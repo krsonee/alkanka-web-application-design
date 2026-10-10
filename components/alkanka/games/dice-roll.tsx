@@ -18,7 +18,7 @@ function Die({ value, rolling, tone }: { value: number; rolling: boolean; tone: 
   return (
     <div
       role="img"
-      aria-label={`Zar: ${value}`}
+      aria-label={`Die showing ${value}`}
       className={cn(
         'grid size-20 grid-cols-3 grid-rows-3 gap-1 rounded-2xl border bg-card p-3 sm:size-24',
         tone === 'cyan' ? 'border-primary/50 glow-cyan' : 'border-accent/50 glow-purple',
@@ -42,11 +42,11 @@ function Die({ value, rolling, tone }: { value: number; rolling: boolean; tone: 
 }
 
 function rewardFor(a: number, b: number) {
-  if (a === 6 && b === 6) return { label: 'Düşeş! Jackpot Kutusu', points: 400 }
-  if (a === b) return { label: `Çift! ${a * 40} AlkaCoin`, points: a * 40 }
+  if (a === 6 && b === 6) return { label: 'Jackpot Mystery Box', points: 400 }
+  if (a === b) return { label: `Doubles! ${a * 40} Points`, points: a * 40 }
   const sum = a + b
-  if (sum >= 10) return { label: `Yüksek atış — ${sum * 10} AlkaCoin`, points: sum * 10 }
-  return { label: `${sum * 5} AlkaCoin`, points: sum * 5 }
+  if (sum >= 10) return { label: `High Roll — ${sum * 10} Points`, points: sum * 10 }
+  return { label: `${sum * 5} Points`, points: sum * 5 }
 }
 
 const rand = () => 1 + Math.floor(Math.random() * 6)
@@ -78,14 +78,14 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
   const isDouble = result && dice[0] === dice[1]
 
   return (
-    <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
+    <article className="glass relative flex flex-col gap-5 overflow-hidden rounded-3xl p-6 glow-purple">
       <header className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Mini oyun</span>
-          <h3 className="font-display text-xl font-bold text-foreground">Zar At</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">Çift gelirse puanın katlanır. Düşeş jackpot kutusunu açar.</p>
+          <span className="text-xs font-semibold uppercase tracking-widest text-accent">Mini-Game</span>
+          <h3 className="font-display text-xl font-bold text-foreground">Dice & Roll</h3>
+          <p className="text-sm leading-relaxed text-muted-foreground">Doubles multiply your points. Double sixes unlock a jackpot box.</p>
         </div>
-        <Dices className="size-6 shrink-0 text-primary" aria-hidden="true" />
+        <Dices className="size-6 shrink-0 text-accent" aria-hidden="true" />
       </header>
 
       <div className="relative flex items-center justify-center gap-5 py-4" key={rollKey}>
@@ -99,16 +99,16 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
           {result ? (
             <span className="animate-pop font-semibold text-gold">{result.label}</span>
           ) : (
-            <span className="text-muted-foreground">{rolling ? 'Zarlar dönüyor…' : 'Bugün 3 atış hakkın var'}</span>
+            <span className="text-muted-foreground">{rolling ? 'Rolling…' : '3 rolls remaining today'}</span>
           )}
         </p>
         <button
           type="button"
           onClick={roll}
           disabled={rolling}
-          className="shrink-0 rounded-lg bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform hover:scale-105 disabled:opacity-70"
+          className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-transform hover:scale-105 disabled:opacity-70"
         >
-          {rolling ? 'Atılıyor' : 'Zar at'}
+          {rolling ? 'Rolling' : 'Roll dice'}
         </button>
       </div>
     </article>

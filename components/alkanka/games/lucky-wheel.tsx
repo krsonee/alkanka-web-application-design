@@ -8,24 +8,24 @@ import { ParticleBurst } from './particle-burst'
 type Segment = { short: string; label: string; points: number; tone: 'cyan' | 'purple' | 'gold' | 'muted' }
 
 const SEGMENTS: Segment[] = [
-  { short: '50', label: '50 AlkaCoin', points: 50, tone: 'gold' },
-  { short: '2x', label: '2x Boost', points: 120, tone: 'muted' },
-  { short: 'VIP', label: 'VIP Geçiş', points: 300, tone: 'purple' },
-  { short: 'Pas', label: 'Tekrar dene', points: 0, tone: 'muted' },
-  { short: '100', label: '100 AlkaCoin', points: 100, tone: 'gold' },
-  { short: 'Kod', label: 'Ücretsiz Promo Kod', points: 150, tone: 'muted' },
-  { short: '250', label: '250 AlkaCoin', points: 250, tone: 'gold' },
-  { short: 'Kutu', label: 'Gizemli Kutu', points: 200, tone: 'muted' },
+  { short: '50', label: '50 Points', points: 50, tone: 'cyan' },
+  { short: '2x', label: '2x Boost', points: 120, tone: 'purple' },
+  { short: 'VIP', label: 'VIP Pass', points: 300, tone: 'gold' },
+  { short: 'Retry', label: 'Try Again', points: 0, tone: 'muted' },
+  { short: '100', label: '100 Points', points: 100, tone: 'cyan' },
+  { short: 'Code', label: 'Free Promo Code', points: 150, tone: 'purple' },
+  { short: '250', label: '250 Points', points: 250, tone: 'gold' },
+  { short: 'Box', label: 'Mystery Box', points: 200, tone: 'muted' },
 ]
 
 const SEG_ANGLE = 360 / SEGMENTS.length
 const SPIN_MS = 4800
 
 const TONE_FILL: Record<Segment['tone'], string> = {
-  cyan: 'color-mix(in oklch, var(--primary) 30%, var(--card))',
-  purple: 'color-mix(in oklch, var(--accent) 38%, var(--card))',
-  gold: 'color-mix(in oklch, var(--gold) 48%, var(--card))',
-  muted: 'var(--background)',
+  cyan: 'color-mix(in oklch, var(--primary) 34%, var(--card))',
+  purple: 'color-mix(in oklch, var(--accent) 40%, var(--card))',
+  gold: 'color-mix(in oklch, var(--gold) 34%, var(--card))',
+  muted: 'var(--secondary)',
 }
 
 const WHEEL_BG = `conic-gradient(${SEGMENTS.map(
@@ -62,14 +62,14 @@ export function LuckyWheel({ onWin }: { onWin: (points: number) => void }) {
   }
 
   return (
-    <article className="panel-gold relative flex flex-col gap-6 overflow-hidden rounded-2xl p-6 lg:row-span-2">
+    <article className="glass relative flex flex-col gap-6 overflow-hidden rounded-3xl p-6 glow-cyan lg:row-span-2">
       <header className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">Çarkıfelek</span>
-          <h3 className="font-display text-2xl font-bold text-foreground">Şans Çarkı</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">Her 6 saatte 1 ücretsiz çevirme. Boost, promo kod ve VIP geçiş kazan.</p>
+          <h3 className="font-display text-2xl font-bold text-foreground">Lucky Wheel</h3>
+          <p className="text-sm leading-relaxed text-muted-foreground">One free spin every 6 hours. Land on boosts, codes and VIP passes.</p>
         </div>
-        <span className="shrink-0 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">1 hak</span>
+        <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">1 spin left</span>
       </header>
 
       <div className="relative mx-auto aspect-square w-full max-w-sm">
@@ -126,22 +126,22 @@ export function LuckyWheel({ onWin }: { onWin: (points: number) => void }) {
           className="absolute top-1/2 left-1/2 z-10 flex size-20 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-4 border-background bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-80 glow-cyan"
         >
           <RotateCw className={cn('mb-0.5 size-5', spinning && 'animate-spin')} aria-hidden="true" />
-          {spinning ? 'Dönüyor' : 'Çevir'}
+          {spinning ? 'Spinning' : 'Spin'}
         </button>
 
         {burstKey > 0 && <ParticleBurst key={burstKey} count={24} distance={170} />}
       </div>
 
-      <div aria-live="polite" className="min-h-14 rounded-xl border border-border bg-background/50 px-4 py-3 text-center">
+      <div aria-live="polite" className="min-h-14 rounded-2xl border border-border bg-background/50 px-4 py-3 text-center">
         {result ? (
           <p key={burstKey + result.label} className="animate-pop">
-            <span className="block text-xs text-muted-foreground">{result.points > 0 ? 'Kazandın' : 'Az kaldı!'}</span>
+            <span className="block text-xs text-muted-foreground">{result.points > 0 ? 'You won' : 'So close!'}</span>
             <span className={cn('font-display text-lg font-bold', result.points > 0 ? 'text-gold' : 'text-foreground')}>
               {result.label}
             </span>
           </p>
         ) : (
-          <p className="py-2 text-sm text-muted-foreground">{spinning ? 'Bol şans…' : 'Ödülünü görmek için çevir'}</p>
+          <p className="py-2 text-sm text-muted-foreground">{spinning ? 'Good luck…' : 'Press spin to reveal your reward'}</p>
         )}
       </div>
     </article>

@@ -12,7 +12,7 @@ type BrandContextValue = {
 const BrandContext = createContext<BrandContextValue | null>(null)
 
 export function BrandProvider({ children }: { children: ReactNode }) {
-  const [concept, setConcept] = useState<LogoConcept>('shield')
+  const [concept, setConcept] = useState<LogoConcept>('wordmark')
   return <BrandContext.Provider value={{ concept, setConcept }}>{children}</BrandContext.Provider>
 }
 

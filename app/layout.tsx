@@ -10,9 +10,9 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: 'AL KANKA — Çark, Zar, Puan Marketi ve Özel Kampanyalar',
+  title: 'Alkanka — Daily Rewards, Mini-Games & Exclusive Campaigns',
   description:
-    'Çarkı çevir, zar at, sandık aç ve AlkaCoin topla. Puan marketinden rozet, ekstra hak ve hediyeler al. Promo kodlar önce Telegram kanalımıza düşer.',
+    'Spin the Lucky Wheel, roll the dice, open daily mystery chests and unlock exclusive partner campaigns. Join the Alkanka Telegram community for live reward drops.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: '#0b0e17',
+  themeColor: '#0f1117',
 }
 
 export default function RootLayout({
@@ -35,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="tr" className={`${inter.variable} ${spaceGrotesk.variable} bg-background`}>
+    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} bg-background`}>
       <body className="font-sans antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

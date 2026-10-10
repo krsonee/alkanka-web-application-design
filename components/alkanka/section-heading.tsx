@@ -1,36 +1,28 @@
 import type { ReactNode } from 'react'
 
 export function SectionHeading({
-  id,
+  eyebrow,
   title,
   description,
+  id,
   action,
 }: {
-  id: string
-  title: string
+  eyebrow: string
+  title: ReactNode
   description?: string
+  id?: string
   action?: ReactNode
 }) {
   return (
-    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-      <div className="flex flex-col gap-1.5">
-        <h2 id={id} className="font-display text-2xl font-bold uppercase tracking-tight text-primary text-balance sm:text-3xl">
+    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div className="flex max-w-2xl flex-col gap-3">
+        <span className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">{eyebrow}</span>
+        <h2 id={id} className="font-display text-3xl font-bold tracking-tight text-balance text-foreground sm:text-4xl">
           {title}
         </h2>
-        {description && <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground text-pretty">{description}</p>}
+        {description && <p className="leading-relaxed text-pretty text-muted-foreground">{description}</p>}
       </div>
       {action}
     </div>
-  )
-}
-
-export function SeeAll({ href, label = 'Tümünü gör' }: { href: string; label?: string }) {
-  return (
-    <a
-      href={href}
-      className="self-start rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:self-auto"
-    >
-      {label}
-    </a>
   )
 }

@@ -60,7 +60,7 @@ function NetworkLogo({ className, size = 'md' }: LogoProps) {
         <circle cx="20" cy="20" r="5.5" fill="var(--gold)" />
       </svg>
       <span className={cn('font-display font-semibold lowercase text-foreground', size === 'sm' ? 'text-base' : 'text-xl')}>
-        alkanka<span className="text-primary">.com</span>
+        alkanka<span className="text-primary">.net</span>
       </span>
     </span>
   )
@@ -79,17 +79,17 @@ function ShieldLogo({ className, size = 'md' }: LogoProps) {
         <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
           Alkanka
         </span>
-        <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-gold">Kanka</span>
+        <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-gold">Apex</span>
       </span>
     </span>
   )
 }
 
 export const LOGO_CONCEPTS: { id: LogoConcept; name: string; description: string }[] = [
-  { id: 'shield', name: 'Altın Kalkan', description: 'Premium güven rozeti' },
-  { id: 'monogram', name: 'A+K Monogram', description: 'Geometrik çift harf' },
-  { id: 'wordmark', name: 'Yazı Logo', description: 'Sade tipografi + nokta' },
-  { id: 'network', name: 'Ağ Düğümü', description: 'Bağlantılı dijital merkez' },
+  { id: 'wordmark', name: 'Neon Wordmark', description: 'Minimal type with a glowing dot' },
+  { id: 'monogram', name: 'A+K Monogram', description: 'Geometric dual-letter mark' },
+  { id: 'network', name: 'Network Node', description: 'Connected digital hub' },
+  { id: 'shield', name: 'Apex Shield', description: 'Premium trust badge' },
 ]
 
 export function AlkankaLogo({ concept, ...props }: LogoProps & { concept: LogoConcept }) {
