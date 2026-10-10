@@ -508,11 +508,12 @@ export function CampaignBoard() {
 
   return (
     <section aria-label="Kampanyalar" className="flex flex-col gap-6">
-      <article className="panel-gold grid overflow-hidden rounded-2xl md:grid-cols-2">
-        <div className="relative aspect-[16/9] md:aspect-auto">
-          <Image src={featured.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 768px) 50vw, 100vw" className="object-cover" />
-        </div>
-        <div className="flex flex-col gap-3 p-6">
+      <article className="panel-gold relative isolate flex min-h-80 overflow-hidden rounded-2xl md:min-h-96">
+  <div className="absolute inset-x-0 top-0 -z-20 h-56 md:inset-0 md:h-auto">
+  <Image src={featured.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 1100px, 100vw" className="object-cover object-[65%_center] md:object-center" />
+  </div>
+  <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-56 bg-gradient-to-t from-card to-transparent to-50% md:inset-0 md:h-auto md:bg-gradient-to-r md:from-card md:via-card/70 md:to-transparent md:to-100%" />
+  <div className="flex max-w-xl flex-col justify-end gap-3 p-5 pt-48 sm:p-8 sm:pt-48 md:justify-center md:pt-8">
           <span className="self-start rounded-md bg-primary px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
             Haftanın kampanyası
           </span>
