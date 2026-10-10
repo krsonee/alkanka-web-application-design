@@ -15,10 +15,7 @@ export function useLogos() {
   return useContext(LogoContext)
 }
 
-export function splitMatch(match: string): [string, string] {
-  const [home = match, away = ''] = match.split(' - ').map((t) => t.trim())
-  return [home, away]
-}
+export { splitMatch } from '@/lib/split-match'
 
 function initialsOf(name: string) {
   return name
