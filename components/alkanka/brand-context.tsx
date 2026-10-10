@@ -44,13 +44,11 @@ export function BrandProvider({ children }: { children: ReactNode }) {
   const [concept, setConceptState] = useState<LogoConcept>(DEFAULT_CONCEPT)
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY)
-    if (saved && ALL_CONCEPTS.includes(saved)) setConceptState(saved as LogoConcept)
+    window.localStorage.removeItem(STORAGE_KEY)
   }, [])
 
   const setConcept = useCallback((next: LogoConcept) => {
-    setConceptState(next)
-    window.localStorage.setItem(STORAGE_KEY, next)
+    if (ALL_CONCEPTS.includes(next)) setConceptState(next)
   }, [])
 
   return <BrandContext.Provider value={{ concept, setConcept }}>{children}</BrandContext.Provider>
