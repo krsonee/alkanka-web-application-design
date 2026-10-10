@@ -40,5 +40,9 @@ const mascots = JAKO_POSES.map((p) => (p === 'jako' ? '/images/mascots/jako.png'
 export const IMAGE_LIBRARY = [...banners, ...heroes, ...tiles, ...mascots]
 
 export function isAllowedImage(value: string) {
-  return value.startsWith('/images/') || /^https:\/\/[^\s"'<>]+$/.test(value)
+  return (
+    value.startsWith('/images/') ||
+    /^\/api\/logo\/[a-z0-9._-]+$/i.test(value) ||
+    /^https:\/\/[^\s"'<>]+$/.test(value)
+  )
 }
