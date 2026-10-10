@@ -34,6 +34,48 @@ const MASCOTS = [
     description: 'Şapkalı, telefonlu tilki. Telegram duyuruları, kodlar ve canlı akış için.',
     image: '/images/mascots/tilki.png',
   },
+  {
+    id: 'ayi',
+    name: 'Koca Ayı',
+    role: 'Güvenilir abi',
+    description: 'Kapüşonlu, snapback şapkalı, kollar kavuşturulmuş. Güvenilir sponsor ve destek alanları için.',
+    image: '/images/mascots/ayi.png',
+  },
+  {
+    id: 'kartal',
+    name: 'Altın Kartal',
+    role: 'Keskin göz',
+    description: 'Bomber ceketli, pilot gözlüklü kartal. Özel oranlar ve tahmin etkinlikleri için.',
+    image: '/images/mascots/kartal.png',
+  },
+  {
+    id: 'panter',
+    name: 'Kara Panter',
+    role: 'Masa ustası',
+    description: 'Kadife takım, elinde çip kulesi. Casino bonusları ve VIP sponsorlar için şık bir yüz.',
+    image: '/images/mascots/panter.png',
+  },
+  {
+    id: 'boga',
+    name: 'Altın Boğa',
+    role: 'Kazanç makinesi',
+    description: 'Altın boynuzlu, zafer pozunda boğa. Büyük kazanç ve turnuva sonuçları için enerjik.',
+    image: '/images/mascots/boga.png',
+  },
+  {
+    id: 'baykus',
+    name: 'Bilge Baykuş',
+    role: 'Analist',
+    description: 'Altın gözlüklü, yelekli baykuş. Kurallar, SSS ve rehber sayfalarında yol gösterir.',
+    image: '/images/mascots/baykus.png',
+  },
+  {
+    id: 'ejder',
+    name: 'Hazine Ejderi',
+    role: 'Sandık bekçisi',
+    description: 'Taçlı minik ejder, coin yığınının üstünde. Sandık oyunu ve market için birebir.',
+    image: '/images/mascots/ejder.png',
+  },
 ] as const
 
 type MascotId = (typeof MASCOTS)[number]['id']
