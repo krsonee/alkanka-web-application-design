@@ -18,16 +18,27 @@ export type EditorItem = {
   saved: Fields | null
 }
 
-export function ContentEditor({ slides, heroes, library }: { slides: EditorItem[]; heroes: EditorItem[]; library: string[] }) {
-  const [tab, setTab] = useState<'slide' | 'hero'>('slide')
+export function ContentEditor({
+  slides,
+  heroes,
+  library,
+  logos,
+}: {
+  slides: EditorItem[]
+  heroes: EditorItem[]
+  library: string[]
+  logos: React.ReactNode
+}) {
+  const [tab, setTab] = useState<'slide' | 'hero' | 'logo'>('slide')
   const items = tab === 'slide' ? slides : heroes
   return (
     <div className="flex flex-col gap-6">
-      <div role="tablist" aria-label="İçerik türü" className="flex w-fit gap-1 rounded-xl border border-border bg-card p-1">
+      <div role="tablist" aria-label="İçerik türü" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-fit">
         {(
           [
             ['slide', `Ana sayfa slider (${slides.length})`],
             ['hero', `Sayfa başlıkları (${heroes.length})`],
+            ['logo', 'Logolar'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -36,7 +47,7 @@ export function ContentEditor({ slides, heroes, library }: { slides: EditorItem[
             aria-selected={tab === key}
             onClick={() => setTab(key)}
             className={cn(
-              'rounded-lg px-4 py-2 text-sm font-semibold',
+              'shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold',
               tab === key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -44,11 +55,15 @@ export function ContentEditor({ slides, heroes, library }: { slides: EditorItem[
           </button>
         ))}
       </div>
-      <div className="grid gap-5 lg:grid-cols-2">
-        {items.map((item) => (
-          <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
-        ))}
-      </div>
+      {tab === 'logo' ? (
+        <div className="flex flex-col gap-6">{logos}</div>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {items.map((item) => (
+            <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

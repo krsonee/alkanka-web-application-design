@@ -6,6 +6,7 @@ import { ADMIN_COOKIE, checkPassword, createSessionValue, isAdmin } from '@/lib/
 import { deleteContent, setContent, type HeroOverride, type SlideOverride } from '@/lib/content'
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
+import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
 
 export type ActionState = { ok?: boolean; message?: string }
 
@@ -98,6 +99,27 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
     await setContent(`slide:${id}`, value)
     revalidatePath('/')
     return { ok: true, message: 'Kaydedildi.' }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
+  }
+}
+
+export async function saveLogos(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const kind = String(form.get('kind'))
+    const allowed = kind === 'sponsors' ? LOGO_SPONSORS : kind === 'teams' ? LOGO_TEAMS : null
+    if (!allowed) return { message: 'Geçersiz liste.' }
+    const value: Record<string, string> = {}
+    for (const item of allowed) {
+      const url = String(form.get(`logo:${item.id}`) ?? '').trim()
+      if (!url) continue
+      if (!isAllowedImage(url)) return { message: `${item.label}: logo /images/ ya da https:// ile başlamalı.` }
+      value[item.id] = url.slice(0, 500)
+    }
+    await setContent(`logos:${kind}`, value)
+    revalidatePath('/', 'layout')
+    return { ok: true, message: `Kaydedildi (${Object.keys(value).length} logo).` }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
   }
