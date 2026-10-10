@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { BallState, BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
+import type { Remote } from './remote'
 
 const W = 1000
 const H = 500
@@ -30,9 +32,25 @@ type Who = 'p' | 'b'
 
 const groupOf = (id: number): Group | 'eight' | 'cue' => (id === 0 ? 'cue' : id === 8 ? 'eight' : id < 8 ? 'solid' : 'stripe')
 
-function rack(): Ball[] {
+function seeded(seedText: string) {
+  let h = 2166136261
+  for (let i = 0; i < seedText.length; i++) h = Math.imul(h ^ seedText.charCodeAt(i), 16777619)
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507)
+    h = Math.imul(h ^ (h >>> 13), 3266489909)
+    return ((h ^= h >>> 16) >>> 0) / 4294967296
+  }
+}
+
+const toState = (b: Ball): BallState => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, inPocket: b.in })
+const fromState = (b: BallState): Ball => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, in: b.inPocket })
+
+function rack(rand: () => number = Math.random): Ball[] {
   const balls: Ball[] = [{ id: 0, x: W * 0.25, y: H / 2, vx: 0, vy: 0, in: false }]
-  const pool = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15].sort(() => Math.random() - 0.5)
+  const pool = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15]
+    .map((id) => ({ id, k: rand() }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.id)
   const apexX = W * 0.7
   let k = 0
   for (let row = 0; row < 5; row++) {
@@ -132,19 +150,53 @@ function castGuide(balls: Ball[], cue: Ball, angle: number) {
   return best
 }
 
-export function Bilardo({ finish }: GameApi) {
+export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote?: Remote<BilardoState> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const balls = useRef<Ball[]>(rack())
+  const seat = remote?.seat ?? 0
+  const oppSeat = seat === 0 ? 1 : 0
+  const remoteGroups = (st: BilardoState): Record<Who, Group | null> => ({ p: st.groups[seat], b: st.groups[oppSeat] })
+  const balls = useRef<Ball[]>(
+    remote && remote.state.balls.length ? remote.state.balls.map(fromState) : rack(remote ? seeded(remote.names.join('|') + (remote.id ?? '')) : Math.random),
+  )
   const game = useRef({
-    turn: 'p' as Who,
-    groups: { p: null, b: null } as Record<Who, Group | null>,
+    turn: (remote ? (remote.state.turn === seat ? 'p' : 'b') : 'p') as Who,
+    groups: (remote ? remoteGroups(remote.state) : { p: null, b: null }) as Record<Who, Group | null>,
     moving: false,
     over: false,
+    replay: false,
     angle: Math.PI,
-    shot: { first: null as number | null, potted: [] as number[] },
+    lastSeq: remote?.state.seq ?? 0,
+    shot: { first: null as number | null, potted: [] as number[], angle: 0, pow: 0 },
   })
   const [power, setPower] = useState(60)
-  const [ui, setUi] = useState({ turn: 'p' as Who, moving: false, message: 'Açılış vuruşu sende. İstekayı nişan al ve vur.', groups: { p: null, b: null } as Record<Who, Group | null>, potted: [] as number[] })
+  const oppName = remote ? remote.names[oppSeat] || 'Rakip' : 'Rakip · Baykuş'
+  const [ui, setUi] = useState({
+    turn: game.current.turn,
+    moving: false,
+    message: remote ? (game.current.turn === 'p' ? 'Sıra sende. Nişan al ve vur.' : `${oppName} nişan alıyor...`) : 'Açılış vuruşu sende. İstekayı nişan al ve vur.',
+    groups: { ...game.current.groups },
+    potted: balls.current.filter((b) => b.in && b.id !== 0).map((b) => b.id),
+  })
+
+  useEffect(() => {
+    if (!remote) return
+    const g = game.current
+    const st = remote.state
+    if (g.moving || st.seq <= g.lastSeq) return
+    g.lastSeq = st.seq
+    if (st.shot && st.shot.by !== seat && st.shot.seq === st.seq) {
+      // Replay the rival's shot from the synced positions, then snap to the authoritative result.
+      g.replay = true
+      g.turn = 'b'
+      shoot(st.shot.angle, st.shot.pow * 100, true)
+      return
+    }
+    balls.current = st.balls.map(fromState)
+    g.groups = remoteGroups(st)
+    g.turn = st.turn === seat ? 'p' : 'b'
+    sync(g.turn === 'p' ? 'Sıra sende. Nişan al ve vur.' : `${oppName} nişan alıyor...`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote?.state.seq])
 
   const sync = (message?: string) => {
     const g = game.current
@@ -157,16 +209,26 @@ export function Bilardo({ finish }: GameApi) {
     }))
   }
 
-  function shoot(angle: number, pow: number) {
+  function shoot(angle: number, pow: number, replay = false) {
     const g = game.current
     const cue = balls.current[0]
     if (g.moving || g.over || cue.in) return
+    if (remote && !replay && (g.turn !== 'p' || remote.busy)) return
     const speed = (pow / 100) * MAX_SPEED
     cue.vx = Math.cos(angle) * speed
     cue.vy = Math.sin(angle) * speed
-    g.shot = { first: null, potted: [] }
+    g.shot = { first: null, potted: [], angle, pow: pow / 100 }
     g.moving = true
-    sync(g.turn === 'p' ? 'Toplar yuvarlanıyor...' : 'Rakip vurdu...')
+    sync(g.turn === 'p' ? 'Toplar yuvarlanıyor...' : `${oppName} vurdu...`)
+  }
+
+  function sendShot(result: 'win' | 'lose' | null, keepTurn: boolean, note: string) {
+    if (!remote) return
+    const g = game.current
+    const groups: [Group | null, Group | null] = [null, null]
+    groups[seat] = g.groups.p
+    groups[oppSeat] = g.groups.b
+    void remote.send({ type: 'shot', angle: g.shot.angle, pow: g.shot.pow, balls: balls.current.map(toState), groups, keepTurn, result, note })
   }
 
   function botShot() {
@@ -210,6 +272,16 @@ export function Bilardo({ finish }: GameApi) {
 
   function settle() {
     const g = game.current
+    if (remote && g.replay) {
+      const st = remote.state
+      g.replay = false
+      g.moving = false
+      balls.current = st.balls.map(fromState)
+      g.groups = remoteGroups(st)
+      g.turn = st.turn === seat ? 'p' : 'b'
+      sync(st.note ? `${st.note}${g.turn === 'p' ? ' Sıra sende.' : ''}` : g.turn === 'p' ? 'Sıra sende.' : `${oppName} yine oynuyor.`)
+      return
+    }
     const list = balls.current
     const shooter = g.turn
     const other: Who = shooter === 'p' ? 'b' : 'p'
@@ -224,7 +296,11 @@ export function Bilardo({ finish }: GameApi) {
       const won = clearedBefore && !scratch
       const playerWon = (shooter === 'p') === won
       sync(won ? (shooter === 'p' ? 'Siyahı deliğe yolladın!' : 'Rakip siyahı soktu.') : shooter === 'p' ? 'Siyah erken düştü.' : 'Rakip siyahı erken soktu!')
-      setTimeout(() => finish(playerWon ? 'win' : 'lose', playerWon ? (won ? 'Grubunu temizleyip siyahı soktun.' : 'Rakip siyahı kuralsız soktu, masa senin.') : won ? 'Rakip grubunu temizleyip siyahı soktu.' : 'Siyahı grubunu bitirmeden soktun.'), 1100)
+      if (remote) {
+        sendShot(won ? 'win' : 'lose', false, won ? 'Siyah kurallı düştü.' : 'Siyah erken düştü.')
+        return
+      }
+      setTimeout(() => finish?.(playerWon ? 'win' : 'lose', playerWon ? (won ? 'Grubunu temizleyip siyahı soktun.' : 'Rakip siyahı kuralsız soktu, masa senin.') : won ? 'Rakip grubunu temizleyip siyahı soktu.' : 'Siyahı grubunu bitirmeden soktun.'), 1100)
       return
     }
 
@@ -260,6 +336,11 @@ export function Bilardo({ finish }: GameApi) {
     else msg = `Top düşmedi. Sıra ${label(other).toLowerCase()}.`
     if (!keep) g.turn = other
     g.moving = false
+    if (remote) {
+      sync(keep ? 'Güzel! Sıra yine sende.' : `${msg.split('. Sıra')[0]}. Sıra ${oppName} oyuncusunda.`)
+      sendShot(null, keep, scratch ? 'Beyaz düştü, faul.' : first === null ? 'Topa değmedi, faul.' : foul ? 'Yanlış gruba vuruş, faul.' : keep ? 'Rakip top soktu.' : '')
+      return
+    }
     sync(msg)
     if (g.turn === 'b') setTimeout(botShot, 1000)
   }
@@ -321,6 +402,14 @@ export function Bilardo({ finish }: GameApi) {
       grad.addColorStop(1, 'rgba(0,0,0,0.25)')
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, W, H)
+      ctx.save()
+      ctx.globalAlpha = 0.08
+      ctx.fillStyle = gold
+      ctx.font = '900 92px system-ui, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('ALKANKA', W * 0.62, H / 2)
+      ctx.restore()
       ctx.strokeStyle = 'rgba(255,255,255,0.08)'
       ctx.beginPath()
       ctx.moveTo(W * 0.25, 0)
@@ -467,7 +556,7 @@ export function Bilardo({ finish }: GameApi) {
         {(['p', 'b'] as const).map((w) => (
           <div key={w} className={cn('flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3', ui.turn === w ? 'border-primary glow-gold' : 'border-border')}>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-foreground">{w === 'p' ? 'Sen' : 'Rakip · Baykuş'}</span>
+              <span className="text-sm font-bold text-foreground">{w === 'p' ? 'Sen' : oppName}</span>
               <span className="text-xs text-muted-foreground">{groupLabel(ui.groups[w])}</span>
             </div>
             <div className="flex flex-wrap justify-end gap-1">
@@ -501,7 +590,7 @@ export function Bilardo({ finish }: GameApi) {
         </p>
         <label className="flex items-center gap-3 text-sm text-muted-foreground">
           Güç
-          <input type="range" min={5} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="w-36 accent-primary" />
+          <input type="range" min={5} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="w-full flex-1 accent-primary sm:w-36 sm:flex-none" />
           <span className="w-9 font-display font-bold text-foreground">{power}</span>
         </label>
         <button

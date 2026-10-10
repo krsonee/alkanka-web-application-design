@@ -140,6 +140,43 @@
   }
 }
 
+@utility felt-table {
+  background:
+    radial-gradient(ellipse at center, color-mix(in oklch, var(--felt) 100%, transparent) 0%, color-mix(in oklch, var(--felt) 70%, var(--background)) 100%);
+  box-shadow: inset 0 0 0 6px color-mix(in oklch, var(--wood) 90%, transparent), inset 0 0 60px -10px var(--background);
+}
+@utility chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  height: 3.25rem;
+  padding: 0 0.5rem;
+  border-radius: 9999px;
+  border: 3px dashed color-mix(in oklch, var(--primary) 60%, transparent);
+  background: var(--background);
+  color: var(--foreground);
+  font-weight: 700;
+  font-size: 0.8rem;
+  transition: transform 150ms, background 150ms;
+}
+@utility chip-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--background);
+  transform: translateY(-3px);
+}
+@utility card-deal {
+  animation: card-deal 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@utility pop-in {
+  animation: pop 500ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes card-deal {
+  from { transform: translate(40px, -60px) rotate(12deg); opacity: 0; }
+  to { transform: translate(0, 0) rotate(0); opacity: 1; }
+}
+
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }

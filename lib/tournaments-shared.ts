@@ -11,11 +11,18 @@ export const STATUS_LABEL: Record<TournamentStatus, string> = {
   iptal: 'İptal edildi',
 }
 
+export const MAX_TOURNAMENT_PLAYERS = 500
+
+export type TournamentEntry = { id: number; userId: string | null; nickname: string; telegram: string; createdAt: string }
+
+export type LiveMatch = { tableId: string; round: number; match: number; players: string[]; status: string }
+
 export type Tournament = {
   id: number
   game: ArenaGame
   title: string
   description: string
+  rules: string
   entryFee: number
   prizePool: number
   prizeNote: string
@@ -24,5 +31,11 @@ export type Tournament = {
   status: TournamentStatus
   winner: string | null
   bracket: Bracket | null
-  entries: { id: number; nickname: string; telegram: string; createdAt: string }[]
+  entries: TournamentEntry[]
+  /** Player key (user id) to display name. */
+  names: Record<string, string>
+  liveMatches: LiveMatch[]
+  currentRound: number | null
 }
+
+export const displayName = (t: Pick<Tournament, 'names'>, key: string | null) => (key ? (t.names[key] ?? key) : null)

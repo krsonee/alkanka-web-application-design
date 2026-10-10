@@ -23,7 +23,7 @@ const BOT_NAMES = ['Baykuş', 'Aslan', 'Goril']
 
 type Phase = 'draw' | 'discard' | 'bots' | 'over'
 
-function TileFace({
+export function TileFace({
   tile,
   okey,
   size = 'md',
@@ -68,7 +68,7 @@ function TileFace({
   )
 }
 
-function TileBack({ className }: { className?: string }) {
+export function TileBack({ className }: { className?: string }) {
   return <span aria-hidden="true" className={cn('h-8 w-6 rounded-sm border border-primary/30 bg-wood shadow', className)} />
 }
 

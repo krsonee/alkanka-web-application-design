@@ -3,18 +3,20 @@
 import { revalidatePath } from 'next/cache'
 import { isAdmin } from '@/lib/admin-auth'
 import { setContent } from '@/lib/content'
+import { pool } from '@/lib/db'
+import { credit, debit, recordHistory } from '@/lib/member'
 import { ARENA_GAMES, ARENA_META, isArenaGame, type ArenaSettings } from '@/lib/arena'
-import { createBracket, setMatchWinner, bracketChampion } from '@/lib/bracket'
+import { cancelTable } from '@/lib/pvp/tables'
 import {
-  TOURNAMENT_STATUSES,
+  MAX_TOURNAMENT_PLAYERS,
+  adminSetMatchWinner,
+  cancelTournament,
   createTournament,
   deleteTournament,
-  getTournament,
   removeEntry,
-  setTournamentState,
+  startTournament,
   updateTournament,
   type TournamentInput,
-  type TournamentStatus,
 } from '@/lib/tournaments'
 import type { ActionState } from './actions'
 
@@ -32,9 +34,9 @@ function fail(e: unknown, fallback: string): ActionState {
   return { message: e instanceof Error ? e.message : fallback }
 }
 
-function int(form: FormData, name: string, min: number, max: number) {
+function int(form: FormData, name: string, label: string, min: number, max: number) {
   const n = Math.round(Number(form.get(name)))
-  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${name} ${min} ile ${max} arasında olmalı.`)
+  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${label} ${min} ile ${max} arasında olmalı.`)
   return n
 }
 
@@ -43,15 +45,24 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
     await requireAdmin()
     const value = {} as ArenaSettings
     for (const g of ARENA_GAMES) {
+      const title = ARENA_META[g].title
       const bets = String(form.get(`${g}:bets`) ?? '')
         .split(/[,\s]+/)
         .map((v) => Math.round(Number(v)))
         .filter((v) => Number.isFinite(v) && v > 0 && v <= 100000)
       const unique = [...new Set(bets)].sort((a, b) => a - b).slice(0, 6)
-      if (!unique.length) return { message: `${ARENA_META[g].title}: en az bir bahis tutarı gir.` }
+      if (!unique.length) return { message: `${title}: en az bir bahis tutarı gir.` }
       const multiplier = Number(String(form.get(`${g}:multiplier`) ?? '').replace(',', '.'))
-      if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 20) return { message: `${ARENA_META[g].title}: çarpan 1 ile 20 arasında olmalı.` }
-      value[g] = { enabled: form.get(`${g}:enabled`) === 'on', bets: unique, multiplier: Math.round(multiplier * 100) / 100 }
+      if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 20) return { message: `${title}: çarpan 1 ile 20 arasında olmalı.` }
+      const commission = Math.round(Number(form.get(`${g}:commission`) ?? 0))
+      if (!Number.isFinite(commission) || commission < 0 || commission > 30) return { message: `${title}: komisyon %0 ile %30 arasında olmalı.` }
+      value[g] = {
+        enabled: form.get(`${g}:enabled`) === 'on',
+        pvpEnabled: form.get(`${g}:pvp`) === 'on',
+        bets: unique,
+        multiplier: Math.round(multiplier * 100) / 100,
+        commission,
+      }
     }
     await setContent('arena:settings', value)
     refresh()
@@ -75,10 +86,11 @@ function readTournament(form: FormData): TournamentInput {
     game,
     title,
     description: String(form.get('description') ?? '').trim().slice(0, 400),
-    entryFee: int(form, 'entryFee', 0, 100000),
-    prizePool: int(form, 'prizePool', 0, 10000000),
+    rules: String(form.get('rules') ?? '').trim().slice(0, 2000),
+    entryFee: int(form, 'entryFee', 'Katılım ücreti', 0, 100000),
+    prizePool: int(form, 'prizePool', 'Ödül havuzu', 0, 10000000),
     prizeNote: String(form.get('prizeNote') ?? '').trim().slice(0, 120),
-    maxPlayers: int(form, 'maxPlayers', 2, 256),
+    maxPlayers: int(form, 'maxPlayers', 'Kişi sayısı', 2, MAX_TOURNAMENT_PLAYERS),
     startsAt,
   }
 }
@@ -102,59 +114,42 @@ export async function removeTournament(_: ActionState, form: FormData): Promise<
     await requireAdmin()
     await deleteTournament(Number(form.get('id')))
     refresh()
-    return { ok: true, message: 'Silindi.' }
+    return { ok: true, message: 'Turnuva silindi, kayıt ücretleri iade edildi.' }
   } catch (e) {
     return fail(e, 'Silinemedi.')
   }
 }
 
-export async function changeTournamentStatus(_: ActionState, form: FormData): Promise<ActionState> {
+export async function beginTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin()
-    const t = await getTournament(Number(form.get('id')))
-    if (!t) return { message: 'Turnuva bulunamadı.' }
-    const status = String(form.get('status')) as TournamentStatus
-    if (!TOURNAMENT_STATUSES.includes(status)) return { message: 'Geçersiz durum.' }
-    let bracket = t.bracket
-    if (status === 'basladi' && !bracket) {
-      if (t.entries.length < 2) return { message: 'Başlatmak için en az 2 katılımcı gerekli.' }
-      bracket = createBracket(t.entries.map((e) => e.nickname), ARENA_META[t.game].group)
-    }
-    if (status === 'kayit') bracket = null
-    await setTournamentState(t.id, status, bracket, status === 'kayit' ? null : bracketChampion(bracket) ?? t.winner)
+    await startTournament(Number(form.get('id')))
     refresh()
-    return { ok: true, message: status === 'basladi' ? 'Eşleşmeler oluşturuldu, turnuva başladı.' : 'Durum güncellendi.' }
+    return { ok: true, message: 'Turnuva başladı. Tüm eşleşmeler aynı anda açıldı.' }
   } catch (e) {
-    return fail(e, 'Güncellenemedi.')
+    return fail(e, 'Başlatılamadı.')
   }
 }
 
-export async function reshuffleBracket(_: ActionState, form: FormData): Promise<ActionState> {
+export async function stopTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin()
-    const t = await getTournament(Number(form.get('id')))
-    if (!t) return { message: 'Turnuva bulunamadı.' }
-    if (t.entries.length < 2) return { message: 'En az 2 katılımcı gerekli.' }
-    const bracket = createBracket(t.entries.map((e) => e.nickname), ARENA_META[t.game].group)
-    await setTournamentState(t.id, 'basladi', bracket, null)
+    await cancelTournament(Number(form.get('id')))
     refresh()
-    return { ok: true, message: 'Eşleşmeler yeniden çekildi.' }
+    return { ok: true, message: 'Turnuva iptal edildi, kayıt ücretleri iade edildi.' }
   } catch (e) {
-    return fail(e, 'Çekilemedi.')
+    return fail(e, 'İptal edilemedi.')
   }
 }
 
 export async function pickMatchWinner(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin()
-    const t = await getTournament(Number(form.get('id')))
-    if (!t?.bracket) return { message: 'Önce turnuvayı başlat.' }
-    const winner = String(form.get('winner') ?? '') || null
-    const bracket = setMatchWinner(t.bracket, Number(form.get('round')), Number(form.get('match')), winner)
-    const champion = bracketChampion(bracket)
-    await setTournamentState(t.id, champion ? 'bitti' : 'basladi', bracket, champion)
+    const winner = String(form.get('winner') ?? '')
+    if (!winner) return { message: 'Kazananı seç.' }
+    await adminSetMatchWinner(Number(form.get('id')), Number(form.get('round')), Number(form.get('match')), winner)
     refresh()
-    return { ok: true, message: champion ? `Şampiyon: ${champion}` : 'Kaydedildi.' }
+    return { ok: true, message: 'Maç sonucu girildi, tur ilerletildi.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
   }
@@ -165,8 +160,39 @@ export async function kickEntry(_: ActionState, form: FormData): Promise<ActionS
     await requireAdmin()
     await removeEntry(Number(form.get('entryId')))
     refresh()
-    return { ok: true, message: 'Katılımcı çıkarıldı.' }
+    return { ok: true, message: 'Katılımcı çıkarıldı, ücreti iade edildi.' }
   } catch (e) {
     return fail(e, 'Çıkarılamadı.')
+  }
+}
+
+export async function adminCancelTable(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    await cancelTable(String(form.get('id')), { admin: true })
+    refresh()
+    return { ok: true, message: 'Masa kapatıldı, bahisler iade edildi.' }
+  } catch (e) {
+    return fail(e, 'Masa kapatılamadı.')
+  }
+}
+
+export async function adjustMemberBalance(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const email = String(form.get('email') ?? '').trim().toLowerCase()
+    const amount = Math.round(Number(form.get('amount')))
+    if (!email) return { message: 'Üye e-postası gir.' }
+    if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 1000000) return { message: 'Geçerli bir tutar gir (örn. 500 veya -200).' }
+    const u = await pool.query('SELECT id, name FROM "user" WHERE lower(email) = $1', [email])
+    const user = u.rows[0]
+    if (!user) return { message: 'Bu e-postaya ait üye bulunamadı.' }
+    if (amount > 0) await credit(user.id, amount)
+    else if (!(await debit(user.id, -amount))) return { message: 'Üyenin bakiyesi yetersiz.' }
+    await recordHistory({ userId: user.id, userName: user.name, game: 'panel', mode: 'admin', opponent: 'Panel düzenlemesi', stake: 0, result: amount > 0 ? 'win' : 'loss', delta: amount })
+    refresh()
+    return { ok: true, message: `${user.name}: ${amount > 0 ? '+' : ''}${amount} KC uygulandı.` }
+  } catch (e) {
+    return fail(e, 'Uygulanamadı.')
   }
 }
