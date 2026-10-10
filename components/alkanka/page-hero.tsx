@@ -32,15 +32,12 @@ export function PageHero({
   return (
     <header className={cn('relative isolate overflow-hidden rounded-2xl border bg-card', toneRing)}>
       {image && (
-        <>
-          <div className="absolute inset-x-0 top-0 -z-20 h-60 sm:inset-0 sm:h-auto">
-            <Image src={image || '/placeholder.svg'} alt="" fill priority sizes="(min-width: 1024px) 1100px, 100vw" className="object-cover object-[72%_center] sm:object-right" />
-          </div>
-          <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-60 bg-gradient-to-t from-card to-transparent to-50% sm:inset-0 sm:h-auto sm:bg-gradient-to-r sm:from-card sm:via-card/70 sm:to-transparent sm:to-100%" />
-          <div aria-hidden="true" className="absolute inset-x-0 bottom-0 -z-10 h-1/3 bg-gradient-to-t from-card/80 to-transparent" />
-        </>
+        <div className="relative -z-10 aspect-[1584/672] w-full sm:absolute sm:inset-y-0 sm:right-0 sm:w-auto sm:max-w-full">
+          <Image src={image || '/placeholder.svg'} alt="" fill priority sizes="(min-width: 1024px) 800px, 100vw" className="object-cover object-right" />
+          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent sm:bg-gradient-to-r sm:from-card sm:via-card/20 sm:via-30% sm:to-transparent" />
+        </div>
       )}
-      <div className="flex min-h-80 flex-col justify-end gap-6 p-4 pt-48 sm:min-h-72 sm:p-7 sm:pt-7 md:flex-row md:items-end">
+      <div className={cn('relative flex flex-col justify-end gap-6 p-4 sm:min-h-72 sm:p-7 md:flex-row md:items-end', image && '-mt-6 pt-0 sm:mt-0 sm:pt-7')}>
         <div className="flex flex-1 flex-col gap-4">
           <nav aria-label="Konum" className="flex items-center gap-1 text-xs text-muted-foreground">
             <Link href="/" className="hover:text-foreground">

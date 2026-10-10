@@ -69,7 +69,6 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <div className="flex flex-col gap-3 border-t border-border p-3">
         <TelegramCard />
-        <LogoSelector />
       </div>
     </>
   )
