@@ -8,6 +8,7 @@ export default function TasksPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/gorevler.png"
         eyebrow="Görevler"
         title="Günlük görevler"
         description="Her gün giriş yap, seriyi koru. 7. günde VIP ödül sandığı açılır. Görevler ekstra Kanka Coin kazandırır."

@@ -11,6 +11,7 @@ export default function SponsorsPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/sponsorlar.png"
         eyebrow="Sponsorlar"
         title="Güvenilir sponsorlar"
         description="Lisans, ödeme hızı ve destek kalitesi her gün kontrol edilir. Sadece AL KANKA linkiyle gelenlere özel bonuslar."

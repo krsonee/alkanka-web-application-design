@@ -8,6 +8,7 @@ export default function TicketsPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/biletler.png"
         eyebrow="Biletler"
         title="Bilet çekilişleri"
         description="Haftalık bilet çekilişi ve günlük turnuvalar. Katıl, Kanka Coin havuzundan payını al."

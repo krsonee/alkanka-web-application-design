@@ -9,6 +9,7 @@ export default function OddsPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/ozel-oranlar.png"
         eyebrow="Özel oranlar"
         title="Artırılmış oranlar"
         description="Sponsorlarımızın sadece AL KANKA üyelerine açtığı yükseltilmiş oranlar. Süre ve limit dolmadan kuponunu yap."

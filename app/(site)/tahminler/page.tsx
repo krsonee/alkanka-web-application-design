@@ -8,6 +8,7 @@ export default function PredictionsPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/tahminler.png"
         eyebrow="Tahminler"
         title="Maç tahminleri"
         description="Skoru bil, Kanka Coin kazan. Tahminler maç başlamadan 10 dakika önce kapanır."

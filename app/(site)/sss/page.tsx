@@ -8,6 +8,7 @@ export default function FaqPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/sss.png"
         eyebrow="Yardım"
         title="Sıkça sorulan sorular"
         description="Kanka Coin, market, Telegram ve hesap güvenliği hakkında en çok sorulanlar."

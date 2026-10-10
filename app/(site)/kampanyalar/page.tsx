@@ -9,6 +9,7 @@ export default function CampaignsPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/kampanyalar.png"
         eyebrow="Kampanyalar"
         title="Kampanyalar"
         description="Turnuvalar, iadeler, freespin yağmurları ve çekilişler. Yeni kampanyalar ilk Telegram kanalına düşer."

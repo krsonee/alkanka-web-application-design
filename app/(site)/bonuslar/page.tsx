@@ -9,6 +9,7 @@ export default function BonusesPage() {
   return (
     <>
       <PageHero
+        image="/images/heroes/bonuslar.png"
         eyebrow="Bonuslar"
         title="Bonus kodları"
         description="Kodu kopyala, kayıt olurken yapıştır. Bonuslar sadece AL KANKA linkiyle gelenlere tanımlanır."
