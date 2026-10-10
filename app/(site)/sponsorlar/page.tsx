@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { PageHero } from '@/components/alkanka/page-hero'
+import { EditableHero } from '@/components/alkanka/editable-hero'
 import { MainSponsor, SponsorDirectory } from '@/components/alkanka/partner-sites'
 import { SPONSORS } from '@/components/alkanka/data'
 
@@ -10,7 +10,7 @@ export default function SponsorsPage() {
   const trusted = SPONSORS.filter((s) => s.tier === 'guvenilir').length
   return (
     <>
-      <PageHero
+      <EditableHero slug="sponsorlar"
         image="/images/heroes/sponsorlar.png"
         eyebrow="Sponsorlar"
         title="Güvenilir sponsorlar"

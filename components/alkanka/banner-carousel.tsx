@@ -4,15 +4,15 @@ import { useCallback, useEffect, useState } from 'react'
 import Image from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SLIDES } from './data'
+import { SLIDES, type Slide } from './data'
 
 const INTERVAL = 6000
 
-export function BannerCarousel() {
+export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
 
-  const go = useCallback((dir: 1 | -1) => setIndex((i) => (i + dir + SLIDES.length) % SLIDES.length), [])
+  const go = useCallback((dir: 1 | -1) => setIndex((i) => (i + dir + slides.length) % slides.length), [])
 
   useEffect(() => {
     if (paused) return
@@ -31,7 +31,7 @@ export function BannerCarousel() {
       className="flex flex-col gap-3"
     >
       <div className="panel-gold relative aspect-[16/10] overflow-hidden rounded-2xl sm:aspect-[21/8]">
-        {SLIDES.map((slide, i) => {
+        {slides.map((slide, i) => {
           const active = i === index
           const external = slide.href.startsWith('http')
           return (
@@ -39,7 +39,7 @@ export function BannerCarousel() {
               key={slide.id}
               role="group"
               aria-roledescription="slide"
-              aria-label={`${i + 1} / ${SLIDES.length}: ${slide.title}`}
+              aria-label={`${i + 1} / ${slides.length}: ${slide.title}`}
               aria-hidden={!active}
               className={cn('absolute inset-0 transition-opacity duration-700', active ? 'opacity-100' : 'pointer-events-none opacity-0')}
             >
@@ -90,7 +90,7 @@ export function BannerCarousel() {
       </div>
 
       <div className="flex justify-center gap-1.5">
-        {SLIDES.map((s, i) => (
+        {slides.map((s, i) => (
           <button
             key={s.id}
             type="button"

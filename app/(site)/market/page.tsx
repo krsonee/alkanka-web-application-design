@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { PageHero } from '@/components/alkanka/page-hero'
+import { EditableHero } from '@/components/alkanka/editable-hero'
 import { PointsMarket } from '@/components/alkanka/points-market'
 
 export const metadata: Metadata = { title: 'Puan Marketi | AL KANKA' }
@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Puan Marketi | AL KANKA' }
 export default function MarketPage() {
   return (
     <>
-      <PageHero
+      <EditableHero slug="market"
         image="/images/heroes/market.png"
         eyebrow="Market"
         title="Puan marketi"

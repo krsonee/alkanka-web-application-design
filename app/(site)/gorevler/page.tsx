@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { PageHero } from '@/components/alkanka/page-hero'
+import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Tasks } from '@/components/alkanka/tasks'
 
 export const metadata: Metadata = { title: 'Görevler | AL KANKA' }
@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Görevler | AL KANKA' }
 export default function TasksPage() {
   return (
     <>
-      <PageHero
+      <EditableHero slug="gorevler"
         image="/images/heroes/gorevler.png"
         eyebrow="Görevler"
         title="Günlük görevler"

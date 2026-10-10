@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { PageHero } from '@/components/alkanka/page-hero'
+import { EditableHero } from '@/components/alkanka/editable-hero'
 import { BonusBoard } from '@/components/alkanka/partner-sites'
 import { BONUSES } from '@/components/alkanka/data'
 
@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: 'Bonuslar | AL KANKA' }
 export default function BonusesPage() {
   return (
     <>
-      <PageHero
+      <EditableHero slug="bonuslar"
         image="/images/heroes/bonuslar.png"
         eyebrow="Bonuslar"
         title="Bonus kodları"

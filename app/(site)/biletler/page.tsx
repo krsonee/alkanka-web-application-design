@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { PageHero } from '@/components/alkanka/page-hero'
+import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Events } from '@/components/alkanka/events'
 
 export const metadata: Metadata = { title: 'Biletler | AL KANKA' }
@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Biletler | AL KANKA' }
 export default function TicketsPage() {
   return (
     <>
-      <PageHero
+      <EditableHero slug="biletler"
         image="/images/heroes/biletler.png"
         eyebrow="Biletler"
         title="Bilet çekilişleri"

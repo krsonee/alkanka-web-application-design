@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { PageHero } from '@/components/alkanka/page-hero'
+import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Leaderboard } from '@/components/alkanka/leaderboard'
 
 export const metadata: Metadata = { title: 'Sıralama | AL KANKA' }
@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Sıralama | AL KANKA' }
 export default function RankingPage() {
   return (
     <>
-      <PageHero
+      <EditableHero slug="siralama"
         image="/images/heroes/siralama.png"
         eyebrow="Sıralama"
         title="Haftalık liderler"

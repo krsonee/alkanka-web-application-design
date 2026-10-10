@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { PageHero } from '@/components/alkanka/page-hero'
+import { EditableHero } from '@/components/alkanka/editable-hero'
 import { OddsBoard } from '@/components/alkanka/partner-sites'
 import { SPECIAL_ODDS } from '@/components/alkanka/data'
 
@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: 'Özel Oranlar | AL KANKA' }
 export default function OddsPage() {
   return (
     <>
-      <PageHero
+      <EditableHero slug="ozel-oranlar"
         image="/images/heroes/ozel-oranlar.png"
         eyebrow="Özel oranlar"
         title="Artırılmış oranlar"
