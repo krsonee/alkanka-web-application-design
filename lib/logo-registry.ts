@@ -1,5 +1,5 @@
 import { PREDICTIONS, SPECIAL_ODDS, SPONSORS } from '@/components/alkanka/data'
-import { splitMatch } from '@/components/alkanka/logo-context'
+import { splitMatch } from '@/lib/split-match'
 
 export const LOGO_SPONSORS = SPONSORS.map((s) => ({ id: s.id, label: s.name, initials: s.initials }))
 
