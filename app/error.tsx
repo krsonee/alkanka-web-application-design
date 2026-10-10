@@ -8,7 +8,7 @@ export default function Error({ reset }: { error: Error & { digest?: string }; r
       <JakoAvatar pose="uzgun" size="lg" className="size-40 rounded-3xl" alt="Üzgün Jako" />
       <h1 className="font-display text-3xl font-bold text-balance">Bir şeyler ters gitti kanka</h1>
       <p className="max-w-sm text-sm leading-relaxed text-muted-foreground text-pretty">
-        Jako tüylerini toparlıyor. Birazdan tekrar dene.
+        Jako tüylerini kabarttı ama sorun çözülmedi. Tekrar denersen büyük ihtimalle düzelir.
       </p>
       <button
         type="button"
