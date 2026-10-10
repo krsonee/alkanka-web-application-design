@@ -29,8 +29,8 @@ export type EmblemId = (typeof EMBLEM_IDS)[number]
 export type SvgConcept = 'wordmark' | 'monogram' | 'network' | 'shield'
 export type LogoConcept = EmblemId | SvgConcept
 
-const STORAGE_KEY = 'alkanka-logo'
-const DEFAULT_CONCEPT: LogoConcept = 'lion'
+const STORAGE_KEY = 'alkanka-logo-v2'
+const DEFAULT_CONCEPT: LogoConcept = 'fist'
 const ALL_CONCEPTS: readonly string[] = [...EMBLEM_IDS, 'wordmark', 'monogram', 'network', 'shield']
 
 type BrandContextValue = {

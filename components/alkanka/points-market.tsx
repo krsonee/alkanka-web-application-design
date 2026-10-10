@@ -4,7 +4,8 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Check, Coins } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MARKET_ITEMS } from './data'
+import { MARKET_ITEMS, type MarketItem } from './data'
+import { DetailButton, DetailModal } from './detail-modal'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -13,6 +14,7 @@ export function PointsMarket() {
   const [stock, setStock] = useState(() => Object.fromEntries(MARKET_ITEMS.map((i) => [i.id, i.stock])))
   const [claimed, setClaimed] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [detail, setDetail] = useState<MarketItem | null>(null)
 
   function claim(id: string, price: number) {
     if (!stock[id]) return
@@ -69,11 +71,12 @@ export function PointsMarket() {
               </div>
 
               <div className="flex flex-1 flex-col gap-3 p-3">
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col items-start gap-0.5">
                   <h3 className="text-sm font-semibold leading-snug text-foreground">{item.name}</h3>
                   <span className="text-xs text-muted-foreground tabular-nums">
                     Stok: {left} / {item.total}
                   </span>
+                  <DetailButton onClick={() => setDetail(item)} />
                 </div>
                 <div className="mt-auto flex items-center gap-1.5">
                   <Coins className="size-4 text-primary" aria-hidden="true" />
@@ -104,6 +107,43 @@ export function PointsMarket() {
           )
         })}
       </ul>
+
+      <DetailModal
+        onClose={() => setDetail(null)}
+        content={
+          detail && {
+            eyebrow: detail.type,
+            title: detail.name,
+            image: detail.image,
+            description: detail.description,
+            facts: [
+              { label: 'Fiyat', value: `${formatAC(detail.price)} KC` },
+              { label: 'Stok', value: `${stock[detail.id]} / ${detail.total}` },
+              { label: 'Limit', value: `Kişi başı ${detail.limit}` },
+              { label: 'Teslimat', value: detail.refOnly ? 'Referans özel' : 'Anında' },
+            ],
+            rules: detail.rules,
+            note: detail.delivery,
+          }
+        }
+        action={
+          detail && (
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                disabled={!stock[detail.id]}
+                onClick={() => claim(detail.id, detail.price)}
+                className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-secondary disabled:text-muted-foreground"
+              >
+                {!stock[detail.id] ? 'Tükendi' : claimed === detail.id ? 'Alındı' : `${formatAC(detail.price)} KC ile al`}
+              </button>
+              <p aria-live="polite" className="min-h-4 text-center text-xs text-destructive">
+                {error === detail.id ? `${formatAC(detail.price - points)} KC eksik — oyunlardan topla` : ''}
+              </p>
+            </div>
+          )
+        }
+      />
     </section>
   )
 }

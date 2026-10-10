@@ -1,47 +1,56 @@
 'use client'
 
 import { useState } from 'react'
-import { Gem, Gift, Package, RotateCcw } from 'lucide-react'
+import Image from 'next/image'
+import { RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ParticleBurst } from './particle-burst'
+import { DetailButton, DetailModal } from '../detail-modal'
 
 const CHESTS = [
-  { name: 'Gümüş Sandık', icon: Package, tone: 'cyan' as const },
-  { name: 'Altın Sandık', icon: Gem, tone: 'gold' as const },
-  { name: 'Mavi Sandık', icon: Gift, tone: 'purple' as const },
-]
+  { id: 'bronze', name: 'Bronz Sandık', odds: 'Sık', rewards: [40, 60, 75, 90] },
+  { id: 'gold', name: 'Altın Sandık', odds: 'Nadir', rewards: [150, 200, 300, 500] },
+  { id: 'silver', name: 'Gümüş Sandık', odds: 'Orta', rewards: [75, 100, 120, 150] },
+] as const
 
-const REWARDS = [
-  { label: '75 Kanka Coin', points: 75 },
-  { label: '24s 2x Boost', points: 150 },
-  { label: 'VIP Promo Kod', points: 300 },
-  { label: '120 Kanka Coin', points: 120 },
-  { label: 'Seri Kalkanı', points: 90 },
-]
-
-const TONE = {
-  cyan: { ring: 'border-primary/50 glow-cyan', icon: 'text-primary' },
-  gold: { ring: 'border-gold/50 glow-gold', icon: 'text-gold' },
-  purple: { ring: 'border-accent/50 glow-purple', icon: 'text-accent' },
+const LABELS: Record<number, string> = {
+  500: 'Jackpot! 500 KC',
+  300: 'VIP Promo Kod + 300 KC',
+  200: '24s 2x Boost + 200 KC',
+  150: '150 Kanka Coin',
 }
 
-type Phase = 'idle' | 'opening' | 'opened'
+const RULES = [
+  'Günde 1 sandık hakkın var, hak her gün 00:00’da yenilenir.',
+  'Her sandıkta garantili ödül vardır, boş sandık yoktur.',
+  'Bronz sandık sık ama küçük, altın sandık nadir ama büyük ödül verir.',
+  'Kazanılan Kanka Coin anında bakiyene eklenir.',
+  'Promo kod ödülleri hesabındaki “Kodlarım” alanına düşer, 7 gün geçerlidir.',
+  'Bot, çoklu hesap veya otomasyon tespit edilirse ödüller iptal edilir.',
+]
+
+type Phase = 'idle' | 'shaking' | 'opened'
+
+function pick(arr: readonly number[]) {
+  return arr[Math.floor(Math.random() * arr.length)]
+}
 
 export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [picked, setPicked] = useState<number | null>(null)
-  const [contents, setContents] = useState<typeof REWARDS>([])
+  const [contents, setContents] = useState<number[]>([])
+  const [rules, setRules] = useState(false)
 
   function open(index: number) {
     if (phase !== 'idle') return
-    const shuffled = [...REWARDS].sort(() => Math.random() - 0.5).slice(0, 3)
-    setContents(shuffled)
+    const prizes = CHESTS.map((c) => pick(c.rewards))
+    setContents(prizes)
     setPicked(index)
-    setPhase('opening')
+    setPhase('shaking')
     setTimeout(() => {
       setPhase('opened')
-      onWin(shuffled[index].points)
-    }, 1300)
+      onWin(prizes[index])
+    }, 1400)
   }
 
   function reset() {
@@ -49,15 +58,19 @@ export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
     setPicked(null)
   }
 
+  const won = picked !== null ? contents[picked] : 0
+  const label = (p: number) => LABELS[p] ?? `${p} Kanka Coin`
+
   return (
     <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
       <header className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-start gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-gold">Günlük bonus</span>
           <h3 className="font-display text-xl font-bold text-foreground">Gizemli Sandıklar</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">Günde 1 sandık seç. Her sandıkta garantili ödül var.</p>
+          <DetailButton onClick={() => setRules(true)} label="Oyun kuralları" />
         </div>
-        {phase === 'opened' && (
+        {phase === 'opened' ? (
           <button
             type="button"
             onClick={reset}
@@ -66,57 +79,90 @@ export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
             <RotateCcw className="size-3.5" aria-hidden="true" />
             Tekrar dene
           </button>
+        ) : (
+          <Image
+            src="/images/mascots/jako-sandik.png"
+            alt=""
+            width={96}
+            height={96}
+            className="hidden size-20 shrink-0 rounded-xl object-cover sm:block"
+          />
         )}
       </header>
 
       <div className="grid grid-cols-3 gap-3">
         {CHESTS.map((chest, i) => {
-          const Icon = chest.icon
           const isPicked = picked === i
           const revealed = phase === 'opened'
+          const opened = revealed && isPicked
           return (
             <button
-              key={chest.name}
+              key={chest.id}
               type="button"
               onClick={() => open(i)}
               disabled={phase !== 'idle'}
-              aria-label={revealed ? `${chest.name}: ${contents[i]?.label}` : `${chest.name} aç`}
+              aria-label={revealed ? `${chest.name}: ${label(contents[i])}` : `${chest.name} aç`}
               className={cn(
-                'relative flex aspect-[4/5] flex-col items-center justify-center gap-2 rounded-2xl border bg-card/70 p-2 transition-all duration-300',
-                phase === 'idle' && 'hover:-translate-y-1 hover:bg-card',
-                isPicked ? TONE[chest.tone].ring : 'border-border',
-                revealed && !isPicked && 'opacity-45',
+                'group relative flex flex-col items-center gap-2 rounded-2xl border bg-card/70 p-2 pb-3 transition-all duration-300',
+                phase === 'idle' && 'hover:-translate-y-1 hover:border-gold/50 hover:bg-card',
+                isPicked ? 'border-gold/60 glow-gold' : 'border-border',
+                revealed && !isPicked && 'opacity-50 grayscale-[40%]',
               )}
             >
-              <span className={cn('relative', isPicked && phase === 'opening' && 'animate-shake')}>
-                <Icon
-                  className={cn('size-10 transition-transform sm:size-12', TONE[chest.tone].icon, revealed && isPicked && 'scale-110')}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
+              <span className={cn('relative block aspect-square w-full', isPicked && phase === 'shaking' && 'animate-shake')}>
+                <Image
+                  src={`/images/chests/${chest.id}-${opened ? 'open' : 'closed'}.png`}
+                  alt=""
+                  fill
+                  sizes="(min-width: 768px) 180px, 30vw"
+                  className={cn('object-contain transition-transform duration-300', opened && 'animate-pop scale-110', phase === 'idle' && 'group-hover:scale-105')}
                 />
+                {opened && <ParticleBurst count={24} distance={90} />}
               </span>
               {revealed ? (
                 <span className={cn('animate-pop text-center text-xs font-semibold', isPicked ? 'text-gold' : 'text-muted-foreground')}>
-                  {contents[i]?.label}
+                  {label(contents[i])}
                 </span>
               ) : (
-                <span className="text-center text-xs text-muted-foreground">{chest.name}</span>
+                <span className="flex flex-col items-center text-center">
+                  <span className="text-xs font-semibold text-foreground">{chest.name}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{chest.odds}</span>
+                </span>
               )}
-              {revealed && isPicked && <ParticleBurst count={20} distance={80} />}
             </button>
           )
         })}
       </div>
 
-      <p aria-live="polite" className="text-sm text-muted-foreground">
-        {phase === 'idle' && 'Açmak için bir sandığa dokun.'}
-        {phase === 'opening' && 'Sandık açılıyor…'}
-        {phase === 'opened' && picked !== null && (
+      <div aria-live="polite" className="flex min-h-12 items-center gap-3">
+        {phase === 'opened' && picked !== null ? (
           <>
-            <span className="font-semibold text-gold">{contents[picked]?.label}</span> kazandın. Sonraki sandık 23s 59dk sonra.
+            <Image src="/images/mascots/jako-kazandi.png" alt="" width={56} height={56} className="size-12 animate-pop rounded-full object-cover" />
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">Jako:</span> Helal kanka!{' '}
+              <span className="font-semibold text-gold">{label(won)}</span> senin. Sonraki sandık 23s 59dk sonra.
+            </p>
           </>
+        ) : (
+          <p className="text-sm text-muted-foreground">{phase === 'shaking' ? 'Sandık açılıyor…' : 'Açmak için bir sandığa dokun.'}</p>
         )}
-      </p>
+      </div>
+
+      <DetailModal
+        onClose={() => setRules(false)}
+        content={
+          rules
+            ? {
+                eyebrow: 'Mini oyun',
+                title: 'Gizemli Sandıklar kuralları',
+                image: '/images/mascots/jako-sandik.png',
+                description: 'Üç sandıktan birini seç, içindeki ödül anında senin. Sandık türüne göre ödül aralığı değişir.',
+                prizes: CHESTS.map((c) => ({ place: c.name, prize: `${c.rewards[0]} – ${c.rewards[c.rewards.length - 1]} KC` })),
+                rules: RULES,
+              }
+            : null
+        }
+      />
     </article>
   )
 }

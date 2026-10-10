@@ -15,6 +15,7 @@ import { Events } from '@/components/alkanka/events'
 import { Leaderboard } from '@/components/alkanka/leaderboard'
 import { Faq } from '@/components/alkanka/faq'
 import { Footer } from '@/components/alkanka/footer'
+import { AuthModal } from '@/components/alkanka/auth-modal'
 
 export default function Page() {
   return (
@@ -41,6 +42,7 @@ export default function Page() {
           </main>
         </div>
         <MobileNav />
+        <AuthModal />
       </PointsProvider>
     </BrandProvider>
   )

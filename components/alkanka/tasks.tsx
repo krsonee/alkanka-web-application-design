@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, CalendarCheck, Send, UserPlus, Eye, Flame, ShieldCheck } from 'lucide-react'
+import { Check, CalendarCheck, Flame } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { TELEGRAM_URL } from './data'
+import { TASKS, type TaskItem } from './data'
+import { DetailButton, DetailModal } from './detail-modal'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -17,15 +18,17 @@ const DAYS = [
   { day: 7, reward: 500, vip: true },
 ]
 
-const TASKS = [
-  { id: 'tg', icon: Send, title: 'Telegram kanalına katıl', detail: '@AlkankaOfficial', reward: 150, href: TELEGRAM_URL },
-  { id: 'visit', icon: Eye, title: '3 partner siteyi ziyaret et', detail: '0 / 3 tamamlandı', reward: 90 },
-  { id: 'invite', icon: UserPlus, title: 'Bir arkadaşını davet et', detail: 'Davet linkini paylaş', reward: 250 },
-  { id: 'verify', icon: ShieldCheck, title: 'Hesabını doğrula', detail: 'Mavi tik al, turnuvalara katıl', reward: 200 },
+const STREAK_RULES = [
+  'Ödülü almak için her gün “Bugünü al” butonuna basman gerekir.',
+  'Gün, Türkiye saatiyle 00:00’da yenilenir.',
+  'Bir günü kaçırırsan seri 1. güne döner. Seri Kalkanı bunu bir kez engeller.',
+  '7. günde VIP ödül sandığı açılır ve seri yeniden başlar.',
 ]
 
 export function Tasks() {
   const { add } = usePoints()
+  const [detail, setDetail] = useState<TaskItem | null>(null)
+  const [streakInfo, setStreakInfo] = useState(false)
   const [streakDay, setStreakDay] = useState(4)
   const [checkedToday, setCheckedToday] = useState(false)
   const [done, setDone] = useState<Record<string, boolean>>({})
@@ -105,9 +108,12 @@ export function Tasks() {
               )
             })}
           </ol>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Bir günü kaçırırsan seri sıfırlanır. Marketten <span className="text-foreground">Seri Kalkanı</span> alarak koruyabilirsin.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Bir günü kaçırırsan seri sıfırlanır. Marketten <span className="text-foreground">Seri Kalkanı</span> alarak koruyabilirsin.
+            </p>
+            <DetailButton onClick={() => setStreakInfo(true)} label="Seri kuralları" />
+          </div>
         </article>
 
         <ul className="flex flex-col gap-2 xl:col-span-2">
@@ -119,9 +125,10 @@ export function Tasks() {
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-primary">
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
-                <div className="flex min-w-0 flex-1 flex-col">
+                <div className="flex min-w-0 flex-1 flex-col items-start">
                   <span className="truncate text-sm font-semibold text-foreground">{t.title}</span>
                   <span className="truncate text-xs text-muted-foreground">{t.detail}</span>
+                  <DetailButton onClick={() => setDetail(t)} label="Nasıl yapılır?" />
                 </div>
                 {t.href && !isDone ? (
                   <a
@@ -148,6 +155,53 @@ export function Tasks() {
           })}
         </ul>
       </div>
+
+      <DetailModal
+        onClose={() => setDetail(null)}
+        content={
+          detail && {
+            eyebrow: 'Görev',
+            title: detail.title,
+            description: detail.description,
+            facts: [
+              { label: 'Ödül', value: `+${formatAC(detail.reward)} KC` },
+              { label: 'Durum', value: done[detail.id] ? 'Tamamlandı' : 'Bekliyor' },
+            ],
+            steps: detail.steps,
+            rules: detail.rules,
+            note: detail.verification,
+          }
+        }
+        action={
+          detail && (
+            <button
+              type="button"
+              onClick={() => {
+                if (detail.href) window.open(detail.href, '_blank', 'noopener,noreferrer')
+                complete(detail.id, detail.reward)
+              }}
+              disabled={done[detail.id]}
+              className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
+            >
+              {done[detail.id] ? 'Tamamlandı' : `Görevi yap, +${formatAC(detail.reward)} KC`}
+            </button>
+          )
+        }
+      />
+      <DetailModal
+        onClose={() => setStreakInfo(false)}
+        content={
+          streakInfo
+            ? {
+                eyebrow: 'Günlük giriş',
+                title: 'Giriş serisi nasıl çalışır?',
+                description: 'Her gün giriş yapıp ödülünü alarak seriyi büyüt. Ödüller her gün artar, 7. gün VIP sandık açılır.',
+                prizes: DAYS.map((d) => ({ place: `${d.day}. gün`, prize: d.vip ? 'VIP sandık' : `+${d.reward} KC` })),
+                rules: STREAK_RULES,
+              }
+            : null
+        }
+      />
     </section>
   )
 }

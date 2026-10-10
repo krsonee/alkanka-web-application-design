@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Coins, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { EVENTS, PREDICTIONS } from './data'
+import { EVENTS, PREDICTIONS, type EventItem } from './data'
+import { DetailButton, DetailModal } from './detail-modal'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -43,6 +44,7 @@ function EventCards() {
   const { spend } = usePoints()
   const [start] = useState(() => (typeof window === 'undefined' ? null : Date.now()))
   const [joined, setJoined] = useState<Record<string, boolean>>({})
+  const [detail, setDetail] = useState<EventItem | null>(null)
 
   function join(id: string, entry: number) {
     if (joined[id]) return
@@ -74,6 +76,7 @@ function EventCards() {
               </span>
               <span className="text-primary">{e.prize}</span>
             </div>
+            <DetailButton onClick={() => setDetail(e)} />
             <button
               type="button"
               onClick={() => join(e.id, e.entry)}
@@ -90,6 +93,36 @@ function EventCards() {
           </div>
         </li>
       ))}
+      <DetailModal
+        onClose={() => setDetail(null)}
+        content={
+          detail && {
+            eyebrow: `${detail.kind} etkinlik`,
+            title: detail.title,
+            image: detail.image,
+            description: detail.description,
+            facts: [
+              { label: 'Katılım', value: detail.entry === 0 ? 'Ücretsiz' : `${detail.entry} KC` },
+              { label: 'Katılımcı', value: formatAC(detail.participants + (joined[detail.id] ? 1 : 0)) },
+            ],
+            steps: detail.steps,
+            prizes: detail.prizes,
+            rules: detail.rules,
+          }
+        }
+        action={
+          detail && (
+            <button
+              type="button"
+              onClick={() => join(detail.id, detail.entry)}
+              disabled={joined[detail.id]}
+              className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
+            >
+              {joined[detail.id] ? 'Katıldın' : detail.entry === 0 ? 'Ücretsiz katıl' : `${detail.entry} KC ile katıl`}
+            </button>
+          )
+        }
+      />
     </ul>
   )
 }

@@ -79,7 +79,7 @@ export const SLIDES: Slide[] = [
     description: '@AlkankaOfficial kanalında 14.2K üye. Promo kodlar, anketler ve anlık drop’lar.',
     cta: 'Kanala katıl',
     href: TELEGRAM_URL,
-    image: '/images/banner-telegram.png',
+    image: '/images/mascots/jako-duyuru.png',
   },
   {
     id: 's4',

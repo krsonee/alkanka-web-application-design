@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { Dices } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ParticleBurst } from './particle-burst'
+import { DetailButton, DetailModal } from '../detail-modal'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -56,6 +57,7 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
   const [rolling, setRolling] = useState(false)
   const [result, setResult] = useState<{ label: string; points: number } | null>(null)
   const [rollKey, setRollKey] = useState(0)
+  const [rules, setRules] = useState(false)
   const interval = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function roll() {
@@ -80,10 +82,11 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
   return (
     <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
       <header className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-start gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">Mini oyun</span>
           <h3 className="font-display text-xl font-bold text-foreground">Zar At</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">Çift gelirse puanın katlanır. Düşeş jackpot kutusunu açar.</p>
+          <DetailButton onClick={() => setRules(true)} label="Oyun kuralları" />
         </div>
         <Dices className="size-6 shrink-0 text-primary" aria-hidden="true" />
       </header>
@@ -111,6 +114,32 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
           {rolling ? 'Atılıyor' : 'Zar at'}
         </button>
       </div>
+
+      <DetailModal
+        onClose={() => setRules(false)}
+        content={
+          rules
+            ? {
+                eyebrow: 'Mini oyun',
+                title: 'Zar At kuralları',
+                description: 'İki zar atılır, sonuca göre Kanka Coin kazanırsın. Her atış kazandırır, çift ve düşeş daha çok kazandırır.',
+                prizes: [
+                  { place: 'Düşeş (6-6)', prize: 'Jackpot · 400 KC' },
+                  { place: 'Çift (1-1 … 5-5)', prize: 'Zar × 40 KC' },
+                  { place: 'Toplam 10+', prize: 'Toplam × 10 KC' },
+                  { place: 'Diğer atışlar', prize: 'Toplam × 5 KC' },
+                ],
+                rules: [
+                  'Günde 3 atış hakkın var, haklar 00:00’da yenilenir.',
+                  'Marketten alınan 2x Boost aktifken kazanç ikiye katlanır.',
+                  'Sonuçlar tamamen rastgeledir, önceki atışlar sonraki atışı etkilemez.',
+                  'Kazanılan Kanka Coin anında bakiyene eklenir.',
+                  'Otomasyon veya çoklu hesap tespitinde kazançlar iptal edilir.',
+                ],
+              }
+            : null
+        }
+      />
     </article>
   )
 }
