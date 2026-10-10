@@ -1,0 +1,116 @@
+'use client'
+
+import { useRef, useState } from 'react'
+import { Dices } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ParticleBurst } from './particle-burst'
+
+const PIPS: Record<number, number[]> = {
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+}
+
+function Die({ value, rolling, tone }: { value: number; rolling: boolean; tone: 'cyan' | 'purple' }) {
+  return (
+    <div
+      role="img"
+      aria-label={`Die showing ${value}`}
+      className={cn(
+        'grid size-20 grid-cols-3 grid-rows-3 gap-1 rounded-2xl border bg-card p-3 sm:size-24',
+        tone === 'cyan' ? 'border-primary/50 glow-cyan' : 'border-accent/50 glow-purple',
+        rolling && 'animate-tumble',
+      )}
+    >
+      {Array.from({ length: 9 }).map((_, i) => (
+        <span key={i} className="flex items-center justify-center">
+          {PIPS[value].includes(i) && (
+            <span
+              className={cn(
+                'size-3 rounded-full sm:size-3.5',
+                tone === 'cyan' ? 'bg-primary shadow-[0_0_8px_var(--primary)]' : 'bg-accent shadow-[0_0_8px_var(--accent)]',
+              )}
+            />
+          )}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function rewardFor(a: number, b: number) {
+  if (a === 6 && b === 6) return { label: 'Jackpot Mystery Box', points: 400 }
+  if (a === b) return { label: `Doubles! ${a * 40} Points`, points: a * 40 }
+  const sum = a + b
+  if (sum >= 10) return { label: `High Roll — ${sum * 10} Points`, points: sum * 10 }
+  return { label: `${sum * 5} Points`, points: sum * 5 }
+}
+
+const rand = () => 1 + Math.floor(Math.random() * 6)
+
+export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
+  const [dice, setDice] = useState<[number, number]>([5, 3])
+  const [rolling, setRolling] = useState(false)
+  const [result, setResult] = useState<{ label: string; points: number } | null>(null)
+  const [rollKey, setRollKey] = useState(0)
+  const interval = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  function roll() {
+    if (rolling) return
+    setRolling(true)
+    setResult(null)
+    setRollKey((k) => k + 1)
+    interval.current = setInterval(() => setDice([rand(), rand()]), 90)
+    setTimeout(() => {
+      if (interval.current) clearInterval(interval.current)
+      const final: [number, number] = [rand(), rand()]
+      setDice(final)
+      setRolling(false)
+      const r = rewardFor(final[0], final[1])
+      setResult(r)
+      onWin(r.points)
+    }, 900)
+  }
+
+  const isDouble = result && dice[0] === dice[1]
+
+  return (
+    <article className="glass relative flex flex-col gap-5 overflow-hidden rounded-3xl p-6 glow-purple">
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-widest text-accent">Mini-Game</span>
+          <h3 className="font-display text-xl font-bold text-foreground">Dice & Roll</h3>
+          <p className="text-sm leading-relaxed text-muted-foreground">Doubles multiply your points. Double sixes unlock a jackpot box.</p>
+        </div>
+        <Dices className="size-6 shrink-0 text-accent" aria-hidden="true" />
+      </header>
+
+      <div className="relative flex items-center justify-center gap-5 py-4" key={rollKey}>
+        <Die value={dice[0]} rolling={rolling} tone="cyan" />
+        <Die value={dice[1]} rolling={rolling} tone="purple" />
+        {isDouble && <ParticleBurst count={16} distance={110} />}
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <p aria-live="polite" className="min-w-0 text-sm">
+          {result ? (
+            <span className="animate-pop font-semibold text-gold">{result.label}</span>
+          ) : (
+            <span className="text-muted-foreground">{rolling ? 'Rolling…' : '3 rolls remaining today'}</span>
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={roll}
+          disabled={rolling}
+          className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-transform hover:scale-105 disabled:opacity-70"
+        >
+          {rolling ? 'Rolling' : 'Roll dice'}
+        </button>
+      </div>
+    </article>
+  )
+}

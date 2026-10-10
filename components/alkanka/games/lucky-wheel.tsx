@@ -1,0 +1,149 @@
+'use client'
+
+import { useRef, useState } from 'react'
+import { RotateCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ParticleBurst } from './particle-burst'
+
+type Segment = { short: string; label: string; points: number; tone: 'cyan' | 'purple' | 'gold' | 'muted' }
+
+const SEGMENTS: Segment[] = [
+  { short: '50', label: '50 Points', points: 50, tone: 'cyan' },
+  { short: '2x', label: '2x Boost', points: 120, tone: 'purple' },
+  { short: 'VIP', label: 'VIP Pass', points: 300, tone: 'gold' },
+  { short: 'Retry', label: 'Try Again', points: 0, tone: 'muted' },
+  { short: '100', label: '100 Points', points: 100, tone: 'cyan' },
+  { short: 'Code', label: 'Free Promo Code', points: 150, tone: 'purple' },
+  { short: '250', label: '250 Points', points: 250, tone: 'gold' },
+  { short: 'Box', label: 'Mystery Box', points: 200, tone: 'muted' },
+]
+
+const SEG_ANGLE = 360 / SEGMENTS.length
+const SPIN_MS = 4800
+
+const TONE_FILL: Record<Segment['tone'], string> = {
+  cyan: 'color-mix(in oklch, var(--primary) 34%, var(--card))',
+  purple: 'color-mix(in oklch, var(--accent) 40%, var(--card))',
+  gold: 'color-mix(in oklch, var(--gold) 34%, var(--card))',
+  muted: 'var(--secondary)',
+}
+
+const WHEEL_BG = `conic-gradient(${SEGMENTS.map(
+  (s, i) => `${TONE_FILL[s.tone]} ${i * SEG_ANGLE}deg ${(i + 1) * SEG_ANGLE}deg`,
+).join(', ')})`
+
+export function LuckyWheel({ onWin }: { onWin: (points: number) => void }) {
+  const [rotation, setRotation] = useState(0)
+  const [spinning, setSpinning] = useState(false)
+  const [result, setResult] = useState<Segment | null>(null)
+  const [burstKey, setBurstKey] = useState(0)
+  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function spin() {
+    if (spinning) return
+    const index = Math.floor(Math.random() * SEGMENTS.length)
+    const center = index * SEG_ANGLE + SEG_ANGLE / 2
+    const jitter = (Math.random() - 0.5) * (SEG_ANGLE * 0.6)
+    const target = (360 - center + jitter + 360) % 360
+    const delta = (target - (rotation % 360) + 360) % 360
+    setResult(null)
+    setSpinning(true)
+    setRotation(rotation + 360 * 6 + delta)
+    if (timeout.current) clearTimeout(timeout.current)
+    timeout.current = setTimeout(() => {
+      const seg = SEGMENTS[index]
+      setSpinning(false)
+      setResult(seg)
+      if (seg.points > 0) {
+        setBurstKey((k) => k + 1)
+        onWin(seg.points)
+      }
+    }, SPIN_MS)
+  }
+
+  return (
+    <article className="glass relative flex flex-col gap-6 overflow-hidden rounded-3xl p-6 glow-cyan lg:row-span-2">
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Çarkıfelek</span>
+          <h3 className="font-display text-2xl font-bold text-foreground">Lucky Wheel</h3>
+          <p className="text-sm leading-relaxed text-muted-foreground">One free spin every 6 hours. Land on boosts, codes and VIP passes.</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">1 spin left</span>
+      </header>
+
+      <div className="relative mx-auto aspect-square w-full max-w-sm">
+        <div
+          aria-hidden="true"
+          className={cn(
+            'absolute -inset-3 rounded-full transition-opacity duration-700',
+            spinning ? 'opacity-100 animate-glow' : 'opacity-40',
+          )}
+          style={{
+            background: 'conic-gradient(var(--primary), var(--accent), var(--gold), var(--primary))',
+            filter: 'blur(18px)',
+          }}
+        />
+        <div className="absolute inset-0 rounded-full border-4 border-background bg-background p-2">
+          <div
+            className="relative size-full rounded-full border border-border"
+            style={{
+              background: WHEEL_BG,
+              transform: `rotate(${rotation}deg)`,
+              transition: `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.8, 0.12, 1)`,
+            }}
+          >
+            {SEGMENTS.map((s, i) => (
+              <div
+                key={s.label}
+                aria-hidden="true"
+                className="absolute inset-0 flex justify-center pt-[9%]"
+                style={{ transform: `rotate(${i * SEG_ANGLE + SEG_ANGLE / 2}deg)` }}
+              >
+                <span className="font-display text-sm font-bold text-foreground sm:text-base">{s.short}</span>
+              </div>
+            ))}
+            {SEGMENTS.map((_, i) => (
+              <div
+                key={`divider-${i}`}
+                aria-hidden="true"
+                className="absolute top-0 left-1/2 h-1/2 w-px origin-bottom bg-background/60"
+                style={{ transform: `rotate(${i * SEG_ANGLE}deg)` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div
+          aria-hidden="true"
+          className="absolute -top-1 left-1/2 z-10 h-0 w-0 -translate-x-1/2 border-x-[12px] border-t-[22px] border-x-transparent border-t-gold drop-shadow-[0_0_10px_var(--gold)]"
+        />
+
+        <button
+          type="button"
+          onClick={spin}
+          disabled={spinning}
+          className="absolute top-1/2 left-1/2 z-10 flex size-20 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-4 border-background bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-80 glow-cyan"
+        >
+          <RotateCw className={cn('mb-0.5 size-5', spinning && 'animate-spin')} aria-hidden="true" />
+          {spinning ? 'Spinning' : 'Spin'}
+        </button>
+
+        {burstKey > 0 && <ParticleBurst key={burstKey} count={24} distance={170} />}
+      </div>
+
+      <div aria-live="polite" className="min-h-14 rounded-2xl border border-border bg-background/50 px-4 py-3 text-center">
+        {result ? (
+          <p key={burstKey + result.label} className="animate-pop">
+            <span className="block text-xs text-muted-foreground">{result.points > 0 ? 'You won' : 'So close!'}</span>
+            <span className={cn('font-display text-lg font-bold', result.points > 0 ? 'text-gold' : 'text-foreground')}>
+              {result.label}
+            </span>
+          </p>
+        ) : (
+          <p className="py-2 text-sm text-muted-foreground">{spinning ? 'Good luck…' : 'Press spin to reveal your reward'}</p>
+        )}
+      </div>
+    </article>
+  )
+}
