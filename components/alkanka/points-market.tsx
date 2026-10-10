@@ -6,6 +6,7 @@ import { Check, Coins } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MARKET_ITEMS, type MarketItem } from './data'
 import { DetailButton, DetailModal } from './detail-modal'
+import { JakoTip } from './jako'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -42,6 +43,17 @@ export function PointsMarket() {
           </span>
         }
       />
+
+      <JakoTip
+        pose={claimed ? 'kazandi' : error ? 'uzgun' : 'market'}
+        title={claimed ? 'Hayırlı olsun' : error ? 'Az kaldı kanka' : 'Jako’nun tavsiyesi'}
+      >
+        {claimed
+          ? 'Ürün hesabına tanımlandı. Detayları profilinden görebilirsin.'
+          : error
+            ? 'Coin yetmedi. Çark, zar ve sandıklardan hızlıca toplayabilirsin.'
+            : 'Stoklar sınırlı! Referans özel ürünler en hızlı bitenler, gözünü dört aç.'}
+      </JakoTip>
 
       <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-4">
         {MARKET_ITEMS.map((item) => {

@@ -14,7 +14,15 @@ import {
   type Sponsor,
   type SponsorTier,
 } from './data'
+import { JakoTip, type JakoPose } from './jako'
 import { SectionHeading } from './section-heading'
+
+const TAB_TIPS: Record<string, { pose: JakoPose; text: string }> = {
+  sponsorlar: { pose: 'jako', text: 'Hepsini tek tek kontrol ettim kanka. Ana sponsorlar en güvenilirleri, gönül rahatlığıyla gir.' },
+  bonuslar: { pose: 'market', text: 'Kodu kopyala, kayıt olurken yapıştır. Bonus sadece AL KANKA linkiyle gelenlere tanımlanır!' },
+  oranlar: { pose: 'dusunen', text: 'Özel oranlar sınırlı süreli. Saat dolmadan kuponunu yap, sonra pişman olma.' },
+  kampanyalar: { pose: 'duyuru', text: 'Yeni kampanyalar ilk Telegram’da duyurulur. Kanala katıl, hiçbirini kaçırma.' },
+}
 
 const TABS = [
   { id: 'sponsorlar', label: 'Sponsorlar' },
@@ -79,6 +87,10 @@ export function PartnerSites() {
           </button>
         ))}
       </div>
+
+      <JakoTip pose={TAB_TIPS[tab].pose} title="Jako diyor ki">
+        {TAB_TIPS[tab].text}
+      </JakoTip>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'sponsorlar' && <SponsorTiers />}

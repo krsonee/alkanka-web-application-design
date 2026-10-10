@@ -1,4 +1,5 @@
 import { TELEGRAM_URL } from './data'
+import { JakoAvatar } from './jako'
 import { BrandLogo } from './logo-selector'
 
 const LINKS = [
@@ -13,6 +14,23 @@ const LINKS = [
 export function Footer() {
   return (
     <footer className="flex flex-col gap-6 border-t border-border pt-8 pb-24 lg:pb-8">
+      <a
+        href={TELEGRAM_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="panel-gold flex flex-col items-start gap-4 rounded-2xl p-5 transition-colors hover:border-primary/50 sm:flex-row sm:items-center"
+      >
+        <JakoAvatar pose="telegram" size="lg" />
+        <span className="flex flex-1 flex-col gap-1">
+          <span className="font-display text-lg font-bold text-foreground text-balance">Kaçırma kanka, Jako her şeyi Telegram’da öter!</span>
+          <span className="text-sm leading-relaxed text-muted-foreground">
+            Yeni bonus kodları, özel oranlar ve etkinlik duyuruları ilk orada.
+          </span>
+        </span>
+        <span className="rounded-lg bg-accent px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-accent-foreground">
+          Kanala katıl
+        </span>
+      </a>
       <div className="flex flex-col justify-between gap-6 md:flex-row md:items-start">
         <div className="flex max-w-sm flex-col gap-3">
           <BrandLogo size="sm" />

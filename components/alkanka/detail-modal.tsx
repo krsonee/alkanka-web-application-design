@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import type { ReactNode } from 'react'
 import { Check, ScrollText } from 'lucide-react'
+import { JakoAvatar, JakoTip } from './jako'
 import { Modal } from './modal'
 
 export type DetailContent = {
@@ -86,7 +87,7 @@ export function DetailModal({
 
             <section className="flex flex-col gap-2 rounded-xl border border-primary/25 bg-primary/5 p-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <ScrollText className="size-4 text-primary" aria-hidden="true" />
+                <JakoAvatar pose="dusunen" size="sm" className="size-8 rounded-lg" />
                 Kurallar
               </h3>
               <ul className="flex flex-col gap-1.5">
@@ -99,7 +100,11 @@ export function DetailModal({
               </ul>
             </section>
 
-            {content.note && <p className="text-xs leading-relaxed text-muted-foreground">{content.note}</p>}
+            {content.note && (
+              <JakoTip pose="dusunen" size="sm" title="Jako hatırlatıyor">
+                {content.note}
+              </JakoTip>
+            )}
             {action}
           </div>
         </>

@@ -121,10 +121,23 @@ import { cn } from '@/lib/utils'
 ] as const
 
 type MascotId = (typeof MASCOTS)[number]['id']
+
+const JAKO_POSES = [
+  { src: '/images/mascots/jako-merhaba.png', label: 'Merhaba', where: 'Kayıt popup’ı' },
+  { src: '/images/mascots/jako-duyuru.png', label: 'Duyuru', where: 'Ana banner, etkinlikler, kampanyalar' },
+  { src: '/images/mascots/jako-kazandi.png', label: 'Kazandı', where: 'Sandık, zar, seri, sıralama' },
+  { src: '/images/mascots/jako-sandik.png', label: 'Sandık', where: 'Gizemli Sandıklar oyunu' },
+  { src: '/images/mascots/jako-zar.png', label: 'Zar', where: 'Zar oyunu' },
+  { src: '/images/mascots/jako-market.png', label: 'Market', where: 'Puan market, bonus kodları' },
+  { src: '/images/mascots/jako-dusunen.png', label: 'Düşünen', where: 'Kurallar, SSS, özel oranlar' },
+  { src: '/images/mascots/jako-uzgun.png', label: 'Üzgün', where: 'Yetersiz coin, boş durumlar, 404' },
+  { src: '/images/mascots/jako-telegram.png', label: 'Telegram', where: 'Sol menü, footer' },
+  { src: '/images/mascots/jako.png', label: 'Klasik', where: 'Giriş popup’ı, sponsorlar' },
+] as const
 const STORAGE_KEY = 'alkanka-mascot'
 
 export function MascotGallery() {
-  const [selected, setSelected] = useState<MascotId>('kurt')
+  const [selected, setSelected] = useState<MascotId>('jako')
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY) as MascotId | null
@@ -210,15 +223,27 @@ export function MascotGallery() {
               Kullanım örnekleri
             </h2>
             <p className="text-sm text-muted-foreground">
-              Kanka Kurt için farklı pozlar. Seçtiğin maskot için de aynı poz seti hazırlanır.
+              Jako Kanka&apos;nın sitede kullanılan tüm pozları ve nerede göründükleri.
             </p>
           </div>
+
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {JAKO_POSES.map((p) => (
+              <li key={p.src} className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
+                <img src={p.src || '/placeholder.svg'} alt={`Jako ${p.label} pozu`} className="aspect-square w-full object-cover" />
+                <div className="flex flex-col gap-0.5 p-3">
+                  <span className="text-sm font-semibold">{p.label}</span>
+                  <span className="text-xs leading-relaxed text-muted-foreground">{p.where}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <article className="relative flex min-h-56 items-end overflow-hidden rounded-2xl border border-border bg-card lg:col-span-2">
               <img
-                src="/images/mascots/kurt-duyuru.png"
-                alt="Megafonla duyuru yapan Kanka Kurt"
+                src="/images/mascots/jako-duyuru.png"
+                alt="Megafonla duyuru yapan Jako Kanka"
                 className="absolute inset-0 size-full object-cover object-right"
               />
               <div className="relative flex max-w-sm flex-col gap-2 bg-gradient-to-r from-background via-background/90 to-transparent p-6">
@@ -234,8 +259,8 @@ export function MascotGallery() {
             <article className="flex flex-col overflow-hidden rounded-2xl border border-primary/40 bg-card">
               <div className="aspect-[16/10] overflow-hidden bg-[#000]">
                 <img
-                  src="/images/mascots/kurt-kazandi.png"
-                  alt="Coin yağmuruyla kutlama yapan Kanka Kurt"
+                  src="/images/mascots/jako-kazandi.png"
+                  alt="Coin yağmuruyla kutlama yapan Jako Kanka"
                   className="size-full object-cover"
                 />
               </div>

@@ -5,6 +5,7 @@ import { Check, CalendarCheck, Flame } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TASKS, type TaskItem } from './data'
 import { DetailButton, DetailModal } from './detail-modal'
+import { JakoTip } from './jako'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -108,10 +109,12 @@ export function Tasks() {
               )
             })}
           </ol>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Bir günü kaçırırsan seri sıfırlanır. Marketten <span className="text-foreground">Seri Kalkanı</span> alarak koruyabilirsin.
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <JakoTip pose={checkedToday ? 'kazandi' : 'dusunen'} title={checkedToday ? 'Helal kanka' : 'Unutma kanka'}>
+              {checkedToday
+                ? 'Bugünkü ödülü aldın, yarın da gel seriyi bozma!'
+                : 'Bir günü kaçırırsan seri sıfırlanır. Marketten Seri Kalkanı alarak koruyabilirsin.'}
+            </JakoTip>
             <DetailButton onClick={() => setStreakInfo(true)} label="Seri kuralları" />
           </div>
         </article>

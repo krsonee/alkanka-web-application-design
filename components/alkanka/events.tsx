@@ -6,6 +6,7 @@ import { Coins, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EVENTS, PREDICTIONS, type EventItem } from './data'
 import { DetailButton, DetailModal } from './detail-modal'
+import { JakoTip } from './jako'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -206,6 +207,9 @@ export function Events() {
         title="Biletler & Tahminler"
         description="Haftalık bilet çekilişi, günlük turnuvalar ve maç tahminleri. Katıl, Kanka Coin havuzundan payını al."
       />
+      <JakoTip pose="duyuru" title="Jako duyuruyor">
+        Bilet çekilişi her pazar 21:00&apos;de canlı yayında! Ne kadar çok bilet, o kadar çok şans kanka.
+      </JakoTip>
       <EventCards />
       <Predictions />
     </section>

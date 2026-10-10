@@ -1,6 +1,7 @@
 import { Crown, Flame } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LEADERBOARD, LIVE_WINS } from './data'
+import { JakoTip } from './jako'
 import { SectionHeading } from './section-heading'
 
 const formatAC = (n: number) => n.toLocaleString('tr-TR')
@@ -13,6 +14,10 @@ export function Leaderboard() {
         title="Sıralama"
         description="Haftalık Kanka Coin liderleri ve son kazananlar. Her pazartesi sıfırlanır, ilk 3 VIP sandık kazanır."
       />
+
+      <JakoTip pose="kazandi" title="Zirveye oyna">
+        Görevleri tamamla, her gün giriş yap, oyunlarda coin topla. Pazartesi ilk 3&apos;e girersen VIP sandık senin!
+      </JakoTip>
 
       <div className="grid gap-4 xl:grid-cols-5">
         <div className="panel-gold overflow-hidden rounded-xl xl:col-span-3">

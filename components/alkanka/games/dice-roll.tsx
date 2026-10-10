@@ -1,8 +1,8 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Dices } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { JakoAvatar, type JakoPose } from '../jako'
 import { ParticleBurst } from './particle-burst'
 import { DetailButton, DetailModal } from '../detail-modal'
 
@@ -78,6 +78,7 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
   }
 
   const isDouble = result && dice[0] === dice[1]
+  const jakoPose: JakoPose = rolling ? 'zar' : result ? (result.points >= 100 ? 'kazandi' : 'jako') : 'zar'
 
   return (
     <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
@@ -88,7 +89,7 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
           <p className="text-sm leading-relaxed text-muted-foreground">Çift gelirse puanın katlanır. Düşeş jackpot kutusunu açar.</p>
           <DetailButton onClick={() => setRules(true)} label="Oyun kuralları" />
         </div>
-        <Dices className="size-6 shrink-0 text-primary" aria-hidden="true" />
+        <JakoAvatar pose={jakoPose} size="lg" className={cn('transition-transform', result && 'animate-pop')} />
       </header>
 
       <div className="relative flex items-center justify-center gap-5 py-4" key={rollKey}>

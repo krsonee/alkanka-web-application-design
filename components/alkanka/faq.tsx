@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ChevronDown, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FAQ, TELEGRAM_URL } from './data'
+import { JakoTip } from './jako'
 import { SectionHeading } from './section-heading'
 
 export function Faq() {
@@ -14,6 +15,10 @@ export function Faq() {
   return (
     <section id="sss" aria-labelledby="sss-title" className="flex scroll-mt-20 flex-col gap-5">
       <SectionHeading id="sss-title" title="Sıkça Sorulan Sorular" description="Kanka Coin, market, Telegram ve hesap güvenliği hakkında en çok sorulanlar." />
+
+      <JakoTip pose="dusunen" title="Kafana takılan mı var?">
+        Cevabı burada bulamazsan Telegram&apos;dan yaz kanka, ekip 7/24 orada.
+      </JakoTip>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {FAQ.map((g) => (

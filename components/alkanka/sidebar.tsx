@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS, TELEGRAM_URL } from './data'
+import { JakoAvatar } from './jako'
 import { BrandLogo, LogoSelector } from './logo-selector'
 
 const SECTION_IDS = ['anasayfa', 'siteler', 'gorevler', 'market', 'oyunlar', 'etkinlikler', 'siralama', 'sss']
@@ -72,13 +73,12 @@ function TelegramCard() {
       rel="noopener noreferrer"
       className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/10 p-3 transition-colors hover:bg-accent/15"
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-        <Send className="size-4" aria-hidden="true" />
-      </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-sm font-semibold text-foreground">Telegram</span>
+      <JakoAvatar pose="telegram" size="sm" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-sm font-semibold text-foreground">Jako Telegram’da!</span>
         <span className="truncate text-xs text-muted-foreground">14.2K üye · 2.384 çevrimiçi</span>
       </span>
+      <Send className="size-4 shrink-0 text-accent" aria-hidden="true" />
     </a>
   )
 }
