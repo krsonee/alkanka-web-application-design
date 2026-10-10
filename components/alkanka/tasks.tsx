@@ -50,12 +50,7 @@ export function Tasks() {
   }
 
   return (
-    <section id="gorevler" aria-labelledby="gorevler-title" className="flex scroll-mt-20 flex-col gap-5">
-      <SectionHeading
-        id="gorevler-title"
-        title="Görevler"
-        description="Her gün giriş yap, seriyi koru. 7. günde VIP ödül sandığı açılır. Görevler ekstra Kanka Coin kazandırır."
-      />
+    <section aria-label="Görevler" className="flex flex-col gap-5">
 
       <div className="grid gap-4 xl:grid-cols-5">
         <article className="panel-gold flex flex-col gap-5 rounded-2xl p-5 xl:col-span-3">

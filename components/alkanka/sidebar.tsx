@@ -1,50 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS, TELEGRAM_URL } from './data'
 import { JakoAvatar } from './jako'
 import { BrandLogo, LogoSelector } from './logo-selector'
 
-const SECTION_IDS = ['anasayfa', 'siteler', 'gorevler', 'market', 'oyunlar', 'etkinlikler', 'siralama', 'sss']
-
-function useActiveSection() {
-  const [active, setActive] = useState('anasayfa')
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-        if (visible[0]) setActive(visible[0].target.id)
-      },
-      { rootMargin: '-30% 0px -60% 0px' },
-    )
-    SECTION_IDS.forEach((id) => {
-      const el = document.getElementById(id)
-      if (el) observer.observe(el)
-    })
-    return () => observer.disconnect()
-  }, [])
-  return active
-}
-
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
-  const active = useActiveSection()
-  const seen = new Set<string>()
+  const pathname = usePathname()
 
   return (
     <nav aria-label="Ana menü" className="flex flex-col gap-0.5">
       {NAV_ITEMS.map((item) => {
-        const target = item.href.slice(1)
-        const isActive = active === target && !seen.has(target)
-        seen.add(target)
+        const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
         const Icon = item.icon
         return (
-          <a
+          <Link
             key={item.id}
             href={item.href}
             onClick={onNavigate}
-            aria-current={isActive ? 'true' : undefined}
+            aria-current={isActive ? 'page' : undefined}
             className={cn(
               'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               isActive
@@ -58,7 +36,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             {item.badge && (
               <span className="rounded bg-live/15 px-1.5 py-0.5 text-[10px] font-semibold text-live">{item.badge}</span>
             )}
-          </a>
+          </Link>
         )
       })}
     </nav>
@@ -100,10 +78,10 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
 export function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-surface lg:flex">
-      <a href="#anasayfa" className="flex h-16 shrink-0 items-center border-b border-border px-5">
+      <Link href="/" className="flex h-16 shrink-0 items-center border-b border-border px-5">
         <BrandLogo size="sm" />
         <span className="sr-only">AL KANKA ana sayfa</span>
-      </a>
+      </Link>
       <SidebarBody />
     </aside>
   )

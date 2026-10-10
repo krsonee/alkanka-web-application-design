@@ -199,19 +199,19 @@ function Predictions() {
   )
 }
 
-export function Events() {
+export function Events({ view }: { view: 'biletler' | 'tahminler' }) {
   return (
-    <section id="etkinlikler" aria-labelledby="etkinlikler-title" className="flex scroll-mt-20 flex-col gap-5">
-      <SectionHeading
-        id="etkinlikler-title"
-        title="Biletler & Tahminler"
-        description="Haftalık bilet çekilişi, günlük turnuvalar ve maç tahminleri. Katıl, Kanka Coin havuzundan payını al."
-      />
-      <JakoTip pose="duyuru" title="Jako duyuruyor">
-        Bilet çekilişi her pazar 21:00&apos;de canlı yayında! Ne kadar çok bilet, o kadar çok şans kanka.
-      </JakoTip>
-      <EventCards />
-      <Predictions />
+    <section aria-label={view === 'biletler' ? 'Biletler' : 'Tahminler'} className="flex flex-col gap-5">
+      {view === 'biletler' ? (
+        <>
+          <JakoTip pose="duyuru" title="Jako duyuruyor">
+            Bilet çekilişi her pazar 21:00&apos;de canlı yayında! Ne kadar çok bilet, o kadar çok şans kanka.
+          </JakoTip>
+          <EventCards />
+        </>
+      ) : (
+        <Predictions />
+      )}
     </section>
   )
 }

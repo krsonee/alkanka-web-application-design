@@ -3,12 +3,13 @@ import { JakoAvatar } from './jako'
 import { BrandLogo } from './logo-selector'
 
 const LINKS = [
-  { label: 'Siteler', href: '#siteler' },
-  { label: 'Çark', href: '#oyunlar' },
-  { label: 'Market', href: '#market' },
-  { label: 'Görevler', href: '#gorevler' },
-  { label: 'Sıralama', href: '#siralama' },
-  { label: 'SSS', href: '#sss' },
+  { label: 'Sponsorlar', href: '/sponsorlar' },
+  { label: 'Kampanyalar', href: '/kampanyalar' },
+  { label: 'Çark', href: '/oyunlar/cark' },
+  { label: 'Market', href: '/market' },
+  { label: 'Görevler', href: '/gorevler' },
+  { label: 'Sıralama', href: '/siralama' },
+  { label: 'SSS', href: '/sss' },
 ]
 
 export function Footer() {

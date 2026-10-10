@@ -51,7 +51,7 @@ export function Topbar() {
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        <a href="#anasayfa" className="lg:hidden">
+        <a href="/" className="lg:hidden">
           <BrandLogo size="sm" />
           <span className="sr-only">AL KANKA ana sayfa</span>
         </a>

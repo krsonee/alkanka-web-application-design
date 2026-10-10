@@ -8,12 +8,7 @@ const formatAC = (n: number) => n.toLocaleString('tr-TR')
 
 export function Leaderboard() {
   return (
-    <section id="siralama" aria-labelledby="siralama-title" className="flex scroll-mt-20 flex-col gap-5">
-      <SectionHeading
-        id="siralama-title"
-        title="Sıralama"
-        description="Haftalık Kanka Coin liderleri ve son kazananlar. Her pazartesi sıfırlanır, ilk 3 VIP sandık kazanır."
-      />
+    <section aria-label="Sıralama" className="flex flex-col gap-5">
 
       <JakoTip pose="kazandi" title="Zirveye oyna">
         Görevleri tamamla, her gün giriş yap, oyunlarda coin topla. Pazartesi ilk 3&apos;e girersen VIP sandık senin!

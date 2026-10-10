@@ -30,19 +30,12 @@ export function PointsMarket() {
   }
 
   return (
-    <section id="market" aria-labelledby="market-title" className="flex scroll-mt-20 flex-col gap-5">
-      <SectionHeading
-        id="market-title"
-        title="Puan Marketi"
-        description="Rozet, ekstra hak ve hediyelik. Nakit yok. Topladığın Kanka Coin ile dilediğini al."
-        action={
-          <span className="flex items-center gap-2 self-start rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm sm:self-auto">
-            <Coins className="size-4 text-primary" aria-hidden="true" />
-            <span className="text-muted-foreground">Bakiyen</span>
-            <span className="font-display font-bold text-foreground tabular-nums">{formatAC(points)}</span>
-          </span>
-        }
-      />
+    <section aria-label="Puan marketi" className="flex flex-col gap-5">
+      <span className="flex items-center gap-2 self-start rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm">
+        <Coins className="size-4 text-primary" aria-hidden="true" />
+        <span className="text-muted-foreground">Bakiyen</span>
+        <span className="font-display font-bold text-foreground tabular-nums">{formatAC(points)}</span>
+      </span>
 
       <JakoTip
         pose={claimed ? 'kazandi' : error ? 'uzgun' : 'market'}

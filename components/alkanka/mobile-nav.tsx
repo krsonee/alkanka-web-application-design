@@ -1,10 +1,10 @@
 import { CircleDot, Home, LayoutGrid, ShoppingBag, UserPlus } from 'lucide-react'
 
 const ITEMS = [
-  { label: 'Ana', href: '#anasayfa', icon: Home },
-  { label: 'Siteler', href: '#siteler', icon: LayoutGrid },
-  { label: 'Çark', href: '#oyunlar', icon: CircleDot, primary: true },
-  { label: 'Market', href: '#market', icon: ShoppingBag },
+  { label: 'Ana', href: '/', icon: Home },
+  { label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
+  { label: 'Çark', href: '/oyunlar/cark', icon: CircleDot, primary: true },
+  { label: 'Market', href: '/market', icon: ShoppingBag },
   { label: 'Kayıt', href: '#kayit', icon: UserPlus },
 ]
 

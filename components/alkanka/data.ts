@@ -25,20 +25,20 @@ export const TELEGRAM_URL = 'https://t.me/AlkankaOfficial'
 export type NavItem = { id: string; label: string; href: string; icon: LucideIcon; badge?: string }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: 'anasayfa', label: 'Ana sayfa', href: '/#anasayfa', icon: Home },
-  { id: 'siteler', label: 'Sponsorlar', href: '/#siteler', icon: LayoutGrid },
-  { id: 'bonuslar', label: 'Bonuslar', href: '/#bonuslar', icon: BadgePercent },
-  { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/#ozel-oranlar', icon: Percent },
-  { id: 'kampanyalar', label: 'Kampanyalar', href: '/#kampanyalar', icon: Megaphone },
-  { id: 'oyunlar', label: 'Çark', href: '/#oyunlar', icon: CircleDot, badge: 'Yeni' },
-  { id: 'zar', label: 'Zar', href: '/#oyunlar', icon: Dices },
-  { id: 'sandik', label: 'Sandık', href: '/#oyunlar', icon: Gift },
-  { id: 'market', label: 'Puan marketi', href: '/#market', icon: ShoppingBag },
-  { id: 'gorevler', label: 'Görevler', href: '/#gorevler', icon: ListChecks },
-  { id: 'etkinlikler', label: 'Biletler', href: '/#etkinlikler', icon: Ticket },
-  { id: 'tahminler', label: 'Tahminler', href: '/#etkinlikler', icon: Flag },
-  { id: 'siralama', label: 'Sıralama', href: '/#siralama', icon: Trophy },
-  { id: 'sss', label: 'SSS', href: '/#sss', icon: HelpCircle },
+  { id: 'anasayfa', label: 'Ana sayfa', href: '/', icon: Home },
+  { id: 'siteler', label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
+  { id: 'bonuslar', label: 'Bonuslar', href: '/bonuslar', icon: BadgePercent },
+  { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
+  { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
+  { id: 'cark', label: 'Çark', href: '/oyunlar/cark', icon: CircleDot, badge: 'Yeni' },
+  { id: 'zar', label: 'Zar', href: '/oyunlar/zar', icon: Dices },
+  { id: 'sandik', label: 'Sandık', href: '/oyunlar/sandik', icon: Gift },
+  { id: 'market', label: 'Puan marketi', href: '/market', icon: ShoppingBag },
+  { id: 'gorevler', label: 'Görevler', href: '/gorevler', icon: ListChecks },
+  { id: 'etkinlikler', label: 'Biletler', href: '/biletler', icon: Ticket },
+  { id: 'tahminler', label: 'Tahminler', href: '/tahminler', icon: Flag },
+  { id: 'siralama', label: 'Sıralama', href: '/siralama', icon: Trophy },
+  { id: 'sss', label: 'SSS', href: '/sss', icon: HelpCircle },
 ]
 
 export const SECTION_IDS = NAV_ITEMS.map((i) => i.href.split('#')[1]).filter((v, i, a) => a.indexOf(v) === i)
@@ -60,7 +60,7 @@ export const SLIDES: Slide[] = [
     title: 'Çarkı çevir, Kanka Coin topla',
     description: 'Her 6 saatte bir ücretsiz çevirme hakkı. Boost, kod ve VIP geçiş kazan.',
     cta: 'Çarkı aç',
-    href: '#oyunlar',
+    href: '/oyunlar/cark',
     image: '/images/banner-wheel.png',
   },
   {
@@ -69,7 +69,7 @@ export const SLIDES: Slide[] = [
     title: 'Rozet, ekstra hak ve hediyeler',
     description: 'Topladığın Kanka Coin ile marketten dilediğini al. Nakit yok, sadece ödül.',
     cta: 'Marketi aç',
-    href: '#market',
+    href: '/market',
     image: '/images/hero-chest.png',
   },
   {
@@ -87,7 +87,7 @@ export const SLIDES: Slide[] = [
     title: '250.000 Kanka Coin ödüllü bilet çekilişi',
     description: 'Bilet al, tahmin yap, sıralamada yüksel. Her pazar 21:00’de çekiliş.',
     cta: 'Bilet al',
-    href: '#etkinlikler',
+    href: '/biletler',
     image: '/images/banner-events.png',
   },
 ]
@@ -95,12 +95,12 @@ export const SLIDES: Slide[] = [
 export type QuickTile = { id: string; label: string; cta: string; href: string; image: string }
 
 export const QUICK_TILES: QuickTile[] = [
-  { id: 'cark', label: 'Çark', cta: 'Çarkı aç', href: '#oyunlar', image: '/images/tile-wheel.png' },
-  { id: 'market', label: 'Market', cta: 'Marketi aç', href: '#market', image: '/images/tile-market.png' },
-  { id: 'gorev', label: 'Görevler', cta: 'Görevlere git', href: '#gorevler', image: '/images/tile-tasks.png' },
-  { id: 'zar', label: 'Zar', cta: 'Zar at', href: '#oyunlar', image: '/images/tile-dice.png' },
-  { id: 'sandik', label: 'Sandık', cta: 'Sandık aç', href: '#oyunlar', image: '/images/tile-chest.png' },
-  { id: 'tahmin', label: 'Tahminler', cta: 'Tahmin et', href: '#etkinlikler', image: '/images/tile-predict.png' },
+  { id: 'cark', label: 'Çark', cta: 'Çarkı aç', href: '/oyunlar/cark', image: '/images/tile-wheel.png' },
+  { id: 'market', label: 'Market', cta: 'Marketi aç', href: '/market', image: '/images/tile-market.png' },
+  { id: 'gorev', label: 'Görevler', cta: 'Görevlere git', href: '/gorevler', image: '/images/tile-tasks.png' },
+  { id: 'zar', label: 'Zar', cta: 'Zar at', href: '/oyunlar/zar', image: '/images/tile-dice.png' },
+  { id: 'sandik', label: 'Sandık', cta: 'Sandık aç', href: '/oyunlar/sandik', image: '/images/tile-chest.png' },
+  { id: 'tahmin', label: 'Tahminler', cta: 'Tahmin et', href: '/tahminler', image: '/images/tile-predict.png' },
 ]
 
 export type TickerEvent = { id: string; kind: 'telegram' | 'claim' | 'drop'; text: string; time: string }
@@ -136,7 +136,7 @@ export type Sponsor = {
   payout: string
 }
 
-export const SPONSORS: Sponsor[] = [
+const BASE_SPONSORS: Sponsor[] = [
   { id: 'novareach', name: 'NovaReach', initials: 'NR', tier: 'ana', tagline: 'Resmi ana sponsor', welcome: '%300 hoş geldin bonusu', perks: ['AL KANKA’ya özel oranlar', '7/24 Türkçe canlı destek', 'Haftalık %25 kayıp bonusu', 'Anında çekim'], rating: 4.9, payout: '5 dk' },
   { id: 'apex-club', name: 'Apex Club', initials: 'AC', tier: 'vip', tagline: 'VIP seviye hızlandırıcı', welcome: '%200 + 100 freespin', perks: ['VIP seviye atlama', 'Kişisel hesap yöneticisi'], rating: 4.8, payout: '10 dk' },
   { id: 'luxe-rewards', name: 'Luxe Rewards', initials: 'LR', tier: 'vip', tagline: 'Concierge bonus kasası', welcome: '%150 yatırım bonusu', perks: ['Yüksek çekim limiti', 'Doğum günü hediyesi'], rating: 4.9, payout: '15 dk' },
@@ -145,6 +145,46 @@ export const SPONSORS: Sponsor[] = [
   { id: 'clickwave', name: 'Clickwave', initials: 'CW', tier: 'guvenilir', tagline: 'Günlük ziyaret serisi', welcome: '50 freespin', perks: ['Günlük çark'], rating: 4.4, payout: '30 dk' },
   { id: 'vertex', name: 'Vertex', initials: 'VX', tier: 'guvenilir', tagline: 'Referans çarpanı', welcome: '%75 yatırım bonusu', perks: ['Arkadaş davet bonusu'], rating: 4.5, payout: '25 dk' },
   { id: 'kuzey', name: 'Kuzey', initials: 'KZ', tier: 'guvenilir', tagline: 'Spor odaklı', welcome: '%100 spor bonusu', perks: ['Canlı maç yayını'], rating: 4.6, payout: '20 dk' },
+]
+
+const EXTRA_SPONSORS: [name: string, initials: string, tier: SponsorTier, welcome: string, perk: string, rating: number, payout: string][] = [
+  ['Zenith', 'ZN', 'vip', '%250 yatırım bonusu', 'Yüksek çekim limiti', 4.8, '10 dk'],
+  ['Royal Spin', 'RS', 'vip', '200 freespin', 'Haftalık VIP turnuva', 4.7, '15 dk'],
+  ['Goldline', 'GL', 'vip', '%200 hoş geldin', 'Kişisel temsilci', 4.8, '10 dk'],
+  ['Kraken', 'KR', 'vip', '%150 + 50 freespin', 'Kripto ile anında çekim', 4.7, '5 dk'],
+  ['Monarch', 'MN', 'vip', '%300 VIP bonusu', 'Doğum günü bonusu', 4.9, '10 dk'],
+  ['Atlas Bet', 'AB', 'vip', '%100 spor + %100 casino', 'Kombine sigortası', 4.6, '15 dk'],
+  ['Mavibet', 'MB', 'guvenilir', '%100 hoş geldin', 'Düşük çevrim', 4.5, '20 dk'],
+  ['Starline', 'SL', 'guvenilir', '75 freespin', 'Günlük çark', 4.4, '30 dk'],
+  ['Polaris', 'PL', 'guvenilir', '%50 yatırım bonusu', 'Haftalık kayıp iadesi', 4.5, '25 dk'],
+  ['Kale', 'KL', 'guvenilir', '%100 spor bonusu', 'Canlı maç yayını', 4.6, '20 dk'],
+  ['Delta Play', 'DP', 'guvenilir', '150 ₺ deneme', 'Yatırımsız deneme', 4.3, '30 dk'],
+  ['Rota', 'RT', 'guvenilir', '%75 hoş geldin', 'Mobil uygulama', 4.4, '25 dk'],
+  ['Nehir', 'NH', 'guvenilir', '%100 casino bonusu', 'Canlı casino iadesi', 4.5, '20 dk'],
+  ['Sirius', 'SR', 'guvenilir', '50 freespin', 'Hızlı kayıt', 4.3, '30 dk'],
+  ['Truva', 'TR', 'guvenilir', '%120 yatırım bonusu', 'Haftalık turnuva', 4.6, '20 dk'],
+  ['Bora', 'BR', 'guvenilir', '%100 spor bonusu', 'Erken ödeme', 4.4, '25 dk'],
+  ['Pera', 'PR', 'guvenilir', '%80 hoş geldin', 'Papara ile yatırım', 4.5, '20 dk'],
+  ['Vira', 'VR', 'guvenilir', '100 freespin', 'Slot turnuvaları', 4.4, '30 dk'],
+  ['Mira', 'MR', 'guvenilir', '%50 kayıp bonusu', 'Çevrimsiz iade', 4.5, '25 dk'],
+  ['Yıldız', 'YL', 'guvenilir', '%100 hoş geldin', '7/24 destek', 4.6, '20 dk'],
+  ['Tuna', 'TN', 'guvenilir', '200 ₺ deneme', 'Yatırımsız bonus', 4.3, '30 dk'],
+  ['Lodos', 'LD', 'guvenilir', '%60 yatırım bonusu', 'Kripto yatırım', 4.4, '25 dk'],
+]
+
+export const SPONSORS: Sponsor[] = [
+  ...BASE_SPONSORS,
+  ...EXTRA_SPONSORS.map(([name, initials, tier, welcome, perk, rating, payout]) => ({
+    id: name.toLowerCase().replace(/\s+/g, '-').replace('ı', 'i'),
+    name,
+    initials,
+    tier,
+    tagline: perk,
+    welcome,
+    perks: [perk, 'AL KANKA linkiyle ekstra bonus'],
+    rating,
+    payout,
+  })),
 ]
 
 export type Bonus = {
@@ -193,13 +233,22 @@ export type Campaign = {
   ends: string
   image: string
   tag: string
+  hoursLeft: number
 }
 
 export const CAMPAIGNS: Campaign[] = [
-  { id: 'c1', sponsorId: 'novareach', title: 'Derbi haftası çılgınlığı', description: 'Derbi haftası boyunca tüm kuponlara %20 kazanç artırımı ve kayıp iadesi.', ends: '3 gün kaldı', image: '/images/banner-events.png', tag: 'Spor' },
-  { id: 'c2', sponsorId: 'apex-club', title: 'VIP Kulübü yaz turnuvası', description: '1.000.000 ₺ ödül havuzlu slot turnuvası. İlk 500 kişiye ödül.', ends: '9 gün kaldı', image: '/images/banner-wheel.png', tag: 'Turnuva' },
-  { id: 'c3', sponsorId: 'luxe-rewards', title: 'Hafta sonu cashback', description: 'Cuma-pazar arası tüm kayıplara %30 nakit iade, çevrimsiz.', ends: 'Hafta sonu', image: '/images/hero-chest.png', tag: 'İade' },
-  { id: 'c4', sponsorId: 'pulse', title: 'Telegram’a özel drop', description: 'Kod önce @AlkankaOfficial kanalına düşer. İlk 200 kişiye 50 freespin.', ends: 'Bugün', image: '/images/banner-telegram.png', tag: 'Telegram' },
+  { id: 'c1', sponsorId: 'novareach', title: 'Derbi haftası çılgınlığı', description: 'Derbi haftası boyunca tüm kuponlara %20 kazanç artırımı ve kayıp iadesi.', ends: '3 gün kaldı', image: '/images/banner-events.png', tag: 'Spor', hoursLeft: 72 },
+  { id: 'c2', sponsorId: 'apex-club', title: 'VIP Kulübü yaz turnuvası', description: '1.000.000 ₺ ödül havuzlu slot turnuvası. İlk 500 kişiye ödül.', ends: '9 gün kaldı', image: '/images/banner-wheel.png', tag: 'Turnuva', hoursLeft: 216 },
+  { id: 'c3', sponsorId: 'luxe-rewards', title: 'Hafta sonu cashback', description: 'Cuma-pazar arası tüm kayıplara %30 nakit iade, çevrimsiz.', ends: 'Hafta sonu', image: '/images/hero-chest.png', tag: 'İade', hoursLeft: 48 },
+  { id: 'c4', sponsorId: 'pulse', title: 'Telegram’a özel drop', description: 'Kod önce @AlkankaOfficial kanalına düşer. İlk 200 kişiye 50 freespin.', ends: 'Bugün', image: '/images/banner-telegram.png', tag: 'Telegram', hoursLeft: 8 },
+  { id: 'c5', sponsorId: 'zenith', title: 'Zenith çifte yatırım günü', description: 'Salı günleri yapılan her yatırıma %50 ekstra bonus, 5.000 ₺’ye kadar.', ends: '2 gün kaldı', image: '/images/tile-market.png', tag: 'Yatırım', hoursLeft: 40 },
+  { id: 'c6', sponsorId: 'royal-spin', title: 'Royal Spin 500 freespin yağmuru', description: 'Her gün seçili slotlarda 100 freespin. 5 gün boyunca toplam 500 freespin.', ends: '5 gün kaldı', image: '/images/tile-wheel.png', tag: 'Freespin', hoursLeft: 120 },
+  { id: 'c7', sponsorId: 'kuzey', title: 'Şampiyonlar Ligi gecesi', description: 'Salı ve çarşamba maçlarında kombine kuponlara %15 ekstra kazanç.', ends: '1 gün kaldı', image: '/images/tile-predict.png', tag: 'Spor', hoursLeft: 26 },
+  { id: 'c8', sponsorId: 'monarch', title: 'Monarch VIP çekilişi', description: 'Ay sonuna kadar yatırım yapan herkes iPhone ve tatil çekilişine katılır.', ends: '18 gün kaldı', image: '/images/tile-chest.png', tag: 'Çekiliş', hoursLeft: 432 },
+  { id: 'c9', sponsorId: 'kraken', title: 'Kripto yatırımına %25 ekstra', description: 'USDT ve BTC yatırımlarında %25 ekstra bonus, anında çekim.', ends: '6 gün kaldı', image: '/images/tile-dice.png', tag: 'Yatırım', hoursLeft: 144 },
+  { id: 'c10', sponsorId: 'goldline', title: 'Goldline canlı casino haftası', description: 'Canlı casino kayıplarına günlük %20 iade, çevrimsiz.', ends: '4 gün kaldı', image: '/images/banner-wheel.png', tag: 'İade', hoursLeft: 96 },
+  { id: 'c11', sponsorId: 'truva', title: 'Truva slot turnuvası', description: '250.000 ₺ ödül havuzu. En yüksek çarpanı yakalayan ilk 100 kişi kazanır.', ends: '7 gün kaldı', image: '/images/hero-chest.png', tag: 'Turnuva', hoursLeft: 168 },
+  { id: 'c12', sponsorId: 'clickwave', title: 'Telegram anket ödülü', description: 'Kanaldaki haftalık ankete katılan ilk 300 kişiye 25 freespin.', ends: 'Bugün', image: '/images/banner-telegram.png', tag: 'Telegram', hoursLeft: 5 },
 ]
 
 export function sponsorById(id: string) {

@@ -13,8 +13,7 @@ export function Faq() {
   const group = FAQ.find((g) => g.id === cat) ?? FAQ[0]
 
   return (
-    <section id="sss" aria-labelledby="sss-title" className="flex scroll-mt-20 flex-col gap-5">
-      <SectionHeading id="sss-title" title="Sıkça Sorulan Sorular" description="Kanka Coin, market, Telegram ve hesap güvenliği hakkında en çok sorulanlar." />
+    <section aria-label="Sıkça sorulan sorular" className="flex flex-col gap-5">
 
       <JakoTip pose="dusunen" title="Kafana takılan mı var?">
         Cevabı burada bulamazsan Telegram&apos;dan yaz kanka, ekip 7/24 orada.
