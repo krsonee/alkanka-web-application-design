@@ -5,9 +5,51 @@ import Link from 'next/link'
 import { Check, Megaphone, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const MASCOTS = [
+  const MASCOTS = [
   {
-    id: 'kurt',
+  id: 'jako',
+  name: 'Jako Kanka',
+  role: 'Geveze muhabir',
+  description: 'Gri tüylü, kırmızı kuyruklu, göz kırpan jako papağanı. Konuşan kuş olduğu için duyuru, kod ve Telegram bildirimlerinin doğal sesi.',
+  image: '/images/mascots/jako.png',
+  },
+  {
+  id: 'kapibara',
+  name: 'Kapibara Usta',
+  role: 'Sakin kafa',
+  description: 'İpek gömlekli, elinde ince belli çay bardağı. Kaybetse de stres yapmayan kanka, sorumlu oyun mesajları için.',
+  image: '/images/mascots/kapibara.png',
+  },
+  {
+  id: 'rakun',
+  name: 'Rakun Reis',
+  role: 'Bonus avcısı',
+  description: 'Bereli, kapüşonlu, omzunda coin çuvalı. Bonus kodu ve fırsat avı bölümlerinin yüzü.',
+  image: '/images/mascots/rakun.png',
+  },
+  {
+  id: 'ahtapot',
+  name: 'Ahtapot Baba',
+  role: 'Çok kollu oyuncu',
+  description: 'Silindir şapka ve monokl; sekiz kolunda kart, çip, zar, kupa. Oyunlar ve etkinlik sayfaları için.',
+  image: '/images/mascots/ahtapot.png',
+  },
+  {
+  id: 'bukalemun',
+  name: 'Bukalemun',
+  role: 'Fırsat kokucu',
+  description: 'Zümrütten altına geçen pulları, dönen gözleri. Özel oranlar ve değişen kampanyalar için.',
+  image: '/images/mascots/bukalemun.png',
+  },
+  {
+  id: 'goril',
+  name: 'Goril Güvenlik',
+  role: 'VIP koruma',
+  description: 'Takım elbiseli, kulaklıklı silverback. Güvenilir site, doğrulama ve hesap güvenliği alanları için.',
+  image: '/images/mascots/goril.png',
+  },
+  {
+  id: 'kurt',
     name: 'Kanka Kurt',
     role: 'Sürünün lideri',
     description: 'Siyah-altın kapüşonlu, altın zincirli. Logodaki kurtla birebir uyumlu, topluluk ruhunu taşır.',
