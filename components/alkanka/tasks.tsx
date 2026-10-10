@@ -50,7 +50,7 @@ export function Tasks() {
       <SectionHeading
         id="gorevler-title"
         title="Görevler"
-        description="Her gün giriş yap, seriyi koru. 7. günde VIP ödül sandığı açılır. Görevler ekstra AlkaCoin kazandırır."
+        description="Her gün giriş yap, seriyi koru. 7. günde VIP ödül sandığı açılır. Görevler ekstra Kanka Coin kazandırır."
       />
 
       <div className="grid gap-4 xl:grid-cols-5">

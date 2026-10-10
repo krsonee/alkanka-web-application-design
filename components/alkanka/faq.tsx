@@ -13,7 +13,7 @@ export function Faq() {
 
   return (
     <section id="sss" aria-labelledby="sss-title" className="flex scroll-mt-20 flex-col gap-5">
-      <SectionHeading id="sss-title" title="Sıkça Sorulan Sorular" description="AlkaCoin, market, Telegram ve hesap güvenliği hakkında en çok sorulanlar." />
+      <SectionHeading id="sss-title" title="Sıkça Sorulan Sorular" description="Kanka Coin, market, Telegram ve hesap güvenliği hakkında en çok sorulanlar." />
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {FAQ.map((g) => (

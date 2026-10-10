@@ -20,7 +20,7 @@ const SEED: Msg[] = [
 const POOL: Omit<Msg, 'id'>[] = [
   { user: 'burak.k', level: 17, text: 'zar turnuvasına katıldım' },
   { user: 'AL KANKA', level: 0, text: 'Yeni özel oran yayında: Kuzey derbi haftası.', system: true },
-  { user: 'zeynep_s', level: 44, text: 'çift altı attım 400 AC' },
+  { user: 'zeynep_s', level: 44, text: 'çift altı attım 400 KC' },
   { user: 'mert_k', level: 64, text: 'bilet çekilişi pazar mı?' },
   { user: 'selin.x', level: 120, text: 'pazar 21:00 kanka' },
   { user: 'kaan_88', level: 103, text: 'görevlerden 250 aldım davet ile' },

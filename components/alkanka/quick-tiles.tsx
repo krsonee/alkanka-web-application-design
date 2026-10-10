@@ -38,7 +38,7 @@ function DistributedCounter() {
     <div ref={ref} className="panel-gold flex flex-col items-center justify-between gap-2 rounded-2xl px-6 py-5 text-center sm:flex-row sm:text-left">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Bugüne kadar topluluğa</p>
       <p className="font-display text-3xl font-bold text-primary tabular-nums sm:text-4xl">
-        {value.toLocaleString('tr-TR')} <span className="text-lg text-foreground">AlkaCoin</span>
+        {value.toLocaleString('tr-TR')} <span className="text-lg text-foreground">Kanka Coin</span>
       </p>
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">dağıttık</p>
     </div>

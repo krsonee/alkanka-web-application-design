@@ -17,7 +17,7 @@ export function Footer() {
         <div className="flex max-w-sm flex-col gap-3">
           <BrandLogo size="sm" />
           <p className="text-sm leading-relaxed text-muted-foreground">
-            AL KANKA bağımsız bir tanıtım ve ödül rehberidir. Mini oyunlar ücretsizdir; AlkaCoin nakde çevrilmez.
+            AL KANKA bağımsız bir tanıtım ve ödül rehberidir. Mini oyunlar ücretsizdir; Kanka Coin nakde çevrilmez.
           </p>
         </div>
         <nav aria-label="Alt menü" className="flex flex-wrap gap-x-6 gap-y-2">

@@ -85,14 +85,57 @@ function ShieldLogo({ className, size = 'md' }: LogoProps) {
   )
 }
 
-export const LOGO_CONCEPTS: { id: LogoConcept; name: string; description: string }[] = [
+export type LogoOption = { id: LogoConcept; name: string; description: string; image?: string }
+
+export const EMBLEM_LOGOS: LogoOption[] = [
+  { id: 'lion', name: 'Aslan', description: 'Güç ve liderlik', image: '/images/logos/lion.png' },
+  { id: 'wolf', name: 'Kurt', description: 'Sürü, sadakat, kanka ruhu', image: '/images/logos/wolf.png' },
+  { id: 'tiger', name: 'Kaplan', description: 'Hız ve cesaret', image: '/images/logos/tiger.png' },
+  { id: 'eagle', name: 'Kartal', description: 'Keskin göz, yüksek hedef', image: '/images/logos/eagle.png' },
+  { id: 'horse', name: 'At', description: 'Yarış ve zafer', image: '/images/logos/horse.png' },
+  { id: 'crown', name: 'Taç', description: 'VIP ve premium', image: '/images/logos/crown.png' },
+  { id: 'coin', name: 'Altın Para', description: 'Kanka Coin vurgusu', image: '/images/logos/coin.png' },
+  { id: 'diamond', name: 'Elmas', description: 'Değer ve kalite', image: '/images/logos/diamond.png' },
+  { id: 'shield-emblem', name: 'Kalkan', description: 'Güvenilir rehber', image: '/images/logos/shield.png' },
+  { id: 'bolt', name: 'Şimşek', description: 'Anlık ödül, hızlı drop', image: '/images/logos/bolt.png' },
+  { id: 'laurel', name: 'Defne', description: 'Kazananların çelengi', image: '/images/logos/laurel.png' },
+  { id: 'fist', name: 'Yumruk', description: 'Topluluk gücü', image: '/images/logos/fist.png' },
+]
+
+export const SVG_LOGOS: LogoOption[] = [
   { id: 'shield', name: 'Altın Kalkan', description: 'Premium güven rozeti' },
   { id: 'monogram', name: 'A+K Monogram', description: 'Geometrik çift harf' },
   { id: 'wordmark', name: 'Yazı Logo', description: 'Sade tipografi + nokta' },
   { id: 'network', name: 'Ağ Düğümü', description: 'Bağlantılı dijital merkez' },
 ]
 
+export const LOGO_CONCEPTS: LogoOption[] = [...EMBLEM_LOGOS, ...SVG_LOGOS]
+
+function EmblemLogo({ image, className, size = 'md' }: LogoProps & { image: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-2.5', className)}>
+      <img
+        src={image}
+        alt=""
+        aria-hidden="true"
+        className={cn(
+          'shrink-0 rounded-full object-cover ring-1 ring-gold/50',
+          size === 'sm' ? 'size-8' : 'size-10',
+        )}
+      />
+      <span className="flex flex-col leading-none">
+        <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
+          Alkanka
+        </span>
+        <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-gold">Kanka</span>
+      </span>
+    </span>
+  )
+}
+
 export function AlkankaLogo({ concept, ...props }: LogoProps & { concept: LogoConcept }) {
+  const emblem = EMBLEM_LOGOS.find((l) => l.id === concept)
+  if (emblem?.image) return <EmblemLogo image={emblem.image} {...props} />
   switch (concept) {
     case 'monogram':
       return <MonogramLogo {...props} />

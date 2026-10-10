@@ -14,7 +14,7 @@ function PointsPill() {
     <div className="relative flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5">
       <Coins className="size-4 text-primary" aria-hidden="true" />
       <span className="flex flex-col leading-none">
-        <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground sm:block">AlkaCoin</span>
+        <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground sm:block">Kanka Coin</span>
         <span className="font-display text-sm font-bold text-foreground tabular-nums" aria-live="polite">
           {formatAC(points)}
         </span>

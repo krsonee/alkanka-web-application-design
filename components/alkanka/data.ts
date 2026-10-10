@@ -49,7 +49,7 @@ export const SLIDES: Slide[] = [
   {
     id: 's1',
     eyebrow: 'Günlük ödül',
-    title: 'Çarkı çevir, AlkaCoin topla',
+    title: 'Çarkı çevir, Kanka Coin topla',
     description: 'Her 6 saatte bir ücretsiz çevirme hakkı. Boost, kod ve VIP geçiş kazan.',
     cta: 'Çarkı aç',
     href: '#oyunlar',
@@ -59,7 +59,7 @@ export const SLIDES: Slide[] = [
     id: 's2',
     eyebrow: 'Puan marketi',
     title: 'Rozet, ekstra hak ve hediyeler',
-    description: 'Topladığın AlkaCoin ile marketten dilediğini al. Nakit yok, sadece ödül.',
+    description: 'Topladığın Kanka Coin ile marketten dilediğini al. Nakit yok, sadece ödül.',
     cta: 'Marketi aç',
     href: '#market',
     image: '/images/hero-chest.png',
@@ -76,7 +76,7 @@ export const SLIDES: Slide[] = [
   {
     id: 's4',
     eyebrow: 'Haftalık etkinlik',
-    title: '250.000 AlkaCoin ödüllü bilet çekilişi',
+    title: '250.000 Kanka Coin ödüllü bilet çekilişi',
     description: 'Bilet al, tahmin yap, sıralamada yüksel. Her pazar 21:00’de çekiliş.',
     cta: 'Bilet al',
     href: '#etkinlikler',
@@ -99,7 +99,7 @@ export type TickerEvent = { id: string; kind: 'telegram' | 'claim' | 'drop'; tex
 
 export const TICKER_EVENTS: TickerEvent[] = [
   { id: 't1', kind: 'telegram', text: 'Telegram kanalına yeni promo kod düştü', time: '1 dk' },
-  { id: 't2', kind: 'claim', text: 'mert_k çarktan 250 AlkaCoin kazandı', time: '2 dk' },
+  { id: 't2', kind: 'claim', text: 'mert_k çarktan 250 Kanka Coin kazandı', time: '2 dk' },
   { id: 't3', kind: 'drop', text: 'VIP ödül havuzu yenilendi — 500 kontenjan açık', time: '3 dk' },
   { id: 't4', kind: 'claim', text: 'aylin.dev Altın Sandık açtı — 2x Boost', time: '4 dk' },
   { id: 't5', kind: 'telegram', text: 'Haftalık anket yayında: sıradaki etkinliği seç', time: '6 dk' },
@@ -132,7 +132,7 @@ export const SITE_TABS: { id: 'all' | SiteCategory; label: string }[] = [
 ]
 
 export const PARTNER_SITES: PartnerSite[] = [
-  { id: 'p1', name: 'NovaReach', initials: 'NR', title: 'Hoş geldin ödül paketi', description: 'İlk kayıtta katlanmış hoş geldin paketi ve bonus AlkaCoin.', category: 'ozel', multiplier: '3x', rating: 4.9, claimed: 82, hot: true },
+  { id: 'p1', name: 'NovaReach', initials: 'NR', title: 'Hoş geldin ödül paketi', description: 'İlk kayıtta katlanmış hoş geldin paketi ve bonus Kanka Coin.', category: 'ozel', multiplier: '3x', rating: 4.9, claimed: 82, hot: true },
   { id: 'p2', name: 'PulseAds', initials: 'PA', title: 'Trafik Surge Boost', description: '72 saatlik boost penceresiyle kampanya erişimini katla.', category: 'trafik', multiplier: '2.5x', rating: 4.6, claimed: 64 },
   { id: 'p3', name: 'Apex Club', initials: 'AC', title: 'VIP seviye hızlandırıcı', description: 'Bir seviye atla, üyelere özel ödül drop’larına anında eriş.', category: 'vip', multiplier: '5x', rating: 4.8, claimed: 91, hot: true },
   { id: 'p4', name: 'Orbitly', initials: 'OR', title: 'Özel oran: 1.8 yerine 3.6', description: 'Sadece AL KANKA linkiyle gelenlere geçerli özel oran fırsatı.', category: 'oran', multiplier: '2x', rating: 4.7, claimed: 47 },
@@ -177,8 +177,8 @@ export type EventItem = {
 }
 
 export const EVENTS: EventItem[] = [
-  { id: 'e1', kind: 'Haftalık', title: 'Bilet Çekilişi', subtitle: '250.000 AlkaCoin havuz', hoursLeft: 52.4, participants: 1284, entry: 50, prize: '1. ödül 50.000 AC', image: '/images/banner-events.png' },
-  { id: 'e2', kind: 'Günlük', title: 'Zar Turnuvası', subtitle: 'En yüksek toplam kazanır', hoursLeft: 6.2, participants: 389, entry: 0, prize: '100 kişiye 500 AC', image: '/images/tile-dice.png' },
+  { id: 'e1', kind: 'Haftalık', title: 'Bilet Çekilişi', subtitle: '250.000 Kanka Coin havuz', hoursLeft: 52.4, participants: 1284, entry: 50, prize: '1. ödül 50.000 KC', image: '/images/banner-events.png' },
+  { id: 'e2', kind: 'Günlük', title: 'Zar Turnuvası', subtitle: 'En yüksek toplam kazanır', hoursLeft: 6.2, participants: 389, entry: 0, prize: '100 kişiye 500 KC', image: '/images/tile-dice.png' },
   { id: 'e3', kind: 'Aylık', title: 'Çark Maratonu', subtitle: 'Ay boyunca en çok çeviren', hoursLeft: 21 * 24 + 3, participants: 2410, entry: 100, prize: '300 kişiye ödül', image: '/images/tile-wheel.png' },
 ]
 
@@ -233,13 +233,13 @@ export const LEADERBOARD = [
 ]
 
 export const LIVE_WINS = [
-  { id: 'w1', game: 'Çark', user: 'fireattack', time: '17:03', reward: '250 AC' },
+  { id: 'w1', game: 'Çark', user: 'fireattack', time: '17:03', reward: '250 KC' },
   { id: 'w2', game: 'Sandık', user: 'shewxye', time: '16:58', reward: '2x Boost' },
-  { id: 'w3', game: 'Zar', user: 'KadirE', time: '16:56', reward: '400 AC' },
-  { id: 'w4', game: 'Tahmin', user: 'MaymunAdam', time: '16:52', reward: '150 AC' },
+  { id: 'w3', game: 'Zar', user: 'KadirE', time: '16:56', reward: '400 KC' },
+  { id: 'w4', game: 'Tahmin', user: 'MaymunAdam', time: '16:52', reward: '150 KC' },
   { id: 'w5', game: 'Çark', user: 'Barka20', time: '16:49', reward: 'VIP Geçiş' },
-  { id: 'w6', game: 'Görev', user: 'deniz_44', time: '16:47', reward: '100 AC' },
-  { id: 'w7', game: 'Zar', user: 'selin.x', time: '16:44', reward: '240 AC' },
+  { id: 'w6', game: 'Görev', user: 'deniz_44', time: '16:47', reward: '100 KC' },
+  { id: 'w7', game: 'Zar', user: 'selin.x', time: '16:44', reward: '240 KC' },
 ]
 
 export type FaqItem = { q: string; a: string }
@@ -248,16 +248,16 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
     id: 'genel',
     label: 'Genel',
     items: [
-      { q: 'AL KANKA nedir ve nasıl çalışır?', a: 'AL KANKA; partner kampanyaları, mini oyunlar ve Telegram topluluğunu tek yerde toplayan bir ödül rehberidir. Görev yap, oyun oyna, AlkaCoin topla ve marketten ödül al.' },
+      { q: 'AL KANKA nedir ve nasıl çalışır?', a: 'AL KANKA; partner kampanyaları, mini oyunlar ve Telegram topluluğunu tek yerde toplayan bir ödül rehberidir. Görev yap, oyun oyna, Kanka Coin topla ve marketten ödül al.' },
       { q: 'Partner siteler hangi kriterlere göre seçiliyor?', a: 'Lisans, ödeme hızı, kullanıcı yorumları ve destek kalitesi düzenli olarak kontrol edilir. Kriterleri karşılamayan partnerler listeden çıkarılır.' },
       { q: 'Bilgiler ne sıklıkla güncelleniyor?', a: 'Kampanyalar ve özel oranlar günlük, giriş adresleri ise anlık olarak güncellenir. En hızlı bildirim Telegram kanalımızdadır.' },
     ],
   },
   {
     id: 'puan',
-    label: 'AlkaCoin',
+    label: 'Kanka Coin',
     items: [
-      { q: 'AlkaCoin nasıl kazanılır?', a: 'Çark, zar ve sandık oyunları, günlük giriş serisi, görevler, tahminler ve etkinlikler ile AlkaCoin kazanırsın.' },
+      { q: 'Kanka Coin nasıl kazanılır?', a: 'Çark, zar ve sandık oyunları, günlük giriş serisi, görevler, tahminler ve etkinlikler ile Kanka Coin kazanırsın.' },
       { q: 'Markette nakit ödül var mı?', a: 'Hayır. Puan marketinde rozet, ekstra oyun hakkı, seri kalkanı, çekiliş bileti ve hediyeler bulunur. Nakit ödül yoktur.' },
       { q: 'Seri kalkanı ne işe yarar?', a: 'Bir günü kaçırdığında 7 günlük giriş serinin sıfırlanmasını engeller. Kalkan otomatik olarak kullanılır.' },
     ],

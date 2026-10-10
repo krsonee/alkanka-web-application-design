@@ -31,7 +31,7 @@ export function PointsMarket() {
       <SectionHeading
         id="market-title"
         title="Puan Marketi"
-        description="Rozet, ekstra hak ve hediyelik. Nakit yok. Topladığın AlkaCoin ile dilediğini al."
+        description="Rozet, ekstra hak ve hediyelik. Nakit yok. Topladığın Kanka Coin ile dilediğini al."
         action={
           <span className="flex items-center gap-2 self-start rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm sm:self-auto">
             <Coins className="size-4 text-primary" aria-hidden="true" />
@@ -78,7 +78,7 @@ export function PointsMarket() {
                 <div className="mt-auto flex items-center gap-1.5">
                   <Coins className="size-4 text-primary" aria-hidden="true" />
                   <span className="font-display text-lg font-bold text-foreground tabular-nums">{formatAC(item.price)}</span>
-                  <span className="text-xs text-muted-foreground">AC</span>
+                  <span className="text-xs text-muted-foreground">KC</span>
                 </div>
                 <button
                   type="button"
@@ -97,7 +97,7 @@ export function PointsMarket() {
                   {soldOut ? 'Tükendi' : claimed === item.id ? 'Alındı' : 'Talep et'}
                 </button>
                 <p aria-live="polite" className="min-h-4 text-center text-xs text-destructive">
-                  {error === item.id ? `${formatAC(item.price - points)} AC eksik — oyunlardan topla` : ''}
+                  {error === item.id ? `${formatAC(item.price - points)} KC eksik — oyunlardan topla` : ''}
                 </p>
               </div>
             </li>

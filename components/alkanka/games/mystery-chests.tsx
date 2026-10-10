@@ -12,10 +12,10 @@ const CHESTS = [
 ]
 
 const REWARDS = [
-  { label: '75 AlkaCoin', points: 75 },
+  { label: '75 Kanka Coin', points: 75 },
   { label: '24s 2x Boost', points: 150 },
   { label: 'VIP Promo Kod', points: 300 },
-  { label: '120 AlkaCoin', points: 120 },
+  { label: '120 Kanka Coin', points: 120 },
   { label: 'Seri Kalkanı', points: 90 },
 ]
 

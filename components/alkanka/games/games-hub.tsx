@@ -14,7 +14,7 @@ export function GamesHub() {
       <SectionHeading
         id="oyunlar-title"
         title="Çark · Zar · Sandık"
-        description="Tamamen ücretsiz mini oyunlar. Kazandığın AlkaCoin anında bakiyene eklenir ve puan marketinde harcanır."
+        description="Tamamen ücretsiz mini oyunlar. Kazandığın Kanka Coin anında bakiyene eklenir ve puan marketinde harcanır."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <LuckyWheel onWin={add} />

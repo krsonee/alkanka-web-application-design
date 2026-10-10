@@ -83,7 +83,7 @@ function EventCards() {
               {joined[e.id] ? 'Katıldın' : e.entry === 0 ? 'Ücretsiz katıl' : (
                 <>
                   <Coins className="size-3.5" aria-hidden="true" />
-                  {e.entry} AC ile katıl
+                  {e.entry} KC ile katıl
                 </>
               )}
             </button>
@@ -150,11 +150,11 @@ function Predictions() {
             <p className="text-xs text-muted-foreground" aria-live="polite">
               {picked ? (
                 <>
-                  Tahminin kaydedildi. Doğru çıkarsa <span className="font-semibold text-primary">+{m.reward} AC</span>.
+                  Tahminin kaydedildi. Doğru çıkarsa <span className="font-semibold text-primary">+{m.reward} KC</span>.
                 </>
               ) : (
                 <>
-                  Doğru tahmin: <span className="font-semibold text-primary">+{m.reward} AC</span>. Katılım bonusu anında.
+                  Doğru tahmin: <span className="font-semibold text-primary">+{m.reward} KC</span>. Katılım bonusu anında.
                 </>
               )}
             </p>
@@ -171,7 +171,7 @@ export function Events() {
       <SectionHeading
         id="etkinlikler-title"
         title="Biletler & Tahminler"
-        description="Haftalık bilet çekilişi, günlük turnuvalar ve maç tahminleri. Katıl, AlkaCoin havuzundan payını al."
+        description="Haftalık bilet çekilişi, günlük turnuvalar ve maç tahminleri. Katıl, Kanka Coin havuzundan payını al."
       />
       <EventCards />
       <Predictions />

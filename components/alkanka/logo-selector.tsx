@@ -1,18 +1,24 @@
 'use client'
 
-import { Check } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { useBrand } from './brand-context'
-import { AlkankaLogo, LOGO_CONCEPTS } from './logos'
+import { AlkankaLogo, EMBLEM_LOGOS, LOGO_CONCEPTS } from './logos'
 
 export function LogoSelector() {
   const { concept, setConcept } = useBrand()
+  const current = LOGO_CONCEPTS.find((c) => c.id === concept)
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-background/40 p-3">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Logo konsepti</span>
-      <div role="radiogroup" aria-label="AL KANKA logo konseptleri" className="grid grid-cols-2 gap-1.5">
-        {LOGO_CONCEPTS.map((c) => {
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Logo seç</span>
+        <Link href="/logolar" className="text-[11px] font-semibold text-primary hover:underline">
+          Büyük gör
+        </Link>
+      </div>
+      <div role="radiogroup" aria-label="Logo seçenekleri" className="grid grid-cols-4 gap-1.5">
+        {EMBLEM_LOGOS.map((c) => {
           const selected = c.id === concept
           return (
             <button
@@ -20,21 +26,22 @@ export function LogoSelector() {
               type="button"
               role="radio"
               aria-checked={selected}
+              aria-label={c.name}
+              title={c.name}
               onClick={() => setConcept(c.id)}
-              title={c.description}
               className={cn(
-                'relative flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-xs transition-colors',
-                selected
-                  ? 'border-primary/60 bg-primary/10 text-primary'
-                  : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                'overflow-hidden rounded-lg border-2 transition-all',
+                selected ? 'border-primary scale-105' : 'border-transparent opacity-70 hover:opacity-100',
               )}
             >
-              {selected && <Check className="size-3 shrink-0" aria-hidden="true" />}
-              <span className="truncate">{c.name}</span>
+              <img src={c.image} alt="" className="aspect-square w-full object-cover" />
             </button>
           )
         })}
       </div>
+      <span className="truncate text-xs text-muted-foreground">
+        Seçili: <span className="font-semibold text-foreground">{current?.name}</span>
+      </span>
     </div>
   )
 }

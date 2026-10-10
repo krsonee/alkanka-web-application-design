@@ -8,13 +8,13 @@ import { ParticleBurst } from './particle-burst'
 type Segment = { short: string; label: string; points: number; tone: 'cyan' | 'purple' | 'gold' | 'muted' }
 
 const SEGMENTS: Segment[] = [
-  { short: '50', label: '50 AlkaCoin', points: 50, tone: 'gold' },
+  { short: '50', label: '50 Kanka Coin', points: 50, tone: 'gold' },
   { short: '2x', label: '2x Boost', points: 120, tone: 'muted' },
   { short: 'VIP', label: 'VIP Geçiş', points: 300, tone: 'purple' },
   { short: 'Pas', label: 'Tekrar dene', points: 0, tone: 'muted' },
-  { short: '100', label: '100 AlkaCoin', points: 100, tone: 'gold' },
+  { short: '100', label: '100 Kanka Coin', points: 100, tone: 'gold' },
   { short: 'Kod', label: 'Ücretsiz Promo Kod', points: 150, tone: 'muted' },
-  { short: '250', label: '250 AlkaCoin', points: 250, tone: 'gold' },
+  { short: '250', label: '250 Kanka Coin', points: 250, tone: 'gold' },
   { short: 'Kutu', label: 'Gizemli Kutu', points: 200, tone: 'muted' },
 ]
 

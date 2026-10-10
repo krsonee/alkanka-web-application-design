@@ -11,7 +11,7 @@ export function Leaderboard() {
       <SectionHeading
         id="siralama-title"
         title="Sıralama"
-        description="Haftalık AlkaCoin liderleri ve son kazananlar. Her pazartesi sıfırlanır, ilk 3 VIP sandık kazanır."
+        description="Haftalık Kanka Coin liderleri ve son kazananlar. Her pazartesi sıfırlanır, ilk 3 VIP sandık kazanır."
       />
 
       <div className="grid gap-4 xl:grid-cols-5">
@@ -23,7 +23,7 @@ export function Leaderboard() {
                 <th scope="col" className="px-4 py-3 font-semibold">#</th>
                 <th scope="col" className="px-2 py-3 font-semibold">Kullanıcı</th>
                 <th scope="col" className="hidden px-2 py-3 font-semibold sm:table-cell">Seri</th>
-                <th scope="col" className="px-4 py-3 text-right font-semibold">AlkaCoin</th>
+                <th scope="col" className="px-4 py-3 text-right font-semibold">Kanka Coin</th>
               </tr>
             </thead>
             <tbody>

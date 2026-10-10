@@ -1,8 +1,29 @@
 'use client'
 
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 
-export type LogoConcept = 'wordmark' | 'monogram' | 'network' | 'shield'
+export const EMBLEM_IDS = [
+  'lion',
+  'wolf',
+  'tiger',
+  'eagle',
+  'horse',
+  'crown',
+  'coin',
+  'diamond',
+  'shield-emblem',
+  'bolt',
+  'laurel',
+  'fist',
+] as const
+
+export type EmblemId = (typeof EMBLEM_IDS)[number]
+export type SvgConcept = 'wordmark' | 'monogram' | 'network' | 'shield'
+export type LogoConcept = EmblemId | SvgConcept
+
+const STORAGE_KEY = 'alkanka-logo'
+const DEFAULT_CONCEPT: LogoConcept = 'lion'
+const ALL_CONCEPTS: readonly string[] = [...EMBLEM_IDS, 'wordmark', 'monogram', 'network', 'shield']
 
 type BrandContextValue = {
   concept: LogoConcept
@@ -12,7 +33,18 @@ type BrandContextValue = {
 const BrandContext = createContext<BrandContextValue | null>(null)
 
 export function BrandProvider({ children }: { children: ReactNode }) {
-  const [concept, setConcept] = useState<LogoConcept>('shield')
+  const [concept, setConceptState] = useState<LogoConcept>(DEFAULT_CONCEPT)
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(STORAGE_KEY)
+    if (saved && ALL_CONCEPTS.includes(saved)) setConceptState(saved as LogoConcept)
+  }, [])
+
+  const setConcept = useCallback((next: LogoConcept) => {
+    setConceptState(next)
+    window.localStorage.setItem(STORAGE_KEY, next)
+  }, [])
+
   return <BrandContext.Provider value={{ concept, setConcept }}>{children}</BrandContext.Provider>
 }
 

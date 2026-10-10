@@ -12,7 +12,7 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: 'AL KANKA — Çark, Zar, Puan Marketi ve Özel Kampanyalar',
   description:
-    'Çarkı çevir, zar at, sandık aç ve AlkaCoin topla. Puan marketinden rozet, ekstra hak ve hediyeler al. Promo kodlar önce Telegram kanalımıza düşer.',
+    'Çarkı çevir, zar at, sandık aç ve Kanka Coin topla. Puan marketinden rozet, ekstra hak ve hediyeler al. Promo kodlar önce Telegram kanalımıza düşer.',
   generator: 'v0.app',
   icons: {
     icon: [

@@ -43,10 +43,10 @@ function Die({ value, rolling, tone }: { value: number; rolling: boolean; tone: 
 
 function rewardFor(a: number, b: number) {
   if (a === 6 && b === 6) return { label: 'Düşeş! Jackpot Kutusu', points: 400 }
-  if (a === b) return { label: `Çift! ${a * 40} AlkaCoin`, points: a * 40 }
+  if (a === b) return { label: `Çift! ${a * 40} Kanka Coin`, points: a * 40 }
   const sum = a + b
-  if (sum >= 10) return { label: `Yüksek atış — ${sum * 10} AlkaCoin`, points: sum * 10 }
-  return { label: `${sum * 5} AlkaCoin`, points: sum * 5 }
+  if (sum >= 10) return { label: `Yüksek atış — ${sum * 10} Kanka Coin`, points: sum * 10 }
+  return { label: `${sum * 5} Kanka Coin`, points: sum * 5 }
 }
 
 const rand = () => 1 + Math.floor(Math.random() * 6)
