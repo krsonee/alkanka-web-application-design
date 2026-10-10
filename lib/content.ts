@@ -29,6 +29,16 @@ export type SlideOverride = {
   image?: string
 }
 
+export type LogoKind = 'sponsors' | 'teams'
+
+export async function getLogos() {
+  const all = await getAllContent()
+  return {
+    sponsors: (all['logos:sponsors'] as Record<string, string> | undefined) ?? {},
+    teams: (all['logos:teams'] as Record<string, string> | undefined) ?? {},
+  }
+}
+
 export async function getContent<T>(key: string): Promise<T | null> {
   try {
     await ensureTable()

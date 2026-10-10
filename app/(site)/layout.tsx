@@ -6,9 +6,13 @@ import { LiveRail } from '@/components/alkanka/live-rail'
 import { MobileNav } from '@/components/alkanka/mobile-nav'
 import { Footer } from '@/components/alkanka/footer'
 import { AuthModal } from '@/components/alkanka/auth-modal'
+import { LogoProvider } from '@/components/alkanka/logo-context'
+import { getLogos } from '@/lib/content'
 
-export default function SiteLayout({ children }: { children: React.ReactNode }) {
+export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  const logos = await getLogos()
   return (
+    <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
         <Sidebar />
@@ -24,5 +28,6 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
         <AuthModal />
       </PointsProvider>
     </BrandProvider>
+    </LogoProvider>
   )
 }

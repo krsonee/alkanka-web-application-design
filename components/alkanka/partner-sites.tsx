@@ -17,6 +17,7 @@ import {
   type SponsorTier,
 } from './data'
 import { JakoTip } from './jako'
+import { TeamLogo, splitMatch, useLogos } from './logo-context'
 import { SectionHeading } from './section-heading'
 
 const payoutMinutes = (s: Sponsor) => Number.parseInt(s.payout, 10) || 99
@@ -60,14 +61,20 @@ function LoadMore({ remaining, onClick }: { remaining: number; onClick: () => vo
 }
 
 function SponsorBadge({ sponsor, size = 'md' }: { sponsor: Sponsor; size?: 'sm' | 'md' | 'lg' }) {
+  const logo = useLogos().sponsors[sponsor.id]
   return (
     <span
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-background font-display font-bold text-primary',
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/30 bg-background font-display font-bold text-primary',
         size === 'lg' ? 'size-16 text-xl' : size === 'sm' ? 'size-9 text-xs' : 'size-11 text-sm',
       )}
     >
-      {sponsor.initials}
+      {logo ? (
+        // eslint-disable-next-line @next/next/no-img-element -- logos can come from any https host set in the panel
+        <img src={logo || '/placeholder.svg'} alt={`${sponsor.name} logosu`} className="size-full object-contain p-1" />
+      ) : (
+        sponsor.initials
+      )}
     </span>
   )
 }
@@ -421,7 +428,16 @@ export function OddsBoard() {
               return (
                 <li key={o.id} className="flex flex-col gap-4 border-b border-border p-4 last:border-0 md:flex-row md:items-center">
                   <div className="flex flex-1 flex-col gap-1">
-                    <span className="font-display text-lg font-bold text-foreground">{o.match}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex shrink-0 -space-x-2">
+                        {splitMatch(o.match)
+                          .filter(Boolean)
+                          .map((team) => (
+                            <TeamLogo key={team} name={team} className="ring-2 ring-card" />
+                          ))}
+                      </span>
+                      <span className="font-display text-lg font-bold text-foreground text-pretty">{o.match}</span>
+                    </span>
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <Clock className="size-3" aria-hidden="true" />
                       {o.kickoff}

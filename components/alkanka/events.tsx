@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { EVENTS, PREDICTIONS, type EventItem } from './data'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
+import { TeamLogo } from './logo-context'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -150,9 +151,15 @@ function Predictions() {
               <span className="text-muted-foreground">{m.kickoff}</span>
             </header>
             <div className="flex items-center justify-between gap-3">
-              <span className="flex-1 font-display text-base font-bold text-foreground">{m.home}</span>
+              <span className="flex min-w-0 flex-1 items-center gap-2 font-display text-base font-bold text-foreground">
+                <TeamLogo name={m.home} />
+                <span className="truncate">{m.home}</span>
+              </span>
               <span className="rounded bg-background px-2 py-1 text-xs font-bold text-muted-foreground">VS</span>
-              <span className="flex-1 text-right font-display text-base font-bold text-foreground">{m.away}</span>
+              <span className="flex min-w-0 flex-1 items-center justify-end gap-2 text-right font-display text-base font-bold text-foreground">
+                <span className="truncate">{m.away}</span>
+                <TeamLogo name={m.away} />
+              </span>
             </div>
             <div className="grid grid-cols-3 gap-2" role="group" aria-label={`${m.home} - ${m.away} tahmini`}>
               {m.options.map((o) => {

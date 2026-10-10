@@ -6,6 +6,8 @@ import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
+import { LogoEditor } from '@/components/panel/logo-editor'
+import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -55,7 +57,29 @@ export default async function PanelPage() {
         </div>
       </header>
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <ContentEditor slides={slides} heroes={heroes} library={IMAGE_LIBRARY} />
+        <ContentEditor
+          slides={slides}
+          heroes={heroes}
+          library={IMAGE_LIBRARY}
+          logos={
+            <>
+              <LogoEditor
+                kind="sponsors"
+                title={`Site logoları (${LOGO_SPONSORS.length})`}
+                hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
+                items={LOGO_SPONSORS}
+                saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
+              />
+              <LogoEditor
+                kind="teams"
+                title={`Takım logoları (${LOGO_TEAMS.length})`}
+                hint="Özel oranlar ve maç tahminlerinde takım adının yanında görünür."
+                items={LOGO_TEAMS}
+                saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
+              />
+            </>
+          }
+        />
       </div>
     </main>
   )
