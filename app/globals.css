@@ -8,6 +8,17 @@
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
   --font-display: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
 
+  --color-tile: var(--tile);
+  --color-tile-red: var(--tile-red);
+  --color-tile-black: var(--tile-black);
+  --color-tile-blue: var(--tile-blue);
+  --color-tile-yellow: var(--tile-yellow);
+  --color-wood: var(--wood);
+  --color-felt: var(--felt);
+  --color-point-a: var(--point-a);
+  --color-point-b: var(--point-b);
+  --color-checker-light: var(--checker-light);
+  --color-checker-dark: var(--checker-dark);
   --color-gold: var(--gold);
   --color-gold-foreground: var(--gold-foreground);
   --color-live: var(--live);
@@ -74,6 +85,17 @@
   --input: oklch(1 0 0 / 0.12);
   --ring: oklch(0.8 0.135 86);
   --radius: 0.75rem;
+  --wood: oklch(0.32 0.05 55);
+  --felt: oklch(0.24 0.045 245);
+  --point-a: oklch(0.72 0.11 80);
+  --point-b: oklch(0.36 0.04 250);
+  --checker-light: oklch(0.95 0.02 85);
+  --checker-dark: oklch(0.22 0.02 30);
+  --tile: oklch(0.95 0.025 88);
+  --tile-red: oklch(0.55 0.21 27);
+  --tile-black: oklch(0.2 0.01 260);
+  --tile-blue: oklch(0.5 0.17 255);
+  --tile-yellow: oklch(0.68 0.16 70);
 }
 
 @layer base {

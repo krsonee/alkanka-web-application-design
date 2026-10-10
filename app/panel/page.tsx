@@ -8,6 +8,10 @@ import { LoginForm, LogoutButton } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
 import { LogoEditor } from '@/components/panel/logo-editor'
 import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
+import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
+import { TournamentManager } from '@/components/panel/tournament-manager'
+import { mergeArena, type ArenaSettings } from '@/lib/arena'
+import { listTournaments } from '@/lib/tournaments'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -61,6 +65,8 @@ export default async function PanelPage() {
           slides={slides}
           heroes={heroes}
           library={IMAGE_LIBRARY}
+          games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
+          tournaments={<TournamentManager tournaments={await listTournaments()} />}
           logos={
             <>
               <LogoEditor
