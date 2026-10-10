@@ -79,13 +79,23 @@ function ShieldLogo({ className, size = 'md' }: LogoProps) {
         <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
           Alkanka
         </span>
-        <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-gold">Kanka</span>
       </span>
     </span>
   )
 }
 
 export type LogoOption = { id: LogoConcept; name: string; description: string; image?: string }
+
+export const PRO_LOGOS: LogoOption[] = [
+  { id: 'pro-wolf', name: 'Kurt Başı', description: 'Espor tarzı, sürü ve sadakat', image: '/images/logos/pro-wolf.png' },
+  { id: 'pro-lion', name: 'Aslan Başı', description: 'Espor tarzı, güç ve liderlik', image: '/images/logos/pro-lion.png' },
+  { id: 'pro-eagle', name: 'Kartal Başı', description: 'Espor tarzı, keskin ve hızlı', image: '/images/logos/pro-eagle.png' },
+  { id: 'pro-monogram', name: 'AK Monogram', description: 'Lüks harf birleşimi', image: '/images/logos/pro-monogram.png' },
+  { id: 'pro-crown', name: 'Taçlı A', description: 'VIP, favicon dostu', image: '/images/logos/pro-crown.png' },
+  { id: 'pro-badge', name: 'K Arması', description: 'Takım kalkanı rozeti', image: '/images/logos/pro-badge.png' },
+  { id: 'pro-chip', name: 'K Çip', description: 'Casino çipi, Kanka Coin', image: '/images/logos/pro-chip.png' },
+  { id: 'pro-handshake', name: 'Kanka Eli', description: 'Kardeşlik ve güven', image: '/images/logos/pro-handshake.png' },
+]
 
 export const EMBLEM_LOGOS: LogoOption[] = [
   { id: 'lion', name: 'Aslan', description: 'Güç ve liderlik', image: '/images/logos/lion.png' },
@@ -109,9 +119,9 @@ export const SVG_LOGOS: LogoOption[] = [
   { id: 'network', name: 'Ağ Düğümü', description: 'Bağlantılı dijital merkez' },
 ]
 
-export const LOGO_CONCEPTS: LogoOption[] = [...EMBLEM_LOGOS, ...SVG_LOGOS]
+export const LOGO_CONCEPTS: LogoOption[] = [...PRO_LOGOS, ...EMBLEM_LOGOS, ...SVG_LOGOS]
 
-function EmblemLogo({ image, className, size = 'md' }: LogoProps & { image: string }) {
+function EmblemLogo({ image, flat, className, size = 'md' }: LogoProps & { image: string; flat?: boolean }) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <img
@@ -119,21 +129,23 @@ function EmblemLogo({ image, className, size = 'md' }: LogoProps & { image: stri
         alt=""
         aria-hidden="true"
         className={cn(
-          'shrink-0 rounded-full object-cover ring-1 ring-gold/50',
-          size === 'sm' ? 'size-8' : 'size-10',
+          'shrink-0 object-cover',
+          flat ? 'rounded-lg' : 'rounded-full ring-1 ring-gold/50',
+          size === 'sm' ? 'size-9' : 'size-11',
         )}
       />
       <span className="flex flex-col leading-none">
         <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
           Alkanka
         </span>
-        <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-gold">Kanka</span>
       </span>
     </span>
   )
 }
 
 export function AlkankaLogo({ concept, ...props }: LogoProps & { concept: LogoConcept }) {
+  const pro = PRO_LOGOS.find((l) => l.id === concept)
+  if (pro?.image) return <EmblemLogo image={pro.image} flat {...props} />
   const emblem = EMBLEM_LOGOS.find((l) => l.id === concept)
   if (emblem?.image) return <EmblemLogo image={emblem.image} {...props} />
   switch (concept) {

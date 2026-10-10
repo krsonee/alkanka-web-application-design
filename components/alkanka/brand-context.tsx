@@ -3,6 +3,14 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 
 export const EMBLEM_IDS = [
+  'pro-wolf',
+  'pro-lion',
+  'pro-eagle',
+  'pro-monogram',
+  'pro-crown',
+  'pro-badge',
+  'pro-chip',
+  'pro-handshake',
   'lion',
   'wolf',
   'tiger',
