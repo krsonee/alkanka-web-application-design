@@ -23,13 +23,17 @@ export function ContentEditor({
   heroes,
   library,
   logos,
+  games,
+  tournaments,
 }: {
   slides: EditorItem[]
   heroes: EditorItem[]
   library: string[]
   logos: React.ReactNode
+  games: React.ReactNode
+  tournaments: React.ReactNode
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'logo'>('slide')
+  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments'>('slide')
   const items = tab === 'slide' ? slides : heroes
   return (
     <div className="flex flex-col gap-6">
@@ -39,6 +43,8 @@ export function ContentEditor({
             ['slide', `Ana sayfa slider (${slides.length})`],
             ['hero', `Sayfa başlıkları (${heroes.length})`],
             ['logo', 'Logolar'],
+            ['games', 'Oyunlar'],
+            ['tournaments', 'Turnuvalar'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -55,7 +61,11 @@ export function ContentEditor({
           </button>
         ))}
       </div>
-      {tab === 'logo' ? (
+      {tab === 'games' ? (
+        games
+      ) : tab === 'tournaments' ? (
+        tournaments
+      ) : tab === 'logo' ? (
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
