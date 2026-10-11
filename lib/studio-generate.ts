@@ -1,5 +1,5 @@
 import 'server-only'
-import { generateImage } from 'ai'
+import { generateText } from 'ai'
 import sharp from 'sharp'
 import { readFile } from '@/lib/studio'
 import type { StudioBrand, StudioKind } from '@/lib/studio-types'
@@ -103,12 +103,23 @@ async function chromaKeySticker(image: Buffer) {
 export async function runGeneration(input: Input) {
   const text = input.revisionOf ? revisionPrompt(input) : input.kind === 'sticker' ? stickerPrompt(input) : bannerPrompt(input)
   const images = input.revisionOf ? [input.revisionOf, ...input.references] : input.references
-  const { image } = await generateImage({
+  const aspectRatio = input.kind === 'sticker' ? '1:1' : input.format
+  const result = await generateText({
     model: MODEL,
-    prompt: images.length ? { text, images } : text,
-    aspectRatio: (input.kind === 'sticker' ? '1:1' : input.format) as `${number}:${number}`,
+    providerOptions: { google: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio } } },
+    messages: [
+      {
+        role: 'user',
+        content: [
+          ...images.map((data) => ({ type: 'file' as const, data, mediaType: 'image/png' })),
+          { type: 'text' as const, text: `${text}\nOutput aspect ratio ${aspectRatio}.` },
+        ],
+      },
+    ],
   })
-  const raw = Buffer.from(image.uint8Array)
+  const file = result.files.find((f) => f.mediaType?.startsWith('image/'))
+  if (!file) throw new Error('Görsel üretilemedi, lütfen tekrar deneyin.')
+  const raw = Buffer.from(file.uint8Array)
 
   if (input.kind === 'sticker') {
     return { data: await chromaKeySticker(raw), contentType: 'image/webp', ext: 'webp' }

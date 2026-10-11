@@ -24,6 +24,7 @@ import {
   Smartphone,
   Ticket,
   Trophy,
+  Tv,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -36,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'siteler', label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
   { id: 'bonuslar', label: 'Bonuslar', href: '/bonuslar', icon: BadgePercent },
   { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
+  { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, badge: 'Canlı' },
   { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'firsatlar', label: 'Günün fırsatları', href: '/firsatlar', icon: Zap },
   { id: 'rehber', label: 'Rehber', href: '/rehber', icon: BookOpen },
