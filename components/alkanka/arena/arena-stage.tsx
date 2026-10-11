@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bot, Swords, Users } from 'lucide-react'
 import { ARENA_META, MODE_LABEL, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 import { cn } from '@/lib/utils'
@@ -104,6 +104,16 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
   const meta = ARENA_META[game]
   const modes = meta.modes.filter((m) => m !== 'pvp' || settings.pvpEnabled)
   const [mode, setMode] = useState<GameMode>(modes[0] ?? 'bot')
+  const [invitedTable, setInvitedTable] = useState<string | null>(null)
+
+  // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('masa')
+    if (!id || !modes.includes('pvp')) return
+    setInvitedTable(id)
+    setMode('pvp')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="flex flex-col gap-4">
@@ -131,7 +141,7 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
         </div>
       )}
       {mode === 'bot' && <BotMode game={game} settings={settings} />}
-      {mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} />}
+      {mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} />}
       {mode === 'local' && <LocalMode game={game} />}
       {modes.includes('pvp') && game !== 'rulet' && (
         <div className="mt-4 border-t border-border pt-6">

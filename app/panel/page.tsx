@@ -18,6 +18,10 @@ import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/t
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { chatStatus } from '@/lib/telegram-chat'
+import { getInviteConfig } from '@/lib/table-invite'
+import { TelegramInviteSetup } from '@/components/panel/telegram-invite-setup'
+import { getChannelUsernames } from '@/lib/telegram-channels'
+import { TelegramChannelsSetup } from '@/components/panel/telegram-channels-setup'
 import { SeoManager } from '@/components/panel/seo-manager'
 import { listPosts } from '@/lib/blog'
 import { dealsPublishing, getVerification, listDeals } from '@/lib/deals'
@@ -69,13 +73,15 @@ export default async function PanelPage() {
 
   const content = await getAllContent()
   const push = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
-  const [tgBots, tgTargets, tgSources, tgLog, cronKey, tgChat] = await Promise.all([
+  const [tgBots, tgTargets, tgSources, tgLog, cronKey, tgChat, tgInvite, tgChannels] = await Promise.all([
     listBots().catch(() => []),
     listTargets().catch(() => []),
     listSources().catch(() => []),
     listLog().catch(() => []),
     getCronKey().catch(() => 'ANAHTAR'),
     chatStatus().catch(() => null),
+    getInviteConfig().catch(() => null),
+    getChannelUsernames().catch(() => null),
   ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
@@ -126,6 +132,8 @@ export default async function PanelPage() {
             <div className="flex flex-col gap-6">
               <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
               <TelegramChatSetup bots={tgBots} status={tgChat} />
+              <TelegramChannelsSetup usernames={tgChannels} />
+              <TelegramInviteSetup bots={tgBots} status={tgInvite} />
             </div>
           }
           studio={

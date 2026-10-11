@@ -210,6 +210,19 @@ export async function closeTable(id: string) {
   }
 }
 
+export async function inviteToTable(id: string) {
+  try {
+    const m = await member()
+    const { headers } = await import('next/headers')
+    const { sendTableInvite } = await import('@/lib/table-invite')
+    const h = await headers()
+    const host = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? h.get('x-forwarded-host') ?? h.get('host') ?? 'alkanka.com'
+    return await sendTableInvite(m, id, `https://${host}`)
+  } catch (e) {
+    return fail(e)
+  }
+}
+
 export async function playMove(id: string, version: number, action: { type: string; [k: string]: unknown }) {
   try {
     await actOnTable(await member(), id, version, action)

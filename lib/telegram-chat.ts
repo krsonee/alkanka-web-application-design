@@ -253,6 +253,27 @@ async function linkWithCode(code: string, from: TgUser) {
   return true
 }
 
+const JOINED_CACHE_MS = 5 * 60 * 1000
+const NOT_JOINED_CACHE_MS = 8_000
+const joinedCache = new Map<string, { at: number; joined: boolean }>()
+
+export async function isGroupMember(userId: string): Promise<boolean> {
+  const hit = joinedCache.get(userId)
+  if (hit && Date.now() - hit.at < (hit.joined ? JOINED_CACHE_MS : NOT_JOINED_CACHE_MS)) return hit.joined
+  const config = await getChatConfig()
+  if (!config) return false
+  const link = await rows<{ tg_id: string }>(sql`SELECT tg_id FROM tg_links WHERE user_id = ${userId}`)
+  if (!link[0]) return false
+  const member = await callBot<{ status: string }>(await botToken(config.botId), 'getChatMember', {
+    chat_id: config.chatId,
+    user_id: Number(link[0].tg_id),
+  }).catch(() => null)
+  if (!member) return hit?.joined ?? false
+  const joined = !['left', 'kicked'].includes(member.status)
+  joinedCache.set(userId, { at: Date.now(), joined })
+  return joined
+}
+
 export async function unlink(userId: string) {
   await ensureChatTables()
   await rows(sql`DELETE FROM tg_links WHERE user_id = ${userId}`)
@@ -317,7 +338,10 @@ export async function sendFromSite(userId: string, rawText: string) {
     chat_id: config.chatId,
     user_id: Number(link[0].tg_id),
   }).catch(() => ({ status: 'left' }) as { status: string; can_send_messages?: boolean })
-  if (['left', 'kicked'].includes(member.status)) throw new Error('Yazabilmek için Telegram grubuna katılmış olman gerekiyor.')
+  if (['left', 'kicked'].includes(member.status)) {
+    joinedCache.set(userId, { at: Date.now(), joined: false })
+    throw new Error('Yazabilmek için önce Telegram sohbet grubuna katılmalısın.')
+  }
   if (member.status === 'restricted' && member.can_send_messages === false) throw new Error('Bu grupta yazma iznin kısıtlanmış.')
 
   const author = link[0].tg_name
