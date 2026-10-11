@@ -25,6 +25,7 @@ export async function saveBrandAction(input: {
   name: string
   domain: string
   logo: string
+  mascot: string
   colors: string[]
   font: string
   notes: string
@@ -33,11 +34,13 @@ export async function saveBrandAction(input: {
   const name = input.name.trim().slice(0, 60)
   if (!name) return { message: 'Marka adı gerekli.' }
   if (input.logo && !/^studio\/logos\/[a-z0-9._-]+$/i.test(input.logo)) return { message: 'Geçersiz logo.' }
+  if (input.mascot && !/^studio\/mascots\/[a-z0-9._-]+$/i.test(input.mascot)) return { message: 'Geçersiz maskot.' }
   await saveBrand({
     id: input.id,
     name,
     domain: input.domain.trim().toLowerCase().slice(0, 120),
     logo: input.logo,
+    mascot: input.mascot,
     colors: input.colors.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 6),
     font: input.font.trim().slice(0, 60),
     notes: input.notes.trim().slice(0, 600),

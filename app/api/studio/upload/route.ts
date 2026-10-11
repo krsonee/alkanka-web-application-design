@@ -25,7 +25,9 @@ export async function POST(request: NextRequest) {
   if (!(await isAdmin())) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const form = await request.formData()
-  const target = form.get('target') === 'logo' ? 'logo' : 'asset'
+  const rawTarget = form.get('target')
+  const target = rawTarget === 'logo' ? 'logo' : rawTarget === 'mascot' ? 'mascot' : 'asset'
+  const folder = target === 'logo' ? 'logos' : target === 'mascot' ? 'mascots' : 'assets'
   const provider = String(form.get('provider') ?? '').trim().slice(0, 60)
   const game = String(form.get('game') ?? '').trim().slice(0, 80)
   const files: Source[] = form
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
         .resize({ width: target === 'logo' ? 800 : 1536, height: target === 'logo' ? 400 : 1536, fit: 'inside', withoutEnlargement: target !== 'logo' })
         .png()
         .toBuffer()
-      const pathname = await storeFile(target === 'logo' ? 'logos' : 'assets', png, 'image/png', 'png')
+      const pathname = await storeFile(folder, png, 'image/png', 'png')
       if (target === 'asset') await addAsset(provider, game, pathname)
       saved.push(pathname)
     } catch (error) {

@@ -29,6 +29,7 @@ export function ContentEditor({
   telegram,
   seo,
   studio,
+  community,
 }: {
   slides: EditorItem[]
   heroes: EditorItem[]
@@ -40,8 +41,9 @@ export function ContentEditor({
   telegram: React.ReactNode
   seo: React.ReactNode
   studio: React.ReactNode
+  community: React.ReactNode
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio'>('slide')
+  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community'>('slide')
   const items = tab === 'slide' ? slides : heroes
   return (
     <div className="flex flex-col gap-6">
@@ -57,6 +59,7 @@ export function ContentEditor({
             ['telegram', 'Telegram'],
             ['seo', 'SEO & Rehber'],
             ['studio', 'Stüdyo'],
+            ['community', 'Topluluk'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -83,6 +86,8 @@ export function ContentEditor({
         telegram
       ) : tab === 'seo' ? (
         seo
+      ) : tab === 'community' ? (
+        community
       ) : tab === 'studio' ? (
         studio
       ) : tab === 'logo' ? (

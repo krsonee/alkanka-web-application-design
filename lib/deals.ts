@@ -70,10 +70,14 @@ export async function recordDeal(input: { sourceId: number; postId: number; bran
   const title = firstLine.trim().slice(0, 90)
   const kind = detectKind(text)
   const odds = kind === 'oran' ? await parseOddsPost(text) : null
-  await rows(sql`INSERT INTO deals (source_id, post_id, brand, kind, title, body, photo, link, odds)
+  const inserted = await rows(sql`INSERT INTO deals (source_id, post_id, brand, kind, title, body, photo, link, odds)
     VALUES (${input.sourceId}, ${input.postId}, ${input.brand}, ${kind}, ${title}, ${text.slice(0, 4000)}, ${input.photo}, ${input.link},
       ${odds ? JSON.stringify(odds) : null}::jsonb)
-    ON CONFLICT (source_id, post_id) DO NOTHING`)
+    ON CONFLICT (source_id, post_id) DO NOTHING RETURNING id`)
+  if (inserted.length && odds?.length) {
+    const { notifyOddsAlerts } = await import('@/lib/community')
+    await notifyOddsAlerts(input.brand, input.link, odds)
+  }
 }
 
 const LIVE_ODDS_HOURS = 72

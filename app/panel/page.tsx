@@ -23,6 +23,9 @@ import { listPosts } from '@/lib/blog'
 import { dealsPublishing, getVerification, listDeals } from '@/lib/deals'
 import { SITE_URL } from '@/lib/seo'
 import { Studio } from '@/components/panel/studio'
+import { CommunityManager } from '@/components/panel/community'
+import { adminComplaints, listLeagueMatches, pendingReviews } from '@/lib/community'
+import { SPONSORS } from '@/components/alkanka/data'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
@@ -103,6 +106,14 @@ export default async function PanelPage() {
               assets={await listAssets().catch(() => [])}
               jobs={await listJobs().catch(() => [])}
               spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
+            />
+          }
+          community={
+            <CommunityManager
+              reviews={await pendingReviews().catch(() => [])}
+              complaints={await adminComplaints().catch(() => [])}
+              matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
+              siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
             />
           }
           seo={
