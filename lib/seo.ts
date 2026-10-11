@@ -77,6 +77,13 @@ export const PAGE_SEO = {
     image: '/images/heroes/biletler.png',
     keywords: ['çekiliş', 'çekiliş bileti', 'ödüllü çekiliş'],
   },
+  kankatv: {
+    path: '/kankatv',
+    title: 'KankaTV — Canlı Skor ve Ücretsiz Canlı Yayın',
+    description:
+      'Premier Lig, LaLiga, Serie A, Bundesliga, Ligue 1 ve Liga Portugal maçları, canlı skorlar ve açık kanalların resmi canlı yayınları.',
+    keywords: ['canlı skor', 'canlı maç', 'kankatv', 'premier lig', 'laliga', 'serie a', 'bundesliga', 'a spor canlı'],
+  },
   tahminler: {
     path: '/tahminler',
     title: 'Maç Tahminleri ve Tahmin Yarışması',
