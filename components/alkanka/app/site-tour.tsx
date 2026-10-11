@@ -48,7 +48,7 @@ const STEPS: Step[] = [
     targets: ['[data-tour="account"]'],
     pose: 'duyuru',
     title: 'Hesabın',
-    body: 'Kayıt olana 250 KC hoş geldin hediyesi. Giriş yaptıktan sonra oyun geçmişine buradan ulaşırsın.',
+    body: 'Kayıt olana Kanka Coin hoş geldin hediyesi. Giriş yaptıktan sonra oyun geçmişine buradan ulaşırsın.',
   },
   {
     targets: ['[data-tour-nav="uygulama"]'],

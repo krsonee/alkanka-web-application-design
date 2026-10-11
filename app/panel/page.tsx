@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { adminConfigured, isAdmin } from '@/lib/admin-auth'
 import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
+import { TEXTS_KEY, type SiteTexts } from '@/lib/site-texts-shared'
+import { TextsEditor } from '@/components/panel/texts-editor'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
@@ -125,6 +127,7 @@ export default async function PanelPage() {
           slides={slides}
           heroes={heroes}
           library={IMAGE_LIBRARY}
+          texts={<TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />}
           games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
           tournaments={<TournamentManager tournaments={await listTournaments()} />}
           push={<PushSender {...push} configured={push.total > 0} />}

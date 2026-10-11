@@ -8,6 +8,7 @@ import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
 import { SHARE_KEY } from '@/lib/share'
+import { TEXT_FIELDS, TEXTS_KEY } from '@/lib/site-texts-shared'
 
 export type ActionState = { ok?: boolean; message?: string }
 
@@ -125,6 +126,24 @@ export async function resetHero(_: ActionState, form: FormData): Promise<ActionS
     return { ok: true, message: 'Varsayılana döndü.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Sıfırlanamadı.' }
+  }
+}
+
+export async function saveTexts(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const value: Record<string, string> = {}
+    for (const f of TEXT_FIELDS) {
+      const v = String(form.get(f.key) ?? '').trim().slice(0, f.max)
+      if (!v) continue
+      if (f.key === 'auth.bonus' && !/^\d{1,6}$/.test(v)) return { message: 'Kayıt bonusu sadece rakam olmalı.' }
+      value[f.key] = v
+    }
+    await setContent(TEXTS_KEY, value)
+    revalidatePath('/', 'layout')
+    return { ok: true, message: `Kaydedildi (${Object.keys(value).length} özel metin).` }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
   }
 }
 

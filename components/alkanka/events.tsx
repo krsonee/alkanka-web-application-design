@@ -10,6 +10,7 @@ import { JakoTip } from './jako'
 import { TeamLogo } from './logo-context'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
+import { useTexts } from './texts-context'
 
 function useNow() {
   const [now, setNow] = useState<number | null>(null)
@@ -44,6 +45,7 @@ function Countdown({ hoursLeft, start }: { hoursLeft: number; start: number | nu
 
 function EventCards() {
   const { spend } = usePoints()
+  const t = useTexts()
   const [start] = useState(() => (typeof window === 'undefined' ? null : Date.now()))
   const [joined, setJoined] = useState<Record<string, boolean>>({})
   const [detail, setDetail] = useState<EventItem | null>(null)
@@ -67,8 +69,8 @@ function EventCards() {
           </div>
           <div className="flex flex-1 flex-col gap-3 p-4 pt-0">
             <div className="flex flex-col">
-              <h3 className="font-display text-lg font-bold text-foreground">{e.title}</h3>
-              <p className="text-sm text-muted-foreground">{e.subtitle}</p>
+              <h3 className="font-display text-lg font-bold text-foreground">{t(`event.${e.id}.title`, e.title)}</h3>
+              <p className="text-sm text-muted-foreground">{t(`event.${e.id}.subtitle`, e.subtitle)}</p>
             </div>
             <Countdown hoursLeft={e.hoursLeft} start={start} />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -76,7 +78,7 @@ function EventCards() {
                 <Users className="size-3.5" aria-hidden="true" />
                 {formatAC(e.participants + (joined[e.id] ? 1 : 0))} katılımcı
               </span>
-              <span className="text-primary">{e.prize}</span>
+              <span className="text-primary">{t(`event.${e.id}.prize`, e.prize)}</span>
             </div>
             <DetailButton onClick={() => setDetail(e)} />
             <button
@@ -100,7 +102,7 @@ function EventCards() {
         content={
           detail && {
             eyebrow: `${detail.kind} etkinlik`,
-            title: detail.title,
+            title: t(`event.${detail.id}.title`, detail.title),
             image: detail.image,
             description: detail.description,
             facts: [

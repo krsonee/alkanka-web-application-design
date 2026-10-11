@@ -23,6 +23,7 @@ export function ContentEditor({
   heroes,
   library,
   logos,
+  texts,
   games,
   tournaments,
   push,
@@ -38,6 +39,7 @@ export function ContentEditor({
   heroes: EditorItem[]
   library: string[]
   logos: React.ReactNode
+  texts: React.ReactNode
   games: React.ReactNode
   tournaments: React.ReactNode
   push: React.ReactNode
@@ -49,7 +51,7 @@ export function ContentEditor({
   market: React.ReactNode
   marketPending?: number
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market'>(
+  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market'>(
     marketPending > 0 ? 'market' : 'slide',
   )
   const items = tab === 'slide' ? slides : heroes
@@ -60,6 +62,7 @@ export function ContentEditor({
           [
             ['slide', `Ana sayfa slider (${slides.length})`],
             ['hero', `Sayfa başlıkları (${heroes.length})`],
+            ['texts', 'Site metinleri'],
             ['logo', 'Logolar'],
             ['games', 'Oyunlar'],
             ['tournaments', 'Turnuvalar'],
@@ -104,6 +107,8 @@ export function ContentEditor({
         market
       ) : tab === 'studio' ? (
         studio
+      ) : tab === 'texts' ? (
+        texts
       ) : tab === 'logo' ? (
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (
