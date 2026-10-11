@@ -8,12 +8,42 @@ export type SportSlug = (typeof SPORTS)[number]['slug']
 export const DAY_OFFSETS = [-1, 0, 1] as const
 export type DayOffset = (typeof DAY_OFFSETS)[number]
 
-export const CHANNELS = [
-  { slug: 'aspor', name: 'A Spor', channelId: 'UCJElRTCNEmLemgirqvsW63Q', tag: 'Spor' },
-  { slug: 'trtspor', name: 'TRT Spor', channelId: 'UCfYNqluOf8EbQkL44otydMw', tag: 'Spor' },
-  { slug: 'atv', name: 'ATV', channelId: 'UCUVZ7T_kwkxDOGFcDlFI-hg', tag: 'Ulusal' },
-  { slug: 'tv8', name: 'TV8', channelId: 'UCp4N3g1zcvp8WE2qJ_JKqBg', tag: 'Ulusal' },
-] as const
+export type ChannelGroup = 'spor' | 'tv' | 'slot' | 'yayinci'
+
+export const CHANNEL_GROUPS: { key: ChannelGroup; label: string }[] = [
+  { key: 'spor', label: 'Spor kanalları' },
+  { key: 'tv', label: 'TV & Haber' },
+  { key: 'slot', label: 'Slot & Casino' },
+  { key: 'yayinci', label: 'Spor yayıncıları' },
+]
+
+type TvChannel = { slug: string; name: string; group: 'spor' | 'tv'; tag: string; path: string }
+
+const TV_CHANNELS: TvChannel[] = [
+  { slug: 'aspor', name: 'A Spor', group: 'spor', tag: 'Spor', path: 'channel/UCJElRTCNEmLemgirqvsW63Q' },
+  { slug: 'trtspor', name: 'TRT Spor', group: 'spor', tag: 'Spor', path: '@trtspor' },
+  { slug: 'htspor', name: 'HT Spor', group: 'spor', tag: 'Spor', path: '@htspor' },
+  { slug: 'beinhaber', name: 'beIN Sports', group: 'spor', tag: 'Spor haber', path: '@beinsportsturkiye' },
+  { slug: 'atv', name: 'ATV', group: 'tv', tag: 'Ulusal', path: 'channel/UCUVZ7T_kwkxDOGFcDlFI-hg' },
+  { slug: 'tv8', name: 'TV8', group: 'tv', tag: 'Ulusal', path: '@tv8' },
+  { slug: 'tv85', name: 'TV8,5', group: 'tv', tag: 'Ulusal', path: 'channel/UCp4N3g1zcvp8WE2qJ_JKqBg' },
+  { slug: 'kanald', name: 'Kanal D', group: 'tv', tag: 'Ulusal', path: '@kanald' },
+  { slug: 'startv', name: 'Star TV', group: 'tv', tag: 'Ulusal', path: '@startv' },
+  { slug: 'now', name: 'NOW', group: 'tv', tag: 'Ulusal', path: '@nowtv' },
+  { slug: 'kanal7', name: 'Kanal 7', group: 'tv', tag: 'Ulusal', path: '@kanal7' },
+  { slug: 'dmax', name: 'DMAX', group: 'tv', tag: 'Belgesel', path: '@dmaxturkiye' },
+  { slug: 'trthaber', name: 'TRT Haber', group: 'tv', tag: 'Haber', path: '@trthaber' },
+  { slug: 'ahaber', name: 'A Haber', group: 'tv', tag: 'Haber', path: '@ahaber' },
+  { slug: 'cnnturk', name: 'CNN Türk', group: 'tv', tag: 'Haber', path: '@cnnturk' },
+  { slug: 'sozcu', name: 'Sözcü TV', group: 'tv', tag: 'Haber', path: '@sozcutelevizyonu' },
+  { slug: 'tv100', name: 'tv100', group: 'tv', tag: 'Haber', path: '@tv100' },
+  { slug: 'tgrthaber', name: 'TGRT Haber', group: 'tv', tag: 'Haber', path: '@tgrthaber' },
+]
+
+const KICK_CATEGORIES: { group: 'slot' | 'yayinci'; categoryId: number; tag: string }[] = [
+  { group: 'slot', categoryId: 28, tag: 'Slot & Casino' },
+  { group: 'yayinci', categoryId: 75, tag: 'Spor' },
+]
 
 export type MatchState = 'pre' | 'in' | 'post'
 export type Side = { id: number; name: string; logo: string; score: number | null }
@@ -27,7 +57,17 @@ export type Match = {
   away: Side
 }
 export type Competition = { id: number; name: string; country: string; matches: Match[] }
-export type Channel = (typeof CHANNELS)[number] & { live: boolean; videoId: string | null }
+export type Channel = {
+  slug: string
+  name: string
+  group: ChannelGroup
+  tag: string
+  live: boolean
+  embedUrl: string | null
+  title: string | null
+  avatar: string | null
+  viewers: number | null
+}
 export type LiveCounts = Record<SportSlug, number>
 export type ScoreBoard = {
   sport: SportSlug
@@ -185,9 +225,9 @@ export async function getMatchDetail(id: number): Promise<MatchDetail> {
   }
 }
 
-async function getLiveVideoId(channelId: string): Promise<string | null> {
+async function getLiveVideoId(path: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://www.youtube.com/channel/${channelId}/live`, {
+    const res = await fetch(`https://www.youtube.com/${path}/live`, {
       headers: { ...HEADERS, 'Accept-Language': 'tr' },
       next: { revalidate: 300 },
     })
@@ -200,7 +240,52 @@ async function getLiveVideoId(channelId: string): Promise<string | null> {
   }
 }
 
+type KickStream = {
+  title: string
+  viewer_count: number
+  channel: { slug: string; username: string; profile_pic: string | null }
+}
+
+async function getKickStreams(categoryId: number, group: 'slot' | 'yayinci', tag: string): Promise<Channel[]> {
+  try {
+    const res = await fetch(
+      `https://web.kick.com/api/v1/livestreams?limit=24&sort=viewer_count_desc&category_id=${categoryId}&language=tr`,
+      { headers: HEADERS, next: { revalidate: 120 } },
+    )
+    if (!res.ok) return []
+    const json = (await res.json()) as { data?: { livestreams?: KickStream[] } }
+    return (json.data?.livestreams ?? []).map((s) => ({
+      slug: `kick-${s.channel.slug}`,
+      name: s.channel.username,
+      group,
+      tag,
+      live: true,
+      embedUrl: `https://player.kick.com/${encodeURIComponent(s.channel.slug)}?autoplay=true&muted=true`,
+      title: s.title,
+      avatar: s.channel.profile_pic,
+      viewers: s.viewer_count,
+    }))
+  } catch {
+    return []
+  }
+}
+
 export async function getChannels(): Promise<Channel[]> {
-  const ids = await Promise.all(CHANNELS.map((c) => getLiveVideoId(c.channelId)))
-  return CHANNELS.map((c, i) => ({ ...c, live: Boolean(ids[i]), videoId: ids[i] }))
+  const [ids, ...kick] = await Promise.all([
+    Promise.all(TV_CHANNELS.map((c) => getLiveVideoId(c.path))),
+    ...KICK_CATEGORIES.map((k) => getKickStreams(k.categoryId, k.group, k.tag)),
+  ])
+  const tv: Channel[] = TV_CHANNELS.map((c, i) => ({
+    slug: c.slug,
+    name: c.name,
+    group: c.group,
+    tag: c.tag,
+    live: Boolean(ids[i]),
+    embedUrl: ids[i] ? `https://www.youtube.com/embed/${ids[i]}?autoplay=1&mute=1&playsinline=1` : null,
+    title: null,
+    avatar: null,
+    viewers: null,
+  }))
+  tv.sort((a, b) => Number(b.live) - Number(a.live))
+  return [...tv, ...kick.flat()]
 }

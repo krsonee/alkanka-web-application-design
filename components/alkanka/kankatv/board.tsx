@@ -6,8 +6,10 @@ import useSWR from 'swr'
 import { ChevronDown, Flag, Percent, Radio, Search, Tv } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
+  CHANNEL_GROUPS,
   SPORTS,
   type Channel,
+  type ChannelGroup,
   type Competition,
   type DayOffset,
   type Match,
@@ -397,14 +399,55 @@ function MatchesTab({
 
 function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; selected: string; onSelect: (slug: string) => void }) {
   const current = channels.find((c) => c.slug === selected) ?? channels[0]
+  const [group, setGroup] = useState<ChannelGroup>(current.group)
+  const groupCounts = useMemo(() => {
+    const counts = {} as Record<ChannelGroup, number>
+    for (const g of CHANNEL_GROUPS) counts[g.key] = channels.filter((c) => c.group === g.key && c.live).length
+    return counts
+  }, [channels])
+  const visible = channels.filter((c) => c.group === group)
+  const isKick = current.group === 'slot' || current.group === 'yayinci'
+
   return (
+    <div className="flex flex-col gap-5">
+      <div role="tablist" aria-label="Kanal türü" className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        {CHANNEL_GROUPS.map((g) => (
+          <button
+            key={g.key}
+            role="tab"
+            type="button"
+            aria-selected={group === g.key}
+            onClick={() => setGroup(g.key)}
+            className={cn(
+              'flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition-colors',
+              group === g.key
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-card text-foreground hover:bg-muted',
+            )}
+          >
+            {g.label}
+            {groupCounts[g.key] > 0 && (
+              <span
+                className={cn(
+                  'rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
+                  group === g.key ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-live text-live-foreground',
+                )}
+              >
+                {groupCounts[g.key]}
+                <span className="sr-only"> canlı</span>
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
     <div className="flex flex-col gap-5 lg:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-foreground">
-          {current.videoId ? (
+          {current.embedUrl ? (
             <iframe
-              key={current.videoId}
-              src={`https://www.youtube.com/embed/${current.videoId}?autoplay=1&mute=1&playsinline=1`}
+              key={current.embedUrl}
+              src={current.embedUrl}
               title={`${current.name} canlı yayın`}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               allowFullScreen
@@ -418,13 +461,25 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
             </div>
           )}
         </div>
+        {current.title && (
+          <p className="line-clamp-2 text-sm font-semibold text-foreground text-pretty">
+            {current.name} · <span className="font-normal text-muted-foreground">{current.title}</span>
+          </p>
+        )}
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Yayınlar kanalların kendi resmi YouTube canlı yayınıdır. Bazı yayınlar yalnızca Türkiye’den açılabilir.
+          {isKick
+            ? 'Yayınlar yayıncıların kendi Kick kanallarından açılır. Slot & Casino yayınları 18 yaş üstü içindir.'
+            : 'Yayınlar kanalların kendi resmi YouTube canlı yayınıdır. Bazı yayınlar yalnızca Türkiye’den açılabilir.'}
         </p>
       </div>
 
-      <ul className="flex flex-col gap-2 lg:w-72">
-        {channels.map((c) => (
+      <ul className="flex max-h-[34rem] flex-col gap-2 overflow-y-auto pr-1 lg:w-80">
+        {visible.length === 0 && (
+          <li className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            Şu an bu bölümde canlı yayın yok.
+          </li>
+        )}
+        {visible.map((c) => (
           <li key={c.slug}>
             <button
               type="button"
@@ -435,12 +490,19 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
                 current.slug === c.slug ? 'border-primary bg-primary/10' : 'border-border bg-card hover:bg-muted',
               )}
             >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-background font-display text-xs font-bold text-foreground">
-                {c.name}
-              </span>
+              {c.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={c.avatar} alt="" className="size-10 shrink-0 rounded-lg object-cover" loading="lazy" />
+              ) : (
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-background px-1 text-center font-display text-[10px] font-bold leading-tight text-foreground">
+                  {c.name}
+                </span>
+              )}
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-sm font-semibold text-foreground">{c.name}</span>
-                <span className="text-xs text-muted-foreground">{c.tag}</span>
+                <span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {c.viewers != null ? `${c.viewers.toLocaleString('tr-TR')} izleyici` : c.tag}
+                </span>
               </span>
               {c.live ? (
                 <span className="flex items-center gap-1 rounded-md bg-live px-2 py-0.5 text-[10px] font-bold uppercase text-live-foreground">
@@ -454,6 +516,7 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
           </li>
         ))}
       </ul>
+    </div>
     </div>
   )
 }
@@ -490,7 +553,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
             )}
           </span>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground text-pretty">
-            Futbol, basketbol ve voleybolda dünyadaki tüm liglerin canlı skorları ve başlamamış maçları kendiliğinden güncellenir. Açık kanallar yayındayken buradan ücretsiz izle.
+            Futbol, basketbol ve voleybolda dünyadaki tüm liglerin canlı skorları ve başlamamış maçları kendiliğinden güncellenir. Spor ve TV kanallarını, Türk slot ve casino yayıncılarını buradan ücretsiz izle.
           </p>
         </div>
         <div role="tablist" aria-label="KankaTV" className="flex gap-1 rounded-lg bg-muted p-1">
@@ -518,7 +581,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
       </header>
 
       {tab === 'matches' ? (
-        <MatchesTab initialBoard={initialBoard} liveChannel={channels.find((c) => c.live)} onWatch={watch} />
+        <MatchesTab initialBoard={initialBoard} liveChannel={channels.find((c) => c.group === 'spor' && c.live)} onWatch={watch} />
       ) : (
         <ChannelsTab channels={channels} selected={channel} onSelect={setChannel} />
       )}
