@@ -17,6 +17,7 @@ export default async function TournamentsPage() {
       <EditableHero
         slug="turnuvalar"
         image="/images/heroes/turnuvalar.png"
+        highlights={['Tavla · Okey · Bilardo', 'Canlı eşleşme ağacı', 'Ödül havuzu']}
         eyebrow="Turnuvalar"
         title="Kanka turnuvaları"
         description="Tavla, okey ve bilardo turnuvalarına kaydol. Eşleşmeler canlı güncellenir, şampiyon ödül havuzunu alır."

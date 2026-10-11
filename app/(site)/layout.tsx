@@ -6,6 +6,7 @@ import { LiveRail } from '@/components/alkanka/live-rail'
 import { MobileNav } from '@/components/alkanka/mobile-nav'
 import { Footer } from '@/components/alkanka/footer'
 import { AuthModal } from '@/components/alkanka/auth-modal'
+import { GuestGate } from '@/components/alkanka/guest-gate'
 import { LogoProvider } from '@/components/alkanka/logo-context'
 import { getLogos } from '@/lib/content'
 import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
@@ -32,6 +33,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         </div>
         <MobileNav />
         <AuthModal />
+        <GuestGate />
         <AppPrompts />
         <SiteTour />
         <ReferralLinker />

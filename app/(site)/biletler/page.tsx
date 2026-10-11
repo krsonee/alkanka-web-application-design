@@ -9,6 +9,7 @@ export default function TicketsPage() {
     <>
       <EditableHero slug="biletler"
         image="/images/heroes/biletler.png"
+        highlights={['Pazar 21:00 canlı çekiliş', 'Günlük turnuva', 'Kanka Coin havuzu']}
         eyebrow="Biletler"
         title="Bilet çekilişleri"
         description="Haftalık bilet çekilişi ve günlük turnuvalar. Katıl, Kanka Coin havuzundan payını al."

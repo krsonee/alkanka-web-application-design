@@ -15,6 +15,7 @@ export default async function MarketPage() {
     <>
       <EditableHero slug="market"
         image="/images/heroes/market.png"
+        highlights={['Sponsor bonusları', 'Rozet ve ekstra hak', 'Ekip onaylı teslim']}
         eyebrow="Market"
         title="Puan marketi"
         description="Sponsor site bonusları, rozetler, ekstra haklar ve hediyeler. Topladığın Kanka Coin ile talep et, ekip onaylasın."

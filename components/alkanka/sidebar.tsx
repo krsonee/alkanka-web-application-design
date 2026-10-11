@@ -38,8 +38,8 @@ function NavLink({ item, pathname, onNavigate, nested }: { item: NavItem; pathna
 
 function NavGroupBlock({ group, pathname, onNavigate }: { group: NavGroup; pathname: string; onNavigate?: () => void }) {
   const hasActive = group.items.some((i) => isActiveHref(pathname, i.href))
-  const [open, setOpen] = useState(true)
-  const expanded = open || hasActive
+  const [open, setOpen] = useState(hasActive)
+  const expanded = open
   const Icon = group.icon
   const panelId = `nav-${group.id}`
   return (

@@ -20,6 +20,7 @@ export default function FaqPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(faqLd)} />
       <EditableHero slug="sss"
         image="/images/heroes/sss.png"
+        highlights={['Kanka Coin', 'Market ve ödüller', 'Hesap güvenliği']}
         eyebrow="Yardım"
         title="Sıkça sorulan sorular"
         description="Kanka Coin, market, Telegram ve hesap güvenliği hakkında en çok sorulanlar."

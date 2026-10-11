@@ -9,6 +9,7 @@ export default function TasksPage() {
     <>
       <EditableHero slug="gorevler"
         image="/images/heroes/gorevler.png"
+        highlights={['Günlük giriş serisi', '7. gün VIP sandık', 'Ekstra Kanka Coin']}
         eyebrow="Görevler"
         title="Günlük görevler"
         description="Her gün giriş yap, seriyi koru. 7. günde VIP ödül sandığı açılır. Görevler ekstra Kanka Coin kazandırır."
