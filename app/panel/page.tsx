@@ -31,8 +31,20 @@ import { KpManager } from '@/components/panel/kp-manager'
 import { AdsEditor } from '@/components/panel/ads-editor'
 import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
+import { MarketManager } from '@/components/panel/market-manager'
+import { listProducts, listRequests, pendingCount } from '@/lib/market'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
+
+async function marketPanel() {
+  try {
+    const [products, requests] = await Promise.all([listProducts({ includeInactive: true }), listRequests()])
+    return <MarketManager products={products} requests={requests} sponsors={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
+  } catch (error) {
+    console.error('[market-panel]', error)
+    return <p className="text-sm text-destructive">Market yüklenemedi.</p>
+  }
+}
 
 async function kpPanel() {
   try {
@@ -133,6 +145,8 @@ export default async function PanelPage() {
             />
           }
           badges={await kpPanel()}
+          market={await marketPanel()}
+          marketPending={await pendingCount().catch(() => 0)}
           seo={
             <SeoManager
               posts={await listPosts({ includeDrafts: true })}

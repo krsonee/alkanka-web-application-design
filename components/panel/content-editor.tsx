@@ -31,6 +31,8 @@ export function ContentEditor({
   studio,
   community,
   badges,
+  market,
+  marketPending = 0,
 }: {
   slides: EditorItem[]
   heroes: EditorItem[]
@@ -44,8 +46,12 @@ export function ContentEditor({
   studio: React.ReactNode
   community: React.ReactNode
   badges: React.ReactNode
+  market: React.ReactNode
+  marketPending?: number
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges'>('slide')
+  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market'>(
+    marketPending > 0 ? 'market' : 'slide',
+  )
   const items = tab === 'slide' ? slides : heroes
   return (
     <div className="flex flex-col gap-6">
@@ -63,6 +69,7 @@ export function ContentEditor({
             ['studio', 'Stüdyo'],
             ['community', 'Topluluk'],
             ['badges', 'Rozetler'],
+            ['market', marketPending > 0 ? `Market (${marketPending} yeni talep)` : 'Market'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -93,6 +100,8 @@ export function ContentEditor({
         community
       ) : tab === 'badges' ? (
         badges
+      ) : tab === 'market' ? (
+        market
       ) : tab === 'studio' ? (
         studio
       ) : tab === 'logo' ? (
