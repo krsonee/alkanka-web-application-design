@@ -105,7 +105,7 @@ export async function deleteAsset(id: number) {
 export async function assetsByIds(ids: number[]) {
   if (!ids.length) return []
   await ensureTables()
-  const r = await rows(sql`SELECT id, pathname FROM studio_assets WHERE id = ANY(${ids})`)
+  const r = await rows(sql`SELECT id, pathname FROM studio_assets WHERE id IN ${ids}`)
   return r.map((a) => String(a.pathname))
 }
 

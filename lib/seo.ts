@@ -91,6 +91,12 @@ export const PAGE_SEO = {
     image: '/images/heroes/tahminler.png',
     keywords: ['maç tahminleri', 'tahmin yarışması', 'günün tahminleri'],
   },
+  rozetler: {
+    path: '/rozetler',
+    title: 'Rozetler ve Seviyeler — Kanka Puan',
+    description: 'Sitede vakit geçir, oyun oyna, görev yap ve sohbette yaz: Kanka Puan topla, seviye atla, değerli rozetleri kazan.',
+    keywords: ['rozet', 'seviye', 'kanka puan', 'tahmin kralı', 'turnuva şampiyonu'],
+  },
   siralama: {
     path: '/siralama',
     title: 'Sıralama ve Liderlik Tablosu',

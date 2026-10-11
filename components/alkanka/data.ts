@@ -24,6 +24,7 @@ import {
   Smartphone,
   Ticket,
   Trophy,
+  Medal,
   Tv,
   type LucideIcon,
 } from 'lucide-react'
@@ -50,6 +51,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'etkinlikler', label: 'Biletler', href: '/biletler', icon: Ticket },
   { id: 'tahminler', label: 'Tahmin ligi', href: '/tahminler', icon: Flag },
   { id: 'siralama', label: 'Sıralama', href: '/siralama', icon: Trophy },
+  { id: 'rozetler', label: 'Rozetler', href: '/rozetler', icon: Medal, badge: 'Yeni' },
   { id: 'guven', label: 'Güven merkezi', href: '/guven', icon: ShieldCheck },
   { id: 'profil', label: 'Profilim', href: '/profil', icon: UserPlus },
   { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone, badge: '+500' },

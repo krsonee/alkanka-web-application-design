@@ -12,6 +12,7 @@ import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
 import { AppPrompts } from '@/components/alkanka/app/app-prompts'
 import { SiteTour } from '@/components/alkanka/app/site-tour'
 import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
+import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const logos = await getLogos()
@@ -34,6 +35,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <AppPrompts />
         <SiteTour />
         <ReferralLinker />
+        <KpHeartbeat />
       </PwaProvider>
       </PointsProvider>
     </BrandProvider>

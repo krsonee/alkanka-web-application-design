@@ -67,7 +67,8 @@ function ensureChatTables() {
 }
 
 async function getSettings(keys: string[]) {
-  const r = await rows<{ key: string; value: string }>(sql`SELECT key, value FROM tg_settings WHERE key = ANY(${keys})`)
+  if (!keys.length) return {} as Record<string, string | undefined>
+  const r = await rows<{ key: string; value: string }>(sql`SELECT key, value FROM tg_settings WHERE key IN ${keys}`)
   return Object.fromEntries(r.map((s) => [s.key, s.value])) as Record<string, string | undefined>
 }
 
@@ -76,7 +77,8 @@ async function setSetting(key: string, value: string) {
 }
 
 async function clearSettings(keys: string[]) {
-  await rows(sql`DELETE FROM tg_settings WHERE key = ANY(${keys})`)
+  if (!keys.length) return
+  await rows(sql`DELETE FROM tg_settings WHERE key IN ${keys}`)
 }
 
 const CHAT_KEYS = ['chat_bot_id', 'chat_bot_username', 'chat_id', 'chat_title', 'chat_invite']
