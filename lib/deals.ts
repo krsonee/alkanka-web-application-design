@@ -3,27 +3,9 @@ import { rows, sql } from '@/lib/db'
 import { slugify } from '@/lib/seo'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 
-export type DealKind = 'oran' | 'promo' | 'bonus' | 'cekilis' | 'genel'
+import { DEAL_LABELS, type Deal, type DealKind, type Verification } from '@/lib/deal-types'
 
-export const DEAL_LABELS: Record<DealKind, string> = {
-  oran: 'Özel oran',
-  promo: 'Promo kod',
-  bonus: 'Bonus',
-  cekilis: 'Çekiliş',
-  genel: 'Duyuru',
-}
-
-export type Deal = {
-  id: number
-  slug: string
-  brand: string
-  kind: DealKind
-  title: string
-  body: string
-  photo: string | null
-  link: string
-  createdAt: string
-}
+export { DEAL_LABELS, type Deal, type DealKind, type Verification }
 
 let ready: Promise<unknown> | null = null
 function ensureTable() {
@@ -118,7 +100,6 @@ export async function deleteDeal(id: number) {
   await rows(sql`DELETE FROM deals WHERE id = ${id}`)
 }
 
-export type Verification = { google: string; bing: string; yandex: string }
 
 export async function getVerification(): Promise<Verification> {
   try {
