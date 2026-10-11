@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type DragEvent } from 'react'
+import { Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TileFace } from './okey'
 import { isJoker, sortHand, type Okey as OkeyValue, type Tile } from './okey-engine'
@@ -72,7 +73,13 @@ export function useRack(hand: Tile[], okey: OkeyValue) {
     setRaw(layoutSorted(sortHand(hand, okey, mode), okey, mode))
   }
 
-  return { slots, selected: selectedId, setSelected, moveTo, arrange }
+  const [flippedRaw, setFlipped] = useState<number[]>([])
+  const flipped = new Set(flippedRaw.filter((id) => hand.some((t) => t.id === id)))
+  function toggleFlip(id: number) {
+    setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
+  }
+
+  return { slots, selected: selectedId, setSelected, moveTo, arrange, flipped, toggleFlip }
 }
 
 export function OkeyRack({
@@ -80,12 +87,14 @@ export function OkeyRack({
   okey,
   rack,
   highlight,
+  onDoubleTile,
 }: {
   hand: Tile[]
   okey: OkeyValue
   rack: ReturnType<typeof useRack>
   /** Tile id that was just drawn, shown with a marker. */
   highlight?: number | null
+  onDoubleTile?: (tile: Tile) => void
 }) {
   const byId = new Map(hand.map((t) => [t.id, t]))
   const [over, setOver] = useState<number | null>(null)
@@ -133,9 +142,17 @@ export function OkeyRack({
                       e.dataTransfer.setData('text/plain', String(tile.id))
                       rack.setSelected(tile.id)
                     }}
+                    onDoubleClick={() => onDoubleTile?.(tile)}
                     className="size-full"
                   >
-                    <RackTile tile={tile} okey={okey} selected={rack.selected === tile.id} fresh={highlight === tile.id} onClick={() => onSlot(i)} />
+                    <RackTile
+                      tile={tile}
+                      okey={okey}
+                      selected={rack.selected === tile.id}
+                      fresh={highlight === tile.id}
+                      flipped={rack.flipped.has(tile.id)}
+                      onClick={() => onSlot(i)}
+                    />
                   </div>
                 ) : (
                   <button
@@ -151,17 +168,47 @@ export function OkeyRack({
         </div>
       ))}
       <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-        Taşa dokun, sonra ıstakada istediğin boş yuvaya dokun (bilgisayarda sürükleyip bırakabilirsin). Taşa taş üstüne dokunursan yer değiştirirler.
+        Taşa dokun, sonra boş yuvaya dokunarak yerini değiştir. Atmak için taşa çift tıkla ya da masadaki &quot;Buraya at&quot; alanına sürükle. Okeye çift tıklarsan ters çevrilir.
       </p>
     </div>
   )
 }
 
-function RackTile({ tile, okey, selected, fresh, onClick }: { tile: Tile; okey: OkeyValue; selected: boolean; fresh: boolean; onClick: () => void }) {
+function RackTile({
+  tile,
+  okey,
+  selected,
+  fresh,
+  flipped,
+  onClick,
+}: {
+  tile: Tile
+  okey: OkeyValue
+  selected: boolean
+  fresh: boolean
+  flipped: boolean
+  onClick: () => void
+}) {
   return (
     <div className={cn('relative size-full transition-transform', selected && '-translate-y-1.5 sm:-translate-y-2')}>
-      <div className="absolute inset-0 origin-bottom">
-        <TileFace tile={tile} okey={okey} size="fluid" selected={selected} onClick={onClick} />
+      <div className="absolute inset-0 origin-bottom [perspective:400px]">
+        <div className={cn('relative size-full transition-transform duration-500 [transform-style:preserve-3d]', flipped && '[transform:rotateY(180deg)]')}>
+          <div className="absolute inset-0 [backface-visibility:hidden]">
+            <TileFace tile={tile} okey={okey} size="fluid" selected={selected} onClick={onClick} />
+          </div>
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label="Ters çevrilmiş okey"
+            aria-pressed={selected}
+            className={cn(
+              'absolute inset-0 rounded-[3px] border border-primary/40 bg-wood shadow-[inset_0_-3px_0_rgb(0_0_0/0.2),0_2px_3px_rgb(0_0_0/0.3)] [backface-visibility:hidden] [transform:rotateY(180deg)] sm:rounded-md',
+              selected && 'ring-2 ring-primary',
+            )}
+          >
+            <Sparkles className="mx-auto size-1/2 text-primary/70" aria-hidden="true" />
+          </button>
+        </div>
       </div>
       {fresh && (
         <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 rounded bg-primary px-1 text-[8px] font-bold uppercase leading-tight text-primary-foreground">

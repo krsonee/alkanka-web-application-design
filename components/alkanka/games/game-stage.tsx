@@ -19,7 +19,7 @@ export function GameStage({ game }: { game: keyof typeof GAMES }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className="mx-auto w-full max-w-2xl">
       <Game
         onWin={onWin}
         lockedFor={locked ? remaining : 0}

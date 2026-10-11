@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Layers, Sparkles, Trophy } from 'lucide-react'
+import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { FlipHorizontal2, Layers, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
 import { OkeyRack, useRack } from './okey-rack'
@@ -73,7 +73,7 @@ export function TileFace({
 export function TurnSteps({ phase }: { phase: 'draw' | 'discard' | 'wait' }) {
   const steps = [
     { key: 'draw', label: '1. Taş çek', hint: 'Ortadaki desteye ya da yerdeki taşa dokun' },
-    { key: 'discard', label: '2. Taş at', hint: 'Bir taş seç, "Seçili taşı at" ya da bitir' },
+    { key: 'discard', label: '2. Taş at', hint: 'Taşa çift tıkla ya da "Buraya at" alanına sürükle' },
   ] as const
   return (
     <ol className="grid grid-cols-2 gap-2" aria-label="Hamle adımları">
@@ -142,6 +142,7 @@ export function Okey({ finish }: GameApi) {
   const [active, setActive] = useState(0)
   const [message, setMessage] = useState('Elinde 15 taş var. Bir taş seçip at, oyun başlasın.')
   const [fresh, setFresh] = useState<number | null>(null)
+  const [dropOver, setDropOver] = useState<'discard' | 'finish' | null>(null)
 
   const { deck, indicator, okey, hands, discards } = game
   const hand = hands[0]
@@ -266,6 +267,66 @@ export function Okey({ finish }: GameApi) {
 
   const pileTop = (i: number) => discards[i][discards[i].length - 1]
 
+  function onDoubleTile(tile: Tile) {
+    if (isJoker(tile, okey) && !tile.fake) {
+      rack.toggleFlip(tile.id)
+      return
+    }
+    if (phase === 'discard') discard(tile.id)
+  }
+
+  function dropTileId(e: DragEvent) {
+    e.preventDefault()
+    setDropOver(null)
+    const id = Number(e.dataTransfer.getData('text/plain'))
+    return Number.isFinite(id) ? id : null
+  }
+
+  function onFinishDrop(e: DragEvent) {
+    const id = dropTileId(e)
+    if (id == null || !winning) return
+    if (winning.tile.id === id) finishHand()
+    else setMessage('Bu taşla bitemezsin. Bitiren taş parlayan butonda yazıyor.')
+  }
+
+  const selectedTile = hand.find((t) => t.id === selected)
+  const selectedIsJoker = selectedTile ? isJoker(selectedTile, okey) && !selectedTile.fake : false
+  const canDiscard = phase === 'discard'
+
+  const discardZone = (
+    <div
+      onDragOver={(e) => {
+        if (!canDiscard) return
+        e.preventDefault()
+        setDropOver('discard')
+      }}
+      onDragLeave={() => setDropOver(null)}
+      onDrop={(e) => {
+        const id = dropTileId(e)
+        if (id != null) discard(id)
+      }}
+      className="absolute bottom-3 right-3 flex flex-col items-center gap-1 sm:bottom-6 sm:right-6"
+    >
+      <button
+        type="button"
+        onClick={() => discard(selected)}
+        disabled={!canDiscard || selected === null}
+        aria-label={selectedTile ? `Seçili taşı buraya at: ${tileName(selectedTile)}` : 'Atılacak taşı seç'}
+        className={cn(
+          'relative flex h-11 w-8 items-center justify-center rounded-md transition-all sm:h-14 sm:w-10',
+          canDiscard ? 'border-2 border-dashed border-primary bg-primary/15' : 'border border-dashed border-foreground/20',
+          dropOver === 'discard' && 'scale-110 bg-primary/40',
+          canDiscard && selected !== null && 'animate-pulse',
+        )}
+      >
+        {pileTop(0) && !canDiscard ? <TileFace tile={pileTop(0)} okey={okey} size="sm" /> : null}
+      </button>
+      <span className={cn('text-[9px] font-bold uppercase tracking-wider', canDiscard ? 'text-primary' : 'text-foreground/50')}>
+        {canDiscard ? 'Buraya at' : 'Senin attığın'}
+      </span>
+    </div>
+  )
+
   const seat = (bot: 1 | 2 | 3, className: string) => (
     <div className={cn('flex items-center gap-3', className)}>
       <div
@@ -313,7 +374,7 @@ export function Okey({ finish }: GameApi) {
         <div className="absolute inset-y-0 right-3 flex items-center">{seat(1, '')}</div>
 
         {discardSlot(3, 'bottom-6 left-6', true)}
-        {discardSlot(0, 'bottom-6 right-6')}
+        {discardZone}
         {discardSlot(1, 'right-6 top-6')}
         {discardSlot(2, 'left-6 top-6')}
 
@@ -332,7 +393,17 @@ export function Okey({ finish }: GameApi) {
             </span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">{phase === 'draw' ? 'Çek' : `${deck.length} taş`}</span>
           </button>
-          <div className="flex flex-col items-center gap-2">
+          <div
+            onDragOver={(e) => {
+              if (!winning) return
+              e.preventDefault()
+              setDropOver('finish')
+            }}
+            onDragLeave={() => setDropOver(null)}
+            onDrop={onFinishDrop}
+            title={winning ? 'Bitiren taşı göstergenin üstüne sürükle' : undefined}
+            className={cn('flex flex-col items-center gap-2 rounded-xl p-1 transition-all', winning && 'ring-2 ring-primary', dropOver === 'finish' && 'scale-110 bg-primary/30')}
+          >
             <TileFace tile={indicator} okey={{ color: -2, num: -2 }} size="sm" label={`Gösterge: ${COLOR_NAMES[indicator.color]} ${indicator.num}`} />
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
           </div>
@@ -358,10 +429,19 @@ export function Okey({ finish }: GameApi) {
             <button onClick={() => sort('cift')} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary">
               Çift diz
             </button>
+            {selectedIsJoker && selected !== null && (
+              <button
+                onClick={() => rack.toggleFlip(selected)}
+                className="flex items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20"
+              >
+                <FlipHorizontal2 className="size-3.5" aria-hidden="true" />
+                {rack.flipped.has(selected) ? 'Okeyi aç' : 'Okeyi ters çevir'}
+              </button>
+            )}
           </div>
         </div>
 
-        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} />
+        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} />
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
