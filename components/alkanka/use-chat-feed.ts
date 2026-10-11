@@ -4,7 +4,7 @@ import useSWR from 'swr'
 import type { ChatFeed, ChatLink } from '@/lib/telegram-chat'
 import type { BroadcastSlug, ChannelFeed } from '@/lib/telegram-channels-shared'
 
-export type ChatResponse = ChatFeed & { me: { loggedIn: boolean; link: ChatLink | null; joined: boolean } }
+export type ChatResponse = ChatFeed & { locked?: boolean; me: { loggedIn: boolean; link: ChatLink | null; joined: boolean } }
 
 const fetcher = <T,>(url: string) => fetch(url, { cache: 'no-store' }).then((r) => r.json() as Promise<T>)
 
@@ -18,7 +18,7 @@ export function useChatFeed(active = true) {
 
 export function useChannelFeed(slug: BroadcastSlug | null) {
   return useSWR<ChannelFeed>(slug ? `/api/chat/channel?slug=${slug}` : null, fetcher<ChannelFeed>, {
-    refreshInterval: (data) => (data?.configured ? 60000 : 0),
+    refreshInterval: (data) => (!data?.configured ? 0 : data.locked ? 30000 : 8000),
     revalidateOnFocus: true,
     keepPreviousData: false,
   })

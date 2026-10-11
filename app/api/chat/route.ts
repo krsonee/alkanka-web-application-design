@@ -8,7 +8,9 @@ export async function GET() {
     const [feed, member] = await Promise.all([getFeed(), getMember()])
     const link = member ? await getLink(member.id) : null
     const joined = member && link && feed.configured ? await isGroupMember(member.id) : false
-    return Response.json({ ...feed, me: { loggedIn: Boolean(member), link, joined } })
+    const me = { loggedIn: Boolean(member), link, joined }
+    if (feed.configured && !joined) return Response.json({ ...feed, pinned: null, messages: [], locked: true, me })
+    return Response.json({ ...feed, locked: false, me })
   } catch (error) {
     console.error('[chat-feed]', error)
     return Response.json(
@@ -19,6 +21,7 @@ export async function GET() {
         pinned: null,
         inviteUrl: null,
         messages: [],
+        locked: false,
         me: { loggedIn: false, link: null, joined: false },
       },
       { status: 200 },

@@ -23,7 +23,9 @@ export function TelegramChannelsSetup({ usernames }: { usernames: Record<Broadca
           </h2>
           <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
             Sağdaki Telegram Canlı panelinde Duyuru, Özel oran ve Promo kod sekmelerinde görünecek kanallar. Kanallar herkese açık
-            olmalı; bot eklemene gerek yok, paylaşımlar dakikada bir otomatik çekilir. Sohbet sekmesi yukarıdaki sohbet grubunu kullanır.
+            olmalı. Üyelik kontrolü için sohbet botunu her kanala yönetici olarak ekle. Sitede yorum yapılabilmesi için kanala bir
+            tartışma grubu bağla (Kanal ayarları → Tartışma) ve botu o gruba da yönetici olarak ekle. Sohbet sekmesi yukarıdaki sohbet
+            grubunu kullanır.
           </p>
         </div>
       </div>

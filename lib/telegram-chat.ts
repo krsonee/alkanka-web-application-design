@@ -26,10 +26,16 @@ export type ChatFeed = {
 export type ChatLink = { tgName: string; tgUsername: string | null }
 
 type TgUser = { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string }
-type TgMessage = {
+export type TgMessage = {
   message_id: number
   from?: TgUser
   chat: { id: number; type: string; title?: string }
+  message_thread_id?: number
+  is_automatic_forward?: boolean
+  forward_origin?: { type: string; chat?: { id: number }; message_id?: number }
+  forward_from_chat?: { id: number }
+  forward_from_message_id?: number
+  reply_to_message?: TgMessage
   text?: string
   caption?: string
   photo?: unknown[]
@@ -97,15 +103,15 @@ export async function getChatConfig(): Promise<ChatConfig | null> {
   }
 }
 
-const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+export const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-function displayName(u?: TgUser) {
+export function displayName(u?: TgUser) {
   if (!u) return 'Telegram'
   const full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim()
   return (full || u.username || 'Telegram').slice(0, 40)
 }
 
-function messageText(m: TgMessage) {
+export function messageText(m: TgMessage) {
   const body = (m.text ?? m.caption ?? '').trim()
   if (m.photo) return body ? `[Fotoğraf] ${body}` : '[Fotoğraf]'
   if (m.video) return body ? `[Video] ${body}` : '[Video]'
@@ -207,7 +213,12 @@ export async function handleUpdate(update: TgUpdate) {
     return
   }
 
-  if (String(m.chat.id) !== config.chatId) return
+  if (String(m.chat.id) !== config.chatId) {
+    // Imported lazily: telegram-channels depends on this module.
+    const { handleDiscussionMessage } = await import('@/lib/telegram-channels')
+    await handleDiscussionMessage(m)
+    return
+  }
 
   if (m.pinned_message) {
     const pinned = messageText(m.pinned_message)
