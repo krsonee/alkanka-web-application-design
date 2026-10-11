@@ -13,7 +13,7 @@ import { formatAC, usePoints } from './points-context'
 function PointsPill() {
   const { points, lastGain } = usePoints()
   return (
-    <div className="relative flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5">
+    <div data-tour="coins" className="relative flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5">
       <Coins className="size-4 text-primary" aria-hidden="true" />
       <span className="flex flex-col leading-none">
         <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground sm:block">Kanka Coin</span>
@@ -51,6 +51,7 @@ function AccountArea() {
         </a>
         <a
           href="#kayit"
+          data-tour="account"
           className="flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-3 text-xs sm:px-4 font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
         >
           Kayıt ol
@@ -59,7 +60,7 @@ function AccountArea() {
     )
   }
   return (
-    <div className="flex items-center gap-1.5">
+    <div data-tour="account" className="flex items-center gap-1.5">
       <Link
         href="/oyunlar/gecmis"
         className="flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/50"
@@ -93,6 +94,7 @@ export function Topbar() {
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Menüyü aç"
+          data-tour="menu-btn"
           className="flex size-9 items-center justify-center rounded-lg border border-border text-foreground lg:hidden"
         >
           <Menu className="size-5" aria-hidden="true" />

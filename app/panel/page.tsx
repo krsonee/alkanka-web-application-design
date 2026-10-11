@@ -12,6 +12,8 @@ import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
 import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
+import { pushStats } from '@/lib/push'
+import { PushSender } from '@/components/panel/push-sender'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -25,6 +27,7 @@ export default async function PanelPage() {
   }
 
   const content = await getAllContent()
+  const push = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
 
   const slides = SLIDES.map((s) => ({
     kind: 'slide' as const,
@@ -67,6 +70,7 @@ export default async function PanelPage() {
           library={IMAGE_LIBRARY}
           games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
           tournaments={<TournamentManager tournaments={await listTournaments()} />}
+          push={<PushSender {...push} configured={push.total > 0} />}
           logos={
             <>
               <LogoEditor

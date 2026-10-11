@@ -25,6 +25,7 @@ export function ContentEditor({
   logos,
   games,
   tournaments,
+  push,
 }: {
   slides: EditorItem[]
   heroes: EditorItem[]
@@ -32,8 +33,9 @@ export function ContentEditor({
   logos: React.ReactNode
   games: React.ReactNode
   tournaments: React.ReactNode
+  push: React.ReactNode
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments'>('slide')
+  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push'>('slide')
   const items = tab === 'slide' ? slides : heroes
   return (
     <div className="flex flex-col gap-6">
@@ -45,6 +47,7 @@ export function ContentEditor({
             ['logo', 'Logolar'],
             ['games', 'Oyunlar'],
             ['tournaments', 'Turnuvalar'],
+            ['push', 'Bildirimler'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -65,6 +68,8 @@ export function ContentEditor({
         games
       ) : tab === 'tournaments' ? (
         tournaments
+      ) : tab === 'push' ? (
+        push
       ) : tab === 'logo' ? (
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (

@@ -8,6 +8,9 @@ import { Footer } from '@/components/alkanka/footer'
 import { AuthModal } from '@/components/alkanka/auth-modal'
 import { LogoProvider } from '@/components/alkanka/logo-context'
 import { getLogos } from '@/lib/content'
+import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
+import { AppPrompts } from '@/components/alkanka/app/app-prompts'
+import { SiteTour } from '@/components/alkanka/app/site-tour'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const logos = await getLogos()
@@ -15,6 +18,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
+      <PwaProvider>
         <Sidebar />
         <LiveRail />
         <div className="min-h-dvh lg:pl-64 xl:pr-80">
@@ -26,6 +30,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         </div>
         <MobileNav />
         <AuthModal />
+        <AppPrompts />
+        <SiteTour />
+      </PwaProvider>
       </PointsProvider>
     </BrandProvider>
     </LogoProvider>

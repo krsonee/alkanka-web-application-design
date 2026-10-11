@@ -22,6 +22,7 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-icon.png',
   },
+  appleWebApp: { capable: true, title: 'AL KANKA', statusBarStyle: 'black-translucent' },
 }
 
 export const viewport: Viewport = {
