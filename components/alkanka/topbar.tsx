@@ -12,7 +12,8 @@ import { formatAC, usePoints } from './points-context'
 import { MemberRank } from './kp/member-rank'
 
 function PointsPill() {
-  const { points, lastGain } = usePoints()
+  const { points, lastGain, member } = usePoints()
+  if (!member) return null
   return (
     <div data-tour="coins" className="relative flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5">
       <Coins className="size-4 text-primary" aria-hidden="true" />
