@@ -17,6 +17,7 @@ function ensureTables() {
       id serial PRIMARY KEY, brand_id int, kind text NOT NULL, format text NOT NULL, prompt text NOT NULL,
       pathname text NOT NULL, parent_id int, cost numeric NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE studio_jobs ADD COLUMN IF NOT EXISTS clean text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE studio_brands ADD COLUMN IF NOT EXISTS mascot text NOT NULL DEFAULT ''`)
   })().catch((error) => {
     ready = null
     throw error
@@ -41,6 +42,8 @@ const mapBrand = (r: Record<string, unknown>): StudioBrand => ({
   domain: String(r.domain),
   logo: String(r.logo),
   logoUrl: fileUrl(String(r.logo)),
+  mascot: String(r.mascot ?? ''),
+  mascotUrl: fileUrl(String(r.mascot ?? '')),
   colors: parseColors(r.colors),
   font: String(r.font),
   notes: String(r.notes),
@@ -57,16 +60,16 @@ export async function getBrand(id: number) {
   return r.length ? mapBrand(r[0]) : null
 }
 
-export async function saveBrand(b: Omit<StudioBrand, 'id' | 'logoUrl'> & { id: number | null }) {
+export async function saveBrand(b: Omit<StudioBrand, 'id' | 'logoUrl' | 'mascotUrl'> & { id: number | null }) {
   await ensureTables()
   const colors = JSON.stringify(b.colors)
   if (b.id) {
-    await rows(sql`UPDATE studio_brands SET name = ${b.name}, domain = ${b.domain}, logo = ${b.logo}, colors = ${colors},
-      font = ${b.font}, notes = ${b.notes} WHERE id = ${b.id}`)
+    await rows(sql`UPDATE studio_brands SET name = ${b.name}, domain = ${b.domain}, logo = ${b.logo}, mascot = ${b.mascot},
+      colors = ${colors}, font = ${b.font}, notes = ${b.notes} WHERE id = ${b.id}`)
     return b.id
   }
-  const r = await rows<{ id: number }>(sql`INSERT INTO studio_brands (name, domain, logo, colors, font, notes)
-    VALUES (${b.name}, ${b.domain}, ${b.logo}, ${colors}, ${b.font}, ${b.notes}) RETURNING id`)
+  const r = await rows<{ id: number }>(sql`INSERT INTO studio_brands (name, domain, logo, mascot, colors, font, notes)
+    VALUES (${b.name}, ${b.domain}, ${b.logo}, ${b.mascot}, ${colors}, ${b.font}, ${b.notes}) RETURNING id`)
   return Number(r[0].id)
 }
 

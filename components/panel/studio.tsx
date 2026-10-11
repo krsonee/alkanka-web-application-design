@@ -129,7 +129,10 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
   const [motion, setMotion] = useState('')
   const [videoRuns, setVideoRuns] = useState(0)
 
+  const [mascotOn, setMascotOn] = useState(true)
+
   const brand = brands.find((b) => b.id === brandId)
+  const useMascot = Boolean(brand?.mascot) && mascotOn
   const runs = kind === 'sticker' ? ['1:1'] : formats
   const unitCost = IMAGE_COST + (kind === 'video' ? videoCost(duration, audio) : 0)
 
@@ -178,7 +181,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
     const baseKind = kind === 'sticker' ? 'sticker' : 'banner'
     await Promise.all(
       runs.map(async (format) => {
-        const banner = await generate({ kind: baseKind, format, category, prompt, brandId, assetIds: picked })
+        const banner = await generate({ kind: baseKind, format, category, prompt, brandId, assetIds: picked, useMascot })
         if (banner && (kind === 'gif' || kind === 'video')) {
           await animate(banner, { mode: kind, duration, audio, motion })
         }
@@ -208,6 +211,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
       prompt: revision,
       brandId: parent.brandId ?? brandId,
       parentId: parent.id,
+      useMascot: Boolean(brands.find((b) => b.id === (parent.brandId ?? brandId))?.mascot) && mascotOn,
     })
     setRevision('')
     router.refresh()
@@ -267,6 +271,21 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
               ))}
             </div>
           </div>
+        ) : null}
+        {brand?.mascotUrl ? (
+          <label
+            className={cn(
+              'flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors',
+              mascotOn ? 'border-primary bg-primary/10' : 'border-border',
+            )}
+          >
+            <img src={brand.mascotUrl || '/placeholder.svg'} alt={`${brand.name} maskotu`} className="size-12 shrink-0 rounded-lg object-contain" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-sm font-bold text-foreground">Maskotu tasarıma ekle</span>
+              <span className="text-xs leading-relaxed text-muted-foreground">Maskot birebir korunur, sadece pozu ve ifadesi talimata göre değişir.</span>
+            </span>
+            <input type="checkbox" checked={mascotOn} onChange={(e) => setMascotOn(e.target.checked)} className="size-4 accent-primary" />
+          </label>
         ) : null}
 
         {kind !== 'sticker' ? (
@@ -568,15 +587,26 @@ function JobCard({ job, onRevise, onAnimate }: { job: StudioJob; onRevise: () =>
   )
 }
 
-type Draft = { id: number | null; name: string; domain: string; logo: string; logoUrl: string; colors: string[]; font: string; notes: string }
-const emptyDraft: Draft = { id: null, name: '', domain: '', logo: '', logoUrl: '', colors: [], font: '', notes: '' }
+type Draft = {
+  id: number | null
+  name: string
+  domain: string
+  logo: string
+  logoUrl: string
+  mascot: string
+  mascotUrl: string
+  colors: string[]
+  font: string
+  notes: string
+}
+const emptyDraft: Draft = { id: null, name: '', domain: '', logo: '', logoUrl: '', mascot: '', mascotUrl: '', colors: [], font: '', notes: '' }
 
 function BrandKits({ brands }: { brands: StudioBrand[] }) {
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(emptyDraft)
   const [message, setMessage] = useState('')
   const [pending, start] = useTransition()
-  const [uploading, setUploading] = useState(false)
+  const [uploading, setUploading] = useState<'' | 'logo' | 'mascot'>('')
   const [reading, setReading] = useState(false)
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
 
@@ -626,17 +656,23 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
     }
   }
 
-  async function uploadLogo(file: File) {
-    setUploading(true)
+  async function uploadBrandImage(file: File, target: 'logo' | 'mascot') {
+    setUploading(target)
     const form = new FormData()
-    form.set('target', 'logo')
+    form.set('target', target)
     form.append('file', file)
-    const res = await fetch('/api/studio/upload', { method: 'POST', body: form })
-    const data = await res.json()
-    setUploading(false)
-    if (!res.ok) return setMessage(data.error)
-    const logo = data.pathnames[0] as string
-    set({ logo, logoUrl: `/api/studio/file/${logo.replace(/^studio\//, '')}` })
+    try {
+      const res = await fetch('/api/studio/upload', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) return setMessage(data.error)
+      const pathname = data.pathnames[0] as string
+      const url = `/api/studio/file/${pathname.replace(/^studio\//, '')}`
+      set(target === 'logo' ? { logo: pathname, logoUrl: url } : { mascot: pathname, mascotUrl: url })
+    } catch {
+      setMessage('Yükleme başarısız oldu, tekrar dene.')
+    } finally {
+      setUploading('')
+    }
   }
 
   function save() {
@@ -747,16 +783,56 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
               )}
             </div>
             <label className={cn(ghostBtn, 'cursor-pointer')}>
-              {uploading ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Upload className="size-3.5" aria-hidden />}
+              {uploading === 'logo' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Upload className="size-3.5" aria-hidden />}
               Logo yükle
               <input
                 type="file"
                 accept="image/png,image/svg+xml,image/webp,image/jpeg"
                 className="sr-only"
-                onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) uploadBrandImage(f, 'logo')
+                  e.target.value = ''
+                }}
               />
             </label>
           </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Site maskotu (isteğe bağlı, şeffaf arka planlı tam boy görsel en iyisi)</span>
+          <div className="flex items-center gap-3">
+            <div className="flex size-24 items-center justify-center rounded-xl border border-border bg-[repeating-conic-gradient(var(--secondary)_0_25%,transparent_0_50%)] bg-[length:16px_16px] p-2">
+              {draft.mascotUrl ? (
+                <img src={draft.mascotUrl || '/placeholder.svg'} alt="Maskot önizleme" className="max-h-full max-w-full object-contain" />
+              ) : (
+                <span className="text-xs text-muted-foreground">Maskot yok</span>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className={cn(ghostBtn, 'cursor-pointer')}>
+                {uploading === 'mascot' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Upload className="size-3.5" aria-hidden />}
+                Maskot yükle
+                <input
+                  type="file"
+                  accept="image/png,image/webp,image/jpeg,image/svg+xml"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) uploadBrandImage(f, 'mascot')
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              {draft.mascot ? (
+                <button type="button" onClick={() => set({ mascot: '', mascotUrl: '' })} className="text-left text-xs text-muted-foreground hover:text-destructive">
+                  Maskotu kaldır
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Yüklenirse bu markanın görsel, sticker, GIF ve video siparişlerinde maskot karakter olarak kullanılır.
+          </p>
         </div>
         <label className={label}>
           Marka notları (yapay zekaya ek tarz bilgisi)
@@ -793,6 +869,9 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
             <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg bg-secondary p-1">
               {b.logoUrl ? <img src={b.logoUrl || '/placeholder.svg'} alt={`${b.name} logosu`} className="max-h-full max-w-full object-contain" /> : null}
             </div>
+            {b.mascotUrl ? (
+              <img src={b.mascotUrl || '/placeholder.svg'} alt={`${b.name} maskotu`} className="size-12 shrink-0 rounded-lg bg-secondary object-contain p-1" />
+            ) : null}
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <p className="truncate text-sm font-bold text-foreground">{b.name}</p>
               <p className="truncate text-xs text-muted-foreground">{b.domain || 'domain yok'}</p>

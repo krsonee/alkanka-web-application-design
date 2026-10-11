@@ -28,9 +28,11 @@ export async function POST(request: NextRequest) {
     .slice(0, 3)
 
   try {
-    const references = await Promise.all((await assetsByIds(assetIds)).map(readFile))
+    const mascot = body.useMascot === true && brand?.mascot ? await readFile(brand.mascot) : null
+    const assetRefs = await Promise.all((await assetsByIds(assetIds)).map(readFile))
+    const references = mascot ? [mascot, ...assetRefs] : assetRefs
     const revisionOf = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
-    const result = await runGeneration({ kind, format, category, prompt, brand, references, revisionOf })
+    const result = await runGeneration({ kind, format, category, prompt, brand, references, revisionOf, mascot: Boolean(mascot) })
     const folder = kind === 'sticker' ? 'stickers' : 'banners'
     const [pathname, clean] = await Promise.all([
       storeFile(folder, result.data, result.contentType, result.ext),

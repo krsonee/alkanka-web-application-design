@@ -4,6 +4,8 @@ export type StudioBrand = {
   domain: string
   logo: string
   logoUrl: string
+  mascot: string
+  mascotUrl: string
   colors: string[]
   font: string
   notes: string
