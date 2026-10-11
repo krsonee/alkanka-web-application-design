@@ -23,6 +23,16 @@ function Stepper({ value, onChange, label, disabled }: { value: number; onChange
   )
 }
 
+function Crest({ name, src }: { name: string; src: string | null }) {
+  if (!src) return <TeamLogo name={name} />
+  return (
+    <span className="flex size-12 items-center justify-center rounded-full bg-secondary p-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={`${name} logosu`} width={32} height={32} loading="lazy" className="size-8 object-contain" />
+    </span>
+  )
+}
+
 function MatchCard({ m, now }: { m: LeagueMatch; now: number }) {
   const { requireLogin } = usePoints()
   const { pending, status, run } = useAction()
@@ -40,7 +50,7 @@ function MatchCard({ m, now }: { m: LeagueMatch; now: number }) {
       </header>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-          <TeamLogo name={m.home} />
+          <Crest name={m.home} src={m.homeLogo} />
           <span className="w-full truncate text-sm font-bold text-foreground">{m.home}</span>
           {!m.settled && <Stepper value={home} onChange={setHome} label={`${m.home} golü`} disabled={closed} />}
         </div>
@@ -48,7 +58,7 @@ function MatchCard({ m, now }: { m: LeagueMatch; now: number }) {
           {m.settled ? `${m.homeGoals} - ${m.awayGoals}` : 'VS'}
         </span>
         <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-          <TeamLogo name={m.away} />
+          <Crest name={m.away} src={m.awayLogo} />
           <span className="w-full truncate text-sm font-bold text-foreground">{m.away}</span>
           {!m.settled && <Stepper value={away} onChange={setAway} label={`${m.away} golü`} disabled={closed} />}
         </div>

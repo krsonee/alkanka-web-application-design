@@ -8,6 +8,7 @@ import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { CommunityGuide, CommunityHint, type CommunityTab } from './community-guide'
+import { FixturePicker } from './fixture-picker'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
@@ -151,6 +152,8 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
   const [form, setForm] = useState({ league: 'Süper Lig', home: '', away: '', kickoff: '' })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
   return (
+    <div className="flex flex-col gap-5">
+    <FixturePicker />
     <div className="grid gap-5 xl:grid-cols-[22rem_1fr]">
       <form
         className="flex flex-col gap-3 self-start rounded-xl border border-border bg-card p-4"
@@ -159,7 +162,7 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
           run(() => createLeagueMatch({ ...form, kickoff: new Date(form.kickoff).toISOString() }), () => setForm({ ...form, home: '', away: '', kickoff: '' }))
         }}
       >
-        <h3 className="font-display text-base font-bold text-foreground">Lige maç ekle</h3>
+        <h3 className="font-display text-base font-bold text-foreground">Elle maç ekle</h3>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Lig<input value={form.league} onChange={set('league')} className={field} /></label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Ev sahibi<input value={form.home} onChange={set('home')} placeholder="Galatasaray" className={field} /></label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Deplasman<input value={form.away} onChange={set('away')} placeholder="Fenerbahçe" className={field} /></label>
@@ -173,6 +176,7 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
       ) : (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz maç eklenmedi.</p>
       )}
+    </div>
     </div>
   )
 }
