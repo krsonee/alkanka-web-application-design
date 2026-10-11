@@ -134,3 +134,19 @@ export function validBet(b: RouletteBet) {
   if (b.kind === 'dozen') return b.value === 1 || b.value === 2 || b.value === 3
   return ['red', 'black', 'even', 'odd', 'low', 'high'].includes(b.kind)
 }
+
+/** Shared live roulette table timing. Client and server derive the same phase from the clock. */
+export const RL_BET_MS = 22_000
+export const RL_SPIN_MS = 9_000
+export const RL_RESULT_MS = 6_000
+export const RL_CYCLE_MS = RL_BET_MS + RL_SPIN_MS + RL_RESULT_MS
+export type RoulettePhase = 'bet' | 'spin' | 'result'
+
+export function rouletteClock(now = Date.now()) {
+  const roundId = Math.floor(now / RL_CYCLE_MS)
+  const start = roundId * RL_CYCLE_MS
+  const offset = now - start
+  const phase: RoulettePhase = offset < RL_BET_MS ? 'bet' : offset < RL_BET_MS + RL_SPIN_MS ? 'spin' : 'result'
+  const phaseEndsAt = phase === 'bet' ? start + RL_BET_MS : phase === 'spin' ? start + RL_BET_MS + RL_SPIN_MS : start + RL_CYCLE_MS
+  return { roundId, phase, phaseEndsAt, spinStartsAt: start + RL_BET_MS, now }
+}

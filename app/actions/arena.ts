@@ -8,6 +8,7 @@ import { ARENA_META, isArenaGame } from '@/lib/arena'
 import { bjAct, bjDeal, bjPayout, bjPublic, betLabel, betReturn, validBet, type BjState, type RouletteBet } from '@/lib/casino'
 import { actOnTable, cancelTable, claimTimeout, createTable, joinTable } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
+import { placeLiveBets } from '@/lib/roulette-live'
 
 type Fail = { ok: false; error: string }
 const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Error ? error.message : 'Bir hata oluştu.' })
@@ -161,6 +162,18 @@ export async function spinRoulette(bets: RouletteBet[]) {
       score: n,
     })
     return { ok: true as const, number: n, returned, total, balance: await getBalance(m.id) }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function placeLiveRouletteBets(bets: RouletteBet[]) {
+  try {
+    const m = await member()
+    const s = (await getArenaSettings()).rulet
+    if (!s.enabled) throw new Error('Rulet şu an kapalı.')
+    const r = await placeLiveBets(m, bets, Math.max(...s.bets))
+    return { ok: true as const, ...r }
   } catch (e) {
     return fail(e)
   }
