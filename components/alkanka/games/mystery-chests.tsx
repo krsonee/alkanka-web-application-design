@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { RotateCcw } from 'lucide-react'
+import { Clock, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { formatRemaining } from './mini-status'
+import type { MiniGameProps } from './lucky-wheel'
 import { ParticleBurst } from './particle-burst'
 import { DetailButton, DetailModal } from '../detail-modal'
 
@@ -35,14 +37,15 @@ function pick(arr: readonly number[]) {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
+export function MysteryChests({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProps) {
+  const locked = lockedFor > 0
   const [phase, setPhase] = useState<Phase>('idle')
   const [picked, setPicked] = useState<number | null>(null)
   const [contents, setContents] = useState<number[]>([])
   const [rules, setRules] = useState(false)
 
   function open(index: number) {
-    if (phase !== 'idle') return
+    if (phase !== 'idle' || !canPlay()) return
     const prizes = CHESTS.map((c) => pick(c.rewards))
     setContents(prizes)
     setPicked(index)
@@ -50,6 +53,7 @@ export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
     setTimeout(() => {
       setPhase('opened')
       onWin(prizes[index])
+      onPlayed()
     }, 1400)
   }
 
@@ -70,7 +74,7 @@ export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
           <p className="text-sm leading-relaxed text-muted-foreground">Günde 1 sandık seç. Her sandıkta garantili ödül var.</p>
           <DetailButton onClick={() => setRules(true)} label="Oyun kuralları" />
         </div>
-        {phase === 'opened' ? (
+        {phase === 'opened' && !locked ? (
           <button
             type="button"
             onClick={reset}
@@ -79,6 +83,12 @@ export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
             <RotateCcw className="size-3.5" aria-hidden="true" />
             Tekrar dene
           </button>
+        ) : locked ? (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-md bg-gold/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-gold">
+            <Clock className="size-3.5" aria-hidden="true" />
+            <span className="sr-only">Sonraki sandık: </span>
+            {formatRemaining(lockedFor)}
+          </span>
         ) : (
           <Image
             src="/images/mascots/jako-sandik.png"
@@ -100,13 +110,14 @@ export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
               key={chest.id}
               type="button"
               onClick={() => open(i)}
-              disabled={phase !== 'idle'}
+              disabled={phase !== 'idle' || locked}
               aria-label={revealed ? `${chest.name}: ${label(contents[i])}` : `${chest.name} aç`}
               className={cn(
                 'group relative flex flex-col items-center gap-2 rounded-2xl border bg-card/70 p-2 pb-3 transition-all duration-300',
                 phase === 'idle' && 'hover:-translate-y-1 hover:border-gold/50 hover:bg-card',
                 isPicked ? 'border-gold/60 glow-gold' : 'border-border',
                 revealed && !isPicked && 'opacity-50 grayscale-[40%]',
+                locked && phase === 'idle' && 'cursor-not-allowed opacity-50 grayscale-[60%]',
               )}
             >
               <span className={cn('relative block aspect-square w-full', isPicked && phase === 'shaking' && 'animate-shake')}>
@@ -140,11 +151,18 @@ export function MysteryChests({ onWin }: { onWin: (points: number) => void }) {
             <Image src="/images/mascots/jako-kazandi.png" alt="" width={56} height={56} className="size-12 animate-pop rounded-full object-cover" />
             <p className="text-sm text-muted-foreground">
               <span className="font-semibold text-foreground">Jako:</span> Helal kanka!{' '}
-              <span className="font-semibold text-gold">{label(won)}</span> senin. Sonraki sandık 23s 59dk sonra.
+              <span className="font-semibold text-gold">{label(won)}</span> senin.
+              {locked && <> Sonraki sandık <span className="tabular-nums text-foreground">{formatRemaining(lockedFor)}</span> sonra.</>}
             </p>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">{phase === 'shaking' ? 'Sandık açılıyor…' : 'Açmak için bir sandığa dokun.'}</p>
+          <p className="text-sm text-muted-foreground">
+            {phase === 'shaking'
+              ? 'Sandık açılıyor…'
+              : locked
+                ? `Bugünkü sandığını açtın. Yeni sandık ${formatRemaining(lockedFor)} sonra (00:00).`
+                : 'Açmak için bir sandığa dokun.'}
+          </p>
         )}
       </div>
 

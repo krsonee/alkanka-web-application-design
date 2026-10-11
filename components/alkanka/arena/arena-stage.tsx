@@ -12,6 +12,7 @@ import { BlackjackHouse } from './blackjack'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
 import { TableLobby } from './table-lobby'
+import { LiveLobby } from './live-lobby'
 
 export const RULES: Record<ArenaGame, string[]> = {
   tavla: [
@@ -132,6 +133,11 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
       {mode === 'bot' && <BotMode game={game} settings={settings} />}
       {mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} />}
       {mode === 'local' && <LocalMode game={game} />}
+      {modes.includes('pvp') && game !== 'rulet' && (
+        <div className="mt-4 border-t border-border pt-6">
+          <LiveLobby game={game} />
+        </div>
+      )}
     </div>
   )
 }

@@ -2,14 +2,63 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Coins, Trophy, Users } from 'lucide-react'
+import { ArrowRight, Clock, Coins, Trophy, Users } from 'lucide-react'
 import { ARENA_GAMES, ARENA_META, type ArenaSettings } from '@/lib/arena'
 import { formatAC } from '../points-context'
 import { jakoSrc, type JakoPose } from '../jako'
+import type { MiniGame } from '@/app/actions/wallet'
+import { formatRemaining, useMiniLock } from './mini-status'
 
-const GAME_CARDS: { href: string; title: string; text: string; pose: JakoPose; limit: string }[] = [
-  { href: '/oyunlar/cark', title: 'Şans Çarkı', text: 'Günde 1 ücretsiz çevirme. 25 ile 1.000 Kanka Coin arası ödül.', pose: 'kazandi', limit: 'Günde 1 hak' },
-  { href: '/oyunlar/sandik', title: 'Gizemli Sandık', text: 'Bronz, gümüş, altın. Kapağı aç, içinden ne çıkacak?', pose: 'sandik', limit: '6 saatte 1' },
+function MiniCard({ game, title, text, pose, limit }: (typeof GAME_CARDS)[number]) {
+  const { remaining, locked } = useMiniLock(game)
+  return (
+    <li>
+      <Link
+        href={`/oyunlar/${game}`}
+        className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-primary"
+      >
+        <div className="relative aspect-[16/10] overflow-hidden bg-background">
+          <Image
+            src={jakoSrc(pose) || '/placeholder.svg'}
+            alt=""
+            fill
+            sizes="(min-width: 640px) 50vw, 100vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
+          <span className="absolute left-3 top-3 rounded-md bg-background/90 px-2 py-1 text-xs font-bold uppercase tracking-wider text-primary">
+            {limit}
+          </span>
+        </div>
+        <div className="flex flex-1 flex-col gap-2 p-5">
+          <h3 className="font-display text-xl font-bold uppercase text-foreground">{title}</h3>
+          <p className="flex-1 text-sm leading-relaxed text-muted-foreground">{text}</p>
+          <div className="flex items-center justify-between gap-3 pt-1">
+            {locked ? (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="size-3.5 text-primary" aria-hidden="true" />
+                Yeni hak: <span className="font-bold tabular-nums text-foreground">{formatRemaining(remaining)}</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs font-bold text-primary">
+                <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                Hakkın hazır
+              </span>
+            )}
+            <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary">
+              {locked ? 'Göz at' : 'Oyna'}
+              <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+            </span>
+          </div>
+        </div>
+      </Link>
+    </li>
+  )
+}
+
+const GAME_CARDS: { game: MiniGame; title: string; text: string; pose: JakoPose; limit: string }[] = [
+  { game: 'cark', title: 'Şans Çarkı', text: 'Her 6 saatte 1 ücretsiz çevirme. Kanka Coin, boost ve promo kod kazan.', pose: 'kazandi', limit: '6 saatte 1' },
+  { game: 'sandik', title: 'Gizemli Sandık', text: 'Günde 1 sandık. Bronz, gümüş, altın: kapağı aç, içinden ne çıkacak?', pose: 'sandik', limit: 'Günde 1' },
 ]
 
 export function GamesHub({ arena }: { arena: ArenaSettings }) {
@@ -76,35 +125,9 @@ export function GamesHub({ arena }: { arena: ArenaSettings }) {
             Mini oyunlar
           </h2>
         </div>
-        <ul className="grid gap-4 md:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2">
           {GAME_CARDS.map((g) => (
-            <li key={g.href}>
-              <Link
-                href={g.href}
-                className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-primary"
-              >
-                <div className="relative aspect-square bg-secondary">
-                  <Image
-                    src={jakoSrc(g.pose) || '/placeholder.svg'}
-                    alt=""
-                    fill
-                    sizes="(min-width: 768px) 33vw, 100vw"
-                    className="object-contain p-6 transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <span className="absolute left-3 top-3 rounded-md bg-background/90 px-2 py-1 text-xs font-bold uppercase tracking-wider text-primary">
-                    {g.limit}
-                  </span>
-                </div>
-                <div className="flex flex-1 flex-col gap-2 p-5">
-                  <h3 className="font-display text-xl font-bold uppercase text-foreground">{g.title}</h3>
-                  <p className="flex-1 text-sm leading-relaxed text-muted-foreground">{g.text}</p>
-                  <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary">
-                    Oyna
-                    <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
-                  </span>
-                </div>
-              </Link>
-            </li>
+            <MiniCard key={g.game} {...g} />
           ))}
         </ul>
       </section>

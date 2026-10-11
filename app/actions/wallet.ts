@@ -14,6 +14,33 @@ const REWARD_LIMITS: Record<string, { perClaim: number; perDay: number; label: s
 
 const SPEND_SOURCES: Record<string, string> = { market: 'Puan marketi', etkinlik: 'Etkinlik' }
 
+export type MiniGame = 'cark' | 'sandik'
+export type MiniStatus = Record<MiniGame, number | null>
+
+const WHEEL_COOLDOWN_HOURS = 6
+
+/** Epoch ms when the next free play unlocks, or null when available now. */
+async function miniNextAt(userId: string, game: MiniGame): Promise<number | null> {
+  if (game === 'cark') {
+    const r = await rows<{ next: string | null }>(sql`SELECT extract(epoch FROM max(created_at) + ${`${WHEEL_COOLDOWN_HOURS} hours`}::interval) * 1000 AS next
+      FROM game_history WHERE user_id = ${userId} AND game = 'cark' AND mode = 'odul'`)
+    const next = r[0]?.next ? Number(r[0].next) : null
+    return next && next > Date.now() ? next : null
+  }
+  const r = await rows<{ used: boolean; next: string }>(sql`SELECT
+      EXISTS (SELECT 1 FROM game_history WHERE user_id = ${userId} AND game = 'sandik' AND mode = 'odul'
+        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS used,
+      extract(epoch FROM ((date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + interval '1 day') AT TIME ZONE 'Europe/Istanbul')) * 1000 AS next`)
+  return r[0]?.used ? Number(r[0].next) : null
+}
+
+export async function getMiniStatus(): Promise<MiniStatus> {
+  const member = await getMember()
+  if (!member) return { cark: null, sandik: null }
+  const [cark, sandik] = await Promise.all([miniNextAt(member.id, 'cark'), miniNextAt(member.id, 'sandik')])
+  return { cark, sandik }
+}
+
 export async function claimReward(source: string, amount: number): Promise<WalletResult> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Ödül almak için giriş yapmalısın.' }
@@ -21,6 +48,12 @@ export async function claimReward(source: string, amount: number): Promise<Walle
   if (!limit) return { ok: false, error: 'Geçersiz ödül.' }
   const value = Math.floor(Number(amount))
   if (!Number.isInteger(value) || value <= 0 || value > limit.perClaim) return { ok: false, error: 'Geçersiz ödül tutarı.' }
+
+  if (source === 'cark' || source === 'sandik') {
+    if (await miniNextAt(member.id, source)) {
+      return { ok: false, error: `${limit.label} için hakkın henüz yenilenmedi.`, balance: await getBalance(member.id) }
+    }
+  }
 
   const today = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM game_history
     WHERE user_id = ${member.id} AND game = ${source} AND mode = 'odul' AND created_at > date_trunc('day', now())`)
