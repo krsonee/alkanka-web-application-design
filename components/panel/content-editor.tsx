@@ -28,6 +28,7 @@ export function ContentEditor({
   push,
   telegram,
   seo,
+  studio,
 }: {
   slides: EditorItem[]
   heroes: EditorItem[]
@@ -38,8 +39,9 @@ export function ContentEditor({
   push: React.ReactNode
   telegram: React.ReactNode
   seo: React.ReactNode
+  studio: React.ReactNode
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo'>('slide')
+  const [tab, setTab] = useState<'slide' | 'hero' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio'>('slide')
   const items = tab === 'slide' ? slides : heroes
   return (
     <div className="flex flex-col gap-6">
@@ -54,6 +56,7 @@ export function ContentEditor({
             ['push', 'Bildirimler'],
             ['telegram', 'Telegram'],
             ['seo', 'SEO & Rehber'],
+            ['studio', 'Stüdyo'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -80,6 +83,8 @@ export function ContentEditor({
         telegram
       ) : tab === 'seo' ? (
         seo
+      ) : tab === 'studio' ? (
+        studio
       ) : tab === 'logo' ? (
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (

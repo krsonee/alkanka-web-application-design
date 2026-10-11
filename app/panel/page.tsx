@@ -22,6 +22,8 @@ import { SeoManager } from '@/components/panel/seo-manager'
 import { listPosts } from '@/lib/blog'
 import { dealsPublishing, getVerification, listDeals } from '@/lib/deals'
 import { SITE_URL } from '@/lib/seo'
+import { Studio } from '@/components/panel/studio'
+import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -94,6 +96,14 @@ export default async function PanelPage() {
               <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
               <TelegramChatSetup bots={tgBots} status={tgChat} />
             </div>
+          }
+          studio={
+            <Studio
+              brands={await listBrands().catch(() => [])}
+              assets={await listAssets().catch(() => [])}
+              jobs={await listJobs().catch(() => [])}
+              spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
+            />
           }
           seo={
             <SeoManager
