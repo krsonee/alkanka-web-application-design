@@ -2,7 +2,23 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Download, Globe, ImagePlus, Loader2, Palette, RefreshCw, Sparkles, Sticker, Trash2, Upload, Wand2 } from 'lucide-react'
+import {
+  BookOpen,
+  Clapperboard,
+  Download,
+  Film,
+  Globe,
+  ImagePlus,
+  Link2,
+  Loader2,
+  Palette,
+  RefreshCw,
+  Sparkles,
+  Sticker,
+  Trash2,
+  Upload,
+  Wand2,
+} from 'lucide-react'
 import {
   deleteAssetAction,
   deleteBrandAction,
@@ -10,16 +26,22 @@ import {
   extractBrandAction,
   saveBrandAction,
 } from '@/app/panel/studio-actions'
+import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
 import {
   IMAGE_COST,
   STUDIO_CATEGORIES,
   STUDIO_FORMATS,
+  VIDEO_DURATIONS,
+  videoCost,
   type StudioAsset,
   type StudioBrand,
   type StudioJob,
   type StudioKind,
 } from '@/lib/studio-types'
 import { cn } from '@/lib/utils'
+
+type StudioView = 'guide' | 'create' | 'brands' | 'library'
+type AnimateOptions = { mode: 'gif' | 'video'; duration: number; audio: boolean; motion: string }
 
 type Props = {
   brands: StudioBrand[]
@@ -40,13 +62,14 @@ const ghostBtn =
 const usd = (n: number) => `$${n.toFixed(2)}`
 
 export function Studio({ brands, assets, jobs, spend }: Props) {
-  const [view, setView] = useState<'create' | 'brands' | 'library'>(brands.length ? 'create' : 'brands')
+  const [view, setView] = useState<StudioView>(brands.length ? 'create' : 'guide')
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Stüdyo bölümü" className="flex gap-1 rounded-xl border border-border bg-card p-1">
+        <div role="tablist" aria-label="Stüdyo bölümü" className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1">
           {(
             [
+              ['guide', 'Rehber'],
               ['create', 'Üret'],
               ['brands', `Marka kitleri (${brands.length})`],
               ['library', `Sağlayıcı kütüphanesi (${assets.length})`],
@@ -58,10 +81,11 @@ export function Studio({ brands, assets, jobs, spend }: Props) {
               aria-selected={view === key}
               onClick={() => setView(key)}
               className={cn(
-                'whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold',
+                'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold',
                 view === key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
+              {key === 'guide' ? <BookOpen className="size-4" aria-hidden /> : null}
               {text}
             </button>
           ))}
@@ -70,13 +94,18 @@ export function Studio({ brands, assets, jobs, spend }: Props) {
           Bu ay <strong className="text-foreground">{usd(spend.month)}</strong> · Toplam {spend.count} üretim, {usd(spend.total)}
         </p>
       </div>
+      {view === 'guide' ? (
+        <StudioGuide onNavigate={setView} />
+      ) : (
+        <StudioHint section={view} onOpenGuide={() => setView('guide')} />
+      )}
       {view === 'create' ? (
         <Creator brands={brands} assets={assets} jobs={jobs} />
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
-      ) : (
+      ) : view === 'library' ? (
         <Library assets={assets} />
-      )}
+      ) : null}
     </div>
   )
 }
@@ -94,25 +123,51 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
   const [results, setResults] = useState<StudioJob[]>([])
   const [revising, setRevising] = useState<StudioJob | null>(null)
   const [revision, setRevision] = useState('')
+  const [animating, setAnimating] = useState<StudioJob | null>(null)
+  const [duration, setDuration] = useState<number>(6)
+  const [audio, setAudio] = useState(false)
+  const [motion, setMotion] = useState('')
+  const [videoRuns, setVideoRuns] = useState(0)
 
   const brand = brands.find((b) => b.id === brandId)
   const runs = kind === 'sticker' ? ['1:1'] : formats
+  const unitCost = IMAGE_COST + (kind === 'video' ? videoCost(duration, audio) : 0)
 
-  async function generate(body: Record<string, unknown>) {
-    setRunning((n) => n + 1)
+  async function post(url: string, body: Record<string, unknown>): Promise<StudioJob | null> {
     try {
-      const res = await fetch('/api/studio/generate', {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({ error: 'Sunucu zaman aşımına uğradı, tekrar dene.' }))
       if (!res.ok) throw new Error(data.error ?? 'Üretim başarısız oldu.')
       setResults((r) => [data.job, ...r])
+      return data.job
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Üretim başarısız oldu.')
+      return null
+    }
+  }
+
+  async function generate(body: Record<string, unknown>) {
+    setRunning((n) => n + 1)
+    try {
+      return await post('/api/studio/generate', body)
     } finally {
       setRunning((n) => n - 1)
+    }
+  }
+
+  async function animate(job: StudioJob, options: AnimateOptions) {
+    const isVideo = options.mode === 'video'
+    if (isVideo) setVideoRuns((n) => n + 1)
+    else setRunning((n) => n + 1)
+    try {
+      return await post('/api/studio/animate', { jobId: job.id, ...options })
+    } finally {
+      if (isVideo) setVideoRuns((n) => n - 1)
+      else setRunning((n) => n - 1)
     }
   }
 
@@ -120,7 +175,24 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
     setError('')
     if (prompt.trim().length < 5) return setError('Talimatı yaz (en az 5 karakter).')
     if (!runs.length) return setError('En az bir format seç.')
-    await Promise.all(runs.map((format) => generate({ kind, format, category, prompt, brandId, assetIds: picked })))
+    const baseKind = kind === 'sticker' ? 'sticker' : 'banner'
+    await Promise.all(
+      runs.map(async (format) => {
+        const banner = await generate({ kind: baseKind, format, category, prompt, brandId, assetIds: picked })
+        if (banner && (kind === 'gif' || kind === 'video')) {
+          await animate(banner, { mode: kind, duration, audio, motion })
+        }
+      }),
+    )
+    router.refresh()
+  }
+
+  async function runAnimation(mode: 'gif' | 'video') {
+    if (!animating) return
+    setError('')
+    const job = animating
+    setAnimating(null)
+    await animate(job, { mode, duration, audio, motion })
     router.refresh()
   }
 
@@ -151,6 +223,8 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
             [
               ['banner', 'Görsel / Banner', ImagePlus],
               ['sticker', 'Sticker', Sticker],
+              ['gif', 'Hareketli GIF', Film],
+              ['video', 'Video', Clapperboard],
             ] as const
           ).map(([key, text, Icon]) => (
             <button
@@ -195,7 +269,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
           </div>
         ) : null}
 
-        {kind === 'banner' ? (
+        {kind !== 'sticker' ? (
           <>
             <fieldset className={label}>
               <legend className="mb-1.5">Formatlar (birden fazla seçersen hepsi aynı anda üretilir)</legend>
@@ -247,6 +321,15 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
           />
         </label>
 
+        {kind === 'gif' ? (
+          <p className="rounded-xl bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
+            Önce banner üretilir, sonra üstünden parlama geçen ve hafif nefes alan döngülü bir GIF yapılır. GIF adımı ücretsizdir, logo ve yazılar hiç bozulmaz.
+          </p>
+        ) : null}
+        {kind === 'video' ? (
+          <VideoOptions duration={duration} setDuration={setDuration} audio={audio} setAudio={setAudio} motion={motion} setMotion={setMotion} />
+        ) : null}
+
         {assets.length ? (
           <details className="rounded-xl border border-border p-3">
             <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
@@ -274,9 +357,9 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
           </details>
         ) : null}
 
-        <button type="button" onClick={start} disabled={running > 0} className={primaryBtn}>
-          {running > 0 ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
-          {running > 0 ? `Üretiliyor (${running})...` : `Üret · ~${usd(IMAGE_COST * runs.length)}`}
+        <button type="button" onClick={start} disabled={running + videoRuns > 0} className={primaryBtn}>
+          {running + videoRuns > 0 ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
+          {running + videoRuns > 0 ? `Üretiliyor (${running + videoRuns})...` : `Üret · ~${usd(unitCost * runs.length)}`}
         </button>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -313,7 +396,33 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
           </div>
         ) : null}
 
-        {shown.length === 0 && running === 0 ? (
+        {animating ? (
+          <div className={card}>
+            <div className="flex items-center gap-2">
+              <Film className="size-5 text-primary" aria-hidden />
+              <h3 className="font-display text-lg font-bold uppercase text-foreground">Hareketlendir</h3>
+            </div>
+            <div className="flex flex-col gap-4 md:flex-row">
+              <img src={animating.url || '/placeholder.svg'} alt="Hareketlendirilecek banner" className="h-32 self-start rounded-lg object-contain" />
+              <div className="flex flex-1 flex-col gap-3">
+                <VideoOptions duration={duration} setDuration={setDuration} audio={audio} setAudio={setAudio} motion={motion} setMotion={setMotion} />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => runAnimation('gif')} className={ghostBtn}>
+                <Film className="size-3.5" aria-hidden /> GIF yap · ücretsiz
+              </button>
+              <button type="button" onClick={() => runAnimation('video')} className={primaryBtn}>
+                <Clapperboard className="size-4" aria-hidden /> Video üret · ~{usd(videoCost(duration, audio))}
+              </button>
+              <button type="button" onClick={() => setAnimating(null)} className={ghostBtn}>
+                Vazgeç
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {shown.length === 0 && running + videoRuns === 0 ? (
           <div className="flex min-h-80 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-8 text-center">
             <Sparkles className="size-8 text-primary" aria-hidden />
             <p className="font-semibold text-foreground">Henüz üretim yok</p>
@@ -330,8 +439,14 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
               <span className="text-xs text-muted-foreground">Üretiliyor, 10-30 sn</span>
             </div>
           ))}
+          {Array.from({ length: videoRuns }).map((_, i) => (
+            <div key={`video-${i}`} className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 text-center">
+              <Clapperboard className="size-6 animate-pulse text-primary" aria-hidden />
+              <span className="text-xs text-muted-foreground">Video üretiliyor, 1-3 dk sürer. Sayfadan ayrılma.</span>
+            </div>
+          ))}
           {shown.map((job) => (
-            <JobCard key={job.id} job={job} onRevise={() => setRevising(job)} />
+            <JobCard key={job.id} job={job} onRevise={() => setRevising(job)} onAnimate={() => setAnimating(job)} />
           ))}
         </div>
       </div>
@@ -339,27 +454,100 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
   )
 }
 
-function JobCard({ job, onRevise }: { job: StudioJob; onRevise: () => void }) {
+const KIND_LABEL: Record<StudioKind, string> = { banner: 'Banner', sticker: 'Sticker', gif: 'GIF', video: 'Video' }
+
+function VideoOptions({
+  duration,
+  setDuration,
+  audio,
+  setAudio,
+  motion,
+  setMotion,
+}: {
+  duration: number
+  setDuration: (n: number) => void
+  audio: boolean
+  setAudio: (b: boolean) => void
+  motion: string
+  setMotion: (s: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <label className={label}>
+        Hareket talimatı (opsiyonel)
+        <textarea
+          value={motion}
+          onChange={(e) => setMotion(e.target.value)}
+          rows={2}
+          maxLength={600}
+          placeholder="Örn: karakter kılıcını kaldırıyor, arkada altın paralar yağıyor, kamera yavaşça yaklaşıyor"
+          className={cn(input, 'resize-y')}
+        />
+      </label>
+      <div className="flex flex-wrap items-end gap-4">
+        <fieldset className={label}>
+          <legend className="mb-1.5">Video süresi</legend>
+          <div className="flex gap-1">
+            {VIDEO_DURATIONS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                aria-pressed={duration === d}
+                onClick={() => setDuration(d)}
+                className={cn(
+                  'rounded-lg border px-3 py-1.5 text-xs font-bold',
+                  duration === d ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
+                )}
+              >
+                {d} sn
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <label className="flex items-center gap-2 pb-1.5 text-xs font-semibold text-muted-foreground">
+          <input type="checkbox" checked={audio} onChange={(e) => setAudio(e.target.checked)} className="size-4 accent-primary" />
+          Ses / müzik ekle
+        </label>
+      </div>
+    </div>
+  )
+}
+
+function JobCard({ job, onRevise, onAnimate }: { job: StudioJob; onRevise: () => void; onAnimate: () => void }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   return (
     <figure className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
       <div className={cn('flex items-center justify-center', job.kind === 'sticker' ? 'bg-[repeating-conic-gradient(var(--secondary)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4' : 'bg-secondary')}>
-        <img src={job.url || '/placeholder.svg'} alt={job.prompt} loading="lazy" className="max-h-80 w-full object-contain" />
+        {job.kind === 'video' ? (
+          <video src={job.url} controls loop muted playsInline preload="metadata" className="max-h-80 w-full bg-foreground object-contain">
+            <track kind="captions" />
+          </video>
+        ) : (
+          <img src={job.url || '/placeholder.svg'} alt={job.prompt} loading="lazy" className="max-h-80 w-full object-contain" />
+        )}
       </div>
       <figcaption className="flex flex-col gap-2 p-3">
         <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{job.prompt}</p>
         <p className="text-xs font-semibold text-foreground">
-          {job.brandName || 'Markasız'} · {job.kind === 'sticker' ? 'Sticker' : job.format}
-          {job.parentId ? ' · revize' : ''}
+          {job.brandName || 'Markasız'} · {KIND_LABEL[job.kind]}
+          {job.kind !== 'sticker' ? ` ${job.format}` : ''}
+          {job.parentId && (job.kind === 'banner' || job.kind === 'sticker') ? ' · revize' : ''}
         </p>
         <div className="flex flex-wrap gap-1.5">
           <a href={`${job.url}?download`} className={ghostBtn}>
             <Download className="size-3.5" aria-hidden /> İndir
           </a>
-          <button type="button" onClick={onRevise} className={ghostBtn}>
-            <RefreshCw className="size-3.5" aria-hidden /> Revize
-          </button>
+          {job.kind === 'banner' || job.kind === 'sticker' ? (
+            <button type="button" onClick={onRevise} className={ghostBtn}>
+              <RefreshCw className="size-3.5" aria-hidden /> Revize
+            </button>
+          ) : null}
+          {job.kind === 'banner' ? (
+            <button type="button" onClick={onAnimate} className={ghostBtn}>
+              <Film className="size-3.5" aria-hidden /> Hareketlendir
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={pending}
@@ -598,19 +786,25 @@ function Library({ assets }: { assets: StudioAsset[] }) {
   const [, start] = useTransition()
   const providers = [...new Set(assets.map((a) => a.provider))]
 
-  async function upload(files: FileList) {
+  const [links, setLinks] = useState('')
+
+  async function upload(files: FileList | null, urls = '') {
     if (!provider.trim()) return setMessage('Önce sağlayıcı adını yaz.')
     setBusy(true)
     setMessage('')
     const form = new FormData()
     form.set('provider', provider)
     form.set('game', game)
-    for (const f of Array.from(files)) form.append('file', f)
+    if (urls) form.set('urls', urls)
+    for (const f of Array.from(files ?? [])) form.append('file', f)
     const res = await fetch('/api/studio/upload', { method: 'POST', body: form })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({ error: 'Yükleme zaman aşımına uğradı.' }))
     setBusy(false)
-    setMessage(res.ok ? `${data.pathnames.length} görsel eklendi.` : data.error)
-    if (res.ok) router.refresh()
+    if (res.ok) {
+      setMessage(`${data.pathnames.length} görsel eklendi.${data.failed?.length ? ` Eklenemeyen: ${data.failed.length}` : ''}`)
+      setLinks('')
+      router.refresh()
+    } else setMessage(data.error)
   }
 
   return (
@@ -649,6 +843,27 @@ function Library({ assets }: { assets: StudioAsset[] }) {
             />
           </label>
         </div>
+        <label className={label}>
+          <span className="flex items-center gap-1.5">
+            <Link2 className="size-3.5" aria-hidden /> Veya görsel linklerini yapıştır (her satıra bir link, en fazla 30)
+          </span>
+          <textarea
+            value={links}
+            onChange={(e) => setLinks(e.target.value)}
+            rows={3}
+            placeholder="https://.../gates-of-olympus-character.png"
+            className={cn(input, 'resize-y font-mono text-xs')}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy || !links.trim()}
+          onClick={() => upload(null, links)}
+          className={cn(ghostBtn, 'self-start')}
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Link2 className="size-3.5" aria-hidden />}
+          Linklerden ekle
+        </button>
         {message ? (
           <p role="status" className="text-sm text-muted-foreground">
             {message}

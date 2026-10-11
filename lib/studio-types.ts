@@ -11,7 +11,7 @@ export type StudioBrand = {
 
 export type StudioAsset = { id: number; provider: string; game: string; pathname: string; url: string }
 
-export type StudioKind = 'banner' | 'sticker'
+export type StudioKind = 'banner' | 'sticker' | 'gif' | 'video'
 
 export type StudioJob = {
   id: number
@@ -43,3 +43,8 @@ export const STUDIO_CATEGORIES = [
 ] as const
 
 export const IMAGE_COST = 0.06
+
+export const VIDEO_DURATIONS = [4, 6, 8] as const
+export const VIDEO_COST_PER_SECOND = { silent: 0.03, audio: 0.05 } as const
+export const videoCost = (seconds: number, audio: boolean) =>
+  seconds * (audio ? VIDEO_COST_PER_SECOND.audio : VIDEO_COST_PER_SECOND.silent)

@@ -23,6 +23,7 @@ function bannerPrompt({ format, category, prompt, brand }: Input) {
     `Aspect ratio ${format}. Cinematic lighting, sharp details, rich depth, professional marketing key visual.`,
     colors,
     brand?.font ? `Typography style should feel similar to the font "${brand.font}".` : '',
+    brand?.notes ? `Brand style notes: ${brand.notes}` : '',
     `Campaign brief (render any requested headline or button text exactly in Turkish, spelled correctly, large and readable): ${prompt}`,
     'IMPORTANT: Do NOT draw any brand logo, watermark or website name. Keep the top-left corner area (about 25% width, 14% height) visually calm and empty so a logo can be placed there later.',
     'If reference images are provided, use their characters, symbols and art style faithfully as the main subject.',
