@@ -27,6 +27,18 @@ import { CommunityManager } from '@/components/panel/community'
 import { adminComplaints, listLeagueMatches, pendingReviews } from '@/lib/community'
 import { SPONSORS } from '@/components/alkanka/data'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
+import { KpManager } from '@/components/panel/kp-manager'
+import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
+
+async function kpPanel() {
+  try {
+    const [cfg, badges, awards, board] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50)])
+    return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} />
+  } catch (error) {
+    console.error('[kp-panel]', error)
+    return <p className="text-sm text-destructive">Rozet sistemi yüklenemedi.</p>
+  }
+}
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -116,6 +128,7 @@ export default async function PanelPage() {
               siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
             />
           }
+          badges={await kpPanel()}
           seo={
             <SeoManager
               posts={await listPosts({ includeDrafts: true })}

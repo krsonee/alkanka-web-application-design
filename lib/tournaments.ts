@@ -280,6 +280,10 @@ async function finishTournament(client: { query: typeof pool.query }, row: Row, 
     `UPDATE tournaments SET status = 'bitti', winner = $2, bracket = $3::jsonb WHERE id = $1 AND status = 'basladi' RETURNING id`,
     [row.id, display, JSON.stringify(bracket)],
   )
+  if (upd.rowCount && n?.user_id) {
+    const { rewardTournamentWin } = await import('@/lib/kanka-puan')
+    await rewardTournamentWin(n.user_id, Number(row.id), String(row.title))
+  }
   const prize = Number(row.prize_pool)
   if (upd.rowCount && prize > 0 && n?.user_id) {
     await credit(n.user_id, prize)
