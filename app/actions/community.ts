@@ -1,6 +1,7 @@
 'use server'
 
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
+import { hashNetwork, recordOrigin } from '@/lib/growth'
 import { revalidatePath } from 'next/cache'
 import { getBalance, getMember } from '@/lib/member'
 import {
@@ -30,9 +31,19 @@ async function run(fn: (m: { id: string; name: string }) => Promise<string | voi
 export async function linkReferralAction(): Promise<ActionResult> {
   const store = await cookies()
   const code = store.get('alk_ref')?.value
-  if (!code) return { ok: true }
+  const originDone = store.get('alk_org')?.value
+  if (!code && originDone) return { ok: true }
   const member = await getMember()
   if (!member) return { ok: true }
+  if (originDone !== member.id) {
+    const h = await headers()
+    const ip = h.get('x-forwarded-for') ?? h.get('x-real-ip')
+    await recordOrigin(member.id, store.get('alk_src')?.value ?? 'direkt', hashNetwork(ip)).catch((error) =>
+      console.error('[growth] kaynak kaydedilemedi', error),
+    )
+    store.set('alk_org', member.id, { maxAge: 60 * 60 * 24 * 365, path: '/', sameSite: 'lax', secure: true, httpOnly: true })
+  }
+  if (!code) return { ok: true }
   store.delete('alk_ref')
   const linked = await attachReferral(member.id, code).catch(() => false)
   return { ok: true, message: linked ? 'Davet bağlandı. 3 oyun oyna, ikiniz de KC kazanın.' : undefined }
@@ -43,6 +54,7 @@ export async function claimReferralAction(): Promise<ActionResult> {
   if (!member) return { ok: false, error: 'Giriş yapmalısın.' }
   const r = await claimReferralRewards(member.id)
   revalidatePath('/profil')
+  if (r.blocked) return { ok: false, error: 'Hesabın incelemede. Davet ödülleri onaydan sonra açılır.' }
   if (!r.count) return { ok: false, error: 'Henüz ödül hak eden davet yok.' }
   return { ok: true, message: `${r.count} davet için ${r.total} KC hesabına eklendi.`, balance: await getBalance(member.id) }
 }

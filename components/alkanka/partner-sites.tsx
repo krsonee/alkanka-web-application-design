@@ -118,10 +118,11 @@ function Meta({ sponsor }: { sponsor: Sponsor }) {
   )
 }
 
-function GoButton({ label = 'Siteye git', className }: { label?: string; className?: string }) {
+function GoButton({ label = 'Siteye git', className, site }: { label?: string; className?: string; site?: string }) {
   return (
     <a
-      href="#kayit"
+      href={site ? `/git/${site}` : '#kayit'}
+      rel={site ? 'nofollow sponsored' : undefined}
       className={cn(
         'flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90',
         className,
@@ -169,7 +170,7 @@ export function MainSponsor({ sponsor = SPONSORS.find((s) => s.tier === 'ana')! 
             </li>
           ))}
         </ul>
-        <GoButton label="Hemen kayıt ol" className="mt-2 h-12 sm:self-start sm:px-8" />
+        <GoButton site={sponsor.id} label="Hemen kayıt ol" className="mt-2 h-12 sm:self-start sm:px-8" />
       </div>
     </article>
   )
@@ -193,7 +194,15 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
           <p className="font-display text-lg font-bold text-primary">{sponsor.welcome}</p>
           <p className="text-sm leading-relaxed text-muted-foreground">{sponsor.perks.join(' · ')}</p>
         </div>
-        <GoButton className="mt-auto" />
+        <div className="mt-auto flex gap-2">
+          <Link
+            href={`/siteler/${sponsor.id}`}
+            className="flex h-10 items-center justify-center rounded-lg border border-border px-3 text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary"
+          >
+            İncele
+          </Link>
+          <GoButton site={sponsor.id} className="flex-1" />
+        </div>
       </div>
     </li>
   )
@@ -206,7 +215,7 @@ function SponsorRow({ sponsor, rank }: { sponsor: Sponsor; rank: number }) {
       <SponsorBadge sponsor={sponsor} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col sm:w-48 sm:flex-none">
         <span className="flex items-center gap-2 truncate font-semibold text-foreground">
-          {sponsor.name}
+          <Link href={`/siteler/${sponsor.id}`} className="hover:text-primary">{sponsor.name}</Link>
           <TierTag tier={sponsor.tier} />
         </span>
         <span className="text-xs text-muted-foreground sm:hidden">{sponsor.welcome}</span>
@@ -217,7 +226,7 @@ function SponsorRow({ sponsor, rank }: { sponsor: Sponsor; rank: number }) {
         {sponsor.rating.toFixed(1)}
       </span>
       <span className="hidden w-20 text-sm text-muted-foreground tabular-nums lg:block">{sponsor.payout}</span>
-      <GoButton label="Git" className="h-9 px-3" />
+      <GoButton site={sponsor.id} label="Git" className="h-9 px-3" />
     </li>
   )
 }
@@ -435,7 +444,7 @@ export function BonusBoard() {
                       <CopyCode code={b.code} />
                     </div>
                   )}
-                  <GoButton label="Bonusu al" className="h-9 sm:flex-1" />
+                  <GoButton site={b.sponsorId} label="Bonusu al" className="h-9 sm:flex-1" />
                 </div>
               </div>
             </li>
@@ -491,7 +500,7 @@ export function OddsBoard() {
                     </span>
                     <span className="text-xs font-bold text-live tabular-nums">+%{boost}</span>
                   </div>
-                  <GoButton label="Oyna" className="md:w-28" />
+                  <GoButton site={s?.id} label="Oyna" className="md:w-28" />
                 </li>
               )
             })}
@@ -574,7 +583,7 @@ export function CampaignBoard() {
             <Clock className="size-4 text-primary" aria-hidden="true" />
             {featured.ends} · {fs?.name}
           </span>
-          <GoButton label="Kampanyaya katıl" className="mt-auto h-12 self-start" />
+          <GoButton site={fs?.id} label="Kampanyaya katıl" className="mt-auto h-12 self-start" />
         </div>
       </article>
 

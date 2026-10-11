@@ -21,6 +21,10 @@ import {
 } from '@/lib/community'
 import { AlertsCard, ReferralCard } from '@/components/alkanka/community/profile-widgets'
 import { AccountSettings } from '@/components/alkanka/profile/account-settings'
+import { SponsorAccountsCard } from '@/components/alkanka/growth-widgets'
+import { myFollows, mySponsorAccounts } from '@/lib/growth'
+import { nextRank, rankForLevel } from '@/lib/ranks-shared'
+import { SPONSORS } from '@/components/alkanka/data'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { cn } from '@/lib/utils'
 
@@ -77,7 +81,13 @@ export default async function ProfilePage() {
     myComplaints(member.id),
     historySummary(member.id),
   ])
+  const [sponsorAccounts, follows] = await Promise.all([
+    mySponsorAccounts(member.id).catch(() => []),
+    myFollows(member.id).catch(() => [] as string[]),
+  ])
   const { level, kp, breakdown } = kpStatus
+  const rank = rankForLevel(level.index)
+  const next = nextRank(level.index)
   const lv = level.index + 1
   const tier = levelTier(lv)
   const ready = referrals.filter((r) => !r.rewarded && r.games >= REFERRAL_MIN_GAMES).length
@@ -230,6 +240,27 @@ export default async function ProfilePage() {
             />
             <AlertsCard alerts={alerts} telegramLinked={profile.stats.telegram} />
           </div>
+
+          <section id="sponsor-hesaplari" aria-label="Sponsor hesapları ve statü" className="grid scroll-mt-24 gap-4 lg:grid-cols-2">
+            <SponsorAccountsCard accounts={sponsorAccounts} sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5">
+              <h3 className="font-display text-base font-bold text-foreground">Statün: {rank.name}</h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {next ? `Seviye ${next.fromLevel + 1} olunca ${next.name} statüsüne geçersin.` : 'En yüksek statüdesin kanka.'}
+              </p>
+              <ul className="flex flex-col gap-1.5 text-sm text-foreground">
+                {rank.perks.map((p) => (
+                  <li key={p} className="flex items-center gap-2">
+                    <Star className="size-3.5 text-gold" aria-hidden />
+                    {p}
+                  </li>
+                ))}
+              </ul>
+              {follows.length > 0 && (
+                <p className="text-xs text-muted-foreground">Adres alarmı açık: {follows.map((id) => siteName(id)).join(', ')}</p>
+              )}
+            </div>
+          </section>
 
           {hits.length > 0 && (
             <section aria-labelledby="eslesen" className="flex flex-col gap-3">

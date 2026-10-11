@@ -66,6 +66,30 @@ export async function pushStats() {
   }
 }
 
+/** Sends to the subscriptions of specific members only (not logged in push_log). */
+export async function sendToUsers(userIds: string[], payload: PushPayload) {
+  if (!userIds.length) return { sent: 0, failed: 0 }
+  const vapid = await getVapid()
+  webpush.setVapidDetails('mailto:destek@alkanka.com', vapid.publicKey, vapid.privateKey)
+  const subs = await rows<{ endpoint: string; p256dh: string; auth: string }>(sql`SELECT endpoint, p256dh, auth FROM push_subscriptions
+    WHERE user_id IN (${sql.join(userIds.map((id) => sql`${id}`), sql`, `)})`)
+  const body = JSON.stringify(payload)
+  let sent = 0
+  let failed = 0
+  const results = await Promise.allSettled(
+    subs.map((s) => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 60 * 60 * 24 })),
+  )
+  for (const [idx, r] of results.entries()) {
+    if (r.status === 'fulfilled') sent++
+    else {
+      failed++
+      const code = (r.reason as { statusCode?: number })?.statusCode
+      if (code === 404 || code === 410) await rows(sql`DELETE FROM push_subscriptions WHERE endpoint = ${subs[idx].endpoint}`)
+    }
+  }
+  return { sent, failed }
+}
+
 export async function sendToAll(payload: PushPayload) {
   const vapid = await getVapid()
   webpush.setVapidDetails('mailto:destek@alkanka.com', vapid.publicKey, vapid.privateKey)

@@ -34,7 +34,9 @@ export function ContentEditor({
   badges,
   market,
   marketPending = 0,
+  growth,
 }: {
+  growth: React.ReactNode
   slides: EditorItem[]
   heroes: EditorItem[]
   library: string[]
@@ -51,7 +53,7 @@ export function ContentEditor({
   market: React.ReactNode
   marketPending?: number
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market'>(
+  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth'>(
     marketPending > 0 ? 'market' : 'slide',
   )
   const items = tab === 'slide' ? slides : heroes
@@ -60,6 +62,7 @@ export function ContentEditor({
       <div role="tablist" aria-label="İçerik türü" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-fit">
         {(
           [
+            ['growth', 'Trafik & Siteler'],
             ['slide', `Ana sayfa slider (${slides.length})`],
             ['hero', `Sayfa başlıkları (${heroes.length})`],
             ['texts', 'Site metinleri'],
@@ -89,7 +92,9 @@ export function ContentEditor({
           </button>
         ))}
       </div>
-      {tab === 'games' ? (
+      {tab === 'growth' ? (
+        growth
+      ) : tab === 'games' ? (
         games
       ) : tab === 'tournaments' ? (
         tournaments
