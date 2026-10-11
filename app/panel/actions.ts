@@ -27,6 +27,30 @@ async function requireAdmin() {
   if (!(await isAdmin())) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
 }
 
+export async function saveAds(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const { AD_PAGES, AD_POSITIONS, ADS_KEY } = await import('@/lib/ads')
+    const value: Record<string, { image: string; href: string; alt: string }> = {}
+    for (const page of AD_PAGES) {
+      for (const pos of AD_POSITIONS) {
+        const key = `${page.id}:${pos.id}`
+        const image = String(form.get(`${key}:image`) ?? '').trim()
+        const href = String(form.get(`${key}:href`) ?? '').trim()
+        if (!image) continue
+        if (!isAllowedImage(image)) return { message: `${page.label} / ${pos.label}: görsel https:// veya /images/ ile başlamalı.` }
+        if (href && !/^https:\/\//.test(href) && !href.startsWith('/')) return { message: `${page.label} / ${pos.label}: link https:// ile başlamalı.` }
+        value[key] = { image, href, alt: String(form.get(`${key}:alt`) ?? '').trim().slice(0, 80) }
+      }
+    }
+    await setContent(ADS_KEY, value)
+    for (const page of AD_PAGES) revalidatePath(`/${page.id}`)
+    return { ok: true, message: 'Reklam alanları kaydedildi.' }
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : 'Kaydedilemedi.' }
+  }
+}
+
 export async function login(_: ActionState, form: FormData): Promise<ActionState> {
   const password = String(form.get('password') ?? '')
   const token = createSessionValue()
