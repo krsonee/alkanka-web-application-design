@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils'
 import { JakoAvatar, type JakoPose } from '../jako'
 import { ParticleBurst } from './particle-burst'
 import { DetailButton, DetailModal } from '../detail-modal'
+import type { MiniGameProps } from './lucky-wheel'
+import { formatRemaining } from './mini-status'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -52,7 +54,8 @@ function rewardFor(a: number, b: number) {
 
 const rand = () => 1 + Math.floor(Math.random() * 6)
 
-export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
+export function DiceRoll({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProps) {
+  const locked = lockedFor > 0
   const [dice, setDice] = useState<[number, number]>([5, 3])
   const [rolling, setRolling] = useState(false)
   const [result, setResult] = useState<{ label: string; points: number } | null>(null)
@@ -61,7 +64,7 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
   const interval = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function roll() {
-    if (rolling) return
+    if (rolling || !canPlay()) return
     setRolling(true)
     setResult(null)
     setRollKey((k) => k + 1)
@@ -74,6 +77,7 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
       const r = rewardFor(final[0], final[1])
       setResult(r)
       onWin(r.points)
+      onPlayed()
     }, 900)
   }
 
@@ -103,16 +107,18 @@ export function DiceRoll({ onWin }: { onWin: (points: number) => void }) {
           {result ? (
             <span className="animate-pop font-semibold text-gold">{result.label}</span>
           ) : (
-            <span className="text-muted-foreground">{rolling ? 'Zarlar dönüyor…' : 'Bugün 3 atış hakkın var'}</span>
+            <span className="text-muted-foreground">
+              {rolling ? 'Zarlar dönüyor…' : locked ? `Haklar ${formatRemaining(lockedFor)} sonra yenilenir` : 'Günde 3 atış hakkın var'}
+            </span>
           )}
         </p>
         <button
           type="button"
           onClick={roll}
-          disabled={rolling}
-          className="shrink-0 rounded-lg bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform hover:scale-105 disabled:opacity-70"
+          disabled={rolling || locked}
+          className="shrink-0 rounded-lg bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform hover:scale-105 disabled:opacity-60 disabled:hover:scale-100"
         >
-          {rolling ? 'Atılıyor' : 'Zar at'}
+          {rolling ? 'Atılıyor' : locked ? 'Hak doldu' : 'Zar at'}
         </button>
       </div>
 

@@ -59,6 +59,7 @@ function MiniCard({ game, title, text, pose, limit }: (typeof GAME_CARDS)[number
 const GAME_CARDS: { game: MiniGame; title: string; text: string; pose: JakoPose; limit: string }[] = [
   { game: 'cark', title: 'Şans Çarkı', text: 'Her 6 saatte 1 ücretsiz çevirme. Kanka Coin, boost ve promo kod kazan.', pose: 'kazandi', limit: '6 saatte 1' },
   { game: 'sandik', title: 'Gizemli Sandık', text: 'Günde 1 sandık. Bronz, gümüş, altın: kapağı aç, içinden ne çıkacak?', pose: 'sandik', limit: 'Günde 1' },
+  { game: 'zar', title: 'Zar At', text: 'Günde 3 atış. Çift gelirse kazancın katlanır, düşeş jackpotu açar.', pose: 'zar', limit: 'Günde 3' },
 ]
 
 export function GamesHub({ arena }: { arena: ArenaSettings }) {

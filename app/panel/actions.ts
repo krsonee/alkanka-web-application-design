@@ -7,6 +7,7 @@ import { deleteContent, setContent, type HeroOverride, type SlideOverride } from
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
+import { SHARE_KEY } from '@/lib/share'
 
 export type ActionState = { ok?: boolean; message?: string }
 
@@ -25,6 +26,25 @@ function imageField(form: FormData) {
 
 async function requireAdmin() {
   if (!(await isAdmin())) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
+}
+
+export async function saveShare(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const text = (name: string, max: number) => String(form.get(name) ?? '').trim().slice(0, max)
+    const image = text('image', 500)
+    if (image && !isAllowedImage(image)) throw new Error('Görsel /images/ ile ya da https:// ile başlamalı.')
+    await setContent(SHARE_KEY, {
+      title: text('title', 90),
+      description: text('description', 200),
+      siteName: text('siteName', 40),
+      image,
+    })
+    revalidatePath('/', 'layout')
+    return { ok: true, message: 'Paylaşım önizlemesi kaydedildi. WhatsApp/Telegram eski önizlemeyi bir süre önbellekte tutabilir.' }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
+  }
 }
 
 export async function saveAds(_: ActionState, form: FormData): Promise<ActionState> {

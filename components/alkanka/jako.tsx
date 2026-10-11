@@ -19,9 +19,9 @@ export function jakoSrc(pose: JakoPose) {
 }
 
 const SIZES = {
-  sm: 'size-12',
-  md: 'size-16',
-  lg: 'size-24',
+  sm: 'size-16',
+  md: 'size-24',
+  lg: 'size-32 sm:size-36',
 } as const
 
 export function JakoAvatar({
@@ -37,7 +37,7 @@ export function JakoAvatar({
 }) {
   return (
     <span className={cn('relative shrink-0 overflow-hidden rounded-2xl bg-surface ring-1 ring-primary/30', SIZES[size], className)}>
-      <Image src={jakoSrc(pose) || '/placeholder.svg'} alt={alt} fill sizes="96px" className="object-cover" />
+      <Image src={jakoSrc(pose) || '/placeholder.svg'} alt={alt} fill sizes="160px" className="object-cover object-top" />
     </span>
   )
 }

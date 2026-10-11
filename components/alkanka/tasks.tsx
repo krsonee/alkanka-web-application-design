@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { TASKS, type TaskItem } from './data'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
+import { DailyGames } from './daily-games'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 
@@ -51,6 +52,7 @@ export function Tasks() {
 
   return (
     <section aria-label="Görevler" className="flex flex-col gap-5">
+      <DailyGames />
 
       <div className="grid gap-4 xl:grid-cols-5">
         <article className="panel-gold flex flex-col gap-5 rounded-2xl p-5 xl:col-span-3">

@@ -3,9 +3,10 @@
 import { usePoints } from '../points-context'
 import { LuckyWheel } from './lucky-wheel'
 import { MysteryChests } from './mystery-chests'
+import { DiceRoll } from './dice-roll'
 import { useMiniLock } from './mini-status'
 
-const GAMES = { cark: LuckyWheel, sandik: MysteryChests }
+const GAMES = { cark: LuckyWheel, sandik: MysteryChests, zar: DiceRoll }
 
 export function GameStage({ game }: { game: keyof typeof GAMES }) {
   const { add, member, requireLogin } = usePoints()

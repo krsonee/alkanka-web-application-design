@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, Space_Grotesk } from 'next/font/google'
 import { getVerification } from '@/lib/deals'
+import { getShare } from '@/lib/share'
 import { DEFAULT_OG, PAGE_SEO, SITE_NAME, SITE_URL } from '@/lib/seo'
 import './globals.css'
 
@@ -12,8 +13,12 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export async function generateMetadata(): Promise<Metadata> {
-  const verify = await getVerification()
+  const [verify, share] = await Promise.all([getVerification(), getShare()])
   const home = PAGE_SEO.anasayfa
+  const ogTitle = share.title || home.title
+  const ogDescription = share.description || home.description
+  const ogImage = share.image || DEFAULT_OG
+  const ogSite = share.siteName || SITE_NAME
   return {
     metadataBase: new URL(SITE_URL),
     title: { default: home.title, template: `%s | ${SITE_NAME}` },
@@ -24,13 +29,13 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       type: 'website',
       locale: 'tr_TR',
-      siteName: SITE_NAME,
-      title: home.title,
-      description: home.description,
+      siteName: ogSite,
+      title: ogTitle,
+      description: ogDescription,
       url: '/',
-      images: [{ url: DEFAULT_OG, width: 1200, height: 630, alt: SITE_NAME }],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: ogSite }],
     },
-    twitter: { card: 'summary_large_image', title: home.title, description: home.description, images: [DEFAULT_OG] },
+    twitter: { card: 'summary_large_image', title: ogTitle, description: ogDescription, images: [ogImage] },
     robots: { index: true, follow: true, googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 } },
     verification: {
       google: verify.google || undefined,

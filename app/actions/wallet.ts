@@ -8,13 +8,14 @@ type WalletResult = { ok: true; balance: number } | { ok: false; error: string; 
 const REWARD_LIMITS: Record<string, { perClaim: number; perDay: number; label: string }> = {
   cark: { perClaim: 500, perDay: 3, label: 'Şans Çarkı' },
   sandik: { perClaim: 500, perDay: 3, label: 'Gizemli Sandık' },
+  zar: { perClaim: 400, perDay: 3, label: 'Zar At' },
   gorev: { perClaim: 300, perDay: 12, label: 'Görev' },
   tahmin: { perClaim: 200, perDay: 10, label: 'Tahmin' },
 }
 
 const SPEND_SOURCES: Record<string, string> = { market: 'Puan marketi', etkinlik: 'Etkinlik' }
 
-export type MiniGame = 'cark' | 'sandik'
+export type MiniGame = 'cark' | 'sandik' | 'zar'
 export type MiniStatus = Record<MiniGame, number | null>
 
 const WHEEL_COOLDOWN_HOURS = 6
@@ -27,18 +28,23 @@ async function miniNextAt(userId: string, game: MiniGame): Promise<number | null
     const next = r[0]?.next ? Number(r[0].next) : null
     return next && next > Date.now() ? next : null
   }
-  const r = await rows<{ used: boolean; next: string }>(sql`SELECT
-      EXISTS (SELECT 1 FROM game_history WHERE user_id = ${userId} AND game = 'sandik' AND mode = 'odul'
+  const dailyPlays = game === 'zar' ? 3 : 1
+  const r = await rows<{ used: string; next: string }>(sql`SELECT
+      (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game = ${game} AND mode = 'odul'
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS used,
       extract(epoch FROM ((date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + interval '1 day') AT TIME ZONE 'Europe/Istanbul')) * 1000 AS next`)
-  return r[0]?.used ? Number(r[0].next) : null
+  return Number(r[0]?.used ?? 0) >= dailyPlays ? Number(r[0].next) : null
 }
 
 export async function getMiniStatus(): Promise<MiniStatus> {
   const member = await getMember()
-  if (!member) return { cark: null, sandik: null }
-  const [cark, sandik] = await Promise.all([miniNextAt(member.id, 'cark'), miniNextAt(member.id, 'sandik')])
-  return { cark, sandik }
+  if (!member) return { cark: null, sandik: null, zar: null }
+  const [cark, sandik, zar] = await Promise.all([
+    miniNextAt(member.id, 'cark'),
+    miniNextAt(member.id, 'sandik'),
+    miniNextAt(member.id, 'zar'),
+  ])
+  return { cark, sandik, zar }
 }
 
 export async function claimReward(source: string, amount: number): Promise<WalletResult> {
@@ -49,7 +55,7 @@ export async function claimReward(source: string, amount: number): Promise<Walle
   const value = Math.floor(Number(amount))
   if (!Number.isInteger(value) || value <= 0 || value > limit.perClaim) return { ok: false, error: 'Geçersiz ödül tutarı.' }
 
-  if (source === 'cark' || source === 'sandik') {
+  if (source === 'cark' || source === 'sandik' || source === 'zar') {
     if (await miniNextAt(member.id, source)) {
       return { ok: false, error: `${limit.label} için hakkın henüz yenilenmedi.`, balance: await getBalance(member.id) }
     }

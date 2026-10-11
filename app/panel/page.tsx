@@ -30,6 +30,8 @@ import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 import { KpManager } from '@/components/panel/kp-manager'
 import { AdsEditor } from '@/components/panel/ads-editor'
 import { ADS_KEY, type AdMap } from '@/lib/ads'
+import { ShareEditor } from '@/components/panel/share-editor'
+import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 
 async function kpPanel() {
@@ -142,6 +144,7 @@ export default async function PanelPage() {
           }
           logos={
             <>
+              <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} />
               <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} />
               <LogoEditor
                 kind="sponsors"
