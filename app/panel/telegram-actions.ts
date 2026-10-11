@@ -16,6 +16,7 @@ import {
   setTargetActive,
   testTarget,
 } from '@/lib/telegram-mirror'
+import { encodeFilter } from '@/lib/telegram-filters'
 import type { ActionState } from './actions'
 
 const EXPIRED = { message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -78,7 +79,8 @@ export async function addSourceAction(_: ActionState, form: FormData): Promise<A
   const channel = normalizeChannel(String(form.get('channel') ?? ''))
   const brand = String(form.get('brand') ?? '').trim().slice(0, 40)
   const link = String(form.get('link') ?? '').trim().slice(0, 500)
-  const keywords = String(form.get('keywords') ?? '').trim().slice(0, 300)
+  const presets = form.getAll('presets').map(String)
+  const keywords = encodeFilter(presets, String(form.get('keywords') ?? '')).slice(0, 300)
   const targetId = Number(form.get('targetId')) || null
   if (!channel) return { message: 'Kanal adı geçersiz. Örnek: @markaresmi ya da t.me/markaresmi' }
   if (!brand) return { message: 'Marka adı zorunlu.' }

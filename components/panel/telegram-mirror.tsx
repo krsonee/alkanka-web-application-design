@@ -17,6 +17,7 @@ import {
 } from '@/app/panel/telegram-actions'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot, MirrorLog, MirrorSource, MirrorTarget } from '@/lib/telegram-mirror'
+import { FILTER_PRESETS, describeFilter } from '@/lib/telegram-filters'
 import { TelegramGuide } from './telegram-guide'
 
 type Props = { bots: MirrorBot[]; targets: MirrorTarget[]; sources: MirrorSource[]; log: MirrorLog[]; cronUrl: string }
@@ -234,11 +235,30 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) 
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
-            Sadece bunları paylaş (isteğe bağlı)
-            <input name="keywords" placeholder="promo, kod, bonus, freespin" className={input} />
-            <span className="text-xs font-normal leading-relaxed text-muted-foreground">Virgülle ayır. Boş bırakırsan tüm yeni postlar paylaşılır.</span>
-          </label>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1.5 text-sm font-medium text-foreground">Hangi postlar paylaşılsın?</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {FILTER_PRESETS.map((f) => (
+                <label
+                  key={f.id}
+                  className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                >
+                  <input type="checkbox" name="presets" value={f.id} className="mt-0.5 size-4 accent-primary" />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-foreground">{f.label}</span>
+                    <span className="text-xs leading-relaxed text-muted-foreground">{f.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <label className="mt-1 flex flex-col gap-1.5 text-sm font-medium text-foreground">
+              Ek kelimeler (isteğe bağlı)
+              <input name="keywords" placeholder="ör. maç önü, kombine" className={input} />
+            </label>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Seçtiğin türlerden ya da yazdığın kelimelerden en az biri geçen postlar paylaşılır. Hiçbirini seçmezsen kanaldaki tüm yeni postlar paylaşılır.
+            </p>
+          </fieldset>
           <button
             disabled={adding}
             className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
@@ -265,7 +285,7 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) 
                     <p className="truncate text-xs text-muted-foreground">{s.link}</p>
                     <p className="text-xs text-muted-foreground">
                       Hedef: {targetTitle(s.targetId)}
-                      {s.keywords ? ` · Filtre: ${s.keywords}` : ''}
+                      {` · ${s.keywords ? `Filtre: ${describeFilter(s.keywords)}` : 'Tüm postlar'}`}
                     </p>
                     <p className={`text-xs ${s.lastError ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {s.lastError ?? (s.lastCheckedAt ? `Son kontrol ${timeFmt.format(new Date(s.lastCheckedAt))}` : 'Henüz kontrol edilmedi')}

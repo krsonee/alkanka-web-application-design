@@ -1,6 +1,7 @@
 import 'server-only'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
+import { filterWords } from '@/lib/telegram-filters'
 
 export type MirrorSource = {
   id: number
@@ -235,10 +236,7 @@ async function sendPost(dest: Destination, post: ScrapedPost, source: { brand: s
 }
 
 function matchesKeywords(post: ScrapedPost, keywords: string) {
-  const list = keywords
-    .split(',')
-    .map((k) => k.trim().toLocaleLowerCase('tr'))
-    .filter(Boolean)
+  const list = filterWords(keywords)
   if (!list.length) return true
   const text = stripTags(post.html).toLocaleLowerCase('tr')
   return list.some((k) => text.includes(k))
