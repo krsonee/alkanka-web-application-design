@@ -5,6 +5,7 @@ import { pageMeta } from '@/lib/seo'
 import { getMember } from '@/lib/member'
 import { AUTO_LABELS, RULE_FIELDS, badgeHolders, getKpConfig, getKpStatus, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
 import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
+import { PageHero } from '@/components/alkanka/page-hero'
 import { cn } from '@/lib/utils'
 
 export const metadata = pageMeta('rozetler')
@@ -44,24 +45,17 @@ export default async function BadgesPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      <section className="relative overflow-hidden rounded-2xl border border-gold/25 bg-surface">
-        <Image
-          src="/images/badges/hero-jako-rozet.png"
-          alt=""
-          fill
-          priority
-          sizes="(min-width: 1024px) 900px, 100vw"
-          className="object-cover object-right opacity-90"
-        />
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-surface via-surface/85 to-transparent" />
-        <div className="relative flex min-h-64 flex-col justify-center gap-4 p-6 md:min-h-72 md:max-w-[60%] md:p-8">
-          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">Kanka Puan · Rozet Salonu</span>
-          <h1 className="text-balance font-display text-3xl font-bold leading-tight text-foreground md:text-4xl">
-            Puan topla, seviye atla, <span className="text-gold">rozetini kap</span>
-          </h1>
-          <p className="max-w-md text-pretty text-sm leading-relaxed text-muted-foreground">
-            {cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.
-          </p>
+      <PageHero
+        eyebrow="Rozet Salonu"
+        title="Puan topla, rozetini kap"
+        description={`${cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.`}
+        image="/images/badges/hero-jako-rozet.png"
+        stats={[
+          { label: 'Seviye', value: String(cfg.levels.length) },
+          { label: 'Lig', value: String(groups.length) },
+          { label: 'Değerli rozet', value: String(specials.length) },
+        ]}
+      >
           <div className="flex flex-wrap gap-2">
             {groups.map((g) => (
               <span key={g.tier} className={cn('inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-xs font-semibold', TIER_BG[g.tier], TIER_TEXT[g.tier])}>
@@ -70,8 +64,7 @@ export default async function BadgesPage() {
               </span>
             ))}
           </div>
-        </div>
-      </section>
+      </PageHero>
 
       {me ? (
         <Link

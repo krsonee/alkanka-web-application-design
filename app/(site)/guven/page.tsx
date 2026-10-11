@@ -6,6 +6,7 @@ import { SPONSORS } from '@/components/alkanka/data'
 import { SponsorLogoPlate } from '@/components/alkanka/partner-sites'
 import { TrustForms } from '@/components/alkanka/community/trust-forms'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
+import { PageHero } from '@/components/alkanka/page-hero'
 import { cn } from '@/lib/utils'
 
 export const metadata: Metadata = {
@@ -48,15 +49,19 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Güven merkezi</span>
-          <h1 className="text-balance font-display text-3xl font-bold text-foreground md:text-4xl">Sitelerin gerçek karnesi</h1>
-          <p className="max-w-2xl text-pretty leading-relaxed text-muted-foreground">
-            Yorumları yalnızca doğrulanmış AL KANKA üyeleri yazar. Toplam {totals.reviews} yorum, {totals.complaints} şikâyet ve
-            {totals.complaints ? ` %${Math.round((totals.resolved / totals.complaints) * 100)}` : ' -'} çözüm oranı herkese açık.
-          </p>
-        </div>
+      <PageHero
+        eyebrow="Güven merkezi"
+        title="Sitelerin gerçek karnesi"
+        description="Yorumları yalnızca doğrulanmış AL KANKA üyeleri yazar. Puanlar, şikâyetler ve çözüm oranları herkese açık."
+        image="/images/heroes/guven.png"
+        tone="accent"
+        stats={[
+          { label: 'Yorum', value: String(totals.reviews) },
+          { label: 'Şikâyet', value: String(totals.complaints) },
+          { label: 'Çözüm oranı', value: totals.complaints ? `%${Math.round((totals.resolved / totals.complaints) * 100)}` : '-' },
+        ]}
+      />
+      <section aria-label="Nasıl işler">
         <ol className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {STEPS.map(({ icon: Icon, title, text }) => (
             <li key={title} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
@@ -70,7 +75,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
             </li>
           ))}
         </ol>
-      </header>
+      </section>
 
       <section aria-labelledby="siralama" className="flex flex-col gap-3">
         <h2 id="siralama" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Güven sıralaması · bir site seç</h2>
