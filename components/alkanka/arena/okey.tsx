@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, Layers, Sparkles, Trophy } from 'lucide-react'
+import { Layers, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
+import { OkeyRack, useRack } from './okey-rack'
 import {
   COLOR_NAMES,
   chooseDiscard,
@@ -23,7 +24,7 @@ const BOT_NAMES = ['Baykuş', 'Aslan', 'Goril']
 
 type Phase = 'draw' | 'discard' | 'bots' | 'over'
 
-function TileFace({
+export function TileFace({
   tile,
   okey,
   size = 'md',
@@ -33,11 +34,12 @@ function TileFace({
 }: {
   tile: Tile
   okey: OkeyValue
-  size?: 'sm' | 'md'
+  size?: 'sm' | 'md' | 'fluid'
   selected?: boolean
   onClick?: () => void
   label?: string
 }) {
+  if (size === 'fluid') return <FluidTile tile={tile} okey={okey} selected={selected} onClick={onClick} label={label} />
   const joker = isJoker(tile, okey)
   const Comp = onClick ? 'button' : 'span'
   const name = tile.fake ? 'Sahte okey' : `${COLOR_NAMES[tile.color]} ${tile.num}${joker ? ' (okey)' : ''}`
@@ -68,7 +70,59 @@ function TileFace({
   )
 }
 
-function TileBack({ className }: { className?: string }) {
+export function TurnSteps({ phase }: { phase: 'draw' | 'discard' | 'wait' }) {
+  const steps = [
+    { key: 'draw', label: '1. Taş çek', hint: 'Ortadaki desteye ya da yerdeki taşa dokun' },
+    { key: 'discard', label: '2. Taş at', hint: 'Bir taş seç, "Seçili taşı at" ya da bitir' },
+  ] as const
+  return (
+    <ol className="grid grid-cols-2 gap-2" aria-label="Hamle adımları">
+      {steps.map((s) => {
+        const on = phase === s.key
+        return (
+          <li
+            key={s.key}
+            aria-current={on ? 'step' : undefined}
+            className={cn('flex flex-col rounded-lg border px-3 py-2', on ? 'border-primary bg-primary/15' : 'border-border opacity-60')}
+          >
+            <span className={cn('text-xs font-bold uppercase tracking-wide', on ? 'text-primary' : 'text-foreground')}>{s.label}</span>
+            <span className="hidden text-[11px] text-muted-foreground sm:block">{s.hint}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+function FluidTile({ tile, okey, selected, onClick, label }: { tile: Tile; okey: OkeyValue; selected?: boolean; onClick?: () => void; label?: string }) {
+  const joker = isJoker(tile, okey)
+  const name = tile.fake ? 'Sahte okey' : `${COLOR_NAMES[tile.color]} ${tile.num}${joker ? ' (okey)' : ''}`
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label ?? name}
+      aria-pressed={selected}
+      className={cn(
+        'relative flex size-full flex-col items-center justify-start gap-[8%] rounded-[3px] bg-tile pt-[12%] shadow-[inset_0_-3px_0_rgb(0_0_0/0.12),0_2px_3px_rgb(0_0_0/0.3)] sm:rounded-md',
+        selected && 'ring-2 ring-primary',
+        joker && !selected && 'ring-1 ring-primary/80',
+      )}
+    >
+      {tile.fake ? (
+        <Sparkles className="size-1/2 text-tile-black" aria-hidden="true" />
+      ) : (
+        <>
+          <span className={cn('font-display text-[clamp(0.7rem,3.2vw,1.5rem)] font-bold leading-none', TEXT[tile.color])}>{tile.num}</span>
+          <span className={cn('aspect-square w-[22%] rounded-full', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][tile.color])} />
+        </>
+      )}
+      {joker && <span className="absolute -top-1.5 rounded bg-primary px-0.5 text-[7px] font-bold uppercase leading-tight text-primary-foreground sm:text-[8px]">Okey</span>}
+    </button>
+  )
+}
+
+export function TileBack({ className }: { className?: string }) {
   return <span aria-hidden="true" className={cn('h-8 w-6 rounded-sm border border-primary/30 bg-wood shadow', className)} />
 }
 
@@ -86,11 +140,15 @@ export function Okey({ finish }: GameApi) {
   const [game, setGame] = useState(deal)
   const [phase, setPhase] = useState<Phase>('discard')
   const [active, setActive] = useState(0)
-  const [selected, setSelected] = useState<number | null>(null)
   const [message, setMessage] = useState('Elinde 15 taş var. Bir taş seçip at, oyun başlasın.')
+  const [fresh, setFresh] = useState<number | null>(null)
 
   const { deck, indicator, okey, hands, discards } = game
   const hand = hands[0]
+  const rack = useRack(hand, okey)
+  const selected = rack.selected
+  const setSelected = rack.setSelected
+  const tileName = (t: Tile) => (t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`)
   const winning = useMemo(() => (phase === 'discard' ? findWinningDiscard(hand, okey) : null), [hand, okey, phase])
 
   function end(result: 'win' | 'lose' | 'draw', note: string) {
@@ -106,8 +164,9 @@ export function Okey({ finish }: GameApi) {
     const tile = nextDeck.pop()!
     setGame({ ...game, deck: nextDeck, hands: [[...hand, tile], ...hands.slice(1)] })
     setSelected(tile.id)
+    setFresh(tile.id)
     setPhase('discard')
-    setMessage('Ortadan çektin. Şimdi bir taş at.')
+    setMessage(`Ortadan ${tileName(tile)} çektin (ıstakada "Yeni" yazıyor). Şimdi atacağın taşı seç.`)
   }
 
   function takeDiscard() {
@@ -118,8 +177,9 @@ export function Okey({ finish }: GameApi) {
     const nextDiscards = discards.map((d, i) => (i === 3 ? d.slice(0, -1) : d))
     setGame({ ...game, discards: nextDiscards, hands: [[...hand, tile], ...hands.slice(1)] })
     setSelected(tile.id)
+    setFresh(tile.id)
     setPhase('discard')
-    setMessage('Yerden aldın. Şimdi bir taş at.')
+    setMessage(`Yerden ${tileName(tile)} aldın. Şimdi atacağın taşı seç.`)
   }
 
   function discard(tileId: number | null) {
@@ -132,6 +192,7 @@ export function Okey({ finish }: GameApi) {
       discards: discards.map((d, i) => (i === 0 ? [...d, tile] : d)),
     })
     setSelected(null)
+    setFresh(null)
     setActive(1)
     setPhase('bots')
     setMessage('Rakipler oynuyor...')
@@ -144,18 +205,8 @@ export function Okey({ finish }: GameApi) {
     end('win', winning.kind === 'cift' ? 'Çiftten bitirdin! Masanın kralı sensin.' : 'Elini açtın! Masayı sen aldın.')
   }
 
-  function move(dir: -1 | 1) {
-    if (selected === null) return
-    const i = hand.findIndex((t) => t.id === selected)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= hand.length) return
-    const next = [...hand]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    setGame({ ...game, hands: [next, ...hands.slice(1)] })
-  }
-
   function sort(mode: 'seri' | 'cift') {
-    setGame({ ...game, hands: [sortHand(hand, okey, mode), ...hands.slice(1)] })
+    rack.arrange(mode)
   }
 
   useEffect(() => {
@@ -202,7 +253,7 @@ export function Okey({ finish }: GameApi) {
               setTimeout(() => {
                 setActive(0)
                 setPhase('draw')
-                setMessage('Sıra sende. Ortadan çek ya da soldaki taşı al.')
+                setMessage('Sıra sende. 1. adım: ortadaki desteden çek ya da sol alttaki Goril’in attığı taşı al.')
               }, 500),
             )
         }, 850),
@@ -247,7 +298,9 @@ export function Okey({ finish }: GameApi) {
         ) : (
           <span className="h-11 w-8 rounded-md border border-dashed border-foreground/20" aria-hidden="true" />
         )}
-        {canTake && <span className="text-[9px] font-bold uppercase tracking-wider text-primary">Al</span>}
+        <span className={cn('text-[9px] font-bold uppercase tracking-wider', canTake ? 'animate-pulse text-primary' : 'text-foreground/50')}>
+          {canTake ? 'Yerden al' : interactive ? 'Soldan gelen' : i === 0 ? 'Senin attığın' : ''}
+        </span>
       </div>
     )
   }
@@ -277,7 +330,7 @@ export function Okey({ finish }: GameApi) {
               <TileBack className="absolute left-0.5 top-0.5 h-11 w-8" />
               <TileBack className="absolute left-0 top-0 h-11 w-8" />
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">{deck.length} taş</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">{phase === 'draw' ? 'Çek' : `${deck.length} taş`}</span>
           </button>
           <div className="flex flex-col items-center gap-2">
             <TileFace tile={indicator} okey={{ color: -2, num: -2 }} size="sm" label={`Gösterge: ${COLOR_NAMES[indicator.color]} ${indicator.num}`} />
@@ -293,6 +346,7 @@ export function Okey({ finish }: GameApi) {
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+        <TurnSteps phase={phase === 'draw' ? 'draw' : phase === 'discard' ? 'discard' : 'wait'} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-semibold text-foreground" aria-live="polite">
             {message}
@@ -304,22 +358,10 @@ export function Okey({ finish }: GameApi) {
             <button onClick={() => sort('cift')} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary">
               Çift diz
             </button>
-            <button onClick={() => move(-1)} disabled={selected === null} aria-label="Seçili taşı sola kaydır" className="rounded-lg border border-border px-2.5 py-2 text-foreground hover:bg-secondary disabled:opacity-40">
-              <ArrowLeft className="size-4" aria-hidden="true" />
-            </button>
-            <button onClick={() => move(1)} disabled={selected === null} aria-label="Seçili taşı sağa kaydır" className="rounded-lg border border-border px-2.5 py-2 text-foreground hover:bg-secondary disabled:opacity-40">
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </button>
           </div>
         </div>
 
-        <div className="rounded-xl bg-wood p-3 pt-5 shadow-inner">
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {hand.map((t) => (
-              <TileFace key={t.id} tile={t} okey={okey} selected={selected === t.id} onClick={() => setSelected(selected === t.id ? null : t.id)} />
-            ))}
-          </div>
-        </div>
+        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} />
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <button

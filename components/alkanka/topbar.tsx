@@ -1,8 +1,10 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Coins, Menu, Search, Send } from 'lucide-react'
+import Link from 'next/link'
+import { Coins, History, LogOut, Menu, Search, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { authClient } from '@/lib/auth-client'
 import { TELEGRAM_URL } from './data'
 import { BrandLogo } from './logo-selector'
 import { MobileDrawer } from './sidebar'
@@ -32,6 +34,50 @@ function PointsPill() {
           {formatAC(lastGain.value)}
         </span>
       )}
+    </div>
+  )
+}
+
+function AccountArea() {
+  const { member, refresh } = usePoints()
+  if (!member) {
+    return (
+      <>
+        <a
+          href="#giris"
+          className="hidden h-9 items-center rounded-lg border border-primary/50 px-4 text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/10 sm:flex"
+        >
+          Giriş
+        </a>
+        <a
+          href="#kayit"
+          className="flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-3 text-xs sm:px-4 font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          Kayıt ol
+        </a>
+      </>
+    )
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <Link
+        href="/oyunlar/gecmis"
+        className="flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/50"
+      >
+        <History className="size-3.5 text-primary" aria-hidden="true" />
+        <span className="max-w-28 truncate">{member.name}</span>
+      </Link>
+      <button
+        type="button"
+        aria-label="Çıkış yap"
+        onClick={async () => {
+          await authClient.signOut()
+          refresh()
+        }}
+        className="flex size-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <LogOut className="size-4" aria-hidden="true" />
+      </button>
     </div>
   )
 }
@@ -80,18 +126,7 @@ export function Topbar() {
             <Send className="size-3.5" aria-hidden="true" />
             Telegram
           </a>
-          <a
-            href="#giris"
-            className="hidden h-9 items-center rounded-lg border border-primary/50 px-4 text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/10 sm:flex"
-          >
-            Giriş
-          </a>
-          <a
-            href="#kayit"
-            className="flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-3 text-xs sm:px-4 font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            Kayıt ol
-          </a>
+          <AccountArea />
         </div>
       </header>
       <MobileDrawer open={open} onClose={close} />

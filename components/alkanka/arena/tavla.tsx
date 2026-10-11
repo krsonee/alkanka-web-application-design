@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dices, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { TavlaState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
+import type { Remote } from './remote'
+import { BrandLogo } from '../logo-selector'
 import {
   applyMove,
   botPlan,
@@ -15,10 +18,9 @@ import {
   type Board,
   type From,
   type Move,
+  type Side,
   type To,
 } from './tavla-engine'
-
-type Phase = 'roll' | 'move' | 'bot' | 'over'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -29,31 +31,57 @@ const PIPS: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 }
 
-export function Die({ value, used, small }: { value: number; used?: boolean; small?: boolean }) {
+export function Die({ value, used, small, className }: { value: number; used?: boolean; small?: boolean; className?: string }) {
   return (
     <span
       role="img"
       aria-label={`Zar ${value}${used ? ', oynandı' : ''}`}
       className={cn(
-        'grid grid-cols-3 grid-rows-3 gap-0.5 rounded-lg bg-checker-light p-1.5 shadow-md transition-opacity',
-        small ? 'size-8' : 'size-11',
-        used && 'opacity-30',
+        'grid grid-cols-3 grid-rows-3 gap-0.5 rounded-lg bg-checker-light p-1 shadow-[0_6px_14px_rgb(0_0_0/0.45)] transition-opacity sm:p-1.5',
+        small ? 'size-8' : 'size-8 sm:size-12',
+        used && 'opacity-35',
+        className,
       )}
     >
       {Array.from({ length: 9 }).map((_, i) => (
         <span key={i} className="flex items-center justify-center">
-          {PIPS[value].includes(i) && <span className={cn('rounded-full bg-checker-dark', small ? 'size-1.5' : 'size-2')} />}
+          {PIPS[value]?.includes(i) && <span className={cn('rounded-full bg-checker-dark', small ? 'size-1.5' : 'size-1.5 sm:size-2')} />}
         </span>
       ))}
     </span>
   )
 }
 
-function Checker({ side, label, glow }: { side: 'p' | 'b'; label?: string; glow?: boolean }) {
+/** Rolls through random faces briefly whenever `rollKey` changes, then lands on the real values. */
+function useRollAnimation(rolled: number[], rollKey: number) {
+  const [faces, setFaces] = useState<number[] | null>(null)
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    if (!rolled.length) return
+    let n = 0
+    const id = setInterval(() => {
+      n++
+      setFaces(rolled.slice(0, 2).map(() => 1 + Math.floor(Math.random() * 6)))
+      if (n > 7) {
+        clearInterval(id)
+        setFaces(null)
+      }
+    }, 70)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rollKey])
+  return faces
+}
+
+function Checker({ side, label, glow }: { side: Side; label?: string; glow?: boolean }) {
   return (
     <span
       className={cn(
-        'relative flex aspect-square w-full max-w-11 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-bold shadow-[inset_0_-3px_0_rgb(0_0_0/0.25)]',
+        'relative flex aspect-square w-full max-w-11 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-[inset_0_-3px_0_rgb(0_0_0/0.25)] sm:text-[11px]',
         side === 'p' ? 'border-point-a bg-checker-light text-checker-dark' : 'border-primary/70 bg-checker-dark text-primary',
         glow && 'ring-2 ring-primary ring-offset-1 ring-offset-felt',
       )}
@@ -63,10 +91,10 @@ function Checker({ side, label, glow }: { side: 'p' | 'b'; label?: string; glow?
   )
 }
 
-function Stack({ count, side, top, glow }: { count: number; side: 'p' | 'b'; top: boolean; glow: boolean }) {
+function Stack({ count, side, top, glow }: { count: number; side: Side; top: boolean; glow: boolean }) {
   const visible = Math.min(count, 5)
   return (
-    <div className={cn('flex h-full w-full flex-col items-center gap-0.5', !top && 'flex-col-reverse')}>
+    <div className={cn('flex h-full w-full flex-col items-center gap-px sm:gap-0.5', !top && 'flex-col-reverse')}>
       {Array.from({ length: visible }).map((_, i) => (
         <Checker key={i} side={side} glow={glow && i === visible - 1} label={i === visible - 1 && count > 5 ? String(count) : undefined} />
       ))}
@@ -74,10 +102,207 @@ function Stack({ count, side, top, glow }: { count: number; side: 'p' | 'b'; top
   )
 }
 
+type BoardProps = {
+  board: Board
+  me: Side
+  legal: Move[]
+  selected: From | null
+  onSelect: (from: From | null) => void
+  onPlay: (m: Move) => void
+  rolled: number[]
+  dice: number[]
+  rollKey: number
+  highlight: Set<number>
+  names: { me: string; opp: string }
+}
+
+function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names }: BoardProps) {
+  const opp: Side = me === 'p' ? 'b' : 'p'
+  const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
+  const targets = useMemo(() => legal.filter((m) => m.from === selected), [legal, selected])
+  const faces = useRollAnimation(rolled, rollKey)
+
+  const usedFlags = useMemo(() => {
+    const left = [...dice]
+    return rolled.map((d) => {
+      const i = left.indexOf(d)
+      if (i >= 0) {
+        left.splice(i, 1)
+        return false
+      }
+      return true
+    })
+  }, [rolled, dice])
+
+  // The board is always drawn from the viewer's perspective: own home board bottom-right.
+  const real = (visual: number) => (me === 'p' ? visual : 23 - visual)
+  const topRow = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+  const bottomRow = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+
+  function clickPoint(i: number) {
+    const t = targets.find((m) => m.to === i)
+    if (t) return onPlay(t)
+    if (selected === i) return onSelect(null)
+    if (sources.has(i)) onSelect(i)
+  }
+
+  const renderPoint = (visual: number, isTop: boolean) => {
+    const i = real(visual)
+    const v = board.pts[i]
+    const side: Side = v > 0 ? 'p' : 'b'
+    const isTarget = targets.some((t) => t.to === i)
+    const isSource = sources.has(i)
+    const mine = side === me
+    const label = me === 'p' ? i + 1 : 24 - i
+    return (
+      <button
+        key={visual}
+        type="button"
+        onClick={() => clickPoint(i)}
+        aria-label={`Hane ${label}${v ? `, ${Math.abs(v)} ${mine ? 'senin' : 'rakip'} pulu` : ', boş'}${isTarget ? ', buraya oynanabilir' : ''}`}
+        className={cn('relative flex h-full min-w-0 flex-1 flex-col items-center px-px outline-none sm:px-0.5', isTop ? 'justify-start' : 'justify-end')}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-x-px h-[90%] transition-colors sm:inset-x-0.5',
+            isTop ? 'top-0' : 'bottom-0',
+            visual % 2 === 0 ? 'bg-point-a' : 'bg-point-b',
+            isTarget ? 'bg-primary' : 'opacity-90',
+          )}
+          style={{ clipPath: isTop ? 'polygon(0 0, 100% 0, 50% 100%)' : 'polygon(50% 0, 100% 100%, 0 100%)' }}
+        />
+        {isTarget && <span aria-hidden="true" className="absolute inset-x-0 top-1/2 z-10 m-auto size-2.5 -translate-y-1/2 animate-pulse rounded-full bg-primary sm:size-3" />}
+        <span className="relative z-10 flex h-full w-full flex-col py-0.5 sm:py-1">
+          {v !== 0 && <Stack count={Math.abs(v)} side={side} top={isTop} glow={(isSource && selected === i) || (!mine && highlight.has(i))} />}
+        </span>
+        {isSource && selected !== i && <span aria-hidden="true" className={cn('absolute z-20 h-1 w-1/2 rounded-full bg-primary', isTop ? '-bottom-1' : '-top-1')} />}
+        <span className={cn('absolute z-20 hidden text-[9px] font-semibold text-muted-foreground sm:block', isTop ? '-top-4' : '-bottom-4')}>{label}</span>
+      </button>
+    )
+  }
+
+  const barSelectable = sources.has('bar')
+  const offTarget = targets.find((t) => t.to === 'off')
+  const shown = faces ?? rolled.slice(0, rolled.length === 4 ? 4 : 2)
+
+  return (
+    <div className="rounded-2xl bg-wood p-1.5 shadow-xl sm:p-3">
+      <div className="flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
+        <div className="relative flex flex-1 flex-col justify-between rounded-lg bg-felt px-0.5 py-4 sm:px-2 sm:py-5">
+          <div className="flex h-[42%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-25">
+            <span className="scale-75 sm:scale-100">
+              <BrandLogo size="sm" />
+            </span>
+          </div>
+          <div className="flex h-[42%]">{bottomRow.slice(0, 6).map((v) => renderPoint(v, false))}</div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => (selected === 'bar' ? onSelect(null) : barSelectable && onSelect('bar'))}
+          disabled={!barSelectable}
+          aria-label={`Kırık pullar: sen ${board.bar[me]}, rakip ${board.bar[opp]}`}
+          className={cn('flex w-6 flex-col items-center justify-between rounded-md bg-wood py-2 sm:w-12 sm:py-3', barSelectable && 'ring-2 ring-primary', selected === 'bar' && 'bg-primary/30')}
+        >
+          <span className="flex w-full flex-col items-center gap-0.5 px-px">
+            {Array.from({ length: Math.min(board.bar[opp], 4) }).map((_, i) => (
+              <Checker key={i} side={opp} label={i === 0 && board.bar[opp] > 4 ? String(board.bar[opp]) : undefined} />
+            ))}
+          </span>
+          <span className="flex w-full flex-col-reverse items-center gap-0.5 px-px">
+            {Array.from({ length: Math.min(board.bar[me], 4) }).map((_, i) => (
+              <Checker key={i} side={me} label={i === 0 && board.bar[me] > 4 ? String(board.bar[me]) : undefined} />
+            ))}
+          </span>
+        </button>
+
+        <div className="relative flex flex-1 flex-col justify-between rounded-lg bg-felt px-0.5 py-4 sm:px-2 sm:py-5">
+          <div className="flex h-[42%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
+          <div aria-live="polite" className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center gap-1.5 sm:gap-3">
+            {shown.length > 0 &&
+              shown.map((d, i) => (
+                <Die key={`${rollKey}-${i}`} value={d} used={!faces && usedFlags[i]} className={cn(faces && 'animate-[tumble_0.6s_ease-out]')} />
+              ))}
+          </div>
+          <div className="flex h-[42%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
+        </div>
+
+        <div className="flex w-8 flex-col justify-between gap-1.5 sm:w-14 sm:gap-2">
+          <div className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center">
+            <span className="line-clamp-1 text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">{names.opp}</span>
+            <span className="font-display text-base font-bold text-primary sm:text-lg">{board.off[opp]}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => offTarget && onPlay(offTarget)}
+            disabled={!offTarget}
+            className={cn('flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center', offTarget && 'animate-pulse bg-primary/40 ring-2 ring-primary')}
+            aria-label={`Toplanan pulların: ${board.off[me]}${offTarget ? ', pulu topla' : ''}`}
+          >
+            <span className="text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">Sen</span>
+            <span className="font-display text-base font-bold text-foreground sm:text-lg">{board.off[me]}</span>
+            {offTarget && <span className="text-[8px] font-bold uppercase text-primary sm:text-[9px]">Topla</span>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ControlBar({
+  message,
+  sub,
+  canUndo,
+  onUndo,
+  canRoll,
+  onRoll,
+  rollLabel,
+}: {
+  message: string
+  sub: string
+  canUndo: boolean
+  onUndo: () => void
+  canRoll: boolean
+  onRoll: () => void
+  rollLabel: string
+}) {
+  return (
+    <div className="flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+      <div className="flex flex-col">
+        <p className="text-sm font-semibold text-foreground" aria-live="polite">
+          {message}
+        </p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </div>
+      <div className="flex gap-2">
+        {canUndo && (
+          <button onClick={onUndo} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary sm:flex-none">
+            <Undo2 className="size-4" aria-hidden="true" />
+            Geri al
+          </button>
+        )}
+        <button
+          onClick={onRoll}
+          disabled={!canRoll}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40 sm:flex-none"
+        >
+          <Dices className="size-4" aria-hidden="true" />
+          {rollLabel}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+type Phase = 'roll' | 'move' | 'bot' | 'over'
+
 export function Tavla({ finish }: GameApi) {
   const [board, setBoard] = useState<Board>(initialBoard)
   const [dice, setDice] = useState<number[]>([])
   const [rolled, setRolled] = useState<number[]>([])
+  const [rollKey, setRollKey] = useState(0)
   const [phase, setPhase] = useState<Phase>('roll')
   const [selected, setSelected] = useState<From | null>(null)
   const [snapshot, setSnapshot] = useState<{ board: Board; dice: number[] } | null>(null)
@@ -85,8 +310,6 @@ export function Tavla({ finish }: GameApi) {
   const [lastBot, setLastBot] = useState<Move[]>([])
 
   const legal = useMemo(() => (phase === 'move' ? legalMoves(board, 'p', dice) : []), [board, dice, phase])
-  const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
-  const targets = useMemo(() => legal.filter((m) => m.from === selected), [legal, selected])
 
   function endGame(b: Board) {
     if (b.off.p === 15) {
@@ -104,10 +327,15 @@ export function Tavla({ finish }: GameApi) {
     return false
   }
 
-  function roll() {
-    const d = rollDice()
+  function showRoll(d: number[]) {
     setRolled(d)
     setDice(d)
+    setRollKey((k) => k + 1)
+  }
+
+  function roll() {
+    const d = rollDice()
+    showRoll(d)
     setSnapshot({ board, dice: d })
     setLastBot([])
     if (!legalMoves(board, 'p', d).length) {
@@ -132,22 +360,6 @@ export function Tavla({ finish }: GameApi) {
     } else if (m.hit) setMessage('Rakibin pulunu kırdın!')
   }
 
-  function clickSource(from: From) {
-    if (phase !== 'move') return
-    if (selected === from) return setSelected(null)
-    if (sources.has(from)) setSelected(from)
-  }
-
-  function clickTarget(to: To) {
-    const m = targets.find((t) => t.to === to)
-    if (m) play(m)
-  }
-
-  function clickPoint(i: number) {
-    if (targets.some((t) => t.to === i)) return clickTarget(i)
-    clickSource(i)
-  }
-
   function undo() {
     if (!snapshot) return
     setBoard(snapshot.board)
@@ -163,17 +375,11 @@ export function Tavla({ finish }: GameApi) {
     timers.push(
       setTimeout(() => {
         const d = rollDice()
-        setRolled(d)
-        setDice(d)
+        showRoll(d)
         const plan = botPlan(board, d)
         if (!plan.length) {
           setMessage(`Rakip ${d.slice(0, 2).join(' - ')} attı, hamle yok. Sıra sende.`)
-          timers.push(
-            setTimeout(() => {
-              setDice([])
-              setPhase('roll')
-            }, 1100),
-          )
+          timers.push(setTimeout(() => setPhase('roll'), 1300))
           return
         }
         setMessage(`Rakip ${d.slice(0, 2).join(' - ')} attı...`)
@@ -196,155 +402,119 @@ export function Tavla({ finish }: GameApi) {
                   }, 500),
                 )
               }
-            }, 650 * (idx + 1)),
+            }, 900 + 650 * idx),
           )
         })
-      }, 800),
+      }, 700),
     )
     return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  const usedFlags = useMemo(() => {
-    const left = [...dice]
-    return rolled.map((d) => {
-      const i = left.indexOf(d)
-      if (i >= 0) {
-        left.splice(i, 1)
-        return false
+  return (
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <TavlaBoard
+        board={board}
+        me="p"
+        legal={legal}
+        selected={selected}
+        onSelect={setSelected}
+        onPlay={play}
+        rolled={rolled}
+        dice={dice}
+        rollKey={rollKey}
+        highlight={new Set(lastBot.map((m) => (typeof m.to === 'number' ? m.to : -1)))}
+        names={{ me: 'Sen', opp: 'Rakip' }}
+      />
+      <ControlBar
+        message={message}
+        sub={`Kalan yol: sen ${pipCount(board, 'p')} · rakip ${pipCount(board, 'b')}`}
+        canUndo={phase === 'move' && !!snapshot}
+        onUndo={undo}
+        canRoll={phase === 'roll'}
+        onRoll={roll}
+        rollLabel={phase === 'bot' ? 'Rakip oynuyor' : 'Zar at'}
+      />
+    </div>
+  )
+}
+
+export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
+  const s = remote.state
+  const me: Side = remote.seat === 0 ? 'p' : 'b'
+  const opp: Side = me === 'p' ? 'b' : 'p'
+  const [pending, setPending] = useState<Move[]>([])
+  const [selected, setSelected] = useState<From | null>(null)
+  const sentFor = useRef(-1)
+
+  useEffect(() => {
+    setPending([])
+    setSelected(null)
+  }, [remote.version])
+
+  const { board, dice } = useMemo(() => {
+    let b = s.board
+    let d = [...s.dice]
+    for (const m of pending) {
+      b = applyMove(b, me, m)
+      d = spendDie(d, m.die)
+    }
+    return { board: b, dice: d }
+  }, [s, pending, me])
+
+  const myMove = remote.myTurn && s.phase === 'move'
+  const legal = useMemo(() => (myMove && !remote.busy ? legalMoves(board, me, dice) : []), [myMove, remote.busy, board, me, dice])
+
+  useEffect(() => {
+    if (!myMove || pending.length === 0 || sentFor.current === remote.version) return
+    const done = board.off[me] >= 15 || dice.length === 0 || legalMoves(board, me, dice).length === 0
+    if (!done) return
+    sentFor.current = remote.version
+    void remote.send({ type: 'moves', moves: pending }).then((ok) => {
+      if (!ok) {
+        sentFor.current = -1
+        setPending([])
       }
-      return true
     })
-  }, [rolled, dice])
+  }, [myMove, pending, board, dice, me, remote])
 
-  const botTouched = new Set(lastBot.map((m) => m.to))
-  const top = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
-  const bottom = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+  const rollKey = remote.version * 10 + (s.phase === 'move' ? 1 : 0)
+  const highlight = new Set(s.lastMoves.map((m) => (typeof m.to === 'number' ? m.to : -1)))
+  const oppName = remote.names[remote.seat === 0 ? 1 : 0] || 'Rakip'
 
-  const renderPoint = (i: number, isTop: boolean) => {
-    const v = board.pts[i]
-    const side = v > 0 ? 'p' : 'b'
-    const isTarget = targets.some((t) => t.to === i)
-    const isSource = sources.has(i)
-    return (
-      <button
-        key={i}
-        type="button"
-        onClick={() => clickPoint(i)}
-        aria-label={`Hane ${i + 1}${v ? `, ${Math.abs(v)} ${v > 0 ? 'senin' : 'rakip'} pulu` : ', boş'}${isTarget ? ', buraya oynanabilir' : ''}`}
-        className={cn('relative flex h-full min-w-0 flex-1 flex-col items-center px-0.5 outline-none', isTop ? 'justify-start' : 'justify-end')}
-      >
-        <span
-          aria-hidden="true"
-          className={cn(
-            'absolute inset-x-0.5 h-[88%] transition-opacity',
-            isTop ? 'top-0' : 'bottom-0',
-            i % 2 === 0 ? 'bg-point-a' : 'bg-point-b',
-            isTarget && 'bg-primary',
-            !isTarget && 'opacity-90',
-          )}
-          style={{ clipPath: isTop ? 'polygon(0 0, 100% 0, 50% 100%)' : 'polygon(50% 0, 100% 100%, 0 100%)' }}
-        />
-        {isTarget && <span aria-hidden="true" className="absolute inset-x-1 bottom-1/2 top-1/2 z-10 m-auto size-3 animate-pulse rounded-full bg-primary" />}
-        <span className="relative z-10 flex h-full w-full flex-col py-1">
-          {v !== 0 && <Stack count={Math.abs(v)} side={side} top={isTop} glow={(isSource && selected === i) || (side === 'b' && botTouched.has(i))} />}
-        </span>
-        {isSource && selected !== i && <span aria-hidden="true" className={cn('absolute z-20 h-1 w-1/2 rounded-full bg-primary', isTop ? '-bottom-1' : '-top-1')} />}
-        <span className={cn('absolute z-20 text-[9px] font-semibold text-muted-foreground', isTop ? '-top-4' : '-bottom-4')}>{i + 1}</span>
-      </button>
-    )
-  }
-
-  const barSelectable = sources.has('bar')
-  const offTarget = targets.some((t) => t.to === 'off')
+  let message: string
+  if (s.note && !remote.myTurn) message = s.note
+  else if (remote.myTurn && s.phase === 'roll') message = s.note ? `${s.note}. Sıra sende, zarı at.` : 'Sıra sende, zarı at.'
+  else if (myMove) message = dice.length === 4 ? `Çift ${dice[0]}! Dört hamle hakkın var.` : 'Pulunu seç ve oyna.'
+  else message = `${oppName} oynuyor...`
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1 rounded-2xl bg-wood p-2 shadow-xl sm:p-3">
-        <div className="flex aspect-[16/11] w-full gap-1.5 sm:gap-2">
-          <div className="flex flex-1 flex-col justify-between rounded-lg bg-felt px-1 py-5 sm:px-2">
-            <div className="flex h-[44%] gap-0">{top.slice(0, 6).map((i) => renderPoint(i, true))}</div>
-            <div className="flex h-[44%] gap-0">{bottom.slice(0, 6).map((i) => renderPoint(i, false))}</div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => clickSource('bar')}
-            disabled={!barSelectable}
-            aria-label={`Kırık pullar: sen ${board.bar.p}, rakip ${board.bar.b}`}
-            className={cn('flex w-8 flex-col items-center justify-between rounded-md bg-wood py-3 sm:w-12', barSelectable && 'ring-2 ring-primary', selected === 'bar' && 'bg-primary/30')}
-          >
-            <span className="flex w-full flex-col items-center gap-0.5 px-0.5">
-              {Array.from({ length: Math.min(board.bar.p, 4) }).map((_, i) => (
-                <Checker key={i} side="p" label={i === 0 && board.bar.p > 4 ? String(board.bar.p) : undefined} />
-              ))}
-            </span>
-            <span className="flex w-full flex-col-reverse items-center gap-0.5 px-0.5">
-              {Array.from({ length: Math.min(board.bar.b, 4) }).map((_, i) => (
-                <Checker key={i} side="b" label={i === 0 && board.bar.b > 4 ? String(board.bar.b) : undefined} />
-              ))}
-            </span>
-          </button>
-
-          <div className="flex flex-1 flex-col justify-between rounded-lg bg-felt px-1 py-5 sm:px-2">
-            <div className="flex h-[44%] gap-0">{top.slice(6).map((i) => renderPoint(i, true))}</div>
-            <div className="flex h-[44%] gap-0">{bottom.slice(6).map((i) => renderPoint(i, false))}</div>
-          </div>
-
-          <div className="flex w-9 flex-col justify-between gap-2 sm:w-14">
-            <div className="flex flex-1 flex-col items-center gap-1 rounded-md bg-felt/70 p-1 text-center">
-              <span className="text-[9px] font-bold uppercase text-muted-foreground">Rakip</span>
-              <span className="font-display text-lg font-bold text-primary">{board.off.b}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => clickTarget('off')}
-              disabled={!offTarget}
-              className={cn(
-                'flex flex-1 flex-col items-center gap-1 rounded-md bg-felt/70 p-1 text-center',
-                offTarget && 'animate-pulse bg-primary/40 ring-2 ring-primary',
-              )}
-              aria-label={`Toplanan pulların: ${board.off.p}${offTarget ? ', pulu topla' : ''}`}
-            >
-              <span className="text-[9px] font-bold uppercase text-muted-foreground">Sen</span>
-              <span className="font-display text-lg font-bold text-foreground">{board.off.p}</span>
-              {offTarget && <span className="text-[9px] font-bold uppercase text-primary">Topla</span>}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1.5">
-            {rolled.length ? rolled.map((d, i) => <Die key={i} value={d} used={usedFlags[i]} />) : <Die value={6} used />}
-          </div>
-          <div className="flex flex-col">
-            <p className="text-sm font-semibold text-foreground" aria-live="polite">
-              {message}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Kalan yol: sen {pipCount(board, 'p')} · rakip {pipCount(board, 'b')}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {phase === 'move' && snapshot && (
-            <button onClick={undo} className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary">
-              <Undo2 className="size-4" aria-hidden="true" />
-              Geri al
-            </button>
-          )}
-          <button
-            onClick={roll}
-            disabled={phase !== 'roll'}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40"
-          >
-            <Dices className="size-4" aria-hidden="true" />
-            {phase === 'bot' ? 'Rakip oynuyor' : 'Zar at'}
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <TavlaBoard
+        board={board}
+        me={me}
+        legal={legal}
+        selected={selected}
+        onSelect={setSelected}
+        onPlay={(m) => {
+          setPending((p) => [...p, m])
+          setSelected(null)
+        }}
+        rolled={s.rolled}
+        dice={s.phase === 'move' ? dice : []}
+        rollKey={rollKey}
+        highlight={highlight}
+        names={{ me: 'Sen', opp: oppName }}
+      />
+      <ControlBar
+        message={message}
+        sub={`Kalan yol: sen ${pipCount(board, me)} · ${oppName} ${pipCount(board, opp)}`}
+        canUndo={myMove && pending.length > 0 && !remote.busy}
+        onUndo={() => setPending([])}
+        canRoll={remote.myTurn && s.phase === 'roll' && !remote.busy}
+        onRoll={() => void remote.send({ type: 'roll' })}
+        rollLabel={remote.myTurn ? 'Zar at' : 'Rakip oynuyor'}
+      />
     </div>
   )
 }

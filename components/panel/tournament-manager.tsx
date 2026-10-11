@@ -5,7 +5,7 @@ import { Loader2, Play, Plus, Shuffle, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_GAMES, ARENA_META } from '@/lib/arena'
 import { STATUS_LABEL, type Tournament, type TournamentStatus } from '@/lib/tournaments-shared'
-import { changeTournamentStatus, kickEntry, pickMatchWinner, removeTournament, reshuffleBracket, saveTournament } from '@/app/panel/arena-actions'
+import { beginTournament, kickEntry, pickMatchWinner, removeTournament, saveTournament, stopTournament } from '@/app/panel/arena-actions'
 import type { ActionState } from '@/app/panel/actions'
 import { BracketView } from '@/components/alkanka/arena/bracket-view'
 import { formatTR } from '@/components/alkanka/arena/tournament-card'
@@ -161,13 +161,6 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
   )
 }
 
-const NEXT_STATUS: Partial<Record<TournamentStatus, { to: TournamentStatus; label: string }[]>> = {
-  kayit: [{ to: 'basladi', label: 'Kayıtları kapat ve başlat' }, { to: 'iptal', label: 'İptal et' }],
-  basladi: [{ to: 'kayit', label: 'Kayda geri al' }, { to: 'iptal', label: 'İptal et' }],
-  bitti: [{ to: 'basladi', label: 'Yeniden aç' }],
-  iptal: [{ to: 'kayit', label: 'Kayıtları aç' }],
-}
-
 function TournamentRow({ t }: { t: Tournament }) {
   return (
     <article className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5">
@@ -183,22 +176,15 @@ function TournamentRow({ t }: { t: Tournament }) {
           {t.winner && <p className="text-sm font-bold text-primary">Şampiyon: {t.winner}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          {(NEXT_STATUS[t.status] ?? []).map((s) => (
-            <ActionButton
-              key={s.to}
-              act={changeTournamentStatus}
-              fields={{ id: t.id, status: s.to }}
-              variant={s.to === 'basladi' ? 'primary' : s.to === 'iptal' ? 'danger' : 'ghost'}
-              confirm={s.to === 'kayit' && t.bracket ? 'Eşleşmeler silinecek. Emin misin?' : undefined}
-            >
-              {s.to === 'basladi' && <Play className="size-3.5" aria-hidden="true" />}
-              {s.label}
+          {t.status === 'kayit' && (
+            <ActionButton act={beginTournament} fields={{ id: t.id }} variant="primary" confirm="Kayıtlar kapanacak ve tüm oyuncular aynı anda eşleşecek.">
+              <Play className="size-3.5" aria-hidden="true" />
+              Kayıtları kapat ve başlat
             </ActionButton>
-          ))}
-          {t.status === 'basladi' && (
-            <ActionButton act={reshuffleBracket} fields={{ id: t.id }} confirm="Eşleşmeler yeniden kura ile çekilecek, girilen sonuçlar silinecek.">
-              <Shuffle className="size-3.5" aria-hidden="true" />
-              Kurayı yeniden çek
+          )}
+          {(t.status === 'kayit' || t.status === 'basladi') && (
+            <ActionButton act={stopTournament} fields={{ id: t.id }} variant="danger" confirm="Turnuva iptal edilecek, açık maçlar kapanacak ve kayıt ücretleri iade edilecek.">
+              İptal et
             </ActionButton>
           )}
           <ActionButton act={removeTournament} fields={{ id: t.id }} variant="danger" confirm="Turnuva ve tüm kayıtlar silinecek.">

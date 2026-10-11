@@ -5,7 +5,7 @@ import { LuckyWheel } from './lucky-wheel'
 import { DiceRoll } from './dice-roll'
 import { MysteryChests } from './mystery-chests'
 
-const GAMES = { cark: LuckyWheel, zar: DiceRoll, sandik: MysteryChests }
+const GAMES = { cark: LuckyWheel, sandik: MysteryChests }
 
 export function GameStage({ game }: { game: keyof typeof GAMES }) {
   const { add } = usePoints()

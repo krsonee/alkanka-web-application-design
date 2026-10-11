@@ -1,7 +1,8 @@
 'use client'
 
 import Image from 'next/image'
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { finishBotGame, startBotGame } from '@/app/actions/arena'
 import { Coins, RotateCcw, Trophy, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
@@ -9,7 +10,7 @@ import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 
 export type GameResult = 'win' | 'lose' | 'draw'
-export type GameApi = { bet: number; finish: (result: GameResult, note?: string) => void }
+export type GameApi = { bet: number; finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void }
 
 type Phase = { kind: 'lobby' } | { kind: 'playing'; bet: number; round: number } | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number }
 
@@ -25,30 +26,45 @@ export function StakeGate({
   children: (api: GameApi) => ReactNode
 }) {
   const meta = ARENA_META[game]
-  const { points, spend, add } = usePoints()
+  const { points, setBalance, requireLogin } = usePoints()
   const [bet, setBet] = useState(settings.bets[0])
   const [phase, setPhase] = useState<Phase>({ kind: 'lobby' })
   const [round, setRound] = useState(0)
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const session = useRef<string | null>(null)
 
-  function start(amount: number) {
-    if (!spend(amount)) {
-      setError('Bakiyen bu bahis için yetersiz.')
+  async function start(amount: number) {
+    if (busy || !requireLogin()) return
+    setBusy(true)
+    const res = await startBotGame(game, amount)
+    setBusy(false)
+    if (!res.ok) {
+      setError(res.error)
       return
     }
+    session.current = res.sessionId
+    setBalance(res.balance)
     setError('')
     const next = round + 1
     setRound(next)
     setPhase({ kind: 'playing', bet: amount, round: next })
   }
 
-  function finish(result: GameResult, note?: string) {
-    setPhase((p) => {
-      if (p.kind !== 'playing') return p
-      const payout = result === 'win' ? Math.round(p.bet * settings.multiplier) : result === 'draw' ? p.bet : 0
-      if (payout > 0) add(payout)
-      return { kind: 'done', bet: p.bet, result, note, payout }
-    })
+  async function finish(result: GameResult, note?: string, score?: { for: number; against: number }) {
+    const id = session.current
+    if (!id || phase.kind !== 'playing') return
+    session.current = null
+    const playedBet = phase.bet
+    const res = await finishBotGame(id, result === 'lose' ? 'loss' : result, score)
+    if (!res.ok) {
+      setError(res.error)
+      setPhase({ kind: 'done', bet: playedBet, result, note, payout: 0 })
+      return
+    }
+    setBalance(res.balance)
+    const final: GameResult = res.result === 'loss' ? 'lose' : res.result
+    setPhase({ kind: 'done', bet: playedBet, result: final, note: final !== result ? 'Oyun çok kısa sürdüğü için galibiyet sayılmadı.' : note, payout: res.payout })
   }
 
   if (phase.kind === 'playing') {

@@ -3,7 +3,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import Image from 'next/image'
 import { Send } from 'lucide-react'
+import { useSWRConfig } from 'swr'
 import { cn } from '@/lib/utils'
+import { authClient } from '@/lib/auth-client'
 import { TELEGRAM_URL } from './data'
 import { Modal } from './modal'
 
@@ -29,6 +31,10 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
 export function AuthModal() {
   const [mode, setMode] = useState<Mode | null>(null)
   const [submitted, setSubmitted] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { mutate } = useSWRConfig()
+  const refresh = () => mutate('/api/me')
 
   useEffect(() => {
     const sync = () => {
@@ -51,9 +57,31 @@ export function AuthModal() {
     setMode(next)
   }
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setSubmitted(true)
+    if (pending) return
+    const form = new FormData(e.currentTarget)
+    const email = String(form.get('email') ?? '').trim()
+    const password = String(form.get('password') ?? '')
+    const name = String(form.get('username') ?? '').trim()
+    setError(null)
+    setPending(true)
+    try {
+      const res =
+        mode === 'kayit'
+          ? await authClient.signUp.email({ email, password, name })
+          : await authClient.signIn.email({ email, password })
+      if (res.error) {
+        setError(mode === 'kayit' ? 'Kayıt tamamlanamadı. Bu e-posta kullanılıyor olabilir.' : 'E-posta veya şifre hatalı.')
+        return
+      }
+      await refresh()
+      close()
+    } catch {
+      setError('Bağlantı hatası, tekrar dene.')
+    } finally {
+      setPending(false)
+    }
   }
 
   const isRegister = mode === 'kayit'
@@ -136,11 +164,17 @@ export function AuthModal() {
                   </label>
                 </>
               )}
+              {error && (
+                <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">
+                  {error}
+                </p>
+              )}
               <button
                 type="submit"
-                className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
+                disabled={pending}
+                className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
               >
-                {isRegister ? 'Kayıt ol, 250 KC kap' : 'Giriş yap'}
+                {pending ? 'Bekle kanka…' : isRegister ? 'Kayıt ol, 250 KC kap' : 'Giriş yap'}
               </button>
               <p className="text-center text-xs text-muted-foreground">
                 {isRegister ? 'Zaten hesabın var mı? ' : 'Hesabın yok mu? '}
