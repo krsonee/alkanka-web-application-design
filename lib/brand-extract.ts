@@ -1,6 +1,119 @@
 import 'server-only'
+import { generateText } from 'ai'
 import sharp from 'sharp'
 import { storeFile } from '@/lib/studio'
+
+const VISION_MODEL = 'google/gemini-3.5-flash'
+
+type VisionResult = { name?: string; font?: string; colors?: string[]; box_2d?: number[] }
+
+function parseJson(text: string): VisionResult {
+  const match = text.match(/\{[\s\S]*\}/)
+  if (!match) return {}
+  try {
+    return JSON.parse(match[0]) as VisionResult
+  } catch {
+    return {}
+  }
+}
+
+async function paletteFromImage(buf: Buffer) {
+  const { data, info } = await sharp(buf).resize(80, 80, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  const counts = new Map<string, number>()
+  for (let i = 0; i < data.length; i += info.channels) {
+    const q = (v: number) => Math.min(255, Math.round(v / 24) * 24)
+    const hex = rgbToHex(q(data[i]), q(data[i + 1]), q(data[i + 2]))
+    counts.set(hex, (counts.get(hex) ?? 0) + 1)
+  }
+  return pickColors(counts, '')
+}
+
+async function knockOutBackground(png: Buffer) {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const { width, height } = info
+  const corners = [0, width - 1, (height - 1) * width, height * width - 1].map((p) => [data[p * 4], data[p * 4 + 1], data[p * 4 + 2]])
+  const [r, g, b] = corners[0]
+  const uniform = corners.every(([cr, cg, cb]) => Math.abs(cr - r) + Math.abs(cg - g) + Math.abs(cb - b) < 40)
+  if (!uniform) return { png, transparent: false }
+  for (let i = 0; i < data.length; i += 4) {
+    const d = Math.abs(data[i] - r) + Math.abs(data[i + 1] - g) + Math.abs(data[i + 2] - b)
+    if (d < 45) data[i + 3] = 0
+    else if (d < 90) data[i + 3] = Math.round(((d - 45) / 45) * 255)
+  }
+  const out = await sharp(data, { raw: { width, height, channels: 4 } }).trim().png().toBuffer()
+  return { png: out, transparent: true }
+}
+
+export async function extractBrandFromScreenshot(input: Buffer, domain: string): Promise<ExtractedBrand> {
+  const warnings: string[] = []
+  const shot = await sharp(input).rotate().resize({ width: 1600, withoutEnlargement: true }).png().toBuffer()
+  const meta = await sharp(shot).metadata()
+  const width = meta.width ?? 1600
+  const height = meta.height ?? 900
+
+  let vision: VisionResult = {}
+  try {
+    const { text } = await generateText({
+      model: VISION_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: [
+                'Screenshot of a website homepage. Reply with ONLY JSON:',
+                '{"name": exact text of the logo wordmark as written (never guess a famous brand),',
+                '"font": closest Google Font to the logo/headings,',
+                '"colors": 3-5 hex brand colors most important first incl. main background,',
+                '"box_2d": [ymin, xmin, ymax, xmax] of the main brand logo normalized 0-1000}',
+              ].join(' '),
+            },
+            { type: 'file', mediaType: 'image/png', data: shot },
+          ],
+        },
+      ],
+    })
+    vision = parseJson(text)
+  } catch (error) {
+    console.error('Vision extract failed:', error)
+    warnings.push('Yapay zeka ekran görüntüsünü okuyamadı, renkler pikselden çıkarıldı.')
+  }
+
+  const aiColors = (vision.colors ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase())
+  const colors = aiColors.length ? aiColors.slice(0, 5) : await paletteFromImage(shot)
+
+  let logo = ''
+  const box = vision.box_2d
+  if (Array.isArray(box) && box.length === 4 && box.every((n) => typeof n === 'number' && n >= 0 && n <= 1000) && box[2] > box[0] && box[3] > box[1]) {
+    try {
+      const [ymin, xmin, ymax, xmax] = box.map((n) => n / 1000)
+      const padX = 0.012
+      const padY = 0.012
+      const left = Math.max(0, Math.floor((xmin - padX) * width))
+      const top = Math.max(0, Math.floor((ymin - padY) * height))
+      const w = Math.min(width - left, Math.ceil((xmax - xmin + padX * 2) * width))
+      const h = Math.min(height - top, Math.ceil((ymax - ymin + padY * 2) * height))
+      const crop = await sharp(shot).extract({ left, top, width: w, height: h }).png().toBuffer()
+      const { png, transparent } = await knockOutBackground(await logoToPng(crop))
+      logo = await storeFile('logos', png, 'image/png', 'png')
+      if (!transparent) warnings.push('Logo kesildi ama arka planı temizlenemedi; şeffaf PNG yüklersen daha net olur.')
+    } catch (error) {
+      console.error('Logo crop failed:', error)
+    }
+  }
+  if (!logo) warnings.push('Logo ekran görüntüsünden kesilemedi, PNG/SVG olarak yükleyebilirsin.')
+
+  const cleanDomain = domain.trim() ? normalizeDomain(domain) : ''
+  return {
+    name: (vision.name || cleanDomain.split('.')[0] || 'Yeni marka').slice(0, 60),
+    domain: cleanDomain,
+    logo,
+    colors,
+    font: (vision.font ?? '').slice(0, 60),
+    warnings,
+  }
+}
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
@@ -76,11 +189,56 @@ async function logoToPng(buf: Buffer) {
   return png
 }
 
+const CHALLENGE = /just a moment|cf-chl|challenge-platform|attention required|checking your browser|ddos-guard|captcha/i
+
+async function fetchPage(domain: string) {
+  const bare = domain.replace(/^www\./, '')
+  for (const url of [`https://${domain}`, `https://www.${bare}`, `https://${bare}`, `http://${bare}`]) {
+    try {
+      const page = await fetchLimited(url, 'text/html')
+      const html = page.buf.toString('utf8')
+      if (html.length < 600 && CHALLENGE.test(html)) continue
+      if (CHALLENGE.test(html.slice(0, 4000)) && !/<img\b/i.test(html)) continue
+      return { html, finalUrl: page.finalUrl }
+    } catch {}
+  }
+  return null
+}
+
+async function faviconFallback(domain: string) {
+  const bare = domain.replace(/^www\./, '')
+  for (const url of [
+    `https://www.google.com/s2/favicons?domain=${bare}&sz=256`,
+    `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${bare}&size=256`,
+  ]) {
+    try {
+      const png = await logoToPng((await fetchLimited(url, 'image/*')).buf)
+      return await storeFile('logos', png, 'image/png', 'png')
+    } catch {}
+  }
+  return ''
+}
+
 export async function extractBrand(domainInput: string): Promise<ExtractedBrand> {
   const domain = normalizeDomain(domainInput)
   const warnings: string[] = []
-  const page = await fetchLimited(`https://${domain}`, 'text/html')
-  const html = page.buf.toString('utf8')
+  const page = await fetchPage(domain)
+  if (!page) {
+    const logo = await faviconFallback(domain)
+    return {
+      name: domain.replace(/^www\./, '').split('.')[0],
+      domain,
+      logo,
+      colors: [],
+      font: '',
+      warnings: [
+        'Site bot korumasında, sayfa okunamadı.',
+        logo ? 'Site ikonu yedek kaynaktan alındı.' : '',
+        'En sağlam yol: sitenin ana sayfasının ekran görüntüsünü "Ekran görüntüsünden çek" ile yükle.',
+      ].filter(Boolean),
+    }
+  }
+  const html = page.html
   const base = page.finalUrl || `https://${domain}`
   const abs = (u: string) => {
     try {

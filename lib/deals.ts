@@ -3,9 +3,10 @@ import { rows, sql } from '@/lib/db'
 import { slugify } from '@/lib/seo'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 
-import { DEAL_LABELS, type Deal, type DealKind, type Verification } from '@/lib/deal-types'
+import { parseOddsPost } from '@/lib/odds-parse'
+import { DEAL_LABELS, type Deal, type DealKind, type ParsedOdd, type Verification } from '@/lib/deal-types'
 
-export { DEAL_LABELS, type Deal, type DealKind, type Verification }
+export { DEAL_LABELS, type Deal, type DealKind, type ParsedOdd, type Verification }
 
 let ready: Promise<unknown> | null = null
 function ensureTable() {
@@ -14,6 +15,7 @@ function ensureTable() {
       id serial PRIMARY KEY, source_id int, post_id int, brand text NOT NULL, kind text NOT NULL, title text NOT NULL,
       body text NOT NULL, photo text, link text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE (source_id, post_id))`)
+    await rows(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS odds jsonb`)
     await rows(sql`CREATE TABLE IF NOT EXISTS seo_settings (key text PRIMARY KEY, value text NOT NULL)`)
   })().catch((error) => {
     ready = null
@@ -40,6 +42,7 @@ function map(r: Record<string, unknown>): Deal {
     photo: r.photo ? String(r.photo) : null,
     link: String(r.link),
     createdAt: new Date(String(r.created_at)).toISOString(),
+    odds: Array.isArray(r.odds) ? (r.odds as ParsedOdd[]) : null,
   }
 }
 
@@ -65,9 +68,33 @@ export async function recordDeal(input: { sourceId: number; postId: number; bran
   if (!(await dealsPublishing())) return
   const firstLine = text.split('\n').find((l) => l.trim().length > 3) ?? text
   const title = firstLine.trim().slice(0, 90)
-  await rows(sql`INSERT INTO deals (source_id, post_id, brand, kind, title, body, photo, link)
-    VALUES (${input.sourceId}, ${input.postId}, ${input.brand}, ${detectKind(text)}, ${title}, ${text.slice(0, 4000)}, ${input.photo}, ${input.link})
+  const kind = detectKind(text)
+  const odds = kind === 'oran' ? await parseOddsPost(text) : null
+  await rows(sql`INSERT INTO deals (source_id, post_id, brand, kind, title, body, photo, link, odds)
+    VALUES (${input.sourceId}, ${input.postId}, ${input.brand}, ${kind}, ${title}, ${text.slice(0, 4000)}, ${input.photo}, ${input.link},
+      ${odds ? JSON.stringify(odds) : null}::jsonb)
     ON CONFLICT (source_id, post_id) DO NOTHING`)
+}
+
+const LIVE_ODDS_HOURS = 72
+const BACKFILL_PER_REQUEST = 3
+
+export async function listLiveOdds(limit = 40) {
+  try {
+    await ensureTable()
+    const r = await rows(sql`SELECT * FROM deals WHERE kind = 'oran' AND created_at > now() - make_interval(hours => ${LIVE_ODDS_HOURS})
+      ORDER BY created_at DESC LIMIT ${limit}`)
+    const deals = r.map(map)
+    const missing = deals.filter((d) => d.odds === null).slice(0, BACKFILL_PER_REQUEST)
+    for (const deal of missing) {
+      deal.odds = await parseOddsPost(deal.body)
+      await rows(sql`UPDATE deals SET odds = ${JSON.stringify(deal.odds)}::jsonb WHERE id = ${deal.id}`)
+    }
+    return deals
+  } catch (error) {
+    console.error('[deals] canlı oranlar okunamadı', error)
+    return []
+  }
 }
 
 export async function listDeals(limit = 60, kind?: DealKind) {

@@ -18,6 +18,17 @@ export type Deal = {
   photo: string | null
   link: string
   createdAt: string
+  odds: ParsedOdd[] | null
+}
+
+export type ParsedOdd = {
+  match: string
+  league: string
+  market: string
+  oldOdd: number | null
+  newOdd: number
+  kickoff: string
+  limit: string
 }
 
 export type Verification = { google: string; bing: string; yandex: string }
