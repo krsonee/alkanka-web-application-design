@@ -287,6 +287,21 @@ export async function setReviewStatus(id: number, status: 'approved' | 'rejected
   await rows(sql`UPDATE site_reviews SET status = ${status} WHERE id = ${id}`)
 }
 
+export async function publishedReviews() {
+  await ensureCommunity()
+  return (await rows(sql`SELECT * FROM site_reviews WHERE status = 'approved' ORDER BY created_at DESC LIMIT 100`)).map(mapReview)
+}
+
+export async function deleteReview(id: number) {
+  await ensureCommunity()
+  await rows(sql`DELETE FROM site_reviews WHERE id = ${id}`)
+}
+
+export async function deleteComplaint(id: number) {
+  await ensureCommunity()
+  await rows(sql`DELETE FROM complaints WHERE id = ${id}`)
+}
+
 export async function adminComplaints() {
   await ensureCommunity()
   return (await rows(sql`SELECT * FROM complaints ORDER BY (status IN ('open','forwarded')) DESC, updated_at DESC LIMIT 100`)).map(mapComplaint)

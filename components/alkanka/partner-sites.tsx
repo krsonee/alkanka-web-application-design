@@ -79,8 +79,15 @@ function SponsorBadge({ sponsor, size = 'md' }: { sponsor: Sponsor; size?: 'sm' 
   )
 }
 
-export function SponsorLogoPlate({ sponsor, className }: { sponsor: Sponsor; className?: string }) {
+export function SponsorLogoPlate({ sponsor, className, compact }: { sponsor: Sponsor; className?: string; compact?: boolean }) {
   const logo = useLogos().sponsors[sponsor.id]
+  if (!logo && compact) {
+    return (
+      <span className={cn('flex items-center justify-center rounded-lg bg-background font-display text-2xl font-bold tracking-tight text-primary', className)}>
+        {sponsor.initials}
+      </span>
+    )
+  }
   if (logo) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- logos and GIF banners can come from any https host set in the panel

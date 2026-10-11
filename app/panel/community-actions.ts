@@ -5,7 +5,9 @@ import { isAdmin } from '@/lib/admin-auth'
 import {
   addLeagueMatch,
   autoSettleLeague,
+  deleteComplaint,
   deleteLeagueMatch,
+  deleteReview,
   importLeagueFixtures,
   publishedFixtureIds,
   setReviewStatus,
@@ -33,6 +35,20 @@ async function guard(fn: () => Promise<string | void>): Promise<Result> {
 
 export async function moderateReview(id: number, status: 'approved' | 'rejected') {
   return guard(() => setReviewStatus(id, status))
+}
+
+export async function removeReview(id: number) {
+  return guard(async () => {
+    await deleteReview(id)
+    return 'Yorum silindi.'
+  })
+}
+
+export async function removeComplaint(id: number) {
+  return guard(async () => {
+    await deleteComplaint(id)
+    return 'Şikâyet kaldırıldı.'
+  })
 }
 
 export async function answerComplaint(id: number, status: Complaint['status'], reply: string) {
