@@ -14,6 +14,7 @@ import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
 import { HeadGame } from './head-game'
+import { MemberRank } from '../kp/member-rank'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -394,10 +395,17 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   return (
     <RoomShell onLeave={onLeave} title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm">
-        <span className="min-w-0 truncate font-semibold text-foreground">
-          {data.team
-            ? `${names[0]} & ${names[2]} vs ${names[1]} & ${names[3]}`
-            : names.join(' · ')}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground">
+          {(data.team ? [0, 2, 1, 3] : names.map((_, i) => i)).map((seatNo, i) => {
+            const p = data.players.find((pl) => pl.seat === seatNo)
+            return (
+              <span key={seatNo} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-muted-foreground">{data.team && i === 2 ? 'vs' : data.team ? '&' : '·'}</span>}
+                <span className="truncate">{names[seatNo]}</span>
+                <MemberRank userId={p?.id} />
+              </span>
+            )
+          })}
         </span>
         <span className="flex items-center gap-1 text-muted-foreground">
           {spectator ? <Eye className="size-3.5" aria-hidden="true" /> : <Clock className="size-3.5" aria-hidden="true" />}

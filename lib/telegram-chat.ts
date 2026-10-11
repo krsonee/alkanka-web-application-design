@@ -6,6 +6,7 @@ import { botToken, callBot, ensureTables } from '@/lib/telegram-mirror'
 export type ChatMessage = {
   id: number
   author: string
+  userId: string | null
   text: string
   origin: 'telegram' | 'site'
   createdAt: string
@@ -278,7 +279,7 @@ export async function getFeed(): Promise<ChatFeed> {
   const [members, settings, r] = await Promise.all([
     memberCount(config),
     getSettings(['chat_pinned']),
-    rows(sql`SELECT id, author, text, origin, created_at FROM tg_chat_messages WHERE chat_id = ${config.chatId} ORDER BY id DESC LIMIT 50`),
+    rows(sql`SELECT id, author, user_id, text, origin, created_at FROM tg_chat_messages WHERE chat_id = ${config.chatId} ORDER BY id DESC LIMIT 50`),
   ])
   return {
     configured: true,
@@ -289,6 +290,7 @@ export async function getFeed(): Promise<ChatFeed> {
     messages: r.reverse().map((m) => ({
       id: Number(m.id),
       author: String(m.author),
+      userId: m.user_id ? String(m.user_id) : null,
       text: String(m.text),
       origin: m.origin === 'site' ? 'site' : 'telegram',
       createdAt: new Date(String(m.created_at)).toISOString(),

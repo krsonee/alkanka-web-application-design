@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { sendChatMessage, startTelegramLink } from '@/app/actions/chat'
 import { TELEGRAM_URL } from './data'
 import { useChatFeed, type ChatResponse } from './use-chat-feed'
+import { MemberRank } from './kp/member-rank'
 
 const timeFormat = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' })
 
@@ -167,6 +168,7 @@ export function LiveRail() {
             <li key={m.id} className="animate-slide-in flex flex-col gap-0.5 text-sm leading-relaxed">
               <span className="flex items-center gap-1.5 text-xs">
                 <span className={cn('font-semibold', m.origin === 'site' ? 'text-primary' : 'text-accent')}>{m.author}</span>
+                <MemberRank userId={m.userId} />
                 {m.origin === 'site' && (
                   <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1 text-[10px] font-semibold text-primary">
                     <Globe className="size-2.5" aria-hidden="true" />

@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { Crown, Target, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { LevelEmblem } from './kp/emblem'
+import { LevelEmblem, RankChip } from './kp/emblem'
+import { MemberRank } from './kp/member-rank'
 
 export type KpRow = { userId: string; name: string; kp: number; level: number; levelName: string; specials: number }
 export type TipRow = { userId: string; name: string; points: number; hits: number; exact: number; picks: number }
@@ -74,8 +75,11 @@ export function RankBoards({ kp, tips, meId }: { kp: Record<BoardPeriod, KpRow[]
                   <Rank n={i + 1} />
                   <LevelEmblem level={u.level} size="sm" />
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-semibold text-foreground">{u.name}{u.userId === meId && ' (sen)'}</span>
-                    <span className="truncate text-[11px] text-muted-foreground">Lv {u.level} · {u.levelName}{u.specials ? ` · ${u.specials} değerli rozet` : ''}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold text-foreground">{u.name}{u.userId === meId && ' (sen)'}</span>
+                      <RankChip level={u.level} />
+                    </span>
+                    <span className="truncate text-[11px] text-muted-foreground">{u.levelName}{u.specials ? ` · ${u.specials} değerli rozet` : ''}</span>
                   </span>
                   <span className="font-display text-sm font-bold tabular-nums text-foreground">{fmt(u.kp)} <span className="text-[10px] text-muted-foreground">KP</span></span>
                 </li>
@@ -97,7 +101,10 @@ export function RankBoards({ kp, tips, meId }: { kp: Record<BoardPeriod, KpRow[]
                 <li key={u.userId} className={cn('flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-0', i < 3 && 'bg-primary/5', u.userId === meId && 'ring-1 ring-inset ring-primary')}>
                   <Rank n={i + 1} />
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-semibold text-foreground">{u.name}{u.userId === meId && ' (sen)'}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold text-foreground">{u.name}{u.userId === meId && ' (sen)'}</span>
+                      <MemberRank userId={u.userId} />
+                    </span>
                     <span className="truncate text-[11px] text-muted-foreground">{u.hits}/{u.picks} doğru · {u.exact} tam skor</span>
                   </span>
                   <span className="font-display text-sm font-bold tabular-nums text-foreground">{fmt(u.points)} <span className="text-[10px] text-muted-foreground">puan</span></span>

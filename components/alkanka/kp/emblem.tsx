@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import {
   Award,
   Bird,
@@ -68,83 +69,146 @@ export function levelIcon(level: number): LucideIcon {
   return LEVEL_ICONS[Math.max(0, level - 1)]
 }
 
-const TIER_RIM: Record<string, string> = {
-  bronz: 'bg-gradient-to-b from-muted-foreground/80 to-muted-foreground/20',
-  altin: 'bg-gradient-to-b from-gold to-gold/30',
-  elmas: 'bg-gradient-to-b from-accent to-accent/30',
-  efsane: 'bg-gradient-to-br from-gold via-primary to-accent',
-}
-
-const TIER_ICON: Record<string, string> = {
-  bronz: 'text-foreground/80',
-  altin: 'text-gold',
-  elmas: 'text-accent',
-  efsane: 'text-primary',
-}
-
 export const TIER_TEXT: Record<string, string> = {
-  bronz: 'text-muted-foreground',
+  bronz: 'text-bronze',
   altin: 'text-gold',
   elmas: 'text-accent',
-  efsane: 'text-primary',
+  efsane: 'text-ruby',
+}
+
+export const TIER_BG: Record<string, string> = {
+  bronz: 'bg-bronze/10 border-bronze/30',
+  altin: 'bg-gold/10 border-gold/30',
+  elmas: 'bg-accent/10 border-accent/30',
+  efsane: 'bg-ruby/10 border-ruby/35',
+}
+
+/** Rim metal + face enamel per tier. Efsane pairs a gold rim with ruby enamel (Jako's red tail). */
+const MATERIAL: Record<string, { rim: string; face: string }> = {
+  bronz: { rim: 'var(--bronze)', face: 'var(--bronze)' },
+  altin: { rim: 'var(--gold)', face: 'var(--gold)' },
+  elmas: { rim: 'var(--accent)', face: 'var(--accent)' },
+  efsane: { rim: 'var(--gold)', face: 'var(--ruby)' },
+}
+
+function star(points: number, outer: number, inner: number) {
+  const pts: string[] = []
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outer : inner
+    const a = (Math.PI * i) / points - Math.PI / 2
+    pts.push(`${(50 + r * Math.cos(a)).toFixed(1)}% ${(50 + r * Math.sin(a)).toFixed(1)}%`)
+  }
+  return `polygon(${pts.join(',')})`
+}
+
+const SHAPES: Record<string, string> = {
+  bronz: 'polygon(50% 0, 96% 14%, 96% 54%, 50% 100%, 4% 54%, 4% 14%)',
+  altin: 'polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
+  elmas: 'polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%)',
+  efsane: star(12, 50, 42),
+  round: 'circle(50% at 50% 50%)',
+}
+
+function materialStyle(tier: string, shape: string): { rim: CSSProperties; face: CSSProperties; shine: CSSProperties } {
+  const m = MATERIAL[tier] ?? MATERIAL.altin
+  const clipPath = SHAPES[shape]
+  return {
+    rim: {
+      clipPath,
+      background: `conic-gradient(from 210deg, color-mix(in oklch, ${m.rim} 55%, var(--foreground)), color-mix(in oklch, ${m.rim} 60%, var(--background)), ${m.rim}, color-mix(in oklch, ${m.rim} 40%, var(--foreground)), color-mix(in oklch, ${m.rim} 55%, var(--background)), color-mix(in oklch, ${m.rim} 55%, var(--foreground)))`,
+    },
+    face: {
+      clipPath,
+      background: `radial-gradient(circle at 32% 22%, color-mix(in oklch, ${m.face} 80%, var(--foreground)) 0%, ${m.face} 38%, color-mix(in oklch, ${m.face} 45%, var(--background)) 100%)`,
+    },
+    shine: {
+      clipPath,
+      background: 'linear-gradient(165deg, color-mix(in oklch, var(--foreground) 38%, transparent) 0%, transparent 46%)',
+    },
+  }
 }
 
 const SIZES = {
-  xs: { box: 'size-7', pad: 'p-[2px]', icon: 'size-3.5', tag: 'hidden' },
-  sm: { box: 'size-9', pad: 'p-[2px]', icon: 'size-4', tag: 'hidden' },
-  md: { box: 'size-12', pad: 'p-[3px]', icon: 'size-5', tag: 'text-[9px] min-w-4 h-4 px-1' },
-  lg: { box: 'size-16', pad: 'p-1', icon: 'size-7', tag: 'text-[10px] min-w-5 h-5 px-1' },
+  chip: { box: 'size-5', pad: 'p-[1.5px]', icon: 'size-2.5', tag: 'hidden', lock: 'hidden' },
+  xs: { box: 'size-7', pad: 'p-[2px]', icon: 'size-3.5', tag: 'hidden', lock: 'size-3 -bottom-0.5 -right-0.5 [&>svg]:size-2' },
+  sm: { box: 'size-10', pad: 'p-[2.5px]', icon: 'size-4', tag: 'hidden', lock: 'size-4 -bottom-0.5 -right-0.5 [&>svg]:size-2.5' },
+  md: { box: 'size-14', pad: 'p-[3px]', icon: 'size-6', tag: 'text-[10px] min-w-5 h-5 px-1', lock: 'size-5 -bottom-0.5 -right-0.5 [&>svg]:size-3' },
+  lg: { box: 'size-20', pad: 'p-1', icon: 'size-9', tag: 'text-xs min-w-6 h-6 px-1.5', lock: 'size-6 bottom-0 right-0 [&>svg]:size-3.5' },
+  xl: { box: 'size-28', pad: 'p-1.5', icon: 'size-12', tag: 'text-sm min-w-8 h-8 px-2', lock: 'size-7 bottom-1 right-1 [&>svg]:size-4' },
 }
 
-const hexClip = { clipPath: 'polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)' }
+export type EmblemSize = keyof typeof SIZES
 
-/** Hexagon medallion for a level: symbol per level, rim material changes every 5 levels. */
-export function LevelEmblem({ level, size = 'md', locked = false, className }: { level: number; size?: keyof typeof SIZES; locked?: boolean; className?: string }) {
+function Medallion({ tier, shape, size, Icon, locked, glow, className, children }: {
+  tier: string
+  shape: string
+  size: EmblemSize
+  Icon: LucideIcon
+  locked?: boolean
+  glow?: boolean
+  className?: string
+  children?: React.ReactNode
+}) {
   const s = SIZES[size]
-  const tier = levelTier(level)
-  const Icon = locked ? Lock : levelIcon(level)
+  const st = materialStyle(tier, shape)
+  const m = MATERIAL[tier] ?? MATERIAL.altin
   return (
-    <span className={cn('relative inline-flex shrink-0', s.box, className)} aria-hidden>
-      <span style={hexClip} className={cn('flex size-full', s.pad, locked ? 'bg-border' : TIER_RIM[tier])}>
-        <span style={hexClip} className="flex size-full items-center justify-center bg-card">
-          <Icon className={cn(s.icon, locked ? 'text-muted-foreground' : TIER_ICON[tier])} strokeWidth={1.75} />
+    <span
+      className={cn('relative inline-flex shrink-0', s.box, locked && 'opacity-45 grayscale', className)}
+      style={glow && !locked ? { filter: `drop-shadow(0 0 10px color-mix(in oklch, ${m.face} 55%, transparent))` } : undefined}
+      aria-hidden
+    >
+      <span className={cn('flex size-full', s.pad)} style={st.rim}>
+        <span className="relative flex size-full items-center justify-center" style={st.face}>
+          <span className="absolute inset-0" style={st.shine} />
+          <Icon
+            className={cn('relative text-foreground', s.icon)}
+            strokeWidth={2}
+            style={{ filter: 'drop-shadow(0 1px 1px color-mix(in oklch, var(--background) 70%, transparent))' }}
+          />
         </span>
       </span>
-      <span
-        className={cn(
-          'absolute -bottom-0.5 -right-1 items-center justify-center rounded-full border border-background font-display font-bold tabular-nums leading-none',
-          s.tag === 'hidden' ? 'hidden' : 'flex',
-          s.tag,
-          locked ? 'bg-muted text-muted-foreground' : 'bg-foreground text-background',
-        )}
-      >
-        {level}
-      </span>
+      {locked && (
+        <span className={cn('absolute flex items-center justify-center rounded-full border border-background bg-muted text-muted-foreground', s.lock)}>
+          <Lock strokeWidth={2.5} />
+        </span>
+      )}
+      {children}
     </span>
   )
 }
 
-/** Round medallion for valuable (special) badges, with a subtle halo for top tiers. */
-export function SpecialEmblem({ icon, tier, size = 'md', className }: { icon: string; tier: string; size?: keyof typeof SIZES; className?: string }) {
+/** Level medallion: symbol per level, shape and metal change every 5 levels (shield, hexagon, octagon, star). */
+export function LevelEmblem({ level, size = 'md', locked = false, className }: { level: number; size?: EmblemSize; locked?: boolean; className?: string }) {
   const s = SIZES[size]
-  const Icon = ICONS[icon] ?? Award
-  const rim = TIER_RIM[tier] ?? TIER_RIM.altin
+  const tier = levelTier(level)
   return (
-    <span
-      className={cn(
-        'relative inline-flex shrink-0 rounded-full',
-        s.box,
-        s.pad,
-        rim,
-        tier === 'efsane' && 'shadow-[0_0_18px_-4px_var(--primary)]',
-        tier === 'elmas' && 'shadow-[0_0_14px_-6px_var(--accent)]',
-        className,
+    <Medallion tier={tier} shape={tier} size={size} Icon={levelIcon(level)} locked={locked} glow={tier === 'efsane' || tier === 'elmas'} className={className}>
+      {!locked && s.tag !== 'hidden' && (
+        <span className={cn('absolute -bottom-0.5 -right-1 flex items-center justify-center rounded-full border-2 border-background bg-foreground font-display font-bold tabular-nums leading-none text-background', s.tag)}>
+          {level}
+        </span>
       )}
-      aria-hidden
-    >
-      <span className="flex size-full items-center justify-center rounded-full bg-card ring-1 ring-inset ring-border">
-        <Icon className={cn(s.icon, TIER_ICON[tier] ?? TIER_ICON.altin)} strokeWidth={1.75} />
+    </Medallion>
+  )
+}
+
+/** Round medallion for valuable (special) badges. */
+export function SpecialEmblem({ icon, tier, size = 'md', locked, className }: { icon: string; tier: string; size?: EmblemSize; locked?: boolean; className?: string }) {
+  return <Medallion tier={tier} shape="round" size={size} Icon={ICONS[icon] ?? Award} locked={locked} glow={tier !== 'altin'} className={className} />
+}
+
+/** Compact rank marker shown next to a member's name across the site. */
+export function RankChip({ level, name, showName = false, className }: { level: number; name?: string; showName?: boolean; className?: string }) {
+  if (!level || level < 1) return null
+  const tier = levelTier(level)
+  return (
+    <span className={cn('inline-flex shrink-0 items-center gap-1 align-middle', className)} title={name ? `Lv ${level} · ${name}` : `Lv ${level}`}>
+      <LevelEmblem level={level} size="chip" />
+      <span className={cn('font-display text-[10px] font-bold leading-none tabular-nums', TIER_TEXT[tier])}>
+        {showName && name ? name : `Lv${level}`}
       </span>
+      <span className="sr-only">{name ? `Seviye ${level}, ${name}` : `Seviye ${level}`}</span>
     </span>
   )
 }

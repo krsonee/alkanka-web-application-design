@@ -20,6 +20,8 @@
   --color-checker-light: var(--checker-light);
   --color-checker-dark: var(--checker-dark);
   --color-gold: var(--gold);
+  --color-bronze: var(--bronze);
+  --color-ruby: var(--ruby);
   --color-gold-foreground: var(--gold-foreground);
   --color-live: var(--live);
   --color-live-foreground: var(--live-foreground);
@@ -79,6 +81,8 @@
   --accent: oklch(0.74 0.13 232);
   --accent-foreground: oklch(0.16 0.03 240);
   --gold: oklch(0.8 0.135 86);
+  --bronze: oklch(0.66 0.11 52);
+  --ruby: oklch(0.6 0.2 18);
   --gold-foreground: oklch(0.19 0.03 80);
   --live: oklch(0.78 0.18 150);
   --live-foreground: oklch(0.18 0.04 150);

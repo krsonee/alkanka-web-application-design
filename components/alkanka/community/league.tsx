@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { TeamLogo } from '../logo-context'
 import { usePoints } from '../points-context'
 import { StatusLine, useAction } from './use-action'
+import { MemberRank } from '../kp/member-rank'
 
 function Stepper({ value, onChange, label, disabled }: { value: number; onChange: (n: number) => void; label: string; disabled: boolean }) {
   return (
@@ -167,7 +168,10 @@ export function League({
               {table.map((r, i) => (
                 <li key={r.userId} className={cn('flex items-center gap-3 border-b border-border py-2 text-sm last:border-0', r.userId === meId && 'font-bold')}>
                   <span className="w-5 text-center font-display font-bold tabular-nums text-muted-foreground">{i === 0 ? <Crown className="size-4 text-primary" aria-label="Lider" /> : i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-foreground">{r.name.split(' ')[0]}</span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-foreground">{r.name.split(' ')[0]}</span>
+                    <MemberRank userId={r.userId} />
+                  </span>
                   <span className="text-xs text-muted-foreground">{r.exact} tam</span>
                   <span className="w-10 text-right font-display font-bold tabular-nums text-primary">{r.points}</span>
                 </li>

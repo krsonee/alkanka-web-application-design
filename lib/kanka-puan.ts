@@ -237,6 +237,19 @@ export async function predictionBoard(period: RankPeriod, limit = 20): Promise<P
   }))
 }
 
+let levelCache: { at: number; data: Record<string, number> } | null = null
+
+/** userId → level for every member with KP; cached briefly because it powers rank chips site-wide. */
+export async function levelMap(): Promise<Record<string, number>> {
+  if (levelCache && Date.now() - levelCache.at < 60_000) return levelCache.data
+  const cfg = await getKpConfig()
+  const list = await totals(cfg.rules, null, 5000)
+  const data: Record<string, number> = {}
+  for (const l of list) if (l.total > 0) data[l.userId] = levelFor(cfg.levels, l.total).index + 1
+  levelCache = { at: Date.now(), data }
+  return data
+}
+
 export async function leaderboard(limit = 20, period: RankPeriod = 'tum'): Promise<LeaderRow[]> {
   const cfg = await getKpConfig()
   const list = (await totals(cfg.rules, null, limit, period)).filter((l) => l.total > 0)

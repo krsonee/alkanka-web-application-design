@@ -14,6 +14,9 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: true,
   },
+  user: {
+    changeEmail: { enabled: true, updateEmailWithoutVerification: true },
+  },
   trustedOrigins: [
     ...(process.env.NODE_ENV === 'development'
       ? [
