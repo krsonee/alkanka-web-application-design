@@ -14,6 +14,8 @@ import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
 import { pushStats } from '@/lib/push'
 import { PushSender } from '@/components/panel/push-sender'
+import { botConfigured, listLog, listSources } from '@/lib/telegram-mirror'
+import { TelegramMirror } from '@/components/panel/telegram-mirror'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -28,6 +30,9 @@ export default async function PanelPage() {
 
   const content = await getAllContent()
   const push = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
+  const [tgSources, tgLog] = await Promise.all([listSources().catch(() => []), listLog().catch(() => [])])
+  const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
+  const cronUrl = `https://${siteHost}/api/cron/telegram?key=CRON_SECRET`
 
   const slides = SLIDES.map((s) => ({
     kind: 'slide' as const,
@@ -71,6 +76,15 @@ export default async function PanelPage() {
           games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
           tournaments={<TournamentManager tournaments={await listTournaments()} />}
           push={<PushSender {...push} configured={push.total > 0} />}
+          telegram={
+            <TelegramMirror
+              sources={tgSources}
+              log={tgLog}
+              configured={botConfigured()}
+              cronReady={Boolean(process.env.CRON_SECRET)}
+              cronUrl={cronUrl}
+            />
+          }
           logos={
             <>
               <LogoEditor
