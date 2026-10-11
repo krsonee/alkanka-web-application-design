@@ -7,6 +7,7 @@ import type { Complaint, LeagueMatch, Review } from '@/lib/community'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
+import { CommunityGuide, CommunityHint, type CommunityTab } from './community-guide'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
@@ -19,10 +20,11 @@ type Props = {
 }
 
 export function CommunityManager({ reviews, complaints, matches, siteNames }: Props) {
-  const [tab, setTab] = useState<'reviews' | 'complaints' | 'league'>('reviews')
+  const [tab, setTab] = useState<CommunityTab>('reviews')
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'forwarded').length
   return (
     <div className="flex flex-col gap-5">
+      <CommunityGuide />
       <div role="tablist" className="flex w-fit gap-1 rounded-lg border border-border bg-card p-1">
         {(
           [
@@ -36,6 +38,7 @@ export function CommunityManager({ reviews, complaints, matches, siteNames }: Pr
           </button>
         ))}
       </div>
+      <CommunityHint tab={tab} />
       {tab === 'reviews' && <Reviews reviews={reviews} siteNames={siteNames} />}
       {tab === 'complaints' && <Complaints complaints={complaints} siteNames={siteNames} />}
       {tab === 'league' && <LeagueAdmin matches={matches} />}
