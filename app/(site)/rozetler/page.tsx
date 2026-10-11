@@ -1,7 +1,8 @@
 import Link from 'next/link'
+import { ChevronRight, Trophy } from 'lucide-react'
 import { pageMeta } from '@/lib/seo'
 import { getMember } from '@/lib/member'
-import { AUTO_LABELS, RULE_FIELDS, badgeHolders, getKpConfig, getKpStatus, leaderboard, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
+import { AUTO_LABELS, RULE_FIELDS, badgeHolders, getKpConfig, getKpStatus, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
 import { LevelEmblem, SpecialEmblem, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { cn } from '@/lib/utils'
 
@@ -9,125 +10,132 @@ export const metadata = pageMeta('rozetler')
 export const dynamic = 'force-dynamic'
 
 const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
+const fmt = (n: number) => n.toLocaleString('tr-TR')
 
 export default async function BadgesPage() {
   const member = await getMember()
-  const [cfg, specials, holders, board, me] = await Promise.all([
+  const [cfg, specials, holders, me] = await Promise.all([
     getKpConfig(),
     listSpecialBadges(),
     badgeHolders(),
-    leaderboard(15),
     member ? getKpStatus(member.id) : Promise.resolve(null),
   ])
   const myLevel = me?.level.index ?? -1
   const earnRules = RULE_FIELDS.filter((f) => !f.key.endsWith('Cap') && cfg.rules[f.key] > 0)
+  const next = me && cfg.levels[me.level.index + 1]
+  const progress = me && next ? Math.min(100, Math.round(((me.kp - me.level.min) / (next.min - me.level.min)) * 100)) : 100
+
+  const groups: { tier: string; items: { l: (typeof cfg.levels)[number]; i: number }[] }[] = []
+  cfg.levels.forEach((l, i) => {
+    const tier = levelTier(i + 1)
+    const g = groups.at(-1)
+    if (g && g.tier === tier) g.items.push({ l, i })
+    else groups.push({ tier, items: [{ l, i }] })
+  })
 
   return (
-    <div className="flex flex-col gap-10">
-      <section className="panel-gold flex flex-col gap-5 rounded-xl p-6 md:flex-row md:items-center">
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Kanka Puan</span>
-          <h1 className="text-balance font-display text-3xl font-bold text-foreground">Puan topla, seviye atla, rozetini kap</h1>
-          <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
-            Sitede geçirdiğin her dakika, oynadığın her oyun, bitirdiğin her görev ve sohbette yazdığın her mesaj Kanka Puan kazandırır. {cfg.levels.length} seviyenin her birinin kendi rozeti var. Şampiyonlara ise değerli rozetler verilir.
+    <div className="flex flex-col gap-8">
+      <section className="panel-gold flex flex-col gap-4 rounded-xl p-5 md:flex-row md:items-center md:gap-6">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-primary">Kanka Puan · Rozetler</span>
+          <h1 className="text-balance font-display text-2xl font-bold text-foreground">Puan topla, seviye atla, rozetini kap</h1>
+          <p className="max-w-xl text-pretty text-sm leading-relaxed text-muted-foreground">
+            {cfg.levels.length} seviyenin her birinin kendi amblemi var. Şampiyonlara ise değerli rozetler verilir.
           </p>
         </div>
         {me ? (
-          <Link href="/profil" className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 pr-5">
+          <Link href="/profil" className="flex w-full shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 md:w-72">
             <LevelEmblem level={me.level.index + 1} size="md" />
-            <span className="flex flex-col">
-              <span className="text-xs text-muted-foreground">Senin seviyen</span>
-              <span className="font-display text-base font-bold text-foreground">{me.level.name}</span>
-              <span className="text-xs tabular-nums text-primary">{me.kp.toLocaleString('tr-TR')} KP</span>
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="truncate font-display text-sm font-bold text-foreground">{me.level.name}</span>
+                <span className="text-xs tabular-nums text-primary">{fmt(me.kp)} KP</span>
+              </span>
+              <span className="h-1.5 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Sonraki seviyeye ilerleme">
+                <span className="block h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+              </span>
+              <span className="text-[11px] text-muted-foreground">{next ? `${next.name} için ${fmt(next.min - me.kp)} KP kaldı` : 'Zirvedesin kanka!'}</span>
             </span>
           </Link>
         ) : (
-          <a href="#giris" className="h-11 shrink-0 rounded-lg bg-primary px-5 text-sm font-bold leading-[2.75rem] text-primary-foreground">Giriş yap, puan kazanmaya başla</a>
+          <a href="#giris" className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground">Giriş yap, puan kazan</a>
         )}
       </section>
 
-      <section aria-labelledby="kazan" className="flex flex-col gap-4">
-        <h2 id="kazan" className="font-display text-xl font-bold text-foreground">Nasıl KP kazanılır?</h2>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <section aria-labelledby="kazan" className="flex flex-col gap-3">
+        <h2 id="kazan" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nasıl KP kazanılır?</h2>
+        <ul className="flex flex-wrap gap-2">
           {earnRules.map((f) => (
-            <li key={f.key} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
-              <span className="text-sm text-foreground">{f.label}</span>
-              <span className="shrink-0 font-display text-sm font-bold tabular-nums text-primary">+{cfg.rules[f.key]}</span>
+            <li key={f.key} className="flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-3 pr-1.5 text-xs text-foreground">
+              {f.label}
+              <span className="rounded-full bg-primary/15 px-2 py-0.5 font-display font-bold tabular-nums text-primary">+{cfg.rules[f.key]}</span>
             </li>
           ))}
         </ul>
-        <p className="text-xs text-muted-foreground">
-          Günde en fazla {cfg.rules.minuteDailyCap} dakika ve {cfg.rules.chatDailyCap} sohbet mesajı puan kazandırır.
-        </p>
+        <p className="text-[11px] text-muted-foreground">Günde en fazla {cfg.rules.minuteDailyCap} dakika ve {cfg.rules.chatDailyCap} sohbet mesajı puan kazandırır.</p>
       </section>
 
-      <section aria-labelledby="seviyeler" className="flex flex-col gap-4">
-        <h2 id="seviyeler" className="font-display text-xl font-bold text-foreground">Seviyeler ve rozetleri</h2>
-        <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {cfg.levels.map((l, i) => {
-            const reached = i <= myLevel
-            const current = i === myLevel
+      <section aria-labelledby="seviyeler" className="flex flex-col gap-3">
+        <h2 id="seviyeler" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Seviyeler</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          {groups.map((g) => (
+            <div key={g.tier + g.items[0].i} className="rounded-xl border border-border bg-card">
+              <p className={cn('border-b border-border px-3 py-2 text-[11px] font-bold uppercase tracking-wider', TIER_TEXT[g.tier])}>
+                {TIER_NAMES[g.tier]} · Lv {g.items[0].i + 1}–{g.items.at(-1)!.i + 1}
+              </p>
+              <ol>
+                {g.items.map(({ l, i }) => {
+                  const current = i === myLevel
+                  const locked = member ? i > myLevel : false
+                  return (
+                    <li key={i} className={cn('flex items-center gap-3 px-3 py-2', current && 'bg-primary/10')}>
+                      <LevelEmblem level={i + 1} size="sm" locked={locked} />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className={cn('truncate text-sm font-semibold', locked ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
+                        <span className="truncate text-[11px] text-muted-foreground">{l.badge}</span>
+                      </span>
+                      {current && <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase text-primary-foreground">Sen</span>}
+                      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{fmt(l.min)} KP</span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="degerli" className="flex flex-col gap-3">
+        <div className="flex items-end justify-between gap-3">
+          <h2 id="degerli" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Değerli rozetler</h2>
+          <Link href="/siralama" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+            <Trophy className="size-3.5" aria-hidden /> Sıralama ve şampiyonlar <ChevronRight className="size-3.5" aria-hidden />
+          </Link>
+        </div>
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {specials.map((b) => {
+            const owners = holders[b.id] ?? []
             return (
-              <li key={i} className={cn('flex flex-col items-center gap-2 rounded-xl border p-4 text-center', current ? 'border-primary bg-primary/10' : 'border-border bg-card')}>
-                <LevelEmblem level={i + 1} size="md" locked={member ? !reached : false} />
-                <span className="font-display text-sm font-bold text-foreground">{l.name}</span>
-                <span className={cn('text-xs font-semibold', TIER_TEXT[levelTier(i + 1)])}>{l.badge}</span>
-                <span className="text-xs tabular-nums text-muted-foreground">{l.min.toLocaleString('tr-TR')} KP</span>
-                {current && <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase text-primary-foreground">Buradasın</span>}
+              <li key={b.id} className="flex gap-3 rounded-xl border border-border bg-card p-3">
+                <SpecialEmblem icon={b.icon} tier={b.tier} size="md" />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate font-display text-sm font-bold text-foreground">{b.name}</span>
+                    <span className={cn('shrink-0 text-[10px] font-bold uppercase tracking-wider', TIER_TEXT[b.tier])}>{TIER_NAMES[b.tier]}</span>
+                  </div>
+                  <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{b.description}</p>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                    {b.bonus > 0 && <span className="font-semibold text-primary">+{fmt(b.bonus)} KP</span>}
+                    {b.auto && <span>{AUTO_LABELS[b.auto]}</span>}
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {owners.length ? <>Sahipleri: <span className="text-foreground">{owners.map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}</span></> : 'Henüz sahibi yok, ilk sen ol.'}
+                  </p>
+                </div>
               </li>
             )
           })}
-        </ol>
-        <p className="text-xs text-muted-foreground">Her 5 seviyede rozetin malzemesi değişir: {Object.values(TIER_NAMES).join(', ')}.</p>
-      </section>
-
-      <section aria-labelledby="degerli" className="flex flex-col gap-4">
-        <h2 id="degerli" className="font-display text-xl font-bold text-foreground">Değerli rozetler</h2>
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {specials.map((b) => (
-            <li key={b.id} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center gap-3">
-                <SpecialEmblem icon={b.icon} tier={b.tier} />
-                <div className="flex min-w-0 flex-col">
-                  <span className="font-display text-base font-bold text-foreground">{b.name}</span>
-                  <span className={cn('text-xs font-semibold', TIER_TEXT[b.tier])}>{TIER_NAMES[b.tier]}{b.bonus ? ` · +${b.bonus.toLocaleString('tr-TR')} KP` : ''}</span>
-                </div>
-              </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">{b.description}</p>
-              {b.auto && <p className="text-xs text-muted-foreground">{AUTO_LABELS[b.auto]}</p>}
-              <div className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
-                {holders[b.id]?.length ? (
-                  <span>
-                    Sahipleri: <span className="text-foreground">{holders[b.id].map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}</span>
-                  </span>
-                ) : (
-                  'Henüz kimse kazanmadı. İlk sen ol.'
-                )}
-              </div>
-            </li>
-          ))}
         </ul>
-      </section>
-
-      <section aria-labelledby="liderler" className="flex flex-col gap-4">
-        <h2 id="liderler" className="font-display text-xl font-bold text-foreground">KP liderleri</h2>
-        {board.length ? (
-          <ol className="grid gap-2 lg:grid-cols-3">
-            {board.map((r, i) => (
-              <li key={r.userId} className={cn('flex items-center gap-3 rounded-xl border bg-card p-3', r.userId === member?.id ? 'border-primary' : 'border-border')}>
-                <span className="w-5 text-right font-display text-sm font-bold tabular-nums text-muted-foreground">{i + 1}</span>
-                <LevelEmblem level={r.level} size="sm" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-semibold text-foreground">{r.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">{r.levelName}{r.specials ? ` · ${r.specials} değerli rozet` : ''}</span>
-                </span>
-                <span className="font-display text-sm font-bold tabular-nums text-primary">{r.kp.toLocaleString('tr-TR')}</span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="text-sm text-muted-foreground">Henüz puan toplayan yok.</p>
-        )}
       </section>
     </div>
   )
