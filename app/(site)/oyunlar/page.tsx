@@ -1,9 +1,9 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { GamesHub } from '@/components/alkanka/games/games-hub'
 import { getArenaSettings } from '@/lib/arena-server'
 
-export const metadata: Metadata = { title: 'Oyunlar | AL KANKA' }
+export const metadata = pageMeta('oyunlar')
 
 export default async function GamesPage() {
   const arena = await getArenaSettings()

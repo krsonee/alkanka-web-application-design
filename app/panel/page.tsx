@@ -14,6 +14,14 @@ import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
 import { pushStats } from '@/lib/push'
 import { PushSender } from '@/components/panel/push-sender'
+import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
+import { TelegramMirror } from '@/components/panel/telegram-mirror'
+import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
+import { chatStatus } from '@/lib/telegram-chat'
+import { SeoManager } from '@/components/panel/seo-manager'
+import { listPosts } from '@/lib/blog'
+import { dealsPublishing, getVerification, listDeals } from '@/lib/deals'
+import { SITE_URL } from '@/lib/seo'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -28,6 +36,16 @@ export default async function PanelPage() {
 
   const content = await getAllContent()
   const push = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
+  const [tgBots, tgTargets, tgSources, tgLog, cronKey, tgChat] = await Promise.all([
+    listBots().catch(() => []),
+    listTargets().catch(() => []),
+    listSources().catch(() => []),
+    listLog().catch(() => []),
+    getCronKey().catch(() => 'ANAHTAR'),
+    chatStatus().catch(() => null),
+  ])
+  const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
+  const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
 
   const slides = SLIDES.map((s) => ({
     kind: 'slide' as const,
@@ -71,6 +89,21 @@ export default async function PanelPage() {
           games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
           tournaments={<TournamentManager tournaments={await listTournaments()} />}
           push={<PushSender {...push} configured={push.total > 0} />}
+          telegram={
+            <div className="flex flex-col gap-6">
+              <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
+              <TelegramChatSetup bots={tgBots} status={tgChat} />
+            </div>
+          }
+          seo={
+            <SeoManager
+              posts={await listPosts({ includeDrafts: true })}
+              deals={await listDeals(30)}
+              publishing={await dealsPublishing()}
+              verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
+              siteUrl={SITE_URL}
+            />
+          }
           logos={
             <>
               <LogoEditor

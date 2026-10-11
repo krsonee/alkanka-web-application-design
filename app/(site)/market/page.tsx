@@ -1,8 +1,8 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { PointsMarket } from '@/components/alkanka/points-market'
 
-export const metadata: Metadata = { title: 'Puan Marketi | AL KANKA' }
+export const metadata = pageMeta('market')
 
 export default function MarketPage() {
   return (

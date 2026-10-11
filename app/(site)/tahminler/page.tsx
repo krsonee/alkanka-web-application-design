@@ -1,8 +1,8 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Events } from '@/components/alkanka/events'
 
-export const metadata: Metadata = { title: 'Tahminler | AL KANKA' }
+export const metadata = pageMeta('tahminler')
 
 export default function PredictionsPage() {
   return (

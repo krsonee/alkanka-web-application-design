@@ -1,9 +1,9 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { BonusBoard } from '@/components/alkanka/partner-sites'
 import { BONUSES } from '@/components/alkanka/data'
 
-export const metadata: Metadata = { title: 'Bonuslar | AL KANKA' }
+export const metadata = pageMeta('bonuslar')
 
 export default function BonusesPage() {
   return (

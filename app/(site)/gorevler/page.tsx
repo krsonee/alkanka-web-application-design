@@ -1,8 +1,8 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Tasks } from '@/components/alkanka/tasks'
 
-export const metadata: Metadata = { title: 'Görevler | AL KANKA' }
+export const metadata = pageMeta('gorevler')
 
 export default function TasksPage() {
   return (

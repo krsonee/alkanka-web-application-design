@@ -1,9 +1,9 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { MainSponsor, SponsorDirectory } from '@/components/alkanka/partner-sites'
 import { SPONSORS } from '@/components/alkanka/data'
 
-export const metadata: Metadata = { title: 'Sponsorlar | AL KANKA' }
+export const metadata = pageMeta('sponsorlar')
 
 export default function SponsorsPage() {
   const vip = SPONSORS.filter((s) => s.tier === 'vip').length

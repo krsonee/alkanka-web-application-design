@@ -1,13 +1,10 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { PageHero } from '@/components/alkanka/page-hero'
 import { InstallGuide } from '@/components/alkanka/app/install-guide'
 import { getAppBonusClaimed } from '@/app/actions/app'
 import { APP_BONUS } from '@/lib/app-config'
 
-export const metadata: Metadata = {
-  title: 'Mobil uygulama | AL KANKA',
-  description: `AL KANKA'yı Android ve iPhone ana ekranına ekle, uygulamadan giriş yap, ${APP_BONUS} KC bonus kazan.`,
-}
+export const metadata = pageMeta('uygulama')
 
 export default async function AppPage() {
   const claimed = await getAppBonusClaimed()
