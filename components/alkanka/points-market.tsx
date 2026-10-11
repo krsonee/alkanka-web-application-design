@@ -64,7 +64,7 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
           <span className="text-muted-foreground">Bakiyen</span>
           <span className="font-display font-bold text-foreground tabular-nums">{formatAC(points)}</span>
         </span>
-        <div role="tablist" aria-label="Ürün türü" className="flex gap-1 rounded-lg border border-border bg-card p-1">
+        <div role="tablist" aria-label="Ürün türü" className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1 [scrollbar-width:none]">
           {(
             [
               ['hepsi', `Tümü (${items.length})`],
