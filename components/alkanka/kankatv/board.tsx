@@ -1,53 +1,164 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { ChevronDown, Flag, Percent, Radio, Tv } from 'lucide-react'
+import { ChevronDown, Flag, Percent, Radio, Search, Tv } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { LEAGUES, type Channel, type KankaTvData, type LeagueSlug, type Match } from '@/lib/kankatv'
+import {
+  SPORTS,
+  type Channel,
+  type Competition,
+  type DayOffset,
+  type Match,
+  type MatchDetail,
+  type ScoreBoard,
+  type SportSlug,
+} from '@/lib/kankatv'
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<KankaTvData>)
+const fetcher = <T,>(url: string) => fetch(url).then((r) => r.json() as Promise<T>)
 const timeFormat = new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' })
-const DAY_LABELS = ['Dün', 'Bugün', 'Yarın']
-const leagueName = (slug: LeagueSlug) => LEAGUES.find((l) => l.slug === slug)?.name ?? slug
+const DAYS: { offset: DayOffset; label: string }[] = [
+  { offset: -1, label: 'Dün' },
+  { offset: 0, label: 'Bugün' },
+  { offset: 1, label: 'Yarın' },
+]
+const FILTERS = [
+  { key: 'all', label: 'Tümü' },
+  { key: 'in', label: 'Canlı' },
+  { key: 'pre', label: 'Başlamamış' },
+  { key: 'post', label: 'Bitti' },
+] as const
+type Filter = (typeof FILTERS)[number]['key']
+const PAGE = 25
 
-function TeamCrest({ src, name }: { src: string | null; name: string }) {
-  if (!src) {
-    return (
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
-        {name.slice(0, 2).toUpperCase()}
-      </span>
-    )
-  }
+function TeamCrest({ src }: { src: string }) {
   // eslint-disable-next-line @next/next/no-img-element -- remote crest CDN, small fixed size
-  return <img src={src} alt="" loading="lazy" className="size-7 shrink-0 object-contain" />
+  return <img src={src} alt="" loading="lazy" className="size-6 shrink-0 object-contain" />
 }
 
 function StatusBadge({ match }: { match: Match }) {
   if (match.state === 'in') {
     return (
       <span className="flex items-center gap-1.5 rounded-md bg-live/15 px-2 py-1 text-xs font-bold text-live tabular-nums">
-        <span className="size-1.5 animate-pulse rounded-full bg-live" aria-hidden="true" />
-        {match.detail === 'İY' ? 'İY' : match.clock}
+        <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-live" aria-hidden="true" />
+        <span className="truncate">{match.clock || match.status || 'Canlı'}</span>
       </span>
     )
   }
   if (match.state === 'post') {
-    return <span className="rounded-md bg-muted px-2 py-1 text-xs font-bold text-muted-foreground">MS</span>
+    return (
+      <span className="block truncate rounded-md bg-muted px-2 py-1 text-center text-xs font-bold text-muted-foreground">
+        {!match.status || /^sonu/i.test(match.status) ? 'MS' : match.status}
+      </span>
+    )
   }
   return (
-    <span className="rounded-md bg-background px-2 py-1 text-xs font-bold text-foreground tabular-nums">
-      {timeFormat.format(new Date(match.date))}
+    <span className="block rounded-md bg-background px-2 py-1 text-center text-xs font-bold text-foreground tabular-nums">
+      {timeFormat.format(new Date(match.start))}
     </span>
   )
 }
 
-function MatchRow({ match }: { match: Match }) {
+function MatchDetails({ match, sport }: { match: Match; sport: SportSlug }) {
+  const { data, isLoading } = useSWR<MatchDetail>(`/api/kankatv/game?id=${match.id}`, fetcher, {
+    refreshInterval: match.state === 'in' ? 30_000 : 0,
+  })
+  const showEvents = sport === 'futbol'
+
+  return (
+    <div className="flex flex-col gap-4 bg-background/60 px-4 py-4">
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+      ) : showEvents && data?.events.length ? (
+        <ol className="flex flex-col gap-2">
+          {data.events.map((e, i) => (
+            <li
+              key={`${e.minute}-${e.player}-${i}`}
+              className={cn('flex items-center gap-2 text-sm', e.side === 'away' && 'flex-row-reverse text-right')}
+            >
+              <span className="w-10 shrink-0 text-xs font-bold text-muted-foreground tabular-nums">{e.minute}</span>
+              <span
+                role="img"
+                aria-label={e.kind === 'goal' ? 'Gol' : e.kind === 'red' ? 'Kırmızı kart' : 'Sarı kart'}
+                className={cn(
+                  'shrink-0',
+                  e.kind === 'goal' && 'size-2.5 rounded-full bg-primary',
+                  e.kind === 'yellow' && 'h-3.5 w-2.5 rounded-sm bg-primary/60',
+                  e.kind === 'red' && 'h-3.5 w-2.5 rounded-sm bg-live',
+                )}
+              />
+              <span className="text-foreground">{e.player || (e.kind === 'goal' ? 'Gol' : 'Kart')}</span>
+            </li>
+          ))}
+        </ol>
+      ) : !showEvents && data?.periods.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm tabular-nums">
+            <thead>
+              <tr className="text-xs text-muted-foreground">
+                <th scope="col" className="py-1 pr-4 text-left font-semibold">
+                  <span className="sr-only">Takım</span>
+                </th>
+                {data.periods.map((p) => (
+                  <th key={p.name} scope="col" className="px-2 py-1 text-center font-semibold">
+                    {p.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(['home', 'away'] as const).map((side) => (
+                <tr key={side} className="border-t border-border">
+                  <th scope="row" className="py-1.5 pr-4 text-left font-medium text-foreground">
+                    {match[side].name}
+                  </th>
+                  {data.periods.map((p) => (
+                    <td key={p.name} className="px-2 py-1.5 text-center text-foreground">
+                      {p[side]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {match.state === 'pre'
+            ? showEvents
+              ? 'Maç henüz başlamadı. Goller ve kartlar burada canlı akacak.'
+              : 'Maç henüz başlamadı. Periyot skorları burada canlı akacak.'
+            : showEvents
+              ? 'Henüz gol ya da kart yok.'
+              : 'Periyot skoru henüz yok.'}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href="/tahminler"
+          className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          <Flag className="size-3.5" aria-hidden="true" />
+          Tahmin et
+        </Link>
+        <Link
+          href="/ozel-oranlar"
+          className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-bold uppercase tracking-wider text-foreground transition-colors hover:bg-muted"
+        >
+          <Percent className="size-3.5" aria-hidden="true" />
+          Özel oranlar
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function MatchRow({ match, sport }: { match: Match; sport: SportSlug }) {
   const [open, setOpen] = useState(false)
-  const scored = match.state !== 'pre'
-  const homeWin = scored && Number(match.home.score) > Number(match.away.score)
-  const awayWin = scored && Number(match.away.score) > Number(match.home.score)
+  const scored = match.home.score !== null && match.away.score !== null
+  const homeWin = scored && match.state === 'post' && match.home.score! > match.away.score!
+  const awayWin = scored && match.state === 'post' && match.away.score! > match.home.score!
 
   return (
     <li className="border-t border-border first:border-t-0">
@@ -57,13 +168,13 @@ function MatchRow({ match }: { match: Match }) {
         aria-expanded={open}
         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
       >
-        <span className="w-14 shrink-0">
+        <span className="w-16 shrink-0">
           <StatusBadge match={match} />
         </span>
         <span className="grid min-w-0 flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3">
           <span className={cn('flex min-w-0 items-center justify-end gap-2 text-sm', homeWin ? 'font-bold' : 'font-medium')}>
-            <span className="truncate text-right text-foreground">{match.home.short}</span>
-            <TeamCrest src={match.home.logo} name={match.home.short} />
+            <span className="truncate text-right text-foreground">{match.home.name}</span>
+            <TeamCrest src={match.home.logo} />
           </span>
           <span
             className={cn(
@@ -74,8 +185,8 @@ function MatchRow({ match }: { match: Match }) {
             {scored ? `${match.home.score} - ${match.away.score}` : 'vs'}
           </span>
           <span className={cn('flex min-w-0 items-center gap-2 text-sm', awayWin ? 'font-bold' : 'font-medium')}>
-            <TeamCrest src={match.away.logo} name={match.away.short} />
-            <span className="truncate text-foreground">{match.away.short}</span>
+            <TeamCrest src={match.away.logo} />
+            <span className="truncate text-foreground">{match.away.name}</span>
           </span>
         </span>
         <ChevronDown
@@ -83,72 +194,87 @@ function MatchRow({ match }: { match: Match }) {
           aria-hidden="true"
         />
       </button>
-
-      {open && (
-        <div className="flex flex-col gap-4 bg-background/60 px-4 py-4">
-          {match.events.length > 0 ? (
-            <ol className="flex flex-col gap-2">
-              {match.events.map((e, i) => (
-                <li
-                  key={`${e.minute}-${e.player}-${i}`}
-                  className={cn('flex items-center gap-2 text-sm', e.side === 'away' && 'flex-row-reverse text-right')}
-                >
-                  <span className="w-10 shrink-0 text-xs font-bold text-muted-foreground tabular-nums">{e.minute}</span>
-                  <span
-                    aria-label={e.kind === 'goal' ? 'Gol' : e.kind === 'red' ? 'Kırmızı kart' : 'Sarı kart'}
-                    className={cn(
-                      'shrink-0',
-                      e.kind === 'goal' && 'size-2.5 rounded-full bg-primary',
-                      e.kind === 'yellow' && 'h-3.5 w-2.5 rounded-sm bg-primary/60',
-                      e.kind === 'red' && 'h-3.5 w-2.5 rounded-sm bg-live',
-                    )}
-                  />
-                  <span className="text-foreground">
-                    {e.player}
-                    {e.note && <span className="ml-1 text-xs text-muted-foreground">({e.note})</span>}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {match.state === 'pre' ? 'Maç henüz başlamadı. Goller ve kartlar burada canlı akacak.' : 'Henüz gol ya da kart yok.'}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/tahminler"
-              className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
-            >
-              <Flag className="size-3.5" aria-hidden="true" />
-              Tahmin et
-            </Link>
-            <Link
-              href="/ozel-oranlar"
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-bold uppercase tracking-wider text-foreground transition-colors hover:bg-muted"
-            >
-              <Percent className="size-3.5" aria-hidden="true" />
-              Özel oranlar
-            </Link>
-          </div>
-        </div>
-      )}
+      {open && <MatchDetails match={match} sport={sport} />}
     </li>
   )
 }
 
-function MatchesTab({ data, onWatch }: { data: KankaTvData; onWatch: (slug: string) => void }) {
-  const [dayIndex, setDayIndex] = useState(1)
-  const [league, setLeague] = useState<LeagueSlug | 'all'>('all')
-  const liveChannel = data.channels.find((c) => c.live)
+function CompetitionList({ competitions, sport }: { competitions: Competition[]; sport: SportSlug }) {
+  const [limit, setLimit] = useState(PAGE)
+  const visible = competitions.slice(0, limit)
+  return (
+    <div className="flex flex-col gap-4">
+      {visible.map((c) => (
+        <section key={c.id} aria-labelledby={`cmp-${c.id}`} className="overflow-hidden rounded-xl border border-border bg-card">
+          <h2
+            id={`cmp-${c.id}`}
+            className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
+          >
+            <span className="truncate text-foreground">{c.name}</span>
+            <span className="shrink-0 text-muted-foreground">{c.country}</span>
+          </h2>
+          <ul>
+            {c.matches.map((m) => (
+              <MatchRow key={m.id} match={m} sport={sport} />
+            ))}
+          </ul>
+        </section>
+      ))}
+      {competitions.length > limit && (
+        <button
+          type="button"
+          onClick={() => setLimit((l) => l + PAGE)}
+          className="h-11 rounded-xl border border-border text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+        >
+          Daha fazla lig göster ({competitions.length - limit})
+        </button>
+      )}
+    </div>
+  )
+}
 
-  const groups = useMemo(() => {
-    const day = data.days[dayIndex]
-    const list = data.matches.filter((m) => m.day === day && (league === 'all' || m.league === league))
-    return LEAGUES.map((l) => ({ league: l, matches: list.filter((m) => m.league === l.slug) })).filter((g) => g.matches.length)
-  }, [data, dayIndex, league])
+function MatchesTab({
+  initialBoard,
+  liveChannel,
+  onWatch,
+}: {
+  initialBoard: ScoreBoard
+  liveChannel?: Channel
+  onWatch: (slug: string) => void
+}) {
+  const [sport, setSport] = useState<SportSlug>('futbol')
+  const [day, setDay] = useState<DayOffset>(0)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [query, setQuery] = useState('')
+  const deferredQuery = useDeferredValue(query)
+  const isInitial = sport === initialBoard.sport && day === initialBoard.day
 
-  const liveNow = data.matches.filter((m) => m.state === 'in')
+  const { data, isLoading } = useSWR<ScoreBoard>(`/api/kankatv?sport=${sport}&day=${day}`, fetcher, {
+    fallbackData: isInitial ? initialBoard : undefined,
+    keepPreviousData: true,
+    refreshInterval: day === 0 ? 30_000 : 0,
+    revalidateOnFocus: true,
+  })
+  const board = data ?? initialBoard
+  const liveCounts = board.liveCounts
+
+  const competitions = useMemo(() => {
+    const q = deferredQuery.trim().toLocaleLowerCase('tr')
+    return board.competitions
+      .map((c) => {
+        const compHit = q && `${c.name} ${c.country}`.toLocaleLowerCase('tr').includes(q)
+        const matches = c.matches.filter(
+          (m) =>
+            (filter === 'all' || m.state === filter) &&
+            (!q || compHit || `${m.home.name} ${m.away.name}`.toLocaleLowerCase('tr').includes(q)),
+        )
+        return { ...c, matches }
+      })
+      .filter((c) => c.matches.length)
+  }, [board, filter, deferredQuery])
+
+  const total = board.competitions.reduce((n, c) => n + c.matches.length, 0)
+  const liveHere = board.competitions.reduce((n, c) => n + c.matches.filter((m) => m.state === 'in').length, 0)
 
   return (
     <div className="flex flex-col gap-5">
@@ -166,73 +292,105 @@ function MatchesTab({ data, onWatch }: { data: KankaTvData; onWatch: (slug: stri
         </button>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div role="tablist" aria-label="Gün" className="flex gap-1 rounded-lg bg-muted p-1">
-          {DAY_LABELS.map((label, i) => (
-            <button
-              key={label}
-              role="tab"
-              type="button"
-              aria-selected={dayIndex === i}
-              onClick={() => setDayIndex(i)}
-              className={cn(
-                'flex-1 rounded-md px-4 py-1.5 text-sm font-semibold transition-colors sm:flex-none',
-                dayIndex === i ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {liveNow.length > 0 && (
-          <span className="flex items-center gap-2 text-sm font-semibold text-live">
-            <span className="size-2 animate-pulse rounded-full bg-live" aria-hidden="true" />
-            {liveNow.length} maç canlı
-          </span>
-        )}
-      </div>
-
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-        {[{ slug: 'all' as const, name: 'Tümü' }, ...LEAGUES].map((l) => (
+      <div role="tablist" aria-label="Spor" className="grid grid-cols-3 gap-2">
+        {SPORTS.map((s) => (
           <button
-            key={l.slug}
+            key={s.slug}
+            role="tab"
             type="button"
-            onClick={() => setLeague(l.slug)}
-            aria-pressed={league === l.slug}
+            aria-selected={sport === s.slug}
+            onClick={() => setSport(s.slug)}
             className={cn(
-              'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
-              league === l.slug
+              'flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition-colors',
+              sport === s.slug
                 ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border text-muted-foreground hover:text-foreground',
+                : 'border-border bg-card text-foreground hover:bg-muted',
             )}
           >
-            {l.name}
+            {s.name}
+            {liveCounts[s.slug] > 0 && (
+              <span
+                className={cn(
+                  'rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
+                  sport === s.slug ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-live text-live-foreground',
+                )}
+              >
+                {liveCounts[s.slug]}
+                <span className="sr-only"> canlı</span>
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {groups.length === 0 ? (
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div role="tablist" aria-label="Gün" className="flex gap-1 rounded-lg bg-muted p-1">
+          {DAYS.map((d) => (
+            <button
+              key={d.offset}
+              role="tab"
+              type="button"
+              aria-selected={day === d.offset}
+              onClick={() => setDay(d.offset)}
+              className={cn(
+                'flex-1 rounded-md px-4 py-1.5 text-sm font-semibold transition-colors md:flex-none',
+                day === d.offset ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+        <label className="relative flex md:w-72">
+          <span className="sr-only">Takım ya da lig ara</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Takım ya da lig ara"
+            className="h-10 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            aria-pressed={filter === f.key}
+            className={cn(
+              'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
+              filter === f.key
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {f.key === 'in' && <span className="size-1.5 animate-pulse rounded-full bg-live" aria-hidden="true" />}
+            {f.label}
+            {f.key === 'in' && liveHere > 0 && <span className="tabular-nums">({liveHere})</span>}
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+          {isLoading && !data ? 'Yükleniyor…' : `${total} maç · ${board.competitions.length} lig`}
+        </span>
+      </div>
+
+      {board.failed ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-          Bu gün için seçili ligde maç yok.
+          Skorlar şu an alınamadı. Birkaç saniye içinde tekrar denenecek.
+        </p>
+      ) : competitions.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+          {filter === 'in' ? 'Şu an canlı maç yok.' : 'Bu seçime uygun maç bulunamadı.'}
         </p>
       ) : (
-        groups.map((g) => (
-          <section key={g.league.slug} aria-labelledby={`lg-${g.league.slug}`} className="overflow-hidden rounded-xl border border-border bg-card">
-            <h2
-              id={`lg-${g.league.slug}`}
-              className="flex items-center justify-between border-b border-border px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
-            >
-              <span className="text-foreground">{g.league.name}</span>
-              <span className="text-muted-foreground">{g.league.country}</span>
-            </h2>
-            <ul>
-              {g.matches.map((m) => (
-                <MatchRow key={m.id} match={m} />
-              ))}
-            </ul>
-          </section>
-        ))
+        <CompetitionList key={`${sport}-${day}-${filter}-${deferredQuery}`} competitions={competitions} sport={sport} />
       )}
+
+      <p className="text-xs text-muted-foreground">Son güncelleme: {timeFormat.format(new Date(board.updatedAt))}</p>
     </div>
   )
 }
@@ -300,15 +458,14 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
   )
 }
 
-export function KankaTvBoard({ initial }: { initial: KankaTvData }) {
-  const { data = initial } = useSWR('/api/kankatv', fetcher, {
-    fallbackData: initial,
-    refreshInterval: (latest) => (latest?.matches.some((m) => m.state === 'in') ? 30_000 : 120_000),
-    revalidateOnFocus: true,
+export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: ScoreBoard; initialChannels: Channel[] }) {
+  const { data: channels = initialChannels } = useSWR<Channel[]>('/api/kankatv/channels', fetcher, {
+    fallbackData: initialChannels,
+    refreshInterval: 120_000,
   })
   const [tab, setTab] = useState<'matches' | 'channels'>('matches')
-  const [channel, setChannel] = useState<string>(() => initial.channels.find((c) => c.live)?.slug ?? initial.channels[0].slug)
-  const liveCount = data.matches.filter((m) => m.state === 'in').length
+  const [channel, setChannel] = useState<string>(() => initialChannels.find((c) => c.live)?.slug ?? initialChannels[0].slug)
+  const totalLive = Object.values(initialBoard.liveCounts).reduce((a, b) => a + b, 0)
 
   const watch = (slug: string) => {
     setChannel(slug)
@@ -326,14 +483,14 @@ export function KankaTvBoard({ initial }: { initial: KankaTvData }) {
             <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">
               Kanka<span className="text-primary">TV</span>
             </h1>
-            {liveCount > 0 && (
+            {totalLive > 0 && (
               <span className="rounded-md bg-live px-2 py-0.5 text-[10px] font-bold uppercase text-live-foreground">
-                {liveCount} canlı
+                {totalLive} canlı
               </span>
             )}
           </span>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground text-pretty">
-            Avrupa’nın 6 büyük liginde günün maçları ve canlı skorlar kendiliğinden güncellenir. Açık kanallar yayındayken buradan ücretsiz izle.
+            Futbol, basketbol ve voleybolda dünyadaki tüm liglerin canlı skorları ve başlamamış maçları kendiliğinden güncellenir. Açık kanallar yayındayken buradan ücretsiz izle.
           </p>
         </div>
         <div role="tablist" aria-label="KankaTV" className="flex gap-1 rounded-lg bg-muted p-1">
@@ -361,15 +518,10 @@ export function KankaTvBoard({ initial }: { initial: KankaTvData }) {
       </header>
 
       {tab === 'matches' ? (
-        <MatchesTab data={data} onWatch={watch} />
+        <MatchesTab initialBoard={initialBoard} liveChannel={channels.find((c) => c.live)} onWatch={watch} />
       ) : (
-        <ChannelsTab channels={data.channels} selected={channel} onSelect={setChannel} />
+        <ChannelsTab channels={channels} selected={channel} onSelect={setChannel} />
       )}
-
-      <p className="text-xs text-muted-foreground">
-        Son güncelleme: {timeFormat.format(new Date(data.updatedAt))} · Lig: {leagueName('eng.1')}, {leagueName('esp.1')},{' '}
-        {leagueName('ita.1')}, {leagueName('ger.1')}, {leagueName('fra.1')}, {leagueName('por.1')}
-      </p>
     </div>
   )
 }

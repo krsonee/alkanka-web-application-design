@@ -1,8 +1,7 @@
-import { getKankaTvData } from '@/lib/kankatv'
+import { getScoreBoard, parseDay, parseSport } from '@/lib/kankatv'
 
-export const revalidate = 30
-
-export async function GET() {
-  const data = await getKankaTvData()
-  return Response.json(data, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } })
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const board = await getScoreBoard(parseSport(searchParams.get('sport')), parseDay(searchParams.get('day')))
+  return Response.json(board, { headers: { 'Cache-Control': 'public, s-maxage=20, stale-while-revalidate=40' } })
 }
