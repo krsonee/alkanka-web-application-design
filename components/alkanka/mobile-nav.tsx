@@ -3,8 +3,8 @@ import { CircleDot, Home, LayoutGrid, ShoppingBag, UserPlus } from 'lucide-react
 const ITEMS = [
   { label: 'Ana', href: '/', icon: Home },
   { label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
-  { label: 'Çark', href: '/oyunlar/cark', icon: CircleDot, primary: true },
-  { label: 'Market', href: '/market', icon: ShoppingBag },
+  { label: 'Çark', href: '/oyunlar/cark', icon: CircleDot, primary: true, tour: 'mobile-cark' },
+  { label: 'Market', href: '/market', icon: ShoppingBag, tour: 'mobile-market' },
   { label: 'Kayıt', href: '#kayit', icon: UserPlus },
 ]
 
@@ -19,7 +19,7 @@ export function MobileNav() {
           const Icon = item.icon
           return (
             <li key={item.label}>
-              <a href={item.href} className="flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground">
+              <a href={item.href} data-tour={'tour' in item ? item.tour : undefined} className="flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground">
                 <span
                   className={
                     item.primary

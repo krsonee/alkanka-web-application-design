@@ -19,6 +19,7 @@ import {
   Megaphone,
   Percent,
   ShoppingBag,
+  Smartphone,
   Ticket,
   Trophy,
   type LucideIcon,
@@ -43,6 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'etkinlikler', label: 'Biletler', href: '/biletler', icon: Ticket },
   { id: 'tahminler', label: 'Tahminler', href: '/tahminler', icon: Flag },
   { id: 'siralama', label: 'Sıralama', href: '/siralama', icon: Trophy },
+  { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone, badge: '+500' },
   { id: 'sss', label: 'SSS', href: '/sss', icon: HelpCircle },
 ]
 

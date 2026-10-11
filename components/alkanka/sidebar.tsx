@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { NAV_ITEMS, TELEGRAM_URL } from './data'
 import { JakoAvatar } from './jako'
 import { BrandLogo, LogoSelector } from './logo-selector'
+import { TourButton } from './app/site-tour'
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
@@ -22,6 +23,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             key={item.id}
             href={item.href}
             onClick={onNavigate}
+            data-tour-nav={item.id}
             aria-current={isActive ? 'page' : undefined}
             className={cn(
               'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
@@ -66,6 +68,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
     <>
       <div className="flex-1 overflow-y-auto px-3 py-4 no-scrollbar">
         <NavList onNavigate={onNavigate} />
+        <TourButton className="mt-0.5 w-full" />
       </div>
       <div className="flex flex-col gap-3 border-t border-border p-3">
         <TelegramCard />
