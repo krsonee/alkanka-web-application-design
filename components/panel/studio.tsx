@@ -577,6 +577,7 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
   const [message, setMessage] = useState('')
   const [pending, start] = useTransition()
   const [uploading, setUploading] = useState(false)
+  const [reading, setReading] = useState(false)
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
 
   function extract() {
@@ -596,6 +597,33 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
       }
       setMessage(res.message ?? '')
     })
+  }
+
+  async function fromScreenshot(file: File) {
+    setMessage('')
+    setReading(true)
+    const form = new FormData()
+    form.set('file', file)
+    form.set('domain', draft.domain)
+    try {
+      const res = await fetch('/api/studio/brand-screenshot', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) return setMessage(data.error)
+      const b = data.brand as { name: string; domain: string; logo: string; colors: string[]; font: string }
+      set({
+        name: draft.name || b.name,
+        domain: b.domain || draft.domain,
+        logo: b.logo || draft.logo,
+        logoUrl: b.logo ? `/api/studio/file/${b.logo.replace(/^studio\//, '')}` : draft.logoUrl,
+        colors: b.colors.length ? b.colors : draft.colors,
+        font: b.font || draft.font,
+      })
+      setMessage(data.message ?? '')
+    } catch {
+      setMessage('Ekran görüntüsü işlenemedi, tekrar dene.')
+    } finally {
+      setReading(false)
+    }
   }
 
   async function uploadLogo(file: File) {
@@ -647,6 +675,27 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
             {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Globe className="size-4" aria-hidden />}
             Siteden çek
           </button>
+        </div>
+        <div className="flex flex-col gap-2 rounded-xl border border-dashed border-border p-3 md:flex-row md:items-center md:justify-between">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Site bot korumasındaysa ya da yanlış veri gelirse: sitenin ana sayfasının ekran görüntüsünü yükle. Yapay zeka logoyu keser, renkleri ve font
+            stilini çıkarır.
+          </p>
+          <label className={cn(ghostBtn, 'shrink-0 cursor-pointer')}>
+            {reading ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Upload className="size-3.5" aria-hidden />}
+            {reading ? 'Okunuyor...' : 'Ekran görüntüsünden çek'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="sr-only"
+              disabled={reading}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) fromScreenshot(f)
+                e.target.value = ''
+              }}
+            />
+          </label>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <label className={label}>
