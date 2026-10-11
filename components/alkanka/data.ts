@@ -46,8 +46,10 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'market', label: 'Puan marketi', href: '/market', icon: ShoppingBag },
   { id: 'gorevler', label: 'Görevler', href: '/gorevler', icon: ListChecks },
   { id: 'etkinlikler', label: 'Biletler', href: '/biletler', icon: Ticket },
-  { id: 'tahminler', label: 'Tahminler', href: '/tahminler', icon: Flag },
+  { id: 'tahminler', label: 'Tahmin ligi', href: '/tahminler', icon: Flag },
   { id: 'siralama', label: 'Sıralama', href: '/siralama', icon: Trophy },
+  { id: 'guven', label: 'Güven merkezi', href: '/guven', icon: ShieldCheck },
+  { id: 'profil', label: 'Profilim', href: '/profil', icon: UserPlus },
   { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone, badge: '+500' },
   { id: 'sss', label: 'SSS', href: '/sss', icon: HelpCircle },
 ]
