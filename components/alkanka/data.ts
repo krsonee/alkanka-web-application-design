@@ -22,6 +22,7 @@ import {
   Percent,
   ShoppingBag,
   Smartphone,
+  Sparkles,
   Ticket,
   Trophy,
   Medal,
@@ -36,15 +37,11 @@ export type NavItem = { id: string; label: string; href: string; icon: LucideIco
 export const NAV_ITEMS: NavItem[] = [
   { id: 'anasayfa', label: 'Ana sayfa', href: '/', icon: Home },
   { id: 'siteler', label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
-  { id: 'bonuslar', label: 'Bonuslar', href: '/bonuslar', icon: BadgePercent },
+  { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
   { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, badge: 'Canlı' },
-  { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'firsatlar', label: 'Günün fırsatları', href: '/firsatlar', icon: Zap },
-  { id: 'rehber', label: 'Rehber', href: '/rehber', icon: BookOpen },
   { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, badge: 'Yeni' },
-  { id: 'cark', label: 'Çark', href: '/oyunlar/cark', icon: CircleDot },
-  { id: 'sandik', label: 'Sandık', href: '/oyunlar/sandik', icon: Gift },
   { id: 'turnuvalar', label: 'Turnuvalar', href: '/turnuvalar', icon: Swords },
   { id: 'market', label: 'Puan marketi', href: '/market', icon: ShoppingBag },
   { id: 'gorevler', label: 'Görevler', href: '/gorevler', icon: ListChecks },
@@ -57,6 +54,28 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone, badge: '+500' },
   { id: 'sss', label: 'SSS', href: '/sss', icon: HelpCircle },
 ]
+
+export type NavGroup = { kind: 'group'; id: string; label: string; icon: LucideIcon; items: NavItem[] }
+export type NavEntry = (NavItem & { kind?: 'item' }) | NavGroup
+
+const EVENT_HUB_IDS = ['gorevler', 'tahminler', 'etkinlikler', 'turnuvalar', 'market']
+
+/** Sidebar tree: the event-hub pages sit together under one roof, in the order the community asked for. */
+export const NAV_TREE: NavEntry[] = (() => {
+  const hub: NavGroup = {
+    kind: 'group',
+    id: 'etkinlik-merkezi',
+    label: 'Görev & Etkinlik Merkezi',
+    icon: Sparkles,
+    items: EVENT_HUB_IDS.map((id) => NAV_ITEMS.find((i) => i.id === id)!).filter(Boolean),
+  }
+  const out: NavEntry[] = []
+  for (const item of NAV_ITEMS) {
+    if (!EVENT_HUB_IDS.includes(item.id)) out.push(item)
+    else if (!out.includes(hub)) out.push(hub)
+  }
+  return out
+})()
 
 export const SECTION_IDS = NAV_ITEMS.map((i) => i.href.split('#')[1]).filter((v, i, a) => a.indexOf(v) === i)
 

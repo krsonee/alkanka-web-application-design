@@ -1,7 +1,9 @@
+import { Suspense } from 'react'
 import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
-import { CampaignBoard } from '@/components/alkanka/partner-sites'
-import { CAMPAIGNS } from '@/components/alkanka/data'
+import { CampaignHub } from '@/components/alkanka/campaign-hub'
+import { AdFrame } from '@/components/alkanka/ad-frame'
+import { BONUSES, CAMPAIGNS, EVENTS } from '@/components/alkanka/data'
 
 export const metadata = pageMeta('kampanyalar')
 
@@ -12,16 +14,20 @@ export default function CampaignsPage() {
         image="/images/heroes/kampanyalar.png"
         eyebrow="Kampanyalar"
         title="Kampanyalar"
-        description="Turnuvalar, iadeler, freespin yağmurları ve çekilişler. Yeni kampanyalar ilk Telegram kanalına düşer."
+        description="AL KANKA etkinlikleri ve sponsor sitelerin bonusları tek yerde. Yeni kampanyalar ilk Telegram kanalına düşer."
         pose="duyuru"
         speech="Yeni kampanya düştü kankalar!"
         stats={[
-          { label: 'Aktif kampanya', value: String(CAMPAIGNS.length) },
+          { label: 'AL KANKA etkinliği', value: String(EVENTS.length) },
+          { label: 'Sponsor bonusu', value: String(BONUSES.length + CAMPAIGNS.length) },
           { label: 'Bugün bitiyor', value: String(CAMPAIGNS.filter((c) => c.hoursLeft <= 24).length) },
-          { label: 'Kategori', value: String(new Set(CAMPAIGNS.map((c) => c.tag)).size) },
         ]}
       />
-      <CampaignBoard />
+      <AdFrame page="kampanyalar">
+        <Suspense>
+          <CampaignHub />
+        </Suspense>
+      </AdFrame>
     </>
   )
 }

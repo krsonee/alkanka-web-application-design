@@ -197,6 +197,75 @@ type RawDetail = {
 
 const EVENT_KINDS: Record<number, MatchEvent['kind']> = { 1: 'goal', 2: 'yellow', 3: 'red' }
 
+/** 365Scores competition ids: top domestic leagues, UEFA club cups and national-team competitions. */
+const FIXTURE_COMPETITIONS = new Map<number, number>([
+  [572, 100], [573, 95], [7016, 90], [7, 88], [11, 87], [78, 86], [17, 85], [25, 84], [35, 83],
+  [57, 80], [73, 79], [113, 76], [649, 75], [72, 74], [570, 60],
+])
+const FIXTURE_NAME = /konferans|conference|dünya kupası|world cup|avrupa şampiyonası|euro 20|eleme|qualif/i
+
+export type Fixture = {
+  extId: number
+  league: string
+  home: string
+  away: string
+  homeLogo: string
+  awayLogo: string
+  kickoff: string
+  started: boolean
+}
+
+/** Upcoming football fixtures for a calendar day (YYYY-MM-DD, Istanbul time), most prestigious first. */
+export async function getFixtures(day: string): Promise<Fixture[]> {
+  const [y, m, d] = day.split('-')
+  if (!y || !m || !d) return []
+  try {
+    const date = `${d}/${m}/${y}`
+    const res = await fetch(
+      `${API}/games/allscores/?${BASE_QUERY}&sports=1&startDate=${date}&endDate=${date}&showOdds=false&onlyMajorGames=false`,
+      { headers: HEADERS, next: { revalidate: 900 } },
+    )
+    if (!res.ok) return []
+    const raw = (await res.json()) as RawScores
+    const comps = new Map((raw.competitions ?? []).map((c) => [c.id, c]))
+    const rank = (id: number) => {
+      const c = comps.get(id)
+      if (!c) return -1
+      return FIXTURE_COMPETITIONS.get(id) ?? (FIXTURE_NAME.test(c.name) && !/women|kadın|u1\d|u2\d/i.test(c.name) ? 70 : -1)
+    }
+    return (raw.games ?? [])
+      .filter((g) => rank(g.competitionId) >= 0)
+      .sort((a, b) => rank(b.competitionId) - rank(a.competitionId) || a.startTime.localeCompare(b.startTime))
+      .map((g) => ({
+        extId: g.id,
+        league: tidy(comps.get(g.competitionId)?.name),
+        home: g.homeCompetitor.name.trim(),
+        away: g.awayCompetitor.name.trim(),
+        homeLogo: crest(g.homeCompetitor.id, g.homeCompetitor.imageVersion),
+        awayLogo: crest(g.awayCompetitor.id, g.awayCompetitor.imageVersion),
+        kickoff: new Date(g.startTime).toISOString(),
+        started: g.statusGroup === 3 || g.statusGroup === 4,
+      }))
+  } catch {
+    return []
+  }
+}
+
+/** Final score of a finished game, or null while it is still to be played or in progress. */
+export async function getFinalScore(id: number): Promise<{ home: number; away: number } | null> {
+  try {
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store' })
+    if (!res.ok) return null
+    const { game } = (await res.json()) as { game?: RawGame }
+    if (!game || game.statusGroup !== 4) return null
+    const home = game.homeCompetitor.score
+    const away = game.awayCompetitor.score
+    return typeof home === 'number' && typeof away === 'number' && home >= 0 && away >= 0 ? { home, away } : null
+  } catch {
+    return null
+  }
+}
+
 export async function getMatchDetail(id: number): Promise<MatchDetail> {
   try {
     const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, next: { revalidate: 30 } })
@@ -260,7 +329,7 @@ async function getKickStreams(categoryId: number, group: 'slot' | 'yayinci', tag
       group,
       tag,
       live: true,
-      embedUrl: `https://player.kick.com/${encodeURIComponent(s.channel.slug)}?autoplay=true&muted=true`,
+      embedUrl: `https://player.kick.com/${encodeURIComponent(s.channel.slug)}?autoplay=true&muted=false`,
       title: s.title,
       avatar: s.channel.profile_pic,
       viewers: s.viewer_count,
@@ -281,7 +350,7 @@ export async function getChannels(): Promise<Channel[]> {
     group: c.group,
     tag: c.tag,
     live: Boolean(ids[i]),
-    embedUrl: ids[i] ? `https://www.youtube.com/embed/${ids[i]}?autoplay=1&mute=1&playsinline=1` : null,
+    embedUrl: ids[i] ? `https://www.youtube.com/embed/${ids[i]}?autoplay=1&mute=0&playsinline=1` : null,
     title: null,
     avatar: null,
     viewers: null,

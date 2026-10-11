@@ -7,7 +7,7 @@ import { ArenaStage } from '@/components/alkanka/arena/arena-stage'
 import { ARENA_GAMES, ARENA_META, isArenaGame } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
 
-const MINI = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık' } as const
+const MINI = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık', zar: 'Zar At' } as const
 type MiniKey = keyof typeof MINI
 
 const TITLES: Record<string, string> = {

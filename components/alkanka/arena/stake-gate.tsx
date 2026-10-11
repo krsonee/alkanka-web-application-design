@@ -81,7 +81,9 @@ export function StakeGate({
             </span>
           </span>
         </div>
-        <div key={phase.round}>{children({ bet: phase.bet, finish })}</div>
+        <div key={phase.round} className="mx-auto w-full max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]">
+          {children({ bet: phase.bet, finish })}
+        </div>
       </div>
     )
   }

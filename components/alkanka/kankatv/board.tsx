@@ -5,6 +5,7 @@ import Link from 'next/link'
 import useSWR from 'swr'
 import { ChevronDown, Flag, Percent, Radio, Search, Tv } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PageHero } from '../page-hero'
 import {
   CHANNEL_GROUPS,
   SPORTS,
@@ -537,26 +538,19 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 md:flex-row md:items-end md:justify-between md:p-6">
-        <div className="flex flex-col gap-2">
-          <span className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Tv className="size-5" aria-hidden="true" />
-            </span>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">
-              Kanka<span className="text-primary">TV</span>
-            </h1>
-            {totalLive > 0 && (
-              <span className="rounded-md bg-live px-2 py-0.5 text-[10px] font-bold uppercase text-live-foreground">
-                {totalLive} canlı
-              </span>
-            )}
-          </span>
-          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground text-pretty">
-            Futbol, basketbol ve voleybolda dünyadaki tüm liglerin canlı skorları ve başlamamış maçları kendiliğinden güncellenir. Spor ve TV kanallarını, Türk slot ve casino yayıncılarını buradan ücretsiz izle.
-          </p>
-        </div>
-        <div role="tablist" aria-label="KankaTV" className="flex gap-1 rounded-lg bg-muted p-1">
+      <PageHero
+        eyebrow="KankaTV"
+        title="KankaTV"
+        description="Futbol, basketbol ve voleybolda tüm liglerin canlı skorları kendiliğinden güncellenir. Spor kanallarını ve Türk slot yayıncılarını buradan ücretsiz izle."
+        image="/images/heroes/kankatv.png"
+        tone="live"
+        stats={[
+          { label: 'Canlı maç', value: String(totalLive) },
+          { label: 'Yayındaki kanal', value: String(channels.filter((c) => c.live).length) },
+          { label: 'Kanal', value: String(channels.length) },
+        ]}
+      >
+        <div role="tablist" aria-label="KankaTV" className="flex w-full gap-1 rounded-lg bg-muted p-1 sm:w-fit">
           {(
             [
               ['matches', 'Maçlar'],
@@ -578,7 +572,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
             </button>
           ))}
         </div>
-      </header>
+      </PageHero>
 
       {tab === 'matches' ? (
         <MatchesTab initialBoard={initialBoard} liveChannel={channels.find((c) => c.group === 'spor' && c.live)} onWatch={watch} />

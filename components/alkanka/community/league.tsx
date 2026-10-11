@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { TeamLogo } from '../logo-context'
 import { usePoints } from '../points-context'
 import { StatusLine, useAction } from './use-action'
+import { MemberRank } from '../kp/member-rank'
 
 function Stepper({ value, onChange, label, disabled }: { value: number; onChange: (n: number) => void; label: string; disabled: boolean }) {
   return (
@@ -20,6 +21,16 @@ function Stepper({ value, onChange, label, disabled }: { value: number; onChange
         <Plus className="size-4" aria-hidden />
       </button>
     </div>
+  )
+}
+
+function Crest({ name, src }: { name: string; src: string | null }) {
+  if (!src) return <TeamLogo name={name} />
+  return (
+    <span className="flex size-12 items-center justify-center rounded-full bg-secondary p-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={`${name} logosu`} width={32} height={32} loading="lazy" className="size-8 object-contain" />
+    </span>
   )
 }
 
@@ -40,7 +51,7 @@ function MatchCard({ m, now }: { m: LeagueMatch; now: number }) {
       </header>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-          <TeamLogo name={m.home} />
+          <Crest name={m.home} src={m.homeLogo} />
           <span className="w-full truncate text-sm font-bold text-foreground">{m.home}</span>
           {!m.settled && <Stepper value={home} onChange={setHome} label={`${m.home} golü`} disabled={closed} />}
         </div>
@@ -48,7 +59,7 @@ function MatchCard({ m, now }: { m: LeagueMatch; now: number }) {
           {m.settled ? `${m.homeGoals} - ${m.awayGoals}` : 'VS'}
         </span>
         <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-          <TeamLogo name={m.away} />
+          <Crest name={m.away} src={m.awayLogo} />
           <span className="w-full truncate text-sm font-bold text-foreground">{m.away}</span>
           {!m.settled && <Stepper value={away} onChange={setAway} label={`${m.away} golü`} disabled={closed} />}
         </div>
@@ -157,7 +168,10 @@ export function League({
               {table.map((r, i) => (
                 <li key={r.userId} className={cn('flex items-center gap-3 border-b border-border py-2 text-sm last:border-0', r.userId === meId && 'font-bold')}>
                   <span className="w-5 text-center font-display font-bold tabular-nums text-muted-foreground">{i === 0 ? <Crown className="size-4 text-primary" aria-label="Lider" /> : i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-foreground">{r.name.split(' ')[0]}</span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-foreground">{r.name.split(' ')[0]}</span>
+                    <MemberRank userId={r.userId} />
+                  </span>
                   <span className="text-xs text-muted-foreground">{r.exact} tam</span>
                   <span className="w-10 text-right font-display font-bold tabular-nums text-primary">{r.points}</span>
                 </li>

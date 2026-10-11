@@ -48,7 +48,7 @@ const STEPS: Step[] = [
     targets: ['[data-tour="account"]'],
     pose: 'duyuru',
     title: 'Hesabın',
-    body: 'Kayıt olana 250 KC hoş geldin hediyesi. Giriş yaptıktan sonra oyun geçmişine buradan ulaşırsın.',
+    body: 'Kayıt olana Kanka Coin hoş geldin hediyesi. Giriş yaptıktan sonra oyun geçmişine buradan ulaşırsın.',
   },
   {
     targets: ['[data-tour-nav="uygulama"]'],
@@ -175,7 +175,7 @@ export function SiteTour() {
         className="absolute flex animate-in fade-in zoom-in-95 flex-col gap-3 rounded-2xl border border-primary/40 bg-card p-4 shadow-2xl duration-200"
       >
         <div className="flex items-start gap-3">
-          <JakoAvatar pose={step.pose} size="sm" />
+          <JakoAvatar pose={step.pose} size="md" className="max-sm:size-20" />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
               Siteyi keşfet · {index + 1}/{STEPS.length}

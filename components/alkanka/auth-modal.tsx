@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { authClient } from '@/lib/auth-client'
 import { TELEGRAM_URL } from './data'
 import { Modal } from './modal'
+import { useTexts } from './texts-context'
 
 type Mode = 'giris' | 'kayit'
 
@@ -34,6 +35,7 @@ export function AuthModal() {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { mutate } = useSWRConfig()
+  const t = useTexts()
   const refresh = () => mutate('/api/me')
 
   useEffect(() => {
@@ -99,9 +101,9 @@ export function AuthModal() {
           />
           <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
           <div className="relative flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-widest text-primary">Jako diyor ki</span>
+            <span className="text-xs font-semibold uppercase tracking-widest text-primary">{t('auth.eyebrow')}</span>
             <p className="font-display text-xl font-bold text-balance">
-              {isRegister ? 'Hoş geldin kanka! İlk girişte 250 Kanka Coin benden.' : 'Tekrar hoş geldin kanka, seri seni bekliyor.'}
+              {isRegister ? t('auth.registerSpeech') : t('auth.loginSpeech')}
             </p>
           </div>
         </div>
@@ -174,7 +176,7 @@ export function AuthModal() {
                 disabled={pending}
                 className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
               >
-                {pending ? 'Bekle kanka…' : isRegister ? 'Kayıt ol, 250 KC kap' : 'Giriş yap'}
+                {pending ? 'Bekle kanka…' : isRegister ? t('auth.registerCta') : t('auth.loginCta')}
               </button>
               <p className="text-center text-xs text-muted-foreground">
                 {isRegister ? 'Zaten hesabın var mı? ' : 'Hesabın yok mu? '}

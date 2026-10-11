@@ -19,6 +19,8 @@ import {
   testTarget,
 } from '@/lib/telegram-mirror'
 import { encodeFilter } from '@/lib/telegram-filters'
+import { saveChannels } from '@/lib/telegram-channels'
+import { BROADCAST_CHANNELS, type BroadcastSlug } from '@/lib/telegram-channels-shared'
 import type { ActionState } from './actions'
 
 const EXPIRED = { message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -112,6 +114,41 @@ export async function deleteSourceAction(form: FormData) {
 export async function rotateCronKeyAction() {
   if (!(await isAdmin())) return
   await getCronKey(true)
+  revalidatePath('/panel')
+}
+
+export async function connectInviteAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await isAdmin())) return EXPIRED
+  const botId = Number(form.get('botId'))
+  const chat = String(form.get('chat') ?? '').trim()
+  if (!botId) return { message: 'Önce bir bot seç.' }
+  if (!chat) return { message: 'Kanal kullanıcı adını ya da ID’sini yaz.' }
+  try {
+    const { connectInviteChannel } = await import('@/lib/table-invite')
+    const title = await connectInviteChannel(botId, chat)
+    revalidatePath('/panel')
+    return { ok: true, message: `"${title}" bağlandı. Masa davetleri bu kanala düşecek.` }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function saveChannelsAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await isAdmin())) return EXPIRED
+  try {
+    const input = Object.fromEntries(BROADCAST_CHANNELS.map((c) => [c.slug, String(form.get(c.slug) ?? '')])) as Record<BroadcastSlug, string>
+    const saved = await saveChannels(input)
+    revalidatePath('/panel')
+    return { ok: true, message: saved.length ? `Kaydedildi: ${saved.join(', ')}.` : 'Kanal bağlantıları temizlendi.' }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function disconnectInviteAction() {
+  if (!(await isAdmin())) return
+  const { disconnectInviteChannel } = await import('@/lib/table-invite')
+  await disconnectInviteChannel()
   revalidatePath('/panel')
 }
 

@@ -19,6 +19,7 @@ export default async function PredictionsPage() {
     <>
       <EditableHero slug="tahminler"
         image="/images/heroes/tahminler.png"
+        highlights={['Tam skor 3 puan', 'Doğru taraf 1 puan', 'Haftalık Kanka Coin ödülü']}
         eyebrow="Tahmin ligi"
         title="Skoru bil, ligde yüksel"
         description="Her hafta seçili maçlara skor tahmini yap. Tam skor 3 puan, doğru taraf 1 puan. Haftanın liderleri Kanka Coin kazanır."

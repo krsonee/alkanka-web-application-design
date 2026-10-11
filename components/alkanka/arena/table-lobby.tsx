@@ -6,6 +6,7 @@ import { ArrowLeft, Clock, Coins, Eye, Loader2, Plus, Swords, Trophy, Users, X }
 import { ARENA_META, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
+import { InviteButton } from './invite-button'
 import { formatAC, usePoints } from '../points-context'
 import type { Remote, RemoteAction } from './remote'
 import { TavlaPvp } from './tavla'
@@ -14,6 +15,7 @@ import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
 import { HeadGame } from './head-game'
+import { MemberRank } from '../kp/member-rank'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -51,7 +53,17 @@ const fetcher = async (url: string) => {
 
 const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 
-export function TableLobby({ game, settings, rules }: { game: ArenaGame; settings: ArenaGameSettings; rules: string[] }) {
+export function TableLobby({
+  game,
+  settings,
+  rules,
+  invitedId = null,
+}: {
+  game: ArenaGame
+  settings: ArenaGameSettings
+  rules: string[]
+  invitedId?: string | null
+}) {
   const { member, points, requireLogin, refresh } = usePoints()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [stake, setStake] = useState(settings.bets[0] ?? 25)
@@ -81,10 +93,26 @@ export function TableLobby({ game, settings, rules }: { game: ArenaGame; setting
   const watchable = (data?.open ?? []).filter((t) => t.status === 'oynaniyor' && t.seat < 0)
   const mine = data?.mine ?? []
   const tour = (data?.tournament ?? []).filter((t) => t.game === game)
+  const invited = invitedId ? open.find((t) => t.id === invitedId) : undefined
+  if (invited) open.sort((a, b) => (a.id === invitedId ? -1 : b.id === invitedId ? 1 : 0))
+  const invitedMine = invitedId != null && mine.some((t) => t.id === invitedId)
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section aria-labelledby="lobby-title" className="flex flex-col gap-4">
+        {invitedId && data && !invitedMine && (
+          <p
+            role="status"
+            className={cn(
+              'rounded-xl border p-3 text-sm',
+              invited ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-card text-muted-foreground',
+            )}
+          >
+            {invited
+              ? `${invited.players.find((p) => !p.bot)?.name ?? 'Bir kanka'} seni masasına çağırıyor. Aşağıdaki "Otur" butonuyla katıl.`
+              : 'Davet edildiğin masa doldu ya da kapandı. Diğer açık masalara göz at veya kendin bir masa aç.'}
+          </p>
+        )}
         {tour.length > 0 && (
           <div className="flex flex-col gap-2 rounded-2xl border border-primary bg-primary/10 p-4">
             {tour.map((t) => (
@@ -129,7 +157,7 @@ export function TableLobby({ game, settings, rules }: { game: ArenaGame; setting
             </p>
           )}
           {open.map((t) => (
-            <TableRowCard key={t.id} t={t}>
+            <TableRowCard key={t.id} t={t} highlight={t.id === invitedId}>
               <button
                 disabled={busy || (member != null && points < t.stake)}
                 onClick={async () => {
@@ -298,12 +326,17 @@ function OptionGroup({
   )
 }
 
-export function TableRowCard({ t, children }: { t: TableSummary; children: React.ReactNode }) {
+export function TableRowCard({ t, children, highlight = false }: { t: TableSummary; children: React.ReactNode; highlight?: boolean }) {
   const host = t.players.find((p) => !p.bot)?.name ?? 'Kanka'
   const humans = t.players.filter((p) => !p.bot).length
   const meta = ARENA_META[t.game as ArenaGame]
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:p-4">
+    <div
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3 sm:p-4',
+        highlight ? 'border-primary ring-2 ring-primary/40' : 'border-border',
+      )}
+    >
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary font-bold text-foreground">
           {host.slice(0, 1).toUpperCase()}
@@ -394,10 +427,17 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   return (
     <RoomShell onLeave={onLeave} title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm">
-        <span className="min-w-0 truncate font-semibold text-foreground">
-          {data.team
-            ? `${names[0]} & ${names[2]} vs ${names[1]} & ${names[3]}`
-            : names.join(' · ')}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground">
+          {(data.team ? [0, 2, 1, 3] : names.map((_, i) => i)).map((seatNo, i) => {
+            const p = data.players.find((pl) => pl.seat === seatNo)
+            return (
+              <span key={seatNo} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-muted-foreground">{data.team && i === 2 ? 'vs' : data.team ? '&' : '·'}</span>}
+                <span className="truncate">{names[seatNo]}</span>
+                <MemberRank userId={p?.id} />
+              </span>
+            )
+          })}
         </span>
         <span className="flex items-center gap-1 text-muted-foreground">
           {spectator ? <Eye className="size-3.5" aria-hidden="true" /> : <Clock className="size-3.5" aria-hidden="true" />}
@@ -427,6 +467,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
           <div className="flex flex-col items-center gap-4 py-10 text-center">
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
             <p className="text-pretty text-sm text-muted-foreground">Masan açık. Bir kanka oturduğunda oyun otomatik başlar.</p>
+            {mySeat >= 0 && !data.tournamentId && <InviteButton tableId={id} />}
             {mySeat === 0 && !data.tournamentId && (
               <button
                 disabled={busy}

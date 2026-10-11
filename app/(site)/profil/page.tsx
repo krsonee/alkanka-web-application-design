@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import Link from 'next/link'
-import { Award, Lock, Star } from 'lucide-react'
-import { getMember } from '@/lib/member'
+import { Award, ChevronRight, Gamepad2, Lock, Medal, Star, Trophy, Users } from 'lucide-react'
+import { getMember, historySummary } from '@/lib/member'
 import { SITE_URL } from '@/lib/seo'
-import { getKpConfig, getKpStatus, type KpBreakdown } from '@/lib/kanka-puan'
-import { LevelEmblem, SpecialEmblem } from '@/components/alkanka/kp/emblem'
+import { getKpConfig, getKpStatus, levelTier, type KpBreakdown } from '@/lib/kanka-puan'
+import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import {
   REFERRAL_MIN_GAMES,
   REFERRED_REWARD,
@@ -19,14 +20,19 @@ import {
   siteName,
 } from '@/lib/community'
 import { AlertsCard, ReferralCard } from '@/components/alkanka/community/profile-widgets'
+import { AccountSettings } from '@/components/alkanka/profile/account-settings'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { cn } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Profilim', robots: { index: false } }
 export const dynamic = 'force-dynamic'
 
+const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
+const TIER_BAR: Record<string, string> = { bronz: 'bg-bronze', altin: 'bg-gold', elmas: 'bg-accent', efsane: 'bg-ruby' }
+const fmt = (n: number) => n.toLocaleString('tr-TR')
+
 const KP_SOURCES: [keyof KpBreakdown, string][] = [
-  ['time', 'Sitede geçen süre'],
+  ['time', 'Sitede süre'],
   ['games', 'Oyunlar'],
   ['tasks', 'Görevler'],
   ['chat', 'Sohbet'],
@@ -34,23 +40,32 @@ const KP_SOURCES: [keyof KpBreakdown, string][] = [
   ['reviews', 'Yorumlar'],
   ['referrals', 'Davetler'],
   ['telegram', 'Telegram'],
-  ['bonus', 'Rozet ve ödüller'],
+  ['bonus', 'Rozet ödülleri'],
 ]
+
+function SectionTitle({ id, children, action }: { id: string; children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-end justify-between gap-3">
+      <h2 id={id} className="font-display text-lg font-bold text-foreground">{children}</h2>
+      {action}
+    </div>
+  )
+}
 
 export default async function ProfilePage() {
   const member = await getMember()
   if (!member) {
     return (
-      <section className="panel-gold mx-auto flex max-w-lg flex-col items-center gap-4 rounded-xl p-8 text-center">
-        <Lock className="size-8 text-primary" aria-hidden />
+      <section className="relative mx-auto flex max-w-lg flex-col items-center gap-4 overflow-hidden rounded-2xl border border-gold/25 bg-surface p-8 text-center">
+        <Lock className="size-8 text-gold" aria-hidden />
         <h1 className="font-display text-2xl font-bold text-foreground">Profilini görmek için giriş yap</h1>
         <p className="text-sm leading-relaxed text-muted-foreground">Seviye, rozetler, davet linki ve oran alarmların burada.</p>
-        <a href="#giris" className="h-11 rounded-lg bg-primary px-5 text-sm font-bold leading-[2.75rem] text-primary-foreground">Giriş yap</a>
+        <a href="#giris" className="inline-flex h-11 items-center rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground">Giriş yap</a>
       </section>
     )
   }
 
-  const [kpStatus, kpConfig, profile, code, referrals, alerts, hits, reviews, complaints] = await Promise.all([
+  const [kpStatus, kpConfig, profile, code, referrals, alerts, hits, reviews, complaints, games] = await Promise.all([
     getKpStatus(member.id),
     getKpConfig(),
     getProfile(member.id),
@@ -60,167 +75,244 @@ export default async function ProfilePage() {
     alertHits(member.id),
     myReviews(member.id),
     myComplaints(member.id),
+    historySummary(member.id),
   ])
   const { level, kp, breakdown } = kpStatus
+  const lv = level.index + 1
+  const tier = levelTier(lv)
   const ready = referrals.filter((r) => !r.rewarded && r.games >= REFERRAL_MIN_GAMES).length
   const pending = referrals.filter((r) => !r.rewarded && r.games < REFERRAL_MIN_GAMES).length
+  const maxSource = Math.max(1, ...KP_SOURCES.map(([k]) => breakdown[k]))
+  const earned = profile.badges.filter((b) => b.earned).length
+  const winRate = games.played ? Math.round((games.wins / games.played) * 100) : 0
+
+  const stats = [
+    { icon: Medal, label: 'Toplam KP', value: fmt(kp) },
+    { icon: Trophy, label: 'KP sırası', value: kpStatus.rank ? `#${kpStatus.rank}` : '—' },
+    { icon: Gamepad2, label: 'Oyun · Kazanma', value: `${fmt(games.played)} · %${winRate}` },
+    { icon: Users, label: 'Davet', value: fmt(referrals.length) },
+  ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <section aria-labelledby="seviye" className="panel-gold flex flex-col gap-5 rounded-xl p-5 md:flex-row md:items-center">
-        <LevelEmblem level={level.index + 1} size="lg" />
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h1 id="seviye" className="font-display text-2xl font-bold text-foreground">{member.name}</h1>
-            <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">Seviye {level.index + 1} · {level.name}</span>
-          </div>
-          <p className="text-sm text-muted-foreground">Rozetin: <b className="text-foreground">{level.badge}</b>{kpStatus.rank ? ` · KP sıralamasında ${kpStatus.rank}.` : ''}</p>
-          <div className="h-2.5 overflow-hidden rounded-full bg-background" role="progressbar" aria-valuenow={level.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Sonraki seviye ilerlemesi">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${level.progress}%` }} />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            <b className="text-foreground tabular-nums">{kp.toLocaleString('tr-TR')} KP</b>
-            {level.next ? ` · ${level.next.name} (${level.next.badge}) için ${(level.next.min - kp).toLocaleString('tr-TR')} KP kaldı` : ' · En yüksek seviyedesin'}
-          </p>
+    <div className="flex flex-col gap-8">
+      <section aria-labelledby="profil-ad" className={cn('overflow-hidden rounded-2xl border', TIER_BG[tier])}>
+        <div className="relative h-36 md:h-44">
+          <Image src="/images/badges/profile-cover.png" alt="" fill priority sizes="(min-width: 1024px) 1000px, 100vw" className="object-cover" />
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+          <Link
+            href="/rozetler"
+            className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-semibold text-foreground backdrop-blur hover:border-gold/50"
+          >
+            Tüm seviyeler <ChevronRight className="size-3.5" aria-hidden />
+          </Link>
         </div>
-        <Link href="/rozetler" className="h-10 shrink-0 rounded-lg border border-primary/40 px-4 text-sm font-semibold leading-10 text-primary hover:bg-primary/10">
-          Tüm seviyeler
-        </Link>
-      </section>
 
-      <section aria-labelledby="kp-kaynak" className="flex flex-col gap-3">
-        <h2 id="kp-kaynak" className="font-display text-lg font-bold text-foreground">KP nereden geldi?</h2>
-        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          {KP_SOURCES.map(([key, label]) => (
-            <li key={key} className="flex flex-col gap-0.5 rounded-xl border border-border bg-card p-3">
-              <span className="text-xs text-muted-foreground">{label}</span>
-              <span className="font-display text-lg font-bold tabular-nums text-foreground">{breakdown[key].toLocaleString('tr-TR')}</span>
-            </li>
+        <div className="relative flex flex-col gap-5 px-5 pb-5 md:flex-row md:items-end md:px-6">
+          <div className="-mt-16 shrink-0 rounded-3xl bg-background/80 p-2 backdrop-blur md:-mt-20">
+            <LevelEmblem level={lv} size="xl" />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <span className={cn('text-[11px] font-bold uppercase tracking-[0.2em]', TIER_TEXT[tier])}>
+              {TIER_NAMES[tier]} Ligi · Seviye {lv}
+            </span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h1 id="profil-ad" className="font-display text-3xl font-bold leading-none text-foreground">{member.name}</h1>
+              <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold', TIER_BG[tier], TIER_TEXT[tier])}>
+                <LevelEmblem level={lv} size="chip" />
+                {level.name}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">Rozetin: <b className="text-foreground">{level.badge}</b></p>
+          </div>
+          <div className="flex w-full flex-col gap-1.5 md:w-72">
+            <div className="flex items-baseline justify-between text-xs">
+              <span className="text-muted-foreground">{level.next ? `${level.next.name} seviyesine` : 'En yüksek seviye'}</span>
+              <span className="font-display font-bold tabular-nums text-foreground">%{level.progress}</span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-background/70" role="progressbar" aria-valuenow={level.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Sonraki seviye ilerlemesi">
+              <div className={cn('h-full rounded-full', TIER_BAR[tier])} style={{ width: `${level.progress}%` }} />
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {level.next ? `${fmt(level.next.min - kp)} KP kaldı` : 'Zirvedesin kanka!'}
+            </span>
+          </div>
+        </div>
+
+        <dl className="grid grid-cols-2 border-t border-border md:grid-cols-4">
+          {stats.map((s, i) => (
+            <div key={s.label} className={cn('flex items-center gap-3 px-5 py-4', i % 2 === 1 && 'border-l border-border', i >= 2 && 'border-t border-border md:border-t-0', i === 2 && 'md:border-l')}>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/70 text-gold">
+                <s.icon className="size-4" aria-hidden />
+              </span>
+              <div className="flex min-w-0 flex-col">
+                <dt className="truncate text-[11px] text-muted-foreground">{s.label}</dt>
+                <dd className="font-display text-base font-bold tabular-nums text-foreground">{s.value}</dd>
+              </div>
+            </div>
           ))}
-        </ul>
-        <p className="text-xs text-muted-foreground">
-          Bugün sitede {kpStatus.todayMinutes} / {kpConfig.rules.minuteDailyCap} dakika puan kazandın.
-        </p>
+        </dl>
       </section>
 
-      <section aria-labelledby="degerli" className="flex flex-col gap-3">
-        <h2 id="degerli" className="font-display text-lg font-bold text-foreground">Değerli rozetlerin</h2>
-        {kpStatus.badges.length ? (
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {kpStatus.badges.map((b) => (
-              <li key={b.id} className="flex items-center gap-3 rounded-xl border border-primary/30 bg-card p-4">
-                <SpecialEmblem icon={b.icon} tier={b.tier} />
-                <div className="flex min-w-0 flex-col">
-                  <span className="font-display text-sm font-bold text-foreground">{b.name}{b.count > 1 ? ` ×${b.count}` : ''}</span>
-                  <span className="text-xs leading-relaxed text-muted-foreground">{b.description}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Henüz değerli rozetin yok. Tahmin ligi, sohbet yarışması ve turnuvalarda birinci ol. <Link href="/rozetler" className="font-semibold text-primary underline-offset-4 hover:underline">Rozetleri gör</Link>
-          </p>
-        )}
-      </section>
+      <div className="grid gap-8 xl:grid-cols-[1fr_22rem]">
+        <div className="flex min-w-0 flex-col gap-8">
+          <section aria-labelledby="degerli" className="flex flex-col gap-3">
+            <SectionTitle id="degerli" action={<Link href="/rozetler" className="text-xs font-semibold text-gold hover:underline">Rozet salonu</Link>}>
+              Değerli rozetlerin
+            </SectionTitle>
+            {kpStatus.badges.length ? (
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {kpStatus.badges.map((b) => (
+                  <li key={b.id} className={cn('flex items-center gap-4 rounded-2xl border p-4', TIER_BG[b.tier])}>
+                    <SpecialEmblem icon={b.icon} tier={b.tier} size="lg" />
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[b.tier])}>{TIER_NAMES[b.tier]}</span>
+                      <span className="font-display text-base font-bold text-foreground">{b.name}{b.count > 1 ? ` ×${b.count}` : ''}</span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">{b.description}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex items-center gap-4 rounded-2xl border border-dashed border-border bg-card p-4">
+                <SpecialEmblem icon="trophy" tier="altin" size="md" locked />
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Henüz değerli rozetin yok. Tahmin ligi, sohbet yarışması ve turnuvalarda birinci ol, ismin parlasın.
+                </p>
+              </div>
+            )}
+          </section>
 
-      <section aria-labelledby="rozetler" className="flex flex-col gap-3">
-        <h2 id="rozetler" className="font-display text-lg font-bold text-foreground">Başarımlar</h2>
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {profile.badges.map((b) => (
-            <li key={b.id} className={cn('flex flex-col gap-2 rounded-xl border p-4', b.earned ? 'border-primary/40 bg-primary/10' : 'border-border bg-card opacity-60')}>
-              <Award className={cn('size-6', b.earned ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
-              <span className="font-display text-sm font-bold text-foreground">{b.label}</span>
-              <span className="text-xs leading-relaxed text-muted-foreground">{b.earned ? 'Kazanıldı' : b.hint}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <ReferralCard
-          url={`${SITE_URL}/davet/${code}`}
-          pending={pending}
-          ready={ready}
-          reward={REFERRER_REWARD}
-          friendReward={REFERRED_REWARD}
-          minGames={REFERRAL_MIN_GAMES}
-        />
-        <AlertsCard alerts={alerts} telegramLinked={profile.stats.telegram} />
-      </div>
-
-      {hits.length > 0 && (
-        <section aria-labelledby="eslesen" className="flex flex-col gap-3">
-          <h2 id="eslesen" className="font-display text-lg font-bold text-foreground">Alarmına uyan oranlar</h2>
-          <ul className="grid gap-2 md:grid-cols-2">
-            {hits.map((h, i) => (
-              <li key={`${h.dealId}-${i}`} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm font-semibold text-foreground">{h.odd.match}</span>
-                  <span className="truncate text-xs text-muted-foreground">{h.brand} · {h.odd.market}</span>
-                </div>
-                <a href={h.link} target="_blank" rel="noopener noreferrer sponsored" className="shrink-0 rounded-lg bg-primary px-3 py-2 font-display text-sm font-bold tabular-nums text-primary-foreground">
-                  {h.odd.newOdd.toFixed(2)}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {referrals.length > 0 && (
-        <section aria-labelledby="davetlerim" className="flex flex-col gap-3">
-          <h2 id="davetlerim" className="font-display text-lg font-bold text-foreground">Davet ettiklerin</h2>
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {referrals.map((r, i) => (
-              <li key={i} className="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-sm">
-                <span className="font-semibold text-foreground">{r.name}</span>
-                <span className={r.rewarded ? 'text-primary' : 'text-muted-foreground'}>
-                  {r.rewarded ? 'Ödül alındı' : `${Math.min(r.games, REFERRAL_MIN_GAMES)}/${REFERRAL_MIN_GAMES} oyun`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section aria-labelledby="yorumlarim" className="flex flex-col gap-3">
-          <h2 id="yorumlarim" className="font-display text-lg font-bold text-foreground">Yorumlarım</h2>
-          {reviews.length ? (
-            <ul className="flex flex-col gap-2">
-              {reviews.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 text-sm">
-                  <span className="flex items-center gap-2 font-semibold text-foreground">
-                    {siteName(r.siteId)}
-                    <span className="flex items-center gap-0.5 text-primary"><Star className="size-3.5 fill-current" aria-hidden />{r.rating}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground">{r.status === 'approved' ? 'Yayında' : r.status === 'pending' ? 'Onay bekliyor' : 'Reddedildi'}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">Henüz yorum yazmadın. <Link href="/guven" className="font-semibold text-primary underline-offset-4 hover:underline">Güven merkezine git</Link></p>
-          )}
-        </section>
-        <section aria-labelledby="sikayetlerim" className="flex flex-col gap-3">
-          <h2 id="sikayetlerim" className="font-display text-lg font-bold text-foreground">Şikâyetlerim</h2>
-          {complaints.length ? (
-            <ul className="flex flex-col gap-2">
-              {complaints.map((c) => (
-                <li key={c.id} className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="truncate font-semibold text-foreground">{siteName(c.siteId)} · {c.title}</span>
-                    <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
+          <section aria-labelledby="kp-kaynak" className="flex flex-col gap-3">
+            <SectionTitle id="kp-kaynak">KP nereden geldi?</SectionTitle>
+            <ul className="grid gap-x-6 gap-y-3 rounded-2xl border border-border bg-card p-5 sm:grid-cols-2">
+              {KP_SOURCES.map(([key, label]) => (
+                <li key={key} className="flex flex-col gap-1.5">
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-display font-bold tabular-nums text-foreground">{fmt(breakdown[key])}</span>
                   </div>
-                  {c.reply && <p className="text-xs leading-relaxed text-muted-foreground">Yanıt: {c.reply}</p>}
+                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full rounded-full bg-gold" style={{ width: `${(breakdown[key] / maxSource) * 100}%` }} />
+                  </div>
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">Açık şikâyetin yok.</p>
+            <p className="text-xs text-muted-foreground">
+              Bugün sitede {kpStatus.todayMinutes} / {kpConfig.rules.minuteDailyCap} dakika puan kazandın.
+            </p>
+          </section>
+
+          <section aria-labelledby="basarim" className="flex flex-col gap-3">
+            <SectionTitle id="basarim" action={<span className="text-xs tabular-nums text-muted-foreground">{earned}/{profile.badges.length}</span>}>
+              Başarımlar
+            </SectionTitle>
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {profile.badges.map((b) => (
+                <li key={b.id} className={cn('flex flex-col gap-2 rounded-2xl border p-4', b.earned ? 'border-gold/35 bg-gold/10' : 'border-border bg-card')}>
+                  <span className={cn('flex size-9 items-center justify-center rounded-full', b.earned ? 'bg-gold text-gold-foreground' : 'bg-muted text-muted-foreground')}>
+                    {b.earned ? <Award className="size-4" aria-hidden /> : <Lock className="size-4" aria-hidden />}
+                  </span>
+                  <span className={cn('font-display text-sm font-bold', b.earned ? 'text-foreground' : 'text-muted-foreground')}>{b.label}</span>
+                  <span className="text-xs leading-relaxed text-muted-foreground">{b.earned ? 'Kazanıldı' : b.hint}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ReferralCard
+              url={`${SITE_URL}/davet/${code}`}
+              pending={pending}
+              ready={ready}
+              reward={REFERRER_REWARD}
+              friendReward={REFERRED_REWARD}
+              minGames={REFERRAL_MIN_GAMES}
+            />
+            <AlertsCard alerts={alerts} telegramLinked={profile.stats.telegram} />
+          </div>
+
+          {hits.length > 0 && (
+            <section aria-labelledby="eslesen" className="flex flex-col gap-3">
+              <SectionTitle id="eslesen">Alarmına uyan oranlar</SectionTitle>
+              <ul className="grid gap-2 md:grid-cols-2">
+                {hits.map((h, i) => (
+                  <li key={`${h.dealId}-${i}`} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm font-semibold text-foreground">{h.odd.match}</span>
+                      <span className="truncate text-xs text-muted-foreground">{h.brand} · {h.odd.market}</span>
+                    </div>
+                    <a href={h.link} target="_blank" rel="noopener noreferrer sponsored" className="shrink-0 rounded-lg bg-primary px-3 py-2 font-display text-sm font-bold tabular-nums text-primary-foreground">
+                      {h.odd.newOdd.toFixed(2)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
-        </section>
+
+          {referrals.length > 0 && (
+            <section aria-labelledby="davetlerim" className="flex flex-col gap-3">
+              <SectionTitle id="davetlerim">Davet ettiklerin</SectionTitle>
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {referrals.map((r, i) => (
+                  <li key={i} className="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-sm">
+                    <span className="font-semibold text-foreground">{r.name}</span>
+                    <span className={r.rewarded ? 'text-gold' : 'text-muted-foreground'}>
+                      {r.rewarded ? 'Ödül alındı' : `${Math.min(r.games, REFERRAL_MIN_GAMES)}/${REFERRAL_MIN_GAMES} oyun`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+
+        <aside className="flex flex-col gap-8">
+          <section aria-labelledby="hesap" className="flex flex-col gap-3">
+            <SectionTitle id="hesap">Hesap ayarları</SectionTitle>
+            <AccountSettings email={member.email} />
+          </section>
+
+          <section aria-labelledby="yorumlarim" className="flex flex-col gap-3">
+            <SectionTitle id="yorumlarim">Yorumlarım</SectionTitle>
+            {reviews.length ? (
+              <ul className="flex flex-col gap-2">
+                {reviews.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 text-sm">
+                    <span className="flex items-center gap-2 font-semibold text-foreground">
+                      {siteName(r.siteId)}
+                      <span className="flex items-center gap-0.5 text-gold"><Star className="size-3.5 fill-current" aria-hidden />{r.rating}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">{r.status === 'approved' ? 'Yayında' : r.status === 'pending' ? 'Onay bekliyor' : 'Reddedildi'}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                Henüz yorum yazmadın. <Link href="/guven" className="font-semibold text-gold underline-offset-4 hover:underline">Güven merkezine git</Link>
+              </p>
+            )}
+          </section>
+
+          <section aria-labelledby="sikayetlerim" className="flex flex-col gap-3">
+            <SectionTitle id="sikayetlerim">Şikâyetlerim</SectionTitle>
+            {complaints.length ? (
+              <ul className="flex flex-col gap-2">
+                {complaints.map((c) => (
+                  <li key={c.id} className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate font-semibold text-foreground">{siteName(c.siteId)} · {c.title}</span>
+                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
+                    </div>
+                    {c.reply && <p className="text-xs leading-relaxed text-muted-foreground">Yanıt: {c.reply}</p>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">Açık şikâyetin yok.</p>
+            )}
+          </section>
+        </aside>
       </div>
     </div>
   )

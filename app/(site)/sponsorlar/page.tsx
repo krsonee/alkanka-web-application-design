@@ -2,6 +2,7 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { MainSponsor, SponsorDirectory } from '@/components/alkanka/partner-sites'
 import { SPONSORS } from '@/components/alkanka/data'
+import { AdFrame } from '@/components/alkanka/ad-frame'
 
 export const metadata = pageMeta('sponsorlar')
 
@@ -24,8 +25,10 @@ export default function SponsorsPage() {
           { label: 'Ort. çekim', value: '18 dk' },
         ]}
       />
-      <MainSponsor />
-      <SponsorDirectory />
+      <AdFrame page="sponsorlar">
+        <MainSponsor />
+        <SponsorDirectory />
+      </AdFrame>
     </>
   )
 }

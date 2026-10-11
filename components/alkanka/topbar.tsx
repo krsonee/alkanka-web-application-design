@@ -9,9 +9,11 @@ import { TELEGRAM_URL } from './data'
 import { BrandLogo } from './logo-selector'
 import { MobileDrawer } from './sidebar'
 import { formatAC, usePoints } from './points-context'
+import { MemberRank } from './kp/member-rank'
 
 function PointsPill() {
-  const { points, lastGain } = usePoints()
+  const { points, lastGain, member } = usePoints()
+  if (!member) return null
   return (
     <div data-tour="coins" className="relative flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5">
       <Coins className="size-4 text-primary" aria-hidden="true" />
@@ -62,11 +64,19 @@ function AccountArea() {
   return (
     <div data-tour="account" className="flex items-center gap-1.5">
       <Link
-        href="/oyunlar/gecmis"
+        href="/profil"
+        aria-label={`Profilim: ${member.name}`}
         className="flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/50"
       >
-        <History className="size-3.5 text-primary" aria-hidden="true" />
         <span className="max-w-28 truncate">{member.name}</span>
+        <MemberRank userId={member.id} />
+      </Link>
+      <Link
+        href="/oyunlar/gecmis"
+        aria-label="Oyun geçmişi"
+        className="hidden size-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground sm:flex"
+      >
+        <History className="size-4" aria-hidden="true" />
       </Link>
       <button
         type="button"

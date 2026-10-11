@@ -6,8 +6,11 @@ import { LiveRail } from '@/components/alkanka/live-rail'
 import { MobileNav } from '@/components/alkanka/mobile-nav'
 import { Footer } from '@/components/alkanka/footer'
 import { AuthModal } from '@/components/alkanka/auth-modal'
+import { GuestGate } from '@/components/alkanka/guest-gate'
 import { LogoProvider } from '@/components/alkanka/logo-context'
 import { getLogos } from '@/lib/content'
+import { getSiteTexts } from '@/lib/site-texts'
+import { TextsProvider } from '@/components/alkanka/texts-context'
 import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
 import { AppPrompts } from '@/components/alkanka/app/app-prompts'
 import { SiteTour } from '@/components/alkanka/app/site-tour'
@@ -15,8 +18,9 @@ import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
 import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const logos = await getLogos()
+  const [logos, texts] = await Promise.all([getLogos(), getSiteTexts()])
   return (
+    <TextsProvider value={texts}>
     <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
@@ -32,6 +36,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         </div>
         <MobileNav />
         <AuthModal />
+        <GuestGate />
         <AppPrompts />
         <SiteTour />
         <ReferralLinker />
@@ -40,5 +45,6 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       </PointsProvider>
     </BrandProvider>
     </LogoProvider>
+    </TextsProvider>
   )
 }

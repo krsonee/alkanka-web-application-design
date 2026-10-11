@@ -79,6 +79,33 @@ function SponsorBadge({ sponsor, size = 'md' }: { sponsor: Sponsor; size?: 'sm' 
   )
 }
 
+export function SponsorLogoPlate({ sponsor, className, compact }: { sponsor: Sponsor; className?: string; compact?: boolean }) {
+  const logo = useLogos().sponsors[sponsor.id]
+  if (!logo && compact) {
+    return (
+      <span className={cn('flex items-center justify-center rounded-lg bg-background font-display text-2xl font-bold tracking-tight text-primary', className)}>
+        {sponsor.initials}
+      </span>
+    )
+  }
+  if (logo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- logos and GIF banners can come from any https host set in the panel
+      <img
+        src={logo}
+        alt={`${sponsor.name} logosu`}
+        className={cn('max-h-full w-auto max-w-[80%] object-contain transition-transform duration-300 group-hover:scale-105', className)}
+      />
+    )
+  }
+  return (
+    <span className={cn('flex flex-col items-center gap-1 text-center', className)}>
+      <span className="font-display text-4xl font-bold tracking-tight text-primary">{sponsor.initials}</span>
+      <span className="font-display text-sm font-bold uppercase tracking-[0.2em] text-foreground">{sponsor.name}</span>
+    </span>
+  )
+}
+
 function Meta({ sponsor }: { sponsor: Sponsor }) {
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -121,16 +148,18 @@ function TierTag({ tier }: { tier: SponsorTier }) {
 
 export function MainSponsor({ sponsor = SPONSORS.find((s) => s.tier === 'ana')! }: { sponsor?: Sponsor }) {
   return (
-    <article className="panel-gold flex flex-col gap-5 rounded-xl p-5 md:flex-row md:items-center">
-      <div className="flex items-center gap-4 md:w-72">
-        <SponsorBadge sponsor={sponsor} size="lg" />
-        <div className="flex flex-col gap-1">
+    <article className="panel-gold group flex flex-col overflow-hidden rounded-xl md:flex-row md:items-stretch">
+      <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-6 md:aspect-auto md:w-80 md:border-r md:border-b-0">
+        <SponsorLogoPlate sponsor={sponsor} className="md:max-h-28" />
+        <span className="absolute top-3 left-3">
           <TierTag tier="ana" />
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="font-display text-xl font-bold text-foreground">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
-      </div>
-      <div className="flex flex-1 flex-col gap-2">
         <p className="font-display text-2xl font-bold text-primary text-balance">{sponsor.welcome}</p>
         <ul className="grid gap-1.5 sm:grid-cols-2">
           {sponsor.perks.map((p) => (
@@ -140,28 +169,32 @@ export function MainSponsor({ sponsor = SPONSORS.find((s) => s.tier === 'ana')! 
             </li>
           ))}
         </ul>
+        <GoButton label="Hemen kayıt ol" className="mt-2 h-12 sm:self-start sm:px-8" />
       </div>
-      <GoButton label="Hemen kayıt ol" className="h-12 md:w-48" />
     </article>
   )
 }
 
 function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
   return (
-    <li className="panel-gold flex flex-col gap-4 rounded-xl p-4 transition-colors hover:border-primary/60">
-      <div className="flex items-center gap-3">
-        <SponsorBadge sponsor={sponsor} />
-        <div className="flex min-w-0 flex-1 flex-col">
+    <li className="panel-gold group flex flex-col overflow-hidden rounded-xl transition-colors hover:border-primary/60">
+      <div className="relative flex aspect-[16/8] items-center justify-center border-b border-border bg-background p-4">
+        <SponsorLogoPlate sponsor={sponsor} />
+        <span className="absolute top-3 right-3">
+          <TierTag tier={sponsor.tier} />
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex items-center justify-between gap-2">
           <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <TierTag tier={sponsor.tier} />
+        <div className="flex flex-col gap-1">
+          <p className="font-display text-lg font-bold text-primary">{sponsor.welcome}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{sponsor.perks.join(' · ')}</p>
+        </div>
+        <GoButton className="mt-auto" />
       </div>
-      <div className="flex flex-col gap-1">
-        <p className="text-sm font-semibold text-primary">{sponsor.welcome}</p>
-        <p className="text-sm leading-relaxed text-muted-foreground">{sponsor.perks.join(' · ')}</p>
-      </div>
-      <GoButton className="mt-auto" />
     </li>
   )
 }
@@ -370,14 +403,16 @@ export function BonusBoard() {
           </Chip>
         ))}
       </div>
-      <ul className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {list.map((b) => {
           const s = sponsorById(b.sponsorId)
           return (
-            <li key={b.id} className="panel-gold flex overflow-hidden rounded-xl">
-              <div className="flex w-24 shrink-0 flex-col items-center justify-center gap-1 border-r border-dashed border-primary/40 bg-primary/10 p-3 text-center">
-                {s && <SponsorBadge sponsor={s} size="sm" />}
-                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{b.type}</span>
+            <li key={b.id} className="panel-gold group flex flex-col overflow-hidden rounded-xl">
+              <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-4">
+                {s && <SponsorLogoPlate sponsor={s} />}
+                <span className="absolute top-3 left-3 rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
+                  {b.type}
+                </span>
               </div>
               <div className="flex flex-1 flex-col gap-3 p-4">
                 <div className="flex flex-col gap-0.5">

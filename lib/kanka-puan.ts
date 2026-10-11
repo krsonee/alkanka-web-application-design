@@ -120,24 +120,37 @@ export type KpBreakdown = { time: number; games: number; tasks: number; chat: nu
 const SOURCE_KEYS: (keyof KpBreakdown)[] = ['time', 'games', 'tasks', 'chat', 'league', 'reviews', 'referrals', 'telegram', 'bonus']
 
 /** Per-user KP, computed from activity tables so every game, task and chat message counts without extra hooks. */
-async function totals(rules: PointRules, userId: string | null, limit = 1) {
+export type RankPeriod = 'gun' | 'hafta' | 'ay' | 'tum'
+
+const TRUNC: Record<Exclude<RankPeriod, 'tum'>, string> = { gun: 'day', hafta: 'week', ay: 'month' }
+
+/** Start of the current Istanbul day/week/month as timestamptz; '-infinity' for all-time. */
+function periodStart(period: RankPeriod) {
+  if (period === 'tum') return sql`'-infinity'::timestamptz`
+  return sql`(date_trunc(${TRUNC[period]}, now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`
+}
+
+async function totals(rules: PointRules, userId: string | null, limit = 1, period: RankPeriod = 'tum') {
+  const since = periodStart(period)
   const [chat, tg] = await Promise.all([tableExists('tg_chat_messages'), tableExists('tg_links')])
   const chatCte = chat
     ? sql`SELECT user_id, sum(least(n, ${rules.chatDailyCap}))::bigint AS v FROM (
         SELECT user_id, date_trunc('day', created_at AT TIME ZONE 'Europe/Istanbul') AS d, count(*) AS n
-        FROM tg_chat_messages WHERE user_id IS NOT NULL GROUP BY 1, 2) x GROUP BY user_id`
+        FROM tg_chat_messages WHERE user_id IS NOT NULL AND created_at >= ${since} GROUP BY 1, 2) x GROUP BY user_id`
     : sql`SELECT NULL::text AS user_id, 0::bigint AS v WHERE false`
-  const tgCte = tg ? sql`SELECT user_id, 1::bigint AS v FROM tg_links` : sql`SELECT NULL::text AS user_id, 0::bigint AS v WHERE false`
+  const tgCte = tg
+    ? sql`SELECT user_id, 1::bigint AS v FROM tg_links WHERE coalesce(linked_at, now()) >= ${since}`
+    : sql`SELECT NULL::text AS user_id, 0::bigint AS v WHERE false`
   const r = await rows(sql`WITH
     g AS (SELECT user_id, count(*) FILTER (WHERE mode <> 'odul') AS games, count(*) FILTER (WHERE mode = 'odul' AND game = 'gorev') AS tasks
-      FROM game_history GROUP BY user_id),
+      FROM game_history WHERE created_at >= ${since} GROUP BY user_id),
     c AS (${chatCte}),
-    l AS (SELECT user_id, coalesce(sum(points), 0) AS v FROM league_picks GROUP BY user_id),
-    rv AS (SELECT user_id, count(*) AS v FROM site_reviews WHERE status = 'approved' GROUP BY user_id),
-    rf AS (SELECT referrer_id AS user_id, count(*) AS v FROM referrals WHERE rewarded_at IS NOT NULL GROUP BY referrer_id),
+    l AS (SELECT user_id, coalesce(sum(points), 0) AS v FROM league_picks WHERE created_at >= ${since} GROUP BY user_id),
+    rv AS (SELECT user_id, count(*) AS v FROM site_reviews WHERE status = 'approved' AND created_at >= ${since} GROUP BY user_id),
+    rf AS (SELECT referrer_id AS user_id, count(*) AS v FROM referrals WHERE rewarded_at IS NOT NULL AND rewarded_at >= ${since} GROUP BY referrer_id),
     t AS (${tgCte}),
     e AS (SELECT user_id, coalesce(sum(points) FILTER (WHERE source = 'sure'), 0) AS time, coalesce(sum(points) FILTER (WHERE source <> 'sure'), 0) AS bonus
-      FROM kp_events GROUP BY user_id),
+      FROM kp_events WHERE created_at >= ${since} GROUP BY user_id),
     ids AS (SELECT user_id FROM g UNION SELECT user_id FROM c UNION SELECT user_id FROM l UNION SELECT user_id FROM rv
       UNION SELECT user_id FROM rf UNION SELECT user_id FROM t UNION SELECT user_id FROM e),
     s AS (SELECT ids.user_id,
@@ -203,9 +216,43 @@ export async function getKpStatus(userId: string): Promise<KpStatus> {
 
 export type LeaderRow = { userId: string; name: string; kp: number; level: number; levelName: string; badge: string; specials: number }
 
-export async function leaderboard(limit = 20): Promise<LeaderRow[]> {
+export type PredictionRow = { userId: string; name: string; points: number; hits: number; exact: number; picks: number }
+
+/** Prediction league table for a period: points from settled matches kicked off in that window. */
+export async function predictionBoard(period: RankPeriod, limit = 20): Promise<PredictionRow[]> {
+  await ensureKp()
+  const since = periodStart(period)
+  const r = await rows(sql`SELECT p.user_id, max(p.user_name) AS name, coalesce(sum(p.points), 0) AS pts,
+      count(*) FILTER (WHERE p.points > 0) AS hits, count(*) FILTER (WHERE p.points = 3) AS exact, count(*) AS picks
+    FROM league_picks p JOIN league_matches m ON m.id = p.match_id
+    WHERE m.settled AND m.kickoff >= ${since}
+    GROUP BY p.user_id HAVING count(*) > 0 ORDER BY pts DESC, exact DESC, hits DESC LIMIT ${limit}`)
+  return r.map((x) => ({
+    userId: String(x.user_id),
+    name: String(x.name ?? 'Kanka').split(' ')[0],
+    points: Number(x.pts),
+    hits: Number(x.hits),
+    exact: Number(x.exact),
+    picks: Number(x.picks),
+  }))
+}
+
+let levelCache: { at: number; data: Record<string, number> } | null = null
+
+/** userId → level for every member with KP; cached briefly because it powers rank chips site-wide. */
+export async function levelMap(): Promise<Record<string, number>> {
+  if (levelCache && Date.now() - levelCache.at < 60_000) return levelCache.data
   const cfg = await getKpConfig()
-  const list = await totals(cfg.rules, null, limit)
+  const list = await totals(cfg.rules, null, 5000)
+  const data: Record<string, number> = {}
+  for (const l of list) if (l.total > 0) data[l.userId] = levelFor(cfg.levels, l.total).index + 1
+  levelCache = { at: Date.now(), data }
+  return data
+}
+
+export async function leaderboard(limit = 20, period: RankPeriod = 'tum'): Promise<LeaderRow[]> {
+  const cfg = await getKpConfig()
+  const list = (await totals(cfg.rules, null, limit, period)).filter((l) => l.total > 0)
   if (!list.length) return []
   const counts = await rows<{ user_id: string; n: string }>(sql`SELECT user_id, count(*) AS n FROM kp_awards
     WHERE user_id IN ${list.map((l) => l.userId)} GROUP BY user_id`)

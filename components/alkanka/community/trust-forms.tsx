@@ -10,9 +10,9 @@ import { StatusLine, useAction } from './use-action'
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
-export function TrustForms({ siteId, siteName }: { siteId: string; siteName: string }) {
+export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteId: string; siteName: string; initialMode?: 'review' | 'complaint' }) {
   const { member } = usePoints()
-  const [mode, setMode] = useState<'review' | 'complaint'>('review')
+  const [mode, setMode] = useState<'review' | 'complaint'>(initialMode)
   const review = useAction()
   const complaint = useAction()
   const [rating, setRating] = useState(0)

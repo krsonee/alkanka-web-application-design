@@ -27,6 +27,9 @@ export function ensureCommunity() {
     await rows(sql`CREATE TABLE IF NOT EXISTS league_picks (
       match_id int NOT NULL REFERENCES league_matches(id) ON DELETE CASCADE, user_id text NOT NULL, user_name text NOT NULL,
       home int NOT NULL, away int NOT NULL, points int, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (match_id, user_id))`)
+    await rows(sql`ALTER TABLE league_matches ADD COLUMN IF NOT EXISTS home_logo text,
+      ADD COLUMN IF NOT EXISTS away_logo text, ADD COLUMN IF NOT EXISTS ext_id bigint`)
+    await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS league_matches_ext_id ON league_matches (ext_id) WHERE ext_id IS NOT NULL`)
   })().catch((error) => {
     ready = null
     throw error
@@ -284,6 +287,21 @@ export async function setReviewStatus(id: number, status: 'approved' | 'rejected
   await rows(sql`UPDATE site_reviews SET status = ${status} WHERE id = ${id}`)
 }
 
+export async function publishedReviews() {
+  await ensureCommunity()
+  return (await rows(sql`SELECT * FROM site_reviews WHERE status = 'approved' ORDER BY created_at DESC LIMIT 100`)).map(mapReview)
+}
+
+export async function deleteReview(id: number) {
+  await ensureCommunity()
+  await rows(sql`DELETE FROM site_reviews WHERE id = ${id}`)
+}
+
+export async function deleteComplaint(id: number) {
+  await ensureCommunity()
+  await rows(sql`DELETE FROM complaints WHERE id = ${id}`)
+}
+
 export async function adminComplaints() {
   await ensureCommunity()
   return (await rows(sql`SELECT * FROM complaints ORDER BY (status IN ('open','forwarded')) DESC, updated_at DESC LIMIT 100`)).map(mapComplaint)
@@ -380,6 +398,9 @@ export type LeagueMatch = {
   league: string
   home: string
   away: string
+  homeLogo: string | null
+  awayLogo: string | null
+  extId: number | null
   kickoff: string
   homeGoals: number | null
   awayGoals: number | null
@@ -401,6 +422,9 @@ export async function listLeagueMatches(userId: string | null, opts: { admin?: b
     league: String(x.league),
     home: String(x.home),
     away: String(x.away),
+    homeLogo: x.home_logo ? String(x.home_logo) : null,
+    awayLogo: x.away_logo ? String(x.away_logo) : null,
+    extId: x.ext_id === null || x.ext_id === undefined ? null : Number(x.ext_id),
     kickoff: iso(x.kickoff),
     homeGoals: x.home_goals === null ? null : Number(x.home_goals),
     awayGoals: x.away_goals === null ? null : Number(x.away_goals),
@@ -440,6 +464,47 @@ export async function addLeagueMatch(input: { league: string; home: string; away
   if (!input.home.trim() || !input.away.trim()) throw new Error('Takım adlarını gir.')
   await rows(sql`INSERT INTO league_matches (league, home, away, kickoff)
     VALUES (${input.league.trim() || 'Futbol'}, ${input.home.trim()}, ${input.away.trim()}, ${when.toISOString()})`)
+}
+
+export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string }
+
+const safeLogo = (url: string) => (/^https:\/\/imagecache\.365scores\.com\//.test(url) ? url : null)
+
+/** Publishes fixtures picked from the calendar; already-published games are skipped. */
+export async function importLeagueFixtures(list: FixtureInput[]) {
+  await ensureCommunity()
+  let added = 0
+  for (const f of list.slice(0, 60)) {
+    const when = new Date(f.kickoff)
+    if (!Number.isSafeInteger(f.extId) || Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) continue
+    const r = await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, home_logo, away_logo, ext_id)
+      VALUES (${f.league.slice(0, 80)}, ${f.home.slice(0, 80)}, ${f.away.slice(0, 80)}, ${when.toISOString()},
+        ${safeLogo(f.homeLogo)}, ${safeLogo(f.awayLogo)}, ${f.extId})
+      ON CONFLICT (ext_id) WHERE ext_id IS NOT NULL DO NOTHING RETURNING id`)
+    added += r.length
+  }
+  return added
+}
+
+export async function publishedFixtureIds(): Promise<number[]> {
+  await ensureCommunity()
+  const r = await rows(sql`SELECT ext_id FROM league_matches WHERE ext_id IS NOT NULL AND kickoff > now() - interval '2 days'`)
+  return r.map((x) => Number(x.ext_id))
+}
+
+/** Scores every finished calendar match using the official result feed. */
+export async function autoSettleLeague(fetchScore: (id: number) => Promise<{ home: number; away: number } | null>) {
+  await ensureCommunity()
+  const due = await rows(sql`SELECT id, ext_id FROM league_matches
+    WHERE NOT settled AND ext_id IS NOT NULL AND kickoff < now() - interval '100 minutes' ORDER BY kickoff LIMIT 30`)
+  let settled = 0
+  for (const m of due) {
+    const score = await fetchScore(Number(m.ext_id))
+    if (!score) continue
+    await settleLeagueMatch(Number(m.id), Math.min(score.home, 20), Math.min(score.away, 20)).catch(() => null)
+    settled++
+  }
+  return { checked: due.length, settled }
 }
 
 export async function deleteLeagueMatch(id: number) {

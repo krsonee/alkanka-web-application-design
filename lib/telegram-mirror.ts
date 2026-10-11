@@ -32,7 +32,7 @@ export type MirrorLog = {
 
 export type MirrorResult = { checked: number; sent: number; skipped: number; failed: number; primed: number; errors: string[] }
 
-type ScrapedPost = { id: number; html: string; photos: string[]; video: string | null }
+type ScrapedPost = { id: number; html: string; photos: string[]; video: string | null; date?: string | null }
 type Destination = { token: string; chatId: string; title: string }
 
 const MAX_PER_RUN = 5
@@ -102,7 +102,7 @@ export function normalizeChat(input: string) {
 }
 
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const stripTags = (s: string) =>
+export const stripTags = (s: string) =>
   s
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, '')
@@ -160,7 +160,8 @@ export async function fetchChannel(channel: string): Promise<ScrapedPost[]> {
     const text = chunk.match(/class="tgme_widget_message_text[^"]*\bjs-message_text\b[^"]*"[^>]*>([\s\S]*?)<\/div>/)
     const photos = [...chunk.matchAll(/tgme_widget_message_photo_wrap[^"]*"[^>]*background-image:url\('([^']+)'\)/g)].map((m) => m[1])
     const video = chunk.match(/<video[^>]+src="([^"]+)"/)?.[1] ?? null
-    posts.push({ id, html: text?.[1] ?? '', photos, video })
+    const date = chunk.match(/<time[^>]+datetime="([^"]+)"/)?.[1] ?? null
+    posts.push({ id, html: text?.[1] ?? '', photos, video, date })
   }
   return posts
 }

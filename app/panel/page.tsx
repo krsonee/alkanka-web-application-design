@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { adminConfigured, isAdmin } from '@/lib/admin-auth'
 import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
+import { TEXTS_KEY, type SiteTexts } from '@/lib/site-texts-shared'
+import { TextsEditor } from '@/components/panel/texts-editor'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
@@ -18,17 +20,37 @@ import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/t
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { chatStatus } from '@/lib/telegram-chat'
+import { getInviteConfig } from '@/lib/table-invite'
+import { TelegramInviteSetup } from '@/components/panel/telegram-invite-setup'
+import { getChannelUsernames } from '@/lib/telegram-channels'
+import { TelegramChannelsSetup } from '@/components/panel/telegram-channels-setup'
 import { SeoManager } from '@/components/panel/seo-manager'
 import { listPosts } from '@/lib/blog'
 import { dealsPublishing, getVerification, listDeals } from '@/lib/deals'
 import { SITE_URL } from '@/lib/seo'
 import { Studio } from '@/components/panel/studio'
 import { CommunityManager } from '@/components/panel/community'
-import { adminComplaints, listLeagueMatches, pendingReviews } from '@/lib/community'
+import { adminComplaints, listLeagueMatches, pendingReviews, publishedReviews } from '@/lib/community'
 import { SPONSORS } from '@/components/alkanka/data'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 import { KpManager } from '@/components/panel/kp-manager'
+import { AdsEditor } from '@/components/panel/ads-editor'
+import { ADS_KEY, type AdMap } from '@/lib/ads'
+import { ShareEditor } from '@/components/panel/share-editor'
+import { MarketManager } from '@/components/panel/market-manager'
+import { listProducts, listRequests, pendingCount } from '@/lib/market'
+import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
+
+async function marketPanel() {
+  try {
+    const [products, requests] = await Promise.all([listProducts({ includeInactive: true }), listRequests()])
+    return <MarketManager products={products} requests={requests} sponsors={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
+  } catch (error) {
+    console.error('[market-panel]', error)
+    return <p className="text-sm text-destructive">Market yüklenemedi.</p>
+  }
+}
 
 async function kpPanel() {
   try {
@@ -53,13 +75,15 @@ export default async function PanelPage() {
 
   const content = await getAllContent()
   const push = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
-  const [tgBots, tgTargets, tgSources, tgLog, cronKey, tgChat] = await Promise.all([
+  const [tgBots, tgTargets, tgSources, tgLog, cronKey, tgChat, tgInvite, tgChannels] = await Promise.all([
     listBots().catch(() => []),
     listTargets().catch(() => []),
     listSources().catch(() => []),
     listLog().catch(() => []),
     getCronKey().catch(() => 'ANAHTAR'),
     chatStatus().catch(() => null),
+    getInviteConfig().catch(() => null),
+    getChannelUsernames().catch(() => null),
   ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
@@ -103,6 +127,7 @@ export default async function PanelPage() {
           slides={slides}
           heroes={heroes}
           library={IMAGE_LIBRARY}
+          texts={<TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />}
           games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
           tournaments={<TournamentManager tournaments={await listTournaments()} />}
           push={<PushSender {...push} configured={push.total > 0} />}
@@ -110,6 +135,8 @@ export default async function PanelPage() {
             <div className="flex flex-col gap-6">
               <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
               <TelegramChatSetup bots={tgBots} status={tgChat} />
+              <TelegramChannelsSetup usernames={tgChannels} />
+              <TelegramInviteSetup bots={tgBots} status={tgInvite} />
             </div>
           }
           studio={
@@ -123,12 +150,15 @@ export default async function PanelPage() {
           community={
             <CommunityManager
               reviews={await pendingReviews().catch(() => [])}
+              published={await publishedReviews().catch(() => [])}
               complaints={await adminComplaints().catch(() => [])}
               matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
               siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
             />
           }
           badges={await kpPanel()}
+          market={await marketPanel()}
+          marketPending={await pendingCount().catch(() => 0)}
           seo={
             <SeoManager
               posts={await listPosts({ includeDrafts: true })}
@@ -140,6 +170,8 @@ export default async function PanelPage() {
           }
           logos={
             <>
+              <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} />
+              <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} />
               <LogoEditor
                 kind="sponsors"
                 title={`Site logoları (${LOGO_SPONSORS.length})`}

@@ -1,47 +1,87 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Send, X } from 'lucide-react'
+import { ChevronDown, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { NAV_ITEMS, TELEGRAM_URL } from './data'
+import { NAV_TREE, TELEGRAM_URL, type NavGroup, type NavItem } from './data'
 import { JakoAvatar } from './jako'
 import { BrandLogo, LogoSelector } from './logo-selector'
 import { TourButton } from './app/site-tour'
 import { useChatFeed } from './use-chat-feed'
+
+const isActiveHref = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href))
+
+function NavLink({ item, pathname, onNavigate, nested }: { item: NavItem; pathname: string; onNavigate?: () => void; nested?: boolean }) {
+  const isActive = isActiveHref(pathname, item.href)
+  const Icon = item.icon
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      data-tour-nav={item.id}
+      aria-current={isActive ? 'page' : undefined}
+      className={cn(
+        'group relative flex items-center gap-3 rounded-lg text-sm font-medium transition-colors',
+        nested ? 'px-2.5 py-2' : 'px-3 py-2.5',
+        isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+      )}
+    >
+      {isActive && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" />}
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <span className="flex-1">{item.label}</span>
+      {item.badge && <span className="rounded bg-live/15 px-1.5 py-0.5 text-[10px] font-semibold text-live">{item.badge}</span>}
+    </Link>
+  )
+}
+
+function NavGroupBlock({ group, pathname, onNavigate }: { group: NavGroup; pathname: string; onNavigate?: () => void }) {
+  const hasActive = group.items.some((i) => isActiveHref(pathname, i.href))
+  const [open, setOpen] = useState(hasActive)
+  const expanded = open
+  const Icon = group.icon
+  const panelId = `nav-${group.id}`
+  return (
+    <div className={cn('my-1 rounded-xl border transition-colors', hasActive ? 'border-primary/25 bg-primary/[0.04]' : 'border-border bg-card/40')}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
+      >
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
+          <Icon className="size-3.5" aria-hidden="true" />
+        </span>
+        <span className="flex-1 text-[13px] font-bold leading-tight text-foreground">{group.label}</span>
+        <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-180')} aria-hidden="true" />
+      </button>
+      {expanded && (
+        <div id={panelId} className="flex flex-col gap-0.5 px-1.5 pb-1.5">
+          <div className="ml-3 flex flex-col gap-0.5 border-l border-border pl-1.5">
+            {group.items.map((item) => (
+              <NavLink key={item.id} item={item} pathname={pathname} onNavigate={onNavigate} nested />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
 
   return (
     <nav aria-label="Ana menü" className="flex flex-col gap-0.5">
-      {NAV_ITEMS.map((item) => {
-        const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
-        const Icon = item.icon
-        return (
-          <Link
-            key={item.id}
-            href={item.href}
-            onClick={onNavigate}
-            data-tour-nav={item.id}
-            aria-current={isActive ? 'page' : undefined}
-            className={cn(
-              'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-            )}
-          >
-            {isActive && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" />}
-            <Icon className="size-4 shrink-0" aria-hidden="true" />
-            <span className="flex-1">{item.label}</span>
-            {item.badge && (
-              <span className="rounded bg-live/15 px-1.5 py-0.5 text-[10px] font-semibold text-live">{item.badge}</span>
-            )}
-          </Link>
-        )
-      })}
+      {NAV_TREE.map((entry) =>
+        entry.kind === 'group' ? (
+          <NavGroupBlock key={entry.id} group={entry} pathname={pathname} onNavigate={onNavigate} />
+        ) : (
+          <NavLink key={entry.id} item={entry} pathname={pathname} onNavigate={onNavigate} />
+        ),
+      )}
     </nav>
   )
 }

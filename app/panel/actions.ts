@@ -7,6 +7,8 @@ import { deleteContent, setContent, type HeroOverride, type SlideOverride } from
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
+import { SHARE_KEY } from '@/lib/share'
+import { TEXT_FIELDS, TEXTS_KEY } from '@/lib/site-texts-shared'
 
 export type ActionState = { ok?: boolean; message?: string }
 
@@ -25,6 +27,49 @@ function imageField(form: FormData) {
 
 async function requireAdmin() {
   if (!(await isAdmin())) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
+}
+
+export async function saveShare(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const text = (name: string, max: number) => String(form.get(name) ?? '').trim().slice(0, max)
+    const image = text('image', 500)
+    if (image && !isAllowedImage(image)) throw new Error('Görsel /images/ ile ya da https:// ile başlamalı.')
+    await setContent(SHARE_KEY, {
+      title: text('title', 90),
+      description: text('description', 200),
+      siteName: text('siteName', 40),
+      image,
+    })
+    revalidatePath('/', 'layout')
+    return { ok: true, message: 'Paylaşım önizlemesi kaydedildi. WhatsApp/Telegram eski önizlemeyi bir süre önbellekte tutabilir.' }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
+  }
+}
+
+export async function saveAds(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const { AD_PAGES, AD_POSITIONS, ADS_KEY } = await import('@/lib/ads')
+    const value: Record<string, { image: string; href: string; alt: string }> = {}
+    for (const page of AD_PAGES) {
+      for (const pos of AD_POSITIONS) {
+        const key = `${page.id}:${pos.id}`
+        const image = String(form.get(`${key}:image`) ?? '').trim()
+        const href = String(form.get(`${key}:href`) ?? '').trim()
+        if (!image) continue
+        if (!isAllowedImage(image)) return { message: `${page.label} / ${pos.label}: görsel https:// veya /images/ ile başlamalı.` }
+        if (href && !/^https:\/\//.test(href) && !href.startsWith('/')) return { message: `${page.label} / ${pos.label}: link https:// ile başlamalı.` }
+        value[key] = { image, href, alt: String(form.get(`${key}:alt`) ?? '').trim().slice(0, 80) }
+      }
+    }
+    await setContent(ADS_KEY, value)
+    for (const page of AD_PAGES) revalidatePath(`/${page.id}`)
+    return { ok: true, message: 'Reklam alanları kaydedildi.' }
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : 'Kaydedilemedi.' }
+  }
 }
 
 export async function login(_: ActionState, form: FormData): Promise<ActionState> {
@@ -81,6 +126,24 @@ export async function resetHero(_: ActionState, form: FormData): Promise<ActionS
     return { ok: true, message: 'Varsayılana döndü.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Sıfırlanamadı.' }
+  }
+}
+
+export async function saveTexts(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin()
+    const value: Record<string, string> = {}
+    for (const f of TEXT_FIELDS) {
+      const v = String(form.get(f.key) ?? '').trim().slice(0, f.max)
+      if (!v) continue
+      if (f.key === 'auth.bonus' && !/^\d{1,6}$/.test(v)) return { message: 'Kayıt bonusu sadece rakam olmalı.' }
+      value[f.key] = v
+    }
+    await setContent(TEXTS_KEY, value)
+    revalidatePath('/', 'layout')
+    return { ok: true, message: `Kaydedildi (${Object.keys(value).length} özel metin).` }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
   }
 }
 

@@ -2,24 +2,26 @@
 
 import { useState } from 'react'
 import { Check, Star, Trash2, X } from 'lucide-react'
-import { answerComplaint, createLeagueMatch, finishLeagueMatch, moderateReview, removeLeagueMatch } from '@/app/panel/community-actions'
+import { answerComplaint, createLeagueMatch, finishLeagueMatch, moderateReview, removeComplaint, removeLeagueMatch, removeReview } from '@/app/panel/community-actions'
 import type { Complaint, LeagueMatch, Review } from '@/lib/community'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { CommunityGuide, CommunityHint, type CommunityTab } from './community-guide'
+import { FixturePicker } from './fixture-picker'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
 type Props = {
   reviews: Review[]
+  published: Review[]
   complaints: Complaint[]
   matches: LeagueMatch[]
   siteNames: Record<string, string>
 }
 
-export function CommunityManager({ reviews, complaints, matches, siteNames }: Props) {
+export function CommunityManager({ reviews, published, complaints, matches, siteNames }: Props) {
   const [tab, setTab] = useState<CommunityTab>('reviews')
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'forwarded').length
   return (
@@ -39,19 +41,19 @@ export function CommunityManager({ reviews, complaints, matches, siteNames }: Pr
         ))}
       </div>
       <CommunityHint tab={tab} />
-      {tab === 'reviews' && <Reviews reviews={reviews} siteNames={siteNames} />}
+      {tab === 'reviews' && <Reviews reviews={reviews} published={published} siteNames={siteNames} />}
       {tab === 'complaints' && <Complaints complaints={complaints} siteNames={siteNames} />}
       {tab === 'league' && <LeagueAdmin matches={matches} />}
     </div>
   )
 }
 
-function Reviews({ reviews, siteNames }: { reviews: Review[]; siteNames: Record<string, string> }) {
+function Reviews({ reviews, published, siteNames }: { reviews: Review[]; published: Review[]; siteNames: Record<string, string> }) {
   const { pending, status, run } = useAction()
-  if (!reviews.length) return <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Onay bekleyen yorum yok.</p>
   return (
     <div className="flex flex-col gap-3">
       <StatusLine status={status} />
+      {!reviews.length && <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Onay bekleyen yorum yok.</p>}
       <ul className="grid gap-3 lg:grid-cols-2">
         {reviews.map((r) => (
           <li key={r.id} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -71,6 +73,33 @@ function Reviews({ reviews, siteNames }: { reviews: Review[]; siteNames: Record<
           </li>
         ))}
       </ul>
+      <h3 className="mt-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Yayındaki yorumlar ({published.length})</h3>
+      {published.length ? (
+        <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+          {published.map((r) => (
+            <li key={r.id} className="flex items-start gap-3 p-3">
+              <span className="flex shrink-0 items-center gap-0.5 text-sm font-bold text-primary"><Star className="size-3.5 fill-current" aria-hidden />{r.rating}</span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="text-xs text-muted-foreground">{siteNames[r.siteId] ?? r.siteId} · {r.userName} · {new Date(r.createdAt).toLocaleDateString('tr-TR')}</span>
+                <p className="line-clamp-2 text-sm text-foreground">{r.body}</p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <button disabled={pending} onClick={() => run(() => moderateReview(r.id, 'rejected'))} className="h-8 rounded-lg bg-secondary px-2.5 text-xs font-bold text-secondary-foreground disabled:opacity-50">Gizle</button>
+                <button
+                  disabled={pending}
+                  onClick={() => confirm('Bu yorum kalıcı olarak silinsin mi?') && run(() => removeReview(r.id))}
+                  aria-label="Yorumu sil"
+                  className="flex size-8 items-center justify-center rounded-lg bg-destructive/15 text-destructive disabled:opacity-50"
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">Yayında yorum yok.</p>
+      )}
     </div>
   )
 }
@@ -101,18 +130,54 @@ function ComplaintRow({ c, site }: { c: Complaint; site: string }) {
         <button disabled={pending} onClick={() => run(() => answerComplaint(c.id, state, reply))} className="h-9 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-50">
           {pending ? 'Kaydediliyor...' : 'Kaydet'}
         </button>
+        <button
+          disabled={pending}
+          onClick={() => confirm('Şikâyet tamamen kaldırılsın mı? Bu işlem geri alınamaz.') && run(() => removeComplaint(c.id))}
+          className="ml-auto flex h-9 items-center gap-1.5 rounded-lg bg-destructive/15 px-3 text-xs font-bold text-destructive disabled:opacity-50"
+        >
+          <Trash2 className="size-4" aria-hidden /> Kaldır
+        </button>
         <StatusLine status={status} />
       </div>
     </li>
   )
 }
 
+const COMPLAINT_FILTERS = [['all', 'Tümü'], ...Object.entries(COMPLAINT_STATUS).map(([k, v]) => [k, v.label])] as [string, string][]
+
 function Complaints({ complaints, siteNames }: { complaints: Complaint[]; siteNames: Record<string, string> }) {
+  const [filter, setFilter] = useState('all')
+  const [q, setQ] = useState('')
   if (!complaints.length) return <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz şikâyet yok.</p>
+  const needle = q.trim().toLocaleLowerCase('tr')
+  const list = complaints.filter(
+    (c) =>
+      (filter === 'all' || c.status === filter) &&
+      (!needle || `${c.title} ${c.body} ${c.userName} ${siteNames[c.siteId] ?? ''}`.toLocaleLowerCase('tr').includes(needle)),
+  )
   return (
-    <ul className="grid gap-3 xl:grid-cols-2">
-      {complaints.map((c) => <ComplaintRow key={c.id} c={c} site={siteNames[c.siteId] ?? c.siteId} />)}
-    </ul>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
+          {COMPLAINT_FILTERS.map(([k, label]) => {
+            const n = k === 'all' ? complaints.length : complaints.filter((c) => c.status === k).length
+            return (
+              <button key={k} onClick={() => setFilter(k)} aria-pressed={filter === k} className={cn('h-8 rounded-md px-2.5 text-xs font-bold', filter === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                {label} ({n})
+              </button>
+            )
+          })}
+        </div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Başlık, üye veya site ara" aria-label="Şikâyet ara" className={cn(field, 'h-10 w-full sm:w-64')} />
+      </div>
+      {list.length ? (
+        <ul className="grid gap-3 xl:grid-cols-2">
+          {list.map((c) => <ComplaintRow key={c.id} c={c} site={siteNames[c.siteId] ?? c.siteId} />)}
+        </ul>
+      ) : (
+        <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Bu filtrede şikâyet yok.</p>
+      )}
+    </div>
   )
 }
 
@@ -151,6 +216,8 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
   const [form, setForm] = useState({ league: 'Süper Lig', home: '', away: '', kickoff: '' })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
   return (
+    <div className="flex flex-col gap-5">
+    <FixturePicker />
     <div className="grid gap-5 xl:grid-cols-[22rem_1fr]">
       <form
         className="flex flex-col gap-3 self-start rounded-xl border border-border bg-card p-4"
@@ -159,7 +226,7 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
           run(() => createLeagueMatch({ ...form, kickoff: new Date(form.kickoff).toISOString() }), () => setForm({ ...form, home: '', away: '', kickoff: '' }))
         }}
       >
-        <h3 className="font-display text-base font-bold text-foreground">Lige maç ekle</h3>
+        <h3 className="font-display text-base font-bold text-foreground">Elle maç ekle</h3>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Lig<input value={form.league} onChange={set('league')} className={field} /></label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Ev sahibi<input value={form.home} onChange={set('home')} placeholder="Galatasaray" className={field} /></label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Deplasman<input value={form.away} onChange={set('away')} placeholder="Fenerbahçe" className={field} /></label>
@@ -173,6 +240,7 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
       ) : (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz maç eklenmedi.</p>
       )}
+    </div>
     </div>
   )
 }

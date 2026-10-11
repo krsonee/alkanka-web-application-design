@@ -6,6 +6,7 @@ import { botToken, callBot, ensureTables } from '@/lib/telegram-mirror'
 export type ChatMessage = {
   id: number
   author: string
+  userId: string | null
   text: string
   origin: 'telegram' | 'site'
   createdAt: string
@@ -25,10 +26,16 @@ export type ChatFeed = {
 export type ChatLink = { tgName: string; tgUsername: string | null }
 
 type TgUser = { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string }
-type TgMessage = {
+export type TgMessage = {
   message_id: number
   from?: TgUser
   chat: { id: number; type: string; title?: string }
+  message_thread_id?: number
+  is_automatic_forward?: boolean
+  forward_origin?: { type: string; chat?: { id: number }; message_id?: number }
+  forward_from_chat?: { id: number }
+  forward_from_message_id?: number
+  reply_to_message?: TgMessage
   text?: string
   caption?: string
   photo?: unknown[]
@@ -96,15 +103,15 @@ export async function getChatConfig(): Promise<ChatConfig | null> {
   }
 }
 
-const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+export const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-function displayName(u?: TgUser) {
+export function displayName(u?: TgUser) {
   if (!u) return 'Telegram'
   const full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim()
   return (full || u.username || 'Telegram').slice(0, 40)
 }
 
-function messageText(m: TgMessage) {
+export function messageText(m: TgMessage) {
   const body = (m.text ?? m.caption ?? '').trim()
   if (m.photo) return body ? `[Fotoğraf] ${body}` : '[Fotoğraf]'
   if (m.video) return body ? `[Video] ${body}` : '[Video]'
@@ -206,7 +213,12 @@ export async function handleUpdate(update: TgUpdate) {
     return
   }
 
-  if (String(m.chat.id) !== config.chatId) return
+  if (String(m.chat.id) !== config.chatId) {
+    // Imported lazily: telegram-channels depends on this module.
+    const { handleDiscussionMessage } = await import('@/lib/telegram-channels')
+    await handleDiscussionMessage(m)
+    return
+  }
 
   if (m.pinned_message) {
     const pinned = messageText(m.pinned_message)
@@ -252,6 +264,27 @@ async function linkWithCode(code: string, from: TgUser) {
   return true
 }
 
+const JOINED_CACHE_MS = 5 * 60 * 1000
+const NOT_JOINED_CACHE_MS = 8_000
+const joinedCache = new Map<string, { at: number; joined: boolean }>()
+
+export async function isGroupMember(userId: string): Promise<boolean> {
+  const hit = joinedCache.get(userId)
+  if (hit && Date.now() - hit.at < (hit.joined ? JOINED_CACHE_MS : NOT_JOINED_CACHE_MS)) return hit.joined
+  const config = await getChatConfig()
+  if (!config) return false
+  const link = await rows<{ tg_id: string }>(sql`SELECT tg_id FROM tg_links WHERE user_id = ${userId}`)
+  if (!link[0]) return false
+  const member = await callBot<{ status: string }>(await botToken(config.botId), 'getChatMember', {
+    chat_id: config.chatId,
+    user_id: Number(link[0].tg_id),
+  }).catch(() => null)
+  if (!member) return hit?.joined ?? false
+  const joined = !['left', 'kicked'].includes(member.status)
+  joinedCache.set(userId, { at: Date.now(), joined })
+  return joined
+}
+
 export async function unlink(userId: string) {
   await ensureChatTables()
   await rows(sql`DELETE FROM tg_links WHERE user_id = ${userId}`)
@@ -278,7 +311,7 @@ export async function getFeed(): Promise<ChatFeed> {
   const [members, settings, r] = await Promise.all([
     memberCount(config),
     getSettings(['chat_pinned']),
-    rows(sql`SELECT id, author, text, origin, created_at FROM tg_chat_messages WHERE chat_id = ${config.chatId} ORDER BY id DESC LIMIT 50`),
+    rows(sql`SELECT id, author, user_id, text, origin, created_at FROM tg_chat_messages WHERE chat_id = ${config.chatId} ORDER BY id DESC LIMIT 50`),
   ])
   return {
     configured: true,
@@ -289,6 +322,7 @@ export async function getFeed(): Promise<ChatFeed> {
     messages: r.reverse().map((m) => ({
       id: Number(m.id),
       author: String(m.author),
+      userId: m.user_id ? String(m.user_id) : null,
       text: String(m.text),
       origin: m.origin === 'site' ? 'site' : 'telegram',
       createdAt: new Date(String(m.created_at)).toISOString(),
@@ -315,7 +349,10 @@ export async function sendFromSite(userId: string, rawText: string) {
     chat_id: config.chatId,
     user_id: Number(link[0].tg_id),
   }).catch(() => ({ status: 'left' }) as { status: string; can_send_messages?: boolean })
-  if (['left', 'kicked'].includes(member.status)) throw new Error('Yazabilmek için Telegram grubuna katılmış olman gerekiyor.')
+  if (['left', 'kicked'].includes(member.status)) {
+    joinedCache.set(userId, { at: Date.now(), joined: false })
+    throw new Error('Yazabilmek için önce Telegram sohbet grubuna katılmalısın.')
+  }
   if (member.status === 'restricted' && member.can_send_messages === false) throw new Error('Bu grupta yazma iznin kısıtlanmış.')
 
   const author = link[0].tg_name

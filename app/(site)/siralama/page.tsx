@@ -9,9 +9,10 @@ export default function RankingPage() {
     <>
       <EditableHero slug="siralama"
         image="/images/heroes/siralama.png"
+        highlights={['Günlük · Haftalık · Aylık', 'Şampiyon rozeti', 'Tahmin ligi tablosu']}
         eyebrow="Sıralama"
-        title="Haftalık liderler"
-        description="Her pazartesi sıfırlanır. İlk 3 VIP sandık kazanır, ilk 10 rozet alır."
+        title="Günlük, haftalık ve aylık liderler"
+        description="Kanka Puan ve tahmin ligi tabloları. Her dönemin birincisi şampiyon rozetini kazanır."
         pose="kazandi"
         speech="Zirvede yer var kanka, çalışmaya devam!"
       />

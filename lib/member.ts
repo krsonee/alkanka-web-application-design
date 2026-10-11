@@ -2,6 +2,7 @@ import 'server-only'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { rows, sql } from '@/lib/db'
+import { getSignupBonus } from '@/lib/site-texts'
 
 export const SIGNUP_BONUS = 250
 
@@ -25,8 +26,9 @@ export async function requireMember(): Promise<Member> {
 }
 
 export async function getBalance(userId: string): Promise<number> {
+  const bonus = await getSignupBonus().catch(() => SIGNUP_BONUS)
   const r = await rows<{ balance: number }>(sql`
-    INSERT INTO wallets (user_id, balance) VALUES (${userId}, ${SIGNUP_BONUS})
+    INSERT INTO wallets (user_id, balance) VALUES (${userId}, ${bonus})
     ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id
     RETURNING balance`)
   return r[0]?.balance ?? 0
