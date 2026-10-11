@@ -38,6 +38,16 @@ const posts = [
   { file: '28-nedir.png', title: 'AL KANKA Nedir' },
   { file: '29-ikili.png', title: 'İki Kanka 750 KC' },
   { file: '30-altin.png', title: 'Altın Sandık 500 KC' },
+  { file: '31-rulet.png', title: 'Rulet Açıldı' },
+  { file: '32-kirmizi-siyah.png', title: 'Kırmızı mı Siyah mı?' },
+  { file: '33-blackjack.png', title: "Blackjack: 21'i Yakala" },
+  { file: '34-kankana-karsi.png', title: 'Blackjack Masa Aç' },
+  { file: '35-kafa-topu.png', title: 'Kafa Topu Açıldı' },
+  { file: '36-rovans.png', title: 'Kafa Topu Rövanş' },
+  { file: '37-kafa-basket.png', title: 'Kafa Basketbolu Açıldı' },
+  { file: '38-smac.png', title: 'Smaç Senden' },
+  { file: '39-oyunlar.png', title: '4 Yeni Oyun' },
+  { file: '40-masa-ac.png', title: 'Masayı Sen Kur' },
 ]
 
 export default function PostlarPage() {

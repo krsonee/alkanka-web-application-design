@@ -87,6 +87,9 @@
   --radius: 0.75rem;
   --wood: oklch(0.32 0.05 55);
   --felt: oklch(0.24 0.045 245);
+  --rl-red: oklch(0.48 0.18 25);
+  --rl-black: oklch(0.17 0.01 260);
+  --rl-green: oklch(0.45 0.12 155);
   --point-a: oklch(0.72 0.11 80);
   --point-b: oklch(0.36 0.04 250);
   --checker-light: oklch(0.95 0.02 85);

@@ -9,26 +9,28 @@ import { TableRoom, TableRowCard, type TableSummary } from './table-lobby'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-export function LiveLobby() {
+export function LiveLobby({ game }: { game?: ArenaGame }) {
   const [filter, setFilter] = useState<string>('all')
   const [watching, setWatching] = useState<string | null>(null)
   const { data, isLoading } = useSWR<{ live: TableSummary[] }>('/api/tables/live', fetcher, { refreshInterval: 5000 })
 
   if (watching) return <TableRoom id={watching} onLeave={() => setWatching(null)} />
 
-  const live = data?.live ?? []
+  const all = data?.live ?? []
+  const live = game ? all.filter((t) => t.game === game) : all
   const games = Array.from(new Set(live.map((t) => t.game)))
   const shown = filter === 'all' ? live : live.filter((t) => t.game === filter)
+  const titleId = game ? `live-title-${game}` : 'live-title'
 
   return (
-    <section className="flex flex-col gap-4" aria-labelledby="live-title">
+    <section className="flex flex-col gap-4" aria-labelledby={titleId}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="live-title" className="flex items-center gap-2 font-display text-xl font-bold text-foreground">
+        <h2 id={titleId} className="flex items-center gap-2 font-display text-xl font-bold text-foreground">
           <Radio className="size-5 text-primary" aria-hidden="true" />
-          Şu an oynanan masalar
+          {game ? 'Aktif masalar' : 'Şu an oynanan masalar'}
           <span className="rounded-full bg-secondary px-2 py-0.5 text-sm font-semibold text-muted-foreground">{live.length}</span>
         </h2>
-        <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Oyun filtresi">
+        {!game && <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Oyun filtresi">
           {['all', ...games].map((g) => (
             <button
               key={g}
@@ -43,7 +45,7 @@ export function LiveLobby() {
               {g === 'all' ? 'Hepsi' : (ARENA_META[g as ArenaGame]?.title ?? g)}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
 
       {isLoading && (
@@ -54,7 +56,7 @@ export function LiveLobby() {
 
       {!isLoading && shown.length === 0 && (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Şu an oynanan masa yok. Bir oyuna girip masa aç, burada görünsün.
+          {game ? 'Bu oyunda şu an aktif masa yok. Çok oyunculu sekmesinden masa aç, burada görünsün.' : 'Şu an oynanan masa yok. Bir oyuna girip masa aç, burada görünsün.'}
         </p>
       )}
 
@@ -62,9 +64,11 @@ export function LiveLobby() {
         {shown.map((t) => (
           <TableRowCard key={t.id} t={t}>
             <div className="flex items-center gap-2">
-              <span className="rounded-md bg-secondary px-2 py-1 text-xs font-semibold text-foreground">
-                {ARENA_META[t.game as ArenaGame]?.title ?? t.game}
-              </span>
+              {!game && (
+                <span className="rounded-md bg-secondary px-2 py-1 text-xs font-semibold text-foreground">
+                  {ARENA_META[t.game as ArenaGame]?.title ?? t.game}
+                </span>
+              )}
               <button
                 onClick={() => setWatching(t.id)}
                 className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:opacity-90"

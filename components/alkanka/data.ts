@@ -35,7 +35,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
   { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, badge: 'Yeni' },
-  { id: 'canli', label: 'Canlı masalar', href: '/oyunlar/canli', icon: Eye },
   { id: 'cark', label: 'Çark', href: '/oyunlar/cark', icon: CircleDot },
   { id: 'sandik', label: 'Sandık', href: '/oyunlar/sandik', icon: Gift },
   { id: 'turnuvalar', label: 'Turnuvalar', href: '/turnuvalar', icon: Swords },

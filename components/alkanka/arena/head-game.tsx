@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints } from 'lucide-react'
+import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Smartphone } from 'lucide-react'
 
 export type Sport = 'futbol' | 'basket'
 export type HeadMode = 'bot' | 'local'
@@ -9,54 +9,90 @@ export type HeadScore = { for: number; against: number }
 
 const W = 960
 const H = 540
-const GROUND = 470
-const G = 0.55
-const HEAD_R = 36
-const BALL_R = 15
+const GROUND = 482
+const G = 0.6
+const HEAD_R = 40
+const FOOT = HEAD_R + 30
+const BALL_R = 17
 const MATCH_SECONDS = 60
+const STEP_MS = 1000 / 60
 
-type Player = { x: number; y: number; vx: number; vy: number; face: 1 | -1; kick: number }
-type Ball = { x: number; y: number; vx: number; vy: number }
+type Player = { x: number; y: number; vx: number; vy: number; face: 1 | -1; kick: number; run: number }
+type Ball = { x: number; y: number; vx: number; vy: number; rot: number }
 type Keys = { left: boolean; right: boolean; jump: boolean; kick: boolean }
 const noKeys = (): Keys => ({ left: false, right: false, jump: false, kick: false })
 
-const GOAL_TOP = 300
-const GOAL_DEPTH = 64
-const RIM_Y = 220
-const RIM_W = 64
-const BOARD_X = 46
-const rimLeft = () => ({ a: BOARD_X + 10, b: BOARD_X + 10 + RIM_W })
-const rimRight = () => ({ a: W - BOARD_X - 10 - RIM_W, b: W - BOARD_X - 10 })
+const GOAL_TOP = GROUND - 176
+const GOAL_DEPTH = 74
+const RIM_Y = 236
+const RIM_W = 70
+const BOARD_X = 40
+const rimLeft = () => ({ a: BOARD_X + 8, b: BOARD_X + 8 + RIM_W })
+const rimRight = () => ({ a: W - BOARD_X - 8 - RIM_W, b: W - BOARD_X - 8 })
 
-function resetPositions(p1: Player, p2: Player, ball: Ball, serveTo: 0 | 1) {
-  Object.assign(p1, { x: 220, y: GROUND - HEAD_R, vx: 0, vy: 0, face: 1, kick: 0 })
-  Object.assign(p2, { x: W - 220, y: GROUND - HEAD_R, vx: 0, vy: 0, face: -1, kick: 0 })
-  Object.assign(ball, { x: W / 2, y: 160, vx: serveTo === 0 ? -1.5 : 1.5, vy: 0 })
+const TEAM = {
+  home: { jersey: '#e5b93e', trim: '#1a1a1a', shorts: '#16181d', boot: '#e5b93e' },
+  away: { jersey: '#2f6fd1', trim: '#ffffff', shorts: '#0f2a56', boot: '#ffffff' },
 }
 
-function stepPlayer(p: Player, k: Keys) {
-  const speed = 5.6
-  p.vx = (k.right ? speed : 0) - (k.left ? speed : 0)
-  if (p.vx) p.face = p.vx > 0 ? 1 : -1
-  if (k.jump && p.y >= GROUND - HEAD_R - 0.5) p.vy = -12.5
-  if (k.kick && p.kick <= 0) p.kick = 14
+function resetPositions(p1: Player, p2: Player, ball: Ball, serveTo: 0 | 1) {
+  Object.assign(p1, { x: 230, y: GROUND - FOOT, vx: 0, vy: 0, face: 1, kick: 0 })
+  Object.assign(p2, { x: W - 230, y: GROUND - FOOT, vx: 0, vy: 0, face: -1, kick: 0 })
+  Object.assign(ball, { x: W / 2, y: 150, vx: serveTo === 0 ? -1.2 : 1.2, vy: 0 })
+}
+
+function onGround(p: Player) {
+  return p.y >= GROUND - FOOT - 0.5
+}
+
+function stepPlayer(p: Player, k: Keys, sport: Sport) {
+  const target = (k.right ? 6.2 : 0) - (k.left ? 6.2 : 0)
+  p.vx += (target - p.vx) * (onGround(p) ? 0.45 : 0.25)
+  if (Math.abs(p.vx) < 0.05) p.vx = 0
+  if (target) p.face = target > 0 ? 1 : -1
+  if (k.jump && onGround(p)) p.vy = -13.4
+  if (k.kick && p.kick <= 0) p.kick = 16
   if (p.kick > 0) p.kick--
   p.vy += G
   p.x += p.vx
   p.y += p.vy
-  if (p.y > GROUND - HEAD_R) {
-    p.y = GROUND - HEAD_R
+  if (p.y > GROUND - FOOT) {
+    p.y = GROUND - FOOT
     p.vy = 0
   }
-  p.x = Math.max(HEAD_R + 8, Math.min(W - HEAD_R - 8, p.x))
+  if (onGround(p) && p.vx) p.run += Math.abs(p.vx) * 0.12
+  const margin = sport === 'futbol' ? GOAL_DEPTH * 0.55 : 24
+  p.x = Math.max(HEAD_R + margin, Math.min(W - HEAD_R - margin, p.x))
 }
 
-function collideCircle(ball: Ball, cx: number, cy: number, r: number, pvx = 0, pvy = 0, bounce = 0.9) {
+function separatePlayers(a: Player, b: Player) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const min = HEAD_R * 1.9
+  if (Math.abs(dx) < min && Math.abs(dy) < HEAD_R * 1.6) {
+    if (dy < -HEAD_R && b.vy > 0) {
+      b.y = a.y - HEAD_R * 1.6
+      b.vy = -6
+      return
+    }
+    if (dy > HEAD_R && a.vy > 0) {
+      a.y = b.y - HEAD_R * 1.6
+      a.vy = -6
+      return
+    }
+    const push = (min - Math.abs(dx)) / 2
+    const s = dx >= 0 ? 1 : -1
+    a.x -= push * s
+    b.x += push * s
+  }
+}
+
+function collideCircle(ball: Ball, cx: number, cy: number, r: number, pvx = 0, pvy = 0, bounce = 0.85) {
   const dx = ball.x - cx
   const dy = ball.y - cy
-  const dist = Math.hypot(dx, dy)
+  const dist = Math.hypot(dx, dy) || 0.001
   const min = r + BALL_R
-  if (dist >= min || dist === 0) return false
+  if (dist >= min) return null
   const nx = dx / dist
   const ny = dy / dist
   ball.x = cx + nx * min
@@ -68,26 +104,27 @@ function collideCircle(ball: Ball, cx: number, cy: number, r: number, pvx = 0, p
     ball.vx -= (1 + bounce) * dot * nx
     ball.vy -= (1 + bounce) * dot * ny
   }
-  ball.vx += pvx * 0.35
-  ball.vy += pvy * 0.35
-  return true
+  ball.vx += pvx * 0.3
+  ball.vy += Math.min(0, pvy) * 0.3
+  return { nx, ny }
 }
 
 function stepBall(ball: Ball, sport: Sport) {
-  ball.vy += 0.38
-  ball.vx *= 0.995
+  ball.vy += 0.42
+  ball.vx *= 0.996
   ball.x += ball.vx
   ball.y += ball.vy
+  ball.rot += ball.vx / BALL_R
   const sp = Math.hypot(ball.vx, ball.vy)
-  if (sp > 22) {
-    ball.vx *= 22 / sp
-    ball.vy *= 22 / sp
+  if (sp > 24) {
+    ball.vx *= 24 / sp
+    ball.vy *= 24 / sp
   }
   if (ball.y > GROUND - BALL_R) {
     ball.y = GROUND - BALL_R
-    ball.vy *= -0.72
+    ball.vy *= sport === 'basket' ? -0.78 : -0.62
     ball.vx *= 0.97
-    if (Math.abs(ball.vy) < 1) ball.vy = 0
+    if (Math.abs(ball.vy) < 1.2) ball.vy = 0
   }
   if (ball.y < BALL_R) {
     ball.y = BALL_R
@@ -95,254 +132,538 @@ function stepBall(ball: Ball, sport: Sport) {
   }
   if (ball.x < BALL_R) {
     ball.x = BALL_R
-    ball.vx = Math.abs(ball.vx) * 0.8
+    ball.vx = Math.max(2, Math.abs(ball.vx) * 0.8)
   }
   if (ball.x > W - BALL_R) {
     ball.x = W - BALL_R
-    ball.vx = -Math.abs(ball.vx) * 0.8
+    ball.vx = -Math.max(2, Math.abs(ball.vx) * 0.8)
   }
   if (sport === 'futbol') {
     for (const side of [0, 1] as const) {
-      const barX0 = side === 0 ? 0 : W - GOAL_DEPTH - 6
-      const barX1 = side === 0 ? GOAL_DEPTH + 6 : W
-      if (ball.x > barX0 - BALL_R && ball.x < barX1 + BALL_R && Math.abs(ball.y - GOAL_TOP) < BALL_R + 4) {
-        ball.y = ball.vy > 0 ? GOAL_TOP - BALL_R - 4 : GOAL_TOP + BALL_R + 4
-        ball.vy *= -0.6
+      const x0 = side === 0 ? 0 : W - GOAL_DEPTH
+      const x1 = side === 0 ? GOAL_DEPTH : W
+      const postX = side === 0 ? GOAL_DEPTH : W - GOAL_DEPTH
+      if (ball.x > x0 - BALL_R && ball.x < x1 + BALL_R && Math.abs(ball.y - GOAL_TOP) < BALL_R + 4) {
+        if (ball.vy >= 0 && ball.y < GOAL_TOP) {
+          ball.y = GOAL_TOP - BALL_R - 4
+          ball.vy = -Math.abs(ball.vy) * 0.55
+          ball.vx += side === 0 ? 0.6 : -0.6
+        } else if (ball.y > GOAL_TOP) {
+          ball.y = GOAL_TOP + BALL_R + 4
+          ball.vy = Math.abs(ball.vy) * 0.5
+        }
       }
+      collideCircle(ball, postX, GOAL_TOP, 5, 0, 0, 0.6)
     }
   } else {
     for (const side of [0, 1] as const) {
       const bx = side === 0 ? BOARD_X : W - BOARD_X
-      if (ball.y > RIM_Y - 110 && ball.y < RIM_Y + 20 && Math.abs(ball.x - bx) < BALL_R + 4) {
-        ball.x = side === 0 ? bx + BALL_R + 4 : bx - BALL_R - 4
-        ball.vx = (side === 0 ? 1 : -1) * Math.abs(ball.vx) * 0.7
+      if (ball.y > RIM_Y - 112 && ball.y < RIM_Y + 18 && Math.abs(ball.x - bx) < BALL_R + 5) {
+        ball.x = side === 0 ? bx + BALL_R + 5 : bx - BALL_R - 5
+        ball.vx = (side === 0 ? 1 : -1) * Math.max(1.5, Math.abs(ball.vx) * 0.7)
       }
       const rim = side === 0 ? rimLeft() : rimRight()
-      collideCircle(ball, rim.a, RIM_Y, 4, 0, 0, 0.6)
-      collideCircle(ball, rim.b, RIM_Y, 4, 0, 0, 0.6)
+      collideCircle(ball, rim.a, RIM_Y, 4, 0, 0, 0.55)
+      collideCircle(ball, rim.b, RIM_Y, 4, 0, 0, 0.55)
     }
   }
 }
 
-function hitBall(ball: Ball, p: Player) {
-  if (collideCircle(ball, p.x, p.y, HEAD_R, p.vx, p.vy)) return
-  const footX = p.x + p.face * 22
-  const footY = p.y + HEAD_R + 6
-  if (p.kick > 6 && Math.hypot(ball.x - footX, ball.y - footY) < BALL_R + 26) {
-    ball.vx = p.face * 15
-    ball.vy = -9
-  } else collideCircle(ball, p.x, p.y + HEAD_R + 4, 14, p.vx, p.vy, 0.6)
+function hitBall(ball: Ball, p: Player, sport: Sport) {
+  const footX = p.x + p.face * 26
+  const footY = p.y + FOOT - 10
+  if (p.kick > 5 && Math.hypot(ball.x - footX, ball.y - footY) < BALL_R + 34) {
+    const power = sport === 'futbol' ? 16 : 11.5
+    ball.vx = p.face * power + p.vx * 0.4
+    ball.vy = sport === 'futbol' ? -8.5 : -15
+    ball.x = footX + p.face * (BALL_R + 4)
+    p.kick = 5
+    return
+  }
+  const head = collideCircle(ball, p.x, p.y, HEAD_R, p.vx, p.vy, 0.9)
+  if (head) {
+    if (head.ny < -0.85 && Math.abs(ball.vx) < 1.2) ball.vx += p.face * 2.2
+    if (!onGround(p) && head.ny < 0) ball.vy -= 1.5
+    return
+  }
+  collideCircle(ball, p.x, p.y + HEAD_R + 14, 16, p.vx, p.vy, 0.5)
+  collideCircle(ball, p.x, p.y + FOOT - 8, 12, p.vx, p.vy, 0.4)
 }
 
 function botKeys(bot: Player, ball: Ball, sport: Sport): Keys {
   const k = noKeys()
-  const defendX = sport === 'futbol' ? W - 150 : W - 190
-  const threat = ball.vx > 2 && ball.x > W / 2
-  const targetX = threat ? Math.max(ball.x + 30, defendX - 80) : ball.x + 28
-  if (bot.x < targetX - 10) k.right = true
-  else if (bot.x > targetX + 10) k.left = true
-  const near = Math.abs(ball.x - bot.x) < 90
-  if (near && ball.y < bot.y - 30 && ball.vy > -2) k.jump = true
-  if (Math.abs(ball.x - (bot.x - 24)) < 40 && ball.y > GROUND - 70) k.kick = Math.random() < 0.3
+  const home = sport === 'futbol' ? W - 160 : W - 200
+  const threat = ball.vx > 3 && ball.x > W * 0.45
+  const targetX = threat ? Math.min(home, Math.max(ball.x + 40, home - 120)) : ball.x + 34
+  if (bot.x < targetX - 12) k.right = true
+  else if (bot.x > targetX + 12) k.left = true
+  const dx = ball.x - bot.x
+  if (Math.abs(dx) < 110 && ball.y < bot.y - 20 && ball.vy > -3 && ball.y > bot.y - 220) k.jump = true
+  if (dx < 0 && dx > -80 && ball.y > bot.y + 10) k.kick = Math.random() < 0.35
+  if (dx > 0 && Math.abs(dx) < 50) k.right = true
   return k
 }
 
-function drawField(ctx: CanvasRenderingContext2D, sport: Sport, css: Record<string, string>) {
-  ctx.fillStyle = css.bg
-  ctx.fillRect(0, 0, W, H)
-  ctx.fillStyle = css.card
-  for (let i = 0; i < 24; i++) ctx.fillRect(i * 40 + 6, 60 + ((i * 37) % 30), 24, 26)
-  ctx.fillStyle = css.ad
-  ctx.fillRect(0, GROUND - 70, W, 24)
-  ctx.fillStyle = css.primary
-  ctx.font = '700 15px sans-serif'
-  ctx.textAlign = 'center'
-  for (let x = 120; x < W; x += 240) ctx.fillText('ALKANKA  -  KANKA COIN', x, GROUND - 53)
+/* ------------------------------ rendering ------------------------------ */
+
+function rand(seed: number) {
+  let s = seed
+  return () => {
+    s = (s * 16807) % 2147483647
+    return (s - 1) / 2147483646
+  }
+}
+
+function paintBackground(sport: Sport): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const ctx = c.getContext('2d')!
+  const r = rand(sport === 'futbol' ? 7 : 11)
+
+  const sky = ctx.createLinearGradient(0, 0, 0, GROUND)
   if (sport === 'futbol') {
-    for (let i = 0; i < 12; i++) {
-      ctx.fillStyle = i % 2 ? css.grass : css.grass2
-      ctx.fillRect(i * 80, GROUND - 46, 80, H - GROUND + 46)
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'
-    ctx.lineWidth = 3
-    ctx.beginPath()
-    ctx.moveTo(W / 2, GROUND - 46)
-    ctx.lineTo(W / 2, H)
-    ctx.stroke()
+    sky.addColorStop(0, '#0a1630')
+    sky.addColorStop(0.5, '#123a5c')
+    sky.addColorStop(1, '#1d4f5e')
   } else {
-    ctx.fillStyle = css.wood
-    ctx.fillRect(0, GROUND - 46, W, H - GROUND + 46)
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)'
-    ctx.lineWidth = 1
-    for (let x = 0; x < W; x += 48) {
+    sky.addColorStop(0, '#120d0a')
+    sky.addColorStop(0.6, '#2a1a12')
+    sky.addColorStop(1, '#3a2416')
+  }
+  ctx.fillStyle = sky
+  ctx.fillRect(0, 0, W, H)
+
+  for (const lx of [120, W - 120]) {
+    const glow = ctx.createRadialGradient(lx, 40, 4, lx, 40, 220)
+    glow.addColorStop(0, 'rgba(255,248,220,0.55)')
+    glow.addColorStop(1, 'rgba(255,248,220,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(lx - 220, 0, 440, 260)
+    ctx.fillStyle = '#2b3240'
+    ctx.fillRect(lx - 40, 22, 80, 30)
+    ctx.fillStyle = '#fff8dc'
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) ctx.fillRect(lx - 34 + i * 18, 26 + j * 13, 14, 10)
+  }
+
+  const standTop = 90
+  const standBottom = GROUND - 92
+  const tiers = 7
+  const crowd = sport === 'futbol'
+    ? ['#e5b93e', '#2f6fd1', '#f2f2f2', '#d64545', '#1f2937', '#e5b93e', '#2f6fd1']
+    : ['#e5b93e', '#e8742a', '#f2f2f2', '#7c2d12', '#1f2937', '#2f6fd1']
+  for (let t = 0; t < tiers; t++) {
+    const y = standTop + ((standBottom - standTop) / tiers) * t
+    const h = (standBottom - standTop) / tiers
+    ctx.fillStyle = t % 2 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.22)'
+    ctx.fillRect(0, y, W, h)
+    for (let x = 6; x < W; x += 15) {
+      if (r() < 0.12) continue
+      const cx = x + r() * 4
+      const cy = y + h * 0.55
+      ctx.fillStyle = crowd[Math.floor(r() * crowd.length)]
       ctx.beginPath()
-      ctx.moveTo(x, GROUND - 46)
-      ctx.lineTo(x, H)
-      ctx.stroke()
+      ctx.roundRect(cx - 5, cy, 10, h * 0.45, 3)
+      ctx.fill()
+      ctx.fillStyle = r() < 0.5 ? '#e0b48a' : '#8d5a3b'
+      ctx.beginPath()
+      ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2)
+      ctx.fill()
     }
   }
-  ctx.fillStyle = 'rgba(255,255,255,0.12)'
-  ctx.font = '700 64px sans-serif'
-  ctx.fillText('ALKANKA', W / 2, H - 16)
-  ctx.fillStyle = css.line
-  ctx.fillRect(0, GROUND, W, 3)
 
+  const boardY = GROUND - 92
+  ctx.fillStyle = '#0b0d12'
+  ctx.fillRect(0, boardY, W, 34)
+  for (let i = 0; i < 8; i++) {
+    const x = i * 120
+    ctx.fillStyle = i % 2 ? '#e5b93e' : '#14171f'
+    ctx.fillRect(x + 2, boardY + 3, 116, 28)
+    ctx.fillStyle = i % 2 ? '#14171f' : '#e5b93e'
+    ctx.font = '800 15px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(i % 2 ? 'KANKA COIN' : 'ALKANKA', x + 60, boardY + 18)
+  }
+
+  const fieldTop = boardY + 34
+  if (sport === 'futbol') {
+    for (let i = 0; i < 12; i++) {
+      ctx.fillStyle = i % 2 ? '#2f8a3e' : '#3a9a48'
+      ctx.beginPath()
+      const x0 = i * 80
+      ctx.moveTo(x0, fieldTop)
+      ctx.lineTo(x0 + 80, fieldTop)
+      ctx.lineTo(x0 + 80 + (x0 + 80 - W / 2) * 0.25, H)
+      ctx.lineTo(x0 + (x0 - W / 2) * 0.25, H)
+      ctx.fill()
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.moveTo(W / 2, fieldTop)
+    ctx.lineTo(W / 2, H)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(W / 2, GROUND + 14, 120, 26, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(0, GROUND)
+    ctx.lineTo(W, GROUND)
+    ctx.stroke()
+  } else {
+    for (let i = 0; i < 20; i++) {
+      ctx.fillStyle = i % 2 ? '#b97a43' : '#c88a50'
+      ctx.fillRect(i * 48, fieldTop, 48, H - fieldTop)
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.06)'
+    ctx.fillRect(0, fieldTop, W, 10)
+    ctx.fillStyle = 'rgba(160,40,20,0.55)'
+    ctx.fillRect(0, GROUND - 2, 190, H - GROUND + 2)
+    ctx.fillRect(W - 190, GROUND - 2, 190, H - GROUND + 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.moveTo(0, GROUND)
+    ctx.lineTo(W, GROUND)
+    ctx.moveTo(W / 2, GROUND)
+    ctx.lineTo(W / 2, H)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(W / 2, GROUND + 22, 70, 16, 0, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'
+  ctx.font = '900 46px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText('ALKANKA', W / 2, H - 10)
+  return c
+}
+
+function drawGoalOrHoop(ctx: CanvasRenderingContext2D, sport: Sport, front: boolean) {
   if (sport === 'futbol') {
     for (const side of [0, 1] as const) {
       const x0 = side === 0 ? 0 : W - GOAL_DEPTH
-      ctx.fillStyle = 'rgba(255,255,255,0.08)'
-      ctx.fillRect(x0, GOAL_TOP, GOAL_DEPTH, GROUND - GOAL_TOP)
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)'
-      ctx.lineWidth = 1
-      for (let y = GOAL_TOP; y < GROUND; y += 14) {
+      const postX = side === 0 ? GOAL_DEPTH : W - GOAL_DEPTH
+      if (!front) {
+        ctx.fillStyle = 'rgba(255,255,255,0.08)'
+        ctx.fillRect(x0, GOAL_TOP, GOAL_DEPTH, GROUND - GOAL_TOP)
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)'
+        ctx.lineWidth = 1
+        for (let y = GOAL_TOP; y <= GROUND; y += 12) {
+          ctx.beginPath()
+          ctx.moveTo(x0, y)
+          ctx.lineTo(x0 + GOAL_DEPTH, y)
+          ctx.stroke()
+        }
+        for (let x = x0; x <= x0 + GOAL_DEPTH; x += 12) {
+          ctx.beginPath()
+          ctx.moveTo(x, GOAL_TOP)
+          ctx.lineTo(x, GROUND)
+          ctx.stroke()
+        }
+      } else {
+        ctx.fillStyle = '#f5f5f5'
+        ctx.strokeStyle = '#9aa3ad'
+        ctx.lineWidth = 1
         ctx.beginPath()
-        ctx.moveTo(x0, y)
-        ctx.lineTo(x0 + GOAL_DEPTH, y)
+        ctx.roundRect(x0, GOAL_TOP - 5, GOAL_DEPTH, 10, 4)
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.roundRect(postX - 5, GOAL_TOP - 5, 10, GROUND - GOAL_TOP + 5, 4)
+        ctx.fill()
         ctx.stroke()
       }
-      ctx.fillStyle = '#f5f5f5'
-      ctx.fillRect(side === 0 ? 0 : W - GOAL_DEPTH - 6, GOAL_TOP - 4, GOAL_DEPTH + 6, 8)
-      ctx.fillRect(side === 0 ? GOAL_DEPTH : W - GOAL_DEPTH - 6, GOAL_TOP, 6, GROUND - GOAL_TOP)
     }
-  } else {
-    for (const side of [0, 1] as const) {
-      const bx = side === 0 ? BOARD_X : W - BOARD_X
-      ctx.fillStyle = '#9ca3af'
-      ctx.fillRect(side === 0 ? bx - 14 : bx + 6, RIM_Y - 40, 8, GROUND - RIM_Y + 40)
-      ctx.fillStyle = 'rgba(255,255,255,0.85)'
-      ctx.fillRect(bx - 4, RIM_Y - 110, 8, 130)
-      const rim = side === 0 ? rimLeft() : rimRight()
-      ctx.strokeStyle = css.primary
-      ctx.lineWidth = 5
+    return
+  }
+  for (const side of [0, 1] as const) {
+    const bx = side === 0 ? BOARD_X : W - BOARD_X
+    const rim = side === 0 ? rimLeft() : rimRight()
+    if (!front) {
+      ctx.fillStyle = '#2b2f36'
+      const poleX = side === 0 ? 10 : W - 22
+      ctx.fillRect(poleX, RIM_Y - 70, 12, GROUND - RIM_Y + 70)
+      ctx.fillRect(side === 0 ? poleX : bx, RIM_Y - 70, Math.abs(bx - poleX), 8)
+      ctx.fillStyle = 'rgba(220,235,255,0.35)'
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.roundRect(bx - 5, RIM_Y - 112, 10, 130, 3)
+      ctx.fill()
+      ctx.stroke()
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+      ctx.lineWidth = 1.5
+      for (let i = 0; i <= 6; i++) {
+        const x = rim.a + (i * RIM_W) / 6
+        const xb = rim.a + RIM_W / 2 + (x - rim.a - RIM_W / 2) * 0.55
+        ctx.beginPath()
+        ctx.moveTo(x, RIM_Y)
+        ctx.lineTo(xb, RIM_Y + 46)
+        ctx.stroke()
+      }
+      for (let j = 1; j <= 3; j++) {
+        const y = RIM_Y + j * 14
+        const shrink = 1 - (j * 14 * 0.45) / 46
+        ctx.beginPath()
+        ctx.moveTo(rim.a + (RIM_W * (1 - shrink)) / 2, y)
+        ctx.lineTo(rim.b - (RIM_W * (1 - shrink)) / 2, y)
+        ctx.stroke()
+      }
+      ctx.strokeStyle = '#e8501f'
+      ctx.lineWidth = 6
+      ctx.lineCap = 'round'
       ctx.beginPath()
       ctx.moveTo(rim.a, RIM_Y)
       ctx.lineTo(rim.b, RIM_Y)
       ctx.stroke()
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)'
-      ctx.lineWidth = 1.5
-      for (let i = 0; i <= 4; i++) {
-        const x = rim.a + (i * RIM_W) / 4
-        ctx.beginPath()
-        ctx.moveTo(x, RIM_Y)
-        ctx.lineTo(rim.a + RIM_W / 2 + (x - rim.a - RIM_W / 2) * 0.55, RIM_Y + 40)
-        ctx.stroke()
-      }
+      ctx.lineCap = 'butt'
     }
   }
 }
 
-function drawPlayer(ctx: CanvasRenderingContext2D, p: Player, color: string, img: HTMLImageElement | null, label: string) {
+function drawPlayer(
+  ctx: CanvasRenderingContext2D,
+  p: Player,
+  kit: (typeof TEAM)['home'],
+  img: HTMLImageElement | null,
+  label: string,
+) {
+  const shadowW = 44 * Math.max(0.45, 1 - (GROUND - FOOT - p.y) / 260)
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'
+  ctx.beginPath()
+  ctx.ellipse(p.x, GROUND + 4, shadowW, 8, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  const hipY = p.y + HEAD_R + 16
+  const kicking = p.kick > 5
+  const swing = kicking ? Math.sin(((16 - p.kick) / 11) * Math.PI) * 1.4 : 0
+  const stride = onGround(p) && Math.abs(p.vx) > 0.5 ? Math.sin(p.run) * 0.5 : 0
+  const legLen = FOOT - HEAD_R - 16
+
+  const drawLeg = (angle: number, back: boolean) => {
+    ctx.save()
+    ctx.translate(p.x + (back ? -p.face * 6 : p.face * 6), hipY)
+    ctx.rotate(angle * p.face)
+    ctx.fillStyle = back ? '#c9a27a' : '#e2b98f'
+    ctx.fillRect(-4, 0, 8, legLen - 4)
+    ctx.fillStyle = back ? '#d7d7d7' : '#fff'
+    ctx.fillRect(-5, legLen - 12, 10, 8)
+    ctx.fillStyle = kit.boot
+    ctx.strokeStyle = '#111'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.roundRect(-7 + p.face * 2, legLen - 6, 22 * (p.face === 1 ? 1 : 1), 10, 5)
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+  }
+  drawLeg(-stride, true)
+
+  ctx.fillStyle = kit.jersey
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.roundRect(p.x - 17, p.y + HEAD_R - 8, 34, 26, 8)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = kit.trim
+  ctx.fillRect(p.x - 17, p.y + HEAD_R + 8, 34, 3)
+  ctx.fillStyle = kit.shorts
+  ctx.beginPath()
+  ctx.roundRect(p.x - 15, p.y + HEAD_R + 12, 30, 10, 3)
+  ctx.fill()
+
+  drawLeg(kicking ? -swing : stride, false)
+
   ctx.save()
-  ctx.fillStyle = color
-  ctx.beginPath()
-  ctx.roundRect(p.x - 18, p.y + HEAD_R - 6, 36, 26, 8)
-  ctx.fill()
-  ctx.fillStyle = '#111'
-  const kickOffset = p.kick > 6 ? p.face * 16 : 0
-  ctx.beginPath()
-  ctx.ellipse(p.x + p.face * 10 + kickOffset, p.y + HEAD_R + 22, 14, 7, 0, 0, Math.PI * 2)
-  ctx.fill()
   ctx.beginPath()
   ctx.arc(p.x, p.y, HEAD_R, 0, Math.PI * 2)
-  ctx.closePath()
-  ctx.fillStyle = color
+  ctx.fillStyle = '#20232b'
   ctx.fill()
   if (img?.complete && img.naturalWidth) {
-    ctx.save()
     ctx.clip()
-    if (p.face === -1) {
-      ctx.translate(p.x * 2, 0)
-      ctx.scale(-1, 1)
-    }
-    ctx.drawImage(img, p.x - HEAD_R * 1.25, p.y - HEAD_R * 1.15, HEAD_R * 2.5, HEAD_R * 2.5)
-    ctx.restore()
-  } else {
-    ctx.fillStyle = '#fff'
-    ctx.beginPath()
-    ctx.arc(p.x + p.face * 12, p.y - 6, 9, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = '#111'
-    ctx.beginPath()
-    ctx.arc(p.x + p.face * 15, p.y - 6, 4, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.translate(p.x, p.y)
+    if (p.face === -1) ctx.scale(-1, 1)
+    const s = img.naturalWidth
+    ctx.drawImage(img, s * 0.13, s * 0.1, s * 0.76, s * 0.8, -HEAD_R * 1.08, -HEAD_R * 1.1, HEAD_R * 2.16, HEAD_R * 2.28)
   }
+  ctx.restore()
   ctx.lineWidth = 3
-  ctx.strokeStyle = color
+  ctx.strokeStyle = kit.jersey
   ctx.beginPath()
   ctx.arc(p.x, p.y, HEAD_R, 0, Math.PI * 2)
   ctx.stroke()
-  ctx.fillStyle = '#fff'
-  ctx.font = '700 13px sans-serif'
+
+  ctx.font = '800 13px sans-serif'
   ctx.textAlign = 'center'
-  ctx.fillText(label, p.x, p.y - HEAD_R - 10)
-  ctx.restore()
+  ctx.textBaseline = 'alphabetic'
+  const tw = ctx.measureText(label).width + 14
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.beginPath()
+  ctx.roundRect(p.x - tw / 2, p.y - HEAD_R - 26, tw, 18, 9)
+  ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.fillText(label, p.x, p.y - HEAD_R - 13)
 }
 
-function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport, css: Record<string, string>) {
-  ctx.save()
+function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport) {
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'
+  const sw = BALL_R * Math.max(0.4, 1 - (GROUND - b.y) / 300)
   ctx.beginPath()
-  ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2)
-  ctx.fillStyle = sport === 'futbol' ? '#f8f8f8' : css.orange
+  ctx.ellipse(b.x, GROUND + 3, sw, 5, 0, 0, Math.PI * 2)
   ctx.fill()
-  ctx.strokeStyle = '#111'
-  ctx.lineWidth = 2
-  ctx.stroke()
+
+  ctx.save()
+  ctx.translate(b.x, b.y)
+  ctx.rotate(b.rot)
   ctx.beginPath()
+  ctx.arc(0, 0, BALL_R, 0, Math.PI * 2)
   if (sport === 'futbol') {
-    ctx.fillStyle = '#111'
-    ctx.arc(b.x, b.y, 5, 0, Math.PI * 2)
+    const g = ctx.createRadialGradient(-5, -6, 2, 0, 0, BALL_R)
+    g.addColorStop(0, '#ffffff')
+    g.addColorStop(1, '#cfd4da')
+    ctx.fillStyle = g
     ctx.fill()
+    ctx.clip()
+    ctx.fillStyle = '#16181d'
+    const pent = (cx: number, cy: number, r: number) => {
+      ctx.beginPath()
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5
+        ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r)
+      }
+      ctx.fill()
+    }
+    pent(0, 0, 6)
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5
+      pent(Math.cos(a) * 15, Math.sin(a) * 15, 5)
+    }
   } else {
-    ctx.moveTo(b.x - BALL_R, b.y)
-    ctx.lineTo(b.x + BALL_R, b.y)
-    ctx.moveTo(b.x, b.y - BALL_R)
-    ctx.lineTo(b.x, b.y + BALL_R)
+    const g = ctx.createRadialGradient(-5, -6, 2, 0, 0, BALL_R)
+    g.addColorStop(0, '#f59a52')
+    g.addColorStop(1, '#c4521b')
+    ctx.fillStyle = g
+    ctx.fill()
+    ctx.strokeStyle = '#2a1206'
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    ctx.moveTo(-BALL_R, 0)
+    ctx.lineTo(BALL_R, 0)
+    ctx.moveTo(0, -BALL_R)
+    ctx.lineTo(0, BALL_R)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(-BALL_R * 1.1, 0, BALL_R * 0.8, -0.9, 0.9)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(BALL_R * 1.1, 0, BALL_R * 0.8, Math.PI - 0.9, Math.PI + 0.9)
     ctx.stroke()
   }
   ctx.restore()
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2)
+  ctx.stroke()
 }
 
-function readCss() {
-  const s = getComputedStyle(document.documentElement)
-  const v = (n: string, f: string) => s.getPropertyValue(n).trim() || f
-  return {
-    bg: v('--background', '#111'),
-    card: v('--card', '#1b1d24'),
-    ad: v('--secondary', '#222'),
-    primary: v('--primary', '#e5b93e'),
-    grass: v('--felt', '#1f6b3a'),
-    grass2: 'color-mix(in oklch, ' + v('--felt', '#1f6b3a') + ' 85%, black)',
-    wood: v('--wood', '#8a5a2b'),
-    line: 'rgba(255,255,255,0.6)',
-    orange: '#e8742a',
-  }
+function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], sc: [number, number], left: number) {
+  const w = 300
+  const x = W / 2 - w / 2
+  ctx.fillStyle = 'rgba(8,10,14,0.88)'
+  ctx.strokeStyle = 'rgba(229,185,62,0.7)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.roundRect(x, 10, w, 46, 10)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = TEAM.home.jersey
+  ctx.fillRect(x + 8, 18, 6, 30)
+  ctx.fillStyle = TEAM.away.jersey
+  ctx.fillRect(x + w - 14, 18, 6, 30)
+  ctx.textBaseline = 'middle'
+  ctx.font = '700 13px sans-serif'
+  ctx.fillStyle = '#e6e6e6'
+  ctx.textAlign = 'left'
+  ctx.fillText(names[0].slice(0, 10), x + 20, 33)
+  ctx.textAlign = 'right'
+  ctx.fillText(names[1].slice(0, 10), x + w - 20, 33)
+  ctx.textAlign = 'center'
+  ctx.font = '900 26px sans-serif'
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(`${sc[0]} - ${sc[1]}`, W / 2, 29)
+  ctx.font = '700 11px monospace'
+  ctx.fillStyle = left <= 10 ? '#ff6b5a' : '#e5b93e'
+  ctx.fillText(`0:${String(left).padStart(2, '0')}`, W / 2, 49)
 }
+
+function drawFlash(ctx: CanvasRenderingContext2D, text: string, t: number) {
+  const k = Math.min(1, t / 12)
+  const scale = 0.6 + 0.5 * k - 0.1 * Math.max(0, (t - 12) / 40)
+  ctx.save()
+  ctx.translate(W / 2, H / 2 - 40)
+  ctx.scale(scale, scale)
+  ctx.font = '900 96px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineWidth = 10
+  ctx.strokeStyle = '#111'
+  ctx.strokeText(text, 0, 0)
+  ctx.fillStyle = '#e5b93e'
+  ctx.fillText(text, 0, 0)
+  ctx.restore()
+}
+
+/* ------------------------------ controls ------------------------------ */
 
 function TouchPad({ keys, side }: { keys: React.RefObject<Keys>; side: 'left' | 'right' }) {
   const bind = (k: keyof Keys) => ({
-    onPointerDown: (e: React.PointerEvent) => {
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault()
+      e.currentTarget.setPointerCapture(e.pointerId)
       keys.current[k] = true
     },
     onPointerUp: () => (keys.current[k] = false),
-    onPointerLeave: () => (keys.current[k] = false),
     onPointerCancel: () => (keys.current[k] = false),
+    onLostPointerCapture: () => (keys.current[k] = false),
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
   })
-  const btn = 'flex size-12 touch-none select-none items-center justify-center rounded-full border border-primary/50 bg-background/70 text-foreground active:bg-primary active:text-primary-foreground'
-  return (
-    <div className={side === 'left' ? 'flex gap-2' : 'flex flex-row-reverse gap-2'}>
+  const btn =
+    'flex size-16 touch-none select-none items-center justify-center rounded-full border-2 border-foreground/20 bg-card/90 text-foreground shadow-lg active:scale-95 active:border-primary active:bg-primary active:text-primary-foreground'
+  const move = (
+    <div className="flex gap-3">
       <button type="button" className={btn} aria-label="Sola" {...bind('left')}>
-        <ChevronLeft className="size-5" aria-hidden="true" />
+        <ChevronLeft className="size-7" aria-hidden="true" />
       </button>
       <button type="button" className={btn} aria-label="Sağa" {...bind('right')}>
-        <ChevronRight className="size-5" aria-hidden="true" />
+        <ChevronRight className="size-7" aria-hidden="true" />
       </button>
+    </div>
+  )
+  const act = (
+    <div className="flex gap-3">
       <button type="button" className={btn} aria-label="Zıpla" {...bind('jump')}>
-        <ArrowBigUp className="size-5" aria-hidden="true" />
+        <ArrowBigUp className="size-7" aria-hidden="true" />
       </button>
-      <button type="button" className={btn} aria-label="Şut" {...bind('kick')}>
-        <Footprints className="size-5" aria-hidden="true" />
+      <button type="button" className={`${btn} border-primary/60`} aria-label="Şut" {...bind('kick')}>
+        <Footprints className="size-7" aria-hidden="true" />
       </button>
+    </div>
+  )
+  return side === 'left' ? (
+    <div className="flex w-full items-center justify-between gap-4">
+      {move}
+      {act}
+    </div>
+  ) : (
+    <div className="flex w-full items-center justify-between gap-4">
+      {act}
+      {move}
     </div>
   )
 }
@@ -365,11 +686,11 @@ export function HeadGame({
   const canvas = useRef<HTMLCanvasElement>(null)
   const k1 = useRef<Keys>(noKeys())
   const k2 = useRef<Keys>(noKeys())
-  const [score, setScore] = useState<[number, number]>([0, 0])
-  const [time, setTime] = useState(MATCH_SECONDS)
-  const [flash, setFlash] = useState('')
+  const [announce, setAnnounce] = useState('0 - 0')
   const endRef = useRef(onEnd)
   endRef.current = onEnd
+  const namesRef = useRef(names)
+  namesRef.current = names
 
   useEffect(() => {
     const map1: Record<string, keyof Keys> = { KeyA: 'left', KeyD: 'right', KeyW: 'jump', KeyS: 'kick', Space: 'kick' }
@@ -387,85 +708,123 @@ export function HeadGame({
     }
     const kd = handle(true)
     const ku = handle(false)
+    const blur = () => {
+      k1.current = noKeys()
+      k2.current = noKeys()
+    }
     window.addEventListener('keydown', kd)
     window.addEventListener('keyup', ku)
+    window.addEventListener('blur', blur)
     return () => {
       window.removeEventListener('keydown', kd)
       window.removeEventListener('keyup', ku)
+      window.removeEventListener('blur', blur)
     }
   }, [mode])
 
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d')
     if (!ctx) return
-    const css = readCss()
-    const jako = new Image()
-    jako.crossOrigin = 'anonymous'
-    jako.src = '/images/mascots/jako.png'
-    const rival = new Image()
-    rival.crossOrigin = 'anonymous'
-    rival.src = '/images/mascots/jako-uzgun.png'
-    const p1: Player = { x: 0, y: 0, vx: 0, vy: 0, face: 1, kick: 0 }
-    const p2: Player = { x: 0, y: 0, vx: 0, vy: 0, face: -1, kick: 0 }
-    const ball: Ball = { x: 0, y: 0, vx: 0, vy: 0 }
+    const bg = paintBackground(sport)
+    const loadImg = (src: string) => {
+      const i = new Image()
+      i.crossOrigin = 'anonymous'
+      i.src = src
+      return i
+    }
+    const homeImg = loadImg('/images/sprites/head-jako.png')
+    const awayImg = loadImg('/images/sprites/head-rival.png')
+    const p1: Player = { x: 0, y: 0, vx: 0, vy: 0, face: 1, kick: 0, run: 0 }
+    const p2: Player = { x: 0, y: 0, vx: 0, vy: 0, face: -1, kick: 0, run: 0 }
+    const ball: Ball = { x: 0, y: 0, vx: 0, vy: 0, rot: 0 }
     resetPositions(p1, p2, ball, 0)
     const sc: [number, number] = [0, 0]
-    let pause = 60
+    let pause = 70
     let raf = 0
     let last = performance.now()
     let acc = 0
-    const started = performance.now()
+    let elapsed = 0
     let ended = false
     let prevBallY = ball.y
+    let flash = ''
+    let flashT = 0
+    let stuckFrames = 0
+    let anchor = { x: ball.x, y: ball.y }
 
     function goal(scorer: 0 | 1, pts: number) {
       sc[scorer] += pts
-      setScore([sc[0], sc[1]])
-      setFlash(sport === 'futbol' ? 'GOL!' : pts === 3 ? 'ÜÇLÜK!' : 'BASKET!')
-      setTimeout(() => setFlash(''), 900)
-      pause = 70
+      setAnnounce(`${sc[0]} - ${sc[1]}`)
+      flash = sport === 'futbol' ? 'GOL!' : 'BASKET!'
+      flashT = 0
+      pause = 80
       resetPositions(p1, p2, ball, scorer === 0 ? 1 : 0)
     }
 
     function step() {
+      if (flash) {
+        flashT++
+        if (flashT > 70) flash = ''
+      }
       const k2now = mode === 'bot' ? botKeys(p2, ball, sport) : k2.current
-      stepPlayer(p1, k1.current)
-      stepPlayer(p2, k2now)
       if (pause > 0) {
         pause--
+        stepPlayer(p1, noKeys(), sport)
+        stepPlayer(p2, noKeys(), sport)
         return
       }
+      elapsed += STEP_MS
+      stepPlayer(p1, k1.current, sport)
+      stepPlayer(p2, k2now, sport)
+      separatePlayers(p1, p2)
       prevBallY = ball.y
       stepBall(ball, sport)
-      hitBall(ball, p1)
-      hitBall(ball, p2)
-      if (sport === 'futbol') {
-        if (ball.x < GOAL_DEPTH - 4 && ball.y > GOAL_TOP + 6) goal(1, 1)
-        else if (ball.x > W - GOAL_DEPTH + 4 && ball.y > GOAL_TOP + 6) goal(0, 1)
-      } else {
-        const crossed = prevBallY < RIM_Y && ball.y >= RIM_Y && ball.vy > 0
-        if (crossed) {
-          const L = rimLeft()
-          const R = rimRight()
-          if (ball.x > L.a + 4 && ball.x < L.b - 4) goal(1, 2)
-          else if (ball.x > R.a + 4 && ball.x < R.b - 4) goal(0, 2)
+      hitBall(ball, p1, sport)
+      hitBall(ball, p2, sport)
+
+      // Unjam: a ball that barely moves while airborne (head-rest, crossbar, wedged against a wall) gets dropped back in.
+      if (Math.hypot(ball.x - anchor.x, ball.y - anchor.y) > 8) {
+        anchor = { x: ball.x, y: ball.y }
+        stuckFrames = 0
+      } else if (ball.y < GROUND - BALL_R - 4 || ball.x < BALL_R + 30 || ball.x > W - BALL_R - 30) {
+        stuckFrames++
+        if (stuckFrames > 100) {
+          Object.assign(ball, { x: W / 2, y: 120, vx: (Math.random() - 0.5) * 3, vy: 0 })
+          anchor = { x: ball.x, y: ball.y }
+          stuckFrames = 0
         }
+      }
+
+      if (sport === 'futbol') {
+        if (ball.x < GOAL_DEPTH - BALL_R * 0.5 && ball.y > GOAL_TOP + 8) goal(1, 1)
+        else if (ball.x > W - GOAL_DEPTH + BALL_R * 0.5 && ball.y > GOAL_TOP + 8) goal(0, 1)
+      } else if (prevBallY < RIM_Y && ball.y >= RIM_Y && ball.vy > 0) {
+        const L = rimLeft()
+        const R = rimRight()
+        if (ball.x > L.a + 3 && ball.x < L.b - 3) goal(1, 2)
+        else if (ball.x > R.a + 3 && ball.x < R.b - 3) goal(0, 2)
       }
     }
 
     function frame(now: number) {
-      acc += Math.min(100, now - last)
+      acc += Math.min(80, now - last)
       last = now
-      while (acc >= 1000 / 60) {
+      let steps = 0
+      while (acc >= STEP_MS && steps < 5) {
         step()
-        acc -= 1000 / 60
+        acc -= STEP_MS
+        steps++
       }
-      const left = Math.max(0, MATCH_SECONDS - Math.floor((now - started) / 1000))
-      setTime(left)
-      drawField(ctx!, sport, css)
-      drawPlayer(ctx!, p1, css.primary, jako, names[0])
-      drawPlayer(ctx!, p2, '#4b8fd6', rival, names[1])
-      drawBall(ctx!, ball, sport, css)
+      if (steps === 5) acc = 0
+      const left = Math.max(0, MATCH_SECONDS - Math.floor(elapsed / 1000))
+      const c = ctx!
+      c.drawImage(bg, 0, 0)
+      drawGoalOrHoop(c, sport, false)
+      drawPlayer(c, p1, TEAM.home, homeImg, namesRef.current[0])
+      drawPlayer(c, p2, TEAM.away, awayImg, namesRef.current[1])
+      drawBall(c, ball, sport)
+      drawGoalOrHoop(c, sport, true)
+      drawScoreboard(c, namesRef.current, sc, left)
+      if (flash) drawFlash(c, flash, flashT)
       if (left <= 0 && !ended) {
         ended = true
         endRef.current({ for: sc[0], against: sc[1] })
@@ -473,39 +832,41 @@ export function HeadGame({
       }
       raf = requestAnimationFrame(frame)
     }
+    const onVis = () => {
+      last = performance.now()
+      k1.current = noKeys()
+    }
+    document.addEventListener('visibilitychange', onVis)
     raf = requestAnimationFrame(frame)
-    return () => cancelAnimationFrame(raf)
-    // names are display only; restarting the match on rename is not wanted
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelAnimationFrame(raf)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [sport, mode])
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
-        <span className="min-w-0 truncate text-sm font-bold text-primary">{names[0]}</span>
-        <div className="flex items-center gap-3">
-          <span className="font-display text-2xl font-bold tabular-nums text-foreground" aria-live="polite">
-            {score[0]} - {score[1]}
-          </span>
-          <span className="rounded-md bg-secondary px-2 py-1 font-mono text-sm tabular-nums text-foreground" aria-label="Kalan süre">
-            {time}s
-          </span>
-        </div>
-        <span className="min-w-0 truncate text-right text-sm font-bold text-foreground">{names[1]}</span>
+      <p className="sr-only" aria-live="polite">
+        Skor {announce}
+      </p>
+      <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-background shadow-xl">
+        <canvas
+          ref={canvas}
+          width={W}
+          height={H}
+          className="block aspect-video w-full touch-none select-none"
+          aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
+        />
       </div>
-      <div className="relative overflow-hidden rounded-2xl border border-primary/30">
-        <canvas ref={canvas} width={W} height={H} className="block aspect-video w-full" aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'} />
-        {flash && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="pop-in font-display text-5xl font-bold text-primary drop-shadow-lg sm:text-7xl">{flash}</span>
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-between gap-3 md:hidden">
+      <div className="flex flex-col gap-3 lg:hidden">
         <TouchPad keys={k1} side="left" />
         {mode === 'local' && <TouchPad keys={k2} side="right" />}
+        <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground portrait:flex landscape:hidden">
+          <Smartphone className="size-3.5 rotate-90" aria-hidden="true" />
+          Daha geniş saha için telefonu yan çevir
+        </p>
       </div>
-      <p className="hidden text-center text-xs text-muted-foreground md:block">
+      <p className="hidden text-center text-xs text-muted-foreground lg:block">
         {mode === 'local'
           ? '1. oyuncu: A / D hareket, W zıpla, S şut  -  2. oyuncu: ok tuşları, aşağı ok şut'
           : 'A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut'}
