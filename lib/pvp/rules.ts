@@ -8,7 +8,15 @@ import {
   type Move,
   type Side,
 } from '@/components/alkanka/arena/tavla-engine'
-import { createDeck, isWinningHand, okeyFrom, type Tile } from '@/components/alkanka/arena/okey-engine'
+import {
+  chooseDiscard,
+  createDeck,
+  findWinningDiscard,
+  isWinningHand,
+  okeyFrom,
+  wantsDiscard,
+  type Tile,
+} from '@/components/alkanka/arena/okey-engine'
 
 export const PVP_GAMES = ['tavla', 'okey', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu'] as const
 /** Games where both players play their own round and the scores are compared. */
@@ -28,16 +36,30 @@ export type TavlaState = {
   note: string
 }
 
+export type OkeyLast = { seat: number; type: 'pile' | 'discard' | 'throw'; tile?: Tile }
+
 export type OkeyState = {
   kind: 'okey'
+  /** 2 or 4. Older 2-seat states may omit it. */
+  seats?: number
+  team?: boolean
+  bots?: number[]
   deck: Tile[]
   indicator: Tile
-  hands: [Tile[], Tile[]]
-  discards: [Tile[], Tile[]]
+  hands: Tile[][]
+  discards: Tile[][]
   turn: number
   phase: 'draw' | 'discard'
   note: string
+  last?: OkeyLast[]
 }
+
+export type TableOptions = { seats: number; team: boolean; bots: number }
+
+export const okeySeats = (s: OkeyState) => s.seats ?? s.hands.length
+/** In okey you draw from the discard pile of the player who played right before you. */
+export const leftOf = (seat: number, n: number) => (seat - 1 + n) % n
+export const teamOf = (seat: number) => seat % 2
 
 export type BallState = { id: number; x: number; y: number; vx: number; vy: number; inPocket: boolean }
 
@@ -58,13 +80,14 @@ export type DuelState = {
 
 export type PvpState = TavlaState | OkeyState | BilardoState | DuelState
 
-export type Outcome = { winnerSeat: number | null; draw?: boolean; replay?: boolean } | null
+/** winnerSeats lists every seat that shares the win (team okey). An empty list means nobody at the table is paid. */
+export type Outcome = { winnerSeat: number | null; winnerSeats?: number[]; draw?: boolean; replay?: boolean } | null
 
 export type ActResult = { state: PvpState; outcome: Outcome }
 
 export const seatSide = (seat: number): Side => (seat === 0 ? 'p' : 'b')
 
-export function initState(game: PvpGame): PvpState {
+export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSeats?: number[] }): PvpState {
   if (game === 'tavla') {
     let a = 0
     let b = 0
@@ -84,18 +107,24 @@ export function initState(game: PvpGame): PvpState {
     const deck = createDeck()
     const idx = deck.findIndex((t) => !t.fake)
     const [indicator] = deck.splice(idx, 1)
-    const h0 = deck.splice(0, 15)
-    const h1 = deck.splice(0, 14)
-    return {
+    const seats = opts?.seats === 4 ? 4 : 2
+    const first = Math.floor(Math.random() * seats)
+    const hands = Array.from({ length: seats }, (_, i) => deck.splice(0, i === first ? 15 : 14))
+    const state: OkeyState = {
       kind: 'okey',
+      seats,
+      team: seats === 4 && opts?.team === true,
+      bots: opts?.botSeats ?? [],
       deck,
       indicator,
-      hands: [h0, h1],
-      discards: [[], []],
-      turn: 0,
+      hands,
+      discards: Array.from({ length: seats }, () => []),
+      turn: first,
       phase: 'discard',
-      note: 'Masa açıldı',
+      note: 'Taşlar dağıtıldı',
+      last: [],
     }
+    return runBots(state).state
   }
   if (game === 'bilardo') {
     return { kind: 'bilardo', balls: [], groups: [null, null], turn: 0, shot: null, seq: 0, note: 'Açılış vuruşu' }
@@ -108,7 +137,16 @@ type Action = { type: string; [k: string]: unknown }
 const other = (seat: number) => (seat === 0 ? 1 : 0)
 
 export function applyAction(state: PvpState, seat: number, action: Action): ActResult {
-  if (action.type === 'resign') return { state, outcome: { winnerSeat: other(seat) } }
+  if (action.type === 'resign') {
+    if (state.kind === 'okey' && okeySeats(state) > 2) {
+      if (state.team) {
+        const winners = [0, 1, 2, 3].filter((x) => teamOf(x) !== teamOf(seat))
+        return { state, outcome: { winnerSeat: winners[0], winnerSeats: winners } }
+      }
+      return seatToBot(state, seat)
+    }
+    return { state, outcome: { winnerSeat: other(seat) } }
+  }
 
   if (state.kind === 'tavla') return tavlaAct(state, seat, action)
   if (state.kind === 'okey') return okeyAct(state, seat, action)
@@ -152,41 +190,85 @@ function tavlaAct(s: TavlaState, seat: number, a: Action): ActResult {
   throw new Error('Bilinmeyen hamle')
 }
 
-function okeyAct(s: OkeyState, seat: number, a: Action): ActResult {
+function okeyWin(s: OkeyState, seat: number): Outcome {
+  if (s.team) return { winnerSeat: seat, winnerSeats: [0, 1, 2, 3].filter((x) => teamOf(x) === teamOf(seat)) }
+  return { winnerSeat: seat }
+}
+
+const pushLast = (s: OkeyState, entry: OkeyLast) => [...(s.last ?? []), entry].slice(-8)
+
+/** One okey step for any seat (human or bot). Does not check whose client sent it. */
+function okeyStep(s: OkeyState, seat: number, a: Action): ActResult {
   if (s.turn !== seat) throw new Error('Sıra sende değil')
-  const hands: [Tile[], Tile[]] = [[...s.hands[0]], [...s.hands[1]]]
-  const discards: [Tile[], Tile[]] = [[...s.discards[0]], [...s.discards[1]]]
+  const n = okeySeats(s)
+  const hands = s.hands.map((h) => [...h])
+  const discards = s.discards.map((d) => [...d])
   if (a.type === 'draw') {
     if (s.phase !== 'draw') throw new Error('Önce taş at')
     if (a.from === 'discard') {
-      const pile = discards[other(seat)]
-      const t = pile.pop()
+      const t = discards[leftOf(seat, n)].pop()
       if (!t) throw new Error('Alınacak taş yok')
       hands[seat].push(t)
-    } else {
-      const deck = [...s.deck]
-      const t = deck.shift()
-      if (!t) return { state: s, outcome: { winnerSeat: null, draw: true } }
-      hands[seat].push(t)
-      return { state: { ...s, deck, hands, phase: 'discard', note: '' }, outcome: null }
+      return { state: { ...s, hands, discards, phase: 'discard', note: '', last: pushLast(s, { seat, type: 'discard', tile: t }) }, outcome: null }
     }
-    return { state: { ...s, hands, discards, phase: 'discard', note: '' }, outcome: null }
+    const deck = [...s.deck]
+    const t = deck.shift()
+    if (!t) return { state: s, outcome: { winnerSeat: null, draw: true } }
+    hands[seat].push(t)
+    return { state: { ...s, deck, hands, phase: 'discard', note: '', last: pushLast(s, { seat, type: 'pile' }) }, outcome: null }
   }
   if (a.type === 'discard' || a.type === 'finish') {
     if (s.phase !== 'discard') throw new Error('Önce taş çek')
     const idx = hands[seat].findIndex((t) => t.id === a.tileId)
     if (idx < 0) throw new Error('Taş bulunamadı')
     const [tile] = hands[seat].splice(idx, 1)
+    discards[seat].push(tile)
+    const last = pushLast(s, { seat, type: 'throw', tile })
     if (a.type === 'finish') {
       if (!isWinningHand(hands[seat], okeyFrom(s.indicator))) throw new Error('El henüz bitmedi')
-      discards[seat].push(tile)
-      return { state: { ...s, hands, discards, note: 'El bitti' }, outcome: { winnerSeat: seat } }
+      return { state: { ...s, hands, discards, last, note: 'El bitti' }, outcome: okeyWin(s, seat) }
     }
-    discards[seat].push(tile)
-    if (s.deck.length === 0) return { state: { ...s, hands, discards }, outcome: { winnerSeat: null, draw: true } }
-    return { state: { ...s, hands, discards, turn: other(seat), phase: 'draw', note: '' }, outcome: null }
+    if (s.deck.length === 0) return { state: { ...s, hands, discards, last }, outcome: { winnerSeat: null, draw: true } }
+    return { state: { ...s, hands, discards, last, turn: (seat + 1) % n, phase: 'draw', note: '' }, outcome: null }
   }
   throw new Error('Bilinmeyen hamle')
+}
+
+/** Plays every consecutive bot turn on the server so bots can never be steered by a client. */
+export function runBots(state: OkeyState): ActResult {
+  let s = state
+  const bots = s.bots ?? []
+  for (let guard = 0; guard < 16 && bots.includes(s.turn); guard++) {
+    const seat = s.turn
+    const ok = okeyFrom(s.indicator)
+    if (s.phase === 'draw') {
+      const top = s.discards[leftOf(seat, okeySeats(s))].at(-1)
+      const r = okeyStep(s, seat, { type: 'draw', from: top && wantsDiscard(s.hands[seat], top, ok) ? 'discard' : 'pile' })
+      if (r.outcome) return r
+      s = r.state as OkeyState
+    }
+    const win = findWinningDiscard(s.hands[seat], ok)
+    const tile = win?.tile ?? chooseDiscard(s.hands[seat], ok)
+    const r = okeyStep(s, seat, { type: win ? 'finish' : 'discard', tileId: tile.id })
+    if (r.outcome) return r
+    s = r.state as OkeyState
+  }
+  return { state: s, outcome: null }
+}
+
+/** Hands an absent player's seat to a bot. */
+export function seatToBot(state: OkeyState, seat: number): ActResult {
+  const bots = Array.from(new Set([...(state.bots ?? []), seat]))
+  const s: OkeyState = { ...state, bots, note: 'Ayrılan oyuncunun yerine bot geçti' }
+  if (bots.length >= okeySeats(s)) return { state: s, outcome: { winnerSeat: null, winnerSeats: [] } }
+  return runBots(s)
+}
+
+function okeyAct(s: OkeyState, seat: number, a: Action): ActResult {
+  if ((s.bots ?? []).includes(seat)) throw new Error('Bu koltuk bota devredildi')
+  const r = okeyStep(s, seat, a)
+  if (r.outcome) return r
+  return runBots(r.state as OkeyState)
 }
 
 function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
@@ -237,14 +319,18 @@ function duelAct(s: DuelState, seat: number, a: Action): ActResult {
 export function viewState(state: PvpState | null, seat: number) {
   if (!state) return null
   if (state.kind === 'okey') {
-    const opp = other(seat)
+    const n = okeySeats(state)
     return {
       ...state,
+      seats: n,
+      team: state.team ?? false,
+      bots: state.bots ?? [],
+      last: state.last ?? [],
       deck: [],
       deckCount: state.deck.length,
-      hands: seat < 0 ? [[], []] : seat === 0 ? [state.hands[0], []] : [[], state.hands[1]],
-      handCounts: [state.hands[0].length, state.hands[1].length],
-      oppSeat: opp,
+      hands: state.hands.map((h, i) => (i === seat ? h : [])),
+      handCounts: state.hands.map((h) => h.length),
+      oppSeat: seat < 0 ? 1 : leftOf(seat, n),
     }
   }
   if (state.kind === 'duel' && seat >= 0) {

@@ -13,7 +13,7 @@ export default async function GamesPage() {
         image="/images/heroes/oyunlar.png"
         eyebrow="Oyunlar"
         title="Tavla · Okey · Bilardo"
-        description="Kanka Coin ile masaya otur, rakibini yen, kazancını katla. Ücretsiz çark, zar ve sandık da seni bekliyor."
+        description="Kanka Coin ile masaya otur, rakibini yen, kazancını katla. Ücretsiz çark ve sandık da seni bekliyor."
         pose="zar"
         speech="Hangisinden başlıyoruz kanka?"
       />

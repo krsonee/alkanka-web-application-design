@@ -4,17 +4,15 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, Lock } from 'lucide-react'
 import { GameStage } from '@/components/alkanka/games/game-stage'
 import { ArenaStage } from '@/components/alkanka/arena/arena-stage'
-import { ARENA_META, isArenaGame } from '@/lib/arena'
+import { ARENA_GAMES, ARENA_META, isArenaGame } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
 
-const MINI = { cark: 'Şans Çarkı', zar: 'Kanka Zarı', sandik: 'Gizemli Sandık' } as const
+const MINI = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık' } as const
 type MiniKey = keyof typeof MINI
 
 const TITLES: Record<string, string> = {
+  ...Object.fromEntries(ARENA_GAMES.map((g) => [g, ARENA_META[g].title])),
   ...MINI,
-  tavla: ARENA_META.tavla.title,
-  okey: ARENA_META.okey.title,
-  bilardo: ARENA_META.bilardo.title,
 }
 
 export function generateStaticParams() {

@@ -168,9 +168,9 @@ export async function spinRoulette(bets: RouletteBet[]) {
 
 /* ---------------- Player tables ---------------- */
 
-export async function openTable(game: string, stake: number) {
+export async function openTable(game: string, stake: number, options?: { seats?: number; team?: boolean; bots?: number }) {
   try {
-    const id = await createTable(await member(), game, stake)
+    const id = await createTable(await member(), game, stake, options)
     revalidatePath('/oyunlar/masalar')
     return { ok: true as const, id }
   } catch (e) {

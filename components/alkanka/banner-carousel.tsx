@@ -49,9 +49,22 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
                 fill
                 priority={i === 0}
                 sizes="(min-width: 1280px) 900px, 100vw"
-                className={cn('object-cover transition-transform duration-[6000ms] ease-out', active ? 'scale-105' : 'scale-100')}
+                className="scale-110 object-cover opacity-40 blur-2xl"
               />
-              <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
+              <div className="absolute inset-y-0 right-0 w-full sm:w-3/5">
+                <Image
+                  src={slide.image}
+                  alt=""
+                  fill
+                  priority={i === 0}
+                  sizes="(min-width: 1280px) 560px, 100vw"
+                  className={cn(
+                    'object-contain object-bottom transition-transform duration-[6000ms] ease-out sm:object-right',
+                    active ? 'scale-[1.03]' : 'scale-100',
+                  )}
+                />
+              </div>
+              <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent sm:bg-gradient-to-r sm:from-background sm:via-background/60 sm:to-transparent" />
               <div className="relative flex h-full max-w-lg flex-col justify-end gap-3 p-5 sm:justify-center sm:p-10">
                 <span className="w-fit rounded-md bg-primary px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-primary-foreground">
                   {slide.eyebrow}

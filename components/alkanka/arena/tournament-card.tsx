@@ -2,12 +2,13 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useActionState, useEffect, useRef } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { CalendarClock, Coins, Crown, Gamepad2, Trophy, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META } from '@/lib/arena'
 import { STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
-import { joinTournament, type JoinState } from '@/app/(site)/turnuvalar/actions'
+import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
 
@@ -24,19 +25,26 @@ const STATUS_STYLE = {
 
 export function TournamentCard({ t }: { t: Tournament }) {
   const meta = ARENA_META[t.game]
-  const { points, spend } = usePoints()
-  const [state, action, pending] = useActionState<JoinState, FormData>(joinTournament, {})
-  const charged = useRef<JoinState | null>(null)
+  const { points, member, refresh, requireLogin } = usePoints()
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const full = t.entries.length >= t.maxPlayers
   const canAfford = points >= t.entryFee
   const fill = Math.min(100, Math.round((t.entries.length / t.maxPlayers) * 100))
+  const joined = member != null && t.entries.some((e) => e.userId === member.id)
+  const myMatch = member ? t.liveMatches.find((m) => m.players.includes(member.id)) : undefined
 
-  useEffect(() => {
-    if (state.ok && state.fee && charged.current !== state) {
-      charged.current = state
-      spend(state.fee)
-    }
-  }, [state, spend])
+  const toggle = () => {
+    if (!requireLogin()) return
+    setError(null)
+    startTransition(async () => {
+      const r = joined ? await exitTournament(t.id) : await enterTournament(t.id)
+      if (!r.ok) setError(r.error ?? 'İşlem başarısız.')
+      refresh()
+      router.refresh()
+    })
+  }
 
   return (
     <article className="flex flex-col overflow-hidden rounded-3xl border border-border bg-card">
@@ -103,41 +111,62 @@ export function TournamentCard({ t }: { t: Tournament }) {
             </div>
           )}
 
-          {t.status === 'kayit' &&
-            (state.ok ? (
-              <p className="rounded-xl border border-primary/50 bg-primary/10 p-4 text-sm font-semibold text-foreground" role="status">
-                {state.message}
+          {t.status === 'basladi' && (
+            <div className="flex flex-col gap-2 rounded-2xl border border-border bg-secondary p-4 text-sm">
+              <p className="font-semibold text-foreground">
+                {t.currentRound ? `${t.currentRound}. tur oynanıyor` : 'Turnuva sürüyor'} · {t.liveMatches.filter((m) => m.status === 'oynaniyor').length} maç aynı anda devam ediyor
               </p>
-            ) : (
-              <form action={action} className="flex flex-col gap-3">
-                <input type="hidden" name="id" value={t.id} />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
-                    Kullanıcı adın
-                    <input name="nickname" required minLength={3} maxLength={20} autoComplete="nickname" placeholder="kanka_34" className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none" />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
-                    Telegram
-                    <input name="telegram" required placeholder="@kullaniciadi" className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none" />
-                  </label>
-                </div>
-                {state.message && (
-                  <p className="text-sm font-semibold text-destructive" role="alert">
-                    {state.message}
-                  </p>
-                )}
-                <button
-                  type="submit"
-                  disabled={pending || full || !canAfford}
-                  className="rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-50"
-                >
-                  {full ? 'Kontenjan doldu' : !canAfford ? `Bakiye yetersiz (${formatAC(t.entryFee)} KC gerekli)` : pending ? 'Kaydediliyor...' : t.entryFee ? `${formatAC(t.entryFee)} KC ile katıl` : 'Ücretsiz katıl'}
-                </button>
-                <Link href={`/oyunlar/${t.game}`} className="text-center text-xs font-semibold text-muted-foreground hover:text-foreground">
-                  Turnuvadan önce {meta.title.toLowerCase()} masasında ısın
+              <p className="leading-relaxed text-muted-foreground">
+                Turdaki tüm maçlar bitince kazananlar otomatik olarak bir sonraki tura eşleşir, finale kadar böyle devam eder.
+              </p>
+              {myMatch && myMatch.status === 'oynaniyor' && (
+                <Link href={`/oyunlar/${t.game}`} className="mt-1 rounded-xl bg-primary px-5 py-3 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground">
+                  Maçın hazır, oyuna gir
                 </Link>
-              </form>
-            ))}
+              )}
+            </div>
+          )}
+
+          {t.status === 'kayit' && (
+            <div className="flex flex-col gap-3">
+              {joined && (
+                <p className="rounded-xl border border-primary/50 bg-primary/10 p-3 text-sm font-semibold text-foreground" role="status">
+                  Kaydın alındı. Turnuva başlayınca tüm oyuncular aynı anda eşleşir.
+                </p>
+              )}
+              {error && (
+                <p className="text-sm font-semibold text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={toggle}
+                disabled={pending || (!joined && member != null && (full || !canAfford))}
+                className={cn(
+                  'rounded-xl px-5 py-3 text-sm font-bold uppercase tracking-wide disabled:opacity-50',
+                  joined ? 'border border-border text-foreground hover:bg-secondary' : 'bg-primary text-primary-foreground hover:brightness-110',
+                )}
+              >
+                {pending
+                  ? 'İşleniyor...'
+                  : joined
+                    ? 'Kaydımı iptal et'
+                    : !member
+                      ? 'Katılmak için giriş yap'
+                      : full
+                        ? 'Kontenjan doldu'
+                        : !canAfford
+                          ? `Bakiye yetersiz (${formatAC(t.entryFee)} KC gerekli)`
+                          : t.entryFee
+                            ? `${formatAC(t.entryFee)} KC ile katıl`
+                            : 'Ücretsiz katıl'}
+              </button>
+              <Link href={`/oyunlar/${t.game}`} className="text-center text-xs font-semibold text-muted-foreground hover:text-foreground">
+                Turnuvadan önce {meta.title.toLowerCase()} masasında ısın
+              </Link>
+            </div>
+          )}
 
           {t.entries.length > 0 && !t.bracket && (
             <ul className="flex flex-wrap gap-1.5" aria-label="Katılımcılar">

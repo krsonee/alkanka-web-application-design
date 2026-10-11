@@ -7,6 +7,7 @@ export type Remote<S> = {
   version: number
   myTurn: boolean
   busy: boolean
-  names: [string, string]
+  names: string[]
+  spectator?: boolean
   send: (action: RemoteAction) => Promise<boolean>
 }

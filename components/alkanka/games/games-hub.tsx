@@ -9,7 +9,6 @@ import { jakoSrc, type JakoPose } from '../jako'
 
 const GAME_CARDS: { href: string; title: string; text: string; pose: JakoPose; limit: string }[] = [
   { href: '/oyunlar/cark', title: 'Şans Çarkı', text: 'Günde 1 ücretsiz çevirme. 25 ile 1.000 Kanka Coin arası ödül.', pose: 'kazandi', limit: 'Günde 1 hak' },
-  { href: '/oyunlar/zar', title: 'Kanka Zarı', text: 'İki zar at, çift gelirse katlanır. 6-6 jackpot.', pose: 'zar', limit: 'Günde 3 hak' },
   { href: '/oyunlar/sandik', title: 'Gizemli Sandık', text: 'Bronz, gümüş, altın. Kapağı aç, içinden ne çıkacak?', pose: 'sandik', limit: '6 saatte 1' },
 ]
 

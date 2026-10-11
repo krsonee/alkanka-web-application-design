@@ -1,0 +1,549 @@
+'use client'
+
+import { useCallback, useState } from 'react'
+import useSWR from 'swr'
+import { ArrowLeft, Clock, Coins, Eye, Loader2, Plus, Swords, Trophy, Users, X } from 'lucide-react'
+import { ARENA_META, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { cn } from '@/lib/utils'
+import { claimTableTimeout, closeTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
+import { formatAC, usePoints } from '../points-context'
+import type { Remote, RemoteAction } from './remote'
+import { TavlaPvp } from './tavla'
+import { OkeyPvp } from './okey-pvp'
+import { Bilardo } from './bilardo'
+import { BlackjackDuel } from './blackjack'
+import { RouletteDuel } from './roulette'
+import { HeadGame } from './head-game'
+
+type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
+export type TableSummary = {
+  id: string
+  game: string
+  stake: number
+  seats: number
+  team: boolean
+  bots: number
+  winners: string[]
+  spectator: boolean
+  status: 'bekliyor' | 'oynaniyor' | 'bitti' | 'iptal'
+  players: PlayerInfo[]
+  version: number
+  winnerId: string | null
+  tournamentId: number | null
+  roundNo: number | null
+  updatedAt: string
+  seat: number
+  turn: number | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  state: any
+}
+type LobbyData = {
+  open: TableSummary[]
+  mine: TableSummary[]
+  tournament: { id: string; game: string; round: number; title: string }[]
+}
+
+const fetcher = async (url: string) => {
+  const r = await fetch(url, { cache: 'no-store' })
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? 'Yüklenemedi')
+  return r.json()
+}
+
+const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
+
+export function TableLobby({ game, settings, rules }: { game: ArenaGame; settings: ArenaGameSettings; rules: string[] }) {
+  const { member, points, requireLogin, refresh } = usePoints()
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [stake, setStake] = useState(settings.bets[0] ?? 25)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isOkey = game === 'okey'
+  const [seats, setSeats] = useState<2 | 4>(4)
+  const [teamMode, setTeamMode] = useState<boolean | null>(null)
+  const [bots, setBots] = useState(0)
+  const humanSeats = isOkey ? seats - (seats === 4 ? bots : 0) : 2
+  const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, { refreshInterval: 4000 })
+
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string; id?: string }>) => {
+    if (!requireLogin()) return
+    setBusy(true)
+    setError(null)
+    const res = await fn()
+    setBusy(false)
+    refresh()
+    if (!res.ok) setError(res.error ?? 'Bir hata oluştu.')
+    return res
+  }
+
+  if (activeId) return <TableRoom id={activeId} onLeave={() => { setActiveId(null); mutate() }} />
+
+  const open = (data?.open ?? []).filter((t) => t.status === 'bekliyor' && t.seat < 0)
+  const watchable = (data?.open ?? []).filter((t) => t.status === 'oynaniyor' && t.seat < 0)
+  const mine = data?.mine ?? []
+  const tour = (data?.tournament ?? []).filter((t) => t.game === game)
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <section aria-labelledby="lobby-title" className="flex flex-col gap-4">
+        {tour.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-2xl border border-primary bg-primary/10 p-4">
+            {tour.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Trophy className="size-4 text-primary" aria-hidden="true" />
+                  {t.title} · {t.round}. tur maçın hazır
+                </span>
+                <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+                  Maça gir
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {mine.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Masalarım</h3>
+            {mine.map((t) => (
+              <TableRowCard key={t.id} t={t}>
+                <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+                  {t.status === 'bekliyor' ? 'Masaya dön' : 'Oyuna dön'}
+                </button>
+              </TableRowCard>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <h3 id="lobby-title" className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+            Açık masalar
+          </h3>
+          {!data && (
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Masalar yükleniyor
+            </div>
+          )}
+          {data && open.length === 0 && (
+            <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+              Şu an bekleyen masa yok. İlk masayı sen aç, kankalar otururken haber verelim.
+            </p>
+          )}
+          {open.map((t) => (
+            <TableRowCard key={t.id} t={t}>
+              <button
+                disabled={busy || (member != null && points < t.stake)}
+                onClick={async () => {
+                  const r = await run(() => sitAtTable(t.id))
+                  if (r?.ok) setActiveId(t.id)
+                }}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-50"
+              >
+                Otur · {formatAC(t.stake)}
+              </button>
+            </TableRowCard>
+          ))}
+        </div>
+
+        {watchable.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Oynanan masalar</h3>
+            {watchable.map((t) => (
+              <TableRowCard key={t.id} t={t}>
+                <button onClick={() => setActiveId(t.id)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground hover:bg-secondary">
+                  <Eye className="size-4" aria-hidden="true" /> İzle
+                </button>
+              </TableRowCard>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <aside className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+          <h3 className="flex items-center gap-2 font-bold text-foreground">
+            <Plus className="size-4 text-primary" aria-hidden="true" /> Masa aç
+          </h3>
+          <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Bahis">
+            {settings.bets.map((b) => (
+              <button
+                key={b}
+                role="radio"
+                aria-checked={stake === b}
+                onClick={() => setStake(b)}
+                className={cn(
+                  'rounded-lg border px-2 py-2 text-sm font-bold',
+                  stake === b ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary',
+                )}
+              >
+                {b}
+              </button>
+            ))}
+          </div>
+          {isOkey && (
+            <div className="flex flex-col gap-3">
+              <OptionGroup
+                label="Masa"
+                value={String(seats)}
+                options={[
+                  { value: '2', label: '2 kişilik' },
+                  { value: '4', label: '4 kişilik' },
+                ]}
+                onChange={(v) => {
+                  const next = v === '4' ? 4 : 2
+                  setSeats(next)
+                  if (next === 2) {
+                    setBots(0)
+                    if (teamMode) setTeamMode(null)
+                  }
+                }}
+              />
+              <OptionGroup
+                label="Oyun modu (zorunlu)"
+                value={teamMode == null ? '' : teamMode ? 'team' : 'solo'}
+                options={[
+                  { value: 'solo', label: 'Tekli' },
+                  { value: 'team', label: 'Takımlı', disabled: seats !== 4 },
+                ]}
+                onChange={(v) => setTeamMode(v === 'team')}
+              />
+              {seats === 4 && (
+                <OptionGroup
+                  label="Bot koltuğu"
+                  value={String(bots)}
+                  options={[
+                    { value: '0', label: 'Bot yok' },
+                    { value: '1', label: '1 bot' },
+                    { value: '2', label: '2 bot' },
+                  ]}
+                  onChange={(v) => setBots(Number(v))}
+                />
+              )}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {humanSeats} gerçek oyuncu
+                {seats === 4 && bots > 0 ? ` + ${bots} bot` : ''}
+                {teamMode ? ' · karşılıklı oturanlar eş olur, eşlerden biri bitirince takım kazanır.' : ''}
+              </p>
+            </div>
+          )}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {isOkey && teamMode
+              ? `Kazanan takımdaki her gerçek oyuncu potun payını alır (%${settings.commission} kesinti).`
+              : `Kazanan potu alır: ${formatAC(stake * humanSeats - Math.round((stake * humanSeats * settings.commission) / 100))} KC (%${settings.commission} kesinti).`}{' '}
+            Bahis masa açılınca ayrılır, masa iptal olursa iade edilir.
+          </p>
+          <button
+            disabled={busy || (isOkey && teamMode == null)}
+            onClick={async () => {
+              const r = await run(() => openTable(game, stake, isOkey ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 } : undefined))
+              if (r?.ok && r.id) setActiveId(r.id)
+            }}
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
+            Masa aç
+          </button>
+          {isOkey && teamMode == null && <p className="text-xs text-muted-foreground">Masa açmak için tekli ya da takımlı modu seç.</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <h3 className="mb-2 font-bold text-foreground">Kurallar</h3>
+          <ul className="flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
+            {rules.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+function OptionGroup({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: { value: string; label: string; disabled?: boolean }[]
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="flex gap-2" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={value === o.value}
+            disabled={o.disabled}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              'flex-1 rounded-lg border px-2 py-2 text-sm font-semibold disabled:opacity-40',
+              value === o.value ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary',
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function TableRowCard({ t, children }: { t: TableSummary; children: React.ReactNode }) {
+  const host = t.players.find((p) => !p.bot)?.name ?? 'Kanka'
+  const humans = t.players.filter((p) => !p.bot).length
+  const meta = ARENA_META[t.game as ArenaGame]
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:p-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary font-bold text-foreground">
+          {host.slice(0, 1).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-foreground">
+            {host}
+            {t.seats > 2 || t.team ? <span className="ml-2 text-xs font-normal text-muted-foreground">{meta?.title}</span> : null}
+          </p>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Coins className="size-3.5" aria-hidden="true" /> {formatAC(t.stake)} KC
+            </span>
+            <span className="flex items-center gap-1">
+              <Users className="size-3.5" aria-hidden="true" /> {humans}/{t.seats - t.bots}
+              {t.bots > 0 ? ` + ${t.bots} bot` : ''}
+            </span>
+            {t.game === 'okey' && <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{t.team ? 'Takımlı' : 'Tekli'}</span>}
+          </p>
+        </div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) {
+  const { refresh, member } = usePoints()
+  const { data, mutate, error } = useSWR<TableSummary>(`/api/tables/${id}`, fetcher, {
+    refreshInterval: (d) => (d && (d.status === 'bitti' || d.status === 'iptal') ? 0 : 1500),
+  })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const send = useCallback(
+    async (action: RemoteAction) => {
+      if (!data) return false
+      setBusy(true)
+      const r = await playMove(id, data.version, action)
+      await mutate()
+      setBusy(false)
+      if (!r.ok) {
+        setMsg(r.error ?? 'Hamle yapılamadı.')
+        return false
+      }
+      setMsg(null)
+      return true
+    },
+    [data, id, mutate],
+  )
+
+  if (error) return <RoomShell onLeave={onLeave}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
+  if (!data) {
+    return (
+      <RoomShell onLeave={onLeave}>
+        <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Masa yükleniyor
+        </div>
+      </RoomShell>
+    )
+  }
+
+  const meta = ARENA_META[data.game as ArenaGame]
+  const seatCount = data.seats || 2
+  const names = Array.from({ length: seatCount }, (_, i) => data.players.find((p) => p.seat === i)?.name ?? 'Bekleniyor')
+  const mySeat = data.seat
+  const spectator = mySeat < 0
+  const ended = data.status === 'bitti' || data.status === 'iptal'
+  const idleMs = Date.now() - new Date(data.updatedAt).getTime()
+  const oppTurnStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn != null && data.turn !== mySeat && idleMs > 3 * 60 * 1000
+  const duelStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn == null && data.state?.scores?.[mySeat] && idleMs > 10 * 60 * 1000
+  const won = member != null && (data.winners ?? []).includes(member.id)
+  const turnName = data.turn != null ? names[data.turn] : null
+
+  const remote: Remote<unknown> = {
+    id,
+    // Tavla and bilardo render from seat 0's side for spectators; okey handles seat -1 itself.
+    seat: spectator && data.game !== 'okey' ? 0 : mySeat,
+    state: data.state,
+    version: data.version,
+    myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
+    busy,
+    names,
+    spectator,
+    send,
+  }
+
+  return (
+    <RoomShell onLeave={onLeave} title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm">
+        <span className="min-w-0 truncate font-semibold text-foreground">
+          {data.team
+            ? `${names[0]} & ${names[2]} vs ${names[1]} & ${names[3]}`
+            : names.join(' · ')}
+        </span>
+        <span className="flex items-center gap-1 text-muted-foreground">
+          {spectator ? <Eye className="size-3.5" aria-hidden="true" /> : <Clock className="size-3.5" aria-hidden="true" />}
+          {data.status === 'bekliyor'
+            ? `Oyuncu bekleniyor (${data.players.filter((p) => !p.bot).length}/${seatCount - (data.bots ?? 0)})`
+            : data.status === 'oynaniyor'
+              ? data.turn == null
+                ? 'Eş zamanlı oynanıyor'
+                : data.turn === mySeat
+                  ? 'Sıra sende'
+                  : `${turnName} oynuyor`
+              : data.status === 'bitti'
+                ? 'Bitti'
+                : 'İptal'}
+          {spectator && data.status === 'oynaniyor' ? ' · izleyici' : ''}
+        </span>
+      </div>
+
+      {msg && (
+        <p role="alert" className="px-4 pt-3 text-sm text-destructive">
+          {msg}
+        </p>
+      )}
+
+      <div className="p-2 sm:p-4">
+        {data.status === 'bekliyor' && (
+          <div className="flex flex-col items-center gap-4 py-10 text-center">
+            <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
+            <p className="text-pretty text-sm text-muted-foreground">Masan açık. Bir kanka oturduğunda oyun otomatik başlar.</p>
+            {mySeat === 0 && !data.tournamentId && (
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  await closeTable(id)
+                  setBusy(false)
+                  refresh()
+                  onLeave()
+                }}
+                className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+              >
+                <X className="size-4" aria-hidden="true" /> Masayı kapat ve bahsi geri al
+              </button>
+            )}
+          </div>
+        )}
+
+        {data.status === 'oynaniyor' && spectator && DUEL.includes(data.game) && (
+          <p className="py-10 text-center text-sm text-muted-foreground">Bu oyunda iki oyuncu aynı anda kendi masasında oynuyor, skorlar bitince görünür.</p>
+        )}
+
+        {(data.status === 'oynaniyor' || ended) && data.state && !(spectator && DUEL.includes(data.game)) && (
+          <div className={cn(spectator && data.game !== 'okey' && 'pointer-events-none')}>
+            <GameSurface game={data.game} remote={remote} done={ended} />
+          </div>
+        )}
+
+        {(oppTurnStale || duelStale) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-secondary p-3 text-sm">
+            <span className="text-foreground">
+              {seatCount > 2 ? `${turnName} uzun süredir hamle yapmadı.` : 'Rakibin uzun süredir hamle yapmadı.'}
+            </span>
+            <button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                const r = await claimTableTimeout(id)
+                await mutate()
+                setBusy(false)
+                refresh()
+                if (!r.ok) setMsg(r.error ?? 'Talep reddedildi.')
+              }}
+              className="rounded-lg bg-primary px-4 py-2 font-bold text-primary-foreground"
+            >
+              {seatCount > 2 && !data.team ? 'Yerine bot geçir' : 'Hükmen galibiyet al'}
+            </button>
+          </div>
+        )}
+
+        {ended && (
+          <div className="mt-4 flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6 text-center">
+            <p className="text-xl font-bold text-foreground">
+              {data.status === 'iptal'
+                ? 'Masa iptal edildi, bahis iade edildi.'
+                : data.winnerId == null
+                  ? 'Berabere, bahisler iade edildi.'
+                  : spectator
+                    ? `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`
+                    : won
+                      ? data.team
+                        ? 'Takımın kazandı!'
+                        : 'Kazandın!'
+                      : 'Kaybettin'}
+            </p>
+            {data.tournamentId && won && (
+              <p className="text-sm text-muted-foreground">Turdaki tüm maçlar bitince bir sonraki tura otomatik eşleşeceksin.</p>
+            )}
+            <button onClick={() => { refresh(); onLeave() }} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground">
+              Lobiye dön
+            </button>
+          </div>
+        )}
+      </div>
+    </RoomShell>
+  )
+}
+
+function GameSurface({ game, remote, done }: { game: string; remote: Remote<unknown>; done: boolean }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = remote as Remote<any>
+  if (game === 'tavla') return <TavlaPvp remote={r} />
+  if (game === 'okey') return <OkeyPvp remote={r} />
+  if (game === 'bilardo') return <Bilardo remote={r} />
+  if (DUEL.includes(game)) {
+    const mine = r.state?.scores?.[r.seat]
+    if (mine || done) {
+      const opp = r.state?.scores?.[r.seat === 0 ? 1 : 0]
+      return (
+        <div className="flex flex-col items-center gap-2 py-8 text-center text-sm">
+          <p className="font-semibold text-foreground">
+            Skorun: {mine ? `${mine.for} - ${mine.against}` : '-'}
+          </p>
+          <p className="text-muted-foreground">
+            {opp && !opp.hidden ? `Rakip skoru: ${opp.for} - ${opp.against}` : 'Rakibinin oyununu bitirmesi bekleniyor.'}
+          </p>
+        </div>
+      )
+    }
+    const submit = (s: { for: number; against: number }) => void r.send({ type: 'score', for: s.for, against: s.against })
+    if (game === 'blackjack') return <BlackjackDuel onDone={submit} />
+    if (game === 'rulet') return <RouletteDuel onDone={submit} />
+    return <HeadGame sport={game === 'kafa-topu' ? 'futbol' : 'basket'} mode="bot" onEnd={submit} />
+  }
+  return null
+}
+
+function RoomShell({ children, onLeave, title }: { children: React.ReactNode; onLeave: () => void; title?: string }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-3 border-b border-border px-3 py-2.5">
+        <button onClick={onLeave} aria-label="Lobiye dön" className="flex size-9 items-center justify-center rounded-lg hover:bg-secondary">
+          <ArrowLeft className="size-4 text-foreground" aria-hidden="true" />
+        </button>
+        <h3 className="truncate font-bold text-foreground">{title ?? 'Masa'}</h3>
+      </div>
+      {children}
+    </div>
+  )
+}
