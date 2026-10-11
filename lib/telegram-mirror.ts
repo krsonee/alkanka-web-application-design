@@ -2,6 +2,7 @@ import 'server-only'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { filterWords } from '@/lib/telegram-filters'
+import { recordDeal } from '@/lib/deals'
 
 export type MirrorSource = {
   id: number
@@ -450,8 +451,17 @@ export async function runMirror(): Promise<MirrorResult> {
         const status = okCount > 0 ? 'sent' : 'failed'
         const detail = failures.length ? `${okCount}/${targets.length} kanal. ${failures.join(' | ')}`.slice(0, 300) : targets.length > 1 ? `${targets.length} kanal` : null
         await rows(sql`UPDATE tg_log SET status = ${status}, detail = ${detail} WHERE id = ${claimed[0].id}`)
-        if (okCount > 0) result.sent++
-        else result.failed++
+        if (okCount > 0) {
+          result.sent++
+          await recordDeal({
+            sourceId: source.id,
+            postId: post.id,
+            brand: source.brand,
+            text: stripTags(post.html),
+            photo: post.photos[0] ?? null,
+            link: source.link,
+          }).catch((error) => console.error('[deals] kaydedilemedi', error))
+        } else result.failed++
       }
       await rows(sql`UPDATE tg_sources SET last_checked_at = now(), last_error = NULL WHERE id = ${source.id}`)
     } catch (error) {

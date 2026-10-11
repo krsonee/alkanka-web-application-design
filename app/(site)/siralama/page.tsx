@@ -1,8 +1,8 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Leaderboard } from '@/components/alkanka/leaderboard'
 
-export const metadata: Metadata = { title: 'Sıralama | AL KANKA' }
+export const metadata = pageMeta('siralama')
 
 export default function RankingPage() {
   return (

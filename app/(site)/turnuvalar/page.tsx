@@ -1,14 +1,11 @@
-import type { Metadata } from 'next'
+import { pageMeta } from '@/lib/seo'
 import Link from 'next/link'
 import { Swords } from 'lucide-react'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { TournamentCard } from '@/components/alkanka/arena/tournament-card'
 import { listTournaments } from '@/lib/tournaments'
 
-export const metadata: Metadata = {
-  title: 'Turnuvalar | AL KANKA',
-  description: 'Tavla, okey ve bilardo turnuvalarına katıl, Kanka Coin ödül havuzunu kap.',
-}
+export const metadata = pageMeta('turnuvalar')
 
 export default async function TournamentsPage() {
   const all = (await listTournaments()).filter((t) => t.status !== 'iptal')

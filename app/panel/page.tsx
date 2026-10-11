@@ -18,6 +18,10 @@ import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/t
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { chatStatus } from '@/lib/telegram-chat'
+import { SeoManager } from '@/components/panel/seo-manager'
+import { listPosts } from '@/lib/blog'
+import { dealsPublishing, getVerification, listDeals } from '@/lib/deals'
+import { SITE_URL } from '@/lib/seo'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -90,6 +94,15 @@ export default async function PanelPage() {
               <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
               <TelegramChatSetup bots={tgBots} status={tgChat} />
             </div>
+          }
+          seo={
+            <SeoManager
+              posts={await listPosts({ includeDrafts: true })}
+              deals={await listDeals(30)}
+              publishing={await dealsPublishing()}
+              verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
+              siteUrl={SITE_URL}
+            />
           }
           logos={
             <>
