@@ -11,7 +11,7 @@ import {
 } from '@/app/panel/seo-actions'
 import type { ActionState } from '@/app/panel/actions'
 import type { BlogPost } from '@/lib/blog'
-import { DEAL_LABELS, type Deal, type Verification } from '@/lib/deals'
+import { DEAL_LABELS, type Deal, type Verification } from '@/lib/deal-types'
 
 type Props = { posts: BlogPost[]; deals: Deal[]; publishing: boolean; verification: Verification; siteUrl: string }
 
