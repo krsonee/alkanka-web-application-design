@@ -38,6 +38,8 @@ import { AdsEditor } from '@/components/panel/ads-editor'
 import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
 import { MarketManager } from '@/components/panel/market-manager'
+import { GrowthManager } from '@/components/panel/growth-manager'
+import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
@@ -159,6 +161,18 @@ export default async function PanelPage() {
           badges={await kpPanel()}
           market={await marketPanel()}
           marketPending={await pendingCount().catch(() => 0)}
+          growth={
+            <GrowthManager
+              sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))}
+              links={await getSiteLinks().catch(() => ({}))}
+              followers={await followerCounts().catch(() => ({}))}
+              report={await trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 }))}
+              flagged={await flaggedMembers().catch(() => [])}
+              accounts={await adminSponsorAccounts().catch(() => [])}
+              period={currentPeriod()}
+              siteUrl={SITE_URL}
+            />
+          }
           seo={
             <SeoManager
               posts={await listPosts({ includeDrafts: true })}

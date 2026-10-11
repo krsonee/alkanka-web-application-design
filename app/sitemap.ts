@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next'
 import { listPosts } from '@/lib/blog'
 import { listDeals } from '@/lib/deals'
 import { PAGE_SEO, SITE_URL } from '@/lib/seo'
+import { SPONSORS } from '@/components/alkanka/data'
 
 export const revalidate = 3600
 
@@ -21,6 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...pages,
     ...['cark', 'sandik', 'zar'].map((g) => ({ url: `${SITE_URL}/oyunlar/${g}`, lastModified: now, changeFrequency: 'weekly' as const, priority: 0.5 })),
+    ...SPONSORS.map((s) => ({ url: `${SITE_URL}/siteler/${s.id}`, lastModified: now, changeFrequency: 'weekly' as const, priority: 0.8 })),
     ...posts.map((p) => ({ url: `${SITE_URL}/rehber/${p.slug}`, lastModified: new Date(p.updatedAt), changeFrequency: 'monthly' as const, priority: 0.7 })),
     ...deals.map((d) => ({ url: `${SITE_URL}/firsatlar/${d.slug}`, lastModified: new Date(d.createdAt), changeFrequency: 'never' as const, priority: 0.5 })),
   ]

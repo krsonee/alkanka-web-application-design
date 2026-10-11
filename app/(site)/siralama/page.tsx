@@ -1,6 +1,9 @@
 import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Leaderboard } from '@/components/alkanka/leaderboard'
+import { WagerBoard } from '@/components/alkanka/wager-board'
+
+export const revalidate = 300
 
 export const metadata = pageMeta('siralama')
 
@@ -17,6 +20,7 @@ export default function RankingPage() {
         speech="Zirvede yer var kanka, çalışmaya devam!"
       />
       <Leaderboard />
+      <WagerBoard />
     </>
   )
 }

@@ -138,6 +138,8 @@ export async function attachReferral(userId: string, code: string) {
   if (!referrer || referrer === userId) return false
   const fresh = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${userId} AND "createdAt" > now() - interval '48 hours'`)
   if (!fresh.length) return false
+  const { sameNetwork } = await import('@/lib/growth')
+  if (await sameNetwork(userId, referrer).catch(() => false)) return false
   const r = await rows(sql`INSERT INTO referrals (referred_id, referrer_id) VALUES (${userId}, ${referrer}) ON CONFLICT DO NOTHING RETURNING referred_id`)
   return r.length > 0
 }
@@ -160,13 +162,20 @@ export async function listReferrals(userId: string): Promise<ReferralRow[]> {
 
 export async function claimReferralRewards(userId: string) {
   await ensureCommunity()
+  const { ensureGrowth, isFlagged } = await import('@/lib/growth')
+  const { rankForUser } = await import('@/lib/ranks')
+  await ensureGrowth()
+  if (await isFlagged(userId)) return { count: 0, total: 0, blocked: true }
   const done = await rows<{ referred_id: string }>(sql`UPDATE referrals r SET rewarded_at = now()
     WHERE r.referrer_id = ${userId} AND r.rewarded_at IS NULL
       AND (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id) >= ${REFERRAL_MIN_GAMES}
+      AND NOT EXISTS (SELECT 1 FROM member_origin o WHERE o.user_id = r.referred_id AND o.flagged)
     RETURNING r.referred_id`)
   for (const d of done) await credit(d.referred_id, REFERRED_REWARD)
-  if (done.length) await credit(userId, REFERRER_REWARD * done.length)
-  return { count: done.length, total: REFERRER_REWARD * done.length }
+  const rank = await rankForUser(userId)
+  const total = Math.round(REFERRER_REWARD * done.length * rank.multiplier)
+  if (done.length) await credit(userId, total)
+  return { count: done.length, total, blocked: false }
 }
 
 // --- Reviews & complaints ------------------------------------------------
