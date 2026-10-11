@@ -39,7 +39,7 @@ const CAPTION_LIMIT = 1000
 const MESSAGE_LIMIT = 3900
 
 let ready: Promise<void> | null = null
-function ensureTables() {
+export function ensureTables() {
   ready ??= (async () => {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_bots (
       id serial PRIMARY KEY, name text NOT NULL, username text NOT NULL UNIQUE, token_enc text NOT NULL,
@@ -164,7 +164,7 @@ export async function fetchChannel(channel: string): Promise<ScrapedPost[]> {
   return posts
 }
 
-async function callBot<T = unknown>(token: string, method: string, body: Record<string, unknown> = {}): Promise<T> {
+export async function callBot<T = unknown>(token: string, method: string, body: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -310,7 +310,7 @@ export async function deleteBot(id: number) {
   await rows(sql`DELETE FROM tg_bots WHERE id = ${id}`)
 }
 
-async function botToken(botId: number) {
+export async function botToken(botId: number) {
   const r = await rows(sql`SELECT token_enc FROM tg_bots WHERE id = ${botId}`)
   if (!r.length) throw new Error('Bot bulunamadı')
   return decrypt(String(r[0].token_enc))
@@ -353,7 +353,7 @@ export async function testTarget(id: number) {
   const r = await rows(sql`SELECT bot_id, chat_id, title FROM tg_targets WHERE id = ${id}`)
   if (!r.length) throw new Error('Kanal bulunamadı')
   const token = await botToken(Number(r[0].bot_id))
-  await callBot(token, 'sendMessage', { chat_id: String(r[0].chat_id), text: 'AL KANKA bot bağlantısı çalışıyor.' })
+  await callBot(token, 'sendMessage', { chat_id: String(r[0].chat_id), text: 'AL KANKA bot bağlantısı çalı��ıyor.' })
   return String(r[0].title)
 }
 

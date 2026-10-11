@@ -9,6 +9,7 @@ import { NAV_ITEMS, TELEGRAM_URL } from './data'
 import { JakoAvatar } from './jako'
 import { BrandLogo, LogoSelector } from './logo-selector'
 import { TourButton } from './app/site-tour'
+import { useChatFeed } from './use-chat-feed'
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
@@ -46,9 +47,12 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function TelegramCard() {
+  const { data } = useChatFeed()
+  const subtitle =
+    data?.configured && data.members != null ? `${data.members.toLocaleString('tr-TR')} üye · canlı sohbet` : 'Topluluğa katıl, sohbete gel'
   return (
     <a
-      href={TELEGRAM_URL}
+      href={data?.inviteUrl ?? TELEGRAM_URL}
       target="_blank"
       rel="noopener noreferrer"
       className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/10 p-3 transition-colors hover:bg-accent/15"
@@ -56,7 +60,7 @@ function TelegramCard() {
       <JakoAvatar pose="telegram" size="sm" />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-sm font-semibold text-foreground">Jako Telegram’da!</span>
-        <span className="truncate text-xs text-muted-foreground">14.2K üye · 2.384 çevrimiçi</span>
+        <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
       </span>
       <Send className="size-4 shrink-0 text-accent" aria-hidden="true" />
     </a>

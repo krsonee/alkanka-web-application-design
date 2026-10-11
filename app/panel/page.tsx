@@ -16,6 +16,8 @@ import { pushStats } from '@/lib/push'
 import { PushSender } from '@/components/panel/push-sender'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
+import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
+import { chatStatus } from '@/lib/telegram-chat'
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
@@ -30,12 +32,13 @@ export default async function PanelPage() {
 
   const content = await getAllContent()
   const push = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
-  const [tgBots, tgTargets, tgSources, tgLog, cronKey] = await Promise.all([
+  const [tgBots, tgTargets, tgSources, tgLog, cronKey, tgChat] = await Promise.all([
     listBots().catch(() => []),
     listTargets().catch(() => []),
     listSources().catch(() => []),
     listLog().catch(() => []),
     getCronKey().catch(() => 'ANAHTAR'),
+    chatStatus().catch(() => null),
   ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
@@ -83,7 +86,10 @@ export default async function PanelPage() {
           tournaments={<TournamentManager tournaments={await listTournaments()} />}
           push={<PushSender {...push} configured={push.total > 0} />}
           telegram={
-            <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
+            <div className="flex flex-col gap-6">
+              <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
+              <TelegramChatSetup bots={tgBots} status={tgChat} />
+            </div>
           }
           logos={
             <>

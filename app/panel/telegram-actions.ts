@@ -1,7 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { isAdmin } from '@/lib/admin-auth'
+import { connectChat, disconnectChat } from '@/lib/telegram-chat'
 import {
   addBot,
   addSource,
@@ -110,6 +112,33 @@ export async function deleteSourceAction(form: FormData) {
 export async function rotateCronKeyAction() {
   if (!(await isAdmin())) return
   await getCronKey(true)
+  revalidatePath('/panel')
+}
+
+export async function connectChatAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await isAdmin())) return EXPIRED
+  const botId = Number(form.get('botId'))
+  const chat = String(form.get('chat') ?? '').trim()
+  if (!botId) return { message: 'Önce bir bot seç.' }
+  if (!chat) return { message: 'Grup kullanıcı adını ya da ID’sini yaz.' }
+  const h = await headers()
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  const host = production ?? h.get('x-forwarded-host') ?? h.get('host') ?? ''
+  if (!host || /localhost|127\.0\.0\.1/.test(host)) {
+    return { message: 'Webhook için sitenin yayında olması gerekiyor. Önce Publish ile yayınla, sonra panelden tekrar bağla.' }
+  }
+  try {
+    const title = await connectChat(botId, chat, `https://${host}`)
+    revalidatePath('/panel')
+    return { ok: true, message: `"${title}" bağlandı. Gruba yazılan yeni mesajlar sitede görünecek.` }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function disconnectChatAction() {
+  if (!(await isAdmin())) return
+  await disconnectChat()
   revalidatePath('/panel')
 }
 
