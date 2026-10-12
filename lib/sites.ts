@@ -1,10 +1,10 @@
 import 'server-only'
 import type { Sponsor, SponsorTier } from '@/components/alkanka/data'
 import { rows, sql } from '@/lib/db'
-import { SITE_BADGES, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
+import { SITE_BADGES, slugify, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
 export type { SiteInput, SponsorSite } from '@/lib/sites-shared'
-export { SITE_BADGES } from '@/lib/sites-shared'
+export { SITE_BADGES, slugify } from '@/lib/sites-shared'
 
 let ready: Promise<unknown> | null = null
 
@@ -30,13 +30,32 @@ export function ensureSites() {
       bonus_type text NOT NULL DEFAULT '',
       wager_text text NOT NULL DEFAULT '',
       bonus_code text NOT NULL DEFAULT '',
+      slug text NOT NULL DEFAULT '',
       created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE sites ADD COLUMN IF NOT EXISTS slug text`)
     await rows(sql`CREATE INDEX IF NOT EXISTS sites_sort_idx ON sites (sort_order, id)`)
+    const missing = await rows<{ id: number; name: string }>(sql`SELECT id, name FROM sites WHERE slug IS NULL OR btrim(slug) = '' ORDER BY id`)
+    for (const row of missing) {
+      const slug = await uniqueSlug(slugify(row.name) || 'sponsor', Number(row.id))
+      await rows(sql`UPDATE sites SET slug = ${slug} WHERE id = ${row.id}`)
+    }
+    await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS sites_slug_idx ON sites (slug)`)
   })().catch((error) => {
     ready = null
     throw error
   })
   return ready
+}
+
+async function uniqueSlug(base: string, exceptId: number | null) {
+  const root = base || 'sponsor'
+  let slug = root
+  for (let n = 2; n < 1000; n += 1) {
+    const taken = await rows<{ id: number }>(sql`SELECT id FROM sites WHERE slug = ${slug}`)
+    if (!taken.some((row) => Number(row.id) !== exceptId)) return slug
+    slug = `${root}-${n}`
+  }
+  throw new Error('Bu adres kısaltması kullanılıyor.')
 }
 
 type SiteRow = {
@@ -59,6 +78,7 @@ type SiteRow = {
   bonus_type: string
   wager_text: string
   bonus_code: string
+  slug: string | null
   created_at: string | Date
 }
 
@@ -84,6 +104,7 @@ function mapSite(row: SiteRow): SponsorSite {
     bonusType: row.bonus_type,
     wagerText: row.wager_text,
     bonusCode: row.bonus_code,
+    slug: String(row.slug ?? '').trim(),
     createdAt: new Date(row.created_at).toISOString(),
   }
 }
@@ -106,7 +127,7 @@ export function tierOf(badge: string): SponsorTier {
 export function toPublicSponsor(site: SponsorSite): PublicSponsor {
   const perks = site.perks.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
   return {
-    id: String(site.id),
+    id: site.slug,
     name: site.name,
     initials: initialsOf(site.name),
     tier: tierOf(site.badge),
@@ -122,7 +143,7 @@ export function toPublicSponsor(site: SponsorSite): PublicSponsor {
 
 export async function listPublicSponsors(): Promise<PublicSponsor[]> {
   const all = await listSites()
-  return all.filter((site) => site.active).map(toPublicSponsor)
+  return all.filter((site) => site.active && site.slug).map(toPublicSponsor)
 }
 
 export function pickFeatured(all: PublicSponsor[]) {
@@ -132,20 +153,12 @@ export function pickFeatured(all: PublicSponsor[]) {
   return { main, cards, total: all.length }
 }
 
-export async function publicSiteById(id: string): Promise<PublicSponsor | null> {
-  if (!/^\d+$/.test(id)) return null
-  const all = await listPublicSponsors()
-  return all.find((site) => site.id === id) ?? null
-}
+export type ResolvedSponsor = PublicSponsor & { recordId: string }
 
-/** Entry address wins, then the site address. Does not read site_links. */
-export async function sponsorTarget(id: string): Promise<string | null> {
-  if (!/^\d+$/.test(id)) return null
-  await ensureSites()
-  const found = await rows<{ entry_url: string; url: string }>(sql`SELECT entry_url, url FROM sites WHERE id = ${Number(id)} AND active`)
-  const entry = String(found[0]?.entry_url ?? '').trim()
-  const url = String(found[0]?.url ?? '').trim()
-  const pick = entry && entry !== '#' ? entry : url && url !== '#' ? url : ''
+function hrefOf(entryUrl: string, url: string) {
+  const entry = entryUrl.trim()
+  const siteUrl = url.trim()
+  const pick = entry && entry !== '#' ? entry : siteUrl && siteUrl !== '#' ? siteUrl : ''
   if (!pick) return null
   try {
     const target = new URL(pick)
@@ -156,10 +169,31 @@ export async function sponsorTarget(id: string): Promise<string | null> {
   }
 }
 
+export async function resolvePublicSite(key: string): Promise<ResolvedSponsor | null> {
+  const all = await listSites()
+  const row = /^\d+$/.test(key)
+    ? all.find((site) => String(site.id) === key) ?? all.find((site) => site.slug === key)
+    : all.find((site) => site.slug === key)
+  if (!row?.active || !row.slug) return null
+  return { ...toPublicSponsor(row), recordId: String(row.id) }
+}
+
+export async function publicSiteById(key: string): Promise<ResolvedSponsor | null> {
+  return resolvePublicSite(key)
+}
+
+/** Entry address wins, then the site address. Does not read site_links. */
+export async function sponsorTarget(key: string): Promise<string | null> {
+  const site = await resolvePublicSite(key)
+  if (!site) return null
+  const row = (await listSites()).find((item) => String(item.id) === site.recordId)
+  return row ? hrefOf(row.entryUrl, row.url) : null
+}
+
 export async function listSites(): Promise<SponsorSite[]> {
   await ensureSites()
   const found = await rows<SiteRow>(sql`SELECT id, name, logo_url, bonus_text, url, entry_url, domain, badge, featured, active,
-    sort_order, clicks, tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, created_at
+    sort_order, clicks, tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, slug, created_at
     FROM sites ORDER BY sort_order, id`)
   return found.map(mapSite)
 }
@@ -187,7 +221,7 @@ function domainOf(value: string) {
   return host
 }
 
-function clean(input: SiteInput): Omit<SiteInput, 'id'> {
+function clean(input: SiteInput): Omit<SiteInput, 'id' | 'slug'> {
   const name = clip(input.name, 80)
   if (!name) throw new Error('Sponsor adı gerekli.')
   const badge = clip(input.badge, 40)
@@ -221,6 +255,7 @@ export async function saveSite(input: SiteInput): Promise<number> {
   const site = clean(input)
   await ensureSites()
   const id = Number(input.id)
+  const slug = await uniqueSlug(slugify(input.slug) || slugify(site.name) || 'sponsor', input.id ? id : null)
   if (input.id != null && input.id !== 0) {
     if (!Number.isInteger(id) || id < 1) throw new Error('Sponsor bulunamadı.')
     const updated = await rows<{ id: number }>(sql`UPDATE sites SET
@@ -240,7 +275,8 @@ export async function saveSite(input: SiteInput): Promise<number> {
       payout = ${site.payout},
       bonus_type = ${site.bonusType},
       wager_text = ${site.wagerText},
-      bonus_code = ${site.bonusCode}
+      bonus_code = ${site.bonusCode},
+      slug = ${slug}
       WHERE id = ${id}
       RETURNING id`)
     if (!updated.length) throw new Error('Sponsor bulunamadı.')
@@ -248,11 +284,11 @@ export async function saveSite(input: SiteInput): Promise<number> {
   }
   const inserted = await rows<{ id: number }>(sql`INSERT INTO sites (
     name, logo_url, bonus_text, url, entry_url, domain, badge, featured, active, sort_order,
-    tagline, perks, rating, payout, bonus_type, wager_text, bonus_code)
+    tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, slug)
     VALUES (
       ${site.name}, ${site.logoUrl}, ${site.bonusText}, ${site.url}, ${site.entryUrl}, ${site.domain}, ${site.badge},
       ${site.featured}, ${site.active}, ${site.sortOrder}, ${site.tagline}, ${site.perks}, ${site.rating}, ${site.payout},
-      ${site.bonusType}, ${site.wagerText}, ${site.bonusCode})
+      ${site.bonusType}, ${site.wagerText}, ${site.bonusCode}, ${slug})
     RETURNING id`)
   return Number(inserted[0]?.id)
 }

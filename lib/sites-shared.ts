@@ -1,5 +1,37 @@
 export const SITE_BADGES = ['', 'Ana Sponsor', 'VIP'] as const
 
+const TURKISH: Record<string, string> = {
+  ç: 'c',
+  Ç: 'c',
+  ğ: 'g',
+  Ğ: 'g',
+  ı: 'i',
+  I: 'i',
+  İ: 'i',
+  ö: 'o',
+  Ö: 'o',
+  ş: 's',
+  Ş: 's',
+  ü: 'u',
+  Ü: 'u',
+  â: 'a',
+  Â: 'a',
+  î: 'i',
+  Î: 'i',
+  û: 'u',
+  Û: 'u',
+}
+
+/** "Makro Bet" → makro-bet, "Şans Çarkı" → sans-carki. */
+export function slugify(value: string) {
+  const mapped = [...value.trim()].map((char) => TURKISH[char] ?? char).join('')
+  return mapped
+    .toLocaleLowerCase('en-US')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+}
+
 export type SiteInput = {
   id: number | null
   name: string
@@ -19,6 +51,7 @@ export type SiteInput = {
   bonusType: string
   wagerText: string
   bonusCode: string
+  slug: string
 }
 
 export type SponsorSite = Omit<SiteInput, 'id'> & {

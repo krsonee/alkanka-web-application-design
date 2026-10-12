@@ -26,6 +26,7 @@ const EMPTY: SiteInput = {
   bonusType: '',
   wagerText: '',
   bonusCode: '',
+  slug: '',
 }
 
 const BADGE_LABEL: Record<(typeof SITE_BADGES)[number], string> = {
@@ -75,7 +76,10 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
           {sites.map((site) => (
             <li key={site.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
               <span className="w-8 shrink-0 text-xs tabular-nums text-muted-foreground">{site.sortOrder}</span>
-              <span className={cn('min-w-0 flex-1 font-medium text-foreground', !site.active && 'opacity-50')}>{site.name}</span>
+              <span className={cn('min-w-0 flex-1 font-medium text-foreground', !site.active && 'opacity-50')}>
+                {site.name}
+                {site.slug ? <span className="ml-2 font-normal text-muted-foreground">/{site.slug}</span> : null}
+              </span>
               <span className="rounded bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
               {site.featured && <span className="text-[10px] font-bold uppercase text-primary">Öne çıkan</span>}
               {!site.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Pasif</span>}
@@ -129,6 +133,7 @@ function SiteForm({
       className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2"
     >
       <Field label="Sponsor adı" value={v.name} onChange={(name) => set('name', name)} required />
+      <Field label="Adres kısaltması" value={v.slug} onChange={(slug) => set('slug', slug)} placeholder="makro-bet" />
       <Field label="Kısa tanım" value={v.tagline} onChange={(tagline) => set('tagline', tagline)} />
       <Field label="Logo adresi" value={v.logoUrl} onChange={(logoUrl) => set('logoUrl', logoUrl)} placeholder="https://… veya /images/…" />
       <Field label="Bonus satırı" value={v.bonusText} onChange={(bonusText) => set('bonusText', bonusText)} />

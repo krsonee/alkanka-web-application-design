@@ -1,20 +1,20 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import { ArrowRight, Check, ShieldCheck, Star, Wallet } from 'lucide-react'
 import { FollowButton } from '@/components/alkanka/growth-widgets'
 import { getMember } from '@/lib/member'
 import { myFollows } from '@/lib/growth'
 import { SITE_URL } from '@/lib/seo'
-import { listPublicSponsors, type PublicSponsor } from '@/lib/sites'
+import { listPublicSponsors, resolvePublicSite } from '@/lib/sites'
 
 export const dynamic = 'force-dynamic'
 
 const TIER_LABEL: Record<string, string> = { ana: 'Ana sponsor', vip: 'VIP sponsor', guvenilir: 'Güvenilir sponsor' }
 
-async function findSponsor(slug: string): Promise<PublicSponsor | undefined> {
-  const all = await listPublicSponsors().catch(() => [])
-  return all.find((site) => site.id === slug)
+async function findSponsor(slug: string) {
+  const site = await resolvePublicSite(slug).catch(() => null)
+  return site
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -30,6 +30,7 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
   const { slug } = await params
   const s = await findSponsor(slug)
   if (!s) notFound()
+  if (slug !== s.id) permanentRedirect(`/siteler/${s.id}`)
 
   const member = await getMember()
   const following = member ? (await myFollows(member.id).catch(() => [] as string[])).includes(s.id) : false
