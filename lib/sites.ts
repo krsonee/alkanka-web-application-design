@@ -1,0 +1,189 @@
+import 'server-only'
+import { rows, sql } from '@/lib/db'
+import { SITE_BADGES, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
+
+export type { SiteInput, SponsorSite } from '@/lib/sites-shared'
+export { SITE_BADGES } from '@/lib/sites-shared'
+
+let ready: Promise<unknown> | null = null
+
+export function ensureSites() {
+  ready ??= (async () => {
+    await rows(sql`CREATE TABLE IF NOT EXISTS sites (
+      id serial PRIMARY KEY,
+      name text NOT NULL,
+      logo_url text NOT NULL DEFAULT '',
+      bonus_text text NOT NULL DEFAULT '',
+      url text NOT NULL DEFAULT '',
+      entry_url text NOT NULL DEFAULT '',
+      domain text NOT NULL DEFAULT '',
+      badge text NOT NULL DEFAULT '',
+      featured boolean NOT NULL DEFAULT false,
+      active boolean NOT NULL DEFAULT true,
+      sort_order integer NOT NULL DEFAULT 0,
+      clicks integer NOT NULL DEFAULT 0,
+      tagline text NOT NULL DEFAULT '',
+      perks text NOT NULL DEFAULT '',
+      rating real NOT NULL DEFAULT 0,
+      payout text NOT NULL DEFAULT '',
+      bonus_type text NOT NULL DEFAULT '',
+      wager_text text NOT NULL DEFAULT '',
+      bonus_code text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE INDEX IF NOT EXISTS sites_sort_idx ON sites (sort_order, id)`)
+  })().catch((error) => {
+    ready = null
+    throw error
+  })
+  return ready
+}
+
+type SiteRow = {
+  id: number
+  name: string
+  logo_url: string
+  bonus_text: string
+  url: string
+  entry_url: string
+  domain: string
+  badge: string
+  featured: boolean
+  active: boolean
+  sort_order: number
+  clicks: number
+  tagline: string
+  perks: string
+  rating: number | string
+  payout: string
+  bonus_type: string
+  wager_text: string
+  bonus_code: string
+  created_at: string | Date
+}
+
+function mapSite(row: SiteRow): SponsorSite {
+  const rating = Number(row.rating)
+  return {
+    id: Number(row.id),
+    name: row.name,
+    logoUrl: row.logo_url,
+    bonusText: row.bonus_text,
+    url: row.url,
+    entryUrl: row.entry_url,
+    domain: row.domain,
+    badge: row.badge,
+    featured: row.featured,
+    active: row.active,
+    sortOrder: Number(row.sort_order) || 0,
+    clicks: Number(row.clicks) || 0,
+    tagline: row.tagline,
+    perks: row.perks,
+    rating: Number.isFinite(rating) ? rating : 0,
+    payout: row.payout,
+    bonusType: row.bonus_type,
+    wagerText: row.wager_text,
+    bonusCode: row.bonus_code,
+    createdAt: new Date(row.created_at).toISOString(),
+  }
+}
+
+export async function listSites(): Promise<SponsorSite[]> {
+  await ensureSites()
+  const found = await rows<SiteRow>(sql`SELECT id, name, logo_url, bonus_text, url, entry_url, domain, badge, featured, active,
+    sort_order, clicks, tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, created_at
+    FROM sites ORDER BY sort_order, id`)
+  return found.map(mapSite)
+}
+
+function clip(value: unknown, max: number) {
+  return String(value ?? '').trim().slice(0, max)
+}
+
+function httpsOrEmpty(value: string, label: string) {
+  if (!value) return ''
+  if (!/^https:\/\/[^\s"'<>]+$/.test(value)) throw new Error(`${label} https:// ile başlamalı.`)
+  return value
+}
+
+function logoOf(value: string) {
+  if (!value) return ''
+  if (value.startsWith('/') && !value.startsWith('//') && !value.includes('..')) return value
+  return httpsOrEmpty(value, 'Logo')
+}
+
+function domainOf(value: string) {
+  const host = value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  if (!host) return ''
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) throw new Error('Alan adı örneği: ornek.com')
+  return host
+}
+
+function clean(input: SiteInput): Omit<SiteInput, 'id'> {
+  const name = clip(input.name, 80)
+  if (!name) throw new Error('Sponsor adı gerekli.')
+  const badge = clip(input.badge, 40)
+  if (!SITE_BADGES.includes(badge as (typeof SITE_BADGES)[number])) throw new Error('Rozet Ana Sponsor, VIP veya güvenilir olmalı.')
+  const sortOrder = Number(input.sortOrder)
+  if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 10000) throw new Error('Sıra 0 ile 10000 arasında tam sayı olmalı.')
+  const rating = Number(input.rating)
+  if (!Number.isFinite(rating) || rating < 0 || rating > 5) throw new Error('Puan 0 ile 5 arasında olmalı.')
+  return {
+    name,
+    logoUrl: logoOf(clip(input.logoUrl, 500)),
+    bonusText: clip(input.bonusText, 200),
+    url: httpsOrEmpty(clip(input.url, 500), 'Site adresi'),
+    entryUrl: httpsOrEmpty(clip(input.entryUrl, 500), 'Giriş adresi'),
+    domain: domainOf(clip(input.domain, 120)),
+    badge,
+    featured: Boolean(input.featured),
+    active: Boolean(input.active),
+    sortOrder,
+    tagline: clip(input.tagline, 160),
+    perks: clip(input.perks, 2000),
+    rating: Math.round(rating * 10) / 10,
+    payout: clip(input.payout, 40),
+    bonusType: clip(input.bonusType, 40),
+    wagerText: clip(input.wagerText, 80),
+    bonusCode: clip(input.bonusCode, 40),
+  }
+}
+
+export async function saveSite(input: SiteInput): Promise<number> {
+  const site = clean(input)
+  await ensureSites()
+  const id = Number(input.id)
+  if (input.id != null && input.id !== 0) {
+    if (!Number.isInteger(id) || id < 1) throw new Error('Sponsor bulunamadı.')
+    const updated = await rows<{ id: number }>(sql`UPDATE sites SET
+      name = ${site.name},
+      logo_url = ${site.logoUrl},
+      bonus_text = ${site.bonusText},
+      url = ${site.url},
+      entry_url = ${site.entryUrl},
+      domain = ${site.domain},
+      badge = ${site.badge},
+      featured = ${site.featured},
+      active = ${site.active},
+      sort_order = ${site.sortOrder},
+      tagline = ${site.tagline},
+      perks = ${site.perks},
+      rating = ${site.rating},
+      payout = ${site.payout},
+      bonus_type = ${site.bonusType},
+      wager_text = ${site.wagerText},
+      bonus_code = ${site.bonusCode}
+      WHERE id = ${id}
+      RETURNING id`)
+    if (!updated.length) throw new Error('Sponsor bulunamadı.')
+    return id
+  }
+  const inserted = await rows<{ id: number }>(sql`INSERT INTO sites (
+    name, logo_url, bonus_text, url, entry_url, domain, badge, featured, active, sort_order,
+    tagline, perks, rating, payout, bonus_type, wager_text, bonus_code)
+    VALUES (
+      ${site.name}, ${site.logoUrl}, ${site.bonusText}, ${site.url}, ${site.entryUrl}, ${site.domain}, ${site.badge},
+      ${site.featured}, ${site.active}, ${site.sortOrder}, ${site.tagline}, ${site.perks}, ${site.rating}, ${site.payout},
+      ${site.bonusType}, ${site.wagerText}, ${site.bonusCode})
+    RETURNING id`)
+  return Number(inserted[0]?.id)
+}
