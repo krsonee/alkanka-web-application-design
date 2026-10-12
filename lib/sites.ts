@@ -1,4 +1,5 @@
 import 'server-only'
+import type { Sponsor, SponsorTier } from '@/components/alkanka/data'
 import { rows, sql } from '@/lib/db'
 import { SITE_BADGES, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
@@ -85,6 +86,50 @@ function mapSite(row: SiteRow): SponsorSite {
     bonusCode: row.bonus_code,
     createdAt: new Date(row.created_at).toISOString(),
   }
+}
+
+export type PublicSponsor = Sponsor & { featured: boolean }
+
+function initialsOf(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2)
+  const letters = parts.map((part) => part[0] ?? '').join('')
+  return (letters || name.slice(0, 2)).toLocaleUpperCase('tr-TR')
+}
+
+export function tierOf(badge: string): SponsorTier {
+  const value = badge.trim()
+  if (value === SITE_BADGES[1]) return 'ana'
+  if (value === SITE_BADGES[2]) return 'vip'
+  return 'guvenilir'
+}
+
+export function toPublicSponsor(site: SponsorSite): PublicSponsor {
+  const perks = site.perks.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  return {
+    id: String(site.id),
+    name: site.name,
+    initials: initialsOf(site.name),
+    tier: tierOf(site.badge),
+    tagline: site.tagline.trim() || site.badge || 'Sponsor',
+    welcome: site.bonusText.trim(),
+    perks: perks.length ? perks : site.badge ? [site.badge] : [],
+    rating: site.rating,
+    payout: site.payout.trim(),
+    logoUrl: site.logoUrl.trim() || undefined,
+    featured: site.featured,
+  }
+}
+
+export async function listPublicSponsors(): Promise<PublicSponsor[]> {
+  const all = await listSites()
+  return all.filter((site) => site.active).map(toPublicSponsor)
+}
+
+export function pickFeatured(all: PublicSponsor[]) {
+  const main = all.find((site) => site.tier === 'ana') ?? all.find((site) => site.featured) ?? all[0] ?? null
+  const highlighted = all.filter((site) => site.id !== main?.id && (site.featured || site.tier === 'vip'))
+  const cards = (highlighted.length ? highlighted : all.filter((site) => site.id !== main?.id)).slice(0, 4)
+  return { main, cards, total: all.length }
 }
 
 export async function listSites(): Promise<SponsorSite[]> {

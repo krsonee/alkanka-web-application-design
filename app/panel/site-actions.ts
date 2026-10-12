@@ -12,6 +12,8 @@ export async function saveSiteAction(input: SiteInput): Promise<Result> {
   try {
     await saveSite(input)
     revalidatePath('/panel')
+    revalidatePath('/')
+    revalidatePath('/sponsorlar')
     return { ok: true, message: input.id ? 'Sponsor güncellendi.' : 'Sponsor kaydedildi.' }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'İşlem başarısız.' }

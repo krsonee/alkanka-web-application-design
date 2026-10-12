@@ -9,7 +9,6 @@ import {
   BONUSES,
   CAMPAIGNS,
   SPECIAL_ODDS,
-  SPONSORS,
   TIER_INFO,
   sponsorById,
   type Campaign,
@@ -60,8 +59,12 @@ function LoadMore({ remaining, onClick }: { remaining: number; onClick: () => vo
   )
 }
 
+function sponsorLogo(sponsor: Sponsor, mapped?: string) {
+  return sponsor.logoUrl?.trim() || mapped || ''
+}
+
 function SponsorBadge({ sponsor, size = 'md' }: { sponsor: Sponsor; size?: 'sm' | 'md' | 'lg' }) {
-  const logo = useLogos().sponsors[sponsor.id]
+  const logo = sponsorLogo(sponsor, useLogos().sponsors[sponsor.id])
   return (
     <span
       className={cn(
@@ -80,7 +83,7 @@ function SponsorBadge({ sponsor, size = 'md' }: { sponsor: Sponsor; size?: 'sm' 
 }
 
 export function SponsorLogoPlate({ sponsor, className, compact }: { sponsor: Sponsor; className?: string; compact?: boolean }) {
-  const logo = useLogos().sponsors[sponsor.id]
+  const logo = sponsorLogo(sponsor, useLogos().sponsors[sponsor.id])
   if (!logo && compact) {
     return (
       <span className={cn('flex items-center justify-center rounded-lg bg-background font-display text-2xl font-bold tracking-tight text-primary', className)}>
@@ -147,14 +150,14 @@ function TierTag({ tier }: { tier: SponsorTier }) {
   )
 }
 
-export function MainSponsor({ sponsor = SPONSORS.find((s) => s.tier === 'ana')! }: { sponsor?: Sponsor }) {
+export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   return (
     <div className="@container">
     <article className="panel-gold group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
       <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-6 @2xl:aspect-auto @2xl:w-60 @2xl:border-r @2xl:border-b-0 @5xl:w-80">
         <SponsorLogoPlate sponsor={sponsor} className="md:max-h-28" />
         <span className="absolute top-3 left-3">
-          <TierTag tier="ana" />
+          <TierTag tier={sponsor.tier} />
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-5">
@@ -261,14 +264,14 @@ const SORTS = [
 
 const PAGE = 12
 
-export function SponsorDirectory() {
+export function SponsorDirectory({ sponsors = [], mainId }: { sponsors?: Sponsor[]; mainId?: string }) {
   const [tier, setTier] = useState<'all' | SponsorTier>('all')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<(typeof SORTS)[number]['id']>('onerilen')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [visible, setVisible] = useState(PAGE)
 
-  const pool = SPONSORS.filter((s) => s.tier !== 'ana')
+  const pool = sponsors.filter((s) => s.id !== mainId)
   const counts = {
     all: pool.length,
     vip: pool.filter((s) => s.tier === 'vip').length,
@@ -287,8 +290,7 @@ export function SponsorDirectory() {
     if (sort === 'cekim') return [...filtered].sort((a, b) => payoutMinutes(a) - payoutMinutes(b))
     if (sort === 'az') return [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'tr'))
     return filtered
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tier, query, sort])
+  }, [tier, query, sort, pool])
 
   const shown = list.slice(0, visible)
 
@@ -367,9 +369,15 @@ export function SponsorDirectory() {
 
       {tier !== 'all' && <p className="text-sm leading-relaxed text-muted-foreground">{TIER_INFO[tier].description}</p>}
 
-      {list.length === 0 ? (
-        <JakoTip pose="uzgun" title="Bulamadım kanka">
-          “{query}” ile eşleşen sponsor yok. Başka bir isim dene veya filtreyi temizle.
+      {sponsors.length === 0 ? (
+        <JakoTip pose="uzgun" title="Henüz sponsor yok">
+          Şu an listelenecek sponsor yok, yakında burada olacak.
+        </JakoTip>
+      ) : list.length === 0 ? (
+        <JakoTip pose="uzgun" title={pool.length === 0 ? 'Liste burada bitiyor' : 'Bulamadım kanka'}>
+          {pool.length === 0
+            ? 'Ana sponsor dışında listelenecek kayıt yok.'
+            : `“${query}” ile eşleşen sponsor yok. Başka bir isim dene veya filtreyi temizle.`}
         </JakoTip>
       ) : view === 'grid' ? (
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
@@ -665,21 +673,19 @@ function SeeAllLink({ href, label = 'Tümünü gör' }: { href: string; label?: 
   )
 }
 
-export function FeaturedSponsors() {
-  const vip = SPONSORS.filter((s) => s.tier === 'vip')
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 4)
+export function FeaturedSponsors({ main = null, cards = [], total = 0 }: { main?: Sponsor | null; cards?: Sponsor[]; total?: number }) {
+  if (!main) return null
   return (
     <section aria-labelledby="one-cikan-title" className="flex flex-col gap-4">
       <SectionHeading
         id="one-cikan-title"
         title="Öne çıkan sponsorlar"
-        description={`Ana sponsor ve en yüksek puanlı VIP siteler. Toplam ${SPONSORS.length} sponsor var.`}
-        action={<SeeAllLink href="/sponsorlar" label={`${SPONSORS.length} sponsorun tümü`} />}
+        description={`Ana sponsor ve öne çıkan VIP siteler. Toplam ${total} sponsor var.`}
+        action={<SeeAllLink href="/sponsorlar" label={`${total} sponsorun tümü`} />}
       />
-      <MainSponsor />
+      <MainSponsor sponsor={main} />
       <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-        {vip.map((s) => (
+        {cards.map((s) => (
           <SponsorCard key={s.id} sponsor={s} />
         ))}
       </ul>

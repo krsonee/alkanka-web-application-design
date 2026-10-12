@@ -170,6 +170,7 @@ export type Sponsor = {
   perks: string[]
   rating: number
   payout: string
+  logoUrl?: string
 }
 
 const BASE_SPONSORS: Sponsor[] = [
