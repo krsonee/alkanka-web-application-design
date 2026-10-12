@@ -18,6 +18,7 @@ type Props = {
   links: Record<string, SiteLink>
   followers: Record<string, number>
   report: TrafficReport
+  recordNames?: Record<string, string>
   flagged: FlaggedMember[]
   accounts: SponsorAccount[]
   period: string
@@ -334,7 +335,7 @@ export function GrowthManager(props: Props) {
         <LinkBuilder siteUrl={props.siteUrl} />
         <Flagged flagged={props.flagged} />
       </div>
-      <Report report={props.report} names={names} />
+      <Report report={props.report} names={{ ...names, ...props.recordNames }} />
       <SiteLinks sites={props.sites} links={props.links} followers={props.followers} />
       <div className="grid gap-6 lg:grid-cols-2">
         <Accounts accounts={props.accounts} names={names} />

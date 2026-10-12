@@ -42,9 +42,9 @@ import { GrowthManager } from '@/components/panel/growth-manager'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
+import { listSites } from '@/lib/sites'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
 import { SitesManager } from '@/components/panel/sites-manager'
-import { listSites } from '@/lib/sites'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 
@@ -178,6 +178,7 @@ export default async function PanelPage() {
           growth={
             <GrowthManager
               sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))}
+              recordNames={Object.fromEntries((await listSites().catch(() => [])).map((site) => [String(site.id), site.name]))}
               links={await getSiteLinks().catch(() => ({}))}
               followers={await followerCounts().catch(() => ({}))}
               report={await trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 }))}
