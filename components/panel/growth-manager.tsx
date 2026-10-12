@@ -8,6 +8,7 @@ import {
   saveSiteLinkAction,
   setFlagAction,
 } from '@/app/panel/growth-actions'
+import { GrowthGuide } from '@/components/panel/growth-guide'
 import type { FlaggedMember, SiteLink, SponsorAccount, TrafficReport } from '@/lib/growth'
 import { cn } from '@/lib/utils'
 
@@ -328,6 +329,7 @@ export function GrowthManager(props: Props) {
   const names = useMemo(() => Object.fromEntries(props.sites.map((s) => [s.id, s.name])), [props.sites])
   return (
     <div className="flex flex-col gap-6">
+      <GrowthGuide />
       <div className="grid gap-6 lg:grid-cols-2">
         <LinkBuilder siteUrl={props.siteUrl} />
         <Flagged flagged={props.flagged} />

@@ -10,6 +10,7 @@ import {
   saveSocialLinksAction,
   toggleSocialEventAction,
 } from '@/app/panel/social-actions'
+import { SocialGuide } from '@/components/panel/social-guide'
 import type { AdminEntry, AdminSocialAccount } from '@/lib/social'
 import { PLATFORM_LABEL, SOCIAL_PLATFORMS, profileUrl, type SocialEvent, type SocialLinks, type SocialPlatform } from '@/lib/social-shared'
 import { cn } from '@/lib/utils'
@@ -272,6 +273,7 @@ export function SocialManager({
 }) {
   return (
     <div className="flex flex-col gap-6">
+      <SocialGuide />
       <LinksForm links={links} />
       <AccountsReview accounts={accounts} />
       <EventsAdmin events={events} entries={entries} />
