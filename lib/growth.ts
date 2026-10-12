@@ -183,11 +183,13 @@ export async function setFlag(userId: string, flagged: boolean) {
 // --- Follows (address change alarm) -------------------------------------
 
 export async function toggleFollow(userId: string, siteId: string) {
-  if (!isSponsor(siteId)) throw new Error('Site bulunamadı.')
+  const { activeSiteRecordId } = await import('@/lib/sites')
+  const recordId = await activeSiteRecordId(siteId)
+  if (!recordId) throw new Error('Site bulunamadı.')
   await ensureGrowth()
-  const removed = await rows(sql`DELETE FROM site_follows WHERE user_id = ${userId} AND site_id = ${siteId} RETURNING site_id`)
+  const removed = await rows(sql`DELETE FROM site_follows WHERE user_id = ${userId} AND site_id = ${recordId} RETURNING site_id`)
   if (removed.length) return false
-  await rows(sql`INSERT INTO site_follows (user_id, site_id) VALUES (${userId}, ${siteId}) ON CONFLICT DO NOTHING`)
+  await rows(sql`INSERT INTO site_follows (user_id, site_id) VALUES (${userId}, ${recordId}) ON CONFLICT DO NOTHING`)
   return true
 }
 

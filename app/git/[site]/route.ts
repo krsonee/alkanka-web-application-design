@@ -13,10 +13,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     sponsorTarget(site).catch(() => null),
     getMember().catch(() => null),
   ])
-  if (!href) return NextResponse.redirect(new URL(`/siteler/${site}`, request.url))
+  if (!href) return NextResponse.redirect(new URL(`/siteler/${listed.id}`, request.url))
 
   const src = request.nextUrl.searchParams.get('src') ?? request.cookies.get('alk_src')?.value ?? 'direkt'
-  await logClick(listed.id, src, member?.id ?? null).catch((error) => console.error('[git] tıklama kaydedilemedi', error))
+  await logClick(listed.recordId, src, member?.id ?? null).catch((error) => console.error('[git] tıklama kaydedilemedi', error))
   const target = new URL(href)
   if (!target.searchParams.has('utm_source')) {
     target.searchParams.set('utm_source', 'alkanka')
