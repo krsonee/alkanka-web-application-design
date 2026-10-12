@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import useSWR from 'swr'
 import { Check, Clock, Coins, Handshake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -68,7 +69,7 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
           {(
             [
               ['hepsi', `Tümü (${items.length})`],
-              ['sponsor', `Sponsor bonusları (${sponsorCount})`],
+              ...(sponsorCount > 0 ? [['sponsor', `Sponsor bonusları (${sponsorCount})`] as const] : []),
               ['alkanka', 'AL KANKA ödülleri'],
             ] as const
           ).map(([key, label]) => (
@@ -115,7 +116,9 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
       )}
 
       {shown.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Bu kategoride şu an ürün yok.</p>
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          {items.length === 0 ? 'Şu an listelenecek ürün yok, yakında burada olacak.' : 'Bu kategoride şu an ürün yok.'}
+        </p>
       ) : (
         <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-4">
           {shown.map((item) => {
@@ -134,11 +137,18 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
                   />
                   <div className="absolute inset-x-0 top-0 flex flex-wrap gap-1 p-2">
                     <span className="rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-foreground">{item.type}</span>
-                    {item.kind === 'sponsor' && (
-                      <span className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-accent-foreground">
-                        <Handshake className="size-3" aria-hidden="true" />
-                        {item.sponsorName}
-                      </span>
+                    {item.kind === 'sponsor' && item.sponsorName && (
+                      item.sponsorSlug ? (
+                        <Link href={`/siteler/${item.sponsorSlug}`} className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-accent-foreground">
+                          <Handshake className="size-3" aria-hidden="true" />
+                          {item.sponsorName}
+                        </Link>
+                      ) : (
+                        <span className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-accent-foreground">
+                          <Handshake className="size-3" aria-hidden="true" />
+                          {item.sponsorName}
+                        </span>
+                      )
                     )}
                   </div>
                 </div>

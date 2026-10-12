@@ -60,7 +60,8 @@ async function sitesPanel() {
 async function marketPanel() {
   try {
     const [products, requests] = await Promise.all([listProducts({ includeInactive: true }), listRequests()])
-    return <MarketManager products={products} requests={requests} sponsors={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
+    const sponsors = (await listSites()).filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
+    return <MarketManager products={products} requests={requests} sponsors={sponsors} />
   } catch (error) {
     console.error('[market-panel]', error)
     return <p className="text-sm text-destructive">Market yüklenemedi.</p>

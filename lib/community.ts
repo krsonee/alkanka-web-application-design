@@ -215,26 +215,57 @@ const mapComplaint = (r: Record<string, unknown>): Complaint => ({
   updatedAt: iso(r.updated_at),
 })
 
-export type SiteTrust = { siteId: string; name: string; rating: number | null; reviews: number; complaints: number; resolved: number }
+export type SiteTrust = {
+  siteId: string
+  slug: string
+  name: string
+  initials: string
+  tagline: string
+  payout: string
+  editorRating: number
+  logoUrl: string
+  rating: number | null
+  reviews: number
+  complaints: number
+  resolved: number
+}
 
 export async function siteTrustTable(): Promise<SiteTrust[]> {
   await ensureCommunity()
+  const { listSites, toPublicSponsor } = await import('@/lib/sites')
+  const sites = (await listSites()).filter((site) => site.active && site.slug)
   const rv = await rows<{ site_id: string; avg: string; n: string }>(sql`SELECT site_id, avg(rating) AS avg, count(*) AS n
     FROM site_reviews WHERE status = 'approved' GROUP BY site_id`)
   const cp = await rows<{ site_id: string; n: string; ok: string }>(sql`SELECT site_id, count(*) AS n,
     count(*) FILTER (WHERE status = 'resolved') AS ok FROM complaints WHERE status <> 'rejected' GROUP BY site_id`)
-  return SPONSORS.map((s) => {
-    const r = rv.find((x) => x.site_id === s.id)
-    const c = cp.find((x) => x.site_id === s.id)
+  return sites.map((site) => {
+    const id = String(site.id)
+    const r = rv.find((x) => x.site_id === id)
+    const c = cp.find((x) => x.site_id === id)
+    const sponsor = toPublicSponsor(site)
     return {
-      siteId: s.id,
-      name: s.name,
+      siteId: id,
+      slug: site.slug,
+      name: site.name,
+      initials: sponsor.initials,
+      tagline: sponsor.tagline,
+      payout: sponsor.payout,
+      editorRating: sponsor.rating,
+      logoUrl: sponsor.logoUrl ?? '',
       rating: r ? Math.round(Number(r.avg) * 10) / 10 : null,
       reviews: Number(r?.n ?? 0),
       complaints: Number(c?.n ?? 0),
       resolved: Number(c?.ok ?? 0),
     }
   })
+}
+
+/** Active sites.id for a new review or complaint. Does not rewrite old rows. */
+async function recordedSiteId(id: string) {
+  const { activeSiteRecordId, resolvePublicSite } = await import('@/lib/sites')
+  if (/^\d+$/.test(id)) return activeSiteRecordId(id)
+  const site = await resolvePublicSite(id)
+  return site?.recordId ?? null
 }
 
 export async function siteReviews(siteId: string) {
@@ -254,7 +285,9 @@ export async function recentComplaints(limit = 8) {
 
 export async function addReview(user: { id: string; name: string }, siteId: string, rating: number, body: string) {
   await ensureCommunity()
-  if (!isSite(siteId)) throw new Error('Site bulunamadı.')
+  const recordId = await recordedSiteId(siteId)
+  if (!recordId) throw new Error('Site bulunamadı.')
+  siteId = recordId
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error('Puan 1 ile 5 arasında olmalı.')
   const text = body.trim()
   if (text.length < 20) throw new Error('Yorum en az 20 karakter olmalı.')
@@ -265,7 +298,9 @@ export async function addReview(user: { id: string; name: string }, siteId: stri
 
 export async function addComplaint(user: { id: string; name: string }, siteId: string, title: string, body: string) {
   await ensureCommunity()
-  if (!isSite(siteId)) throw new Error('Site bulunamadı.')
+  const recordId = await recordedSiteId(siteId)
+  if (!recordId) throw new Error('Site bulunamadı.')
+  siteId = recordId
   const t = title.trim()
   const b = body.trim()
   if (t.length < 5 || t.length > 120) throw new Error('Başlık 5-120 karakter olmalı.')

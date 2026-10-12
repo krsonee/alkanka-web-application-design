@@ -1,7 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
-import { MARKET_ITEMS, SPONSORS } from '@/components/alkanka/data'
+import { MARKET_ITEMS } from '@/components/alkanka/data'
 
 export type MarketKind = 'alkanka' | 'sponsor'
 export type RequestStatus = 'beklemede' | 'onaylandi' | 'reddedildi'
@@ -11,6 +11,7 @@ export type MarketProduct = {
   kind: MarketKind
   sponsorId: string | null
   sponsorName: string | null
+  sponsorSlug: string | null
   type: string
   name: string
   description: string
@@ -86,15 +87,6 @@ function ensure() {
           VALUES (${i.id}, 'alkanka', ${i.type}, ${i.name}, ${i.description}, ${i.delivery}, ${JSON.stringify(i.rules)}::jsonb, ${i.image},
             ${i.price}, ${i.stock}, ${i.total}, ${i.limit}, ${Boolean(i.refOnly)}, ${sort++}) ON CONFLICT DO NOTHING`)
       }
-      const seeds = SPONSORS.slice(0, 3)
-      for (const s of seeds) {
-        await rows(sql`INSERT INTO market_items (id, kind, sponsor_id, sponsor_name, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, sort)
-          VALUES (${`sp-${s.id}`}, 'sponsor', ${s.id}, ${s.name}, 'SPONSOR BONUSU', ${`${s.name} ${s.welcome}`},
-            ${`${s.name} hesabına tanımlanan özel bonus. ${s.tagline}.`},
-            'Talebin onaylandığında bonus sponsor site hesabına eklenir.',
-            ${JSON.stringify(['Sponsor sitede kayıtlı ve doğrulanmış hesabın olmalı.', 'Bonus çevrim kuralları sponsor siteye aittir.'])}::jsonb,
-            '/images/tile-market.png', 4000, 10, 10, 1, true, ${sort++}) ON CONFLICT DO NOTHING`)
-      }
     }
   })().catch((e) => {
     ready = null
@@ -110,21 +102,34 @@ type ItemRow = {
 }
 
 const toProduct = (r: ItemRow): MarketProduct => ({
-  id: r.id, kind: r.kind, sponsorId: r.sponsor_id, sponsorName: r.sponsor_name, type: r.type, name: r.name,
+  id: r.id, kind: r.kind, sponsorId: r.sponsor_id, sponsorName: r.sponsor_name, sponsorSlug: null, type: r.type, name: r.name,
   description: r.description, delivery: r.delivery, rules: Array.isArray(r.rules) ? r.rules : [], image: r.image,
   price: r.price, stock: r.stock, total: r.total, perUser: r.per_user, needsUsername: r.needs_username || r.kind === 'sponsor',
   active: r.active, sort: r.sort,
 })
+
+async function withSponsorSlugs(items: MarketProduct[]) {
+  const { listSites } = await import('@/lib/sites')
+  const sites = await listSites()
+  return items.map((item) => {
+    if (item.kind !== 'sponsor' || !item.sponsorId) return item
+    const site = sites.find((row) => String(row.id) === item.sponsorId || row.slug === item.sponsorId)
+    if (!site?.active || !site.slug) return item
+    return { ...item, sponsorName: site.name, sponsorSlug: site.slug }
+  })
+}
 
 export async function listProducts(opts: { includeInactive?: boolean } = {}): Promise<MarketProduct[]> {
   await ensure()
   const r = opts.includeInactive
     ? await rows<ItemRow>(sql`SELECT * FROM market_items ORDER BY kind DESC, sort, created_at`)
     : await rows<ItemRow>(sql`SELECT * FROM market_items WHERE active ORDER BY kind DESC, sort, created_at`)
-  return r.map(toProduct)
+  const items = await withSponsorSlugs(r.map(toProduct))
+  if (opts.includeInactive) return items
+  return items.filter((item) => item.kind !== 'sponsor' || item.sponsorSlug)
 }
 
-export type ProductInput = Omit<MarketProduct, 'id' | 'needsUsername'> & { id: string | null; needsUsername: boolean }
+export type ProductInput = Omit<MarketProduct, 'id' | 'needsUsername' | 'sponsorSlug'> & { id: string | null; needsUsername: boolean }
 
 const clean = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max)
 const int = (v: unknown, min: number, max: number) => Math.min(max, Math.max(min, Math.floor(Number(v) || 0)))
@@ -134,9 +139,10 @@ export async function saveProduct(input: ProductInput) {
   const name = clean(input.name, 120)
   if (!name) throw new Error('Ürün adı zorunlu.')
   const kind: MarketKind = input.kind === 'sponsor' ? 'sponsor' : 'alkanka'
-  const sponsor = kind === 'sponsor' ? SPONSORS.find((s) => s.id === input.sponsorId) : undefined
-  const sponsorName = kind === 'sponsor' ? clean(input.sponsorName || sponsor?.name, 80) || null : null
-  if (kind === 'sponsor' && !sponsorName) throw new Error('Sponsor site seçmelisin.')
+  const { listSites } = await import('@/lib/sites')
+  const sponsor = kind === 'sponsor' ? (await listSites()).find((site) => String(site.id) === String(input.sponsorId) && site.slug) : undefined
+  if (kind === 'sponsor' && !sponsor) throw new Error('Sponsor site seçmelisin.')
+  const sponsorName = sponsor ? clean(sponsor.name, 80) || null : null
   const id = input.id || `${kind === 'sponsor' ? 'sp' : 'ak'}-${Date.now().toString(36)}`
   const rules = (input.rules ?? []).map((x) => clean(x, 200)).filter(Boolean).slice(0, 12)
   const total = int(input.total, 0, 100000)

@@ -180,7 +180,7 @@ function ProductForm({ value, sponsors, pending, onSave, onCancel }: { value: Pr
             }}
             className={field}
           >
-            <option value="">Seç</option>
+            <option value="">{sponsors.length ? 'Seç' : 'Kayıtlı sponsor yok, yakında eklenecek.'}</option>
             {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </label>
