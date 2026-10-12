@@ -32,6 +32,17 @@ export function slugify(value: string) {
     .slice(0, 80)
 }
 
+export const SLUG_LETTER_ERROR = 'Adres en az bir harf içermeli'
+
+/** Typed shortcut, otherwise the name. Empty input still falls back to the name. */
+export function publicSlug(raw: string, name: string) {
+  return slugify(raw) || slugify(name) || 'sponsor'
+}
+
+export function slugHasLetter(slug: string) {
+  return /[a-z]/.test(slug)
+}
+
 export type SiteInput = {
   id: number | null
   name: string

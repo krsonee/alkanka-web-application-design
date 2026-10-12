@@ -33,7 +33,7 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
   if (slug !== s.id) permanentRedirect(`/siteler/${s.id}`)
 
   const member = await getMember()
-  const following = member ? (await myFollows(member.id).catch(() => [] as string[])).includes(s.id) : false
+  const following = member ? (await myFollows(member.id).catch(() => [] as string[])).includes(s.recordId) : false
   const others = (await listPublicSponsors().catch(() => [])).filter((item) => item.id !== s.id).slice(0, 4)
 
   return (
@@ -65,7 +65,7 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
             Güncel adrese git
             <ArrowRight className="size-4" aria-hidden />
           </a>
-          <FollowButton siteId={s.id} initial={following} loggedIn={!!member} />
+          <FollowButton siteId={s.recordId} initial={following} loggedIn={!!member} />
         </div>
       </section>
 

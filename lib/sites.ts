@@ -1,7 +1,7 @@
 import 'server-only'
 import type { Sponsor, SponsorTier } from '@/components/alkanka/data'
 import { rows, sql } from '@/lib/db'
-import { SITE_BADGES, slugify, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
+import { SITE_BADGES, SLUG_LETTER_ERROR, publicSlug, slugHasLetter, slugify, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
 export type { SiteInput, SponsorSite } from '@/lib/sites-shared'
 export { SITE_BADGES, slugify } from '@/lib/sites-shared'
@@ -182,6 +182,13 @@ export async function publicSiteById(key: string): Promise<ResolvedSponsor | nul
   return resolvePublicSite(key)
 }
 
+/** Active sites.id for a new follow. Does not read or write site_follows. */
+export async function activeSiteRecordId(id: string): Promise<string | null> {
+  if (!/^\d+$/.test(id)) return null
+  const row = (await listSites()).find((site) => String(site.id) === id && site.active)
+  return row ? String(row.id) : null
+}
+
 /** Entry address wins, then the site address. Does not read site_links. */
 export async function sponsorTarget(key: string): Promise<string | null> {
   const site = await resolvePublicSite(key)
@@ -255,7 +262,9 @@ export async function saveSite(input: SiteInput): Promise<number> {
   const site = clean(input)
   await ensureSites()
   const id = Number(input.id)
-  const slug = await uniqueSlug(slugify(input.slug) || slugify(site.name) || 'sponsor', input.id ? id : null)
+  const slugBase = publicSlug(input.slug, site.name)
+  if (!slugHasLetter(slugBase)) throw new Error(SLUG_LETTER_ERROR)
+  const slug = await uniqueSlug(slugBase, input.id ? id : null)
   if (input.id != null && input.id !== 0) {
     if (!Number.isInteger(id) || id < 1) throw new Error('Sponsor bulunamadı.')
     const updated = await rows<{ id: number }>(sql`UPDATE sites SET

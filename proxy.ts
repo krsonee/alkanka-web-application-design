@@ -1,17 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 /** First-touch attribution: ?src=sms or ?utm_source=mail on any landing is kept for 30 days. */
-export async function proxy(request: NextRequest) {
-  const numeric = request.nextUrl.pathname.match(/^\/siteler\/(\d+)$/)
-  if (numeric) {
-    const { resolvePublicSite } = await import('@/lib/sites')
-    const site = await resolvePublicSite(numeric[1]).catch(() => null)
-    if (site && site.id !== numeric[1]) {
-      const url = request.nextUrl.clone()
-      url.pathname = `/siteler/${site.id}`
-      return NextResponse.redirect(url, 308)
-    }
-  }
+export function proxy(request: NextRequest) {
   const params = request.nextUrl.searchParams
   const raw = params.get('src') ?? params.get('utm_source')
   const res = NextResponse.next()

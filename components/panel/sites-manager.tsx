@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { saveSiteAction } from '@/app/panel/site-actions'
-import { SITE_BADGES, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
+import { SITE_BADGES, SLUG_LETTER_ERROR, publicSlug, slugHasLetter, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
 const EMPTY: SiteInput = {
@@ -41,6 +41,10 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
   const [pending, start] = useTransition()
 
   function save(input: SiteInput) {
+    if (!slugHasLetter(publicSlug(input.slug, input.name))) {
+      setMsg({ ok: false, text: SLUG_LETTER_ERROR })
+      return
+    }
     start(async () => {
       const res = await saveSiteAction(input)
       setMsg(res.ok ? { ok: true, text: res.message ?? 'Kaydedildi.' } : { ok: false, text: res.error })
@@ -120,8 +124,14 @@ function SiteForm({
   onCancel: () => void
 }) {
   const [v, setV] = useState<SiteDraft>(() => draftFrom(value))
+  const [slugError, setSlugError] = useState<string | null>(null)
   const set = <K extends keyof SiteDraft>(key: K, next: SiteDraft[K]) => setV((prev) => ({ ...prev, [key]: next }))
   function submit() {
+    if (!slugHasLetter(publicSlug(v.slug, v.name))) {
+      setSlugError(SLUG_LETTER_ERROR)
+      return
+    }
+    setSlugError(null)
     onSave(savedFrom(v))
   }
   return (
@@ -133,7 +143,17 @@ function SiteForm({
       className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2"
     >
       <Field label="Sponsor adı" value={v.name} onChange={(name) => set('name', name)} required />
-      <Field label="Adres kısaltması" value={v.slug} onChange={(slug) => set('slug', slug)} placeholder="makro-bet" />
+      <Field
+        label="Adres kısaltması"
+        value={v.slug}
+        onChange={(slug) => {
+          setSlugError(null)
+          set('slug', slug)
+        }}
+        placeholder="makro-bet"
+        hint="Sponsor yayındayken değiştirirsen eski linkler çalışmaz."
+        error={slugError}
+      />
       <Field label="Kısa tanım" value={v.tagline} onChange={(tagline) => set('tagline', tagline)} />
       <Field label="Logo adresi" value={v.logoUrl} onChange={(logoUrl) => set('logoUrl', logoUrl)} placeholder="https://… veya /images/…" />
       <Field label="Bonus satırı" value={v.bonusText} onChange={(bonusText) => set('bonusText', bonusText)} />
@@ -193,6 +213,8 @@ function Field({
   placeholder,
   required,
   inputMode,
+  hint,
+  error,
 }: {
   label: string
   value: string
@@ -200,11 +222,15 @@ function Field({
   placeholder?: string
   required?: boolean
   inputMode?: 'decimal' | 'numeric'
+  hint?: string
+  error?: string | null
 }) {
   return (
     <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
       {label}
-      <input required={required} value={value} inputMode={inputMode} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className={field} />
+      <input required={required} value={value} inputMode={inputMode} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className={field} aria-invalid={error ? true : undefined} />
+      {hint ? <span className="text-[11px] font-normal leading-relaxed text-muted-foreground">{hint}</span> : null}
+      {error ? <span role="alert" className="text-[11px] font-normal text-destructive">{error}</span> : null}
     </label>
   )
 }
