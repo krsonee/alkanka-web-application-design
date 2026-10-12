@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { permanentRedirect } from 'next/navigation'
 import { BadgeCheck, CheckCircle2, MessageSquareWarning, PenLine, SearchCheck, Send, Star } from 'lucide-react'
-import { isSite, siteComplaints, siteName, siteReviews, siteTrustTable, type SiteTrust } from '@/lib/community'
-import { SPONSORS } from '@/components/alkanka/data'
+import { siteComplaints, siteReviews, siteTrustTable, type SiteTrust } from '@/lib/community'
+import type { Sponsor } from '@/components/alkanka/data'
 import { SponsorLogoPlate } from '@/components/alkanka/partner-sites'
 import { TrustForms } from '@/components/alkanka/community/trust-forms'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
@@ -25,8 +26,23 @@ const STEPS = [
   { icon: CheckCircle2, title: 'Çözülür', text: 'Çözüm oranı her sitenin karnesine işlenir.' },
 ]
 
-function score(t: SiteTrust, fallback: number) {
-  return t.rating ?? fallback
+function score(t: SiteTrust) {
+  return t.rating ?? t.editorRating
+}
+
+function asSponsor(t: SiteTrust): Sponsor {
+  return {
+    id: t.slug,
+    name: t.name,
+    initials: t.initials,
+    tier: 'guvenilir',
+    tagline: t.tagline,
+    welcome: '',
+    perks: [],
+    rating: t.editorRating,
+    payout: t.payout,
+    logoUrl: t.logoUrl || undefined,
+  }
 }
 
 function resolveRate(t: SiteTrust) {
@@ -36,16 +52,18 @@ function resolveRate(t: SiteTrust) {
 export default async function TrustPage({ searchParams }: { searchParams: Promise<{ site?: string; tab?: string }> }) {
   const { site, tab } = await searchParams
   const table = await siteTrustTable()
-  const fallbackOf = (id: string) => SPONSORS.find((s) => s.id === id)?.rating ?? 0
-  const ranked = [...table].sort((a, b) => score(b, fallbackOf(b.siteId)) - score(a, fallbackOf(a.siteId)) || b.reviews - a.reviews)
-  const selected = site && isSite(site) ? site : ranked[0]?.siteId ?? SPONSORS[0].id
-  const current = table.find((t) => t.siteId === selected)!
-  const sponsor = SPONSORS.find((s) => s.id === selected)!
   const view = tab === 'sikayet' ? 'sikayet' : 'yorum'
-  const [reviews, complaints] = await Promise.all([siteReviews(selected), siteComplaints(selected)])
-  const rate = resolveRate(current)
   const totals = table.reduce((a, t) => ({ reviews: a.reviews + t.reviews, complaints: a.complaints + t.complaints, resolved: a.resolved + t.resolved }), { reviews: 0, complaints: 0, resolved: 0 })
-  const href = (s: string, t = view) => `/guven?site=${s}${t === 'sikayet' ? '&tab=sikayet' : ''}`
+  const ranked = [...table].sort((a, b) => score(b) - score(a) || b.reviews - a.reviews)
+  const current = ranked.find((item) => item.slug === site) ?? ranked.find((item) => item.siteId === site) ?? ranked[0]
+  if (current && site && site !== current.slug) {
+    permanentRedirect(`/guven?site=${current.slug}${view === 'sikayet' ? '&tab=sikayet' : ''}`)
+  }
+  const sponsor = current ? asSponsor(current) : null
+  const selected = current?.siteId ?? ''
+  const [reviews, complaints] = current ? await Promise.all([siteReviews(selected), siteComplaints(selected)]) : [[], []]
+  const rate = current ? resolveRate(current) : null
+  const href = (slug: string, t = view) => `/guven?site=${slug}${t === 'sikayet' ? '&tab=sikayet' : ''}`
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,17 +95,23 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
         </ol>
       </section>
 
+      {ranked.length === 0 || !current || !sponsor ? (
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          Şu an listelenecek sponsor yok, yakında burada olacak.
+        </p>
+      ) : (
+      <>
       <section aria-labelledby="siralama" className="flex flex-col gap-3">
         <h2 id="siralama" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Güven sıralaması · bir site seç</h2>
         <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2">
           {ranked.map((t, i) => {
-            const s = SPONSORS.find((x) => x.id === t.siteId)!
+            const s = asSponsor(t)
             const active = t.siteId === selected
             const r = resolveRate(t)
             return (
               <li key={t.siteId} className="w-40 shrink-0 snap-start">
                 <Link
-                  href={href(t.siteId)}
+                  href={href(t.slug)}
                   scroll={false}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
@@ -99,7 +123,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                     <span>#{i + 1}</span>
                     <span className="flex items-center gap-0.5 text-primary">
                       <Star className="size-3 fill-current" aria-hidden />
-                      {score(t, s.rating).toFixed(1)}
+                      {score(t).toFixed(1)}
                     </span>
                   </span>
                   <span className="flex h-12 items-center justify-center overflow-hidden">
@@ -125,7 +149,9 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                 <SponsorLogoPlate sponsor={sponsor} compact className="h-14 w-24" />
               </span>
               <div className="flex min-w-0 flex-col">
-                <h2 id="karne" className="truncate font-display text-xl font-bold text-foreground">{current.name} karnesi</h2>
+                <h2 id="karne" className="truncate font-display text-xl font-bold text-foreground">
+                  <Link href={`/siteler/${current.slug}`} className="hover:text-primary">{current.name} karnesi</Link>
+                </h2>
                 <span className="text-sm text-muted-foreground">{sponsor.tagline} · Ortalama çekim {sponsor.payout}</span>
               </div>
             </div>
@@ -134,7 +160,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                 <dt className="text-[11px] text-muted-foreground">Üye puanı</dt>
                 <dd className="flex items-center gap-1 font-display text-2xl font-bold text-foreground">
                   <Star className="size-5 fill-primary text-primary" aria-hidden />
-                  {score(current, sponsor.rating).toFixed(1)}
+                  {score(current).toFixed(1)}
                 </dd>
                 <dd className="text-[11px] text-muted-foreground">{current.reviews ? `${current.reviews} yorum` : 'Editör puanı'}</dd>
               </div>
@@ -164,7 +190,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                 key={id}
                 role="tab"
                 aria-selected={view === id}
-                href={href(selected, id)}
+                href={href(current.slug, id)}
                 scroll={false}
                 className={cn('flex h-9 items-center justify-center rounded-md px-4 text-xs font-bold uppercase tracking-wider', view === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
               >
@@ -229,12 +255,14 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
         </div>
 
         <aside className="flex flex-col gap-3 xl:sticky xl:top-20 xl:self-start">
-          <TrustForms siteId={selected} siteName={siteName(selected)} initialMode={view === 'sikayet' ? 'complaint' : 'review'} />
+          <TrustForms siteId={selected} siteName={current.name} initialMode={view === 'sikayet' ? 'complaint' : 'review'} />
           <p className="px-1 text-xs leading-relaxed text-muted-foreground">
             Şifre, kart veya kimlik bilgisi paylaşma. Hakaret ve reklam içeren kayıtlar yayınlanmaz.
           </p>
         </aside>
       </div>
+      </>
+      )}
     </div>
   )
 }
