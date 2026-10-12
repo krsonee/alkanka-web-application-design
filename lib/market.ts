@@ -87,16 +87,6 @@ function ensure() {
           VALUES (${i.id}, 'alkanka', ${i.type}, ${i.name}, ${i.description}, ${i.delivery}, ${JSON.stringify(i.rules)}::jsonb, ${i.image},
             ${i.price}, ${i.stock}, ${i.total}, ${i.limit}, ${Boolean(i.refOnly)}, ${sort++}) ON CONFLICT DO NOTHING`)
       }
-      const { listSites } = await import('@/lib/sites')
-      const seeds = (await listSites()).filter((site) => site.active && site.slug).slice(0, 3)
-      for (const s of seeds) {
-        await rows(sql`INSERT INTO market_items (id, kind, sponsor_id, sponsor_name, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, sort)
-          VALUES (${`sp-${s.id}`}, 'sponsor', ${String(s.id)}, ${s.name}, 'SPONSOR BONUSU', ${`${s.name} bonusu`},
-            ${`${s.name} hesabına tanımlanan özel bonus.`},
-            'Talebin onaylandığında bonus sponsor site hesabına eklenir.',
-            ${JSON.stringify(['Sponsor sitede kayıtlı ve doğrulanmış hesabın olmalı.', 'Bonus çevrim kuralları sponsor siteye aittir.'])}::jsonb,
-            '/images/tile-market.png', 4000, 10, 10, 1, true, ${sort++}) ON CONFLICT DO NOTHING`)
-      }
     }
   })().catch((e) => {
     ready = null
