@@ -7,10 +7,20 @@ import { FAQ, TELEGRAM_URL } from './data'
 import { JakoTip } from './jako'
 import { SectionHeading } from './section-heading'
 
-export function Faq() {
-  const [cat, setCat] = useState(FAQ[0].id)
-  const [open, setOpen] = useState<string | null>(FAQ[0].items[0].q)
-  const group = FAQ.find((g) => g.id === cat) ?? FAQ[0]
+export type FaqGroup = { id: string; label: string; items: { q: string; a: string }[] }
+
+export function Faq({ groups }: { groups?: FaqGroup[] } = {}) {
+  const source = groups ?? FAQ
+  const [cat, setCat] = useState(source[0]?.id ?? '')
+  const [open, setOpen] = useState<string | null>(source[0]?.items[0]?.q ?? null)
+  const group = source.find((g) => g.id === cat) ?? source[0]
+  if (!group) {
+    return (
+      <JakoTip pose="dusunen" title="Soru yok">
+        Sıkça sorulan sorular paneldeki SSS menüsünden eklenir.
+      </JakoTip>
+    )
+  }
 
   return (
     <section aria-label="Sıkça sorulan sorular" className="flex flex-col gap-5">
@@ -20,7 +30,7 @@ export function Faq() {
       </JakoTip>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        {FAQ.map((g) => (
+        {source.map((g) => (
           <button
             key={g.id}
             type="button"

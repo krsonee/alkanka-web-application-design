@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { isAuthenticated } from '@/lib/admin-gate'
 import { importWagers, notifyAddressChange, setFlag, setSiteLink, setSponsorAccountStatus } from '@/lib/growth'
-import { SPONSORS } from '@/components/alkanka/data'
+import { siteName } from '@/lib/sponsor-catalog'
 
 type Result = { ok: boolean; message: string }
 const denied: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -14,14 +14,14 @@ function siteBase() {
 }
 
 export async function saveSiteLinkAction(siteId: string, url: string, notify: boolean): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await isAuthenticated())) return denied
   try {
     const { changed } = await setSiteLink(siteId, url)
     revalidatePath('/siteler')
     revalidatePath(`/siteler/${siteId}`)
     revalidatePath('/panel')
     if (!changed || !notify) return { ok: true, message: changed ? 'Adres güncellendi (bildirim gönderilmedi).' : 'Adres kaydedildi.' }
-    const name = SPONSORS.find((s) => s.id === siteId)?.name ?? siteId
+    const name = await siteName(siteId)
     const r = await notifyAddressChange(siteId, name, `${siteBase()}/git/${siteId}?src=alarm`)
     return { ok: true, message: `Adres güncellendi. ${r.push} cihaza bildirim, ${r.telegram} Telegram mesajı gitti.` }
   } catch (error) {
@@ -30,14 +30,14 @@ export async function saveSiteLinkAction(siteId: string, url: string, notify: bo
 }
 
 export async function setFlagAction(userId: string, flagged: boolean): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await isAuthenticated())) return denied
   await setFlag(userId, flagged)
   revalidatePath('/panel')
   return { ok: true, message: flagged ? 'Üye işaretlendi.' : 'İşaret kaldırıldı, ödüller açıldı.' }
 }
 
 export async function reviewSponsorAccountAction(userId: string, siteId: string, approve: boolean, note: string): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await isAuthenticated())) return denied
   await setSponsorAccountStatus(userId, siteId, approve ? 'approved' : 'rejected', note)
   revalidatePath('/panel')
   revalidatePath('/siralama')
@@ -45,7 +45,7 @@ export async function reviewSponsorAccountAction(userId: string, siteId: string,
 }
 
 export async function importWagersAction(siteId: string, period: string, text: string): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await isAuthenticated())) return denied
   try {
     const r = await importWagers(siteId, period, text)
     revalidatePath('/siralama')

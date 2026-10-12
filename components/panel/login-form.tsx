@@ -7,22 +7,22 @@ import { login, logout } from '@/app/panel/actions'
 export function LoginForm({ configured }: { configured: boolean }) {
   const [state, action, pending] = useActionState(login, {})
   return (
-    <form action={action} className="flex w-full max-w-sm flex-col gap-4 rounded-2xl border border-primary/30 bg-card p-6">
-      <div className="flex items-center gap-3">
+    <form action={action} className="flex w-full max-w-sm flex-col gap-4 rounded-3xl border border-border bg-card p-8 text-center">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/images/logos/fist.png" alt="" className="mx-auto h-20 w-auto" />
+      <div className="flex flex-col items-center gap-1">
         <span className="flex size-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <LockKeyhole className="size-5" aria-hidden="true" />
         </span>
-        <div className="flex flex-col">
-          <h1 className="font-display text-xl font-bold uppercase text-foreground">Yönetim paneli</h1>
-          <p className="text-sm text-muted-foreground">Devam etmek için şifreni gir.</p>
-        </div>
+        <h1 className="mt-2 text-xl font-black tracking-widest text-primary">AL KANKA PANEL</h1>
+        <p className="text-xs text-muted-foreground">Yönetim paneline giriş yapın</p>
       </div>
       {!configured && (
         <p className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-sm leading-relaxed text-foreground">
           {'ADMIN_PASSWORD ortam değişkeni ayarlı değil. Ayarlar > Vars bölümünden ekle.'}
         </p>
       )}
-      <label className="flex flex-col gap-1.5 text-sm text-foreground">
+      <label className="flex flex-col gap-1.5 text-left text-sm text-foreground">
         Şifre
         <input
           name="password"

@@ -10,6 +10,7 @@ import {
   setDealsPublishingAction,
 } from '@/app/panel/seo-actions'
 import type { ActionState } from '@/app/panel/actions'
+import { ImageField } from '@/components/panel/image-field'
 import type { BlogPost } from '@/lib/blog'
 import { DEAL_LABELS, type Deal, type Verification } from '@/lib/deal-types'
 
@@ -131,10 +132,7 @@ function BlogEditor({ posts }: { posts: BlogPost[] }) {
           İçerik
           <textarea name="body" required rows={12} defaultValue={editing?.body} className={`${input} font-mono`} />
         </label>
-        <label className={label}>
-          Kapak görseli linki (isteğe bağlı)
-          <input name="cover" maxLength={500} defaultValue={editing?.cover} placeholder="https://..." className={input} />
-        </label>
+        <CoverField initial={editing?.cover} />
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" name="published" defaultChecked={editing?.published ?? true} className="size-4 accent-primary" />
           Yayında
@@ -235,5 +233,15 @@ function DealsCard({ deals, publishing }: { deals: Deal[]; publishing: boolean }
         </ul>
       )}
     </section>
+  )
+}
+
+function CoverField({ initial }: { initial?: string }) {
+  const [value, setValue] = useState(initial ?? '')
+  return (
+    <label className="flex flex-col gap-1.5 text-sm text-foreground">
+      Kapak görseli (isteğe bağlı)
+      <ImageField name="cover" label="Kapak görseli" value={value} onChange={setValue} placeholder="https://..." />
+    </label>
   )
 }

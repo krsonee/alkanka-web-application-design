@@ -5,6 +5,7 @@ import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketProduct, MarketRequest, ProductInput } from '@/lib/market'
 import { deleteMarketProductAction, resolveMarketRequestAction, saveMarketProductAction } from '@/app/panel/market-actions'
+import { ImageField } from '@/components/panel/image-field'
 
 type SponsorOption = { id: string; name: string }
 
@@ -211,10 +212,10 @@ function ProductForm({ value, sponsors, pending, onSave, onCancel }: { value: Pr
           <input type="number" min={k === 'price' || k === 'perUser' ? 1 : 0} value={v[k]} onChange={(e) => set(k, Number(e.target.value))} className={field} />
         </label>
       ))}
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground sm:col-span-2">
+      <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:col-span-2">
         Görsel URL
-        <input value={v.image} onChange={(e) => set('image', e.target.value)} className={field} placeholder="/images/tile-market.png veya https://..." />
-      </label>
+        <ImageField label="Ürün görseli" value={v.image} onChange={(image) => set('image', image)} placeholder="/images/tile-market.png veya https://..." />
+      </div>
       <label className="flex flex-col gap-1 text-xs text-muted-foreground sm:col-span-2">
         Teslimat notu
         <input value={v.delivery} onChange={(e) => set('delivery', e.target.value)} className={field} />

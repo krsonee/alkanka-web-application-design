@@ -1,0 +1,105 @@
+CREATE TABLE IF NOT EXISTS faqs (
+  id serial PRIMARY KEY,
+  question text NOT NULL,
+  answer text NOT NULL,
+  category text NOT NULL DEFAULT 'Genel',
+  slug text NOT NULL DEFAULT '',
+  active boolean NOT NULL DEFAULT true,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+
+TRUNCATE faqs RESTART IDENTITY;
+
+INSERT INTO faqs (question, answer, category, slug, sort_order) VALUES
+('AL KANKA nedir ve nasıl çalışır?',
+ 'AL KANKA, Türkiye''de hizmet veren bahis ve casino sitelerinin güncel giriş adreslerini, bonus kampanyalarını ve ödeme performansını tek listede toplayan bağımsız bir rehber platformudur. Ekibimiz her adresi yayına almadan önce elle kontrol eder, erişim engeli sonrası değişen alan adlarını takip eder ve listeyi gün içinde günceller. Böylece dağınık kaynaklarda adres aramak yerine tek sayfadan doğrulanmış bilgiye ulaşırsınız.',
+ 'Genel', 'al-kanka-nedir', 1),
+
+('AL KANKA bir bahis sitesi mi?',
+ 'Hayır. AL KANKA bahis veya casino oyunu sunmaz, bahis kabul etmez ve para transferi yapmaz. Yalnızca tanıtım ve yönlendirme yapan bir rehberdir; oynadığınız her işlem ilgili bahis sitesiyle sizin aranızda gerçekleşir. Bu nedenle üyelik, bakiye ve ödeme süreçlerinde muhatabınız her zaman ilgili sitenin kendisidir.',
+ 'Genel', 'al-kanka-bahis-sitesi-mi', 2),
+
+('Siteler hangi kriterlere göre seçiliyor?',
+ 'Listeye giren her site ödeme hızı, kullanıcı şikâyetlerinin çözüm oranı, lisans bilgisi, müşteri hizmetlerinin erişilebilirliği ve altyapı kalitesi başlıkları üzerinden değerlendirilir. Ödeme sorunu bildirimleri artan siteler önce uyarı listesine alınır, sorun sürerse listeden çıkarılır. Sıralama tek başına reklam bütçesine göre değil, bu performans verileriyle birlikte belirlenir.',
+ 'Genel', 'siteler-nasil-seciliyor', 3),
+
+('Bilgiler ne sıklıkla güncelleniyor?',
+ 'Giriş adresleri günlük olarak kontrol edilir; erişim engeli sonrası değişen adresler genellikle birkaç saat içinde listeye yansır. Bonus kampanyaları ve çevrim şartları ise kampanya değiştikçe güncellenir. Yine de bir adres veya kampanyanın çalışmadığını fark ederseniz Telegram kanalımızdan bildirebilirsiniz.',
+ 'Genel', 'bilgiler-ne-siklikla-guncelleniyor', 4),
+
+('Bir bahis sitesinin güvenilir olduğunu nasıl anlarım?',
+ 'Güvenilir bir sitede geçerli bir lisans bilgisi, 7/24 ulaşılabilen canlı destek, açıkça yazılmış bonus çevrim şartları ve tutarlı çekim süreleri bulunur. Kullanıcı yorumlarında ödeme geciktirme, keyfi hesap kapatma veya kazanç iptali şikâyetlerinin yoğunlaşması en önemli uyarı işaretidir. Şüphede kaldığınızda küçük bir tutarla test çekimi yapmak en pratik yöntemdir.',
+ 'Genel', 'guvenilir-bahis-sitesi-nasil-anlasilir', 5),
+
+('Deneme bonusu nedir?',
+ 'Deneme bonusu, siteye yeni kaydolan kullanıcılara para yatırma şartı olmadan tanımlanan tanıtım kredisidir. Amaç, oyuncunun siteyi kendi parasını riske atmadan test etmesidir. Tutarlar genellikle 100 TL ile 1.000 TL arasında değişir ve kazançların çekilebilmesi için bir çevrim şartı uygulanır.',
+ 'Bonuslar', 'deneme-bonusu-nedir', 6),
+
+('Deneme bonusu nasıl alınır?',
+ 'Listedeki sitenin kartında yer alan giriş butonuna tıklayın, üyelik formunu gerçek bilgilerinizle doldurun ve telefon doğrulamasını tamamlayın. Ardından canlı destek hattına bağlanıp AL KANKA üzerinden geldiğinizi belirtin; bonus genellikle birkaç dakika içinde hesabınıza tanımlanır. Bazı siteler bonusu otomatik yükler, bu durumda talep etmenize gerek kalmaz.',
+ 'Bonuslar', 'deneme-bonusu-nasil-alinir', 7),
+
+('Çevrim şartı ne demek?',
+ 'Çevrim şartı, bonusla kazandığınız tutarı çekebilmek için toplam ne kadar bahis yapmanız gerektiğini belirler. Örneğin 500 TL bonus ve 10x çevrim şartı, 5.000 TL tutarında oyun oynamanız anlamına gelir. Çevrim tamamlanmadan yapılan çekim talepleri iptal edilir, bu yüzden bonusu almadan önce şartı mutlaka okuyun.',
+ 'Bonuslar', 'cevrim-sarti-nedir', 8),
+
+('Freespin nedir ve nasıl kullanılır?',
+ 'Freespin, belirli slot oyunlarında ücretsiz çevirme hakkıdır ve bakiyenizden düşmeden dönüş yapmanızı sağlar. Hangi oyunda geçerli olduğu kampanya sayfasında belirtilir; farklı bir oyunda kullanılamaz. Freespin kazançları çoğu sitede bonus bakiyesine eklenir ve normal bonus gibi çevrim şartına tabidir.',
+ 'Bonuslar', 'freespin-nedir', 9),
+
+('Kayıp bonusu nasıl işler?',
+ 'Kayıp bonusu, belirli bir dönemde yaptığınız net zararın yüzdesinin hesabınıza iade edilmesidir. Oranlar genellikle %10 ile %50 arasında değişir ve haftalık ya da anlık olarak tanımlanır. İade edilen tutarın çevrim şartsız mı yoksa şartlı mı verildiği siteye göre değişir; çevrimsiz iade oyuncu açısından en avantajlı olanıdır.',
+ 'Bonuslar', 'kayip-bonusu-nedir', 10),
+
+('Bonusumu neden çekemiyorum?',
+ 'En sık neden çevrim şartının tamamlanmamış olmasıdır. Bunun dışında yasaklı oyunlarda oynamak, tek bahiste izin verilen üst limiti aşmak, aynı IP üzerinden birden fazla hesap açmak veya kimlik doğrulamasını tamamlamamak da çekimi engeller. Kampanya kurallarını okuduğunuz hâlde sorun sürüyorsa canlı destekten işlem kaydınızın incelenmesini isteyin.',
+ 'Bonuslar', 'bonus-neden-cekilemiyor', 11),
+
+('Hangi para yatırma yöntemleri kullanılıyor?',
+ 'Türkiye''de en yaygın yöntemler havale ve EFT, Papara, Payfix, Parazula gibi elektronik cüzdanlar, kredi kartı ve kripto para transferidir. Havale genellikle en düşük komisyonlu seçenekken kripto transferler en hızlı sonuçlananıdır. Yatırım yaparken açıklama alanına sitenin verdiği referans kodunu yazmayı unutmayın, aksi hâlde bakiye tanımlaması gecikir.',
+ 'Ödeme', 'para-yatirma-yontemleri', 12),
+
+('Çekim talebi ne kadar sürede sonuçlanır?',
+ 'Kripto para çekimleri çoğunlukla 5-30 dakika içinde tamamlanır. Papara ve benzeri cüzdanlarda süre 10 dakika ile 1 saat arasında değişir, banka havalesinde ise mesai saatlerine bağlı olarak 30 dakika ile birkaç saat sürebilir. Hafta sonu ve resmî tatillerde banka kaynaklı gecikmeler normaldir.',
+ 'Ödeme', 'cekim-suresi-ne-kadar', 13),
+
+('Minimum yatırım ve çekim tutarları nedir?',
+ 'Çoğu sitede minimum yatırım 50 TL ile 200 TL, minimum çekim ise 100 TL ile 500 TL arasındadır. Bu limitler ödeme yöntemine göre farklılık gösterir; kripto işlemlerinde alt sınır genellikle daha yüksektir. Güncel tutarları işlem yapmadan önce ilgili sitenin kasa sayfasından teyit edin.',
+ 'Ödeme', 'minimum-yatirim-cekim-tutari', 14),
+
+('Hesap doğrulama neden isteniyor?',
+ 'Lisanslı siteler, kara para aklamayı önleme mevzuatı gereği ilk çekimden önce kimlik doğrulaması yapmak zorundadır. Genellikle kimlik fotoğrafı ve adınıza kayıtlı bir ödeme aracı belgesi istenir. Belgeleri üyelik sırasında hazır göndermek, ilk çekiminizin gecikmeden onaylanmasını sağlar.',
+ 'Ödeme', 'hesap-dogrulama-kyc', 15),
+
+('Ödememi alamıyorum, ne yapmalıyım?',
+ 'Önce çevrim şartını tamamladığınızı ve hesap doğrulamanızın onaylandığını kontrol edin. Sorun sürüyorsa canlı destekten talep numaranızı alın ve yazışmanın ekran görüntüsünü saklayın. Makul süre içinde çözüm gelmezse durumu Telegram kanalımızdan bize iletin; bildirimleri ilgili sitenin temsilcisine taşıyor ve tekrarlayan şikâyetlerde siteyi listeden çıkarıyoruz.',
+ 'Ödeme', 'odeme-alamiyorum-ne-yapmaliyim', 16),
+
+('Giriş adresleri neden sürekli değişiyor?',
+ 'Yurt dışı merkezli bahis sitelerine Türkiye''den erişim düzenli olarak engellenir. Siteler bu engeli aşmak için alan adının sonundaki sayıyı artırarak yeni bir adres açar; örneğin bir adres kapandığında bir sonraki numaralı sürüm devreye girer. Bu tamamen teknik bir zorunluluktur ve sitenin güvenilirliğiyle ilgili bir sorun değildir.',
+ 'Giriş ve Güvenlik', 'giris-adresleri-neden-degisiyor', 17),
+
+('Yeni giriş adresini nereden öğrenirim?',
+ 'Bu sayfadaki liste her adres değişikliğinde güncellenir; aradığınız siteyi arama kutusuna yazarak güncel bağlantısına ulaşabilirsiniz. Anlık bildirim almak isterseniz Telegram kanalımıza katılabilirsiniz. Arama motorlarında karşınıza çıkan eski bağlantılar yerine buradaki doğrulanmış adresi kullanmanız daha güvenlidir.',
+ 'Giriş ve Güvenlik', 'guncel-giris-adresi-nereden-ogrenilir', 18),
+
+('Adres değişince hesabım ve bakiyem ne olur?',
+ 'Hiçbir şey olmaz. Alan adı değişse de altyapı aynı kaldığı için kullanıcı adınız, şifreniz, bakiyeniz ve bonus geçmişiniz korunur. Yeni adresten mevcut bilgilerinizle giriş yapmanız yeterlidir; yeniden üye olmanız gerekmez, hatta ikinci hesap açmak kural ihlali sayılır.',
+ 'Giriş ve Güvenlik', 'adres-degisince-hesabim-ne-olur', 19),
+
+('Mobil giriş veya uygulama var mı?',
+ 'Listelenen sitelerin neredeyse tamamı mobil tarayıcıya uyumlu çalışır, ayrı bir uygulama kurmanıza gerek yoktur. Bazı siteler Android için apk dosyası sunar; bu dosyaları yalnızca sitenin resmî adresinden indirin. Uygulama mağazalarında bahis sitesi adıyla çıkan üçüncü taraf uygulamalar çoğunlukla sahtedir.',
+ 'Giriş ve Güvenlik', 'mobil-giris-uygulama', 20),
+
+('VPN kullanmam gerekir mi?',
+ 'Listedeki güncel adresler erişime açık olduğu için normal şartlarda VPN gerekmez. Adres yeni değiştiyse ve operatörünüz henüz güncellemediyse geçici olarak DNS ayarı veya VPN çözüm olabilir. Ancak bazı siteler VPN ile girişte hesabı güvenlik nedeniyle askıya alabilir, bu yüzden önce güncel adresi denemek daha doğrudur.',
+ 'Giriş ve Güvenlik', 'vpn-gerekli-mi', 21),
+
+('Lisans bilgisi neden önemli?',
+ 'Lisans, sitenin bir denetim otoritesine karşı sorumlu olduğunu ve oyun sonuçlarının bağımsız olarak denetlendiğini gösterir. Curaçao, Malta ve Kahnawake en sık karşılaşılan lisanslardır. Lisans numarası genellikle sitenin alt kısmında yer alır ve ilgili otoritenin sitesinden sorgulanabilir; sorgulanamayan bir numara ciddi bir uyarı işaretidir.',
+ 'Giriş ve Güvenlik', 'bahis-sitesi-lisansi', 22),
+
+('Yaş sınırı ve sorumlu oyun konusunda ne bilmeliyim?',
+ 'Listelenen tüm sitelerde ve bu rehberde yaş sınırı 18''dir. Kumar bağımlılık yapabilir; oynamaya başlamadan önce kaybetmeyi göze alabileceğiniz bir bütçe belirleyin ve bu sınırı kayıplarınızı geri kazanmak için asla aşmayın. Kontrolü kaybettiğinizi düşünüyorsanız sitelerin sunduğu hesap dondurma ve kendini dışlama araçlarını kullanın veya YEŞİLAY danışma hattından destek alın.',
+ 'Giriş ve Güvenlik', 'yas-siniri-sorumlu-oyun', 23);

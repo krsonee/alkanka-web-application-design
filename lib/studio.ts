@@ -1,6 +1,11 @@
 import 'server-only'
-import { get, put } from '@vercel/blob'
+import { mkdir, readFile as readDisk, writeFile } from 'fs/promises'
+import { join } from 'path'
+import { randomBytes } from 'crypto'
+import { get } from '@vercel/blob'
 import { rows, sql } from '@/lib/db'
+import { decodeHtml } from '@/lib/html-text'
+import { UPLOAD_DIR } from '@/lib/uploads'
 import type { StudioAsset, StudioBrand, StudioJob } from '@/lib/studio-types'
 
 let ready: Promise<unknown> | null = null
@@ -38,15 +43,15 @@ function parseColors(value: unknown): string[] {
 
 const mapBrand = (r: Record<string, unknown>): StudioBrand => ({
   id: Number(r.id),
-  name: String(r.name),
+  name: decodeHtml(String(r.name)),
   domain: String(r.domain),
   logo: String(r.logo),
   logoUrl: fileUrl(String(r.logo)),
   mascot: String(r.mascot ?? ''),
   mascotUrl: fileUrl(String(r.mascot ?? '')),
   colors: parseColors(r.colors),
-  font: String(r.font),
-  notes: String(r.notes),
+  font: decodeHtml(String(r.font)),
+  notes: decodeHtml(String(r.notes)),
 })
 
 export async function listBrands() {
@@ -62,14 +67,17 @@ export async function getBrand(id: number) {
 
 export async function saveBrand(b: Omit<StudioBrand, 'id' | 'logoUrl' | 'mascotUrl'> & { id: number | null }) {
   await ensureTables()
+  const name = decodeHtml(b.name)
+  const font = decodeHtml(b.font)
+  const notes = decodeHtml(b.notes)
   const colors = JSON.stringify(b.colors)
   if (b.id) {
-    await rows(sql`UPDATE studio_brands SET name = ${b.name}, domain = ${b.domain}, logo = ${b.logo}, mascot = ${b.mascot},
-      colors = ${colors}, font = ${b.font}, notes = ${b.notes} WHERE id = ${b.id}`)
+    await rows(sql`UPDATE studio_brands SET name = ${name}, domain = ${b.domain}, logo = ${b.logo}, mascot = ${b.mascot},
+      colors = ${colors}, font = ${font}, notes = ${notes} WHERE id = ${b.id}`)
     return b.id
   }
   const r = await rows<{ id: number }>(sql`INSERT INTO studio_brands (name, domain, logo, mascot, colors, font, notes)
-    VALUES (${b.name}, ${b.domain}, ${b.logo}, ${b.mascot}, ${colors}, ${b.font}, ${b.notes}) RETURNING id`)
+    VALUES (${name}, ${b.domain}, ${b.logo}, ${b.mascot}, ${colors}, ${font}, ${notes}) RETURNING id`)
   return Number(r[0].id)
 }
 
@@ -164,16 +172,34 @@ export async function studioSpend() {
   return { total: Number(r[0].total), month: Number(r[0].month), count: Number(r[0].count) }
 }
 
+const SAFE_PART = /^[a-z0-9._-]+$/i
+
+function studioDiskPath(pathname: string) {
+  const parts = pathname.split('/')
+  if (parts.length !== 3 || parts[0] !== 'studio' || parts.some((part) => !SAFE_PART.test(part))) {
+    throw new Error('Geçersiz dosya')
+  }
+  return join(UPLOAD_DIR, ...parts)
+}
+
+/** Writes under UPLOAD_DIR/studio so a redeploy does not wipe brand logos. */
 export async function storeFile(folder: string, data: Buffer | Uint8Array, contentType: string, ext: string) {
-  const blob = await put(`studio/${folder}/file.${ext}`, Buffer.from(data), {
-    access: 'private',
-    addRandomSuffix: true,
-    contentType,
-  })
-  return blob.pathname
+  void contentType
+  const folderSafe = folder.replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'assets'
+  const extSafe = ext.replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'bin'
+  const pathname = `studio/${folderSafe}/${randomBytes(8).toString('hex')}.${extSafe}`
+  const full = studioDiskPath(pathname)
+  await mkdir(join(UPLOAD_DIR, 'studio', folderSafe), { recursive: true })
+  await writeFile(full, Buffer.from(data))
+  return pathname
 }
 
 export async function readFile(pathname: string) {
+  try {
+    return await readDisk(studioDiskPath(pathname))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
   const result = await get(pathname, { access: 'private' })
   if (!result || result.statusCode !== 200) throw new Error(`Missing file ${pathname}`)
   return Buffer.from(await new Response(result.stream).arrayBuffer())

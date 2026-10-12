@@ -1,7 +1,13 @@
 import 'server-only'
+import { readFile } from 'fs/promises'
+import { join } from 'path'
 import { generateText } from 'ai'
 import sharp from 'sharp'
+import { decodeHtml } from '@/lib/html-text'
 import { storeFile } from '@/lib/studio'
+
+const NO_AI =
+  'Yapay zeka anahtarı ayarlı değil. Ekran görüntüsünden logo ve font okunamıyor; renkler görüntüdeki piksellerden çıkarıldı. Logoyu bilgisayarından yükleyebilirsin.'
 
 const VISION_MODEL = 'google/gemini-3.5-flash'
 
@@ -52,6 +58,9 @@ export async function extractBrandFromScreenshot(input: Buffer, domain: string):
   const height = meta.height ?? 900
 
   let vision: VisionResult = {}
+  if (!process.env.AI_GATEWAY_API_KEY) {
+    warnings.push(NO_AI)
+  } else {
   try {
     const { text } = await generateText({
       model: VISION_MODEL,
@@ -77,7 +86,13 @@ export async function extractBrandFromScreenshot(input: Buffer, domain: string):
     vision = parseJson(text)
   } catch (error) {
     console.error('Vision extract failed:', error)
-    warnings.push('Yapay zeka ekran görüntüsünü okuyamadı, renkler pikselden çıkarıldı.')
+    const msg = error instanceof Error ? error.message : ''
+    warnings.push(
+      /api key|unauthorized|authentication/i.test(msg)
+        ? 'Yapay zeka anahtarı geçersiz. Logo ve font okunamadı; renkler pikselden çıkarıldı. Logoyu bilgisayarından yükleyebilirsin.'
+        : 'Yapay zeka ekran görüntüsünü okuyamadı, renkler pikselden çıkarıldı.',
+    )
+  }
   }
 
   const aiColors = (vision.colors ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase())
@@ -106,7 +121,7 @@ export async function extractBrandFromScreenshot(input: Buffer, domain: string):
 
   const cleanDomain = domain.trim() ? normalizeDomain(domain) : ''
   return {
-    name: (vision.name || cleanDomain.split('.')[0] || 'Yeni marka').slice(0, 60),
+    name: decodeHtml(vision.name || cleanDomain.split('.')[0] || 'Yeni marka').slice(0, 60),
     domain: cleanDomain,
     logo,
     colors,
@@ -169,6 +184,17 @@ function collectColors(text: string, into: Map<string, number>, weight = 1) {
   }
 }
 
+function pickFont(css: string) {
+  const counts = new Map<string, number>()
+  for (const match of css.matchAll(/font-family\s*:\s*([^;}{]+)/gi)) {
+    const first = match[1].split(',')[0]?.trim().replace(/^["']|["']$/g, '') ?? ''
+    if (!first || first.length > 40) continue
+    if (/^(inherit|initial|unset|revert|sans-serif|serif|monospace|system-ui|ui-sans-serif|-apple-system|blinkmacsystemfont|var\()/i.test(first)) continue
+    counts.set(first, (counts.get(first) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+}
+
 function pickColors(counts: Map<string, number>, theme: string) {
   const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c)
   const vivid = sorted.filter((c) => !isNeutral(c))
@@ -205,6 +231,42 @@ async function fetchPage(domain: string) {
   return null
 }
 
+function ownHosts() {
+  const hosts = new Set(['alkanka.com', 'www.alkanka.com'])
+  const site = process.env.NEXT_PUBLIC_SITE_URL
+  if (site) {
+    try {
+      hosts.add(new URL(site).hostname)
+    } catch {}
+  }
+  return hosts
+}
+
+function isOwnHost(host: string) {
+  return ownHosts().has(host.toLowerCase())
+}
+
+async function loadBytes(url: string) {
+  const parsed = new URL(url)
+  if (isOwnHost(parsed.hostname)) {
+    const rel = decodeURIComponent(parsed.pathname).replace(/^\/+/, '')
+    if (rel && !rel.includes('..') && !rel.includes('\\')) {
+      try {
+        return await readFile(join(process.cwd(), 'public', rel))
+      } catch {}
+    }
+  }
+  const got = await fetchLimited(url, 'image/*,*/*')
+  if (got.type.toLowerCase().startsWith('text/html')) throw new Error('Görsel değil')
+  return got.buf
+}
+
+function ownLogoUrls(domain: string) {
+  if (!isOwnHost(domain)) return []
+  const origin = `https://${domain.replace(/^www\./, '')}`
+  return ['/apple-icon.png', '/images/logos/fist.png', '/app-icon-512.png', '/images/og.png'].map((path) => origin + path)
+}
+
 async function faviconFallback(domain: string) {
   const bare = domain.replace(/^www\./, '')
   for (const url of [
@@ -224,16 +286,24 @@ export async function extractBrand(domainInput: string): Promise<ExtractedBrand>
   const warnings: string[] = []
   const page = await fetchPage(domain)
   if (!page) {
-    const logo = await faviconFallback(domain)
+    let logo = ''
+    for (const url of ownLogoUrls(domain)) {
+      try {
+        logo = await storeFile('logos', await logoToPng(await loadBytes(url)), 'image/png', 'png')
+        break
+      } catch {}
+    }
+    if (!logo) logo = await faviconFallback(domain)
+    const own = isOwnHost(domain)
     return {
-      name: domain.replace(/^www\./, '').split('.')[0],
+      name: own ? 'AL KANKA' : domain.replace(/^www\./, '').split('.')[0],
       domain,
       logo,
-      colors: [],
-      font: '',
+      colors: own ? ['#f5c400', '#0b0e17'] : [],
+      font: own ? 'Space Grotesk' : '',
       warnings: [
         'Site bot korumasında, sayfa okunamadı.',
-        logo ? 'Site ikonu yedek kaynaktan alındı.' : '',
+        logo ? 'Logo yerel dosyadan veya site ikonundan alındı.' : 'Logo otomatik alınamadı, PNG olarak yükleyebilirsin.',
         'En sağlam yol: sitenin ana sayfasının ekran görüntüsünü "Ekran görüntüsünden çek" ile yükle.',
       ].filter(Boolean),
     }
@@ -253,8 +323,8 @@ export async function extractBrand(domainInput: string): Promise<ExtractedBrand>
     const tag = metas.find((t) => new RegExp(`(name|property)\\s*=\\s*["']${key}["']`, 'i').test(t))
     return tag ? attr(tag, 'content') : ''
   }
-  const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? '').trim()
-  const name = meta('og:site_name') || title.split(/[|\-–—:]/)[0].trim() || domain.split('.')[0]
+  const title = decodeHtml((html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? '').trim())
+  const name = decodeHtml(meta('og:site_name') || title.split(/[|\-–—:]/)[0].trim() || domain.split('.')[0])
   const themeRaw = meta('theme-color')
   const theme = /^#[0-9a-f]{6}$/i.test(themeRaw) ? themeRaw.toLowerCase() : ''
 
@@ -272,10 +342,7 @@ export async function extractBrand(domainInput: string): Promise<ExtractedBrand>
     try {
       const css = (await fetchLimited(href, 'text/css')).buf.toString('utf8')
       collectColors(css, counts)
-      if (!font) {
-        const family = css.match(/font-family\s*:\s*["']?([^"',;}]+)/i)?.[1]?.trim() ?? ''
-        if (family && !/^(inherit|initial|sans-serif|serif|monospace|system-ui|-apple-system|var\()/i.test(family)) font = family
-      }
+      if (!font) font = pickFont(css)
     } catch {}
   }
   const gfont = html.match(/fonts\.googleapis\.com\/css2?\?family=([^"'&:]+)/i)?.[1]
@@ -290,24 +357,30 @@ export async function extractBrand(domainInput: string): Promise<ExtractedBrand>
   const touch = links.find((t) => /apple-touch-icon/i.test(attr(t, 'rel')))
   const icon = links.find((t) => /\bicon\b/i.test(attr(t, 'rel')) && /png|svg/i.test(attr(t, 'href')))
   const candidates = [
+    ...ownLogoUrls(domain),
     logoImg && (attr(logoImg, 'src') || attr(logoImg, 'data-src')),
     touch && attr(touch, 'href'),
     icon && attr(icon, 'href'),
     meta('og:image'),
+    '/favicon.ico',
+    '/apple-touch-icon.png',
+    '/favicon-32x32.png',
   ]
     .filter((c): c is string => Boolean(c) && !String(c).startsWith('data:'))
     .map(abs)
     .filter(Boolean)
 
   let logo = ''
-  for (const url of candidates) {
+  for (const url of [...new Set(candidates)]) {
     try {
-      const png = await logoToPng((await fetchLimited(url, 'image/*')).buf)
+      const png = await logoToPng(await loadBytes(url))
       logo = await storeFile('logos', png, 'image/png', 'png')
       break
     } catch {}
   }
-  if (!logo) warnings.push('Logo otomatik alınamadı, PNG/SVG olarak yükleyebilirsin.')
+  if (!logo) logo = await faviconFallback(domain)
+  if (!logo) warnings.push('Logo otomatik alınamadı, PNG olarak yükleyebilirsin.')
+  if (!font) warnings.push('Font okunamadı, elle yazabilirsin.')
 
-  return { name: name.slice(0, 60), domain, logo, colors, font: font.slice(0, 60), warnings }
+  return { name: name.slice(0, 60), domain, logo, colors, font: decodeHtml(font).slice(0, 60), warnings }
 }

@@ -1,15 +1,28 @@
 import { jsonLd, pageMeta } from '@/lib/seo'
-import { FAQ } from '@/components/alkanka/data'
 import { EditableHero } from '@/components/alkanka/editable-hero'
-import { Faq } from '@/components/alkanka/faq'
+import { Faq, type FaqGroup } from '@/components/alkanka/faq'
+import { getFaqs } from '@/lib/data'
 
 export const metadata = pageMeta('sss')
+export const dynamic = 'force-dynamic'
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const rows = await getFaqs().catch(() => [])
+  const groups: FaqGroup[] = []
+  for (const row of rows) {
+    const label = row.category || 'Genel'
+    const id = label.toLocaleLowerCase('tr-TR').replace(/\s+/g, '-')
+    let group = groups.find((item) => item.id === id)
+    if (!group) {
+      group = { id, label, items: [] }
+      groups.push(group)
+    }
+    group.items.push({ q: row.question, a: row.answer })
+  }
   const faqLd = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    mainEntity: FAQ.flatMap((g) => g.items).map((item) => ({
+    mainEntity: groups.flatMap((g) => g.items).map((item) => ({
       '@type': 'Question',
       name: item.q,
       acceptedAnswer: { '@type': 'Answer', text: item.a },
@@ -27,7 +40,7 @@ export default function FaqPage() {
         pose="telegram"
         speech="Cevabı bulamazsan Telegram'dan yaz kanka."
       />
-      <Faq />
+      <Faq groups={groups} />
     </>
   )
 }

@@ -1,0 +1,15 @@
+{$SITE_DOMAIN}, www.{$SITE_DOMAIN} {
+	encode gzip
+
+	# Uygulama hız sınırını bu başlıklara göre uygular. Cloudflare arkasında
+	# olmadığımız için ziyaretçinin gönderdiği sahte değerler silinir; gerçek
+	# IP'yi Caddy X-Forwarded-For ile iletir.
+	request_header -Cf-Connecting-Ip
+	request_header -True-Client-Ip
+	request_header -X-Vercel-Forwarded-For
+	request_header -X-Real-Ip
+
+	reverse_proxy web:3000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+}

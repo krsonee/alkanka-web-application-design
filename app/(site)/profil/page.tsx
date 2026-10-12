@@ -21,14 +21,13 @@ import {
   listReferrals,
   myComplaints,
   myReviews,
-  siteName,
 } from '@/lib/community'
 import { AlertsCard, ReferralCard } from '@/components/alkanka/community/profile-widgets'
 import { AccountSettings } from '@/components/alkanka/profile/account-settings'
 import { SponsorAccountsCard } from '@/components/alkanka/growth-widgets'
 import { myFollows, mySponsorAccounts } from '@/lib/growth'
 import { nextRank, rankForLevel } from '@/lib/ranks-shared'
-import { SPONSORS } from '@/components/alkanka/data'
+import { listCatalog, siteNames } from '@/lib/sponsor-catalog'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { cn } from '@/lib/utils'
 
@@ -365,23 +364,25 @@ function BadgesTab({ kpStatus, badges }: { kpStatus: KpStatus; badges: Awaited<R
 }
 
 async function AccountsTab({ memberId }: { memberId: string }) {
-  const [sponsorAccounts, follows, social, links, events, entries] = await Promise.all([
+  const [sponsorAccounts, follows, social, links, events, entries, catalog, names] = await Promise.all([
     mySponsorAccounts(memberId).catch(() => []),
     myFollows(memberId).catch(() => [] as string[]),
     mySocialAccounts(memberId).catch(() => []),
     getSocialLinks().catch(() => ({})),
     listSocialEvents().catch(() => []),
     myEntries(memberId).catch(() => []),
+    listCatalog().catch(() => []),
+    siteNames().catch(() => ({}) as Record<string, string>),
   ])
   return (
     <>
       <div id="sponsor-hesaplari" className="grid scroll-mt-24 items-start gap-4 lg:grid-cols-2">
         <SocialAccountsCard accounts={social} links={links} />
         <div className="flex flex-col gap-4">
-          <SponsorAccountsCard accounts={sponsorAccounts} sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
+          <SponsorAccountsCard accounts={sponsorAccounts} sites={catalog.map((s) => ({ id: s.id, name: s.name }))} />
           {follows.length > 0 && (
             <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-              Adres alarmı açık: <span className="text-foreground">{follows.map((id) => siteName(id)).join(', ')}</span>
+              Adres alarmı açık: <span className="text-foreground">{follows.map((id) => names[id] ?? id).join(', ')}</span>
             </p>
           )}
         </div>
@@ -392,7 +393,11 @@ async function AccountsTab({ memberId }: { memberId: string }) {
 }
 
 async function ReviewsTab({ memberId }: { memberId: string }) {
-  const [reviews, complaints] = await Promise.all([myReviews(memberId), myComplaints(memberId)])
+  const [reviews, complaints, names] = await Promise.all([
+    myReviews(memberId),
+    myComplaints(memberId),
+    siteNames().catch(() => ({}) as Record<string, string>),
+  ])
   return (
     <div className="grid items-start gap-8 lg:grid-cols-2">
       <section aria-labelledby="yorumlarim" className="flex flex-col gap-3">
@@ -402,7 +407,7 @@ async function ReviewsTab({ memberId }: { memberId: string }) {
             {reviews.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 text-sm">
                 <span className="flex items-center gap-2 font-semibold text-foreground">
-                  {siteName(r.siteId)}
+                  {names[r.siteId] ?? r.siteId}
                   <span className="flex items-center gap-0.5 text-gold"><Star className="size-3.5 fill-current" aria-hidden />{r.rating}</span>
                 </span>
                 <span className="text-xs text-muted-foreground">{r.status === 'approved' ? 'Yayında' : r.status === 'pending' ? 'Onay bekliyor' : 'Reddedildi'}</span>
@@ -423,7 +428,7 @@ async function ReviewsTab({ memberId }: { memberId: string }) {
             {complaints.map((c) => (
               <li key={c.id} className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="truncate font-semibold text-foreground">{siteName(c.siteId)} · {c.title}</span>
+                  <span className="truncate font-semibold text-foreground">{names[c.siteId] ?? c.siteId} · {c.title}</span>
                   <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
                 </div>
                 {c.reply && <p className="text-xs leading-relaxed text-muted-foreground">Yanıt: {c.reply}</p>}

@@ -1,15 +1,16 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { adminConfigured, isAdmin } from '@/lib/admin-auth'
-import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
+import { isAuthenticated } from '@/lib/admin-gate'
+import { panelConfigured } from '@/app/panel/actions'
+import { extraHeroes, extraSlideIds, getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
 import { TEXTS_KEY, type SiteTexts } from '@/lib/site-texts-shared'
 import { TextsEditor } from '@/components/panel/texts-editor'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
-import { LoginForm, LogoutButton } from '@/components/panel/login-form'
+import { LoginForm } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
+import { PanelShell } from '@/components/panel/panel-shell'
 import { LogoEditor } from '@/components/panel/logo-editor'
-import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
+import { LOGO_TEAMS } from '@/lib/logo-registry'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
 import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
@@ -31,7 +32,7 @@ import { SITE_URL } from '@/lib/seo'
 import { Studio } from '@/components/panel/studio'
 import { CommunityManager } from '@/components/panel/community'
 import { adminComplaints, listLeagueMatches, pendingReviews, publishedReviews } from '@/lib/community'
-import { SPONSORS } from '@/components/alkanka/data'
+import { listCatalog } from '@/lib/sponsor-catalog'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 import { KpManager } from '@/components/panel/kp-manager'
 import { AdsEditor } from '@/components/panel/ads-editor'
@@ -40,16 +41,24 @@ import { ShareEditor } from '@/components/panel/share-editor'
 import { MarketManager } from '@/components/panel/market-manager'
 import { GrowthManager } from '@/components/panel/growth-manager'
 import { SocialManager } from '@/components/panel/social-manager'
+import { AdminDashboard } from '@/components/admin/AdminDashboard'
+import { DesignContentPanel } from '@/components/admin/DesignContentPanel'
+import { HomeVisualsPanel } from '@/components/admin/HomeVisualsPanel'
+import { StatisticsPanel } from '@/components/admin/StatisticsPanel'
+import { PointsDesk } from '@/components/admin/PointsDesk'
+import { MembersPanel } from '@/components/admin/MembersPanel'
+import { ShortLinksPanel } from '@/components/admin/ShortLinksPanel'
+import { EmailTemplatesPanel } from '@/components/admin/EmailTemplatesPanel'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 
-async function marketPanel() {
+async function marketPanel(sponsors: { id: string; name: string }[]) {
   try {
     const [products, requests] = await Promise.all([listProducts({ includeInactive: true }), listRequests()])
-    return <MarketManager products={products} requests={requests} sponsors={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
+    return <MarketManager products={products} requests={requests} sponsors={sponsors} />
   } catch (error) {
     console.error('[market-panel]', error)
     return <p className="text-sm text-destructive">Market yüklenemedi.</p>
@@ -69,10 +78,10 @@ async function kpPanel() {
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
 
 export default async function PanelPage() {
-  if (!(await isAdmin())) {
+  if (!(await isAuthenticated())) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-background p-4">
-        <LoginForm configured={adminConfigured()} />
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <LoginForm configured={await panelConfigured()} />
       </main>
     )
   }
@@ -92,80 +101,64 @@ export default async function PanelPage() {
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
 
-  const slides = SLIDES.map((s) => ({
-    kind: 'slide' as const,
-    id: s.id,
-    label: s.eyebrow,
-    path: '/',
-    defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image },
-    saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
-  }))
+  const slides = [
+    ...SLIDES.map((s) => ({
+      kind: 'slide' as const,
+      id: s.id,
+      label: s.eyebrow,
+      path: '/',
+      defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
+      saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
+    })),
+    ...extraSlideIds(content).map((id) => {
+      const saved = (content[`slide:${id}`] as SlideOverride | undefined) ?? null
+      return {
+        kind: 'slide' as const,
+        id,
+        label: saved?.title || 'Ek slayt',
+        path: '/',
+        custom: true,
+        defaults: { eyebrow: '', title: '', description: '', cta: 'İncele', image: '', href: '/' },
+        saved,
+      }
+    }),
+  ]
 
-  const heroes = HERO_PAGES.map((p) => ({
-    kind: 'hero' as const,
-    id: p.slug,
-    label: p.label,
-    path: p.path,
-    defaults: { title: p.title, image: p.image },
-    saved: (content[`hero:${p.slug}`] as HeroOverride | undefined) ?? null,
-  }))
+  const heroes = [
+    ...HERO_PAGES.map((p) => ({
+      kind: 'hero' as const,
+      id: p.slug,
+      label: p.label,
+      path: p.path,
+      defaults: { title: p.title, image: p.image },
+      saved: (content[`hero:${p.slug}`] as HeroOverride | undefined) ?? null,
+    })),
+    ...extraHeroes(content).map((p) => ({
+      kind: 'hero' as const,
+      id: p.slug,
+      label: p.label,
+      path: p.path,
+      custom: true,
+      defaults: { title: p.label, image: '' },
+      saved: (content[`hero:${p.slug}`] as HeroOverride | undefined) ?? null,
+    })),
+  ]
+
+  const catalog = await listCatalog().catch(() => [])
+  const sponsorOptions = catalog.map((site) => ({ id: site.id, name: site.name }))
+  const sponsorNames = Object.fromEntries(sponsorOptions.map((site) => [site.id, site.name]))
+  const marketPending = await pendingCount().catch(() => 0)
 
   return (
-    <main className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <div className="flex flex-col">
-            <span className="font-display text-lg font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
-            <span className="text-xs text-muted-foreground">Slider ve sayfa başlıklarını düzenle</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/" className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary">
-              Siteyi aç
-            </Link>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <ContentEditor
-          slides={slides}
-          heroes={heroes}
-          library={IMAGE_LIBRARY}
-          texts={<TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />}
-          games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
-          tournaments={<TournamentManager tournaments={await listTournaments()} />}
-          push={<PushSender {...push} configured={push.total > 0} />}
-          telegram={
-            <div className="flex flex-col gap-6">
-              <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
-              <TelegramChatSetup bots={tgBots} status={tgChat} />
-              <TelegramChannelsSetup usernames={tgChannels} />
-              <TelegramInviteSetup bots={tgBots} status={tgInvite} />
-            </div>
-          }
-          studio={
-            <Studio
-              brands={await listBrands().catch(() => [])}
-              assets={await listAssets().catch(() => [])}
-              jobs={await listJobs().catch(() => [])}
-              spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
-            />
-          }
-          community={
-            <CommunityManager
-              reviews={await pendingReviews().catch(() => [])}
-              published={await publishedReviews().catch(() => [])}
-              complaints={await adminComplaints().catch(() => [])}
-              matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
-              siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
-            />
-          }
-          badges={await kpPanel()}
-          market={await marketPanel()}
-          marketPending={await pendingCount().catch(() => 0)}
-          growth={
+    <PanelShell
+      sections={[
+        {
+          id: 'growth',
+          group: 'Büyüme',
+          label: 'Trafik ve büyüme',
+          body: (
             <GrowthManager
-              sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))}
+              sites={sponsorOptions}
               links={await getSiteLinks().catch(() => ({}))}
               followers={await followerCounts().catch(() => ({}))}
               report={await trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 }))}
@@ -174,35 +167,50 @@ export default async function PanelPage() {
               period={currentPeriod()}
               siteUrl={SITE_URL}
             />
-          }
-          social={
+          ),
+        },
+        {
+          id: 'social',
+          group: 'Büyüme',
+          label: 'Sosyal medya',
+          body: (
             <SocialManager
               links={await getSocialLinks().catch(() => ({}) as SocialLinks)}
               accounts={await adminSocialAccounts().catch(() => [])}
               events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
               entries={await adminEntries().catch(() => [])}
             />
-          }
-          seo={
-            <SeoManager
-              posts={await listPosts({ includeDrafts: true })}
-              deals={await listDeals(30)}
-              publishing={await dealsPublishing()}
-              verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
-              siteUrl={SITE_URL}
-            />
-          }
-          logos={
+          ),
+        },
+        { id: 'market', group: 'Büyüme', label: 'Market', badge: marketPending, body: await marketPanel(sponsorOptions) },
+        { id: 'badges', group: 'Üyeler', label: 'Rozetler', body: await kpPanel() },
+        { id: 'points', group: 'Üyeler', label: 'Puan', body: <PointsDesk /> },
+        { id: 'members', group: 'Üyeler', label: 'Üyeler', body: <MembersPanel /> },
+        { id: 'sites', group: 'İçerik', label: 'Sponsorlar', body: <AdminDashboard bare initialTab="sites" /> },
+        {
+          id: 'slide',
+          group: 'İçerik',
+          label: 'Slider',
+          body: <ContentEditor only="slide" slides={slides} heroes={heroes} library={IMAGE_LIBRARY} />,
+        },
+        {
+          id: 'hero',
+          group: 'İçerik',
+          label: 'Sayfa başlıkları',
+          body: <ContentEditor only="hero" slides={slides} heroes={heroes} library={IMAGE_LIBRARY} />,
+        },
+        { id: 'texts', group: 'İçerik', label: 'Site metinleri', body: <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} /> },
+        {
+          id: 'logos',
+          group: 'İçerik',
+          label: 'Logolar',
+          body: (
             <>
               <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} />
               <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} />
-              <LogoEditor
-                kind="sponsors"
-                title={`Site logoları (${LOGO_SPONSORS.length})`}
-                hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
-                items={LOGO_SPONSORS}
-                saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
-              />
+              <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+                Sponsor logoları Sponsorlar menüsündeki Logo yükle butonuyla kaydedilir. Bu ekrandaki takım logoları tahmin kartları içindir.
+              </p>
               <LogoEditor
                 kind="teams"
                 title={`Takım logoları (${LOGO_TEAMS.length})`}
@@ -211,9 +219,80 @@ export default async function PanelPage() {
                 saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
               />
             </>
-          }
-        />
-      </div>
-    </main>
+          ),
+        },
+        { id: 'design', group: 'İçerik', label: 'Site içeriği', body: <DesignContentPanel /> },
+        { id: 'home', group: 'İçerik', label: 'Ana sayfa', body: <HomeVisualsPanel /> },
+        {
+          id: 'games',
+          group: 'Oyunlar',
+          label: 'Oyunlar',
+          body: <ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />,
+        },
+        { id: 'tournaments', group: 'Oyunlar', label: 'Turnuvalar', body: <TournamentManager tournaments={await listTournaments()} /> },
+        {
+          id: 'community',
+          group: 'Topluluk',
+          label: 'Topluluk',
+          body: (
+            <CommunityManager
+              reviews={await pendingReviews().catch(() => [])}
+              published={await publishedReviews().catch(() => [])}
+              complaints={await adminComplaints().catch(() => [])}
+              matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
+              siteNames={sponsorNames}
+            />
+          ),
+        },
+        {
+          id: 'studio',
+          group: 'Topluluk',
+          label: 'Stüdyo',
+          body: (
+            <Studio
+              brands={await listBrands().catch(() => [])}
+              assets={await listAssets().catch(() => [])}
+              jobs={await listJobs().catch(() => [])}
+              spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
+            />
+          ),
+        },
+        {
+          id: 'seo',
+          group: 'Topluluk',
+          label: 'SEO ve rehber',
+          body: (
+            <SeoManager
+              posts={await listPosts({ includeDrafts: true })}
+              deals={await listDeals(30)}
+              publishing={await dealsPublishing()}
+              verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
+              siteUrl={SITE_URL}
+            />
+          ),
+        },
+        { id: 'push', group: 'İletişim', label: 'Bildirimler', body: <PushSender {...push} configured={push.total > 0} /> },
+        {
+          id: 'telegram',
+          group: 'İletişim',
+          label: 'Telegram',
+          body: (
+            <div className="flex flex-col gap-6">
+              <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
+              <TelegramChatSetup bots={tgBots} status={tgChat} />
+              <TelegramChannelsSetup usernames={tgChannels} />
+              <TelegramInviteSetup bots={tgBots} status={tgInvite} />
+            </div>
+          ),
+        },
+        { id: 'email', group: 'İletişim', label: 'E-posta', body: <EmailTemplatesPanel /> },
+        { id: 'news', group: 'İletişim', label: 'Duyurular', body: <AdminDashboard bare initialTab="news" /> },
+        { id: 'popups', group: 'İletişim', label: 'Pop-up', body: <AdminDashboard bare initialTab="popups" /> },
+        { id: 'stats', group: 'Yönetim', label: 'İstatistikler', body: <StatisticsPanel /> },
+        { id: 'links', group: 'Yönetim', label: 'Kısa link', body: <ShortLinksPanel /> },
+        { id: 'faq', group: 'Yönetim', label: 'SSS', body: <AdminDashboard bare initialTab="faq" /> },
+        { id: 'settings', group: 'Yönetim', label: 'Ayarlar', body: <AdminDashboard bare initialTab="settings" /> },
+      ]}
+    />
   )
 }

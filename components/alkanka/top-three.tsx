@@ -2,11 +2,16 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Crown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { LEADERBOARD } from './data'
+import { leaderboard } from '@/lib/kanka-puan'
 import { jakoSrc } from './jako'
 
-export function TopThree() {
-  const podium = [LEADERBOARD[1], LEADERBOARD[0], LEADERBOARD[2]]
+export async function TopThree() {
+  const board = await leaderboard(3, 'hafta').catch(() => [])
+  const podium = [
+    board[1] ? { rank: 2, name: board[1].name, points: board[1].kp, key: board[1].userId } : null,
+    board[0] ? { rank: 1, name: board[0].name, points: board[0].kp, key: board[0].userId } : null,
+    board[2] ? { rank: 3, name: board[2].name, points: board[2].kp, key: board[2].userId } : null,
+  ].filter((row) => row !== null)
   return (
     <section aria-labelledby="zirve-title" className="panel-gold grid items-center gap-6 overflow-hidden rounded-2xl p-5 md:grid-cols-[1fr_auto] md:p-7">
       <div className="flex flex-col gap-5">
@@ -14,12 +19,14 @@ export function TopThree() {
           <h2 id="zirve-title" className="font-display text-2xl font-bold uppercase tracking-tight text-primary sm:text-3xl">
             Haftanın zirvesi
           </h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">Pazartesi sıfırlanır. İlk 3 VIP sandık kazanır.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {podium.length ? 'Pazartesi sıfırlanır. İlk 3 VIP sandık kazanır.' : 'Bu hafta henüz Kanka Puan sıralaması yok.'}
+          </p>
         </div>
         <ol className="grid grid-cols-3 items-end gap-3">
           {podium.map((u) => (
             <li
-              key={u.rank}
+              key={u.key}
               className={cn(
                 'flex flex-col items-center gap-1 rounded-xl border bg-background px-2 text-center',
                 u.rank === 1 ? 'border-primary py-6' : 'border-border py-4',

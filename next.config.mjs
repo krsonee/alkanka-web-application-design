@@ -6,6 +6,13 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  serverExternalPackages: ["teleproto", "sharp"],
+  experimental: {
+    serverActions: {
+      allowedOrigins: ["alkanka.com", "www.alkanka.com", "alkanka-web.onrender.com"],
+      bodySizeLimit: "8mb",
+    },
+  },
   async headers() {
     return [
       {

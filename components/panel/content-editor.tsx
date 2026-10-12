@@ -1,19 +1,22 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { ExternalLink, ImageIcon, RotateCcw, Save } from 'lucide-react'
+import { ExternalLink, ImageIcon, Plus, RotateCcw, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { JAKO_POSES } from '@/lib/site-registry'
+import { ImageField } from '@/components/panel/image-field'
 
-type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string }
+type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string; href?: string; hidden?: boolean }
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
   id: string
   label: string
   path: string
+  custom?: boolean
   defaults: Fields
   saved: Fields | null
 }
@@ -36,29 +39,44 @@ export function ContentEditor({
   marketPending = 0,
   growth,
   social,
+  only,
 }: {
-  growth: React.ReactNode
-  social: React.ReactNode
+  growth?: React.ReactNode
+  social?: React.ReactNode
   slides: EditorItem[]
   heroes: EditorItem[]
   library: string[]
-  logos: React.ReactNode
-  texts: React.ReactNode
-  games: React.ReactNode
-  tournaments: React.ReactNode
-  push: React.ReactNode
-  telegram: React.ReactNode
-  seo: React.ReactNode
-  studio: React.ReactNode
-  community: React.ReactNode
-  badges: React.ReactNode
-  market: React.ReactNode
+  logos?: React.ReactNode
+  texts?: React.ReactNode
+  games?: React.ReactNode
+  tournaments?: React.ReactNode
+  push?: React.ReactNode
+  telegram?: React.ReactNode
+  seo?: React.ReactNode
+  studio?: React.ReactNode
+  community?: React.ReactNode
+  badges?: React.ReactNode
+  market?: React.ReactNode
   marketPending?: number
+  /** Kabuk menüsü bir türü seçtiyse sekme şeridini gösterme. */
+  only?: 'slide' | 'hero'
 }) {
   const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth' | 'social'>(
-    marketPending > 0 ? 'market' : 'slide',
+    only ?? (marketPending > 0 ? 'market' : 'slide'),
   )
-  const items = tab === 'slide' ? slides : heroes
+  const items = (only ?? tab) === 'slide' ? slides : heroes
+  if (only) {
+    return (
+      <div className="flex flex-col gap-5">
+        <AddCard kind={only} />
+        <div className="grid gap-5 lg:grid-cols-2">
+          {items.map((item) => (
+            <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
+          ))}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col gap-6">
       <div role="tablist" aria-label="İçerik türü" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-fit">
@@ -122,10 +140,13 @@ export function ContentEditor({
       ) : tab === 'logo' ? (
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {items.map((item) => (
-            <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
-          ))}
+        <div className="flex flex-col gap-5">
+          {(tab === 'slide' || tab === 'hero') && <AddCard kind={tab} />}
+          <div className="grid gap-5 lg:grid-cols-2">
+            {items.map((item) => (
+              <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -133,6 +154,7 @@ export function ContentEditor({
 }
 
 function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
+  const router = useRouter()
   const isSlide = item.kind === 'slide'
   const [saveState, saveAction, saving] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
   const [resetState, resetAction, resetting] = useActionState<ActionState, FormData>(isSlide ? resetSlide : resetHero, {})
@@ -140,7 +162,13 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
   const [picker, setPicker] = useState(false)
   const preview = image || item.defaults.image || '/placeholder.svg'
   const status = resetState.message && !saveState.message ? resetState : saveState
-  const value = (k: keyof Fields) => item.saved?.[k] ?? ''
+  const value = (k: keyof Fields) => {
+    const raw = item.saved?.[k]
+    return typeof raw === 'string' ? raw : ''
+  }
+  useEffect(() => {
+    if (saveState.ok || resetState.ok) router.refresh()
+  }, [saveState.ok, saveState.message, resetState.ok, resetState.message, router])
 
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
@@ -166,6 +194,7 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
       <form action={saveAction} className="flex flex-col gap-3 p-4">
         <input type="hidden" name={isSlide ? 'id' : 'slug'} value={item.id} />
         <input type="hidden" name="image" value={image} />
+        {item.custom ? <input type="hidden" name="custom" value="1" /> : null}
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
@@ -201,23 +230,26 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
               ))}
             </div>
           )}
-          <input
-            aria-label="Görsel adresi"
+          <ImageField
+            label="Görsel adresi"
             value={image}
-            onChange={(e) => setImage(e.target.value)}
-            placeholder={`Varsayılan: ${item.defaults.image}`}
-            className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            onChange={setImage}
+            placeholder={item.defaults.image ? `Varsayılan: ${item.defaults.image}` : 'https://… veya boş bırak'}
           />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Galeriden seç ya da https:// ile başlayan bir görsel linki yapıştır.
-          </p>
         </div>
 
         <Text name="eyebrow" label="Üst etiket" value={value('eyebrow')} placeholder={item.defaults.eyebrow} />
         <Text name="title" label="Başlık" value={value('title')} placeholder={item.defaults.title} />
         <Text name="description" label="Açıklama" value={value('description')} placeholder={item.defaults.description} multiline />
         {isSlide ? (
-          <Text name="cta" label="Buton yazısı" value={value('cta')} placeholder={item.defaults.cta} />
+          <>
+            <Text name="cta" label="Buton yazısı" value={value('cta')} placeholder={item.defaults.cta} />
+            <Text name="href" label="Buton linki" value={String(item.saved?.href ?? '')} placeholder={item.defaults.href || '/'} />
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" name="hidden" value="1" defaultChecked={Boolean(item.saved?.hidden)} className="size-4 accent-primary" />
+              Sitede gizle
+            </label>
+          </>
         ) : (
           <>
             <Text name="speech" label="Jako konuşma balonu" value={value('speech')} placeholder="Varsayılan metin kullanılır" />
@@ -249,12 +281,12 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
           </button>
           <button
             formAction={resetAction}
-            disabled={resetting || !item.saved}
+            disabled={resetting || (!item.saved && !item.custom)}
             onClick={() => setImage('')}
             className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-40"
           >
             <RotateCcw className="size-4" aria-hidden="true" />
-            Varsayılana dön
+            {item.custom ? 'Sil' : 'Varsayılana dön'}
           </button>
           {status.message && (
             <p role="status" className={cn('text-sm', status.ok ? 'text-primary' : 'text-live')}>
@@ -290,5 +322,54 @@ function Text({
         <input name={name} defaultValue={value} placeholder={placeholder} className={cls} />
       )}
     </label>
+  )
+}
+
+function AddCard({ kind }: { kind: 'slide' | 'hero' }) {
+  const router = useRouter()
+  const isSlide = kind === 'slide'
+  const [state, action, pending] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
+  const [image, setImage] = useState('')
+  const [id, setId] = useState(() => `x${Date.now().toString(36)}`)
+  useEffect(() => {
+    if (!state.ok) return
+    setImage('')
+    setId(`x${Date.now().toString(36)}`)
+    router.refresh()
+  }, [state.ok, state.message, router])
+
+  return (
+    <form key={id} action={action} className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/40 bg-card p-4">
+      <div className="flex items-center gap-2">
+        <Plus className="size-4 text-primary" aria-hidden />
+        <h2 className="font-display text-lg font-bold text-foreground">{isSlide ? 'Yeni slayt' : 'Yeni sayfa başlığı'}</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {isSlide
+          ? 'Eklediğin slayt ana sayfadaki kaydırmalı banner’a eklenir. Kaydettikten sonra silebilirsin.'
+          : 'Yeni başlık /sayfa/adres altında yayınlanır. Mevcut sayfaların başlığını alttaki kartlardan değiştir.'}
+      </p>
+      <input type="hidden" name="create" value="1" />
+      {isSlide ? <input type="hidden" name="id" value={id} /> : null}
+      <input type="hidden" name="image" value={image} />
+      {!isSlide ? <Text name="label" label="Sayfa adı" value="" placeholder="Örn. Deneme bonusu" /> : null}
+      <Text name="eyebrow" label="Üst etiket" value="" placeholder="Kampanya" />
+      <Text name="title" label="Başlık" value="" placeholder={isSlide ? 'Slayt başlığı' : 'Sayfa başlığı'} />
+      <Text name="description" label="Açıklama" value="" placeholder="Kısa açıklama" multiline />
+      {isSlide ? (
+        <>
+          <Text name="cta" label="Buton yazısı" value="" placeholder="İncele" />
+          <Text name="href" label="Buton linki" value="" placeholder="/" />
+        </>
+      ) : null}
+      <ImageField label="Görsel adresi" value={image} onChange={setImage} />
+      <div className="flex flex-wrap items-center gap-2">
+        <button disabled={pending} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+          <Save className="size-4" aria-hidden />
+          {pending ? 'Kaydediliyor…' : 'Ekle'}
+        </button>
+        {state.message ? <p className={cn('text-sm', state.ok ? 'text-primary' : 'text-live')}>{state.message}</p> : null}
+      </div>
+    </form>
   )
 }

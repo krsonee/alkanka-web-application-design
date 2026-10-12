@@ -1,6 +1,7 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
+import { getCurrentMember } from '@/lib/member-auth'
 import { rows, sql } from '@/lib/db'
 import { getSignupBonus } from '@/lib/site-texts'
 
@@ -11,8 +12,17 @@ export type Member = { id: string; name: string; email: string }
 export async function getMember(): Promise<Member | null> {
   try {
     const session = await auth.api.getSession({ headers: await headers() })
-    if (!session?.user) return null
-    return { id: session.user.id, name: session.user.name || 'Kanka', email: session.user.email }
+    if (session?.user) {
+      return { id: session.user.id, name: session.user.name || 'Kanka', email: session.user.email }
+    }
+  } catch (error) {
+    console.error('[member] better-auth oturumu okunamadı', error)
+  }
+  try {
+    const member = await getCurrentMember()
+    if (!member) return null
+    const extra = await rows<{ email: string | null }>(sql`SELECT email FROM members WHERE id = ${member.id}`)
+    return { id: String(member.id), name: member.username || 'Kanka', email: extra[0]?.email ?? '' }
   } catch (error) {
     console.error('[member] oturum okunamadı', error)
     return null

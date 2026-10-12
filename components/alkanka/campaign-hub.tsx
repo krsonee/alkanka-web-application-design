@@ -6,16 +6,29 @@ import { BadgePercent, PartyPopper } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BonusBoard, CampaignBoard } from './partner-sites'
 import { Events } from './events'
-import { BONUSES, CAMPAIGNS, EVENTS } from './data'
+import { JakoTip } from './jako'
+import { BONUSES, CAMPAIGNS, EVENTS, type Bonus, type Campaign, type Sponsor } from './data'
 
-const TABS = [
-  { id: 'etkinlikler', label: 'AL KANKA etkinlikleri', icon: PartyPopper, count: EVENTS.length },
-  { id: 'bonuslar', label: 'Sponsor site bonusları', icon: BadgePercent, count: BONUSES.length + CAMPAIGNS.length },
-] as const
+export type HubEvent = { id: string; title: string; detail: string; href: string }
 
-type TabId = (typeof TABS)[number]['id']
+type TabId = 'etkinlikler' | 'bonuslar'
 
-export function CampaignHub() {
+export function CampaignHub({
+  sponsors,
+  bonuses,
+  campaigns,
+  events,
+}: {
+  sponsors?: Sponsor[]
+  bonuses?: Bonus[]
+  campaigns?: Campaign[]
+  events?: HubEvent[]
+} = {}) {
+  const usingDb = bonuses !== undefined || campaigns !== undefined || events !== undefined
+  const tabs = [
+    { id: 'etkinlikler' as const, label: 'AL KANKA etkinlikleri', icon: PartyPopper, count: events?.length ?? EVENTS.length },
+    { id: 'bonuslar' as const, label: 'Sponsor site bonusları', icon: BadgePercent, count: (bonuses?.length ?? BONUSES.length) + (campaigns?.length ?? CAMPAIGNS.length) },
+  ]
   const params = useSearchParams()
   const router = useRouter()
   const initial: TabId = params.get('sekme') === 'bonuslar' ? 'bonuslar' : 'etkinlikler'
@@ -29,7 +42,7 @@ export function CampaignHub() {
   return (
     <div className="flex flex-col gap-6">
       <div role="tablist" aria-label="Kampanya türü" className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-card p-1">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const Icon = t.icon
           const active = tab === t.id
           return (
@@ -57,12 +70,30 @@ export function CampaignHub() {
 
       {tab === 'etkinlikler' ? (
         <div id="kampanya-etkinlikler" role="tabpanel">
-          <Events view="biletler" />
+          {usingDb ? (
+            events?.length ? (
+              <ul className="grid gap-3 md:grid-cols-2">
+                {events.map((event) => (
+                  <li key={event.id} className="panel-gold flex flex-col gap-2 rounded-xl p-4">
+                    <h3 className="font-display text-lg font-bold text-foreground">{event.title}</h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{event.detail}</p>
+                    <a href={event.href} className="text-xs font-bold uppercase tracking-wider text-primary hover:underline">İncele</a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <JakoTip pose="uzgun" title="Etkinlik yok">
+                Turnuvalar paneldeki Turnuvalar menüsünden açılır.
+              </JakoTip>
+            )
+          ) : (
+            <Events view="biletler" />
+          )}
         </div>
       ) : (
         <div id="kampanya-bonuslar" role="tabpanel" className="flex flex-col gap-10">
-          <BonusBoard />
-          <CampaignBoard />
+          <BonusBoard bonuses={bonuses} sponsors={sponsors} />
+          <CampaignBoard campaigns={campaigns} sponsors={sponsors} />
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ import 'server-only'
 import { randomBytes } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { credit } from '@/lib/member'
-import { SPONSORS } from '@/components/alkanka/data'
+import { listCatalog, sponsorExists, siteName as catalogName } from '@/lib/sponsor-catalog'
 import type { ParsedOdd } from '@/lib/deal-types'
 
 let ready: Promise<unknown> | null = null
@@ -37,8 +37,12 @@ export function ensureCommunity() {
   return ready
 }
 
-export const siteName = (id: string) => SPONSORS.find((s) => s.id === id)?.name ?? id
-export const isSite = (id: string) => SPONSORS.some((s) => s.id === id)
+export async function siteName(id: string) {
+  return catalogName(id)
+}
+export async function isSite(id: string) {
+  return sponsorExists(id)
+}
 const iso = (v: unknown) => new Date(String(v)).toISOString()
 
 // --- Levels & badges -----------------------------------------------------
@@ -223,13 +227,14 @@ export async function siteTrustTable(): Promise<SiteTrust[]> {
     FROM site_reviews WHERE status = 'approved' GROUP BY site_id`)
   const cp = await rows<{ site_id: string; n: string; ok: string }>(sql`SELECT site_id, count(*) AS n,
     count(*) FILTER (WHERE status = 'resolved') AS ok FROM complaints WHERE status <> 'rejected' GROUP BY site_id`)
-  return SPONSORS.map((s) => {
+  const sites = await listCatalog()
+  return sites.map((s) => {
     const r = rv.find((x) => x.site_id === s.id)
     const c = cp.find((x) => x.site_id === s.id)
     return {
       siteId: s.id,
       name: s.name,
-      rating: r ? Math.round(Number(r.avg) * 10) / 10 : null,
+      rating: r ? Math.round(Number(r.avg) * 10) / 10 : s.rating > 0 ? s.rating : null,
       reviews: Number(r?.n ?? 0),
       complaints: Number(c?.n ?? 0),
       resolved: Number(c?.ok ?? 0),
@@ -254,7 +259,7 @@ export async function recentComplaints(limit = 8) {
 
 export async function addReview(user: { id: string; name: string }, siteId: string, rating: number, body: string) {
   await ensureCommunity()
-  if (!isSite(siteId)) throw new Error('Site bulunamadı.')
+  if (!(await isSite(siteId))) throw new Error('Site bulunamadı.')
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error('Puan 1 ile 5 arasında olmalı.')
   const text = body.trim()
   if (text.length < 20) throw new Error('Yorum en az 20 karakter olmalı.')
@@ -265,7 +270,7 @@ export async function addReview(user: { id: string; name: string }, siteId: stri
 
 export async function addComplaint(user: { id: string; name: string }, siteId: string, title: string, body: string) {
   await ensureCommunity()
-  if (!isSite(siteId)) throw new Error('Site bulunamadı.')
+  if (!(await isSite(siteId))) throw new Error('Site bulunamadı.')
   const t = title.trim()
   const b = body.trim()
   if (t.length < 5 || t.length > 120) throw new Error('Başlık 5-120 karakter olmalı.')

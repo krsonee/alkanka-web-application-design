@@ -12,6 +12,7 @@ import {
   SPONSORS,
   TIER_INFO,
   sponsorById,
+  type Bonus,
   type Campaign,
   type Sponsor,
   type SponsorTier,
@@ -80,7 +81,7 @@ function SponsorBadge({ sponsor, size = 'md' }: { sponsor: Sponsor; size?: 'sm' 
 }
 
 export function SponsorLogoPlate({ sponsor, className, compact }: { sponsor: Sponsor; className?: string; compact?: boolean }) {
-  const logo = useLogos().sponsors[sponsor.id]
+  const logo = sponsor.logoUrl || useLogos().sponsors[sponsor.id]
   if (!logo && compact) {
     return (
       <span className={cn('flex items-center justify-center rounded-lg bg-background font-display text-2xl font-bold tracking-tight text-primary', className)}>
@@ -110,10 +111,10 @@ function Meta({ sponsor }: { sponsor: Sponsor }) {
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
       <Star className="size-3 fill-primary text-primary" aria-hidden="true" />
-      {sponsor.rating.toFixed(1)}
+      {sponsor.rating > 0 ? sponsor.rating.toFixed(1) : '—'}
       <span aria-hidden="true">·</span>
       <Zap className="size-3" aria-hidden="true" />
-      {sponsor.payout} çekim
+      {sponsor.payout ? `${sponsor.payout} çekim` : 'çekim yazılmadı'}
     </span>
   )
 }
@@ -147,7 +148,10 @@ function TierTag({ tier }: { tier: SponsorTier }) {
   )
 }
 
-export function MainSponsor({ sponsor = SPONSORS.find((s) => s.tier === 'ana')! }: { sponsor?: Sponsor }) {
+export function MainSponsor({ sponsor }: { sponsor?: Sponsor | null }) {
+  const chosen = sponsor === undefined ? SPONSORS.find((s) => s.tier === 'ana') : sponsor
+  if (!chosen) return null
+  sponsor = chosen
   return (
     <div className="@container">
     <article className="panel-gold group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
@@ -261,14 +265,15 @@ const SORTS = [
 
 const PAGE = 12
 
-export function SponsorDirectory() {
+export function SponsorDirectory({ sponsors, mainId }: { sponsors?: Sponsor[]; mainId?: string } = {}) {
   const [tier, setTier] = useState<'all' | SponsorTier>('all')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<(typeof SORTS)[number]['id']>('onerilen')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [visible, setVisible] = useState(PAGE)
 
-  const pool = SPONSORS.filter((s) => s.tier !== 'ana')
+  const source = sponsors ?? SPONSORS
+  const pool = source.filter((s) => (mainId ? s.id !== mainId : s.tier !== 'ana'))
   const counts = {
     all: pool.length,
     vip: pool.filter((s) => s.tier === 'vip').length,
@@ -412,10 +417,12 @@ function CopyCode({ code }: { code: string }) {
   )
 }
 
-export function BonusBoard() {
-  const types = ['Tümü', ...Array.from(new Set(BONUSES.map((b) => b.type)))]
+export function BonusBoard({ bonuses, sponsors }: { bonuses?: Bonus[]; sponsors?: Sponsor[] } = {}) {
+  const rows = bonuses ?? BONUSES
+  const find = (id: string) => sponsors?.find((s) => s.id === id) ?? sponsorById(id)
+  const types = ['Tümü', ...Array.from(new Set(rows.map((b) => b.type)))]
   const [type, setType] = useState('Tümü')
-  const list = BONUSES.filter((b) => type === 'Tümü' || b.type === type)
+  const list = rows.filter((b) => type === 'Tümü' || b.type === type)
 
   return (
     <section aria-label="Bonus listesi" className="flex flex-col gap-4">
@@ -423,13 +430,13 @@ export function BonusBoard() {
         {types.map((t) => (
           <Chip key={t} active={type === t} onClick={() => setType(t)}>
             {t}
-            <Count n={t === 'Tümü' ? BONUSES.length : BONUSES.filter((b) => b.type === t).length} active={type === t} />
+            <Count n={t === 'Tümü' ? rows.length : rows.filter((b) => b.type === t).length} active={type === t} />
           </Chip>
         ))}
       </div>
       <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {list.map((b) => {
-          const s = sponsorById(b.sponsorId)
+          const s = find(b.sponsorId)
           return (
             <li key={b.id} className="panel-gold group flex flex-col overflow-hidden rounded-xl">
               <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-4">
@@ -470,7 +477,39 @@ export function BonusBoard() {
   )
 }
 
-export function OddsBoard() {
+export type OddsCard = { id: string; siteId: string; siteName: string; body: string; when: string }
+
+export function OddsBoard({ cards }: { cards?: OddsCard[] } = {}) {
+  if (cards) {
+    if (!cards.length) {
+      return (
+        <JakoTip pose="uzgun" title="Oran kartı yok">
+          Özel oranlar panelde Puan menüsünün Oran bölümünden eklenir.
+        </JakoTip>
+      )
+    }
+    return (
+      <section aria-label="Özel oranlar" className="flex flex-col gap-3">
+        <ul className="panel-gold overflow-hidden rounded-xl">
+          {cards.map((card) => (
+            <li key={card.id} className="flex flex-col gap-3 border-b border-border p-4 last:border-0 md:flex-row md:items-center">
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="font-display text-lg font-bold text-foreground">{card.siteName}</span>
+                <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{card.body}</p>
+                {card.when ? (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="size-3" aria-hidden="true" />
+                    {card.when}
+                  </span>
+                ) : null}
+              </div>
+              <GoButton site={card.siteId || undefined} label="Oyna" className="md:w-28" />
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
   const leagues = Array.from(new Set(SPECIAL_ODDS.map((o) => o.league)))
   return (
     <section aria-label="Özel oranlar" className="flex flex-col gap-6">
@@ -526,8 +565,8 @@ export function OddsBoard() {
   )
 }
 
-function CampaignCard({ c }: { c: Campaign }) {
-  const s = sponsorById(c.sponsorId)
+function CampaignCard({ c, sponsors }: { c: Campaign; sponsors?: Sponsor[] }) {
+  const s = sponsors?.find((item) => item.id === c.sponsorId) ?? sponsorById(c.sponsorId)
   const urgent = c.hoursLeft <= 24
   return (
     <li className="panel-gold group flex flex-col overflow-hidden rounded-xl">
@@ -555,10 +594,12 @@ function CampaignCard({ c }: { c: Campaign }) {
         <p className="text-sm leading-relaxed text-muted-foreground">{c.description}</p>
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <span className="text-xs text-muted-foreground">{s?.name}</span>
-          <a href="#kayit" className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary hover:underline">
-            Katıl
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
-          </a>
+          {s ? <GoButton site={s.id} label="Katıl" className="h-9 w-auto px-3" /> : (
+            <a href="#kayit" className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary hover:underline">
+              Katıl
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </a>
+          )}
         </div>
       </div>
     </li>
@@ -567,19 +608,21 @@ function CampaignCard({ c }: { c: Campaign }) {
 
 const CAMPAIGN_PAGE = 6
 
-export function CampaignBoard() {
-  const tags = ['Tümü', ...Array.from(new Set(CAMPAIGNS.map((c) => c.tag)))]
+export function CampaignBoard({ campaigns, sponsors }: { campaigns?: Campaign[]; sponsors?: Sponsor[] } = {}) {
+  const rows = campaigns ?? CAMPAIGNS
+  if (!rows.length) return null
+  const tags = ['Tümü', ...Array.from(new Set(rows.map((c) => c.tag)))]
   const [tag, setTag] = useState('Tümü')
   const [sort, setSort] = useState<'bitis' | 'uzun'>('bitis')
   const [todayOnly, setTodayOnly] = useState(false)
   const [visible, setVisible] = useState(CAMPAIGN_PAGE)
 
-  const featured = CAMPAIGNS[0]
-  const rest = CAMPAIGNS.slice(1)
+  const featured = rows[0]
+  const rest = rows.slice(1)
     .filter((c) => (tag === 'Tümü' || c.tag === tag) && (!todayOnly || c.hoursLeft <= 24))
     .sort((a, b) => (sort === 'bitis' ? a.hoursLeft - b.hoursLeft : b.hoursLeft - a.hoursLeft))
   const shown = rest.slice(0, visible)
-  const fs = sponsorById(featured.sponsorId)
+  const fs = sponsors?.find((item) => item.id === featured.sponsorId) ?? sponsorById(featured.sponsorId)
 
   return (
     <section aria-label="Kampanyalar" className="flex flex-col gap-6">
@@ -614,7 +657,7 @@ export function CampaignBoard() {
               }}
             >
               {t}
-              <Count n={t === 'Tümü' ? CAMPAIGNS.length - 1 : CAMPAIGNS.slice(1).filter((c) => c.tag === t).length} active={tag === t} />
+              <Count n={t === 'Tümü' ? rows.length - 1 : rows.slice(1).filter((c) => c.tag === t).length} active={tag === t} />
             </Chip>
           ))}
         </div>
@@ -644,7 +687,7 @@ export function CampaignBoard() {
       ) : (
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((c) => (
-            <CampaignCard key={c.id} c={c} />
+            <CampaignCard key={c.id} c={c} sponsors={sponsors} />
           ))}
         </ul>
       )}
@@ -665,19 +708,23 @@ function SeeAllLink({ href, label = 'Tümünü gör' }: { href: string; label?: 
   )
 }
 
-export function FeaturedSponsors() {
-  const vip = SPONSORS.filter((s) => s.tier === 'vip')
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 4)
+export function FeaturedSponsors({ main, cards, total }: { main?: Sponsor | null; cards?: Sponsor[]; total?: number } = {}) {
+  const usingDb = cards !== undefined || main !== undefined || total !== undefined
+  const vip = usingDb
+    ? (cards ?? [])
+    : SPONSORS.filter((s) => s.tier === 'vip')
+        .sort((a, b) => b.rating - a.rating)
+        .slice(0, 4)
+  const count = usingDb ? (total ?? vip.length) : SPONSORS.length
   return (
     <section aria-labelledby="one-cikan-title" className="flex flex-col gap-4">
       <SectionHeading
         id="one-cikan-title"
         title="Öne çıkan sponsorlar"
-        description={`Ana sponsor ve en yüksek puanlı VIP siteler. Toplam ${SPONSORS.length} sponsor var.`}
-        action={<SeeAllLink href="/sponsorlar" label={`${SPONSORS.length} sponsorun tümü`} />}
+        description={`Ana sponsor ve öne çıkan siteler. Toplam ${count} sponsor var.`}
+        action={<SeeAllLink href="/sponsorlar" label={`${count} sponsorun tümü`} />}
       />
-      <MainSponsor />
+      <MainSponsor sponsor={usingDb ? main : undefined} />
       <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
         {vip.map((s) => (
           <SponsorCard key={s.id} sponsor={s} />
@@ -687,19 +734,21 @@ export function FeaturedSponsors() {
   )
 }
 
-export function EndingCampaigns() {
-  const list = [...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3)
+export function EndingCampaigns({ campaigns, sponsors }: { campaigns?: Campaign[]; sponsors?: Sponsor[] } = {}) {
+  const source = campaigns ?? CAMPAIGNS
+  if (campaigns && !source.length) return null
+  const list = [...source].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3)
   return (
     <section aria-labelledby="biten-title" className="flex flex-col gap-4">
       <SectionHeading
         id="biten-title"
-        title="Bitmek üzere"
-        description="Süresi dolmadan yetiş kanka."
-        action={<SeeAllLink href="/kampanyalar" label={`${CAMPAIGNS.length} kampanyanın tümü`} />}
+        title={campaigns ? 'Kampanyalar' : 'Bitmek üzere'}
+        description={campaigns ? 'Panelden açılan kampanyalar.' : 'Süresi dolmadan yetiş kanka.'}
+        action={<SeeAllLink href="/kampanyalar" label={`${source.length} kampanyanın tümü`} />}
       />
       <ul className="grid gap-4 md:grid-cols-3">
         {list.map((c) => (
-          <CampaignCard key={c.id} c={c} />
+          <CampaignCard key={c.id} c={c} sponsors={sponsors} />
         ))}
       </ul>
     </section>

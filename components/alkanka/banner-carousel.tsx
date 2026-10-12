@@ -8,6 +8,10 @@ import { SLIDES, type Slide } from './data'
 
 const INTERVAL = 6000
 
+function isFinishedPoster(src: string) {
+  return src.startsWith('/uploads/') || src.startsWith('http://') || src.startsWith('https://')
+}
+
 export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -34,6 +38,7 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
         {slides.map((slide, i) => {
           const active = i === index
           const external = slide.href.startsWith('http')
+          const poster = isFinishedPoster(slide.image)
           return (
             <div
               key={slide.id}
@@ -43,7 +48,7 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
               aria-hidden={!active}
               className={cn('absolute inset-0 transition-opacity duration-700', active ? 'opacity-100' : 'pointer-events-none opacity-0')}
             >
-              <div className="absolute inset-0 sm:left-1/4">
+              <div className={cn('absolute inset-0', !poster && 'sm:left-1/4')}>
                 <Image
                   src={slide.image}
                   alt=""
@@ -51,8 +56,10 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
                   priority={i === 0}
                   sizes="(min-width: 1280px) 1100px, 100vw"
                   className={cn(
-                    'object-cover object-center transition-transform duration-[6000ms] ease-out',
-                    active ? 'scale-105' : 'scale-100',
+                    poster
+                      ? 'object-contain object-center'
+                      : 'object-cover object-center transition-transform duration-[6000ms] ease-out',
+                    !poster && (active ? 'scale-105' : 'scale-100'),
                   )}
                 />
               </div>

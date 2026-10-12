@@ -43,6 +43,7 @@ export const IMAGE_LIBRARY = [...banners, ...heroes, ...tiles, ...mascots]
 export function isAllowedImage(value: string) {
   return (
     value.startsWith('/images/') ||
+    value.startsWith('/uploads/') ||
     /^\/api\/logo\/[a-z0-9._-]+$/i.test(value) ||
     /^https:\/\/[^\s"'<>]+$/.test(value)
   )

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import sharp from 'sharp'
-import { isAdmin } from '@/lib/admin-auth'
+import { isAuthenticated } from '@/lib/admin-gate'
 import { addAsset, storeFile } from '@/lib/studio'
 
 export const maxDuration = 120
@@ -22,7 +22,7 @@ async function fromUrl(raw: string): Promise<Source> {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
+  if (!(await isAuthenticated())) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const form = await request.formData()
   const rawTarget = form.get('target')
@@ -51,11 +51,15 @@ export async function POST(request: NextRequest) {
       const source = typeof entry === 'string' ? await fromUrl(entry) : entry
       if (!TYPES.includes(source.type)) throw new Error('desteklenmeyen format')
       if (source.size > MAX_BYTES) throw new Error('en fazla 8 MB')
-      const png = await sharp(await source.read(), { density: 300 })
-        .resize({ width: target === 'logo' ? 800 : 1536, height: target === 'logo' ? 400 : 1536, fit: 'inside', withoutEnlargement: target !== 'logo' })
-        .png()
-        .toBuffer()
-      const pathname = await storeFile(folder, png, 'image/png', 'png')
+      const raw = await source.read()
+      const gif = source.type === 'image/gif' && raw.length > 6 && raw[0] === 0x47 && raw[1] === 0x49 && raw[2] === 0x46
+      const stored = gif
+        ? raw
+        : await sharp(raw, { density: 300 })
+            .resize({ width: target === 'logo' ? 800 : 1536, height: target === 'logo' ? 400 : 1536, fit: 'inside', withoutEnlargement: target !== 'logo' })
+            .png()
+            .toBuffer()
+      const pathname = await storeFile(folder, stored, gif ? 'image/gif' : 'image/png', gif ? 'gif' : 'png')
       if (target === 'asset') await addAsset(provider, game, pathname)
       saved.push(pathname)
     } catch (error) {

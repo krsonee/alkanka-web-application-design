@@ -1,8 +1,9 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { saveAds, type ActionState } from '@/app/panel/actions'
-import { AD_PAGES, AD_POSITIONS, type AdMap } from '@/lib/ads'
+import { ImageField } from '@/components/panel/image-field'
+import { AD_PAGES, AD_POSITIONS, type AdMap } from '@/lib/ads-shared'
 
 const input =
   'h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none'
@@ -32,11 +33,7 @@ export function AdsEditor({ saved }: { saved: AdMap }) {
                     {pos.label}
                     <span className="font-normal text-muted-foreground">{pos.size}</span>
                   </span>
-                  {slot?.image && (
-                    // eslint-disable-next-line @next/next/no-img-element -- preview of an admin-provided creative
-                    <img src={slot.image} alt="" className="h-16 w-full rounded-md border border-border bg-background object-contain" />
-                  )}
-                  <input name={`${key}:image`} defaultValue={slot?.image} placeholder="Görsel / GIF linki (https://…)" aria-label={`${page.label} ${pos.label} görsel`} className={input} />
+                  <AdImage name={`${key}:image`} initial={slot?.image} label={`${page.label} ${pos.label} görsel`} />
                   <input name={`${key}:href`} defaultValue={slot?.href} placeholder="Tıklanınca gidilecek link" aria-label={`${page.label} ${pos.label} link`} className={input} />
                   <input name={`${key}:alt`} defaultValue={slot?.alt} placeholder="Site adı (erişilebilirlik)" aria-label={`${page.label} ${pos.label} açıklama`} className={input} />
                 </div>
@@ -52,5 +49,18 @@ export function AdsEditor({ saved }: { saved: AdMap }) {
         {state.message && <p className={state.ok ? 'text-sm text-live' : 'text-sm text-destructive'}>{state.message}</p>}
       </div>
     </form>
+  )
+}
+
+function AdImage({ name, initial, label }: { name: string; initial?: string; label: string }) {
+  const [value, setValue] = useState(initial ?? '')
+  return (
+    <div className="flex flex-col gap-2">
+      {value ? (
+        // eslint-disable-next-line @next/next/no-img-element -- preview of an admin-provided creative
+        <img src={value} alt="" className="h-16 w-full rounded-md border border-border bg-background object-contain" />
+      ) : null}
+      <ImageField name={name} label={label} value={value} onChange={setValue} placeholder="Görsel / GIF linki (https://…)" />
+    </div>
   )
 }

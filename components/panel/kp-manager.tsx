@@ -18,6 +18,7 @@ import type { AutoKind, AwardRow, ContestRow, LeaderRow, SpecialBadge } from '@/
 import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, RULE_FIELDS, type BadgeTier, type LevelDef, type PointRules } from '@/lib/kanka-puan-shared'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { ICONS, LevelEmblem, SpecialEmblem } from '@/components/alkanka/kp/emblem'
+import { ImageField } from '@/components/panel/image-field'
 import { cn } from '@/lib/utils'
 
 const field =
@@ -181,6 +182,12 @@ function BadgesEditor({ badges, autoLabels }: { badges: SpecialBadge[]; autoLabe
               </select>
             </label>
           </div>
+          <ImageField
+            label="Rozet görseli"
+            value={draft.icon.startsWith('/') || draft.icon.startsWith('http') ? draft.icon : ''}
+            onChange={(icon) => setDraft({ ...draft, icon })}
+            placeholder="Boş bırakırsan alttaki simgelerden biri kullanılır"
+          />
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-xs font-semibold text-muted-foreground">Simge</legend>
             <div className="flex flex-wrap gap-1.5">

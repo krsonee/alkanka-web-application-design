@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { BadgeCheck, CheckCircle2, MessageSquareWarning, PenLine, SearchCheck, Send, Star } from 'lucide-react'
-import { isSite, siteComplaints, siteName, siteReviews, siteTrustTable, type SiteTrust } from '@/lib/community'
-import { SPONSORS } from '@/components/alkanka/data'
+import { isSite, siteComplaints, siteReviews, siteTrustTable, type SiteTrust } from '@/lib/community'
+import { listCatalog } from '@/lib/sponsor-catalog'
 import { SponsorLogoPlate } from '@/components/alkanka/partner-sites'
 import { TrustForms } from '@/components/alkanka/community/trust-forms'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
@@ -35,13 +35,25 @@ function resolveRate(t: SiteTrust) {
 
 export default async function TrustPage({ searchParams }: { searchParams: Promise<{ site?: string; tab?: string }> }) {
   const { site, tab } = await searchParams
-  const table = await siteTrustTable()
-  const fallbackOf = (id: string) => SPONSORS.find((s) => s.id === id)?.rating ?? 0
-  const ranked = [...table].sort((a, b) => score(b, fallbackOf(b.siteId)) - score(a, fallbackOf(a.siteId)) || b.reviews - a.reviews)
-  const selected = site && isSite(site) ? site : ranked[0]?.siteId ?? SPONSORS[0].id
-  const current = table.find((t) => t.siteId === selected)!
-  const sponsor = SPONSORS.find((s) => s.id === selected)!
+  const [table, catalog] = await Promise.all([siteTrustTable(), listCatalog().catch(() => [])])
+  const byId = new Map(catalog.map((item) => [item.id, item]))
+  const ranked = [...table].sort((a, b) => (b.reviews - a.reviews) || (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 24)
+  const known = site ? await isSite(site) : false
+  const selected = known && site ? site : ranked[0]?.siteId ?? catalog[0]?.id ?? ''
+  const current = table.find((t) => t.siteId === selected) ?? ranked[0]
+  const sponsor = byId.get(selected) ?? catalog[0]
   const view = tab === 'sikayet' ? 'sikayet' : 'yorum'
+  if (!current || !sponsor) {
+    return (
+      <PageHero
+        eyebrow="Güven merkezi"
+        title="Sitelerin gerçek karnesi"
+        description="Sponsorlar panelden eklendiğinde yorum ve şikâyet karnesi burada görünür."
+        image="/images/heroes/guven.png"
+        tone="accent"
+      />
+    )
+  }
   const [reviews, complaints] = await Promise.all([siteReviews(selected), siteComplaints(selected)])
   const rate = resolveRate(current)
   const totals = table.reduce((a, t) => ({ reviews: a.reviews + t.reviews, complaints: a.complaints + t.complaints, resolved: a.resolved + t.resolved }), { reviews: 0, complaints: 0, resolved: 0 })
@@ -81,7 +93,8 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
         <h2 id="siralama" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Güven sıralaması · bir site seç</h2>
         <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2">
           {ranked.map((t, i) => {
-            const s = SPONSORS.find((x) => x.id === t.siteId)!
+            const s = byId.get(t.siteId)
+            if (!s) return null
             const active = t.siteId === selected
             const r = resolveRate(t)
             return (
@@ -229,7 +242,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
         </div>
 
         <aside className="flex flex-col gap-3 xl:sticky xl:top-20 xl:self-start">
-          <TrustForms siteId={selected} siteName={siteName(selected)} initialMode={view === 'sikayet' ? 'complaint' : 'review'} />
+          <TrustForms siteId={selected} siteName={sponsor.name} initialMode={view === 'sikayet' ? 'complaint' : 'review'} />
           <p className="px-1 text-xs leading-relaxed text-muted-foreground">
             Şifre, kart veya kimlik bilgisi paylaşma. Hakaret ve reklam içeren kayıtlar yayınlanmaz.
           </p>

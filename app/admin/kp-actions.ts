@@ -1,0 +1,99 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { isAuthenticated } from '@/lib/admin-gate'
+import {
+  adjustPoints,
+  awardBadge,
+  awardContest,
+  contestStandings,
+  deleteSpecialBadge,
+  revokeAward,
+  saveLevels,
+  saveRules,
+  saveSpecialBadge,
+  searchMembers,
+  type AutoKind,
+  type BadgeInput,
+  type ContestRow,
+  type LevelDef,
+  type PointRules,
+} from '@/lib/kanka-puan'
+
+type Result = { ok: true; message?: string } | { ok: false; error: string }
+
+async function guard(fn: () => Promise<string | void>): Promise<Result> {
+  if (!(await isAuthenticated())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  try {
+    const message = await fn()
+    revalidatePath('/admin')
+    revalidatePath('/rozetler')
+    revalidatePath('/profil')
+    return { ok: true, message: message || undefined }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'İşlem başarısız.' }
+  }
+}
+
+export async function updateLevels(levels: LevelDef[]) {
+  return guard(async () => {
+    await saveLevels(levels)
+    return 'Seviyeler kaydedildi.'
+  })
+}
+
+export async function updateRules(rules: PointRules) {
+  return guard(async () => {
+    await saveRules(rules)
+    return 'Puan kuralları kaydedildi.'
+  })
+}
+
+export async function upsertBadge(input: BadgeInput) {
+  return guard(async () => {
+    await saveSpecialBadge(input)
+    return 'Rozet kaydedildi.'
+  })
+}
+
+export async function removeBadge(id: string) {
+  return guard(async () => {
+    await deleteSpecialBadge(id)
+    return 'Rozet silindi.'
+  })
+}
+
+export async function giveBadge(badgeId: string, userId: string, note: string) {
+  return guard(async () => {
+    const ok = await awardBadge(badgeId, userId, `manuel-${Date.now()}`, note || undefined)
+    return ok ? 'Rozet verildi.' : 'Bu üye rozeti zaten almış.'
+  })
+}
+
+export async function giveContestBadge(badgeId: string) {
+  return guard(() => awardContest(badgeId))
+}
+
+export async function takeBackAward(awardId: number) {
+  return guard(async () => {
+    await revokeAward(awardId)
+    return 'Rozet geri alındı.'
+  })
+}
+
+export async function changePoints(userId: string, points: number, note: string) {
+  return guard(async () => {
+    await adjustPoints(userId, points, note)
+    return `${points > 0 ? '+' : ''}${points} KP işlendi.`
+  })
+}
+
+export async function findMembers(q: string) {
+  if (!(await isAuthenticated())) return []
+  return searchMembers(q)
+}
+
+export async function previewContest(kind: Exclude<AutoKind, 'turnuva'>): Promise<{ period: string; rows: ContestRow[] } | null> {
+  if (!(await isAuthenticated())) return null
+  return contestStandings(kind)
+}

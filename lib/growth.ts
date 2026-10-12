@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
-import { SPONSORS } from '@/components/alkanka/data'
+import { sponsorExists } from '@/lib/sponsor-catalog'
 
 /** A 3rd account from the same network within this window gets flagged. */
 export const MAX_ACCOUNTS_PER_NETWORK = 2
@@ -36,7 +36,9 @@ export function ensureGrowth() {
 }
 
 const iso = (v: unknown) => new Date(String(v)).toISOString()
-export const isSponsor = (id: string) => SPONSORS.some((s) => s.id === id)
+export async function isSponsor(id: string) {
+  return sponsorExists(id)
+}
 
 export function cleanSrc(value: string | null | undefined) {
   const v = (value ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32)
@@ -75,7 +77,7 @@ export async function getSiteLink(siteId: string): Promise<SiteLink | null> {
 
 /** Saves the current entry address. Returns true when an existing address changed (followers should be alerted). */
 export async function setSiteLink(siteId: string, rawUrl: string) {
-  if (!isSponsor(siteId)) throw new Error('Site bulunamadı.')
+  if (!(await isSponsor(siteId))) throw new Error('Site bulunamadı.')
   const url = rawUrl.trim()
   if (!url) {
     await ensureGrowth()
@@ -183,7 +185,7 @@ export async function setFlag(userId: string, flagged: boolean) {
 // --- Follows (address change alarm) -------------------------------------
 
 export async function toggleFollow(userId: string, siteId: string) {
-  if (!isSponsor(siteId)) throw new Error('Site bulunamadı.')
+  if (!(await isSponsor(siteId))) throw new Error('Site bulunamadı.')
   await ensureGrowth()
   const removed = await rows(sql`DELETE FROM site_follows WHERE user_id = ${userId} AND site_id = ${siteId} RETURNING site_id`)
   if (removed.length) return false
@@ -257,7 +259,7 @@ const mapAccount = (x: Record<string, unknown>): SponsorAccount => ({
 })
 
 export async function linkSponsorAccount(userId: string, siteId: string, rawUsername: string) {
-  if (!isSponsor(siteId)) throw new Error('Site bulunamadı.')
+  if (!(await isSponsor(siteId))) throw new Error('Site bulunamadı.')
   const username = rawUsername.trim().replace(/\s+/g, '').slice(0, 40)
   if (username.length < 3) throw new Error('Kullanıcı adı en az 3 karakter olmalı.')
   await ensureGrowth()
@@ -302,7 +304,7 @@ function parseAmount(raw: string) {
 
 /** Accepts "kullaniciadi,tutar" lines (comma, semicolon or tab). Replaces the period's data for that site. */
 export async function importWagers(siteId: string, period: string, text: string) {
-  if (!isSponsor(siteId)) throw new Error('Site bulunamadı.')
+  if (!(await isSponsor(siteId))) throw new Error('Site bulunamadı.')
   if (!/^\d{4}-\d{2}$/.test(period)) throw new Error('Dönem YYYY-AA biçiminde olmalı (ör. 2026-10).')
   const entries = new Map<string, number>()
   for (const line of text.split(/\r?\n/)) {

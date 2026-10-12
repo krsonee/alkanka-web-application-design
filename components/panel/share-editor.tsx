@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { saveShare, type ActionState } from '@/app/panel/actions'
+import { ImageField } from '@/components/panel/image-field'
 import type { ShareSettings } from '@/lib/share'
 
 const input =
@@ -61,10 +62,10 @@ export function ShareEditor({ saved }: { saved: ShareSettings }) {
             Site adı
             <input name="siteName" value={draft.siteName} onChange={set('siteName')} maxLength={40} placeholder={FALLBACK.siteName} className={input} />
           </label>
-          <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+          <div className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
             Görsel / logo linki (1200×630)
-            <input name="image" value={draft.image} onChange={set('image')} placeholder="https://… veya /images/…" className={input} />
-          </label>
+            <ImageField name="image" label="Paylaşım görseli" value={draft.image} onChange={(image) => setDraft((d) => ({ ...d, image }))} placeholder="https://… veya /images/…" />
+          </div>
         </div>
         <div className="flex flex-col gap-2">
           <span className="text-xs font-semibold text-muted-foreground">Önizleme</span>

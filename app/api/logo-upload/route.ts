@@ -1,38 +1,27 @@
-import { put } from '@vercel/blob'
+import { randomBytes } from 'crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAdmin } from '@/lib/admin-auth'
-
-const MAX_BYTES = 2 * 1024 * 1024
-const TYPES: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'image/svg+xml': 'svg',
-  'image/gif': 'gif',
-}
+import { isAuthenticated } from '@/lib/admin-gate'
+import { detectImageType, MAX_UPLOAD_BYTES, writeImageFile } from '@/lib/uploads'
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin())) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
   }
 
   const form = await request.formData()
   const file = form.get('file')
-  const id = String(form.get('id') ?? 'logo').replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'logo'
+  const id = String(form.get('id') ?? form.get('name') ?? 'logo').replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'logo'
 
   if (!(file instanceof File)) return NextResponse.json({ error: 'Dosya seçilmedi.' }, { status: 400 })
-  const ext = TYPES[file.type]
-  if (!ext) return NextResponse.json({ error: 'Sadece PNG, JPG, WEBP, SVG veya GIF yükleyebilirsin.' }, { status: 400 })
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Dosya en fazla 2 MB olabilir.' }, { status: 400 })
+  if (file.size > MAX_UPLOAD_BYTES) return NextResponse.json({ error: 'Dosya en fazla 8 MB olabilir.' }, { status: 400 })
+
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const ext = detectImageType(bytes)
+  if (!ext) return NextResponse.json({ error: 'Sadece PNG, JPG, WEBP veya GIF yükleyebilirsin.' }, { status: 400 })
 
   try {
-    const blob = await put(`logos/${id}.${ext}`, file, {
-      access: 'private',
-      addRandomSuffix: true,
-      contentType: file.type,
-    })
-    const name = blob.pathname.slice('logos/'.length)
-    return NextResponse.json({ url: `/api/logo/${name}` })
+    const url = await writeImageFile(`${id}-${randomBytes(4).toString('hex')}.${ext}`, bytes)
+    return NextResponse.json({ url })
   } catch (error) {
     console.error('Logo upload failed:', error)
     return NextResponse.json({ error: 'Yükleme başarısız oldu.' }, { status: 500 })

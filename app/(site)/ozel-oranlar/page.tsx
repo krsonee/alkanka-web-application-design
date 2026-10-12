@@ -3,13 +3,13 @@ import { listLiveOdds } from '@/lib/deals'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { OddsBoard } from '@/components/alkanka/partner-sites'
 import { LiveOddsBoard } from '@/components/alkanka/live-odds-board'
-import { SPECIAL_ODDS } from '@/components/alkanka/data'
+import { listPublicOdds } from '@/lib/public-boards'
 
 export const metadata = pageMeta('ozel-oranlar')
-export const revalidate = 120
+export const dynamic = 'force-dynamic'
 
 export default async function OddsPage() {
-  const deals = await listLiveOdds()
+  const [deals, cards] = await Promise.all([listLiveOdds().catch(() => []), listPublicOdds().catch(() => [])])
   const liveOdds = deals.flatMap((d) => d.odds ?? [])
   const hasLive = deals.length > 0
   const stats = hasLive
@@ -19,9 +19,9 @@ export default async function OddsPage() {
         { label: 'En yüksek', value: liveOdds.length ? Math.max(...liveOdds.map((o) => o.newOdd)).toFixed(2) : '-' },
       ]
     : [
-        { label: 'Aktif oran', value: String(SPECIAL_ODDS.length) },
-        { label: 'Lig', value: String(new Set(SPECIAL_ODDS.map((o) => o.league)).size) },
-        { label: 'En yüksek', value: Math.max(...SPECIAL_ODDS.map((o) => o.newOdd)).toFixed(2) },
+        { label: 'Aktif kart', value: String(cards.length) },
+        { label: 'Site', value: String(new Set(cards.map((card) => card.siteName)).size) },
+        { label: 'Kaynak', value: 'Panel' },
       ]
 
   return (
@@ -36,7 +36,7 @@ export default async function OddsPage() {
         tone="accent"
         stats={stats}
       />
-      {hasLive ? <LiveOddsBoard deals={deals} /> : <OddsBoard />}
+      {hasLive ? <LiveOddsBoard deals={deals} /> : <OddsBoard cards={cards} />}
     </>
   )
 }

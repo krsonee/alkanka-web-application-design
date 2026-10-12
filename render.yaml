@@ -1,0 +1,73 @@
+# Render Blueprint: web sitesi + panel, Telegram worker ve PostgreSQL.
+# Render panelinde "New > Blueprint" ile bu depo seçilince hepsi birlikte kurulur.
+# "sync: false" olan değerleri Render kurulum sırasında sizden ister.
+
+databases:
+  - name: alkanka-db
+    plan: basic-256mb
+    region: frankfurt
+    databaseName: alkanka
+    user: alkanka
+    postgresMajorVersion: "16"
+    ipAllowList: []
+
+envVarGroups:
+  # Panel ve worker aynı şifreleme anahtarını kullanmak zorunda; bu yüzden
+  # ortak grupta tutulur. Değerleri Render rastgele üretir.
+  - name: alkanka-shared
+    envVars:
+      - key: TELEGRAM_ENCRYPTION_KEY
+        generateValue: true
+      - key: NODE_VERSION
+        value: "22"
+
+services:
+  - type: web
+    name: alkanka-web
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:render
+    healthCheckPath: /api/health
+    autoDeploy: true
+    domains:
+      - alkanka.com
+      - www.alkanka.com
+    disk:
+      name: alkanka-uploads
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - fromGroup: alkanka-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: alkanka-db
+          property: connectionString
+      - key: NEXT_PUBLIC_SITE_URL
+        value: https://alkanka.com
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: TELEGRAM_BOT_ADMINS
+        sync: false
+
+  - type: worker
+    name: alkanka-telegram
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --omit=dev
+    startCommand: npm run worker:telegram
+    autoDeploy: true
+    envVars:
+      - fromGroup: alkanka-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: alkanka-db
+          property: connectionString
+      - key: TELEGRAM_BOT_ADMINS
+        sync: false

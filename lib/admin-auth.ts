@@ -25,9 +25,16 @@ export function createSessionValue() {
 }
 
 export async function isAdmin() {
+  const jar = await cookies()
+  try {
+    const { SESSION_COOKIE, verifySessionToken } = await import('@/lib/admin-gate')
+    if (verifySessionToken(jar.get(SESSION_COOKIE)?.value)) return true
+  } catch {
+    // Oturum anahtarı yoksa eski çerez kontrolü denenir.
+  }
   const expected = sessionToken()
   if (!expected) return false
-  const value = (await cookies()).get(ADMIN_COOKIE)?.value
+  const value = jar.get(ADMIN_COOKIE)?.value
   return Boolean(value) && safeEqual(value!, expected)
 }
 

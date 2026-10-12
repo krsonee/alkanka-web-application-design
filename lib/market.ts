@@ -1,7 +1,8 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
-import { MARKET_ITEMS, SPONSORS } from '@/components/alkanka/data'
+import { MARKET_ITEMS } from '@/components/alkanka/data'
+import { listCatalog } from '@/lib/sponsor-catalog'
 
 export type MarketKind = 'alkanka' | 'sponsor'
 export type RequestStatus = 'beklemede' | 'onaylandi' | 'reddedildi'
@@ -86,7 +87,7 @@ function ensure() {
           VALUES (${i.id}, 'alkanka', ${i.type}, ${i.name}, ${i.description}, ${i.delivery}, ${JSON.stringify(i.rules)}::jsonb, ${i.image},
             ${i.price}, ${i.stock}, ${i.total}, ${i.limit}, ${Boolean(i.refOnly)}, ${sort++}) ON CONFLICT DO NOTHING`)
       }
-      const seeds = SPONSORS.slice(0, 3)
+      const seeds = (await listCatalog().catch(() => [])).slice(0, 3)
       for (const s of seeds) {
         await rows(sql`INSERT INTO market_items (id, kind, sponsor_id, sponsor_name, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, sort)
           VALUES (${`sp-${s.id}`}, 'sponsor', ${s.id}, ${s.name}, 'SPONSOR BONUSU', ${`${s.name} ${s.welcome}`},
@@ -134,7 +135,8 @@ export async function saveProduct(input: ProductInput) {
   const name = clean(input.name, 120)
   if (!name) throw new Error('Ürün adı zorunlu.')
   const kind: MarketKind = input.kind === 'sponsor' ? 'sponsor' : 'alkanka'
-  const sponsor = kind === 'sponsor' ? SPONSORS.find((s) => s.id === input.sponsorId) : undefined
+  const catalog = kind === 'sponsor' ? await listCatalog().catch(() => []) : []
+  const sponsor = catalog.find((s) => s.id === input.sponsorId)
   const sponsorName = kind === 'sponsor' ? clean(input.sponsorName || sponsor?.name, 80) || null : null
   if (kind === 'sponsor' && !sponsorName) throw new Error('Sponsor site seçmelisin.')
   const id = input.id || `${kind === 'sponsor' ? 'sp' : 'ak'}-${Date.now().toString(36)}`

@@ -17,7 +17,9 @@ function Item({ event }: { event: TickerEvent }) {
   )
 }
 
-export function ActivityTicker() {
+export function ActivityTicker({ events }: { events?: TickerEvent[] } = {}) {
+  const rows = events ?? TICKER_EVENTS
+  if (events && !rows.length) return null
   return (
     <section aria-label="Canlı aktivite" className="glass flex items-center overflow-hidden rounded-xl">
       <span className="flex shrink-0 items-center gap-2 border-r border-border bg-live/10 px-4 py-3 text-xs font-bold uppercase tracking-wider text-live">
@@ -26,10 +28,10 @@ export function ActivityTicker() {
       </span>
       <div className="relative flex-1 overflow-hidden py-3 [mask-image:linear-gradient(90deg,transparent,black_6%,black_94%,transparent)]">
         <ul className="flex w-max animate-marquee hover:[animation-play-state:paused]">
-          {TICKER_EVENTS.map((e) => (
+          {rows.map((e) => (
             <Item key={e.id} event={e} />
           ))}
-          {TICKER_EVENTS.map((e) => (
+          {rows.map((e) => (
             <Item key={`${e.id}-dup`} event={e} />
           ))}
         </ul>

@@ -31,3 +31,16 @@ To learn more, take a look at the following resources:
 - [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 - [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+
+## Canlı site notları
+
+Tasarım reposuna alkanka.com üzerindeki panel, veritabanı ve yükleme düzeni eklendi. Çalıştırmak için:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Veritabanı tabloları `pnpm db:init` ile oluşturulur (var olan satırlara dokunmaz). Render açılışı `pnpm start:render` kullanır. Telegram aktarıcı `pnpm worker:telegram`.
+
+Gizli değerler `.env` dosyasına yazılır ve commit edilmez. İsimler: `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `UPLOAD_DIR`. Ayrıntılı liste `.env` şablonundaki açıklamalardadır; şifreler bu dosyaya yazılmaz.

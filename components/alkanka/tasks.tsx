@@ -27,8 +27,36 @@ const STREAK_RULES = [
   '7. günde VIP ödül sandığı açılır ve seri yeniden başlar.',
 ]
 
-export function Tasks() {
+export type BoardTask = {
+  id: number
+  title: string
+  description: string
+  reward: number
+  claimed: boolean
+  needsCode: boolean
+}
+
+export function Tasks({ tasks }: { tasks?: BoardTask[] } = {}) {
   const { add } = usePoints()
+  const [boardDone, setBoardDone] = useState<Record<number, boolean>>({})
+  const [note, setNote] = useState('')
+  const [code, setCode] = useState('')
+
+  async function claimBoard(task: BoardTask) {
+    setNote('')
+    const res = await fetch('/api/puan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'task', taskId: task.id, code }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setNote(typeof data.error === 'string' ? data.error : 'Görev kaydedilemedi.')
+      return
+    }
+    setBoardDone((current) => ({ ...current, [task.id]: true }))
+    setNote('Görev puanı hesabına yazıldı.')
+  }
   const [detail, setDetail] = useState<TaskItem | null>(null)
   const [streakInfo, setStreakInfo] = useState(false)
   const [streakDay, setStreakDay] = useState(4)
@@ -52,6 +80,36 @@ export function Tasks() {
 
   return (
     <section aria-label="Görevler" className="flex flex-col gap-5">
+      {tasks ? (
+        <div className="flex flex-col gap-3">
+          <SectionHeading id="gorevler-baslik" title="Görevler" description="Paneldeki Puan menüsünden açılan görevler. Tamamlayınca puan hesabına yazılır." />
+          {tasks.length ? (
+            <ul className="grid gap-3">
+              {tasks.map((task) => {
+                const claimed = task.claimed || boardDone[task.id]
+                return (
+                  <li key={task.id} className="panel-gold flex flex-col gap-2 rounded-xl p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-semibold text-foreground">{task.title}</h3>
+                      <span className="text-sm font-bold text-primary">+{task.reward}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{task.description}</p>
+                    {task.needsCode && !claimed ? (
+                      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Kod" className="h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+                    ) : null}
+                    <button type="button" disabled={claimed} onClick={() => claimBoard(task)} className="self-start text-xs font-bold uppercase tracking-wider text-primary disabled:text-muted-foreground">
+                      {claimed ? 'Alındı' : 'Tamamla'}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <JakoTip pose="dusunen" title="Açık görev yok">Puan menüsünden görev eklenince burada görünür.</JakoTip>
+          )}
+          {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
+        </div>
+      ) : null}
       <DailyGames />
 
       <div className="grid gap-4 xl:grid-cols-5">

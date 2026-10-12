@@ -45,7 +45,7 @@ function UploadButton({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
@@ -152,7 +152,7 @@ export function LogoEditor({
           {pending ? 'Kaydediliyor…' : 'Logoları kaydet'}
         </button>
         <span className="text-xs text-muted-foreground">
-          Link yapıştır ya da yükle butonuyla dosya seç (PNG, JPG, WEBP, SVG · en fazla 2 MB). Kaydetmeyi unutma.
+          Link yapıştır ya da bilgisayardan yükle (PNG, JPG, WEBP, GIF · en fazla 8 MB). Kaydetmeyi unutma.
         </span>
         {uploadError && (
           <p role="alert" className="text-sm text-live">

@@ -170,6 +170,7 @@ export type Sponsor = {
   perks: string[]
   rating: number
   payout: string
+  logoUrl?: string
 }
 
 const BASE_SPONSORS: Sponsor[] = [
@@ -226,7 +227,7 @@ export const SPONSORS: Sponsor[] = [
 export type Bonus = {
   id: string
   sponsorId: string
-  type: 'Hoş geldin' | 'Yatırım' | 'Kayıp' | 'Freespin' | 'Deneme'
+  type: string
   title: string
   amount: string
   wager: string

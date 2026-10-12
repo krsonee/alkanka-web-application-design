@@ -195,6 +195,16 @@ export function LevelEmblem({ level, size = 'md', locked = false, className }: {
 
 /** Round medallion for valuable (special) badges. */
 export function SpecialEmblem({ icon, tier, size = 'md', locked, className }: { icon: string; tier: string; size?: EmblemSize; locked?: boolean; className?: string }) {
+  const photo = icon.startsWith('/uploads/') || icon.startsWith('/images/') || icon.startsWith('https://') || icon.startsWith('/api/logo/')
+  if (photo) {
+    const box = SIZES[size].box
+    return (
+      <span className={cn('relative inline-flex shrink-0 overflow-hidden rounded-full border border-border bg-card', box, className)}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- admin-uploaded badge art */}
+        <img src={icon} alt="" className="size-full object-cover" />
+      </span>
+    )
+  }
   return <Medallion tier={tier} shape="round" size={size} Icon={ICONS[icon] ?? Award} locked={locked} glow={tier !== 'altin'} className={className} />
 }
 
