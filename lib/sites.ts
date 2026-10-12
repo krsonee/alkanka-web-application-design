@@ -132,6 +132,30 @@ export function pickFeatured(all: PublicSponsor[]) {
   return { main, cards, total: all.length }
 }
 
+export async function publicSiteById(id: string): Promise<PublicSponsor | null> {
+  if (!/^\d+$/.test(id)) return null
+  const all = await listPublicSponsors()
+  return all.find((site) => site.id === id) ?? null
+}
+
+/** Entry address wins, then the site address. Does not read site_links. */
+export async function sponsorTarget(id: string): Promise<string | null> {
+  if (!/^\d+$/.test(id)) return null
+  await ensureSites()
+  const found = await rows<{ entry_url: string; url: string }>(sql`SELECT entry_url, url FROM sites WHERE id = ${Number(id)} AND active`)
+  const entry = String(found[0]?.entry_url ?? '').trim()
+  const url = String(found[0]?.url ?? '').trim()
+  const pick = entry && entry !== '#' ? entry : url && url !== '#' ? url : ''
+  if (!pick) return null
+  try {
+    const target = new URL(pick)
+    if (target.protocol !== 'https:' && target.protocol !== 'http:') return null
+    return target.toString()
+  } catch {
+    return null
+  }
+}
+
 export async function listSites(): Promise<SponsorSite[]> {
   await ensureSites()
   const found = await rows<SiteRow>(sql`SELECT id, name, logo_url, bonus_text, url, entry_url, domain, badge, featured, active,

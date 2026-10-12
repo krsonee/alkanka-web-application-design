@@ -2,23 +2,24 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowRight, Check, ShieldCheck, Star, Wallet } from 'lucide-react'
-import { SPONSORS } from '@/components/alkanka/data'
 import { FollowButton } from '@/components/alkanka/growth-widgets'
 import { getMember } from '@/lib/member'
 import { myFollows } from '@/lib/growth'
 import { SITE_URL } from '@/lib/seo'
+import { listPublicSponsors, type PublicSponsor } from '@/lib/sites'
 
 export const dynamic = 'force-dynamic'
 
-const TIER_LABEL: Record<string, string> = { platinum: 'Platin sponsor', gold: 'Altın sponsor', silver: 'Gümüş sponsor' }
+const TIER_LABEL: Record<string, string> = { ana: 'Ana sponsor', vip: 'VIP sponsor', guvenilir: 'Güvenilir sponsor' }
 
-function findSponsor(slug: string) {
-  return SPONSORS.find((s) => s.id === slug)
+async function findSponsor(slug: string): Promise<PublicSponsor | undefined> {
+  const all = await listPublicSponsors().catch(() => [])
+  return all.find((site) => site.id === slug)
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
-  const s = findSponsor(slug)
+  const s = await findSponsor(slug)
   if (!s) return { title: 'Site bulunamadı', robots: { index: false } }
   const title = `${s.name} güncel giriş, bonus ve inceleme`
   const description = `${s.name}: ${s.welcome}. Çekim süresi ${s.payout}, puan ${s.rating.toFixed(1)}. Adres değişince haber almak için takip et.`
@@ -27,12 +28,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function SiteDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const s = findSponsor(slug)
+  const s = await findSponsor(slug)
   if (!s) notFound()
 
   const member = await getMember()
   const following = member ? (await myFollows(member.id).catch(() => [] as string[])).includes(s.id) : false
-  const others = SPONSORS.filter((x) => x.id !== s.id).slice(0, 4)
+  const others = (await listPublicSponsors().catch(() => [])).filter((item) => item.id !== s.id).slice(0, 4)
 
   return (
     <div className="flex flex-col gap-8">
@@ -43,8 +44,11 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
       </nav>
 
       <section aria-labelledby="site-ad" className="flex flex-col gap-6 rounded-2xl border border-border bg-card p-5 md:flex-row md:items-center md:p-8">
-        <div className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-primary font-display text-2xl font-bold text-primary-foreground">
-          {s.initials}
+        <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary font-display text-2xl font-bold text-primary-foreground">
+          {s.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- logos can come from any https host saved with the sponsor
+            <img src={s.logoUrl} alt="" className="size-full bg-background object-contain p-2" />
+          ) : s.initials}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <span className="text-xs font-bold uppercase tracking-widest text-primary">{TIER_LABEL[s.tier] ?? 'Sponsor'}</span>
