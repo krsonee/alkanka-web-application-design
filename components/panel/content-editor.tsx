@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import Image from 'next/image'
 import { ExternalLink, ImageIcon, RotateCcw, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,9 @@ import { resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/
 import { JAKO_POSES } from '@/lib/site-registry'
 
 type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string }
+
+type PanelTab = 'slide' | 'hero' | 'texts' | 'sponsors' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth' | 'social'
+const PANEL_TABS: PanelTab[] = ['growth', 'social', 'slide', 'hero', 'texts', 'sponsors', 'logo', 'games', 'tournaments', 'push', 'telegram', 'seo', 'studio', 'community', 'badges', 'market']
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
@@ -57,9 +60,11 @@ export function ContentEditor({
   marketPending?: number
   sponsors: React.ReactNode
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'sponsors' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth' | 'social'>(
-    marketPending > 0 ? 'market' : 'slide',
-  )
+  const [tab, setTab] = useState<PanelTab>(marketPending > 0 ? 'market' : 'slide')
+  useEffect(() => {
+    const saved = window.location.hash.replace('#', '')
+    if (PANEL_TABS.includes(saved as PanelTab)) setTab(saved as PanelTab)
+  }, [])
   const items = tab === 'slide' ? slides : heroes
   return (
     <div className="flex flex-col gap-6">
@@ -88,7 +93,10 @@ export function ContentEditor({
             key={key}
             role="tab"
             aria-selected={tab === key}
-            onClick={() => setTab(key)}
+            onClick={() => {
+              setTab(key)
+              window.history.replaceState(null, '', `#${key}`)
+            }}
             className={cn(
               'shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold',
               tab === key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',

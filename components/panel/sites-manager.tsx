@@ -153,7 +153,7 @@ function SiteForm({
         Aktif
       </label>
       <div className="flex flex-wrap gap-2 md:col-span-2">
-        <button type="submit" disabled={pending} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+        <button type="button" disabled={pending} onClick={() => onSave(v)} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
           {pending ? 'Kaydediliyor…' : 'Kaydet'}
         </button>
         <button type="button" onClick={onCancel} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold text-foreground">
