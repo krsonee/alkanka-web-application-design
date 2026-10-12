@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { Check, CalendarCheck, Flame } from 'lucide-react'
+import { completeTaskAction } from '@/app/actions/tasks'
 import { cn } from '@/lib/utils'
-import { TASKS, type TaskItem } from './data'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
 import { DailyGames } from './daily-games'
-import { formatAC, usePoints } from './points-context'
-import { SectionHeading } from './section-heading'
+import { usePoints } from './points-context'
+
+export type PublicTask = { id: number; title: string; detail: string; points: number; done: boolean }
 
 const DAYS = [
   { day: 1, reward: 25 },
@@ -27,13 +28,14 @@ const STREAK_RULES = [
   '7. günde VIP ödül sandığı açılır ve seri yeniden başlar.',
 ]
 
-export function Tasks() {
-  const { add } = usePoints()
-  const [detail, setDetail] = useState<TaskItem | null>(null)
+export function Tasks({ tasks }: { tasks: PublicTask[] }) {
+  const { add, requireLogin } = usePoints()
   const [streakInfo, setStreakInfo] = useState(false)
   const [streakDay, setStreakDay] = useState(4)
   const [checkedToday, setCheckedToday] = useState(false)
-  const [done, setDone] = useState<Record<string, boolean>>({})
+  const [done, setDone] = useState<Record<number, boolean>>(() => Object.fromEntries(tasks.filter((task) => task.done).map((task) => [task.id, true])))
+  const [note, setNote] = useState<string | null>(null)
+  const [pending, start] = useTransition()
 
   function checkIn() {
     if (checkedToday) return
@@ -44,10 +46,18 @@ export function Tasks() {
     setCheckedToday(true)
   }
 
-  function complete(id: string, reward: number) {
-    if (done[id]) return
-    setDone((d) => ({ ...d, [id]: true }))
-    add(reward)
+  function complete(task: PublicTask) {
+    if (done[task.id] || pending) return
+    if (!requireLogin()) return
+    start(async () => {
+      const result = await completeTaskAction(task.id)
+      if (!result.ok) {
+        setNote(result.error)
+        return
+      }
+      setDone((current) => ({ ...current, [task.id]: true }))
+      setNote(result.message)
+    })
   }
 
   return (
@@ -116,78 +126,35 @@ export function Tasks() {
           </div>
         </article>
 
-        <ul className="flex flex-col gap-2 xl:col-span-2">
-          {TASKS.map((t) => {
-            const Icon = t.icon
-            const isDone = done[t.id]
-            return (
-              <li key={t.id} className="panel-gold flex items-center gap-3 rounded-xl p-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-primary">
-                  <Icon className="size-4" aria-hidden="true" />
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col items-start">
-                  <span className="truncate text-sm font-semibold text-foreground">{t.title}</span>
-                  <span className="truncate text-xs text-muted-foreground">{t.detail}</span>
-                  <DetailButton onClick={() => setDetail(t)} label="Nasıl yapılır?" />
-                </div>
-                {t.href && !isDone ? (
-                  <a
-                    href={t.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => complete(t.id, t.reward)}
-                    className="shrink-0 rounded-lg bg-accent px-3 py-2 text-xs font-bold text-accent-foreground"
-                  >
-                    +{formatAC(t.reward)}
-                  </a>
-                ) : (
+        {tasks.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground xl:col-span-2">
+            Şu an listelenecek görev yok, yakında burada olacak.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2 xl:col-span-2">
+            {tasks.map((task) => {
+              const isDone = Boolean(done[task.id])
+              return (
+                <li key={task.id} className="panel-gold flex items-center gap-3 rounded-xl p-3">
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-semibold text-foreground">{task.title}</span>
+                    {task.detail ? <span className="truncate text-xs text-muted-foreground">{task.detail}</span> : null}
+                  </div>
                   <button
                     type="button"
-                    onClick={() => complete(t.id, t.reward)}
-                    disabled={isDone}
+                    onClick={() => complete(task)}
+                    disabled={isDone || pending}
                     className="shrink-0 rounded-lg border border-primary/40 px-3 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/10 disabled:border-transparent disabled:bg-primary/10"
                   >
-                    {isDone ? 'Tamam' : `+${formatAC(t.reward)}`}
+                    {isDone ? 'Tamam' : `+${task.points}`}
                   </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
-
-      <DetailModal
-        onClose={() => setDetail(null)}
-        content={
-          detail && {
-            eyebrow: 'Görev',
-            title: detail.title,
-            description: detail.description,
-            facts: [
-              { label: 'Ödül', value: `+${formatAC(detail.reward)} KC` },
-              { label: 'Durum', value: done[detail.id] ? 'Tamamlandı' : 'Bekliyor' },
-            ],
-            steps: detail.steps,
-            rules: detail.rules,
-            note: detail.verification,
-          }
-        }
-        action={
-          detail && (
-            <button
-              type="button"
-              onClick={() => {
-                if (detail.href) window.open(detail.href, '_blank', 'noopener,noreferrer')
-                complete(detail.id, detail.reward)
-              }}
-              disabled={done[detail.id]}
-              className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
-            >
-              {done[detail.id] ? 'Tamamlandı' : `Görevi yap, +${formatAC(detail.reward)} KC`}
-            </button>
-          )
-        }
-      />
+      {note ? <p className="text-sm text-muted-foreground" aria-live="polite">{note}</p> : null}
       <DetailModal
         onClose={() => setStreakInfo(false)}
         content={
