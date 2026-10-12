@@ -43,8 +43,19 @@ import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
+import { SitesManager } from '@/components/panel/sites-manager'
+import { listSites } from '@/lib/sites'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
+
+async function sitesPanel() {
+  try {
+    return <SitesManager sites={await listSites()} />
+  } catch (error) {
+    console.error('[sites-panel]', error)
+    return <p className="text-sm text-destructive">Sponsorlar yüklenemedi.</p>
+  }
+}
 
 async function marketPanel() {
   try {
@@ -160,6 +171,7 @@ export default async function PanelPage() {
               siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
             />
           }
+          sponsors={await sitesPanel()}
           badges={await kpPanel()}
           market={await marketPanel()}
           marketPending={await pendingCount().catch(() => 0)}

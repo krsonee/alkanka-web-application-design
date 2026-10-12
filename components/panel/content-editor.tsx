@@ -36,6 +36,7 @@ export function ContentEditor({
   marketPending = 0,
   growth,
   social,
+  sponsors,
 }: {
   growth: React.ReactNode
   social: React.ReactNode
@@ -54,8 +55,9 @@ export function ContentEditor({
   badges: React.ReactNode
   market: React.ReactNode
   marketPending?: number
+  sponsors: React.ReactNode
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth' | 'social'>(
+  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'sponsors' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth' | 'social'>(
     marketPending > 0 ? 'market' : 'slide',
   )
   const items = tab === 'slide' ? slides : heroes
@@ -69,6 +71,7 @@ export function ContentEditor({
             ['slide', `Ana sayfa slider (${slides.length})`],
             ['hero', `Sayfa başlıkları (${heroes.length})`],
             ['texts', 'Site metinleri'],
+            ['sponsors', 'Sponsorlar'],
             ['logo', 'Logolar'],
             ['games', 'Oyunlar'],
             ['tournaments', 'Turnuvalar'],
@@ -119,6 +122,8 @@ export function ContentEditor({
         studio
       ) : tab === 'texts' ? (
         texts
+      ) : tab === 'sponsors' ? (
+        sponsors
       ) : tab === 'logo' ? (
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (
