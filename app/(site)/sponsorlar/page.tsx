@@ -20,9 +20,9 @@ export default async function SponsorsPage() {
         image="/images/heroes/sponsorlar.png"
         eyebrow="Sponsorlar"
         title="Güvenilir sponsorlar"
-        description="Liste, logo, bonus ve sıra paneldeki Sponsorlar menüsünden gelir. Sadece panelde aktif olan siteler görünür."
+        description="Lisans, ödeme hızı ve destek kalitesi her gün kontrol edilir. Sadece AL KANKA linkiyle gelenlere özel bonuslar."
         pose="jako"
-        speech="Hepsini paneldeki listeden okudum kanka."
+        speech="Hepsini tek tek kontrol ettim kanka, gönül rahatlığıyla gir."
         stats={[
           { label: 'Toplam sponsor', value: String(sponsors.length) },
           { label: 'VIP', value: String(vip) },

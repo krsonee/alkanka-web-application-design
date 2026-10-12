@@ -97,9 +97,9 @@ function initialsOf(name: string) {
 }
 
 export function tierOf(badge: string): SponsorTier {
-  const value = badge.toLocaleLowerCase('tr-TR')
-  if (value.includes('ana')) return 'ana'
-  if (value.includes('vip')) return 'vip'
+  const value = badge.trim()
+  if (value === SITE_BADGES[1]) return 'ana'
+  if (value === SITE_BADGES[2]) return 'vip'
   return 'guvenilir'
 }
 

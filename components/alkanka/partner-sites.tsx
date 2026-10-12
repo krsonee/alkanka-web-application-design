@@ -157,7 +157,7 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
       <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-6 @2xl:aspect-auto @2xl:w-60 @2xl:border-r @2xl:border-b-0 @5xl:w-80">
         <SponsorLogoPlate sponsor={sponsor} className="md:max-h-28" />
         <span className="absolute top-3 left-3">
-          <TierTag tier="ana" />
+          <TierTag tier={sponsor.tier} />
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-5">
@@ -371,7 +371,7 @@ export function SponsorDirectory({ sponsors = [], mainId }: { sponsors?: Sponsor
 
       {sponsors.length === 0 ? (
         <JakoTip pose="uzgun" title="Henüz sponsor yok">
-          Panelde aktif sponsor kaydı yok. Liste, paneldeki Sponsorlar sekmesinden dolar.
+          Şu an listelenecek sponsor yok, yakında burada olacak.
         </JakoTip>
       ) : list.length === 0 ? (
         <JakoTip pose="uzgun" title={pool.length === 0 ? 'Liste burada bitiyor' : 'Bulamadım kanka'}>
@@ -674,13 +674,7 @@ function SeeAllLink({ href, label = 'Tümünü gör' }: { href: string; label?: 
 }
 
 export function FeaturedSponsors({ main = null, cards = [], total = 0 }: { main?: Sponsor | null; cards?: Sponsor[]; total?: number }) {
-  if (!main) {
-    return (
-      <section aria-labelledby="one-cikan-title">
-        <SectionHeading id="one-cikan-title" title="Öne çıkan sponsorlar" description="Panelde henüz aktif sponsor yok." />
-      </section>
-    )
-  }
+  if (!main) return null
   return (
     <section aria-labelledby="one-cikan-title" className="flex flex-col gap-4">
       <SectionHeading
