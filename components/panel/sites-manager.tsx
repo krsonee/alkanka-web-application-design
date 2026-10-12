@@ -90,6 +90,20 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
   )
 }
 
+type SiteDraft = Omit<SiteInput, 'rating' | 'sortOrder'> & { rating: string; sortOrder: string }
+
+function draftFrom(value: SiteInput): SiteDraft {
+  return { ...value, rating: String(value.rating), sortOrder: String(value.sortOrder) }
+}
+
+function numberFrom(value: string) {
+  return Number(value.trim().replaceAll(',', '.'))
+}
+
+function savedFrom(draft: SiteDraft): SiteInput {
+  return { ...draft, rating: numberFrom(draft.rating), sortOrder: numberFrom(draft.sortOrder) }
+}
+
 function SiteForm({
   value,
   pending,
@@ -101,13 +115,16 @@ function SiteForm({
   onSave: (value: SiteInput) => void
   onCancel: () => void
 }) {
-  const [v, setV] = useState(value)
-  const set = <K extends keyof SiteInput>(key: K, next: SiteInput[K]) => setV((prev) => ({ ...prev, [key]: next }))
+  const [v, setV] = useState<SiteDraft>(() => draftFrom(value))
+  const set = <K extends keyof SiteDraft>(key: K, next: SiteDraft[K]) => setV((prev) => ({ ...prev, [key]: next }))
+  function submit() {
+    onSave(savedFrom(v))
+  }
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        onSave(v)
+        submit()
       }}
       className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2"
     >
@@ -132,8 +149,8 @@ function SiteForm({
           ))}
         </select>
       </label>
-      <Field label="Puan (5 üzerinden)" value={String(v.rating)} onChange={(rating) => set('rating', Number(rating))} inputMode="decimal" />
-      <Field label="Sıra" value={String(v.sortOrder)} onChange={(sortOrder) => set('sortOrder', Number(sortOrder))} inputMode="numeric" />
+      <Field label="Puan (5 üzerinden)" value={v.rating} onChange={(rating) => set('rating', rating)} inputMode="decimal" />
+      <Field label="Sıra" value={v.sortOrder} onChange={(sortOrder) => set('sortOrder', sortOrder)} inputMode="numeric" />
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
         Ayrıcalıklar
         <textarea
@@ -153,7 +170,7 @@ function SiteForm({
         Aktif
       </label>
       <div className="flex flex-wrap gap-2 md:col-span-2">
-        <button type="button" disabled={pending} onClick={() => onSave(v)} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+        <button type="button" disabled={pending} onClick={submit} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
           {pending ? 'Kaydediliyor…' : 'Kaydet'}
         </button>
         <button type="button" onClick={onCancel} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold text-foreground">
