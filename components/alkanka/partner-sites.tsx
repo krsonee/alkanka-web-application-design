@@ -142,15 +142,16 @@ function TierTag({ tier }: { tier: SponsorTier }) {
         tier === 'vip' ? 'bg-primary/15 text-primary' : tier === 'ana' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground',
       )}
     >
-      {tier === 'vip' ? 'VIP' : tier === 'ana' ? 'Ana' : 'Güvenilir'}
+      {tier === 'vip' ? 'VIP' : tier === 'ana' ? 'Ana sponsor' : 'Güvenilir'}
     </span>
   )
 }
 
 export function MainSponsor({ sponsor = SPONSORS.find((s) => s.tier === 'ana')! }: { sponsor?: Sponsor }) {
   return (
-    <article className="panel-gold group flex flex-col overflow-hidden rounded-xl md:flex-row md:items-stretch">
-      <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-6 md:aspect-auto md:w-80 md:border-r md:border-b-0">
+    <div className="@container">
+    <article className="panel-gold group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
+      <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-6 @2xl:aspect-auto @2xl:w-60 @2xl:border-r @2xl:border-b-0 @5xl:w-80">
         <SponsorLogoPlate sponsor={sponsor} className="md:max-h-28" />
         <span className="absolute top-3 left-3">
           <TierTag tier="ana" />
@@ -172,7 +173,21 @@ export function MainSponsor({ sponsor = SPONSORS.find((s) => s.tier === 'ana')! 
         </ul>
         <GoButton site={sponsor.id} label="Hemen kayıt ol" className="mt-2 h-12 sm:self-start sm:px-8" />
       </div>
+      <div className="relative hidden min-h-56 overflow-hidden bg-background @3xl:block @3xl:w-64 @5xl:w-96">
+        <Image
+          src="/images/mascots/jako-kazandi.png"
+          alt=""
+          fill
+          sizes="384px"
+          className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+        />
+        <div aria-hidden className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-card to-transparent" />
+        <p className="absolute right-4 bottom-4 max-w-52 rounded-xl rounded-br-sm border border-primary/40 bg-background/85 px-3 py-2 text-xs leading-relaxed text-foreground backdrop-blur">
+          <b className="text-primary">Jako diyor ki:</b> Kanka, bu linkten gelen {sponsor.welcome.toLocaleLowerCase('tr-TR')} kapıyor!
+        </p>
+      </div>
     </article>
+    </div>
   )
 }
 

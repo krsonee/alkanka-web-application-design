@@ -69,7 +69,7 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
   const names = Object.fromEntries(sites.map((s) => [s.id, s.name]))
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
+    <div className="@container flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-col gap-1">
         <h3 className="flex items-center gap-2 font-display text-base font-bold text-foreground">
           <Link2 className="size-4 text-primary" aria-hidden="true" />
@@ -80,7 +80,7 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
         </p>
       </div>
       <form
-        className="flex flex-col gap-2 sm:flex-row"
+        className="flex flex-col gap-2 @lg:flex-row"
         onSubmit={(e) => {
           e.preventDefault()
           run(() => linkSponsorAccountAction(siteId, username), () => setUsername(''))
@@ -90,7 +90,7 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
           aria-label="Sponsor site"
           value={siteId}
           onChange={(e) => setSiteId(e.target.value)}
-          className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground sm:w-44"
+          className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground @lg:w-44"
         >
           {sites.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
@@ -101,7 +101,7 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="Sitedeki kullanıcı adın"
-          className="h-10 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+          className="h-10 min-w-0 flex-1 placeholder:text-muted-foreground rounded-lg border border-input bg-background px-3 text-sm text-foreground"
         />
         <button
           type="submit"

@@ -49,16 +49,22 @@ export function ReferralCard({
         </div>
         <Gift className="size-6 shrink-0 text-primary" aria-hidden />
       </header>
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-background p-1.5">
-        <code className="min-w-0 flex-1 truncate px-2 text-sm text-foreground">{url}</code>
-        <button onClick={copy} className="flex h-9 items-center gap-1.5 rounded-md bg-secondary px-3 text-xs font-semibold text-secondary-foreground hover:bg-secondary/80">
-          {copied ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
-          {copied ? 'Kopyalandı' : 'Kopyala'}
-        </button>
-        <button onClick={share} className="flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground">
-          <Send className="size-4" aria-hidden />
-          Paylaş
-        </button>
+      <div className="@container">
+        <div className="flex flex-col gap-2 @md:flex-row @md:items-center @md:rounded-lg @md:border @md:border-border @md:bg-background @md:p-1.5">
+          <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground @md:border-0 @md:bg-transparent @md:px-2 @md:py-0">
+            {url}
+          </code>
+          <div className="grid grid-cols-2 gap-2 @md:flex">
+            <button onClick={copy} className="flex h-10 items-center justify-center gap-1.5 rounded-md bg-secondary px-3 text-xs font-semibold text-secondary-foreground hover:bg-secondary/80 @md:h-9">
+              {copied ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
+              {copied ? 'Kopyalandı' : 'Kopyala'}
+            </button>
+            <button onClick={share} className="flex h-10 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground @md:h-9">
+              <Send className="size-4" aria-hidden />
+              Paylaş
+            </button>
+          </div>
+        </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
@@ -99,7 +105,7 @@ export function AlertsCard({ alerts, telegramLinked }: { alerts: string[]; teleg
         </div>
         <Bell className="size-6 shrink-0 text-primary" aria-hidden />
       </header>
-      <form onSubmit={submit} className="flex gap-2">
+      <form onSubmit={submit} className="flex flex-wrap gap-2">
         <label htmlFor="alarm-input" className="sr-only">Takım veya lig</label>
         <input
           id="alarm-input"
@@ -107,7 +113,7 @@ export function AlertsCard({ alerts, telegramLinked }: { alerts: string[]; teleg
           onChange={(e) => setValue(e.target.value)}
           placeholder="Örn. Galatasaray, Premier Lig"
           maxLength={40}
-          className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="h-10 min-w-40 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />
         <button disabled={pending} className="flex h-10 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-50">
           <Plus className="size-4" aria-hidden />
@@ -131,7 +137,7 @@ export function AlertsCard({ alerts, telegramLinked }: { alerts: string[]; teleg
       <p className="text-xs leading-relaxed text-muted-foreground">
         {telegramLinked
           ? 'Telegram hesabın bağlı: eşleşen oranlar sana özel mesajla da gelir.'
-          : 'Telegram’ı bağlarsan eşleşen oranlar anında özel mesajla gelir. Bağlantı için sağdaki sohbet panelini kullan.'}
+          : 'Telegram’ı bağlarsan eşleşen oranlar anında özel mesajla gelir. Bağlantı için Bağlı hesaplar sekmesine bak.'}
       </p>
       <StatusLine status={status} />
     </section>

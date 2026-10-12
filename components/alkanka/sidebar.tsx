@@ -10,6 +10,8 @@ import { JakoAvatar } from './jako'
 import { BrandLogo, LogoSelector } from './logo-selector'
 import { TourButton } from './app/site-tour'
 import { useChatFeed } from './use-chat-feed'
+import { SocialRow } from './social-icons'
+import type { SocialLinks } from '@/lib/social-shared'
 
 const isActiveHref = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href))
 
@@ -107,12 +109,13 @@ function TelegramCard() {
   )
 }
 
-function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarBody({ onNavigate, social }: { onNavigate?: () => void; social: SocialLinks }) {
   return (
     <>
       <div className="flex-1 overflow-y-auto px-3 py-4 no-scrollbar">
         <NavList onNavigate={onNavigate} />
         <TourButton className="mt-0.5 w-full" />
+        <SocialRow links={social} className="mt-3 border-t border-border px-1 pt-4" />
       </div>
       <div className="flex flex-col gap-3 border-t border-border p-3">
         <TelegramCard />
@@ -121,19 +124,19 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ social }: { social: SocialLinks }) {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-surface lg:flex">
       <Link href="/" className="flex h-16 shrink-0 items-center border-b border-border px-5">
         <BrandLogo size="sm" />
         <span className="sr-only">AL KANKA ana sayfa</span>
       </Link>
-      <SidebarBody />
+      <SidebarBody social={social} />
     </aside>
   )
 }
 
-export function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function MobileDrawer({ open, onClose, social }: { open: boolean; onClose: () => void; social: SocialLinks }) {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -175,7 +178,7 @@ export function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => 
             <X className="size-5" aria-hidden="true" />
           </button>
         </div>
-        {open && <SidebarBody onNavigate={onClose} />}
+        {open && <SidebarBody onNavigate={onClose} social={social} />}
       </aside>
     </div>
   )

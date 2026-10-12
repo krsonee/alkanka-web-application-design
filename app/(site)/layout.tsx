@@ -10,6 +10,7 @@ import { GuestGate } from '@/components/alkanka/guest-gate'
 import { LogoProvider } from '@/components/alkanka/logo-context'
 import { getLogos } from '@/lib/content'
 import { getSiteTexts } from '@/lib/site-texts'
+import { getSocialLinks } from '@/lib/social'
 import { TextsProvider } from '@/components/alkanka/texts-context'
 import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
 import { AppPrompts } from '@/components/alkanka/app/app-prompts'
@@ -18,17 +19,17 @@ import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
 import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [logos, texts] = await Promise.all([getLogos(), getSiteTexts()])
+  const [logos, texts, social] = await Promise.all([getLogos(), getSiteTexts(), getSocialLinks().catch(() => ({}))])
   return (
     <TextsProvider value={texts}>
     <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
       <PwaProvider>
-        <Sidebar />
+        <Sidebar social={social} />
         <LiveRail />
         <div className="min-h-dvh lg:pl-64 xl:pr-80">
-          <Topbar />
+          <Topbar social={social} />
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
             {children}
             <Footer />

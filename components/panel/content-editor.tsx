@@ -35,8 +35,10 @@ export function ContentEditor({
   market,
   marketPending = 0,
   growth,
+  social,
 }: {
   growth: React.ReactNode
+  social: React.ReactNode
   slides: EditorItem[]
   heroes: EditorItem[]
   library: string[]
@@ -53,7 +55,7 @@ export function ContentEditor({
   market: React.ReactNode
   marketPending?: number
 }) {
-  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth'>(
+  const [tab, setTab] = useState<'slide' | 'hero' | 'texts' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth' | 'social'>(
     marketPending > 0 ? 'market' : 'slide',
   )
   const items = tab === 'slide' ? slides : heroes
@@ -63,6 +65,7 @@ export function ContentEditor({
         {(
           [
             ['growth', 'Trafik & Siteler'],
+            ['social', 'Sosyal medya'],
             ['slide', `Ana sayfa slider (${slides.length})`],
             ['hero', `Sayfa başlıkları (${heroes.length})`],
             ['texts', 'Site metinleri'],
@@ -94,6 +97,8 @@ export function ContentEditor({
       </div>
       {tab === 'growth' ? (
         growth
+      ) : tab === 'social' ? (
+        social
       ) : tab === 'games' ? (
         games
       ) : tab === 'tournaments' ? (

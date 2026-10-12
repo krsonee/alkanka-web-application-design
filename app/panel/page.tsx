@@ -39,6 +39,8 @@ import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
 import { MarketManager } from '@/components/panel/market-manager'
 import { GrowthManager } from '@/components/panel/growth-manager'
+import { SocialManager } from '@/components/panel/social-manager'
+import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
@@ -171,6 +173,14 @@ export default async function PanelPage() {
               accounts={await adminSponsorAccounts().catch(() => [])}
               period={currentPeriod()}
               siteUrl={SITE_URL}
+            />
+          }
+          social={
+            <SocialManager
+              links={await getSocialLinks().catch(() => ({}) as SocialLinks)}
+              accounts={await adminSocialAccounts().catch(() => [])}
+              events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
+              entries={await adminEntries().catch(() => [])}
             />
           }
           seo={
