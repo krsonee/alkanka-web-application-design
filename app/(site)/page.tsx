@@ -6,8 +6,10 @@ import { TopThree } from '@/components/alkanka/top-three'
 import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
 import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
 import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
+import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 
 export const metadata = pageMeta('anasayfa')
+export const dynamic = 'force-dynamic'
 
 const SITE_LD = [
   { '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/app-icon-512.png`, sameAs: [TELEGRAM_URL] },
@@ -19,7 +21,11 @@ function SiteJsonLd() {
 }
 
 export default async function HomePage() {
-  const content = await getAllContent()
+  const [content, sponsors] = await Promise.all([
+    getAllContent(),
+    listPublicSponsors().catch(() => []),
+  ])
+  const featured = pickFeatured(sponsors)
   const slides = SLIDES.map((s) => ({ ...s, ...withoutEmpty(content[`slide:${s.id}`] as SlideOverride | undefined) }))
 
   return (
@@ -31,7 +37,7 @@ export default async function HomePage() {
         <QuickTiles />
         <ActivityTicker />
       </div>
-      <FeaturedSponsors />
+      <FeaturedSponsors main={featured.main} cards={featured.cards} total={featured.total} />
       <EndingCampaigns />
       <TopThree />
     </>
