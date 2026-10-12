@@ -1,5 +1,5 @@
 import type { SocialLinks, SocialPlatform } from '@/lib/social-shared'
-import { PLATFORM_LABEL, SOCIAL_PLATFORMS } from '@/lib/social-shared'
+import { DEFAULT_SOCIAL_LINKS, PLATFORM_LABEL, PLATFORM_SHORT, SOCIAL_PLATFORMS } from '@/lib/social-shared'
 import { cn } from '@/lib/utils'
 
 type IconProps = { className?: string }
@@ -42,31 +42,30 @@ export const PLATFORM_TINT: Record<SocialPlatform, string> = {
   youtube: 'hover:border-destructive/50 hover:text-destructive',
 }
 
-/** Compact row of the brand's official accounts. Renders nothing until at least one is set in the panel. */
+/** The brand's official accounts as three side-by-side tiles. Panel links override the defaults. */
 export function SocialRow({ links, className }: { links: SocialLinks; className?: string }) {
-  const items = SOCIAL_PLATFORMS.filter((p) => links[p])
-  if (!items.length) return null
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <nav aria-label="AL KANKA sosyal medya hesapları" className={cn('flex flex-col gap-2', className)}>
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bizi takip et</span>
-      <ul className="ml-auto flex items-center gap-1.5">
-        {items.map((p) => (
+      <ul className="grid grid-cols-3 gap-2">
+        {SOCIAL_PLATFORMS.map((p) => (
           <li key={p}>
             <a
-              href={links[p]}
+              href={links[p] || DEFAULT_SOCIAL_LINKS[p]}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`AL KANKA ${PLATFORM_LABEL[p]} hesabı`}
+              aria-label={`AL KANKA ${PLATFORM_LABEL[p]} hesabını takip et`}
               className={cn(
-                'flex size-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors',
+                'flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card py-2.5 text-muted-foreground transition-colors',
                 PLATFORM_TINT[p],
               )}
             >
-              <SocialIcon platform={p} className="size-3.5" />
+              <SocialIcon platform={p} className="size-4" />
+              <span className="text-[11px] font-medium leading-none">{PLATFORM_SHORT[p]}</span>
             </a>
           </li>
         ))}
       </ul>
-    </div>
+    </nav>
   )
 }

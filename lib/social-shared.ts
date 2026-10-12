@@ -10,6 +10,19 @@ export const PLATFORM_LABEL: Record<SocialPlatform, string> = {
 
 export type SocialLinks = Partial<Record<SocialPlatform, string>>
 
+/** Fallbacks shown until the admin saves the real profile links in the panel. */
+export const DEFAULT_SOCIAL_LINKS: Required<SocialLinks> = {
+  x: 'https://x.com/AlkankaOfficial',
+  instagram: 'https://www.instagram.com/alkankaofficial',
+  youtube: 'https://www.youtube.com/@AlkankaOfficial',
+}
+
+export const PLATFORM_SHORT: Record<SocialPlatform, string> = {
+  x: 'X',
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+}
+
 export type AccountStatus = 'pending' | 'verified' | 'rejected'
 export type EntryStatus = 'pending' | 'approved' | 'rejected'
 

@@ -115,7 +115,7 @@ function SidebarBody({ onNavigate, social }: { onNavigate?: () => void; social: 
       <div className="flex-1 overflow-y-auto px-3 py-4 no-scrollbar">
         <NavList onNavigate={onNavigate} />
         <TourButton className="mt-0.5 w-full" />
-        <SocialRow links={social} className="mt-2 px-3" />
+        <SocialRow links={social} className="mt-3 border-t border-border px-1 pt-4" />
       </div>
       <div className="flex flex-col gap-3 border-t border-border p-3">
         <TelegramCard />
