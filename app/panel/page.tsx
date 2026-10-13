@@ -45,6 +45,8 @@ import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, ge
 import { listSites } from '@/lib/sites'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
 import { SitesManager } from '@/components/panel/sites-manager'
+import { TasksManager } from '@/components/panel/tasks-manager'
+import { listPendingClaims, listTasks } from '@/lib/tasks'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 
@@ -54,6 +56,16 @@ async function sitesPanel() {
   } catch (error) {
     console.error('[sites-panel]', error)
     return <p className="text-sm text-destructive">Sponsorlar yüklenemedi.</p>
+  }
+}
+
+async function tasksPanel() {
+  try {
+    const [tasks, claims] = await Promise.all([listTasks(), listPendingClaims()])
+    return <TasksManager tasks={tasks} claims={claims} />
+  } catch (error) {
+    console.error('[tasks-panel]', error)
+    return <p className="text-sm text-destructive">Görevler yüklenemedi.</p>
   }
 }
 
@@ -174,6 +186,7 @@ export default async function PanelPage() {
           }
           sponsors={await sitesPanel()}
           badges={await kpPanel()}
+          tasks={await tasksPanel()}
           market={await marketPanel()}
           marketPending={await pendingCount().catch(() => 0)}
           growth={

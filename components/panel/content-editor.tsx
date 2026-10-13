@@ -9,8 +9,8 @@ import { JAKO_POSES } from '@/lib/site-registry'
 
 type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string }
 
-type PanelTab = 'slide' | 'hero' | 'texts' | 'sponsors' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'market' | 'growth' | 'social'
-const PANEL_TABS: PanelTab[] = ['growth', 'social', 'slide', 'hero', 'texts', 'sponsors', 'logo', 'games', 'tournaments', 'push', 'telegram', 'seo', 'studio', 'community', 'badges', 'market']
+type PanelTab = 'slide' | 'hero' | 'texts' | 'sponsors' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'tasks' | 'market' | 'growth' | 'social'
+const PANEL_TABS: PanelTab[] = ['growth', 'social', 'slide', 'hero', 'texts', 'sponsors', 'logo', 'games', 'tournaments', 'push', 'telegram', 'seo', 'studio', 'community', 'badges', 'tasks', 'market']
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
@@ -35,6 +35,7 @@ export function ContentEditor({
   studio,
   community,
   badges,
+  tasks,
   market,
   marketPending = 0,
   growth,
@@ -56,6 +57,7 @@ export function ContentEditor({
   studio: React.ReactNode
   community: React.ReactNode
   badges: React.ReactNode
+  tasks: React.ReactNode
   market: React.ReactNode
   marketPending?: number
   sponsors: React.ReactNode
@@ -86,6 +88,7 @@ export function ContentEditor({
             ['studio', 'Stüdyo'],
             ['community', 'Topluluk'],
             ['badges', 'Rozetler'],
+            ['tasks', 'Görevler'],
             ['market', marketPending > 0 ? `Market (${marketPending} yeni talep)` : 'Market'],
           ] as const
         ).map(([key, label]) => (
@@ -124,6 +127,8 @@ export function ContentEditor({
         community
       ) : tab === 'badges' ? (
         badges
+      ) : tab === 'tasks' ? (
+        tasks
       ) : tab === 'market' ? (
         market
       ) : tab === 'studio' ? (
