@@ -7,6 +7,7 @@ import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
 import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
 import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
+import { readLeaderboard, sumKpPoints } from '@/lib/kanka-puan'
 
 export const metadata = pageMeta('anasayfa')
 export const dynamic = 'force-dynamic'
@@ -21,9 +22,11 @@ function SiteJsonLd() {
 }
 
 export default async function HomePage() {
-  const [content, sponsors] = await Promise.all([
+  const [content, sponsors, podium, distributed] = await Promise.all([
     getAllContent(),
     listPublicSponsors().catch(() => []),
+    readLeaderboard(3),
+    sumKpPoints(),
   ])
   const featured = pickFeatured(sponsors)
   const slides = SLIDES.map((s) => ({ ...s, ...withoutEmpty(content[`slide:${s.id}`] as SlideOverride | undefined) }))
@@ -34,12 +37,12 @@ export default async function HomePage() {
       <h1 className="sr-only">AL KANKA: sponsorlar, kampanyalar ve ücretsiz mini oyunlar</h1>
       <div className="flex flex-col gap-4">
         <BannerCarousel slides={slides} />
-        <QuickTiles />
+        <QuickTiles distributed={distributed} />
         <ActivityTicker />
       </div>
       <FeaturedSponsors main={featured.main} cards={featured.cards} total={featured.total} />
       <EndingCampaigns />
-      <TopThree />
+      <TopThree rows={podium.map((row) => ({ userId: row.userId, name: row.name, points: row.kp }))} />
     </>
   )
 }

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Medal } from 'lucide-react'
 import { leaderboard, predictionBoard, recentAwards } from '@/lib/kanka-puan'
+import { publicRankName } from '@/lib/kanka-puan-shared'
 import { getMember } from '@/lib/member'
 import { JakoTip } from './jako'
 import { SpecialEmblem } from './kp/emblem'
@@ -54,7 +55,7 @@ export async function Leaderboard() {
               <li key={a.id} className="flex items-center gap-3 border-b border-border px-4 py-3 sm:odd:border-r">
                 <SpecialEmblem icon={a.icon} tier={a.tier} size="sm" />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-semibold text-foreground">{a.userName.split(' ')[0]}</span>
+                  <span className="truncate text-sm font-semibold text-foreground">{publicRankName(a.userName)}</span>
                   <span className="truncate text-[11px] text-muted-foreground">{a.badgeName}{a.note ? ` · ${a.note}` : ''}</span>
                 </span>
                 <span className="shrink-0 text-[11px] text-muted-foreground">{dateTR(a.awardedAt)}</span>

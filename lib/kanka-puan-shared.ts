@@ -78,3 +78,11 @@ export const BADGE_ICONS = ['award', 'trophy', 'crown', 'target', 'eye', 'messag
 /** Tier band for level emblems: every 5 levels the emblem material changes. */
 export const levelTier = (levelNumber: number) =>
   levelNumber >= 16 ? 'efsane' : levelNumber >= 11 ? 'elmas' : levelNumber >= 6 ? 'altin' : 'bronz'
+
+/** Public ranking label. Missing names, emails, and masked addresses become a generic label. */
+export function publicRankName(raw: string | null | undefined): string {
+  const name = String(raw ?? '').replace(/\s+/g, ' ').trim()
+  const first = name.split(' ')[0] ?? ''
+  if (!first || first.includes('@') || first.includes('*')) return 'Kanka'
+  return first
+}
