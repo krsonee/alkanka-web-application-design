@@ -1,15 +1,17 @@
 import { jsonLd, pageMeta } from '@/lib/seo'
-import { FAQ } from '@/components/alkanka/data'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Faq } from '@/components/alkanka/faq'
+import { listPublicFaqs } from '@/lib/faqs'
 
 export const metadata = pageMeta('sss')
+export const dynamic = 'force-dynamic'
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const groups = await listPublicFaqs().catch(() => [])
   const faqLd = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    mainEntity: FAQ.flatMap((g) => g.items).map((item) => ({
+    mainEntity: groups.flatMap((group) => group.items).map((item) => ({
       '@type': 'Question',
       name: item.q,
       acceptedAnswer: { '@type': 'Answer', text: item.a },
@@ -17,7 +19,7 @@ export default function FaqPage() {
   }
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(faqLd)} />
+      {groups.length > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(faqLd)} />}
       <EditableHero slug="sss"
         image="/images/heroes/sss.png"
         highlights={['Kanka Coin', 'Market ve ödüller', 'Hesap güvenliği']}
@@ -27,7 +29,7 @@ export default function FaqPage() {
         pose="telegram"
         speech="Cevabı bulamazsan Telegram'dan yaz kanka."
       />
-      <Faq />
+      <Faq groups={groups} />
     </>
   )
 }
