@@ -1,7 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
-import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, type BadgeTier, type LevelDef, type PointRules } from '@/lib/kanka-puan-shared'
+import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, publicRankName, type BadgeTier, type LevelDef, type PointRules } from '@/lib/kanka-puan-shared'
 
 export * from '@/lib/kanka-puan-shared'
 
@@ -72,15 +72,19 @@ export function ensureKp() {
 
 // --- Config --------------------------------------------------------------
 
-export async function getKpConfig(): Promise<KpConfig> {
-  await ensureKp()
-  const r = await rows<{ key: string; value: unknown }>(sql`SELECT key, value FROM kp_settings WHERE key IN ('levels', 'rules')`)
+function configFrom(r: { key: string; value: unknown }[]): KpConfig {
   const levels = r.find((x) => x.key === 'levels')?.value as LevelDef[] | undefined
   const rules = r.find((x) => x.key === 'rules')?.value as Partial<PointRules> | undefined
   return {
     levels: levels?.length ? levels : DEFAULT_LEVELS,
     rules: { ...DEFAULT_RULES, ...(rules ?? {}) },
   }
+}
+
+export async function getKpConfig(): Promise<KpConfig> {
+  await ensureKp()
+  const r = await rows<{ key: string; value: unknown }>(sql`SELECT key, value FROM kp_settings WHERE key IN ('levels', 'rules')`)
+  return configFrom(r)
 }
 
 export async function saveLevels(input: LevelDef[]) {
@@ -114,6 +118,13 @@ export async function saveRules(input: PointRules) {
 
 const tableExists = async (name: string) =>
   Boolean((await rows<{ t: string | null }>(sql`SELECT to_regclass(${name}) AS t`))[0]?.t)
+
+/** Levels and rules already stored. Does not create tables or seed rows. */
+async function readKpConfig(): Promise<KpConfig> {
+  if (!(await tableExists('kp_settings'))) return { levels: DEFAULT_LEVELS, rules: DEFAULT_RULES }
+  const r = await rows<{ key: string; value: unknown }>(sql`SELECT key, value FROM kp_settings WHERE key IN ('levels', 'rules')`)
+  return configFrom(r)
+}
 
 export type KpBreakdown = { time: number; games: number; tasks: number; chat: number; league: number; reviews: number; referrals: number; telegram: number; bonus: number }
 
@@ -229,7 +240,7 @@ export async function predictionBoard(period: RankPeriod, limit = 20): Promise<P
     GROUP BY p.user_id HAVING count(*) > 0 ORDER BY pts DESC, exact DESC, hits DESC LIMIT ${limit}`)
   return r.map((x) => ({
     userId: String(x.user_id),
-    name: String(x.name ?? 'Kanka').split(' ')[0],
+    name: publicRankName(String(x.name ?? '')),
     points: Number(x.pts),
     hits: Number(x.hits),
     exact: Number(x.exact),
@@ -250,17 +261,26 @@ export async function levelMap(): Promise<Record<string, number>> {
   return data
 }
 
-export async function leaderboard(limit = 20, period: RankPeriod = 'tum'): Promise<LeaderRow[]> {
-  const cfg = await getKpConfig()
+export async function leaderboard(limit = 20, period: RankPeriod = 'tum', opts?: { readOnly?: boolean }): Promise<LeaderRow[]> {
+  const cfg = opts?.readOnly ? await readKpConfig() : await getKpConfig()
   const list = (await totals(cfg.rules, null, limit, period)).filter((l) => l.total > 0)
   if (!list.length) return []
-  const counts = await rows<{ user_id: string; n: string }>(sql`SELECT user_id, count(*) AS n FROM kp_awards
-    WHERE user_id IN ${list.map((l) => l.userId)} GROUP BY user_id`)
+  let counts: { user_id: string; n: string }[] = []
+  const awardsReady = !opts?.readOnly || (await tableExists('kp_awards'))
+  if (awardsReady) {
+    try {
+      counts = await rows<{ user_id: string; n: string }>(sql`SELECT user_id, count(*) AS n FROM kp_awards
+        WHERE user_id IN ${list.map((l) => l.userId)} GROUP BY user_id`)
+    } catch (error) {
+      if (!opts?.readOnly) throw error
+      counts = []
+    }
+  }
   return list.map((l) => {
     const lv = levelFor(cfg.levels, l.total)
     return {
       userId: l.userId,
-      name: l.name.split(' ')[0],
+      name: publicRankName(l.name),
       kp: l.total,
       level: lv.index + 1,
       levelName: lv.name,
@@ -268,6 +288,29 @@ export async function leaderboard(limit = 20, period: RankPeriod = 'tum'): Promi
       specials: Number(counts.find((c) => c.user_id === l.userId)?.n ?? 0),
     }
   })
+}
+
+/** Ranking for a public page. Same rows as leaderboard(), and it never creates or writes. */
+export async function readLeaderboard(limit = 20, period: RankPeriod = 'tum'): Promise<LeaderRow[]> {
+  try {
+    return await leaderboard(limit, period, { readOnly: true })
+  } catch (error) {
+    console.error('[kanka-puan] sıra okunamadı', error)
+    return []
+  }
+}
+
+/** Sum of kp_events.points. Null when there is nothing to show, so the counter can stay empty. */
+export async function sumKpPoints(): Promise<number | null> {
+  try {
+    if (!(await tableExists('kp_events'))) return null
+    const r = await rows<{ n: string | number | null }>(sql`SELECT coalesce(sum(points), 0) AS n FROM kp_events`)
+    const n = Number(r[0]?.n ?? 0)
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null
+  } catch (error) {
+    console.error('[kanka-puan] puan toplamı okunamadı', error)
+    return null
+  }
 }
 
 // --- Time on site --------------------------------------------------------
@@ -411,7 +454,7 @@ export async function badgeHolders(): Promise<Record<string, { name: string; cou
   const r = await rows<{ badge_id: string; name: string | null; n: string }>(sql`SELECT a.badge_id, max(u.name) AS name, count(*) AS n
     FROM kp_awards a LEFT JOIN public."user" u ON u.id = a.user_id GROUP BY a.badge_id, a.user_id ORDER BY max(a.awarded_at) DESC`)
   const out: Record<string, { name: string; count: number }[]> = {}
-  for (const x of r) (out[x.badge_id] ??= []).length < 8 && out[x.badge_id].push({ name: String(x.name ?? 'Kanka').split(' ')[0], count: Number(x.n) })
+  for (const x of r) (out[x.badge_id] ??= []).length < 8 && out[x.badge_id].push({ name: publicRankName(x.name), count: Number(x.n) })
   return out
 }
 

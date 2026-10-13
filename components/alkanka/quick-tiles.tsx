@@ -4,13 +4,12 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { QUICK_TILES } from './data'
 
-const DISTRIBUTED = 48215600
-
-function DistributedCounter() {
-  const [value, setValue] = useState(DISTRIBUTED)
+function DistributedCounter({ total }: { total: number | null }) {
+  const [value, setValue] = useState(total ?? 0)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (total == null || total <= 0) return
     const el = ref.current
     if (!el) return
     let raf = 0
@@ -18,11 +17,11 @@ function DistributedCounter() {
       if (!entry.isIntersecting) return
       observer.disconnect()
       const start = performance.now()
-      const from = DISTRIBUTED * 0.82
+      const from = total * 0.82
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / 1600)
         const eased = 1 - Math.pow(1 - t, 3)
-        setValue(Math.round(from + (DISTRIBUTED - from) * eased))
+        setValue(Math.round(from + (total - from) * eased))
         if (t < 1) raf = requestAnimationFrame(tick)
       }
       raf = requestAnimationFrame(tick)
@@ -32,7 +31,15 @@ function DistributedCounter() {
       observer.disconnect()
       cancelAnimationFrame(raf)
     }
-  }, [])
+  }, [total])
+
+  if (total == null || total <= 0) {
+    return (
+      <div className="panel-gold flex items-center justify-center rounded-2xl px-6 py-5 text-center">
+        <p className="text-sm font-medium text-muted-foreground">Topluluk puanı yakında burada birikecek</p>
+      </div>
+    )
+  }
 
   return (
     <div ref={ref} className="panel-gold flex flex-col items-center justify-between gap-2 rounded-2xl px-6 py-5 text-center sm:flex-row sm:text-left">
@@ -45,7 +52,7 @@ function DistributedCounter() {
   )
 }
 
-export function QuickTiles() {
+export function QuickTiles({ distributed }: { distributed: number | null }) {
   return (
     <section aria-label="Hızlı erişim" className="flex flex-col gap-4">
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
@@ -72,7 +79,7 @@ export function QuickTiles() {
           </li>
         ))}
       </ul>
-      <DistributedCounter />
+      <DistributedCounter total={distributed} />
     </section>
   )
 }
