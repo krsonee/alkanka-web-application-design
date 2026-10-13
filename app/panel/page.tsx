@@ -101,7 +101,7 @@ async function kpPanel() {
   }
 }
 
-export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false } }
+export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
 export default async function PanelPage() {
   if (!(await isAdmin())) {
@@ -154,7 +154,7 @@ export default async function PanelPage() {
             <span className="text-xs text-muted-foreground">Slider ve sayfa başlıklarını düzenle</span>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/" className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary">
+            <Link href={SITE_URL} target="_blank" rel="noopener" className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary">
               Siteyi aç
             </Link>
             <LogoutButton />
