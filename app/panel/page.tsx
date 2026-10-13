@@ -46,7 +46,7 @@ import { listSites } from '@/lib/sites'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
 import { SitesManager } from '@/components/panel/sites-manager'
 import { TasksManager } from '@/components/panel/tasks-manager'
-import { listTasks } from '@/lib/tasks'
+import { listPendingClaims, listTasks } from '@/lib/tasks'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 
@@ -61,7 +61,8 @@ async function sitesPanel() {
 
 async function tasksPanel() {
   try {
-    return <TasksManager tasks={await listTasks()} />
+    const [tasks, claims] = await Promise.all([listTasks(), listPendingClaims()])
+    return <TasksManager tasks={tasks} claims={claims} />
   } catch (error) {
     console.error('[tasks-panel]', error)
     return <p className="text-sm text-destructive">Görevler yüklenemedi.</p>
