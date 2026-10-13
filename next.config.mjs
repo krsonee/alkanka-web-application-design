@@ -7,7 +7,11 @@ const nextConfig = {
     unoptimized: true,
   },
   async headers() {
+    const noindex = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }]
     return [
+      { source: '/:path*', has: [{ type: 'host', value: '(www\\.)?alkanka\\.shop' }], headers: noindex },
+      { source: '/panel', headers: noindex },
+      { source: '/panel/:path*', headers: noindex },
       {
         source: '/sw.js',
         headers: [
