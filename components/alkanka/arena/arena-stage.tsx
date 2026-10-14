@@ -129,7 +129,13 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
   const [mode, setMode] = useState<GameMode | null>(modes.length === 1 ? modes[0] : null)
   const [entered, setEntered] = useState<{ mode: GameMode; bet: number } | null>(null)
   const [invitedTable, setInvitedTable] = useState<string | null>(null)
+  const [watching, setWatching] = useState<string | null>(null)
   const houseGame = game === 'blackjack' || game === 'rulet'
+
+  const watch = (id: string | null) => {
+    setWatching(id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
   useEffect(() => {
@@ -151,6 +157,14 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
       Mod ve bahis seçimine dön
     </button>
   )
+
+  if (watching) {
+    return (
+      <div className="flex flex-col gap-4">
+        <LiveLobby game={game} watching={watching} onWatch={watch} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -176,7 +190,7 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
       {entered?.mode === 'local' && <LocalMode game={game} />}
       {modes.includes('pvp') && game !== 'rulet' && (
         <div className="mt-4 border-t border-border pt-6">
-          <LiveLobby game={game} />
+          <LiveLobby game={game} watching={null} onWatch={watch} />
         </div>
       )}
     </div>

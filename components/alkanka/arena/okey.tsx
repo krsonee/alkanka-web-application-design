@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
-import { FlipHorizontal2, Layers, Sparkles, Trophy } from 'lucide-react'
+import { FlipHorizontal2, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
 import { OkeyRack, useRack } from './okey-rack'
@@ -119,6 +119,23 @@ function FluidTile({ tile, okey, selected, onClick, label }: { tile: Tile; okey:
       )}
       {joker && <span className="absolute -top-1.5 rounded bg-primary px-0.5 text-[7px] font-bold uppercase leading-tight text-primary-foreground sm:text-[8px]">Okey</span>}
     </button>
+  )
+}
+
+/** Subtle house branding: an engraved ring in the felt and a brass plaque on the rail, like a real club table. */
+export function FeltBranding() {
+  return (
+    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+      <div className="absolute inset-0 m-auto flex size-[46%] max-h-64 max-w-64 items-center justify-center rounded-full border border-foreground/[0.06] shadow-[inset_0_0_30px_rgb(0_0_0/0.25)]">
+        <div className="absolute inset-3 rounded-full border border-dashed border-foreground/[0.05]" />
+      </div>
+      <span className="absolute inset-x-0 bottom-[16%] text-center font-display text-[11px] font-bold uppercase tracking-[0.6em] text-foreground/[0.07] sm:text-sm">
+        Al Kanka
+      </span>
+      <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-b-md bg-gradient-to-b from-primary/80 to-primary/50 px-3 pb-0.5 pt-px font-display text-[8px] font-bold uppercase tracking-[0.35em] text-primary-foreground shadow-md sm:text-[9px]">
+        Al Kanka Club
+      </span>
+    </div>
   )
 }
 
@@ -301,7 +318,7 @@ export function Okey({ finish }: GameApi) {
         const id = dropTileId(e)
         if (id != null) discard(id)
       }}
-      className="absolute bottom-3 right-3 flex flex-col items-center gap-1 sm:bottom-6 sm:right-6"
+      className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 rounded-xl bg-background/25 p-1.5 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)] sm:bottom-6 sm:right-6"
     >
       <button
         type="button"
@@ -323,29 +340,49 @@ export function Okey({ finish }: GameApi) {
     </div>
   )
 
-  const seat = (bot: 1 | 2 | 3, className: string) => (
-    <div className={cn('flex items-center gap-3', className)}>
-      <div
-        className={cn(
-          'flex flex-col items-center gap-1 rounded-xl border bg-background/70 px-3 py-2',
-          active === bot && phase === 'bots' ? 'border-primary glow-gold' : 'border-border',
-        )}
-      >
-        <span className="text-xs font-bold text-foreground">{BOT_NAMES[bot - 1]}</span>
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-          <Layers className="size-3" aria-hidden="true" />
-          {hands[bot].length} taş
-        </span>
-        <span className="sr-only">{BOTS[bot - 1]} oyuncu</span>
+  const seat = (bot: 1 | 2 | 3, className: string) => {
+    const turn = active === bot && phase === 'bots'
+    const name = BOT_NAMES[bot - 1]
+    return (
+      <div className={cn('flex items-center', className)}>
+        <div
+          className={cn(
+            'flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-3.5 backdrop-blur-sm transition-colors',
+            turn ? 'border-primary bg-background/85 glow-gold' : 'border-foreground/10 bg-background/55',
+          )}
+        >
+          <span
+            className={cn(
+              'relative flex size-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold sm:size-9',
+              turn ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground',
+            )}
+            aria-hidden="true"
+          >
+            {name.charAt(0)}
+            {turn && <span className="absolute -inset-1 animate-ping rounded-full border border-primary/60" />}
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-xs font-bold text-foreground sm:text-sm">{name}</span>
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="hidden gap-px sm:flex" aria-hidden="true">
+                {Array.from({ length: Math.min(hands[bot].length, 7) }).map((_, i) => (
+                  <span key={i} className="h-2.5 w-1.5 rounded-[1px] bg-wood ring-1 ring-foreground/10" />
+                ))}
+              </span>
+              {turn ? <span className="text-primary">Düşünüyor</span> : `${hands[bot].length} taş`}
+            </span>
+          </span>
+          <span className="sr-only">{BOTS[bot - 1]} oyuncu</span>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const discardSlot = (i: number, className: string, interactive?: boolean) => {
     const t = pileTop(i)
     const canTake = interactive && phase === 'draw' && t
     return (
-      <div className={cn('absolute flex flex-col items-center gap-1', className)}>
+      <div className={cn('absolute flex flex-col items-center gap-1.5 rounded-xl bg-background/25 p-1.5 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)]', className)}>
         {t ? (
           canTake ? (
             <TileFace tile={t} okey={okey} size="sm" onClick={takeDiscard} label={`Yerdeki taşı al: ${t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`}`} selected={false} />
@@ -353,18 +390,21 @@ export function Okey({ finish }: GameApi) {
             <TileFace tile={t} okey={okey} size="sm" />
           )
         ) : (
-          <span className="h-11 w-8 rounded-md border border-dashed border-foreground/20" aria-hidden="true" />
+          <span className="h-11 w-8 rounded-md border border-foreground/10 bg-background/20" aria-hidden="true" />
         )}
-        <span className={cn('text-[9px] font-bold uppercase tracking-wider', canTake ? 'animate-pulse text-primary' : 'text-foreground/50')}>
-          {canTake ? 'Yerden al' : interactive ? 'Soldan gelen' : i === 0 ? 'Senin attığın' : ''}
-        </span>
+        {(canTake || interactive || i === 0) && (
+          <span className={cn('text-[9px] font-bold uppercase tracking-wider', canTake ? 'animate-pulse text-primary' : 'text-foreground/55')}>
+            {canTake ? 'Yerden al' : interactive ? 'Soldan gelen' : 'Senin attığın'}
+          </span>
+        )}
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[2rem] border-8 border-wood bg-felt shadow-xl sm:aspect-[16/9]">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[2rem] border-[10px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9]">
+        <FeltBranding />
         <div className="absolute inset-x-0 top-3 flex justify-center">{seat(2, '')}</div>
         <div className="absolute inset-y-0 left-3 flex items-center">{seat(3, '')}</div>
         <div className="absolute inset-y-0 right-3 flex items-center">{seat(1, '')}</div>
