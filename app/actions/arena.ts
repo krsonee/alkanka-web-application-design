@@ -60,7 +60,9 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
     let final = result
     if (final === 'win' && Number(row.secs) < (MIN_WIN_SECONDS[game] ?? 30)) final = 'loss'
     const s = (await getArenaSettings())[game]
-    const payout = await capPayout(m.id, stake, final === 'win' ? Math.floor(stake * s.multiplier) : final === 'draw' ? stake : 0)
+    const mars = game === 'tavla' && final === 'win' && score?.for === 15 && score.against === 0
+    const winMultiplier = mars ? Math.max(3, s.multiplier) : s.multiplier
+    const payout = await capPayout(m.id, stake, final === 'win' ? Math.floor(stake * winMultiplier) : final === 'draw' ? stake : 0)
     if (payout) await credit(m.id, payout)
     await recordHistory({
       userId: m.id,
