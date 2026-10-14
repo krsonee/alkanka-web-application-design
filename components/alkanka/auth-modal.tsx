@@ -81,19 +81,35 @@ export function AuthModal() {
         setNotice('Bu e-posta kayıtlıysa şifre sıfırlama bağlantısı gönderdik. Gelen kutunu ve spam klasörünü kontrol et.')
         return
       }
-      const res =
-        mode === 'kayit'
-          ? await authClient.signUp.email({ email, password, name, ...(phone ? { phone } : {}) })
-          : await authClient.signIn.email({ email, password })
-      if (res.error) {
-        if (res.error.status === 403) {
-          setNotice('E-postan henüz onaylanmamış. Onay bağlantısını tekrar gönderdik, gelen kutunu kontrol et.')
+      if (mode === 'giris') {
+        const login = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ identifier: email, password }),
+        })
+        if (!login.ok) {
+          const body = (await login.json().catch(() => null)) as { code?: string; message?: string } | null
+          if (login.status === 429) setError('Çok fazla deneme yaptın. 1 dakika bekleyip tekrar dene.')
+          else if (login.status === 403) setNotice('E-postan henüz onaylanmamış. Onay bağlantısını tekrar gönderdik, gelen kutunu kontrol et.')
+          else if (login.status === 409 && body?.message) setError(body.message)
+          else setError('Kullanıcı adı/e-posta veya şifre hatalı.')
           return
         }
-        setError(mode === 'kayit' ? 'Kayıt tamamlanamadı. Bu e-posta kullanılıyor olabilir.' : 'E-posta veya şifre hatalı.')
+        await refresh()
+        close()
         return
       }
-      if (mode === 'kayit' && !res.data?.token) {
+      const res = await authClient.signUp.email({ email, password, name, ...(phone ? { phone } : {}) })
+      if (res.error) {
+        if (res.error.status === 429) {
+          setError('Çok fazla deneme yaptın. 1 dakika bekleyip tekrar dene.')
+          return
+        }
+        setError('Kayıt tamamlanamadı. Bu e-posta kullanılıyor olabilir.')
+        return
+      }
+      if (!res.data?.token) {
         setNotice(`Neredeyse tamam kanka. ${email} adresine onay bağlantısı gönderdik, tıklayınca hesabın açılacak.`)
         return
       }
@@ -175,7 +191,21 @@ export function AuthModal() {
                 </p>
               )}
               {isRegister && <Field label="Kullanıcı adı" name="username" required minLength={3} autoComplete="username" placeholder="kanka123" />}
-              <Field label="E-posta" name="email" type="email" required autoComplete="email" placeholder="ornek@mail.com" />
+              {mode === 'giris' ? (
+                <Field
+                  label="Kullanıcı adı veya e-posta"
+                  name="email"
+                  type="text"
+                  required
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="kanka123 veya ornek@mail.com"
+                />
+              ) : (
+                <Field label="E-posta" name="email" type="email" required autoComplete="email" autoCapitalize="none" placeholder="ornek@mail.com" />
+              )}
               {!isForgot && (
                 <Field
                   label="Şifre"
