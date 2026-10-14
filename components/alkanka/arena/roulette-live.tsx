@@ -241,7 +241,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     <div className="flex flex-col gap-4">
       <header className="overflow-hidden rounded-3xl border border-primary/30 bg-card">
         <div className="grid items-stretch md:grid-cols-[minmax(0,22rem)_1fr]">
-          <div className="relative aspect-[1408/768] w-full bg-background md:aspect-auto md:min-h-48">
+          <div className="relative hidden bg-background md:block md:min-h-48">
             <Image
               src="/images/mascots/jako-krupiye.png"
               alt="Krupiye Jako masada, topu atmaya hazır"
@@ -251,16 +251,23 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               priority
             />
           </div>
-          <div className="flex flex-col justify-center gap-3 p-4 sm:p-6">
+          <div className="flex flex-col justify-center gap-3 p-3 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
                 Canlı masa · Tur #{clock.roundId % 10000}
               </span>
-              <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground">
+              <span className="hidden rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground sm:inline">
                 Herkes aynı masada · Avrupa ruleti
               </span>
             </div>
-            <DealerLine phase={clock.phase} number={number} secondsLeft={secondsLeft} />
+            <div className="flex items-end gap-2">
+              <div className="relative size-12 shrink-0 overflow-hidden rounded-full border-2 border-primary/60 bg-background md:hidden">
+                <Image src="/images/mascots/jako-krupiye.png" alt="" fill sizes="48px" className="object-cover object-top" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DealerLine phase={clock.phase} number={number} secondsLeft={secondsLeft} />
+              </div>
+            </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
               <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear" style={{ width: `${progress * 100}%` }} />
             </div>
@@ -279,10 +286,10 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
       </header>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
-        <section className="tavla-wood flex flex-col gap-4 rounded-[2rem] p-2.5 sm:p-3" aria-label="Rulet masası">
-          <div className="felt-table flex flex-col gap-5 rounded-[1.6rem] p-3 sm:p-5">
-            <div className="flex flex-col items-center gap-5 lg:flex-row lg:items-center">
-              <div className="relative aspect-square w-56 shrink-0 sm:w-64 lg:w-72">
+        <section className="tavla-wood flex flex-col gap-4 rounded-3xl p-1.5 sm:rounded-[2rem] sm:p-3" aria-label="Rulet masası">
+          <div className="felt-table flex flex-col gap-3 rounded-[1.25rem] p-2 sm:gap-5 sm:rounded-[1.6rem] sm:p-5">
+            <div className="flex flex-col items-center gap-3 sm:gap-5 lg:flex-row lg:items-center">
+              <div className="relative aspect-square w-44 shrink-0 sm:w-64 lg:w-72">
                 <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />
                 {showWin && <WinFlash n={number} />}
               </div>
@@ -297,8 +304,8 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               </div>
             </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2" role="radiogroup" aria-label="Fiş değeri">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex items-center justify-center gap-2 sm:justify-start" role="radiogroup" aria-label="Fiş değeri">
               {settings.bets.map((v) => (
                 <button key={v} role="radio" aria-checked={chip === v} onClick={() => setChip(v)} className="rounded-full" aria-label={`${v} KC fiş`}>
                   <Chip amount={v} tone={chipTone(v, settings.bets)} size="lg" active={chip === v} />
@@ -309,7 +316,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               <button
                 onClick={() => setDraft(new Map())}
                 disabled={!draft.size || sending}
-                className="flex size-11 items-center justify-center rounded-xl border border-border bg-background/70 text-foreground disabled:opacity-40"
+                className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background/70 text-foreground disabled:opacity-40"
                 aria-label="Onaylanmamış bahisleri temizle"
               >
                 <Trash2 className="size-4" aria-hidden="true" />
@@ -317,15 +324,16 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               <button
                 onClick={() => confirm(lastConfirmed)}
                 disabled={!betting || !lastConfirmed.length || sending || draft.size > 0}
-                className="flex h-11 items-center gap-1.5 rounded-xl border border-border bg-background/70 px-3 text-sm font-semibold text-foreground disabled:opacity-40"
+                aria-label="Son bahsi tekrarla"
+                className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-background/70 px-3 text-sm font-semibold text-foreground disabled:opacity-40"
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
-                Tekrarla
+                <span className="hidden sm:inline">Tekrarla</span>
               </button>
               <button
                 onClick={() => confirm(draftList())}
                 disabled={!betting || !draft.size || sending}
-                className="h-11 rounded-xl bg-primary px-5 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50"
+                className="h-11 flex-1 rounded-xl bg-primary px-4 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50 sm:flex-none sm:px-5"
               >
                 {sending ? 'Gönderiliyor...' : betting ? `Bahsi koy · ${formatAC(draftTotal)}` : 'Bahisler kapalı'}
               </button>
@@ -354,7 +362,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">Sayıya 36x, düzine 3x, renk / tek-çift / alt-üst 2x öder. Top sunucuda atılır, herkes aynı turu görür.</p>
+          <p className="text-pretty text-xs leading-relaxed text-muted-foreground">Sayıya 36x, düzine 3x, renk / tek-çift / alt-üst 2x öder. Top sunucuda atılır, herkes aynı turu görür.</p>
           </div>
         </section>
 

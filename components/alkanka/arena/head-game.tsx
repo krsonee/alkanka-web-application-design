@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Smartphone } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export type Sport = 'futbol' | 'basket'
 export type HeadMode = 'bot' | 'local'
@@ -621,8 +622,8 @@ function drawFlash(ctx: CanvasRenderingContext2D, text: string, t: number) {
 
 /* ------------------------------ controls ------------------------------ */
 
-function TouchPad({ keys, side }: { keys: React.RefObject<Keys>; side: 'left' | 'right' }) {
-  const bind = (k: keyof Keys) => ({
+function bindKey(keys: React.RefObject<Keys>, k: keyof Keys) {
+  return {
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault()
       e.currentTarget.setPointerCapture(e.pointerId)
@@ -632,38 +633,60 @@ function TouchPad({ keys, side }: { keys: React.RefObject<Keys>; side: 'left' | 
     onPointerCancel: () => (keys.current[k] = false),
     onLostPointerCapture: () => (keys.current[k] = false),
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
-  })
-  const btn =
-    'flex size-20 sm:size-16 touch-none select-none items-center justify-center rounded-full border-2 border-foreground/20 bg-card/90 text-foreground shadow-lg active:scale-95 active:border-primary active:bg-primary active:text-primary-foreground'
-  const move = (
-    <div className="flex gap-3">
-      <button type="button" className={btn} aria-label="Sola" {...bind('left')}>
-        <ChevronLeft className="size-7" aria-hidden="true" />
-      </button>
-      <button type="button" className={btn} aria-label="Sağa" {...bind('right')}>
-        <ChevronRight className="size-7" aria-hidden="true" />
-      </button>
-    </div>
-  )
-  const act = (
-    <div className="flex gap-3">
-      <button type="button" className={btn} aria-label="Zıpla" {...bind('jump')}>
-        <ArrowBigUp className="size-7" aria-hidden="true" />
-      </button>
-      <button type="button" className={`${btn} border-primary/60`} aria-label="Şut" {...bind('kick')}>
-        <Footprints className="size-7" aria-hidden="true" />
-      </button>
-    </div>
-  )
-  return side === 'left' ? (
-    <div className="flex w-full items-center justify-between gap-4">
-      {move}
-      {act}
-    </div>
-  ) : (
-    <div className="flex w-full items-center justify-between gap-4">
-      {act}
-      {move}
+  }
+}
+
+const OVERLAY_BTN =
+  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground'
+
+/**
+ * Translucent buttons drawn over the pitch on touch screens.
+ * Solo: arrows bottom-left, jump/kick bottom-right. Two players: each gets a 2x2 cluster in their own corner.
+ */
+function OverlayControls({ k1, k2, mode }: { k1: React.RefObject<Keys>; k2: React.RefObject<Keys>; mode: 'bot' | 'local' }) {
+  if (mode === 'local') {
+    const cluster = (keys: React.RefObject<Keys>, corner: 'left' | 'right', label: string) => (
+      <div className={cn('absolute bottom-2 grid grid-cols-2 gap-1.5', corner === 'left' ? 'left-2' : 'right-2')} role="group" aria-label={label}>
+        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} sola`} {...bindKey(keys, 'left')}>
+          <ChevronLeft className="size-5" aria-hidden="true" />
+        </button>
+        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} sağa`} {...bindKey(keys, 'right')}>
+          <ChevronRight className="size-5" aria-hidden="true" />
+        </button>
+        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} zıpla`} {...bindKey(keys, 'jump')}>
+          <ArrowBigUp className="size-5" aria-hidden="true" />
+        </button>
+        <button type="button" className={cn(OVERLAY_BTN, 'size-11 border-primary/80')} aria-label={`${label} şut`} {...bindKey(keys, 'kick')}>
+          <Footprints className="size-5" aria-hidden="true" />
+        </button>
+      </div>
+    )
+    return (
+      <div className="pointer-events-none absolute inset-0 lg:hidden">
+        {cluster(k1, 'left', '1. oyuncu')}
+        {cluster(k2, 'right', '2. oyuncu')}
+      </div>
+    )
+  }
+  const size = 'size-14 landscape:size-16'
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-2.5 lg:hidden">
+      <div className="flex gap-2.5">
+        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Sola" {...bindKey(k1, 'left')}>
+          <ChevronLeft className="size-7" aria-hidden="true" />
+        </button>
+        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Sağa" {...bindKey(k1, 'right')}>
+          <ChevronRight className="size-7" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="flex items-end gap-2.5">
+        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Zıpla" {...bindKey(k1, 'jump')}>
+          <ArrowBigUp className="size-7" aria-hidden="true" />
+        </button>
+        <button type="button" className={cn(OVERLAY_BTN, size, 'mb-5 border-primary/80')} aria-label="Şut" {...bindKey(k1, 'kick')}>
+          <Footprints className="size-7" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   )
 }
@@ -857,10 +880,9 @@ export function HeadGame({
           className="block aspect-video w-full touch-none select-none"
           aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
         />
+        <OverlayControls k1={k1} k2={k2} mode={mode} />
       </div>
       <div className="flex flex-col gap-3 lg:hidden">
-        <TouchPad keys={k1} side="left" />
-        {mode === 'local' && <TouchPad keys={k2} side="right" />}
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground portrait:flex landscape:hidden">
           <Smartphone className="size-3.5 rotate-90" aria-hidden="true" />
           Daha geniş saha için telefonu yan çevir
