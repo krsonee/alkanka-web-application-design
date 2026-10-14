@@ -6,13 +6,17 @@ import { Eye, Loader2, Radio } from 'lucide-react'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
 import { cn } from '@/lib/utils'
 import { TableRoom, TableRowCard, type TableSummary } from './table-lobby'
+import { useIdle } from '../use-idle'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export function LiveLobby({ game }: { game?: ArenaGame }) {
   const [filter, setFilter] = useState<string>('all')
   const [watching, setWatching] = useState<string | null>(null)
-  const { data, isLoading } = useSWR<{ live: TableSummary[] }>('/api/tables/live', fetcher, { refreshInterval: 5000 })
+  const idle = useIdle()
+  const { data, isLoading } = useSWR<{ live: TableSummary[] }>('/api/tables/live', fetcher, {
+    refreshInterval: idle || watching ? 0 : 8000,
+  })
 
   if (watching) return <TableRoom id={watching} onLeave={() => setWatching(null)} />
 

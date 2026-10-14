@@ -10,6 +10,7 @@ import type { RouletteLiveState } from '@/lib/roulette-live'
 import { placeLiveRouletteBets } from '@/app/actions/arena'
 import { cn } from '@/lib/utils'
 import { formatAC, usePoints } from '../points-context'
+import { useIdle } from '../use-idle'
 import { RouletteWheel, pocketColor } from './roulette-wheel'
 import { Chip, RouletteBoard, betKey, chipTone, parseKey, type BetKind } from './roulette-board'
 
@@ -105,7 +106,9 @@ function PlayersPanel({ players, phase }: { players: RouletteLiveState['players'
 
 export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const { member, setBalance, requireLogin, points } = usePoints()
-  const { data, mutate } = useSWR<RouletteLiveState>('/api/rulet', fetcher, { refreshInterval: 2000 })
+  const idle = useIdle()
+  // Phase changes trigger an immediate refetch below; the interval only keeps other players' bets fresh.
+  const { data, mutate } = useSWR<RouletteLiveState>('/api/rulet', fetcher, { refreshInterval: idle ? 30000 : 6000 })
   const { offset, ready, clock } = useServerClock(data)
   const [chip, setChip] = useState(settings.bets[0] ?? 25)
   const [draft, setDraft] = useState<Map<string, number>>(new Map())

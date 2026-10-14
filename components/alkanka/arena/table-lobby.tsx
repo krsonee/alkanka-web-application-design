@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
 import { formatAC, usePoints } from '../points-context'
+import { useIdle } from '../use-idle'
 import type { Remote, RemoteAction } from './remote'
 import { TavlaPvp } from './tavla'
 import { OkeyPvp } from './okey-pvp'
@@ -78,7 +79,10 @@ export function TableLobby({
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
   const [bots, setBots] = useState(0)
   const humanSeats = isOkey ? seats - (seats === 4 ? bots : 0) : 2
-  const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, { refreshInterval: 4000 })
+  const lobbyIdle = useIdle()
+  const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, {
+    refreshInterval: lobbyIdle ? 30000 : 6000,
+  })
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string; id?: string }>) => {
     if (!requireLogin()) return
@@ -369,8 +373,17 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
 
 export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) {
   const { refresh, member } = usePoints()
+  const idle = useIdle()
   const { data, mutate, error } = useSWR<TableSummary>(`/api/tables/${id}`, fetcher, {
-    refreshInterval: (d) => (d && (d.status === 'bitti' || d.status === 'iptal') ? 0 : 1500),
+    refreshInterval: (d) => {
+      if (!d) return 2000
+      if (d.status === 'bitti' || d.status === 'iptal') return 0
+      if (idle) return 10000
+      if (d.status === 'bekliyor') return 5000
+      if (d.spectator) return 3000
+      // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
+      return d.turn === d.seat ? 5000 : 2000
+    },
   })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)

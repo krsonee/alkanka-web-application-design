@@ -59,7 +59,7 @@ export function Tasks({ tasks }: { tasks: PublicTask[] }) {
 
   useEffect(() => {
     if (!waiting) return
-    const id = window.setInterval(() => refresh(), 2000)
+    const id = window.setInterval(() => refresh(), 30000)
     return () => window.clearInterval(id)
   }, [waiting, refresh])
 

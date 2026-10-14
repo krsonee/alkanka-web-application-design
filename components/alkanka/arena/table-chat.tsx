@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { Loader2, MessageCircle, Send, Smile } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
+import { useIdle } from '../use-idle'
 
 const QUICK = ['👍', '😂', '🔥', '😮', '😡', '👏', '🎲', '🍀']
 const EMOJIS = [
@@ -26,7 +27,8 @@ const fetcher = async (url: string) => {
 /** Shared chat for everyone at a table: seated players and spectators. */
 export function TableChat({ tableId, className }: { tableId: string; className?: string }) {
   const { member, requireLogin } = usePoints()
-  const { data, mutate } = useSWR(`/api/tables/${tableId}/chat`, fetcher, { refreshInterval: 2500 })
+  const idle = useIdle()
+  const { data, mutate } = useSWR(`/api/tables/${tableId}/chat`, fetcher, { refreshInterval: idle ? 20000 : 5000 })
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
