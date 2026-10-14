@@ -258,6 +258,12 @@
 }
 .animate-badge-pulse { animation: badge-pulse 2.4s ease-out infinite; }
 
+@keyframes tab-attention {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 55%, transparent); border-color: color-mix(in oklch, var(--primary) 50%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--primary) 0%, transparent); border-color: var(--primary); }
+}
+.tab-attention { animation: tab-attention 1.8s ease-in-out infinite; }
+
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }

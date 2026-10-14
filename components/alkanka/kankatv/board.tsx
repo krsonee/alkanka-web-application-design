@@ -4,7 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternal
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { ChevronDown, ExternalLink, Flag, Percent, Radio, Search, Send, Tv } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, Flag, Percent, Radio, Search, Send, Trophy, Tv, Volume1, Volume2, VolumeX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageHero } from '../page-hero'
 import {
@@ -429,10 +429,91 @@ function useYouTubeFailure(frame: React.RefObject<HTMLIFrameElement | null>, src
   return failedSrc !== null && failedSrc === src
 }
 
+function withMuted(src: string, muted: boolean) {
+  const url = new URL(src)
+  if (url.hostname === 'www.youtube.com') url.searchParams.set('mute', muted ? '1' : '0')
+  else url.searchParams.set('muted', muted ? 'true' : 'false')
+  return url.toString()
+}
+
+function postYouTube(frame: HTMLIFrameElement | null, func: string, args: unknown[] = []) {
+  frame?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*')
+}
+
+function SoundControls({
+  muted,
+  volume,
+  isYouTube,
+  onToggle,
+  onVolume,
+}: {
+  muted: boolean
+  volume: number
+  isYouTube: boolean
+  onToggle: () => void
+  onVolume: (v: number) => void
+}) {
+  const Icon = muted || volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={!muted}
+        className={cn(
+          'flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-bold transition-colors',
+          muted ? 'bg-primary text-primary-foreground motion-safe:animate-pulse' : 'bg-secondary text-foreground hover:bg-muted',
+        )}
+      >
+        <Icon className="size-5" aria-hidden="true" />
+        {muted ? 'Sesi aç' : 'Sesi kapat'}
+      </button>
+      {isYouTube ? (
+        <label className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="sr-only">Ses seviyesi</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={muted ? 0 : volume}
+            onChange={(e) => onVolume(Number(e.target.value))}
+            className="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+          />
+          <span className="w-9 text-right text-xs font-semibold tabular-nums text-muted-foreground">{muted ? 0 : volume}</span>
+        </label>
+      ) : (
+        <p className="min-w-0 flex-1 text-xs leading-snug text-muted-foreground">
+          Ses seviyesini yayının içindeki hoparlör simgesinden de ayarlayabilirsin.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; selected: string; onSelect: (slug: string) => void }) {
   const current = channels.find((c) => c.slug === selected) ?? channels[0]
-  const playerSrc = usePlayerSrc(current.embedUrl)
+  const rawSrc = usePlayerSrc(current.embedUrl)
+  const [muted, setMuted] = useState(false)
+  const [volume, setVolume] = useState(80)
+  const isYouTube = Boolean(rawSrc?.startsWith('https://www.youtube.com/embed/'))
+  // YouTube is controlled live over postMessage; other players only honour the muted flag on load.
+  const playerSrc = rawSrc && !isYouTube ? withMuted(rawSrc, muted) : rawSrc
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const toggleSound = () => {
+    const next = !muted
+    setMuted(next)
+    if (isYouTube) {
+      postYouTube(frameRef.current, next ? 'mute' : 'unMute')
+      if (!next) postYouTube(frameRef.current, 'setVolume', [volume || 50])
+    }
+  }
+  const changeVolume = (v: number) => {
+    setVolume(v)
+    setMuted(v === 0)
+    postYouTube(frameRef.current, 'setVolume', [v])
+    postYouTube(frameRef.current, v === 0 ? 'mute' : 'unMute')
+  }
   const playerFailed = useYouTubeFailure(frameRef, playerSrc)
   const showPlayer = Boolean(current.embedUrl) && !playerFailed
   const [group, setGroup] = useState<ChannelGroup>(current.group)
@@ -573,6 +654,9 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
             </div>
           )}
         </div>
+        {showPlayer && playerSrc && (
+          <SoundControls muted={muted} volume={volume} isYouTube={isYouTube} onToggle={toggleSound} onVolume={changeVolume} />
+        )}
         {current.title && (
           <p className="line-clamp-2 text-sm font-semibold text-foreground text-pretty">
             {current.name} · <span className="font-normal text-muted-foreground">{current.title}</span>
@@ -667,13 +751,13 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
           { label: 'Kanal', value: String(channels.length) },
         ]}
       >
-        <div role="tablist" aria-label="KankaTV" className="flex w-full gap-1 rounded-lg bg-muted p-1 sm:w-fit">
+        <div role="tablist" aria-label="KankaTV" className="flex w-full gap-2 sm:w-fit">
           {(
             [
-              ['matches', 'Maçlar'],
-              ['channels', 'Canlı kanallar'],
+              ['matches', 'Maçlar', Trophy],
+              ['channels', 'Canlı kanallar', Tv],
             ] as const
-          ).map(([key, label]) => (
+          ).map(([key, label, TabIcon]) => (
             <button
               key={key}
               role="tab"
@@ -681,11 +765,15 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
               aria-selected={tab === key}
               onClick={() => setTab(key)}
               className={cn(
-                'flex-1 rounded-md px-4 py-2 text-sm font-semibold transition-colors md:flex-none',
-                tab === key ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                'flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-bold transition-colors md:flex-none',
+                tab === key
+                  ? 'border-primary bg-primary text-primary-foreground shadow-md'
+                  : 'tab-attention border-primary/60 bg-card text-foreground hover:bg-muted',
               )}
             >
+              <TabIcon className="size-4 shrink-0" aria-hidden="true" />
               {label}
+              {tab !== key && <ChevronRight className="size-4 shrink-0 text-primary" aria-hidden="true" />}
             </button>
           ))}
         </div>

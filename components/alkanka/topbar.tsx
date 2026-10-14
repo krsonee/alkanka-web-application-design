@@ -21,7 +21,7 @@ function PointsPill() {
     <div
       data-tour="coins"
       title="Kanka Coin bakiyen"
-      className="relative flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5"
+      className="relative flex h-9 shrink-0 items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2 sm:gap-1.5 sm:px-2.5"
     >
       <Coins className="size-3.5 text-primary" aria-hidden="true" />
       <span className="sr-only">Kanka Coin bakiyesi:</span>
@@ -55,7 +55,7 @@ function BadgeButton() {
     <Link
       href="/profil?sekme=rozetler"
       title="Aktif rozetin"
-      className="animate-badge-pulse relative flex h-9 items-center gap-1 overflow-hidden rounded-lg border border-primary/40 bg-primary/[0.08] px-2 transition-colors hover:border-primary"
+      className="animate-badge-pulse relative flex h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-primary/40 bg-primary/[0.08] px-1.5 transition-colors hover:border-primary sm:px-2"
     >
       <span className="tier-shine pointer-events-none absolute inset-0" aria-hidden="true" />
       <MemberRank userId={member.id} className="relative scale-110" />
@@ -100,15 +100,15 @@ function AccountMenu() {
         aria-controls="hesap-menu"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold text-foreground transition-colors',
+          'flex h-9 items-center gap-2 rounded-lg border px-1.5 text-xs font-bold text-foreground transition-colors sm:px-3',
           open ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50',
         )}
       >
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-display text-[11px] font-bold text-primary-foreground">
           {member.name.slice(0, 1).toUpperCase()}
         </span>
-        <span className="hidden max-w-28 truncate sm:inline">{member.name}</span>
-        <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden="true" />
+        <span className="sr-only sm:not-sr-only sm:max-w-28 sm:truncate">{member.name}</span>
+        <ChevronDown className={cn('hidden size-3.5 text-muted-foreground transition-transform sm:block', open && 'rotate-180')} aria-hidden="true" />
       </button>
       {open && (
         <div
@@ -192,24 +192,24 @@ export function Topbar({ social, sponsors = [] }: { social: SocialLinks; sponsor
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md lg:px-6">
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:gap-3 sm:px-4 lg:px-6">
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Menüyü aç"
           data-tour="menu-btn"
-          className="flex size-9 items-center justify-center rounded-lg border border-border text-foreground lg:hidden"
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border text-foreground lg:hidden"
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        <a href="/" className="lg:hidden">
+        <a href="/" className="min-w-0 shrink max-[379px]:hidden lg:hidden">
           <BrandLogo size="sm" />
           <span className="sr-only">AL KANKA ana sayfa</span>
         </a>
 
         <SiteSearch sponsors={sponsors} />
 
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
           <BadgeButton />
           <PointsPill />
           <RadioPlayer />
