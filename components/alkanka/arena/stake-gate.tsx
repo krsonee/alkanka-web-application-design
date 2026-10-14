@@ -23,7 +23,7 @@ import { ParticleBurst } from '../games/particle-burst'
 export type GameResult = 'win' | 'lose' | 'draw'
 export type GameApi = { bet: number; finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void }
 
-type Phase = { kind: 'lobby' } | { kind: 'playing'; bet: number; round: number } | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number }
+type Phase = { kind: 'lobby' } | { kind: 'playing'; bet: number; round: number } | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number; mars?: boolean }
 
 export function StakeGate({
   game,
@@ -77,7 +77,8 @@ export function StakeGate({
     }
     setBalance(res.balance)
     const final: GameResult = res.result === 'loss' ? 'lose' : res.result
-    setPhase({ kind: 'done', bet: playedBet, result: final, note: final !== result ? 'Oyun çok kısa sürdüğü için galibiyet sayılmadı.' : note, payout: res.payout })
+    const mars = game === 'tavla' && final === 'win' && score?.for === 15 && score.against === 0
+    setPhase({ kind: 'done', bet: playedBet, result: final, note: final !== result ? 'Oyun çok kısa sürdüğü için galibiyet sayılmadı.' : note, payout: res.payout, mars })
   }
 
   if (phase.kind === 'playing') {
@@ -105,7 +106,12 @@ export function StakeGate({
     const won = phase.result === 'win'
     return (
       <div className="relative flex flex-col items-center gap-5 overflow-hidden rounded-2xl border border-primary/30 bg-card px-6 py-12 text-center">
-        {won && <ParticleBurst key={round} count={28} distance={160} />}
+        {won && <ParticleBurst key={round} count={phase.mars ? 48 : 28} distance={phase.mars ? 220 : 160} />}
+        {phase.mars && (
+          <span className="animate-badge-pulse rounded-full border-2 border-primary bg-primary/15 px-4 py-1 font-display text-sm font-bold uppercase tracking-[0.3em] text-primary">
+            Mars · 3x
+          </span>
+        )}
         <span
           className={cn(
             'flex size-16 items-center justify-center rounded-2xl',
@@ -117,7 +123,7 @@ export function StakeGate({
         <div className="flex flex-col gap-2">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">{meta.title}</p>
           <h2 className="font-display text-4xl font-bold uppercase text-foreground text-balance">
-            {won ? 'Kazandın kanka!' : phase.result === 'draw' ? 'Berabere' : 'Bu el rakibin'}
+            {phase.mars ? 'Mars yaptın kanka!' : won ? 'Kazandın kanka!' : phase.result === 'draw' ? 'Berabere' : 'Bu el rakibin'}
           </h2>
           {phase.note && <p className="text-sm text-muted-foreground">{phase.note}</p>}
         </div>
@@ -147,23 +153,25 @@ export function StakeGate({
 
   return (
     <section className="grid overflow-hidden rounded-2xl border border-border bg-card lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative aspect-[4/3] lg:aspect-auto">
+      <div className="relative aspect-[16/7] sm:aspect-[4/3] lg:aspect-auto">
         <Image src={meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
-        <span className="absolute left-4 top-4 flex items-center gap-1.5 rounded-md bg-background/90 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-primary">
+        <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-card to-transparent sm:hidden" aria-hidden="true" />
+        <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-md bg-background/90 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary sm:left-4 sm:top-4 sm:px-2.5 sm:py-1 sm:text-xs">
           <Users className="size-3.5" aria-hidden="true" />
           {meta.players}
         </span>
+        <h2 className="absolute bottom-2 left-4 font-display text-2xl font-bold uppercase text-foreground sm:hidden">{meta.title}</h2>
       </div>
-      <div className="flex flex-col gap-6 p-6 lg:p-8">
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Kanka Coin masası</p>
-          <h2 className="font-display text-4xl font-bold uppercase text-foreground">{meta.title}</h2>
-          <p className="leading-relaxed text-muted-foreground">{meta.short}</p>
+      <div className="flex flex-col gap-4 p-4 sm:gap-6 sm:p-6 lg:p-8">
+        <div className="flex flex-col gap-1 sm:gap-2">
+          <p className="hidden text-xs font-bold uppercase tracking-[0.2em] text-primary sm:block">Kanka Coin masası</p>
+          <h2 className="hidden font-display text-4xl font-bold uppercase text-foreground sm:block">{meta.title}</h2>
+          <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">{meta.short}</p>
         </div>
 
         {modeSelect && (
           <fieldset className="flex flex-col gap-3">
-            <legend className="mb-3 text-sm font-semibold text-foreground">
+            <legend className="mb-2 text-sm font-semibold text-foreground sm:mb-3">
               Oyun modunu seç <span className="text-primary">*</span>
             </legend>
             <div className={cn('grid gap-2', modeSelect.modes.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
@@ -174,13 +182,13 @@ export function StakeGate({
                   <label
                     key={m}
                     className={cn(
-                      'flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center transition-colors',
-                      active ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:border-primary/50',
+                      'flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary sm:gap-1.5 sm:px-2 sm:py-3',
+                      active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-surface text-foreground hover:border-primary/50',
                     )}
                   >
                     <input type="radio" name="mode" value={m} checked={active} onChange={() => modeSelect.onChange(m)} className="sr-only" />
-                    <Icon className="size-5" aria-hidden="true" />
-                    <span className="text-xs font-bold uppercase tracking-wide">{MODE_LABEL[m]}</span>
+                    <Icon className="size-4 sm:size-5" aria-hidden="true" />
+                    <span className="text-[11px] font-bold uppercase leading-tight tracking-wide sm:text-xs">{MODE_LABEL[m]}</span>
                   </label>
                 )
               })}
@@ -189,36 +197,36 @@ export function StakeGate({
         )}
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-3 text-sm font-semibold text-foreground">Bahsini seç</legend>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <legend className="mb-2 text-sm font-semibold text-foreground sm:mb-3">Bahsini seç</legend>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             {settings.bets.map((b) => (
               <label
                 key={b}
                 className={cn(
-                  'flex cursor-pointer flex-col items-center gap-0.5 rounded-xl border px-3 py-3 transition-colors',
+                  'flex cursor-pointer flex-col items-center gap-0 rounded-xl border px-1 py-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary sm:gap-0.5 sm:px-3 sm:py-3',
                   bet === b ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50',
                   b > points && 'opacity-50',
                 )}
               >
                 <input type="radio" name="bet" value={b} checked={bet === b} onChange={() => setBet(b)} className="sr-only" />
-                <span className="font-display text-lg font-bold text-foreground">{formatAC(b)}</span>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">KC</span>
+                <span className="font-display text-base font-bold text-foreground sm:text-lg">{formatAC(b)}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-[11px]">KC</span>
               </label>
             ))}
           </div>
         </fieldset>
 
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border text-sm">
-          <div className="flex flex-col gap-0.5 bg-surface px-4 py-3">
-            <dt className="text-muted-foreground">Bakiyen</dt>
-            <dd className="flex items-center gap-1.5 font-display text-lg font-bold text-foreground">
+          <div className="flex flex-col gap-0.5 bg-surface px-3 py-2 sm:px-4 sm:py-3">
+            <dt className="text-xs text-muted-foreground sm:text-sm">Bakiyen</dt>
+            <dd className="flex items-center gap-1.5 font-display text-base font-bold text-foreground sm:text-lg">
               <Coins className="size-4 text-primary" aria-hidden="true" />
               {formatAC(points)}
             </dd>
           </div>
-          <div className="flex flex-col gap-0.5 bg-surface px-4 py-3">
-            <dt className="text-muted-foreground">Kazanırsan</dt>
-            <dd className="font-display text-lg font-bold text-primary">
+          <div className="flex flex-col gap-0.5 bg-surface px-3 py-2 sm:px-4 sm:py-3">
+            <dt className="text-xs text-muted-foreground sm:text-sm">Kazanırsan</dt>
+            <dd className="font-display text-base font-bold text-primary sm:text-lg">
               {formatAC(Math.round(bet * settings.multiplier))} KC <span className="text-xs text-muted-foreground">({settings.multiplier}x)</span>
             </dd>
           </div>
@@ -234,7 +242,7 @@ export function StakeGate({
             modeSelect.onEnter(m, bet)
           }}
           disabled={(modeSelect != null && modeSelect.mode == null) || (modeSelect?.mode !== 'local' && bet > points)}
-          className="rounded-xl bg-primary px-6 py-4 font-display text-lg font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl bg-primary px-6 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/20 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:py-4 sm:text-lg"
         >
           {!modeSelect || modeSelect.mode === 'bot' ? 'Masaya otur' : modeSelect.mode === 'pvp' ? 'Oyuncu masalarına geç' : modeSelect.mode === 'local' ? 'Aynı cihazda başla' : 'Önce oyun modunu seç'}
         </button>

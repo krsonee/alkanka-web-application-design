@@ -41,12 +41,12 @@ export function CampaignHub() {
               aria-controls={`kampanya-${t.id}`}
               onClick={() => select(t.id)}
               className={cn(
-                'flex min-w-0 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors sm:text-sm',
+                'flex min-h-12 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold leading-tight transition-colors sm:gap-2 sm:px-3 sm:text-sm sm:uppercase sm:tracking-wider',
                 active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
               )}
             >
               <Icon className="size-4 shrink-0" aria-hidden="true" />
-              <span className="truncate">{t.label}</span>
+              <span className="text-balance text-center sm:truncate">{t.label}</span>
               <span className={cn('hidden rounded px-1.5 text-[10px] tabular-nums sm:inline', active ? 'bg-primary-foreground/20' : 'bg-secondary')}>
                 {t.count}
               </span>

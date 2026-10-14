@@ -139,8 +139,14 @@ export function SiteTour() {
 
   const isLast = index === STEPS.length - 1
   const cardWidth = Math.min(340, viewport.w - 24)
+  const mobile = viewport.w > 0 && viewport.w < 640
   let cardStyle: React.CSSProperties
-  if (box) {
+  if (mobile) {
+    const targetLow = box ? box.top + box.height / 2 > viewport.h / 2 : false
+    cardStyle = targetLow
+      ? { top: 'calc(env(safe-area-inset-top) + 12px)', left: 12, right: 12 }
+      : { bottom: 'calc(env(safe-area-inset-bottom) + 84px)', left: 12, right: 12 }
+  } else if (box) {
     const below = box.top + box.height + 12
     const fitsBelow = below + 230 < viewport.h
     const left = Math.min(Math.max(12, box.left + box.width / 2 - cardWidth / 2), viewport.w - cardWidth - 12)

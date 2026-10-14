@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Loader2, Pause, Play, Radio, Search, Volume2, VolumeX, X } from 'lucide-react'
+import { Loader2, Pause, Play, Radio, RadioReceiver, Search, Volume2, VolumeX, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { RadioStation } from '@/app/api/radyo/route'
 
@@ -128,11 +128,11 @@ export function RadioPlayer() {
         aria-label={playing && current ? `Radyo: ${current.name} çalıyor` : 'Radyo'}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'relative flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-foreground transition-colors',
+          'relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-foreground transition-colors sm:px-2.5',
           open || playing ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50',
         )}
       >
-        <Radio className={cn('size-4 text-primary', playing ? 'animate-radio-wave' : 'animate-radio-idle')} aria-hidden="true" />
+        <RadioReceiver className={cn('size-[18px] text-primary', playing ? 'animate-radio-wave' : 'animate-radio-idle')} aria-hidden="true" />
         {playing ? <Equalizer active /> : <span className="hidden text-xs font-semibold md:inline">Radyo</span>}
       </button>
 

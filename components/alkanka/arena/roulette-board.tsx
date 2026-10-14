@@ -156,10 +156,17 @@ function Horizontal(p: BoardProps) {
   )
 }
 
-function Vertical(p: BoardProps) {
+const MOBILE_OUTSIDE: Record<string, ReactNode> = {
+  red: <span className="size-3.5 rotate-45 bg-[var(--rl-red)]" aria-hidden="true" />,
+  black: <span className="size-3.5 rotate-45 border border-foreground/50 bg-[var(--rl-black)]" aria-hidden="true" />,
+}
+
+/** Same horizontal layout as the real felt, scaled down so the whole board fits a phone without scrolling. */
+function Compact(p: BoardProps) {
+  const cell = 'min-h-0 border-foreground/35 p-0'
   return (
-    <div className="grid grid-cols-[repeat(2,2.75rem)_repeat(3,minmax(0,1fr))] overflow-hidden rounded-lg border-2 border-foreground/50 md:hidden">
-      <Cell p={p} kind="number" value={0} label="Sayı 0" style={{ gridColumn: '3 / span 3', gridRow: 1, ...numBg(0) }} className="rounded-t-[2rem]">
+    <div className="grid grid-cols-[1.6rem_repeat(12,minmax(0,1fr))] overflow-hidden rounded-md border-2 border-foreground/50 md:hidden">
+      <Cell p={p} kind="number" value={0} label="Sayı 0" style={{ gridColumn: 1, gridRow: '1 / span 3', ...numBg(0) }} className={cn(cell, 'rounded-l-2xl text-xs')}>
         0
       </Cell>
       {NUMBERS.map((n) => (
@@ -169,19 +176,20 @@ function Vertical(p: BoardProps) {
           kind="number"
           value={n}
           label={`Sayı ${n}`}
-          style={{ gridColumn: ((n - 1) % 3) + 3, gridRow: Math.ceil(n / 3) + 1, ...numBg(n) }}
+          style={{ gridColumn: Math.ceil(n / 3) + 1, gridRow: 3 - ((n - 1) % 3), ...numBg(n) }}
+          className={cn(cell, 'h-10 text-[11px]')}
         >
           {n}
         </Cell>
       ))}
       {[1, 2, 3].map((d) => (
-        <Cell key={d} p={p} kind="dozen" value={d} label={`${d}. düzine`} style={{ gridColumn: 2, gridRow: `${(d - 1) * 4 + 2} / span 4` }}>
-          <span className="-rotate-90 whitespace-nowrap">{d}. 12</span>
+        <Cell key={d} p={p} kind="dozen" value={d} label={`${d}. düzine`} style={{ gridColumn: `${(d - 1) * 4 + 2} / span 4`, gridRow: 4 }} className={cn(cell, 'h-9 text-[11px]')}>
+          {d}. 12
         </Cell>
       ))}
       {OUTSIDE.map((o, i) => (
-        <Cell key={o.kind} p={p} kind={o.kind} label={o.label} style={{ gridColumn: 1, gridRow: `${i * 2 + 2} / span 2` }}>
-          <span className={cn(typeof o.text === 'string' && '-rotate-90 whitespace-nowrap text-xs')}>{o.text}</span>
+        <Cell key={o.kind} p={p} kind={o.kind} label={o.label} style={{ gridColumn: `${i * 2 + 2} / span 2`, gridRow: 5 }} className={cn(cell, 'h-9 text-[10px]')}>
+          {MOBILE_OUTSIDE[o.kind] ?? o.text}
         </Cell>
       ))}
     </div>
@@ -192,7 +200,7 @@ export function RouletteBoard(p: BoardProps) {
   return (
     <>
       <Horizontal {...p} />
-      <Vertical {...p} />
+      <Compact {...p} />
     </>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, Search, ShieldCheck, Star, Zap } from 'lucide-react'
@@ -562,11 +562,11 @@ export function OddsBoard() {
   )
 }
 
-function CampaignCard({ c }: { c: Campaign }) {
+function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
   const s = sponsorById(c.sponsorId)
   const urgent = c.hoursLeft <= 24
   return (
-    <li className="panel-gold group flex flex-col overflow-hidden rounded-xl">
+    <li className={cn('panel-gold group flex flex-col overflow-hidden rounded-xl', className)}>
       <div className="relative aspect-[16/9] overflow-hidden">
         <Image
           src={c.image || '/placeholder.svg'}
@@ -782,21 +782,74 @@ export function FeaturedSponsors({
   )
 }
 
-export function EndingCampaigns() {
+const SLIDE_GAP = 12
+
+export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
   const list = [...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3)
+  const trackRef = useRef<HTMLUListElement>(null)
+  const [active, setActive] = useState(0)
+  const [paused, setPaused] = useState(false)
+
+  const goTo = (i: number) => {
+    const el = trackRef.current
+    if (!el) return
+    el.scrollTo({ left: i * (el.clientWidth + SLIDE_GAP), behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    if (paused || list.length < 2) return
+    const mobile = window.matchMedia('(max-width: 767px)')
+    if (!mobile.matches) return
+    const timer = window.setInterval(() => {
+      const el = trackRef.current
+      if (!el) return
+      const current = Math.round(el.scrollLeft / (el.clientWidth + SLIDE_GAP))
+      const next = (current + 1) % list.length
+      el.scrollTo({ left: next * (el.clientWidth + SLIDE_GAP), behavior: 'smooth' })
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [paused, list.length])
+
   return (
     <section aria-labelledby="biten-title" className="flex flex-col gap-4">
       <SectionHeading
         id="biten-title"
         title="Bitmek üzere"
         description="Süresi dolmadan yetiş kanka."
-        action={<SeeAllLink href="/kampanyalar" label={`${CAMPAIGNS.length} kampanyanın tümü`} />}
+        action={showAll ? <SeeAllLink href="/kampanyalar?sekme=bonuslar" label={`${CAMPAIGNS.length} kampanyanın tümü`} /> : undefined}
       />
-      <ul className="grid gap-4 md:grid-cols-3">
+      <ul
+        ref={trackRef}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          setActive(Math.round(el.scrollLeft / (el.clientWidth + SLIDE_GAP)))
+        }}
+        onTouchStart={() => setPaused(true)}
+        aria-roledescription="carousel"
+        aria-label="Bitmek üzere olan kampanyalar"
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto no-scrollbar md:grid md:grid-cols-3 md:gap-4 md:overflow-visible"
+      >
         {list.map((c) => (
-          <CampaignCard key={c.id} c={c} />
+          <CampaignCard key={c.id} c={c} className="w-full shrink-0 snap-center md:w-auto" />
         ))}
       </ul>
+      {list.length > 1 && (
+        <div className="flex items-center justify-center gap-2 md:hidden">
+          {list.map((c, i) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => {
+                setPaused(true)
+                goTo(i)
+              }}
+              aria-label={`${i + 1}. kampanyayı göster`}
+              aria-current={i === active}
+              className={cn('h-1.5 rounded-full transition-all', i === active ? 'w-8 bg-primary' : 'w-3 bg-border')}
+            />
+          ))}
+        </div>
+      )}
     </section>
   )
 }

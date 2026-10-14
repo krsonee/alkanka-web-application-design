@@ -364,7 +364,16 @@ export function Tavla({ finish }: GameApi) {
     if (b.off.p === 15) {
       setPhase('over')
       setMessage('Tüm pulları topladın!')
-      setTimeout(() => finish('win', b.off.b === 0 ? 'Mars! Rakip tek pul bile toplayamadı.' : 'Tüm pulları rakibinden önce topladın.'), 900)
+      const mars = b.off.b === 0
+      setMessage(mars ? 'MARS! Rakip tek pul bile toplayamadı.' : 'Tüm pulları topladın!')
+      setTimeout(
+        () =>
+          finish('win', mars ? 'Rakip tek pul bile toplayamadan bitirdin, kazancın 3 katı.' : 'Tüm pulları rakibinden önce topladın.', {
+            for: 15,
+            against: b.off.b,
+          }),
+        900,
+      )
       return true
     }
     if (b.off.b === 15) {
