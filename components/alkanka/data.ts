@@ -50,7 +50,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'siralama', label: 'Sıralama', href: '/siralama', icon: Trophy },
   { id: 'rozetler', label: 'Rozetler', href: '/rozetler', icon: Medal, badge: 'Yeni' },
   { id: 'guven', label: 'Güven merkezi', href: '/guven', icon: ShieldCheck },
-  { id: 'profil', label: 'Profilim', href: '/profil', icon: UserPlus },
   { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone, badge: '+500' },
   { id: 'sss', label: 'SSS', href: '/sss', icon: HelpCircle },
 ]

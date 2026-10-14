@@ -12,7 +12,7 @@ export type ChannelGroup = 'spor' | 'tv' | 'slot' | 'yayinci'
 
 export const CHANNEL_GROUPS: { key: ChannelGroup; label: string }[] = [
   { key: 'spor', label: 'Spor kanalları' },
-  { key: 'tv', label: 'TV & Haber' },
+  { key: 'tv', label: 'TV & Mizah & Haber' },
   { key: 'slot', label: 'Slot & Casino' },
   { key: 'yayinci', label: 'Spor yayıncıları' },
 ]
