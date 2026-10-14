@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, type DragEvent } from 'react'
-import { Sparkles } from 'lucide-react'
+import { useRef, useState, type PointerEvent } from 'react'
+import { MousePointerClick, Move, Pointer, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TileFace } from './okey'
 import { isJoker, sortHand, type Okey as OkeyValue, type Tile } from './okey-engine'
@@ -82,12 +82,16 @@ export function useRack(hand: Tile[], okey: OkeyValue) {
   return { slots, selected: selectedId, setSelected, moveTo, arrange, flipped, toggleFlip }
 }
 
+export type DropKind = 'discard' | 'finish'
+
 export function OkeyRack({
   hand,
   okey,
   rack,
   highlight,
   onDoubleTile,
+  onDropOut,
+  onDropHover,
 }: {
   hand: Tile[]
   okey: OkeyValue
@@ -95,9 +99,17 @@ export function OkeyRack({
   /** Tile id that was just drawn, shown with a marker. */
   highlight?: number | null
   onDoubleTile?: (tile: Tile) => void
+  /** Called when a tile is dragged onto an element marked with data-drop="discard" | "finish". */
+  onDropOut?: (tileId: number, kind: DropKind) => void
+  onDropHover?: (kind: DropKind | null) => void
 }) {
   const byId = new Map(hand.map((t) => [t.id, t]))
   const [over, setOver] = useState<number | null>(null)
+  const [ghost, setGhost] = useState<{ id: number; x: number; y: number } | null>(null)
+  const press = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
+  const suppressClick = useRef(false)
+  const lastTap = useRef<{ id: number; t: number } | null>(null)
+  const hoverKind = useRef<DropKind | null>(null)
 
   const onSlot = (i: number) => {
     const id = rack.slots[i]
@@ -109,13 +121,66 @@ export function OkeyRack({
     if (id != null) rack.setSelected(id === rack.selected ? null : id)
   }
 
-  const onDrop = (e: DragEvent, i: number) => {
-    e.preventDefault()
+  const onTileTap = (tile: Tile, i: number) => {
+    if (suppressClick.current) return
+    const now = Date.now()
+    if (lastTap.current?.id === tile.id && now - lastTap.current.t < 350) {
+      lastTap.current = null
+      onDoubleTile?.(tile)
+      return
+    }
+    lastTap.current = { id: tile.id, t: now }
+    onSlot(i)
+  }
+
+  const targetAt = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null
+    const slot = el?.closest<HTMLElement>('[data-rack-slot]')
+    if (slot) return { slot: Number(slot.dataset.rackSlot), kind: null }
+    const zone = el?.closest<HTMLElement>('[data-drop]')
+    return { slot: null, kind: (zone?.dataset.drop as DropKind | undefined) ?? null }
+  }
+
+  const setHover = (kind: DropKind | null) => {
+    if (hoverKind.current === kind) return
+    hoverKind.current = kind
+    onDropHover?.(kind)
+  }
+
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>, id: number) => {
+    if (e.button !== 0) return
+    press.current = { id, x: e.clientX, y: e.clientY, moved: false }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    const p = press.current
+    if (!p) return
+    if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 8) return
+    p.moved = true
+    setGhost({ id: p.id, x: e.clientX, y: e.clientY })
+    const t = targetAt(e.clientX, e.clientY)
+    setOver(t.slot)
+    setHover(t.kind)
+  }
+
+  const endDrag = (e: PointerEvent<HTMLDivElement>, cancelled = false) => {
+    const p = press.current
+    press.current = null
+    if (!p?.moved) return
+    suppressClick.current = true
+    setTimeout(() => (suppressClick.current = false), 0)
+    setGhost(null)
     setOver(null)
-    const id = Number(e.dataTransfer.getData('text/plain'))
-    if (Number.isFinite(id)) rack.moveTo(id, i)
+    setHover(null)
+    if (cancelled) return
+    const t = targetAt(e.clientX, e.clientY)
+    if (t.slot != null) rack.moveTo(p.id, t.slot)
+    else if (t.kind) onDropOut?.(p.id, t.kind)
     rack.setSelected(null)
   }
+
+  const ghostTile = ghost ? byId.get(ghost.id) : undefined
 
   return (
     <div className="flex flex-col gap-1 rounded-xl bg-wood p-1.5 shadow-inner sm:gap-2 sm:p-3" role="group" aria-label="Istakan, iki sıra">
@@ -128,23 +193,16 @@ export function OkeyRack({
             return (
               <div
                 key={i}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setOver(i)
-                }}
-                onDragLeave={() => setOver((o) => (o === i ? null : o))}
-                onDrop={(e) => onDrop(e, i)}
+                data-rack-slot={i}
                 className={cn('relative flex aspect-[3/4] items-end justify-center rounded-sm', over === i && 'bg-primary/30')}
               >
                 {tile ? (
                   <div
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', String(tile.id))
-                    }}
-                    onDragEnd={() => rack.setSelected(null)}
-                    onDoubleClick={() => onDoubleTile?.(tile)}
-                    className="size-full"
+                    onPointerDown={(e) => onPointerDown(e, tile.id)}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={(e) => endDrag(e)}
+                    onPointerCancel={(e) => endDrag(e, true)}
+                    className={cn('size-full touch-none select-none', ghost?.id === tile.id && 'opacity-30')}
                   >
                     <RackTile
                       tile={tile}
@@ -152,7 +210,7 @@ export function OkeyRack({
                       selected={rack.selected === tile.id}
                       fresh={highlight === tile.id}
                       flipped={rack.flipped.has(tile.id)}
-                      onClick={() => onSlot(i)}
+                      onClick={() => onTileTap(tile, i)}
                     />
                   </div>
                 ) : (
@@ -168,9 +226,29 @@ export function OkeyRack({
           })}
         </div>
       ))}
-      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-        Taşa dokun, sonra boş yuvaya dokunarak yerini değiştir ya da sürükle bırak. Atmak için taşı seç ve &quot;Taşı at&quot; butonuna bas ya da masadaki &quot;Buraya at&quot; alanına sürükle. Okeye çift tıklarsan ters çevrilir.
-      </p>
+      <ul className="flex flex-wrap items-center gap-1.5 pt-0.5" aria-label="Kontroller">
+        {[
+          { icon: Pointer, label: 'Dokun', text: 'seç' },
+          { icon: MousePointerClick, label: 'Çift dokun', text: 'at' },
+          { icon: Move, label: 'Sürükle', text: 'yer değiştir / at' },
+        ].map(({ icon: Icon, label, text }) => (
+          <li key={label} className="flex items-center gap-1 rounded-full bg-background/35 px-2 py-1 text-[10px] text-foreground/80 sm:text-[11px]">
+            <Icon className="size-3 text-primary" aria-hidden="true" />
+            <span className="font-bold text-foreground">{label}</span>
+            <span>{text}</span>
+          </li>
+        ))}
+      </ul>
+
+      {ghost && ghostTile && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed z-[80] h-14 w-10 -translate-x-1/2 -translate-y-[70%] rotate-3 drop-shadow-2xl sm:h-16 sm:w-12"
+          style={{ left: ghost.x, top: ghost.y }}
+        >
+          <TileFace tile={ghostTile} okey={okey} size="fluid" selected />
+        </div>
+      )}
     </div>
   )
 }

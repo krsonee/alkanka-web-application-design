@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { FlipHorizontal2, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
-import { OkeyRack, useRack } from './okey-rack'
+import { OkeyRack, useRack, type DropKind } from './okey-rack'
 import {
   COLOR_NAMES,
   chooseDiscard,
@@ -73,7 +73,7 @@ export function TileFace({
 export function TurnSteps({ phase }: { phase: 'draw' | 'discard' | 'wait' }) {
   const steps = [
     { key: 'draw', label: '1. Taş çek', hint: 'Ortadaki desteye ya da yerdeki taşa dokun' },
-    { key: 'discard', label: '2. Taş at', hint: 'Taşa çift tıkla ya da "Buraya at" alanına sürükle' },
+    { key: 'discard', label: '2. Taş at', hint: 'Taşa çift dokun ya da "Buraya at" alanına sürükle' },
   ] as const
   return (
     <ol className="grid grid-cols-2 gap-2" aria-label="Hamle adımları">
@@ -285,7 +285,15 @@ export function Okey({ finish }: GameApi) {
   const pileTop = (i: number) => discards[i][discards[i].length - 1]
 
   function onDoubleTile(tile: Tile) {
-    if (isJoker(tile, okey) && !tile.fake) rack.toggleFlip(tile.id)
+    if (phase === 'discard') discard(tile.id)
+    else if (isJoker(tile, okey) && !tile.fake) rack.toggleFlip(tile.id)
+  }
+
+  function onDropOut(id: number, kind: DropKind) {
+    if (kind === 'discard') return discard(id)
+    if (!winning) return
+    if (winning.tile.id === id) finishHand()
+    else setMessage('Bu taşla bitemezsin. Bitiren taş parlayan butonda yazıyor.')
   }
 
   function dropTileId(e: DragEvent) {
@@ -313,6 +321,7 @@ export function Okey({ finish }: GameApi) {
         e.preventDefault()
         setDropOver('discard')
       }}
+      data-drop={canDiscard ? 'discard' : undefined}
       onDragLeave={() => setDropOver(null)}
       onDrop={(e) => {
         const id = dropTileId(e)
@@ -437,6 +446,7 @@ export function Okey({ finish }: GameApi) {
             }}
             onDragLeave={() => setDropOver(null)}
             onDrop={onFinishDrop}
+            data-drop={winning ? 'finish' : undefined}
             title={winning ? 'Bitiren taşı göstergenin üstüne sürükle' : undefined}
             className={cn('flex flex-col items-center gap-2 rounded-xl p-1 transition-all', winning && 'ring-2 ring-primary', dropOver === 'finish' && 'scale-110 bg-primary/30')}
           >
@@ -477,7 +487,7 @@ export function Okey({ finish }: GameApi) {
           </div>
         </div>
 
-        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} />
+        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} onDropOut={onDropOut} onDropHover={setDropOver} />
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <button

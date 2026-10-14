@@ -141,7 +141,15 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
 
         {!spectator && (
           <div className="mt-2 sm:mt-3">
-            <OkeyRack hand={hand} okey={okey} rack={rack} highlight={myDiscard ? fresh : null} />
+            <OkeyRack
+              hand={hand}
+              okey={okey}
+              rack={rack}
+              highlight={myDiscard ? fresh : null}
+              onDoubleTile={(tile) => {
+                if (myDiscard && !remote.busy) void remote.send({ type: 'discard', tileId: tile.id })
+              }}
+            />
           </div>
         )}
       </div>
