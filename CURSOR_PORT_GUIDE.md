@@ -349,8 +349,8 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 30. ✅ "Moderatör" / "Sponsor Destek" badges (`ROLE_BADGE_IDS` in `lib/kanka-puan.ts`): give/revoke needs the `roles` permission, no auto KP, excluded from leaderboards, level frozen, market purchase blocked (`lib/market.ts`), cannot be deleted.
 31. ✅ Hidden member limits (`member_limits`, `lib/member-limits.ts`, `components/panel/limits-manager.tsx`), enforced in arena settle, live roulette/blackjack, PvP tables and market purchase. Members only see a generic error.
 
-**G. Telegram bots** (extend `lib/telegram-*`)
-32. Post sharing bot: picks up a post from the sponsor support group, appends the alkanka link/text, posts it to the target channels and replies in the source group with the post link.
+**G. Telegram bots: ✅ ALL DONE** (`lib/telegram-bots.ts`, panel → Telegram → "Bot paketi" via `components/panel/telegram-bot-suite.tsx`; all three bots are off until enabled in the panel)
+32. ✅ Post sharing bot: picks up a post from the sponsor support group, appends the alkanka link/text, posts it to the target channels and replies in the source group with the post link.
 33. Special odds bot: mirrors special odds posts with our links and notes. When the result is marked won, it auto-posts "Özel oran kazandı".
 34. Approval notifier: market purchases, completed tasks and complaints needing admin/mod approval are sent to a Telegram group with a template text.
 

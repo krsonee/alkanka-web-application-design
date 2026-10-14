@@ -10,6 +10,7 @@ import { actOnTable, cancelTable, claimTimeout, createTable, joinTable } from '@
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
+import { assertRateLimit } from '@/lib/rate-limit'
 import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, sitAtTable as bjLiveSit } from '@/lib/blackjack-live'
 
 type Fail = { ok: false; error: string }
@@ -18,6 +19,7 @@ const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Err
 async function member() {
   const m = await getMember()
   if (!m) throw new Error('Bu işlem için giriş yapmalısın.')
+  await assertRateLimit(`game:${m.id}`, 40, 10)
   return m
 }
 

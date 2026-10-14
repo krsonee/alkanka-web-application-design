@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { getMember } from '@/lib/member'
 import { getTableRow } from '@/lib/pvp/tables'
+import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const m = await getMember()
   if (!m) return NextResponse.json({ error: 'Yazmak için giriş yapmalısın.' }, { status: 401 })
+  if (await hitRateLimit(`tablechat:${m.id}`, 6, 15)) return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 })
   const t = await getTableRow(id)
   if (!t || t.status === 'iptal') return NextResponse.json({ error: 'Masa bulunamadı.' }, { status: 404 })
 
