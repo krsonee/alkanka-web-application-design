@@ -127,4 +127,7 @@ export function mergeArena(saved: Partial<Record<string, Partial<ArenaGameSettin
   return out
 }
 
+/** Seconds a player has for each action at a kanka table; when it runs out the server plays for them. */
+export const TURN_SECONDS: Partial<Record<ArenaGame, number>> = { tavla: 40, okey: 30, bilardo: 35 }
+
 export const RESULT_LABEL: Record<string, string> = { win: 'Kazandı', loss: 'Kaybetti', draw: 'Berabere', refund: 'İade' }

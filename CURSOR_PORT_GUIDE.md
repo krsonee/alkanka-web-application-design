@@ -312,19 +312,16 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 3. ✅ Kanka Coin box made smaller (single line, `h-9`, "KC" suffix).
 4. ✅ Animated radio button + "Kanka Radyo" panel: live Turkish stations (~200) from the free Radio Browser API via `app/api/radyo/route.ts` (6 h cache, 3 mirrors, HTTPS + non-HLS MP3/AAC only), search by name/genre, play/pause, mute, close; keeps playing across page navigation because it lives in the persistent top bar (`components/alkanka/radio-player.tsx`).
 
-**B. Header / profile**
-9. Show username and badge separately. Move the badge next to the KC balance, slightly larger, with a subtle animation. Shrink the KC balance box.
-10. Add an animated active-badge icon and a radio icon to the header. Clicking the radio opens a dropdown panel (same style as the profile menu) listing live Turkish radio streams. Play them with a native `<audio>` element, one at a time.
-
 **C. Home & ranking design**
 11. Redesign "Sıralamanın zirvesi" and `/siralama`: podium with the Jako mascot, gold/silver/bronze, animated entrance, consistent with the theme.
 
-**D. Games (biggest group)**
-12. Smaller game cards on `/oyunlar` (denser grid, more games to come). Smaller currency/bubble UI.
-13. Move the "Oyuncuya karşı / Bota karşı" choice into the table-creation modal as a **required** field and remove the old separate area.
-14. Spectator view: fit the game in the viewport (`max-h-[100dvh]`, scale to fit) with no scrolling.
-15. Table chat: one shared chat per table for players and spectators (DB table `table_messages(table_id, user_id, body, created_at)`, rate-limited, max 300 chars, server-side member check).
-16. Turn timer on every turn-based game (tavla 30 s, okey 20 s, 101 20 s, batak 20 s, blackjack 15 s). On timeout the server makes a random legal move and passes the turn. **Enforce it on the server, not the client.**
+**D. Games (biggest group): items 12-16 and 18 ✅ DONE**
+12. ✅ Smaller game cards on `/oyunlar`: 2/3/4/5-column grid, square cards, compact badges (`components/alkanka/games/games-hub.tsx`).
+13. ✅ Mode choice ("Bota karşı / Oyuncuya karşı / Aynı cihaz") is required: nothing renders until one is picked (`arena-stage.tsx`, `mode` starts `null`).
+14. ✅ Spectator view scales the board to fit the viewport, never upscales, no scrolling (`components/alkanka/arena/fit-to-screen.tsx`, used in `TableRoom`).
+15. ✅ Table chat shared by players and spectators (`table_messages`, `app/api/tables/[id]/chat/route.ts`, `components/alkanka/arena/table-chat.tsx`): 300 chars max, rate-limited, server-side session check.
+16. ✅ Server-enforced turn timer with auto random legal move on timeout (`lib/pvp/rules.ts`, `lib/pvp/tables.ts`, `app/api/tables/[id]/route.ts`).
+18. ✅ Okey selection: drag-drop clears the selection, double-click no longer discards (only flips the okey tile), discard only via the "Taşı at" button or the "Buraya at" drop zone (`okey-rack.tsx`, `okey.tsx`).
 17. Tavla: realistic wood board, clear whose-turn indicator, highlight the selected checker and its legal destination points, responsive.
 18. Okey: realistic felt table and tiles. Click selects, a second click on the slot places, drag-drop does not leave the tile selected, and discarding takes a single explicit action (not a double-click).
 19. Billiards: realistic table (felt texture, wood rails, pocket shading), "AL KANKA" logo in the felt center.

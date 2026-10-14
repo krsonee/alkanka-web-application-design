@@ -30,9 +30,9 @@ function MiniCard({ game, title, text, pose, limit }: (typeof GAME_CARDS)[number
             {limit}
           </span>
         </div>
-        <div className="flex flex-1 flex-col gap-2 p-5">
-          <h3 className="font-display text-xl font-bold uppercase text-foreground">{title}</h3>
-          <p className="flex-1 text-sm leading-relaxed text-muted-foreground">{text}</p>
+        <div className="flex flex-1 flex-col gap-1.5 p-3">
+          <h3 className="font-display text-lg font-bold uppercase leading-tight text-foreground">{title}</h3>
+          <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-muted-foreground">{text}</p>
           <div className="flex items-center justify-between gap-3 pt-1">
             {locked ? (
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -80,7 +80,7 @@ export function GamesHub({ arena }: { arena: ArenaSettings }) {
               Turnuvalara göz at
             </Link>
           </div>
-          <ul className="grid gap-4 md:grid-cols-3">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {tables.map((g) => {
               const meta = ARENA_META[g]
               const s = arena[g]
@@ -88,27 +88,23 @@ export function GamesHub({ arena }: { arena: ArenaSettings }) {
                 <li key={g}>
                   <Link
                     href={`/oyunlar/${g}`}
-                    className="group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-primary"
+                    className="group relative flex aspect-square flex-col justify-end overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-primary"
                   >
-                    <Image src={meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 768px) 33vw, 100vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
-                    <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-md bg-background/90 px-2 py-1 text-xs font-bold uppercase tracking-wider text-primary">
-                      <Users className="size-3.5" aria-hidden="true" />
+                    <Image src={meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+                    <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                      <Users className="size-3" aria-hidden="true" />
                       {meta.players}
                     </span>
-                    <span className="absolute right-3 top-3 rounded-md bg-primary px-2 py-1 font-display text-sm font-bold text-primary-foreground">x{s.multiplier}</span>
-                    <div className="relative flex flex-col gap-2 p-5">
-                      <h3 className="font-display text-3xl font-bold uppercase text-foreground">{meta.title}</h3>
-                      <p className="text-sm leading-relaxed text-muted-foreground">{meta.short}</p>
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Coins className="size-3.5 text-primary" aria-hidden="true" />
-                          {formatAC(s.bets[0])} - {formatAC(s.bets[s.bets.length - 1])} KC
+                    <span className="absolute right-2 top-2 rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{s.multiplier}</span>
+                    <div className="relative flex flex-col gap-1 p-3">
+                      <h3 className="font-display text-lg font-bold uppercase leading-tight text-foreground">{meta.title}</h3>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <Coins className="size-3 text-primary" aria-hidden="true" />
+                          {formatAC(s.bets[0])}-{formatAC(s.bets[s.bets.length - 1])}
                         </span>
-                        <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary">
-                          Masaya otur
-                          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
-                        </span>
+                        <ArrowRight className="size-3.5 text-primary transition-transform group-hover:translate-x-1" aria-label="Masaya otur" />
                       </div>
                     </div>
                   </Link>
@@ -126,7 +122,7 @@ export function GamesHub({ arena }: { arena: ArenaSettings }) {
             Mini oyunlar
           </h2>
         </div>
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {GAME_CARDS.map((g) => (
             <MiniCard key={g.game} {...g} />
           ))}

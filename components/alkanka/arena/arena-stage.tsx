@@ -103,7 +103,7 @@ function LocalMode({ game }: { game: ArenaGame }) {
 export function ArenaStage({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
   const meta = ARENA_META[game]
   const modes = meta.modes.filter((m) => m !== 'pvp' || settings.pvpEnabled)
-  const [mode, setMode] = useState<GameMode>(modes[0] ?? 'bot')
+  const [mode, setMode] = useState<GameMode | null>(modes.length === 1 ? modes[0] : null)
   const [invitedTable, setInvitedTable] = useState<string | null>(null)
 
   // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
@@ -139,6 +139,11 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
             )
           })}
         </div>
+      )}
+      {mode == null && (
+        <p className="rounded-2xl border border-dashed border-primary bg-card p-6 text-center text-sm font-semibold text-foreground">
+          Başlamak için yukarıdan oyun modunu seç: {modes.map((m) => MODE_LABEL[m]).join(' / ')}
+        </p>
       )}
       {mode === 'bot' && <BotMode game={game} settings={settings} />}
       {mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} />}

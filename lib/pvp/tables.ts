@@ -2,7 +2,9 @@ import 'server-only'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
+import { TURN_SECONDS } from '@/lib/arena'
 import {
+  autoMove,
   applyAction,
   currentTurn,
   initState,
@@ -223,6 +225,28 @@ export async function actOnTable(m: Member, id: string, version: number, action:
   const { state, outcome } = applyAction(t.state, seat, action)
   await saveState(t, version, state)
   if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome)
+}
+
+/**
+ * Called on every table poll. When the current player's turn clock has expired the server
+ * plays an automatic move for them. The version check in saveState makes concurrent polls safe.
+ */
+export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
+  if (t.status !== 'oynaniyor' || !t.state || t.tournamentId) return t
+  const limit = TURN_SECONDS[t.game as keyof typeof TURN_SECONDS]
+  const turn = currentTurn(t.state)
+  if (!limit || turn == null) return t
+  if (Date.now() - new Date(t.updatedAt).getTime() < limit * 1000) return t
+  if (t.players.find((p) => p.seat === turn)?.bot) return t
+  const result = autoMove(t.state)
+  if (!result) return t
+  try {
+    await saveState(t, t.version, result.state)
+  } catch {
+    return (await getTableRow(t.id)) ?? t
+  }
+  if (result.outcome) await finishTable({ ...t, state: result.state, version: t.version + 1 }, result.outcome)
+  return (await getTableRow(t.id)) ?? t
 }
 
 /** A waiting player may claim the win (2 seats) or hand the idle seat to a bot (4 seats). */
