@@ -2,9 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Loader2, MessageCircle, Send } from 'lucide-react'
+import { Loader2, MessageCircle, Send, Smile } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
+
+const QUICK = ['👍', '😂', '🔥', '😮', '😡', '👏', '🎲', '🍀']
+const EMOJIS = [
+  '😀', '😁', '😂', '🤣', '😅', '😊', '😉', '😎', '🤩', '😍', '😘', '🙂', '🤔', '🤨', '😐', '🙄',
+  '😏', '😴', '😬', '😮', '😱', '😭', '😤', '😡', '🤯', '🥳', '🤑', '🤡', '😈', '👻', '💀', '🙈',
+  '👍', '👎', '👏', '🙌', '🙏', '💪', '🤝', '✌️', '🤞', '👊', '👋', '🫡', '❤️', '💔', '🔥', '⭐',
+  '🎉', '🏆', '🥇', '💰', '💸', '🪙', '🎲', '🃏', '♠️', '♥️', '🎱', '⚽', '🏀', '🍀', '🦜', '☕',
+]
+const ONLY_EMOJI = /^(\p{Extended_Pictographic}|\uFE0F|\u200D|\s){1,12}$/u
 
 type ChatMessage = { id: number; userId: string; name: string; player: boolean; body: string; at: string }
 
@@ -22,6 +31,8 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const listRef = useRef<HTMLOListElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const messages = data?.messages ?? []
   const lastId = messages.at(-1)?.id
 
@@ -30,8 +41,8 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
     if (el) el.scrollTop = el.scrollHeight
   }, [lastId])
 
-  const submit = async () => {
-    const body = text.trim()
+  const submit = async (override?: string) => {
+    const body = (override ?? text).trim()
     if (!body || sending) return
     if (!requireLogin()) return
     setSending(true)
@@ -46,8 +57,21 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
       setError((await r.json().catch(() => ({}))).error ?? 'Gönderilemedi.')
       return
     }
-    setText('')
+    if (override == null) setText('')
+    setPickerOpen(false)
     mutate()
+  }
+
+  const insertEmoji = (emoji: string) => {
+    const el = inputRef.current
+    const start = el?.selectionStart ?? text.length
+    const end = el?.selectionEnd ?? text.length
+    const next = (text.slice(0, start) + emoji + text.slice(end)).slice(0, 200)
+    setText(next)
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
   }
 
   return (
@@ -69,12 +93,41 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
             <span className={cn('font-bold', m.userId === member?.id ? 'text-primary' : 'text-foreground')}>{m.name}</span>
             {!m.player && <span className="ml-1 rounded bg-secondary px-1 text-[10px] font-semibold uppercase text-muted-foreground">izleyici</span>}
             <span className="text-muted-foreground">: </span>
-            <span className="break-words text-foreground">{m.body}</span>
+            <span className={cn('break-words text-foreground', ONLY_EMOJI.test(m.body) && 'align-middle text-2xl leading-none')}>{m.body}</span>
           </li>
         ))}
       </ol>
+      <div className="flex gap-1 overflow-x-auto border-t border-border px-2 pt-2" role="group" aria-label="Hızlı emoji gönder">
+        {QUICK.map((e) => (
+          <button
+            key={e}
+            type="button"
+            disabled={sending}
+            onClick={() => void submit(e)}
+            aria-label={`${e} gönder`}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-lg transition-transform hover:scale-110 hover:bg-secondary disabled:opacity-50"
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+      {pickerOpen && (
+        <div id={`emoji-${tableId}`} className="mx-2 mt-2 grid max-h-40 grid-cols-8 gap-1 overflow-y-auto rounded-lg border border-border bg-card p-2" role="group" aria-label="Emoji ekle">
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => insertEmoji(e)}
+              aria-label={`${e} ekle`}
+              className="flex aspect-square items-center justify-center rounded-md text-lg hover:bg-secondary"
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
       <form
-        className="flex items-center gap-2 border-t border-border p-2"
+        className="flex items-center gap-2 p-2"
         onSubmit={(e) => {
           e.preventDefault()
           void submit()
@@ -83,7 +136,18 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
         <label htmlFor={`chat-${tableId}`} className="sr-only">
           Mesaj yaz
         </label>
+        <button
+          type="button"
+          onClick={() => setPickerOpen((o) => !o)}
+          aria-expanded={pickerOpen}
+          aria-controls={`emoji-${tableId}`}
+          aria-label="Emoji seç"
+          className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg border border-border hover:bg-secondary', pickerOpen ? 'text-primary' : 'text-muted-foreground')}
+        >
+          <Smile className="size-4" aria-hidden="true" />
+        </button>
         <input
+          ref={inputRef}
           id={`chat-${tableId}`}
           value={text}
           maxLength={200}

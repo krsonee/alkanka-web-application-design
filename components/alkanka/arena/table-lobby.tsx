@@ -60,15 +60,17 @@ export function TableLobby({
   settings,
   rules,
   invitedId = null,
+  initialStake,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
   rules: string[]
   invitedId?: string | null
+  initialStake?: number
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [stake, setStake] = useState(settings.bets[0] ?? 25)
+  const [stake, setStake] = useState(initialStake && settings.bets.includes(initialStake) ? initialStake : (settings.bets[0] ?? 25))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isOkey = game === 'okey'
