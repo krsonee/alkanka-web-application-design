@@ -9,7 +9,7 @@ import { bjAct, bjDeal, bjPayout, bjPublic, betLabel, betReturn, validBet, type 
 import { actOnTable, cancelTable, claimTimeout, createTable, joinTable } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
-import { actAtTable as bjLiveAct, sitAtTable as bjLiveSit } from '@/lib/blackjack-live'
+import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, sitAtTable as bjLiveSit } from '@/lib/blackjack-live'
 
 type Fail = { ok: false; error: string }
 const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Error ? error.message : 'Bir hata oluştu.' })
@@ -142,6 +142,16 @@ export async function sitBlackjackTable(seat: number, bet: number) {
     const s = (await getArenaSettings()).blackjack
     if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
     const res = await bjLiveSit(m, seat, bet, s.bets)
+    return { ok: true as const, ...res }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function readyBlackjackTable() {
+  try {
+    const m = await member()
+    const res = await bjLiveReady(m)
     return { ok: true as const, ...res }
   } catch (e) {
     return fail(e)

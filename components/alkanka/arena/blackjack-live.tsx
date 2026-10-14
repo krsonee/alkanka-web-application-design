@@ -3,11 +3,10 @@
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Armchair, Hand, Layers, Loader2, Plus, Trophy } from 'lucide-react'
-import { BJ_BET_MS, BJ_PLAY_MS, BJ_RESULT_MS, blackjackClock } from '@/lib/casino'
+import { Armchair, Hand, Layers, Loader2, Play, Plus, Trophy } from 'lucide-react'
 import type { ArenaGameSettings } from '@/lib/arena'
 import type { BlackjackLiveState } from '@/lib/blackjack-live'
-import { actBlackjackTable, sitBlackjackTable } from '@/app/actions/arena'
+import { actBlackjackTable, readyBlackjackTable, sitBlackjackTable } from '@/app/actions/arena'
 import { cn } from '@/lib/utils'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
@@ -17,9 +16,8 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json())
 type Seat = NonNullable<BlackjackLiveState['seats'][number]>
 
 const RESULT_LABEL: Record<string, string> = { blackjack: 'Blackjack!', win: 'Kazandı', push: 'Berabere', loss: 'Kaybetti' }
-const PHASE_MS = { bet: BJ_BET_MS, play: BJ_PLAY_MS, result: BJ_RESULT_MS }
-
-function useServerClock(serverNow: number | undefined) {
+/** Server time, ticking locally between polls. */
+function useServerNow(serverNow: number | undefined) {
   const [offset, setOffset] = useState(0)
   useEffect(() => {
     if (serverNow) setOffset(serverNow - Date.now())
@@ -30,11 +28,12 @@ function useServerClock(serverNow: number | undefined) {
     const id = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(id)
   }, [])
-  return { ready: now !== null, clock: blackjackClock((now ?? 0) + offset) }
+  return now === null ? null : now + offset
 }
 
 function dealerLine(phase: string, seated: number, secondsLeft: number, dealerValue: number) {
-  if (phase === 'bet') return seated ? `Bahisler açık, ${secondsLeft} saniye. Boş koltuk var, otur kanka!` : `Masa boş, ilk koltuğa sen otur! ${secondsLeft} saniye.`
+  if (phase === 'waiting') return 'Masa boş kanka. Bahsini seç, koltuğa otur, kartları hemen dağıtayım!'
+  if (phase === 'bet') return seated > 1 ? `Bahisler açık, ${secondsLeft} saniye. Herkes "Dağıt" derse hemen başlarım.` : `Bahisler açık, ${secondsLeft} saniye. Beklemek istemezsen "Hemen dağıt" de.`
   if (phase === 'play') return `Kartlar dağıtıldı. Kart mı, dur mu? ${secondsLeft} saniye.`
   return dealerValue > 21 ? `Krupiye ${dealerValue} ile battı! Masada kalan herkes kazandı.` : `Krupiye ${dealerValue}. Ödemeler yapılıyor.`
 }
@@ -116,33 +115,58 @@ function SeatBox({
 export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   const { member, setBalance, requireLogin, points } = usePoints()
   const idle = useIdle()
-  const { data, mutate } = useSWR<BlackjackLiveState>('/api/blackjack', fetcher, { refreshInterval: idle ? 30000 : 3000 })
-  const { ready, clock } = useServerClock(data?.serverNow)
+  const [seatedHere, setSeatedHere] = useState(false)
+  // Poll quickly only while this viewer is in a hand; spectators and idle tabs poll slowly.
+  const { data, mutate } = useSWR<BlackjackLiveState>('/api/blackjack', fetcher, { refreshInterval: idle ? 30000 : seatedHere ? 1500 : 4000 })
+  const now = useServerNow(data?.serverNow)
   const [bet, setBet] = useState(settings.bets[0] ?? 25)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const lastPhase = useRef(clock.phase)
+  const phase = data?.phase ?? 'waiting'
+  const seats = data?.seats ?? Array.from({ length: 6 }, () => null)
+  const me = seats.find((s) => s?.mine) ?? null
+  const seated = seats.filter(Boolean).length
+  const msLeft = data?.phaseEndsAt && now ? Math.max(0, data.phaseEndsAt - now) : 0
+  const secondsLeft = Math.ceil(msLeft / 1000)
+  const progress = data?.phaseTotal ? Math.min(1, msLeft / data.phaseTotal) : 0
+  const canSit = (phase === 'waiting' || (phase === 'bet' && secondsLeft > 1)) && !me
+  const myTurn = phase === 'play' && me && !me.done
+
   useEffect(() => {
-    if (lastPhase.current !== clock.phase) {
-      lastPhase.current = clock.phase
+    setSeatedHere(!!me && phase !== 'result')
+  }, [me, phase])
+
+  // When the countdown runs out, ask the server for the next phase instead of waiting for the next poll.
+  const askedFor = useRef<number | null>(null)
+  useEffect(() => {
+    if (!data?.phaseEndsAt || msLeft > 0 || askedFor.current === data.phaseEndsAt) return
+    askedFor.current = data.phaseEndsAt
+    const t = setTimeout(() => mutate(), 300)
+    return () => clearTimeout(t)
+  }, [data?.phaseEndsAt, msLeft, mutate])
+
+  const lastPhase = useRef(phase)
+  useEffect(() => {
+    if (lastPhase.current !== phase) {
+      lastPhase.current = phase
       setError('')
-      mutate()
     }
-  }, [clock.phase, mutate])
+  }, [phase])
 
   useEffect(() => {
     if (typeof data?.balance === 'number' && data.phase === 'result') setBalance(data.balance)
   }, [data?.balance, data?.phase, setBalance])
 
-  const sameRound = data?.roundId === clock.roundId && data?.phase === clock.phase
-  const seats = sameRound ? data!.seats : Array.from({ length: 6 }, () => null)
-  const me = seats.find((s) => s?.mine) ?? null
-  const seated = seats.filter(Boolean).length
-  const secondsLeft = Math.max(0, Math.ceil((clock.phaseEndsAt - clock.now) / 1000))
-  const progress = Math.max(0, (clock.phaseEndsAt - clock.now) / PHASE_MS[clock.phase])
-  const canSit = clock.phase === 'bet' && !me && secondsLeft > 1
-  const myTurn = clock.phase === 'play' && me && !me.done
+  async function dealNow() {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    const res = await readyBlackjackTable()
+    setBusy(false)
+    if (!res.ok) return setError(res.error)
+    mutate()
+  }
 
   async function sit(n: number) {
     if (busy || !requireLogin()) return
@@ -167,7 +191,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     mutate()
   }
 
-  if (!ready || !data) {
+  if (now === null || !data || !Array.isArray(data.seats)) {
     return (
       <div className="felt-table flex min-h-96 items-center justify-center rounded-3xl border border-primary/30">
         <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Masa yükleniyor" />
@@ -175,8 +199,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     )
   }
 
-  const dealer = sameRound ? data.dealer : []
-  const dealerHidden = sameRound && data.dealerHidden
+  const dealer = data.dealer
+  const dealerHidden = data.dealerHidden
+  const phaseLabel = phase === 'waiting' ? 'Oyuncu bekleniyor' : phase === 'bet' ? `Bahis · ${secondsLeft} sn` : phase === 'play' ? `Oyun · ${secondsLeft} sn` : 'Sonuç'
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_17rem]">
@@ -184,10 +209,10 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
         <div className="felt-table relative flex flex-col gap-4 overflow-hidden rounded-[1.25rem] px-3 pb-4 pt-3 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
-              Canlı masa · El #{clock.roundId % 10000}
+              Canlı masa · El #{data.roundId % 10000}
             </span>
             <span className="rounded-full border border-primary/40 bg-background/70 px-3 py-1 text-xs font-bold tabular-nums text-foreground">
-              {clock.phase === 'bet' ? 'Bahis' : clock.phase === 'play' ? 'Oyun' : 'Sonuç'} · {secondsLeft} sn
+              {phaseLabel}
             </span>
           </div>
 
@@ -196,7 +221,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               <Image src="/images/mascots/jako-dealer.png" alt="Krupiye Jako" fill sizes="96px" className="object-cover object-top" priority />
             </div>
             <p aria-live="polite" className="mb-1 max-w-64 rounded-2xl rounded-bl-sm border border-primary/40 bg-background/85 px-3 py-2 text-xs font-semibold text-foreground sm:text-sm">
-              {dealerLine(clock.phase, seated, secondsLeft, data.dealerValue)}
+              {dealerLine(phase, seated, secondsLeft, data.dealerValue)}
             </p>
           </div>
 
@@ -218,7 +243,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {seats.map((s, i) => (
-              <SeatBox key={i} index={i} seat={s} canSit={canSit} busy={busy} onSit={sit} phase={clock.phase} />
+              <SeatBox key={i} index={i} seat={s} canSit={canSit} busy={busy} onSit={sit} phase={phase} />
             ))}
           </div>
         </div>
@@ -241,7 +266,25 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 </button>
               )}
             </div>
-          ) : clock.phase === 'bet' && !me ? (
+          ) : phase === 'bet' && me ? (
+            <div className="flex flex-col items-center gap-2">
+              {me.ready ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  {seated > 1 ? `Hazırsın. Diğer oyuncular bekleniyor, en geç ${secondsLeft} saniye.` : 'Kartlar dağıtılıyor...'}
+                </p>
+              ) : (
+                <button
+                  disabled={busy}
+                  onClick={dealNow}
+                  className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50"
+                >
+                  <Play className="size-4" aria-hidden="true" />
+                  {seated > 1 ? 'Hazırım, dağıt' : 'Hemen dağıt'}
+                </button>
+              )}
+              <p className="text-xs text-muted-foreground">Koltuk {me.seat} senin. Basmazsan kartlar {secondsLeft} saniye sonra kendiliğinden dağıtılır.</p>
+            </div>
+          ) : (phase === 'bet' || phase === 'waiting') && !me ? (
             <div className="flex flex-col items-center gap-2">
               <div className="flex flex-wrap justify-center gap-2" role="radiogroup" aria-label="Bahis">
                 {settings.bets.map((b) => (
@@ -255,9 +298,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           ) : (
             <p className="text-center text-sm text-muted-foreground">
               {me
-                ? clock.phase === 'bet'
-                  ? `Koltuk ${me.seat} senin. Kartlar ${secondsLeft} saniye sonra dağıtılacak.`
-                  : clock.phase === 'play'
+                ? phase === 'play'
                     ? 'Elin tamam, diğer oyuncular bekleniyor.'
                     : me.delta !== null && me.delta > 0
                       ? `Tebrikler, +${formatAC(me.delta)} kazandın!`
@@ -269,7 +310,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           )}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <p className="text-center text-xs text-muted-foreground">
-            Masada 6 koltuk var. Süre bitince oynamayan el otomatik durur. Kartlar sunucuda dağıtılır, herkes aynı masayı görür.
+            Masada 6 koltuk var. Herkes durunca krupiye hemen açar, süre dolunca oynamayan el otomatik durur. Kartlar sunucuda dağıtılır, herkes aynı masayı görür.
           </p>
         </div>
       </section>
@@ -279,20 +320,29 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           <Trophy className="size-4 text-primary" aria-hidden="true" />
           Son el kazananları
         </h3>
-        <p className="text-xs text-muted-foreground">Krupiye: {data.lastRound.dealerValue > 21 ? `${data.lastRound.dealerValue} (battı)` : data.lastRound.dealerValue}</p>
-        {data.lastRound.winners.length === 0 ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">Son elde kazanan yok.</p>
+        {!data.lastRound ? (
+          <p className="text-sm leading-relaxed text-muted-foreground">Henüz oynanmış el yok.</p>
         ) : (
-          <ol className="flex flex-col gap-1.5">
-            {data.lastRound.winners.map((w, i) => (
-              <li key={`${w.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm">
-                <span className="truncate font-semibold text-foreground">{w.name}</span>
-                <span className="shrink-0 font-bold tabular-nums text-primary">+{formatAC(w.won)}</span>
-              </li>
-            ))}
-          </ol>
+          <>
+            <p className="text-xs text-muted-foreground">Krupiye: {data.lastRound.dealerValue > 21 ? `${data.lastRound.dealerValue} (battı)` : data.lastRound.dealerValue}</p>
+            <LastWinners winners={data.lastRound.winners} />
+          </>
         )}
       </aside>
     </div>
+  )
+}
+
+function LastWinners({ winners }: { winners: { name: string; won: number }[] }) {
+  if (winners.length === 0) return <p className="text-sm leading-relaxed text-muted-foreground">Son elde kazanan yok.</p>
+  return (
+    <ol className="flex flex-col gap-1.5">
+      {winners.map((w, i) => (
+        <li key={`${w.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm">
+          <span className="truncate font-semibold text-foreground">{w.name}</span>
+          <span className="shrink-0 font-bold tabular-nums text-primary">+{formatAC(w.won)}</span>
+        </li>
+      ))}
+    </ol>
   )
 }
