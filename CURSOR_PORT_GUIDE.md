@@ -306,6 +306,12 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 7. ✅ KankaTV offline state with Jako and "Şu anda yayın yapılmıyor" text (`components/alkanka/kankatv/board.tsx`).
 8. ✅ KankaTV channels extended, group renamed "TV & Mizah & Haber" (`lib/kankatv.ts`).
 
+**B. Top bar (badge, coin, radio): ✅ ALL DONE**
+1. ✅ Username is separate: the account button shows only an avatar initial + name + chevron (`components/alkanka/topbar.tsx` `AccountMenu`).
+2. ✅ Active badge (rank emblem) moved next to the Kanka Coin balance, slightly bigger, with pulse + shine animation; links to `/profil?sekme=rozetler` (`BadgeButton`, `.animate-badge-pulse` in `app/globals.css`).
+3. ✅ Kanka Coin box made smaller (single line, `h-9`, "KC" suffix).
+4. ✅ Animated radio button + "Kanka Radyo" panel: live Turkish stations (~200) from the free Radio Browser API via `app/api/radyo/route.ts` (6 h cache, 3 mirrors, HTTPS + non-HLS MP3/AAC only), search by name/genre, play/pause, mute, close; keeps playing across page navigation because it lives in the persistent top bar (`components/alkanka/radio-player.tsx`).
+
 **B. Header / profile**
 9. Show username and badge separately. Move the badge next to the KC balance, slightly larger, with a subtle animation. Shrink the KC balance box.
 10. Add an animated active-badge icon and a radio icon to the header. Clicking the radio opens a dropdown panel (same style as the profile menu) listing live Turkish radio streams. Play them with a native `<audio>` element, one at a time.

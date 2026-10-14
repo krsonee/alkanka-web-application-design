@@ -11,19 +11,25 @@ import { MobileDrawer } from './sidebar'
 import { formatAC, usePoints } from './points-context'
 import { MemberRank } from './kp/member-rank'
 import { SiteSearch } from './site-search'
+import { RadioPlayer } from './radio-player'
 import type { SocialLinks } from '@/lib/social-shared'
 
 function PointsPill() {
   const { points, lastGain, member } = usePoints()
   if (!member) return null
   return (
-    <div data-tour="coins" className="relative flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5">
-      <Coins className="size-4 text-primary" aria-hidden="true" />
-      <span className="flex flex-col leading-none">
-        <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground sm:block">Kanka Coin</span>
-        <span className="font-display text-sm font-bold text-foreground tabular-nums" aria-live="polite">
-          {formatAC(points)}
-        </span>
+    <div
+      data-tour="coins"
+      title="Kanka Coin bakiyen"
+      className="relative flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5"
+    >
+      <Coins className="size-3.5 text-primary" aria-hidden="true" />
+      <span className="sr-only">Kanka Coin bakiyesi:</span>
+      <span className="font-display text-xs font-bold text-foreground tabular-nums" aria-live="polite">
+        {formatAC(points)}
+      </span>
+      <span className="hidden text-[10px] font-semibold uppercase text-muted-foreground sm:inline" aria-hidden="true">
+        KC
       </span>
       {lastGain && (
         <span
@@ -39,6 +45,22 @@ function PointsPill() {
         </span>
       )}
     </div>
+  )
+}
+
+function BadgeButton() {
+  const { member } = usePoints()
+  if (!member) return null
+  return (
+    <Link
+      href="/profil?sekme=rozetler"
+      title="Aktif rozetin"
+      className="animate-badge-pulse relative flex h-9 items-center gap-1 overflow-hidden rounded-lg border border-primary/40 bg-primary/[0.08] px-2 transition-colors hover:border-primary"
+    >
+      <span className="tier-shine pointer-events-none absolute inset-0" aria-hidden="true" />
+      <MemberRank userId={member.id} className="relative scale-110" />
+      <span className="sr-only">Rozetlerim</span>
+    </Link>
   )
 }
 
@@ -82,8 +104,10 @@ function AccountMenu() {
           open ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50',
         )}
       >
-        <span className="max-w-28 truncate">{member.name}</span>
-        <MemberRank userId={member.id} />
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-display text-[11px] font-bold text-primary-foreground">
+          {member.name.slice(0, 1).toUpperCase()}
+        </span>
+        <span className="hidden max-w-28 truncate sm:inline">{member.name}</span>
         <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </button>
       {open && (
@@ -185,8 +209,10 @@ export function Topbar({ social }: { social: SocialLinks }) {
 
         <SiteSearch />
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <BadgeButton />
           <PointsPill />
+          <RadioPlayer />
           <a
             href={TELEGRAM_URL}
             target="_blank"
