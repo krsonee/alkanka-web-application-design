@@ -54,7 +54,7 @@ export function LoginForm({ configured }: { configured: boolean }) {
       </div>
       {!configured && (
         <p className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-sm leading-relaxed text-foreground">
-          {'ADMIN_PASSWORD ortam değişkeni ayarlı değil. Ayarlar > Vars bölümünden ekle.'}
+          {'Panel anahtarı ayarlı değil. Ayarlar > Vars bölümünden ADMIN_PASSWORD ekle.'}
         </p>
       )}
       <label className="flex flex-col gap-1.5 text-sm text-foreground">

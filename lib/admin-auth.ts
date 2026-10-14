@@ -8,5 +8,5 @@ export async function isAdmin() {
 }
 
 export function adminConfigured() {
-  return Boolean(process.env.ADMIN_PASSWORD)
+  return Boolean(process.env.ADMIN_PASSWORD || process.env.BETTER_AUTH_SECRET)
 }
