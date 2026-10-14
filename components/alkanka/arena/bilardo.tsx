@@ -152,6 +152,7 @@ function castGuide(balls: Ball[], cue: Ball, angle: number) {
 
 export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote?: Remote<BilardoState> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const feltNoise = useRef<CanvasPattern | null>(null)
   const seat = remote?.seat ?? 0
   const oppSeat = seat === 0 ? 1 : 0
   const remoteGroups = (st: BilardoState): Record<Who, Group | null> => ({ p: st.groups[seat], b: st.groups[oppSeat] })
@@ -387,6 +388,22 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       ctx.beginPath()
       ctx.roundRect(0, 0, CW, CH, 26)
       ctx.fill()
+      ctx.save()
+      ctx.beginPath()
+      ctx.roundRect(0, 0, CW, CH, 26)
+      ctx.clip()
+      for (let y = 0; y < CH; y += 3) {
+        const a = 0.05 + 0.05 * Math.sin(y * 0.37) * Math.sin(y * 0.071)
+        ctx.fillStyle = a > 0.05 ? `rgba(255,220,170,${a.toFixed(3)})` : `rgba(0,0,0,${(0.1 - a).toFixed(3)})`
+        ctx.fillRect(0, y, CW, 1.5)
+      }
+      const railShade = ctx.createLinearGradient(0, 0, 0, CH)
+      railShade.addColorStop(0, 'rgba(255,255,255,0.14)')
+      railShade.addColorStop(0.5, 'rgba(0,0,0,0)')
+      railShade.addColorStop(1, 'rgba(0,0,0,0.35)')
+      ctx.fillStyle = railShade
+      ctx.fillRect(0, 0, CW, CH)
+      ctx.restore()
       ctx.strokeStyle = gold
       ctx.globalAlpha = 0.5
       ctx.lineWidth = 2
@@ -397,18 +414,60 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       ctx.translate(RAIL, RAIL)
       ctx.fillStyle = felt
       ctx.fillRect(0, 0, W, H)
+      if (!feltNoise.current) {
+        const nc = document.createElement('canvas')
+        nc.width = 96
+        nc.height = 96
+        const nx = nc.getContext('2d')
+        if (nx) {
+          const img = nx.createImageData(96, 96)
+          for (let i = 0; i < img.data.length; i += 4) {
+            const v = Math.random() * 255
+            img.data[i] = img.data[i + 1] = img.data[i + 2] = v
+            img.data[i + 3] = 14
+          }
+          nx.putImageData(img, 0, 0)
+          feltNoise.current = ctx.createPattern(nc, 'repeat')
+        }
+      }
+      if (feltNoise.current) {
+        ctx.fillStyle = feltNoise.current
+        ctx.fillRect(0, 0, W, H)
+      }
       const grad = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W * 0.6)
-      grad.addColorStop(0, 'rgba(255,255,255,0.06)')
-      grad.addColorStop(1, 'rgba(0,0,0,0.25)')
+      grad.addColorStop(0, 'rgba(255,255,255,0.08)')
+      grad.addColorStop(1, 'rgba(0,0,0,0.32)')
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, W, H)
+      const cushion = 10
+      ;[
+        [0, 0, W, cushion, 0, 0, 0, cushion],
+        [0, H - cushion, W, cushion, 0, H, 0, H - cushion],
+        [0, 0, cushion, H, 0, 0, cushion, 0],
+        [W - cushion, 0, cushion, H, W, 0, W - cushion, 0],
+      ].forEach(([x, y, w, h, x0, y0, x1, y1]) => {
+        const cg = ctx.createLinearGradient(x0, y0, x1, y1)
+        cg.addColorStop(0, 'rgba(0,0,0,0.45)')
+        cg.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.fillStyle = cg
+        ctx.fillRect(x, y, w, h)
+      })
       ctx.save()
-      ctx.globalAlpha = 0.08
-      ctx.fillStyle = gold
-      ctx.font = '900 92px system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText('ALKANKA', W * 0.62, H / 2)
+      ctx.globalAlpha = 0.1
+      ctx.strokeStyle = gold
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.ellipse(W / 2, H / 2, 150, 70, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.globalAlpha = 0.13
+      ctx.fillStyle = gold
+      ctx.font = '900 64px system-ui, sans-serif'
+      ctx.fillText('AL KANKA', W / 2, H / 2 - 4)
+      ctx.globalAlpha = 0.1
+      ctx.font = '700 16px system-ui, sans-serif'
+      ctx.fillText('alkanka.com', W / 2, H / 2 + 40)
       ctx.restore()
       ctx.strokeStyle = 'rgba(255,255,255,0.08)'
       ctx.beginPath()
@@ -416,10 +475,21 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       ctx.lineTo(W * 0.25, H)
       ctx.stroke()
       for (const [px, py] of POCKETS) {
-        ctx.fillStyle = '#05070c'
+        const pg = ctx.createRadialGradient(px, py, POCKET_R * 0.2, px, py, POCKET_R * 1.35)
+        pg.addColorStop(0, '#000000')
+        pg.addColorStop(0.7, '#05070c')
+        pg.addColorStop(1, 'rgba(5,7,12,0)')
+        ctx.fillStyle = pg
         ctx.beginPath()
-        ctx.arc(px, py, POCKET_R, 0, Math.PI * 2)
+        ctx.arc(px, py, POCKET_R * 1.35, 0, Math.PI * 2)
         ctx.fill()
+        ctx.strokeStyle = gold
+        ctx.globalAlpha = 0.35
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.arc(px, py, POCKET_R + 1, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.globalAlpha = 1
       }
       ;[0.125, 0.25, 0.375, 0.625, 0.75, 0.875].forEach((f) => {
         ctx.fillStyle = gold

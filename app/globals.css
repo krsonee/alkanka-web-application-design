@@ -154,6 +154,26 @@
     radial-gradient(ellipse at center, color-mix(in oklch, var(--felt) 100%, transparent) 0%, color-mix(in oklch, var(--felt) 70%, var(--background)) 100%);
   box-shadow: inset 0 0 0 6px color-mix(in oklch, var(--wood) 90%, transparent), inset 0 0 60px -10px var(--background);
 }
+@utility tavla-wood {
+  background:
+    repeating-linear-gradient(92deg, transparent 0 7px, color-mix(in oklch, var(--checker-dark) 18%, transparent) 7px 8px, transparent 8px 19px),
+    repeating-linear-gradient(88deg, transparent 0 23px, color-mix(in oklch, var(--checker-light) 6%, transparent) 23px 25px),
+    linear-gradient(180deg, color-mix(in oklch, var(--wood) 85%, var(--checker-light)) 0%, var(--wood) 45%, color-mix(in oklch, var(--wood) 75%, var(--checker-dark)) 100%);
+  box-shadow: inset 0 2px 0 color-mix(in oklch, var(--checker-light) 18%, transparent), inset 0 -3px 0 color-mix(in oklch, var(--checker-dark) 50%, transparent), 0 20px 40px -12px rgb(0 0 0 / 0.6);
+}
+@utility tavla-felt {
+  background:
+    radial-gradient(ellipse at 50% 40%, color-mix(in oklch, var(--felt) 85%, var(--checker-light)) 0%, var(--felt) 55%, color-mix(in oklch, var(--felt) 70%, var(--checker-dark)) 100%);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--checker-dark) 60%, transparent), inset 0 6px 18px -4px rgb(0 0 0 / 0.55);
+}
+@utility checker-light-3d {
+  background: radial-gradient(circle at 35% 30%, var(--checker-light) 0%, color-mix(in oklch, var(--checker-light) 82%, var(--point-a)) 60%, color-mix(in oklch, var(--checker-light) 60%, var(--checker-dark)) 100%);
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.18), inset 0 0 0 3px color-mix(in oklch, var(--checker-light) 70%, var(--point-a)), 0 2px 4px rgb(0 0 0 / 0.45);
+}
+@utility checker-dark-3d {
+  background: radial-gradient(circle at 35% 30%, color-mix(in oklch, var(--checker-dark) 70%, var(--checker-light)) 0%, var(--checker-dark) 60%, color-mix(in oklch, var(--checker-dark) 70%, black) 100%);
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.35), inset 0 0 0 3px color-mix(in oklch, var(--checker-dark) 70%, var(--primary)), 0 2px 4px rgb(0 0 0 / 0.5);
+}
 @utility chip {
   display: inline-flex;
   align-items: center;
