@@ -634,7 +634,7 @@ function TouchPad({ keys, side }: { keys: React.RefObject<Keys>; side: 'left' | 
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
   })
   const btn =
-    'flex size-16 touch-none select-none items-center justify-center rounded-full border-2 border-foreground/20 bg-card/90 text-foreground shadow-lg active:scale-95 active:border-primary active:bg-primary active:text-primary-foreground'
+    'flex size-20 sm:size-16 touch-none select-none items-center justify-center rounded-full border-2 border-foreground/20 bg-card/90 text-foreground shadow-lg active:scale-95 active:border-primary active:bg-primary active:text-primary-foreground'
   const move = (
     <div className="flex gap-3">
       <button type="button" className={btn} aria-label="Sola" {...bind('left')}>

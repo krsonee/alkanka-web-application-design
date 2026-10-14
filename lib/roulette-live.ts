@@ -87,12 +87,24 @@ export async function liveState(member: Member | null) {
       returned: c.phase === 'result' && n !== null ? bets.reduce((a, b) => a + betReturn(b, n), 0) : null,
     }
   })
+  const lastId = c.phase === 'result' ? c.roundId : c.roundId - 1
+  const lastN = roundNumber(lastId)
+  const prev = await pool.query(`SELECT user_name, total, bets FROM roulette_bets WHERE round_id = $1 LIMIT 60`, [lastId])
+  const winners = prev.rows
+    .map((p) => {
+      const won = (p.bets as RouletteBet[]).reduce((a, b) => a + betReturn(b, lastN), 0) - Number(p.total)
+      return { name: String(p.user_name), won }
+    })
+    .filter((w) => w.won > 0)
+    .sort((a, b) => b.won - a.won)
+    .slice(0, 8)
   return {
     ...c,
     serverNow: Date.now(),
     number: n,
     history,
     players: table,
+    lastRound: { id: lastId, number: lastN, winners },
     balance: member ? await getBalance(member.id) : null,
   }
 }

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { Check, CalendarCheck, Flame } from 'lucide-react'
-import { completeTaskAction } from '@/app/actions/tasks'
+import { checkInAction, completeTaskAction } from '@/app/actions/tasks'
+import { PERIODS, STREAK_DAYS, type TaskPeriod } from '@/lib/task-period'
 import { cn } from '@/lib/utils'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
@@ -16,19 +17,20 @@ export type PublicTask = {
   points: number
   link: string | null
   needsApproval: boolean
+  period: TaskPeriod
   claim: 'beklemede' | 'onaylandi' | 'reddedildi' | null
   done: boolean
 }
 
-const DAYS = [
-  { day: 1, reward: 25 },
-  { day: 2, reward: 40 },
-  { day: 3, reward: 60 },
-  { day: 4, reward: 80 },
-  { day: 5, reward: 110 },
-  { day: 6, reward: 150 },
-  { day: 7, reward: 500, vip: true },
-]
+const DAYS = STREAK_DAYS
+const PERIOD_LABEL = Object.fromEntries(PERIODS.map((p) => [p.value, p.label])) as Record<TaskPeriod, string>
+const PERIOD_RULE: Record<TaskPeriod, string> = {
+  once: 'Aynı görev için puan bir kez yazılır.',
+  daily: 'Bu görev her gün Türkiye saatiyle 00:00’da yenilenir.',
+  weekly: 'Bu görev her pazartesi 00:00’da yenilenir.',
+  monthly: 'Bu görev her ayın 1’inde yenilenir.',
+}
+const PERIOD_ORDER: TaskPeriod[] = ['daily', 'weekly', 'monthly', 'once']
 
 const STREAK_RULES = [
   'Ödülü almak için her gün “Bugünü al” butonuna basman gerekir.',
@@ -45,12 +47,13 @@ function statusOf(task: PublicTask, local: PublicTask['claim'] | undefined, done
   return 'open' as const
 }
 
-export function Tasks({ tasks }: { tasks: PublicTask[] }) {
-  const { add, requireLogin, setBalance, refresh } = usePoints()
+export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak: { streak: number; checkedToday: boolean } }) {
+  const tasks = [...rawTasks].sort((a, b) => PERIOD_ORDER.indexOf(a.period) - PERIOD_ORDER.indexOf(b.period))
+  const { requireLogin, setBalance, refresh } = usePoints()
   const [detail, setDetail] = useState<PublicTask | null>(null)
   const [streakInfo, setStreakInfo] = useState(false)
-  const [streakDay, setStreakDay] = useState(4)
-  const [checkedToday, setCheckedToday] = useState(false)
+  const [streakDay, setStreakDay] = useState(streak.streak)
+  const [checkedToday, setCheckedToday] = useState(streak.checkedToday)
   const [done, setDone] = useState<Record<number, boolean>>(() => Object.fromEntries(tasks.filter((task) => task.done).map((task) => [task.id, true])))
   const [claims, setClaims] = useState<Record<number, PublicTask['claim']>>(() => Object.fromEntries(tasks.filter((task) => task.claim).map((task) => [task.id, task.claim])))
   const [note, setNote] = useState<string | null>(null)
@@ -64,12 +67,19 @@ export function Tasks({ tasks }: { tasks: PublicTask[] }) {
   }, [waiting, refresh])
 
   function checkIn() {
-    if (checkedToday) return
-    const today = DAYS[streakDay]
-    if (!today) return
-    add(today.reward)
-    setStreakDay((d) => d + 1)
-    setCheckedToday(true)
+    if (checkedToday || pending) return
+    if (!requireLogin()) return
+    start(async () => {
+      const result = await checkInAction()
+      if (!result.ok) {
+        setNote(result.error)
+        return
+      }
+      setStreakDay(result.streak)
+      setCheckedToday(true)
+      setBalance(result.balance)
+      setNote(result.claimed ? `+${formatAC(result.reward)} KC yazıldı, seri ${result.streak}. gün.` : 'Bugünkü ödülü zaten aldın.')
+    })
   }
 
   function complete(task: PublicTask) {
@@ -129,7 +139,7 @@ export function Tasks({ tasks }: { tasks: PublicTask[] }) {
             <button
               type="button"
               onClick={checkIn}
-              disabled={checkedToday || streakDay >= DAYS.length}
+              disabled={checkedToday || pending}
               className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground"
             >
               <CalendarCheck className="size-4" aria-hidden="true" />
@@ -188,7 +198,12 @@ export function Tasks({ tasks }: { tasks: PublicTask[] }) {
               return (
                 <li key={task.id} className="panel-gold flex items-center gap-3 rounded-xl p-3">
                   <div className="flex min-w-0 flex-1 flex-col items-start">
-                    <span className="truncate text-sm font-semibold text-foreground">{task.title}</span>
+                    <span className="flex max-w-full items-center gap-2">
+                      {task.period !== 'once' ? (
+                        <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">{PERIOD_LABEL[task.period]}</span>
+                      ) : null}
+                      <span className="truncate text-sm font-semibold text-foreground">{task.title}</span>
+                    </span>
                     {task.detail ? <span className="truncate text-xs text-muted-foreground">{task.detail}</span> : null}
                     <DetailButton onClick={() => setDetail(task)} label="Nasıl yapılır?" />
                   </div>
@@ -218,6 +233,7 @@ export function Tasks({ tasks }: { tasks: PublicTask[] }) {
                 description: selected.detail || 'Bu görevin açıklaması yakında burada olacak.',
                 facts: [
                   { label: 'Ödül', value: `+${formatAC(selected.points)} KC` },
+                  { label: 'Tekrar', value: PERIOD_LABEL[selected.period] },
                   {
                     label: 'Durum',
                     value: statusOf(selected, claims[selected.id], Boolean(done[selected.id])) === 'done'
@@ -233,7 +249,7 @@ export function Tasks({ tasks }: { tasks: PublicTask[] }) {
                 rules: [
                   selected.needsApproval ? 'Puan, kontrol tamamlanınca yazılır.' : 'Puan görevi tamamlayınca yazılır.',
                   ...(selected.link ? ['Bağlantı yeni sekmede açılır.'] : []),
-                  'Aynı görev için puan bir kez yazılır.',
+                  PERIOD_RULE[selected.period],
                 ],
               }
             : null

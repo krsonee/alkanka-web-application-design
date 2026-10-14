@@ -2,6 +2,7 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureKp } from '@/lib/kanka-puan'
 import { credit, getBalance } from '@/lib/member'
+import { isPeriod, periodFromKey, periodKey, type TaskPeriod } from '@/lib/task-period'
 
 export type TaskRecord = {
   id: number
@@ -12,6 +13,9 @@ export type TaskRecord = {
   needsApproval: boolean
   active: boolean
   sort: number
+  period: TaskPeriod
+  startsAt: string | null
+  endsAt: string | null
 }
 
 export type TaskInput = {
@@ -23,6 +27,17 @@ export type TaskInput = {
   needsApproval: boolean
   active: boolean
   sort: number
+  period: TaskPeriod
+  startsAt: string
+  endsAt: string
+}
+
+function taskRef(id: number, period: TaskPeriod, key = periodKey(period)) {
+  return period === 'once' ? String(id) : `${id}:${key}`
+}
+
+function isCurrentKey(key: string) {
+  return key === '' || key === periodKey(periodFromKey(key))
 }
 
 export type ClaimStatus = 'beklemede' | 'onaylandi' | 'reddedildi'
@@ -58,6 +73,12 @@ export function ensureTasks() {
       status text NOT NULL DEFAULT 'beklemede',
       created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE (user_id, task_id))`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS period text NOT NULL DEFAULT 'once'`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starts_at timestamptz`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ends_at timestamptz`)
+    await rows(sql`ALTER TABLE task_claims ADD COLUMN IF NOT EXISTS period_key text NOT NULL DEFAULT ''`)
+    await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS task_claims_period_uniq ON task_claims (user_id, task_id, period_key)`)
+    await rows(sql`ALTER TABLE task_claims DROP CONSTRAINT IF EXISTS task_claims_user_id_task_id_key`)
   })().catch((error) => {
     ready = null
     throw error
@@ -89,31 +110,43 @@ function mapTask(row: Record<string, unknown>): TaskRecord {
     needsApproval: Boolean(row.needs_approval),
     active: Boolean(row.active),
     sort: Number(row.sort),
+    period: isPeriod(row.period) ? row.period : 'once',
+    startsAt: row.starts_at ? new Date(String(row.starts_at)).toISOString() : null,
+    endsAt: row.ends_at ? new Date(String(row.ends_at)).toISOString() : null,
   }
 }
 
 export async function listTasks(): Promise<TaskRecord[]> {
   await ensureTasks()
-  const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort FROM tasks ORDER BY sort, id`)
+  const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at FROM tasks ORDER BY sort, id`)
   return found.map(mapTask)
 }
 
 export async function listPublicTasks(): Promise<TaskRecord[]> {
-  return (await listTasks()).filter((task) => task.active)
+  const now = Date.now()
+  return (await listTasks()).filter((task) =>
+    task.active && (!task.startsAt || Date.parse(task.startsAt) <= now) && (!task.endsAt || Date.parse(task.endsAt) > now))
 }
 
+/** Ids done in the current period: one-off refs are plain ids, recurring refs are `id:periodKey`. */
 export async function completedTaskIds(userId: string): Promise<number[]> {
   await ensureTasks()
   await ensureKp()
   const found = await rows<{ ref: string }>(sql`SELECT ref FROM kp_events WHERE user_id = ${userId} AND source = 'gorev' AND ref IS NOT NULL`)
-  return found.map((row) => Number(row.ref)).filter((id) => Number.isInteger(id))
+  const ids: number[] = []
+  for (const { ref } of found) {
+    const [id, key = ''] = String(ref).split(':')
+    if (Number.isInteger(Number(id)) && isCurrentKey(key)) ids.push(Number(id))
+  }
+  return ids
 }
 
 export async function taskClaimMap(userId: string): Promise<Record<number, ClaimStatus>> {
   await ensureTasks()
-  const found = await rows<{ task_id: number; status: string }>(sql`SELECT task_id, status FROM task_claims WHERE user_id = ${userId}`)
+  const found = await rows<{ task_id: number; status: string; period_key: string }>(sql`SELECT task_id, status, period_key FROM task_claims WHERE user_id = ${userId}`)
   const map: Record<number, ClaimStatus> = {}
   for (const row of found) {
+    if (!isCurrentKey(String(row.period_key ?? ''))) continue
     if (row.status === 'beklemede' || row.status === 'onaylandi' || row.status === 'reddedildi') map[Number(row.task_id)] = row.status
   }
   return map
@@ -140,6 +173,16 @@ function clip(value: unknown, max: number) {
   return String(value ?? '').trim().slice(0, max)
 }
 
+/** Panel sends `YYYY-MM-DDTHH:mm` in Turkey time; stored as an absolute timestamp. */
+function cleanDate(value: unknown, label: string): string | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw)) throw new Error(`${label} tarihi geçersiz.`)
+  const ms = Date.parse(`${raw}:00+03:00`)
+  if (!Number.isFinite(ms)) throw new Error(`${label} tarihi geçersiz.`)
+  return new Date(ms).toISOString()
+}
+
 export async function saveTask(input: TaskInput): Promise<number> {
   const title = clip(input.title, 80)
   if (!title) throw new Error('Görev adı gerekli.')
@@ -150,31 +193,38 @@ export async function saveTask(input: TaskInput): Promise<number> {
   if (!Number.isInteger(sort) || sort < 0 || sort > 10000) throw new Error('Sıra 0 ile 10000 arasında tam sayı olmalı.')
   const link = cleanLink(input.link)
   const needsApproval = Boolean(input.needsApproval)
+  if (!isPeriod(input.period)) throw new Error('Tekrar türü geçersiz.')
+  const period = input.period
+  const startsAt = cleanDate(input.startsAt, 'Başlangıç')
+  const endsAt = cleanDate(input.endsAt, 'Bitiş')
+  if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) throw new Error('Bitiş, başlangıçtan sonra olmalı.')
   await ensureTasks()
   const active = Boolean(input.active)
   if (input.id != null && input.id !== 0) {
     const id = Number(input.id)
     if (!Number.isInteger(id) || id < 1) throw new Error('Görev bulunamadı.')
     const updated = await rows<{ id: number }>(sql`UPDATE tasks SET
-      title = ${title}, detail = ${detail}, points = ${points}, link = ${link}, needs_approval = ${needsApproval}, active = ${active}, sort = ${sort}
+      title = ${title}, detail = ${detail}, points = ${points}, link = ${link}, needs_approval = ${needsApproval}, active = ${active}, sort = ${sort},
+      period = ${period}, starts_at = ${startsAt}, ends_at = ${endsAt}
       WHERE id = ${id} RETURNING id`)
     if (!updated.length) throw new Error('Görev bulunamadı.')
     return id
   }
-  const inserted = await rows<{ id: number }>(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort)
-    VALUES (${title}, ${detail}, ${points}, ${link}, ${needsApproval}, ${active}, ${sort}) RETURNING id`)
+  const inserted = await rows<{ id: number }>(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at)
+    VALUES (${title}, ${detail}, ${points}, ${link}, ${needsApproval}, ${active}, ${sort}, ${period}, ${startsAt}, ${endsAt}) RETURNING id`)
   return Number(inserted[0]?.id)
 }
 
 /** Writes one kp_events row and, only then, the visible coin balance. A repeat inserts nothing. */
-export async function awardTask(userId: string, taskId: number): Promise<{ awarded: boolean; points: number; balance: number }> {
+export async function awardTask(userId: string, taskId: number, claimKey?: string): Promise<{ awarded: boolean; points: number; balance: number }> {
   await ensureTasks()
   await ensureKp()
-  const found = await rows<{ id: number; points: number }>(sql`SELECT id, points FROM tasks WHERE id = ${taskId} AND active`)
+  const found = await rows<{ id: number; points: number; period: string }>(sql`SELECT id, points, period FROM tasks WHERE id = ${taskId} AND active`)
   const task = found[0]
   if (!task) throw new Error('Görev bulunamadı.')
   const points = Math.trunc(Number(task.points))
-  const ref = String(task.id)
+  const period = isPeriod(task.period) ? task.period : 'once'
+  const ref = taskRef(Number(task.id), period, claimKey || undefined)
   const inserted = await rows<{ id: number }>(sql`INSERT INTO kp_events (user_id, source, points, ref)
     VALUES (${userId}, 'gorev', ${points}, ${ref})
     ON CONFLICT DO NOTHING
@@ -186,15 +236,16 @@ export async function awardTask(userId: string, taskId: number): Promise<{ award
 
 export async function requestTaskApproval(userId: string, taskId: number): Promise<{ status: ClaimStatus; points: number }> {
   await ensureTasks()
-  const found = await rows<{ id: number; points: number }>(sql`SELECT id, points FROM tasks WHERE id = ${taskId} AND active AND needs_approval`)
+  const found = await rows<{ id: number; points: number; period: string }>(sql`SELECT id, points, period FROM tasks WHERE id = ${taskId} AND active AND needs_approval`)
   const task = found[0]
   if (!task) throw new Error('Görev bulunamadı.')
-  const inserted = await rows<{ id: number }>(sql`INSERT INTO task_claims (user_id, task_id, status)
-    VALUES (${userId}, ${task.id}, 'beklemede')
-    ON CONFLICT (user_id, task_id) DO NOTHING
+  const key = periodKey(isPeriod(task.period) ? task.period : 'once')
+  const inserted = await rows<{ id: number }>(sql`INSERT INTO task_claims (user_id, task_id, status, period_key)
+    VALUES (${userId}, ${task.id}, 'beklemede', ${key})
+    ON CONFLICT (user_id, task_id, period_key) DO NOTHING
     RETURNING id`)
   if (inserted.length > 0) return { status: 'beklemede', points: Number(task.points) }
-  const existing = await rows<{ status: string }>(sql`SELECT status FROM task_claims WHERE user_id = ${userId} AND task_id = ${task.id}`)
+  const existing = await rows<{ status: string }>(sql`SELECT status FROM task_claims WHERE user_id = ${userId} AND task_id = ${task.id} AND period_key = ${key}`)
   const status = existing[0]?.status
   if (status === 'beklemede' || status === 'onaylandi' || status === 'reddedildi') return { status, points: Number(task.points) }
   throw new Error('Görev talebi kaydedilemedi.')
@@ -202,10 +253,10 @@ export async function requestTaskApproval(userId: string, taskId: number): Promi
 
 export async function approveClaim(claimId: number): Promise<{ awarded: boolean; points: number }> {
   await ensureTasks()
-  const found = await rows<{ id: number; user_id: string; task_id: number; status: string }>(sql`SELECT id, user_id, task_id, status FROM task_claims WHERE id = ${claimId}`)
+  const found = await rows<{ id: number; user_id: string; task_id: number; status: string; period_key: string }>(sql`SELECT id, user_id, task_id, status, period_key FROM task_claims WHERE id = ${claimId}`)
   const claim = found[0]
   if (!claim || claim.status !== 'beklemede') throw new Error('Talep bulunamadı.')
-  const result = await awardTask(String(claim.user_id), Number(claim.task_id))
+  const result = await awardTask(String(claim.user_id), Number(claim.task_id), String(claim.period_key ?? ''))
   await rows(sql`UPDATE task_claims SET status = 'onaylandi' WHERE id = ${claim.id} AND status = 'beklemede'`)
   return { awarded: result.awarded, points: result.points }
 }
