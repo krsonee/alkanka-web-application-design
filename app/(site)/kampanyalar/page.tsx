@@ -4,10 +4,14 @@ import { EditableHero } from '@/components/alkanka/editable-hero'
 import { CampaignHub } from '@/components/alkanka/campaign-hub'
 import { AdFrame } from '@/components/alkanka/ad-frame'
 import { BONUSES, CAMPAIGNS, EVENTS } from '@/components/alkanka/data'
+import { MainSponsorRotator } from '@/components/alkanka/partner-sites'
+import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 
 export const metadata = pageMeta('kampanyalar')
 
-export default function CampaignsPage() {
+export default async function CampaignsPage() {
+  const sponsors = await listPublicSponsors().catch(() => [])
+  const { mains } = pickFeatured(sponsors)
   return (
     <>
       <EditableHero slug="kampanyalar"
@@ -24,6 +28,7 @@ export default function CampaignsPage() {
         ]}
       />
       <AdFrame page="kampanyalar">
+        {mains.length > 0 && <MainSponsorRotator sponsors={mains} />}
         <Suspense>
           <CampaignHub />
         </Suspense>

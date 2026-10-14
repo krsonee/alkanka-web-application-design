@@ -40,7 +40,7 @@ export default async function HomePage() {
         <QuickTiles distributed={distributed} />
         <ActivityTicker />
       </div>
-      <FeaturedSponsors main={featured.main} cards={featured.cards} total={featured.total} />
+      <FeaturedSponsors main={featured.main} mains={featured.mains} cards={featured.cards} total={featured.total} />
       <EndingCampaigns />
       <TopThree rows={podium.map((row) => ({ userId: row.userId, name: row.name, points: row.kp }))} />
     </>

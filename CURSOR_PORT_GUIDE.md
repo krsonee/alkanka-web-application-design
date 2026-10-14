@@ -296,15 +296,15 @@ Everything in this section lives in this file. **Do not create a separate notes 
 ### 8.2 Remaining work (do in this order, one PR per group)
 Rules for every item: keep the current dark/gold theme and Turkish copy style. Hide "AL KANKA" / "alkanka.com" subtly in game tables (felt center, card backs, dealer tray, wheel hub). Test at 390x844 and 1440x900 with no page scroll during play.
 
-**A. Quick site fixes**
-1. Site search: wire the topbar search input to a real search over sites, games, bonuses and pages (`/api/search?q=`, debounced, keyboard navigable results).
-2. Two-option filter that can't go back to "all": add a "Tümü" option and allow deselecting.
-3. Sponsor tags on cards: pulsing/shimmer badge (`animate-pulse` + gold ring), respect `prefers-reduced-motion`.
-4. Main sponsor missing in the marked areas: render the `featured` main sponsor in those slots.
-5. "Detay / Kurallar" buttons: higher-contrast outline buttons.
-6. Featured sponsors on the home page: show one at a time, auto-rotating slider (5 s, pause on hover) when there is more than one.
-7. KankaTV offline state: when the YouTube embed has no live stream, show a Jako illustration and the text "Şu anda yayın yapılmıyor, başka kanalları dene kanka".
-8. KankaTV channels: add PC gaming streamers, comedy channels to the `tv` group, and post-match sports streamers (YouTube/Kick) to `yayinci` (currently empty) in `lib/kankatv.ts`.
+**A. Quick site fixes: ✅ ALL DONE**
+1. ✅ Site search (`components/alkanka/site-search.tsx`).
+2. ✅ Filters can be deselected: clicking an active chip returns to "Tümü" (sponsor tier, bonus type, campaign tag) in `components/alkanka/partner-sites.tsx`.
+3. ✅ Animated tier badges: VIP glows, Ana sponsor has a gold shine sweep (`.tier-shine` in `app/globals.css`), both respect `prefers-reduced-motion`.
+4. ✅ Main sponsor shown on home, `/sponsorlar` and `/kampanyalar` (`MainSponsorRotator`).
+5. ✅ "Detay / Kurallar" buttons higher contrast (`components/alkanka/detail-modal.tsx`).
+6. ✅ Main sponsor rotator: one at a time, auto-rotates every 6 s, pauses on hover/focus, dot navigation. Rotation = main sponsor + other "ana"/featured sites (`pickFeatured().mains` in `lib/sites.ts`).
+7. ✅ KankaTV offline state with Jako and "Şu anda yayın yapılmıyor" text (`components/alkanka/kankatv/board.tsx`).
+8. ✅ KankaTV channels extended, group renamed "TV & Mizah & Haber" (`lib/kankatv.ts`).
 
 **B. Header / profile**
 9. Show username and badge separately. Move the badge next to the KC balance, slightly larger, with a subtle animation. Shrink the KC balance box.

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, Check, Clock, Copy, LayoutGrid, List, Search, Star, Zap } from 'lucide-react'
@@ -141,10 +141,15 @@ function TierTag({ tier }: { tier: SponsorTier }) {
   return (
     <span
       className={cn(
-        'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
-        tier === 'vip' ? 'bg-primary/15 text-primary' : tier === 'ana' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground',
+        'relative inline-flex items-center gap-1 overflow-hidden rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+        tier === 'vip'
+          ? 'bg-primary/15 text-primary ring-1 ring-primary/50 motion-safe:animate-glow'
+          : tier === 'ana'
+            ? 'tier-shine bg-primary text-primary-foreground'
+            : 'bg-secondary text-muted-foreground',
       )}
     >
+      {tier !== 'guvenilir' && <Star className="size-2.5 fill-current" aria-hidden="true" />}
       {tier === 'vip' ? 'VIP' : tier === 'ana' ? 'Ana sponsor' : 'Güvenilir'}
     </span>
   )
@@ -312,7 +317,7 @@ export function SponsorDirectory({ sponsors = [], mainId }: { sponsors?: Sponsor
       <div className="sticky top-16 z-20 -mx-1 flex flex-col gap-3 rounded-xl border border-border bg-surface/95 p-3 backdrop-blur-md lg:flex-row lg:items-center">
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {TIER_FILTERS.map((f) => (
-            <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(f.id)}>
+            <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(tier === f.id ? 'all' : f.id)}>
               {f.label}
               <Count n={counts[f.id]} active={tier === f.id} />
             </Chip>
@@ -429,7 +434,7 @@ export function BonusBoard() {
     <section aria-label="Bonus listesi" className="flex flex-col gap-4">
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {types.map((t) => (
-          <Chip key={t} active={type === t} onClick={() => setType(t)}>
+          <Chip key={t} active={type === t} onClick={() => setType(type === t ? 'Tümü' : t)}>
             {t}
             <Count n={t === 'Tümü' ? BONUSES.length : BONUSES.filter((b) => b.type === t).length} active={type === t} />
           </Chip>
@@ -617,7 +622,7 @@ export function CampaignBoard() {
               key={t}
               active={tag === t}
               onClick={() => {
-                setTag(t)
+                setTag(tag === t ? 'Tümü' : t)
                 setVisible(CAMPAIGN_PAGE)
               }}
             >
@@ -673,8 +678,68 @@ function SeeAllLink({ href, label = 'Tümünü gör' }: { href: string; label?: 
   )
 }
 
-export function FeaturedSponsors({ main = null, cards = [], total = 0 }: { main?: Sponsor | null; cards?: Sponsor[]; total?: number }) {
+export function MainSponsorRotator({ sponsors }: { sponsors: Sponsor[] }) {
+  const [index, setIndex] = useState(0)
+  const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    if (sponsors.length < 2 || paused) return
+    const timer = window.setInterval(() => setIndex((i) => (i + 1) % sponsors.length), 6000)
+    return () => window.clearInterval(timer)
+  }, [sponsors.length, paused])
+
+  if (sponsors.length === 0) return null
+  const current = sponsors[index % sponsors.length]
+
+  return (
+    <div
+      className="flex flex-col gap-3"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+      aria-roledescription="carousel"
+      aria-label="Ana sponsorlar"
+    >
+      <div key={current.id} className="motion-safe:animate-slide-in" aria-live={paused ? 'polite' : 'off'}>
+        <MainSponsor sponsor={current} />
+      </div>
+      {sponsors.length > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          {sponsors.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setIndex(i)}
+              aria-label={`${s.name} sponsorunu göster`}
+              aria-current={i === index % sponsors.length}
+              className={cn(
+                'h-1.5 rounded-full transition-all',
+                i === index % sponsors.length ? 'w-8 bg-primary' : 'w-3 bg-border hover:bg-primary/50',
+              )}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function FeaturedSponsors({
+  main = null,
+  mains = [],
+  cards = [],
+  total = 0,
+}: {
+  main?: Sponsor | null
+  mains?: Sponsor[]
+  cards?: Sponsor[]
+  total?: number
+}) {
   if (!main) return null
+  const rotation = mains.length ? mains : [main]
+  const rotatingIds = new Set(rotation.map((s) => s.id))
+  const restCards = cards.filter((s) => !rotatingIds.has(s.id))
   return (
     <section aria-labelledby="one-cikan-title" className="flex flex-col gap-4">
       <SectionHeading
@@ -683,9 +748,9 @@ export function FeaturedSponsors({ main = null, cards = [], total = 0 }: { main?
         description={`Ana sponsor ve öne çıkan VIP siteler. Toplam ${total} sponsor var.`}
         action={<SeeAllLink href="/sponsorlar" label={`${total} sponsorun tümü`} />}
       />
-      <MainSponsor sponsor={main} />
+      <MainSponsorRotator sponsors={rotation} />
       <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-        {cards.map((s) => (
+        {(restCards.length ? restCards : cards).map((s) => (
           <SponsorCard key={s.id} sponsor={s} />
         ))}
       </ul>

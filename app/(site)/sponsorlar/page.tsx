@@ -1,6 +1,6 @@
 import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
-import { MainSponsor, SponsorDirectory } from '@/components/alkanka/partner-sites'
+import { MainSponsorRotator, SponsorDirectory } from '@/components/alkanka/partner-sites'
 import { AdFrame } from '@/components/alkanka/ad-frame'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 
@@ -31,7 +31,7 @@ export default async function SponsorsPage() {
         ]}
       />
       <AdFrame page="sponsorlar">
-        {featured.main ? <MainSponsor sponsor={featured.main} /> : null}
+        {featured.mains.length > 0 ? <MainSponsorRotator sponsors={featured.mains} /> : null}
         <SponsorDirectory sponsors={sponsors} mainId={featured.main?.id} />
       </AdFrame>
     </>

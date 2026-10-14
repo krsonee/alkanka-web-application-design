@@ -150,7 +150,10 @@ export function pickFeatured(all: PublicSponsor[]) {
   const main = all.find((site) => site.tier === 'ana') ?? all.find((site) => site.featured) ?? all[0] ?? null
   const highlighted = all.filter((site) => site.id !== main?.id && (site.featured || site.tier === 'vip'))
   const cards = (highlighted.length ? highlighted : all.filter((site) => site.id !== main?.id)).slice(0, 4)
-  return { main, cards, total: all.length }
+  const rotation = main
+    ? [main, ...all.filter((site) => site.id !== main.id && (site.tier === 'ana' || site.featured))].slice(0, 6)
+    : []
+  return { main, mains: rotation, cards, total: all.length }
 }
 
 export type ResolvedSponsor = PublicSponsor & { recordId: string }

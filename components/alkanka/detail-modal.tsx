@@ -118,7 +118,7 @@ export function DetailButton({ onClick, label = 'Detay & kurallar' }: { onClick:
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1 text-xs font-semibold text-muted-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
+      className="flex h-8 items-center gap-1.5 self-start rounded-lg border border-primary/45 bg-primary/10 px-3 text-xs font-bold text-primary transition-colors hover:border-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
     >
       <ScrollText className="size-3.5" aria-hidden="true" />
       {label}

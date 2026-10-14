@@ -8,11 +8,12 @@ export type SportSlug = (typeof SPORTS)[number]['slug']
 export const DAY_OFFSETS = [-1, 0, 1] as const
 export type DayOffset = (typeof DAY_OFFSETS)[number]
 
-export type ChannelGroup = 'spor' | 'tv' | 'slot' | 'yayinci'
+export type ChannelGroup = 'spor' | 'tv' | 'oyun' | 'slot' | 'yayinci'
 
 export const CHANNEL_GROUPS: { key: ChannelGroup; label: string }[] = [
   { key: 'spor', label: 'Spor kanalları' },
   { key: 'tv', label: 'TV & Mizah & Haber' },
+  { key: 'oyun', label: 'Oyun yayıncıları' },
   { key: 'slot', label: 'Slot & Casino' },
   { key: 'yayinci', label: 'Spor yayıncıları' },
 ]
@@ -38,12 +39,22 @@ const TV_CHANNELS: TvChannel[] = [
   { slug: 'sozcu', name: 'Sözcü TV', group: 'tv', tag: 'Haber', path: '@sozcutelevizyonu' },
   { slug: 'tv100', name: 'tv100', group: 'tv', tag: 'Haber', path: '@tv100' },
   { slug: 'tgrthaber', name: 'TGRT Haber', group: 'tv', tag: 'Haber', path: '@tgrthaber' },
+  { slug: 'guldurguldur', name: 'Güldür Güldür Show', group: 'tv', tag: 'Mizah', path: '@guldurguldurshow' },
+  { slug: 'cokguzelhareketler', name: 'Çok Güzel Hareketler 2', group: 'tv', tag: 'Mizah', path: '@cokguzelhareketler2' },
+  { slug: 'tolgshow', name: 'Tolgshow', group: 'tv', tag: 'Mizah', path: '@tolgshow' },
+  { slug: 'cmylmz', name: 'Cem Yılmaz', group: 'tv', tag: 'Mizah', path: '@cmylmz' },
+  { slug: 'kafalar', name: 'Kafalar', group: 'tv', tag: 'Mizah', path: '@kafalar' },
+  { slug: 'yasinobuz', name: 'Yasin Obuz', group: 'tv', tag: 'Mizah', path: '@yasinobuz' },
 ]
 
 const KICK_CATEGORIES: { group: 'slot' | 'yayinci'; categoryId: number; tag: string }[] = [
   { group: 'slot', categoryId: 28, tag: 'Slot & Casino' },
   { group: 'yayinci', categoryId: 75, tag: 'Spor' },
 ]
+
+const SPORT_TEXT = /\b(ma[cç]|futbol|derbi|galatasaray|fenerbah[cç]e|be[sş]ikta[sş]|trabzon|s[uü]per lig|[sş]ampiyonlar ligi|ma[cç] sonu|spor|basketbol|nba|euroleague|fifa|ea fc|efootball)\b/i
+const SPORT_CATEGORY = /sport|football|soccer|basketball|fifa|ea sports fc|efootball|nba/i
+const NOT_GAME_CATEGORY = /just chatting|irl|music|slots|casino|gambling|pools|asmr|talk shows|podcast|sports/i
 
 export type MatchState = 'pre' | 'in' | 'post'
 export type Side = { id: number; name: string; logo: string; score: number | null }
@@ -313,37 +324,64 @@ type KickStream = {
   title: string
   viewer_count: number
   channel: { slug: string; username: string; profile_pic: string | null }
+  category?: { name?: string } | null
 }
 
-async function getKickStreams(categoryId: number, group: 'slot' | 'yayinci', tag: string): Promise<Channel[]> {
+function kickChannel(s: KickStream, group: ChannelGroup, tag: string): Channel {
+  return {
+    slug: `kick-${s.channel.slug}`,
+    name: s.channel.username,
+    group,
+    tag,
+    live: true,
+    embedUrl: `https://player.kick.com/${encodeURIComponent(s.channel.slug)}?autoplay=true&muted=false`,
+    title: s.title,
+    avatar: s.channel.profile_pic,
+    viewers: s.viewer_count,
+  }
+}
+
+async function fetchKick(query: string, limit: number): Promise<KickStream[]> {
   try {
-    const res = await fetch(
-      `https://web.kick.com/api/v1/livestreams?limit=24&sort=viewer_count_desc&category_id=${categoryId}&language=tr`,
-      { headers: HEADERS, next: { revalidate: 120 } },
-    )
+    const res = await fetch(`https://web.kick.com/api/v1/livestreams?limit=${limit}&sort=viewer_count_desc&language=tr${query}`, {
+      headers: HEADERS,
+      next: { revalidate: 120 },
+    })
     if (!res.ok) return []
     const json = (await res.json()) as { data?: { livestreams?: KickStream[] } }
-    return (json.data?.livestreams ?? []).map((s) => ({
-      slug: `kick-${s.channel.slug}`,
-      name: s.channel.username,
-      group,
-      tag,
-      live: true,
-      embedUrl: `https://player.kick.com/${encodeURIComponent(s.channel.slug)}?autoplay=true&muted=false`,
-      title: s.title,
-      avatar: s.channel.profile_pic,
-      viewers: s.viewer_count,
-    }))
+    return json.data?.livestreams ?? []
   } catch {
     return []
   }
 }
 
+async function getKickStreams(categoryId: number, group: 'slot' | 'yayinci', tag: string): Promise<Channel[]> {
+  return (await fetchKick(`&category_id=${categoryId}`, 24)).map((s) => kickChannel(s, group, tag))
+}
+
+async function getKickMixed(): Promise<Channel[]> {
+  const streams = await fetchKick('', 100)
+  const sport: Channel[] = []
+  const games: Channel[] = []
+  for (const s of streams) {
+    const category = s.category?.name ?? ''
+    if (SPORT_CATEGORY.test(category) || SPORT_TEXT.test(s.title)) {
+      if (sport.length < 24) sport.push(kickChannel(s, 'yayinci', category || 'Spor'))
+    } else if (category && !NOT_GAME_CATEGORY.test(category) && games.length < 24) {
+      games.push(kickChannel(s, 'oyun', category))
+    }
+  }
+  return [...games, ...sport]
+}
+
 export async function getChannels(): Promise<Channel[]> {
-  const [ids, ...kick] = await Promise.all([
+  const [ids, mixed, ...kick] = await Promise.all([
     Promise.all(TV_CHANNELS.map((c) => getLiveVideoId(c.path))),
+    getKickMixed(),
     ...KICK_CATEGORIES.map((k) => getKickStreams(k.categoryId, k.group, k.tag)),
   ])
+  const seen = new Set<string>()
+  const kickAll = [...kick.flat(), ...mixed].filter((c) => (seen.has(c.slug) ? false : (seen.add(c.slug), true)))
   const tv: Channel[] = TV_CHANNELS.map((c, i) => ({
     slug: c.slug,
     name: c.name,
@@ -356,5 +394,5 @@ export async function getChannels(): Promise<Channel[]> {
     viewers: null,
   }))
   tv.sort((a, b) => Number(b.live) - Number(a.live))
-  return [...tv, ...kick.flat()]
+  return [...tv, ...kickAll]
 }
