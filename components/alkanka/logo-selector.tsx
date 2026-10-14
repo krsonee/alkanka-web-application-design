@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { useBrand } from './brand-context'
+import { useLogos } from './logo-context'
 import { AlkankaLogo, EMBLEM_LOGOS, LOGO_CONCEPTS } from './logos'
 
 export function LogoSelector() {
@@ -48,5 +49,13 @@ export function LogoSelector() {
 
 export function BrandLogo({ size = 'md' }: { size?: 'sm' | 'md' }) {
   const { concept } = useBrand()
+  const custom = useLogos().brand
+  if (custom?.logoUrl) {
+    const height = size === 'sm' ? Math.round((custom.logoHeight ?? 36) * 0.85) : custom.logoHeight ?? 36
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={custom.logoUrl || '/placeholder.svg'} alt="AL KANKA" style={{ height }} className="w-auto max-w-44 object-contain" />
+    )
+  }
   return <AlkankaLogo concept={concept} size={size} />
 }

@@ -1,8 +1,11 @@
+import { capPayout } from '@/lib/member-limits'
 import 'server-only'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
+import { TURN_SECONDS } from '@/lib/arena'
 import {
+  autoMove,
   applyAction,
   currentTurn,
   initState,
@@ -225,6 +228,28 @@ export async function actOnTable(m: Member, id: string, version: number, action:
   if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome)
 }
 
+/**
+ * Called on every table poll. When the current player's turn clock has expired the server
+ * plays an automatic move for them. The version check in saveState makes concurrent polls safe.
+ */
+export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
+  if (t.status !== 'oynaniyor' || !t.state || t.tournamentId) return t
+  const limit = TURN_SECONDS[t.game as keyof typeof TURN_SECONDS]
+  const turn = currentTurn(t.state)
+  if (!limit || turn == null) return t
+  if (Date.now() - new Date(t.updatedAt).getTime() < limit * 1000) return t
+  if (t.players.find((p) => p.seat === turn)?.bot) return t
+  const result = autoMove(t.state)
+  if (!result) return t
+  try {
+    await saveState(t, t.version, result.state)
+  } catch {
+    return (await getTableRow(t.id)) ?? t
+  }
+  if (result.outcome) await finishTable({ ...t, state: result.state, version: t.version + 1 }, result.outcome)
+  return (await getTableRow(t.id)) ?? t
+}
+
 /** A waiting player may claim the win (2 seats) or hand the idle seat to a bot (4 seats). */
 export async function claimTimeout(m: Member, id: string) {
   const t = await getTableRow(id)
@@ -295,10 +320,15 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const settings = (await getArenaSettings())[t.game as keyof Awaited<ReturnType<typeof getArenaSettings>>]
   const pot = t.stake * people.length
   const prizeEach = humanWinners.length ? Math.floor((pot * (1 - (settings?.commission ?? 0) / 100)) / humanWinners.length) : 0
-  for (const p of humanWinners) await credit(p.id, prizeEach)
+  const paid = new Map<string, number>()
+  for (const p of humanWinners) {
+    const amount = await capPayout(p.id, t.stake, prizeEach)
+    paid.set(p.id, amount)
+    await credit(p.id, amount)
+  }
   for (const p of people) {
-    const won = humanWinners.some((w) => w.id === p.id)
-    await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: won ? prizeEach - t.stake : -t.stake, tableId: t.id })
+    const won = paid.has(p.id)
+    await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: won ? (paid.get(p.id) ?? 0) - t.stake : -t.stake, tableId: t.id })
   }
 }
 

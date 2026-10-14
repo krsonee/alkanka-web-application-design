@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
 import { betLabel, betReturn, rouletteClock as clock, validBet, type RouletteBet } from '@/lib/casino'
+import { capPayout } from '@/lib/member-limits'
 
 const MAX_ENTRIES = 30
 
@@ -28,7 +29,7 @@ export async function settleFor(member: Pick<Member, 'id' | 'name'>) {
     const n = roundNumber(Number(row.round_id))
     const bets = row.bets as RouletteBet[]
     const total = Number(row.total)
-    const returned = bets.reduce((a, b) => a + betReturn(b, n), 0)
+    const returned = await capPayout(member.id, total, bets.reduce((a, b) => a + betReturn(b, n), 0))
     await pool.query(`UPDATE roulette_bets SET returned = $2 WHERE id = $1`, [row.id, returned])
     if (returned) await credit(member.id, returned)
     await recordHistory({
@@ -87,12 +88,24 @@ export async function liveState(member: Member | null) {
       returned: c.phase === 'result' && n !== null ? bets.reduce((a, b) => a + betReturn(b, n), 0) : null,
     }
   })
+  const lastId = c.phase === 'result' ? c.roundId : c.roundId - 1
+  const lastN = roundNumber(lastId)
+  const prev = await pool.query(`SELECT user_name, total, bets FROM roulette_bets WHERE round_id = $1 LIMIT 60`, [lastId])
+  const winners = prev.rows
+    .map((p) => {
+      const won = (p.bets as RouletteBet[]).reduce((a, b) => a + betReturn(b, lastN), 0) - Number(p.total)
+      return { name: String(p.user_name), won }
+    })
+    .filter((w) => w.won > 0)
+    .sort((a, b) => b.won - a.won)
+    .slice(0, 8)
   return {
     ...c,
     serverNow: Date.now(),
     number: n,
     history,
     players: table,
+    lastRound: { id: lastId, number: lastN, winners },
     balance: member ? await getBalance(member.id) : null,
   }
 }

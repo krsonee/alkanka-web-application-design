@@ -2,6 +2,7 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { MARKET_ITEMS } from '@/components/alkanka/data'
+import { assertCanBuy } from '@/lib/member-limits'
 
 export type MarketKind = 'alkanka' | 'sponsor'
 export type RequestStatus = 'beklemede' | 'onaylandi' | 'reddedildi'
@@ -175,6 +176,9 @@ export async function requestProduct(member: Member, itemId: string, siteUsernam
   const used = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM market_requests
     WHERE user_id = ${member.id} AND item_id = ${item.id} AND status <> 'reddedildi'`)
   if (Number(used[0]?.c ?? 0) >= item.perUser) throw new Error(`Bu üründen en fazla ${item.perUser} adet alabilirsin.`)
+  await assertCanBuy(member.id, item.price)
+  const { isRoleHolder } = await import('@/lib/kanka-puan')
+  if (await isRoleHolder(member.id)) throw new Error('Görevli hesaplar marketten alışveriş yapamaz.')
 
   const reserved = await rows(sql`UPDATE market_items SET stock = stock - 1 WHERE id = ${item.id} AND stock > 0 RETURNING stock`)
   if (!reserved.length) throw new Error('Stok tükendi.')
@@ -186,6 +190,11 @@ export async function requestProduct(member: Member, itemId: string, siteUsernam
   await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, site_username, price)
     VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${item.price})`)
   await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: item.price, result: 'loss', delta: -item.price })
+  const { notifyApproval } = await import('@/lib/telegram-bots')
+  await notifyApproval('market', {
+    uye: member.name,
+    detay: `${item.name} (${item.price} KC)${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
+  }).catch(() => {})
   return item
 }
 

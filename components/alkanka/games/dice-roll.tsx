@@ -7,6 +7,8 @@ import { ParticleBurst } from './particle-burst'
 import { DetailButton, DetailModal } from '../detail-modal'
 import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
+import { playMini } from '@/app/actions/wallet'
+import { usePoints } from '../points-context'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -54,7 +56,8 @@ function rewardFor(a: number, b: number) {
 
 const rand = () => 1 + Math.floor(Math.random() * 6)
 
-export function DiceRoll({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProps) {
+export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
+  const { setBalance } = usePoints()
   const locked = lockedFor > 0
   const [dice, setDice] = useState<[number, number]>([5, 3])
   const [rolling, setRolling] = useState(false)
@@ -63,22 +66,27 @@ export function DiceRoll({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProps)
   const [rules, setRules] = useState(false)
   const interval = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  function roll() {
+  async function roll() {
     if (rolling || !canPlay()) return
     setRolling(true)
     setResult(null)
     setRollKey((k) => k + 1)
     interval.current = setInterval(() => setDice([rand(), rand()]), 90)
+    const started = Date.now()
+    const res = await playMini('zar')
     setTimeout(() => {
       if (interval.current) clearInterval(interval.current)
-      const final: [number, number] = [rand(), rand()]
-      setDice(final)
       setRolling(false)
-      const r = rewardFor(final[0], final[1])
-      setResult(r)
-      onWin(r.points)
+      if (!res.ok || res.game !== 'zar') {
+        if (typeof res.balance === 'number') setBalance(res.balance)
+        if (!res.ok) setResult({ label: res.error, points: 0 })
+        return
+      }
+      setDice(res.dice)
+      setResult(rewardFor(res.dice[0], res.dice[1]))
+      setBalance(res.balance)
       onPlayed()
-    }, 900)
+    }, Math.max(0, 900 - (Date.now() - started)))
   }
 
   const isDouble = result && dice[0] === dice[1]

@@ -8,7 +8,17 @@ const nextConfig = {
   },
   async headers() {
     const noindex = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }]
+    const security = [
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Strict-Transport-Security', value: 'max-age=63072000' },
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+    ]
+    const frameGuard = [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }]
     return [
+      { source: '/:path*', headers: security },
+      { source: '/panel', headers: frameGuard },
+      { source: '/panel/:path*', headers: frameGuard },
       { source: '/:path*', has: [{ type: 'host', value: '(www\\.)?alkanka\\.shop' }], headers: noindex },
       { source: '/panel', headers: noindex },
       { source: '/panel/:path*', headers: noindex },

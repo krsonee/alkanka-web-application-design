@@ -114,6 +114,7 @@ export function OkeyRack({
     setOver(null)
     const id = Number(e.dataTransfer.getData('text/plain'))
     if (Number.isFinite(id)) rack.moveTo(id, i)
+    rack.setSelected(null)
   }
 
   return (
@@ -140,8 +141,8 @@ export function OkeyRack({
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', String(tile.id))
-                      rack.setSelected(tile.id)
                     }}
+                    onDragEnd={() => rack.setSelected(null)}
                     onDoubleClick={() => onDoubleTile?.(tile)}
                     className="size-full"
                   >
@@ -168,7 +169,7 @@ export function OkeyRack({
         </div>
       ))}
       <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-        Taşa dokun, sonra boş yuvaya dokunarak yerini değiştir. Atmak için taşa çift tıkla ya da masadaki &quot;Buraya at&quot; alanına sürükle. Okeye çift tıklarsan ters çevrilir.
+        Taşa dokun, sonra boş yuvaya dokunarak yerini değiştir ya da sürükle bırak. Atmak için taşı seç ve &quot;Taşı at&quot; butonuna bas ya da masadaki &quot;Buraya at&quot; alanına sürükle. Okeye çift tıklarsan ters çevrilir.
       </p>
     </div>
   )

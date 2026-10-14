@@ -81,9 +81,9 @@ function Checker({ side, label, glow }: { side: Side; label?: string; glow?: boo
   return (
     <span
       className={cn(
-        'relative flex aspect-square w-full max-w-11 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-[inset_0_-3px_0_rgb(0_0_0/0.25)] sm:text-[11px]',
-        side === 'p' ? 'border-point-a bg-checker-light text-checker-dark' : 'border-primary/70 bg-checker-dark text-primary',
-        glow && 'ring-2 ring-primary ring-offset-1 ring-offset-felt',
+        'relative flex aspect-square w-full max-w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-transform duration-200 sm:text-[11px]',
+        side === 'p' ? 'checker-light-3d text-checker-dark' : 'checker-dark-3d text-primary',
+        glow && 'z-10 -translate-y-0.5 scale-110 ring-[3px] ring-primary ring-offset-2 ring-offset-felt',
       )}
     >
       {label}
@@ -114,9 +114,10 @@ type BoardProps = {
   rollKey: number
   highlight: Set<number>
   names: { me: string; opp: string }
+  turn: 'me' | 'opp' | null
 }
 
-function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names }: BoardProps) {
+function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn }: BoardProps) {
   const opp: Side = me === 'p' ? 'b' : 'p'
   const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
   const targets = useMemo(() => legal.filter((m) => m.from === selected), [legal, selected])
@@ -168,11 +169,25 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
             'absolute inset-x-px h-[90%] transition-colors sm:inset-x-0.5',
             isTop ? 'top-0' : 'bottom-0',
             visual % 2 === 0 ? 'bg-point-a' : 'bg-point-b',
-            isTarget ? 'bg-primary' : 'opacity-90',
+            isTarget ? 'animate-pulse bg-primary' : 'opacity-90',
+            selected === i && 'brightness-125',
           )}
-          style={{ clipPath: isTop ? 'polygon(0 0, 100% 0, 50% 100%)' : 'polygon(50% 0, 100% 100%, 0 100%)' }}
+          style={{
+            clipPath: isTop ? 'polygon(0 0, 100% 0, 50% 100%)' : 'polygon(50% 0, 100% 100%, 0 100%)',
+            backgroundImage: isTarget ? undefined : 'linear-gradient(90deg, rgb(0 0 0 / 0.18), transparent 45%, rgb(255 255 255 / 0.08) 55%, rgb(0 0 0 / 0.18))',
+          }}
         />
-        {isTarget && <span aria-hidden="true" className="absolute inset-x-0 top-1/2 z-10 m-auto size-2.5 -translate-y-1/2 animate-pulse rounded-full bg-primary sm:size-3" />}
+        {isTarget && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              'absolute inset-x-0 z-20 m-auto flex size-5 items-center justify-center rounded-full border-2 border-primary bg-primary/30 sm:size-7',
+              isTop ? 'bottom-[12%]' : 'top-[12%]',
+            )}
+          >
+            <span className="size-2 animate-ping rounded-full bg-primary" />
+          </span>
+        )}
         <span className="relative z-10 flex h-full w-full flex-col py-0.5 sm:py-1">
           {v !== 0 && <Stack count={Math.abs(v)} side={side} top={isTop} glow={(isSource && selected === i) || (!mine && highlight.has(i))} />}
         </span>
@@ -187,9 +202,11 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   const shown = faces ?? rolled.slice(0, rolled.length === 4 ? 4 : 2)
 
   return (
-    <div className="rounded-2xl bg-wood p-1.5 shadow-xl sm:p-3">
+    <div className="flex flex-col gap-2">
+      <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
+      <div className="tavla-wood rounded-2xl p-1.5 sm:p-3">
       <div className="flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
-        <div className="relative flex flex-1 flex-col justify-between rounded-lg bg-felt px-0.5 py-4 sm:px-2 sm:py-5">
+        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-5">
           <div className="flex h-[42%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-25">
             <span className="scale-75 sm:scale-100">
@@ -218,7 +235,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </span>
         </button>
 
-        <div className="relative flex flex-1 flex-col justify-between rounded-lg bg-felt px-0.5 py-4 sm:px-2 sm:py-5">
+        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-5">
           <div className="flex h-[42%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
           <div aria-live="polite" className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center gap-1.5 sm:gap-3">
             {shown.length > 0 &&
@@ -247,6 +264,38 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </button>
         </div>
       </div>
+      </div>
+    </div>
+  )
+}
+
+function TurnIndicator({ turn, me, opp }: { turn: 'me' | 'opp' | null; me: string; opp: string }) {
+  const seat = (who: 'me' | 'opp', name: string, side: 'light' | 'dark') => {
+    const active = turn === who
+    return (
+      <div
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-2 transition-all',
+          who === 'opp' && 'flex-row-reverse text-right',
+          active ? 'border-primary bg-primary/15 shadow-[0_0_18px_-4px_var(--primary)]' : 'border-border bg-card opacity-70',
+        )}
+      >
+        <span aria-hidden="true" className={cn('size-5 shrink-0 rounded-full', side === 'light' ? 'checker-light-3d' : 'checker-dark-3d')} />
+        <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">{name}</span>
+        {active && (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase text-primary-foreground">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary-foreground" />
+            Sırada
+          </span>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-center gap-2" aria-live="polite" aria-label={turn === 'me' ? 'Sıra sende' : turn === 'opp' ? `Sıra ${opp} oyuncusunda` : 'Oyun bitti'}>
+      {seat('me', me, 'light')}
+      <span className="shrink-0 text-xs font-bold text-muted-foreground">VS</span>
+      {seat('opp', opp, 'dark')}
     </div>
   )
 }
@@ -425,6 +474,7 @@ export function Tavla({ finish }: GameApi) {
         rollKey={rollKey}
         highlight={new Set(lastBot.map((m) => (typeof m.to === 'number' ? m.to : -1)))}
         names={{ me: 'Sen', opp: 'Rakip' }}
+        turn={phase === 'over' ? null : phase === 'bot' ? 'opp' : 'me'}
       />
       <ControlBar
         message={message}
@@ -505,6 +555,7 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
         rollKey={rollKey}
         highlight={highlight}
         names={{ me: 'Sen', opp: oppName }}
+        turn={remote.myTurn ? 'me' : 'opp'}
       />
       <ControlBar
         message={message}

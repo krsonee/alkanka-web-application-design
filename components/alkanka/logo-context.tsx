@@ -3,7 +3,11 @@
 import { createContext, useContext } from 'react'
 import { cn } from '@/lib/utils'
 
-export type LogoMaps = { sponsors: Record<string, string>; teams: Record<string, string> }
+export type LogoMaps = {
+  sponsors: Record<string, string>
+  teams: Record<string, string>
+  brand?: { logoUrl?: string; logoHeight?: number }
+}
 
 const LogoContext = createContext<LogoMaps>({ sponsors: {}, teams: {} })
 

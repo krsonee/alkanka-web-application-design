@@ -38,6 +38,14 @@ const DEFAULT_BADGES: Omit<SpecialBadge, 'holders' | 'active'>[] = [
   { id: 'kurucu-kanka', name: 'Kurucu Kanka', description: 'AL KANKA’nın ilk üyelerinden.', icon: 'crown', tier: 'efsane', bonus: 0, auto: null },
 ]
 
+/** Staff badges. Holders earn no KP, never appear in rankings, never level up and cannot buy from the market. */
+export const ROLE_BADGES = [
+  { id: 'moderator', name: 'Moderatör', description: 'AL KANKA topluluk moderatörü.', icon: 'shield' },
+  { id: 'sponsor-destek', name: 'Sponsor Destek', description: 'Sponsor destek ekibi üyesi.', icon: 'heart' },
+] as const
+
+export const ROLE_BADGE_IDS: readonly string[] = ROLE_BADGES.map((b) => b.id)
+
 let ready: Promise<unknown> | null = null
 export function ensureKp() {
   ready ??= (async () => {
@@ -62,6 +70,10 @@ export function ensureKp() {
           VALUES (${b.id}, ${b.name}, ${b.description}, ${b.icon}, ${b.tier}, ${b.bonus}, ${b.auto}, ${i}) ON CONFLICT DO NOTHING`)
       }
       await rows(sql`INSERT INTO kp_settings (key, value) VALUES ('badges_seeded', 'true'::jsonb) ON CONFLICT DO NOTHING`)
+    }
+    for (const b of ROLE_BADGES) {
+      await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, sort)
+        VALUES (${b.id}, ${b.name}, ${b.description}, ${b.icon}, 'elmas', 0, NULL, 900) ON CONFLICT DO NOTHING`)
     }
   })().catch((error) => {
     ready = null
@@ -143,7 +155,10 @@ function periodStart(period: RankPeriod) {
 
 async function totals(rules: PointRules, userId: string | null, limit = 1, period: RankPeriod = 'tum') {
   const since = periodStart(period)
-  const [chat, tg] = await Promise.all([tableExists('tg_chat_messages'), tableExists('tg_links')])
+  const [chat, tg, awards] = await Promise.all([tableExists('tg_chat_messages'), tableExists('tg_links'), tableExists('kp_awards')])
+  const notRoleHolder = awards
+    ? sql`AND NOT EXISTS (SELECT 1 FROM kp_awards ra WHERE ra.user_id = ids.user_id AND ra.badge_id IN ('moderator', 'sponsor-destek'))`
+    : sql``
   const chatCte = chat
     ? sql`SELECT user_id, sum(least(n, ${rules.chatDailyCap}))::bigint AS v FROM (
         SELECT user_id, date_trunc('day', created_at AT TIME ZONE 'Europe/Istanbul') AS d, count(*) AS n
@@ -176,7 +191,7 @@ async function totals(rules: PointRules, userId: string | null, limit = 1, perio
       coalesce(e.bonus, 0) AS bonus
       FROM ids LEFT JOIN g USING (user_id) LEFT JOIN c USING (user_id) LEFT JOIN l USING (user_id) LEFT JOIN rv USING (user_id)
       LEFT JOIN rf USING (user_id) LEFT JOIN t USING (user_id) LEFT JOIN e USING (user_id)
-      WHERE ids.user_id IS NOT NULL AND (${userId}::text IS NULL OR ids.user_id = ${userId}))
+      WHERE ids.user_id IS NOT NULL AND (${userId}::text IS NULL OR ids.user_id = ${userId}) ${notRoleHolder})
     SELECT s.*, (s.time + s.games + s.tasks + s.chat + s.league + s.reviews + s.referrals + s.telegram + s.bonus) AS total, u.name
     FROM s LEFT JOIN public."user" u ON u.id = s.user_id
     ORDER BY total DESC LIMIT ${limit}`)
@@ -313,12 +328,25 @@ export async function sumKpPoints(): Promise<number | null> {
   }
 }
 
+export async function awardBadgeId(awardId: number): Promise<string | null> {
+  await ensureKp()
+  const [a] = await rows<{ badge_id: string }>(sql`SELECT badge_id FROM kp_awards WHERE id = ${awardId}`)
+  return a?.badge_id ?? null
+}
+
+/** True when the member holds a staff badge (Moderatör / Sponsor Destek). */
+export async function isRoleHolder(userId: string): Promise<boolean> {
+  if (!(await tableExists('kp_awards'))) return false
+  const r = await rows(sql`SELECT 1 FROM kp_awards WHERE user_id = ${userId} AND badge_id IN ('moderator', 'sponsor-destek') LIMIT 1`)
+  return r.length > 0
+}
+
 // --- Time on site --------------------------------------------------------
 
 /** Credits one minute of active time. The minute bucket makes repeated or parallel pings harmless. */
 export async function pingActive(userId: string) {
   const cfg = await getKpConfig()
-  if (cfg.rules.minute > 0) {
+  if (cfg.rules.minute > 0 && !(await isRoleHolder(userId))) {
     await rows(sql`INSERT INTO kp_events (user_id, source, points, ref)
       SELECT ${userId}, 'sure', ${cfg.rules.minute}, to_char(now() AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM-DD"T"HH24:MI')
       WHERE (SELECT count(*) FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
@@ -400,6 +428,7 @@ export async function saveSpecialBadge(input: BadgeInput) {
 export async function deleteSpecialBadge(id: string) {
   await ensureKp()
   await rows(sql`DELETE FROM kp_events WHERE source = 'rozet' AND ref LIKE ${`${id}:%`}`)
+  if (ROLE_BADGE_IDS.includes(id)) throw new Error('Görevli rozetleri silinemez.')
   await rows(sql`DELETE FROM kp_badges WHERE id = ${id}`)
 }
 

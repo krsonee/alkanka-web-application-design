@@ -1,11 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import {
   adjustPoints,
   awardBadge,
+  awardBadgeId,
   awardContest,
+  ROLE_BADGE_IDS,
   contestStandings,
   deleteSpecialBadge,
   revokeAward,
@@ -23,7 +25,7 @@ import {
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
 async function guard(fn: () => Promise<string | void>): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('badges'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const message = await fn()
     revalidatePath('/panel')
@@ -63,8 +65,11 @@ export async function removeBadge(id: string) {
   })
 }
 
+const NO_ROLE_PERMISSION = 'Görevli rozetlerini sadece yönetici veya yetkili personel verebilir.'
+
 export async function giveBadge(badgeId: string, userId: string, note: string) {
   return guard(async () => {
+    if (ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     const ok = await awardBadge(badgeId, userId, `manuel-${Date.now()}`, note || undefined)
     return ok ? 'Rozet verildi.' : 'Bu üye rozeti zaten almış.'
   })
@@ -76,6 +81,8 @@ export async function giveContestBadge(badgeId: string) {
 
 export async function takeBackAward(awardId: number) {
   return guard(async () => {
+    const badgeId = await awardBadgeId(awardId)
+    if (badgeId && ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     await revokeAward(awardId)
     return 'Rozet geri alındı.'
   })
@@ -89,11 +96,11 @@ export async function changePoints(userId: string, points: number, note: string)
 }
 
 export async function findMembers(q: string) {
-  if (!(await isAdmin())) return []
+  if (!(await canPanel('badges'))) return []
   return searchMembers(q)
 }
 
 export async function previewContest(kind: Exclude<AutoKind, 'turnuva'>): Promise<{ period: string; rows: ContestRow[] } | null> {
-  if (!(await isAdmin())) return null
+  if (!(await canPanel('badges'))) return null
   return contestStandings(kind)
 }

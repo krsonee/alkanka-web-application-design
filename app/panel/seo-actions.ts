@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { deletePost, savePost } from '@/lib/blog'
 import { deleteDeal, extractVerificationCode, setDealsPublishing, setVerification } from '@/lib/deals'
 import { slugify } from '@/lib/seo'
@@ -14,7 +14,7 @@ function str(form: FormData, key: string, max: number) {
 }
 
 export async function savePostAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('seo'))) return EXPIRED
   const title = str(form, 'title', 120)
   const excerpt = str(form, 'excerpt', 200)
   const body = str(form, 'body', 30000)
@@ -47,27 +47,27 @@ export async function savePostAction(_: ActionState, form: FormData): Promise<Ac
 }
 
 export async function deletePostAction(id: number) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('seo'))) return
   await deletePost(id)
   revalidatePath('/rehber', 'layout')
   revalidatePath('/panel')
 }
 
 export async function deleteDealAction(id: number) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('seo'))) return
   await deleteDeal(id)
   revalidatePath('/firsatlar', 'layout')
   revalidatePath('/panel')
 }
 
 export async function setDealsPublishingAction(on: boolean) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('seo'))) return
   await setDealsPublishing(on)
   revalidatePath('/panel')
 }
 
 export async function saveVerificationAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('seo'))) return EXPIRED
   try {
     await setVerification({
       google: extractVerificationCode(str(form, 'google', 400)),

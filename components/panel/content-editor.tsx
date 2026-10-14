@@ -6,11 +6,11 @@ import { ExternalLink, ImageIcon, RotateCcw, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { JAKO_POSES } from '@/lib/site-registry'
+import { PANEL_GROUPS, type PanelModule } from '@/lib/panel-modules'
 
 type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string }
 
-type PanelTab = 'slide' | 'hero' | 'texts' | 'sponsors' | 'logo' | 'games' | 'tournaments' | 'push' | 'telegram' | 'seo' | 'studio' | 'community' | 'badges' | 'tasks' | 'faqs' | 'market' | 'growth' | 'social'
-const PANEL_TABS: PanelTab[] = ['growth', 'social', 'slide', 'hero', 'texts', 'sponsors', 'logo', 'games', 'tournaments', 'push', 'telegram', 'seo', 'studio', 'community', 'badges', 'tasks', 'faqs', 'market']
+type PanelTab = PanelModule | 'staff' | 'account'
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
@@ -42,7 +42,19 @@ export function ContentEditor({
   growth,
   social,
   sponsors,
+  allowed,
+  isOwner,
+  branding,
+  limits,
+  staff,
+  account,
 }: {
+  allowed: string[]
+  isOwner: boolean
+  branding: React.ReactNode
+  limits: React.ReactNode
+  staff: React.ReactNode
+  account: React.ReactNode
   growth: React.ReactNode
   social: React.ReactNode
   slides: EditorItem[]
@@ -64,55 +76,95 @@ export function ContentEditor({
   marketPending?: number
   sponsors: React.ReactNode
 }) {
-  const [tab, setTab] = useState<PanelTab>(marketPending > 0 ? 'market' : 'slide')
+  const groups = [
+    ...PANEL_GROUPS.map((g) => ({
+      label: g.label,
+      items: g.modules
+        .filter((m) => m.id !== 'roles' && allowed.includes(m.id))
+        .map((m) => ({
+          id: m.id as PanelTab,
+          label:
+            m.id === 'market' && marketPending > 0
+              ? `Market (${marketPending})`
+              : m.id === 'slide'
+                ? `Slider (${slides.length})`
+                : m.id === 'hero'
+                  ? `Sayfa başlıkları (${heroes.length})`
+                  : m.label,
+        })),
+    })),
+    {
+      label: 'Ayarlar',
+      items: [...(isOwner ? [{ id: 'staff' as PanelTab, label: 'Personel & yetkiler' }] : []), { id: 'account' as PanelTab, label: 'Hesabım & 2FA' }],
+    },
+  ].filter((g) => g.items.length > 0)
+  const tabs = groups.flatMap((g) => g.items.map((i) => i.id))
+  const initial: PanelTab = marketPending > 0 && tabs.includes('market') ? 'market' : (tabs[0] ?? 'account')
+  const [tab, setTab] = useState<PanelTab>(initial)
+  const [filter, setFilter] = useState('')
   useEffect(() => {
-    const saved = window.location.hash.replace('#', '')
-    if (PANEL_TABS.includes(saved as PanelTab)) setTab(saved as PanelTab)
+    const saved = window.location.hash.replace('#', '') as PanelTab
+    if (tabs.includes(saved)) setTab(saved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const items = tab === 'slide' ? slides : heroes
+  const q = filter.trim().toLocaleLowerCase('tr')
+  const shown = groups
+    .map((g) => ({ ...g, items: q ? g.items.filter((i) => i.label.toLocaleLowerCase('tr').includes(q) || g.label.toLocaleLowerCase('tr').includes(q)) : g.items }))
+    .filter((g) => g.items.length > 0)
+  const pick = (id: PanelTab) => {
+    setTab(id)
+    window.history.replaceState(null, '', `#${id}`)
+  }
   return (
-    <div className="flex flex-col gap-6">
-      <div role="tablist" aria-label="İçerik türü" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-fit">
-        {(
-          [
-            ['growth', 'Trafik & Siteler'],
-            ['social', 'Sosyal medya'],
-            ['slide', `Ana sayfa slider (${slides.length})`],
-            ['hero', `Sayfa başlıkları (${heroes.length})`],
-            ['texts', 'Site metinleri'],
-            ['sponsors', 'Sponsorlar'],
-            ['logo', 'Logolar'],
-            ['games', 'Oyunlar'],
-            ['tournaments', 'Turnuvalar'],
-            ['push', 'Bildirimler'],
-            ['telegram', 'Telegram'],
-            ['seo', 'SEO & Rehber'],
-            ['studio', 'Stüdyo'],
-            ['community', 'Topluluk'],
-            ['badges', 'Rozetler'],
-            ['tasks', 'Görevler'],
-            ['faqs', 'SSS'],
-            ['market', marketPending > 0 ? `Market (${marketPending} yeni talep)` : 'Market'],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => {
-              setTab(key)
-              window.history.replaceState(null, '', `#${key}`)
-            }}
-            className={cn(
-              'shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold',
-              tab === key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {tab === 'growth' ? (
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <nav aria-label="Panel bölümleri" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:w-60 lg:shrink-0 lg:overflow-y-auto">
+        <label className="sr-only" htmlFor="panel-nav-filter">
+          Bölüm ara
+        </label>
+        <input
+          id="panel-nav-filter"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Bölüm ara…"
+          className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+        />
+        <div className="flex gap-3 overflow-x-auto lg:flex-col lg:overflow-visible">
+          {shown.map((g) => (
+            <div key={g.label} className="flex shrink-0 flex-col gap-1">
+              <span className="px-2 text-xs font-semibold uppercase tracking-wider text-primary">{g.label}</span>
+              <div className="flex gap-1 lg:flex-col">
+                {g.items.map((i) => (
+                  <button
+                    key={i.id}
+                    onClick={() => pick(i.id)}
+                    aria-current={tab === i.id ? 'page' : undefined}
+                    className={cn(
+                      'shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-medium',
+                      tab === i.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                    )}
+                  >
+                    {i.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {shown.length === 0 && <p className="px-2 text-sm text-muted-foreground">Bölüm bulunamadı.</p>}
+        </div>
+      </nav>
+      <div className="min-w-0 flex-1">
+      {!tabs.includes(tab) ? (
+        <p className="text-sm text-muted-foreground">Bu bölüme erişim yetkin yok.</p>
+      ) : tab === 'staff' ? (
+        staff
+      ) : tab === 'account' ? (
+        account
+      ) : tab === 'branding' ? (
+        branding
+      ) : tab === 'limits' ? (
+        limits
+      ) : tab === 'growth' ? (
         growth
       ) : tab === 'social' ? (
         social
@@ -151,6 +203,7 @@ export function ContentEditor({
           ))}
         </div>
       )}
+      </div>
     </div>
   )
 }

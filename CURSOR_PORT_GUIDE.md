@@ -203,6 +203,7 @@ Copy each listed path from `../alkanka-source` into the same path in the target.
   - Mirrored posts go to target channels and to the site.
   - The live chat rail is two-way with the real Telegram group and supports **multiple channels as tabs**. Channel tabs are **only for members**, and members can comment on channel posts (`tg_channel_threads`, `tg_channel_comments`).
   - Posts tagged as special odds are parsed into deals (Phase 11).
+- Bot suite (DONE): `lib/telegram-bots.ts`, `components/panel/telegram-bot-suite.tsx`. Panel controls an auto-share bot (site posts/odds to target channels, run by the cron), a special-odds bot (Telegram posts with odds text become deals), and an approval-notification bot (market purchases, task proofs, complaints go to an admin chat). All three are off by default and switched on from the panel.
 
 ### Phase 10: Admin panel (`/panel`)
 - `app/panel/`: copy the whole folder (`page.tsx`, `actions.ts`, `arena-actions.ts`, `community-actions.ts`, `kp-actions.ts`, `market-actions.ts`, `push-actions.ts`, `seo-actions.ts`, `studio-actions.ts`, `telegram-actions.ts`)
@@ -272,3 +273,182 @@ Run all of these and report pass/fail for each:
 ## 7. Copy-paste prompt for Cursor
 
 > Read `CURSOR_PORT_GUIDE.md` in full before doing anything. Clone or pull `https://github.com/krsonee/alkanka-web-application-design` (branch `main`) into `../alkanka-source`. Port every feature into this project 1:1, following the phases in section 4 in order, the merge rules in section 5 and the stack in section 1. Copy files only with shell commands (`cp` / `rsync`). Never retype, summarize, shorten or reformat source code. Only edit copied files to fix import paths or swap in this project's admin auth guard, and keep a list of every edited file. Keep all Turkish UI text and characters unchanged. After each phase, run `pnpm exec tsc --noEmit` and the byte-for-byte script from section 0.3, and fix every problem before continuing. List the environment variables from section 3 that are missing and ask me for them. Do not invent values. Never drop or alter existing database data. At the end, run the full checklist in section 6 and give me a pass/fail report per item, plus the final output of the byte-for-byte script and your list of edited files.
+
+---
+
+## 8. Round 2 changes (October 2026): done vs. remaining
+
+Everything in this section lives in this file. **Do not create a separate notes file.** Update this section as you finish items.
+
+### 8.1 Already done in the source repo (port 1:1)
+| Feature | Files |
+|---|---|
+| SMTP mail helper (any provider, Alibaba DirectMail ready) | `lib/mail.ts` (dependency: `nodemailer`) |
+| Mandatory email verification after signup (turns on automatically when SMTP env vars exist) | `lib/auth.ts` (`requireEmailVerification: mailEnabled`, `sendVerificationEmail`, `autoSignInAfterVerification`) |
+| Forgot password + reset page | `lib/auth.ts` (`sendResetPassword`), `app/(site)/sifre-sifirla/page.tsx`, `components/alkanka/reset-password-form.tsx` |
+| Signup modal: referral field replaced by optional phone, parrot image fits (`object-contain`), "Şifremi unuttum" link, verification notice | `components/alkanka/auth-modal.tsx` |
+| DB: optional `phone` column on `"user"` | `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone text;` |
+| Existing users marked verified so they are not locked out | `UPDATE "user" SET "emailVerified" = true WHERE "emailVerified" = false;` (run **once**, before setting SMTP env vars) |
+| "Profilim" removed from the left menu (still in the profile dropdown) | `components/alkanka/data.ts` |
+| KankaTV group renamed to "TV & Mizah & Haber" | `lib/kankatv.ts` |
+| ✅ A1 Site search works (pages, sponsors, games; Ctrl K, arrow keys, Enter) | `components/alkanka/site-search.tsx`, used in `topbar.tsx` |
+| ✅ H36 (part) Security headers: nosniff, Referrer-Policy, HSTS, Permissions-Policy, X-Frame-Options SAMEORIGIN on `/panel` | `next.config.mjs` |
+
+### 8.2 Remaining work (do in this order, one PR per group)
+Rules for every item: keep the current dark/gold theme and Turkish copy style. Hide "AL KANKA" / "alkanka.com" subtly in game tables (felt center, card backs, dealer tray, wheel hub). Test at 390x844 and 1440x900 with no page scroll during play.
+
+**A. Quick site fixes: ✅ ALL DONE**
+1. ✅ Site search (`components/alkanka/site-search.tsx`).
+2. ✅ Filters can be deselected: clicking an active chip returns to "Tümü" (sponsor tier, bonus type, campaign tag) in `components/alkanka/partner-sites.tsx`.
+3. ✅ Animated tier badges: VIP glows, Ana sponsor has a gold shine sweep (`.tier-shine` in `app/globals.css`), both respect `prefers-reduced-motion`.
+4. ✅ Main sponsor shown on home, `/sponsorlar` and `/kampanyalar` (`MainSponsorRotator`).
+5. ✅ "Detay / Kurallar" buttons higher contrast (`components/alkanka/detail-modal.tsx`).
+6. ✅ Main sponsor rotator: one at a time, auto-rotates every 6 s, pauses on hover/focus, dot navigation. Rotation = main sponsor + other "ana"/featured sites (`pickFeatured().mains` in `lib/sites.ts`).
+7. ✅ KankaTV offline state with Jako and "Şu anda yayın yapılmıyor" text (`components/alkanka/kankatv/board.tsx`).
+8. ✅ KankaTV channels extended, group renamed "TV & Mizah & Haber" (`lib/kankatv.ts`).
+
+**B. Top bar (badge, coin, radio): ✅ ALL DONE**
+1. ✅ Username is separate: the account button shows only an avatar initial + name + chevron (`components/alkanka/topbar.tsx` `AccountMenu`).
+2. ✅ Active badge (rank emblem) moved next to the Kanka Coin balance, slightly bigger, with pulse + shine animation; links to `/profil?sekme=rozetler` (`BadgeButton`, `.animate-badge-pulse` in `app/globals.css`).
+3. ✅ Kanka Coin box made smaller (single line, `h-9`, "KC" suffix).
+4. ✅ Animated radio button + "Kanka Radyo" panel: live Turkish stations (~200) from the free Radio Browser API via `app/api/radyo/route.ts` (6 h cache, 3 mirrors, HTTPS + non-HLS MP3/AAC only), search by name/genre, play/pause, mute, close; keeps playing across page navigation because it lives in the persistent top bar (`components/alkanka/radio-player.tsx`).
+
+**C. Home & ranking design: ✅ DONE**
+11. ✅ Podium with Jako, gold/silver/bronze, animated entrance on home and `/siralama` (`components/alkanka/top-three.tsx`).
+
+**Round 3 fixes: ✅ DONE**
+- ✅ Mode choice moved into the stake menu as a required step ("Oyun modunu seç *"); play button stays disabled until a mode is picked (`stake-gate.tsx`, `arena-stage.tsx`).
+- ✅ Table chat emoji picker + one-tap emoji send (`table-chat.tsx`).
+- ✅ Tournament bracket redesigned (`bracket-view.tsx`).
+
+**D. Games (biggest group): items 12-16 and 18 ✅ DONE**
+12. ✅ Smaller game cards on `/oyunlar`: 2/3/4/5-column grid, square cards, compact badges (`components/alkanka/games/games-hub.tsx`).
+13. ✅ Mode choice ("Bota karşı / Oyuncuya karşı / Aynı cihaz") is required: nothing renders until one is picked (`arena-stage.tsx`, `mode` starts `null`).
+14. ✅ Spectator view scales the board to fit the viewport, never upscales, no scrolling (`components/alkanka/arena/fit-to-screen.tsx`, used in `TableRoom`).
+15. ✅ Table chat shared by players and spectators (`table_messages`, `app/api/tables/[id]/chat/route.ts`, `components/alkanka/arena/table-chat.tsx`): 300 chars max, rate-limited, server-side session check.
+16. ✅ Server-enforced turn timer with auto random legal move on timeout (`lib/pvp/rules.ts`, `lib/pvp/tables.ts`, `app/api/tables/[id]/route.ts`).
+18. ✅ Okey selection: drag-drop clears the selection, double-click no longer discards (only flips the okey tile), discard only via the "Taşı at" button or the "Buraya at" drop zone (`okey-rack.tsx`, `okey.tsx`).
+17. ✅ Tavla: wood-grain frame, felt surface, 3D checkers, glowing selected checker, pulsing legal destination points, "Sıra sende / Rakipte" indicator (`components/alkanka/arena/tavla.tsx`, `.tavla-*` styles in `app/globals.css`). Verified by type check only; the board requires login so it was not screenshotted.
+18. ✅ Okey selection behavior (see line above). Visual felt/tile realism can be polished further later.
+19. ✅ Billiards: wood-grain rails with shading, felt noise texture, cushion shadows, deep pocket gradients with gold rims, centered "AL KANKA" logo (`components/alkanka/arena/bilardo.tsx`).
+20. ✅ Roulette: live shared table + Jako croupier already existed; added "Son tur kazananları" panel (top 8 winners, username + amount) computed in `liveState().lastRound` (`lib/roulette-live.ts`, `WinnersPanel` in `roulette-live.tsx`). Original spec: one global live table. Server-driven rounds (betting window, then Jako croupier spins). Everyone sees the same result. Winners list (username + amount) beside the wheel after each round. Extend the existing `lib/roulette-live.ts`.
+21. ✅ DONE — Blackjack: multiplayer tables with up to 6 seats side by side, shared dealer, server-driven rounds. (`lib/blackjack-live.ts`, `app/api/blackjack/route.ts`, `components/alkanka/arena/blackjack-live.tsx`; "Canlı masa / Tek başına" tabs on the game page.)
+22. ✅ House games done: Çark, Zar and Sandık outcomes are now decided server-side with `crypto.randomInt` in `playMini()` (`app/actions/wallet.ts`). The client can no longer send its own reward amount. "Büyük ödül oranı" (default 40%) is editable in Panel → Oyunlar and stored as `arena:house`. PvP part: already 1/N with no bot bias. Original spec: PvP games use no house edge or bot bias, so each seat has equal odds (1/N). House games (zar, çark, gizemli kutu) target a 40% player / 60% house win rate. Make the rate configurable in the panel. All RNG goes through `crypto.randomInt`, server side only.
+23. ✅ Touch pads already existed (pointer-capture buttons for left/right/jump/kick); enlarged to `size-20` on phones (`TouchPad` in `head-game.tsx`). Original spec: Mobile controls for Kafa Topu / Kafa Basketbolu: large touch zones (left/right swipe areas + jump tap) instead of small buttons.
+
+**E. Tasks after day 7: ✅ DONE**
+24. ✅ Real server-side 7-day streak check-in that repeats after day 7 (`daily_checkins` table, `lib/checkin.ts`, `checkInAction`), Turkey-time days, a missed day resets the streak. Tasks have `period` (once/daily/weekly/monthly) plus optional `starts_at`/`ends_at`; completions reset per period (`lib/task-period.ts`, `lib/tasks.ts`). Panel → Görevler form has Tekrar, Başlangıç and Bitiş fields, and the list shows the period and an expired badge (`components/panel/tasks-manager.tsx`). Original spec: Recurring tasks: daily, weekly and monthly pools that rotate after the 7-day starter track, plus streak rewards. Add a panel module to create, schedule and disable tasks manually.
+
+**F. Panel: ✅ ALL DONE**
+- Blackjack wait fix: a solo player no longer waits. Round starts immediately when everyone seated has bet (short 8 s window only when 2+ players), dealer plays as soon as all hands finish (`lib/blackjack-live.ts`).
+25. ✅ Grouped left nav, shows only modules the account may use (`lib/panel-modules.ts` `PANEL_GROUPS`, `components/panel/content-editor.tsx`); page loads data only for allowed modules (`app/panel/page.tsx`).
+26. ✅ Header logo/text editor (`lib/branding.ts`, `app/panel/branding-actions.ts`, `components/panel/branding-editor.tsx`, read by `logo-context.tsx`).
+27. ✅ App icon upload, served at `/app-icon/192|512|180` and used by `app/manifest.ts` and the apple-touch icon (`app/api/app-icon-upload/route.ts`, `app/app-icon/[size]/route.ts`).
+28. ✅ Staff accounts with per-module permissions (`panel_accounts`, `lib/panel-auth.ts`, `components/panel/staff-manager.tsx`). Every panel action guard calls `requirePanel(module)` server-side. Main admin still logs in with `ADMIN_PASSWORD`.
+29. ✅ TOTP 2FA (own RFC 6238 implementation in `lib/totp.ts`, AES-GCM encrypted secret, 8 hashed backup codes, login rate limit via `panel_login_attempts`), self-service in "Hesabım" (`components/panel/account-settings.tsx`), admins can reset per account.
+30. ✅ "Moderatör" / "Sponsor Destek" badges (`ROLE_BADGE_IDS` in `lib/kanka-puan.ts`): give/revoke needs the `roles` permission, no auto KP, excluded from leaderboards, level frozen, market purchase blocked (`lib/market.ts`), cannot be deleted.
+31. ✅ Hidden member limits (`member_limits`, `lib/member-limits.ts`, `components/panel/limits-manager.tsx`), enforced in arena settle, live roulette/blackjack, PvP tables and market purchase. Members only see a generic error.
+
+**G. Telegram bots: ✅ ALL DONE** (`lib/telegram-bots.ts`, panel → Telegram → "Bot paketi" via `components/panel/telegram-bot-suite.tsx`; all three bots are off until enabled in the panel)
+32. ✅ Post sharing bot: picks up a post from the sponsor support group, appends the alkanka link/text, posts it to the target channels and replies in the source group with the post link.
+33. ✅ Special odds bot: mirrors special odds posts with our links and notes. When the result is marked won, it auto-posts "Özel oran kazandı".
+34. ✅ Approval notifier: market purchases, completed tasks and complaints needing admin/mod approval are sent to a Telegram group with a template text.
+
+**H. Security & audit: ✅ DONE**
+35. ✅ Scanned every Telegram/settings key the panel writes against its readers (readers include batch `getSettings([...])` calls); no dead fields found. Panel content and arena settings are read by the site through `lib/content.ts` and `getArenaSettings()`.
+36. ✅ Write routes and actions all check the session (panel actions via `requirePanel(module)`). Money inputs are validated by hand on the server (allowed-bet lists, integer/range checks, trimmed text) rather than with Zod. SQL is parameterized. Rate limits: Better Auth (auth), `panel_login_attempts` (panel login), and `lib/rate-limit.ts` with the `rate_hits` table (chat 6/15 s, table chat 6/15 s, game actions 40/10 s). Security headers are in `next.config` (panel gets SAMEORIGIN + noindex). The panel cookie is httpOnly + secure. Original spec: every write API checks the session and role. Zod-validate all inputs. Parameterized SQL only. Rate-limit auth, chat and game endpoints. Use the security headers in `next.config` (nosniff, Referrer-Policy, HSTS, X-Frame-Options SAMEORIGIN on the panel). Use `httpOnly` cookies and keep secrets server-only.
+
+### 8.3 What the owner (user) must do: step by step
+**MAIL KURULUMU (Türkçe, adım adım, hiç bilmeyen biri için)**
+
+Bu kurulum bitince iki şey çalışır: (1) yeni üye kayıt olunca mailine "Hesabımı onayla" linki gider, onaylamadan giriş yapamaz. (2) "Şifremi unuttum" linkine basan üyeye şifre sıfırlama maili gider. Kod hazır. Mail ayarlarını girmediğin sürece site eskisi gibi mailsiz çalışır, hiçbir şey bozulmaz. Mevcut 10 üye zaten "onaylı" işaretlendi, onlar kilitlenmez.
+
+Önce hangi yolu seçeceğine karar ver:
+- **YOL A: Alibaba DirectMail.** Hesabın ve kredin var. Ucuz, ama Alibaba bazen kimlik ya da şirket doğrulaması istiyor ve bu birkaç gün sürebiliyor.
+- **YOL B: Resend.** Ayda 3.000 mail ücretsiz. Kurulumu 15 dakika sürer, mailler spam'e düşmez. **Takılırsan bunu kullan.**
+
+---
+
+**YOL A: ALIBABA DIRECTMAIL**
+
+*A1. Hizmeti aç*
+1. Tarayıcıda `https://www.alibabacloud.com` adresine git. Sağ üstten **Log In**'e bas ve hesabınla gir.
+2. Üstteki arama kutusuna `DirectMail` yaz, çıkan **DirectMail** sonucuna tıkla.
+3. Açılan sayfada **Activate Now**, **Buy Now** ya da **Console** butonu görürsen ona bas. "Pay-As-You-Go" seçeneği çıkarsa onu seç, şartları onayla (kutucuğa tik), **Activate**'e bas.
+4. Konsol açılınca sol üstte bir bölge (region) seçici var, genelde "Singapore", "Hangzhou" gibi yazar. **Singapore**'u seç. Bundan sonra hep bu bölgede kal.
+
+*A2. Alan adını ekle*
+5. Sol menüden **Email Settings**, sonra **Email Domains**'e tıkla. (Menü İngilizce değilse sağ üstten dili English yap.)
+6. **New Domain** butonuna bas. Kutuya **sadece** `mail.alkanka.com` yaz (www yok, https yok). **OK**'e bas.
+7. Listede `mail.alkanka.com` satırı belirir, durumu kırmızı ya da "To be verified" yazar. Satırın sağındaki **Configure** linkine bas.
+8. Bir tablo açılır, 4 civarı satır olur. Her satırda üç bilgi var: **Type** (TXT, MX ya da CNAME), **Host Record / Name** (ör. `aliyundm.mail`, `mail`, `aliyun-ap-southeast-1._domainkey.mail`) ve **Record Value** (uzun bir yazı). **Bu sekmeyi kapatma.**
+
+*A3. DNS kayıtlarını Vercel'e gir (alkanka.com Vercel'de olduğu için)*
+9. Yeni bir sekmede `https://vercel.com` adresine gir ve hesabına giriş yap.
+10. Üst menüden **Domains**'e tıkla. Görmüyorsan takım adının yanındaki menüden **Settings**, sonra **Domains**'e gir. Listede **alkanka.com**'a tıkla.
+11. Sayfada **DNS Records** bölümünü bul. Bölümün altında boş bir satır olur: **Name**, **Type**, **Value**, **TTL**.
+12. Alibaba'daki **her satır için** şunları yap:
+    - **Type**: Alibaba'da ne yazıyorsa onu seç (TXT, MX ya da CNAME).
+    - **Name**: Alibaba'daki **Host Record**'u yaz, ama **sonunda `.alkanka.com` varsa onu sil**. Örneğin `aliyundm.mail.alkanka.com` yazıyorsa sadece `aliyundm.mail` yaz.
+    - **Value**: Alibaba'daki **Record Value**'yu kopyala-yapıştır yap. Başta ya da sonda boşluk kalmasın, tırnak işaretlerini de silme.
+    - MX kaydında **Priority** diye bir kutu çıkarsa Alibaba'daki sayıyı yaz (genelde `10`).
+    - **TTL**'ye dokunma. **Add**'e bas.
+13. Bütün satırları ekleyince Alibaba sekmesine dön ve **Verify** butonuna bas. Hemen yeşile dönmezse panik yapma, 10-60 dakika bekle ve tekrar **Verify**'a bas. Satırların hepsi yeşil tik olunca devam et.
+    - Bir satır uzun süre kırmızı kalırsa Name'e fazladan `.alkanka.com` ekleyip eklemediğine bak. En sık yapılan hata bu.
+
+*A4. Gönderici adresini oluştur*
+14. Alibaba sol menüden **Email Settings**, sonra **Sender Addresses**'e gir. **Create Sender Address**'e bas.
+15. Formu şöyle doldur: **Email Domain**: `mail.alkanka.com`. **Account**: `noreply`. **Reply-To**: boş bırak ya da kendi mailini yaz. **Mail Type**: **Triggered Emails** (işlem maili). **OK**'e bas.
+16. Listede `noreply@mail.alkanka.com` satırı çıkar. Sağındaki **SMTP Password**'e bas. En az 10 karakterli, büyük-küçük harf ve rakam içeren bir şifre yaz (ör. `AlKanka2026Mail`). **Bu şifreyi bir yere not et**, bir daha gösterilmez.
+17. Alibaba yeni hesaplarda günlük gönderim limitini düşük tutabilir (ör. günde 200). Yeterli değilse aynı sayfada **Quota** ya da **Upgrade**'den arttırırsın.
+
+*A5. Ayarları siteye gir*
+18. v0'da sağ üstteki **ayarlar (dişli)** simgesine tıkla, sonra **Vars**'a gir.
+19. **Add** / **New Variable** ile aşağıdaki 5 değişkeni tek tek ekle. Sol kutu = **Key**, sağ kutu = **Value**. Büyük-küçük harf aynı olmalı:
+
+| Key | Value |
+|---|---|
+| `SMTP_HOST` | `smtpdm-ap-southeast-1.aliyun.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | `noreply@mail.alkanka.com` |
+| `SMTP_PASS` | 16. adımda not ettiğin şifre |
+| `MAIL_FROM` | `AL KANKA <noreply@mail.alkanka.com>` |
+
+   - Singapore dışında bir bölge seçtiysen SMTP_HOST farklıdır. Alibaba'da **Sender Addresses** sayfasında "SMTP address" diye yazar, oradakini kullan.
+20. Kaydet. Sonra **Publish**'e basıp yeniden yayınla. Vercel'den yapıyorsan **Project**, **Settings**, **Environment Variables**'a aynı 5 satırı ekle, **Production** tikini işaretle, sonra **Deployments** sekmesinde en üstteki satırın **...** menüsünden **Redeploy**'a bas.
+
+---
+
+**YOL B: RESEND (takılırsan bunu kullan)**
+1. `https://resend.com` adresine gir, **Sign Up** ile Google hesabınla kayıt ol.
+2. Soldan **Domains**'e gir, **Add Domain**'e bas. `mail.alkanka.com` yaz, Region'da **EU (Ireland)**'ı seç, **Add**'e bas.
+3. Ekranda 3-4 DNS kaydı çıkar (MX, TXT, TXT). Yukarıdaki **A3** adımlarının aynısını yap: Vercel'de alkanka.com'un **DNS Records** bölümüne her birini Type / Name / Value olarak gir. Name'de sonda `.alkanka.com` varsa sil.
+4. Resend'de **Verify DNS Records**'a bas. Birkaç dakika içinde **Verified** olur.
+5. Soldan **API Keys**'e gir, **Create API Key**'e bas. Name: `alkanka`, Permission: **Sending access**, Domain: `mail.alkanka.com`. **Add**'e bas. Çıkan `re_...` ile başlayan anahtarı kopyala, bir daha gösterilmez.
+6. v0'da **Ayarlar**, sonra **Vars**'a gir ve şunları ekle:
+
+| Key | Value |
+|---|---|
+| `SMTP_HOST` | `smtp.resend.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | `resend` |
+| `SMTP_PASS` | 5. adımdaki `re_...` anahtarı |
+| `MAIL_FROM` | `AL KANKA <noreply@mail.alkanka.com>` |
+
+7. **Publish** ile yeniden yayınla.
+
+---
+
+**TEST (iki yolda da aynı)**
+1. Gizli sekme aç (Ctrl+Shift+N), `alkanka.com`'a gir.
+2. **Kayıt ol**'a bas ve daha önce kullanmadığın bir mail adresiyle kayıt ol. Ekranda "mailini kontrol et" uyarısı çıkmalı.
+3. Mail kutuna bak, gelmediyse **Spam / Gereksiz** klasörüne de bak. "Hesabımı onayla" butonuna bas, site açılıp seni içeri almalı.
+4. Çıkış yap. **Giriş yap**'a, sonra **Şifremi unuttum**'a bas. Aynı maili yaz, gelen maildeki linke tıkla, yeni şifreni belirle ve yeni şifreyle giriş yap.
+5. Mail hiç gelmiyorsa: Vars'taki 5 değişkeni harf harf kontrol et (başta/sonda boşluk olmasın), Publish yaptığından emin ol, Alibaba'da domain satırlarının hepsinin yeşil olduğuna bak. Yine olmuyorsa YOL B'ye geç.
+
+**Telegram bots:** create each bot with @BotFather (`/newbot`), add it as **admin** to every source/target channel and group, and paste the token into the panel's Telegram tab.
+
+**2FA (after item 29 is built):** install Google Authenticator on your phone. In the panel open Profile, then 2FA, then **Etkinleştir**, scan the QR code and enter the 6-digit code. Store the backup codes somewhere safe.
+
+### 8.4 Prompt for Cursor (round 2)
+> Read `CURSOR_PORT_GUIDE.md`, especially section 8. First port everything in 8.1 1:1 (copy files with shell commands, run the two SQL statements once, `pnpm add nodemailer`). Then implement 8.2 groups A to H in order, one commit per item, keeping the existing theme, Turkish copy and file locations. Enforce all game, limit, badge and permission rules on the server. After each group run `pnpm exec tsc --noEmit` and `pnpm build`, and test at 390x844 and 1440x900. Mark each finished item in section 8.2 of this same file with ✅ and never create a separate notes file. Ask me for any missing env var instead of inventing it. Never delete existing data.

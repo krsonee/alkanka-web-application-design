@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { runGeneration } from '@/lib/studio-generate'
 import { IMAGE_COST, STUDIO_CATEGORIES, STUDIO_FORMATS } from '@/lib/studio-types'
@@ -7,7 +7,7 @@ import { IMAGE_COST, STUDIO_CATEGORIES, STUDIO_FORMATS } from '@/lib/studio-type
 export const maxDuration = 300
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
+  if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   if (!body) return NextResponse.json({ error: 'Geçersiz istek.' }, { status: 400 })

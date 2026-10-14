@@ -9,6 +9,9 @@ import { bjAct, bjDeal, bjPayout, bjPublic, betLabel, betReturn, validBet, type 
 import { actOnTable, cancelTable, claimTimeout, createTable, joinTable } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
+import { assertCanPlay, capPayout } from '@/lib/member-limits'
+import { assertRateLimit } from '@/lib/rate-limit'
+import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, sitAtTable as bjLiveSit } from '@/lib/blackjack-live'
 
 type Fail = { ok: false; error: string }
 const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Error ? error.message : 'Bir hata oluştu.' })
@@ -16,6 +19,7 @@ const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Err
 async function member() {
   const m = await getMember()
   if (!m) throw new Error('Bu işlem için giriş yapmalısın.')
+  await assertRateLimit(`game:${m.id}`, 40, 10)
   return m
 }
 
@@ -31,6 +35,7 @@ export async function startBotGame(game: string, stake: number) {
     const s = (await getArenaSettings())[game]
     if (!s.enabled) throw new Error('Bu oyun şu an kapalı.')
     if (!s.bets.includes(stake)) throw new Error('Geçersiz bahis.')
+    await assertCanPlay(m.id)
     await pool.query(`UPDATE solo_sessions SET status = 'terk' WHERE user_id = $1 AND game = $2 AND status = 'acik'`, [m.id, game])
     if (!(await debit(m.id, stake))) throw new Error('Yetersiz Kanka Coin.')
     const r = await pool.query(`INSERT INTO solo_sessions (user_id, game, stake, status) VALUES ($1,$2,$3,'acik') RETURNING id`, [m.id, game, stake])
@@ -55,7 +60,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
     let final = result
     if (final === 'win' && Number(row.secs) < (MIN_WIN_SECONDS[game] ?? 30)) final = 'loss'
     const s = (await getArenaSettings())[game]
-    const payout = final === 'win' ? Math.floor(stake * s.multiplier) : final === 'draw' ? stake : 0
+    const payout = await capPayout(m.id, stake, final === 'win' ? Math.floor(stake * s.multiplier) : final === 'draw' ? stake : 0)
     if (payout) await credit(m.id, payout)
     await recordHistory({
       userId: m.id,
@@ -77,7 +82,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
 /* ---------------- Blackjack (server RNG) ---------------- */
 
 async function settleBlackjack(m: { id: string; name: string }, id: string, state: BjState, stake: number) {
-  const payout = bjPayout(state)
+  const payout = await capPayout(m.id, state.bet, bjPayout(state))
   if (payout) await credit(m.id, payout)
   const result = state.result === 'push' ? 'draw' : state.result === 'loss' ? 'loss' : 'win'
   await recordHistory({ userId: m.id, userName: m.name, game: 'blackjack', mode: 'bot', opponent: 'Krupiye', stake: state.bet, result, delta: payout - state.bet, tableId: id })
@@ -90,6 +95,7 @@ export async function blackjackDeal(stake: number) {
     const s = (await getArenaSettings()).blackjack
     if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
     if (!s.bets.includes(stake)) throw new Error('Geçersiz bahis.')
+    await assertCanPlay(m.id)
     if (!(await debit(m.id, stake))) throw new Error('Yetersiz Kanka Coin.')
     const state = bjDeal(stake)
     const r = await pool.query(`INSERT INTO solo_sessions (user_id, game, stake, status, state) VALUES ($1,'blackjack',$2,$3,$4::jsonb) RETURNING id`, [
@@ -135,6 +141,40 @@ export async function blackjackAct(id: string, action: 'hit' | 'stand' | 'double
   }
 }
 
+export async function sitBlackjackTable(seat: number, bet: number) {
+  try {
+    const m = await member()
+    const s = (await getArenaSettings()).blackjack
+    if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
+    await assertCanPlay(m.id)
+    const res = await bjLiveSit(m, seat, bet, s.bets)
+    return { ok: true as const, ...res }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function readyBlackjackTable() {
+  try {
+    const m = await member()
+    const res = await bjLiveReady(m)
+    return { ok: true as const, ...res }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function actBlackjackTable(action: 'hit' | 'stand' | 'double') {
+  try {
+    const m = await member()
+    if (!['hit', 'stand', 'double'].includes(action)) throw new Error('Geçersiz hamle.')
+    const res = await bjLiveAct(m, action)
+    return { ok: true as const, ...res }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
 /* ---------------- Roulette (server RNG) ---------------- */
 
 export async function spinRoulette(bets: RouletteBet[]) {
@@ -146,9 +186,10 @@ export async function spinRoulette(bets: RouletteBet[]) {
     const max = Math.max(...s.bets)
     if (!bets.every(validBet) || bets.some((b) => b.amount > max)) throw new Error('Geçersiz bahis.')
     const total = bets.reduce((a, b) => a + b.amount, 0)
+    await assertCanPlay(m.id)
     if (!(await debit(m.id, total))) throw new Error('Yetersiz Kanka Coin.')
     const n = Math.floor(Math.random() * 37)
-    const returned = bets.reduce((a, b) => a + betReturn(b, n), 0)
+    const returned = await capPayout(m.id, total, bets.reduce((a, b) => a + betReturn(b, n), 0))
     if (returned) await credit(m.id, returned)
     await recordHistory({
       userId: m.id,
@@ -172,6 +213,7 @@ export async function placeLiveRouletteBets(bets: RouletteBet[]) {
     const m = await member()
     const s = (await getArenaSettings()).rulet
     if (!s.enabled) throw new Error('Rulet şu an kapalı.')
+    await assertCanPlay(m.id)
     const r = await placeLiveBets(m, bets, Math.max(...s.bets))
     return { ok: true as const, ...r }
   } catch (e) {
@@ -183,7 +225,9 @@ export async function placeLiveRouletteBets(bets: RouletteBet[]) {
 
 export async function openTable(game: string, stake: number, options?: { seats?: number; team?: boolean; bots?: number }) {
   try {
-    const id = await createTable(await member(), game, stake, options)
+    const m = await member()
+    await assertCanPlay(m.id)
+    const id = await createTable(m, game, stake, options)
     revalidatePath('/oyunlar/masalar')
     return { ok: true as const, id }
   } catch (e) {
@@ -193,7 +237,9 @@ export async function openTable(game: string, stake: number, options?: { seats?:
 
 export async function sitAtTable(id: string) {
   try {
-    await joinTable(await member(), id)
+    const m = await member()
+    await assertCanPlay(m.id)
+    await joinTable(m, id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)

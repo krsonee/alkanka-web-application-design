@@ -3,9 +3,20 @@
 import Image from 'next/image'
 import { useRef, useState, type ReactNode } from 'react'
 import { finishBotGame, startBotGame } from '@/app/actions/arena'
-import { Coins, RotateCcw, Trophy, Undo2, Users } from 'lucide-react'
+import { Bot, Coins, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ARENA_META, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { ARENA_META, MODE_LABEL, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
+
+const MODE_ICON: Record<GameMode, typeof Bot> = { bot: Bot, pvp: Swords, local: Users }
+
+/** Mode picker shown inside the stake menu; `onEnter` handles every mode StakeGate doesn't start itself. */
+export type ModeSelect = {
+  modes: GameMode[]
+  mode: GameMode | null
+  onChange: (m: GameMode) => void
+  onEnter: (m: GameMode, bet: number) => void
+  botExternal?: boolean
+}
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 
@@ -19,11 +30,13 @@ export function StakeGate({
   settings,
   rules,
   children,
+  modeSelect,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
   rules: string[]
   children: (api: GameApi) => ReactNode
+  modeSelect?: ModeSelect
 }) {
   const meta = ARENA_META[game]
   const { points, setBalance, requireLogin } = usePoints()
@@ -148,6 +161,33 @@ export function StakeGate({
           <p className="leading-relaxed text-muted-foreground">{meta.short}</p>
         </div>
 
+        {modeSelect && (
+          <fieldset className="flex flex-col gap-3">
+            <legend className="mb-3 text-sm font-semibold text-foreground">
+              Oyun modunu seç <span className="text-primary">*</span>
+            </legend>
+            <div className={cn('grid gap-2', modeSelect.modes.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+              {modeSelect.modes.map((m) => {
+                const Icon = MODE_ICON[m]
+                const active = modeSelect.mode === m
+                return (
+                  <label
+                    key={m}
+                    className={cn(
+                      'flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center transition-colors',
+                      active ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:border-primary/50',
+                    )}
+                  >
+                    <input type="radio" name="mode" value={m} checked={active} onChange={() => modeSelect.onChange(m)} className="sr-only" />
+                    <Icon className="size-5" aria-hidden="true" />
+                    <span className="text-xs font-bold uppercase tracking-wide">{MODE_LABEL[m]}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+        )}
+
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-3 text-sm font-semibold text-foreground">Bahsini seç</legend>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -185,12 +225,22 @@ export function StakeGate({
         </dl>
 
         <button
-          onClick={() => start(bet)}
-          disabled={bet > points}
+          onClick={() => {
+            if (!modeSelect) return start(bet)
+            const m = modeSelect.mode
+            if (!m) return
+            if (m === 'bot' && !modeSelect.botExternal) return start(bet)
+            if (m !== 'local' && !requireLogin()) return
+            modeSelect.onEnter(m, bet)
+          }}
+          disabled={(modeSelect != null && modeSelect.mode == null) || (modeSelect?.mode !== 'local' && bet > points)}
           className="rounded-xl bg-primary px-6 py-4 font-display text-lg font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Masaya otur
+          {!modeSelect || modeSelect.mode === 'bot' ? 'Masaya otur' : modeSelect.mode === 'pvp' ? 'Oyuncu masalarına geç' : modeSelect.mode === 'local' ? 'Aynı cihazda başla' : 'Önce oyun modunu seç'}
         </button>
+        {modeSelect && modeSelect.mode == null && (
+          <p className="-mt-3 text-center text-xs text-muted-foreground">Devam etmek için bir oyun modu seçmen gerekiyor.</p>
+        )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <details className="group rounded-xl border border-border px-4 py-3 text-sm">

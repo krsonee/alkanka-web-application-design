@@ -1,8 +1,9 @@
 'use server'
 
-import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { ADMIN_COOKIE, checkPassword, createSessionValue, isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
+import type { PanelModule } from '@/lib/panel-modules'
+import { panelLogout } from '@/app/panel/auth-actions'
 import { deleteContent, setContent, type HeroOverride, type SlideOverride } from '@/lib/content'
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
@@ -25,13 +26,13 @@ function imageField(form: FormData) {
   return value
 }
 
-async function requireAdmin() {
-  if (!(await isAdmin())) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
+async function requireAdmin(module: PanelModule) {
+  if (!(await canPanel(module))) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
 }
 
 export async function saveShare(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('logo')
     const text = (name: string, max: number) => String(form.get(name) ?? '').trim().slice(0, max)
     const image = text('image', 500)
     if (image && !isAllowedImage(image)) throw new Error('Görsel /images/ ile ya da https:// ile başlamalı.')
@@ -50,7 +51,7 @@ export async function saveShare(_: ActionState, form: FormData): Promise<ActionS
 
 export async function saveAds(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('logo')
     const { AD_PAGES, AD_POSITIONS, ADS_KEY } = await import('@/lib/ads')
     const value: Record<string, { image: string; href: string; alt: string }> = {}
     for (const page of AD_PAGES) {
@@ -72,29 +73,13 @@ export async function saveAds(_: ActionState, form: FormData): Promise<ActionSta
   }
 }
 
-export async function login(_: ActionState, form: FormData): Promise<ActionState> {
-  const password = String(form.get('password') ?? '')
-  const token = createSessionValue()
-  if (!token || !checkPassword(password)) return { message: 'Şifre yanlış.' }
-  ;(await cookies()).set(ADMIN_COOKIE, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    path: '/',
-    maxAge: 60 * 60 * 12,
-  })
-  revalidatePath('/panel')
-  return { ok: true }
-}
-
 export async function logout() {
-  ;(await cookies()).delete(ADMIN_COOKIE)
-  revalidatePath('/panel')
+  await panelLogout()
 }
 
 export async function saveHero(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('hero')
     const slug = String(form.get('slug'))
     const page = HERO_PAGES.find((p) => p.slug === slug)
     if (!page) return { message: 'Sayfa bulunamadı.' }
@@ -117,7 +102,7 @@ export async function saveHero(_: ActionState, form: FormData): Promise<ActionSt
 
 export async function resetHero(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('hero')
     const page = HERO_PAGES.find((p) => p.slug === String(form.get('slug')))
     if (!page) return { message: 'Sayfa bulunamadı.' }
     await deleteContent(`hero:${page.slug}`)
@@ -131,7 +116,7 @@ export async function resetHero(_: ActionState, form: FormData): Promise<ActionS
 
 export async function saveTexts(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('texts')
     const value: Record<string, string> = {}
     for (const f of TEXT_FIELDS) {
       const v = String(form.get(f.key) ?? '').trim().slice(0, f.max)
@@ -149,7 +134,7 @@ export async function saveTexts(_: ActionState, form: FormData): Promise<ActionS
 
 export async function saveSlide(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('slide')
     const id = String(form.get('id'))
     if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     const value: SlideOverride = {
@@ -169,7 +154,7 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
 
 export async function saveLogos(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('logo')
     const kind = String(form.get('kind'))
     const allowed = kind === 'sponsors' ? LOGO_SPONSORS : kind === 'teams' ? LOGO_TEAMS : null
     if (!allowed) return { message: 'Geçersiz liste.' }
@@ -190,7 +175,7 @@ export async function saveLogos(_: ActionState, form: FormData): Promise<ActionS
 
 export async function resetSlide(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('slide')
     const id = String(form.get('id'))
     if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     await deleteContent(`slide:${id}`)

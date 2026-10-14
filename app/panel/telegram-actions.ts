@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { connectChat, disconnectChat } from '@/lib/telegram-chat'
 import {
   addBot,
@@ -19,6 +19,7 @@ import {
   testTarget,
 } from '@/lib/telegram-mirror'
 import { encodeFilter } from '@/lib/telegram-filters'
+import { saveApprovalSettings, saveOddsSettings, saveShareSettings, setOddsResult, testApproval } from '@/lib/telegram-bots'
 import { saveChannels } from '@/lib/telegram-channels'
 import { BROADCAST_CHANNELS, type BroadcastSlug } from '@/lib/telegram-channels-shared'
 import type { ActionState } from './actions'
@@ -27,7 +28,7 @@ const EXPIRED = { message: 'Oturum süresi doldu, tekrar giriş yap.' }
 const errorText = (error: unknown) => String((error as Error).message ?? error)
 
 export async function addBotAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const me = await addBot(String(form.get('token') ?? '').trim())
     revalidatePath('/panel')
@@ -38,13 +39,13 @@ export async function addBotAction(_: ActionState, form: FormData): Promise<Acti
 }
 
 export async function deleteBotAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await deleteBot(Number(form.get('id')))
   revalidatePath('/panel')
 }
 
 export async function addTargetAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const botId = Number(form.get('botId'))
   if (!botId) return { message: 'Önce bir bot seç.' }
   try {
@@ -57,19 +58,19 @@ export async function addTargetAction(_: ActionState, form: FormData): Promise<A
 }
 
 export async function toggleTargetAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await setTargetActive(Number(form.get('id')), form.get('active') === 'true')
   revalidatePath('/panel')
 }
 
 export async function deleteTargetAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await deleteTarget(Number(form.get('id')))
   revalidatePath('/panel')
 }
 
 export async function testTargetAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const title = await testTarget(Number(form.get('id')))
     return { ok: true, message: `Test mesajı "${title}" kanalına gönderildi.` }
@@ -79,7 +80,7 @@ export async function testTargetAction(_: ActionState, form: FormData): Promise<
 }
 
 export async function addSourceAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const channel = normalizeChannel(String(form.get('channel') ?? ''))
   const brand = String(form.get('brand') ?? '').trim().slice(0, 40)
   const link = String(form.get('link') ?? '').trim().slice(0, 500)
@@ -100,25 +101,25 @@ export async function addSourceAction(_: ActionState, form: FormData): Promise<A
 }
 
 export async function toggleSourceAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await setSourceActive(Number(form.get('id')), form.get('active') === 'true')
   revalidatePath('/panel')
 }
 
 export async function deleteSourceAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await deleteSource(Number(form.get('id')))
   revalidatePath('/panel')
 }
 
 export async function rotateCronKeyAction() {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await getCronKey(true)
   revalidatePath('/panel')
 }
 
 export async function connectInviteAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const botId = Number(form.get('botId'))
   const chat = String(form.get('chat') ?? '').trim()
   if (!botId) return { message: 'Önce bir bot seç.' }
@@ -134,7 +135,7 @@ export async function connectInviteAction(_: ActionState, form: FormData): Promi
 }
 
 export async function saveChannelsAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const input = Object.fromEntries(BROADCAST_CHANNELS.map((c) => [c.slug, String(form.get(c.slug) ?? '')])) as Record<BroadcastSlug, string>
     const saved = await saveChannels(input)
@@ -146,14 +147,14 @@ export async function saveChannelsAction(_: ActionState, form: FormData): Promis
 }
 
 export async function disconnectInviteAction() {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   const { disconnectInviteChannel } = await import('@/lib/table-invite')
   await disconnectInviteChannel()
   revalidatePath('/panel')
 }
 
 export async function connectChatAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const botId = Number(form.get('botId'))
   const chat = String(form.get('chat') ?? '').trim()
   if (!botId) return { message: 'Önce bir bot seç.' }
@@ -174,13 +175,110 @@ export async function connectChatAction(_: ActionState, form: FormData): Promise
 }
 
 export async function disconnectChatAction() {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await disconnectChat()
   revalidatePath('/panel')
 }
 
+async function siteOrigin() {
+  const h = await headers()
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? h.get('x-forwarded-host') ?? h.get('host') ?? ''
+  return host && !/localhost|127\.0\.0\.1/.test(host) ? `https://${host}` : ''
+}
+
+const formIds = (form: FormData, name: string) =>
+  form
+    .getAll(name)
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0)
+
+export async function saveShareAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const enabled = form.get('enabled') === 'on'
+    const title = await saveShareSettings({
+      enabled,
+      botId: Number(form.get('botId')) || null,
+      sourceChat: String(form.get('sourceChat') ?? ''),
+      trigger: String(form.get('trigger') ?? ''),
+      appendText: String(form.get('appendText') ?? ''),
+      replyText: String(form.get('replyText') ?? ''),
+      targetIds: formIds(form, 'targetIds'),
+      siteOrigin: await siteOrigin(),
+    })
+    revalidatePath('/panel')
+    return { ok: true, message: enabled ? `Paylaşım botu "${title}" grubunu dinliyor.` : 'Paylaşım botu kapatıldı.' }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function saveOddsAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await saveOddsSettings({
+      note: String(form.get('note') ?? ''),
+      winText: String(form.get('winText') ?? ''),
+      targetIds: formIds(form, 'targetIds'),
+    })
+    revalidatePath('/panel')
+    return { ok: true, message: 'Özel oran ayarları kaydedildi.' }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function setOddsResultAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  const dealId = Number(form.get('dealId'))
+  const raw = String(form.get('result') ?? '')
+  const result = raw === 'won' || raw === 'lost' ? raw : null
+  if (!dealId) return { message: 'Özel oran seçilmedi.' }
+  try {
+    const { posted } = await setOddsResult(dealId, result)
+    revalidatePath('/panel')
+    revalidatePath('/ozel-oranlar')
+    if (result === 'won') return { ok: true, message: posted ? `Kazandı olarak işaretlendi, ${posted} kanala duyuruldu.` : 'Kazandı olarak işaretlendi.' }
+    return { ok: true, message: result === 'lost' ? 'Kaybetti olarak işaretlendi.' : 'Sonuç temizlendi.' }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function saveApprovalsAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const enabled = form.get('enabled') === 'on'
+    const title = await saveApprovalSettings({
+      enabled,
+      botId: Number(form.get('botId')) || null,
+      chatId: String(form.get('chatId') ?? ''),
+      templates: {
+        market: String(form.get('tpl_market') ?? ''),
+        task: String(form.get('tpl_task') ?? ''),
+        complaint: String(form.get('tpl_complaint') ?? ''),
+      },
+      siteOrigin: await siteOrigin(),
+    })
+    revalidatePath('/panel')
+    return { ok: true, message: enabled ? `Onay bildirimleri "${title}" grubuna gidecek.` : 'Onay bildirimleri kapatıldı.' }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function testApprovalAction(): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await testApproval()
+    return { ok: true, message: 'Test bildirimi gönderildi.' }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
 export async function runMirrorAction(): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const r = await runMirror()
     revalidatePath('/panel')

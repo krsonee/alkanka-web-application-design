@@ -142,6 +142,14 @@ export const RL_RESULT_MS = 6_000
 export const RL_CYCLE_MS = RL_BET_MS + RL_SPIN_MS + RL_RESULT_MS
 export type RoulettePhase = 'bet' | 'spin' | 'result'
 
+export const BJ_SEATS = 6
+/** Live blackjack runs on events: the bet window opens when someone sits and ends early once every seat is ready; play ends once every hand is done. These are only the upper limits. */
+export const BJ_BET_MS = 8_000
+export const BJ_JOIN_GRACE_MS = 3_000
+export const BJ_PLAY_MS = 20_000
+export const BJ_RESULT_MS = 5_000
+export type BlackjackPhase = 'waiting' | 'bet' | 'play' | 'result'
+
 export function rouletteClock(now = Date.now()) {
   const roundId = Math.floor(now / RL_CYCLE_MS)
   const start = roundId * RL_CYCLE_MS

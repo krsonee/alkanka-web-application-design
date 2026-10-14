@@ -3,6 +3,21 @@
 import { revalidatePath } from 'next/cache'
 import { getMember } from '@/lib/member'
 import { awardTask, listPublicTasks, requestTaskApproval } from '@/lib/tasks'
+import { checkIn } from '@/lib/checkin'
+
+export async function checkInAction(): Promise<
+  { ok: true; claimed: boolean; streak: number; reward: number; balance: number } | { ok: false; error: string }
+> {
+  const member = await getMember()
+  if (!member) return { ok: false, error: 'Ödül için giriş yapmalısın.' }
+  try {
+    const result = await checkIn(member.id)
+    revalidatePath('/gorevler')
+    return { ok: true, ...result }
+  } catch {
+    return { ok: false, error: 'Ödül alınamadı, biraz sonra tekrar dene.' }
+  }
+}
 
 export async function completeTaskAction(taskId: number): Promise<
   | { ok: true; awarded: boolean; pending: boolean; points: number; balance?: number; message: string }
@@ -14,7 +29,7 @@ export async function completeTaskAction(taskId: number): Promise<
     const task = (await listPublicTasks()).find((item) => item.id === taskId)
     if (!task) return { ok: false, error: 'Görev bulunamadı.' }
     if (task.needsApproval) {
-      const claim = await requestTaskApproval(member.id, taskId)
+      const claim = await requestTaskApproval(member.id, taskId, member.name)
       revalidatePath('/gorevler')
       revalidatePath('/panel')
       if (claim.status === 'beklemede') return { ok: true, awarded: false, pending: true, points: claim.points, message: 'Onay bekliyor.' }

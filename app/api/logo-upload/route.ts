@@ -1,6 +1,6 @@
 import { put } from '@vercel/blob'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanelAny } from '@/lib/admin-auth'
 
 const MAX_BYTES = 2 * 1024 * 1024
 const TYPES: Record<string, string> = {
@@ -12,7 +12,7 @@ const TYPES: Record<string, string> = {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin())) {
+  if (!(await canPanelAny(['logo', 'branding', 'sponsors']))) {
     return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
   }
 

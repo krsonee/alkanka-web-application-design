@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bot, Swords, Users } from 'lucide-react'
-import { ARENA_META, MODE_LABEL, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
+import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { StakeGate } from './stake-gate'
+import { ARENA_META, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
+import { StakeGate, type GameApi } from './stake-gate'
 import { Tavla } from './tavla'
 import { Okey } from './okey'
 import { Bilardo } from './bilardo'
 import { BlackjackHouse } from './blackjack'
+import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
 import { TableLobby } from './table-lobby'
@@ -52,28 +53,50 @@ export const RULES: Record<ArenaGame, string[]> = {
   ],
 }
 
-const MODE_ICON: Record<GameMode, typeof Bot> = { bot: Bot, pvp: Swords, local: Users }
+function BotGame({ game, api }: { game: ArenaGame; api: GameApi }) {
+  if (game === 'tavla') return <Tavla {...api} />
+  if (game === 'okey') return <Okey {...api} />
+  if (game === 'bilardo') return <Bilardo finish={api.finish} />
+  const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
+  return (
+    <HeadGame
+      sport={sport}
+      mode="bot"
+      onEnd={(s) => api.finish(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s)}
+    />
+  )
+}
+
+/** House games (blackjack, rulet) have their own live tables instead of the StakeGate flow. */
+function BlackjackModes({ settings }: { settings: ArenaGameSettings }) {
+  const [solo, setSolo] = useState(false)
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex w-fit gap-1 rounded-xl border border-border bg-card p-1" role="tablist" aria-label="Blackjack masası">
+        {[
+          { id: false, label: 'Canlı masa (6 kişi)' },
+          { id: true, label: 'Tek başına' },
+        ].map((t) => (
+          <button
+            key={t.label}
+            role="tab"
+            aria-selected={solo === t.id}
+            onClick={() => setSolo(t.id)}
+            className={cn('rounded-lg px-4 py-2 text-sm font-bold', solo === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {solo ? <BlackjackHouse settings={settings} /> : <BlackjackLive settings={settings} />}
+    </div>
+  )
+}
 
 function BotMode({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
-  if (game === 'blackjack') return <BlackjackHouse settings={settings} />
+  if (game === 'blackjack') return <BlackjackModes settings={settings} />
   if (game === 'rulet') return <RouletteLive settings={settings} />
-  return (
-    <StakeGate game={game} settings={settings} rules={RULES[game]}>
-      {(api) => {
-        if (game === 'tavla') return <Tavla {...api} />
-        if (game === 'okey') return <Okey {...api} />
-        if (game === 'bilardo') return <Bilardo finish={api.finish} />
-        const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
-        return (
-          <HeadGame
-            sport={sport}
-            mode="bot"
-            onEnd={(s) => api.finish(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s)}
-          />
-        )
-      }}
-    </StakeGate>
-  )
+  return null
 }
 
 function LocalMode({ game }: { game: ArenaGame }) {
@@ -103,8 +126,10 @@ function LocalMode({ game }: { game: ArenaGame }) {
 export function ArenaStage({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
   const meta = ARENA_META[game]
   const modes = meta.modes.filter((m) => m !== 'pvp' || settings.pvpEnabled)
-  const [mode, setMode] = useState<GameMode>(modes[0] ?? 'bot')
+  const [mode, setMode] = useState<GameMode | null>(modes.length === 1 ? modes[0] : null)
+  const [entered, setEntered] = useState<{ mode: GameMode; bet: number } | null>(null)
   const [invitedTable, setInvitedTable] = useState<string | null>(null)
+  const houseGame = game === 'blackjack' || game === 'rulet'
 
   // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
   useEffect(() => {
@@ -112,37 +137,43 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
     if (!id || !modes.includes('pvp')) return
     setInvitedTable(id)
     setMode('pvp')
+    setEntered({ mode: 'pvp', bet: settings.bets[0] })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const back = (
+    <button
+      type="button"
+      onClick={() => setEntered(null)}
+      className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+    >
+      <ArrowLeft className="size-4" aria-hidden="true" />
+      Mod ve bahis seçimine dön
+    </button>
+  )
+
   return (
     <div className="flex flex-col gap-4">
-      {modes.length > 1 && (
-        <div role="tablist" aria-label="Oyun modu" className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-card p-1.5 sm:flex sm:w-fit">
-          {modes.map((m) => {
-            const Icon = MODE_ICON[m]
-            return (
-              <button
-                key={m}
-                role="tab"
-                aria-selected={mode === m}
-                onClick={() => setMode(m)}
-                className={cn(
-                  'flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold uppercase tracking-wide transition-colors',
-                  mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                  m === 'local' && modes.length === 3 && 'col-span-2 sm:col-span-1',
-                )}
-              >
-                <Icon className="size-4" aria-hidden="true" />
-                {MODE_LABEL[m]}
-              </button>
-            )
-          })}
-        </div>
+      {entered == null && (
+        <StakeGate
+          game={game}
+          settings={settings}
+          rules={RULES[game]}
+          modeSelect={{
+            modes,
+            mode,
+            onChange: setMode,
+            botExternal: houseGame,
+            onEnter: (m, bet) => setEntered({ mode: m, bet }),
+          }}
+        >
+          {(api) => <BotGame game={game} api={api} />}
+        </StakeGate>
       )}
-      {mode === 'bot' && <BotMode game={game} settings={settings} />}
-      {mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} />}
-      {mode === 'local' && <LocalMode game={game} />}
+      {entered && back}
+      {entered?.mode === 'bot' && <BotMode game={game} settings={settings} />}
+      {entered?.mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} initialStake={entered.bet} />}
+      {entered?.mode === 'local' && <LocalMode game={game} />}
       {modes.includes('pvp') && game !== 'rulet' && (
         <div className="mt-4 border-t border-border pt-6">
           <LiveLobby game={game} />

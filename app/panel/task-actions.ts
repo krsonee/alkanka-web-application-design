@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { approveClaim, rejectClaim, saveTask, type TaskInput } from '@/lib/tasks'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
@@ -13,7 +13,7 @@ function done(pathMessage: string): Result {
 }
 
 export async function saveTaskAction(input: TaskInput): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('tasks'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     await saveTask(input)
     return done(input.id ? 'Görev güncellendi.' : 'Görev kaydedildi.')
@@ -23,7 +23,7 @@ export async function saveTaskAction(input: TaskInput): Promise<Result> {
 }
 
 export async function approveClaimAction(claimId: number): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('tasks'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     await approveClaim(claimId)
     return done('Puan yazıldı.')
@@ -33,7 +33,7 @@ export async function approveClaimAction(claimId: number): Promise<Result> {
 }
 
 export async function rejectClaimAction(claimId: number): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('tasks'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     await rejectClaim(claimId)
     return done('Talep reddedildi.')

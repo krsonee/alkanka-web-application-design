@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { pool } from '@/lib/db'
+import { mailEnabled, sendResetMail, sendVerifyMail } from '@/lib/mail'
 
 export const auth = betterAuth({
   database: pool,
@@ -12,10 +13,38 @@ export const auth = betterAuth({
         : process.env.V0_RUNTIME_URL),
   emailAndPassword: {
     enabled: true,
-    autoSignIn: true,
+    autoSignIn: !mailEnabled,
+    requireEmailVerification: mailEnabled,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    sendResetPassword: async ({ user, url }) => {
+      await sendResetMail(user.email, url)
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: mailEnabled,
+    sendOnSignIn: mailEnabled,
+    autoSignInAfterVerification: true,
+    expiresIn: 60 * 60,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendVerifyMail(user.email, user.name, url)
+    },
   },
   user: {
     changeEmail: { enabled: true, updateEmailWithoutVerification: true },
+    additionalFields: {
+      phone: { type: 'string', required: false, input: true },
+    },
+  },
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 30,
+    customRules: {
+      '/sign-in/email': { window: 60, max: 5 },
+      '/sign-up/email': { window: 60, max: 3 },
+      '/request-password-reset': { window: 60, max: 3 },
+      '/send-verification-email': { window: 60, max: 3 },
+    },
   },
   trustedOrigins: [
     ...(process.env.NODE_ENV === 'development'

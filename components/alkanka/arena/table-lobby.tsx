@@ -1,13 +1,16 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { ArrowLeft, Clock, Coins, Eye, Loader2, Plus, Swords, Trophy, Users, X } from 'lucide-react'
-import { ARENA_META, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { TableChat } from './table-chat'
+import { FitToScreen } from './fit-to-screen'
 import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
 import { formatAC, usePoints } from '../points-context'
+import { useIdle } from '../use-idle'
 import type { Remote, RemoteAction } from './remote'
 import { TavlaPvp } from './tavla'
 import { OkeyPvp } from './okey-pvp'
@@ -58,15 +61,17 @@ export function TableLobby({
   settings,
   rules,
   invitedId = null,
+  initialStake,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
   rules: string[]
   invitedId?: string | null
+  initialStake?: number
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [stake, setStake] = useState(settings.bets[0] ?? 25)
+  const [stake, setStake] = useState(initialStake && settings.bets.includes(initialStake) ? initialStake : (settings.bets[0] ?? 25))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isOkey = game === 'okey'
@@ -74,7 +79,10 @@ export function TableLobby({
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
   const [bots, setBots] = useState(0)
   const humanSeats = isOkey ? seats - (seats === 4 ? bots : 0) : 2
-  const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, { refreshInterval: 4000 })
+  const lobbyIdle = useIdle()
+  const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, {
+    refreshInterval: lobbyIdle ? 30000 : 6000,
+  })
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string; id?: string }>) => {
     if (!requireLogin()) return
@@ -365,8 +373,17 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
 
 export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) {
   const { refresh, member } = usePoints()
+  const idle = useIdle()
   const { data, mutate, error } = useSWR<TableSummary>(`/api/tables/${id}`, fetcher, {
-    refreshInterval: (d) => (d && (d.status === 'bitti' || d.status === 'iptal') ? 0 : 1500),
+    refreshInterval: (d) => {
+      if (!d) return 2000
+      if (d.status === 'bitti' || d.status === 'iptal') return 0
+      if (idle) return 10000
+      if (d.status === 'bekliyor') return 5000
+      if (d.spectator) return 3000
+      // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
+      return d.turn === d.seat ? 5000 : 2000
+    },
   })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -454,6 +471,15 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
                 : 'İptal'}
           {spectator && data.status === 'oynaniyor' ? ' · izleyici' : ''}
         </span>
+        {data.status === 'oynaniyor' && data.turn != null && TURN_SECONDS[data.game as ArenaGame] && (
+          <TurnClock
+            key={`${data.version}-${data.turn}`}
+            updatedAt={data.updatedAt}
+            seconds={TURN_SECONDS[data.game as ArenaGame] ?? 30}
+            mine={data.turn === mySeat}
+            onExpire={() => void mutate()}
+          />
+        )}
       </div>
 
       {msg && (
@@ -462,7 +488,8 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
         </p>
       )}
 
-      <div className="p-2 sm:p-4">
+      <div className="flex flex-col gap-3 p-2 sm:p-4 xl:flex-row xl:items-start">
+      <div className="min-w-0 flex-1">
         {data.status === 'bekliyor' && (
           <div className="flex flex-col items-center gap-4 py-10 text-center">
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
@@ -492,7 +519,13 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
 
         {(data.status === 'oynaniyor' || ended) && data.state && !(spectator && DUEL.includes(data.game)) && (
           <div className={cn(spectator && data.game !== 'okey' && 'pointer-events-none')}>
-            <GameSurface game={data.game} remote={remote} done={ended} />
+            {spectator ? (
+              <FitToScreen>
+                <GameSurface game={data.game} remote={remote} done={ended} />
+              </FitToScreen>
+            ) : (
+              <GameSurface game={data.game} remote={remote} done={ended} />
+            )}
           </div>
         )}
 
@@ -542,7 +575,42 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
           </div>
         )}
       </div>
+      <TableChat tableId={id} className="h-72 xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0" />
+      </div>
     </RoomShell>
+  )
+}
+
+function TurnClock({ updatedAt, seconds, mine, onExpire }: { updatedAt: string; seconds: number; mine: boolean; onExpire: () => void }) {
+  const deadline = new Date(updatedAt).getTime() + seconds * 1000
+  const [now, setNow] = useState(() => Date.now())
+  const left = Math.max(0, Math.ceil((deadline - now) / 1000))
+  const expired = left === 0
+
+  useEffect(() => {
+    if (expired) {
+      onExpire()
+      return
+    }
+    const t = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expired])
+
+  const pct = Math.min(100, Math.max(0, ((deadline - now) / (seconds * 1000)) * 100))
+  const urgent = left <= 10
+  return (
+    <div className="flex w-full items-center gap-2 sm:w-56" role="timer" aria-label={`Hamle süresi ${left} saniye`}>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+        <div
+          className={cn('h-full rounded-full transition-[width] duration-200 ease-linear', urgent ? 'bg-destructive' : 'bg-primary')}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={cn('w-16 text-right text-xs font-bold tabular-nums', urgent ? 'text-destructive' : 'text-foreground')}>
+        {expired ? 'Süre doldu' : `${mine ? 'Sen ' : ''}${left} sn`}
+      </span>
+    </div>
   )
 }
 

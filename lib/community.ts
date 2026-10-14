@@ -308,6 +308,8 @@ export async function addComplaint(user: { id: string; name: string }, siteId: s
   const [{ open }] = await rows<{ open: string }>(sql`SELECT count(*) AS open FROM complaints WHERE user_id = ${user.id} AND status IN ('open', 'forwarded')`)
   if (Number(open) >= 3) throw new Error('Aynı anda en fazla 3 açık şikâyetin olabilir.')
   await rows(sql`INSERT INTO complaints (site_id, user_id, user_name, title, body) VALUES (${siteId}, ${user.id}, ${user.name.slice(0, 40)}, ${t}, ${b})`)
+  const { notifyApproval } = await import('@/lib/telegram-bots')
+  await notifyApproval('complaint', { uye: user.name, detay: t }).catch(() => {})
 }
 
 export async function myReviews(userId: string) {

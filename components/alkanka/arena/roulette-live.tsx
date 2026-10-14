@@ -3,13 +3,14 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Loader2, RotateCcw, Trash2, Users } from 'lucide-react'
+import { Loader2, RotateCcw, Trash2, Trophy, Users } from 'lucide-react'
 import { RED, RL_BET_MS, rouletteClock, betLabel, type RouletteBet } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import type { RouletteLiveState } from '@/lib/roulette-live'
 import { placeLiveRouletteBets } from '@/app/actions/arena'
 import { cn } from '@/lib/utils'
 import { formatAC, usePoints } from '../points-context'
+import { useIdle } from '../use-idle'
 import { RouletteWheel, pocketColor } from './roulette-wheel'
 import { Chip, RouletteBoard, betKey, chipTone, parseKey, type BetKind } from './roulette-board'
 
@@ -103,9 +104,39 @@ function PlayersPanel({ players, phase }: { players: RouletteLiveState['players'
   )
 }
 
+function WinnersPanel({ last }: { last: RouletteLiveState['lastRound'] | undefined }) {
+  if (!last) return null
+  return (
+    <aside className="flex flex-col gap-3 rounded-2xl border border-primary/40 bg-card p-4" aria-labelledby="rl-winners">
+      <h3 id="rl-winners" className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-foreground">
+        <Trophy className="size-4 text-primary" aria-hidden="true" />
+        Son tur kazananları
+        <NumberPill n={last.number} />
+      </h3>
+      {last.winners.length === 0 ? (
+        <p className="text-sm leading-relaxed text-muted-foreground">Bu turda kazanan çıkmadı, kasa kazandı.</p>
+      ) : (
+        <ol className="flex flex-col gap-1.5">
+          {last.winners.map((w, i) => (
+            <li key={`${w.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="w-4 shrink-0 text-xs font-bold text-primary tabular-nums">{i + 1}</span>
+                <span className="truncate font-semibold text-foreground">{w.name}</span>
+              </span>
+              <span className="shrink-0 font-bold text-primary tabular-nums">+{formatAC(w.won)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </aside>
+  )
+}
+
 export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const { member, setBalance, requireLogin, points } = usePoints()
-  const { data, mutate } = useSWR<RouletteLiveState>('/api/rulet', fetcher, { refreshInterval: 2000 })
+  const idle = useIdle()
+  // Phase changes trigger an immediate refetch below; the interval only keeps other players' bets fresh.
+  const { data, mutate } = useSWR<RouletteLiveState>('/api/rulet', fetcher, { refreshInterval: idle ? 30000 : 6000 })
   const { offset, ready, clock } = useServerClock(data)
   const [chip, setChip] = useState(settings.bets[0] ?? 25)
   const [draft, setDraft] = useState<Map<string, number>>(new Map())
@@ -291,7 +322,10 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
           <p className="text-xs text-muted-foreground">Sayıya 36x, düzine 3x, renk / tek-çift / alt-üst 2x öder. Top sunucuda atılır, herkes aynı turu görür.</p>
         </section>
 
-        <PlayersPanel players={players} phase={clock.phase} />
+        <div className="flex flex-col gap-4">
+          <WinnersPanel last={data?.lastRound} />
+          <PlayersPanel players={players} phase={clock.phase} />
+        </div>
       </div>
     </div>
   )

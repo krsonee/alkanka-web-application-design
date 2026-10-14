@@ -36,6 +36,10 @@ export async function getLogos() {
   return {
     sponsors: (all['logos:sponsors'] as Record<string, string> | undefined) ?? {},
     teams: (all['logos:teams'] as Record<string, string> | undefined) ?? {},
+    brand: (() => {
+      const b = all['site:branding'] as { logoUrl?: string; logoHeight?: number } | undefined
+      return b?.logoUrl ? { logoUrl: b.logoUrl, logoHeight: b.logoHeight } : undefined
+    })(),
   }
 }
 

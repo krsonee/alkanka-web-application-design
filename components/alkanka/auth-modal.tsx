@@ -10,11 +10,11 @@ import { TELEGRAM_URL } from './data'
 import { Modal } from './modal'
 import { useTexts } from './texts-context'
 
-type Mode = 'giris' | 'kayit'
+type Mode = 'giris' | 'kayit' | 'sifremi-unuttum'
 
 function readHash(): Mode | null {
   const h = window.location.hash.slice(1)
-  return h === 'giris' || h === 'kayit' ? h : null
+  return h === 'giris' || h === 'kayit' || h === 'sifremi-unuttum' ? h : null
 }
 
 function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
@@ -32,6 +32,7 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
 export function AuthModal() {
   const [mode, setMode] = useState<Mode | null>(null)
   const [submitted, setSubmitted] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { mutate } = useSWRConfig()
@@ -42,6 +43,8 @@ export function AuthModal() {
     const sync = () => {
       setMode(readHash())
       setSubmitted(false)
+      setNotice(null)
+      setError(null)
     }
     sync()
     window.addEventListener('hashchange', sync)
@@ -55,6 +58,8 @@ export function AuthModal() {
 
   function switchTo(next: Mode) {
     setSubmitted(false)
+    setNotice(null)
+    setError(null)
     history.replaceState(null, '', `#${next}`)
     setMode(next)
   }
@@ -66,15 +71,30 @@ export function AuthModal() {
     const email = String(form.get('email') ?? '').trim()
     const password = String(form.get('password') ?? '')
     const name = String(form.get('username') ?? '').trim()
+    const phone = String(form.get('phone') ?? '').replace(/[^\d+]/g, '').slice(0, 16)
     setError(null)
+    setNotice(null)
     setPending(true)
     try {
+      if (mode === 'sifremi-unuttum') {
+        await authClient.requestPasswordReset({ email, redirectTo: `${window.location.origin}/sifre-sifirla` })
+        setNotice('Bu e-posta kayıtlıysa şifre sıfırlama bağlantısı gönderdik. Gelen kutunu ve spam klasörünü kontrol et.')
+        return
+      }
       const res =
         mode === 'kayit'
-          ? await authClient.signUp.email({ email, password, name })
+          ? await authClient.signUp.email({ email, password, name, ...(phone ? { phone } : {}) })
           : await authClient.signIn.email({ email, password })
       if (res.error) {
+        if (res.error.status === 403) {
+          setNotice('E-postan henüz onaylanmamış. Onay bağlantısını tekrar gönderdik, gelen kutunu kontrol et.')
+          return
+        }
         setError(mode === 'kayit' ? 'Kayıt tamamlanamadı. Bu e-posta kullanılıyor olabilir.' : 'E-posta veya şifre hatalı.')
+        return
+      }
+      if (mode === 'kayit' && !res.data?.token) {
+        setNotice(`Neredeyse tamam kanka. ${email} adresine onay bağlantısı gönderdik, tıklayınca hesabın açılacak.`)
         return
       }
       await refresh()
@@ -87,9 +107,10 @@ export function AuthModal() {
   }
 
   const isRegister = mode === 'kayit'
+  const isForgot = mode === 'sifremi-unuttum'
 
   return (
-    <Modal open={!!mode} onClose={close} title={isRegister ? 'Kayıt ol' : 'Giriş yap'} className="max-w-3xl">
+    <Modal open={!!mode} onClose={close} title={isRegister ? 'Kayıt ol' : isForgot ? 'Şifremi unuttum' : 'Giriş yap'} className="max-w-3xl">
       <div className="grid md:grid-cols-2">
         <div className="relative hidden min-h-full flex-col justify-end overflow-hidden bg-background p-6 md:flex">
           <Image
@@ -97,7 +118,7 @@ export function AuthModal() {
             alt="AL KANKA maskotu Jako"
             fill
             sizes="384px"
-            className="object-cover"
+            className="object-contain object-top pb-20"
           />
           <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
           <div className="relative flex flex-col gap-1">
@@ -115,11 +136,11 @@ export function AuthModal() {
                 key={m}
                 type="button"
                 role="tab"
-                aria-selected={mode === m}
+                aria-selected={mode === m || (isForgot && m === 'giris')}
                 onClick={() => switchTo(m)}
                 className={cn(
                   'h-9 rounded-md text-xs font-bold uppercase tracking-wider transition-colors',
-                  mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                  mode === m || (isForgot && m === 'giris') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {m === 'giris' ? 'Giriş' : 'Kayıt ol'}
@@ -145,21 +166,39 @@ export function AuthModal() {
             </div>
           ) : (
             <form onSubmit={onSubmit} className="flex flex-col gap-4">
-              <h2 className="font-display text-xl font-bold">{isRegister ? 'AL KANKA’ya katıl' : 'Hesabına giriş yap'}</h2>
+              <h2 className="font-display text-xl font-bold">
+                {isRegister ? 'AL KANKA’ya katıl' : isForgot ? 'Şifreni sıfırla' : 'Hesabına giriş yap'}
+              </h2>
+              {isForgot && (
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Kayıtlı e-posta adresini yaz, sana yeni şifre belirleme bağlantısı gönderelim.
+                </p>
+              )}
               {isRegister && <Field label="Kullanıcı adı" name="username" required minLength={3} autoComplete="username" placeholder="kanka123" />}
               <Field label="E-posta" name="email" type="email" required autoComplete="email" placeholder="ornek@mail.com" />
-              <Field
-                label="Şifre"
-                name="password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete={isRegister ? 'new-password' : 'current-password'}
-                placeholder="En az 8 karakter"
-              />
+              {!isForgot && (
+                <Field
+                  label="Şifre"
+                  name="password"
+                  type="password"
+                  required
+                  minLength={8}
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+                  placeholder="En az 8 karakter"
+                />
+              )}
+              {mode === 'giris' && (
+                <button
+                  type="button"
+                  onClick={() => switchTo('sifremi-unuttum')}
+                  className="-mt-2 self-end text-xs font-semibold text-primary hover:underline"
+                >
+                  Şifremi unuttum
+                </button>
+              )}
               {isRegister && (
                 <>
-                  <Field label="Referans kodu (isteğe bağlı)" name="ref" placeholder="KANKA-XXXX" />
+                  <Field label="Telefon (isteğe bağlı)" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="05XX XXX XX XX" maxLength={20} />
                   <label className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
                     <input type="checkbox" required className="mt-0.5 accent-[var(--primary)]" />
                     18 yaşından büyüğüm, kullanım şartlarını ve kuralları kabul ediyorum.
@@ -171,17 +210,22 @@ export function AuthModal() {
                   {error}
                 </p>
               )}
+              {notice && (
+                <p role="status" className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold leading-relaxed text-foreground">
+                  {notice}
+                </p>
+              )}
               <button
                 type="submit"
                 disabled={pending}
                 className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
               >
-                {pending ? 'Bekle kanka…' : isRegister ? t('auth.registerCta') : t('auth.loginCta')}
+                {pending ? 'Bekle kanka…' : isForgot ? 'Bağlantı gönder' : isRegister ? t('auth.registerCta') : t('auth.loginCta')}
               </button>
               <p className="text-center text-xs text-muted-foreground">
-                {isRegister ? 'Zaten hesabın var mı? ' : 'Hesabın yok mu? '}
-                <button type="button" onClick={() => switchTo(isRegister ? 'giris' : 'kayit')} className="font-semibold text-primary hover:underline">
-                  {isRegister ? 'Giriş yap' : 'Kayıt ol'}
+                {isRegister ? 'Zaten hesabın var mı? ' : isForgot ? 'Şifreni hatırladın mı? ' : 'Hesabın yok mu? '}
+                <button type="button" onClick={() => switchTo(isRegister || isForgot ? 'giris' : 'kayit')} className="font-semibold text-primary hover:underline">
+                  {isRegister || isForgot ? 'Giriş yap' : 'Kayıt ol'}
                 </button>
               </p>
             </form>

@@ -268,11 +268,7 @@ export function Okey({ finish }: GameApi) {
   const pileTop = (i: number) => discards[i][discards[i].length - 1]
 
   function onDoubleTile(tile: Tile) {
-    if (isJoker(tile, okey) && !tile.fake) {
-      rack.toggleFlip(tile.id)
-      return
-    }
-    if (phase === 'discard') discard(tile.id)
+    if (isJoker(tile, okey) && !tile.fake) rack.toggleFlip(tile.id)
   }
 
   function dropTileId(e: DragEvent) {

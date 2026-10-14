@@ -1,13 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { deleteProduct, resolveRequest, saveProduct, type ProductInput } from '@/lib/market'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
 async function guard(fn: () => Promise<string | void>): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('market'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const message = await fn()
     revalidatePath('/panel')

@@ -1,6 +1,7 @@
 'use client'
 
 import { useDeferredValue, useMemo, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { ChevronDown, Flag, Percent, Radio, Search, Tv } from 'lucide-react'
@@ -407,11 +408,12 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
     return counts
   }, [channels])
   const visible = channels.filter((c) => c.group === group)
-  const isKick = current.group === 'slot' || current.group === 'yayinci'
+  const isKick = current.group === 'slot' || current.group === 'yayinci' || current.group === 'oyun'
+  const liveAlternatives = channels.filter((c) => c.live && c.slug !== current.slug).slice(0, 3)
 
   return (
     <div className="flex flex-col gap-5">
-      <div role="tablist" aria-label="Kanal türü" className="grid grid-cols-2 gap-2 md:grid-cols-4">
+      <div role="tablist" aria-label="Kanal türü" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {CHANNEL_GROUPS.map((g) => (
           <button
             key={g.key}
@@ -444,7 +446,12 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
 
     <div className="flex flex-col gap-5 lg:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-foreground">
+        <div
+          className={cn(
+            'relative aspect-video w-full overflow-hidden rounded-xl border',
+            current.embedUrl ? 'border-border bg-foreground' : 'border-primary/30 bg-card',
+          )}
+        >
           {current.embedUrl ? (
             <iframe
               key={current.embedUrl}
@@ -455,10 +462,45 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
               className="absolute inset-0 size-full"
             />
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
-              <Tv className="size-8 text-background/60" aria-hidden="true" />
-              <p className="text-sm font-semibold text-background">{current.name} şu an yayında değil</p>
-              <p className="text-xs text-background/70">Yayın başladığında burada otomatik açılır.</p>
+            <div className="absolute inset-0 flex items-center justify-center gap-4 p-4 sm:gap-8 sm:p-8">
+              <Image
+                src="/images/mascots/jako-uzgun.png"
+                alt=""
+                width={240}
+                height={240}
+                className="h-3/5 w-auto shrink-0 object-contain motion-safe:animate-[float_4s_ease-in-out_infinite] drop-shadow-xl sm:h-4/5"
+              />
+              <div className="flex max-w-sm flex-col gap-2 sm:gap-3">
+                <span className="flex items-center gap-1.5 self-start rounded-md bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <Tv className="size-3" aria-hidden="true" />
+                  {current.name} · Kapalı
+                </span>
+                <p className="font-display text-base font-bold leading-snug text-foreground text-balance sm:text-2xl">
+                  Şu anda yayın yapılmıyor, başka kanalları dene kanka
+                </p>
+                {liveAlternatives.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {liveAlternatives.map((c) => (
+                      <button
+                        key={c.slug}
+                        type="button"
+                        onClick={() => {
+                          setGroup(c.group)
+                          onSelect(c.slug)
+                        }}
+                        className="flex items-center gap-1 rounded-md border border-primary/40 bg-background px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+                      >
+                        <span className="size-1.5 rounded-full bg-live motion-safe:animate-pulse" aria-hidden="true" />
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="hidden text-xs leading-relaxed text-muted-foreground sm:block">
+                    Yayın başladığında burada otomatik açılır.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>

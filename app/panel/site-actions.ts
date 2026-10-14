@@ -1,14 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { saveSite } from '@/lib/sites'
 import type { SiteInput } from '@/lib/sites-shared'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
 export async function saveSiteAction(input: SiteInput): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('sponsors'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     await saveSite(input)
     revalidatePath('/panel')

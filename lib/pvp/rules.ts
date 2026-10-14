@@ -239,21 +239,70 @@ export function runBots(state: OkeyState): ActResult {
   let s = state
   const bots = s.bots ?? []
   for (let guard = 0; guard < 16 && bots.includes(s.turn); guard++) {
-    const seat = s.turn
-    const ok = okeyFrom(s.indicator)
-    if (s.phase === 'draw') {
-      const top = s.discards[leftOf(seat, okeySeats(s))].at(-1)
-      const r = okeyStep(s, seat, { type: 'draw', from: top && wantsDiscard(s.hands[seat], top, ok) ? 'discard' : 'pile' })
-      if (r.outcome) return r
-      s = r.state as OkeyState
-    }
-    const win = findWinningDiscard(s.hands[seat], ok)
-    const tile = win?.tile ?? chooseDiscard(s.hands[seat], ok)
-    const r = okeyStep(s, seat, { type: win ? 'finish' : 'discard', tileId: tile.id })
+    const r = okeyBotTurn(s, s.turn)
     if (r.outcome) return r
     s = r.state as OkeyState
   }
   return { state: s, outcome: null }
+}
+
+/** Plays one full okey turn (draw if needed, then discard) for the given seat with the bot strategy. */
+function okeyBotTurn(state: OkeyState, seat: number): ActResult {
+  let s = state
+  const ok = okeyFrom(s.indicator)
+  if (s.phase === 'draw') {
+    const top = s.discards[leftOf(seat, okeySeats(s))].at(-1)
+    const r = okeyStep(s, seat, { type: 'draw', from: top && wantsDiscard(s.hands[seat], top, ok) ? 'discard' : 'pile' })
+    if (r.outcome) return r
+    s = r.state as OkeyState
+  }
+  const win = findWinningDiscard(s.hands[seat], ok)
+  const tile = win?.tile ?? chooseDiscard(s.hands[seat], ok)
+  return okeyStep(s, seat, { type: win ? 'finish' : 'discard', tileId: tile.id })
+}
+
+/**
+ * Plays a move for a player whose turn clock ran out, so the game never stalls:
+ * tavla rolls and plays random legal moves, okey plays one bot turn, bilardo passes the turn.
+ */
+export function autoMove(state: PvpState): ActResult | null {
+  if (state.kind === 'tavla') {
+    const seat = state.turn
+    const side = seatSide(seat)
+    let s = state
+    if (s.phase === 'roll') {
+      const r = tavlaAct(s, seat, { type: 'roll' })
+      if (r.state.kind !== 'tavla' || r.state.turn !== seat) return { ...r, state: { ...r.state, note: 'Süre doldu, otomatik zar atıldı' } as PvpState }
+      s = r.state
+    }
+    let board = s.board
+    let dice = [...s.dice]
+    const moves: Move[] = []
+    for (let guard = 0; guard < 4 && dice.length > 0; guard++) {
+      const legal = legalMoves(board, side, dice)
+      if (!legal.length) break
+      const pick = legal[Math.floor(Math.random() * legal.length)]
+      moves.push(pick)
+      board = applyMove(board, side, pick)
+      dice = spendDie(dice, pick.die)
+      if (board.off[side] >= 15) break
+    }
+    const r = tavlaAct(s, seat, { type: 'moves', moves })
+    return { ...r, state: { ...r.state, note: 'Süre doldu, otomatik hamle yapıldı' } as PvpState }
+  }
+  if (state.kind === 'okey') {
+    const r = okeyBotTurn(state, state.turn)
+    if (r.outcome) return r
+    const next = runBots(r.state as OkeyState)
+    return next.outcome ? next : { ...next, state: { ...next.state, note: 'Süre doldu, otomatik taş atıldı' } as PvpState }
+  }
+  if (state.kind === 'bilardo') {
+    return {
+      state: { ...state, turn: other(state.turn), shot: null, seq: state.seq + 1, note: 'Süre doldu, sıra rakibe geçti' },
+      outcome: null,
+    }
+  }
+  return null
 }
 
 /** Hands an absent player's seat to a bot. */

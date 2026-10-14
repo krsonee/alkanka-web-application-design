@@ -4,10 +4,19 @@ import { useState, useTransition } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { approveClaimAction, rejectClaimAction, saveTaskAction } from '@/app/panel/task-actions'
 import type { PendingClaim, TaskInput, TaskRecord } from '@/lib/tasks'
+import { PERIODS, type TaskPeriod } from '@/lib/task-period'
 import { cn } from '@/lib/utils'
 
+/** ISO timestamp → `YYYY-MM-DDTHH:mm` in Turkey time for datetime-local inputs. */
+function toLocalInput(iso: string | null) {
+  if (!iso) return ''
+  return new Date(Date.parse(iso) + 3 * 3600000).toISOString().slice(0, 16)
+}
+
+const PERIOD_LABEL = Object.fromEntries(PERIODS.map((p) => [p.value, p.label])) as Record<TaskPeriod, string>
+
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
-const EMPTY: TaskInput = { id: null, title: '', detail: '', points: 10, link: '', needsApproval: true, active: true, sort: 0 }
+const EMPTY: TaskInput = { id: null, title: '', detail: '', points: 10, link: '', needsApproval: true, active: true, sort: 0, period: 'once', startsAt: '', endsAt: '' }
 const LINK_ERROR = 'Bağlantı https:// ile başlamalı.'
 
 export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: PendingClaim[] }) {
@@ -63,9 +72,11 @@ export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: P
                 {task.title}
                 <span className="ml-2 font-normal text-muted-foreground">+{task.points}</span>
                 {task.needsApproval ? <span className="ml-2 text-xs font-normal text-muted-foreground">Onay gerekir</span> : null}
+                {task.period !== 'once' ? <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">{PERIOD_LABEL[task.period]}</span> : null}
+                {task.endsAt && Date.parse(task.endsAt) < Date.now() ? <span className="ml-2 text-xs font-normal text-destructive">Süresi doldu</span> : null}
               </span>
               {!task.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Pasif</span>}
-              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '' })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
+              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                 <Pencil className="size-4" aria-hidden="true" />
               </button>
             </li>
@@ -136,6 +147,25 @@ function TaskForm({ value, pending, onSave, onCancel }: { value: TaskInput; pend
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
         Sıra
         <input required inputMode="numeric" value={String(v.sort)} onChange={(event) => set('sort', Number(event.target.value))} className={field} />
+      </label>
+      <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+        Tekrar
+        <select value={v.period} onChange={(event) => set('period', event.target.value as TaskPeriod)} className={field}>
+          {PERIODS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+      </label>
+      <p className="self-end pb-2 text-xs leading-relaxed text-muted-foreground">
+        Günlük görev her gün, haftalık her pazartesi, aylık her ayın 1&apos;inde yeniden yapılabilir.
+      </p>
+      <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+        Başlangıç (boş = hemen)
+        <input type="datetime-local" value={v.startsAt} onChange={(event) => set('startsAt', event.target.value)} className={field} />
+      </label>
+      <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+        Bitiş (boş = süresiz)
+        <input type="datetime-local" value={v.endsAt} onChange={(event) => set('endsAt', event.target.value)} className={field} />
       </label>
       <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
         <input type="checkbox" checked={v.needsApproval} onChange={(event) => set('needsApproval', event.target.checked)} className="size-4 accent-primary" />
