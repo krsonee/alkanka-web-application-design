@@ -66,12 +66,25 @@ export default async function BadgesPage() {
           </div>
       </PageHero>
 
+      <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:hidden">
+        {[
+          { href: '#kazan', label: 'KP kazan' },
+          ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),
+          { href: '#degerli', label: 'Değerli' },
+        ].map((l) => (
+          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground">
+            {l.label}
+          </a>
+        ))}
+      </nav>
+
       {me ? (
         <Link
           href="/profil"
-          className={cn('flex flex-col gap-4 rounded-2xl border p-4 transition-colors hover:border-gold/50 sm:flex-row sm:items-center', TIER_BG[myTier])}
+          className={cn('flex flex-row items-center gap-3 rounded-2xl border p-3 transition-colors hover:border-gold/50 sm:gap-4 sm:p-4', TIER_BG[myTier])}
         >
-          <LevelEmblem level={me.level.index + 1} size="lg" />
+          <LevelEmblem level={me.level.index + 1} size="md" className="sm:hidden" />
+          <LevelEmblem level={me.level.index + 1} size="lg" className="hidden sm:flex" />
           <span className="flex min-w-0 flex-1 flex-col gap-2">
             <span className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="flex items-baseline gap-2">
@@ -96,13 +109,16 @@ export default async function BadgesPage() {
         </div>
       )}
 
-      <section aria-labelledby="kazan" className="flex flex-col gap-3">
+      <section aria-labelledby="kazan" className="flex scroll-mt-32 flex-col gap-3">
         <h2 id="kazan" className="font-display text-lg font-bold text-foreground">Nasıl KP kazanılır?</h2>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-3">
           {earnRules.map((f) => (
-            <li key={f.key} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground">
-              {f.label}
-              <span className="rounded-full bg-gold/15 px-2.5 py-0.5 font-display text-xs font-bold tabular-nums text-gold">+{cfg.rules[f.key]}</span>
+            <li
+              key={f.key}
+              className="flex flex-col-reverse items-start gap-1 rounded-xl border border-border bg-card px-2.5 py-2 text-xs leading-snug text-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2.5 sm:text-sm"
+            >
+              <span className="text-pretty">{f.label}</span>
+              <span className="shrink-0 rounded-full bg-gold/15 px-2.5 py-0.5 font-display text-xs font-bold tabular-nums text-gold">+{cfg.rules[f.key]}</span>
             </li>
           ))}
         </ul>
@@ -112,8 +128,8 @@ export default async function BadgesPage() {
       <section aria-labelledby="seviyeler" className="flex flex-col gap-4">
         <h2 id="seviyeler" className="font-display text-lg font-bold text-foreground">Seviyeler</h2>
         {groups.map((g) => (
-          <article key={g.tier + g.items[0].i} className={cn('overflow-hidden rounded-2xl border', TIER_BG[g.tier])}>
-            <header className="relative flex h-28 items-center overflow-hidden md:h-32">
+          <article key={g.tier + g.items[0].i} id={`lig-${g.tier}`} className={cn('scroll-mt-32 overflow-hidden rounded-2xl border', TIER_BG[g.tier])}>
+            <header className="relative flex h-20 items-center overflow-hidden sm:h-28 md:h-32">
               <Image src={`/images/badges/tier-${g.tier}.png`} alt="" fill sizes="(min-width: 1024px) 900px, 100vw" className="object-cover object-right" />
               <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
               <div className="relative flex flex-col gap-1 px-5">
@@ -123,7 +139,7 @@ export default async function BadgesPage() {
                 </span>
               </div>
             </header>
-            <ol className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-5">
+            <ol className="flex snap-x snap-mandatory gap-2 overflow-x-auto p-3 pt-4 no-scrollbar sm:grid sm:snap-none sm:grid-cols-3 sm:overflow-visible lg:grid-cols-5">
               {g.items.map(({ l, i }) => {
                 const current = i === myLevel
                 const locked = member ? i > myLevel : false
@@ -131,14 +147,15 @@ export default async function BadgesPage() {
                   <li
                     key={i}
                     className={cn(
-                      'relative flex flex-col items-center gap-2 rounded-xl border bg-card/80 px-2 pb-3 pt-4 text-center',
+                      'relative flex w-28 shrink-0 snap-start flex-col items-center gap-1.5 rounded-xl border bg-card/80 px-2 pb-2.5 pt-3 text-center sm:w-auto sm:gap-2 sm:pb-3 sm:pt-4',
                       current ? 'border-gold ring-2 ring-gold/30' : 'border-border',
                     )}
                   >
                     {current && (
                       <span className="absolute -top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold uppercase text-gold-foreground">Sen</span>
                     )}
-                    <LevelEmblem level={i + 1} size="lg" locked={locked} />
+                    <LevelEmblem level={i + 1} size="md" locked={locked} className="sm:hidden" />
+                    <LevelEmblem level={i + 1} size="lg" locked={locked} className="hidden sm:flex" />
                     <span className="flex flex-col">
                       <span className={cn('text-sm font-bold', locked ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
                       <span className="text-[11px] text-muted-foreground">{l.badge}</span>
@@ -154,7 +171,7 @@ export default async function BadgesPage() {
         ))}
       </section>
 
-      <section aria-labelledby="degerli" className="flex flex-col gap-4">
+      <section aria-labelledby="degerli" className="flex scroll-mt-32 flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1">
             <h2 id="degerli" className="font-display text-lg font-bold text-foreground">Değerli rozetler</h2>
@@ -164,11 +181,11 @@ export default async function BadgesPage() {
             <Trophy className="size-3.5" aria-hidden /> Sıralama ve şampiyonlar <ChevronRight className="size-3.5" aria-hidden />
           </Link>
         </div>
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-3">
           {specials.map((b) => {
             const owners = holders[b.id] ?? []
             return (
-              <li key={b.id} className={cn('flex flex-col gap-3 rounded-2xl border p-4', TIER_BG[b.tier])}>
+              <li key={b.id} className={cn('flex w-[82%] shrink-0 snap-center flex-col gap-3 rounded-2xl border p-4 sm:w-auto', TIER_BG[b.tier])}>
                 <div className="flex items-center gap-4">
                   <SpecialEmblem icon={b.icon} tier={b.tier} size="lg" />
                   <div className="flex min-w-0 flex-1 flex-col gap-1">

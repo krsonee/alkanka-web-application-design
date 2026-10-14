@@ -8,6 +8,7 @@ import { SponsorLogoPlate } from '@/components/alkanka/partner-sites'
 import { TrustForms } from '@/components/alkanka/community/trust-forms'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { PageHero } from '@/components/alkanka/page-hero'
+import { AutoRail } from '@/components/alkanka/auto-rail'
 import { cn } from '@/lib/utils'
 
 export const metadata: Metadata = {
@@ -79,12 +80,16 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
           { label: 'Çözüm oranı', value: totals.complaints ? `%${Math.round((totals.resolved / totals.complaints) * 100)}` : '-' },
         ]}
       />
-      <section aria-label="Nasıl işler">
+      <section aria-labelledby="nasil" className="flex flex-col gap-3">
+        <h2 id="nasil" className="font-display text-lg font-bold text-foreground sm:sr-only">Nasıl işler?</h2>
         <ol className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {STEPS.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                <Icon className="size-4" aria-hidden />
+          {STEPS.map(({ icon: Icon, title, text }, i) => (
+            <li key={title} className="relative flex flex-col items-start gap-2 rounded-xl border-2 border-primary/30 bg-card p-3 sm:flex-row sm:gap-3 sm:border sm:border-border">
+              <span className="absolute right-2.5 top-2 font-display text-2xl font-bold leading-none text-primary/25 sm:hidden" aria-hidden>
+                {i + 1}
+              </span>
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground sm:size-9 sm:bg-primary/15 sm:text-primary">
+                <Icon className="size-5 sm:size-4" aria-hidden />
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="text-sm font-bold text-foreground">{title}</span>
@@ -102,14 +107,19 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
       ) : (
       <>
       <section aria-labelledby="siralama" className="flex flex-col gap-3">
-        <h2 id="siralama" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Güven sıralaması · bir site seç</h2>
-        <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2">
+        <div className="flex items-end justify-between gap-2">
+          <h2 id="siralama" className="font-display text-lg font-bold text-foreground sm:font-sans sm:text-xs sm:uppercase sm:tracking-wider sm:text-muted-foreground">
+            Güven sıralaması<span className="hidden sm:inline"> · bir site seç</span>
+          </h2>
+          <span className="text-xs font-semibold text-primary sm:hidden">Karnesi için siteye dokun</span>
+        </div>
+        <AutoRail label="Siteler" className="-mx-4 gap-2 px-4 pb-2 sm:-mx-1 sm:px-1">
           {ranked.map((t, i) => {
             const s = asSponsor(t)
             const active = t.siteId === selected
             const r = resolveRate(t)
             return (
-              <li key={t.siteId} className="w-40 shrink-0 snap-start">
+              <li key={t.siteId} className="w-[calc(50%-0.25rem)] shrink-0 snap-start sm:w-40">
                 <Link
                   href={href(t.slug)}
                   scroll={false}
@@ -138,7 +148,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
               </li>
             )
           })}
-        </ul>
+        </AutoRail>
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
@@ -155,7 +165,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                 <span className="text-sm text-muted-foreground">{sponsor.tagline} · Ortalama çekim {sponsor.payout}</span>
               </div>
             </div>
-            <dl className="grid grid-cols-3 gap-2">
+            <dl className="grid grid-cols-3 gap-1.5 sm:gap-2 [&>div]:p-2.5 sm:[&>div]:p-3 [&_dd.font-display]:text-xl sm:[&_dd.font-display]:text-2xl">
               <div className="flex flex-col gap-0.5 rounded-lg bg-background p-3">
                 <dt className="text-[11px] text-muted-foreground">Üye puanı</dt>
                 <dd className="flex items-center gap-1 font-display text-2xl font-bold text-foreground">
