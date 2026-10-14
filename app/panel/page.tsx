@@ -167,7 +167,7 @@ export default async function PanelPage() {
           heroes={heroes}
           library={IMAGE_LIBRARY}
           texts={<TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />}
-          games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} />}
+          games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)} />}
           tournaments={<TournamentManager tournaments={await listTournaments()} />}
           push={<PushSender {...push} configured={push.total > 0} />}
           telegram={

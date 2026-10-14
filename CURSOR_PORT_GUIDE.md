@@ -312,8 +312,13 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 3. ✅ Kanka Coin box made smaller (single line, `h-9`, "KC" suffix).
 4. ✅ Animated radio button + "Kanka Radyo" panel: live Turkish stations (~200) from the free Radio Browser API via `app/api/radyo/route.ts` (6 h cache, 3 mirrors, HTTPS + non-HLS MP3/AAC only), search by name/genre, play/pause, mute, close; keeps playing across page navigation because it lives in the persistent top bar (`components/alkanka/radio-player.tsx`).
 
-**C. Home & ranking design**
-11. Redesign "Sıralamanın zirvesi" and `/siralama`: podium with the Jako mascot, gold/silver/bronze, animated entrance, consistent with the theme.
+**C. Home & ranking design: ✅ DONE**
+11. ✅ Podium with Jako, gold/silver/bronze, animated entrance on home and `/siralama` (`components/alkanka/top-three.tsx`).
+
+**Round 3 fixes: ✅ DONE**
+- ✅ Mode choice moved into the stake menu as a required step ("Oyun modunu seç *"); play button stays disabled until a mode is picked (`stake-gate.tsx`, `arena-stage.tsx`).
+- ✅ Table chat emoji picker + one-tap emoji send (`table-chat.tsx`).
+- ✅ Tournament bracket redesigned (`bracket-view.tsx`).
 
 **D. Games (biggest group): items 12-16 and 18 ✅ DONE**
 12. ✅ Smaller game cards on `/oyunlar`: 2/3/4/5-column grid, square cards, compact badges (`components/alkanka/games/games-hub.tsx`).
@@ -327,7 +332,7 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 19. Billiards: realistic table (felt texture, wood rails, pocket shading), "AL KANKA" logo in the felt center.
 20. Roulette: one global live table. Server-driven rounds (betting window, then Jako croupier spins). Everyone sees the same result. Winners list (username + amount) beside the wheel after each round. Extend the existing `lib/roulette-live.ts`.
 21. Blackjack: multiplayer tables with up to 6 seats side by side, shared dealer, server-driven rounds.
-22. Fairness: PvP games use no house edge or bot bias, so each seat has equal odds (1/N). House games (zar, çark, gizemli kutu) target a 40% player / 60% house win rate. Make the rate configurable in the panel. All RNG goes through `crypto.randomInt`, server side only.
+22. ✅ House games done: Çark, Zar and Sandık outcomes are now decided server-side with `crypto.randomInt` in `playMini()` (`app/actions/wallet.ts`). The client can no longer send its own reward amount. "Büyük ödül oranı" (default 40%) is editable in Panel → Oyunlar and stored as `arena:house`. PvP part: already 1/N with no bot bias. Original spec: PvP games use no house edge or bot bias, so each seat has equal odds (1/N). House games (zar, çark, gizemli kutu) target a 40% player / 60% house win rate. Make the rate configurable in the panel. All RNG goes through `crypto.randomInt`, server side only.
 23. Mobile controls for Kafa Topu / Kafa Basketbolu: large touch zones (left/right swipe areas + jump tap) instead of small buttons.
 
 **E. Tasks after day 7**

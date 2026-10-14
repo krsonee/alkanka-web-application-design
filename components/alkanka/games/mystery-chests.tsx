@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils'
 import { formatRemaining } from './mini-status'
 import type { MiniGameProps } from './lucky-wheel'
 import { ParticleBurst } from './particle-burst'
+import { playMini } from '@/app/actions/wallet'
+import { usePoints } from '../points-context'
 import { DetailButton, DetailModal } from '../detail-modal'
 
 const CHESTS = [
@@ -33,11 +35,9 @@ const RULES = [
 
 type Phase = 'idle' | 'shaking' | 'opened'
 
-function pick(arr: readonly number[]) {
-  return arr[Math.floor(Math.random() * arr.length)]
-}
 
-export function MysteryChests({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProps) {
+export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
+  const { setBalance } = usePoints()
   const locked = lockedFor > 0
   const [phase, setPhase] = useState<Phase>('idle')
   const [picked, setPicked] = useState<number | null>(null)
@@ -46,15 +46,23 @@ export function MysteryChests({ onWin, lockedFor, canPlay, onPlayed }: MiniGameP
 
   function open(index: number) {
     if (phase !== 'idle' || !canPlay()) return
-    const prizes = CHESTS.map((c) => pick(c.rewards))
-    setContents(prizes)
     setPicked(index)
     setPhase('shaking')
-    setTimeout(() => {
-      setPhase('opened')
-      onWin(prizes[index])
-      onPlayed()
-    }, 1400)
+    const started = Date.now()
+    void playMini('sandik', index).then((res) => {
+      setTimeout(() => {
+        if (!res.ok || res.game !== 'sandik') {
+          if (typeof res.balance === 'number') setBalance(res.balance)
+          setPhase('idle')
+          setPicked(null)
+          return
+        }
+        setContents(res.prizes)
+        setPhase('opened')
+        setBalance(res.balance)
+        onPlayed()
+      }, Math.max(0, 1400 - (Date.now() - started)))
+    })
   }
 
   function reset() {

@@ -2,12 +2,15 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Leaderboard } from '@/components/alkanka/leaderboard'
 import { WagerBoard } from '@/components/alkanka/wager-board'
+import { TopThree } from '@/components/alkanka/top-three'
+import { leaderboard } from '@/lib/kanka-puan'
 
 export const revalidate = 300
 
 export const metadata = pageMeta('siralama')
 
-export default function RankingPage() {
+export default async function RankingPage() {
+  const podium = await leaderboard(3, 'tum', { readOnly: true }).catch(() => [])
   return (
     <>
       <EditableHero slug="siralama"
@@ -19,6 +22,7 @@ export default function RankingPage() {
         pose="kazandi"
         speech="Zirvede yer var kanka, çalışmaya devam!"
       />
+      <TopThree rows={podium.map((row) => ({ userId: row.userId, name: row.name, points: row.kp }))} />
       <Leaderboard />
       <WagerBoard />
     </>

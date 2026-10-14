@@ -7,7 +7,7 @@ import { ARENA_GAMES, ARENA_META, type ArenaSettings } from '@/lib/arena'
 import { saveArenaSettings } from '@/app/panel/arena-actions'
 import type { ActionState } from '@/app/panel/actions'
 
-export function ArenaSettingsEditor({ settings }: { settings: ArenaSettings }) {
+export function ArenaSettingsEditor({ settings, winRate = 40 }: { settings: ArenaSettings; winRate?: number }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveArenaSettings, {})
   return (
     <form action={action} className="flex flex-col gap-5">
@@ -41,6 +41,14 @@ export function ArenaSettingsEditor({ settings }: { settings: ArenaSettings }) {
           )
         })}
       </div>
+      <fieldset className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+        <legend className="px-1 text-sm font-bold text-foreground">Mini oyunlar (Şans Çarkı, Gizemli Sandık, Zar At)</legend>
+        <label className="flex max-w-sm flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
+          Büyük ödül çıkma oranı (%)
+          <input name="house:winRate" type="number" min={0} max={100} defaultValue={winRate} className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none" />
+        </label>
+        <p className="text-xs leading-relaxed text-muted-foreground">Sonuç artık sunucuda belirleniyor. Örneğin 40 yazarsan, oyunların yaklaşık %40&apos;ında büyük ödül çıkar, geri kalanında küçük ödül çıkar.</p>
+      </fieldset>
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={pending} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-60">
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}

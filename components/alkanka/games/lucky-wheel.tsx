@@ -5,6 +5,8 @@ import { Clock, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatRemaining } from './mini-status'
 import { ParticleBurst } from './particle-burst'
+import { playMini } from '@/app/actions/wallet'
+import { usePoints } from '../points-context'
 
 type Segment = { short: string; label: string; points: number; tone: 'cyan' | 'purple' | 'gold' | 'muted' }
 
@@ -40,7 +42,8 @@ export type MiniGameProps = {
   onPlayed: () => void
 }
 
-export function LuckyWheel({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProps) {
+export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
+  const { setBalance } = usePoints()
   const locked = lockedFor > 0
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
@@ -48,9 +51,16 @@ export function LuckyWheel({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProp
   const [burstKey, setBurstKey] = useState(0)
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function spin() {
+  async function spin() {
     if (spinning || !canPlay()) return
-    const index = Math.floor(Math.random() * SEGMENTS.length)
+    setSpinning(true)
+    const res = await playMini('cark')
+    if (!res.ok || res.game !== 'cark') {
+      setSpinning(false)
+      if (typeof res.balance === 'number') setBalance(res.balance)
+      return
+    }
+    const index = res.index
     const center = index * SEG_ANGLE + SEG_ANGLE / 2
     const jitter = (Math.random() - 0.5) * (SEG_ANGLE * 0.6)
     const target = (360 - center + jitter + 360) % 360
@@ -63,10 +73,8 @@ export function LuckyWheel({ onWin, lockedFor, canPlay, onPlayed }: MiniGameProp
       const seg = SEGMENTS[index]
       setSpinning(false)
       setResult(seg)
-      if (seg.points > 0) {
-        setBurstKey((k) => k + 1)
-        onWin(seg.points)
-      }
+      setBalance(res.balance)
+      if (seg.points > 0) setBurstKey((k) => k + 1)
       onPlayed()
     }, SPIN_MS)
   }

@@ -1,5 +1,7 @@
 'use server'
 
+import { randomInt } from 'node:crypto'
+import { getContent } from '@/lib/content'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 
@@ -56,9 +58,7 @@ export async function claimReward(source: string, amount: number): Promise<Walle
   if (!Number.isInteger(value) || value <= 0 || value > limit.perClaim) return { ok: false, error: 'Geçersiz ödül tutarı.' }
 
   if (source === 'cark' || source === 'sandik' || source === 'zar') {
-    if (await miniNextAt(member.id, source)) {
-      return { ok: false, error: `${limit.label} için hakkın henüz yenilenmedi.`, balance: await getBalance(member.id) }
-    }
+    return { ok: false, error: 'Bu ödül sunucuda belirlenir.', balance: await getBalance(member.id) }
   }
 
   const today = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM game_history
@@ -70,6 +70,74 @@ export async function claimReward(source: string, amount: number): Promise<Walle
   await credit(member.id, value)
   await recordHistory({ userId: member.id, userName: member.name, game: source, mode: 'odul', opponent: limit.label, stake: 0, result: 'win', delta: value })
   return { ok: true, balance: await getBalance(member.id) }
+}
+
+/* ---------- House mini games: outcome decided on the server ---------- */
+
+const WHEEL_POINTS = [50, 120, 300, 10, 100, 150, 250, 200]
+const WHEEL_BIG = WHEEL_POINTS.map((p, i) => (p >= 150 ? i : -1)).filter((i) => i >= 0)
+const WHEEL_SMALL = WHEEL_POINTS.map((p, i) => (p < 150 ? i : -1)).filter((i) => i >= 0)
+const CHEST_REWARDS = [
+  [40, 60, 75, 90],
+  [150, 200, 300, 500],
+  [75, 100, 120, 150],
+]
+
+function dicePoints(a: number, b: number) {
+  if (a === 6 && b === 6) return 400
+  if (a === b) return a * 40
+  const sum = a + b
+  return sum >= 10 ? sum * 10 : sum * 5
+}
+const diceBig = (a: number, b: number) => a === b || a + b >= 10
+
+const pickFrom = <T,>(arr: readonly T[]) => arr[randomInt(arr.length)]
+
+export async function getHouseWinRate() {
+  const saved = await getContent<{ winRate?: number }>('arena:house').catch(() => null)
+  const rate = Number(saved?.winRate)
+  return Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : 40
+}
+
+export type MiniOutcome =
+  | { game: 'cark'; index: number; points: number }
+  | { game: 'zar'; dice: [number, number]; points: number }
+  | { game: 'sandik'; prizes: number[]; points: number }
+
+export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; balance: number } & MiniOutcome) | { ok: false; error: string; balance?: number }> {
+  const member = await getMember()
+  if (!member) return { ok: false, error: 'Oynamak için giriş yapmalısın.' }
+  const limit = REWARD_LIMITS[game]
+  if (!limit) return { ok: false, error: 'Geçersiz oyun.' }
+  if (await miniNextAt(member.id, game)) {
+    return { ok: false, error: `${limit.label} için hakkın henüz yenilenmedi.`, balance: await getBalance(member.id) }
+  }
+  const big = randomInt(100) < (await getHouseWinRate())
+
+  let outcome: MiniOutcome
+  if (game === 'cark') {
+    const index = pickFrom(big ? WHEEL_BIG : WHEEL_SMALL)
+    outcome = { game, index, points: WHEEL_POINTS[index] }
+  } else if (game === 'zar') {
+    let a = 1
+    let b = 1
+    for (let i = 0; i < 200; i++) {
+      a = 1 + randomInt(6)
+      b = 1 + randomInt(6)
+      if (diceBig(a, b) === big) break
+    }
+    outcome = { game, dice: [a, b], points: dicePoints(a, b) }
+  } else {
+    const c = Math.max(0, Math.min(CHEST_REWARDS.length - 1, Math.floor(Number(chest)) || 0))
+    const prizes = CHEST_REWARDS.map((r) => pickFrom(r))
+    const pool = CHEST_REWARDS[c]
+    prizes[c] = pickFrom(big ? pool.slice(2) : pool.slice(0, 2))
+    outcome = { game, prizes, points: prizes[c] }
+  }
+
+  await credit(member.id, outcome.points)
+  await recordHistory({ userId: member.id, userName: member.name, game, mode: 'odul', opponent: limit.label, stake: 0, result: big ? 'win' : 'draw', delta: outcome.points })
+  return { ok: true, balance: await getBalance(member.id), ...outcome }
 }
 
 export async function spendKC(source: string, amount: number): Promise<WalletResult> {

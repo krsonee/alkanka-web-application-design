@@ -64,7 +64,10 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
         commission,
       }
     }
+    const winRate = Math.round(Number(form.get('house:winRate') ?? 40))
+    if (!Number.isFinite(winRate) || winRate < 0 || winRate > 100) return { message: 'Mini oyun kazanma oranı %0 ile %100 arasında olmalı.' }
     await setContent('arena:settings', value)
+    await setContent('arena:house', { winRate })
     refresh()
     return { ok: true, message: 'Oyun ayarları kaydedildi.' }
   } catch (e) {
