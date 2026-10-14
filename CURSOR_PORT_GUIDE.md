@@ -338,14 +338,15 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 **E. Tasks after day 7: ✅ DONE**
 24. ✅ Real server-side 7-day streak check-in that repeats after day 7 (`daily_checkins` table, `lib/checkin.ts`, `checkInAction`), Turkey-time days, a missed day resets the streak. Tasks have `period` (once/daily/weekly/monthly) plus optional `starts_at`/`ends_at`; completions reset per period (`lib/task-period.ts`, `lib/tasks.ts`). Panel → Görevler form has Tekrar, Başlangıç and Bitiş fields, and the list shows the period and an expired badge (`components/panel/tasks-manager.tsx`). Original spec: Recurring tasks: daily, weekly and monthly pools that rotate after the 7-day starter track, plus streak rewards. Add a panel module to create, schedule and disable tasks manually.
 
-**F. Panel**
-25. Panel redesign: clear left nav grouped by area (Site, Üyeler, Oyunlar, Sponsorlar, Telegram, Ayarlar), consistent forms, search per table.
-26. Header logo/text editor in the panel (logo upload + text fields, stored in DB, read by the topbar).
-27. Mobile app icon upload in the panel (generates `icon-192/512` and the manifest icons).
-28. Staff accounts: admins create staff users with per-module permissions (`staff(user_id, permissions jsonb)`). Every panel API checks the permission server-side.
-29. TOTP 2FA (Google Authenticator) for all panel accounts. Admins can enable or disable it per account. Use `otplib`, store an encrypted secret, and provide backup codes.
-30. Badges "Moderatör" and "Sponsor Destek", assignable only by admins or delegated staff. Holders earn no auto points, are excluded from rankings, cannot level up and cannot buy from the market. Enforce this server-side in KP, rank and market code.
-31. Hidden member restrictions: daily win limit, daily game limit, market ban and market spend limit (`member_limits` table). Members never see them, and the server enforces them in game settle and market purchase.
+**F. Panel: ✅ ALL DONE**
+- Blackjack wait fix: a solo player no longer waits. Round starts immediately when everyone seated has bet (short 8 s window only when 2+ players), dealer plays as soon as all hands finish (`lib/blackjack-live.ts`).
+25. ✅ Grouped left nav, shows only modules the account may use (`lib/panel-modules.ts` `PANEL_GROUPS`, `components/panel/content-editor.tsx`); page loads data only for allowed modules (`app/panel/page.tsx`).
+26. ✅ Header logo/text editor (`lib/branding.ts`, `app/panel/branding-actions.ts`, `components/panel/branding-editor.tsx`, read by `logo-context.tsx`).
+27. ✅ App icon upload, served at `/app-icon/192|512|180` and used by `app/manifest.ts` and the apple-touch icon (`app/api/app-icon-upload/route.ts`, `app/app-icon/[size]/route.ts`).
+28. ✅ Staff accounts with per-module permissions (`panel_accounts`, `lib/panel-auth.ts`, `components/panel/staff-manager.tsx`). Every panel action guard calls `requirePanel(module)` server-side. Main admin still logs in with `ADMIN_PASSWORD`.
+29. ✅ TOTP 2FA (own RFC 6238 implementation in `lib/totp.ts`, AES-GCM encrypted secret, 8 hashed backup codes, login rate limit via `panel_login_attempts`), self-service in "Hesabım" (`components/panel/account-settings.tsx`), admins can reset per account.
+30. ✅ "Moderatör" / "Sponsor Destek" badges (`ROLE_BADGE_IDS` in `lib/kanka-puan.ts`): give/revoke needs the `roles` permission, no auto KP, excluded from leaderboards, level frozen, market purchase blocked (`lib/market.ts`), cannot be deleted.
+31. ✅ Hidden member limits (`member_limits`, `lib/member-limits.ts`, `components/panel/limits-manager.tsx`), enforced in arena settle, live roulette/blackjack, PvP tables and market purchase. Members only see a generic error.
 
 **G. Telegram bots** (extend `lib/telegram-*`)
 32. Post sharing bot: picks up a post from the sponsor support group, appends the alkanka link/text, posts it to the target channels and replies in the source group with the post link.
