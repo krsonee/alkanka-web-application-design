@@ -5,7 +5,9 @@ import { canPanel } from '@/lib/admin-auth'
 import {
   adjustPoints,
   awardBadge,
+  awardBadgeId,
   awardContest,
+  ROLE_BADGE_IDS,
   contestStandings,
   deleteSpecialBadge,
   revokeAward,
@@ -63,8 +65,11 @@ export async function removeBadge(id: string) {
   })
 }
 
+const NO_ROLE_PERMISSION = 'Görevli rozetlerini sadece yönetici veya yetkili personel verebilir.'
+
 export async function giveBadge(badgeId: string, userId: string, note: string) {
   return guard(async () => {
+    if (ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     const ok = await awardBadge(badgeId, userId, `manuel-${Date.now()}`, note || undefined)
     return ok ? 'Rozet verildi.' : 'Bu üye rozeti zaten almış.'
   })
@@ -76,6 +81,8 @@ export async function giveContestBadge(badgeId: string) {
 
 export async function takeBackAward(awardId: number) {
   return guard(async () => {
+    const badgeId = await awardBadgeId(awardId)
+    if (badgeId && ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     await revokeAward(awardId)
     return 'Rozet geri alındı.'
   })

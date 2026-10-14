@@ -26,6 +26,7 @@ export const PANEL_GROUPS = [
     modules: [
       { id: 'community', label: 'Topluluk' },
       { id: 'badges', label: 'Rozetler & puan' },
+      { id: 'roles', label: 'Görevli rozetleri (Moderatör, Sponsor Destek)' },
       { id: 'tasks', label: 'Görevler' },
       { id: 'market', label: 'Market' },
       { id: 'social', label: 'Sosyal medya' },

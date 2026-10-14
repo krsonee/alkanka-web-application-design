@@ -80,7 +80,7 @@ export function ContentEditor({
     ...PANEL_GROUPS.map((g) => ({
       label: g.label,
       items: g.modules
-        .filter((m) => allowed.includes(m.id))
+        .filter((m) => m.id !== 'roles' && allowed.includes(m.id))
         .map((m) => ({
           id: m.id as PanelTab,
           label:

@@ -177,6 +177,8 @@ export async function requestProduct(member: Member, itemId: string, siteUsernam
     WHERE user_id = ${member.id} AND item_id = ${item.id} AND status <> 'reddedildi'`)
   if (Number(used[0]?.c ?? 0) >= item.perUser) throw new Error(`Bu üründen en fazla ${item.perUser} adet alabilirsin.`)
   await assertCanBuy(member.id, item.price)
+  const { isRoleHolder } = await import('@/lib/kanka-puan')
+  if (await isRoleHolder(member.id)) throw new Error('Görevli hesaplar marketten alışveriş yapamaz.')
 
   const reserved = await rows(sql`UPDATE market_items SET stock = stock - 1 WHERE id = ${item.id} AND stock > 0 RETURNING stock`)
   if (!reserved.length) throw new Error('Stok tükendi.')
