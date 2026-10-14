@@ -290,6 +290,8 @@ Everything in this section lives in this file. **Do not create a separate notes 
 | Existing users marked verified so they are not locked out | `UPDATE "user" SET "emailVerified" = true WHERE "emailVerified" = false;` (run **once**, before setting SMTP env vars) |
 | "Profilim" removed from the left menu (still in the profile dropdown) | `components/alkanka/data.ts` |
 | KankaTV group renamed to "TV & Mizah & Haber" | `lib/kankatv.ts` |
+| ✅ A1 Site search works (pages, sponsors, games; Ctrl K, arrow keys, Enter) | `components/alkanka/site-search.tsx`, used in `topbar.tsx` |
+| ✅ H36 (part) Security headers: nosniff, Referrer-Policy, HSTS, Permissions-Policy, X-Frame-Options SAMEORIGIN on `/panel` | `next.config.mjs` |
 
 ### 8.2 Remaining work (do in this order, one PR per group)
 Rules for every item: keep the current dark/gold theme and Turkish copy style. Hide "AL KANKA" / "alkanka.com" subtly in game tables (felt center, card backs, dealer tray, wheel hub). Test at 390x844 and 1440x900 with no page scroll during play.
@@ -347,23 +349,92 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 36. Security pass: every write API checks the session and role. Zod-validate all inputs. Parameterized SQL only. Rate-limit auth, chat and game endpoints. Use the security headers in `next.config` (nosniff, Referrer-Policy, HSTS, X-Frame-Options SAMEORIGIN on the panel). Use `httpOnly` cookies and keep secrets server-only.
 
 ### 8.3 What the owner (user) must do: step by step
-**Mail (Alibaba Cloud DirectMail, needed for verification + forgot password)**
-1. Go to alibabacloud.com and log in. In the top search bar type **DirectMail** and open it. Choose region **Singapore** (or any region DirectMail offers).
-2. Left menu: **Email Domains**, then **New Domain**. Type `mail.alkanka.com` and confirm.
-3. Click **Configure** next to the domain. You will see 3–4 DNS records (TXT for ownership + SPF, CNAME/TXT for DKIM, MX). Keep this page open.
-4. In another tab, open where your domain's DNS is managed (Vercel: vercel.com, then Domains, then alkanka.com, then DNS Records). Add each record exactly as shown: same Type, Name (Host) and Value. Save.
-5. Back in DirectMail click **Verify**. It can take 10–60 minutes. When all rows are green, continue.
-6. Left menu: **Sender Addresses**, then **Create Sender Address**. Domain: `mail.alkanka.com`, account: `noreply`, type: **Triggered**. Save.
-7. Click **Set SMTP Password** next to `noreply@mail.alkanka.com` and choose a strong password. Write it down.
-8. Run the "existing users verified" SQL from 8.1 once (ask Cursor or me to run it).
-9. In v0 open **Settings, then Vars** (or Vercel, then Project, then Settings, then Environment Variables) and add:
-   - `SMTP_HOST` = `smtpdm-ap-southeast-1.aliyun.com` (Singapore. Other regions show their host on the DirectMail SMTP page)
-   - `SMTP_PORT` = `465`
-   - `SMTP_USER` = `noreply@mail.alkanka.com`
-   - `SMTP_PASS` = the password from step 7
-   - `MAIL_FROM` = `AL KANKA <noreply@mail.alkanka.com>`
-10. Redeploy (Publish). Test: sign up with a new email, open the mail, click **Hesabımı onayla**. Then log out, click **Şifremi unuttum**, enter the email and use the link.
-- If Alibaba asks for business verification or the mail lands in spam, the cheapest reliable fallback is **Resend** (free 3,000 mails/month): use the same 5 variables with `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_USER=resend`, `SMTP_PASS=<Resend API key>`.
+**MAIL KURULUMU (Türkçe, adım adım, hiç bilmeyen biri için)**
+
+Bu kurulum bitince iki şey çalışır: (1) yeni üye kayıt olunca mailine "Hesabımı onayla" linki gider, onaylamadan giriş yapamaz. (2) "Şifremi unuttum" linkine basan üyeye şifre sıfırlama maili gider. Kod hazır. Mail ayarlarını girmediğin sürece site eskisi gibi mailsiz çalışır, hiçbir şey bozulmaz. Mevcut 10 üye zaten "onaylı" işaretlendi, onlar kilitlenmez.
+
+Önce hangi yolu seçeceğine karar ver:
+- **YOL A: Alibaba DirectMail.** Hesabın ve kredin var. Ucuz, ama Alibaba bazen kimlik ya da şirket doğrulaması istiyor ve bu birkaç gün sürebiliyor.
+- **YOL B: Resend.** Ayda 3.000 mail ücretsiz. Kurulumu 15 dakika sürer, mailler spam'e düşmez. **Takılırsan bunu kullan.**
+
+---
+
+**YOL A: ALIBABA DIRECTMAIL**
+
+*A1. Hizmeti aç*
+1. Tarayıcıda `https://www.alibabacloud.com` adresine git. Sağ üstten **Log In**'e bas ve hesabınla gir.
+2. Üstteki arama kutusuna `DirectMail` yaz, çıkan **DirectMail** sonucuna tıkla.
+3. Açılan sayfada **Activate Now**, **Buy Now** ya da **Console** butonu görürsen ona bas. "Pay-As-You-Go" seçeneği çıkarsa onu seç, şartları onayla (kutucuğa tik), **Activate**'e bas.
+4. Konsol açılınca sol üstte bir bölge (region) seçici var, genelde "Singapore", "Hangzhou" gibi yazar. **Singapore**'u seç. Bundan sonra hep bu bölgede kal.
+
+*A2. Alan adını ekle*
+5. Sol menüden **Email Settings**, sonra **Email Domains**'e tıkla. (Menü İngilizce değilse sağ üstten dili English yap.)
+6. **New Domain** butonuna bas. Kutuya **sadece** `mail.alkanka.com` yaz (www yok, https yok). **OK**'e bas.
+7. Listede `mail.alkanka.com` satırı belirir, durumu kırmızı ya da "To be verified" yazar. Satırın sağındaki **Configure** linkine bas.
+8. Bir tablo açılır, 4 civarı satır olur. Her satırda üç bilgi var: **Type** (TXT, MX ya da CNAME), **Host Record / Name** (ör. `aliyundm.mail`, `mail`, `aliyun-ap-southeast-1._domainkey.mail`) ve **Record Value** (uzun bir yazı). **Bu sekmeyi kapatma.**
+
+*A3. DNS kayıtlarını Vercel'e gir (alkanka.com Vercel'de olduğu için)*
+9. Yeni bir sekmede `https://vercel.com` adresine gir ve hesabına giriş yap.
+10. Üst menüden **Domains**'e tıkla. Görmüyorsan takım adının yanındaki menüden **Settings**, sonra **Domains**'e gir. Listede **alkanka.com**'a tıkla.
+11. Sayfada **DNS Records** bölümünü bul. Bölümün altında boş bir satır olur: **Name**, **Type**, **Value**, **TTL**.
+12. Alibaba'daki **her satır için** şunları yap:
+    - **Type**: Alibaba'da ne yazıyorsa onu seç (TXT, MX ya da CNAME).
+    - **Name**: Alibaba'daki **Host Record**'u yaz, ama **sonunda `.alkanka.com` varsa onu sil**. Örneğin `aliyundm.mail.alkanka.com` yazıyorsa sadece `aliyundm.mail` yaz.
+    - **Value**: Alibaba'daki **Record Value**'yu kopyala-yapıştır yap. Başta ya da sonda boşluk kalmasın, tırnak işaretlerini de silme.
+    - MX kaydında **Priority** diye bir kutu çıkarsa Alibaba'daki sayıyı yaz (genelde `10`).
+    - **TTL**'ye dokunma. **Add**'e bas.
+13. Bütün satırları ekleyince Alibaba sekmesine dön ve **Verify** butonuna bas. Hemen yeşile dönmezse panik yapma, 10-60 dakika bekle ve tekrar **Verify**'a bas. Satırların hepsi yeşil tik olunca devam et.
+    - Bir satır uzun süre kırmızı kalırsa Name'e fazladan `.alkanka.com` ekleyip eklemediğine bak. En sık yapılan hata bu.
+
+*A4. Gönderici adresini oluştur*
+14. Alibaba sol menüden **Email Settings**, sonra **Sender Addresses**'e gir. **Create Sender Address**'e bas.
+15. Formu şöyle doldur: **Email Domain**: `mail.alkanka.com`. **Account**: `noreply`. **Reply-To**: boş bırak ya da kendi mailini yaz. **Mail Type**: **Triggered Emails** (işlem maili). **OK**'e bas.
+16. Listede `noreply@mail.alkanka.com` satırı çıkar. Sağındaki **SMTP Password**'e bas. En az 10 karakterli, büyük-küçük harf ve rakam içeren bir şifre yaz (ör. `AlKanka2026Mail`). **Bu şifreyi bir yere not et**, bir daha gösterilmez.
+17. Alibaba yeni hesaplarda günlük gönderim limitini düşük tutabilir (ör. günde 200). Yeterli değilse aynı sayfada **Quota** ya da **Upgrade**'den arttırırsın.
+
+*A5. Ayarları siteye gir*
+18. v0'da sağ üstteki **ayarlar (dişli)** simgesine tıkla, sonra **Vars**'a gir.
+19. **Add** / **New Variable** ile aşağıdaki 5 değişkeni tek tek ekle. Sol kutu = **Key**, sağ kutu = **Value**. Büyük-küçük harf aynı olmalı:
+
+| Key | Value |
+|---|---|
+| `SMTP_HOST` | `smtpdm-ap-southeast-1.aliyun.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | `noreply@mail.alkanka.com` |
+| `SMTP_PASS` | 16. adımda not ettiğin şifre |
+| `MAIL_FROM` | `AL KANKA <noreply@mail.alkanka.com>` |
+
+   - Singapore dışında bir bölge seçtiysen SMTP_HOST farklıdır. Alibaba'da **Sender Addresses** sayfasında "SMTP address" diye yazar, oradakini kullan.
+20. Kaydet. Sonra **Publish**'e basıp yeniden yayınla. Vercel'den yapıyorsan **Project**, **Settings**, **Environment Variables**'a aynı 5 satırı ekle, **Production** tikini işaretle, sonra **Deployments** sekmesinde en üstteki satırın **...** menüsünden **Redeploy**'a bas.
+
+---
+
+**YOL B: RESEND (takılırsan bunu kullan)**
+1. `https://resend.com` adresine gir, **Sign Up** ile Google hesabınla kayıt ol.
+2. Soldan **Domains**'e gir, **Add Domain**'e bas. `mail.alkanka.com` yaz, Region'da **EU (Ireland)**'ı seç, **Add**'e bas.
+3. Ekranda 3-4 DNS kaydı çıkar (MX, TXT, TXT). Yukarıdaki **A3** adımlarının aynısını yap: Vercel'de alkanka.com'un **DNS Records** bölümüne her birini Type / Name / Value olarak gir. Name'de sonda `.alkanka.com` varsa sil.
+4. Resend'de **Verify DNS Records**'a bas. Birkaç dakika içinde **Verified** olur.
+5. Soldan **API Keys**'e gir, **Create API Key**'e bas. Name: `alkanka`, Permission: **Sending access**, Domain: `mail.alkanka.com`. **Add**'e bas. Çıkan `re_...` ile başlayan anahtarı kopyala, bir daha gösterilmez.
+6. v0'da **Ayarlar**, sonra **Vars**'a gir ve şunları ekle:
+
+| Key | Value |
+|---|---|
+| `SMTP_HOST` | `smtp.resend.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | `resend` |
+| `SMTP_PASS` | 5. adımdaki `re_...` anahtarı |
+| `MAIL_FROM` | `AL KANKA <noreply@mail.alkanka.com>` |
+
+7. **Publish** ile yeniden yayınla.
+
+---
+
+**TEST (iki yolda da aynı)**
+1. Gizli sekme aç (Ctrl+Shift+N), `alkanka.com`'a gir.
+2. **Kayıt ol**'a bas ve daha önce kullanmadığın bir mail adresiyle kayıt ol. Ekranda "mailini kontrol et" uyarısı çıkmalı.
+3. Mail kutuna bak, gelmediyse **Spam / Gereksiz** klasörüne de bak. "Hesabımı onayla" butonuna bas, site açılıp seni içeri almalı.
+4. Çıkış yap. **Giriş yap**'a, sonra **Şifremi unuttum**'a bas. Aynı maili yaz, gelen maildeki linke tıkla, yeni şifreni belirle ve yeni şifreyle giriş yap.
+5. Mail hiç gelmiyorsa: Vars'taki 5 değişkeni harf harf kontrol et (başta/sonda boşluk olmasın), Publish yaptığından emin ol, Alibaba'da domain satırlarının hepsinin yeşil olduğuna bak. Yine olmuyorsa YOL B'ye geç.
 
 **Telegram bots:** create each bot with @BotFather (`/newbot`), add it as **admin** to every source/target channel and group, and paste the token into the panel's Telegram tab.
 

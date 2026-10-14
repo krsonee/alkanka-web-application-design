@@ -10,6 +10,7 @@ import { BrandLogo } from './logo-selector'
 import { MobileDrawer } from './sidebar'
 import { formatAC, usePoints } from './points-context'
 import { MemberRank } from './kp/member-rank'
+import { SiteSearch } from './site-search'
 import type { SocialLinks } from '@/lib/social-shared'
 
 function PointsPill() {
@@ -182,18 +183,7 @@ export function Topbar({ social }: { social: SocialLinks }) {
           <span className="sr-only">AL KANKA ana sayfa</span>
         </a>
 
-        <label className="relative hidden max-w-md flex-1 md:flex">
-          <span className="sr-only">Sayfa, site veya oyun ara</span>
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input
-            type="search"
-            placeholder="Site, kampanya veya oyun ara…"
-            className="h-10 w-full rounded-lg border border-border bg-card pr-14 pl-9 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
-          />
-          <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            Ctrl K
-          </kbd>
-        </label>
+        <SiteSearch />
 
         <div className="ml-auto flex items-center gap-2">
           <PointsPill />
