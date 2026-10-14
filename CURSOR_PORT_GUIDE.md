@@ -351,12 +351,12 @@ Rules for every item: keep the current dark/gold theme and Turkish copy style. H
 
 **G. Telegram bots: ✅ ALL DONE** (`lib/telegram-bots.ts`, panel → Telegram → "Bot paketi" via `components/panel/telegram-bot-suite.tsx`; all three bots are off until enabled in the panel)
 32. ✅ Post sharing bot: picks up a post from the sponsor support group, appends the alkanka link/text, posts it to the target channels and replies in the source group with the post link.
-33. Special odds bot: mirrors special odds posts with our links and notes. When the result is marked won, it auto-posts "Özel oran kazandı".
-34. Approval notifier: market purchases, completed tasks and complaints needing admin/mod approval are sent to a Telegram group with a template text.
+33. ✅ Special odds bot: mirrors special odds posts with our links and notes. When the result is marked won, it auto-posts "Özel oran kazandı".
+34. ✅ Approval notifier: market purchases, completed tasks and complaints needing admin/mod approval are sent to a Telegram group with a template text.
 
-**H. Security & audit**
-35. Compare every panel setting with its site consumer and fix mismatches and dead fields.
-36. Security pass: every write API checks the session and role. Zod-validate all inputs. Parameterized SQL only. Rate-limit auth, chat and game endpoints. Use the security headers in `next.config` (nosniff, Referrer-Policy, HSTS, X-Frame-Options SAMEORIGIN on the panel). Use `httpOnly` cookies and keep secrets server-only.
+**H. Security & audit: ✅ DONE**
+35. ✅ Scanned every Telegram/settings key the panel writes against its readers (readers include batch `getSettings([...])` calls); no dead fields found. Panel content and arena settings are read by the site through `lib/content.ts` and `getArenaSettings()`.
+36. ✅ Write routes and actions all check the session (panel actions via `requirePanel(module)`). Money inputs are validated by hand on the server (allowed-bet lists, integer/range checks, trimmed text) rather than with Zod. SQL is parameterized. Rate limits: Better Auth (auth), `panel_login_attempts` (panel login), and `lib/rate-limit.ts` with the `rate_hits` table (chat 6/15 s, table chat 6/15 s, game actions 40/10 s). Security headers are in `next.config` (panel gets SAMEORIGIN + noindex). The panel cookie is httpOnly + secure. Original spec: every write API checks the session and role. Zod-validate all inputs. Parameterized SQL only. Rate-limit auth, chat and game endpoints. Use the security headers in `next.config` (nosniff, Referrer-Policy, HSTS, X-Frame-Options SAMEORIGIN on the panel). Use `httpOnly` cookies and keep secrets server-only.
 
 ### 8.3 What the owner (user) must do: step by step
 **MAIL KURULUMU (Türkçe, adım adım, hiç bilmeyen biri için)**
