@@ -8,9 +8,10 @@ export type SportSlug = (typeof SPORTS)[number]['slug']
 export const DAY_OFFSETS = [-1, 0, 1] as const
 export type DayOffset = (typeof DAY_OFFSETS)[number]
 
-export type ChannelGroup = 'spor' | 'tv' | 'oyun' | 'slot' | 'yayinci'
+export type ChannelGroup = 'uye' | 'spor' | 'tv' | 'oyun' | 'slot' | 'yayinci'
 
 export const CHANNEL_GROUPS: { key: ChannelGroup; label: string }[] = [
+  { key: 'uye', label: 'Kanka yayıncılar' },
   { key: 'spor', label: 'Spor kanalları' },
   { key: 'tv', label: 'TV & Mizah & Haber' },
   { key: 'oyun', label: 'Oyun yayıncıları' },
@@ -75,6 +76,8 @@ export type Channel = {
   tag: string
   live: boolean
   embedUrl: string | null
+  /** Set for streams that cannot be embedded (Telegram); the player shows a join button instead. */
+  externalUrl?: string | null
   title: string | null
   avatar: string | null
   viewers: number | null
@@ -305,7 +308,7 @@ export async function getMatchDetail(id: number): Promise<MatchDetail> {
   }
 }
 
-async function getLiveVideoId(path: string): Promise<string | null> {
+export async function getLiveVideoId(path: string): Promise<string | null> {
   try {
     const res = await fetch(`https://www.youtube.com/${path}/live`, {
       headers: { ...HEADERS, 'Accept-Language': 'tr' },
