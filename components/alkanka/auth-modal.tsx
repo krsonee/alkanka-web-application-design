@@ -133,10 +133,10 @@ export function AuthModal() {
             src={isRegister ? '/images/mascots/jako-merhaba.png' : '/images/mascots/jako.png'}
             alt="AL KANKA maskotu Jako"
             fill
-            sizes="384px"
-            className="object-contain object-top pb-20"
+            sizes="(min-width: 768px) 384px, 0px"
+            className="object-cover object-[50%_35%]"
           />
-          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
+          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/40 via-30% to-transparent to-60%" />
           <div className="relative flex flex-col gap-1">
             <span className="text-xs font-semibold uppercase tracking-widest text-primary">{t('auth.eyebrow')}</span>
             <p className="font-display text-xl font-bold text-balance">

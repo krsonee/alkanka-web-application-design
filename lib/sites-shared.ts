@@ -1,4 +1,4 @@
-export const SITE_BADGES = ['', 'Ana Sponsor', 'VIP'] as const
+export const SITE_BADGES = ['Ana Sponsor', 'Elit Sponsor', 'VIP', '', 'Sponsor Değil'] as const
 
 const TURKISH: Record<string, string> = {
   ç: 'c',

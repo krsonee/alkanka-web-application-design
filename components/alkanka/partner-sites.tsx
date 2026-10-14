@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, Check, Clock, Copy, LayoutGrid, List, Search, Star, Zap } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, Search, ShieldCheck, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   BONUSES,
@@ -11,6 +11,7 @@ import {
   SPECIAL_ODDS,
   TIER_INFO,
   sponsorById,
+  tierRank,
   type Campaign,
   type Sponsor,
   type SponsorTier,
@@ -137,20 +138,34 @@ function GoButton({ label = 'Siteye git', className, site }: { label?: string; c
   )
 }
 
-function TierTag({ tier }: { tier: SponsorTier }) {
+const TIER_TAG: Record<SponsorTier, { label: string; Icon: typeof Star; className: string }> = {
+  ana: {
+    label: 'Ana sponsor',
+    Icon: Crown,
+    className: 'tier-shine bg-primary text-primary-foreground shadow-[0_0_18px_-2px] shadow-primary/70 ring-1 ring-primary',
+  },
+  elit: {
+    label: 'Elit sponsor',
+    Icon: Gem,
+    className: 'bg-primary/25 text-primary ring-1 ring-primary/80 shadow-[0_0_12px_-3px] shadow-primary/60 motion-safe:animate-glow',
+  },
+  vip: { label: 'VIP sponsor', Icon: Star, className: 'bg-primary/12 text-primary ring-1 ring-primary/40' },
+  guvenilir: { label: 'Güvenilir', Icon: ShieldCheck, className: 'bg-secondary text-foreground/80 ring-1 ring-border' },
+  degil: { label: 'Sponsor değil', Icon: CircleSlash, className: 'bg-transparent text-muted-foreground ring-1 ring-dashed ring-border' },
+}
+
+export function TierTag({ tier, className }: { tier: SponsorTier; className?: string }) {
+  const { label, Icon, className: tone } = TIER_TAG[tier]
   return (
     <span
       className={cn(
-        'relative inline-flex items-center gap-1 overflow-hidden rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
-        tier === 'vip'
-          ? 'bg-primary/15 text-primary ring-1 ring-primary/50 motion-safe:animate-glow'
-          : tier === 'ana'
-            ? 'tier-shine bg-primary text-primary-foreground'
-            : 'bg-secondary text-muted-foreground',
+        'relative inline-flex shrink-0 items-center gap-1 overflow-hidden rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap',
+        tone,
+        className,
       )}
     >
-      {tier !== 'guvenilir' && <Star className="size-2.5 fill-current" aria-hidden="true" />}
-      {tier === 'vip' ? 'VIP' : tier === 'ana' ? 'Ana sponsor' : 'Güvenilir'}
+      <Icon className={cn('size-3', (tier === 'ana' || tier === 'vip') && 'fill-current')} aria-hidden="true" />
+      {label}
     </span>
   )
 }
@@ -256,6 +271,8 @@ function SponsorRow({ sponsor, rank }: { sponsor: Sponsor; rank: number }) {
 
 const TIER_FILTERS: { id: 'all' | SponsorTier; label: string }[] = [
   { id: 'all', label: 'Tümü' },
+  { id: 'ana', label: 'Ana sponsor' },
+  { id: 'elit', label: 'Elit' },
   { id: 'vip', label: 'VIP' },
   { id: 'guvenilir', label: 'Güvenilir' },
 ]
@@ -269,20 +286,26 @@ const SORTS = [
 
 const PAGE = 12
 
-export function SponsorDirectory({ sponsors = [], mainId }: { sponsors?: Sponsor[]; mainId?: string }) {
+export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; mainId?: string }) {
   const [tier, setTier] = useState<'all' | SponsorTier>('all')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<(typeof SORTS)[number]['id']>('onerilen')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [visible, setVisible] = useState(PAGE)
 
-  const pool = sponsors.filter((s) => s.id !== mainId)
-  const counts = {
+  const pool = useMemo(
+    () => sponsors.filter((s) => s.tier !== 'degil').sort((a, b) => tierRank(a.tier) - tierRank(b.tier)),
+    [sponsors],
+  )
+  const counts: Record<'all' | SponsorTier, number> = {
     all: pool.length,
+    ana: pool.filter((s) => s.tier === 'ana').length,
+    elit: pool.filter((s) => s.tier === 'elit').length,
     vip: pool.filter((s) => s.tier === 'vip').length,
     guvenilir: pool.filter((s) => s.tier === 'guvenilir').length,
-    ana: 0,
+    degil: 0,
   }
+  const filters = TIER_FILTERS.filter((f) => f.id === 'all' || counts[f.id] > 0)
 
   const list = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr')
@@ -316,7 +339,7 @@ export function SponsorDirectory({ sponsors = [], mainId }: { sponsors?: Sponsor
 
       <div className="sticky top-16 z-20 -mx-1 flex flex-col gap-3 rounded-xl border border-border bg-surface/95 p-3 backdrop-blur-md lg:flex-row lg:items-center">
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {TIER_FILTERS.map((f) => (
+          {filters.map((f) => (
             <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(tier === f.id ? 'all' : f.id)}>
               {f.label}
               <Count n={counts[f.id]} active={tier === f.id} />
@@ -381,7 +404,7 @@ export function SponsorDirectory({ sponsors = [], mainId }: { sponsors?: Sponsor
       ) : list.length === 0 ? (
         <JakoTip pose="uzgun" title={pool.length === 0 ? 'Liste burada bitiyor' : 'Bulamadım kanka'}>
           {pool.length === 0
-            ? 'Ana sponsor dışında listelenecek kayıt yok.'
+            ? 'Listelenecek sponsor yok.'
             : `“${query}” ile eşleşen sponsor yok. Başka bir isim dene veya filtreyi temizle.`}
         </JakoTip>
       ) : view === 'grid' ? (
@@ -738,22 +761,23 @@ export function FeaturedSponsors({
 }) {
   if (!main) return null
   const rotation = mains.length ? mains : [main]
-  const rotatingIds = new Set(rotation.map((s) => s.id))
-  const restCards = cards.filter((s) => !rotatingIds.has(s.id))
+  const extra = cards.filter((s) => !rotation.some((r) => r.id === s.id))
   return (
     <section aria-labelledby="one-cikan-title" className="flex flex-col gap-4">
       <SectionHeading
         id="one-cikan-title"
         title="Öne çıkan sponsorlar"
-        description={`Ana sponsor ve öne çıkan VIP siteler. Toplam ${total} sponsor var.`}
+        description={`Ana sponsor ve önerilen siteler. Toplam ${total} sponsor var.`}
         action={<SeeAllLink href="/sponsorlar" label={`${total} sponsorun tümü`} />}
       />
       <MainSponsorRotator sponsors={rotation} />
-      <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-        {(restCards.length ? restCards : cards).map((s) => (
-          <SponsorCard key={s.id} sponsor={s} />
-        ))}
-      </ul>
+      {extra.length > 0 && (
+        <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          {extra.map((s) => (
+            <SponsorCard key={s.id} sponsor={s} />
+          ))}
+        </ul>
+      )}
     </section>
   )
 }

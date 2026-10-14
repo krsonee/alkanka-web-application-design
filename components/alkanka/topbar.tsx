@@ -10,7 +10,7 @@ import { BrandLogo } from './logo-selector'
 import { MobileDrawer } from './sidebar'
 import { formatAC, usePoints } from './points-context'
 import { MemberRank } from './kp/member-rank'
-import { SiteSearch } from './site-search'
+import { SiteSearch, type SearchSponsor } from './site-search'
 import { RadioPlayer } from './radio-player'
 import type { SocialLinks } from '@/lib/social-shared'
 
@@ -186,7 +186,7 @@ function AccountArea() {
   return <AccountMenu />
 }
 
-export function Topbar({ social }: { social: SocialLinks }) {
+export function Topbar({ social, sponsors = [] }: { social: SocialLinks; sponsors?: SearchSponsor[] }) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
 
@@ -207,7 +207,7 @@ export function Topbar({ social }: { social: SocialLinks }) {
           <span className="sr-only">AL KANKA ana sayfa</span>
         </a>
 
-        <SiteSearch />
+        <SiteSearch sponsors={sponsors} />
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           <BadgeButton />

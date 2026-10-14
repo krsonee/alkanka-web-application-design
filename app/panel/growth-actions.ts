@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { importWagers, notifyAddressChange, setFlag, setSiteLink, setSponsorAccountStatus } from '@/lib/growth'
-import { SPONSORS } from '@/components/alkanka/data'
+import { siteNameLookup } from '@/lib/sites'
 
 type Result = { ok: boolean; message: string }
 const denied: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -21,7 +21,7 @@ export async function saveSiteLinkAction(siteId: string, url: string, notify: bo
     revalidatePath(`/siteler/${siteId}`)
     revalidatePath('/panel')
     if (!changed || !notify) return { ok: true, message: changed ? 'Adres güncellendi (bildirim gönderilmedi).' : 'Adres kaydedildi.' }
-    const name = SPONSORS.find((s) => s.id === siteId)?.name ?? siteId
+    const name = (await siteNameLookup())(siteId)
     const r = await notifyAddressChange(siteId, name, `${siteBase()}/git/${siteId}?src=alarm`)
     return { ok: true, message: `Adres güncellendi. ${r.push} cihaza bildirim, ${r.telegram} Telegram mesajı gitti.` }
   } catch (error) {

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 export default async function SponsorsPage() {
   const sponsors = await listPublicSponsors().catch(() => [])
   const featured = pickFeatured(sponsors)
-  const vip = sponsors.filter((site) => site.tier === 'vip').length
+  const premium = sponsors.filter((site) => site.tier === 'ana' || site.tier === 'elit' || site.tier === 'vip').length
   const trusted = sponsors.filter((site) => site.tier === 'guvenilir').length
   const minutes = sponsors.map((site) => Number.parseInt(site.payout, 10)).filter((value) => value > 0)
   const average = minutes.length ? `${Math.round(minutes.reduce((sum, value) => sum + value, 0) / minutes.length)} dk` : '—'
@@ -25,7 +25,7 @@ export default async function SponsorsPage() {
         speech="Hepsini tek tek kontrol ettim kanka, gönül rahatlığıyla gir."
         stats={[
           { label: 'Toplam sponsor', value: String(sponsors.length) },
-          { label: 'VIP', value: String(vip) },
+          { label: 'Ana · Elit · VIP', value: String(premium) },
           { label: 'Güvenilir', value: String(trusted) },
           { label: 'Ort. çekim', value: average },
         ]}

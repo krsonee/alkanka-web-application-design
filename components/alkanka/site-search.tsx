@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { NAV_ITEMS, SPONSORS } from './data'
+import { NAV_ITEMS } from './data'
 
 type Result = { id: string; label: string; hint: string; href: string }
 
@@ -19,16 +19,25 @@ const GAMES: [string, string][] = [
   ['kafa-basketbolu', 'Kafa Basketbolu'],
 ]
 
-const INDEX: Result[] = [
+export type SearchSponsor = { id: string; name: string; welcome: string }
+
+const STATIC_INDEX: Result[] = [
   ...NAV_ITEMS.map((n) => ({ id: `p-${n.id}`, label: n.label, hint: 'Sayfa', href: n.href })),
-  ...SPONSORS.map((s) => ({ id: `s-${s.id}`, label: s.name, hint: `Sponsor · ${s.welcome}`, href: `/sponsorlar#${s.id}` })),
   ...GAMES.map(([id, label]) => ({ id: `g-${id}`, label, hint: 'Oyun', href: `/oyunlar#${id}` })),
 ]
 
 const normalize = (v: string) =>
   v.toLocaleLowerCase('tr').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i')
 
-export function SiteSearch() {
+export function SiteSearch({ sponsors = [] }: { sponsors?: SearchSponsor[] }) {
+  const INDEX = useMemo<Result[]>(
+    () => [
+      ...STATIC_INDEX.slice(0, NAV_ITEMS.length),
+      ...sponsors.map((s) => ({ id: `s-${s.id}`, label: s.name, hint: s.welcome ? `Sponsor · ${s.welcome}` : 'Sponsor', href: `/siteler/${s.id}` })),
+      ...STATIC_INDEX.slice(NAV_ITEMS.length),
+    ],
+    [sponsors],
+  )
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
