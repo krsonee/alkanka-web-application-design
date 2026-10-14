@@ -1,7 +1,10 @@
-import { PREDICTIONS, SPECIAL_ODDS, SPONSORS } from '@/components/alkanka/data'
+import { PREDICTIONS, SPECIAL_ODDS } from '@/components/alkanka/data'
 import { splitMatch } from '@/lib/split-match'
+import { siteOptions } from '@/lib/sites'
 
-export const LOGO_SPONSORS = SPONSORS.map((s) => ({ id: s.id, label: s.name, initials: s.initials }))
+export async function listLogoSponsors() {
+  return (await siteOptions()).map((s) => ({ id: s.id, label: s.name, initials: s.initials }))
+}
 
 export const LOGO_TEAMS = Array.from(
   new Set([...SPECIAL_ODDS.flatMap((o) => splitMatch(o.match)), ...PREDICTIONS.flatMap((p) => [p.home, p.away])].filter(Boolean)),

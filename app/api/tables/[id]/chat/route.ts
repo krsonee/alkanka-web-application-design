@@ -7,6 +7,7 @@ import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 export const dynamic = 'force-dynamic'
 
 const MAX_LEN = 200
+const SHARED_ROOMS = new Set(['rulet-canli'])
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -34,8 +35,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const m = await getMember()
   if (!m) return NextResponse.json({ error: 'Yazmak için giriş yapmalısın.' }, { status: 401 })
   if (await hitRateLimit(`tablechat:${m.id}`, 6, 15)) return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 })
-  const t = await getTableRow(id)
-  if (!t || t.status === 'iptal') return NextResponse.json({ error: 'Masa bulunamadı.' }, { status: 404 })
+  // Shared house tables (live roulette) have a fixed room id instead of a PvP table row.
+  const sharedRoom = SHARED_ROOMS.has(id)
+  const t = sharedRoom ? null : await getTableRow(id)
+  if (!sharedRoom && (!t || t.status === 'iptal')) return NextResponse.json({ error: 'Masa bulunamadı.' }, { status: 404 })
 
   const payload = (await req.json().catch(() => ({}))) as { body?: unknown }
   const body = String(payload.body ?? '')
@@ -51,7 +54,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   )
   if (recent.rows[0].n >= 4) return NextResponse.json({ error: 'Biraz yavaş kanka, birkaç saniye bekle.' }, { status: 429 })
 
-  const isPlayer = t.players.some((p) => p.id === m.id && !p.bot)
+  const isPlayer = t ? t.players.some((p) => p.id === m.id && !p.bot) : false
   await pool.query(`INSERT INTO table_messages (table_id, user_id, user_name, is_player, body) VALUES ($1,$2,$3,$4,$5)`, [
     id,
     m.id,

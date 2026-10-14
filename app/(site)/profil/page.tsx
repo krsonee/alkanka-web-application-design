@@ -23,14 +23,13 @@ import {
   listReferrals,
   myComplaints,
   myReviews,
-  siteName,
 } from '@/lib/community'
+import { siteNameLookup, siteOptions } from '@/lib/sites'
 import { AlertsCard, ReferralCard } from '@/components/alkanka/community/profile-widgets'
 import { AccountSettings } from '@/components/alkanka/profile/account-settings'
 import { SponsorAccountsCard } from '@/components/alkanka/growth-widgets'
 import { myFollows, mySponsorAccounts } from '@/lib/growth'
 import { nextRank, rankForLevel } from '@/lib/ranks-shared'
-import { SPONSORS } from '@/components/alkanka/data'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { cn } from '@/lib/utils'
 
@@ -367,7 +366,8 @@ function BadgesTab({ kpStatus, badges }: { kpStatus: KpStatus; badges: Awaited<R
 }
 
 async function AccountsTab({ memberId }: { memberId: string }) {
-  const [sponsorAccounts, follows, social, links, events, entries, streams] = await Promise.all([
+  const [sites, sponsorAccounts, follows, social, links, events, entries, streams] = await Promise.all([
+    siteOptions(),
     mySponsorAccounts(memberId).catch(() => []),
     myFollows(memberId).catch(() => [] as string[]),
     mySocialAccounts(memberId).catch(() => []),
@@ -382,10 +382,10 @@ async function AccountsTab({ memberId }: { memberId: string }) {
         <SocialAccountsCard accounts={social} links={links} />
         <div className="flex flex-col gap-4">
           <StreamChannelsCard streams={streams} />
-          <SponsorAccountsCard accounts={sponsorAccounts} sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
+          <SponsorAccountsCard accounts={sponsorAccounts} sites={sites.map((s) => ({ id: s.id, name: s.name }))} />
           {follows.length > 0 && (
             <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-              Adres alarmı açık: <span className="text-foreground">{follows.map((id) => siteName(id)).join(', ')}</span>
+              Adres alarmı açık: <span className="text-foreground">{follows.map((id) => sites.find((s) => s.id === id)?.name ?? id).join(', ')}</span>
             </p>
           )}
         </div>
@@ -396,7 +396,7 @@ async function AccountsTab({ memberId }: { memberId: string }) {
 }
 
 async function ReviewsTab({ memberId }: { memberId: string }) {
-  const [reviews, complaints] = await Promise.all([myReviews(memberId), myComplaints(memberId)])
+  const [reviews, complaints, siteName] = await Promise.all([myReviews(memberId), myComplaints(memberId), siteNameLookup()])
   return (
     <div className="grid items-start gap-8 lg:grid-cols-2">
       <section aria-labelledby="yorumlarim" className="flex flex-col gap-3">

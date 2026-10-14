@@ -11,7 +11,7 @@ import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
 import { assertRateLimit } from '@/lib/rate-limit'
-import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, sitAtTable as bjLiveSit } from '@/lib/blackjack-live'
+import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, joinBlackjack as bjLiveJoin } from '@/lib/blackjack-live'
 
 type Fail = { ok: false; error: string }
 const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Error ? error.message : 'Bir hata oluştu.' })
@@ -141,13 +141,14 @@ export async function blackjackAct(id: string, action: 'hit' | 'stand' | 'double
   }
 }
 
-export async function sitBlackjackTable(seat: number, bet: number) {
+export async function joinBlackjackTable(bet: number, prefer?: number | null) {
   try {
     const m = await member()
     const s = (await getArenaSettings()).blackjack
     if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
     await assertCanPlay(m.id)
-    const res = await bjLiveSit(m, seat, bet, s.bets)
+    const preferred = Number.isInteger(prefer) && prefer! > 0 ? prefer! : null
+    const res = await bjLiveJoin(m, bet, s.bets, preferred)
     return { ok: true as const, ...res }
   } catch (e) {
     return fail(e)

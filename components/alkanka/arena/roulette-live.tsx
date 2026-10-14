@@ -13,6 +13,7 @@ import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
 import { RouletteWheel, pocketColor } from './roulette-wheel'
 import { Chip, RouletteBoard, betKey, chipTone, parseKey, type BetKind } from './roulette-board'
+import { TableChat } from './table-chat'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const colorName = (n: number) => (n === 0 ? 'yeşil' : RED.has(n) ? 'kırmızı' : 'siyah')
@@ -104,8 +105,30 @@ function PlayersPanel({ players, phase }: { players: RouletteLiveState['players'
   )
 }
 
+/** Big flashing badge over the wheel so the winning number is unmistakable. */
+function WinFlash({ n }: { n: number }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+      <span className="absolute size-28 animate-ping rounded-full border-4 border-primary opacity-60" />
+      <span
+        className="relative flex size-24 flex-col items-center justify-center rounded-full border-4 border-primary font-display text-foreground shadow-2xl"
+        style={{ background: pocketColor(n) }}
+      >
+        <span className="text-4xl font-bold leading-none">{n}</span>
+        <span className="mt-1 text-[10px] font-bold uppercase tracking-widest">{colorName(n)}</span>
+      </span>
+    </div>
+  )
+}
+
 function WinnersPanel({ last }: { last: RouletteLiveState['lastRound'] | undefined }) {
-  if (!last) return null
+  if (!last) {
+    return (
+      <aside className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+        Kazananlar her turun sonunda burada listelenir.
+      </aside>
+    )
+  }
   return (
     <aside className="flex flex-col gap-3 rounded-2xl border border-primary/40 bg-card p-4" aria-labelledby="rl-winners">
       <h3 id="rl-winners" className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-foreground">
@@ -212,55 +235,67 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     )
   }
 
+  const showWin = clock.phase === 'result' && number !== null
+
   return (
     <div className="flex flex-col gap-4">
-      <section className="felt-table relative overflow-hidden rounded-3xl border border-primary/30" aria-label="Canlı rulet masası">
-        <div className="relative grid min-h-80 items-center gap-4 p-4 sm:p-6 md:grid-cols-[1fr_minmax(0,22rem)]">
-          <Image
-            src="/images/mascots/jako-krupiye.png"
-            alt="Krupiye Jako topu atmaya hazırlanıyor"
-            fill
-            sizes="(min-width: 768px) 60vw, 100vw"
-            className="object-cover object-[20%_center] opacity-40 md:opacity-100 md:[mask-image:linear-gradient(to_right,black_45%,transparent_75%)]"
-            priority
-          />
-          <div className="relative flex max-w-sm flex-col gap-3 self-end md:self-start">
-            <span className="w-fit rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
-              Canlı masa · Tur #{clock.roundId % 10000}
-            </span>
+      <header className="overflow-hidden rounded-3xl border border-primary/30 bg-card">
+        <div className="grid items-stretch md:grid-cols-[minmax(0,22rem)_1fr]">
+          <div className="relative aspect-[1408/768] w-full bg-background md:aspect-auto md:min-h-48">
+            <Image
+              src="/images/mascots/jako-krupiye.png"
+              alt="Krupiye Jako masada, topu atmaya hazır"
+              fill
+              sizes="(min-width: 768px) 22rem, 100vw"
+              className="object-contain object-center"
+              priority
+            />
+          </div>
+          <div className="flex flex-col justify-center gap-3 p-4 sm:p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
+                Canlı masa · Tur #{clock.roundId % 10000}
+              </span>
+              <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground">
+                Herkes aynı masada · Avrupa ruleti
+              </span>
+            </div>
             <DealerLine phase={clock.phase} number={number} secondsLeft={secondsLeft} />
-          </div>
-          <div className="relative mx-auto flex w-full max-w-80 flex-col items-center gap-3">
-            <div className="aspect-square w-full">
-              <RouletteWheel clockOffset={offset} number={number} highlight={clock.phase === 'result' ? number : null} />
+            <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+              <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear" style={{ width: `${progress * 100}%` }} />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Son sayılar</span>
+              <ol className="no-scrollbar flex gap-1.5 overflow-x-auto py-1" aria-label="Son çıkan sayılar">
+                {(data?.history ?? []).map((n, i) => (
+                  <li key={i} className={cn(i === 0 && 'ring-2 ring-primary ring-offset-1 ring-offset-card', 'rounded-full')}>
+                    <NumberPill n={n} />
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
         </div>
+      </header>
 
-        <div className="relative flex items-center gap-3 border-t border-primary/20 bg-background/60 px-4 py-3 backdrop-blur sm:px-6">
-          <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Son sayılar</span>
-          <ol className="flex gap-1.5 overflow-x-auto" aria-label="Son çıkan sayılar">
-            {(data?.history ?? []).map((n, i) => (
-              <li key={i} className={cn(i === 0 && 'ring-2 ring-primary ring-offset-1 ring-offset-background', 'rounded-full')}>
-                <NumberPill n={n} />
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="h-1 bg-background/60" aria-hidden="true">
-          <div className="h-full bg-primary transition-[width] duration-300 ease-linear" style={{ width: `${progress * 100}%` }} />
-        </div>
-      </section>
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
-        <section className="felt-table flex flex-col gap-4 rounded-3xl border border-primary/30 p-3 sm:p-5" aria-label="Bahis alanı">
-          {!data ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Masa yükleniyor" />
+      <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
+        <section className="tavla-wood flex flex-col gap-4 rounded-[2rem] p-2.5 sm:p-3" aria-label="Rulet masası">
+          <div className="felt-table flex flex-col gap-5 rounded-[1.6rem] p-3 sm:p-5">
+            <div className="flex flex-col items-center gap-5 lg:flex-row lg:items-center">
+              <div className="relative aspect-square w-56 shrink-0 sm:w-64 lg:w-72">
+                <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />
+                {showWin && <WinFlash n={number} />}
+              </div>
+              <div className="w-full min-w-0 flex-1">
+                {!data ? (
+                  <div className="flex justify-center py-16">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Masa yükleniyor" />
+                  </div>
+                ) : (
+                  <RouletteBoard mine={mine} others={others} onBet={place} disabled={!betting || sending} winner={showWin ? number : null} chipValues={settings.bets} />
+                )}
+              </div>
             </div>
-          ) : (
-            <RouletteBoard mine={mine} others={others} onBet={place} disabled={!betting || sending} winner={clock.phase === 'result' ? number : null} chipValues={settings.bets} />
-          )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2" role="radiogroup" aria-label="Fiş değeri">
@@ -320,11 +355,13 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
             )}
           </div>
           <p className="text-xs text-muted-foreground">Sayıya 36x, düzine 3x, renk / tek-çift / alt-üst 2x öder. Top sunucuda atılır, herkes aynı turu görür.</p>
+          </div>
         </section>
 
-        <div className="flex flex-col gap-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:flex xl:flex-col">
           <WinnersPanel last={data?.lastRound} />
           <PlayersPanel players={players} phase={clock.phase} />
+          <TableChat tableId="rulet-canli" className="h-80 md:col-span-2 xl:h-96" />
         </div>
       </div>
     </div>

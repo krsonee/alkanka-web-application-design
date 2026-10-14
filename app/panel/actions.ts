@@ -7,7 +7,7 @@ import { panelLogout } from '@/app/panel/auth-actions'
 import { deleteContent, setContent, type HeroOverride, type SlideOverride } from '@/lib/content'
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
-import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
+import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
 import { SHARE_KEY } from '@/lib/share'
 import { TEXT_FIELDS, TEXTS_KEY } from '@/lib/site-texts-shared'
 
@@ -156,7 +156,7 @@ export async function saveLogos(_: ActionState, form: FormData): Promise<ActionS
   try {
     await requireAdmin('logo')
     const kind = String(form.get('kind'))
-    const allowed = kind === 'sponsors' ? LOGO_SPONSORS : kind === 'teams' ? LOGO_TEAMS : null
+    const allowed = kind === 'sponsors' ? await listLogoSponsors() : kind === 'teams' ? LOGO_TEAMS : null
     if (!allowed) return { message: 'Geçersiz liste.' }
     const value: Record<string, string> = {}
     for (const item of allowed) {

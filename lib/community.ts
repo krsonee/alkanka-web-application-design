@@ -2,7 +2,6 @@ import 'server-only'
 import { randomBytes } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { credit } from '@/lib/member'
-import { SPONSORS } from '@/components/alkanka/data'
 import type { ParsedOdd } from '@/lib/deal-types'
 
 let ready: Promise<unknown> | null = null
@@ -37,8 +36,6 @@ export function ensureCommunity() {
   return ready
 }
 
-export const siteName = (id: string) => SPONSORS.find((s) => s.id === id)?.name ?? id
-export const isSite = (id: string) => SPONSORS.some((s) => s.id === id)
 const iso = (v: unknown) => new Date(String(v)).toISOString()
 
 // --- Levels & badges -----------------------------------------------------

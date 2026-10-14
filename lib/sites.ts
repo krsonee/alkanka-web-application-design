@@ -1,5 +1,5 @@
 import 'server-only'
-import type { Sponsor, SponsorTier } from '@/components/alkanka/data'
+import { tierRank, type Sponsor, type SponsorTier } from '@/components/alkanka/data'
 import { rows, sql } from '@/lib/db'
 import { SITE_BADGES, SLUG_LETTER_ERROR, publicSlug, slugHasLetter, slugify, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
@@ -119,10 +119,14 @@ function initialsOf(name: string) {
 
 export function tierOf(badge: string): SponsorTier {
   const value = badge.trim()
-  if (value === SITE_BADGES[1]) return 'ana'
-  if (value === SITE_BADGES[2]) return 'vip'
+  if (value === 'Ana Sponsor') return 'ana'
+  if (value === 'Elit Sponsor') return 'elit'
+  if (value === 'VIP') return 'vip'
+  if (value === 'Sponsor Değil') return 'degil'
   return 'guvenilir'
 }
+
+const byTier = (a: PublicSponsor, b: PublicSponsor) => tierRank(a.tier) - tierRank(b.tier)
 
 export function toPublicSponsor(site: SponsorSite): PublicSponsor {
   const perks = site.perks.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
@@ -141,19 +145,35 @@ export function toPublicSponsor(site: SponsorSite): PublicSponsor {
   }
 }
 
-export async function listPublicSponsors(): Promise<PublicSponsor[]> {
+export async function listPublicSites(): Promise<PublicSponsor[]> {
   const all = await listSites()
-  return all.filter((site) => site.active && site.slug).map(toPublicSponsor)
+  return all.filter((site) => site.active && site.slug).map(toPublicSponsor).sort(byTier)
+}
+
+export type SiteOption = { id: string; name: string; initials: string }
+
+export async function siteOptions(): Promise<SiteOption[]> {
+  const all = await listPublicSites().catch(() => [] as PublicSponsor[])
+  return all.map((site) => ({ id: site.id, name: site.name, initials: site.initials }))
+}
+
+export async function siteNameLookup() {
+  const names = new Map((await siteOptions()).map((site) => [site.id, site.name]))
+  return (id: string) => names.get(id) ?? id
+}
+
+export async function sponsorExists(id: string) {
+  return (await siteOptions()).some((site) => site.id === id)
+}
+
+export async function listPublicSponsors(): Promise<PublicSponsor[]> {
+  return (await listPublicSites()).filter((site) => site.tier !== 'degil')
 }
 
 export function pickFeatured(all: PublicSponsor[]) {
-  const main = all.find((site) => site.tier === 'ana') ?? all.find((site) => site.featured) ?? all[0] ?? null
-  const highlighted = all.filter((site) => site.id !== main?.id && (site.featured || site.tier === 'vip'))
-  const cards = (highlighted.length ? highlighted : all.filter((site) => site.id !== main?.id)).slice(0, 4)
-  const rotation = main
-    ? [main, ...all.filter((site) => site.id !== main.id && (site.tier === 'ana' || site.featured))].slice(0, 6)
-    : []
-  return { main, mains: rotation, cards, total: all.length }
+  const rotation = all.filter((site) => site.tier === 'ana' || site.featured).slice(0, 8)
+  const main = rotation[0] ?? all[0] ?? null
+  return { main, mains: rotation.length ? rotation : main ? [main] : [], cards: [] as PublicSponsor[], total: all.length }
 }
 
 export type ResolvedSponsor = PublicSponsor & { recordId: string }
@@ -235,7 +255,7 @@ function clean(input: SiteInput): Omit<SiteInput, 'id' | 'slug'> {
   const name = clip(input.name, 80)
   if (!name) throw new Error('Sponsor adı gerekli.')
   const badge = clip(input.badge, 40)
-  if (!SITE_BADGES.includes(badge as (typeof SITE_BADGES)[number])) throw new Error('Rozet Ana Sponsor, VIP veya güvenilir olmalı.')
+  if (!SITE_BADGES.includes(badge as (typeof SITE_BADGES)[number])) throw new Error('Rozet Ana Sponsor, Elit Sponsor, VIP, Güvenilir veya Sponsor Değil olmalı.')
   const sortOrder = Number(input.sortOrder)
   if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 10000) throw new Error('Sıra 0 ile 10000 arasında tam sayı olmalı.')
   const rating = Number(input.rating)

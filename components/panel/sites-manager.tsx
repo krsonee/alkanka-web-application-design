@@ -30,9 +30,11 @@ const EMPTY: SiteInput = {
 }
 
 const BADGE_LABEL: Record<(typeof SITE_BADGES)[number], string> = {
-  '': 'Güvenilir',
-  'Ana Sponsor': 'Ana sponsor',
-  VIP: 'VIP',
+  'Ana Sponsor': '1 · Ana sponsor',
+  'Elit Sponsor': '2 · Elit sponsor',
+  VIP: '3 · VIP sponsor',
+  '': '4 · Güvenilir sponsor',
+  'Sponsor Değil': '5 · Sponsor değil (yalnızca güven merkezi ve özel oranlar)',
 }
 
 export function SitesManager({ sites }: { sites: SponsorSite[] }) {

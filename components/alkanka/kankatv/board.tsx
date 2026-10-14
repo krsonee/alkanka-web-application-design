@@ -1,6 +1,6 @@
 'use client'
 
-import { useDeferredValue, useMemo, useState, useSyncExternalStore } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
@@ -408,9 +408,33 @@ function usePlayerSrc(embedUrl: string | null) {
   return host ? `${embedUrl}&parent=${encodeURIComponent(host)}` : null
 }
 
+/**
+ * YouTube reports unplayable videos (ended, region-locked, embedding off) only through the
+ * IFrame API's postMessage channel, so we subscribe to it and fall back to the offline screen.
+ */
+function useYouTubeFailure(frame: React.RefObject<HTMLIFrameElement | null>, src: string | null) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  useEffect(() => {
+    if (!src?.startsWith('https://www.youtube.com/embed/')) return
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || typeof event.data !== 'string') return
+      try {
+        const data = JSON.parse(event.data) as { event?: string }
+        if (data.event === 'onError') setFailedSrc(src)
+      } catch {}
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [frame, src])
+  return failedSrc !== null && failedSrc === src
+}
+
 function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; selected: string; onSelect: (slug: string) => void }) {
   const current = channels.find((c) => c.slug === selected) ?? channels[0]
   const playerSrc = usePlayerSrc(current.embedUrl)
+  const frameRef = useRef<HTMLIFrameElement>(null)
+  const playerFailed = useYouTubeFailure(frameRef, playerSrc)
+  const showPlayer = Boolean(current.embedUrl) && !playerFailed
   const [group, setGroup] = useState<ChannelGroup>(current.group)
   const groupCounts = useMemo(() => {
     const counts = {} as Record<ChannelGroup, number>
@@ -418,18 +442,18 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
     return counts
   }, [channels])
   const visible = channels.filter((c) => c.group === group)
-  const isKick = current.group === 'slot' || current.group === 'yayinci' || current.group === 'oyun'
+  const isKick = current.slug.startsWith('kick-')
   const liveAlternatives = channels.filter((c) => c.live && c.slug !== current.slug).slice(0, 3)
   const note =
     current.group === 'uye'
       ? 'Kanka yayıncılar, kanallarını profillerinden bağlayan üyelerimizdir. Yayın onların kendi Kick, Twitch, YouTube ya da Telegram kanalından açılır.'
       : isKick
-        ? 'Yayınlar yayıncıların kendi Kick kanallarından açılır. Slot & Casino yayınları 18 yaş üstü içindir.'
+        ? 'Yayınlar yayıncıların kendi Kick kanallarından açılır. Şans oyunları yayınları 18 yaş üstü içindir.'
         : 'Yayınlar kanalların kendi resmi YouTube canlı yayınıdır. Bazı yayınlar yalnızca Türkiye’den açılabilir.'
 
   return (
     <div className="flex flex-col gap-5">
-      <div role="tablist" aria-label="Kanal türü" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div role="tablist" aria-label="Kanal türü" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {CHANNEL_GROUPS.map((g) => (
           <button
             key={g.key}
@@ -465,14 +489,16 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
         <div
           className={cn(
             'relative aspect-video w-full overflow-hidden rounded-xl border',
-            current.embedUrl ? 'border-border bg-foreground' : 'border-primary/30 bg-card',
+            showPlayer ? 'border-border bg-foreground' : 'border-primary/30 bg-card',
           )}
         >
-          {current.embedUrl ? (
+          {showPlayer ? (
             playerSrc && (
               <iframe
+                ref={frameRef}
                 key={playerSrc}
                 src={playerSrc}
+                onLoad={(e) => e.currentTarget.contentWindow?.postMessage('{"event":"listening","id":1}', '*')}
                 title={`${current.name} canlı yayın`}
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                 allowFullScreen
@@ -632,7 +658,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
       <PageHero
         eyebrow="KankaTV"
         title="KankaTV"
-        description="Futbol, basketbol ve voleybolda tüm liglerin canlı skorları kendiliğinden güncellenir. Spor kanallarını ve Türk slot yayıncılarını buradan ücretsiz izle."
+        description="Futbol, basketbol ve voleybolda tüm liglerin canlı skorları kendiliğinden güncellenir. E-spor, şans oyunları, TV ve spor yayınlarını buradan ücretsiz izle."
         image="/images/heroes/kankatv.png"
         tone="live"
         stats={[

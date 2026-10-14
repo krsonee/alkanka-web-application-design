@@ -8,15 +8,14 @@ export type SportSlug = (typeof SPORTS)[number]['slug']
 export const DAY_OFFSETS = [-1, 0, 1] as const
 export type DayOffset = (typeof DAY_OFFSETS)[number]
 
-export type ChannelGroup = 'uye' | 'spor' | 'tv' | 'oyun' | 'slot' | 'yayinci'
+export type ChannelGroup = 'oyun' | 'slot' | 'tv' | 'spor' | 'uye'
 
 export const CHANNEL_GROUPS: { key: ChannelGroup; label: string }[] = [
-  { key: 'uye', label: 'Kanka yayıncılar' },
-  { key: 'spor', label: 'Spor kanalları' },
+  { key: 'oyun', label: 'E-spor yayınları' },
+  { key: 'slot', label: 'Şans oyunları' },
   { key: 'tv', label: 'TV & Mizah & Haber' },
-  { key: 'oyun', label: 'Oyun yayıncıları' },
-  { key: 'slot', label: 'Slot & Casino' },
-  { key: 'yayinci', label: 'Spor yayıncıları' },
+  { key: 'spor', label: 'Sports' },
+  { key: 'uye', label: 'Kanka yayıncılar' },
 ]
 
 type TvChannel = { slug: string; name: string; group: 'spor' | 'tv'; tag: string; path: string }
@@ -48,14 +47,20 @@ const TV_CHANNELS: TvChannel[] = [
   { slug: 'yasinobuz', name: 'Yasin Obuz', group: 'tv', tag: 'Mizah', path: '@yasinobuz' },
 ]
 
-const KICK_CATEGORIES: { group: 'slot' | 'yayinci'; categoryId: number; tag: string }[] = [
-  { group: 'slot', categoryId: 28, tag: 'Slot & Casino' },
-  { group: 'yayinci', categoryId: 75, tag: 'Spor' },
-]
+const KICK_CATEGORY_IDS = { slot: 28, spor: 75 } as const
 
-const SPORT_TEXT = /\b(ma[cç]|futbol|derbi|galatasaray|fenerbah[cç]e|be[sş]ikta[sş]|trabzon|s[uü]per lig|[sş]ampiyonlar ligi|ma[cç] sonu|spor|basketbol|nba|euroleague|fifa|ea fc|efootball)\b/i
-const SPORT_CATEGORY = /sport|football|soccer|basketball|fifa|ea sports fc|efootball|nba/i
-const NOT_GAME_CATEGORY = /just chatting|irl|music|slots|casino|gambling|pools|asmr|talk shows|podcast|sports/i
+/** Real-world sport only; football video games (EA FC, eFootball) are e-sports. */
+const SPORT_CATEGORY = /^sports$|^football$|soccer|basketball|volleyball|tennis|formula|motorsport|ufc|mma|boxing|wrestling/i
+const CHANCE_CATEGORY = /\b(slots?|casino|gambling|poker|roulette|blackjack)\b/i
+const NOT_GAME_CATEGORY = /^(just chatting|irl|music|asmr|art|talk shows?.*|podcasts?|travel.*|food.*|special events|pools.*|chess)$/i
+
+function classifyKick(category: string): Exclude<ChannelGroup, 'tv' | 'uye'> | null {
+  if (!category) return null
+  if (CHANCE_CATEGORY.test(category)) return 'slot'
+  if (SPORT_CATEGORY.test(category)) return 'spor'
+  if (NOT_GAME_CATEGORY.test(category)) return null
+  return 'oyun'
+}
 
 export type MatchState = 'pre' | 'in' | 'post'
 export type Side = { id: number; name: string; logo: string; score: number | null }
@@ -316,8 +321,15 @@ export async function getLiveVideoId(path: string): Promise<string | null> {
     })
     if (!res.ok) return null
     const html = await res.text()
-    if (!html.includes('"isLive":true')) return null
-    return html.match(/"videoId":"([\w-]{11})"/)?.[1] ?? null
+    // `/live` only canonicalises to a watch URL when the channel itself is broadcasting; the
+    // looser `"isLive":true` check also matched recommended videos from other channels.
+    const canonical = html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})"/)?.[1]
+    if (!canonical) return null
+    const detailsId = html.match(/"videoDetails":\{"videoId":"([\w-]{11})"/)?.[1]
+    if (detailsId && detailsId !== canonical) return null
+    if (!html.includes('"isLiveNow":true')) return null
+    if (html.includes('"playableInEmbed":false')) return null
+    return canonical
   } catch {
     return null
   }
@@ -358,40 +370,44 @@ async function fetchKick(query: string, limit: number): Promise<KickStream[]> {
   }
 }
 
-async function getKickStreams(categoryId: number, group: 'slot' | 'yayinci', tag: string): Promise<Channel[]> {
-  return (await fetchKick(`&category_id=${categoryId}`, 24)).map((s) => kickChannel(s, group, tag))
-}
+const KICK_PER_GROUP = 24
 
-async function getKickMixed(): Promise<Channel[]> {
-  const streams = await fetchKick('', 100)
-  const sport: Channel[] = []
-  const games: Channel[] = []
-  for (const s of streams) {
-    const category = s.category?.name ?? ''
-    if (SPORT_CATEGORY.test(category) || SPORT_TEXT.test(s.title)) {
-      if (sport.length < 24) sport.push(kickChannel(s, 'yayinci', category || 'Spor'))
-    } else if (category && !NOT_GAME_CATEGORY.test(category) && games.length < 24) {
-      games.push(kickChannel(s, 'oyun', category))
-    }
+/**
+ * Every Kick stream is filed by its own category name, so a stream only lands in a tab it
+ * belongs to; streams with no fitting tab (Just Chatting, music, ...) are dropped.
+ */
+async function getKickChannels(): Promise<Channel[]> {
+  const batches = await Promise.all([
+    fetchKick(`&category_id=${KICK_CATEGORY_IDS.slot}`, KICK_PER_GROUP),
+    fetchKick(`&category_id=${KICK_CATEGORY_IDS.spor}`, KICK_PER_GROUP),
+    fetchKick('', 100),
+  ])
+  const seen = new Set<string>()
+  const buckets: Record<'oyun' | 'slot' | 'spor', Channel[]> = { oyun: [], slot: [], spor: [] }
+  for (const s of batches.flat()) {
+    if (seen.has(s.channel.slug)) continue
+    seen.add(s.channel.slug)
+    const category = s.category?.name?.trim() ?? ''
+    const group = classifyKick(category)
+    if (!group || buckets[group].length >= KICK_PER_GROUP) continue
+    buckets[group].push(kickChannel(s, group, category))
   }
-  return [...games, ...sport]
+  const byViewers = (a: Channel, b: Channel) => (b.viewers ?? 0) - (a.viewers ?? 0)
+  return [...buckets.oyun.sort(byViewers), ...buckets.slot.sort(byViewers), ...buckets.spor.sort(byViewers)]
 }
 
 export async function getChannels(): Promise<Channel[]> {
-  const [ids, mixed, ...kick] = await Promise.all([
+  const [ids, kickAll] = await Promise.all([
     Promise.all(TV_CHANNELS.map((c) => getLiveVideoId(c.path))),
-    getKickMixed(),
-    ...KICK_CATEGORIES.map((k) => getKickStreams(k.categoryId, k.group, k.tag)),
+    getKickChannels(),
   ])
-  const seen = new Set<string>()
-  const kickAll = [...kick.flat(), ...mixed].filter((c) => (seen.has(c.slug) ? false : (seen.add(c.slug), true)))
   const tv: Channel[] = TV_CHANNELS.map((c, i) => ({
     slug: c.slug,
     name: c.name,
     group: c.group,
     tag: c.tag,
     live: Boolean(ids[i]),
-    embedUrl: ids[i] ? `https://www.youtube.com/embed/${ids[i]}?autoplay=1&mute=0&playsinline=1` : null,
+    embedUrl: ids[i] ? `https://www.youtube.com/embed/${ids[i]}?autoplay=1&mute=0&playsinline=1&enablejsapi=1` : null,
     title: null,
     avatar: null,
     viewers: null,

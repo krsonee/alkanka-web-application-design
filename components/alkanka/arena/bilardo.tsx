@@ -595,25 +595,125 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [power])
 
-  function aimFromPointer(e: ReactPointerEvent<HTMLCanvasElement>) {
+  const canAim = () => {
     const g = game.current
-    if (g.moving || g.over || g.turn !== 'p') return
+    return !g.moving && !g.over && g.turn === 'p' && !balls.current[0].in
+  }
+
+  /** Points the cue at the pointer. Ignores positions on top of the cue ball, where atan2 swings wildly. */
+  function aimAt(e: ReactPointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     const x = ((e.clientX - rect.left) / rect.width) * (W + RAIL * 2) - RAIL
     const y = ((e.clientY - rect.top) / rect.height) * (H + RAIL * 2) - RAIL
     const cue = balls.current[0]
-    g.angle = Math.atan2(y - cue.y, x - cue.x)
+    if (Math.hypot(x - cue.x, y - cue.y) < R * 1.5) return
+    game.current.angle = Math.atan2(y - cue.y, x - cue.x)
   }
 
-  function onKey(e: React.KeyboardEvent) {
-    const g = game.current
-    if (e.key === 'ArrowLeft') g.angle -= e.shiftKey ? 0.002 : 0.02
-    else if (e.key === 'ArrowRight') g.angle += e.shiftKey ? 0.002 : 0.02
-    else if (e.key === 'ArrowUp') setPower((p) => Math.min(100, p + 5))
-    else if (e.key === 'ArrowDown') setPower((p) => Math.max(5, p - 5))
-    else if (e.key === ' ' || e.key === 'Enter') shoot(g.angle, power)
-    else return
-    e.preventDefault()
+  const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
+  const [aimLocked, setAimLocked] = useState(false)
+  const lockedRef = useRef(false)
+  const lock = (v: boolean) => {
+    lockedRef.current = v
+    setAimLocked(v)
+  }
+
+  function onPointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
+    e.currentTarget.focus({ preventScroll: true })
+    if (!canAim()) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }
+    aimAt(e)
+  }
+
+  function onPointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!canAim()) return
+    const d = drag.current
+    if (d && d.id === e.pointerId) {
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) d.moved = true
+      aimAt(e)
+    } else if (!lockedRef.current && e.pointerType === 'mouse') {
+      aimAt(e)
+    }
+  }
+
+  function onPointerUp(e: ReactPointerEvent<HTMLCanvasElement>) {
+    const d = drag.current
+    if (!d || d.id !== e.pointerId) return
+    drag.current = null
+    // A drag always leaves the aim locked; a plain click toggles the lock.
+    lock(d.moved ? true : !lockedRef.current)
+  }
+
+  const powerRef = useRef(power)
+  powerRef.current = power
+
+  // Keyboard works anywhere on the page (no need to click the table first), except while typing in a field.
+  useEffect(() => {
+    const held = new Set<string>()
+    let raf = 0
+    let last = 0
+    let heldFor = 0
+    const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+
+    const tick = (now: number) => {
+      const dt = Math.min(50, now - (last || now))
+      last = now
+      heldFor += dt
+      const dir = (held.has('right') ? 1 : 0) - (held.has('left') ? 1 : 0)
+      if (dir && canAim()) {
+        // Starts precise, then speeds up the longer the key is held, so full turns don't feel stuck.
+        const base = held.has('fine') ? 0.15 : Math.min(2.4, 0.5 + heldFor / 600)
+        game.current.angle += dir * base * (dt / 1000)
+      }
+      raf = dir ? requestAnimationFrame(tick) : 0
+    }
+
+    const down = (e: KeyboardEvent) => {
+      if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
+      const k = e.key
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') held.add('left')
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D') held.add('right')
+      else if (k === 'ArrowUp' || k === 'w' || k === 'W') setPower((p) => Math.min(100, p + 5))
+      else if (k === 'ArrowDown' || k === 's' || k === 'S') setPower((p) => Math.max(5, p - 5))
+      else if (k === ' ' || k === 'Enter') {
+        if (e.repeat) return e.preventDefault()
+        if (canAim()) {
+          shoot(game.current.angle, powerRef.current)
+          lock(false)
+        }
+      } else return
+      held[e.shiftKey ? 'add' : 'delete']('fine')
+      e.preventDefault()
+      if ((held.has('left') || held.has('right')) && !raf) {
+        last = 0
+        heldFor = 0
+        lock(true)
+        raf = requestAnimationFrame(tick)
+      }
+    }
+    const up = (e: KeyboardEvent) => {
+      const k = e.key
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') held.delete('left')
+      if (k === 'ArrowRight' || k === 'd' || k === 'D') held.delete('right')
+      if (k === 'Shift') held.delete('fine')
+    }
+    const clear = () => held.clear()
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', clear)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', clear)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const fire = () => {
+    shoot(game.current.angle, power)
+    lock(false)
   }
 
   const yourTurn = ui.turn === 'p' && !ui.moving
@@ -644,15 +744,28 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ))}
       </div>
 
-      <canvas
-        ref={canvasRef}
-        tabIndex={0}
-        onKeyDown={onKey}
-        onPointerMove={aimFromPointer}
-        onPointerDown={aimFromPointer}
-        aria-label="Bilardo masası. Nişan almak için imleci hareket ettir veya sol-sağ ok tuşlarını kullan, boşluk ile vur."
-        className={cn('aspect-[1076/576] w-full touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary', yourTurn ? 'cursor-crosshair' : 'cursor-wait')}
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          tabIndex={0}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => (drag.current = null)}
+          aria-label="Bilardo masası. İmleçle nişan al, tıklayarak nişanı kilitle. Sol-sağ ok tuşlarıyla döndür, yukarı-aşağı ile gücü ayarla, boşluk ile vur."
+          className={cn('aspect-[1076/576] w-full touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary', yourTurn ? 'cursor-crosshair' : 'cursor-wait')}
+        />
+        {yourTurn && (
+          <span
+            className={cn(
+              'pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider shadow-md backdrop-blur-sm',
+              aimLocked ? 'bg-primary text-primary-foreground' : 'bg-background/70 text-foreground',
+            )}
+          >
+            {aimLocked ? 'Nişan kilitli · Boşluk ile vur' : 'Nişan al · Tıkla ve kilitle'}
+          </span>
+        )}
+      </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center">
         <p className="flex-1 text-sm font-semibold text-foreground" aria-live="polite">
@@ -664,7 +777,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           <span className="w-9 font-display font-bold text-foreground">{power}</span>
         </label>
         <button
-          onClick={() => shoot(game.current.angle, power)}
+          onClick={fire}
           disabled={!yourTurn}
           className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40"
         >
@@ -672,6 +785,47 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           {ui.turn === 'b' ? 'Rakip nişan alıyor' : 'Vur'}
         </button>
       </div>
+
+      <KeyGuide />
     </div>
+  )
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex min-w-6 items-center justify-center rounded-md border border-border border-b-2 bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-bold text-foreground">
+      {children}
+    </kbd>
+  )
+}
+
+function KeyGuide() {
+  const rows: { keys: React.ReactNode; label: string }[] = [
+    { keys: <span className="text-xs font-semibold text-foreground">Fare</span>, label: 'İmleçle nişan al, tıklayınca nişan kilitlenir' },
+    { keys: <span className="text-xs font-semibold text-foreground">Sürükle</span>, label: 'Basılı tutup çevirerek istakayı her yöne döndür' },
+    { keys: (<><Kbd>←</Kbd><Kbd>→</Kbd></>), label: 'İstakayı döndür (basılı tut, hızlanır)' },
+    { keys: (<><Kbd>Shift</Kbd><span className="text-muted-foreground">+</span><Kbd>←→</Kbd></>), label: 'İnce ayar' },
+    { keys: (<><Kbd>↑</Kbd><Kbd>↓</Kbd></>), label: 'Vuruş gücü ±5' },
+    { keys: (<><Kbd>Boşluk</Kbd><Kbd>Enter</Kbd></>), label: 'Vur' },
+  ]
+  return (
+    <details className="group hidden rounded-2xl border border-border bg-card md:block" open>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-foreground">
+        Tuş rehberi
+        <span className="text-xs font-medium text-muted-foreground group-open:hidden">Göster</span>
+        <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Gizle</span>
+      </summary>
+      <ul className="grid gap-x-6 gap-y-2.5 border-t border-border px-4 py-3 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((r) => (
+          <li key={r.label} className="flex items-center gap-3">
+            <span className="flex shrink-0 items-center gap-1">{r.keys}</span>
+            <span className="text-xs leading-relaxed text-muted-foreground">{r.label}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+        Tuşlar masaya tıklamadan da çalışır. Sohbete yazarken devre dışı kalır. W A S D tuşları da kullanılabilir.
+      </p>
+    </details>
   )
 }

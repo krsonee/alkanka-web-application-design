@@ -13,7 +13,7 @@ import { SLIDES } from '@/components/alkanka/data'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
 import { LogoEditor } from '@/components/panel/logo-editor'
-import { LOGO_SPONSORS, LOGO_TEAMS } from '@/lib/logo-registry'
+import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
 import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
@@ -37,7 +37,7 @@ import { SITE_URL } from '@/lib/seo'
 import { Studio } from '@/components/panel/studio'
 import { CommunityManager } from '@/components/panel/community'
 import { adminComplaints, listLeagueMatches, pendingReviews, publishedReviews } from '@/lib/community'
-import { SPONSORS } from '@/components/alkanka/data'
+import { siteOptions } from '@/lib/sites'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 import { KpManager } from '@/components/panel/kp-manager'
 import { AdsEditor } from '@/components/panel/ads-editor'
@@ -207,15 +207,17 @@ export default async function PanelPage() {
       const b = await getBranding()
       return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
     }),
-    section(session, 'logo', 'Logolar', () => (
+    section(session, 'logo', 'Logolar', async () => {
+      const logoSponsors = await listLogoSponsors()
+      return (
       <>
         <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} />
         <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} />
         <LogoEditor
           kind="sponsors"
-          title={`Site logoları (${LOGO_SPONSORS.length})`}
+          title={`Site logoları (${logoSponsors.length})`}
           hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
-          items={LOGO_SPONSORS}
+          items={logoSponsors}
           saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
         />
         <LogoEditor
@@ -226,7 +228,8 @@ export default async function PanelPage() {
           saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
         />
       </>
-    )),
+      )
+    }),
     section(session, 'seo', 'SEO', async () => (
       <SeoManager
         posts={await listPosts({ includeDrafts: true })}
@@ -240,7 +243,7 @@ export default async function PanelPage() {
     section(session, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
     section(session, 'growth', 'Büyüme', async () => (
       <GrowthManager
-        sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))}
+        sites={(await siteOptions()).map((s) => ({ id: s.id, name: s.name }))}
         recordNames={Object.fromEntries((await listSites().catch(() => [])).map((site) => [String(site.id), site.name]))}
         links={await getSiteLinks().catch(() => ({}))}
         followers={await followerCounts().catch(() => ({}))}
@@ -257,7 +260,7 @@ export default async function PanelPage() {
         published={await publishedReviews().catch(() => [])}
         complaints={await adminComplaints().catch(() => [])}
         matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
-        siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
+        siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
       />
     )),
     section(session, 'badges', 'Rozet sistemi', kpPanel),

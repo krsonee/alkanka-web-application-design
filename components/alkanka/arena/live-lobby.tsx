@@ -10,9 +10,20 @@ import { useIdle } from '../use-idle'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-export function LiveLobby({ game }: { game?: ArenaGame }) {
+export function LiveLobby({
+  game,
+  watching: watchingProp,
+  onWatch,
+}: {
+  game?: ArenaGame
+  /** When provided, the parent owns which table is open so it can hide its own chrome while watching. */
+  watching?: string | null
+  onWatch?: (id: string | null) => void
+}) {
   const [filter, setFilter] = useState<string>('all')
-  const [watching, setWatching] = useState<string | null>(null)
+  const [watchingLocal, setWatchingLocal] = useState<string | null>(null)
+  const watching = watchingProp !== undefined ? watchingProp : watchingLocal
+  const setWatching = onWatch ?? setWatchingLocal
   const idle = useIdle()
   const { data, isLoading } = useSWR<{ live: TableSummary[] }>('/api/tables/live', fetcher, {
     refreshInterval: idle || watching ? 0 : 8000,

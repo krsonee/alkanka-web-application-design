@@ -6,7 +6,7 @@ import useSWR from 'swr'
 import { Armchair, Hand, Layers, Loader2, Play, Plus, Trophy } from 'lucide-react'
 import type { ArenaGameSettings } from '@/lib/arena'
 import type { BlackjackLiveState } from '@/lib/blackjack-live'
-import { actBlackjackTable, readyBlackjackTable, sitBlackjackTable } from '@/app/actions/arena'
+import { actBlackjackTable, joinBlackjackTable, readyBlackjackTable } from '@/app/actions/arena'
 import { cn } from '@/lib/utils'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
@@ -38,37 +38,13 @@ function dealerLine(phase: string, seated: number, secondsLeft: number, dealerVa
   return dealerValue > 21 ? `Krupiye ${dealerValue} ile battı! Masada kalan herkes kazandı.` : `Krupiye ${dealerValue}. Ödemeler yapılıyor.`
 }
 
-function SeatBox({
-  index,
-  seat,
-  canSit,
-  busy,
-  onSit,
-  phase,
-}: {
-  index: number
-  seat: Seat | null
-  canSit: boolean
-  busy: boolean
-  onSit: (n: number) => void
-  phase: string
-}) {
+function SeatBox({ index, seat, phase }: { index: number; seat: Seat | null; phase: string }) {
   if (!seat) {
     return (
       <div className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/30 bg-background/30 p-2">
+        <Armchair className="size-5 text-primary/50" aria-hidden="true" />
         <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/70">Koltuk {index + 1}</span>
-        {canSit ? (
-          <button
-            onClick={() => onSit(index + 1)}
-            disabled={busy}
-            className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-bold uppercase text-primary-foreground disabled:opacity-50"
-          >
-            <Armchair className="size-3.5" aria-hidden="true" />
-            Otur
-          </button>
-        ) : (
-          <span className="text-xs text-muted-foreground">Boş</span>
-        )}
+        <span className="text-xs text-muted-foreground">Boş</span>
       </div>
     )
   }
@@ -116,8 +92,12 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   const { member, setBalance, requireLogin, points } = usePoints()
   const idle = useIdle()
   const [seatedHere, setSeatedHere] = useState(false)
+  const [viewTable, setViewTable] = useState<number | null>(null)
   // Poll quickly only while this viewer is in a hand; spectators and idle tabs poll slowly.
-  const { data, mutate } = useSWR<BlackjackLiveState>('/api/blackjack', fetcher, { refreshInterval: idle ? 30000 : seatedHere ? 1500 : 4000 })
+  const { data, mutate } = useSWR<BlackjackLiveState>(viewTable ? `/api/blackjack?masa=${viewTable}` : '/api/blackjack', fetcher, {
+    refreshInterval: idle ? 30000 : seatedHere ? 1500 : 4000,
+    keepPreviousData: true,
+  })
   const now = useServerNow(data?.serverNow)
   const [bet, setBet] = useState(settings.bets[0] ?? 25)
   const [busy, setBusy] = useState(false)
@@ -130,7 +110,6 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   const msLeft = data?.phaseEndsAt && now ? Math.max(0, data.phaseEndsAt - now) : 0
   const secondsLeft = Math.ceil(msLeft / 1000)
   const progress = data?.phaseTotal ? Math.min(1, msLeft / data.phaseTotal) : 0
-  const canSit = (phase === 'waiting' || (phase === 'bet' && secondsLeft > 1)) && !me
   const myTurn = phase === 'play' && me && !me.done
 
   useEffect(() => {
@@ -168,15 +147,21 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     mutate()
   }
 
-  async function sit(n: number) {
+  const [notice, setNotice] = useState('')
+
+  async function join() {
     if (busy || !requireLogin()) return
     if (bet > points) return setError('Bakiyen bu bahis için yetersiz.')
     setBusy(true)
     setError('')
-    const res = await sitBlackjackTable(n, bet)
+    setNotice('')
+    const res = await joinBlackjackTable(bet, data?.tableNo ?? null)
     setBusy(false)
     if (!res.ok) return setError(res.error)
     setBalance(res.balance)
+    setViewTable(res.tableNo)
+    if (!res.seated) setNotice(`Masa ${res.tableNo} el oynuyor. Bu el bitince tekrar "Masaya otur"a bas, ilk boş koltuk senin.`)
+    else if (data && res.tableNo !== data.tableNo) setNotice(`Masa ${data.tableNo} doluydu, seni Masa ${res.tableNo}'e oturttuk.`)
     mutate()
   }
 
@@ -209,8 +194,27 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
         <div className="felt-table relative flex flex-col gap-4 overflow-hidden rounded-[1.25rem] px-3 pb-4 pt-3 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
-              Canlı masa · El #{data.roundId % 10000}
+              Masa {data.tableNo} · El #{data.roundId % 10000}
             </span>
+            {data.tables.length > 1 && (
+              <div className="flex flex-wrap gap-1" role="tablist" aria-label="Masalar">
+                {data.tables.map((t) => (
+                  <button
+                    key={t.no}
+                    role="tab"
+                    aria-selected={t.no === data.tableNo}
+                    disabled={!!me && t.no !== data.tableNo}
+                    onClick={() => setViewTable(t.no)}
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-[11px] font-bold tabular-nums disabled:opacity-40',
+                      t.no === data.tableNo ? 'border-primary bg-primary/20 text-foreground' : 'border-primary/30 bg-background/60 text-muted-foreground',
+                    )}
+                  >
+                    Masa {t.no} · {t.seated}/6
+                  </button>
+                ))}
+              </div>
+            )}
             <span className="rounded-full border border-primary/40 bg-background/70 px-3 py-1 text-xs font-bold tabular-nums text-foreground">
               {phaseLabel}
             </span>
@@ -243,7 +247,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {seats.map((s, i) => (
-              <SeatBox key={i} index={i} seat={s} canSit={canSit} busy={busy} onSit={sit} phase={phase} />
+              <SeatBox key={i} index={i} seat={s} phase={phase} />
             ))}
           </div>
         </div>
@@ -284,8 +288,8 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               )}
               <p className="text-xs text-muted-foreground">Koltuk {me.seat} senin. Basmazsan kartlar {secondsLeft} saniye sonra kendiliğinden dağıtılır.</p>
             </div>
-          ) : (phase === 'bet' || phase === 'waiting') && !me ? (
-            <div className="flex flex-col items-center gap-2">
+          ) : !me ? (
+            <div className="flex flex-col items-center gap-3">
               <div className="flex flex-wrap justify-center gap-2" role="radiogroup" aria-label="Bahis">
                 {settings.bets.map((b) => (
                   <button key={b} role="radio" aria-checked={bet === b} onClick={() => setBet(b)} className={cn('chip', bet === b && 'chip-active')}>
@@ -293,7 +297,17 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">{member ? 'Bahsini seç, sonra boş bir koltuğa otur.' : 'Oynamak için giriş yap. İzlemek serbest.'}</p>
+              <button
+                disabled={busy}
+                onClick={join}
+                className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Armchair className="size-4" aria-hidden="true" />}
+                Masaya otur · {formatAC(bet)}
+              </button>
+              <p className="text-center text-xs text-muted-foreground">
+                {member ? 'Koltuk seçmene gerek yok: ilk boş koltuğa oturursun. Masa doluysa yeni masa açılır.' : 'Oynamak için giriş yap. İzlemek serbest.'}
+              </p>
             </div>
           ) : (
             <p className="text-center text-sm text-muted-foreground">
@@ -308,6 +322,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 : 'Bu eli izliyorsun. Bahis süresi açılınca boş koltuğa oturabilirsin.'}
             </p>
           )}
+          {notice && !error && <p aria-live="polite" className="text-center text-sm font-semibold text-primary">{notice}</p>}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <p className="text-center text-xs text-muted-foreground">
             Masada 6 koltuk var. Herkes durunca krupiye hemen açar, süre dolunca oynamayan el otomatik durur. Kartlar sunucuda dağıtılır, herkes aynı masayı görür.
