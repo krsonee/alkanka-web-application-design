@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { ARENA_META, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 import { StakeGate, type GameApi } from './stake-gate'
 import { Tavla } from './tavla'
 import { Okey } from './okey'
 import { Bilardo } from './bilardo'
 import { BlackjackHouse } from './blackjack'
+import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
 import { TableLobby } from './table-lobby'
@@ -66,8 +68,33 @@ function BotGame({ game, api }: { game: ArenaGame; api: GameApi }) {
 }
 
 /** House games (blackjack, rulet) have their own live tables instead of the StakeGate flow. */
+function BlackjackModes({ settings }: { settings: ArenaGameSettings }) {
+  const [solo, setSolo] = useState(false)
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex w-fit gap-1 rounded-xl border border-border bg-card p-1" role="tablist" aria-label="Blackjack masası">
+        {[
+          { id: false, label: 'Canlı masa (6 kişi)' },
+          { id: true, label: 'Tek başına' },
+        ].map((t) => (
+          <button
+            key={t.label}
+            role="tab"
+            aria-selected={solo === t.id}
+            onClick={() => setSolo(t.id)}
+            className={cn('rounded-lg px-4 py-2 text-sm font-bold', solo === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {solo ? <BlackjackHouse settings={settings} /> : <BlackjackLive settings={settings} />}
+    </div>
+  )
+}
+
 function BotMode({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
-  if (game === 'blackjack') return <BlackjackHouse settings={settings} />
+  if (game === 'blackjack') return <BlackjackModes settings={settings} />
   if (game === 'rulet') return <RouletteLive settings={settings} />
   return null
 }

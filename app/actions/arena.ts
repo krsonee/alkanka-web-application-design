@@ -9,6 +9,7 @@ import { bjAct, bjDeal, bjPayout, bjPublic, betLabel, betReturn, validBet, type 
 import { actOnTable, cancelTable, claimTimeout, createTable, joinTable } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
+import { actAtTable as bjLiveAct, sitAtTable as bjLiveSit } from '@/lib/blackjack-live'
 
 type Fail = { ok: false; error: string }
 const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Error ? error.message : 'Bir hata oluştu.' })
@@ -130,6 +131,29 @@ export async function blackjackAct(id: string, action: 'hit' | 'stand' | 'double
     }
     if (state.phase === 'done') await settleBlackjack(m, id, state, Number(row.stake))
     return { ok: true as const, id, hand: bjPublic(state), balance: await getBalance(m.id) }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function sitBlackjackTable(seat: number, bet: number) {
+  try {
+    const m = await member()
+    const s = (await getArenaSettings()).blackjack
+    if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
+    const res = await bjLiveSit(m, seat, bet, s.bets)
+    return { ok: true as const, ...res }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function actBlackjackTable(action: 'hit' | 'stand' | 'double') {
+  try {
+    const m = await member()
+    if (!['hit', 'stand', 'double'].includes(action)) throw new Error('Geçersiz hamle.')
+    const res = await bjLiveAct(m, action)
+    return { ok: true as const, ...res }
   } catch (e) {
     return fail(e)
   }

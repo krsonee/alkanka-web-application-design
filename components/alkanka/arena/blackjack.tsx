@@ -10,8 +10,29 @@ import type { ArenaGameSettings } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
 
-export function PlayingCard({ card, hidden, index = 0 }: { card?: Card; hidden?: boolean; index?: number }) {
+export function PlayingCard({ card, hidden, index = 0, small }: { card?: Card; hidden?: boolean; index?: number; small?: boolean }) {
   const red = card && (card.s === 1 || card.s === 2)
+  if (small) {
+    return (
+      <div
+        className={cn(
+          'card-deal relative flex h-14 w-10 shrink-0 flex-col items-center justify-center rounded-md border shadow-md sm:h-16 sm:w-11',
+          hidden || !card ? 'border-primary/40 bg-secondary' : 'border-border bg-[oklch(0.97_0.01_90)]',
+        )}
+        style={{ animationDelay: `${index * 90}ms` }}
+        aria-label={hidden || !card ? 'Kapalı kart' : `${RANKS[card.r]} ${SUITS[card.s]}`}
+      >
+        {hidden || !card ? (
+          <span className="text-[8px] font-bold uppercase tracking-widest text-primary">AK</span>
+        ) : (
+          <span className={cn('font-display text-sm font-bold leading-none', red ? 'text-[oklch(0.55_0.2_25)]' : 'text-[oklch(0.18_0.01_260)]')}>
+            {RANKS[card.r]}
+            <span className="block text-center text-base">{SUITS[card.s]}</span>
+          </span>
+        )}
+      </div>
+    )
+  }
   return (
     <div
       className="card-deal relative flex h-24 w-16 shrink-0 flex-col justify-between rounded-lg border p-1.5 shadow-lg sm:h-32 sm:w-22"

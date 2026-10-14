@@ -142,6 +142,22 @@ export const RL_RESULT_MS = 6_000
 export const RL_CYCLE_MS = RL_BET_MS + RL_SPIN_MS + RL_RESULT_MS
 export type RoulettePhase = 'bet' | 'spin' | 'result'
 
+export const BJ_SEATS = 6
+export const BJ_BET_MS = 15_000
+export const BJ_PLAY_MS = 25_000
+export const BJ_RESULT_MS = 8_000
+export const BJ_CYCLE_MS = BJ_BET_MS + BJ_PLAY_MS + BJ_RESULT_MS
+export type BlackjackPhase = 'bet' | 'play' | 'result'
+
+export function blackjackClock(now = Date.now()) {
+  const roundId = Math.floor(now / BJ_CYCLE_MS)
+  const start = roundId * BJ_CYCLE_MS
+  const offset = now - start
+  const phase: BlackjackPhase = offset < BJ_BET_MS ? 'bet' : offset < BJ_BET_MS + BJ_PLAY_MS ? 'play' : 'result'
+  const phaseEndsAt = phase === 'bet' ? start + BJ_BET_MS : phase === 'play' ? start + BJ_BET_MS + BJ_PLAY_MS : start + BJ_CYCLE_MS
+  return { roundId, phase, phaseEndsAt, now }
+}
+
 export function rouletteClock(now = Date.now()) {
   const roundId = Math.floor(now / RL_CYCLE_MS)
   const start = roundId * RL_CYCLE_MS

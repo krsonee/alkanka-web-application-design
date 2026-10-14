@@ -201,6 +201,13 @@
 @utility pop-in {
   animation: pop 500ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
+@utility bj-seat-active {
+  animation: bj-seat-pulse 1.6s ease-in-out infinite;
+}
+@keyframes bj-seat-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 45%, transparent); }
+}
 @keyframes card-deal {
   from { transform: translate(40px, -60px) rotate(12deg); opacity: 0; }
   to { transform: translate(0, 0) rotate(0); opacity: 1; }
