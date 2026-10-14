@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import {
   addLeagueMatch,
   autoSettleLeague,
@@ -21,7 +21,7 @@ import { getFinalScore, getFixtures, type Fixture } from '@/lib/kankatv'
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
 async function guard(fn: () => Promise<string | void>): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('community'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const message = await fn()
     revalidatePath('/panel')
@@ -60,7 +60,7 @@ export async function createLeagueMatch(input: { league: string; home: string; a
 }
 
 export async function loadFixtures(day: string): Promise<{ ok: true; fixtures: Fixture[]; published: number[] } | { ok: false; error: string }> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('community'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: 'Geçerli bir tarih seç.' }
   const [fixtures, published] = await Promise.all([getFixtures(day), publishedFixtureIds()])
   return { ok: true, fixtures, published }

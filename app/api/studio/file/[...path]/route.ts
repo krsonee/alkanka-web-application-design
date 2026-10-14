@@ -1,9 +1,9 @@
 import { get } from '@vercel/blob'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
-  if (!(await isAdmin())) return new NextResponse('Unauthorized', { status: 401 })
+  if (!(await canPanel('studio'))) return new NextResponse('Unauthorized', { status: 401 })
   const { path } = await params
   if (path.length !== 2 || !path.every((p) => /^[a-z0-9._-]+$/i.test(p))) return new NextResponse('Not found', { status: 404 })
 

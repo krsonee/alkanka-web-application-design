@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { connectChat, disconnectChat } from '@/lib/telegram-chat'
 import {
   addBot,
@@ -27,7 +27,7 @@ const EXPIRED = { message: 'Oturum süresi doldu, tekrar giriş yap.' }
 const errorText = (error: unknown) => String((error as Error).message ?? error)
 
 export async function addBotAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const me = await addBot(String(form.get('token') ?? '').trim())
     revalidatePath('/panel')
@@ -38,13 +38,13 @@ export async function addBotAction(_: ActionState, form: FormData): Promise<Acti
 }
 
 export async function deleteBotAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await deleteBot(Number(form.get('id')))
   revalidatePath('/panel')
 }
 
 export async function addTargetAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const botId = Number(form.get('botId'))
   if (!botId) return { message: 'Önce bir bot seç.' }
   try {
@@ -57,19 +57,19 @@ export async function addTargetAction(_: ActionState, form: FormData): Promise<A
 }
 
 export async function toggleTargetAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await setTargetActive(Number(form.get('id')), form.get('active') === 'true')
   revalidatePath('/panel')
 }
 
 export async function deleteTargetAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await deleteTarget(Number(form.get('id')))
   revalidatePath('/panel')
 }
 
 export async function testTargetAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const title = await testTarget(Number(form.get('id')))
     return { ok: true, message: `Test mesajı "${title}" kanalına gönderildi.` }
@@ -79,7 +79,7 @@ export async function testTargetAction(_: ActionState, form: FormData): Promise<
 }
 
 export async function addSourceAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const channel = normalizeChannel(String(form.get('channel') ?? ''))
   const brand = String(form.get('brand') ?? '').trim().slice(0, 40)
   const link = String(form.get('link') ?? '').trim().slice(0, 500)
@@ -100,25 +100,25 @@ export async function addSourceAction(_: ActionState, form: FormData): Promise<A
 }
 
 export async function toggleSourceAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await setSourceActive(Number(form.get('id')), form.get('active') === 'true')
   revalidatePath('/panel')
 }
 
 export async function deleteSourceAction(form: FormData) {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await deleteSource(Number(form.get('id')))
   revalidatePath('/panel')
 }
 
 export async function rotateCronKeyAction() {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await getCronKey(true)
   revalidatePath('/panel')
 }
 
 export async function connectInviteAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const botId = Number(form.get('botId'))
   const chat = String(form.get('chat') ?? '').trim()
   if (!botId) return { message: 'Önce bir bot seç.' }
@@ -134,7 +134,7 @@ export async function connectInviteAction(_: ActionState, form: FormData): Promi
 }
 
 export async function saveChannelsAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const input = Object.fromEntries(BROADCAST_CHANNELS.map((c) => [c.slug, String(form.get(c.slug) ?? '')])) as Record<BroadcastSlug, string>
     const saved = await saveChannels(input)
@@ -146,14 +146,14 @@ export async function saveChannelsAction(_: ActionState, form: FormData): Promis
 }
 
 export async function disconnectInviteAction() {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   const { disconnectInviteChannel } = await import('@/lib/table-invite')
   await disconnectInviteChannel()
   revalidatePath('/panel')
 }
 
 export async function connectChatAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   const botId = Number(form.get('botId'))
   const chat = String(form.get('chat') ?? '').trim()
   if (!botId) return { message: 'Önce bir bot seç.' }
@@ -174,13 +174,13 @@ export async function connectChatAction(_: ActionState, form: FormData): Promise
 }
 
 export async function disconnectChatAction() {
-  if (!(await isAdmin())) return
+  if (!(await canPanel('telegram'))) return
   await disconnectChat()
   revalidatePath('/panel')
 }
 
 export async function runMirrorAction(): Promise<ActionState> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const r = await runMirror()
     revalidatePath('/panel')

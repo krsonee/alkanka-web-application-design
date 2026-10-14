@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
 import { betLabel, betReturn, rouletteClock as clock, validBet, type RouletteBet } from '@/lib/casino'
+import { capPayout } from '@/lib/member-limits'
 
 const MAX_ENTRIES = 30
 
@@ -28,7 +29,7 @@ export async function settleFor(member: Pick<Member, 'id' | 'name'>) {
     const n = roundNumber(Number(row.round_id))
     const bets = row.bets as RouletteBet[]
     const total = Number(row.total)
-    const returned = bets.reduce((a, b) => a + betReturn(b, n), 0)
+    const returned = await capPayout(member.id, total, bets.reduce((a, b) => a + betReturn(b, n), 0))
     await pool.query(`UPDATE roulette_bets SET returned = $2 WHERE id = $1`, [row.id, returned])
     if (returned) await credit(member.id, returned)
     await recordHistory({

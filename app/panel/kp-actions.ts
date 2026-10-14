@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import {
   adjustPoints,
   awardBadge,
@@ -23,7 +23,7 @@ import {
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
 async function guard(fn: () => Promise<string | void>): Promise<Result> {
-  if (!(await isAdmin())) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  if (!(await canPanel('badges'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const message = await fn()
     revalidatePath('/panel')
@@ -89,11 +89,11 @@ export async function changePoints(userId: string, points: number, note: string)
 }
 
 export async function findMembers(q: string) {
-  if (!(await isAdmin())) return []
+  if (!(await canPanel('badges'))) return []
   return searchMembers(q)
 }
 
 export async function previewContest(kind: Exclude<AutoKind, 'turnuva'>): Promise<{ period: string; rows: ContestRow[] } | null> {
-  if (!(await isAdmin())) return null
+  if (!(await canPanel('badges'))) return null
   return contestStandings(kind)
 }

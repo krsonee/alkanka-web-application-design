@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { extractBrand } from '@/lib/brand-extract'
 import { deleteAsset, deleteBrand, deleteJob, saveBrand } from '@/lib/studio'
 
@@ -10,7 +10,7 @@ type Result = { ok?: boolean; message?: string; brand?: { name: string; domain: 
 const EXPIRED = { message: 'Oturum süresi doldu, tekrar giriş yap.' }
 
 export async function extractBrandAction(domain: string): Promise<Result> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('studio'))) return EXPIRED
   try {
     const b = await extractBrand(domain)
     return { ok: true, brand: b, message: b.warnings.join(' ') || 'Marka bilgileri siteden çekildi.' }
@@ -30,7 +30,7 @@ export async function saveBrandAction(input: {
   font: string
   notes: string
 }): Promise<Result> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('studio'))) return EXPIRED
   const name = input.name.trim().slice(0, 60)
   if (!name) return { message: 'Marka adı gerekli.' }
   if (input.logo && !/^studio\/logos\/[a-z0-9._-]+$/i.test(input.logo)) return { message: 'Geçersiz logo.' }
@@ -50,21 +50,21 @@ export async function saveBrandAction(input: {
 }
 
 export async function deleteBrandAction(id: number): Promise<Result> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('studio'))) return EXPIRED
   await deleteBrand(id)
   revalidatePath('/panel')
   return { ok: true }
 }
 
 export async function deleteAssetAction(id: number): Promise<Result> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('studio'))) return EXPIRED
   await deleteAsset(id)
   revalidatePath('/panel')
   return { ok: true }
 }
 
 export async function deleteJobAction(id: number): Promise<Result> {
-  if (!(await isAdmin())) return EXPIRED
+  if (!(await canPanel('studio'))) return EXPIRED
   await deleteJob(id)
   revalidatePath('/panel')
   return { ok: true }

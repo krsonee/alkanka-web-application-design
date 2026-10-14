@@ -1,7 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
+import type { PanelModule } from '@/lib/panel-modules'
 import { setContent } from '@/lib/content'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory } from '@/lib/member'
@@ -20,8 +21,8 @@ import {
 } from '@/lib/tournaments'
 import type { ActionState } from './actions'
 
-async function requireAdmin() {
-  if (!(await isAdmin())) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
+async function requireAdmin(module: PanelModule) {
+  if (!(await canPanel(module))) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
 }
 
 function refresh() {
@@ -42,7 +43,7 @@ function int(form: FormData, name: string, label: string, min: number, max: numb
 
 export async function saveArenaSettings(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('games')
     const value = {} as ArenaSettings
     for (const g of ARENA_GAMES) {
       const title = ARENA_META[g].title
@@ -100,7 +101,7 @@ function readTournament(form: FormData): TournamentInput {
 
 export async function saveTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('tournaments')
     const input = readTournament(form)
     const id = Number(form.get('id'))
     if (id) await updateTournament(id, input)
@@ -114,7 +115,7 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
 
 export async function removeTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('tournaments')
     await deleteTournament(Number(form.get('id')))
     refresh()
     return { ok: true, message: 'Turnuva silindi, kayıt ücretleri iade edildi.' }
@@ -125,7 +126,7 @@ export async function removeTournament(_: ActionState, form: FormData): Promise<
 
 export async function beginTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('tournaments')
     await startTournament(Number(form.get('id')))
     refresh()
     return { ok: true, message: 'Turnuva başladı. Tüm eşleşmeler aynı anda açıldı.' }
@@ -136,7 +137,7 @@ export async function beginTournament(_: ActionState, form: FormData): Promise<A
 
 export async function stopTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('tournaments')
     await cancelTournament(Number(form.get('id')))
     refresh()
     return { ok: true, message: 'Turnuva iptal edildi, kayıt ücretleri iade edildi.' }
@@ -147,7 +148,7 @@ export async function stopTournament(_: ActionState, form: FormData): Promise<Ac
 
 export async function pickMatchWinner(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('tournaments')
     const winner = String(form.get('winner') ?? '')
     if (!winner) return { message: 'Kazananı seç.' }
     await adminSetMatchWinner(Number(form.get('id')), Number(form.get('round')), Number(form.get('match')), winner)
@@ -160,7 +161,7 @@ export async function pickMatchWinner(_: ActionState, form: FormData): Promise<A
 
 export async function kickEntry(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('tournaments')
     await removeEntry(Number(form.get('entryId')))
     refresh()
     return { ok: true, message: 'Katılımcı çıkarıldı, ücreti iade edildi.' }
@@ -171,7 +172,7 @@ export async function kickEntry(_: ActionState, form: FormData): Promise<ActionS
 
 export async function adminCancelTable(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('games')
     await cancelTable(String(form.get('id')), { admin: true })
     refresh()
     return { ok: true, message: 'Masa kapatıldı, bahisler iade edildi.' }
@@ -182,7 +183,7 @@ export async function adminCancelTable(_: ActionState, form: FormData): Promise<
 
 export async function adjustMemberBalance(_: ActionState, form: FormData): Promise<ActionState> {
   try {
-    await requireAdmin()
+    await requireAdmin('games')
     const email = String(form.get('email') ?? '').trim().toLowerCase()
     const amount = Math.round(Number(form.get('amount')))
     if (!email) return { message: 'Üye e-postası gir.' }

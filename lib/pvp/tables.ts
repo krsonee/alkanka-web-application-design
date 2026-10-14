@@ -1,3 +1,4 @@
+import { capPayout } from '@/lib/member-limits'
 import 'server-only'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
@@ -319,10 +320,15 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const settings = (await getArenaSettings())[t.game as keyof Awaited<ReturnType<typeof getArenaSettings>>]
   const pot = t.stake * people.length
   const prizeEach = humanWinners.length ? Math.floor((pot * (1 - (settings?.commission ?? 0) / 100)) / humanWinners.length) : 0
-  for (const p of humanWinners) await credit(p.id, prizeEach)
+  const paid = new Map<string, number>()
+  for (const p of humanWinners) {
+    const amount = await capPayout(p.id, t.stake, prizeEach)
+    paid.set(p.id, amount)
+    await credit(p.id, amount)
+  }
   for (const p of people) {
-    const won = humanWinners.some((w) => w.id === p.id)
-    await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: won ? prizeEach - t.stake : -t.stake, tableId: t.id })
+    const won = paid.has(p.id)
+    await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: won ? (paid.get(p.id) ?? 0) - t.stake : -t.stake, tableId: t.id })
   }
 }
 

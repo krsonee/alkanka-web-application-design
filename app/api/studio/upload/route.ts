@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import sharp from 'sharp'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { addAsset, storeFile } from '@/lib/studio'
 
 export const maxDuration = 120
@@ -22,7 +22,7 @@ async function fromUrl(raw: string): Promise<Source> {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
+  if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const form = await request.formData()
   const rawTarget = form.get('target')

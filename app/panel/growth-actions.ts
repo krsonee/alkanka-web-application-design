@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { importWagers, notifyAddressChange, setFlag, setSiteLink, setSponsorAccountStatus } from '@/lib/growth'
 import { SPONSORS } from '@/components/alkanka/data'
 
@@ -14,7 +14,7 @@ function siteBase() {
 }
 
 export async function saveSiteLinkAction(siteId: string, url: string, notify: boolean): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await canPanel('growth'))) return denied
   try {
     const { changed } = await setSiteLink(siteId, url)
     revalidatePath('/siteler')
@@ -30,14 +30,14 @@ export async function saveSiteLinkAction(siteId: string, url: string, notify: bo
 }
 
 export async function setFlagAction(userId: string, flagged: boolean): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await canPanel('growth'))) return denied
   await setFlag(userId, flagged)
   revalidatePath('/panel')
   return { ok: true, message: flagged ? 'Üye işaretlendi.' : 'İşaret kaldırıldı, ödüller açıldı.' }
 }
 
 export async function reviewSponsorAccountAction(userId: string, siteId: string, approve: boolean, note: string): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await canPanel('growth'))) return denied
   await setSponsorAccountStatus(userId, siteId, approve ? 'approved' : 'rejected', note)
   revalidatePath('/panel')
   revalidatePath('/siralama')
@@ -45,7 +45,7 @@ export async function reviewSponsorAccountAction(userId: string, siteId: string,
 }
 
 export async function importWagersAction(siteId: string, period: string, text: string): Promise<Result> {
-  if (!(await isAdmin())) return denied
+  if (!(await canPanel('growth'))) return denied
   try {
     const r = await importWagers(siteId, period, text)
     revalidatePath('/siralama')

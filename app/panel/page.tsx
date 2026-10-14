@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { adminConfigured, isAdmin } from '@/lib/admin-auth'
+import { adminConfigured } from '@/lib/admin-auth'
+import { getPanelSession, type PanelSession } from '@/lib/panel-auth'
+import type { PanelModule } from '@/lib/panel-modules'
+import { rows, sql } from '@/lib/db'
 import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
 import { TEXTS_KEY, type SiteTexts } from '@/lib/site-texts-shared'
 import { TextsEditor } from '@/components/panel/texts-editor'
@@ -51,70 +55,31 @@ import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
+import { BrandingEditor } from '@/components/panel/branding-editor'
+import { getBranding } from '@/lib/branding'
+import { LimitsManager } from '@/components/panel/limits-manager'
+import { listLimits } from '@/lib/member-limits'
+import { StaffManager, type StaffRow } from '@/components/panel/staff-manager'
+import { AccountSettings } from '@/components/panel/account-settings'
+import { cleanPermissions } from '@/lib/panel-modules'
 
-async function sitesPanel() {
+function failed(label: string) {
+  return <p className="text-sm text-destructive">{label} yüklenemedi.</p>
+}
+
+/** Loads a panel section only when the signed-in account may see it, so hidden sections never query their data. */
+async function section(session: PanelSession, module: PanelModule, label: string, load: () => Promise<ReactNode> | ReactNode): Promise<ReactNode> {
+  if (!session.isOwner && !session.permissions.includes(module)) return null
   try {
-    return <SitesManager sites={await listSites()} />
+    return await load()
   } catch (error) {
-    console.error('[sites-panel]', error)
-    return <p className="text-sm text-destructive">Sponsorlar yüklenemedi.</p>
+    console.error(`[panel:${module}]`, error)
+    return failed(label)
   }
 }
 
-async function tasksPanel() {
-  try {
-    const [tasks, claims] = await Promise.all([listTasks(), listPendingClaims()])
-    return <TasksManager tasks={tasks} claims={claims} />
-  } catch (error) {
-    console.error('[tasks-panel]', error)
-    return <p className="text-sm text-destructive">Görevler yüklenemedi.</p>
-  }
-}
-
-async function faqsPanel() {
-  try {
-    return <FaqsManager faqs={await listFaqs()} />
-  } catch (error) {
-    console.error('[faqs-panel]', error)
-    return <p className="text-sm text-destructive">Sorular yüklenemedi.</p>
-  }
-}
-
-async function marketPanel() {
-  try {
-    const [products, requests] = await Promise.all([listProducts({ includeInactive: true }), listRequests()])
-    const sponsors = (await listSites()).filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
-    return <MarketManager products={products} requests={requests} sponsors={sponsors} />
-  } catch (error) {
-    console.error('[market-panel]', error)
-    return <p className="text-sm text-destructive">Market yüklenemedi.</p>
-  }
-}
-
-async function kpPanel() {
-  try {
-    const [cfg, badges, awards, board] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50)])
-    return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} />
-  } catch (error) {
-    console.error('[kp-panel]', error)
-    return <p className="text-sm text-destructive">Rozet sistemi yüklenemedi.</p>
-  }
-}
-
-export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
-
-export default async function PanelPage() {
-  if (!(await isAdmin())) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center bg-background p-4">
-        <LoginForm configured={adminConfigured()} />
-      </main>
-    )
-  }
-
-  const content = await getAllContent()
-  const push = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
-  const [tgBots, tgTargets, tgSources, tgLog, cronKey, tgChat, tgInvite, tgChannels] = await Promise.all([
+async function telegramPanel() {
+  const [bots, targets, sources, log, cronKey, chat, invite, channels] = await Promise.all([
     listBots().catch(() => []),
     listTargets().catch(() => []),
     listSources().catch(() => []),
@@ -126,32 +91,219 @@ export default async function PanelPage() {
   ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
+  return (
+    <div className="flex flex-col gap-6">
+      <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} />
+      <TelegramChatSetup bots={bots} status={chat} />
+      <TelegramChannelsSetup usernames={channels} />
+      <TelegramInviteSetup bots={bots} status={invite} />
+    </div>
+  )
+}
 
-  const slides = SLIDES.map((s) => ({
-    kind: 'slide' as const,
-    id: s.id,
-    label: s.eyebrow,
-    path: '/',
-    defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image },
-    saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
-  }))
+async function marketPanel() {
+  const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
+  const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
+  return <MarketManager products={products} requests={requests} sponsors={sponsors} />
+}
 
-  const heroes = HERO_PAGES.map((p) => ({
-    kind: 'hero' as const,
-    id: p.slug,
-    label: p.label,
-    path: p.path,
-    defaults: { title: p.title, image: p.image },
-    saved: (content[`hero:${p.slug}`] as HeroOverride | undefined) ?? null,
+async function kpPanel() {
+  const [cfg, badges, awards, board] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50)])
+  return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} />
+}
+
+async function staffPanel() {
+  const list = await rows<{
+    id: number
+    username: string
+    display_name: string
+    is_owner: boolean
+    permissions: unknown
+    totp_enabled: boolean
+    totp_required: boolean
+    active: boolean
+    last_login_at: string | null
+  }>(sql`SELECT id, username, display_name, is_owner, permissions, totp_enabled, totp_required, active, last_login_at FROM panel_accounts ORDER BY is_owner DESC, username`)
+  const accounts: StaffRow[] = list.map((a) => ({
+    id: Number(a.id),
+    username: a.username,
+    displayName: a.display_name,
+    isOwner: a.is_owner,
+    permissions: cleanPermissions(a.permissions),
+    totpEnabled: a.totp_enabled,
+    totpRequired: a.totp_required,
+    active: a.active,
+    lastLoginAt: a.last_login_at ? new Date(a.last_login_at).toISOString() : null,
   }))
+  return <StaffManager accounts={accounts} />
+}
+
+export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
+
+export default async function PanelPage() {
+  const session = await getPanelSession()
+  if (!session) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-background p-4">
+        <LoginForm configured={adminConfigured()} />
+      </main>
+    )
+  }
+
+  const content = await getAllContent()
+  const can = (m: PanelModule) => session.isOwner || session.permissions.includes(m)
+  const allowed = session.isOwner ? null : session.permissions
+
+  const slides = can('slide')
+    ? SLIDES.map((s) => ({
+        kind: 'slide' as const,
+        id: s.id,
+        label: s.eyebrow,
+        path: '/',
+        defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image },
+        saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
+      }))
+    : []
+
+  const heroes = can('hero')
+    ? HERO_PAGES.map((p) => ({
+        kind: 'hero' as const,
+        id: p.slug,
+        label: p.label,
+        path: p.path,
+        defaults: { title: p.title, image: p.image },
+        saved: (content[`hero:${p.slug}`] as HeroOverride | undefined) ?? null,
+      }))
+    : []
+
+  const [
+    texts,
+    branding,
+    logos,
+    seo,
+    faqs,
+    sponsors,
+    growth,
+    community,
+    badges,
+    tasks,
+    market,
+    social,
+    limits,
+    games,
+    tournaments,
+    telegram,
+    push,
+    studio,
+  ] = await Promise.all([
+    section(session, 'texts', 'Site yazıları', () => <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />),
+    section(session, 'branding', 'Logo ayarları', async () => {
+      const b = await getBranding()
+      return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
+    }),
+    section(session, 'logo', 'Logolar', () => (
+      <>
+        <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} />
+        <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} />
+        <LogoEditor
+          kind="sponsors"
+          title={`Site logoları (${LOGO_SPONSORS.length})`}
+          hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
+          items={LOGO_SPONSORS}
+          saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
+        />
+        <LogoEditor
+          kind="teams"
+          title={`Takım logoları (${LOGO_TEAMS.length})`}
+          hint="Özel oranlar ve maç tahminlerinde takım adının yanında görünür."
+          items={LOGO_TEAMS}
+          saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
+        />
+      </>
+    )),
+    section(session, 'seo', 'SEO', async () => (
+      <SeoManager
+        posts={await listPosts({ includeDrafts: true })}
+        deals={await listDeals(30)}
+        publishing={await dealsPublishing()}
+        verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
+        siteUrl={SITE_URL}
+      />
+    )),
+    section(session, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
+    section(session, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
+    section(session, 'growth', 'Büyüme', async () => (
+      <GrowthManager
+        sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))}
+        recordNames={Object.fromEntries((await listSites().catch(() => [])).map((site) => [String(site.id), site.name]))}
+        links={await getSiteLinks().catch(() => ({}))}
+        followers={await followerCounts().catch(() => ({}))}
+        report={await trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 }))}
+        flagged={await flaggedMembers().catch(() => [])}
+        accounts={await adminSponsorAccounts().catch(() => [])}
+        period={currentPeriod()}
+        siteUrl={SITE_URL}
+      />
+    )),
+    section(session, 'community', 'Topluluk', async () => (
+      <CommunityManager
+        reviews={await pendingReviews().catch(() => [])}
+        published={await publishedReviews().catch(() => [])}
+        complaints={await adminComplaints().catch(() => [])}
+        matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
+        siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
+      />
+    )),
+    section(session, 'badges', 'Rozet sistemi', kpPanel),
+    section(session, 'tasks', 'Görevler', async () => {
+      const [list, claims] = await Promise.all([listTasks(), listPendingClaims()])
+      return <TasksManager tasks={list} claims={claims} />
+    }),
+    section(session, 'market', 'Market', marketPanel),
+    section(session, 'social', 'Sosyal medya', async () => (
+      <SocialManager
+        links={await getSocialLinks().catch(() => ({}) as SocialLinks)}
+        accounts={await adminSocialAccounts().catch(() => [])}
+        events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
+        entries={await adminEntries().catch(() => [])}
+      />
+    )),
+    section(session, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
+    section(session, 'games', 'Oyun ayarları', () => (
+      <ArenaSettingsEditor
+        settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
+        winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
+      />
+    )),
+    section(session, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
+    section(session, 'telegram', 'Telegram', telegramPanel),
+    section(session, 'push', 'Bildirimler', async () => {
+      const stats = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
+      return <PushSender {...stats} configured={stats.total > 0} />
+    }),
+    section(session, 'studio', 'Stüdyo', async () => (
+      <Studio
+        brands={await listBrands().catch(() => [])}
+        assets={await listAssets().catch(() => [])}
+        jobs={await listJobs().catch(() => [])}
+        spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
+      />
+    )),
+  ])
+
+  const marketPending = can('market') ? await pendingCount().catch(() => 0) : 0
+  const staff = session.isOwner ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
 
   return (
     <main className="min-h-dvh bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
           <div className="flex flex-col">
             <span className="font-display text-lg font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
-            <span className="text-xs text-muted-foreground">Slider ve sayfa başlıklarını düzenle</span>
+            <span className="text-xs text-muted-foreground">
+              {session.displayName}
+              {session.isOwner ? ' · Ana yönetici' : ''}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <Link href={SITE_URL} target="_blank" rel="noopener" className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary">
@@ -161,96 +313,34 @@ export default async function PanelPage() {
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-6">
         <ContentEditor
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'studio']))}
+          isOwner={session.isOwner}
           slides={slides}
           heroes={heroes}
           library={IMAGE_LIBRARY}
-          texts={<TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />}
-          games={<ArenaSettingsEditor settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)} winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)} />}
-          tournaments={<TournamentManager tournaments={await listTournaments()} />}
-          push={<PushSender {...push} configured={push.total > 0} />}
-          telegram={
-            <div className="flex flex-col gap-6">
-              <TelegramMirror bots={tgBots} targets={tgTargets} sources={tgSources} log={tgLog} cronUrl={cronUrl} />
-              <TelegramChatSetup bots={tgBots} status={tgChat} />
-              <TelegramChannelsSetup usernames={tgChannels} />
-              <TelegramInviteSetup bots={tgBots} status={tgInvite} />
-            </div>
-          }
-          studio={
-            <Studio
-              brands={await listBrands().catch(() => [])}
-              assets={await listAssets().catch(() => [])}
-              jobs={await listJobs().catch(() => [])}
-              spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
-            />
-          }
-          community={
-            <CommunityManager
-              reviews={await pendingReviews().catch(() => [])}
-              published={await publishedReviews().catch(() => [])}
-              complaints={await adminComplaints().catch(() => [])}
-              matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
-              siteNames={Object.fromEntries(SPONSORS.map((s) => [s.id, s.name]))}
-            />
-          }
-          sponsors={await sitesPanel()}
-          badges={await kpPanel()}
-          tasks={await tasksPanel()}
-          faqs={await faqsPanel()}
-          market={await marketPanel()}
-          marketPending={await pendingCount().catch(() => 0)}
-          growth={
-            <GrowthManager
-              sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))}
-              recordNames={Object.fromEntries((await listSites().catch(() => [])).map((site) => [String(site.id), site.name]))}
-              links={await getSiteLinks().catch(() => ({}))}
-              followers={await followerCounts().catch(() => ({}))}
-              report={await trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 }))}
-              flagged={await flaggedMembers().catch(() => [])}
-              accounts={await adminSponsorAccounts().catch(() => [])}
-              period={currentPeriod()}
-              siteUrl={SITE_URL}
-            />
-          }
-          social={
-            <SocialManager
-              links={await getSocialLinks().catch(() => ({}) as SocialLinks)}
-              accounts={await adminSocialAccounts().catch(() => [])}
-              events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
-              entries={await adminEntries().catch(() => [])}
-            />
-          }
-          seo={
-            <SeoManager
-              posts={await listPosts({ includeDrafts: true })}
-              deals={await listDeals(30)}
-              publishing={await dealsPublishing()}
-              verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
-              siteUrl={SITE_URL}
-            />
-          }
-          logos={
-            <>
-              <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} />
-              <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} />
-              <LogoEditor
-                kind="sponsors"
-                title={`Site logoları (${LOGO_SPONSORS.length})`}
-                hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
-                items={LOGO_SPONSORS}
-                saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
-              />
-              <LogoEditor
-                kind="teams"
-                title={`Takım logoları (${LOGO_TEAMS.length})`}
-                hint="Özel oranlar ve maç tahminlerinde takım adının yanında görünür."
-                items={LOGO_TEAMS}
-                saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
-              />
-            </>
-          }
+          texts={texts}
+          branding={branding}
+          logos={logos}
+          seo={seo}
+          faqs={faqs}
+          sponsors={sponsors}
+          growth={growth}
+          community={community}
+          badges={badges}
+          tasks={tasks}
+          market={market}
+          marketPending={marketPending}
+          social={social}
+          limits={limits}
+          games={games}
+          tournaments={tournaments}
+          telegram={telegram}
+          push={push}
+          studio={studio}
+          staff={staff}
+          account={<AccountSettings username={session.username} isOwner={session.isOwner} totpEnabled={session.totpEnabled} totpRequired={session.totpRequired} />}
         />
       </div>
     </main>

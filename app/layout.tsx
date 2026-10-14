@@ -53,7 +53,7 @@ const BASE_META: Metadata = {
       { url: '/icon-dark-32x32.png', media: '(prefers-color-scheme: dark)' },
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-icon.png',
+    apple: '/app-icon/180',
   },
   appleWebApp: { capable: true, title: 'AL KANKA', statusBarStyle: 'black-translucent' },
 }

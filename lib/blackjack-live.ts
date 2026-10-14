@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
 import { BJ_BET_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, handValue, type BlackjackPhase, type Card } from '@/lib/casino'
+import { capPayout } from '@/lib/member-limits'
 
 /** Every card is derived from the server secret, so nobody can predict the next card but every viewer sees the same table. */
 function cardAt(roundId: number, who: string, i: number): Card {
@@ -135,7 +136,7 @@ async function settleFinished(round: Round) {
     const cards = seatCards(roundId, Number(row.seat), Number(row.drawn))
     const dealer = dealerHand(roundId)
     const { result, multiplier } = outcome(cards, !!row.doubled, dealer)
-    const returned = Math.floor(stake * multiplier)
+    const returned = await capPayout(String(row.user_id), stake, Math.floor(stake * multiplier))
     await pool.query(`UPDATE blackjack_live SET returned = $2 WHERE id = $1`, [row.id, returned])
     if (returned) await credit(String(row.user_id), returned)
     await recordHistory({

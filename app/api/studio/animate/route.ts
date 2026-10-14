@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAdmin } from '@/lib/admin-auth'
+import { canPanel } from '@/lib/admin-auth'
 import { addJob, getJob, readFile, storeFile } from '@/lib/studio'
 import { makeGif, makeVideo } from '@/lib/studio-animate'
 import { VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
@@ -7,7 +7,7 @@ import { VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
 export const maxDuration = 300
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
+  if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   const jobId = Number.parseInt(String(body?.jobId ?? ''), 10)
