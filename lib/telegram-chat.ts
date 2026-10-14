@@ -43,8 +43,10 @@ export type TgMessage = {
   sticker?: { emoji?: string }
   pinned_message?: TgMessage
   new_chat_members?: TgUser[]
+  video_chat_started?: object
+  video_chat_ended?: object
 }
-export type TgUpdate = { update_id: number; message?: TgMessage }
+export type TgUpdate = { update_id: number; message?: TgMessage; channel_post?: TgMessage }
 
 const MAX_TEXT = 500
 const SEND_COOLDOWN_MS = 3000
@@ -140,7 +142,7 @@ export async function connectChat(botId: number, chatInput: string, siteOrigin: 
   await callBot(token, 'setWebhook', {
     url: `${siteOrigin}/api/telegram/webhook`,
     secret_token: secret,
-    allowed_updates: ['message'],
+    allowed_updates: ['message', 'channel_post'],
     drop_pending_updates: true,
   })
 
@@ -195,10 +197,17 @@ export async function verifyWebhookSecret(header: string | null) {
 }
 
 export async function handleUpdate(update: TgUpdate) {
-  const m = update.message
-  if (!m) return
+  const post = update.message ?? update.channel_post
+  if (!post) return
   const config = await getChatConfig()
   if (!config) return
+  if (post.video_chat_started || post.video_chat_ended) {
+    const { handleVideoChat } = await import('@/lib/member-streams')
+    await handleVideoChat(post, config.botId)
+    return
+  }
+  const m = update.message
+  if (!m) return
   if (m.chat.type !== 'private') {
     // Imported lazily to keep telegram-bots out of the chat module's import graph.
     const { handleShareMessage } = await import('@/lib/telegram-bots')

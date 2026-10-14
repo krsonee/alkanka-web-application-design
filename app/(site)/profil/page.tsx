@@ -5,6 +5,8 @@ import { Award, ChevronRight, Gamepad2, Lock, Medal, Star, Trophy, Users } from 
 import { ProfileTabs, PROFILE_TABS, type ProfileTab } from '@/components/alkanka/profile/profile-tabs'
 import { SocialAccountsCard, SocialEventsCard } from '@/components/alkanka/profile/social-accounts'
 import { getSocialLinks, listSocialEvents, myEntries, mySocialAccounts } from '@/lib/social'
+import { myStreams } from '@/lib/member-streams'
+import { StreamChannelsCard } from '@/components/alkanka/profile/stream-channels'
 import { RANKS } from '@/lib/ranks-shared'
 import { getMember, historySummary } from '@/lib/member'
 import { SITE_URL } from '@/lib/seo'
@@ -365,19 +367,21 @@ function BadgesTab({ kpStatus, badges }: { kpStatus: KpStatus; badges: Awaited<R
 }
 
 async function AccountsTab({ memberId }: { memberId: string }) {
-  const [sponsorAccounts, follows, social, links, events, entries] = await Promise.all([
+  const [sponsorAccounts, follows, social, links, events, entries, streams] = await Promise.all([
     mySponsorAccounts(memberId).catch(() => []),
     myFollows(memberId).catch(() => [] as string[]),
     mySocialAccounts(memberId).catch(() => []),
     getSocialLinks().catch(() => ({})),
     listSocialEvents().catch(() => []),
     myEntries(memberId).catch(() => []),
+    myStreams(memberId).catch(() => []),
   ])
   return (
     <>
       <div id="sponsor-hesaplari" className="grid scroll-mt-24 items-start gap-4 lg:grid-cols-2">
         <SocialAccountsCard accounts={social} links={links} />
         <div className="flex flex-col gap-4">
+          <StreamChannelsCard streams={streams} />
           <SponsorAccountsCard accounts={sponsorAccounts} sites={SPONSORS.map((s) => ({ id: s.id, name: s.name }))} />
           {follows.length > 0 && (
             <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">

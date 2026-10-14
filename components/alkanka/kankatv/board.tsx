@@ -1,10 +1,10 @@
 'use client'
 
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { ChevronDown, Flag, Percent, Radio, Search, Tv } from 'lucide-react'
+import { ChevronDown, ExternalLink, Flag, Percent, Radio, Search, Send, Tv } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageHero } from '../page-hero'
 import {
@@ -399,8 +399,18 @@ function MatchesTab({
   )
 }
 
+const noopSubscribe = () => () => {}
+
+/** Twitch embeds must name the embedding hostname, which is only known in the browser. */
+function usePlayerSrc(embedUrl: string | null) {
+  const host = useSyncExternalStore(noopSubscribe, () => window.location.hostname, () => null)
+  if (!embedUrl || !embedUrl.startsWith('https://player.twitch.tv/')) return embedUrl
+  return host ? `${embedUrl}&parent=${encodeURIComponent(host)}` : null
+}
+
 function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; selected: string; onSelect: (slug: string) => void }) {
   const current = channels.find((c) => c.slug === selected) ?? channels[0]
+  const playerSrc = usePlayerSrc(current.embedUrl)
   const [group, setGroup] = useState<ChannelGroup>(current.group)
   const groupCounts = useMemo(() => {
     const counts = {} as Record<ChannelGroup, number>
@@ -410,10 +420,16 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
   const visible = channels.filter((c) => c.group === group)
   const isKick = current.group === 'slot' || current.group === 'yayinci' || current.group === 'oyun'
   const liveAlternatives = channels.filter((c) => c.live && c.slug !== current.slug).slice(0, 3)
+  const note =
+    current.group === 'uye'
+      ? 'Kanka yayıncılar, kanallarını profillerinden bağlayan üyelerimizdir. Yayın onların kendi Kick, Twitch, YouTube ya da Telegram kanalından açılır.'
+      : isKick
+        ? 'Yayınlar yayıncıların kendi Kick kanallarından açılır. Slot & Casino yayınları 18 yaş üstü içindir.'
+        : 'Yayınlar kanalların kendi resmi YouTube canlı yayınıdır. Bazı yayınlar yalnızca Türkiye’den açılabilir.'
 
   return (
     <div className="flex flex-col gap-5">
-      <div role="tablist" aria-label="Kanal türü" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div role="tablist" aria-label="Kanal türü" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {CHANNEL_GROUPS.map((g) => (
           <button
             key={g.key}
@@ -453,14 +469,41 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
           )}
         >
           {current.embedUrl ? (
-            <iframe
-              key={current.embedUrl}
-              src={current.embedUrl}
-              title={`${current.name} canlı yayın`}
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              allowFullScreen
-              className="absolute inset-0 size-full"
-            />
+            playerSrc && (
+              <iframe
+                key={playerSrc}
+                src={playerSrc}
+                title={`${current.name} canlı yayın`}
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen
+                className="absolute inset-0 size-full"
+              />
+            )
+          ) : current.externalUrl ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
+              <span className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+                <Send className="size-7" aria-hidden="true" />
+              </span>
+              <div className="flex max-w-md flex-col gap-1.5">
+                <span className="flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider text-live">
+                  <span className="size-1.5 rounded-full bg-live motion-safe:animate-pulse" aria-hidden="true" />
+                  Telegram&apos;da canlı
+                </span>
+                <p className="font-display text-xl font-bold leading-snug text-foreground text-balance sm:text-2xl">{current.name}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+                  Telegram yayınları siteye gömülemiyor. Tek tıkla Telegram&apos;da yayına katılabilirsin.
+                </p>
+              </div>
+              <a
+                href={current.externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Yayına katıl
+                <ExternalLink className="size-4" aria-hidden="true" />
+              </a>
+            </div>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center gap-4 p-4 sm:gap-8 sm:p-8">
               <Image
@@ -509,17 +552,23 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
             {current.name} · <span className="font-normal text-muted-foreground">{current.title}</span>
           </p>
         )}
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {isKick
-            ? 'Yayınlar yayıncıların kendi Kick kanallarından açılır. Slot & Casino yayınları 18 yaş üstü içindir.'
-            : 'Yayınlar kanalların kendi resmi YouTube canlı yayınıdır. Bazı yayınlar yalnızca Türkiye’den açılabilir.'}
-        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{note}</p>
       </div>
 
       <ul className="flex max-h-[34rem] flex-col gap-2 overflow-y-auto pr-1 lg:w-80">
         {visible.length === 0 && (
           <li className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-            Şu an bu bölümde canlı yayın yok.
+            {group === 'uye' ? (
+              <>
+                Henüz kanal bağlayan kanka yok.{' '}
+                <Link href="/profil?tab=hesaplar" className="font-semibold text-primary underline-offset-2 hover:underline">
+                  Kanalını profilinden bağla
+                </Link>
+                , yayına geçince burada görünsün.
+              </>
+            ) : (
+              'Şu an bu bölümde canlı yayın yok.'
+            )}
           </li>
         )}
         {visible.map((c) => (
