@@ -234,9 +234,9 @@ export async function awardTask(userId: string, taskId: number, claimKey?: strin
   return { awarded, points, balance: await getBalance(userId) }
 }
 
-export async function requestTaskApproval(userId: string, taskId: number): Promise<{ status: ClaimStatus; points: number }> {
+export async function requestTaskApproval(userId: string, taskId: number, userName = 'Üye'): Promise<{ status: ClaimStatus; points: number }> {
   await ensureTasks()
-  const found = await rows<{ id: number; points: number; period: string }>(sql`SELECT id, points, period FROM tasks WHERE id = ${taskId} AND active AND needs_approval`)
+  const found = await rows<{ id: number; points: number; period: string; title: string }>(sql`SELECT id, points, period, title FROM tasks WHERE id = ${taskId} AND active AND needs_approval`)
   const task = found[0]
   if (!task) throw new Error('Görev bulunamadı.')
   const key = periodKey(isPeriod(task.period) ? task.period : 'once')
@@ -244,7 +244,11 @@ export async function requestTaskApproval(userId: string, taskId: number): Promi
     VALUES (${userId}, ${task.id}, 'beklemede', ${key})
     ON CONFLICT (user_id, task_id, period_key) DO NOTHING
     RETURNING id`)
-  if (inserted.length > 0) return { status: 'beklemede', points: Number(task.points) }
+  if (inserted.length > 0) {
+    const { notifyApproval } = await import('@/lib/telegram-bots')
+    await notifyApproval('task', { uye: userName, detay: `${task.title} (+${Number(task.points)} KP)` }).catch(() => {})
+    return { status: 'beklemede', points: Number(task.points) }
+  }
   const existing = await rows<{ status: string }>(sql`SELECT status FROM task_claims WHERE user_id = ${userId} AND task_id = ${task.id} AND period_key = ${key}`)
   const status = existing[0]?.status
   if (status === 'beklemede' || status === 'onaylandi' || status === 'reddedildi') return { status, points: Number(task.points) }

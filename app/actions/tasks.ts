@@ -29,7 +29,7 @@ export async function completeTaskAction(taskId: number): Promise<
     const task = (await listPublicTasks()).find((item) => item.id === taskId)
     if (!task) return { ok: false, error: 'Görev bulunamadı.' }
     if (task.needsApproval) {
-      const claim = await requestTaskApproval(member.id, taskId)
+      const claim = await requestTaskApproval(member.id, taskId, member.name)
       revalidatePath('/gorevler')
       revalidatePath('/panel')
       if (claim.status === 'beklemede') return { ok: true, awarded: false, pending: true, points: claim.points, message: 'Onay bekliyor.' }

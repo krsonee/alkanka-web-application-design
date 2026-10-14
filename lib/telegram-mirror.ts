@@ -217,18 +217,19 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
   await send('sendMessage', message)
 }
 
-function buildMessage(post: ScrapedPost, source: { brand: string; link: string }) {
+function buildMessage(post: ScrapedPost, source: { brand: string; link: string }, note: string) {
+  const noteHtml = note ? `\n\n<i>${escapeHtml(note)}</i>` : ''
   const footerHtml = `\n\n<a href="${escapeHtml(source.link)}"><b>${escapeHtml(source.brand)} giriş ve bonus için tıkla</b></a>`
   let body = toTelegramHtml(post.html, source.link)
   if (stripTags(body).length > MESSAGE_LIMIT) body = escapeHtml(stripTags(body).slice(0, MESSAGE_LIMIT).trimEnd() + '…')
   return {
-    html: (body + footerHtml).trim(),
-    plain: `${stripTags(body)}\n\n${source.brand} giriş ve bonus: ${source.link}`.trim(),
+    html: (body + noteHtml + footerHtml).trim(),
+    plain: `${stripTags(body)}${note ? `\n\n${note}` : ''}\n\n${source.brand} giriş ve bonus: ${source.link}`.trim(),
   }
 }
 
-async function sendPost(dest: Destination, post: ScrapedPost, source: { brand: string; link: string }) {
-  const { html, plain } = buildMessage(post, source)
+async function sendPost(dest: Destination, post: ScrapedPost, source: { brand: string; link: string }, note = '') {
+  const { html, plain } = buildMessage(post, source, note)
   try {
     await deliver(dest, post, html, 'HTML')
   } catch (error) {
@@ -407,6 +408,9 @@ export async function runMirror(): Promise<MirrorResult> {
   if (!destinations.size) throw new Error('Bağlı ve aktif hedef kanal yok. Önce bot ve hedef kanal ekle')
   const sources = (await rows(sql`SELECT * FROM tg_sources WHERE active ORDER BY id`)).map(mapSource)
   const result: MirrorResult = { checked: 0, sent: 0, skipped: 0, failed: 0, primed: 0, errors: [] }
+  // Imported lazily: telegram-bots depends on this module.
+  const bots = await import('@/lib/telegram-bots')
+  const odds = { isOddsText: bots.isOddsText, extras: await bots.oddsMirrorExtras() }
 
   for (const source of sources) {
     result.checked++
@@ -440,17 +444,21 @@ export async function runMirror(): Promise<MirrorResult> {
           continue
         }
 
+        const isOdds = odds.isOddsText(stripTags(post.html))
+        const postTargets = isOdds
+          ? [...targets, ...odds.extras.targetIds.map((id) => destinations.get(id)).filter((d): d is Destination => Boolean(d) && !targets.includes(d!))]
+          : targets
         const failures: string[] = []
-        for (const dest of targets) {
+        for (const dest of postTargets) {
           try {
-            await sendPost(dest, post, source)
+            await sendPost(dest, post, source, isOdds ? odds.extras.note : '')
           } catch (error) {
             failures.push(`${dest.title}: ${String((error as Error).message)}`)
           }
         }
-        const okCount = targets.length - failures.length
+        const okCount = postTargets.length - failures.length
         const status = okCount > 0 ? 'sent' : 'failed'
-        const detail = failures.length ? `${okCount}/${targets.length} kanal. ${failures.join(' | ')}`.slice(0, 300) : targets.length > 1 ? `${targets.length} kanal` : null
+        const detail = failures.length ? `${okCount}/${postTargets.length} kanal. ${failures.join(' | ')}`.slice(0, 300) : postTargets.length > 1 ? `${postTargets.length} kanal` : null
         await rows(sql`UPDATE tg_log SET status = ${status}, detail = ${detail} WHERE id = ${claimed[0].id}`)
         if (okCount > 0) {
           result.sent++

@@ -190,6 +190,11 @@ export async function requestProduct(member: Member, itemId: string, siteUsernam
   await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, site_username, price)
     VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${item.price})`)
   await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: item.price, result: 'loss', delta: -item.price })
+  const { notifyApproval } = await import('@/lib/telegram-bots')
+  await notifyApproval('market', {
+    uye: member.name,
+    detay: `${item.name} (${item.price} KC)${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
+  }).catch(() => {})
   return item
 }
 

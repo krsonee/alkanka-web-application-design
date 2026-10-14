@@ -23,6 +23,8 @@ import { PushSender } from '@/components/panel/push-sender'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
+import { TelegramBotSuite } from '@/components/panel/telegram-bot-suite'
+import { DEFAULT_SUITE, getBotSuite, listOddsDeals, shareStatus } from '@/lib/telegram-bots'
 import { chatStatus } from '@/lib/telegram-chat'
 import { getInviteConfig } from '@/lib/table-invite'
 import { TelegramInviteSetup } from '@/components/panel/telegram-invite-setup'
@@ -79,7 +81,7 @@ async function section(session: PanelSession, module: PanelModule, label: string
 }
 
 async function telegramPanel() {
-  const [bots, targets, sources, log, cronKey, chat, invite, channels] = await Promise.all([
+  const [bots, targets, sources, log, cronKey, chat, invite, channels, suite, shareInfo, oddsDeals] = await Promise.all([
     listBots().catch(() => []),
     listTargets().catch(() => []),
     listSources().catch(() => []),
@@ -88,6 +90,9 @@ async function telegramPanel() {
     chatStatus().catch(() => null),
     getInviteConfig().catch(() => null),
     getChannelUsernames().catch(() => null),
+    getBotSuite().catch(() => DEFAULT_SUITE),
+    shareStatus().catch(() => ({ lastError: null, lastRunAt: null, shared: 0 })),
+    listOddsDeals().catch(() => []),
   ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
@@ -97,6 +102,7 @@ async function telegramPanel() {
       <TelegramChatSetup bots={bots} status={chat} />
       <TelegramChannelsSetup usernames={channels} />
       <TelegramInviteSetup bots={bots} status={invite} />
+      <TelegramBotSuite suite={suite} bots={bots} targets={targets} status={shareInfo} deals={oddsDeals} />
     </div>
   )
 }

@@ -196,9 +196,15 @@ export async function verifyWebhookSecret(header: string | null) {
 
 export async function handleUpdate(update: TgUpdate) {
   const m = update.message
-  if (!m?.from || m.from.is_bot) return
+  if (!m) return
   const config = await getChatConfig()
   if (!config) return
+  if (m.chat.type !== 'private') {
+    // Imported lazily to keep telegram-bots out of the chat module's import graph.
+    const { handleShareMessage } = await import('@/lib/telegram-bots')
+    if (await handleShareMessage(m, config.botId)) return
+  }
+  if (!m.from || m.from.is_bot) return
 
   if (m.chat.type === 'private') {
     const code = m.text?.match(/^\/start\s+([A-Za-z0-9_-]{8,64})$/)?.[1]

@@ -203,6 +203,7 @@ Copy each listed path from `../alkanka-source` into the same path in the target.
   - Mirrored posts go to target channels and to the site.
   - The live chat rail is two-way with the real Telegram group and supports **multiple channels as tabs**. Channel tabs are **only for members**, and members can comment on channel posts (`tg_channel_threads`, `tg_channel_comments`).
   - Posts tagged as special odds are parsed into deals (Phase 11).
+- Bot suite (DONE): `lib/telegram-bots.ts`, `components/panel/telegram-bot-suite.tsx`. Panel controls an auto-share bot (site posts/odds to target channels, run by the cron), a special-odds bot (Telegram posts with odds text become deals), and an approval-notification bot (market purchases, task proofs, complaints go to an admin chat). All three are off by default and switched on from the panel.
 
 ### Phase 10: Admin panel (`/panel`)
 - `app/panel/`: copy the whole folder (`page.tsx`, `actions.ts`, `arena-actions.ts`, `community-actions.ts`, `kp-actions.ts`, `market-actions.ts`, `push-actions.ts`, `seo-actions.ts`, `studio-actions.ts`, `telegram-actions.ts`)
