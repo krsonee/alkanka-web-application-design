@@ -146,15 +146,15 @@ function dealerLine(
 
 /**
  * Seat centres around the table rail, as % of the table box.
- * Mobile uses a tall stadium table (two side columns + a bottom pair); sm+ uses a wide poker-style arc.
+ * Mobile uses a compact round table (two side columns + a bottom pair) so the whole game fits one screen; sm+ uses a wide poker-style arc.
  */
 const SEAT_POS: { m: [number, number]; d: [number, number] }[] = [
-  { m: [16, 45], d: [9, 47] },
-  { m: [84, 45], d: [22, 75] },
-  { m: [16, 67], d: [40, 86] },
-  { m: [84, 67], d: [60, 86] },
-  { m: [32, 88], d: [78, 75] },
-  { m: [68, 88], d: [91, 47] },
+  { m: [14, 41], d: [9, 47] },
+  { m: [86, 41], d: [22, 75] },
+  { m: [15, 67], d: [40, 86] },
+  { m: [85, 67], d: [60, 86] },
+  { m: [37, 87], d: [78, 75] },
+  { m: [63, 87], d: [91, 47] },
 ];
 
 function SeatPod({
@@ -182,7 +182,7 @@ function SeatPod({
         style={style}
         className={cn(place, "flex flex-col items-center gap-1")}
       >
-        <span className="flex size-11 items-center justify-center rounded-full border-2 border-dashed border-primary/35 bg-background/30 sm:size-12">
+        <span className="flex size-9 items-center justify-center rounded-full border-2 border-dashed border-primary/35 bg-background/30 sm:size-12">
           <Armchair className="size-4 text-primary/60" aria-hidden="true" />
         </span>
         <span className="rounded-full bg-background/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -201,7 +201,7 @@ function SeatPod({
       style={style}
       className={cn(
         place,
-        "flex w-23 flex-col items-center gap-1 sm:w-28",
+        "flex w-20 flex-col items-center gap-1 sm:w-28",
         seat.mine && "z-10",
       )}
     >
@@ -443,7 +443,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
         className="flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3"
         aria-label="Canlı blackjack masası"
       >
-        <div className="flex flex-col gap-3 px-1 pb-3 pt-1 sm:px-2">
+        <div className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
               Masa {data.tableNo} · El #{data.roundId % 10000}
@@ -461,20 +461,20 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
           <p
             aria-live="polite"
-            className="rounded-xl border border-primary/30 bg-background/70 px-3 py-2 text-center text-xs font-semibold text-foreground sm:text-sm"
+            className="rounded-xl border border-primary/30 bg-background/70 px-3 py-1.5 text-center text-xs font-semibold text-foreground sm:py-2 sm:text-sm"
           >
             {dealerLine(phase, seated, secondsLeft, data.dealerValue)}
           </p>
 
-          <div className="rounded-[999px] bg-wood p-2.5 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:p-3.5">
-            <div className="felt-table relative mx-auto aspect-[5/7] w-full rounded-[999px] border-2 border-primary/40 sm:aspect-[16/9]">
+          <div className="mx-auto w-full max-w-[min(100%,58svh)] rounded-[999px] bg-wood p-2 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:max-w-none sm:p-3.5">
+            <div className="felt-table relative mx-auto aspect-square w-full rounded-[999px] border-2 border-primary/40 sm:aspect-[16/9]">
               <div
                 className="pointer-events-none absolute inset-3 rounded-[999px] border border-primary/15 sm:inset-5"
                 aria-hidden="true"
               />
 
-              <div className="absolute left-1/2 top-[4%] flex -translate-x-1/2 flex-col items-center gap-1.5">
-                <div className="relative size-11 overflow-hidden rounded-full border-2 border-primary/70 bg-background shadow-lg sm:size-14">
+              <div className="absolute left-1/2 top-[5%] flex -translate-x-1/2 flex-col items-center gap-1 sm:top-[4%] sm:gap-1.5">
+                <div className="relative size-9 overflow-hidden rounded-full border-2 border-primary/70 bg-background shadow-lg sm:size-14">
                   <Image
                     src="/images/mascots/jako-dealer.png"
                     alt="Krupiye Jako"
@@ -533,7 +533,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           />
         </div>
 
-        <div className="flex flex-col items-center gap-3 px-2 pb-2 pt-4">
+        <div className="flex flex-col items-center gap-2 px-2 pb-2 pt-3 sm:gap-3 sm:pt-4">
           {myTurn ? (
             <div className="flex flex-wrap justify-center gap-2">
               <button
@@ -584,8 +584,8 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               </p>
             </div>
           ) : !me ? (
-            <div className="flex w-full flex-col items-center gap-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <div className="flex w-full flex-col items-center gap-2 sm:gap-3">
+              <span className="sr-only text-xs font-bold uppercase tracking-wider text-muted-foreground sm:not-sr-only">
                 Ana bahis
               </span>
               <div
@@ -618,7 +618,12 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 )}
                 Masaya otur · {formatAC(totalBet)}
               </button>
-              <p className="text-center text-xs text-muted-foreground">
+              <p
+                className={cn(
+                  "text-center text-xs text-muted-foreground",
+                  member && "hidden sm:block",
+                )}
+              >
                 {member
                   ? "Koltuk seçmene gerek yok: ilk boş koltuğa oturursun. Masa doluysa yeni masa açılır."
                   : "Oynamak için giriş yap. İzlemek serbest."}
@@ -650,7 +655,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               {error}
             </p>
           )}
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="hidden text-center text-xs text-muted-foreground sm:block">
             Masada 6 koltuk var. Herkes durunca krupiye hemen açar, süre dolunca
             oynamayan el otomatik durur.
           </p>
