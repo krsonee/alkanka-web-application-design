@@ -412,26 +412,100 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
         )}
       </section>
 
-      <section className="rounded-2xl border border-border bg-card">
-        <button
-          type="button"
-          onClick={() => setShowScores((v) => !v)}
-          aria-expanded={showScores}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left"
-        >
-          <Trophy className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="flex min-w-0 flex-1 gap-3 overflow-hidden text-sm">
-            {ranking.map((seat, i) => (
-              <span key={seat} className={cn('flex shrink-0 items-center gap-1 tabular-nums', i === 0 ? 'font-bold text-primary' : 'text-muted-foreground')}>
-                {i + 1}. <span className="max-w-16 truncate">{nameOf(seat)}</span> {s.totals[seat]}
-              </span>
-            ))}
+      <section aria-label="Puan tablosu" className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-3 py-2.5 sm:px-4">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <Trophy className="size-4" aria-hidden="true" />
           </span>
-          <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', showScores && 'rotate-180')} aria-hidden="true" />
-        </button>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold text-foreground">Puan tablosu</h3>
+            <p className="text-xs tabular-nums text-muted-foreground">
+              El {s.handNo}/{s.handsTotal} · {variantLabel(variant)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowScores((v) => !v)}
+            aria-expanded={showScores}
+            className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-bold text-foreground transition-colors hover:bg-secondary"
+          >
+            {showScores ? 'Gizle' : 'El el'}
+            <ChevronDown className={cn('size-3.5 transition-transform', showScores && 'rotate-180')} aria-hidden="true" />
+          </button>
+        </div>
+
+        <ol className={cn('grid gap-2 p-2 sm:gap-3 sm:p-3', n === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
+          {ranking.map((seat, rank) => {
+            const last = s.results.at(-1)?.scores[seat]
+            const goal = variant === 'koz-maca' ? s.bids[seat] : s.bidder === seat ? s.highBid : null
+            const taken = s.taken[seat] ?? 0
+            const leader = rank === 0 && s.totals[seat] !== s.totals[ranking[1]]
+            const isMe = seat === me
+            return (
+              <li
+                key={seat}
+                className={cn(
+                  'relative flex min-w-0 flex-col gap-2 rounded-xl border p-2.5 sm:p-3',
+                  leader ? 'border-gold/60 bg-gold/10' : isMe ? 'border-primary/40 bg-primary/5' : 'border-border bg-secondary/40',
+                  s.turn === seat && 'ring-2 ring-gold/50',
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-black tabular-nums',
+                      leader ? 'bg-gold text-gold-foreground' : 'bg-background text-muted-foreground ring-1 ring-border',
+                    )}
+                  >
+                    {leader ? <Crown className="size-3.5" aria-label="Lider" /> : rank + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">{nameOf(seat)}</span>
+                  {s.bidder === seat && variant !== 'koz-maca' && (
+                    <span className="shrink-0 rounded bg-gold px-1 text-[10px] font-bold text-gold-foreground">İhale</span>
+                  )}
+                </div>
+
+                <div className="flex items-end justify-between gap-2">
+                  <span className={cn('font-display text-2xl font-black leading-none tabular-nums sm:text-3xl', s.totals[seat] < 0 ? 'text-destructive' : 'text-foreground')}>
+                    {s.totals[seat]}
+                  </span>
+                  {last != null && (
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums',
+                        last < 0 ? 'bg-destructive/15 text-destructive' : last > 0 ? 'bg-primary/15 text-primary' : 'bg-background text-muted-foreground',
+                      )}
+                      aria-label={`Son el ${last}`}
+                    >
+                      {last > 0 ? `+${last}` : last}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between text-[11px] tabular-nums text-muted-foreground">
+                    <span>Bu el</span>
+                    <span className="font-semibold text-foreground">
+                      {taken}
+                      {goal != null ? ` / ${goal}` : ''} el
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-background" aria-hidden="true">
+                    <div
+                      className={cn('h-full rounded-full transition-[width] duration-500', goal != null && taken >= goal ? 'bg-primary' : 'bg-gold')}
+                      style={{ width: `${Math.min(100, (taken / Math.max(1, goal ?? maxTricks)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+
         {showScores && (
-          <div className="grid gap-4 border-t border-border p-4 md:grid-cols-2">
-            <table className="w-full text-sm">
+          <div className="grid gap-4 border-t border-border p-3 sm:p-4 md:grid-cols-2">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[18rem] text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="py-1 pr-2 font-semibold">El</th>
@@ -463,6 +537,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                 </tr>
               </tbody>
             </table>
+            </div>
             <div>
               <h3 className="mb-2 text-sm font-bold text-foreground">Son el</h3>
               {s.lastTrick ? (

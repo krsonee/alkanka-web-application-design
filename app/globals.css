@@ -366,6 +366,30 @@
   60% { transform: rotate(420deg) translateY(4px) scale(1.05); }
   100% { transform: rotate(720deg) translateY(0) scale(1); }
 }
+@keyframes pawn-hop {
+  0% { transform: translateY(0) rotate(0) scale(1, 1); }
+  35% { transform: translateY(-38%) rotate(-8deg) scale(0.96, 1.05); }
+  70% { transform: translateY(-12%) rotate(6deg) scale(1, 1); }
+  100% { transform: translateY(0) rotate(0) scale(1.06, 0.94); }
+}
+@keyframes pawn-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10%); }
+}
+@keyframes die-roll {
+  0% { transform: translate(-40%, -60%) rotate(-260deg) scale(0.6); opacity: 0.3; }
+  55% { transform: translate(6%, 8%) rotate(30deg) scale(1.08); opacity: 1; }
+  80% { transform: translate(-2%, -3%) rotate(-8deg) scale(0.98); }
+  100% { transform: translate(0, 0) rotate(0) scale(1); }
+}
+@keyframes cell-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--pulse-color), 0 0 0 0 var(--pulse-color); }
+  50% { box-shadow: inset 0 0 0 3px var(--pulse-color), 0 0 14px 2px var(--pulse-color); }
+}
+@keyframes card-flip-in {
+  0% { transform: perspective(600px) rotateY(90deg) scale(0.8); opacity: 0; }
+  100% { transform: perspective(600px) rotateY(0) scale(1); opacity: 1; }
+}
 @keyframes burst {
   0% { transform: translate(-50%, -50%) rotate(var(--angle)) translateY(0) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -50%) rotate(var(--angle)) translateY(var(--dist)) scale(0.2); opacity: 0; }

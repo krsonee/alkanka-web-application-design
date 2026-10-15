@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
-import { ArrowRight, Mail, X } from 'lucide-react'
+import { ArrowRight, Check, ExternalLink, Mail, X } from 'lucide-react'
 import { getMiniStatus, type MiniGame, type MiniStatus } from '@/app/actions/wallet'
-import { getInboxStatus, type InboxStatus } from '@/app/actions/inbox'
+import { getInboxStatus, markInboxRead, type InboxStatus } from '@/app/actions/inbox'
 import { JakoAvatar, type JakoPose } from './jako'
 import { cn } from '@/lib/utils'
 
@@ -21,7 +21,16 @@ const POPPED_KEY = 'ak-inbox-popped'
 
 type Alert =
   | { kind: 'reward'; id: string; game: MiniGame }
-  | { kind: 'message'; id: string; title: string; unread: number; image?: string | null }
+  | {
+      kind: 'message'
+      id: string
+      messageId: number
+      title: string
+      body: string
+      url: string | null
+      unread: number
+      image?: string | null
+    }
 
 type MessageAlertData = Extract<Alert, { kind: 'message' }>
 
@@ -54,7 +63,7 @@ export function JakoAlerts() {
     refreshInterval: 5 * 60_000,
     revalidateOnFocus: true,
   })
-  const { data: inbox } = useSWR<InboxStatus>('inbox-status', () => getInboxStatus(), {
+  const { data: inbox, mutate: refreshInbox } = useSWR<InboxStatus>('inbox-status', () => getInboxStatus(), {
     refreshInterval: 30_000,
     revalidateOnFocus: true,
   })
@@ -108,7 +117,16 @@ export function JakoAlerts() {
     if (latest.id <= popped) return
     localStorage.setItem(POPPED_KEY, String(latest.id))
     if (pathRef.current === '/profil' && window.location.search.includes('sekme=mesajlar')) return
-    setPopup({ kind: 'message', id: `msg-${latest.id}`, title: latest.title, unread: inbox.unread, image: latest.imageUrl })
+    setPopup({
+      kind: 'message',
+      id: `msg-${latest.id}`,
+      messageId: latest.id,
+      title: latest.title,
+      body: latest.body,
+      url: latest.url,
+      unread: inbox.unread,
+      image: latest.imageUrl,
+    })
     systemNotify('Sana özel mesaj var kanka!', latest.title, '/profil?sekme=mesajlar')
   }, [inbox])
 
@@ -118,6 +136,22 @@ export function JakoAlerts() {
       return null
     })
   }, [push])
+
+  const readPopup = useCallback(() => {
+    setPopup((current) => {
+      if (current) {
+        markInboxRead([current.messageId])
+          .then(() => refreshInbox())
+          .catch(() => {})
+      }
+      return null
+    })
+  }, [refreshInbox])
+
+  const reopen = (alert: MessageAlertData) => {
+    dismiss(alert.id)
+    setPopup(alert)
+  }
 
   useEffect(() => {
     if (pathname === '/profil') setPopup(null)
@@ -133,7 +167,7 @@ export function JakoAlerts() {
 
   return (
     <>
-    {popup && <MessagePopup alert={popup} onLater={deferPopup} onRead={() => setPopup(null)} />}
+    {popup && <MessagePopup alert={popup} onLater={deferPopup} onRead={readPopup} />}
     <section
       aria-label="Bildirimler"
       aria-live="polite"
@@ -141,7 +175,7 @@ export function JakoAlerts() {
     >
       {alerts.map((alert) =>
         alert.kind === 'message' ? (
-          <MessageAlert key={alert.id} alert={alert} onClose={() => dismiss(alert.id)} />
+          <MessageAlert key={alert.id} alert={alert} onClose={() => dismiss(alert.id)} onOpen={() => reopen(alert)} />
         ) : (
           <RewardAlert key={alert.id} game={alert.game} onClose={() => dismiss(alert.id)} />
         ),
@@ -181,45 +215,77 @@ function MessagePopup({
         role="dialog"
         aria-modal="true"
         aria-labelledby="jako-popup-title"
-        className="relative flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border border-primary/40 bg-card px-6 pt-8 pb-6 text-center shadow-2xl animate-in fade-in zoom-in-90 slide-in-from-bottom-6 duration-500"
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl border border-primary/40 bg-card px-5 pt-6 pb-5 shadow-2xl animate-in fade-in zoom-in-90 slide-in-from-bottom-6 duration-500 sm:px-6"
       >
-        <span className="relative block">
-          <JakoAvatar pose="duyuru" size="lg" className="ring-4 ring-primary/30 animate-bounce [animation-iteration-count:2]" />
-          <span className="absolute -top-2 -right-2 flex min-w-8 items-center justify-center rounded-full bg-primary px-2 py-1 text-sm font-bold tabular-nums text-primary-foreground ring-4 ring-card">
-            {alert.unread > 9 ? '9+' : alert.unread}
+        <div className="flex items-center gap-3">
+          <span className="relative block shrink-0">
+            <JakoAvatar pose="duyuru" size="md" className="ring-2 ring-primary/30" />
+            {alert.unread > 1 && (
+              <span className="absolute -top-2 -right-2 flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card">
+                {alert.unread > 9 ? '9+' : alert.unread}
+              </span>
+            )}
           </span>
-        </span>
-        <div className="flex flex-col gap-2">
-          <span className="flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-primary">
-            <Mail className="size-3.5" aria-hidden />
-            Jako diyor ki
-          </span>
-          <h2 id="jako-popup-title" className="font-display text-xl font-bold leading-snug text-foreground text-balance">
-            Sana özel mesaj geldi kanka!
-          </h2>
-          <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground text-pretty">{alert.title}</p>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-primary">
+              <Mail className="size-3.5" aria-hidden />
+              Jako diyor ki
+            </span>
+            <h2 id="jako-popup-title" className="font-display text-lg font-bold leading-snug text-foreground text-balance">
+              {alert.title}
+            </h2>
+          </div>
         </div>
-        {alert.image && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={alert.image} alt="" className="max-h-44 w-full rounded-2xl border border-border bg-secondary object-cover" />
-        )}
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain rounded-2xl border border-border bg-secondary/40 p-4">
+          {alert.image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={alert.image} alt="" className="max-h-56 w-full rounded-xl border border-border bg-secondary object-cover" />
+          )}
+          {alert.body ? (
+            <p className="whitespace-pre-line break-words text-sm leading-relaxed text-foreground text-pretty">{alert.body}</p>
+          ) : (
+            <p className="text-sm leading-relaxed text-muted-foreground">Sana özel mesaj geldi kanka!</p>
+          )}
+          {alert.url && (
+            <a
+              href={alert.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 self-start text-sm font-semibold text-primary hover:underline"
+            >
+              Bağlantıyı aç
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          )}
+        </div>
         <div className="flex w-full flex-col gap-2">
-          <Link
-            href="/profil?sekme=mesajlar"
-            onClick={onRead}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:bg-primary/90"
-          >
-            Mesajı oku
-            <ArrowRight className="size-4" aria-hidden />
-          </Link>
           <button
             ref={laterRef}
             type="button"
-            onClick={onLater}
-            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+            onClick={onRead}
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:bg-primary/90"
           >
-            Sonra bakarım
+            <Check className="size-4" aria-hidden />
+            Okudum, devam et
           </button>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onLater}
+              className="rounded-xl px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              Sonra bakarım
+            </button>
+            <a
+              href="/profil?sekme=mesajlar"
+              target="_blank"
+              rel="noopener"
+              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              Tüm mesajlar
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -278,7 +344,15 @@ function RewardAlert({ game, onClose }: { game: MiniGame; onClose: () => void })
   )
 }
 
-function MessageAlert({ alert, onClose }: { alert: Extract<Alert, { kind: 'message' }>; onClose: () => void }) {
+function MessageAlert({
+  alert,
+  onClose,
+  onOpen,
+}: {
+  alert: MessageAlertData
+  onClose: () => void
+  onOpen: () => void
+}) {
   return (
     <Shell onClose={onClose} tone="primary">
       <div className="flex items-center gap-3 p-3 pr-10">
@@ -305,14 +379,14 @@ function MessageAlert({ alert, onClose }: { alert: Extract<Alert, { kind: 'messa
           <p className="truncate text-xs text-muted-foreground">{alert.title}</p>
         </div>
       </div>
-      <Link
-        href="/profil?sekme=mesajlar"
-        onClick={onClose}
-        className="flex items-center justify-center gap-2 border-t border-border bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full items-center justify-center gap-2 border-t border-border bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
       >
         Mesajı oku
         <ArrowRight className="size-4" aria-hidden />
-      </Link>
+      </button>
     </Shell>
   )
 }
