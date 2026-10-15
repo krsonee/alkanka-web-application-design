@@ -441,7 +441,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
       <section
-        className="flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3"
+        className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3"
         aria-label="Canlı blackjack masası"
       >
         <div className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
@@ -455,9 +455,12 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 İzleyici · {data.watchers.length}
               </span>
             )}
-            <span className="rounded-full border border-primary/40 bg-background/70 px-3 py-1 text-xs font-bold tabular-nums text-foreground">
-              {phaseLabel}
-            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <MobileTableChat key={`m-${data.tableNo}`} tableId={`blackjack-masa-${data.tableNo}`} />
+              <span className="rounded-full border border-primary/40 bg-background/70 px-3 py-1 text-xs font-bold tabular-nums text-foreground">
+                {phaseLabel}
+              </span>
+            </div>
           </div>
 
           <p
@@ -675,7 +678,6 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           tableId={`blackjack-masa-${data.tableNo}`}
           className="hidden h-80 lg:flex"
         />
-        <MobileTableChat key={`m-${data.tableNo}`} tableId={`blackjack-masa-${data.tableNo}`} />
         <BlackjackWatchers names={data.watchers} spectating={!!member && !me} />
         <section
           className="flex flex-col gap-3 rounded-2xl border border-primary/40 bg-card p-4"

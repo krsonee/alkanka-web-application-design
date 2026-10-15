@@ -1,104 +1,273 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import useSWR from 'swr'
-import { MessageCircle, X } from 'lucide-react'
+import { Loader2, MessageCircle, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { TableChat } from './table-chat'
+import { usePoints } from '../points-context'
+import { useIdle } from '../use-idle'
+import { ONLY_EMOJI, QUICK } from './table-chat'
 
-type ChatPeek = { messages: { id: number; name: string; body: string }[] }
+type ChatMessage = { id: number; userId: string; name: string; player: boolean; body: string; at: string }
+type Toast = { id: number; name: string; body: string; mine: boolean }
+type Floater = { id: number; emoji: string; drift: number; left: number }
+
+const PHRASES = ['İyi şanslar', 'Helal olsun', 'Kart ver kanka', 'Yazık oldu', 'GG']
 
 const fetcher = async (url: string) => {
   const r = await fetch(url, { cache: 'no-store' })
   if (!r.ok) throw new Error('Sohbet yüklenemedi')
-  return (await r.json()) as ChatPeek
+  return (await r.json()) as { messages: ChatMessage[] }
 }
 
-/** Mobile-only floating chat: a bubble above the bottom nav that opens a bottom sheet, so the table never has to scroll. */
+/**
+ * Mobile in-game chat that lives on the table itself: a pill in the table header, live-stream style
+ * message toasts and rising emoji reactions over the felt, and a compact quick-chat panel.
+ * Must be rendered inside a `relative` container (the table section).
+ */
 export function MobileTableChat({ tableId }: { tableId: string }) {
-  const [open, setOpen] = useState(false)
-  const [seenId, setSeenId] = useState<number | null>(null)
-  const { data } = useSWR(open ? null : `/api/tables/${tableId}/chat`, fetcher, { refreshInterval: 8000 })
+  const { member, requireLogin } = usePoints()
+  const idle = useIdle()
+  const { data, mutate } = useSWR(`/api/tables/${tableId}/chat`, fetcher, { refreshInterval: idle ? 20000 : 5000 })
   const messages = data?.messages ?? []
   const lastId = messages.at(-1)?.id ?? null
 
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [floaters, setFloaters] = useState<Floater[]>([])
+  const [unread, setUnread] = useState(0)
+  const seenRef = useRef<number | null>(null)
+  const openRef = useRef(open)
+  openRef.current = open
+
   useEffect(() => {
-    if (seenId === null && lastId !== null) setSeenId(lastId)
-  }, [lastId, seenId])
+    if (lastId === null) return
+    if (seenRef.current === null) {
+      seenRef.current = lastId
+      return
+    }
+    const fresh = messages.filter((m) => m.id > (seenRef.current ?? 0))
+    seenRef.current = lastId
+    if (fresh.length === 0) return
+
+    const emojis = fresh.filter((m) => ONLY_EMOJI.test(m.body))
+    const texts = fresh.filter((m) => !ONLY_EMOJI.test(m.body))
+
+    if (emojis.length) {
+      const next = emojis.slice(-6).map((m, i) => ({
+        id: m.id,
+        emoji: [...m.body.trim()].slice(0, 2).join(''),
+        drift: Math.round((Math.random() - 0.5) * 60),
+        left: 62 + ((m.id * 7 + i * 11) % 28),
+      }))
+      setFloaters((f) => [...f, ...next].slice(-10))
+      const ids = new Set(next.map((n) => n.id))
+      setTimeout(() => setFloaters((f) => f.filter((x) => !ids.has(x.id))), 3000)
+    }
+
+    if (openRef.current) return
+    if (texts.length) {
+      const next = texts.slice(-3).map((m) => ({ id: m.id, name: m.name, body: m.body, mine: m.userId === member?.id }))
+      setToasts((t) => [...t, ...next].slice(-3))
+      const ids = new Set(next.map((n) => n.id))
+      setTimeout(() => setToasts((t) => t.filter((x) => !ids.has(x.id))), 5000)
+    }
+    setUnread((u) => u + fresh.filter((m) => m.userId !== member?.id).length)
+    // messages is derived from lastId; only react when a new message arrives
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastId])
 
   useEffect(() => {
     if (!open) return
+    setUnread(0)
+    setToasts([])
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  const unread = seenId === null ? 0 : messages.filter((m) => m.id > seenId).length
-  const latest = unread > 0 ? messages.at(-1) : undefined
-
-  const close = () => {
-    setOpen(false)
-    setSeenId(null)
+  const submit = async (override?: string) => {
+    const body = (override ?? text).trim()
+    if (!body || sending) return
+    if (!requireLogin()) return
+    setSending(true)
+    setError(null)
+    const r = await fetch(`/api/tables/${tableId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    })
+    setSending(false)
+    if (!r.ok) {
+      setError((await r.json().catch(() => ({}))).error ?? 'Gönderilemedi.')
+      return
+    }
+    if (override == null) setText('')
+    mutate()
   }
+
+  const recent = messages.slice(-6)
 
   return (
     <div className="lg:hidden">
-      {!open && (
-        <div className="fixed right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-40 flex items-end gap-2">
-          {latest && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="animate-in fade-in slide-in-from-right-2 max-w-52 truncate rounded-2xl rounded-br-sm border border-primary/40 bg-card/95 px-3 py-2 text-left text-xs text-foreground shadow-lg backdrop-blur"
-            >
-              <span className="font-bold text-primary">{latest.name}: </span>
-              {latest.body}
-            </button>
-          )}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={`quick-chat-${tableId}`}
+        aria-label={unread > 0 ? `Masa sohbeti, ${unread} yeni mesaj` : 'Masa sohbeti'}
+        className={cn(
+          'relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-colors',
+          open ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/40 bg-background/70 text-foreground',
+        )}
+      >
+        <MessageCircle className="size-3.5" aria-hidden="true" />
+        Sohbet
+        {unread > 0 && !open && (
+          <span className="absolute -top-1.5 -right-1.5 flex min-w-4 items-center justify-center rounded-full bg-live px-1 text-[10px] font-bold leading-4 text-background">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+
+      <div className="pointer-events-none absolute inset-x-3 top-28 z-20 flex flex-col items-start gap-1.5" aria-hidden="true">
+        {toasts.map((t) => (
+          <p
+            key={t.id}
+            className="chat-toast max-w-[80%] truncate rounded-2xl rounded-tl-sm border border-primary/25 bg-background/80 px-3 py-1.5 text-xs text-foreground shadow-lg backdrop-blur-md"
+          >
+            <span className={cn('font-bold', t.mine ? 'text-primary' : 'text-foreground')}>{t.name} </span>
+            <span className="text-muted-foreground">{t.body}</span>
+          </p>
+        ))}
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
+        {floaters.map((f) => (
+          <span
+            key={f.id}
+            className="chat-emoji-rise absolute bottom-[38%] text-3xl drop-shadow-lg"
+            style={{ left: `${f.left}%`, '--drift': `${f.drift}px` } as CSSProperties}
+          >
+            {f.emoji}
+          </span>
+        ))}
+      </div>
+
+      {open && (
+        <>
           <button
             type="button"
-            onClick={() => setOpen(true)}
-            aria-label={unread > 0 ? `Masa sohbetini aç, ${unread} yeni mesaj` : 'Masa sohbetini aç'}
-            className="relative flex size-12 items-center justify-center rounded-full border border-primary/60 bg-card text-primary shadow-lg shadow-black/40 transition-transform active:scale-95"
+            tabIndex={-1}
+            aria-label="Sohbeti kapat"
+            onClick={() => setOpen(false)}
+            className="absolute inset-0 z-30 cursor-default rounded-3xl bg-background/30"
+          />
+          <div
+            id={`quick-chat-${tableId}`}
+            role="dialog"
+            aria-label="Masa sohbeti"
+            className="animate-in fade-in slide-in-from-top-2 absolute inset-x-2 top-12 z-40 flex flex-col overflow-hidden rounded-2xl border border-primary/40 bg-card/95 shadow-2xl backdrop-blur-md duration-200"
           >
-            <MessageCircle className="size-5" aria-hidden="true" />
-            {unread > 0 && (
-              <span className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground">
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <span className="size-1.5 rounded-full bg-live animate-glow" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-wide text-foreground">Masa sohbeti</span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Sohbeti kapat"
+                className="ml-auto flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </div>
 
-      <div
-        className={cn('fixed inset-0 z-50 transition-opacity', open ? 'opacity-100' : 'pointer-events-none opacity-0')}
-        aria-hidden={!open}
-      >
-        <button type="button" tabIndex={-1} aria-label="Sohbeti kapat" onClick={close} className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Masa sohbeti"
-          className={cn(
-            'absolute inset-x-0 bottom-0 flex h-[65dvh] flex-col rounded-t-3xl border-t border-primary/40 bg-card pb-[env(safe-area-inset-bottom)] shadow-2xl transition-transform duration-300',
-            open ? 'translate-y-0' : 'translate-y-full',
-          )}
-        >
-          <div className="flex items-center justify-between px-4 pt-2 pb-1">
-            <span className="mx-auto h-1 w-10 rounded-full bg-border" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={close}
-              aria-label="Sohbeti kapat"
-              className="absolute top-2 right-3 flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary"
+            <ol aria-live="polite" className="flex max-h-36 flex-col gap-1 overflow-y-auto px-3 py-2 text-[13px]">
+              {!data && (
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> Yükleniyor
+                </li>
+              )}
+              {data && recent.length === 0 && <li className="text-muted-foreground">Masa sessiz. İlk selamı sen ver.</li>}
+              {recent.map((m) => (
+                <li key={m.id} className="leading-snug text-pretty">
+                  <span className={cn('font-bold', m.userId === member?.id ? 'text-primary' : 'text-foreground')}>{m.name}</span>
+                  {!m.player && <span className="ml-1 text-[10px] font-semibold uppercase text-muted-foreground">izleyici</span>}
+                  <span className="text-muted-foreground">: </span>
+                  <span className={cn('break-words text-foreground', ONLY_EMOJI.test(m.body) && 'align-middle text-xl leading-none')}>{m.body}</span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="flex gap-1 overflow-x-auto px-2" role="group" aria-label="Hızlı tepki gönder">
+              {QUICK.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  disabled={sending}
+                  onClick={() => void submit(e)}
+                  aria-label={`${e} gönder`}
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-lg transition-transform active:scale-90 disabled:opacity-50"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto px-2 pt-2" role="group" aria-label="Hazır mesaj gönder">
+              {PHRASES.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  disabled={sending}
+                  onClick={() => void submit(p)}
+                  className="shrink-0 rounded-full border border-primary/30 px-3 py-1 text-xs font-semibold text-foreground transition-colors active:bg-primary active:text-primary-foreground disabled:opacity-50"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            <form
+              className="flex items-center gap-2 p-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void submit()
+              }}
             >
-              <X className="size-4" aria-hidden="true" />
-            </button>
+              <label htmlFor={`qchat-${tableId}`} className="sr-only">
+                Mesaj yaz
+              </label>
+              <input
+                id={`qchat-${tableId}`}
+                value={text}
+                maxLength={200}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
+                }}
+                placeholder={member ? 'Masaya yaz...' : 'Yazmak için giriş yap'}
+                className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
+              />
+              <button
+                type="submit"
+                disabled={sending || !text.trim()}
+                aria-label="Gönder"
+                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50"
+              >
+                {sending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
+              </button>
+            </form>
+            {error && (
+              <p role="alert" className="px-3 pb-2 text-xs text-destructive">
+                {error}
+              </p>
+            )}
           </div>
-          {open && <TableChat tableId={tableId} className="mx-3 mb-3 flex-1 border-0" />}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }
