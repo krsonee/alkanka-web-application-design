@@ -24,6 +24,21 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Sıran gelince ortadan çek ya da rakibin attığı taşı al, sonra bir taş at.',
     'Taşları ıstakada istediğin yere sürükle; seri ve perleri dizip 14 taşla ya da 7 çiftle elini aç.',
   ],
+  okey101: [
+    'Herkese 21 taş, başlayana 22 taş dağıtılır. Gösterge taşının bir üstü okeydir.',
+    'Elini açmak için seri ve perlerinin toplamı en az 101 olmalı ya da en az 5 çift ile çifte gidersin. Açtıktan sonra yerdeki perlere işleyebilirsin.',
+    'Eli ilk bitiren kazanır. Açamayan 202, açan elindeki taşlar kadar ceza yer; çifte gidenin cezası ikiye katlanır. Set sonunda en az cezası olan kazanır.',
+  ],
+  batak: [
+    '4 kişi, 52 kart, herkese 13 kart. Sırayla ihale verilir (en az 4), en yüksek veren kozu seçer ve ilk kartı atar.',
+    'Atılan renge uymak, mümkünse yükseltmek zorundasın. Rengin yoksa koz çakmalısın. Koz kırılmadan kozla açılamaz.',
+    'Sözünü tutan aldığı el kadar puan alır, ihaleyi alıp tutamayan ihalesi kadar eksi yer, hiç el almayan batar. Set sonunda en yüksek puan kazanır.',
+  ],
+  monopoly: [
+    'Klasik 40 kareli tahta. Zar at, ilerle, sahipsiz mülkü satın al; başkasının mülküne gelince kira ödersin.',
+    'Bir renk grubunun tamamına sahip olunca ev, 4 evden sonra otel dikebilirsin. Çift atarsan tekrar atarsın, üç çift hapse sokar.',
+    'Parası biten iflas eder. Son kalan oyuncu ya da 20 tur sonunda en zengin olan masayı kazanır.',
+  ],
   bilardo: [
     '8 top kuralı: ilk sokulan top grubunu belirler, düz (1-7) ya da çizgili (9-15).',
     'Kendi topunu sokarsan tekrar vurursun. Beyazı sokmak ya da önce rakip topa vurmak faul sayılır.',

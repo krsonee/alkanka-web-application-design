@@ -10,7 +10,9 @@ import {
   currentTurn,
   initState,
   isPvpGame,
+  isSeatGame,
   okeySeats,
+  seatGameToBot,
   seatToBot,
   viewState,
   type Outcome,
@@ -56,7 +58,13 @@ function mapTable(r: Record<string, unknown>): TableRow {
     state: (r.state as PvpState | null) ?? null,
     version: Number(r.version),
     winnerId: (r.winner_id as string | null) ?? null,
-    options: { seats, team: raw.team === true, bots: Number(raw.bots ?? 0), winners: raw.winners },
+    options: {
+      seats,
+      team: raw.team === true,
+      bots: Number(raw.bots ?? 0),
+      ...(raw.rounds ? { rounds: Number(raw.rounds) } : {}),
+      winners: raw.winners,
+    },
     createdBy: String(r.created_by ?? ''),
     tournamentId: r.tournament_id == null ? null : Number(r.tournament_id),
     roundNo: r.round_no == null ? null : Number(r.round_no),
@@ -124,7 +132,20 @@ export async function listMyActiveTables(userId: string) {
   return r.rows.map(mapTable)
 }
 
+const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
+  okey101: { seats: [2, 4], rounds: [1, 3, 5] },
+  batak: { seats: [4], rounds: [1, 3, 5] },
+  monopoly: { seats: [2, 3, 4], rounds: [] },
+}
+
 function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOptions {
+  const rule = SEAT_RULES[game]
+  if (rule) {
+    const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]
+    const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
+    const rounds = rule.rounds.includes(Number(input?.rounds)) ? Number(input?.rounds) : rule.rounds[0]
+    return { seats, team: false, bots, ...(rounds ? { rounds } : {}) }
+  }
   if (game !== 'okey') return { seats: 2, team: false, bots: 0 }
   const seats = input?.seats === 4 ? 4 : 2
   if (typeof input?.team !== 'boolean') throw new Error('Takımlı ya da tekli oyun modunu seçmelisin.')
@@ -150,10 +171,13 @@ export async function createTable(m: Member, game: string, stake: number, input?
   for (let s = humanSeats; s < opts.seats; s++) {
     players.push({ id: `bot:${s}`, name: BOT_NAMES[(s - humanSeats) % BOT_NAMES.length], seat: s, bot: true })
   }
+  // A table already filled with bots starts right away.
+  const full = players.length >= opts.seats
+  const state = full ? initState(game, { ...opts, botSeats: players.filter((p) => p.bot).map((p) => p.seat) }) : null
   const r = await pool.query(
-    `INSERT INTO game_tables (game, stake, seats, status, players, created_by, mode, options)
-     VALUES ($1,$2,$3,'bekliyor',$4::jsonb,$5,'pvp',$6::jsonb) RETURNING id`,
-    [game, stake, opts.seats, JSON.stringify(players), m.id, JSON.stringify(opts)],
+    `INSERT INTO game_tables (game, stake, seats, status, players, created_by, mode, options, state)
+     VALUES ($1,$2,$3,$7,$4::jsonb,$5,'pvp',$6::jsonb,$8::jsonb) RETURNING id`,
+    [game, stake, opts.seats, JSON.stringify(players), m.id, JSON.stringify(opts), full ? 'oynaniyor' : 'bekliyor', state ? JSON.stringify(state) : null],
   )
   return String(r.rows[0].id)
 }
@@ -266,6 +290,14 @@ export async function claimTimeout(m: Member, id: string) {
   const turn = currentTurn(t.state)
   if (turn === seat) throw new Error('Sıra sende.')
   if (idle < TURN_TIMEOUT_MS) throw new Error('Rakibin için süre dolmadı.')
+  if (isSeatGame(t.game) && turn != null) {
+    const res = seatGameToBot(t.state, turn)
+    if (res) {
+      await saveState(t, t.version, res.state)
+      if (res.outcome) await finishTable({ ...t, state: res.state, version: t.version + 1 }, res.outcome)
+      return
+    }
+  }
   if (t.state.kind === 'okey' && okeySeats(t.state) > 2 && turn != null) {
     const { state, outcome } = seatToBot(t.state, turn)
     await saveState(t, t.version, state)
@@ -318,7 +350,9 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   }
 
   const settings = (await getArenaSettings())[t.game as keyof Awaited<ReturnType<typeof getArenaSettings>>]
-  const pot = t.stake * people.length
+  // In 101 / Batak / Monopoly the bots together put in one extra stake, so beating bots alone pays double.
+  const botBonus = isSeatGame(t.game) && t.players.some((p) => p.bot) ? t.stake : 0
+  const pot = t.stake * people.length + botBonus
   const prizeEach = humanWinners.length ? Math.floor((pot * (1 - (settings?.commission ?? 0) / 100)) / humanWinners.length) : 0
   const paid = new Map<string, number>()
   for (const p of humanWinners) {

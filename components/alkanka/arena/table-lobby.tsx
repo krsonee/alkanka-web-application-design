@@ -14,6 +14,9 @@ import { useIdle } from '../use-idle'
 import type { Remote, RemoteAction } from './remote'
 import { TavlaPvp } from './tavla'
 import { OkeyPvp } from './okey-pvp'
+import { Okey101Pvp } from './okey101-pvp'
+import { BatakPvp } from './batak-pvp'
+import { MonopolyPvp } from './monopoly-pvp'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
@@ -55,6 +58,11 @@ const fetcher = async (url: string) => {
 }
 
 const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
+const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
+  okey101: { seats: [2, 4], rounds: [1, 3, 5] },
+  batak: { seats: [4], rounds: [1, 3, 5] },
+  monopoly: { seats: [2, 3, 4], rounds: [] },
+}
 
 export function TableLobby({
   game,
@@ -78,7 +86,16 @@ export function TableLobby({
   const [seats, setSeats] = useState<2 | 4>(4)
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
   const [bots, setBots] = useState(0)
-  const humanSeats = isOkey ? seats - (seats === 4 ? bots : 0) : 2
+  const seatRule = SEAT_GAME_RULES[game]
+  const [seatSeats, setSeatSeats] = useState(seatRule?.seats[seatRule.seats.length - 1] ?? 4)
+  const [seatBots, setSeatBots] = useState(0)
+  const [seatRounds, setSeatRounds] = useState(seatRule?.rounds[0] ?? 0)
+  const humanSeats = seatRule ? seatSeats - seatBots : isOkey ? seats - (seats === 4 ? bots : 0) : 2
+  const tableOptions = seatRule
+    ? { seats: seatSeats, bots: seatBots, ...(seatRounds ? { rounds: seatRounds } : {}) }
+    : isOkey
+      ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 }
+      : undefined
   const lobbyIdle = useIdle()
   const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, {
     refreshInterval: lobbyIdle ? 30000 : 6000,
@@ -261,6 +278,40 @@ export function TableLobby({
               </p>
             </div>
           )}
+          {seatRule && (
+            <div className="flex flex-col gap-3">
+              {seatRule.seats.length > 1 && (
+                <OptionGroup
+                  label="Masa"
+                  value={String(seatSeats)}
+                  options={seatRule.seats.map((n) => ({ value: String(n), label: `${n} kişilik` }))}
+                  onChange={(v) => {
+                    const n = Number(v)
+                    setSeatSeats(n)
+                    setSeatBots((b) => Math.min(b, n - 1))
+                  }}
+                />
+              )}
+              <OptionGroup
+                label="Bot koltuğu"
+                value={String(seatBots)}
+                options={Array.from({ length: seatSeats }, (_, i) => ({ value: String(i), label: i === 0 ? 'Bot yok' : `${i} bot` }))}
+                onChange={(v) => setSeatBots(Number(v))}
+              />
+              {seatRule.rounds.length > 0 && (
+                <OptionGroup
+                  label="El sayısı"
+                  value={String(seatRounds)}
+                  options={seatRule.rounds.map((n) => ({ value: String(n), label: `${n} el` }))}
+                  onChange={(v) => setSeatRounds(Number(v))}
+                />
+              )}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {humanSeats} gerçek oyuncu{seatBots > 0 ? ` + ${seatBots} bot` : ''}
+                {humanSeats === 1 ? ' · masa açılır açılmaz botlara karşı başlar.' : ''}
+              </p>
+            </div>
+          )}
           <p className="text-xs leading-relaxed text-muted-foreground">
             {isOkey && teamMode
               ? `Kazanan takımdaki her gerçek oyuncu potun payını alır (%${settings.commission} kesinti).`
@@ -270,7 +321,7 @@ export function TableLobby({
           <button
             disabled={busy || (isOkey && teamMode == null)}
             onClick={async () => {
-              const r = await run(() => openTable(game, stake, isOkey ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 } : undefined))
+              const r = await run(() => openTable(game, stake, tableOptions))
               if (r?.ok && r.id) setActiveId(r.id)
             }}
             className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground disabled:opacity-50"
@@ -431,7 +482,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   const remote: Remote<unknown> = {
     id,
     // Tavla and bilardo render from seat 0's side for spectators; okey handles seat -1 itself.
-    seat: spectator && data.game !== 'okey' ? 0 : mySeat,
+    seat: spectator && !['okey', 'okey101', 'batak', 'monopoly'].includes(data.game) ? 0 : mySeat,
     state: data.state,
     version: data.version,
     myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
@@ -620,6 +671,9 @@ function GameSurface({ game, remote, done }: { game: string; remote: Remote<unkn
   if (game === 'tavla') return <TavlaPvp remote={r} />
   if (game === 'okey') return <OkeyPvp remote={r} />
   if (game === 'bilardo') return <Bilardo remote={r} />
+  if (game === 'okey101') return <Okey101Pvp remote={r} />
+  if (game === 'batak') return <BatakPvp remote={r} />
+  if (game === 'monopoly') return <MonopolyPvp remote={r} />
   if (DUEL.includes(game)) {
     const mine = r.state?.scores?.[r.seat]
     if (mine || done) {
