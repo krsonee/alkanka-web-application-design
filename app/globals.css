@@ -208,6 +208,38 @@
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
   50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 45%, transparent); }
 }
+@utility bj-win-glow {
+  animation: bj-win-glow 1.2s ease-in-out 3;
+}
+@keyframes bj-win-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--primary) 50%, transparent), 0 0 24px 4px color-mix(in oklch, var(--primary) 45%, transparent); }
+}
+@utility bj-float-up {
+  animation: bj-float-up 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes bj-float-up {
+  0% { transform: translate(-50%, 10px) scale(0.6); opacity: 0; }
+  15% { transform: translate(-50%, 0) scale(1.15); opacity: 1; }
+  70% { transform: translate(-50%, -26px) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -44px) scale(0.95); opacity: 0; }
+}
+@utility bj-banner {
+  animation: bj-banner 650ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+@keyframes bj-banner {
+  0% { transform: translate(-50%, -50%) scale(0.4) rotate(-6deg); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+}
+@utility bj-lose-shake {
+  animation: bj-lose-shake 500ms ease-in-out both;
+}
+@keyframes bj-lose-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}
 @keyframes card-deal {
   from { transform: translate(40px, -60px) rotate(12deg); opacity: 0; }
   to { transform: translate(0, 0) rotate(0); opacity: 1; }
