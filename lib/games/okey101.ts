@@ -357,7 +357,7 @@ function parseGroups(raw: unknown): number[][] {
   })
 }
 
-function placeGroups(s: Okey101State, seat: number, groups: number[][], mode: 'seri' | 'cift') {
+function placeGroups(s: Okey101State, seat: number, groups: number[][], mode: 'seri' | 'cift' | 'karma') {
   const ok = okeyFrom(s.indicator)
   const { rest } = takeTiles(s.hands[seat], groups.flat())
   if (rest.length < 1) throw new Error('Atmak için elinde en az bir taş kalmalı.')
@@ -447,7 +447,9 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
     const mode = s.opened[seat]
     if (!mode) throw new Error('Önce elini açmalısın')
     const groups = parseGroups(a.groups)
-    const placed = placeGroups(s, seat, groups, mode)
+    // A series opener may also lay pairs once someone at the table has opened with pairs.
+    const anyPairOpener = s.opened.some((o) => o === 'cift')
+    const placed = placeGroups(s, seat, groups, mode === 'seri' && anyPairOpener ? 'karma' : mode)
     hands[seat] = placed.rest
     return {
       state: { ...s, hands, melds: [...s.melds, ...placed.melds], nextId: placed.nextId, log: pushLog(s, { seat, text: 'yeni per açtı' }) },

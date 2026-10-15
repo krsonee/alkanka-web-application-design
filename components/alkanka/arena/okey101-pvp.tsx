@@ -77,9 +77,11 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const selected = rack.selected
   const canDiscard = playPhase && selected != null && s.taken == null && !remote.busy
 
+  const pairsAllowed = opened === 'seri' && s.opened.some((o) => o === 'cift')
   const pairMode = opened === 'cift' || (!opened && pairs.length >= PAIR_MIN && runValue < OPEN_MIN)
+  const layable = pairMode ? pairs : pairsAllowed ? [...runs, ...pairs] : runs
   const marks: SlotMark[] = Array(RACK_COLS * 2).fill(null)
-  for (const g of pairMode ? pairs : runs) {
+  for (const g of layable) {
     g.slots.forEach((i, k) => (marks[i] = k === 0 ? { label: g.kind === 'pair' ? 'Ç' : String(g.value) } : {}))
   }
 
@@ -95,8 +97,11 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   }
   const ids = (list: Segment[]) => list.map((g) => g.tiles.map((t) => t.id))
   const layDown = () => {
-    const list = opened === 'cift' ? pairs : runs
-    if (list.length === 0) return setLocalError('Istakada geçerli grup yok. Taşları boşlukla ayırıp yan yana diz.')
+    const list = opened === 'cift' ? pairs : pairsAllowed ? [...runs, ...pairs] : runs
+    if (list.length === 0) {
+      const hint = opened === 'seri' && pairs.length > 0 ? ' Çiftleri yere açabilmen için masada çiftten açan biri olmalı.' : ''
+      return setLocalError(`Istakada geçerli grup yok. Taşları boşlukla ayırıp yan yana diz.${hint}`)
+    }
     act({ type: 'lay', groups: ids(list) })
   }
 
@@ -127,9 +132,18 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const sideTop = mySeat >= 0 ? top(leftOf101(mySeat, n)) : top(leftSeat)
   const canTakeSide = drawPhase && !!sideTop && !s.noTake && !remote.busy
 
+  // 101: lowest running total leads. Ties share the same rank.
+  const hasStandings = s.results.length > 0
+  const rankOf = (seat: number) => 1 + s.totals.filter((t) => t < s.totals[seat]).length
+  const standings = s.totals
+    .map((total, seat) => ({ seat, total, rank: rankOf(seat) }))
+    .sort((a, b) => a.total - b.total || a.seat - b.seat)
+
   const seatPill = (seat: number | null, vertical?: boolean) =>
     seat == null ? <span /> : (
       <SeatPill
+        rank={hasStandings ? rankOf(seat) : undefined}
+        total={hasStandings ? s.totals[seat] : undefined}
         name={nameOf(seat)}
         bot={s.bots.includes(seat)}
         turn={s.turn === seat}
@@ -160,6 +174,51 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Eller gizli, yere açılan perler canlı görünür.
         </p>
+      )}
+
+      {hasStandings && (
+        <section aria-label="Sıralama" className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-2">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+              <Trophy className="size-3.5 text-primary" aria-hidden="true" /> Sıralama
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {s.handNo}/{s.handsTotal}. el · az puan önde
+            </span>
+          </div>
+          <ol className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            {standings.map(({ seat, total, rank }) => {
+              const leader = rank === 1
+              const gap = total - standings[0].total
+              return (
+                <li
+                  key={seat}
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg border px-2 py-1.5',
+                    leader ? 'border-primary bg-primary/15' : 'border-border bg-secondary',
+                    seat === mySeat && !leader && 'border-foreground/30',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+                      leader ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground',
+                    )}
+                  >
+                    {rank}
+                  </span>
+                  <span className={cn('min-w-0 flex-1 truncate text-xs', seat === mySeat ? 'font-bold text-foreground' : 'font-semibold text-foreground')}>
+                    {nameOf(seat)}
+                  </span>
+                  <span className="flex flex-col items-end leading-tight">
+                    <span className={cn('text-xs font-bold tabular-nums', leader ? 'text-primary' : 'text-foreground')}>{total}</span>
+                    {!leader && <span className="text-[9px] tabular-nums text-muted-foreground">+{gap}</span>}
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
+        </section>
       )}
 
       <div className="relative overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
@@ -434,6 +493,8 @@ function SeatPill({
   count,
   status,
   vertical,
+  rank,
+  total,
 }: {
   name: string
   bot: boolean
@@ -441,11 +502,13 @@ function SeatPill({
   count: number
   status: string | null
   vertical?: boolean
+  rank?: number
+  total?: number
 }) {
   return (
     <div
       className={cn(
-        'flex items-center border backdrop-blur-sm transition-colors',
+        'relative flex items-center border backdrop-blur-sm transition-colors',
         vertical ? 'w-14 flex-col gap-1 rounded-2xl px-1 py-1.5 text-center sm:w-auto sm:flex-row sm:gap-2 sm:rounded-full sm:py-1 sm:pl-1 sm:pr-3 sm:text-left' : 'gap-2 rounded-full py-1 pl-1 pr-3',
         turn ? 'border-primary bg-background/85 glow-gold' : 'border-foreground/10 bg-background/55',
       )}
@@ -467,6 +530,17 @@ function SeatPill({
         </span>
         {status && <span className="text-[9px] font-bold uppercase tracking-wider text-primary">{status}</span>}
       </span>
+      {rank != null && (
+        <span
+          className={cn(
+            'absolute -right-1.5 -top-2 rounded-full px-1.5 py-px text-[9px] font-bold tabular-nums shadow',
+            rank === 1 ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground ring-1 ring-border',
+          )}
+          aria-label={`${rank}. sırada, ${total} puan`}
+        >
+          {rank}. · {total}
+        </span>
+      )}
     </div>
   )
 }
