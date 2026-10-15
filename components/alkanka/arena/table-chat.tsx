@@ -7,14 +7,14 @@ import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
 
-const QUICK = ['👍', '😂', '🔥', '😮', '😡', '👏', '🎲', '🍀']
+export const QUICK = ['👍', '😂', '🔥', '😮', '😡', '👏', '🎲', '🍀']
 const EMOJIS = [
   '😀', '😁', '😂', '🤣', '😅', '😊', '😉', '😎', '🤩', '😍', '😘', '🙂', '🤔', '🤨', '😐', '🙄',
   '😏', '😴', '😬', '😮', '😱', '😭', '😤', '😡', '🤯', '🥳', '🤑', '🤡', '😈', '👻', '💀', '🙈',
   '👍', '👎', '👏', '🙌', '🙏', '💪', '🤝', '✌️', '🤞', '👊', '👋', '🫡', '❤️', '💔', '🔥', '⭐',
   '🎉', '🏆', '🥇', '💰', '💸', '🪙', '🎲', '🃏', '♠️', '♥️', '🎱', '⚽', '🏀', '🍀', '🦜', '☕',
 ]
-const ONLY_EMOJI = /^(\p{Extended_Pictographic}|\uFE0F|\u200D|\s){1,12}$/u
+export const ONLY_EMOJI = /^(\p{Extended_Pictographic}|\uFE0F|\u200D|\s){1,12}$/u
 
 type ChatMessage = { id: number; userId: string; name: string; player: boolean; body: string; at: string }
 

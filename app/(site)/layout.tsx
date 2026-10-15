@@ -3,6 +3,7 @@ import { PointsProvider } from '@/components/alkanka/points-context'
 import { Sidebar } from '@/components/alkanka/sidebar'
 import { Topbar } from '@/components/alkanka/topbar'
 import { LiveRail } from '@/components/alkanka/live-rail'
+import { TelegramBubble } from '@/components/alkanka/telegram-bubble'
 import { MobileNav } from '@/components/alkanka/mobile-nav'
 import { Footer } from '@/components/alkanka/footer'
 import { AuthModal } from '@/components/alkanka/auth-modal'
@@ -43,6 +44,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           </main>
         </div>
         <MobileNav />
+        <TelegramBubble />
         <AuthModal />
         <GuestGate />
         <AppPrompts />

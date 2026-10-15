@@ -549,14 +549,25 @@ export function LiveRail() {
       <MessagesSquare className="size-4" aria-hidden="true" />
       Sohbet
     </button>
+    {mobileOpen && (
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Sohbeti kapat"
+        onClick={() => setMobileOpen(false)}
+        className="animate-in fade-in fixed inset-0 z-50 bg-background/60 backdrop-blur-sm xl:hidden"
+      />
+    )}
     <aside
       aria-label="Telegram canlı sohbet"
       className={cn(
-        'fixed inset-0 z-50 w-full flex-col bg-surface xl:inset-y-0 xl:left-auto xl:z-30 xl:flex xl:w-80 xl:border-l xl:border-border',
-        mobileOpen ? 'flex pb-[env(safe-area-inset-bottom)] xl:pb-0' : 'hidden',
+        'fixed inset-x-0 bottom-0 z-50 h-[85dvh] w-full flex-col overflow-hidden rounded-t-3xl border-t border-accent/40 bg-surface shadow-2xl',
+        'xl:top-0 xl:left-auto xl:z-30 xl:flex xl:h-auto xl:w-80 xl:rounded-none xl:border-t-0 xl:border-l xl:border-border xl:shadow-none',
+        mobileOpen ? 'animate-in slide-in-from-bottom flex pb-[env(safe-area-inset-bottom)] duration-300 xl:animate-none xl:pb-0' : 'hidden',
       )}
     >
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
+      <span className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border xl:hidden" aria-hidden="true" />
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 xl:h-16">
         <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
           <Send className="size-4" aria-hidden="true" />
         </span>
