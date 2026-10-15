@@ -22,6 +22,9 @@ import { pushStats } from '@/lib/push'
 import { PushSender } from '@/components/panel/push-sender'
 import { MessageSender } from '@/components/panel/message-sender'
 import { listSent } from '@/lib/inbox'
+import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
+import { RewardsEditor } from '@/components/panel/rewards-editor'
+import { CatalogEditor } from '@/components/panel/catalog-editor'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
@@ -204,6 +207,8 @@ export default async function PanelPage() {
     push,
     studio,
     messages,
+    rewards,
+    catalog,
   ] = await Promise.all([
     section(session, 'texts', 'Site yazıları', () => <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />),
     section(session, 'branding', 'Logo ayarları', async () => {
@@ -302,6 +307,14 @@ export default async function PanelPage() {
       />
     )),
     section(session, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
+    section(session, 'rewards', 'Ödül ayarları', async () => {
+      const [config, hidden] = await Promise.all([getRewardConfig(), getHidden()])
+      return <RewardsEditor initial={config} hidden={hidden.mini ?? []} />
+    }),
+    section(session, 'catalog', 'Etkinlik ve kampanyalar', async () => {
+      const [{ rewards: _rewards, ...catalog }, hidden, options] = await Promise.all([getCatalog({ includeHidden: true }), getHidden(), siteOptions()])
+      return <CatalogEditor catalog={catalog} sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))} library={IMAGE_LIBRARY} hidden={hidden} />
+    }),
   ])
 
   const marketPending = can('market') ? await pendingCount().catch(() => 0) : 0
@@ -328,12 +341,14 @@ export default async function PanelPage() {
       </header>
       <div className="mx-auto max-w-7xl px-4 py-6">
         <ContentEditor
-          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'messages', 'studio']))}
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio']))}
           isOwner={session.isOwner}
           slides={slides}
           heroes={heroes}
           library={IMAGE_LIBRARY}
           texts={texts}
+          rewards={rewards}
+          catalog={catalog}
           branding={branding}
           logos={logos}
           seo={seo}
