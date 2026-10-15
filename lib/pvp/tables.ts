@@ -20,6 +20,8 @@ import {
   type TableOptions,
 } from './rules'
 
+import { normalizeVariant } from '@/lib/games/batak'
+
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
 
 export type TableRow = {
@@ -140,6 +142,13 @@ const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
 
 function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOptions {
   const rule = SEAT_RULES[game]
+  if (game === 'batak') {
+    const variant = normalizeVariant(input?.variant)
+    const seats = variant === 'gommeli' ? 3 : 4
+    const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
+    const rounds = rule.rounds.includes(Number(input?.rounds)) ? Number(input?.rounds) : rule.rounds[0]
+    return { seats, team: variant === 'esli', bots, rounds, variant }
+  }
   if (rule) {
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))

@@ -30,7 +30,7 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Eli ilk bitiren kazanır. Açamayan 202, açan elindeki taşlar kadar ceza yer; çifte gidenin cezası ikiye katlanır. Set sonunda en az cezası olan kazanır.',
   ],
   batak: [
-    '4 kişi, 52 kart, herkese 13 kart. Sırayla ihale verilir (en az 4), en yüksek veren kozu seçer ve ilk kartı atar.',
+    'Klasik: 4 kişi, 13 kart, ihale en az 5. Koz Maça: ihale yok, koz maça, herkes el tahmini yapar. Eşli: 2+2 takım, ihale en az 8, ihalecinin eşi kartlarını açar. Gömmeli: 3 kişi, 16 kart, ihaleci yerdeki 4 kartı alıp 4 kart gömer.',
     'Atılan renge uymak, mümkünse yükseltmek zorundasın. Rengin yoksa koz çakmalısın. Koz kırılmadan kozla açılamaz.',
     'Sözünü tutan aldığı el kadar puan alır, ihaleyi alıp tutamayan ihalesi kadar eksi yer, hiç el almayan batar. Set sonunda en yüksek puan kazanır.',
   ],
