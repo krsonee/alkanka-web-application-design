@@ -36,7 +36,7 @@ export function JakoAvatar({
   alt?: string
 }) {
   return (
-    <span className={cn('relative shrink-0 overflow-hidden rounded-2xl bg-surface ring-1 ring-primary/30', SIZES[size], className)}>
+    <span className={cn('relative block shrink-0 overflow-hidden rounded-2xl bg-surface ring-1 ring-primary/30', SIZES[size], className)}>
       <Image src={jakoSrc(pose) || '/placeholder.svg'} alt={alt} fill sizes="160px" className="object-cover object-top" />
     </span>
   )

@@ -1,5 +1,6 @@
 'use client'
 
+import { HideButton } from '@/components/panel/hide-button'
 import { useActionState, type ReactNode } from 'react'
 import { Loader2, Play, Plus, Shuffle, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -161,7 +162,7 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
   )
 }
 
-function TournamentRow({ t }: { t: Tournament }) {
+function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
   return (
     <article className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -187,6 +188,7 @@ function TournamentRow({ t }: { t: Tournament }) {
               İptal et
             </ActionButton>
           )}
+          <HideButton kind="tournament" id={t.id} hidden={hidden} label={t.title} className="px-3 py-2" />
           <ActionButton act={removeTournament} fields={{ id: t.id }} variant="danger" confirm="Turnuva ve tüm kayıtlar silinecek.">
             <Trash2 className="size-3.5" aria-hidden="true" />
             Sil
@@ -236,7 +238,7 @@ function TournamentRow({ t }: { t: Tournament }) {
   )
 }
 
-export function TournamentManager({ tournaments }: { tournaments: Tournament[] }) {
+export function TournamentManager({ tournaments, hidden = [] }: { tournaments: Tournament[]; hidden?: string[] }) {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-4 rounded-2xl border border-primary/40 bg-card p-5">
@@ -251,7 +253,7 @@ export function TournamentManager({ tournaments }: { tournaments: Tournament[] }
       {tournaments.length === 0 ? (
         <p className="text-sm text-muted-foreground">Henüz turnuva yok.</p>
       ) : (
-        tournaments.map((t) => <TournamentRow key={t.id} t={t} />)
+        tournaments.map((t) => <TournamentRow key={t.id} t={t} hidden={hidden.includes(String(t.id))} />)
       )}
     </div>
   )

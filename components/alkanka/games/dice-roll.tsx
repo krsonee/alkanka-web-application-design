@@ -9,6 +9,8 @@ import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
 import { playMini } from '@/app/actions/wallet'
 import { usePoints } from '../points-context'
+import { useCatalog } from '../catalog-context'
+import { diceReward } from '@/lib/rewards-shared'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -46,18 +48,12 @@ function Die({ value, rolling, tone }: { value: number; rolling: boolean; tone: 
   )
 }
 
-function rewardFor(a: number, b: number) {
-  if (a === 6 && b === 6) return { label: 'Düşeş! Jackpot Kutusu', points: 400 }
-  if (a === b) return { label: `Çift! ${a * 40} Kanka Coin`, points: a * 40 }
-  const sum = a + b
-  if (sum >= 10) return { label: `Yüksek atış — ${sum * 10} Kanka Coin`, points: sum * 10 }
-  return { label: `${sum * 5} Kanka Coin`, points: sum * 5 }
-}
 
 const rand = () => 1 + Math.floor(Math.random() * 6)
 
 export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
   const { setBalance } = usePoints()
+  const { dice: diceConfig } = useCatalog().rewards
   const locked = lockedFor > 0
   const [dice, setDice] = useState<[number, number]>([5, 3])
   const [rolling, setRolling] = useState(false)
@@ -83,7 +79,7 @@ export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         return
       }
       setDice(res.dice)
-      setResult(rewardFor(res.dice[0], res.dice[1]))
+      setResult({ label: diceReward(res.dice[0], res.dice[1], diceConfig).label, points: res.points })
       setBalance(res.balance)
       onPlayed()
     }, Math.max(0, 900 - (Date.now() - started)))
@@ -116,7 +112,7 @@ export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
             <span className="animate-pop font-semibold text-gold">{result.label}</span>
           ) : (
             <span className="text-muted-foreground">
-              {rolling ? 'Zarlar dönüyor…' : locked ? `Haklar ${formatRemaining(lockedFor)} sonra yenilenir` : 'Günde 3 atış hakkın var'}
+              {rolling ? 'Zarlar dönüyor…' : locked ? `Haklar ${formatRemaining(lockedFor)} sonra yenilenir` : `Günde ${diceConfig.dailyPlays} atış hakkın var`}
             </span>
           )}
         </p>
@@ -139,13 +135,13 @@ export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
                 title: 'Zar At kuralları',
                 description: 'İki zar atılır, sonuca göre Kanka Coin kazanırsın. Her atış kazandırır, çift ve düşeş daha çok kazandırır.',
                 prizes: [
-                  { place: 'Düşeş (6-6)', prize: 'Jackpot · 400 KC' },
-                  { place: 'Çift (1-1 … 5-5)', prize: 'Zar × 40 KC' },
-                  { place: 'Toplam 10+', prize: 'Toplam × 10 KC' },
-                  { place: 'Diğer atışlar', prize: 'Toplam × 5 KC' },
+                  { place: 'Düşeş (6-6)', prize: `Jackpot · ${diceConfig.jackpot} KC` },
+                  { place: 'Çift (1-1 … 5-5)', prize: `Zar × ${diceConfig.doubleX} KC` },
+                  { place: `Toplam ${diceConfig.highMin}+`, prize: `Toplam × ${diceConfig.highX} KC` },
+                  { place: 'Diğer atışlar', prize: `Toplam × ${diceConfig.lowX} KC` },
                 ],
                 rules: [
-                  'Günde 3 atış hakkın var, haklar 00:00’da yenilenir.',
+                  `Günde ${diceConfig.dailyPlays} atış hakkın var, haklar 00:00’da yenilenir.`,
                   'Marketten alınan 2x Boost aktifken kazanç ikiye katlanır.',
                   'Sonuçlar tamamen rastgeledir, önceki atışlar sonraki atışı etkilemez.',
                   'Kazanılan Kanka Coin anında bakiyene eklenir.',

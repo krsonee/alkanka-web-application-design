@@ -1,5 +1,6 @@
 'use client'
 
+import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { approveClaimAction, rejectClaimAction, saveTaskAction } from '@/app/panel/task-actions'
@@ -75,7 +76,8 @@ export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: P
                 {task.period !== 'once' ? <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">{PERIOD_LABEL[task.period]}</span> : null}
                 {task.endsAt && Date.parse(task.endsAt) < Date.now() ? <span className="ml-2 text-xs font-normal text-destructive">Süresi doldu</span> : null}
               </span>
-              {!task.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Pasif</span>}
+              {!task.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+              <HideButton key={`${task.id}-${task.active}`} kind="task" id={task.id} hidden={!task.active} label={task.title} />
               <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                 <Pencil className="size-4" aria-hidden="true" />
               </button>

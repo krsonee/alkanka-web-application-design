@@ -11,21 +11,11 @@ import { playMini } from '@/app/actions/wallet'
 import { usePoints } from '../points-context'
 import { DetailButton, DetailModal } from '../detail-modal'
 
-const CHESTS = [
-  { id: 'bronze', name: 'Bronz Sandık', odds: 'Sık', rewards: [40, 60, 75, 90] },
-  { id: 'gold', name: 'Altın Sandık', odds: 'Nadir', rewards: [150, 200, 300, 500] },
-  { id: 'silver', name: 'Gümüş Sandık', odds: 'Orta', rewards: [75, 100, 120, 150] },
-] as const
+import { useCatalog } from '../catalog-context'
+import { CHEST_IDS } from '@/lib/rewards-shared'
 
-const LABELS: Record<number, string> = {
-  500: 'Jackpot! 500 KC',
-  300: 'VIP Promo Kod + 300 KC',
-  200: '24s 2x Boost + 200 KC',
-  150: '150 Kanka Coin',
-}
-
-const RULES = [
-  'Günde 1 sandık hakkın var, hak her gün 00:00’da yenilenir.',
+const rulesFor = (dailyPlays: number) => [
+  `Günde ${dailyPlays} sandık hakkın var, haklar her gün 00:00’da yenilenir.`,
   'Her sandıkta garantili ödül vardır, boş sandık yoktur.',
   'Bronz sandık sık ama küçük, altın sandık nadir ama büyük ödül verir.',
   'Kazanılan Kanka Coin anında bakiyene eklenir.',
@@ -38,6 +28,9 @@ type Phase = 'idle' | 'shaking' | 'opened'
 
 export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
   const { setBalance } = usePoints()
+  const { chest: chestConfig } = useCatalog().rewards
+  const CHESTS = chestConfig.chests.map((c, i) => ({ ...c, id: CHEST_IDS[i] ?? 'bronze' }))
+  const jackpot = Math.max(...CHESTS.flatMap((c) => c.rewards))
   const locked = lockedFor > 0
   const [phase, setPhase] = useState<Phase>('idle')
   const [picked, setPicked] = useState<number | null>(null)
@@ -71,7 +64,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
   }
 
   const won = picked !== null ? contents[picked] : 0
-  const label = (p: number) => LABELS[p] ?? `${p} Kanka Coin`
+  const label = (p: number) => (p === jackpot ? `Jackpot! ${p} KC` : `${p} Kanka Coin`)
 
   return (
     <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
@@ -79,7 +72,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         <div className="flex flex-col items-start gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-gold">Günlük bonus</span>
           <h3 className="font-display text-xl font-bold text-foreground">Gizemli Sandıklar</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">Günde 1 sandık seç. Her sandıkta garantili ödül var.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">Günde {chestConfig.dailyPlays} sandık seç. Her sandıkta garantili ödül var.</p>
           <DetailButton onClick={() => setRules(true)} label="Oyun kuralları" />
         </div>
         {phase === 'opened' && !locked ? (
@@ -168,7 +161,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
             {phase === 'shaking'
               ? 'Sandık açılıyor…'
               : locked
-                ? `Bugünkü sandığını açtın. Yeni sandık ${formatRemaining(lockedFor)} sonra (00:00).`
+                ? `Bugünkü sandık hakkın bitti. Yeni sandık ${formatRemaining(lockedFor)} sonra (00:00).`
                 : 'Açmak için bir sandığa dokun.'}
           </p>
         )}
@@ -184,7 +177,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
                 image: '/images/mascots/jako-sandik.png',
                 description: 'Üç sandıktan birini seç, içindeki ödül anında senin. Sandık türüne göre ödül aralığı değişir.',
                 prizes: CHESTS.map((c) => ({ place: c.name, prize: `${c.rewards[0]} – ${c.rewards[c.rewards.length - 1]} KC` })),
-                rules: RULES,
+                rules: rulesFor(chestConfig.dailyPlays),
               }
             : null
         }

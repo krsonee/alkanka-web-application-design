@@ -8,20 +8,10 @@ import { ParticleBurst } from './particle-burst'
 import { playMini } from '@/app/actions/wallet'
 import { usePoints } from '../points-context'
 
-type Segment = { short: string; label: string; points: number; tone: 'cyan' | 'purple' | 'gold' | 'muted' }
+import { useCatalog } from '../catalog-context'
+import { WHEEL_SEGMENT_COUNT, type WheelSegment as Segment } from '@/lib/rewards-shared'
 
-const SEGMENTS: Segment[] = [
-  { short: '50', label: '50 Kanka Coin', points: 50, tone: 'gold' },
-  { short: '2x', label: '2x Boost', points: 120, tone: 'muted' },
-  { short: 'VIP', label: 'VIP Geçiş', points: 300, tone: 'purple' },
-  { short: '10', label: 'Teselli: 10 Kanka Coin', points: 10, tone: 'muted' },
-  { short: '100', label: '100 Kanka Coin', points: 100, tone: 'gold' },
-  { short: 'Kod', label: 'Ücretsiz Promo Kod', points: 150, tone: 'muted' },
-  { short: '250', label: '250 Kanka Coin', points: 250, tone: 'gold' },
-  { short: 'Kutu', label: 'Gizemli Kutu', points: 200, tone: 'muted' },
-]
-
-const SEG_ANGLE = 360 / SEGMENTS.length
+const SEG_ANGLE = 360 / WHEEL_SEGMENT_COUNT
 const SPIN_MS = 4800
 
 const TONE_FILL: Record<Segment['tone'], string> = {
@@ -31,9 +21,10 @@ const TONE_FILL: Record<Segment['tone'], string> = {
   muted: 'var(--background)',
 }
 
-const WHEEL_BG = `conic-gradient(${SEGMENTS.map(
-  (s, i) => `${TONE_FILL[s.tone]} ${i * SEG_ANGLE}deg ${(i + 1) * SEG_ANGLE}deg`,
-).join(', ')})`
+const wheelBackground = (segments: Segment[]) =>
+  `conic-gradient(${segments
+    .map((s, i) => `${TONE_FILL[s.tone]} ${i * SEG_ANGLE}deg ${(i + 1) * SEG_ANGLE}deg`)
+    .join(', ')})`
 
 export type MiniGameProps = {
   onWin: (points: number) => void | Promise<void>
@@ -44,6 +35,8 @@ export type MiniGameProps = {
 
 export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
   const { setBalance } = usePoints()
+  const { wheel } = useCatalog().rewards
+  const SEGMENTS = wheel.segments
   const locked = lockedFor > 0
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
@@ -85,7 +78,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         <div className="flex flex-col gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">Çarkıfelek</span>
           <h3 className="font-display text-2xl font-bold text-foreground">Şans Çarkı</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">Her 6 saatte 1 ücretsiz çevirme. Boost, promo kod ve VIP geçiş kazan.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">Her {wheel.cooldownHours} saatte 1 ücretsiz çevirme. Boost, promo kod ve VIP geçiş kazan.</p>
         </div>
         <span className="shrink-0 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary">
           {locked ? formatRemaining(lockedFor) : '1 hak'}
@@ -108,14 +101,14 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
           <div
             className="relative size-full rounded-full border border-border"
             style={{
-              background: WHEEL_BG,
+              background: wheelBackground(SEGMENTS),
               transform: `rotate(${rotation}deg)`,
               transition: `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.8, 0.12, 1)`,
             }}
           >
             {SEGMENTS.map((s, i) => (
               <div
-                key={s.label}
+                key={`seg-${i}`}
                 aria-hidden="true"
                 className="absolute inset-0 flex justify-center pt-[9%]"
                 style={{ transform: `rotate(${i * SEG_ANGLE + SEG_ANGLE / 2}deg)` }}

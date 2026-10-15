@@ -1,5 +1,6 @@
 'use client'
 
+import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -88,7 +89,8 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
               </span>
               <span className="rounded bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
               {site.featured && <span className="text-[10px] font-bold uppercase text-primary">Öne çıkan</span>}
-              {!site.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Pasif</span>}
+              {!site.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+              <HideButton key={`${site.id}-${site.active}`} kind="sponsor" id={site.id} hidden={!site.active} label={site.name} />
               <button type="button" aria-label={`${site.name} düzenle`} onClick={() => setEditing(site)} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                 <Pencil className="size-4" aria-hidden="true" />
               </button>

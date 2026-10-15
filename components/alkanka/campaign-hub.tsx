@@ -6,16 +6,21 @@ import { BadgePercent, PartyPopper } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BonusBoard, CampaignBoard } from './partner-sites'
 import { Events } from './events'
-import { BONUSES, CAMPAIGNS, EVENTS } from './data'
+import { useCatalog } from './catalog-context'
 
 const TABS = [
-  { id: 'etkinlikler', label: 'AL KANKA etkinlikleri', icon: PartyPopper, count: EVENTS.length },
-  { id: 'bonuslar', label: 'Sponsor site bonusları', icon: BadgePercent, count: BONUSES.length + CAMPAIGNS.length },
+  { id: 'etkinlikler', label: 'AL KANKA etkinlikleri', icon: PartyPopper },
+  { id: 'bonuslar', label: 'Sponsor site bonusları', icon: BadgePercent },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
 
 export function CampaignHub() {
+  const catalog = useCatalog()
+  const counts = {
+    etkinlikler: catalog.events.length,
+    bonuslar: catalog.bonuses.length + catalog.campaigns.length,
+  }
   const params = useSearchParams()
   const router = useRouter()
   const initial: TabId = params.get('sekme') === 'bonuslar' ? 'bonuslar' : 'etkinlikler'
@@ -48,7 +53,7 @@ export function CampaignHub() {
               <Icon className="size-4 shrink-0" aria-hidden="true" />
               <span className="text-balance text-center sm:truncate">{t.label}</span>
               <span className={cn('hidden rounded px-1.5 text-[10px] tabular-nums sm:inline', active ? 'bg-primary-foreground/20' : 'bg-secondary')}>
-                {t.count}
+                {counts[t.id]}
               </span>
             </button>
           )

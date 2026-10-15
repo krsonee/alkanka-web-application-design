@@ -1,5 +1,6 @@
 'use client'
 
+import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { saveFaqAction } from '@/app/panel/faq-actions'
@@ -50,7 +51,8 @@ export function FaqsManager({ faqs }: { faqs: FaqRecord[] }) {
                 {faq.question}
                 <span className="ml-2 font-normal text-muted-foreground">{faq.category}</span>
               </span>
-              {!faq.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Pasif</span>}
+              {!faq.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+              <HideButton key={`${faq.id}-${faq.active}`} kind="faq" id={faq.id} hidden={!faq.active} label={faq.question} />
               <button
                 type="button"
                 aria-label={`${faq.question} düzenle`}

@@ -2,6 +2,9 @@
 
 import { randomInt } from 'node:crypto'
 import { getContent } from '@/lib/content'
+import { getHidden, getRewardConfig } from '@/lib/catalog'
+import { isHidden } from '@/lib/hidden-shared'
+import { diceReward, wheelBigIndices, type RewardConfig } from '@/lib/rewards-shared'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 
@@ -18,19 +21,17 @@ const REWARD_LIMITS: Record<string, { perClaim: number; perDay: number; label: s
 const SPEND_SOURCES: Record<string, string> = { market: 'Puan marketi', etkinlik: 'Etkinlik' }
 
 export type MiniGame = 'cark' | 'sandik' | 'zar'
-export type MiniStatus = Record<MiniGame, number | null>
-
-const WHEEL_COOLDOWN_HOURS = 6
+export type MiniStatus = Record<MiniGame, number | null> & { hidden?: MiniGame[] }
 
 /** Epoch ms when the next free play unlocks, or null when available now. */
-async function miniNextAt(userId: string, game: MiniGame): Promise<number | null> {
+async function miniNextAt(userId: string, game: MiniGame, config: RewardConfig): Promise<number | null> {
   if (game === 'cark') {
-    const r = await rows<{ next: string | null }>(sql`SELECT extract(epoch FROM max(created_at) + ${`${WHEEL_COOLDOWN_HOURS} hours`}::interval) * 1000 AS next
+    const r = await rows<{ next: string | null }>(sql`SELECT extract(epoch FROM max(created_at) + ${`${config.wheel.cooldownHours} hours`}::interval) * 1000 AS next
       FROM game_history WHERE user_id = ${userId} AND game = 'cark' AND mode = 'odul'`)
     const next = r[0]?.next ? Number(r[0].next) : null
     return next && next > Date.now() ? next : null
   }
-  const dailyPlays = game === 'zar' ? 3 : 1
+  const dailyPlays = game === 'zar' ? config.dice.dailyPlays : config.chest.dailyPlays
   const r = await rows<{ used: string; next: string }>(sql`SELECT
       (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game = ${game} AND mode = 'odul'
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS used,
@@ -39,14 +40,16 @@ async function miniNextAt(userId: string, game: MiniGame): Promise<number | null
 }
 
 export async function getMiniStatus(): Promise<MiniStatus> {
-  const member = await getMember()
-  if (!member) return { cark: null, sandik: null, zar: null }
+  const [member, hiddenMap] = await Promise.all([getMember(), getHidden()])
+  const hidden = (hiddenMap.mini ?? []) as MiniGame[]
+  if (!member) return { cark: null, sandik: null, zar: null, hidden }
+  const config = await getRewardConfig()
   const [cark, sandik, zar] = await Promise.all([
-    miniNextAt(member.id, 'cark'),
-    miniNextAt(member.id, 'sandik'),
-    miniNextAt(member.id, 'zar'),
+    miniNextAt(member.id, 'cark', config),
+    miniNextAt(member.id, 'sandik', config),
+    miniNextAt(member.id, 'zar', config),
   ])
-  return { cark, sandik, zar }
+  return { cark, sandik, zar, hidden }
 }
 
 export async function claimReward(source: string, amount: number): Promise<WalletResult> {
@@ -74,23 +77,6 @@ export async function claimReward(source: string, amount: number): Promise<Walle
 
 /* ---------- House mini games: outcome decided on the server ---------- */
 
-const WHEEL_POINTS = [50, 120, 300, 10, 100, 150, 250, 200]
-const WHEEL_BIG = WHEEL_POINTS.map((p, i) => (p >= 150 ? i : -1)).filter((i) => i >= 0)
-const WHEEL_SMALL = WHEEL_POINTS.map((p, i) => (p < 150 ? i : -1)).filter((i) => i >= 0)
-const CHEST_REWARDS = [
-  [40, 60, 75, 90],
-  [150, 200, 300, 500],
-  [75, 100, 120, 150],
-]
-
-function dicePoints(a: number, b: number) {
-  if (a === 6 && b === 6) return 400
-  if (a === b) return a * 40
-  const sum = a + b
-  return sum >= 10 ? sum * 10 : sum * 5
-}
-const diceBig = (a: number, b: number) => a === b || a + b >= 10
-
 const pickFrom = <T,>(arr: readonly T[]) => arr[randomInt(arr.length)]
 
 export async function getHouseWinRate() {
@@ -109,29 +95,37 @@ export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; 
   if (!member) return { ok: false, error: 'Oynamak için giriş yapmalısın.' }
   const limit = REWARD_LIMITS[game]
   if (!limit) return { ok: false, error: 'Geçersiz oyun.' }
-  if (await miniNextAt(member.id, game)) {
+  if (isHidden(await getHidden(), 'mini', game)) return { ok: false, error: `${limit.label} şu an kapalı.` }
+  const config = await getRewardConfig()
+  if (await miniNextAt(member.id, game, config)) {
     return { ok: false, error: `${limit.label} için hakkın henüz yenilenmedi.`, balance: await getBalance(member.id) }
   }
   const big = randomInt(100) < (await getHouseWinRate())
 
   let outcome: MiniOutcome
   if (game === 'cark') {
-    const index = pickFrom(big ? WHEEL_BIG : WHEEL_SMALL)
-    outcome = { game, index, points: WHEEL_POINTS[index] }
+    const segments = config.wheel.segments
+    const bigSet = wheelBigIndices(segments)
+    const all = segments.map((_, i) => i)
+    const pool = all.filter((i) => bigSet.has(i) === big)
+    const index = pickFrom(pool.length ? pool : all)
+    outcome = { game, index, points: segments[index].points }
   } else if (game === 'zar') {
     let a = 1
     let b = 1
     for (let i = 0; i < 200; i++) {
       a = 1 + randomInt(6)
       b = 1 + randomInt(6)
-      if (diceBig(a, b) === big) break
+      if (diceReward(a, b, config.dice).big === big) break
     }
-    outcome = { game, dice: [a, b], points: dicePoints(a, b) }
+    outcome = { game, dice: [a, b], points: diceReward(a, b, config.dice).points }
   } else {
-    const c = Math.max(0, Math.min(CHEST_REWARDS.length - 1, Math.floor(Number(chest)) || 0))
-    const prizes = CHEST_REWARDS.map((r) => pickFrom(r))
-    const pool = CHEST_REWARDS[c]
-    prizes[c] = pickFrom(big ? pool.slice(2) : pool.slice(0, 2))
+    const chests = config.chest.chests
+    const c = Math.max(0, Math.min(chests.length - 1, Math.floor(Number(chest)) || 0))
+    const prizes = chests.map((ch) => pickFrom(ch.rewards))
+    const pool = chests[c].rewards
+    const split = Math.floor(pool.length / 2)
+    prizes[c] = pickFrom(big ? pool.slice(split) : pool.slice(0, split))
     outcome = { game, prizes, points: prizes[c] }
   }
 

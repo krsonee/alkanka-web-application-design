@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { Loader2, Save } from 'lucide-react'
 import { ARENA_GAMES, ARENA_META, type ArenaSettings } from '@/lib/arena'
 import { saveArenaSettings } from '@/app/panel/arena-actions'
+import { HideButton } from '@/components/panel/hide-button'
 import type { ActionState } from '@/app/panel/actions'
 
 export function ArenaSettingsEditor({ settings, winRate = 40 }: { settings: ArenaSettings; winRate?: number }) {
@@ -23,10 +24,11 @@ export function ArenaSettingsEditor({ settings, winRate = 40 }: { settings: Aren
                 <legend className="absolute bottom-3 left-4 font-display text-2xl font-bold uppercase text-foreground">{meta.title}</legend>
               </div>
               <div className="flex flex-col gap-4 p-4">
-                <label className="flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 text-sm font-semibold text-foreground">
-                  Sitede yayında
-                  <input type="checkbox" name={`${g}:enabled`} defaultChecked={s.enabled} className="size-5 accent-primary" />
-                </label>
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 text-sm font-semibold text-foreground">
+                  {s.enabled ? 'Sitede yayında' : 'Siteden gizli'}
+                  <input type="hidden" name={`${g}:enabled`} value={s.enabled ? 'on' : ''} />
+                  <HideButton key={`${g}-${s.enabled}`} kind="arena" id={g} hidden={!s.enabled} label={meta.title} />
+                </div>
                 <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
                   Bahis seçenekleri (KC, virgülle ayır, en fazla 6)
                   <input name={`${g}:bets`} defaultValue={s.bets.join(', ')} className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none" />

@@ -62,8 +62,9 @@ const GAME_CARDS: { game: MiniGame; title: string; text: string; pose: JakoPose;
   { game: 'zar', title: 'Zar At', text: 'Günde 3 atış. Çift gelirse kazancın katlanır, düşeş jackpotu açar.', pose: 'zar', limit: 'Günde 3' },
 ]
 
-export function GamesHub({ arena }: { arena: ArenaSettings }) {
+export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hiddenMini?: string[] }) {
   const tables = ARENA_GAMES.filter((g) => arena[g].enabled)
+  const minis = GAME_CARDS.filter((c) => !hiddenMini.includes(c.game))
   return (
     <div className="flex flex-col gap-10">
       {tables.length > 0 && (
@@ -123,7 +124,7 @@ export function GamesHub({ arena }: { arena: ArenaSettings }) {
           </h2>
         </div>
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {GAME_CARDS.map((g) => (
+          {minis.map((g) => (
             <MiniCard key={g.game} {...g} />
           ))}
         </ul>
