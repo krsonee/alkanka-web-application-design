@@ -63,10 +63,18 @@ function findTarget(selectors: string[]) {
   for (const s of selectors) {
     for (const el of document.querySelectorAll<HTMLElement>(s)) {
       const r = el.getBoundingClientRect()
-      if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden') return el
+      if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' && isOnTop(el, r)) return el
     }
   }
   return null
+}
+
+function isOnTop(el: HTMLElement, r: DOMRect) {
+  const x = Math.min(Math.max(r.left + r.width / 2, 0), window.innerWidth - 1)
+  const y = Math.min(Math.max(r.top + r.height / 2, 0), window.innerHeight - 1)
+  if (r.bottom < 0 || r.top > window.innerHeight) return true
+  const hit = document.elementsFromPoint(x, y).find((n) => !n.closest('[data-tour-overlay]'))
+  return !hit || el.contains(hit) || hit.contains(el)
 }
 
 type Box = { top: number; left: number; width: number; height: number }
@@ -162,7 +170,7 @@ export function SiteTour() {
   }
 
   return (
-    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body">
+    <div data-tour-overlay="" className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body">
       {box ? (
         <div
           aria-hidden="true"
@@ -241,11 +249,14 @@ export function SiteTour() {
   )
 }
 
-export function TourButton({ className }: { className?: string }) {
+export function TourButton({ className, onStart }: { className?: string; onStart?: () => void }) {
   return (
     <button
       type="button"
-      onClick={() => window.dispatchEvent(new Event(TOUR_START_EVENT))}
+      onClick={() => {
+        onStart?.()
+        setTimeout(() => window.dispatchEvent(new Event(TOUR_START_EVENT)), onStart ? 320 : 0)
+      }}
       className={cn(
         'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
         className,
