@@ -17,6 +17,7 @@ import {
   Send,
   Ticket,
   UserPlus,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { sendChannelCommentAction, sendChatMessage, startTelegramLink } from '@/app/actions/chat'
@@ -32,6 +33,8 @@ import {
 import { TELEGRAM_URL } from './data'
 import { useChannelFeed, useChatFeed, type ChatResponse } from './use-chat-feed'
 import { MemberRank } from './kp/member-rank'
+
+export const OPEN_CHAT_EVENT = 'alkanka:open-chat'
 
 const timeFormat = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' })
 const dateTimeFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -516,9 +519,43 @@ export function LiveRail() {
         ? `@${channel.data.username}`
         : 'Yakında'
   const isLive = tab === 'sohbet' ? chat.data?.configured : channel.data?.configured
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    const open = () => setMobileOpen(true)
+    window.addEventListener(OPEN_CHAT_EVENT, open)
+    return () => window.removeEventListener(OPEN_CHAT_EVENT, open)
+  }, [])
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKey = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && setMobileOpen(false)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [mobileOpen])
 
   return (
-    <aside aria-label="Telegram canlı sohbet" className="fixed inset-y-0 right-0 z-30 hidden w-80 flex-col border-l border-border bg-surface xl:flex">
+    <>
+    <button
+      type="button"
+      onClick={() => setMobileOpen(true)}
+      className="fixed bottom-5 right-5 z-30 hidden items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground shadow-lg transition-opacity hover:opacity-90 lg:flex xl:hidden"
+    >
+      <MessagesSquare className="size-4" aria-hidden="true" />
+      Sohbet
+    </button>
+    <aside
+      aria-label="Telegram canlı sohbet"
+      className={cn(
+        'fixed inset-0 z-50 w-full flex-col bg-surface xl:inset-y-0 xl:left-auto xl:z-30 xl:flex xl:w-80 xl:border-l xl:border-border',
+        mobileOpen ? 'flex pb-[env(safe-area-inset-bottom)] xl:pb-0' : 'hidden',
+      )}
+    >
       <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
         <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
           <Send className="size-4" aria-hidden="true" />
@@ -530,6 +567,14 @@ export function LiveRail() {
             {subtitle}
           </span>
         </span>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Sohbeti kapat"
+          className="ml-auto flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground xl:hidden"
+        >
+          <X className="size-5" aria-hidden="true" />
+        </button>
       </div>
 
       <div role="tablist" aria-label="Telegram kanalları" className="grid shrink-0 grid-cols-4 gap-1 border-b border-border p-2">
@@ -564,5 +609,6 @@ export function LiveRail() {
         )}
       </div>
     </aside>
+    </>
   )
 }
