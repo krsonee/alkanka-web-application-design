@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Dices, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TavlaState } from '@/lib/pvp/rules'
@@ -91,12 +92,14 @@ function Checker({ side, label, glow }: { side: Side; label?: string; glow?: boo
   )
 }
 
-function Stack({ count, side, top, glow }: { count: number; side: Side; top: boolean; glow: boolean }) {
+function Stack({ count, side, top, glow, lifted }: { count: number; side: Side; top: boolean; glow: boolean; lifted?: boolean }) {
   const visible = Math.min(count, 5)
   return (
     <div className={cn('flex h-full w-full flex-col items-center gap-px sm:gap-0.5', !top && 'flex-col-reverse')}>
       {Array.from({ length: visible }).map((_, i) => (
-        <Checker key={i} side={side} glow={glow && i === visible - 1} label={i === visible - 1 && count > 5 ? String(count) : undefined} />
+        <span key={i} className={cn('flex w-full justify-center', lifted && i === visible - 1 && 'opacity-30')}>
+          <Checker side={side} glow={glow && i === visible - 1 && !lifted} label={i === visible - 1 && count > 5 ? String(count) : undefined} />
+        </span>
       ))}
     </div>
   )
@@ -140,7 +143,59 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   const topRow = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
   const bottomRow = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
+  const drag = useRef<{ from: From; x: number; y: number; active: boolean } | null>(null)
+  const suppressClick = useRef(false)
+  const [ghost, setGhost] = useState<{ x: number; y: number; from: From } | null>(null)
+  const [hover, setHover] = useState<To | null>(null)
+
+  function dropAt(x: number, y: number): To | null {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-drop]')
+    const v = el?.dataset.drop
+    if (v == null) return null
+    return v === 'off' ? 'off' : Number(v)
+  }
+
+  function startDrag(e: React.PointerEvent, from: From) {
+    if (!sources.has(from) || e.button !== 0) return
+    drag.current = { from, x: e.clientX, y: e.clientY, active: false }
+    const moves = legal
+    const onMove = (ev: PointerEvent) => {
+      const d = drag.current
+      if (!d) return
+      if (!d.active) {
+        if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) < 6) return
+        d.active = true
+        onSelect(d.from)
+      }
+      ev.preventDefault()
+      setGhost({ x: ev.clientX, y: ev.clientY, from: d.from })
+      setHover(dropAt(ev.clientX, ev.clientY))
+    }
+    const finish = (ev: PointerEvent, cancelled: boolean) => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      const d = drag.current
+      drag.current = null
+      setGhost(null)
+      setHover(null)
+      if (!d?.active) return
+      suppressClick.current = true
+      setTimeout(() => (suppressClick.current = false), 0)
+      if (cancelled) return
+      const to = dropAt(ev.clientX, ev.clientY)
+      const m = moves.find((x) => x.from === d.from && x.to === to)
+      if (m) onPlay(m)
+    }
+    const onUp = (ev: PointerEvent) => finish(ev, false)
+    const onCancel = (ev: PointerEvent) => finish(ev, true)
+    window.addEventListener('pointermove', onMove, { passive: false })
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+  }
+
   function clickPoint(i: number) {
+    if (suppressClick.current) return
     const t = targets.find((m) => m.to === i)
     if (t) return onPlay(t)
     if (selected === i) return onSelect(null)
@@ -159,9 +214,16 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       <button
         key={visual}
         type="button"
+        data-drop={i}
         onClick={() => clickPoint(i)}
+        onPointerDown={(e) => startDrag(e, i)}
         aria-label={`Hane ${label}${v ? `, ${Math.abs(v)} ${mine ? 'senin' : 'rakip'} pulu` : ', boş'}${isTarget ? ', buraya oynanabilir' : ''}`}
-        className={cn('relative flex h-full min-w-0 flex-1 flex-col items-center px-px outline-none sm:px-0.5', isTop ? 'justify-start' : 'justify-end')}
+        className={cn(
+          'relative flex h-full min-w-0 flex-1 flex-col items-center px-px outline-none sm:px-0.5',
+          isTop ? 'justify-start' : 'justify-end',
+          isSource && 'cursor-grab touch-none',
+          ghost && 'cursor-grabbing',
+        )}
       >
         <span
           aria-hidden="true"
@@ -181,15 +243,24 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           <span
             aria-hidden="true"
             className={cn(
-              'absolute inset-x-0 z-20 m-auto flex size-5 items-center justify-center rounded-full border-2 border-primary bg-primary/30 sm:size-7',
+              'absolute inset-x-0 z-20 m-auto flex size-5 items-center justify-center rounded-full border-2 border-primary bg-primary/30 transition-transform sm:size-7',
               isTop ? 'bottom-[12%]' : 'top-[12%]',
+              hover === i && 'scale-150 bg-primary/60',
             )}
           >
             <span className="size-2 animate-ping rounded-full bg-primary" />
           </span>
         )}
         <span className="relative z-10 flex h-full w-full flex-col py-0.5 sm:py-1">
-          {v !== 0 && <Stack count={Math.abs(v)} side={side} top={isTop} glow={(isSource && selected === i) || (!mine && highlight.has(i))} />}
+          {v !== 0 && (
+            <Stack
+              count={Math.abs(v)}
+              side={side}
+              top={isTop}
+              glow={(isSource && selected === i) || (!mine && highlight.has(i))}
+              lifted={ghost?.from === i}
+            />
+          )}
         </span>
         {isSource && selected !== i && <span aria-hidden="true" className={cn('absolute z-20 h-1 w-1/2 rounded-full bg-primary', isTop ? '-bottom-1' : '-top-1')} />}
         <span className={cn('absolute z-20 hidden text-[9px] font-semibold text-muted-foreground sm:block', isTop ? '-top-4' : '-bottom-4')}>{label}</span>
@@ -202,7 +273,18 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   const shown = faces ?? rolled.slice(0, rolled.length === 4 ? 4 : 2)
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex select-none flex-col gap-2">
+      {ghost &&
+        createPortal(
+          <span
+            aria-hidden="true"
+            className="pointer-events-none fixed z-[100] flex w-10 -translate-x-1/2 -translate-y-1/2 scale-110 drop-shadow-[0_10px_14px_rgb(0_0_0/0.55)] sm:w-12"
+            style={{ left: ghost.x, top: ghost.y }}
+          >
+            <Checker side={me} />
+          </span>,
+          document.body,
+        )}
       <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
       <div className="tavla-wood rounded-2xl p-1.5 sm:p-3">
       <div className="flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
@@ -218,10 +300,19 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
 
         <button
           type="button"
-          onClick={() => (selected === 'bar' ? onSelect(null) : barSelectable && onSelect('bar'))}
+          onClick={() => {
+            if (suppressClick.current) return
+            if (selected === 'bar') onSelect(null)
+            else if (barSelectable) onSelect('bar')
+          }}
+          onPointerDown={(e) => startDrag(e, 'bar')}
           disabled={!barSelectable}
           aria-label={`Kırık pullar: sen ${board.bar[me]}, rakip ${board.bar[opp]}`}
-          className={cn('flex w-6 flex-col items-center justify-between rounded-md bg-wood py-2 sm:w-12 sm:py-3', barSelectable && 'ring-2 ring-primary', selected === 'bar' && 'bg-primary/30')}
+          className={cn(
+            'flex w-6 flex-col items-center justify-between rounded-md bg-wood py-2 sm:w-12 sm:py-3',
+            barSelectable && 'cursor-grab touch-none ring-2 ring-primary',
+            selected === 'bar' && 'bg-primary/30',
+          )}
         >
           <span className="flex w-full flex-col items-center gap-0.5 px-px">
             {Array.from({ length: Math.min(board.bar[opp], 4) }).map((_, i) => (
@@ -253,9 +344,14 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </div>
           <button
             type="button"
-            onClick={() => offTarget && onPlay(offTarget)}
+            data-drop="off"
+            onClick={() => !suppressClick.current && offTarget && onPlay(offTarget)}
             disabled={!offTarget}
-            className={cn('flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center', offTarget && 'animate-pulse bg-primary/40 ring-2 ring-primary')}
+            className={cn(
+              'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center transition-transform',
+              offTarget && 'animate-pulse bg-primary/40 ring-2 ring-primary',
+              hover === 'off' && 'scale-105 bg-primary/70',
+            )}
             aria-label={`Toplanan pulların: ${board.off[me]}${offTarget ? ', pulu topla' : ''}`}
           >
             <span className="text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">Sen</span>
