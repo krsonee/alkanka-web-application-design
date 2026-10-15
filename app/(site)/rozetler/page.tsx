@@ -6,6 +6,7 @@ import { getMember } from '@/lib/member'
 import { AUTO_LABELS, RULE_FIELDS, badgeHolders, getKpConfig, getKpStatus, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
 import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { PageHero } from '@/components/alkanka/page-hero'
+import { AutoScrollRow } from '@/components/alkanka/auto-scroll-row'
 import { cn } from '@/lib/utils'
 
 export const metadata = pageMeta('rozetler')
@@ -181,11 +182,11 @@ export default async function BadgesPage() {
             <Trophy className="size-3.5" aria-hidden /> Sıralama ve şampiyonlar <ChevronRight className="size-3.5" aria-hidden />
           </Link>
         </div>
-        <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-3">
+        <AutoScrollRow label="Değerli rozetler" className="-mx-4 scroll-px-4 gap-3 px-4 pb-1 sm:mx-0 sm:scroll-px-0 sm:px-0">
           {specials.map((b) => {
             const owners = holders[b.id] ?? []
             return (
-              <li key={b.id} className={cn('flex w-[82%] shrink-0 snap-center flex-col gap-3 rounded-2xl border p-4 sm:w-auto', TIER_BG[b.tier])}>
+              <li key={b.id} className={cn('flex w-[82%] shrink-0 snap-start flex-col gap-3 rounded-2xl border p-4 sm:w-[calc(50%-0.375rem)] xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[b.tier])}>
                 <div className="flex items-center gap-4">
                   <SpecialEmblem icon={b.icon} tier={b.tier} size="lg" />
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -207,7 +208,7 @@ export default async function BadgesPage() {
               </li>
             )
           })}
-        </ul>
+        </AutoScrollRow>
       </section>
     </div>
   )
