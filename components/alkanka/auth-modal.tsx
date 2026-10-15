@@ -106,7 +106,8 @@ export function AuthModal() {
           setError('Çok fazla deneme yaptın. 1 dakika bekleyip tekrar dene.')
           return
         }
-        setError('Kayıt tamamlanamadı. Bu e-posta kullanılıyor olabilir.')
+        const msg = res.error.message ?? ''
+        setError(/kullanıcı adı/i.test(msg) ? msg : 'Kayıt tamamlanamadı. Bu e-posta kullanılıyor olabilir.')
         return
       }
       if (!res.data?.token) {

@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { pool } from '@/lib/db'
 import { mailEnabled, sendResetMail, sendVerifyMail } from '@/lib/mail'
 
@@ -28,6 +29,20 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => {
       await sendVerifyMail(user.email, user.name, url)
     },
+  },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== '/sign-up/email') return
+      const name = String(ctx.body?.name ?? '').normalize('NFC').trim()
+      if (name.length < 3 || name.includes('@')) {
+        throw new APIError('BAD_REQUEST', { message: 'Kullanıcı adı en az 3 karakter olmalı ve @ içermemeli.' })
+      }
+      const { rows } = await pool.query('SELECT 1 FROM "user" WHERE lower(trim(name)) = lower($1) LIMIT 1', [name])
+      if (rows.length) {
+        throw new APIError('BAD_REQUEST', { message: 'Bu kullanıcı adı alınmış, başka bir tane dene.' })
+      }
+      return { context: { ...ctx, body: { ...ctx.body, name } } }
+    }),
   },
   user: {
     changeEmail: { enabled: true, updateEmailWithoutVerification: true },
