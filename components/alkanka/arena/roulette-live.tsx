@@ -59,7 +59,7 @@ function DealerLine({ phase, number, secondsLeft }: { phase: string; number: num
   if (phase === 'spin') text = 'Bahisler kapandı, top dönüyor...'
   if (phase === 'result' && number !== null) text = `${number} ${colorName(number)}! Kazananlara ödeme yapılıyor.`
   return (
-    <p aria-live="polite" className="relative rounded-2xl rounded-bl-none border border-primary/40 bg-background/85 px-4 py-2.5 text-sm font-semibold text-foreground shadow-lg backdrop-blur">
+    <p aria-live="polite" className="relative rounded-2xl rounded-bl-none border border-primary/40 bg-background/85 px-3 py-2 text-pretty break-words text-sm font-semibold leading-snug text-foreground shadow-lg backdrop-blur sm:px-4 sm:py-2.5">
       {text}
     </p>
   )
@@ -240,7 +240,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   return (
     <div className="flex flex-col gap-4">
       <header className="overflow-hidden rounded-3xl border border-primary/30 bg-card">
-        <div className="grid items-stretch md:grid-cols-[minmax(0,22rem)_1fr]">
+        <div className="grid grid-cols-[minmax(0,1fr)] items-stretch md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <div className="relative hidden bg-background md:block md:min-h-48">
             <Image
               src="/images/mascots/jako-krupiye.png"
@@ -251,7 +251,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               priority
             />
           </div>
-          <div className="flex flex-col justify-center gap-3 p-3 sm:p-6">
+          <div className="flex min-w-0 flex-col justify-center gap-3 p-3 sm:p-6">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
                 Canlı masa · Tur #{clock.roundId % 10000}
@@ -271,9 +271,9 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
             <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
               <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear" style={{ width: `${progress * 100}%` }} />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Son sayılar</span>
-              <ol className="no-scrollbar flex gap-1.5 overflow-x-auto py-1" aria-label="Son çıkan sayılar">
+              <ol className="no-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 py-1" aria-label="Son çıkan sayılar">
                 {(data?.history ?? []).map((n, i) => (
                   <li key={i} className={cn(i === 0 && 'ring-2 ring-primary ring-offset-1 ring-offset-card', 'rounded-full')}>
                     <NumberPill n={n} />
