@@ -32,6 +32,7 @@ import {
 } from "./blackjack-side-bets";
 import { BlackjackTables, BlackjackWatchers } from "./blackjack-tables";
 import { TableChat } from "./table-chat";
+import { MobileTableChat } from "./mobile-table-chat";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 type Seat = NonNullable<BlackjackLiveState["seats"][number]>;
@@ -672,8 +673,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
         <TableChat
           key={data.tableNo}
           tableId={`blackjack-masa-${data.tableNo}`}
-          className="h-80"
+          className="hidden h-80 lg:flex"
         />
+        <MobileTableChat key={`m-${data.tableNo}`} tableId={`blackjack-masa-${data.tableNo}`} />
         <BlackjackWatchers names={data.watchers} spectating={!!member && !me} />
         <section
           className="flex flex-col gap-3 rounded-2xl border border-primary/40 bg-card p-4"
