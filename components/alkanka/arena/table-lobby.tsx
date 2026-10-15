@@ -17,6 +17,7 @@ import { TavlaPvp } from './tavla'
 import { OkeyPvp } from './okey-pvp'
 import { Okey101Pvp } from './okey101-pvp'
 import { BatakPvp } from './batak-pvp'
+import { BATAK_VARIANTS, type BatakVariant } from '@/lib/games/batak'
 import { MonopolyPvp } from './monopoly-pvp'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
@@ -91,9 +92,10 @@ export function TableLobby({
   const [seatSeats, setSeatSeats] = useState(seatRule?.seats[seatRule.seats.length - 1] ?? 4)
   const [seatBots, setSeatBots] = useState(0)
   const [seatRounds, setSeatRounds] = useState(seatRule?.rounds[0] ?? 0)
+  const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
   const humanSeats = seatRule ? seatSeats - seatBots : isOkey ? seats - (seats === 4 ? bots : 0) : 2
   const tableOptions = seatRule
-    ? { seats: seatSeats, bots: seatBots, ...(seatRounds ? { rounds: seatRounds } : {}) }
+    ? { seats: seatSeats, bots: seatBots, ...(seatRounds ? { rounds: seatRounds } : {}), ...(game === 'batak' ? { variant: batakVariant } : {}) }
     : isOkey
       ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 }
       : undefined
@@ -281,6 +283,20 @@ export function TableLobby({
           )}
           {seatRule && (
             <div className="flex flex-col gap-3">
+              {game === 'batak' && (
+                <OptionGroup
+                  label="Batak türü"
+                  value={batakVariant}
+                  options={BATAK_VARIANTS.map((v) => ({ value: v.value, label: `${v.label} · ${v.hint}` }))}
+                  onChange={(v) => {
+                    const variant = v as BatakVariant
+                    const n = BATAK_VARIANTS.find((x) => x.value === variant)?.seats ?? 4
+                    setBatakVariant(variant)
+                    setSeatSeats(n)
+                    setSeatBots((b) => Math.min(b, n - 1))
+                  }}
+                />
+              )}
               {seatRule.seats.length > 1 && (
                 <OptionGroup
                   label="Masa"

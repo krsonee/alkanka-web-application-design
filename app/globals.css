@@ -93,6 +93,7 @@
   --radius: 0.75rem;
   --wood: oklch(0.32 0.05 55);
   --felt: oklch(0.24 0.045 245);
+  --baize: oklch(0.36 0.075 158);
   --rl-red: oklch(0.48 0.18 25);
   --rl-black: oklch(0.17 0.01 260);
   --rl-green: oklch(0.45 0.12 155);
@@ -153,6 +154,20 @@
   background:
     radial-gradient(ellipse at center, color-mix(in oklch, var(--felt) 100%, transparent) 0%, color-mix(in oklch, var(--felt) 70%, var(--background)) 100%);
   box-shadow: inset 0 0 0 6px color-mix(in oklch, var(--wood) 90%, transparent), inset 0 0 60px -10px var(--background);
+}
+@utility baize-table {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 45%, color-mix(in oklch, var(--baize) 88%, var(--checker-light)) 0%, var(--baize) 45%, color-mix(in oklch, var(--baize) 55%, var(--background)) 100%);
+  box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--gold) 22%, transparent), inset 0 10px 40px -8px rgb(0 0 0 / 0.6), inset 0 -10px 30px -12px rgb(0 0 0 / 0.5);
+}
+@utility card-back {
+  background:
+    repeating-linear-gradient(45deg, color-mix(in oklch, var(--ruby) 70%, var(--background)) 0 3px, color-mix(in oklch, var(--ruby) 45%, var(--background)) 3px 6px);
+  box-shadow: inset 0 0 0 2px var(--tile), 0 2px 4px rgb(0 0 0 / 0.45);
+}
+@utility playing-card {
+  background: linear-gradient(160deg, var(--tile) 0%, color-mix(in oklch, var(--tile) 88%, var(--checker-dark)) 100%);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 6px 14px -4px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(0 0 0 / 0.18);
 }
 @utility tavla-wood {
   background:

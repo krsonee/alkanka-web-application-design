@@ -63,7 +63,7 @@ export type OkeyState = {
   last?: OkeyLast[]
 }
 
-export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number }
+export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string }
 
 export const okeySeats = (s: OkeyState) => s.seats ?? s.hands.length
 /** In okey you draw from the discard pile of the player who played right before you. */
@@ -98,7 +98,7 @@ export const seatSide = (seat: number): Side => (seat === 0 ? 'p' : 'b')
 
 export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSeats?: number[] }): PvpState {
   if (game === 'okey101') return runOkey101Bots(initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
-  if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds })).state
+  if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant })).state
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
   if (game === 'tavla') {
     let a = 0
