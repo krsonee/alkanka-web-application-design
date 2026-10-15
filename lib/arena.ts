@@ -1,4 +1,6 @@
-export const ARENA_GAMES = ['tavla', 'okey', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu'] as const
+export const ARENA_GAMES = ['tavla', 'okey', 'okey101', 'batak', 'monopoly', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu'] as const
+/** Seat games run entirely on kanka tables; empty seats can be filled with server bots. */
+export const SEAT_TABLE_GAMES = ['okey101', 'batak', 'monopoly'] as const
 export type ArenaGame = (typeof ARENA_GAMES)[number]
 
 export type GameMode = 'bot' | 'pvp' | 'local'
@@ -37,6 +39,33 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
     group: 2,
     category: 'masa',
     modes: ['bot', 'pvp'],
+  },
+  okey101: {
+    title: '101 Okey',
+    short: '101 sayıyla el aç, çift git, işle. Eli bitir, en az cezayla masadan kalk.',
+    image: '/images/games/okey101.png',
+    players: '2 ya da 4 kişi, boş koltuğa bot',
+    group: 2,
+    category: 'masa',
+    modes: ['pvp'],
+  },
+  batak: {
+    title: 'Batak',
+    short: 'İhaleli batak. İhaleyi al, kozu seç, sözünü tut; batan ihalesi kadar yer.',
+    image: '/images/games/batak.png',
+    players: '4 kişi, boş koltuğa bot',
+    group: 2,
+    category: 'masa',
+    modes: ['pvp'],
+  },
+  monopoly: {
+    title: 'Monopoly',
+    short: 'Zar at, mülk al, ev ve otel dik. Rakiplerini iflas ettiren son patron kazanır.',
+    image: '/images/games/monopoly.png',
+    players: '2-4 kişi, boş koltuğa bot',
+    group: 2,
+    category: 'masa',
+    modes: ['pvp'],
   },
   bilardo: {
     title: 'Bilardo',
@@ -99,6 +128,9 @@ const base = { enabled: true, pvpEnabled: true, bets: [25, 50, 100, 250], commis
 export const DEFAULT_ARENA: ArenaSettings = {
   tavla: { ...base, multiplier: 2 },
   okey: { ...base, multiplier: 3 },
+  okey101: { ...base, multiplier: 2 },
+  batak: { ...base, multiplier: 2 },
+  monopoly: { ...base, multiplier: 2 },
   bilardo: { ...base, multiplier: 2 },
   blackjack: { ...base, multiplier: 2 },
   rulet: { ...base, multiplier: 1 },
@@ -128,6 +160,6 @@ export function mergeArena(saved: Partial<Record<string, Partial<ArenaGameSettin
 }
 
 /** Seconds a player has for each action at a kanka table; when it runs out the server plays for them. */
-export const TURN_SECONDS: Partial<Record<ArenaGame, number>> = { tavla: 40, okey: 30, bilardo: 35 }
+export const TURN_SECONDS: Partial<Record<ArenaGame, number>> = { tavla: 40, okey: 30, okey101: 40, batak: 25, monopoly: 45, bilardo: 35 }
 
 export const RESULT_LABEL: Record<string, string> = { win: 'Kazandı', loss: 'Kaybetti', draw: 'Berabere', refund: 'İade' }

@@ -12,7 +12,7 @@ const TYPES: Record<string, string> = {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await canPanelAny(['logo', 'branding', 'sponsors']))) {
+  if (!(await canPanelAny(['logo', 'branding', 'sponsors', 'messages']))) {
     return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
   }
 

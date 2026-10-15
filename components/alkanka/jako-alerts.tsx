@@ -21,7 +21,9 @@ const POPPED_KEY = 'ak-inbox-popped'
 
 type Alert =
   | { kind: 'reward'; id: string; game: MiniGame }
-  | { kind: 'message'; id: string; title: string; unread: number }
+  | { kind: 'message'; id: string; title: string; unread: number; image?: string | null }
+
+type MessageAlertData = Extract<Alert, { kind: 'message' }>
 
 function readPending(): Partial<Record<MiniGame, number>> {
   try {
@@ -42,6 +44,7 @@ function systemNotify(title: string, body: string, url: string) {
 export function JakoAlerts() {
   const pathname = usePathname()
   const [alerts, setAlerts] = useState<Alert[]>([])
+  const [popup, setPopup] = useState<MessageAlertData | null>(null)
   const pathRef = useRef(pathname)
   useEffect(() => {
     pathRef.current = pathname
@@ -105,11 +108,19 @@ export function JakoAlerts() {
     if (latest.id <= popped) return
     localStorage.setItem(POPPED_KEY, String(latest.id))
     if (pathRef.current === '/profil' && window.location.search.includes('sekme=mesajlar')) return
-    push({ kind: 'message', id: `msg-${latest.id}`, title: latest.title, unread: inbox.unread })
+    setPopup({ kind: 'message', id: `msg-${latest.id}`, title: latest.title, unread: inbox.unread, image: latest.imageUrl })
     systemNotify('Sana özel mesaj var kanka!', latest.title, '/profil?sekme=mesajlar')
-  }, [inbox, push])
+  }, [inbox])
+
+  const deferPopup = useCallback(() => {
+    setPopup((current) => {
+      if (current) push(current)
+      return null
+    })
+  }, [push])
 
   useEffect(() => {
+    if (pathname === '/profil') setPopup(null)
     setAlerts((list) =>
       list.filter((a) => {
         if (a.kind === 'reward') return !pathname.startsWith(REWARDS[a.game].href)
@@ -118,9 +129,11 @@ export function JakoAlerts() {
     )
   }, [pathname])
 
-  if (!alerts.length) return null
+  if (!alerts.length && !popup) return null
 
   return (
+    <>
+    {popup && <MessagePopup alert={popup} onLater={deferPopup} onRead={() => setPopup(null)} />}
     <section
       aria-label="Bildirimler"
       aria-live="polite"
@@ -134,6 +147,82 @@ export function JakoAlerts() {
         ),
       )}
     </section>
+    </>
+  )
+}
+
+function MessagePopup({
+  alert,
+  onLater,
+  onRead,
+}: {
+  alert: MessageAlertData
+  onLater: () => void
+  onRead: () => void
+}) {
+  const laterRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    laterRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onLater()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onLater])
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Sonra bak"
+        tabIndex={-1}
+        onClick={onLater}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm animate-in fade-in duration-300"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="jako-popup-title"
+        className="relative flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border border-primary/40 bg-card px-6 pt-8 pb-6 text-center shadow-2xl animate-in fade-in zoom-in-90 slide-in-from-bottom-6 duration-500"
+      >
+        <span className="relative block">
+          <JakoAvatar pose="duyuru" size="lg" className="ring-4 ring-primary/30 animate-bounce [animation-iteration-count:2]" />
+          <span className="absolute -top-2 -right-2 flex min-w-8 items-center justify-center rounded-full bg-primary px-2 py-1 text-sm font-bold tabular-nums text-primary-foreground ring-4 ring-card">
+            {alert.unread > 9 ? '9+' : alert.unread}
+          </span>
+        </span>
+        <div className="flex flex-col gap-2">
+          <span className="flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-primary">
+            <Mail className="size-3.5" aria-hidden />
+            Jako diyor ki
+          </span>
+          <h2 id="jako-popup-title" className="font-display text-xl font-bold leading-snug text-foreground text-balance">
+            Sana özel mesaj geldi kanka!
+          </h2>
+          <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground text-pretty">{alert.title}</p>
+        </div>
+        {alert.image && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={alert.image} alt="" className="max-h-44 w-full rounded-2xl border border-border bg-secondary object-cover" />
+        )}
+        <div className="flex w-full flex-col gap-2">
+          <Link
+            href="/profil?sekme=mesajlar"
+            onClick={onRead}
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:bg-primary/90"
+          >
+            Mesajı oku
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+          <button
+            ref={laterRef}
+            type="button"
+            onClick={onLater}
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            Sonra bakarım
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
