@@ -226,7 +226,7 @@ export function OkeyRack({
           })}
         </div>
       ))}
-      <ul className="flex flex-wrap items-center gap-1.5 pt-0.5" aria-label="Kontroller">
+      <ul className="hidden flex-wrap items-center gap-1.5 pt-0.5 sm:flex" aria-label="Kontroller">
         {[
           { icon: Pointer, label: 'Dokun', text: 'seç' },
           { icon: MousePointerClick, label: 'Çift dokun', text: 'at' },
