@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import useSWR from 'swr'
-import { ArrowLeft, Clock, Coins, Eye, Loader2, Plus, Swords, Trophy, Users, X } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Coins, Eye, Loader2, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
@@ -215,25 +215,36 @@ export function TableLobby({
       </section>
 
       <aside className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
-          <h3 className="flex items-center gap-2 font-bold text-foreground">
-            <Plus className="size-4 text-primary" aria-hidden="true" /> Masa aç
-          </h3>
-          <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Bahis">
-            {settings.bets.map((b) => (
-              <button
-                key={b}
-                role="radio"
-                aria-checked={stake === b}
-                onClick={() => setStake(b)}
-                className={cn(
-                  'rounded-lg border px-2 py-2 text-sm font-bold',
-                  stake === b ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary',
-                )}
-              >
-                {b}
-              </button>
-            ))}
+        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <Plus className="size-5" aria-hidden="true" />
+            </span>
+            <div className="flex flex-col">
+              <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
+              <p className="text-xs text-muted-foreground">Ayarları seç, kankaları bekle.</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">Bahis</span>
+            <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label="Bahis">
+              {settings.bets.map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  role="radio"
+                  aria-checked={stake === b}
+                  onClick={() => setStake(b)}
+                  className={cn(
+                    'flex flex-col items-center rounded-lg py-2 transition-colors',
+                    stake === b ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
+                  )}
+                >
+                  <span className="text-base font-bold tabular-nums leading-none">{b}</span>
+                  <span className={cn('mt-1 text-xs font-medium leading-none', stake === b ? 'text-primary-foreground/80' : 'text-muted-foreground')}>KC</span>
+                </button>
+              ))}
+            </div>
           </div>
           {isOkey && (
             <div className="flex flex-col gap-3">
@@ -274,28 +285,56 @@ export function TableLobby({
                   onChange={(v) => setBots(Number(v))}
                 />
               )}
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {humanSeats} gerçek oyuncu
-                {seats === 4 && bots > 0 ? ` + ${bots} bot` : ''}
-                {teamMode ? ' · karşılıklı oturanlar eş olur, eşlerden biri bitirince takım kazanır.' : ''}
-              </p>
+              {teamMode && (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Karşılıklı oturanlar eş olur, eşlerden biri bitirince takım kazanır.
+                </p>
+              )}
             </div>
           )}
           {seatRule && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-5">
               {game === 'batak' && (
-                <OptionGroup
-                  label="Batak türü"
-                  value={batakVariant}
-                  options={BATAK_VARIANTS.map((v) => ({ value: v.value, label: `${v.label} · ${v.hint}` }))}
-                  onChange={(v) => {
-                    const variant = v as BatakVariant
-                    const n = BATAK_VARIANTS.find((x) => x.value === variant)?.seats ?? 4
-                    setBatakVariant(variant)
-                    setSeatSeats(n)
-                    setSeatBots((b) => Math.min(b, n - 1))
-                  }}
-                />
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">Batak türü</span>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Batak türü">
+                    {BATAK_VARIANTS.map((v) => {
+                      const active = batakVariant === v.value
+                      return (
+                        <button
+                          key={v.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => {
+                            setBatakVariant(v.value)
+                            setSeatSeats(v.seats)
+                            setSeatBots((b) => Math.min(b, v.seats - 1))
+                          }}
+                          className={cn(
+                            'relative flex min-h-20 flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors',
+                            active ? 'border-primary bg-primary/10' : 'border-border hover:border-muted-foreground/40 hover:bg-secondary/50',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'absolute right-2.5 top-2.5 flex size-4 items-center justify-center rounded-full border',
+                              active ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+                            )}
+                            aria-hidden="true"
+                          >
+                            {active && <Check className="size-3" strokeWidth={3} />}
+                          </span>
+                          <span className="pr-5 text-sm font-bold leading-tight text-foreground">{v.label}</span>
+                          <span className="text-xs leading-snug text-muted-foreground text-pretty">{v.hint}</span>
+                          <span className="mt-auto flex items-center gap-1 pt-1 text-xs font-semibold text-muted-foreground">
+                            <Users className="size-3" aria-hidden="true" /> {v.seats} kişi
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               )}
               {seatRule.seats.length > 1 && (
                 <OptionGroup
@@ -323,17 +362,31 @@ export function TableLobby({
                   onChange={(v) => setSeatRounds(Number(v))}
                 />
               )}
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {humanSeats} gerçek oyuncu{seatBots > 0 ? ` + ${seatBots} bot` : ''}
-                {humanSeats === 1 ? ' · masa açılır açılmaz botlara karşı başlar.' : ''}
-              </p>
             </div>
           )}
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {isOkey && teamMode
-              ? `Kazanan takımdaki her gerçek oyuncu potun payını alır (%${settings.commission} kesinti).`
-              : `Kazanan potu alır: ${formatAC(stake * humanSeats - Math.round((stake * humanSeats * settings.commission) / 100))} KC (%${settings.commission} kesinti).`}{' '}
-            Bahis masa açılınca ayrılır, masa iptal olursa iade edilir.
+          <dl className="flex flex-col gap-2 rounded-xl border border-border bg-secondary/40 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-muted-foreground">Oyuncular</dt>
+              <dd className="font-semibold text-foreground">
+                {humanSeats} gerçek
+                {seatRule && seatBots > 0 ? ` + ${seatBots} bot` : isOkey && seats === 4 && bots > 0 ? ` + ${bots} bot` : ''}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-muted-foreground">Toplam pot</dt>
+              <dd className="font-semibold tabular-nums text-foreground">{formatAC(stake * humanSeats)} KC</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
+              <dt className="text-muted-foreground">{isOkey && teamMode ? 'Kazanan takıma' : 'Kazanan alır'}</dt>
+              <dd className="flex items-center gap-1 font-bold tabular-nums text-primary">
+                <Coins className="size-4" aria-hidden="true" />
+                {formatAC(stake * humanSeats - Math.round((stake * humanSeats * settings.commission) / 100))} KC
+              </dd>
+            </div>
+          </dl>
+          <p className="-mt-2 text-xs leading-relaxed text-muted-foreground text-pretty">
+            %{settings.commission} kesinti uygulanır. Bahis masa açılınca ayrılır, masa iptal olursa iade edilir.
+            {seatRule && humanSeats === 1 ? ' Tek gerçek oyuncuyla masa hemen botlara karşı başlar.' : ''}
           </p>
           <button
             disabled={busy || (isOkey && teamMode == null)}
@@ -341,7 +394,7 @@ export function TableLobby({
               const r = await run(() => openTable(game, stake, tableOptions))
               if (r?.ok && r.id) setActiveId(r.id)
             }}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold uppercase tracking-wide text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
             Masa aç
@@ -378,9 +431,9 @@ function OptionGroup({
   onChange: (v: string) => void
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</span>
-      <div className="flex gap-2" role="radiogroup" aria-label={label}>
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <div className="flex gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label={label}>
         {options.map((o) => (
           <button
             key={o.value}
@@ -390,8 +443,8 @@ function OptionGroup({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'flex-1 rounded-lg border px-2 py-2 text-sm font-semibold disabled:opacity-40',
-              value === o.value ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary',
+              'flex-1 rounded-lg px-2 py-2 text-sm font-semibold transition-colors disabled:opacity-40',
+              value === o.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
             )}
           >
             {o.label}
