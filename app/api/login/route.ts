@@ -1,15 +1,37 @@
 import { auth } from '@/lib/auth'
 import { pool } from '@/lib/db'
 
-async function resolveEmail(identifier: string) {
-  if (identifier.includes('@')) return { email: identifier.toLowerCase() }
-  const { rows } = await pool.query<{ email: string }>(
-    'SELECT email FROM "user" WHERE lower(name) = lower($1) LIMIT 2',
-    [identifier],
+const MAX_CANDIDATES = 5
+
+/**
+ * Turns whatever the user typed into candidate account emails.
+ * Order: exact e-mail → exact username → e-mail local part (the bit before "@").
+ * Several accounts can share a legacy username, so every match is a candidate
+ * and the password decides which one is theirs.
+ */
+async function candidateEmails(identifier: string): Promise<string[]> {
+  const value = identifier.normalize('NFC').trim()
+  if (value.includes('@')) return [value.toLowerCase()]
+
+  const byName = await pool.query<{ email: string }>(
+    `SELECT email FROM "user" WHERE lower(trim(name)) = lower($1) ORDER BY "createdAt" ASC LIMIT ${MAX_CANDIDATES}`,
+    [value],
   )
-  if (rows.length === 1) return { email: rows[0].email }
-  if (rows.length > 1) return { ambiguous: true as const }
-  return { missing: true as const }
+  if (byName.rows.length) return byName.rows.map((r) => r.email)
+
+  const byLocalPart = await pool.query<{ email: string }>(
+    `SELECT email FROM "user" WHERE lower(split_part(email, '@', 1)) = lower($1) ORDER BY "createdAt" ASC LIMIT ${MAX_CANDIDATES}`,
+    [value],
+  )
+  return byLocalPart.rows.map((r) => r.email)
+}
+
+function signIn(req: Request, email: string, password: string) {
+  const url = new URL('/api/auth/sign-in/email', req.url)
+  const headers = new Headers(req.headers)
+  headers.set('content-type', 'application/json')
+  headers.delete('content-length')
+  return auth.handler(new Request(url, { method: 'POST', headers, body: JSON.stringify({ email, password }) }))
 }
 
 export async function POST(req: Request) {
@@ -20,22 +42,17 @@ export async function POST(req: Request) {
     return Response.json({ code: 'INVALID', message: 'Kullanıcı adı/e-posta ve şifre gerekli.' }, { status: 400 })
   }
 
-  const resolved = await resolveEmail(identifier)
-  if ('ambiguous' in resolved) {
-    return Response.json(
-      { code: 'AMBIGUOUS', message: 'Bu kullanıcı adı birden fazla hesapta var, lütfen e-posta adresinle giriş yap.' },
-      { status: 409 },
-    )
-  }
-  if ('missing' in resolved) {
+  const emails = await candidateEmails(identifier)
+  if (!emails.length) {
     return Response.json({ code: 'INVALID_CREDENTIALS', message: 'Kullanıcı adı/e-posta veya şifre hatalı.' }, { status: 401 })
   }
 
-  const url = new URL('/api/auth/sign-in/email', req.url)
-  const headers = new Headers(req.headers)
-  headers.set('content-type', 'application/json')
-  headers.delete('content-length')
-  return auth.handler(
-    new Request(url, { method: 'POST', headers, body: JSON.stringify({ email: resolved.email, password }) }),
-  )
+  let last: Response | null = null
+  for (const email of emails) {
+    const res = await signIn(req, email, password)
+    // Success, unverified e-mail and rate limit are final answers; only a wrong password tries the next account.
+    if (res.ok || res.status === 403 || res.status === 429) return res
+    last = res
+  }
+  return last!
 }
