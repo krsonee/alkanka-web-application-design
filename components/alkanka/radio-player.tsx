@@ -140,7 +140,7 @@ export function RadioPlayer() {
         <div
           role="dialog"
           aria-label="Canlı radyolar"
-          className="absolute right-0 top-11 z-50 flex max-h-[min(70vh,560px)] w-[min(92vw,22rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-background/60"
+          className="fixed inset-x-3 top-16 z-50 flex max-h-[min(70vh,560px)] flex-col sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[22rem] overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-background/60"
         >
           <div className="flex items-center justify-between gap-2 border-b border-border bg-primary/[0.06] px-4 py-3">
             <span className="flex items-center gap-2">

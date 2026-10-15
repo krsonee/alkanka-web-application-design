@@ -42,6 +42,74 @@ const RESULT_LABEL: Record<string, string> = {
   push: "Berabere",
   loss: "Kaybetti",
 };
+/** Net gain for the hand including side bets; null until the hand is revealed. */
+function seatNet(seat: Seat) {
+  if (seat.delta === null) return null;
+  return seat.delta + seat.side.won - seat.side.pairs - seat.side.t213;
+}
+
+function ResultBanner({ seats }: { seats: (Seat | null)[] }) {
+  const played = seats.filter((s): s is Seat => !!s && s.delta !== null);
+  if (played.length === 0) return null;
+  const me = played.find((s) => s.mine);
+  const base =
+    "bj-banner pointer-events-none absolute left-1/2 top-[56%] z-30 flex min-w-44 flex-col items-center gap-0.5 rounded-2xl border-2 px-5 py-3 text-center shadow-2xl sm:top-1/2 sm:min-w-56 sm:px-7 sm:py-4";
+
+  if (me) {
+    const net = seatNet(me)!;
+    const tone =
+      net > 0
+        ? "border-primary bg-background/95 shadow-primary/40"
+        : net < 0
+          ? "border-destructive bg-background/95"
+          : "border-primary/40 bg-background/95";
+    return (
+      <div role="status" className={cn(base, tone)}>
+        <span
+          className={cn(
+            "font-display text-xl font-black uppercase tracking-wide sm:text-3xl",
+            net > 0 ? "text-primary" : net < 0 ? "text-destructive" : "text-foreground",
+          )}
+        >
+          {net > 0
+            ? me.result === "blackjack"
+              ? "Blackjack!"
+              : "Kazandın!"
+            : net < 0
+              ? "Kaybettin"
+              : "Berabere"}
+        </span>
+        <span className="text-base font-black tabular-nums text-foreground sm:text-xl">
+          {net > 0
+            ? `+${formatAC(net)}`
+            : net < 0
+              ? `-${formatAC(-net)}`
+              : "Bahsin iade edildi"}
+        </span>
+      </div>
+    );
+  }
+
+  const winners = played.filter((s) => seatNet(s)! > 0);
+  const losers = played.filter((s) => seatNet(s)! < 0).length;
+  const top = winners.sort((a, b) => seatNet(b)! - seatNet(a)!)[0];
+  return (
+    <div role="status" className={cn(base, "border-primary/60 bg-background/95")}>
+      <span className="font-display text-base font-black uppercase tracking-wide text-primary sm:text-xl">
+        El bitti
+      </span>
+      <span className="text-xs font-bold text-foreground sm:text-sm">
+        {winners.length} kazanan · {losers} kaybeden
+      </span>
+      {top && (
+        <span className="text-xs font-bold tabular-nums text-primary sm:text-sm">
+          {top.name} +{formatAC(seatNet(top)!)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** Server time, ticking locally between polls. */
 function useServerNow(serverNow: number | undefined) {
   const [offset, setOffset] = useState(0);
@@ -124,7 +192,9 @@ function SeatPod({
     );
   }
 
-  const win = seat.delta !== null && seat.delta > 0;
+  const net = seatNet(seat);
+  const win = net !== null && net > 0;
+  const lose = net !== null && net < 0;
   const acting = phase === "play" && !seat.done;
   return (
     <div
@@ -135,7 +205,26 @@ function SeatPod({
         seat.mine && "z-10",
       )}
     >
-      <div className="relative flex min-h-12 justify-center -space-x-6 sm:min-h-14 sm:-space-x-5">
+      {net !== null && net !== 0 && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "bj-float-up pointer-events-none absolute -top-5 left-1/2 z-20 whitespace-nowrap rounded-full px-2.5 py-1 text-sm font-black tabular-nums shadow-lg",
+            win
+              ? "bg-primary text-primary-foreground"
+              : "bg-destructive text-primary-foreground",
+          )}
+        >
+          {win ? "+" : "-"}
+          {formatAC(Math.abs(net))}
+        </span>
+      )}
+      <div
+        className={cn(
+          "relative flex min-h-12 justify-center -space-x-6 transition-[opacity,filter] duration-500 sm:min-h-14 sm:-space-x-5",
+          lose && "bj-lose-shake opacity-45 grayscale",
+        )}
+      >
         {seat.cards.map((c, i) => (
           <PlayingCard key={`${i}-${c.r}-${c.s}`} card={c} index={i} small />
         ))}
@@ -159,6 +248,8 @@ function SeatPod({
             ? "border-primary ring-2 ring-primary/40"
             : "border-primary/25",
           acting && "bj-seat-active",
+          win && "bj-win-glow border-primary",
+          lose && "border-destructive/70",
         )}
       >
         <span
@@ -185,14 +276,28 @@ function SeatPod({
       {seat.result ? (
         <span
           className={cn(
-            "pop-in rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+            "pop-in whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-black uppercase tabular-nums shadow",
             win
               ? "bg-primary text-primary-foreground"
-              : "bg-secondary text-muted-foreground",
+              : lose
+                ? "bg-destructive text-primary-foreground"
+                : "bg-secondary text-foreground",
           )}
         >
-          {RESULT_LABEL[seat.result]}
-          {win && ` +${formatAC(seat.delta!)}`}
+          {win
+            ? seat.result === "blackjack"
+              ? "Blackjack!"
+              : "Kazandı"
+            : lose
+              ? "Kaybetti"
+              : RESULT_LABEL.push}
+          {net !== null && net !== 0 && (
+            <>
+              {" "}
+              {win ? "+" : "-"}
+              {formatAC(Math.abs(net))}
+            </>
+          )}
         </span>
       ) : phase === "play" && seat.done ? (
         <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -398,7 +503,15 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 )}
               </div>
 
-              <div className="pointer-events-none absolute left-1/2 top-[56%] flex w-[40%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 text-center sm:top-[50%] sm:w-[34%]">
+              {phase === "result" && (
+                <ResultBanner key={data.roundId} seats={seats} />
+              )}
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-[56%] flex w-[40%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 text-center transition-opacity sm:top-[50%] sm:w-[34%]",
+                  phase === "result" && "opacity-0",
+                )}
+              >
                 <span className="font-display text-sm font-bold uppercase tracking-[0.25em] text-primary/30 sm:text-lg">
                   Al Kanka
                 </span>
