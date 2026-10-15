@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 import type { PoolClient } from 'pg'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
-import { BJ_BET_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, handValue, type BlackjackPhase, type Card } from '@/lib/casino'
+import { BJ_BET_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
 
 /** Every card is derived from the server secret, so nobody can predict the next card but every viewer sees the same table. */
@@ -20,6 +20,15 @@ function dealerHand(roundId: number) {
   while (handValue(cards) < 17) cards.push(cardAt(roundId, 'd', cards.length))
   return cards
 }
+
+/** Side bets settle on the opening deal: the seat's first two cards and the dealer's up card. */
+function sideHits(roundId: number, seat: number) {
+  const [a, b] = seatCards(roundId, seat, 2)
+  const up = cardAt(roundId, 'd', 0)
+  return { pairs: pairsHit(a, b), t213: threeCardHit([a, b, up]) }
+}
+
+const sideReturn = (stake: number, h: { x: number } | null) => (stake > 0 && h ? stake * (h.x + 1) : 0)
 
 const isNatural = (cards: Card[]) => cards.length === 2 && handValue(cards) === 21
 
@@ -142,7 +151,7 @@ async function settleFinished() {
          AND (r.id IS NULL OR r.phase = 'result' OR r.id < (SELECT MAX(r2.id) FROM blackjack_round r2 WHERE r2.table_no = r.table_no))
        ORDER BY l.id LIMIT 60
        FOR UPDATE OF l SKIP LOCKED)
-     RETURNING id, round_id, seat, user_id, user_name, bet, drawn, doubled`,
+     RETURNING id, round_id, seat, user_id, user_name, bet, drawn, doubled, side_pairs, side_213`,
   )
   for (const row of r.rows) {
     const roundId = Number(row.round_id)
@@ -150,18 +159,26 @@ async function settleFinished() {
     const cards = seatCards(roundId, Number(row.seat), Number(row.drawn))
     const dealer = dealerHand(roundId)
     const { result, multiplier } = outcome(cards, !!row.doubled, dealer)
-    const returned = await capPayout(String(row.user_id), stake, Math.floor(stake * multiplier))
-    await pool.query(`UPDATE blackjack_live SET returned = $2 WHERE id = $1`, [row.id, returned])
-    if (returned) await credit(String(row.user_id), returned)
+    const sidePairs = Number(row.side_pairs) || 0
+    const side213 = Number(row.side_213) || 0
+    const hits = sideHits(roundId, Number(row.seat))
+    const mainWin = Math.floor(stake * multiplier)
+    const sideWin = sideReturn(sidePairs, hits.pairs) + sideReturn(side213, hits.t213)
+    const totalStake = stake + sidePairs + side213
+    const total = await capPayout(String(row.user_id), totalStake, mainWin + sideWin)
+    const returned = Math.min(mainWin, total)
+    const sideReturned = total - returned
+    await pool.query(`UPDATE blackjack_live SET returned = $2, side_returned = $3 WHERE id = $1`, [row.id, returned, sideReturned])
+    if (total) await credit(String(row.user_id), total)
     await recordHistory({
       userId: String(row.user_id),
       userName: String(row.user_name),
       game: 'blackjack',
       mode: 'masa',
       opponent: `Krupiye ${handValue(dealer)} · Sen ${handValue(cards)}`,
-      stake,
-      result: result === 'push' ? 'draw' : result === 'loss' ? 'loss' : 'win',
-      delta: returned - stake,
+      stake: totalStake,
+      result: total > totalStake ? 'win' : total === totalStake ? 'draw' : result === 'push' ? 'draw' : 'loss',
+      delta: total - totalStake,
       score: handValue(cards),
     })
   }
@@ -186,9 +203,13 @@ export type JoinResult = { balance: number; tableNo: number; seated: boolean }
  * If the only tables with room are mid-hand, they are sent there to wait for the next hand.
  * Only when every table is full does a fresh 6-seat table open.
  */
-export async function joinBlackjack(member: Member, bet: number, allowedBets: number[], prefer?: number | null): Promise<JoinResult> {
+export type SideBets = { pairs: number; t213: number }
+
+export async function joinBlackjack(member: Member, bet: number, allowedBets: number[], prefer?: number | null, side: SideBets = { pairs: 0, t213: 0 }): Promise<JoinResult> {
   if (!allowedBets.includes(bet)) throw new Error('Geçersiz bahis.')
-  if (!(await debit(member.id, bet))) throw new Error('Yetersiz Kanka Coin.')
+  if (!BJ_SIDE_STAKES.includes(side.pairs) || !BJ_SIDE_STAKES.includes(side.t213)) throw new Error('Geçersiz yan bahis.')
+  const total = bet + side.pairs + side.t213
+  if (!(await debit(member.id, total))) throw new Error('Yetersiz Kanka Coin.')
   let out: { tableNo: number; seated: boolean; charged: boolean }
   try {
     out = await inTx(async (c) => {
@@ -215,12 +236,14 @@ export async function joinBlackjack(member: Member, bet: number, allowedBets: nu
         const used = new Set(taken.rows.map((x) => Number(x.seat)))
         const seat = Array.from({ length: BJ_SEATS }, (_, i) => i + 1).find((s) => !used.has(s))!
         if (round.phase === 'waiting') round = await setPhase(c, round.id, 'bet', BJ_BET_MS)
-        await c.query(`INSERT INTO blackjack_live (round_id, seat, user_id, user_name, bet) VALUES ($1,$2,$3,$4,$5)`, [
+        await c.query(`INSERT INTO blackjack_live (round_id, seat, user_id, user_name, bet, side_pairs, side_213) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [
           round.id,
           seat,
           member.id,
           member.name,
           bet,
+          side.pairs,
+          side.t213,
         ])
         // A late joiner always gets a few seconds to press "deal" before cards come out.
         if (round.endsAt !== null && round.endsAt - Date.now() < BJ_JOIN_GRACE_MS) await setPhase(c, round.id, 'bet', BJ_JOIN_GRACE_MS)
@@ -231,14 +254,21 @@ export async function joinBlackjack(member: Member, bet: number, allowedBets: nu
 
       const fresh = Math.max(...nos) + 1
       const round = await setPhase(c, (await newRound(c, fresh)).id, 'bet', BJ_BET_MS)
-      await c.query(`INSERT INTO blackjack_live (round_id, seat, user_id, user_name, bet) VALUES ($1,1,$2,$3,$4)`, [round.id, member.id, member.name, bet])
+      await c.query(`INSERT INTO blackjack_live (round_id, seat, user_id, user_name, bet, side_pairs, side_213) VALUES ($1,1,$2,$3,$4,$5,$6)`, [
+        round.id,
+        member.id,
+        member.name,
+        bet,
+        side.pairs,
+        side.t213,
+      ])
       return { tableNo: fresh, seated: true, charged: true }
     })
   } catch (e) {
-    await credit(member.id, bet)
+    await credit(member.id, total)
     throw e
   }
-  if (!out.charged) await credit(member.id, bet)
+  if (!out.charged) await credit(member.id, total)
   return { balance: await getBalance(member.id), tableNo: out.tableNo, seated: out.seated }
 }
 
@@ -296,14 +326,38 @@ export async function actAtTable(member: Member, action: 'hit' | 'stand' | 'doub
 
 const PHASE_TOTAL: Record<BlackjackPhase, number | null> = { waiting: null, bet: BJ_BET_MS, play: BJ_PLAY_MS, result: BJ_RESULT_MS }
 
+/** A spectator counts as watching while their tab keeps polling; idle tabs poll every 30s. */
+const WATCH_WINDOW_S = 45
+
+async function markWatching(member: Member, tableNo: number | null) {
+  if (tableNo === null) {
+    await pool.query(`DELETE FROM blackjack_watch WHERE user_id = $1`, [member.id])
+    return
+  }
+  await pool.query(`DELETE FROM blackjack_watch WHERE user_id = $1 AND table_no <> $2`, [member.id, tableNo])
+  await pool.query(
+    `INSERT INTO blackjack_watch (table_no, user_id, user_name, seen_at) VALUES ($1,$2,$3,now())
+     ON CONFLICT (table_no, user_id) DO UPDATE SET seen_at = now(), user_name = EXCLUDED.user_name`,
+    [tableNo, member.id, member.name.slice(0, 40)],
+  )
+  if (Math.random() < 0.05) await pool.query(`DELETE FROM blackjack_watch WHERE seen_at < now() - interval '10 minutes'`)
+}
+
+/** True when the member holds a seat on this table's current round. Used to tag chat messages from players. */
+export async function isSeatedAt(userId: string, tableNo: number) {
+  return (await seatedTable(pool, userId)) === tableNo
+}
+
 /** Overview of every table so viewers can hop between them. Empty extra tables are hidden. */
 async function tableList(viewing: number) {
   const r = await pool.query(
-    `SELECT DISTINCT ON (r.table_no) r.table_no, r.phase, (SELECT COUNT(*) FROM blackjack_live l WHERE l.round_id = r.id) AS seated
+    `SELECT DISTINCT ON (r.table_no) r.table_no, r.phase,
+       (SELECT COUNT(*) FROM blackjack_live l WHERE l.round_id = r.id) AS seated,
+       (SELECT COUNT(*) FROM blackjack_watch w WHERE w.table_no = r.table_no AND w.seen_at > now() - interval '${WATCH_WINDOW_S} seconds') AS watching
      FROM blackjack_round r ORDER BY r.table_no, r.id DESC`,
   )
   return r.rows
-    .map((x) => ({ no: Number(x.table_no), phase: String(x.phase) as BlackjackPhase, seated: Number(x.seated) }))
+    .map((x) => ({ no: Number(x.table_no), phase: String(x.phase) as BlackjackPhase, seated: Number(x.seated), watching: Number(x.watching) }))
     .filter((t) => t.no === 1 || t.seated > 0 || t.no === viewing)
 }
 
@@ -314,10 +368,16 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
 
   const round = await inTx((c) => advance(c, tableNo))
   await settleFinished()
+  if (member) await markWatching(member, mine === null ? tableNo : null)
+  const watchQ = await pool.query(
+    `SELECT user_name FROM blackjack_watch WHERE table_no = $1 AND seen_at > now() - interval '${WATCH_WINDOW_S} seconds' ORDER BY seen_at DESC LIMIT 40`,
+    [tableNo],
+  )
+  const watchers = watchQ.rows.map((w) => String(w.user_name))
   const { id: roundId, phase } = round
 
   const rows = await pool.query(
-    `SELECT seat, user_id, user_name, bet, drawn, stood, doubled, ready FROM blackjack_live WHERE round_id = $1 ORDER BY seat`,
+    `SELECT seat, user_id, user_name, bet, drawn, stood, doubled, ready, side_pairs, side_213 FROM blackjack_live WHERE round_id = $1 ORDER BY seat`,
     [roundId],
   )
   const dealing = phase === 'play' || phase === 'result'
@@ -333,6 +393,17 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
     const doubled = !!row.doubled
     const res = reveal ? outcome(cards, doubled, dealerFull) : null
     const stake = Number(row.bet) * (doubled ? 2 : 1)
+    const hits = dealing ? sideHits(roundId, i + 1) : null
+    const sp = Number(row.side_pairs) || 0
+    const s3 = Number(row.side_213) || 0
+    const side = {
+      pairs: sp,
+      t213: s3,
+      pairsHit: sp > 0 ? (hits?.pairs ?? null) : null,
+      t213Hit: s3 > 0 ? (hits?.t213 ?? null) : null,
+      settled: dealing,
+      won: dealing ? sideReturn(sp, hits?.pairs ?? null) + sideReturn(s3, hits?.t213 ?? null) : 0,
+    }
     return {
       seat: i + 1,
       name: String(row.user_name),
@@ -345,6 +416,7 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
       done: phase === 'play' ? !!row.stood || value >= 21 : phase === 'result',
       result: res?.result ?? null,
       delta: res ? Math.floor(stake * res.multiplier) - stake : null,
+      side,
     }
   })
 
@@ -357,12 +429,16 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
   const lastId = prevQ.rowCount ? Number(prevQ.rows[0].round_id) : null
   const prev = lastId
     ? await pool.query(
-        `SELECT user_name, bet, doubled, returned FROM blackjack_live WHERE round_id = $1 AND returned IS NOT NULL ORDER BY (returned - bet * (CASE WHEN doubled THEN 2 ELSE 1 END)) DESC LIMIT 6`,
+        `SELECT user_name, bet, doubled, returned, side_pairs, side_213, COALESCE(side_returned, 0) AS side_returned FROM blackjack_live WHERE round_id = $1 AND returned IS NOT NULL
+         ORDER BY (returned + COALESCE(side_returned, 0) - bet * (CASE WHEN doubled THEN 2 ELSE 1 END) - side_pairs - side_213) DESC LIMIT 6`,
         [lastId],
       )
-    : { rows: [] as { user_name: string; bet: number; doubled: boolean; returned: number }[] }
+    : { rows: [] as { user_name: string; bet: number; doubled: boolean; returned: number; side_pairs: number; side_213: number; side_returned: number }[] }
   const winners = prev.rows
-    .map((p) => ({ name: String(p.user_name), won: Number(p.returned) - Number(p.bet) * (p.doubled ? 2 : 1) }))
+    .map((p) => ({
+      name: String(p.user_name),
+      won: Number(p.returned) + Number(p.side_returned) - Number(p.bet) * (p.doubled ? 2 : 1) - Number(p.side_pairs) - Number(p.side_213),
+    }))
     .filter((w) => w.won > 0)
 
   return {
@@ -374,6 +450,7 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
     phaseTotal: PHASE_TOTAL[phase],
     serverNow: Date.now(),
     seats,
+    watchers,
     dealer,
     dealerHidden: phase === 'play',
     dealerValue: handValue(dealer),

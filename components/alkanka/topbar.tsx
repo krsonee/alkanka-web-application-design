@@ -58,7 +58,7 @@ function BadgeButton() {
       className="animate-badge-pulse relative flex h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-primary/40 bg-primary/[0.08] px-1.5 transition-colors hover:border-primary sm:px-2"
     >
       <span className="tier-shine pointer-events-none absolute inset-0" aria-hidden="true" />
-      <MemberRank userId={member.id} className="relative scale-110" />
+      <MemberRank userId={member.id} className="relative" />
       <span className="sr-only">Rozetlerim</span>
     </Link>
   )
@@ -202,7 +202,7 @@ export function Topbar({ social, sponsors = [] }: { social: SocialLinks; sponsor
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        <a href="/" className="min-w-0 shrink max-[379px]:hidden lg:hidden">
+        <a href="/" className="flex shrink-0 items-center lg:hidden max-[459px]:[&_.logo-text]:hidden">
           <BrandLogo size="sm" />
           <span className="sr-only">AL KANKA ana sayfa</span>
         </a>
