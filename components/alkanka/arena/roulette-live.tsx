@@ -14,6 +14,7 @@ import { useIdle } from '../use-idle'
 import { RouletteWheel, pocketColor } from './roulette-wheel'
 import { Chip, RouletteBoard, betKey, chipTone, parseKey, type BetKind } from './roulette-board'
 import { TableChat } from './table-chat'
+import { MobileTableChat } from './mobile-table-chat'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const colorName = (n: number) => (n === 0 ? 'yeşil' : RED.has(n) ? 'kırmızı' : 'siyah')
@@ -239,7 +240,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="overflow-hidden rounded-3xl border border-primary/30 bg-card">
+      <header className="relative overflow-hidden rounded-3xl border border-primary/30 bg-card">
         <div className="grid grid-cols-[minmax(0,1fr)] items-stretch md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <div className="relative hidden bg-background md:block md:min-h-48">
             <Image
@@ -259,6 +260,9 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               <span className="hidden rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground sm:inline">
                 Herkes aynı masada · Avrupa ruleti
               </span>
+              <div className="ml-auto">
+                <MobileTableChat tableId="rulet-canli" />
+              </div>
             </div>
             <div className="flex items-end gap-2">
               <div className="relative size-12 shrink-0 overflow-hidden rounded-full border-2 border-primary/60 bg-background md:hidden">
@@ -369,7 +373,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
         <div className="grid gap-4 md:grid-cols-2 xl:flex xl:flex-col">
           <WinnersPanel last={data?.lastRound} />
           <PlayersPanel players={players} phase={clock.phase} />
-          <TableChat tableId="rulet-canli" className="h-80 md:col-span-2 xl:h-96" />
+          <TableChat tableId="rulet-canli" className="hidden h-80 md:col-span-2 lg:flex xl:h-96" />
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { ArrowLeft, Clock, Coins, Eye, Loader2, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
+import { MobileTableChat } from './mobile-table-chat'
 import { FitToScreen } from './fit-to-screen'
 import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
@@ -531,6 +532,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             onExpire={() => void mutate()}
           />
         )}
+        <MobileTableChat key={`m-${id}`} tableId={id} />
       </div>
 
       {msg && (
@@ -626,7 +628,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
           </div>
         )}
       </div>
-      <TableChat tableId={id} className="h-72 xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0" />
+      <TableChat tableId={id} className="hidden h-72 lg:flex xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0" />
       </div>
     </RoomShell>
   )
@@ -699,7 +701,7 @@ function GameSurface({ game, remote, done }: { game: string; remote: Remote<unkn
 
 function RoomShell({ children, onLeave, title }: { children: React.ReactNode; onLeave: () => void; title?: string }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center gap-3 border-b border-border px-3 py-2.5">
         <button onClick={onLeave} aria-label="Lobiye dön" className="flex size-9 items-center justify-center rounded-lg hover:bg-secondary">
           <ArrowLeft className="size-4 text-foreground" aria-hidden="true" />
