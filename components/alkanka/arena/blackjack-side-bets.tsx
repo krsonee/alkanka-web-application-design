@@ -28,54 +28,67 @@ function PayoutList({ table }: { table: SideHit[] }) {
 /** Optional side bets picked together with the main bet. Each side shows its full payout table. */
 export function SideBetPicker({ value, onChange }: { value: SideStakes; onChange: (v: SideStakes) => void }) {
   return (
-    <div className="grid w-full max-w-xl gap-2 sm:grid-cols-2">
+    <div className="flex w-full max-w-md flex-col gap-1.5 rounded-xl border border-primary/20 bg-background/50 p-2">
       {SIDES.map((side) => {
         const stake = value[side.key]
         const best = side.table[0]
         return (
-          <fieldset key={side.key} className={cn('flex flex-col gap-2 rounded-xl border bg-background/60 p-3', stake > 0 ? 'border-primary' : 'border-primary/25')}>
-            <legend className="sr-only">{side.name} yan bahsi</legend>
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex min-w-0 flex-col">
-                <span className="font-display text-sm font-bold uppercase tracking-wide text-foreground">{side.name}</span>
-                <span className="text-pretty text-[11px] leading-snug text-muted-foreground">{side.hint}</span>
-              </div>
-              <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">{best.x}:1&apos;e kadar</span>
+          <fieldset key={side.key} className="flex items-center justify-between gap-2">
+            <legend className="sr-only">{side.name} yan bahsi: {side.hint}</legend>
+            <div className="flex min-w-0 flex-col leading-tight" title={side.hint}>
+              <span className={cn('truncate text-xs font-bold uppercase tracking-wide', stake > 0 ? 'text-primary' : 'text-foreground')}>
+                {side.name}
+              </span>
+              <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">{best.x}:1&apos;e kadar</span>
             </div>
-            <div className="flex gap-1" role="radiogroup" aria-label={`${side.name} tutarı`}>
-              {BJ_SIDE_STAKES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  role="radio"
-                  aria-checked={stake === s}
-                  onClick={() => onChange({ ...value, [side.key]: s })}
-                  className={cn(
-                    'flex-1 rounded-lg border px-1 py-1.5 text-xs font-bold tabular-nums transition-colors',
-                    stake === s ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/25 text-muted-foreground hover:border-primary/60 hover:text-foreground',
-                  )}
-                >
-                  {s === 0 ? 'Yok' : s}
-                </button>
-              ))}
+            <div className="flex shrink-0 gap-1" role="radiogroup" aria-label={`${side.name} tutarı`}>
+              {BJ_SIDE_STAKES.map((s) => {
+                const active = stake === s
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={s === 0 ? 'Yan bahis yok' : `${s} AC`}
+                    onClick={() => onChange({ ...value, [side.key]: s })}
+                    className={cn(
+                      'grid size-8 place-items-center rounded-full border-2 border-dashed text-[11px] font-bold tabular-nums transition-all',
+                      active
+                        ? 'scale-105 border-primary-foreground/40 bg-primary text-primary-foreground shadow-sm'
+                        : 'border-primary/30 bg-background text-muted-foreground hover:border-primary/70 hover:text-foreground',
+                    )}
+                  >
+                    {s === 0 ? '—' : s}
+                  </button>
+                )
+              })}
             </div>
-            <details className="group">
-              <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">
-                <Info className="size-3" aria-hidden="true" />
-                Ödeme oranları
-              </summary>
-              <div className="pt-2">
-                <PayoutList table={side.table} />
-                {stake > 0 && (
-                  <p className="pt-2 text-[11px] text-muted-foreground">
-                    En iyi elde {formatAC(stake * (best.x + 1))} geri alırsın.
-                  </p>
-                )}
-              </div>
-            </details>
           </fieldset>
         )
       })}
+      <details className="group border-t border-primary/15 pt-1.5">
+        <summary className="flex cursor-pointer list-none items-center gap-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground">
+          <Info className="size-3" aria-hidden="true" />
+          Yan bahis oranları
+        </summary>
+        <div className="grid gap-3 pt-2 sm:grid-cols-2">
+          {SIDES.map((side) => {
+            const stake = value[side.key]
+            const best = side.table[0]
+            return (
+              <div key={side.key} className="flex flex-col gap-1">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-primary">{side.name}</span>
+                <span className="text-[10px] text-muted-foreground">{side.hint}</span>
+                <PayoutList table={side.table} />
+                {stake > 0 && (
+                  <p className="text-[10px] text-muted-foreground">En iyi elde {formatAC(stake * (best.x + 1))} geri alırsın.</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </details>
     </div>
   )
 }
