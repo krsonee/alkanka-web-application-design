@@ -30,6 +30,7 @@ export function ContentEditor({
   games,
   tournaments,
   push,
+  messages,
   telegram,
   seo,
   studio,
@@ -65,6 +66,7 @@ export function ContentEditor({
   games: React.ReactNode
   tournaments: React.ReactNode
   push: React.ReactNode
+  messages: React.ReactNode
   telegram: React.ReactNode
   seo: React.ReactNode
   studio: React.ReactNode
@@ -174,6 +176,8 @@ export function ContentEditor({
         tournaments
       ) : tab === 'push' ? (
         push
+      ) : tab === 'messages' ? (
+        messages
       ) : tab === 'telegram' ? (
         telegram
       ) : tab === 'seo' ? (

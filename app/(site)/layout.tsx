@@ -19,6 +19,7 @@ import { AppPrompts } from '@/components/alkanka/app/app-prompts'
 import { SiteTour } from '@/components/alkanka/app/site-tour'
 import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
 import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
+import { JakoAlerts } from '@/components/alkanka/jako-alerts'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [logos, texts, social, sponsors] = await Promise.all([
@@ -51,6 +52,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <SiteTour />
         <ReferralLinker />
         <KpHeartbeat />
+        <JakoAlerts />
       </PwaProvider>
       </PointsProvider>
     </BrandProvider>

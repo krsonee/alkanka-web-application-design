@@ -20,6 +20,8 @@ import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
 import { pushStats } from '@/lib/push'
 import { PushSender } from '@/components/panel/push-sender'
+import { MessageSender } from '@/components/panel/message-sender'
+import { listSent } from '@/lib/inbox'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
@@ -201,6 +203,7 @@ export default async function PanelPage() {
     telegram,
     push,
     studio,
+    messages,
   ] = await Promise.all([
     section(session, 'texts', 'Site yazıları', () => <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />),
     section(session, 'branding', 'Logo ayarları', async () => {
@@ -298,6 +301,7 @@ export default async function PanelPage() {
         spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
       />
     )),
+    section(session, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
   ])
 
   const marketPending = can('market') ? await pendingCount().catch(() => 0) : 0
@@ -324,7 +328,7 @@ export default async function PanelPage() {
       </header>
       <div className="mx-auto max-w-7xl px-4 py-6">
         <ContentEditor
-          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'studio']))}
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'messages', 'studio']))}
           isOwner={session.isOwner}
           slides={slides}
           heroes={heroes}
@@ -347,6 +351,7 @@ export default async function PanelPage() {
           tournaments={tournaments}
           telegram={telegram}
           push={push}
+          messages={messages}
           studio={studio}
           staff={staff}
           account={<AccountSettings username={session.username} isOwner={session.isOwner} totpEnabled={session.totpEnabled} totpRequired={session.totpRequired} />}

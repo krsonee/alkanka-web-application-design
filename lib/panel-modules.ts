@@ -47,6 +47,7 @@ export const PANEL_GROUPS = [
     modules: [
       { id: 'telegram', label: 'Telegram botları' },
       { id: 'push', label: 'Bildirimler' },
+      { id: 'messages', label: 'Site içi mesajlar' },
     ],
   },
   {

@@ -32,6 +32,8 @@ import { myFollows, mySponsorAccounts } from '@/lib/growth'
 import { nextRank, rankForLevel } from '@/lib/ranks-shared'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { cn } from '@/lib/utils'
+import { listInbox, type InboxMessage } from '@/lib/inbox'
+import { InboxList } from '@/components/alkanka/profile/inbox-list'
 
 export const metadata: Metadata = { title: 'Profilim', robots: { index: false } }
 export const dynamic = 'force-dynamic'
@@ -76,13 +78,15 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     )
   }
 
-  const [kpStatus, kpConfig, profile, referrals, games] = await Promise.all([
+  const [kpStatus, kpConfig, profile, referrals, games, inbox] = await Promise.all([
     getKpStatus(member.id),
     getKpConfig(),
     getProfile(member.id),
     listReferrals(member.id),
     historySummary(member.id),
+    listInbox(member.id).catch((error) => (console.error('[inbox] okunamadı', error), [] as InboxMessage[])),
   ])
+  const unread = inbox.filter((m) => !m.read).length
   const { level, kp } = kpStatus
   const lv = level.index + 1
   const tier = levelTier(lv)
@@ -155,7 +159,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         </dl>
       </section>
 
-      <ProfileTabs active={tab} />
+      <ProfileTabs active={tab} unread={unread} />
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex min-w-0 flex-col gap-8">
         {tab === 'genel' && <OverviewTab memberId={member.id} kpStatus={kpStatus} rules={kpConfig.rules} referrals={referrals} telegram={profile.stats.telegram} />}
@@ -168,6 +172,14 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           </section>
         )}
         {tab === 'yorumlar' && <ReviewsTab memberId={member.id} />}
+        {tab === 'mesajlar' && (
+          <section aria-labelledby="mesajlar" className="flex max-w-3xl flex-col gap-3">
+            <SectionTitle id="mesajlar" action={<span className="text-xs tabular-nums text-muted-foreground">{inbox.length} mesaj</span>}>
+              Mesaj kutum
+            </SectionTitle>
+            <InboxList messages={inbox} />
+          </section>
+        )}
       </div>
     </div>
   )
