@@ -174,18 +174,18 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   return (
     <div className="@container">
     <article className="panel-gold group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
-      <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-6 @2xl:aspect-auto @2xl:w-60 @2xl:border-r @2xl:border-b-0 @5xl:w-80">
-        <SponsorLogoPlate sponsor={sponsor} className="md:max-h-28" />
-        <span className="absolute top-3 left-3">
+      <div className="relative flex aspect-[16/5] items-center justify-center border-b border-border bg-background p-3 sm:aspect-[16/7] sm:p-6 @2xl:aspect-auto @2xl:w-60 @2xl:border-r @2xl:border-b-0 @5xl:w-80">
+        <SponsorLogoPlate sponsor={sponsor} className="max-h-16 sm:max-h-none md:max-h-28" />
+        <span className="absolute top-2 left-2 sm:top-3 sm:left-3">
           <TierTag tier={sponsor.tier} />
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-5">
+      <div className="flex flex-1 flex-col gap-1.5 p-4 sm:gap-2 sm:p-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="font-display text-xl font-bold text-foreground">{sponsor.name}</span>
+          <span className="font-display text-lg font-bold text-foreground sm:text-xl">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <p className="font-display text-2xl font-bold text-primary text-balance">{sponsor.welcome}</p>
+        <p className="font-display text-xl font-bold text-primary text-balance sm:text-2xl">{sponsor.welcome}</p>
         <ul className="grid gap-1.5 sm:grid-cols-2">
           {sponsor.perks.map((p) => (
             <li key={p} className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -194,7 +194,7 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
             </li>
           ))}
         </ul>
-        <GoButton site={sponsor.id} label="Hemen kayıt ol" className="mt-2 h-12 sm:self-start sm:px-8" />
+        <GoButton site={sponsor.id} label="Hemen kayıt ol" className="mt-1.5 h-11 sm:mt-2 sm:h-12 sm:self-start sm:px-8" />
       </div>
       <div className="relative hidden min-h-56 overflow-hidden bg-background @3xl:block @3xl:w-64 @5xl:w-96">
         <Image
@@ -567,7 +567,7 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
   const urgent = c.hoursLeft <= 24
   return (
     <li className={cn('panel-gold group flex flex-col overflow-hidden rounded-xl', className)}>
-      <div className="relative aspect-[16/9] overflow-hidden">
+      <div className="relative aspect-[16/7] overflow-hidden sm:aspect-[16/9]">
         <Image
           src={c.image || '/placeholder.svg'}
           alt=""
@@ -586,9 +586,9 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
           {c.ends}
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
+      <div className="flex flex-1 flex-col gap-1.5 p-3.5 sm:gap-2 sm:p-4">
         <h3 className="font-semibold text-foreground">{c.title}</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">{c.description}</p>
+        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:line-clamp-none">{c.description}</p>
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <span className="text-xs text-muted-foreground">{s?.name}</span>
           <a href="#kayit" className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary hover:underline">

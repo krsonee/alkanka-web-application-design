@@ -19,16 +19,16 @@ export function Footer() {
         href={TELEGRAM_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="panel-gold flex flex-col items-start gap-4 rounded-2xl p-5 transition-colors hover:border-primary/50 sm:flex-row sm:items-center"
+        className="panel-gold flex flex-wrap items-center gap-3 rounded-2xl p-4 transition-colors hover:border-primary/50 sm:flex-nowrap sm:gap-4 sm:p-5"
       >
-        <JakoAvatar pose="telegram" size="lg" />
-        <span className="flex flex-1 flex-col gap-1">
-          <span className="font-display text-lg font-bold text-foreground text-balance">Kaçırma kanka, Jako her şeyi Telegram’da öter!</span>
+        <JakoAvatar pose="telegram" size="sm" className="sm:size-32" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="font-display text-base font-bold text-foreground text-balance sm:text-lg">Kaçırma kanka, Jako her şeyi Telegram’da öter!</span>
           <span className="text-sm leading-relaxed text-muted-foreground">
             Yeni bonus kodları, özel oranlar ve etkinlik duyuruları ilk orada.
           </span>
         </span>
-        <span className="rounded-lg bg-accent px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-accent-foreground">
+        <span className="w-full rounded-lg bg-accent px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wider text-accent-foreground sm:w-auto">
           Kanala katıl
         </span>
       </a>
