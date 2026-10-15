@@ -143,14 +143,15 @@ export async function blackjackAct(id: string, action: 'hit' | 'stand' | 'double
   }
 }
 
-export async function joinBlackjackTable(bet: number, prefer?: number | null, side?: { pairs?: number; t213?: number }) {
+export async function joinBlackjackTable(bet: number, prefer?: number | null, side?: { pairs?: number; t213?: number }, seat?: number | null) {
   try {
     const m = await member()
     const s = (await getArenaSettings()).blackjack
     if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
     await assertCanPlay(m.id)
     const preferred = Number.isInteger(prefer) && prefer! > 0 ? prefer! : null
-    const res = await bjLiveJoin(m, bet, s.bets, preferred, { pairs: Number(side?.pairs) || 0, t213: Number(side?.t213) || 0 })
+    const preferredSeat = preferred && Number.isInteger(seat) && seat! > 0 ? seat! : null
+    const res = await bjLiveJoin(m, bet, s.bets, preferred, { pairs: Number(side?.pairs) || 0, t213: Number(side?.t213) || 0 }, preferredSeat)
     return { ok: true as const, ...res }
   } catch (e) {
     return fail(e)
