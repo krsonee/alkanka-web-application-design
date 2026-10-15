@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { ARENA_META, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 import { StakeGate, type GameApi } from './stake-gate'
 import { Tavla } from './tavla'
 import { Okey } from './okey'
 import { Bilardo } from './bilardo'
-import { BlackjackHouse } from './blackjack'
 import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
@@ -34,7 +32,7 @@ export const RULES: Record<ArenaGame, string[]> = {
   blackjack: [
     'Kartlar sunucuda karılır. 21’e en yakın olan kazanır, 21’i geçen yanar.',
     'Krupiye 17’ye kadar çeker. Blackjack 2.5x, normal kazanç 2x öder.',
-    'Kanka masasında ikiniz de aynı bahisle 5 el oynarsınız, fişi çok olan potu alır.',
+    'Tek canlı masa, 6 koltuk. Boş koltuk varsa otomatik oturursun, tüm masalar doluysa yeni masa açılır.',
   ],
   rulet: [
     'Avrupa ruleti (tek sıfır). Herkes aynı canlı masada oynar, top sunucuda atılır.',
@@ -67,34 +65,7 @@ function BotGame({ game, api }: { game: ArenaGame; api: GameApi }) {
   )
 }
 
-/** House games (blackjack, rulet) have their own live tables instead of the StakeGate flow. */
-function BlackjackModes({ settings }: { settings: ArenaGameSettings }) {
-  const [solo, setSolo] = useState(false)
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex w-fit gap-1 rounded-xl border border-border bg-card p-1" role="tablist" aria-label="Blackjack masası">
-        {[
-          { id: false, label: 'Canlı masa (6 kişi)' },
-          { id: true, label: 'Tek başına' },
-        ].map((t) => (
-          <button
-            key={t.label}
-            role="tab"
-            aria-selected={solo === t.id}
-            onClick={() => setSolo(t.id)}
-            className={cn('rounded-lg px-4 py-2 text-sm font-bold', solo === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {solo ? <BlackjackHouse settings={settings} /> : <BlackjackLive settings={settings} />}
-    </div>
-  )
-}
-
 function BotMode({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
-  if (game === 'blackjack') return <BlackjackModes settings={settings} />
   if (game === 'rulet') return <RouletteLive settings={settings} />
   return null
 }
@@ -158,8 +129,10 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
     </button>
   )
 
-  // Roulette is one shared live table for everyone: no bot / player choice, no stake gate.
+  // Roulette and blackjack are shared live tables: no bot / player choice, no stake gate.
+  // Blackjack seats you at the first 6-seat table with a free spot, or opens a new one.
   if (game === 'rulet') return <RouletteLive settings={settings} />
+  if (game === 'blackjack') return <BlackjackLive settings={settings} />
 
   if (watching) {
     return (
