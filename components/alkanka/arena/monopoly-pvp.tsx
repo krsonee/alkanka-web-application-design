@@ -82,34 +82,71 @@ function cellCenter(i: number) {
   return { x: ((x + w / 2) / UNITS) * 100, y: ((y + h / 2) / UNITS) * 100 }
 }
 
-/** Walks each pawn one square at a time toward its real position so moves read as movement, not teleports. */
-function useWalkingPawns(target: number[]) {
+const TURN_GAP_MS = 650
+
+/**
+ * Walks pawns one square at a time, one player at a time, in turn order starting
+ * from whoever held the turn before this update — so a batch of bot moves that
+ * arrives in a single server response still plays out sequentially.
+ */
+function useWalkingPawns(target: number[], turn: number) {
   const [shown, setShown] = useState(target)
+  const [walker, setWalker] = useState<number | null>(null)
   const shownRef = useRef(target)
+  const startRef = useRef(turn)
+  const turnRef = useRef(turn)
   const key = target.join(',')
 
   useEffect(() => {
     const goal = key.split(',').map(Number)
-    if (shownRef.current.length !== goal.length) {
+    const n = goal.length
+    if (shownRef.current.length !== n) {
       shownRef.current = goal
       setShown(goal)
+      startRef.current = turnRef.current
       return
     }
-    const id = window.setInterval(() => {
-      const next = shownRef.current.map((p, i) => {
-        const t = goal[i]
-        if (p === t) return p
-        const steps = (t - p + 40) % 40
-        return steps > 12 ? t : (p + 1) % 40
-      })
+    const start = startRef.current
+    const order = Array.from({ length: n }, (_, k) => (start + k) % n)
+    let timer = 0
+    let current: number | null = null
+
+    const tick = () => {
+      const seat = order.find((i) => shownRef.current[i] !== goal[i])
+      if (seat === undefined) {
+        current = null
+        setWalker(null)
+        startRef.current = turnRef.current
+        return
+      }
+      if (current !== null && current !== seat) {
+        current = seat
+        setWalker(seat)
+        timer = window.setTimeout(tick, TURN_GAP_MS)
+        return
+      }
+      current = seat
+      setWalker(seat)
+      const p = shownRef.current[seat]
+      const t = goal[seat]
+      const steps = (t - p + 40) % 40
+      const next = [...shownRef.current]
+      next[seat] = steps > 12 ? t : (p + 1) % 40
       shownRef.current = next
       setShown(next)
-      if (next.every((p, i) => p === goal[i])) window.clearInterval(id)
-    }, STEP_MS)
-    return () => window.clearInterval(id)
+      timer = window.setTimeout(tick, next[seat] === t ? TURN_GAP_MS : STEP_MS)
+    }
+
+    timer = window.setTimeout(tick, STEP_MS)
+    return () => window.clearTimeout(timer)
   }, [key])
 
-  return shown
+  useEffect(() => {
+    turnRef.current = turn
+    if (shownRef.current.every((p, i) => p === target[i])) startRef.current = turn
+  }, [turn, target])
+
+  return { shown, walker }
 }
 
 function SquareIcon({ i, className }: { i: number; className: string }) {
@@ -153,8 +190,9 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   const fill = (t: string) => t.replace(/@(\d)/g, (_, d) => nameOf(Number(d)))
 
   const realPos = useMemo(() => s.players.map((p) => p.pos), [s.players])
-  const shownPos = useWalkingPawns(realPos)
+  const { shown: shownPos, walker } = useWalkingPawns(realPos, s.turn)
   const walking = shownPos.some((p, i) => p !== realPos[i])
+  const shownTurn = walking && walker !== null ? walker : s.turn
 
   const myPlayer = me >= 0 ? s.players[me] : null
   const myProps = me >= 0 ? BOARD.map((_, i) => i).filter((i) => s.owner[i] === me) : []
@@ -216,7 +254,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               <BoardCenter
                 s={s}
                 walking={walking}
-                activeName={active ? nameOf(s.turn) : ''}
+                activeName={active ? nameOf(shownTurn) : ''}
                 activeSquareIndex={active?.pos ?? 0}
                 note={s.note ? fill(s.note) : myTurn ? 'Sıra sende, zarları at.' : `${nameOf(s.turn)} oynuyor`}
               />
@@ -239,7 +277,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
                       y={y + dy}
                       stepKey={pos}
                       moving={pos !== p.pos}
-                      active={s.turn === i}
+                      active={shownTurn === i}
                       zIndex={Math.round((y + dy) * 10)}
                     />
                   )
@@ -258,7 +296,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
           busy={remote.busy}
           walking={walking}
           send={remote.send}
-          activeName={active ? nameOf(s.turn) : ''}
+          activeName={active ? nameOf(shownTurn) : ''}
           activeSquareIndex={active?.pos ?? 0}
           ownerName={activeSquare && s.owner[active!.pos] != null ? nameOf(s.owner[active!.pos]!) : null}
           onOpenDeed={openDeed}
