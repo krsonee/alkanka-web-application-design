@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { Loader2, Mail, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react'
+import { useRef, useState, useTransition } from 'react'
+import { ImagePlus, Loader2, Mail, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react'
+import { EmojiPicker } from './emoji-picker'
 import { deleteInboxMessage, searchMembersForMessage, sendInboxMessage } from '@/app/panel/inbox-actions'
 import type { SentMessage } from '@/lib/inbox'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,41 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [url, setUrl] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const titleRef = useRef<HTMLInputElement>(null)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const insertAt = (el: HTMLInputElement | HTMLTextAreaElement | null, value: string, set: (v: string) => void, emoji: string, max: number) => {
+    const start = el?.selectionStart ?? value.length
+    const end = el?.selectionEnd ?? value.length
+    const next = (value.slice(0, start) + emoji + value.slice(end)).slice(0, max)
+    set(next)
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
+  }
+
+  const upload = async (file: File) => {
+    setStatus(null)
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('id', 'mesaj')
+      const res = await fetch('/api/logo-upload', { method: 'POST', body: form })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (!res.ok || !data.url) setStatus({ ok: false, text: data.error ?? 'Görsel yüklenemedi.' })
+      else setImageUrl(data.url)
+    } catch {
+      setStatus({ ok: false, text: 'Görsel yüklenemedi.' })
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [searching, startSearch] = useTransition()
   const [sending, startSend] = useTransition()
@@ -33,12 +69,13 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
     setStatus(null)
     if (mode === 'one' && !target) return setStatus({ ok: false, text: 'Önce bir üye seç.' })
     startSend(async () => {
-      const r = await sendInboxMessage({ userId: mode === 'one' ? target!.id : null, title, body, url })
+      const r = await sendInboxMessage({ userId: mode === 'one' ? target!.id : null, title, body, url, imageUrl })
       if (r.ok) {
         setStatus({ ok: true, text: r.message })
         setTitle('')
         setBody('')
         setUrl('')
+        setImageUrl('')
       } else setStatus({ ok: false, text: r.error })
     })
   }
@@ -140,14 +177,59 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
           </div>
         )}
 
-        <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
-          Başlık (en fazla 80)
-          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} required className={input} />
-        </label>
-        <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
-          Mesaj (en fazla 1000)
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={1000} required rows={5} className={input} />
-        </label>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="msg-title" className="text-xs font-semibold text-muted-foreground">Başlık (en fazla 80)</label>
+            <EmojiPicker label="Başlığa emoji ekle" onPick={(e) => insertAt(titleRef.current, title, setTitle, e, 80)} />
+          </div>
+          <input id="msg-title" ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} required className={input} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="msg-body" className="text-xs font-semibold text-muted-foreground">Mesaj (en fazla 1000)</label>
+            <EmojiPicker label="Mesaja emoji ekle" onPick={(e) => insertAt(bodyRef.current, body, setBody, e, 1000)} />
+          </div>
+          <textarea id="msg-body" ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} maxLength={1000} required={!imageUrl} rows={5} className={input} />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Görsel (isteğe bağlı · PNG, JPG, WEBP, GIF · en fazla 2 MB)</span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="sr-only"
+            aria-label="Mesaj görseli seç"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) upload(f)
+            }}
+          />
+          {imageUrl ? (
+            <div className="relative overflow-hidden rounded-xl border border-border">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt="Mesaj görseli önizleme" className="max-h-56 w-full bg-secondary object-contain" />
+              <button
+                type="button"
+                onClick={() => setImageUrl('')}
+                aria-label="Görseli kaldır"
+                className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow hover:text-destructive"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border px-3 py-5 text-sm font-semibold text-muted-foreground hover:border-primary hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ImagePlus className="size-4" aria-hidden />}
+              {uploading ? 'Yükleniyor…' : 'Görsel ekle'}
+            </button>
+          )}
+        </div>
         <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
           Buton linki (isteğe bağlı)
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="/bonuslar" className={input} />
@@ -156,7 +238,7 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
-            disabled={sending}
+            disabled={sending || uploading}
             className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50"
           >
             {sending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
@@ -189,6 +271,10 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                     <Trash2 className="size-4" aria-hidden />
                   </button>
                 </div>
+                {m.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={m.imageUrl} alt="" className="h-20 w-full rounded-lg bg-secondary object-cover" />
+                )}
                 <p className="line-clamp-2 text-xs text-muted-foreground">{m.body}</p>
                 <p className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
                   <span>{m.target}</span>·<span>{m.reads} okundu</span>·<span>{dateFmt.format(new Date(m.createdAt))}</span>

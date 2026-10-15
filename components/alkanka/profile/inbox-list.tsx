@@ -55,7 +55,11 @@ export function InboxList({ messages }: { messages: InboxMessage[] }) {
             </time>
           </div>
           <h3 className="font-display text-base font-bold text-foreground text-pretty">{m.title}</h3>
-          <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground text-pretty">{m.body}</p>
+          {m.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={m.imageUrl} alt={m.title} loading="lazy" className="max-h-96 w-full rounded-xl border border-border bg-secondary object-contain" />
+          )}
+          {m.body && <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground text-pretty">{m.body}</p>}
           {m.url && (
             <Link href={m.url} className="flex items-center gap-1.5 self-start text-sm font-bold text-gold underline-offset-4 hover:underline">
               Detaya git

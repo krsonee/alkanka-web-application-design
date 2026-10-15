@@ -13,12 +13,14 @@ export async function searchMembersForMessage(query: string) {
   return findMember(String(query ?? '').slice(0, 100))
 }
 
-export async function sendInboxMessage(input: { userId: string | null; title: string; body: string; url: string }): Promise<Result> {
+export async function sendInboxMessage(input: { userId: string | null; title: string; body: string; url: string; imageUrl?: string }): Promise<Result> {
   if (!(await canPanel('messages'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
   const title = String(input.title ?? '').trim().slice(0, 80)
   const body = String(input.body ?? '').trim().slice(0, 1000)
   const rawUrl = String(input.url ?? '').trim()
-  if (!title || !body) return { ok: false, error: 'Başlık ve mesaj zorunlu.' }
+  const imageUrl = String(input.imageUrl ?? '').trim()
+  if (imageUrl && !/^\/api\/logo\/[a-z0-9._-]+$/i.test(imageUrl)) return { ok: false, error: 'Görsel geçersiz, tekrar yükle.' }
+  if (!title || (!body && !imageUrl)) return { ok: false, error: 'Başlık ve mesaj (ya da görsel) zorunlu.' }
   if (rawUrl && (!rawUrl.startsWith('/') || rawUrl.startsWith('//'))) return { ok: false, error: 'Link / ile başlamalı (ör. /oyunlar/cark).' }
 
   let targetLabel = 'Tüm üyeler'
@@ -31,7 +33,7 @@ export async function sendInboxMessage(input: { userId: string | null; title: st
 
   try {
     const session = await getPanelSession()
-    await sendMessage({ userId, targetLabel, title, body, url: rawUrl ? rawUrl.slice(0, 200) : null, sentBy: session?.username ?? '' })
+    await sendMessage({ userId, targetLabel, title, body, url: rawUrl ? rawUrl.slice(0, 200) : null, imageUrl: imageUrl || null, sentBy: session?.username ?? '' })
     revalidatePath('/panel')
     return { ok: true, message: userId ? `${targetLabel} adlı üyeye gönderildi.` : 'Tüm üyelere gönderildi.' }
   } catch (error) {
