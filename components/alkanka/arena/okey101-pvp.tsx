@@ -1,25 +1,47 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, Bot, ChevronDown, Eye, Plus, Trophy, Undo2, X } from 'lucide-react'
+import { ArrowDownToLine, Bot, ChevronDown, Eye, Trophy, Undo2, Wand2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { analyzeMeld, leftOf101, OPEN_MIN, PAIR_MIN, type Okey101View } from '@/lib/games/okey101'
+import { analyzeMeld, bestPartition, findPairs, leftOf101, OPEN_MIN, PAIR_MIN, type HandResult, type Okey101View } from '@/lib/games/okey101'
 import type { Remote } from './remote'
 import { FeltBranding, TileBack, TileFace } from './okey'
 import { okeyFrom, sortHand, type Tile } from './okey-engine'
+import { layoutGroups, OkeyRack, RACK_COLS, useRack, type SlotMark } from './okey-rack'
 
 type OkeyValue = ReturnType<typeof okeyFrom>
+type Segment = { tiles: Tile[]; slots: number[]; kind: 'run' | 'set' | 'pair'; value: number }
+
+/** Tiles touching each other on the same rack row form one group; empty slots split groups. */
+function readSegments(slots: (number | null)[], byId: Map<number, Tile>, okey: OkeyValue): Segment[] {
+  const out: Segment[] = []
+  for (let row = 0; row < 2; row++) {
+    let cur: number[] = []
+    const flush = () => {
+      if (cur.length >= 2) {
+        const tiles = cur.map((i) => byId.get(slots[i]!)!).filter(Boolean)
+        const a = analyzeMeld(tiles, okey)
+        if (a) out.push({ tiles, slots: cur, kind: a.kind, value: a.value })
+      }
+      cur = []
+    }
+    for (let c = 0; c < RACK_COLS; c++) {
+      const i = row * RACK_COLS + c
+      if (slots[i] != null && byId.has(slots[i]!)) cur.push(i)
+      else flush()
+    }
+    flush()
+  }
+  return out
+}
 
 export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const s = remote.state
   const n = s.seats
   const mySeat = remote.spectator ? -1 : remote.seat
   const okey = useMemo(() => okeyFrom(s.indicator), [s.indicator])
-  const rawHand = mySeat >= 0 ? s.hands[mySeat] ?? [] : []
-  const [sortMode, setSortMode] = useState<'seri' | 'cift'>('seri')
-  const hand = useMemo(() => sortHand(rawHand, okey, sortMode), [rawHand, okey, sortMode])
-  const [selected, setSelected] = useState<number[]>([])
-  const [staged, setStaged] = useState<number[][]>([])
+  const hand = useMemo(() => (mySeat >= 0 ? s.hands[mySeat] ?? [] : []), [s.hands, mySeat])
+  const rack = useRack(hand, okey)
   const [localError, setLocalError] = useState<string | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
 
@@ -29,44 +51,68 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     }
   }, [])
 
-  const stagedIds = new Set(staged.flat())
-  const handIds = new Set(hand.map((t) => t.id))
-  const liveStaged = staged.filter((g) => g.every((id) => handIds.has(id)))
-  const liveSelected = selected.filter((id) => handIds.has(id) && !stagedIds.has(id))
+  const autoLayout = (mode: 'seri' | 'cift') => {
+    const groups = mode === 'seri' ? bestPartition(hand, okey).groups : findPairs(hand, okey)
+    const used = new Set(groups.flat().map((t) => t.id))
+    rack.setLayout(layoutGroups(groups, sortHand(hand.filter((t) => !used.has(t.id)), okey, 'seri')))
+  }
+
+  // Each new hand starts with the best possible layout; after that the player's own arrangement is kept turn to turn.
+  const [arrangedHand, setArrangedHand] = useState<number | null>(null)
+  if (hand.length > 0 && arrangedHand !== s.handNo) {
+    setArrangedHand(s.handNo)
+    autoLayout(s.opened[mySeat] === 'cift' ? 'cift' : 'seri')
+  }
+
   const byId = new Map(hand.map((t) => [t.id, t]))
-  const tilesOf = (ids: number[]) => ids.map((id) => byId.get(id)).filter(Boolean) as Tile[]
+  const segments = readSegments(rack.slots, byId, okey)
+  const runs = segments.filter((g) => g.kind !== 'pair')
+  const pairs = segments.filter((g) => g.kind === 'pair')
+  const runValue = runs.reduce((a, g) => a + g.value, 0)
 
   const myTurn = remote.myTurn
   const drawPhase = myTurn && s.phase === 'draw'
   const playPhase = myTurn && s.phase === 'play'
   const opened = mySeat >= 0 ? s.opened[mySeat] : null
+  const selected = rack.selected
+  const canDiscard = playPhase && selected != null && s.taken == null && !remote.busy
 
-  const stagedInfo = liveStaged.map((g) => analyzeMeld(tilesOf(g), okey))
-  const stagedValue = stagedInfo.reduce((a, b) => a + (b?.value ?? 0), 0)
-  const stagedPairs = stagedInfo.filter((a) => a?.kind === 'pair').length
-  const allValid = stagedInfo.length > 0 && stagedInfo.every(Boolean)
-  const canDiscard = playPhase && liveSelected.length === 1 && s.taken == null && !remote.busy
-
-  const reset = () => {
-    setSelected([])
-    setStaged([])
-    setLocalError(null)
+  const pairMode = opened === 'cift' || (!opened && pairs.length >= PAIR_MIN && runValue < OPEN_MIN)
+  const marks: SlotMark[] = Array(RACK_COLS * 2).fill(null)
+  for (const g of pairMode ? pairs : runs) {
+    g.slots.forEach((i, k) => (marks[i] = k === 0 ? { label: g.kind === 'pair' ? 'Ç' : String(g.value) } : {}))
   }
+
   const act = async (action: Parameters<typeof remote.send>[0]) => {
     setLocalError(null)
     const ok = await remote.send(action)
-    if (ok) reset()
+    if (ok) rack.setSelected(null)
+    return ok
   }
-  const toggle = (id: number) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const discard = (tileId: number) => {
+    if (!playPhase || s.taken != null || remote.busy) return
+    act({ type: 'discard', tileId })
+  }
+  const ids = (list: Segment[]) => list.map((g) => g.tiles.map((t) => t.id))
+  const layDown = () => {
+    const list = opened === 'cift' ? pairs : runs
+    if (list.length === 0) return setLocalError('Istakada geçerli grup yok. Taşları boşlukla ayırıp yan yana diz.')
+    act({ type: 'lay', groups: ids(list) })
+  }
 
-  const makeGroup = () => {
-    const tiles = tilesOf(liveSelected)
-    if (tiles.length < 2) return setLocalError('Grup için en az 2 taş seç (çift 2, per en az 3 taş).')
-    if (!analyzeMeld(tiles, okey)) return setLocalError('Seçtiğin taşlar geçerli bir seri, per ya da çift oluşturmuyor.')
-    setStaged((g) => [...g, liveSelected])
-    setSelected([])
-    setLocalError(null)
+  // Hand-over popup: shows each finished hand's scores without having to scroll to the score table.
+  const [seenResults, setSeenResults] = useState(s.results.length)
+  const [handPopup, setHandPopup] = useState<HandResult | null>(null)
+  if (s.results.length !== seenResults) {
+    setSeenResults(s.results.length)
+    const finalHand = s.results.length >= s.handsTotal
+    if (s.results.length > seenResults && !finalHand) setHandPopup(s.results[s.results.length - 1])
   }
+  useEffect(() => {
+    if (!handPopup) return
+    const t = setTimeout(() => setHandPopup(null), 5000)
+    return () => clearTimeout(t)
+  }, [handPopup])
 
   const nameOf = (seat: number) => (seat === mySeat ? 'Sen' : remote.names[seat] ?? `Oyuncu ${seat + 1}`)
   const lastResult = s.results[s.results.length - 1]
@@ -152,14 +198,14 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             {s.melds.length > 0 && (
               <div className="flex max-h-36 w-full flex-wrap content-start justify-center gap-1 overflow-y-auto sm:max-h-56 sm:gap-1.5" aria-label="Yerdeki perler">
                 {s.melds.map((m) => {
-                  const canAdd = playPhase && !!opened && m.kind !== 'pair' && liveSelected.length > 0
+                  const canAdd = playPhase && !!opened && m.kind !== 'pair' && selected != null
                   return (
                     <button
                       key={m.id}
                       type="button"
                       disabled={!canAdd || remote.busy}
-                      onClick={() => act({ type: 'add', meldId: m.id, tileIds: liveSelected })}
-                      aria-label={`${nameOf(m.owner)} peri${canAdd ? ', seçili taşları işle' : ''}`}
+                      onClick={() => selected != null && act({ type: 'add', meldId: m.id, tileIds: [selected] })}
+                      aria-label={`${nameOf(m.owner)} peri${canAdd ? ', seçili taşı işle' : ''}`}
                       className={cn(
                         'flex gap-px rounded-md bg-background/30 p-0.5 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] disabled:cursor-default',
                         canAdd && 'ring-2 ring-primary',
@@ -189,8 +235,9 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           <div className="flex items-end justify-center">{seatPill(viewer)}</div>
           <button
             type="button"
+            data-drop="discard"
             disabled={!canDiscard}
-            onClick={() => act({ type: 'discard', tileId: liveSelected[0] })}
+            onClick={() => selected != null && discard(selected)}
             aria-label="Seçili taşı buraya at"
             className="flex flex-col items-center gap-1 self-end rounded-lg bg-background/25 p-1 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)] disabled:cursor-default"
           >
@@ -215,58 +262,17 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 
       {mySeat >= 0 && (
         <div className="flex flex-col gap-2">
-          {liveStaged.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                Hazır: {stagedPairs > 0 ? `${stagedPairs} çift` : `${stagedValue} sayı`}
-              </span>
-              {liveStaged.map((g, i) => (
-                <button
-                  key={g.join('-')}
-                  type="button"
-                  onClick={() => setStaged((cur) => cur.filter((_, k) => k !== i))}
-                  aria-label="Grubu ıstakaya geri al"
-                  className="flex items-center gap-px rounded-md border border-border bg-secondary p-0.5 hover:border-destructive"
-                >
-                  {tilesOf(g).map((t) => (
-                    <TileFace key={t.id} tile={t} okey={okey} size="xs" />
-                  ))}
-                  <span className="px-1 text-[10px] font-bold tabular-nums text-foreground">{stagedInfo[i]?.value ?? '?'}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="rounded-xl bg-wood p-1.5 shadow-[0_10px_20px_rgb(0_0_0/0.4)] sm:p-2">
-            <div className="grid gap-x-0.5 sm:gap-x-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }} role="group" aria-label={`Istakan, ${hand.length} taş`}>
-              {Array.from({ length: slots }, (_, i) => {
-                const t = hand[i]
-                return (
-                  <div key={t ? t.id : `e-${i}`} className="flex items-end border-b-4 border-background/40 pb-1 pt-2">
-                    {t ? (
-                      <div
-                        className={cn(
-                          'aspect-[3/4] w-full transition-transform',
-                          liveSelected.includes(t.id) && '-translate-y-1.5',
-                          stagedIds.has(t.id) && 'opacity-30',
-                        )}
-                      >
-                        <TileFace
-                          tile={t}
-                          okey={okey}
-                          size="fluid"
-                          selected={liveSelected.includes(t.id)}
-                          onClick={stagedIds.has(t.id) ? undefined : () => toggle(t.id)}
-                        />
-                      </div>
-                    ) : (
-                      <div className="aspect-[3/4] w-full" aria-hidden="true" />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          <OkeyRack
+            hand={hand}
+            okey={okey}
+            rack={rack}
+            marks={marks}
+            onDoubleTile={(t) => discard(t.id)}
+            onDropOut={(id, kind) => kind === 'discard' && discard(id)}
+          />
+          <p className="text-center text-[11px] leading-snug text-muted-foreground">
+            Taşları sürükleyip diz. Yan yana duran taşlar bir grup sayılır, boşluk grubu ayırır; geçerli perlerin altı sarı çizilir.
+          </p>
 
           {localError && (
             <p role="alert" className="text-xs text-destructive sm:text-sm">
@@ -274,30 +280,27 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             </p>
           )}
 
-          <div className="grid grid-cols-4 gap-1.5">
-            <ActionButton disabled={!playPhase || liveSelected.length < 2} onClick={makeGroup}>
-              <Plus className="size-3.5" aria-hidden="true" /> Grup
-            </ActionButton>
+          <div className="grid grid-cols-3 gap-1.5">
             {!opened ? (
               <>
                 <ActionButton
                   primary
-                  disabled={!playPhase || !allValid || stagedPairs > 0 || stagedValue < OPEN_MIN || remote.busy}
-                  onClick={() => act({ type: 'open', mode: 'seri', groups: liveStaged })}
+                  disabled={!playPhase || runValue < OPEN_MIN || remote.busy}
+                  onClick={() => act({ type: 'open', mode: 'seri', groups: ids(runs) })}
                 >
-                  Aç <span className="tabular-nums opacity-80">{stagedValue}/{OPEN_MIN}</span>
+                  Aç <span className="tabular-nums opacity-80">{runValue}/{OPEN_MIN}</span>
                 </ActionButton>
                 <ActionButton
                   primary
-                  disabled={!playPhase || !allValid || stagedPairs !== liveStaged.length || stagedPairs < PAIR_MIN || remote.busy}
-                  onClick={() => act({ type: 'open', mode: 'cift', groups: liveStaged })}
+                  disabled={!playPhase || pairs.length < PAIR_MIN || remote.busy}
+                  onClick={() => act({ type: 'open', mode: 'cift', groups: ids(pairs) })}
                 >
-                  Çift <span className="tabular-nums opacity-80">{stagedPairs}/{PAIR_MIN}</span>
+                  Çift <span className="tabular-nums opacity-80">{pairs.length}/{PAIR_MIN}</span>
                 </ActionButton>
               </>
             ) : (
               <div className="col-span-2">
-                <ActionButton primary disabled={!playPhase || !allValid || remote.busy} onClick={() => act({ type: 'lay', groups: liveStaged })}>
+                <ActionButton primary disabled={!playPhase || remote.busy} onClick={layDown}>
                   Perleri yere aç
                 </ActionButton>
               </div>
@@ -307,28 +310,57 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
                 <Undo2 className="size-3.5" aria-hidden="true" /> Geri ver
               </ActionButton>
             ) : (
-              <ActionButton danger disabled={!canDiscard} onClick={() => act({ type: 'discard', tileId: liveSelected[0] })}>
+              <ActionButton danger disabled={!canDiscard} onClick={() => selected != null && discard(selected)}>
                 <ArrowDownToLine className="size-3.5" aria-hidden="true" /> At
               </ActionButton>
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-2">
+          <div className="grid grid-cols-2 gap-1.5">
             <button
               type="button"
-              onClick={() => setSortMode((m) => (m === 'seri' ? 'cift' : 'seri'))}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground hover:bg-secondary"
+              onClick={() => autoLayout('seri')}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary"
             >
-              {sortMode === 'seri' ? 'Çifte göre diz' : 'Seriye göre diz'}
+              <Wand2 className="size-3.5 text-primary" aria-hidden="true" /> Perlere göre diz
             </button>
-            {(liveSelected.length > 0 || liveStaged.length > 0) && (
-              <button type="button" onClick={reset} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground hover:bg-secondary">
-                <X className="size-3.5" aria-hidden="true" /> Seçimi temizle
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => autoLayout('cift')}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary"
+            >
+              <Wand2 className="size-3.5 text-primary" aria-hidden="true" /> Çiftlere göre diz
+            </button>
           </div>
         </div>
       )}
+
+      {handPopup && (
+        <div className="fixed inset-x-0 top-20 z-[75] flex justify-center px-4" role="status">
+          <div className="w-full max-w-sm animate-in fade-in slide-in-from-top-4 zoom-in-95 rounded-2xl border border-primary/60 bg-card p-4 shadow-2xl duration-300">
+            <p className="text-center text-xs font-bold uppercase tracking-widest text-primary">{handPopup.hand}. el bitti</p>
+            <p className="mt-1 text-center text-base font-bold text-foreground">
+              {handPopup.finisher != null
+                ? handPopup.finisher === mySeat
+                  ? 'Eli sen bitirdin!'
+                  : `${nameOf(handPopup.finisher)} eli bitirdi`
+                : 'Deste bitti'}
+            </p>
+            <ul className="mt-3 grid grid-cols-2 gap-1.5 text-sm">
+              {handPopup.scores.map((sc, i) => (
+                <li key={i} className={cn('flex justify-between rounded-lg bg-secondary px-2.5 py-1.5', i === mySeat && 'ring-1 ring-primary')}>
+                  <span className="truncate text-muted-foreground">{nameOf(i)}</span>
+                  <span className="font-bold tabular-nums text-foreground">{sc}</span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => setHandPopup(null)} className="mt-3 w-full rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground">
+              Devam
+            </button>
+          </div>
+        </div>
+      )}
+
 
       <details className="group rounded-2xl border border-border bg-card">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-bold text-foreground sm:px-4">
