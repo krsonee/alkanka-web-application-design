@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { FlipHorizontal2, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
@@ -164,6 +164,13 @@ export function Okey({ finish }: GameApi) {
   const { deck, indicator, okey, hands, discards } = game
   const hand = hands[0]
   const rack = useRack(hand, okey)
+  const boardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 639px)').matches) {
+      boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [])
   const selected = rack.selected
   const setSelected = rack.setSelected
   const tileName = (t: Tile) => (t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`)
@@ -411,17 +418,17 @@ export function Okey({ finish }: GameApi) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[2rem] border-[10px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9]">
+    <div ref={boardRef} className="flex scroll-mt-20 flex-col gap-2 sm:gap-4">
+      <div className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
-        <div className="absolute inset-x-0 top-3 flex justify-center">{seat(2, '')}</div>
-        <div className="absolute inset-y-0 left-3 flex items-center">{seat(3, '')}</div>
-        <div className="absolute inset-y-0 right-3 flex items-center">{seat(1, '')}</div>
+        <div className="absolute inset-x-0 top-2 flex justify-center sm:top-3">{seat(2, '')}</div>
+        <div className="absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
+        <div className="absolute inset-y-0 right-2 flex items-center sm:right-3">{seat(1, '')}</div>
 
-        {discardSlot(3, 'bottom-6 left-6', true)}
+        {discardSlot(3, 'bottom-2 left-2 sm:bottom-6 sm:left-6', true)}
         {discardZone}
-        {discardSlot(1, 'right-6 top-6')}
-        {discardSlot(2, 'left-6 top-6')}
+        {discardSlot(1, 'right-2 top-2 sm:right-6 sm:top-6')}
+        {discardSlot(2, 'left-2 top-2 sm:left-6 sm:top-6')}
 
         <div className="absolute inset-0 m-auto flex h-fit w-fit items-center gap-5">
           <button
@@ -462,23 +469,26 @@ export function Okey({ finish }: GameApi) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
-        <TurnSteps phase={phase === 'draw' ? 'draw' : phase === 'discard' ? 'discard' : 'wait'} />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-foreground" aria-live="polite">
+      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-2.5 sm:gap-3 sm:p-4">
+        <div className="hidden sm:block">
+          <TurnSteps phase={phase === 'draw' ? 'draw' : phase === 'discard' ? 'discard' : 'wait'} />
+        </div>
+        <div className="flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
+          <p className="min-w-0 text-xs font-semibold leading-snug text-foreground sm:text-sm" aria-live="polite">
             {message}
           </p>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => sort('seri')} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary">
+          <div className="flex shrink-0 gap-1.5 sm:flex-wrap sm:gap-2">
+            <button onClick={() => sort('seri')} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary sm:px-3 sm:py-2">
               Seri diz
             </button>
-            <button onClick={() => sort('cift')} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary">
+            <button onClick={() => sort('cift')} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary sm:px-3 sm:py-2">
               Çift diz
             </button>
             {selectedIsJoker && selected !== null && (
               <button
                 onClick={() => rack.toggleFlip(selected)}
-                className="flex items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20"
+                aria-label={rack.flipped.has(selected) ? 'Okeyi aç' : 'Okeyi ters çevir'}
+                className="flex items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 sm:px-3 sm:py-2"
               >
                 <FlipHorizontal2 className="size-3.5" aria-hidden="true" />
                 {rack.flipped.has(selected) ? 'Okeyi aç' : 'Okeyi ters çevir'}
@@ -489,11 +499,11 @@ export function Okey({ finish }: GameApi) {
 
         <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} onDropOut={onDropOut} onDropHover={setDropOver} />
 
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex gap-2">
           <button
             onClick={() => discard(selected)}
             disabled={phase !== 'discard' || selected === null}
-            className="flex-1 rounded-xl border border-primary/50 px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary hover:bg-primary/10 disabled:opacity-40"
+            className="flex-1 rounded-xl border border-primary/50 px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-primary hover:bg-primary/10 disabled:opacity-40 sm:px-5 sm:py-3 sm:text-sm"
           >
             Seçili taşı at
           </button>
@@ -501,12 +511,19 @@ export function Okey({ finish }: GameApi) {
             onClick={finishHand}
             disabled={!winning}
             className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground disabled:opacity-40',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-primary-foreground disabled:opacity-40 sm:gap-2 sm:px-5 sm:py-3 sm:text-sm',
               winning && 'glow-gold animate-pulse',
             )}
           >
-            <Trophy className="size-4" aria-hidden="true" />
-            {winning ? 'Elini aç ve bitir' : 'Bitirmek için per tamamla'}
+            <Trophy className="size-4 shrink-0" aria-hidden="true" />
+            {winning ? (
+              'Elini aç ve bitir'
+            ) : (
+              <>
+                <span className="sm:hidden">Per tamamla</span>
+                <span className="hidden sm:inline">Bitirmek için per tamamla</span>
+              </>
+            )}
           </button>
         </div>
       </div>
