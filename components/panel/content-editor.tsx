@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { JAKO_POSES } from '@/lib/site-registry'
 import { PANEL_GROUPS, type PanelModule } from '@/lib/panel-modules'
+import { HideButton } from '@/components/panel/hide-button'
 
 type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string }
 
@@ -19,6 +20,7 @@ export type EditorItem = {
   path: string
   defaults: Fields
   saved: Fields | null
+  hidden?: boolean
 }
 
 export function ContentEditor({
@@ -31,6 +33,8 @@ export function ContentEditor({
   tournaments,
   push,
   messages,
+  rewards,
+  catalog,
   telegram,
   seo,
   studio,
@@ -67,6 +71,8 @@ export function ContentEditor({
   tournaments: React.ReactNode
   push: React.ReactNode
   messages: React.ReactNode
+  rewards: React.ReactNode
+  catalog: React.ReactNode
   telegram: React.ReactNode
   seo: React.ReactNode
   studio: React.ReactNode
@@ -178,6 +184,10 @@ export function ContentEditor({
         push
       ) : tab === 'messages' ? (
         messages
+      ) : tab === 'rewards' ? (
+        rewards
+      ) : tab === 'catalog' ? (
+        catalog
       ) : tab === 'telegram' ? (
         telegram
       ) : tab === 'seo' ? (
@@ -229,9 +239,14 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
         <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4">
           <div className="flex flex-col">
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary">{isSlide ? 'Slayt' : 'Sayfa'}</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+              {isSlide ? 'Slayt' : 'Sayfa'}
+              {item.hidden && <span className="ml-2 text-muted-foreground">· Siteden gizli</span>}
+            </span>
             <h2 className="font-display text-lg font-bold text-foreground">{item.label}</h2>
           </div>
+          <div className="flex items-center gap-2">
+          {isSlide && <HideButton key={`${item.id}-${!!item.hidden}`} kind="slide" id={item.id} hidden={!!item.hidden} label={item.label} className="bg-background/80 backdrop-blur" />}
           <a
             href={item.path}
             target="_blank"
@@ -240,6 +255,7 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
           >
             Önizle <ExternalLink className="size-3" aria-hidden="true" />
           </a>
+          </div>
         </div>
       </div>
 

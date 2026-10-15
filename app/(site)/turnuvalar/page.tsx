@@ -4,11 +4,14 @@ import { Swords } from 'lucide-react'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { TournamentCard } from '@/components/alkanka/arena/tournament-card'
 import { listTournaments } from '@/lib/tournaments'
+import { getHidden } from '@/lib/catalog'
+import { withoutHidden } from '@/lib/hidden-shared'
 
 export const metadata = pageMeta('turnuvalar')
 
 export default async function TournamentsPage() {
-  const all = (await listTournaments()).filter((t) => t.status !== 'iptal')
+  const [list, hidden] = await Promise.all([listTournaments(), getHidden()])
+  const all = withoutHidden(list, hidden, 'tournament').filter((t) => t.status !== 'iptal')
   const live = all.filter((t) => t.status !== 'bitti')
   const done = all.filter((t) => t.status === 'bitti')
 

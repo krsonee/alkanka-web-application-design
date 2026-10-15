@@ -5,9 +5,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, Search, ShieldCheck, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useCatalog } from './catalog-context'
 import {
-  BONUSES,
-  CAMPAIGNS,
   SPECIAL_ODDS,
   TIER_INFO,
   sponsorById,
@@ -449,6 +448,7 @@ function CopyCode({ code }: { code: string }) {
 }
 
 export function BonusBoard() {
+  const { bonuses: BONUSES } = useCatalog()
   const types = ['Tümü', ...Array.from(new Set(BONUSES.map((b) => b.type)))]
   const [type, setType] = useState('Tümü')
   const list = BONUSES.filter((b) => type === 'Tümü' || b.type === type)
@@ -604,6 +604,7 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
 const CAMPAIGN_PAGE = 6
 
 export function CampaignBoard() {
+  const { campaigns: CAMPAIGNS } = useCatalog()
   const tags = ['Tümü', ...Array.from(new Set(CAMPAIGNS.map((c) => c.tag)))]
   const [tag, setTag] = useState('Tümü')
   const [sort, setSort] = useState<'bitis' | 'uzun'>('bitis')
@@ -785,6 +786,7 @@ export function FeaturedSponsors({
 const SLIDE_GAP = 12
 
 export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
+  const { campaigns: CAMPAIGNS } = useCatalog()
   const list = [...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3)
   const trackRef = useRef<HTMLUListElement>(null)
   const [active, setActive] = useState(0)

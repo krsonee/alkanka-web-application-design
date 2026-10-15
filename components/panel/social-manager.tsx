@@ -1,5 +1,6 @@
 'use client'
 
+import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Check, ExternalLink, Loader2, Trash2, X } from 'lucide-react'
 import {
@@ -8,7 +9,6 @@ import {
   reviewEntryAction,
   reviewSocialAccountAction,
   saveSocialLinksAction,
-  toggleSocialEventAction,
 } from '@/app/panel/social-actions'
 import { SocialGuide } from '@/components/panel/social-guide'
 import type { AdminEntry, AdminSocialAccount } from '@/lib/social'
@@ -203,9 +203,7 @@ function EventsAdmin({ events, entries }: { events: SocialEvent[]; entries: Admi
                 </div>
                 <div className="flex items-center gap-2">
                   <a href={ev.postUrl} target="_blank" rel="noopener noreferrer" className={ghost}>Gönderi</a>
-                  <button disabled={pending} onClick={() => run(() => toggleSocialEventAction(ev.id, !ev.active))} className={ghost}>
-                    {ev.active ? 'Kapat' : 'Aç'}
-                  </button>
+                  <HideButton key={`${ev.id}-${ev.active}`} kind="social" id={ev.id} hidden={!ev.active} label={ev.title} />
                   <button disabled={pending} aria-label={`${ev.title} sil`} onClick={() => confirm('Etkinlik ve katılımları silinsin mi?') && run(() => deleteSocialEventAction(ev.id))} className={ghost}>
                     <Trash2 className="size-3.5" aria-hidden />
                   </button>

@@ -3,14 +3,17 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { CampaignHub } from '@/components/alkanka/campaign-hub'
 import { AdFrame } from '@/components/alkanka/ad-frame'
-import { BONUSES, CAMPAIGNS, EVENTS } from '@/components/alkanka/data'
+import { getCatalog } from '@/lib/catalog'
 import { EndingCampaigns, MainSponsorRotator } from '@/components/alkanka/partner-sites'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 
 export const metadata = pageMeta('kampanyalar')
 
 export default async function CampaignsPage() {
-  const sponsors = await listPublicSponsors().catch(() => [])
+  const [sponsors, { events: EVENTS, bonuses: BONUSES, campaigns: CAMPAIGNS }] = await Promise.all([
+    listPublicSponsors().catch(() => []),
+    getCatalog(),
+  ])
   const { mains } = pickFeatured(sponsors)
   return (
     <>

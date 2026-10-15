@@ -1,5 +1,6 @@
 'use client'
 
+import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Minus, Plus, Search, Trash2, Undo2 } from 'lucide-react'
 import {
@@ -223,6 +224,7 @@ function BadgesEditor({ badges, autoLabels }: { badges: SpecialBadge[]; autoLabe
               <button onClick={() => setDraft({ id: b.id, name: b.name, description: b.description, icon: b.icon, tier: b.tier, bonus: b.bonus, auto: b.auto, active: b.active })} className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-secondary">
                 Düzenle
               </button>
+              <HideButton key={`${b.id}-${b.active}`} kind="badge" id={b.id} hidden={!b.active} label={b.name} />
               <button
                 disabled={pending}
                 onClick={() => confirm(`${b.name} rozeti ve tüm verilişleri silinsin mi?`) && run(() => removeBadge(b.id))}

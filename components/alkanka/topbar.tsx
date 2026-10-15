@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Award, ChevronDown, Coins, History, Link2, LogOut, Menu, MessageSquareText, Search, Send, Settings, UserRound } from 'lucide-react'
+import useSWR from 'swr'
+import { Award, ChevronDown, Coins, History, Link2, LogOut, Mail, Menu, MessageSquareText, Search, Send, Settings, UserRound } from 'lucide-react'
+import { getInboxStatus, type InboxStatus } from '@/app/actions/inbox'
 import { cn } from '@/lib/utils'
 import { authClient } from '@/lib/auth-client'
 import { TELEGRAM_URL } from './data'
@@ -90,6 +92,13 @@ function AccountMenu() {
     }
   }, [open])
 
+  const { data: inbox } = useSWR<InboxStatus>(member ? 'inbox-status' : null, () => getInboxStatus(), {
+    refreshInterval: 30_000,
+    revalidateOnFocus: true,
+  })
+  const unread = inbox?.unread ?? 0
+  const unreadLabel = unread > 9 ? '9+' : String(unread)
+
   if (!member) return null
   return (
     <div ref={ref} data-tour="account" className="relative">
@@ -98,14 +107,23 @@ function AccountMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls="hesap-menu"
+        aria-label={unread ? `Hesap menüsü, ${unread} okunmamış mesaj` : undefined}
         onClick={() => setOpen((v) => !v)}
         className={cn(
           'flex h-9 items-center gap-2 rounded-lg border px-1.5 text-xs font-bold text-foreground transition-colors sm:px-3',
           open ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50',
         )}
       >
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-display text-[11px] font-bold text-primary-foreground">
+        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-display text-[11px] font-bold text-primary-foreground">
           {member.name.slice(0, 1).toUpperCase()}
+          {unread > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 flex" aria-hidden="true">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-60" />
+              <span className="relative flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-none text-destructive-foreground ring-2 ring-background">
+                {unreadLabel}
+              </span>
+            </span>
+          )}
         </span>
         <span className="sr-only sm:not-sr-only sm:max-w-28 sm:truncate">{member.name}</span>
         <ChevronDown className={cn('hidden size-3.5 text-muted-foreground transition-transform sm:block', open && 'rotate-180')} aria-hidden="true" />
@@ -125,6 +143,27 @@ function AccountMenu() {
               <span className="truncate text-sm font-bold text-foreground">{member.name}</span>
               <span className="text-xs tabular-nums text-muted-foreground">{points.toLocaleString('tr-TR')} KC bakiye</span>
             </span>
+          </div>
+          <div className="p-1.5 pb-0">
+            <Link
+              role="menuitem"
+              href="/profil?sekme=mesajlar"
+              onClick={() => setOpen(false)}
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
+                unread
+                  ? 'bg-primary/10 text-foreground ring-1 ring-primary/40 hover:bg-primary/15'
+                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+              )}
+            >
+              <Mail className="size-4 text-primary" aria-hidden="true" />
+              <span className="flex-1">Mesajlarım</span>
+              {unread > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+                  {unreadLabel} yeni
+                </span>
+              )}
+            </Link>
           </div>
           <ul className="flex flex-col p-1.5">
             {MENU.map((item) => (

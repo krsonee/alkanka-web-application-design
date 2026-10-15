@@ -1,5 +1,6 @@
 'use client'
 
+import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -86,6 +87,7 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
                 <span className={cn('min-w-0 flex-1 font-medium text-foreground', !p.active && 'opacity-50')}>{p.name}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">{p.price.toLocaleString('tr-TR')} KC</span>
                 <span className={cn('text-xs tabular-nums', p.stock > 0 ? 'text-muted-foreground' : 'text-destructive')}>Stok {p.stock}/{p.total}</span>
+                <HideButton key={`${p.id}-${p.active}`} kind="market" id={p.id} hidden={!p.active} label={p.name} />
                 <button type="button" aria-label={`${p.name} düzenle`} onClick={() => setEditing({ ...p })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                   <Pencil className="size-4" aria-hidden="true" />
                 </button>

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Coins, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { EVENTS, PREDICTIONS, type EventItem } from './data'
+import { type EventItem } from './data'
+import { useCatalog } from './catalog-context'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
 import { TeamLogo } from './logo-context'
@@ -44,6 +45,7 @@ function Countdown({ hoursLeft, start }: { hoursLeft: number; start: number | nu
 }
 
 function EventCards() {
+  const { events: EVENTS } = useCatalog()
   const { spend } = usePoints()
   const t = useTexts()
   const [start] = useState(() => (typeof window === 'undefined' ? null : Date.now()))
@@ -132,6 +134,7 @@ function EventCards() {
 }
 
 function Predictions() {
+  const { predictions: PREDICTIONS } = useCatalog()
   const { add } = usePoints()
   const [picks, setPicks] = useState<Record<string, string>>({})
 

@@ -38,6 +38,8 @@ export const PANEL_GROUPS = [
     label: 'Oyunlar',
     modules: [
       { id: 'games', label: 'Oyun ayarları' },
+      { id: 'rewards', label: 'Çark, zar, sandık ödülleri' },
+      { id: 'catalog', label: 'Etkinlik, bilet, tahmin, kampanya, bonus' },
       { id: 'tournaments', label: 'Turnuvalar' },
     ],
   },

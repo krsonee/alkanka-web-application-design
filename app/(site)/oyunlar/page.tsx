@@ -2,11 +2,12 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { GamesHub } from '@/components/alkanka/games/games-hub'
 import { getArenaSettings } from '@/lib/arena-server'
+import { getHidden } from '@/lib/catalog'
 
 export const metadata = pageMeta('oyunlar')
 
 export default async function GamesPage() {
-  const arena = await getArenaSettings()
+  const [arena, hidden] = await Promise.all([getArenaSettings(), getHidden()])
   return (
     <>
       <EditableHero slug="oyunlar"
@@ -18,7 +19,7 @@ export default async function GamesPage() {
         pose="zar"
         speech="Hangisinden başlıyoruz kanka?"
       />
-      <GamesHub arena={arena} />
+      <GamesHub arena={arena} hiddenMini={hidden.mini ?? []} />
     </>
   )
 }

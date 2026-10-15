@@ -65,6 +65,10 @@ export function JakoAlerts() {
     if (!mini) return
     const pending = readPending()
     for (const game of Object.keys(REWARDS) as MiniGame[]) {
+      if (mini.hidden?.includes(game)) {
+        delete pending[game]
+        continue
+      }
       const next = mini[game]
       if (next) pending[game] = next
     }
@@ -188,14 +192,22 @@ function RewardAlert({ game, onClose }: { game: MiniGame; onClose: () => void })
 function MessageAlert({ alert, onClose }: { alert: Extract<Alert, { kind: 'message' }>; onClose: () => void }) {
   return (
     <Shell onClose={onClose} tone="primary">
-      <div className="flex items-end gap-3 p-3 pr-10">
-        <span className="relative">
-          <JakoAvatar pose="duyuru" size="md" className="animate-bounce [animation-iteration-count:2]" />
-          <span className="absolute -top-1.5 -right-1.5 flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card">
+      <div className="flex items-center gap-3 p-3 pr-10">
+        <span className="relative block shrink-0">
+          <JakoAvatar
+            pose="duyuru"
+            size="md"
+            className="ring-2 ring-primary/40 animate-bounce [animation-iteration-count:2]"
+          />
+          <span className="absolute -top-2 -right-2 flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card">
             {alert.unread > 9 ? '9+' : alert.unread}
           </span>
         </span>
-        <div className="relative flex min-w-0 flex-1 flex-col gap-1 rounded-xl rounded-bl-sm border border-primary/25 bg-primary/5 px-3 py-2">
+        <div className="relative flex min-w-0 flex-1 flex-col gap-1 rounded-xl rounded-tl-sm border border-primary/25 bg-primary/5 px-3 py-2.5">
+          <span
+            aria-hidden
+            className="absolute top-4 -left-1.5 size-3 rotate-45 border-b border-l border-primary/25 bg-card"
+          />
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-primary">
             <Mail className="size-3" aria-hidden />
             Jako diyor ki

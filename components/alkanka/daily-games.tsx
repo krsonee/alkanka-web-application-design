@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
 import type { MiniGame } from '@/app/actions/wallet'
-import { MiniCountdown } from './games/mini-status'
+import { MiniCountdown, useMiniStatus } from './games/mini-status'
 
 const GAMES: { game: MiniGame; title: string; text: string; image: string; reward: string }[] = [
   { game: 'cark', title: 'Şans Çarkı', text: '6 saatte bir ücretsiz çevir', image: '/images/tile-wheel.png', reward: '500 KC’ye kadar' },
@@ -13,6 +13,9 @@ const GAMES: { game: MiniGame; title: string; text: string; image: string; rewar
 ]
 
 export function DailyGames() {
+  const { status } = useMiniStatus()
+  const games = GAMES.filter((g) => !status?.hidden?.includes(g.game))
+  if (!games.length) return null
   return (
     <section aria-labelledby="gunluk-oyunlar" className="flex flex-col gap-3">
       <div className="flex items-end justify-between gap-3">
@@ -27,7 +30,7 @@ export function DailyGames() {
         </Link>
       </div>
       <ul className="grid gap-3 sm:grid-cols-3">
-        {GAMES.map((g) => (
+        {games.map((g) => (
           <li key={g.game}>
             <Link
               href={`/oyunlar/${g.game}`}

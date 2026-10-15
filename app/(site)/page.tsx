@@ -7,6 +7,7 @@ import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
 import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
 import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
+import { HIDDEN_KEY, readHidden, withoutHidden } from '@/lib/hidden-shared'
 import { readLeaderboard, sumKpPoints } from '@/lib/kanka-puan'
 
 export const metadata = pageMeta('anasayfa')
@@ -29,7 +30,8 @@ export default async function HomePage() {
     sumKpPoints(),
   ])
   const featured = pickFeatured(sponsors)
-  const slides = SLIDES.map((s) => ({ ...s, ...withoutEmpty(content[`slide:${s.id}`] as SlideOverride | undefined) }))
+  const hidden = readHidden(content[HIDDEN_KEY])
+  const slides = withoutHidden(SLIDES, hidden, 'slide').map((s) => ({ ...s, ...withoutEmpty(content[`slide:${s.id}`] as SlideOverride | undefined) }))
 
   return (
     <>

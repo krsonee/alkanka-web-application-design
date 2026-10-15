@@ -20,17 +20,21 @@ import { SiteTour } from '@/components/alkanka/app/site-tour'
 import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
 import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
 import { JakoAlerts } from '@/components/alkanka/jako-alerts'
+import { CatalogProvider } from '@/components/alkanka/catalog-context'
+import { getCatalog } from '@/lib/catalog'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [logos, texts, social, sponsors] = await Promise.all([
+  const [logos, texts, social, sponsors, catalog] = await Promise.all([
     getLogos(),
     getSiteTexts(),
     getSocialLinks().catch(() => ({})),
     listPublicSponsors().catch(() => []),
+    getCatalog(),
   ])
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
   return (
     <TextsProvider value={texts}>
+    <CatalogProvider value={catalog}>
     <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
@@ -57,6 +61,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       </PointsProvider>
     </BrandProvider>
     </LogoProvider>
+    </CatalogProvider>
     </TextsProvider>
   )
 }
