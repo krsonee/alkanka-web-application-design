@@ -205,7 +205,7 @@ export type JoinResult = { balance: number; tableNo: number; seated: boolean }
  */
 export type SideBets = { pairs: number; t213: number }
 
-export async function joinBlackjack(member: Member, bet: number, allowedBets: number[], prefer?: number | null, side: SideBets = { pairs: 0, t213: 0 }): Promise<JoinResult> {
+export async function joinBlackjack(member: Member, bet: number, allowedBets: number[], prefer?: number | null, side: SideBets = { pairs: 0, t213: 0 }, preferSeat: number | null = null): Promise<JoinResult> {
   if (!allowedBets.includes(bet)) throw new Error('Geçersiz bahis.')
   if (!BJ_SIDE_STAKES.includes(side.pairs) || !BJ_SIDE_STAKES.includes(side.t213)) throw new Error('Geçersiz yan bahis.')
   const total = bet + side.pairs + side.t213
@@ -234,7 +234,9 @@ export async function joinBlackjack(member: Member, bet: number, allowedBets: nu
           continue
         }
         const used = new Set(taken.rows.map((x) => Number(x.seat)))
-        const seat = Array.from({ length: BJ_SEATS }, (_, i) => i + 1).find((s) => !used.has(s))!
+        const wantsThis = no === prefer && preferSeat !== null && preferSeat >= 1 && preferSeat <= BJ_SEATS
+        if (wantsThis && used.has(preferSeat)) throw new Error(`Koltuk ${preferSeat} az önce doldu kanka, başka bir koltuk seç.`)
+        const seat = wantsThis ? preferSeat : Array.from({ length: BJ_SEATS }, (_, i) => i + 1).find((s) => !used.has(s))!
         if (round.phase === 'waiting') round = await setPhase(c, round.id, 'bet', BJ_BET_MS)
         await c.query(`INSERT INTO blackjack_live (round_id, seat, user_id, user_name, bet, side_pairs, side_213) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [
           round.id,

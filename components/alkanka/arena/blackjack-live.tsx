@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import {
   Armchair,
+  Check,
   Eye,
   Hand,
   Layers,
@@ -162,10 +163,16 @@ function SeatPod({
   index,
   seat,
   phase,
+  selectable = false,
+  selected = false,
+  onSelect,
 }: {
   index: number;
   seat: Seat | null;
   phase: string;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (seat: number) => void;
 }) {
   const pos = SEAT_POS[index];
   const style = {
@@ -178,18 +185,74 @@ function SeatPod({
     "absolute left-(--mx) top-(--my) -translate-x-1/2 -translate-y-1/2 sm:left-(--dx) sm:top-(--dy)";
 
   if (!seat) {
-    return (
-      <div
-        style={style}
-        className={cn(place, "flex flex-col items-center gap-1")}
+    const ring = (
+      <span
+        className={cn(
+          "relative flex size-9 items-center justify-center rounded-full border-2 border-dashed border-primary/35 bg-background/30 transition-all duration-200 sm:size-12",
+          selectable &&
+            "group-hover:scale-110 group-hover:border-primary/80 group-hover:bg-primary/15",
+          selected &&
+            "scale-110 border-solid border-primary bg-primary text-primary-foreground shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_30%,transparent),0_0_24px_color-mix(in_oklch,var(--primary)_55%,transparent)]",
+        )}
       >
-        <span className="flex size-9 items-center justify-center rounded-full border-2 border-dashed border-primary/35 bg-background/30 sm:size-12">
-          <Armchair className="size-4 text-primary/60" aria-hidden="true" />
-        </span>
-        <span className="rounded-full bg-background/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-          Koltuk {index + 1}
-        </span>
-      </div>
+        {selected && (
+          <span
+            className="absolute inset-0 animate-ping rounded-full border-2 border-primary/60"
+            aria-hidden="true"
+          />
+        )}
+        {selected ? (
+          <Check className="size-4 sm:size-5" aria-hidden="true" />
+        ) : (
+          <Armchair
+            className={cn(
+              "size-4 text-primary/60",
+              selectable && "group-hover:text-primary",
+            )}
+            aria-hidden="true"
+          />
+        )}
+      </span>
+    );
+    const label = (
+      <span
+        className={cn(
+          "whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors",
+          selected
+            ? "bg-primary text-primary-foreground"
+            : "bg-background/50 text-muted-foreground",
+          selectable && !selected && "group-hover:text-foreground",
+        )}
+      >
+        {selected ? "Senin yerin" : `Koltuk ${index + 1}`}
+      </span>
+    );
+    if (!selectable) {
+      return (
+        <div
+          style={style}
+          className={cn(place, "flex flex-col items-center gap-1")}
+        >
+          {ring}
+          {label}
+        </div>
+      );
+    }
+    return (
+      <button
+        type="button"
+        style={style}
+        onClick={() => onSelect?.(index + 1)}
+        aria-pressed={selected}
+        aria-label={`Koltuk ${index + 1}${selected ? ", seçili" : ", boş, seçmek için dokun"}`}
+        className={cn(
+          place,
+          "group z-10 flex cursor-pointer flex-col items-center gap-1 rounded-2xl p-1.5 outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        )}
+      >
+        {ring}
+        {label}
+      </button>
     );
   }
 
@@ -339,6 +402,15 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   const secondsLeft = Math.ceil(msLeft / 1000);
   const progress = data?.phaseTotal ? Math.min(1, msLeft / data.phaseTotal) : 0;
   const myTurn = phase === "play" && me && !me.done;
+  const [pickedSeat, setPickedSeat] = useState<number | null>(null);
+  const canPick = !me && (phase === "waiting" || phase === "bet");
+  const chosenSeat =
+    canPick && pickedSeat !== null && !seats[pickedSeat - 1] ? pickedSeat : null;
+
+  function pickSeat(n: number) {
+    setError("");
+    setPickedSeat((cur) => (cur === n ? null : n));
+  }
 
   useEffect(() => {
     setSeatedHere(!!me && phase !== "result");
@@ -389,9 +461,19 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     setBusy(true);
     setError("");
     setNotice("");
-    const res = await joinBlackjackTable(bet, data?.tableNo ?? null, side);
+    const res = await joinBlackjackTable(
+      bet,
+      data?.tableNo ?? null,
+      side,
+      chosenSeat,
+    );
     setBusy(false);
-    if (!res.ok) return setError(res.error);
+    if (!res.ok) {
+      setPickedSeat(null);
+      mutate();
+      return setError(res.error);
+    }
+    setPickedSeat(null);
     setBalance(res.balance);
     setViewTable(res.tableNo);
     if (!res.seated)
@@ -525,7 +607,15 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               </div>
 
               {seats.map((s, i) => (
-                <SeatPod key={i} index={i} seat={s} phase={phase} />
+                <SeatPod
+                  key={i}
+                  index={i}
+                  seat={s}
+                  phase={phase}
+                  selectable={canPick}
+                  selected={chosenSeat === i + 1}
+                  onSelect={pickSeat}
+                />
               ))}
             </div>
           </div>
@@ -620,17 +710,17 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 ) : (
                   <Armchair className="size-4" aria-hidden="true" />
                 )}
-                Masaya otur · {formatAC(totalBet)}
+                {chosenSeat
+                  ? `Koltuk ${chosenSeat}'e otur`
+                  : "Masaya otur"}{" "}
+                · {formatAC(totalBet)}
               </button>
-              <p
-                className={cn(
-                  "text-center text-xs text-muted-foreground",
-                  member && "hidden sm:block",
-                )}
-              >
-                {member
-                  ? "Koltuk seçmene gerek yok: ilk boş koltuğa oturursun. Masa doluysa yeni masa açılır."
-                  : "Oynamak için giriş yap. İzlemek serbest."}
+              <p className="text-center text-xs text-muted-foreground">
+                {!member
+                  ? "Oynamak için giriş yap. İzlemek serbest."
+                  : chosenSeat
+                    ? `Koltuk ${chosenSeat} seçili. Vazgeçmek için tekrar dokun.`
+                    : "Masadaki boş bir koltuğa dokunup yerini seç, ya da direkt otur, ilk boş koltuk senin."}
               </p>
             </div>
           ) : (
