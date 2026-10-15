@@ -150,6 +150,50 @@ export const BJ_PLAY_MS = 20_000
 export const BJ_RESULT_MS = 5_000
 export type BlackjackPhase = 'waiting' | 'bet' | 'play' | 'result'
 
+/** Optional side bets on the live table. 0 means the side bet is off. */
+export const BJ_SIDE_STAKES = [0, 10, 25, 50]
+export type SideHit = { key: string; label: string; x: number }
+
+/** Perfect Pairs: judged on the player's first two cards. Payouts are "x to 1". */
+export const BJ_PAIRS_TABLE: SideHit[] = [
+  { key: 'perfect', label: 'Mükemmel çift', x: 25 },
+  { key: 'colored', label: 'Renkli çift', x: 12 },
+  { key: 'mixed', label: 'Karışık çift', x: 5 },
+]
+
+/** 21+3: player's first two cards plus the dealer's up card, read as a three-card poker hand. */
+export const BJ_213_TABLE: SideHit[] = [
+  { key: 'suited-trips', label: 'Aynı türden üçlü', x: 100 },
+  { key: 'straight-flush', label: 'Floş kent', x: 40 },
+  { key: 'trips', label: 'Üçlü', x: 30 },
+  { key: 'straight', label: 'Kent', x: 10 },
+  { key: 'flush', label: 'Floş', x: 5 },
+]
+
+const isRed = (c: Card) => c.s === 1 || c.s === 2
+const hit = (table: SideHit[], key: string) => table.find((h) => h.key === key) ?? null
+
+export function pairsHit(a: Card | undefined, b: Card | undefined) {
+  if (!a || !b || a.r !== b.r) return null
+  if (a.s === b.s) return hit(BJ_PAIRS_TABLE, 'perfect')
+  return hit(BJ_PAIRS_TABLE, isRed(a) === isRed(b) ? 'colored' : 'mixed')
+}
+
+export function threeCardHit(cards: (Card | undefined)[]) {
+  if (cards.length !== 3 || cards.some((c) => !c)) return null
+  const [a, b, c] = cards as Card[]
+  const flush = a.s === b.s && b.s === c.s
+  const trips = a.r === b.r && b.r === c.r
+  const ranks = [a.r, b.r, c.r].sort((x, y) => x - y)
+  const straight = !trips && ((ranks[1] === ranks[0] + 1 && ranks[2] === ranks[1] + 1) || (ranks[0] === 1 && ranks[1] === 12 && ranks[2] === 13))
+  if (trips && flush) return hit(BJ_213_TABLE, 'suited-trips')
+  if (straight && flush) return hit(BJ_213_TABLE, 'straight-flush')
+  if (trips) return hit(BJ_213_TABLE, 'trips')
+  if (straight) return hit(BJ_213_TABLE, 'straight')
+  if (flush) return hit(BJ_213_TABLE, 'flush')
+  return null
+}
+
 export function rouletteClock(now = Date.now()) {
   const roundId = Math.floor(now / RL_CYCLE_MS)
   const start = roundId * RL_CYCLE_MS

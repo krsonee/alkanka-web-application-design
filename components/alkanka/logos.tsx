@@ -33,7 +33,7 @@ function MonogramLogo({ className, size = 'md' }: LogoProps) {
         <path d="M9 30 L16 10 L23 30 M11.5 23 H20.5" fill="none" stroke="var(--primary)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M26 10 V30 M26 20 L33 10 M28.5 17 L33 30" fill="none" stroke="var(--accent)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <span className={cn('font-display font-semibold tracking-wide text-foreground', size === 'sm' ? 'text-base' : 'text-xl')}>
+      <span className={cn('logo-text font-display font-semibold tracking-wide text-foreground', size === 'sm' ? 'text-base' : 'text-xl')}>
         ALKANKA
       </span>
     </span>
@@ -59,7 +59,7 @@ function NetworkLogo({ className, size = 'md' }: LogoProps) {
         <circle cx="31" cy="31" r="3" fill="var(--primary)" />
         <circle cx="20" cy="20" r="5.5" fill="var(--gold)" />
       </svg>
-      <span className={cn('font-display font-semibold lowercase text-foreground', size === 'sm' ? 'text-base' : 'text-xl')}>
+      <span className={cn('logo-text font-display font-semibold lowercase text-foreground', size === 'sm' ? 'text-base' : 'text-xl')}>
         alkanka<span className="text-primary">.com</span>
       </span>
     </span>
@@ -75,7 +75,7 @@ function ShieldLogo({ className, size = 'md' }: LogoProps) {
         <path d="M12 27 L20 11 L28 27" fill="none" stroke="var(--gold)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M15.5 22 H24.5" stroke="var(--primary)" strokeWidth="2.4" strokeLinecap="round" />
       </svg>
-      <span className="flex flex-col leading-none">
+      <span className="logo-text flex flex-col leading-none">
         <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
           Alkanka
         </span>
@@ -134,7 +134,7 @@ function EmblemLogo({ image, flat, className, size = 'md' }: LogoProps & { image
           size === 'sm' ? 'size-9' : 'size-11',
         )}
       />
-      <span className="flex flex-col leading-none">
+      <span className="logo-text flex flex-col leading-none">
         <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
           Alkanka
         </span>
