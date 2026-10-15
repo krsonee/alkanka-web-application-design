@@ -42,12 +42,25 @@ function DistributedCounter({ total }: { total: number | null }) {
   }
 
   return (
-    <div ref={ref} className="panel-gold flex flex-col items-center justify-between gap-2 rounded-2xl px-6 py-5 text-center sm:flex-row sm:text-left">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Bugüne kadar topluluğa</p>
-      <p className="font-display text-3xl font-bold text-primary tabular-nums sm:text-4xl">
-        {value.toLocaleString('tr-TR')} <span className="text-lg text-foreground">Kanka Coin</span>
+    <div
+      ref={ref}
+      className="panel-gold relative flex items-center justify-between gap-3 overflow-hidden rounded-xl px-4 py-2.5 sm:px-6 sm:py-3"
+    >
+      <span className="counter-sheen" aria-hidden="true" />
+      <span className="relative flex min-w-0 items-center gap-2.5">
+        <span className="relative flex size-2 shrink-0" aria-hidden="true">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+          <span className="relative inline-flex size-2 rounded-full bg-primary" />
+        </span>
+        <span className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <span className="sm:hidden">Topluluğa dağıtılan</span>
+          <span className="hidden sm:inline">Bugüne kadar topluluğa dağıttık</span>
+        </span>
+      </span>
+      <p className="relative flex shrink-0 items-baseline gap-1.5 font-display font-bold tabular-nums">
+        <span className="text-xl text-primary sm:text-2xl">{value.toLocaleString('tr-TR')}</span>
+        <span className="text-xs uppercase tracking-wider text-foreground">Kanka Coin</span>
       </p>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">dağıttık</p>
     </div>
   )
 }

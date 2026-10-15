@@ -233,6 +233,23 @@
   .tier-shine::after { animation: none; display: none; }
 }
 
+@keyframes counter-sheen {
+  0% { transform: translateX(-120%); }
+  55%, 100% { transform: translateX(320%); }
+}
+.counter-sheen {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 35%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--primary) 22%, transparent), transparent);
+  animation: counter-sheen 4.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .counter-sheen { animation: none; display: none; }
+}
+
 @keyframes eq {
   0%, 100% { height: 4px; }
   50% { height: 14px; }
