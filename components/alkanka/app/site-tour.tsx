@@ -27,13 +27,13 @@ const STEPS: Step[] = [
     body: 'Oyunlardan, görevlerden ve tahminlerden kazandığın KC burada birikir. Hepsi gerçek bakiye, hesabına kaydedilir.',
   },
   {
-    targets: ['[data-tour-nav="oyunlar"]', '[data-tour="menu-btn"]'],
+    targets: ['[data-tour-nav="oyunlar"]', '[data-tour="mobile-oyunlar"]'],
     pose: 'zar',
     title: 'Oyunlar',
-    body: 'Rulet, blackjack, kafa topu ve kafa basket. Tek başına oyna ya da masa açıp kankanla karşılaş.',
+    body: 'Tavla, okey, blackjack, rulet, kafa topu ve daha fazlası. Tek başına oyna ya da masa açıp kankanla karşılaş. Mobilde alttaki ortadaki butondan tek dokunuşla gelirsin.',
   },
   {
-    targets: ['[data-tour-nav="cark"]', '[data-tour="mobile-cark"]'],
+    targets: ['[data-tour-nav="cark"]', '[data-tour="tile-cark"]'],
     pose: 'sandik',
     title: 'Ücretsiz çark ve sandık',
     body: 'Çarkı 6 saatte bir, sandığı günde bir kez bedava aç. Geri sayım kartın üstünde görünür.',
