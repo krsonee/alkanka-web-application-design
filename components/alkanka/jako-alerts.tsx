@@ -215,28 +215,45 @@ function MessagePopup({
         role="dialog"
         aria-modal="true"
         aria-labelledby="jako-popup-title"
-        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl border border-primary/40 bg-card px-5 pt-6 pb-5 shadow-2xl animate-in fade-in zoom-in-90 slide-in-from-bottom-6 duration-500 sm:px-6"
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col gap-4 overflow-hidden rounded-3xl border border-primary/40 bg-card px-5 pt-5 pb-5 shadow-2xl animate-in fade-in zoom-in-95 duration-300 sm:px-6"
       >
-        <div className="flex items-center gap-3">
-          <span className="relative block shrink-0">
-            <JakoAvatar pose="duyuru" size="md" className="ring-2 ring-primary/30" />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -top-24 -left-16 size-64 rounded-full bg-primary/10 blur-3xl"
+        />
+        <div className="relative flex items-end gap-4">
+          <div className="relative shrink-0 animate-[jako-fly-in_700ms_cubic-bezier(.2,1.3,.4,1)_both]">
+            <div className="animate-[jako-bob_3.2s_ease-in-out_900ms_infinite]">
+              <div className="origin-bottom animate-[jako-shout_2.6s_ease-in-out_1.1s_infinite]">
+                <JakoAvatar pose="duyuru" size="md" className="ring-2 ring-primary/40 sm:size-28" />
+              </div>
+            </div>
+            <span aria-hidden className="pointer-events-none absolute top-[18%] -right-7 flex size-10 items-center">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="absolute inset-0 rounded-full border-r-2 border-primary opacity-0 animate-[jako-wave_1.6s_ease-out_infinite]"
+                  style={{ animationDelay: `${900 + i * 400}ms` }}
+                />
+              ))}
+            </span>
             {alert.unread > 1 && (
-              <span className="absolute -top-2 -right-2 flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card">
+              <span className="absolute -top-2 -left-2 flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card animate-[pop_400ms_ease-out_700ms_both]">
                 {alert.unread > 9 ? '9+' : alert.unread}
               </span>
             )}
-          </span>
-          <div className="flex min-w-0 flex-col gap-1">
+          </div>
+          <div className="flex min-w-0 flex-col gap-1 pb-1 pl-4 animate-[rise_400ms_ease-out_350ms_both]">
             <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-primary">
               <Mail className="size-3.5" aria-hidden />
               Jako diyor ki
             </span>
-            <h2 id="jako-popup-title" className="font-display text-lg font-bold leading-snug text-foreground text-balance">
+            <h2 id="jako-popup-title" className="font-display text-lg font-bold leading-snug text-foreground text-balance sm:text-xl">
               {alert.title}
             </h2>
           </div>
         </div>
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain rounded-2xl border border-border bg-secondary/40 p-4">
+        <div className="relative flex min-h-0 origin-top-left flex-col gap-3 overflow-y-auto overscroll-contain rounded-2xl rounded-tl-md border border-primary/25 bg-secondary/50 p-4 animate-[bubble-pop_450ms_cubic-bezier(.2,1.2,.4,1)_550ms_both]">
           {alert.image && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={alert.image} alt="" className="max-h-56 w-full rounded-xl border border-border bg-secondary object-cover" />
@@ -258,13 +275,17 @@ function MessagePopup({
             </a>
           )}
         </div>
-        <div className="flex w-full flex-col gap-2">
+        <div className="flex w-full flex-col gap-2 animate-[rise_400ms_ease-out_800ms_both]">
           <button
             ref={laterRef}
             type="button"
             onClick={onRead}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:bg-primary/90"
+            className="relative flex items-center justify-center gap-2 overflow-hidden rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground transition-transform hover:bg-primary/90 active:scale-[0.98]"
           >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-primary-foreground/20 animate-[btn-sheen_3s_ease-in-out_1.4s_infinite]"
+            />
             <Check className="size-4" aria-hidden />
             Okudum, devam et
           </button>
@@ -360,7 +381,7 @@ function MessageAlert({
           <JakoAvatar
             pose="duyuru"
             size="md"
-            className="ring-2 ring-primary/40 animate-bounce [animation-iteration-count:2]"
+            className="origin-bottom ring-2 ring-primary/40 animate-[jako-shout_2.6s_ease-in-out_600ms_infinite]"
           />
           <span className="absolute -top-2 -right-2 flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground ring-2 ring-card">
             {alert.unread > 9 ? '9+' : alert.unread}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getMember } from '@/lib/member'
-import { listMyActiveTables, listOpenTables, tableView } from '@/lib/pvp/tables'
+import { listMyActiveTables, listOpenTables, sweepIdleTables, tableView } from '@/lib/pvp/tables'
 import { myTournamentTables } from '@/lib/tournaments'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: Request) {
   const game = new URL(req.url).searchParams.get('game') ?? undefined
   const m = await getMember()
+  await sweepIdleTables().catch((e) => console.error('[tables] sweep failed', e))
   const [open, mine, tour] = await Promise.all([
     listOpenTables(game),
     m ? listMyActiveTables(m.id) : Promise.resolve([]),
