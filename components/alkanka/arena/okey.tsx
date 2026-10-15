@@ -34,7 +34,7 @@ export function TileFace({
 }: {
   tile: Tile
   okey: OkeyValue
-  size?: 'sm' | 'md' | 'fluid'
+  size?: 'xs' | 'sm' | 'md' | 'fluid'
   selected?: boolean
   onClick?: () => void
   label?: string
@@ -51,7 +51,7 @@ export function TileFace({
       aria-pressed={onClick ? selected : undefined}
       className={cn(
         'relative flex shrink-0 flex-col items-center justify-start rounded-md bg-tile shadow-[inset_0_-4px_0_rgb(0_0_0/0.12),0_2px_4px_rgb(0_0_0/0.3)] transition-transform',
-        size === 'md' ? 'h-16 w-11 pt-1.5 sm:h-[4.5rem] sm:w-12' : 'h-11 w-8 pt-1',
+        size === 'md' ? 'h-16 w-11 pt-1.5 sm:h-[4.5rem] sm:w-12' : size === 'xs' ? 'h-8 w-6 rounded pt-0.5' : 'h-11 w-8 pt-1',
         selected && '-translate-y-3 ring-2 ring-primary',
         onClick && 'hover:-translate-y-1',
         joker && 'ring-2 ring-primary/80',
@@ -61,8 +61,8 @@ export function TileFace({
         <Sparkles className={cn('text-tile-black', size === 'md' ? 'mt-2 size-6' : 'mt-1 size-4')} aria-hidden="true" />
       ) : (
         <>
-          <span className={cn('font-display font-bold leading-none', TEXT[tile.color], size === 'md' ? 'text-2xl' : 'text-base')}>{tile.num}</span>
-          <span className={cn('mt-1 rounded-full', size === 'md' ? 'size-2.5' : 'size-1.5', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][tile.color])} />
+          <span className={cn('font-display font-bold leading-none', TEXT[tile.color], size === 'md' ? 'text-2xl' : size === 'xs' ? 'text-sm' : 'text-base')}>{tile.num}</span>
+          <span className={cn('rounded-full', size === 'md' ? 'mt-1 size-2.5' : size === 'xs' ? 'mt-0.5 size-1' : 'mt-1 size-1.5', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][tile.color])} />
         </>
       )}
       {joker && <span className="absolute -top-2 rounded bg-primary px-1 text-[8px] font-bold uppercase text-primary-foreground">Okey</span>}
