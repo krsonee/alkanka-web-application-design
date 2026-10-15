@@ -612,15 +612,19 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
               </a>
             </div>
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center gap-4 p-4 sm:gap-8 sm:p-8">
-              <Image
-                src="/images/mascots/jako-uzgun.png"
-                alt=""
-                width={240}
-                height={240}
-                className="h-3/5 w-auto shrink-0 object-contain motion-safe:animate-[float_4s_ease-in-out_infinite] drop-shadow-xl sm:h-4/5"
-              />
-              <div className="flex max-w-sm flex-col gap-2 sm:gap-3">
+  <div className="absolute inset-0 flex items-end overflow-hidden sm:items-center">
+  <Image
+  src="/images/kankatv-offline.png"
+  alt="Jako kanepede oturmuş, kapalı televizyona omuz silkiyor"
+  fill
+  sizes="(min-width: 1024px) 66vw, 100vw"
+  className="object-cover object-[70%_center]"
+  />
+  <div
+  className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent sm:bg-gradient-to-r sm:from-background/95 sm:via-background/50 sm:to-transparent"
+  aria-hidden="true"
+  />
+  <div className="relative flex max-w-sm flex-col gap-2 p-4 sm:gap-3 sm:p-8">
                 <span className="flex items-center gap-1.5 self-start rounded-md bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   <Tv className="size-3" aria-hidden="true" />
                   {current.name} · Kapalı
