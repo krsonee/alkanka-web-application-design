@@ -23,7 +23,8 @@ export function PlayingCard({ card, hidden, index = 0, small }: { card?: Card; h
         aria-label={hidden || !card ? 'Kapalı kart' : `${RANKS[card.r]} ${SUITS[card.s]}`}
       >
         {hidden || !card ? (
-          <span className="text-[8px] font-bold uppercase tracking-widest text-primary">AK</span>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/images/logos/fist.png" alt="" className="size-7 rounded-full object-cover" />
         ) : (
           <span className={cn('font-display text-sm font-bold leading-none', red ? 'text-[oklch(0.55_0.2_25)]' : 'text-[oklch(0.18_0.01_260)]')}>
             {RANKS[card.r]}
@@ -42,7 +43,8 @@ export function PlayingCard({ card, hidden, index = 0, small }: { card?: Card; h
       {hidden || !card ? (
         <div className="absolute inset-0 flex items-center justify-center rounded-lg border border-primary/40 bg-secondary">
           <div className="flex size-[80%] items-center justify-center rounded-md border border-primary/30 bg-background">
-            <span className="font-display text-[10px] font-bold uppercase tracking-widest text-primary sm:text-xs">Alkanka</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/logos/fist.png" alt="" className="size-10 rounded-full object-cover sm:size-12" />
           </div>
         </div>
       ) : (
