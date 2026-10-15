@@ -174,9 +174,15 @@ function AccountArea() {
           Giriş
         </a>
         <a
-          href="#kayit"
+          href="#giris"
           data-tour="account"
-          className="flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-3 text-xs sm:px-4 font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
+          className="flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 sm:hidden"
+        >
+          Giriş yap
+        </a>
+        <a
+          href="#kayit"
+          className="hidden h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 sm:flex"
         >
           Kayıt ol
         </a>
