@@ -54,6 +54,29 @@ function layoutSorted(tiles: Tile[], okey: OkeyValue, mode: 'seri' | 'cift'): Sl
   return slots
 }
 
+/** Places each group with an empty slot after it so groups read as separate sets; leftovers fill the rest. */
+export function layoutGroups(groups: Tile[][], rest: Tile[]): Slots {
+  const all = [...groups.flat(), ...rest]
+  const compact: Slots = [...all.map((t) => t.id), ...Array(Math.max(0, RACK_SLOTS - all.length)).fill(null)]
+  const slots: Slots = Array(RACK_SLOTS).fill(null)
+  let pos = 0
+  for (const g of groups) {
+    if (pos < RACK_COLS && pos + g.length > RACK_COLS) pos = RACK_COLS
+    if (pos + g.length > RACK_SLOTS) return compact
+    for (const t of g) slots[pos++] = t.id
+    pos++
+  }
+  const free = [
+    ...slots.map((id, i) => (id == null && i >= pos ? i : -1)).filter((i) => i >= 0),
+    ...slots.map((id, i) => (id == null && i < pos ? i : -1)).filter((i) => i >= 0),
+  ]
+  if (free.length < rest.length) return compact
+  rest.forEach((t, k) => (slots[free[k]] = t.id))
+  return slots
+}
+
+export type SlotMark = { label?: string } | null
+
 export function useRack(hand: Tile[], okey: OkeyValue) {
   const [raw, setRaw] = useState<Slots>(() => layoutSorted(sortHand(hand, okey, 'seri'), okey, 'seri'))
   const [selected, setSelected] = useState<number | null>(null)
@@ -79,7 +102,7 @@ export function useRack(hand: Tile[], okey: OkeyValue) {
     setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
   }
 
-  return { slots, selected: selectedId, setSelected, moveTo, arrange, flipped, toggleFlip }
+  return { slots, selected: selectedId, setSelected, moveTo, arrange, setLayout: setRaw, flipped, toggleFlip }
 }
 
 export type DropKind = 'discard' | 'finish'
@@ -92,10 +115,13 @@ export function OkeyRack({
   onDoubleTile,
   onDropOut,
   onDropHover,
+  marks,
 }: {
   hand: Tile[]
   okey: OkeyValue
   rack: ReturnType<typeof useRack>
+  /** Per-slot marker: a non-null value underlines the slot as part of a valid group; label shows above its first tile. */
+  marks?: SlotMark[]
   /** Tile id that was just drawn, shown with a marker. */
   highlight?: number | null
   onDoubleTile?: (tile: Tile) => void
@@ -190,12 +216,21 @@ export function OkeyRack({
             const i = row * RACK_COLS + c
             const tile = id != null ? byId.get(id) : undefined
             const canDropHere = rack.selected != null && id == null
+            const mark = marks?.[i]
             return (
               <div
                 key={i}
                 data-rack-slot={i}
                 className={cn('relative flex aspect-[3/4] items-end justify-center rounded-sm', over === i && 'bg-primary/30')}
               >
+                {mark && (
+                  <span aria-hidden="true" className="pointer-events-none absolute -bottom-1 -left-px -right-px z-10 h-1 bg-primary" />
+                )}
+                {mark?.label && (
+                  <span className="pointer-events-none absolute -top-1.5 left-0 z-20 rounded-sm bg-primary px-0.5 text-[8px] font-bold leading-tight tabular-nums text-primary-foreground sm:text-[9px]">
+                    {mark.label}
+                  </span>
+                )}
                 {tile ? (
                   <div
                     onPointerDown={(e) => onPointerDown(e, tile.id)}

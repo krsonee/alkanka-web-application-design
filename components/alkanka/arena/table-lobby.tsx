@@ -439,6 +439,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [resultClosed, setResultClosed] = useState(false)
 
   const send = useCallback(
     async (action: RemoteAction) => {
@@ -601,6 +602,69 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             >
               {seatCount > 2 && !data.team ? 'Yerine bot geçir' : 'Hükmen galibiyet al'}
             </button>
+          </div>
+        )}
+
+        {ended && !resultClosed && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-result-title"
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-300"
+          >
+            <div
+              className={cn(
+                'flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border-2 bg-card p-6 text-center shadow-2xl animate-in zoom-in-75 slide-in-from-bottom-6 duration-500',
+                won ? 'border-primary glow-gold' : 'border-border',
+              )}
+            >
+              <span
+                className={cn(
+                  'flex size-20 items-center justify-center rounded-full animate-in spin-in-12 zoom-in-50 duration-700',
+                  won ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground',
+                )}
+              >
+                {won || spectator || data.winnerId == null ? <Trophy className="size-10" aria-hidden="true" /> : <X className="size-10" aria-hidden="true" />}
+              </span>
+              <p id="game-result-title" className={cn('text-3xl font-black uppercase tracking-tight', won ? 'text-primary' : 'text-foreground')}>
+                {data.status === 'iptal'
+                  ? 'İptal'
+                  : data.winnerId == null
+                    ? 'Berabere'
+                    : spectator
+                      ? 'Oyun bitti'
+                      : won
+                        ? data.team
+                          ? 'Takımın kazandı!'
+                          : 'Kazandın!'
+                        : 'Kaybettin'}
+              </p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {data.status === 'iptal' || data.winnerId == null
+                  ? 'Bahis iade edildi.'
+                  : spectator
+                    ? `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`
+                    : won
+                      ? 'Pot hesabına eklendi.'
+                      : `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`}
+              </p>
+              <div className="mt-1 grid w-full grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResultClosed(true)}
+                  className="rounded-xl border border-border py-2.5 text-sm font-bold text-foreground hover:bg-secondary"
+                >
+                  Masayı gör
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { refresh(); onLeave() }}
+                  className="rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground"
+                >
+                  Lobiye dön
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
