@@ -72,7 +72,9 @@ export function QuickTiles({ distributed }: { distributed: number | null }) {
         {QUICK_TILES.map((tile, i) => (
           <li key={tile.id} className="animate-rise" style={{ animationDelay: `${i * 60}ms` }}>
             <a
-              href={tile.href}
+                href={tile.href}
+                data-tour={`tile-${tile.id}`}
+
               className="panel-gold group flex h-full flex-col gap-3 rounded-xl p-2.5 transition-all hover:-translate-y-0.5 hover:glow-gold"
             >
               <span className="relative block aspect-[16/10] overflow-hidden rounded-lg">

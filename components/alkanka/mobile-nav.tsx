@@ -1,12 +1,12 @@
 'use client'
 
-import { CircleDot, Home, LayoutGrid, MessagesSquare, ShoppingBag } from 'lucide-react'
+import { Dices, Home, LayoutGrid, MessagesSquare, ShoppingBag } from 'lucide-react'
 import { OPEN_CHAT_EVENT } from './live-rail'
 
 const ITEMS = [
   { label: 'Ana', href: '/', icon: Home },
   { label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
-  { label: 'Çark', href: '/oyunlar/cark', icon: CircleDot, primary: true, tour: 'mobile-cark' },
+  { label: 'Oyunlar', href: '/oyunlar', icon: Dices, primary: true, tour: 'mobile-oyunlar' },
   { label: 'Market', href: '/market', icon: ShoppingBag, tour: 'mobile-market' },
 ]
 
@@ -27,13 +27,13 @@ export function MobileNav() {
                 <span
                   className={
                     item.primary
-                      ? 'flex size-9 -mt-5 items-center justify-center rounded-full bg-primary text-primary-foreground glow-gold'
+                      ? 'flex size-12 -mt-7 items-center justify-center rounded-full bg-primary text-primary-foreground ring-4 ring-surface glow-gold'
                       : 'flex size-5 items-center justify-center'
                   }
                 >
-                  <Icon className="size-5" aria-hidden="true" />
+                  <Icon className={item.primary ? 'size-6' : 'size-5'} aria-hidden="true" />
                 </span>
-                {item.label}
+                <span className={item.primary ? 'font-bold text-primary' : undefined}>{item.label}</span>
               </a>
             </li>
           )
