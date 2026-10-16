@@ -15,6 +15,7 @@ import {
   legalMoves,
   pipCount,
   rollDice,
+  routesFrom,
   spendDie,
   type Board,
   type From,
@@ -111,7 +112,7 @@ type BoardProps = {
   legal: Move[]
   selected: From | null
   onSelect: (from: From | null) => void
-  onPlay: (m: Move) => void
+  onPlay: (seq: Move[]) => void
   rolled: number[]
   dice: number[]
   rollKey: number
@@ -123,7 +124,10 @@ type BoardProps = {
 function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn }: BoardProps) {
   const opp: Side = me === 'p' ? 'b' : 'p'
   const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
-  const targets = useMemo(() => legal.filter((m) => m.from === selected), [legal, selected])
+  const routes = useMemo(
+    () => (selected != null && sources.has(selected) ? routesFrom(board, me, dice, selected) : new Map<To, Move[]>()),
+    [board, me, dice, selected, sources],
+  )
   const faces = useRollAnimation(rolled, rollKey)
 
   const usedFlags = useMemo(() => {
@@ -158,7 +162,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   function startDrag(e: React.PointerEvent, from: From) {
     if (!sources.has(from) || e.button !== 0) return
     drag.current = { from, x: e.clientX, y: e.clientY, active: false }
-    const moves = legal
+    const dragRoutes = routesFrom(board, me, dice, from)
     const onMove = (ev: PointerEvent) => {
       const d = drag.current
       if (!d) return
@@ -184,8 +188,8 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       setTimeout(() => (suppressClick.current = false), 0)
       if (cancelled) return
       const to = dropAt(ev.clientX, ev.clientY)
-      const m = moves.find((x) => x.from === d.from && x.to === to)
-      if (m) onPlay(m)
+      const seq = to == null ? undefined : dragRoutes.get(to)
+      if (seq) onPlay(seq)
     }
     const onUp = (ev: PointerEvent) => finish(ev, false)
     const onCancel = (ev: PointerEvent) => finish(ev, true)
@@ -196,8 +200,8 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
 
   function clickPoint(i: number) {
     if (suppressClick.current) return
-    const t = targets.find((m) => m.to === i)
-    if (t) return onPlay(t)
+    const seq = routes.get(i)
+    if (seq) return onPlay(seq)
     if (selected === i) return onSelect(null)
     if (sources.has(i)) onSelect(i)
   }
@@ -206,7 +210,8 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
     const i = real(visual)
     const v = board.pts[i]
     const side: Side = v > 0 ? 'p' : 'b'
-    const isTarget = targets.some((t) => t.to === i)
+    const steps = routes.get(i)?.length ?? 0
+    const isTarget = steps > 0
     const isSource = sources.has(i)
     const mine = side === me
     const label = me === 'p' ? i + 1 : 24 - i
@@ -248,7 +253,11 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
               hover === i && 'scale-150 bg-primary/60',
             )}
           >
-            <span className="size-2 animate-ping rounded-full bg-primary" />
+            {steps > 1 ? (
+              <span className="text-[9px] font-black text-primary-foreground sm:text-[11px]">{`×${steps}`}</span>
+            ) : (
+              <span className="size-2 animate-ping rounded-full bg-primary" />
+            )}
           </span>
         )}
         <span className="relative z-10 flex h-full w-full flex-col py-0.5 sm:py-1">
@@ -269,7 +278,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   }
 
   const barSelectable = sources.has('bar')
-  const offTarget = targets.find((t) => t.to === 'off')
+  const offTarget = routes.get('off')
   const shown = faces ?? rolled.slice(0, rolled.length === 4 ? 4 : 2)
 
   return (
@@ -501,9 +510,14 @@ export function Tavla({ finish }: GameApi) {
     setPhase('move')
   }
 
-  function play(m: Move) {
-    const next = applyMove(board, 'p', m)
-    const left = spendDie(dice, m.die)
+  function play(seq: Move[]) {
+    let next = board
+    let left = dice
+    for (const m of seq) {
+      next = applyMove(next, 'p', m)
+      left = spendDie(left, m.die)
+    }
+    const hit = seq.some((m) => m.hit)
     setBoard(next)
     setDice(left)
     setSelected(null)
@@ -511,7 +525,7 @@ export function Tavla({ finish }: GameApi) {
     if (!left.length || !legalMoves(next, 'p', left).length) {
       setMessage('Hamleni tamamladın. Sıra rakipte.')
       setPhase('bot')
-    } else if (m.hit) setMessage('Rakibin pulunu kırdın!')
+    } else if (hit) setMessage('Rakibin pulunu kırdın!')
   }
 
   function undo() {
@@ -651,8 +665,8 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
         legal={legal}
         selected={selected}
         onSelect={setSelected}
-        onPlay={(m) => {
-          setPending((p) => [...p, m])
+        onPlay={(seq) => {
+          setPending((p) => [...p, ...seq])
           setSelected(null)
         }}
         rolled={s.rolled}

@@ -170,3 +170,23 @@ export function botPlan(b: Board, dice: number[]): Move[] {
 export function spendDie(dice: number[], die: number) {
   return removeDie(dice, die)
 }
+
+/**
+ * Every destination a single checker can reach this turn, including chained
+ * moves that use several dice (e.g. 3+5 or a full double), each step legal.
+ */
+export function routesFrom(b: Board, s: Side, dice: number[], from: From): Map<To, Move[]> {
+  const out = new Map<To, Move[]>()
+  const walk = (board: Board, left: number[], pos: From, seq: Move[]) => {
+    if (!left.length) return
+    for (const m of legalMoves(board, s, left)) {
+      if (m.from !== pos) continue
+      const next = [...seq, m]
+      const prev = out.get(m.to)
+      if (!prev || prev.length > next.length) out.set(m.to, next)
+      if (m.to !== 'off') walk(applyMove(board, s, m), removeDie(left, m.die), m.to, next)
+    }
+  }
+  walk(b, dice, from, [])
+  return out
+}

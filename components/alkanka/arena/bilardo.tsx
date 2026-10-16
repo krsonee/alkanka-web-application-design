@@ -6,27 +6,40 @@ import { cn } from '@/lib/utils'
 import type { BallState, BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
+import { playSound } from '@/lib/sound'
 
 const W = 1000
 const H = 500
 const RAIL = 38
 const R = 12
-const POCKET_R = 25
+// Scale: 1000 units = 100" playing surface (9 ft table), ball 2.25" ≈ 22.5 units.
+// Pocket mouths follow WPA sizing: corner ≈ 4.6", side ≈ 5.2" (cushion nose to nose).
+const POCKET_R = 22
+const CORNER_MOUTH = 14
+const SIDE_MOUTH = 16
 const MAX_SPEED = 30
 const SUB = 8
 const FRICTION = Math.pow(0.987, 1 / SUB)
+const FOLLOW_GAIN = 0.62
+const ENGLISH_GAIN = 0.42
 
 const BALL_COLORS = ['#f5f1e6', '#f2c230', '#2559c9', '#d4382c', '#6b3fa0', '#ef7d22', '#1f8a4c', '#8a2432', '#141414']
 const POCKETS = [
-  [0, 0],
-  [W / 2, -6],
-  [W, 0],
-  [0, H],
-  [W / 2, H + 6],
-  [W, H],
+  [-6, -6],
+  [W / 2, -8],
+  [W + 6, -6],
+  [-6, H + 6],
+  [W / 2, H + 8],
+  [W + 6, H + 6],
 ] as const
 
+const inHorizontalMouth = (x: number) => x < CORNER_MOUTH || x > W - CORNER_MOUTH || Math.abs(x - W / 2) < SIDE_MOUTH
+const inVerticalMouth = (y: number) => y < CORNER_MOUTH || y > H - CORNER_MOUTH
+
 type Ball = { id: number; x: number; y: number; vx: number; vy: number; in: boolean }
+/** Cue-ball spin. `side` > 0 is right english, `follow` > 0 is top spin, < 0 is draw. */
+type Spin = { side: number; follow: number; applied: boolean }
+type SpinInput = { x: number; y: number }
 type Group = 'solid' | 'stripe'
 type Who = 'p' | 'b'
 
@@ -63,7 +76,27 @@ function rack(rand: () => number = Math.random): Ball[] {
   return balls
 }
 
-function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball) => void) {
+function cushion(b: Ball, axis: 'x' | 'y', spin?: Spin) {
+  if (spin && b.id === 0 && Math.abs(spin.side) > 0.01) {
+    const sp = Math.hypot(b.vx, b.vy) || 1
+    // English pushes the rebound toward the shooter's side of the spin, along the rail.
+    const rx = -b.vy / sp
+    const ry = b.vx / sp
+    if (axis === 'y') {
+      b.vy = -b.vy * 0.82
+      b.vx += rx * spin.side * ENGLISH_GAIN * sp
+    } else {
+      b.vx = -b.vx * 0.82
+      b.vy += ry * spin.side * ENGLISH_GAIN * sp
+    }
+    spin.side *= 0.5
+    return
+  }
+  if (axis === 'y') b.vy = -b.vy * 0.82
+  else b.vx = -b.vx * 0.82
+}
+
+function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball) => void, spin?: Spin) {
   for (let s = 0; s < SUB; s++) {
     for (const b of balls) {
       if (b.in) continue
@@ -80,12 +113,12 @@ function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball)
         }
       }
       if (b.in) continue
-      const nearPocketX = POCKETS.some(([px]) => Math.abs(b.x - px) < POCKET_R + 4)
-      const nearPocketY = POCKETS.some(([, py]) => Math.abs(b.y - py) < POCKET_R + 4)
-      if (b.x < R && !nearPocketY) ((b.x = R), (b.vx = -b.vx * 0.82))
-      if (b.x > W - R && !nearPocketY) ((b.x = W - R), (b.vx = -b.vx * 0.82))
-      if (b.y < R && !nearPocketX) ((b.y = R), (b.vy = -b.vy * 0.82))
-      if (b.y > H - R && !nearPocketX) ((b.y = H - R), (b.vy = -b.vy * 0.82))
+      const mouthX = inHorizontalMouth(b.x)
+      const mouthY = inVerticalMouth(b.y)
+      if (b.x < R && !mouthY && b.vx < 0) ((b.x = R), cushion(b, 'x', spin))
+      if (b.x > W - R && !mouthY && b.vx > 0) ((b.x = W - R), cushion(b, 'x', spin))
+      if (b.y < R && !mouthX && b.vy < 0) ((b.y = R), cushion(b, 'y', spin))
+      if (b.y > H - R && !mouthX && b.vy > 0) ((b.y = H - R), cushion(b, 'y', spin))
       b.x = Math.min(Math.max(b.x, -10), W + 10)
       b.y = Math.min(Math.max(b.y, -10), H + 10)
     }
@@ -108,11 +141,19 @@ function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball)
         b.y += ny * overlap
         const rel = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny
         if (rel <= 0) continue
+        const cue = spin && !spin.applied ? (a.id === 0 ? a : b.id === 0 ? b : null) : null
+        const pre = cue ? { vx: cue.vx, vy: cue.vy, sp: Math.hypot(cue.vx, cue.vy) } : null
         const imp = rel * 0.97
         a.vx -= imp * nx
         a.vy -= imp * ny
         b.vx += imp * nx
         b.vy += imp * ny
+        if (cue && pre && spin && pre.sp > 0) {
+          // Top spin keeps the cue ball rolling forward, draw pulls it back along the shot line.
+          cue.vx += (pre.vx / pre.sp) * spin.follow * FOLLOW_GAIN * pre.sp
+          cue.vy += (pre.vy / pre.sp) * spin.follow * FOLLOW_GAIN * pre.sp
+          spin.applied = true
+        }
         onHit(a, b)
       }
     }
@@ -167,9 +208,16 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     replay: false,
     angle: Math.PI,
     lastSeq: remote?.state.seq ?? 0,
-    shot: { first: null as number | null, potted: [] as number[], angle: 0, pow: 0 },
+    shot: { first: null as number | null, potted: [] as number[], angle: 0, pow: 0, spin: { x: 0, y: 0 } as SpinInput },
+    spin: { side: 0, follow: 0, applied: true } as Spin,
   })
   const [power, setPower] = useState(60)
+  const [spin, setSpinState] = useState<SpinInput>({ x: 0, y: 0 })
+  const spinRef = useRef(spin)
+  const setSpin = (v: SpinInput) => {
+    spinRef.current = v
+    setSpinState(v)
+  }
   const oppName = remote ? remote.names[oppSeat] || 'Rakip' : 'Rakip · Baykuş'
   const [ui, setUi] = useState({
     turn: game.current.turn,
@@ -189,7 +237,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       // Replay the rival's shot from the synced positions, then snap to the authoritative result.
       g.replay = true
       g.turn = 'b'
-      shoot(st.shot.angle, st.shot.pow * 100, true)
+      shoot(st.shot.angle, st.shot.pow * 100, true, { x: st.shot.spinX ?? 0, y: st.shot.spinY ?? 0 })
       return
     }
     balls.current = st.balls.map(fromState)
@@ -210,7 +258,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     }))
   }
 
-  function shoot(angle: number, pow: number, replay = false) {
+  function shoot(angle: number, pow: number, replay = false, sp: SpinInput = { x: 0, y: 0 }) {
     const g = game.current
     const cue = balls.current[0]
     if (g.moving || g.over || cue.in) return
@@ -218,7 +266,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const speed = (pow / 100) * MAX_SPEED
     cue.vx = Math.cos(angle) * speed
     cue.vy = Math.sin(angle) * speed
-    g.shot = { first: null, potted: [], angle, pow: pow / 100 }
+    g.spin = { side: sp.x, follow: sp.y, applied: false }
+    g.shot = { first: null, potted: [], angle, pow: pow / 100, spin: sp }
     g.moving = true
     sync(g.turn === 'p' ? 'Toplar yuvarlanıyor...' : `${oppName} vurdu...`)
   }
@@ -229,7 +278,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const groups: [Group | null, Group | null] = [null, null]
     groups[seat] = g.groups.p
     groups[oppSeat] = g.groups.b
-    void remote.send({ type: 'shot', angle: g.shot.angle, pow: g.shot.pow, balls: balls.current.map(toState), groups, keepTurn, result, note })
+    void remote.send({ type: 'shot', angle: g.shot.angle, pow: g.shot.pow, spinX: g.shot.spin.x, spinY: g.shot.spin.y, balls: balls.current.map(toState), groups, keepTurn, result, note })
   }
 
   function botShot() {
@@ -265,10 +314,11 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     if (!best) {
       const near = targets.sort((a, b) => Math.hypot(a.x - cue.x, a.y - cue.y) - Math.hypot(b.x - cue.x, b.y - cue.y))[0]
       const angle = near ? Math.atan2(near.y - cue.y, near.x - cue.x) : Math.random() * Math.PI * 2
-      return shoot(angle + (Math.random() - 0.5) * 0.05, 55)
+      return shoot(angle + (Math.random() - 0.5) * 0.05, 55, false, { x: 0, y: 0 })
     }
     const noise = (Math.random() - 0.5) * 0.028
-    shoot(best.angle + noise, Math.min(95, 30 + best.dist / 18))
+    // A little draw keeps the bot's cue ball from following the object ball in.
+    shoot(best.angle + noise, Math.min(95, 30 + best.dist / 18), false, { x: 0, y: -0.25 })
   }
 
   function settle() {
@@ -367,12 +417,17 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         step(
           balls.current,
           (a, b) => {
+            if (Math.hypot(a.vx - b.vx, a.vy - b.vy) > 1.5) playSound('tile')
             if (g.shot.first === null) {
               if (a.id === 0) g.shot.first = b.id
               else if (b.id === 0) g.shot.first = a.id
             }
           },
-          (b) => g.shot.potted.push(b.id),
+          (b) => {
+            playSound('pocket')
+            g.shot.potted.push(b.id)
+          },
+          g.spin,
         )
         const still = balls.current.every((b) => b.in || (b.vx === 0 && b.vy === 0))
         idleFrames = still ? idleFrames + 1 : 0
@@ -475,19 +530,19 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       ctx.lineTo(W * 0.25, H)
       ctx.stroke()
       for (const [px, py] of POCKETS) {
-        const pg = ctx.createRadialGradient(px, py, POCKET_R * 0.2, px, py, POCKET_R * 1.35)
+        const pg = ctx.createRadialGradient(px, py, POCKET_R * 0.2, px, py, POCKET_R * 1.15)
         pg.addColorStop(0, '#000000')
-        pg.addColorStop(0.7, '#05070c')
+        pg.addColorStop(0.75, '#05070c')
         pg.addColorStop(1, 'rgba(5,7,12,0)')
         ctx.fillStyle = pg
         ctx.beginPath()
-        ctx.arc(px, py, POCKET_R * 1.35, 0, Math.PI * 2)
+        ctx.arc(px, py, POCKET_R * 1.15, 0, Math.PI * 2)
         ctx.fill()
         ctx.strokeStyle = gold
-        ctx.globalAlpha = 0.35
-        ctx.lineWidth = 2
+        ctx.globalAlpha = 0.3
+        ctx.lineWidth = 1.5
         ctx.beginPath()
-        ctx.arc(px, py, POCKET_R + 1, 0, Math.PI * 2)
+        ctx.arc(px, py, POCKET_R, 0, Math.PI * 2)
         ctx.stroke()
         ctx.globalAlpha = 1
       }
@@ -679,8 +734,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       else if (k === ' ' || k === 'Enter') {
         if (e.repeat) return e.preventDefault()
         if (canAim()) {
-          shoot(game.current.angle, powerRef.current)
+          shoot(game.current.angle, powerRef.current, false, spinRef.current)
           lock(false)
+          setSpin({ x: 0, y: 0 })
         }
       } else return
       held[e.shiftKey ? 'add' : 'delete']('fine')
@@ -712,8 +768,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   }, [])
 
   const fire = () => {
-    shoot(game.current.angle, power)
+    shoot(game.current.angle, power, false, spinRef.current)
     lock(false)
+    setSpin({ x: 0, y: 0 })
   }
 
   const yourTurn = ui.turn === 'p' && !ui.moving
@@ -771,6 +828,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         <p className="flex-1 text-sm font-semibold text-foreground" aria-live="polite">
           {ui.message}
         </p>
+        <SpinPad value={spin} onChange={setSpin} disabled={!yourTurn} />
         <label className="flex items-center gap-3 text-sm text-muted-foreground">
           Güç
           <input type="range" min={5} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="w-full flex-1 accent-primary sm:w-36 sm:flex-none" />
@@ -791,6 +849,82 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   )
 }
 
+function spinLabel({ x, y }: SpinInput) {
+  if (Math.hypot(x, y) < 0.12) return 'Ortadan'
+  const v = y > 0.25 ? 'Üst' : y < -0.25 ? 'Alt' : ''
+  const h = x > 0.25 ? 'Sağ' : x < -0.25 ? 'Sol' : ''
+  return [v, h].filter(Boolean).join(' · ') || 'Hafif'
+}
+
+/** Cue-ball contact point picker: drag the tip marker anywhere on the ball to set english and follow/draw. */
+function SpinPad({ value, onChange, disabled }: { value: SpinInput; onChange: (v: SpinInput) => void; disabled: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const set = (clientX: number, clientY: number) => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    let x = ((clientX - r.left) / r.width) * 2 - 1
+    let y = -(((clientY - r.top) / r.height) * 2 - 1)
+    const d = Math.hypot(x, y)
+    if (d > 0.8) ((x = (x / d) * 0.8), (y = (y / d) * 0.8))
+    onChange({ x: Math.round(x * 20) / 20, y: Math.round(y * 20) / 20 })
+  }
+  const nudge = (dx: number, dy: number) => {
+    let x = value.x + dx
+    let y = value.y + dy
+    const d = Math.hypot(x, y)
+    if (d > 0.8) ((x = (x / d) * 0.8), (y = (y / d) * 0.8))
+    onChange({ x, y })
+  }
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        ref={ref}
+        role="slider"
+        tabIndex={disabled ? -1 : 0}
+        aria-label="Falso noktası"
+        aria-valuetext={spinLabel(value)}
+        aria-disabled={disabled}
+        onPointerDown={(e) => {
+          if (disabled) return
+          e.currentTarget.setPointerCapture(e.pointerId)
+          set(e.clientX, e.clientY)
+        }}
+        onPointerMove={(e) => !disabled && e.buttons && set(e.clientX, e.clientY)}
+        onDoubleClick={() => onChange({ x: 0, y: 0 })}
+        onKeyDown={(e) => {
+          const map: Record<string, [number, number]> = { ArrowUp: [0, 0.1], ArrowDown: [0, -0.1], ArrowLeft: [-0.1, 0], ArrowRight: [0.1, 0] }
+          const m = map[e.key]
+          if (!m) return
+          e.preventDefault()
+          e.stopPropagation()
+          nudge(m[0], m[1])
+        }}
+        className={cn(
+          'relative size-14 shrink-0 touch-none rounded-full bg-checker-light shadow-[inset_-6px_-8px_14px_rgb(0_0_0/0.25),0_4px_10px_rgb(0_0_0/0.35)] outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          disabled ? 'opacity-40' : 'cursor-crosshair',
+        )}
+      >
+        <span aria-hidden="true" className="absolute inset-x-1/2 inset-y-2 w-px -translate-x-1/2 bg-checker-dark/20" />
+        <span aria-hidden="true" className="absolute inset-y-1/2 inset-x-2 h-px -translate-y-1/2 bg-checker-dark/20" />
+        <span
+          aria-hidden="true"
+          className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive ring-2 ring-checker-light transition-[left,top] duration-75"
+          style={{ left: `${50 + value.x * 50}%`, top: `${50 - value.y * 50}%` }}
+        />
+      </div>
+      <div className="flex min-w-16 flex-col">
+        <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Falso</span>
+        <span className="text-sm font-semibold text-foreground">{spinLabel(value)}</span>
+        {(value.x !== 0 || value.y !== 0) && (
+          <button type="button" onClick={() => onChange({ x: 0, y: 0 })} className="self-start text-[11px] font-semibold text-primary hover:underline">
+            Sıfırla
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="inline-flex min-w-6 items-center justify-center rounded-md border border-border border-b-2 bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-bold text-foreground">
@@ -807,6 +941,7 @@ function KeyGuide() {
     { keys: (<><Kbd>Shift</Kbd><span className="text-muted-foreground">+</span><Kbd>←→</Kbd></>), label: 'İnce ayar' },
     { keys: (<><Kbd>↑</Kbd><Kbd>↓</Kbd></>), label: 'Vuruş gücü ±5' },
     { keys: (<><Kbd>Boşluk</Kbd><Kbd>Enter</Kbd></>), label: 'Vur' },
+    { keys: <span className="text-xs font-semibold text-foreground">Falso</span>, label: 'Beyaz topta noktayı sürükle: üst = takip, alt = geri çekme, sağ/sol = bant falsosu' },
   ]
   return (
     <details className="group hidden rounded-2xl border border-border bg-card md:block" open>

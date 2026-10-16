@@ -497,7 +497,7 @@ export function Okey({ finish }: GameApi) {
           </div>
         </div>
 
-        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} onDropOut={onDropOut} onDropHover={setDropOver} />
+        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} onDropOut={onDropOut} onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish' ? k : null)} />
 
         <div className="flex gap-2">
           <button

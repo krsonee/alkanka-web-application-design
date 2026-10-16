@@ -77,7 +77,7 @@ export type BilardoState = {
   balls: BallState[]
   groups: [('solid' | 'stripe') | null, ('solid' | 'stripe') | null]
   turn: number
-  shot: { angle: number; pow: number; by: number; seq: number } | null
+  shot: { angle: number; pow: number; spinX?: number; spinY?: number; by: number; seq: number } | null
   seq: number
   note: string
 }
@@ -379,6 +379,11 @@ function okeyAct(s: OkeyState, seat: number, a: Action): ActResult {
   return runBots(r.state as OkeyState)
 }
 
+const clampSpin = (v: unknown) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.max(-1, Math.min(1, n)) : 0
+}
+
 function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
   if (s.turn !== seat) throw new Error('Sıra sende değil')
   if (a.type !== 'shot') throw new Error('Bilinmeyen hamle')
@@ -394,7 +399,7 @@ function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
     balls,
     groups,
     seq,
-    shot: { angle, pow, by: seat, seq },
+    shot: { angle, pow, spinX: clampSpin(a.spinX), spinY: clampSpin(a.spinY), by: seat, seq },
     turn: keep ? seat : other(seat),
     note: typeof a.note === 'string' ? a.note.slice(0, 80) : '',
   }

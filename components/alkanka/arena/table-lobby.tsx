@@ -24,6 +24,9 @@ import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
 import { HeadGame } from './head-game'
 import { MemberRank } from '../kp/member-rank'
+import { playSound } from '@/lib/sound'
+import { SoundToggle, actionSound } from './sound-toggle'
+import { useTableSounds } from './use-table-sounds'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -529,13 +532,29 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
       await mutate()
       setBusy(false)
       if (!r.ok) {
+        playSound('error')
         setMsg(r.error ?? 'Hamle yapılamadı.')
         return false
       }
+      playSound(actionSound(data.game, action.type))
       setMsg(null)
       return true
     },
     [data, id, mutate],
+  )
+
+  useTableSounds(
+    data
+      ? {
+          status: data.status,
+          version: data.version,
+          turn: data.turn ?? null,
+          seat: data.seat,
+          humans: data.players.filter((p) => !p.bot).length,
+          game: data.game,
+          won: member != null && (data.winners ?? []).includes(member.id),
+        }
+      : null,
   )
 
   if (error) return <RoomShell onLeave={onLeave}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
@@ -625,6 +644,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
               }}
             />
           )}
+          <SoundToggle />
           <MobileTableChat key={`m-${id}`} tableId={id} />
         </div>
       </div>

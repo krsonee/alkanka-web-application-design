@@ -105,7 +105,7 @@ export function useRack(hand: Tile[], okey: OkeyValue) {
   return { slots, selected: selectedId, setSelected, moveTo, arrange, setLayout: setRaw, flipped, toggleFlip }
 }
 
-export type DropKind = 'discard' | 'finish'
+export type DropKind = 'discard' | 'finish' | `meld:${number}`
 
 export function OkeyRack({
   hand,
