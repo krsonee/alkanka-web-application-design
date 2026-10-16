@@ -1,5 +1,6 @@
 'use client'
 
+import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
 import { ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { resetCatalog, saveCatalogList } from '@/app/panel/catalog-actions'
@@ -141,15 +142,13 @@ function FieldInput({ field, item, set, sponsors, library }: { field: Field; ite
       ) : field.type === 'pairs' ? (
         <textarea id={id} rows={3} className={cn(input, 'resize-y font-mono leading-relaxed')} defaultValue={toPairs(value, field.a, field.b)} onBlur={(e) => set({ [field.key]: fromPairs(e.target.value, field.a, field.b, field.numericB, value) })} />
       ) : field.type === 'image' ? (
-        <div className="flex items-center gap-3">
-          {value ? <img src={String(value)} alt="" className="size-10 shrink-0 rounded-lg border border-border object-cover" /> : null}
-          <input id={id} list="catalog-images" className={input} value={String(value ?? '')} onChange={(e) => set({ [field.key]: e.target.value })} placeholder="/images/... veya https://..." />
-          <datalist id="catalog-images">
-            {library.map((src) => (
-              <option key={src} value={src} />
-            ))}
-          </datalist>
-        </div>
+        <ImageField
+          value={String(value ?? '')}
+          onChange={(url) => set({ [field.key]: url })}
+          library={library}
+          uploadId={`catalog-${field.key}`}
+          placeholder="/images/... veya https://..."
+        />
       ) : (
         <input id={id} maxLength={field.max} className={input} value={String(value ?? '')} onChange={(e) => set({ [field.key]: e.target.value })} />
       )}

@@ -1,6 +1,7 @@
 'use client'
 
 import { HideButton } from '@/components/panel/hide-button'
+import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -159,7 +160,9 @@ function SiteForm({
         error={slugError}
       />
       <Field label="Kısa tanım" value={v.tagline} onChange={(tagline) => set('tagline', tagline)} />
-      <Field label="Logo adresi" value={v.logoUrl} onChange={(logoUrl) => set('logoUrl', logoUrl)} placeholder="https://… veya /images/…" />
+      <div className="md:col-span-2">
+        <ImageField label="Logo" value={v.logoUrl} onChange={(logoUrl) => set('logoUrl', logoUrl)} uploadId="sponsor-logo" compact />
+      </div>
       <Field label="Bonus satırı" value={v.bonusText} onChange={(bonusText) => set('bonusText', bonusText)} />
       <Field label="Bonus türü" value={v.bonusType} onChange={(bonusType) => set('bonusType', bonusType)} placeholder="Deneme, hoş geldin…" />
       <Field label="Çevrim" value={v.wagerText} onChange={(wagerText) => set('wagerText', wagerText)} />
