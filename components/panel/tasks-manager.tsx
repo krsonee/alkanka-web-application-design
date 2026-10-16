@@ -6,6 +6,7 @@ import { Pencil, Plus } from 'lucide-react'
 import { approveClaimAction, rejectClaimAction, saveTaskAction } from '@/app/panel/task-actions'
 import type { PendingClaim, TaskInput, TaskRecord } from '@/lib/tasks'
 import { PERIODS, type TaskPeriod } from '@/lib/task-period'
+import { KIND_META, TASK_GAMES, TASK_KINDS, TASK_PLATFORMS, type TaskKind } from '@/lib/task-kinds'
 import { cn } from '@/lib/utils'
 
 /** ISO timestamp → `YYYY-MM-DDTHH:mm` in Turkey time for datetime-local inputs. */
@@ -17,20 +18,31 @@ function toLocalInput(iso: string | null) {
 const PERIOD_LABEL = Object.fromEntries(PERIODS.map((p) => [p.value, p.label])) as Record<TaskPeriod, string>
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
-const EMPTY: TaskInput = { id: null, title: '', detail: '', points: 10, link: '', needsApproval: true, active: true, sort: 0, period: 'once', startsAt: '', endsAt: '' }
+const EMPTY: TaskInput = { id: null, title: '', detail: '', points: 10, link: '', needsApproval: true, active: true, sort: 0, period: 'once', startsAt: '', endsAt: '', kind: 'manual', target: 1, param: '' }
 const LINK_ERROR = 'Bağlantı https:// ile başlamalı.'
 
 const TASK_TEMPLATES: Partial<TaskInput>[] = [
-  { title: '3 Tavla maçı tamamla', detail: 'Bugün 3 tavla maçını sonuna kadar oyna.', points: 30, period: 'daily', needsApproval: false },
-  { title: '1 Okey masası kazan', detail: 'Canlı Okey masasında bir eli kazan.', points: 40, period: 'daily', needsApproval: false },
-  { title: '101 Okey oyna', detail: 'Bir 101 Okey masasına otur ve oyunu bitir.', points: 25, period: 'daily', needsApproval: false },
-  { title: 'Batak ligi: 5 el kazan', detail: 'Bu hafta Batak masalarında toplam 5 el kazan.', points: 75, period: 'weekly', needsApproval: false },
-  { title: 'Bilardo düellosu kazan', detail: 'Amerikan Bilardo masasında bir rakibi yen.', points: 50, period: 'weekly', needsApproval: false },
-  { title: 'Maç davetini Telegram\u2019da paylaş', detail: 'Masa davet linkini bir Telegram grubunda paylaş, ekran görüntüsünü gönder.', points: 20, period: 'daily', needsApproval: true },
+  { title: '3 Tavla maçı tamamla', detail: 'Bugün 3 tavla maçını sonuna kadar oyna.', points: 30, period: 'daily', kind: 'game_play', param: 'tavla', target: 3 },
+  { title: '1 Okey masası kazan', detail: 'Bugün bir Okey masasında kazan.', points: 40, period: 'daily', kind: 'game_win', param: 'okey', target: 1 },
+  { title: '101 Okey oyna', detail: 'Bir 101 Okey masasına otur ve oyunu bitir.', points: 25, period: 'daily', kind: 'game_play', param: 'okey101', target: 1 },
+  { title: 'Batak ligi: 5 el kazan', detail: 'Bu hafta Batak masalarında 5 kez kazan.', points: 75, period: 'weekly', kind: 'game_win', param: 'batak', target: 5 },
+  { title: 'Bilardo düellosu kazan', detail: 'Bu hafta bir Bilardo maçı kazan.', points: 50, period: 'weekly', kind: 'game_win', param: 'bilardo', target: 1 },
+  { title: 'Herhangi 10 maç oyna', detail: 'Bu hafta istediğin oyunda 10 maç bitir.', points: 100, period: 'weekly', kind: 'game_play', param: '', target: 10 },
+  { title: 'Sponsor siteyi ziyaret et', detail: 'Bugün sponsorlardan birine sitemizdeki Git butonuyla gir.', points: 15, period: 'daily', kind: 'sponsor_visit', param: '', target: 1 },
+  { title: 'Sponsor hesabını bağla', detail: 'Sponsor sitedeki kullanıcı adını profilinden bağla, onaylanınca ödül senin.', points: 200, period: 'once', kind: 'sponsor_link', param: '', target: 1 },
+  { title: '3 arkadaşını davet et', detail: 'Bu ay davet linkinle 3 arkadaşın kayıt olsun.', points: 300, period: 'monthly', kind: 'invite', target: 3 },
+  { title: 'Telegram hesabını bağla', detail: 'Profilinden Telegram hesabını bağla.', points: 50, period: 'once', kind: 'telegram_link' },
+  { title: 'Instagram hesabını doğrula', detail: 'Profilinden Instagram hesabını bağla ve doğrulat.', points: 50, period: 'once', kind: 'social_link', param: 'instagram' },
+  { title: 'Maç davetini Telegram\u2019da paylaş', detail: 'Masa davet linkini bir Telegram grubunda paylaş, ekran görüntüsünü gönder.', points: 20, period: 'daily', kind: 'manual', needsApproval: true },
 ]
 
-export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: PendingClaim[] }) {
-  const [editing, setEditing] = useState<TaskInput | null>(null)
+export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[]; claims: PendingClaim[]; sites?: { id: string; name: string }[] }) {
+  const [editing, setEditingRaw] = useState<TaskInput | null>(null)
+  const [formKey, setFormKey] = useState(0)
+  const setEditing = (next: TaskInput | null) => {
+    setEditingRaw(next)
+    if (next) setFormKey((k) => k + 1)
+  }
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
 
@@ -71,7 +83,7 @@ export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: P
         {msg && <p className={cn('text-sm', msg.ok ? 'text-success' : 'text-destructive')} aria-live="polite">{msg.text}</p>}
       </div>
       <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
-        <p className="text-xs font-semibold text-muted-foreground">Hazır oyun görevleri (tıkla, formu doldursun, istersen düzenleyip kaydet)</p>
+        <p className="text-xs font-semibold text-muted-foreground">Hazır görevler: tıkla, form dolsun, düzenleyip kaydet. Oyun, sponsor, davet ve hesap görevleri otomatik kontrol edilir.</p>
         <div className="flex flex-wrap gap-2">
           {TASK_TEMPLATES.map((t) => (
             <button
@@ -85,7 +97,7 @@ export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: P
           ))}
         </div>
       </div>
-      {editing && <TaskForm value={editing} pending={pending} onCancel={() => setEditing(null)} onSave={save} />}
+      {editing && <TaskForm key={formKey} sites={sites} value={editing} pending={pending} onCancel={() => setEditing(null)} onSave={save} />}
       {tasks.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz görev yok.</p>
       ) : (
@@ -96,13 +108,17 @@ export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: P
               <span className={cn('min-w-0 flex-1 font-medium text-foreground', !task.active && 'opacity-50')}>
                 {task.title}
                 <span className="ml-2 font-normal text-muted-foreground">+{task.points}</span>
-                {task.needsApproval ? <span className="ml-2 text-xs font-normal text-muted-foreground">Onay gerekir</span> : null}
+                {task.kind !== 'manual' ? (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {KIND_META[task.kind].label}{task.param ? ` · ${paramLabel(task.kind, task.param, sites)}` : ''}{task.target > 1 ? ` · ${task.target} kez` : ''}
+                  </span>
+                ) : task.needsApproval ? <span className="ml-2 text-xs font-normal text-muted-foreground">Onay gerekir</span> : null}
                 {task.period !== 'once' ? <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">{PERIOD_LABEL[task.period]}</span> : null}
                 {task.endsAt && Date.parse(task.endsAt) < Date.now() ? <span className="ml-2 text-xs font-normal text-destructive">Süresi doldu</span> : null}
               </span>
               {!task.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
               <HideButton key={`${task.id}-${task.active}`} kind="task" id={task.id} hidden={!task.active} label={task.title} />
-              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
+              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', param: task.param ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                 <Pencil className="size-4" aria-hidden="true" />
               </button>
             </li>
@@ -136,10 +152,18 @@ export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: P
   )
 }
 
-function TaskForm({ value, pending, onSave, onCancel }: { value: TaskInput; pending: boolean; onSave: (value: TaskInput) => void; onCancel: () => void }) {
+function paramLabel(kind: TaskKind, param: string, sites: { id: string; name: string }[]) {
+  const type = KIND_META[kind].param
+  const list = type === 'game' ? TASK_GAMES : type === 'platform' ? TASK_PLATFORMS : sites.map((x) => ({ value: x.id, label: x.name }))
+  return list.find((x) => x.value === param)?.label ?? param
+}
+
+function TaskForm({ value, pending, onSave, onCancel, sites }: { value: TaskInput; pending: boolean; onSave: (value: TaskInput) => void; onCancel: () => void; sites: { id: string; name: string }[] }) {
   const [v, setV] = useState(value)
   const [error, setError] = useState<string | null>(null)
   const set = <K extends keyof TaskInput>(key: K, next: TaskInput[K]) => setV((prev) => ({ ...prev, [key]: next }))
+  const meta = KIND_META[v.kind]
+  const paramOptions = meta.param === 'game' ? TASK_GAMES : meta.param === 'platform' ? TASK_PLATFORMS : sites.map((x) => ({ value: x.id, label: x.name }))
   return (
     <form
       onSubmit={(event) => {
@@ -150,7 +174,7 @@ function TaskForm({ value, pending, onSave, onCancel }: { value: TaskInput; pend
           return
         }
         setError(null)
-        onSave({ ...v, link, points: Number(v.points), sort: Number(v.sort) })
+        onSave({ ...v, link, points: Number(v.points), sort: Number(v.sort), target: Number(v.target) })
       }}
       className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2"
     >
@@ -162,8 +186,36 @@ function TaskForm({ value, pending, onSave, onCancel }: { value: TaskInput; pend
         Kısa açıklama
         <input value={v.detail} onChange={(event) => set('detail', event.target.value)} className={field} />
       </label>
+      <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+        Görev türü
+        <select value={v.kind} onChange={(event) => setV((prev) => ({ ...prev, kind: event.target.value as TaskKind, param: '', target: 1 }))} className={field}>
+          {TASK_KINDS.map((k) => (
+            <option key={k.value} value={k.value}>{k.label}</option>
+          ))}
+        </select>
+      </label>
+      {meta.param ? (
+        <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+          {meta.param === 'game' ? 'Oyun' : meta.param === 'platform' ? 'Platform' : 'Sponsor site'}
+          <select value={v.param} onChange={(event) => set('param', event.target.value)} className={field}>
+            <option value="">{meta.param === 'game' ? 'Herhangi bir oyun' : meta.param === 'platform' ? 'Herhangi bir platform' : 'Herhangi bir sponsor'}</option>
+            {paramOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+      ) : <span className="hidden md:block" />}
+      {meta.counted ? (
+        <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+          Hedef sayı (kaç kez)
+          <input required inputMode="numeric" value={String(v.target)} onChange={(event) => set('target', Number(event.target.value))} className={field} />
+        </label>
+      ) : null}
+      <p className={cn('self-end pb-2 text-xs leading-relaxed text-muted-foreground', !meta.counted && 'md:col-span-2')}>
+        {meta.hint}{v.kind !== 'manual' ? ' Sayım, seçtiğin tekrar döneminin başından itibaren yapılır.' : ''}
+      </p>
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
-        Bağlantı
+        Bağlantı {v.kind !== 'manual' ? '(boş bırak, üye otomatik doğru sayfaya gider)' : ''}
         <input value={v.link} inputMode="url" placeholder="https://" onChange={(event) => set('link', event.target.value)} className={field} />
       </label>
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
@@ -193,8 +245,8 @@ function TaskForm({ value, pending, onSave, onCancel }: { value: TaskInput; pend
         Bitiş (boş = süresiz)
         <input type="datetime-local" value={v.endsAt} onChange={(event) => set('endsAt', event.target.value)} className={field} />
       </label>
-      <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
-        <input type="checkbox" checked={v.needsApproval} onChange={(event) => set('needsApproval', event.target.checked)} className="size-4 accent-primary" />
+      <label className={cn('flex items-center gap-2 text-sm font-semibold text-foreground', v.kind !== 'manual' && 'opacity-50')}>
+        <input type="checkbox" disabled={v.kind !== 'manual'} checked={v.kind === 'manual' && v.needsApproval} onChange={(event) => set('needsApproval', event.target.checked)} className="size-4 accent-primary" />
         Onay beklesin
       </label>
       <label className="flex items-center gap-2 text-sm font-semibold text-foreground">

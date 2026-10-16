@@ -3,7 +3,7 @@ import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Tasks } from '@/components/alkanka/tasks'
 import { getMember } from '@/lib/member'
 import { getStreak, type StreakState } from '@/lib/checkin'
-import { completedTaskIds, listPublicTasks, taskClaimMap, type ClaimStatus } from '@/lib/tasks'
+import { completedTaskIds, listPublicTasks, taskClaimMap, taskProgressMap, type ClaimStatus } from '@/lib/tasks'
 
 export const metadata = pageMeta('gorevler')
 export const dynamic = 'force-dynamic'
@@ -18,6 +18,7 @@ export default async function TasksPage() {
     member ? getStreak(member.id).catch(() => noStreak) : Promise.resolve(noStreak),
   ])
   const finished = new Set(done)
+  const progress = member ? await taskProgressMap(member.id, tasks).catch(() => ({} as Record<number, number>)) : {}
   return (
     <>
       <EditableHero slug="gorevler"
@@ -31,7 +32,7 @@ export default async function TasksPage() {
       />
       <Tasks
         streak={streak}
-        tasks={tasks.map((task) => ({ id: task.id, title: task.title, detail: task.detail, points: task.points, link: task.link, needsApproval: task.needsApproval, period: task.period, claim: claims[task.id] ?? null, done: finished.has(task.id) }))}
+        tasks={tasks.map((task) => ({ id: task.id, title: task.title, detail: task.detail, points: task.points, link: task.link, needsApproval: task.needsApproval, period: task.period, kind: task.kind, target: task.target, param: task.param, progress: progress[task.id] ?? 0, claim: claims[task.id] ?? null, done: finished.has(task.id) }))}
       />
     </>
   )

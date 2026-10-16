@@ -302,8 +302,8 @@ export default async function PanelPage() {
     )),
     section(session, 'badges', 'Rozet sistemi', kpPanel),
     section(session, 'tasks', 'Görevler', async () => {
-      const [list, claims] = await Promise.all([listTasks(), listPendingClaims()])
-      return <TasksManager tasks={list} claims={claims} />
+      const [list, claims, sites] = await Promise.all([listTasks(), listPendingClaims(), siteOptions().catch(() => [])])
+      return <TasksManager tasks={list} claims={claims} sites={sites.map((x) => ({ id: x.id, name: x.name }))} />
     }),
     section(session, 'market', 'Market', marketPanel),
     section(session, 'social', 'Sosyal medya', async () => (

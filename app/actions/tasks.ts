@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getMember } from '@/lib/member'
-import { awardTask, listPublicTasks, requestTaskApproval } from '@/lib/tasks'
+import { awardTask, listPublicTasks, requestTaskApproval, taskProgress } from '@/lib/tasks'
 import { checkIn } from '@/lib/checkin'
 
 export async function checkInAction(): Promise<
@@ -28,7 +28,12 @@ export async function completeTaskAction(taskId: number): Promise<
   try {
     const task = (await listPublicTasks()).find((item) => item.id === taskId)
     if (!task) return { ok: false, error: 'Görev bulunamadı.' }
-    if (task.needsApproval) {
+    if (task.kind !== 'manual') {
+      const progress = await taskProgress(member.id, task)
+      if (progress < task.target) {
+        return { ok: false, error: task.target > 1 ? `Henüz bitmedi: ${progress}/${task.target}. Tamamlayınca ödülü al.` : 'Görev henüz tamamlanmadı. Önce görevi yap, sonra ödülü al.' }
+      }
+    } else if (task.needsApproval) {
       const claim = await requestTaskApproval(member.id, taskId, member.name)
       revalidatePath('/gorevler')
       revalidatePath('/panel')
