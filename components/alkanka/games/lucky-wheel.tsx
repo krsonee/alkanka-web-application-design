@@ -27,13 +27,7 @@ const wheelBackground = (segments: Segment[]) =>
     .map((_, i) => `${isGold(i) ? GOLD_FILL : DARK_FILL} ${i * SEG_ANGLE}deg ${(i + 1) * SEG_ANGLE}deg`)
     .join(', ')})`
 
-const COINS = [
-  { top: '6%', left: '8%', size: 'size-9', delay: '0s' },
-  { top: '14%', left: '86%', size: 'size-11', delay: '0.6s' },
-  { top: '72%', left: '4%', size: 'size-8', delay: '1.1s' },
-  { top: '80%', left: '88%', size: 'size-10', delay: '0.3s' },
-  { top: '42%', left: '92%', size: 'size-6', delay: '1.5s' },
-]
+const WIND_MS = 380
 
 export type MiniGameProps = {
   onWin: (points: number) => void | Promise<void>
@@ -51,7 +45,9 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<Segment | null>(null)
   const [burstKey, setBurstKey] = useState(0)
+  const [jakoPhase, setJakoPhase] = useState<'idle' | 'spin' | 'cheer'>('idle')
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const jakoTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   async function spin() {
     if (spinning || !canPlay()) return
@@ -69,16 +65,23 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
     const delta = (target - (rotation % 360) + 360) % 360
     setResult(null)
     setSpinning(true)
+    setJakoPhase('spin')
     setRotation(rotation + 360 * 6 + delta)
     if (timeout.current) clearTimeout(timeout.current)
+    if (jakoTimeout.current) clearTimeout(jakoTimeout.current)
+    jakoTimeout.current = setTimeout(() => setJakoPhase('idle'), WIND_MS + 500)
     timeout.current = setTimeout(() => {
       const seg = SEGMENTS[index]
       setSpinning(false)
       setResult(seg)
       setBalance(res.balance)
-      if (seg.points > 0) setBurstKey((k) => k + 1)
+      if (seg.points > 0) {
+        setBurstKey((k) => k + 1)
+        setJakoPhase('cheer')
+        jakoTimeout.current = setTimeout(() => setJakoPhase('idle'), 1800)
+      }
       onPlayed()
-    }, SPIN_MS)
+    }, SPIN_MS + WIND_MS)
   }
 
   return (
@@ -94,32 +97,60 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         </span>
       </header>
 
-      <div className="relative -mx-6 overflow-hidden">
-        <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
-        <Image
-          src="/images/wheel-stage.png"
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 560px, 100vw"
-          className="object-cover"
-          priority={false}
+      <div
+        className="relative -mx-6 overflow-hidden border-y border-gold/15"
+        style={{
+          background:
+            'radial-gradient(ellipse 50% 62% at 66% 46%, color-mix(in oklch, var(--gold) 20%, var(--background)), var(--background) 72%)',
+        }}
+      >
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-40"
+          style={{
+            backgroundImage: 'radial-gradient(color-mix(in oklch, var(--gold) 35%, transparent) 1px, transparent 1.5px)',
+            backgroundSize: '18px 18px',
+            maskImage: 'radial-gradient(ellipse 70% 70% at 64% 50%, #000 20%, transparent 75%)',
+          }}
         />
-        <div aria-hidden="true" className="absolute inset-0 bg-gold-foreground/30" />
-        {COINS.map((c, i) => (
-          <span
-            key={`coin-${i}`}
-            aria-hidden="true"
-            className={cn('wheel-coin absolute z-[1] rounded-full border-2 border-gold-foreground/40', c.size)}
-            style={{
-              top: c.top,
-              left: c.left,
-              background: 'radial-gradient(circle at 35% 30%, color-mix(in oklch, var(--gold) 60%, var(--foreground)), var(--gold) 55%, color-mix(in oklch, var(--gold) 60%, var(--gold-foreground)))',
-              animation: `wheel-coin-float 3.2s ease-in-out ${c.delay} infinite`,
-            }}
-          />
-        ))}
+        <div
+          aria-hidden="true"
+          className="absolute bottom-[6%] left-[38%] h-[10%] w-[52%] rounded-[100%] blur-xl"
+          style={{ background: 'color-mix(in oklch, var(--gold) 35%, transparent)' }}
+        />
+        <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
 
-        <div className="relative z-[2] mx-auto my-8 aspect-square w-[82%] max-w-sm">
+        <div className="relative flex justify-end py-10 pr-[5%]">
+        <div
+          aria-hidden="true"
+          className="wheel-jako pointer-events-none absolute bottom-0 left-[-7%] z-[3] w-[60%] origin-bottom mix-blend-lighten"
+          style={{
+            animation:
+              jakoPhase === 'spin'
+                ? `jako-spin ${WIND_MS + 500}ms cubic-bezier(0.3, 0.7, 0.3, 1) both`
+                : jakoPhase === 'cheer'
+                  ? 'jako-cheer 0.9s ease-in-out 2'
+                  : 'jako-idle 3.6s ease-in-out infinite',
+          }}
+        >
+          <Image
+            src="/images/mascots/jako-cark.png"
+            alt=""
+            width={1408}
+            height={768}
+            sizes="(min-width: 1024px) 340px, 60vw"
+            className="h-auto w-full"
+            style={{ maskImage: 'linear-gradient(to top, #000 85%, transparent), linear-gradient(to left, transparent, #000 12%)', maskComposite: 'intersect' }}
+          />
+        </div>
+
+        <div className="relative aspect-square w-[60%] max-w-sm">
+          <div
+            aria-hidden="true"
+            className="wheel-ring absolute -inset-[9%] rounded-full border border-dashed border-gold/35"
+            style={{ animation: `wheel-ring-spin ${spinning ? '6s' : '40s'} linear infinite` }}
+          />
+          <div aria-hidden="true" className="absolute -inset-[4%] rounded-full border border-gold/20" />
           <div
             aria-hidden="true"
             className="absolute -inset-4 rounded-full transition-opacity duration-700"
@@ -157,7 +188,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
               style={{
                 background: wheelBackground(SEGMENTS),
                 transform: `rotate(${rotation}deg)`,
-                transition: `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.8, 0.12, 1)`,
+                transition: `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.8, 0.12, 1) ${WIND_MS}ms`,
                 boxShadow: '0 0 0 3px var(--gold), inset 0 0 30px color-mix(in oklch, var(--gold-foreground) 60%, transparent)',
               }}
             >
@@ -219,6 +250,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         </button>
 
         {burstKey > 0 && <ParticleBurst key={burstKey} count={24} distance={170} />}
+        </div>
         </div>
       </div>
 
