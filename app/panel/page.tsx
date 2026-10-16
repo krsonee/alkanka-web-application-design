@@ -72,6 +72,7 @@ import { cleanPermissions } from '@/lib/panel-modules'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
+import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { listAudit, listMembers } from '@/lib/members-admin'
 import { levelMap } from '@/lib/kanka-puan'
 
@@ -113,13 +114,15 @@ async function telegramPanel() {
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
   return (
-    <div className="flex flex-col gap-6">
-      <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} />
-      <TelegramChatSetup bots={bots} status={chat} />
-      <TelegramChannelsSetup usernames={channels} />
-      <TelegramInviteSetup bots={bots} status={invite} />
-      <TelegramBotSuite suite={suite} bots={bots} targets={targets} status={shareInfo} deals={oddsDeals} />
-    </div>
+    <TelegramTabs
+      tabs={[
+        { id: 'mirror', label: 'Botlar ve aktarım', content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
+        { id: 'suite', label: 'Bot paketleri', content: <TelegramBotSuite suite={suite} bots={bots} targets={targets} status={shareInfo} deals={oddsDeals} /> },
+        { id: 'chat', label: 'Site sohbeti', content: <TelegramChatSetup bots={bots} status={chat} /> },
+        { id: 'channels', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
+        { id: 'invite', label: 'Davet linkleri', content: <TelegramInviteSetup bots={bots} status={invite} /> },
+      ]}
+    />
   )
 }
 

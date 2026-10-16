@@ -81,7 +81,7 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+    <div className="grid gap-6 lg:grid-cols-12 lg:[&>*:first-child]:col-span-7 lg:[&>*:nth-child(2)]:col-span-5">
       <form
         onSubmit={(e) => {
           e.preventDefault()
