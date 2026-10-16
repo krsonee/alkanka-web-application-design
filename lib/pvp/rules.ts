@@ -101,7 +101,7 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
   if (game === 'okey101') return runOkey101Bots(initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
   if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant })).state
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
-  if (game === 'pisti') return runPistiBots(initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant })).state
+  if (game === 'pisti') return runPistiBots(initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant, team: opts?.team })).state
   if (game === 'tavla') {
     let a = 0
     let b = 0

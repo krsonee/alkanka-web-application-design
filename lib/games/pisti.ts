@@ -119,9 +119,9 @@ function freshHand(base: Base): PistiState {
   return pushEvent(dealRound(s), { seat: base.dealer, kind: 'deal', taken: 0, points: 0, text: `${base.handNo}. el dağıtıldı. Yerde 4 kart var.` })
 }
 
-export function initPisti(opts: { seats?: number; botSeats?: number[]; target?: unknown }): PistiState {
+export function initPisti(opts: { seats?: number; botSeats?: number[]; target?: unknown; team?: boolean }): PistiState {
   const seats = opts.seats === 4 ? 4 : 2
-  const team = seats === 4
+  const team = seats === 4 && opts.team !== false
   return freshHand({
     seats,
     team,

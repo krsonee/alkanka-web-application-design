@@ -19,7 +19,7 @@ import { Okey101Pvp } from './okey101-pvp'
 import { BatakPvp } from './batak-pvp'
 import { BATAK_VARIANTS, type BatakVariant } from '@/lib/games/batak'
 import { MonopolyPvp } from './monopoly-pvp'
-import { PistiPvp } from './pisti-pvp'
+import { PistiFinalScore, PistiPvp } from './pisti-pvp'
 import { PISTI_TARGETS } from '@/lib/games/pisti'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
@@ -101,13 +101,14 @@ export function TableLobby({
   const [seatRounds, setSeatRounds] = useState(seatRule?.rounds[0] ?? 0)
   const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
   const [pistiTarget, setPistiTarget] = useState('151')
+  const [pistiTeam, setPistiTeam] = useState(true)
   const humanSeats = seatRule ? seatSeats - seatBots : isOkey ? seats - (seats === 4 ? bots : 0) : 2
   const tableOptions = seatRule
     ? {
         seats: seatSeats,
         bots: seatBots,
         ...(seatRounds ? { rounds: seatRounds } : {}),
-        ...(game === 'batak' ? { variant: batakVariant } : game === 'pisti' ? { variant: pistiTarget } : {}),
+        ...(game === 'batak' ? { variant: batakVariant } : game === 'pisti' ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam } : {}),
       }
     : isOkey
       ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 }
@@ -239,19 +240,16 @@ export function TableLobby({
       </section>
 
       <aside className="flex flex-col gap-4">
-        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-4 sm:p-5">
-          <div className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <Plus className="size-5" aria-hidden="true" />
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 sm:gap-4 sm:p-5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Plus className="size-4" aria-hidden="true" />
             </span>
-            <div className="flex flex-col">
-              <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
-              <p className="text-xs text-muted-foreground">Ayarları seç, kankaları bekle.</p>
-            </div>
+            <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
           </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">Bahis</span>
-            <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label="Bahis">
+          <div className="flex items-center gap-3">
+            <span className="w-20 shrink-0 text-xs font-semibold leading-tight text-muted-foreground">Bahis</span>
+            <div className="grid flex-1 grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label="Bahis">
               {settings.bets.map((b) => (
                 <button
                   key={b}
@@ -260,12 +258,12 @@ export function TableLobby({
                   aria-checked={stake === b}
                   onClick={() => setStake(b)}
                   className={cn(
-                    'flex flex-col items-center rounded-lg py-2 transition-colors',
+                    'flex items-baseline justify-center gap-0.5 rounded-lg py-1.5 transition-colors',
                     stake === b ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
                   )}
                 >
-                  <span className="text-base font-bold tabular-nums leading-none">{b}</span>
-                  <span className={cn('mt-1 text-xs font-medium leading-none', stake === b ? 'text-primary-foreground/80' : 'text-muted-foreground')}>KC</span>
+                  <span className="text-sm font-bold tabular-nums leading-none">{b}</span>
+                  <span className={cn('text-[10px] font-medium leading-none', stake === b ? 'text-primary-foreground/80' : 'text-muted-foreground')}>KC</span>
                 </button>
               ))}
             </div>
@@ -317,7 +315,7 @@ export function TableLobby({
             </div>
           )}
           {seatRule && (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2.5">
               {game === 'batak' && (
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-muted-foreground">Batak türü</span>
@@ -362,14 +360,11 @@ export function TableLobby({
               )}
               {game === 'pisti' && (
                 <OptionGroup
-                  label="Kaç puana oynanacak"
+                  label="Puan"
                   value={pistiTarget}
-                  options={PISTI_TARGETS.map((t) => ({ value: t.value, label: `${t.label} · ${t.hint}` }))}
+                  options={PISTI_TARGETS.map((t) => ({ value: t.value, label: t.value === '101' ? '101 · Hızlı' : '151 · Klasik' }))}
                   onChange={setPistiTarget}
                 />
-              )}
-              {game === 'pisti' && seatSeats === 4 && (
-                <p className="-mt-3 text-xs leading-relaxed text-muted-foreground">4 kişilik masada karşılıklı oturanlar eş olur.</p>
               )}
               {seatRule.seats.length > 1 && (
                 <OptionGroup
@@ -381,6 +376,17 @@ export function TableLobby({
                     setSeatSeats(n)
                     setSeatBots((b) => Math.min(b, n - 1))
                   }}
+                />
+              )}
+              {game === 'pisti' && seatSeats === 4 && (
+                <OptionGroup
+                  label="Mod"
+                  value={pistiTeam ? 'team' : 'solo'}
+                  options={[
+                    { value: 'team', label: 'Eşli (2+2)' },
+                    { value: 'solo', label: 'Tekli' },
+                  ]}
+                  onChange={(v) => setPistiTeam(v === 'team')}
                 />
               )}
               <OptionGroup
@@ -399,29 +405,29 @@ export function TableLobby({
               )}
             </div>
           )}
-          <dl className="flex flex-col gap-2 rounded-xl border border-border bg-secondary/40 p-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Oyuncular</dt>
-              <dd className="font-semibold text-foreground">
-                {humanSeats} gerçek
+          <dl className="grid grid-cols-3 divide-x divide-border rounded-xl border border-border bg-secondary/40 py-2 text-center">
+            <div className="flex flex-col gap-0.5 px-1">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Oyuncu</dt>
+              <dd className="text-xs font-bold text-foreground">
+                {humanSeats}
                 {seatRule && seatBots > 0 ? ` + ${seatBots} bot` : isOkey && seats === 4 && bots > 0 ? ` + ${bots} bot` : ''}
               </dd>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Toplam pot</dt>
-              <dd className="font-semibold tabular-nums text-foreground">{formatAC(stake * humanSeats)} KC</dd>
+            <div className="flex flex-col gap-0.5 px-1">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pot</dt>
+              <dd className="text-xs font-bold tabular-nums text-foreground">{formatAC(stake * humanSeats)} KC</dd>
             </div>
-            <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
-              <dt className="text-muted-foreground">{isOkey && teamMode ? 'Kazanan takıma' : 'Kazanan alır'}</dt>
-              <dd className="flex items-center gap-1 font-bold tabular-nums text-primary">
-                <Coins className="size-4" aria-hidden="true" />
+            <div className="flex flex-col gap-0.5 px-1">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{isOkey && teamMode ? 'Takıma' : 'Kazanan'}</dt>
+              <dd className="flex items-center justify-center gap-1 text-xs font-bold tabular-nums text-primary">
+                <Coins className="size-3.5" aria-hidden="true" />
                 {formatAC(stake * humanSeats - Math.round((stake * humanSeats * settings.commission) / 100))} KC
               </dd>
             </div>
           </dl>
-          <p className="-mt-2 text-xs leading-relaxed text-muted-foreground text-pretty">
-            %{settings.commission} kesinti uygulanır. Bahis masa açılınca ayrılır, masa iptal olursa iade edilir.
-            {seatRule && humanSeats === 1 ? ' Tek gerçek oyuncuyla masa hemen botlara karşı başlar.' : ''}
+          <p className="-mt-1 text-[11px] leading-snug text-muted-foreground text-pretty">
+            %{settings.commission} kesinti. Masa iptal olursa bahis iade edilir.
+            {seatRule && humanSeats === 1 ? ' Tek gerçek oyuncuyla oyun hemen botlara karşı başlar.' : ''}
           </p>
           <button
             disabled={busy || (isOkey && teamMode == null)}
@@ -429,7 +435,7 @@ export function TableLobby({
               const r = await run(() => openTable(game, stake, tableOptions))
               if (r?.ok && r.id) setActiveId(r.id)
             }}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold uppercase tracking-wide text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
             Masa aç
@@ -466,9 +472,9 @@ function OptionGroup({
   onChange: (v: string) => void
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
-      <div className="flex gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label={label}>
+    <div className="flex items-center gap-3">
+      <span className="w-20 shrink-0 text-xs font-semibold leading-tight text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 flex-1 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label={label}>
         {options.map((o) => (
           <button
             key={o.value}
@@ -478,7 +484,7 @@ function OptionGroup({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'flex-1 rounded-lg px-2 py-2 text-sm font-semibold transition-colors disabled:opacity-40',
+              'min-w-0 flex-1 truncate rounded-lg px-1.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 sm:text-sm',
               value === o.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
             )}
           >
@@ -521,7 +527,7 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
             {t.game === 'okey' && <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{t.team ? 'Takımlı' : 'Tekli'}</span>}
             {t.game === 'pisti' && (
               <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">
-                {t.variant === '101' ? 101 : 151} puan{t.seats === 4 ? ' · Eşli' : ''}
+                {t.variant === '101' ? 101 : 151} puan{t.seats === 4 ? (t.team ? ' · Eşli' : ' · Tekli') : ''}
               </span>
             )}
           </p>
@@ -619,10 +625,16 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     send,
   }
 
+  const immersive = data.game === 'pisti' && data.status === 'oynaniyor'
+
   return (
-    <RoomShell onLeave={onLeave} title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm">
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground">
+    <RoomShell
+      immersive={immersive}
+      onLeave={onLeave}
+      title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
+    >
+      <div className={cn('flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm', immersive && 'max-lg:flex-nowrap max-lg:px-2 max-lg:py-2')}>
+        <span className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground', immersive && 'max-lg:hidden')}>
           {(data.team ? [0, 2, 1, 3] : names.map((_, i) => i)).map((seatNo, i) => {
             const p = data.players.find((pl) => pl.seat === seatNo)
             return (
@@ -634,7 +646,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             )
           })}
         </span>
-        <span className="flex items-center gap-1 text-muted-foreground">
+        <span className={cn('flex items-center gap-1 text-muted-foreground', immersive && 'max-lg:hidden')}>
           {spectator ? <Eye className="size-3.5" aria-hidden="true" /> : <Clock className="size-3.5" aria-hidden="true" />}
           {data.status === 'bekliyor'
             ? `Oyuncu bekleniyor (${data.players.filter((p) => !p.bot).length}/${seatCount - (data.bots ?? 0)})`
@@ -650,13 +662,15 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
           {spectator && data.status === 'oynaniyor' ? ' · izleyici' : ''}
         </span>
         {data.status === 'oynaniyor' && data.turn != null && TURN_SECONDS[data.game as ArenaGame] && (
-          <TurnClock
-            key={`${data.version}-${data.turn}`}
-            updatedAt={data.updatedAt}
-            seconds={TURN_SECONDS[data.game as ArenaGame] ?? 30}
-            mine={data.turn === mySeat}
-            onExpire={() => void mutate()}
-          />
+          <div className={immersive ? 'min-w-0 flex-1 lg:flex-none' : 'contents'}>
+            <TurnClock
+              key={`${data.version}-${data.turn}`}
+              updatedAt={data.updatedAt}
+              seconds={TURN_SECONDS[data.game as ArenaGame] ?? 30}
+              mine={data.turn === mySeat}
+              onExpire={() => void mutate()}
+            />
+          </div>
         )}
         <div className="flex items-center gap-2">
           {!spectator && mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (
@@ -798,13 +812,16 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
                       ? 'Pot hesabına eklendi.'
                       : `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`}
               </p>
+              {data.game === 'pisti' && data.status === 'bitti' && Array.isArray(data.state?.totals) && (
+                <PistiFinalScore state={data.state} names={names} mySeat={mySeat} />
+              )}
               <div className="mt-1 grid w-full grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setResultClosed(true)}
                   className="rounded-xl border border-border py-2.5 text-sm font-bold text-foreground hover:bg-secondary"
                 >
-                  Masayı gör
+                  Masaya dön
                 </button>
                 <button
                   type="button"
@@ -914,10 +931,15 @@ function GameSurface({ game, remote, done }: { game: string; remote: Remote<unkn
   return null
 }
 
-function RoomShell({ children, onLeave, title }: { children: React.ReactNode; onLeave: () => void; title?: string }) {
+function RoomShell({ children, onLeave, title, immersive }: { children: React.ReactNode; onLeave: () => void; title?: string; immersive?: boolean }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center gap-3 border-b border-border px-3 py-2.5">
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-2xl border border-border bg-card',
+        immersive && 'max-lg:fixed max-lg:inset-0 max-lg:z-[60] max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:rounded-none max-lg:border-0 max-lg:pt-[env(safe-area-inset-top)]',
+      )}
+    >
+      <div className={cn('flex items-center gap-3 border-b border-border px-3 py-2.5', immersive && 'max-lg:py-1.5')}>
         <button onClick={onLeave} aria-label="Lobiye dön" className="flex size-9 items-center justify-center rounded-lg hover:bg-secondary">
           <ArrowLeft className="size-4 text-foreground" aria-hidden="true" />
         </button>

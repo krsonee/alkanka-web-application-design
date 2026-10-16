@@ -125,7 +125,7 @@ const SOUNDS: Record<SoundName, () => void> = {
   dice: () => {
     for (let i = 0; i < 6; i++) noise({ at: i * 0.05 + Math.random() * 0.02, dur: 0.04, freq: 2200 + Math.random() * 1500, q: 4, vol: 0.6 })
   },
-  card: () => noise({ dur: 0.09, freq: 3000, q: 0.7, vol: 0.45, type: 'highpass' }),
+  card: () => noise({ dur: 0.06, freq: 1300, q: 0.9, vol: 0.14 }),
   tile: () => {
     noise({ dur: 0.05, freq: 1800, q: 6, vol: 0.7 })
     tones([{ f: 1400, dur: 0.05, type: 'square', vol: 0.05 }])

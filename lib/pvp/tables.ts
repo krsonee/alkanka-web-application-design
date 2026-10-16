@@ -159,7 +159,7 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
   if (game === 'pisti') {
     const seats = Number(input?.seats) === 4 ? 4 : 2
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
-    return { seats, team: seats === 4, bots, variant: String(normalizeTarget(input?.variant)) }
+    return { seats, team: seats === 4 && input?.team !== false, bots, variant: String(normalizeTarget(input?.variant)) }
   }
   if (rule) {
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]

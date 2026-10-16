@@ -30,7 +30,7 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Eli ilk bitiren kazanır. Açamayan 202, açan elindeki taşlar kadar ceza yer; çifte gidenin cezası ikiye katlanır. Set sonunda en az cezası olan kazanır.',
   ],
   pisti: [
-    '52 kart. Yere 4 kart (3 kapalı), herkese 4 kart dağıtılır. 2 kişi ya da 4 kişi eşli oynanır, karşılıklı oturanlar eştir.',
+    '52 kart. Yere 4 kart (3 kapalı), herkese 4 kart dağıtılır. 2 kişi ya da 4 kişi oynanır. 4 kişide eşli (karşılıklı oturanlar eş) ya da tekli seçilebilir.',
     'Yerdeki en üst kartla aynı kartı atan ya da Vale atan yeri toplar. Yerde tek kart varken aynısıyla alırsan pişti: 10 puan, Vale ile Vale pişti 20 puan.',
     'El sonunda en çok kart 3, her As ve Vale 1, sinek 2 2, karo 10 3 puan. Masada seçilen 101 ya da 151 puana ilk ulaşan kazanır.',
   ],

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Bot, Eye, Layers, Sparkles, Trophy, X } from 'lucide-react'
+import { Bot, Eye, Layers, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { playSound } from '@/lib/sound'
 import { RANK_LABEL, sideOf, type PCard, type PistiEvent, type PistiHandResult, type PistiView } from '@/lib/games/pisti'
@@ -189,11 +189,13 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
       )}
 
       <section aria-label="Pişti masası" className="tavla-wood rounded-[1.75rem] p-1.5 sm:p-2.5">
-        <div className="baize-table relative h-[min(38rem,calc(100dvh-11rem))] min-h-[30rem] overflow-hidden rounded-[1.4rem]">
+        <div className="baize-table relative h-[calc(100dvh-8.75rem)] min-h-[25rem] overflow-hidden lg:h-[min(38rem,calc(100dvh-11rem))] lg:min-h-[30rem] rounded-[1.4rem]">
           {/* Scoreboard */}
           <div className="absolute inset-x-2 top-2 z-20 flex items-stretch gap-1.5 sm:inset-x-4 sm:top-3 sm:gap-2">
             {sides.map((side) => {
-              const pct = Math.min(100, (s.totals[side] / s.target) * 100)
+              const live = (s.capturedPoints[side] ?? 0) + (s.pistiPts[side] ?? 0)
+              const shown = s.totals[side] + live
+              const pct = Math.min(100, (shown / s.target) * 100)
               const mine = side === mySide && me >= 0
               const lead = finished && side === winnerSide
               return (
@@ -206,16 +208,17 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
                 >
                   <div className="flex items-baseline justify-between gap-1">
                     <span className={cn('truncate text-[11px] font-bold sm:text-xs', lead ? '' : 'text-foreground')}>{sideLabel(side)}</span>
-                    <span key={s.totals[side]} className={cn('animate-pop font-display text-base font-bold tabular-nums leading-none sm:text-lg', lead ? '' : 'text-foreground')}>
-                      {s.totals[side]}
+                    <span key={shown} className={cn('animate-pop font-display text-lg font-black tabular-nums leading-none sm:text-xl', lead ? '' : 'text-foreground')} aria-label={`${sideLabel(side)} ${shown} puan`}>
+                      {shown}
                     </span>
                   </div>
                   <div className="h-1 overflow-hidden rounded-full bg-secondary">
                     <div className="h-full rounded-full bg-gold transition-[width] duration-700" style={{ width: `${pct}%` }} />
                   </div>
                   <span className={cn('flex items-center gap-1.5 text-[10px] tabular-nums leading-none', lead ? 'text-gold-foreground/80' : 'text-muted-foreground')}>
+                    <span className={cn('font-bold', live > 0 && !lead && 'text-gold')}>+{live} el</span>
                     <span>{s.capturedCounts[side]} kart</span>
-                    {s.pistiCount[side] > 0 && <span className="font-bold text-gold">{s.pistiCount[side]} pişti</span>}
+                    {s.pistiCount[side] > 0 && <span className={cn('font-bold', !lead && 'text-gold')}>{s.pistiCount[side]}P</span>}
                   </span>
                 </div>
               )
@@ -364,32 +367,42 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
             <HandSummary result={summary} sides={sides} label={sideLabel} mySide={me >= 0 ? mySide : -1} totals={s.totals} onClose={() => setSummary(null)} />
           )}
 
-          {/* Final */}
-          {finished && !replaying && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
-              <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-3xl border border-border bg-card p-5 text-center shadow-2xl" style={{ animation: 'pisti-burst 650ms cubic-bezier(0.2,1.4,0.4,1) both' }}>
-                <span className={cn('flex size-16 items-center justify-center rounded-full', iWon ? 'bg-gold text-gold-foreground' : 'bg-secondary text-muted-foreground')}>
-                  <Trophy className="size-8" aria-hidden="true" />
-                </span>
-                <h3 className="font-display text-2xl font-black text-foreground text-balance">
-                  {me < 0 ? `${sideLabel(winnerSide)} kazandı` : iWon ? (s.team ? 'Kazandınız!' : 'Kazandın!') : s.team ? 'Kaybettiniz' : 'Kaybettin'}
-                </h3>
-                <p className="text-sm text-muted-foreground">{s.target} puana ilk ulaşan masayı aldı.</p>
-                <ol className="flex w-full flex-col gap-1.5">
-                  {[...sides]
-                    .sort((a, b) => s.totals[b] - s.totals[a])
-                    .map((side) => (
-                      <li key={side} className={cn('flex items-center justify-between rounded-xl px-3 py-2 text-sm font-bold', side === winnerSide ? 'bg-gold text-gold-foreground' : 'bg-secondary text-foreground')}>
-                        <span>{sideLabel(side)}</span>
-                        <span className="tabular-nums">{s.totals[side]}</span>
-                      </li>
-                    ))}
-                </ol>
-              </div>
-            </div>
-          )}
         </div>
       </section>
+    </div>
+  )
+}
+
+export function PistiFinalScore({ state, names, mySeat }: { state: PistiView; names: string[]; mySeat: number }) {
+  const sides = state.team ? [0, 1] : state.totals.map((_, i) => i)
+  const label = (side: number) => (state.team ? `${names[side]} & ${names[side + 2]}` : names[side])
+  const max = Math.max(...state.totals)
+  const mine = mySeat >= 0 ? sideOf(state, mySeat) : -1
+  return (
+    <div className="flex w-full flex-col gap-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Skor · {state.target} puan · {state.handNo} el
+      </p>
+      <ol className="flex w-full flex-col gap-1.5">
+        {[...sides]
+          .sort((a, b) => state.totals[b] - state.totals[a])
+          .map((side, i) => (
+            <li
+              key={side}
+              className={cn(
+                'flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-bold animate-in fade-in slide-in-from-bottom-2',
+                state.totals[side] === max ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground',
+              )}
+              style={{ animationDelay: `${300 + i * 120}ms`, animationFillMode: 'both' }}
+            >
+              <span className="min-w-0 truncate text-left">
+                {label(side)}
+                {side === mine && <span className="ml-1 text-xs font-semibold opacity-75">(sen)</span>}
+              </span>
+              <span className="font-display text-lg font-black tabular-nums">{state.totals[side]}</span>
+            </li>
+          ))}
+      </ol>
     </div>
   )
 }
