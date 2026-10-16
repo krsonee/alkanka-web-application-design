@@ -10,6 +10,7 @@ import {
   Hand,
   Layers,
   Loader2,
+  LogOut,
   Play,
   Plus,
   Trophy,
@@ -18,7 +19,9 @@ import type { ArenaGameSettings } from "@/lib/arena";
 import type { BlackjackLiveState } from "@/lib/blackjack-live";
 import {
   actBlackjackTable,
+  changeBlackjackBet,
   joinBlackjackTable,
+  leaveBlackjackTable,
   readyBlackjackTable,
 } from "@/app/actions/arena";
 import { cn } from "@/lib/utils";
@@ -413,8 +416,8 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   }
 
   useEffect(() => {
-    setSeatedHere(!!me && phase !== "result");
-  }, [me, phase]);
+    setSeatedHere(!!me && !me.leaving);
+  }, [me]);
 
   // When the countdown runs out, ask the server for the next phase instead of waiting for the next poll.
   const askedFor = useRef<number | null>(null);
@@ -484,6 +487,34 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
       setNotice(
         `Masa ${data.tableNo} doluydu, seni Masa ${res.tableNo}'e oturttuk.`,
       );
+    mutate();
+  }
+
+  async function leave() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    const res = await leaveBlackjackTable();
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setBalance(res.balance);
+    setNotice(
+      res.left
+        ? "Masadan kalktın, bahsin iade edildi."
+        : "Bu el bitince masadan kalkacaksın. Elin normal şekilde sonuçlanır.",
+    );
+    mutate();
+  }
+
+  async function changeBet(b: number) {
+    if (busy || !me || b === me.baseBet) return;
+    setBusy(true);
+    setError("");
+    const res = await changeBlackjackBet(b);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setBet(b);
+    setBalance(res.balance);
     mutate();
   }
 
@@ -672,9 +703,30 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   {seated > 1 ? "Hazırım, dağıt" : "Hemen dağıt"}
                 </button>
               )}
-              <p className="text-xs text-muted-foreground">
-                Koltuk {me.seat} senin. Basmazsan kartlar {secondsLeft} saniye
-                sonra kendiliğinden dağıtılır.
+              <div
+                className="flex flex-wrap justify-center gap-2"
+                role="radiogroup"
+                aria-label="Bu elin bahsi"
+              >
+                {settings.bets.map((b) => (
+                  <button
+                    key={b}
+                    role="radio"
+                    aria-checked={me.baseBet === b}
+                    disabled={busy}
+                    onClick={() => changeBet(b)}
+                    className={cn("chip", me.baseBet === b && "chip-active")}
+                  >
+                    {formatAC(b)}
+                  </button>
+                ))}
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                Koltuk {me.seat} senin, kalkana kadar her el burada oynarsın.
+                Basmazsan kartlar {secondsLeft} saniye sonra kendiliğinden
+                dağıtılır.
+                {me.idle > 0 &&
+                  " Son eli kaçırdın, bu eli de kaçırırsan masadan kaldırılırsın."}
               </p>
             </div>
           ) : !me ? (
@@ -732,9 +784,21 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                     ? `Tebrikler, +${formatAC(me.delta)} kazandın!`
                     : me.delta === 0
                       ? "Berabere, bahsin iade edildi."
-                      : "Bu el krupiyenin. Yeni el birazdan başlıyor."
+                      : "Bu el krupiyenin."
                 : "Bu eli izliyorsun. Bahis süresi açılınca boş koltuğa oturabilirsin."}
+              {me && phase === "result" && !me.leaving &&
+                " Koltuğun seni bekliyor, yeni el aynı bahisle başlıyor."}
             </p>
+          )}
+          {me && (
+            <button
+              disabled={busy || me.leaving}
+              onClick={leave}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+            >
+              <LogOut className="size-3.5" aria-hidden="true" />
+              {me.leaving ? "El bitince kalkıyorsun" : "Masadan kalk"}
+            </button>
           )}
           {notice && !error && (
             <p

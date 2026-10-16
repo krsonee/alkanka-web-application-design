@@ -143,7 +143,7 @@ export async function listMyActiveTables(userId: string) {
 const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 3, 5] },
-  monopoly: { seats: [2, 3, 4], rounds: [] },
+  monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
 }
 

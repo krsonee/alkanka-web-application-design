@@ -69,7 +69,7 @@ const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 3, 5] },
-  monopoly: { seats: [2, 3, 4], rounds: [] },
+  monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
 }
 
@@ -370,7 +370,7 @@ export function TableLobby({
                 <OptionGroup
                   label="Masa"
                   value={String(seatSeats)}
-                  options={seatRule.seats.map((n) => ({ value: String(n), label: `${n} kişilik` }))}
+                  options={seatRule.seats.map((n) => ({ value: String(n), label: seatRule.seats.length > 5 ? String(n) : `${n} kişilik` }))}
                   onChange={(v) => {
                     const n = Number(v)
                     setSeatSeats(n)
@@ -392,14 +392,17 @@ export function TableLobby({
               <OptionGroup
                 label="Bot koltuğu"
                 value={String(seatBots)}
-                options={Array.from({ length: seatSeats }, (_, i) => ({ value: String(i), label: i === 0 ? 'Bot yok' : `${i} bot` }))}
+                options={Array.from({ length: seatSeats }, (_, i) => ({ value: String(i), label: i === 0 ? (seatSeats > 5 ? 'Yok' : 'Bot yok') : seatSeats > 5 ? String(i) : `${i} bot` }))}
                 onChange={(v) => setSeatBots(Number(v))}
               />
               {seatRule.rounds.length > 0 && (
                 <OptionGroup
-                  label="El sayısı"
+                  label={game === 'monopoly' ? 'Süre' : 'El sayısı'}
                   value={String(seatRounds)}
-                  options={seatRule.rounds.map((n) => ({ value: String(n), label: `${n} el` }))}
+                  options={seatRule.rounds.map((n) => ({
+                    value: String(n),
+                    label: game === 'monopoly' ? (n >= 999 ? 'İflasa kadar' : `${n} tur`) : `${n} el`,
+                  }))}
                   onChange={(v) => setSeatRounds(Number(v))}
                 />
               )}
@@ -474,7 +477,11 @@ function OptionGroup({
   return (
     <div className="flex items-center gap-3">
       <span className="w-20 shrink-0 text-xs font-semibold leading-tight text-muted-foreground">{label}</span>
-      <div className="flex min-w-0 flex-1 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label={label}>
+      <div
+        className={cn('min-w-0 flex-1 gap-1 rounded-xl bg-secondary/60 p-1', options.length > 5 ? 'grid grid-cols-5' : 'flex')}
+        role="radiogroup"
+        aria-label={label}
+      >
         {options.map((o) => (
           <button
             key={o.value}

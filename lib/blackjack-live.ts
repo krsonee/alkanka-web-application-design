@@ -97,6 +97,52 @@ async function newRound(c: PoolClient, tableNo: number) {
   return toRound(r.rows[0])
 }
 
+/** A player who lets this many hands in a row play out without touching anything is stood up, so an abandoned tab stops paying bets. */
+const MAX_IDLE_HANDS = 2
+
+/** Charges inside the table transaction, so a rolled-back hand never keeps the money. */
+async function debitIn(c: PoolClient, userId: string, amount: number) {
+  if (amount <= 0) return true
+  const r = await c.query(`UPDATE wallets SET balance = balance - $2, updated_at = now() WHERE user_id = $1 AND balance >= $2 RETURNING balance`, [userId, amount])
+  return (r.rowCount ?? 0) > 0
+}
+
+async function creditIn(c: PoolClient, userId: string, amount: number) {
+  if (amount <= 0) return
+  await c.query(`UPDATE wallets SET balance = balance + $2, updated_at = now() WHERE user_id = $1`, [userId, amount])
+}
+
+/**
+ * Everyone who sat through the last hand keeps their seat and their stake for the next one.
+ * Side bets drop off first when the balance can't cover them; a player who can't cover the main bet, asked to leave, or sat idle too long is stood up.
+ */
+async function carryOver(c: PoolClient, fromRound: number, round: Round): Promise<Round> {
+  const prev = await c.query(
+    `SELECT seat, user_id, user_name, bet, side_pairs, side_213, acted, idle FROM blackjack_live WHERE round_id = $1 AND leaving = false ORDER BY seat`,
+    [fromRound],
+  )
+  let carried = 0
+  for (const p of prev.rows) {
+    const idle = p.acted ? 0 : Number(p.idle) + 1
+    if (idle >= MAX_IDLE_HANDS) continue
+    const userId = String(p.user_id)
+    const bet = Number(p.bet)
+    let pairs = Number(p.side_pairs) || 0
+    let t213 = Number(p.side_213) || 0
+    if (!(await debitIn(c, userId, bet + pairs + t213))) {
+      pairs = 0
+      t213 = 0
+      if (!(await debitIn(c, userId, bet))) continue
+    }
+    await c.query(
+      `INSERT INTO blackjack_live (round_id, seat, user_id, user_name, bet, side_pairs, side_213, idle) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [round.id, Number(p.seat), userId, String(p.user_name), bet, pairs, t213, idle],
+    )
+    carried++
+  }
+  return carried ? setPhase(c, round.id, 'bet', BJ_BET_MS) : round
+}
+
 /** Locks a table's current round and moves it forward as far as the clock and the players allow. Every read and action goes through here, so a table never waits on a fixed timer. */
 async function advance(c: PoolClient, tableNo: number): Promise<Round> {
   const cur = await c.query(`SELECT ${ROUND_COLS} FROM blackjack_round WHERE table_no = $1 ORDER BY id DESC LIMIT 1 FOR UPDATE`, [tableNo])
@@ -126,7 +172,8 @@ async function advance(c: PoolClient, tableNo: number): Promise<Round> {
     }
     if (round.phase === 'result') {
       if (!expired) break
-      round = await newRound(c, tableNo)
+      const finished = round.id
+      round = await carryOver(c, finished, await newRound(c, tableNo))
       continue
     }
     break
@@ -217,7 +264,9 @@ export async function joinBlackjack(member: Member, bet: number, allowedBets: nu
       const already = await seatedTable(c, member.id)
       if (already !== null) {
         const round = await advance(c, already)
-        if (round.phase !== 'result') return { tableNo: already, seated: true, charged: false }
+        const mine = await c.query(`SELECT leaving FROM blackjack_live WHERE round_id = $1 AND user_id = $2`, [round.id, member.id])
+        const stays = mine.rowCount && !mine.rows[0].leaving
+        if (stays || round.phase !== 'result') return { tableNo: already, seated: true, charged: false }
       }
 
       const nos = await tableNumbers(c)
@@ -286,9 +335,50 @@ export async function readyAtTable(member: Member) {
     const no = await myTable(c, member)
     const round = await advance(c, no)
     if (round.phase !== 'bet') throw new Error('Kartlar zaten dağıtıldı.')
-    const r = await c.query(`UPDATE blackjack_live SET ready = true WHERE round_id = $1 AND user_id = $2`, [round.id, member.id])
+    const r = await c.query(`UPDATE blackjack_live SET ready = true, acted = true WHERE round_id = $1 AND user_id = $2`, [round.id, member.id])
     if (!r.rowCount) throw new Error('Önce masaya otur.')
     await advance(c, no)
+  })
+  return { balance: await getBalance(member.id) }
+}
+
+/**
+ * Stands the member up. Before the cards come out the seat is freed and the stake refunded on the spot;
+ * once a hand is running it plays out and pays as usual, and the seat simply isn't carried into the next hand.
+ */
+export async function leaveTable(member: Member) {
+  const out = await inTx(async (c) => {
+    const no = await myTable(c, member)
+    const round = await advance(c, no)
+    const r = await c.query(`SELECT id, bet, side_pairs, side_213 FROM blackjack_live WHERE round_id = $1 AND user_id = $2`, [round.id, member.id])
+    const row = r.rows[0]
+    if (!row) throw new Error('Zaten masada değilsin.')
+    if (round.phase === 'waiting' || round.phase === 'bet') {
+      await c.query(`DELETE FROM blackjack_live WHERE id = $1`, [row.id])
+      await creditIn(c, member.id, Number(row.bet) + (Number(row.side_pairs) || 0) + (Number(row.side_213) || 0))
+      await advance(c, no)
+      return { left: true }
+    }
+    await c.query(`UPDATE blackjack_live SET leaving = true, acted = true WHERE id = $1`, [row.id])
+    return { left: false }
+  })
+  return { balance: await getBalance(member.id), ...out }
+}
+
+/** Changes the stake for the coming hand while bets are still open; the difference is charged or refunded right away. */
+export async function changeTableBet(member: Member, bet: number, allowedBets: number[]) {
+  if (!allowedBets.includes(bet)) throw new Error('Geçersiz bahis.')
+  await inTx(async (c) => {
+    const no = await myTable(c, member)
+    const round = await advance(c, no)
+    if (round.phase !== 'bet') throw new Error('Bahis sadece kartlar dağıtılmadan değişir.')
+    const r = await c.query(`SELECT id, bet FROM blackjack_live WHERE round_id = $1 AND user_id = $2 FOR UPDATE`, [round.id, member.id])
+    const row = r.rows[0]
+    if (!row) throw new Error('Önce masaya otur.')
+    const diff = bet - Number(row.bet)
+    if (diff > 0 && !(await debitIn(c, member.id, diff))) throw new Error('Yetersiz Kanka Coin.')
+    if (diff < 0) await creditIn(c, member.id, -diff)
+    await c.query(`UPDATE blackjack_live SET bet = $2, acted = true WHERE id = $1`, [row.id, bet])
   })
   return { balance: await getBalance(member.id) }
 }
@@ -305,6 +395,7 @@ export async function actAtTable(member: Member, action: 'hit' | 'stand' | 'doub
     const cards = seatCards(round.id, Number(row.seat), drawn)
     if (handValue(cards) >= 21) throw new Error('Elin tamamlandı.')
 
+    await c.query(`UPDATE blackjack_live SET acted = true WHERE id = $1`, [row.id])
     if (action === 'stand') {
       await c.query(`UPDATE blackjack_live SET stood = true WHERE id = $1`, [row.id])
     } else if (action === 'hit') {
@@ -379,7 +470,7 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
   const { id: roundId, phase } = round
 
   const rows = await pool.query(
-    `SELECT seat, user_id, user_name, bet, drawn, stood, doubled, ready, side_pairs, side_213 FROM blackjack_live WHERE round_id = $1 ORDER BY seat`,
+    `SELECT seat, user_id, user_name, bet, drawn, stood, doubled, ready, side_pairs, side_213, leaving, idle FROM blackjack_live WHERE round_id = $1 ORDER BY seat`,
     [roundId],
   )
   const dealing = phase === 'play' || phase === 'result'
@@ -415,6 +506,9 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
       value,
       doubled,
       ready: !!row.ready,
+      leaving: !!row.leaving,
+      idle: Number(row.idle) || 0,
+      baseBet: Number(row.bet),
       done: phase === 'play' ? !!row.stood || value >= 21 : phase === 'result',
       result: res?.result ?? null,
       delta: res ? Math.floor(stake * res.multiplier) - stake : null,

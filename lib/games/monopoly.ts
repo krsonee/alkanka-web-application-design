@@ -59,6 +59,12 @@ export const GROUP_SQUARES: Record<Group, number[]> = BOARD.reduce(
   {} as Record<Group, number[]>,
 )
 
+export const MAX_SEATS = 10
+/** Lobby value for the classic long game: no turn limit, it ends when only one player is left standing. */
+export const UNTIL_BANKRUPT = 999
+/** The bank only has so many buildings; running out of houses is part of the classic long game. */
+export const BANK_HOUSES = 32
+export const BANK_HOTELS = 12
 export const START_MONEY = 1500
 export const JAIL_FINE = 50
 export const GO_SALARY = 200
@@ -148,7 +154,8 @@ const shuffled = (n: number) => {
 const d6 = () => 1 + Math.floor(Math.random() * 6)
 
 export function initMonopoly(opts: { seats?: number; botSeats?: number[]; rounds?: number }): MonopolyState {
-  const seats = Math.max(2, Math.min(4, Math.floor(opts.seats ?? 4)))
+  const seats = Math.max(2, Math.min(MAX_SEATS, Math.floor(opts.seats ?? 4)))
+  const rounds = Math.floor(Number(opts.rounds) || 0)
   return {
     kind: 'monopoly',
     seats,
@@ -165,7 +172,7 @@ export function initMonopoly(opts: { seats?: number; botSeats?: number[]; rounds
     chest: shuffled(CHEST.length),
     card: null,
     round: 1,
-    maxRounds: opts.rounds && opts.rounds >= 10 ? Math.min(40, Math.floor(opts.rounds)) : 20,
+    maxRounds: rounds >= 10 && rounds < UNTIL_BANKRUPT ? Math.min(100, rounds) : 0,
     log: ['Oyun başladı. Herkesin kasasında 1.500 ₺ var.'],
     note: '',
     seq: 0,
@@ -377,7 +384,7 @@ function afterMove(s: MonopolyState, seat: number) {
 function finishIfOver(s: MonopolyState): number[] | null {
   const live = alive(s)
   if (live.length <= 1) return live
-  if (s.round > s.maxRounds) {
+  if (s.maxRounds > 0 && s.round > s.maxRounds) {
     const worth = live.map((i) => netWorth(s, i))
     const max = Math.max(...worth)
     return live.filter((_, k) => worth[k] === max)
@@ -460,12 +467,25 @@ const sqPrice = (pos: number) => {
   return isBuyable(sq) ? sq.price : 0
 }
 
+/** Houses and hotels still in the bank. A hotel gives its four houses back when it goes up. */
+export function bankStock(s: MonopolyState) {
+  let houses = 0
+  let hotels = 0
+  for (const h of s.houses) {
+    if (h === 5) hotels++
+    else houses += h
+  }
+  return { houses: BANK_HOUSES - houses, hotels: BANK_HOTELS - hotels }
+}
+
 export function canBuild(s: MonopolyState, seat: number, pos: number) {
   const sq = BOARD[pos]
   if (sq.type !== 'property' || s.owner[pos] !== seat || !ownsGroup(s, seat, sq.group)) return false
   const group = GROUP_SQUARES[sq.group]
   if (group.some((i) => s.mortgaged[i])) return false
   if (s.houses[pos] >= 5) return false
+  const stock = bankStock(s)
+  if (s.houses[pos] === 4 ? stock.hotels < 1 : stock.houses < 1) return false
   const min = Math.min(...group.map((i) => s.houses[i]))
   return s.houses[pos] === min && s.players[seat].money >= sq.house
 }
@@ -533,7 +553,7 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       afterMove(s, seat)
       break
     case 'build': {
-      if (!canBuild(s, seat, pos)) throw new Error('Buraya ev dikemezsin (tüm renk grubu senin olmalı, evler eşit dağılmalı).')
+      if (!canBuild(s, seat, pos)) throw new Error('Buraya ev dikemezsin (tüm renk grubu senin olmalı, evler eşit dağılmalı, bankada ev/otel kalmış olmalı).')
       const sq = BOARD[pos] as Extract<Square, { type: 'property' }>
       p.money -= sq.house
       s.houses[pos]++
