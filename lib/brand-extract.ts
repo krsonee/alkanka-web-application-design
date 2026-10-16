@@ -5,7 +5,9 @@ import { storeFile } from '@/lib/studio'
 
 const VISION_MODEL = 'google/gemini-3.5-flash'
 
-type VisionResult = { name?: string; font?: string; colors?: string[]; box_2d?: number[] }
+type VisionResult = { name?: string; font?: string; colors?: string[]; box_2d?: number[]; blocked?: boolean }
+
+export class BlockedPageError extends Error {}
 
 function parseJson(text: string): VisionResult {
   const match = text.match(/\{[\s\S]*\}/)
@@ -63,7 +65,8 @@ export async function extractBrandFromScreenshot(input: Buffer, domain: string):
               type: 'text',
               text: [
                 'Screenshot of a website homepage. Reply with ONLY JSON:',
-                '{"name": exact text of the logo wordmark as written (never guess a famous brand),',
+                '{"blocked": true if this is a captcha, bot check, "not a robot", DDoS protection, error or blank page instead of the real site, else false,',
+                '"name": exact text of the logo wordmark as written (never guess a famous brand),',
                 '"font": closest Google Font to the logo/headings,',
                 '"colors": 3-5 hex brand colors most important first incl. main background,',
                 '"box_2d": [ymin, xmin, ymax, xmax] of the main brand logo normalized 0-1000}',
@@ -78,6 +81,9 @@ export async function extractBrandFromScreenshot(input: Buffer, domain: string):
   } catch (error) {
     console.error('Vision extract failed:', error)
     warnings.push('Yapay zeka ekran görüntüsünü okuyamadı, renkler pikselden çıkarıldı.')
+  }
+  if (vision.blocked === true) {
+    throw new BlockedPageError('Görüntü sitenin kendisi değil, bot koruması / doğrulama sayfası.')
   }
 
   const aiColors = (vision.colors ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase())
@@ -119,7 +125,15 @@ const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
 const MAX_BYTES = 1_500_000
 
-export type ExtractedBrand = { name: string; domain: string; logo: string; colors: string[]; font: string; warnings: string[] }
+export type ExtractedBrand = {
+  name: string
+  domain: string
+  logo: string
+  colors: string[]
+  font: string
+  warnings: string[]
+  blocked?: boolean
+}
 
 export function normalizeDomain(input: string) {
   const raw = input.trim().toLowerCase()
@@ -129,16 +143,45 @@ export function normalizeDomain(input: string) {
   return url.hostname
 }
 
-async function fetchLimited(url: string, accept = '*/*') {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': UA, Accept: accept, 'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8' },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(12000),
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const buf = Buffer.from(await res.arrayBuffer())
-  if (buf.length > MAX_BYTES) throw new Error('Dosya çok büyük')
-  return { buf, type: res.headers.get('content-type') ?? '', finalUrl: res.url }
+// Many sponsor sites set a cookie and redirect to themselves; native fetch drops cookies and loops forever.
+async function fetchLimited(url: string, accept = '*/*', maxBytes = MAX_BYTES) {
+  const jar = new Map<string, string>()
+  let current = url
+  for (let hop = 0; hop < 8; hop++) {
+    const res = await fetch(current, {
+      headers: {
+        'User-Agent': UA,
+        Accept: accept,
+        'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8',
+        ...(jar.size ? { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; ') } : {}),
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(12000),
+    })
+    for (const cookie of res.headers.getSetCookie()) {
+      const pair = cookie.split(';')[0]
+      const eq = pair.indexOf('=')
+      if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1))
+    }
+    const location = res.headers.get('location')
+    if (res.status >= 300 && res.status < 400 && location) {
+      current = new URL(location, current).toString()
+      continue
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length > maxBytes) throw new Error('Dosya çok büyük')
+    return { buf, type: res.headers.get('content-type') ?? '', finalUrl: current }
+  }
+  throw new Error('Çok fazla yönlendirme')
+}
+
+async function renderScreenshot(domain: string) {
+  const target = encodeURIComponent(`https://${domain}`)
+  const url = `https://api.microlink.io/?url=${target}&screenshot=true&meta=false&embed=screenshot.url&viewport.width=1440&viewport.height=900&waitForTimeout=3500`
+  const res = await fetch(url, { signal: AbortSignal.timeout(40000) })
+  if (!res.ok || !res.headers.get('content-type')?.startsWith('image/')) throw new Error(`Render ${res.status}`)
+  return Buffer.from(await res.arrayBuffer())
 }
 
 const attr = (tag: string, name: string) => tag.match(new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, 'i'))?.[1] ?? ''
@@ -189,7 +232,8 @@ async function logoToPng(buf: Buffer) {
   return png
 }
 
-const CHALLENGE = /just a moment|cf-chl|challenge-platform|attention required|checking your browser|ddos-guard|captcha/i
+const CHALLENGE =
+  /just a moment|cf-chl|challenge-platform|attention required|checking your browser|ddos-guard|captcha|authentication challenge|nexusguard|not a robot|__nxq|sucuri|incapsula|access denied/i
 
 async function fetchPage(domain: string) {
   const bare = domain.replace(/^www\./, '')
@@ -224,6 +268,12 @@ export async function extractBrand(domainInput: string): Promise<ExtractedBrand>
   const warnings: string[] = []
   const page = await fetchPage(domain)
   if (!page) {
+    try {
+      const rendered = await extractBrandFromScreenshot(await renderScreenshot(domain), domain)
+      return { ...rendered, warnings: ['Site HTML vermedi, sayfa tarayıcıda açılıp görüntüsünden okundu.', ...rendered.warnings] }
+    } catch (error) {
+      if (!(error instanceof BlockedPageError)) console.error('Rendered brand extract failed:', error)
+    }
     const logo = await faviconFallback(domain)
     return {
       name: domain.replace(/^www\./, '').split('.')[0],
@@ -231,10 +281,11 @@ export async function extractBrand(domainInput: string): Promise<ExtractedBrand>
       logo,
       colors: [],
       font: '',
+      blocked: true,
       warnings: [
-        'Site bot korumasında, sayfa okunamadı.',
+        'Bu site "robot değilim" doğrulamasıyla korunuyor; sunucumuz (ve tarayıcı servisleri) içeriğe giremiyor.',
         logo ? 'Site ikonu yedek kaynaktan alındı.' : '',
-        'En sağlam yol: sitenin ana sayfasının ekran görüntüsünü "Ekran görüntüsünden çek" ile yükle.',
+        'Çözüm: siteyi kendi tarayıcında aç, ana sayfanın ekran görüntüsünü al ve aşağıdaki "Ekran görüntüsünden çek" ile yükle. Logo, renk ve font oradan çıkarılır.',
       ].filter(Boolean),
     }
   }
