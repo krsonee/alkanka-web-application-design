@@ -19,6 +19,7 @@ import { AppPrompts } from '@/components/alkanka/app/app-prompts'
 import { SiteTour } from '@/components/alkanka/app/site-tour'
 import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
 import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
+import { WinnersTicker } from '@/components/alkanka/kp/winners-ticker'
 import { JakoAlerts } from '@/components/alkanka/jako-alerts'
 import { CatalogProvider } from '@/components/alkanka/catalog-context'
 import { getCatalog } from '@/lib/catalog'
@@ -43,6 +44,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <LiveRail />
         <div className="min-h-dvh lg:pl-64 xl:pr-80">
           <Topbar social={social} sponsors={searchSponsors} />
+          <WinnersTicker />
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
             {children}
             <Footer />

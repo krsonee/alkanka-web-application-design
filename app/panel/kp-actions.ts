@@ -22,6 +22,16 @@ import {
   type PointRules,
 } from '@/lib/kanka-puan'
 
+import { saveOnlineConfig, saveTickerConfig } from '@/lib/online-rewards'
+import type { OnlineConfig, TickerConfig } from '@/lib/online-rewards-shared'
+
+export async function updateTicker(cfg: TickerConfig) {
+  return guard(async () => {
+    await saveTickerConfig(cfg)
+    return 'Kazananlar şeridi kaydedildi.'
+  })
+}
+
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
 async function guard(fn: () => Promise<string | void>): Promise<Result> {
@@ -48,6 +58,14 @@ export async function updateRules(rules: PointRules) {
   return guard(async () => {
     await saveRules(rules)
     return 'Puan kuralları kaydedildi.'
+  })
+}
+
+export async function updateOnlineRewards(cfg: OnlineConfig) {
+  return guard(async () => {
+    await saveOnlineConfig(cfg)
+    revalidatePath('/gorevler')
+    return 'Online ödülleri kaydedildi.'
   })
 }
 
