@@ -1,6 +1,6 @@
-export const ARENA_GAMES = ['tavla', 'okey', 'okey101', 'batak', 'monopoly', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu'] as const
+export const ARENA_GAMES = ['tavla', 'okey', 'okey101', 'batak', 'pisti', 'monopoly', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu'] as const
 /** Seat games run entirely on kanka tables; empty seats can be filled with server bots. */
-export const SEAT_TABLE_GAMES = ['okey101', 'batak', 'monopoly'] as const
+export const SEAT_TABLE_GAMES = ['okey101', 'batak', 'monopoly', 'pisti'] as const
 export type ArenaGame = (typeof ARENA_GAMES)[number]
 
 export type GameMode = 'bot' | 'pvp' | 'local'
@@ -54,6 +54,15 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
     short: 'İhaleli batak. İhaleyi al, kozu seç, sözünü tut; batan ihalesi kadar yer.',
     image: '/images/games/batak.png',
     players: '4 kişi, boş koltuğa bot',
+    group: 2,
+    category: 'masa',
+    modes: ['pvp'],
+  },
+  pisti: {
+    title: 'Pişti',
+    short: 'Aynı kartla ya da valeyle yeri topla, tek kartı yakala pişti yap. 101 ya da 151 puana ilk ulaşan kazanır.',
+    image: '/images/games/pisti.png',
+    players: '2 kişi ya da 4 kişi eşli, boş koltuğa bot',
     group: 2,
     category: 'masa',
     modes: ['pvp'],
@@ -131,6 +140,7 @@ export const DEFAULT_ARENA: ArenaSettings = {
   okey101: { ...base, multiplier: 2 },
   batak: { ...base, multiplier: 2 },
   monopoly: { ...base, multiplier: 2 },
+  pisti: { ...base, multiplier: 2 },
   bilardo: { ...base, multiplier: 2 },
   blackjack: { ...base, multiplier: 2 },
   rulet: { ...base, multiplier: 1 },
@@ -160,6 +170,6 @@ export function mergeArena(saved: Partial<Record<string, Partial<ArenaGameSettin
 }
 
 /** Seconds a player has for each action at a kanka table; when it runs out the server plays for them. */
-export const TURN_SECONDS: Partial<Record<ArenaGame, number>> = { tavla: 40, okey: 30, okey101: 40, batak: 25, monopoly: 45, bilardo: 35 }
+export const TURN_SECONDS: Partial<Record<ArenaGame, number>> = { tavla: 40, okey: 30, okey101: 40, batak: 25, pisti: 30, monopoly: 45, bilardo: 35 }
 
 export const RESULT_LABEL: Record<string, string> = { win: 'Kazandı', loss: 'Kaybetti', draw: 'Berabere', refund: 'İade' }

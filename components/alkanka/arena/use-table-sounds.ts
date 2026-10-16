@@ -19,6 +19,7 @@ const MOVE_SOUND: Record<string, SoundName> = {
   okey: 'tile',
   okey101: 'tile',
   batak: 'card',
+  pisti: 'card',
   bilardo: 'cue',
 }
 

@@ -21,6 +21,7 @@ import {
 } from './rules'
 
 import { normalizeVariant } from '@/lib/games/batak'
+import { normalizeTarget } from '@/lib/games/pisti'
 
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
 
@@ -97,6 +98,7 @@ export function tableView(t: TableRow, userId: string | null) {
     seats: t.seats,
     team: t.options.team,
     bots: t.options.bots,
+    variant: t.options.variant ?? null,
     winners: t.options.winners ?? (t.winnerId ? [t.winnerId] : []),
     status: t.status,
     players: t.players,
@@ -142,6 +144,7 @@ const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 3, 5] },
   monopoly: { seats: [2, 3, 4], rounds: [] },
+  pisti: { seats: [2, 4], rounds: [] },
 }
 
 function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOptions {
@@ -152,6 +155,11 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
     const rounds = rule.rounds.includes(Number(input?.rounds)) ? Number(input?.rounds) : rule.rounds[0]
     return { seats, team: variant === 'esli', bots, rounds, variant }
+  }
+  if (game === 'pisti') {
+    const seats = Number(input?.seats) === 4 ? 4 : 2
+    const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
+    return { seats, team: seats === 4, bots, variant: String(normalizeTarget(input?.variant)) }
   }
   if (rule) {
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]
