@@ -5,7 +5,9 @@ import { useActionState, type ReactNode } from 'react'
 import { Loader2, Play, Plus, Shuffle, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_GAMES, ARENA_META } from '@/lib/arena'
-import { STATUS_LABEL, type Tournament, type TournamentStatus } from '@/lib/tournaments-shared'
+import { FORMAT_LABEL, FORMAT_SHORT, STATUS_LABEL, TOURNAMENT_FORMATS, type Tournament } from '@/lib/tournaments-shared'
+import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
+import { LeagueView } from '@/components/alkanka/arena/league-view'
 import { beginTournament, kickEntry, pickMatchWinner, removeTournament, saveTournament, stopTournament } from '@/app/panel/arena-actions'
 import type { ActionState } from '@/app/panel/actions'
 import { BracketView } from '@/components/alkanka/arena/bracket-view'
@@ -91,6 +93,17 @@ function TournamentForm({ t }: { t?: Tournament }) {
           </select>
         </label>
         <label className={labelCls}>
+          Format
+          <select name="format" defaultValue={t?.format ?? 'eleme'} className={field}>
+            {TOURNAMENT_FORMATS.map((f) => (
+              <option key={f} value={f}>
+                {FORMAT_LABEL[f]}
+              </option>
+            ))}
+          </select>
+          <span className="font-normal">Lig formatında en fazla {MAX_LEAGUE_PLAYERS} oyuncu, en çok puanı toplayan şampiyon olur.</span>
+        </label>
+        <label className={labelCls}>
           Turnuva adı
           <input name="title" required minLength={3} maxLength={80} defaultValue={t?.title} placeholder="Cuma Akşamı Tavla Kupası" className={field} />
         </label>
@@ -104,7 +117,7 @@ function TournamentForm({ t }: { t?: Tournament }) {
         </label>
         <label className={labelCls}>
           Kontenjan (oyuncu)
-          <input type="number" name="maxPlayers" min={2} max={256} required defaultValue={t?.maxPlayers ?? 16} className={field} />
+          <input type="number" name="maxPlayers" min={2} max={500} required defaultValue={t?.maxPlayers ?? 16} className={field} />
         </label>
         <label className={labelCls}>
           Katılım ücreti (KC, 0 = ücretsiz)
@@ -152,7 +165,7 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
         <option value="">Kazanan seç</option>
         {real.map((p) => (
           <option key={p} value={p}>
-            {p}
+            {t.names[p] ?? p}
           </option>
         ))}
       </select>
@@ -168,7 +181,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">
-            {ARENA_META[t.game].title} · {STATUS_LABEL[t.status]}
+            {ARENA_META[t.game].title} · {FORMAT_SHORT[t.format]} · {STATUS_LABEL[t.status]}
           </span>
           <h3 className="font-display text-xl font-bold uppercase text-foreground">{t.title}</h3>
           <p className="text-xs capitalize text-muted-foreground">
@@ -196,7 +209,18 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
         </div>
       </div>
 
-      {t.bracket && (
+      {t.bracket && t.format === 'lig' && (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-sm font-bold text-foreground">Puan durumu ve fikstür (kazananı seçince puan tablosu güncellenir, hafta bitince sonraki hafta açılır)</h4>
+          <LeagueView
+            bracket={t.bracket}
+            names={t.names}
+            order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)}
+            renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />}
+          />
+        </div>
+      )}
+      {t.bracket && t.format === 'eleme' && (
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-bold text-foreground">Eşleşmeler (kazananı seçince otomatik bir üst tura geçer)</h4>
           <BracketView bracket={t.bracket} renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />} />

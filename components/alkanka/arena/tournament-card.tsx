@@ -11,6 +11,7 @@ import { STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
 import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
+import { LeagueView } from './league-view'
 
 export function formatTR(iso: string) {
   return new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', weekday: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
@@ -182,8 +183,12 @@ export function TournamentCard({ t }: { t: Tournament }) {
 
       {t.bracket && (
         <div className="flex flex-col gap-3 border-t border-border p-5 md:p-7">
-          <h3 className="font-display text-lg font-bold uppercase text-foreground">Eşleşmeler</h3>
-          <BracketView bracket={t.bracket} />
+          <h3 className="font-display text-lg font-bold uppercase text-foreground">{t.format === 'lig' ? 'Puan durumu ve fikstür' : 'Eşleşmeler'}</h3>
+          {t.format === 'lig' ? (
+            <LeagueView bracket={t.bracket} names={t.names} order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)} />
+          ) : (
+            <BracketView bracket={t.bracket} />
+          )}
         </div>
       )}
     </article>

@@ -13,6 +13,18 @@ export const STATUS_LABEL: Record<TournamentStatus, string> = {
 
 export const MAX_TOURNAMENT_PLAYERS = 500
 
+export const TOURNAMENT_FORMATS = ['eleme', 'lig'] as const
+export type TournamentFormat = (typeof TOURNAMENT_FORMATS)[number]
+
+export const FORMAT_LABEL: Record<TournamentFormat, string> = {
+  eleme: 'Eleme (kaybeden elenir)',
+  lig: 'Lig (herkes herkesle, puanlı)',
+}
+
+export const FORMAT_SHORT: Record<TournamentFormat, string> = { eleme: 'Eleme', lig: 'Lig' }
+
+export const isTournamentFormat = (v: unknown): v is TournamentFormat => TOURNAMENT_FORMATS.includes(v as TournamentFormat)
+
 export type TournamentEntry = { id: number; userId: string | null; nickname: string; telegram: string; createdAt: string }
 
 export type LiveMatch = { tableId: string; round: number; match: number; players: string[]; status: string }
@@ -29,6 +41,7 @@ export type Tournament = {
   maxPlayers: number
   startsAt: string
   status: TournamentStatus
+  format: TournamentFormat
   winner: string | null
   bracket: Bracket | null
   entries: TournamentEntry[]

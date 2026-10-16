@@ -3,8 +3,9 @@ import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import type { ArenaGame } from './arena'
 import { bracketChampion, createBracket, setMatchWinner, type Bracket } from './bracket'
+import { createLeague, leagueChampion, MAX_LEAGUE_PLAYERS, setLeagueWinner } from './league'
 import { initState } from './pvp/rules'
-import { MAX_TOURNAMENT_PLAYERS, type LiveMatch, type Tournament, type TournamentStatus } from './tournaments-shared'
+import { MAX_TOURNAMENT_PLAYERS, type LiveMatch, type Tournament, type TournamentFormat, type TournamentStatus } from './tournaments-shared'
 
 export { TOURNAMENT_STATUSES, STATUS_LABEL, MAX_TOURNAMENT_PLAYERS } from './tournaments-shared'
 export type { Tournament, TournamentStatus } from './tournaments-shared'
@@ -44,6 +45,7 @@ function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
     maxPlayers: Number(r.max_players),
     startsAt: new Date(String(r.starts_at)).toISOString(),
     status: r.status as TournamentStatus,
+    format: r.format === 'lig' ? 'lig' : 'eleme',
     winner: (r.winner as string | null) ?? null,
     bracket,
     names,
@@ -98,25 +100,30 @@ export type TournamentInput = {
   prizeNote: string
   maxPlayers: number
   startsAt: string
+  format: TournamentFormat
 }
 
-const clampPlayers = (n: number) => Math.min(MAX_TOURNAMENT_PLAYERS, Math.max(2, Math.floor(n)))
+const clampPlayers = (n: number, format: TournamentFormat) =>
+  Math.min(format === 'lig' ? MAX_LEAGUE_PLAYERS : MAX_TOURNAMENT_PLAYERS, Math.max(2, Math.floor(n)))
 
 export async function createTournament(t: TournamentInput) {
   await pool.query(
     `INSERT INTO tournaments (game, title, description, rules, entry_fee, prize_pool, prize_note, max_players, starts_at, format, table_size)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'eleme',2)`,
-    [t.game, t.title, t.description, t.rules, t.entryFee, t.prizePool, t.prizeNote, clampPlayers(t.maxPlayers), t.startsAt],
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,2)`,
+    [t.game, t.title, t.description, t.rules, t.entryFee, t.prizePool, t.prizeNote, clampPlayers(t.maxPlayers, t.format), t.startsAt, t.format],
   )
 }
 
 export async function updateTournament(id: number, t: TournamentInput) {
   await pool.query(
     `UPDATE tournaments SET game=$2, title=$3, description=$4, rules=$5, entry_fee=$6, prize_pool=$7, prize_note=$8,
-       max_players=$9, starts_at=$10 WHERE id=$1 AND status = 'kayit'`,
-    [id, t.game, t.title, t.description, t.rules, t.entryFee, t.prizePool, t.prizeNote, clampPlayers(t.maxPlayers), t.startsAt],
+       max_players=$9, starts_at=$10, format=$11 WHERE id=$1 AND status = 'kayit'`,
+    [id, t.game, t.title, t.description, t.rules, t.entryFee, t.prizePool, t.prizeNote, clampPlayers(t.maxPlayers, t.format), t.startsAt, t.format],
   )
 }
+
+const championOf = (format: unknown, bracket: Bracket, order: string[]) =>
+  format === 'lig' ? leagueChampion(bracket, order) : bracketChampion(bracket)
 
 async function refundAll(id: number) {
   const t = await pool.query('SELECT entry_fee, game FROM tournaments WHERE id = $1', [id])
@@ -203,10 +210,11 @@ async function autoStartDue() {
 
 /** Pairs every entrant at once and opens all first-round tables simultaneously. */
 export async function startTournament(id: number) {
-  const entries = await pool.query('SELECT * FROM tournament_entries WHERE tournament_id = $1', [id])
+  const entries = await pool.query('SELECT * FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [id])
   if (entries.rowCount! < 2) throw new Error('Başlatmak için en az 2 oyuncu gerekli.')
+  const t = await pool.query('SELECT format FROM tournaments WHERE id = $1', [id])
   const keys = entries.rows.map(entryKey)
-  const bracket = createBracket(keys, 2)
+  const bracket = t.rows[0]?.format === 'lig' ? createLeague(keys) : createBracket(keys, 2)
   const r = await pool.query(
     `UPDATE tournaments SET status = 'basladi', bracket = $2::jsonb, winner = NULL WHERE id = $1 AND status = 'kayit' RETURNING id`,
     [id, JSON.stringify(bracket)],
@@ -230,7 +238,8 @@ async function openReadyMatches(id: number) {
       return
     }
     const bracket = row.bracket as Bracket
-    const champion = bracketChampion(bracket)
+    const order = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [id])
+    const champion = championOf(row.format, bracket, order.rows.map(entryKey))
     if (champion) {
       await finishTournament(client, row, bracket, champion)
       await client.query('COMMIT')
@@ -296,10 +305,11 @@ export async function advanceTournament(id: number, round: number, match: number
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const t = await client.query('SELECT bracket, status FROM tournaments WHERE id = $1 FOR UPDATE', [id])
+    const t = await client.query('SELECT bracket, status, format FROM tournaments WHERE id = $1 FOR UPDATE', [id])
     const row = t.rows[0]
     if (row?.status === 'basladi' && row.bracket) {
-      const next = setMatchWinner(row.bracket as Bracket, round, match, winnerKey)
+      const set = row.format === 'lig' ? setLeagueWinner : setMatchWinner
+      const next = set(row.bracket as Bracket, round, match, winnerKey)
       await client.query('UPDATE tournaments SET bracket = $2::jsonb WHERE id = $1', [id, JSON.stringify(next)])
     }
     await client.query('COMMIT')
