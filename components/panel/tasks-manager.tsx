@@ -67,8 +67,13 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
     })
   }
 
+  const activeCount = tasks.filter((t) => t.active).length
+  const autoCount = tasks.filter((t) => t.active && t.kind !== 'manual').length
+  const totalPoints = tasks.filter((t) => t.active).reduce((sum, t) => sum + t.points, 0)
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
+    <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
       <TasksGuide />
       <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
         Görev adı, kısa açıklama ve puan burada durur. Kayıt silinmez; yayından çıkarmak için aktif kutusunu kapat.
@@ -127,8 +132,27 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
           ))}
         </ul>
       )}
+    </div>
+    <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4 lg:col-span-4">
+      <section aria-label="Görev özeti" className="grid grid-cols-3 gap-2 rounded-xl border border-border bg-card p-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-semibold text-muted-foreground">Yayında</span>
+          <span className="font-display text-xl font-bold tabular-nums text-foreground">{activeCount}</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-semibold text-muted-foreground">Otomatik</span>
+          <span className="font-display text-xl font-bold tabular-nums text-foreground">{autoCount}</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-semibold text-muted-foreground">Toplam puan</span>
+          <span className="font-display text-xl font-bold tabular-nums text-primary">{totalPoints}</span>
+        </div>
+      </section>
       <section className="flex flex-col gap-3" aria-label="Bekleyen talepler">
-        <h3 className="font-display text-base font-bold text-foreground">Bekleyen talepler</h3>
+        <h3 className="flex items-center gap-2 font-display text-base font-bold text-foreground">
+          Bekleyen talepler
+          {claims.length > 0 ? <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold tabular-nums text-primary-foreground">{claims.length}</span> : null}
+        </h3>
         {claims.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Bekleyen talep yok.</p>
         ) : (
@@ -150,6 +174,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
           </ul>
         )}
       </section>
+    </aside>
     </div>
   )
 }

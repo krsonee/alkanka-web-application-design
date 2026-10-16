@@ -154,7 +154,7 @@ export function StakeGate({
   return (
     <section className="grid overflow-hidden rounded-2xl border border-border bg-card lg:grid-cols-[1.05fr_1fr]">
       <div className="relative aspect-[16/7] sm:aspect-[4/3] lg:aspect-auto">
-        <Image src={meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+        <Image src={settings.image || meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
         <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-card to-transparent sm:hidden" aria-hidden="true" />
         <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-md bg-background/90 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary sm:left-4 sm:top-4 sm:px-2.5 sm:py-1 sm:text-xs">
           <Users className="size-3.5" aria-hidden="true" />

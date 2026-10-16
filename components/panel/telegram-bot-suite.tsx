@@ -76,7 +76,7 @@ function TargetChecks({ targets, selected, emptyText }: { targets: MirrorTarget[
   )
 }
 
-function ShareSection({ suite, bots, targets, status }: { suite: BotSuite; bots: MirrorBot[]; targets: MirrorTarget[]; status: ShareStatus }) {
+export function ShareSection({ suite, bots, targets, status }: { suite: BotSuite; bots: MirrorBot[]; targets: MirrorTarget[]; status: ShareStatus }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveShareAction, {})
   const s = suite.share
   return (
@@ -219,7 +219,7 @@ function OddsRow({ deal }: { deal: OddsDeal }) {
   )
 }
 
-function OddsSection({ suite, targets, deals }: { suite: BotSuite; targets: MirrorTarget[]; deals: OddsDeal[] }) {
+export function OddsSection({ suite, targets, deals }: { suite: BotSuite; targets: MirrorTarget[]; deals: OddsDeal[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveOddsAction, {})
   return (
     <section aria-labelledby="tg-odds-title" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
@@ -268,7 +268,7 @@ function OddsSection({ suite, targets, deals }: { suite: BotSuite; targets: Mirr
   )
 }
 
-function ApprovalSection({ suite, bots }: { suite: BotSuite; bots: MirrorBot[] }) {
+export function ApprovalSection({ suite, bots }: { suite: BotSuite; bots: MirrorBot[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveApprovalsAction, {})
   const [testState, testAction, testing] = useActionState<ActionState, FormData>(testApprovalAction, {})
   const a = suite.approvals
