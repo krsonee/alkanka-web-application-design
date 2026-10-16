@@ -10,6 +10,7 @@ import { TEXTS_KEY, type SiteTexts } from '@/lib/site-texts-shared'
 import { TextsEditor } from '@/components/panel/texts-editor'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
+import { CUSTOM_SLIDES_KEY, readCustomSlides } from '@/lib/custom-slides'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
 import { LogoEditor } from '@/components/panel/logo-editor'
@@ -52,6 +53,7 @@ import { MarketManager } from '@/components/panel/market-manager'
 import { GrowthManager } from '@/components/panel/growth-manager'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
+import { affLinkViews } from '@/lib/aff-links'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
@@ -187,7 +189,17 @@ export default async function PanelPage() {
         path: '/',
         defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image },
         saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
-      }))
+      })).concat(
+        readCustomSlides(content[CUSTOM_SLIDES_KEY]).map((s) => ({
+          kind: 'slide' as const,
+          id: s.id,
+          label: s.eyebrow || s.title,
+          path: '/',
+          custom: true,
+          defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
+          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
+        })),
+      )
     : []
 
   const heroes = can('hero')
@@ -275,6 +287,8 @@ export default async function PanelPage() {
         accounts={await adminSponsorAccounts().catch(() => [])}
         period={currentPeriod()}
         siteUrl={SITE_URL}
+        affLinks={await affLinkViews().catch(() => [])}
+        affSites={(await listSites().catch(() => [])).map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
       />
     )),
     section(session, 'community', 'Topluluk', async () => (

@@ -6,6 +6,7 @@ import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketProduct, MarketRequest, ProductInput } from '@/lib/market'
 import { deleteMarketProductAction, resolveMarketRequestAction, saveMarketProductAction } from '@/app/panel/market-actions'
+import { ImageField } from '@/components/panel/image-field'
 
 type SponsorOption = { id: string; name: string }
 
@@ -215,7 +216,7 @@ function ProductForm({ value, sponsors, pending, onSave, onCancel }: { value: Pr
       ))}
       <label className="flex flex-col gap-1 text-xs text-muted-foreground sm:col-span-2">
         Görsel URL
-        <input value={v.image} onChange={(e) => set('image', e.target.value)} className={field} placeholder="/images/tile-market.png veya https://..." />
+        <ImageField value={v.image} onChange={(url) => set('image', url)} uploadId="market" placeholder="/images/tile-market.png veya https://..." />
       </label>
       <label className="flex flex-col gap-1 text-xs text-muted-foreground sm:col-span-2">
         Teslimat notu

@@ -8,7 +8,9 @@ import {
   saveSiteLinkAction,
   setFlagAction,
 } from '@/app/panel/growth-actions'
+import { AffLinksManager, type AffSiteOption } from '@/components/panel/aff-links-manager'
 import { GrowthGuide } from '@/components/panel/growth-guide'
+import type { AffLinkView } from '@/lib/aff-links'
 import type { FlaggedMember, SiteLink, SponsorAccount, TrafficReport } from '@/lib/growth'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +25,8 @@ type Props = {
   accounts: SponsorAccount[]
   period: string
   siteUrl: string
+  affLinks: AffLinkView[]
+  affSites: AffSiteOption[]
 }
 
 const input = 'rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -158,6 +162,9 @@ function SiteLinks({ sites, links, followers }: Pick<Props, 'sites' | 'links' | 
         </label>
       </div>
       <Note msg={msg} />
+      {sites.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Yayında sponsor yok. Sponsorlar sekmesinde siteyi “Aktif” yapınca burada görünür.</p>
+      ) : null}
       <ul className="flex max-h-[480px] flex-col overflow-y-auto rounded-xl border border-border">
         {list.map((s) => {
           const saved = links[s.id]?.url ?? ''
@@ -331,6 +338,7 @@ export function GrowthManager(props: Props) {
   return (
     <div className="flex flex-col gap-6">
       <GrowthGuide />
+      <AffLinksManager links={props.affLinks} sites={props.affSites} siteUrl={props.siteUrl} />
       <div className="grid gap-6 lg:grid-cols-2">
         <LinkBuilder siteUrl={props.siteUrl} />
         <Flagged flagged={props.flagged} />

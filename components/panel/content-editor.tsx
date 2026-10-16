@@ -2,14 +2,15 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import Image from 'next/image'
-import { ChevronRight, LayoutDashboard, ExternalLink, ImageIcon, RotateCcw, Save } from 'lucide-react'
+import { ChevronRight, LayoutDashboard, ExternalLink, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
+import { addSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
+import { ImageField } from '@/components/panel/image-field'
 import { JAKO_POSES } from '@/lib/site-registry'
 import { PANEL_GROUPS, type PanelModule } from '@/lib/panel-modules'
 import { HideButton } from '@/components/panel/hide-button'
 
-type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string }
+type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string; href?: string }
 
 type PanelTab = PanelModule | 'staff' | 'account' | 'audit' | 'dashboard'
 
@@ -21,6 +22,7 @@ export type EditorItem = {
   defaults: Fields
   saved: Fields | null
   hidden?: boolean
+  custom?: boolean
 }
 
 export function ContentEditor({
@@ -258,6 +260,7 @@ export function ContentEditor({
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
+          {tab === 'slide' && <AddSlideCard />}
           {items.map((item) => (
             <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
           ))}
@@ -275,12 +278,41 @@ const SLIDE_PRESETS = [
   { label: 'Bilardo düellosu', eyebrow: 'Amerikan Bilardo', title: 'Istakanı hazırla', description: 'Birebir bilardo düellolarında rakibini yen, Kanka Coin kazan.', cta: 'Düelloya başla' },
 ]
 
+function AddSlideCard() {
+  const [state, action, pending] = useActionState<ActionState>(addSlide, {})
+  return (
+    <form
+      action={action}
+      className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-card p-6 text-center"
+    >
+      <Plus className="size-8 text-primary" aria-hidden="true" />
+      <div className="flex flex-col gap-1">
+        <h2 className="font-display text-lg font-bold text-foreground">Yeni slayt ekle</h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Ana sayfa slider&apos;ına istediğin kadar yeni slayt ekle. Eklenen slayt listenin sonuna düşer, görselini bilgisayardan yükleyebilirsin.
+        </p>
+      </div>
+      <button
+        disabled={pending}
+        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+      >
+        <Plus className="size-4" aria-hidden="true" />
+        {pending ? 'Ekleniyor…' : 'Slayt ekle'}
+      </button>
+      {state.message && (
+        <p role="status" className={cn('text-sm', state.ok ? 'text-primary' : 'text-live')}>
+          {state.message}
+        </p>
+      )}
+    </form>
+  )
+}
+
 function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
   const isSlide = item.kind === 'slide'
   const [saveState, saveAction, saving] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
   const [resetState, resetAction, resetting] = useActionState<ActionState, FormData>(isSlide ? resetSlide : resetHero, {})
   const [image, setImage] = useState(item.saved?.image || '')
-  const [picker, setPicker] = useState(false)
   const preview = image || item.defaults.image || '/placeholder.svg'
   const status = resetState.message && !saveState.message ? resetState : saveState
   const value = (k: keyof Fields) => item.saved?.[k] ?? ''
@@ -314,53 +346,27 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
 
       <form action={saveAction} className="flex flex-col gap-3 p-4">
         <input type="hidden" name={isSlide ? 'id' : 'slug'} value={item.id} />
-        <input type="hidden" name="image" value={image} />
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">Görsel</span>
-            <button
-              type="button"
-              onClick={() => setPicker((v) => !v)}
-              aria-expanded={picker}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary"
-            >
-              <ImageIcon className="size-3.5" aria-hidden="true" />
-              {picker ? 'Kapat' : 'Galeriden seç'}
-            </button>
-          </div>
-          {picker && (
-            <div className="grid max-h-56 grid-cols-4 gap-2 overflow-y-auto rounded-lg border border-border bg-background p-2 sm:grid-cols-5">
-              {library.map((src) => (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => {
-                    setImage(src)
-                    setPicker(false)
-                  }}
-                  aria-label={`Görsel seç: ${src.split('/').pop()}`}
-                  className={cn(
-                    'relative aspect-square overflow-hidden rounded-md border-2',
-                    preview === src ? 'border-primary' : 'border-transparent hover:border-border',
-                  )}
-                >
-                  <Image src={src || '/placeholder.svg'} alt="" fill sizes="96px" className="object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-          <input
-            aria-label="Görsel adresi"
-            value={image}
-            onChange={(e) => setImage(e.target.value)}
-            placeholder={`Varsayılan: ${item.defaults.image}`}
-            className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-          />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Galeriden seç ya da https:// ile başlayan bir görsel linki yapıştır.
-          </p>
-        </div>
+        <ImageField
+          name="image"
+          label="Görsel"
+          value={image}
+          onChange={setImage}
+          library={library}
+          uploadId={isSlide ? 'slide' : 'hero'}
+          placeholder={`Varsayılan: ${item.defaults.image}`}
+          hint="Bilgisayardan yükle, galeriden seç ya da link yapıştır. Önerilen boyut 1600×600 (slider) / 1600×500 (başlık)."
+        />
+        {item.custom && (
+          <label className="flex flex-col gap-1.5 text-sm text-foreground">
+            Butonun gideceği link
+            <input
+              name="href"
+              defaultValue={item.saved?.href ?? '/'}
+              placeholder="/oyunlar/tavla veya https://…"
+              className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+          </label>
+        )}
 
         {isSlide && (
           <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-2">
@@ -423,11 +429,17 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
           <button
             formAction={resetAction}
             disabled={resetting || !item.saved}
-            onClick={() => setImage('')}
-            className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-40"
+            onClick={(e) => {
+              if (item.custom && !confirm('Bu slayt silinsin mi?')) e.preventDefault()
+              else setImage('')
+            }}
+            className={cn(
+              'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm hover:bg-secondary disabled:opacity-40',
+              item.custom ? 'border-live/40 text-live' : 'border-border text-foreground',
+            )}
           >
-            <RotateCcw className="size-4" aria-hidden="true" />
-            Varsayılana dön
+            {item.custom ? <Trash2 className="size-4" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
+            {item.custom ? 'Slaytı sil' : 'Varsayılana dön'}
           </button>
           {status.message && (
             <p role="status" className={cn('text-sm', status.ok ? 'text-primary' : 'text-live')}>

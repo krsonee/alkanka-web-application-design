@@ -4,6 +4,26 @@ const ol = 'flex list-decimal flex-col gap-1.5 pl-5'
 
 const STEPS: GuideStep[] = [
   {
+    title: 'Sponsor affiliate linkleri: kısa link, takip ve güncel adres',
+    body: (
+      <ol className={ol}>
+        <li>Sponsorun affiliate panelinden sana verdiği linki <b>Sponsorun verdiği affiliate linki</b> alanına aynen yapıştır. Kendin link üretmene gerek yok.</li>
+        <li>
+          <b>Kısa link</b> otomatik dolar (ör. <span className={code}>alkanka.com/r/makro</span>). Reklamlarda, Telegram’da ve SMS’te bu kısa linki kullan. Sonuna <span className={code}>?src=tg</span> eklersen kanal raporda ayrı görünür.
+        </li>
+        <li>
+          <b>Güncel adrese aff koduyla yönlendir:</b> linkin yolu ve aff kodu korunur, sadece alan adı sponsorun güncel adresiyle değişir. Güncel adres “Giriş adresleri” bölümünden (yoksa Sponsorlar sekmesindeki giriş adresinden) gelir. Site kapanıp yeni adrese geçince sadece giriş adresini güncellemen yeter.
+        </li>
+        <li>
+          Link sponsorun takip alan adındaysa (ör. <span className={code}>track.sponsor.com</span>) <b>Linki aynen kullan</b> seç. Sponsor yeni link verirse <b>Düzenle / linki yenile</b> ile değiştir; kısa linkin aynı kalır, eski link kayıtta durur.
+        </li>
+        <li>
+          <b>Git butonu</b> işaretli link, sitedeki o sponsorun tüm “Git” butonlarında kullanılır. Her satırda bugün, 7 gün, toplam, tekil kişi ve kaynak dağılımı görünür. <b>Hedefi kontrol et</b> linkin açılıp açılmadığını test eder.
+        </li>
+      </ol>
+    ),
+  },
+  {
     title: 'Kampanya linki: hangi kanal üye getiriyor?',
     body: (
       <ol className={ol}>

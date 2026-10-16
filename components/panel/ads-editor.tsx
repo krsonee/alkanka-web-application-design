@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { saveAds, type ActionState } from '@/app/panel/actions'
 import { AD_PAGES, AD_POSITIONS, type AdMap } from '@/lib/ads'
+import { ImageField } from '@/components/panel/image-field'
 
 const input =
   'h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none'
@@ -15,7 +16,7 @@ export function AdsEditor({ saved }: { saved: AdMap }) {
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-lg font-bold uppercase text-foreground">Sponsor reklam alanları</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Her sayfada üst banner ile sol ve sağ kule alanı var. GIF, PNG veya JPG linki yapıştır. Boş bıraktığın alan sitede görünmez.
+          Her sayfada üst banner ile sol ve sağ kule alanı var. GIF, PNG veya JPG&apos;yi bilgisayardan yükle, galeriden seç ya da link yapıştır. Boş bıraktığın alan sitede görünmez.
           Kuleler geniş ekranda içeriğin iki yanında sabit durur, mobilde içeriğin altına iner.
         </p>
       </div>
@@ -32,11 +33,13 @@ export function AdsEditor({ saved }: { saved: AdMap }) {
                     {pos.label}
                     <span className="font-normal text-muted-foreground">{pos.size}</span>
                   </span>
-                  {slot?.image && (
-                    // eslint-disable-next-line @next/next/no-img-element -- preview of an admin-provided creative
-                    <img src={slot.image} alt="" className="h-16 w-full rounded-md border border-border bg-background object-contain" />
-                  )}
-                  <input name={`${key}:image`} defaultValue={slot?.image} placeholder="Görsel / GIF linki (https://…)" aria-label={`${page.label} ${pos.label} görsel`} className={input} />
+                  <ImageField
+                    name={`${key}:image`}
+                    defaultValue={slot?.image ?? ''}
+                    uploadId={`ad-${page.id}-${pos.id}`}
+                    placeholder="Görsel / GIF linki (https://…)"
+                    compact
+                  />
                   <input name={`${key}:href`} defaultValue={slot?.href} placeholder="Tıklanınca gidilecek link" aria-label={`${page.label} ${pos.label} link`} className={input} />
                   <input name={`${key}:alt`} defaultValue={slot?.alt} placeholder="Site adı (erişilebilirlik)" aria-label={`${page.label} ${pos.label} açıklama`} className={input} />
                 </div>
