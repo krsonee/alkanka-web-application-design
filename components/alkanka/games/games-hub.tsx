@@ -91,7 +91,7 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
                     href={`/oyunlar/${g}`}
                     className="group relative flex aspect-square flex-col justify-end overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-primary"
                   >
-                    <Image src={meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <Image src={s.image || meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
                     <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
                     <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
                       <Users className="size-3" aria-hidden="true" />

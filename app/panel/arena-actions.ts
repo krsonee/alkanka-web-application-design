@@ -59,12 +59,15 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
       if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 20) return { message: `${title}: çarpan 1 ile 20 arasında olmalı.` }
       const commission = Math.round(Number(form.get(`${g}:commission`) ?? 0))
       if (!Number.isFinite(commission) || commission < 0 || commission > 30) return { message: `${title}: komisyon %0 ile %30 arasında olmalı.` }
+      const image = String(form.get(`${g}:image`) ?? '').trim().slice(0, 500)
+      if (image && !/^(https:\/\/|\/)/.test(image)) return { message: `${title}: görsel adresi https:// veya / ile başlamalı.` }
       value[g] = {
         enabled: form.get(`${g}:enabled`) === 'on',
         pvpEnabled: form.get(`${g}:pvp`) === 'on',
         bets: unique,
         multiplier: Math.round(multiplier * 100) / 100,
         commission,
+        ...(image ? { image } : {}),
       }
     }
     const winRate = Math.round(Number(form.get('house:winRate') ?? 40))

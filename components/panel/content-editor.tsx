@@ -45,7 +45,7 @@ export function ContentEditor({
   tasks,
   faqs,
   market,
-  marketPending = 0,
+  pending = {},
   growth,
   social,
   sponsors,
@@ -89,7 +89,7 @@ export function ContentEditor({
   tasks: React.ReactNode
   faqs: React.ReactNode
   market: React.ReactNode
-  marketPending?: number
+  pending?: Record<string, number>
   sponsors: React.ReactNode
 }) {
   const groups = [
@@ -99,10 +99,9 @@ export function ContentEditor({
         .filter((m) => m.id !== 'roles' && allowed.includes(m.id))
         .map((m) => ({
           id: m.id as PanelTab,
+          pending: pending[m.id] ?? 0,
           label:
-            m.id === 'market' && marketPending > 0
-              ? `Market (${marketPending})`
-              : m.id === 'slide'
+            m.id === 'slide'
                 ? `Slider (${slides.length})`
                 : m.id === 'hero'
                   ? `Sayfa başlıkları (${heroes.length})`
@@ -112,8 +111,8 @@ export function ContentEditor({
     {
       label: 'Ayarlar',
       items: [
-        ...(isOwner ? [{ id: 'staff' as PanelTab, label: 'Personel & yetkiler' }, { id: 'audit' as PanelTab, label: 'İşlem logları' }] : []),
-        { id: 'account' as PanelTab, label: 'Hesabım & 2FA' },
+        ...(isOwner ? [{ id: 'staff' as PanelTab, label: 'Personel & yetkiler', pending: 0 }, { id: 'audit' as PanelTab, label: 'İşlem logları', pending: 0 }] : []),
+        { id: 'account' as PanelTab, label: 'Hesabım & 2FA', pending: 0 },
       ],
     },
   ].filter((g) => g.items.length > 0)
@@ -180,6 +179,9 @@ export function ContentEditor({
                 )}
               >
                 <span className="truncate">{g.label}</span>
+                {!expanded && g.items.some((i) => i.pending > 0) ? (
+                  <span className="ml-auto mr-1 size-2 shrink-0 rounded-full bg-destructive" aria-label="Bekleyen işlem var" />
+                ) : null}
                 <ChevronRight className={cn('size-4 shrink-0 transition-transform duration-200', expanded && 'rotate-90')} aria-hidden="true" />
               </button>
               <div className={cn('ml-2 flex-col gap-1 border-l border-border pl-3', expanded ? 'flex' : 'hidden')}>
@@ -189,11 +191,17 @@ export function ContentEditor({
                     onClick={() => pick(i.id)}
                     aria-current={tab === i.id ? 'page' : undefined}
                     className={cn(
-                      'truncate rounded-lg px-3 py-2 text-left text-sm font-medium',
+                      'flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium',
                       tab === i.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                     )}
                   >
-                    {i.label}
+                    <span className="truncate">{i.label}</span>
+                    {i.pending > 0 ? (
+                      <span className="shrink-0 rounded-full bg-destructive px-2 py-0.5 text-xs font-bold tabular-nums text-destructive-foreground">
+                        {i.pending > 99 ? '99+' : i.pending}
+                        <span className="sr-only"> bekleyen</span>
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>

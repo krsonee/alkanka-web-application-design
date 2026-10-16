@@ -137,6 +137,7 @@ export type ArenaGameSettings = {
   bets: number[]
   multiplier: number
   commission: number
+  image?: string
 }
 export type ArenaSettings = Record<ArenaGame, ArenaGameSettings>
 
@@ -173,6 +174,7 @@ export function mergeArena(saved: Partial<Record<string, Partial<ArenaGameSettin
       bets: Array.isArray(s.bets) && s.bets.length ? s.bets.filter((b) => Number.isInteger(b) && b > 0) : d.bets,
       multiplier: typeof s.multiplier === 'number' && s.multiplier >= 1 ? s.multiplier : d.multiplier,
       commission: typeof s.commission === 'number' && s.commission >= 0 && s.commission <= 50 ? s.commission : d.commission,
+      ...(typeof s.image === 'string' && /^(https:\/\/|\/)/.test(s.image) ? { image: s.image } : {}),
     }
   }
   return out

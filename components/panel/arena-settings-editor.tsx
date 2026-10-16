@@ -6,6 +6,7 @@ import { Loader2, Save } from 'lucide-react'
 import { ARENA_GAMES, ARENA_META, type ArenaSettings } from '@/lib/arena'
 import { saveArenaSettings } from '@/app/panel/arena-actions'
 import { HideButton } from '@/components/panel/hide-button'
+import { ImageField } from '@/components/panel/image-field'
 import type { ActionState } from '@/app/panel/actions'
 
 export function ArenaSettingsEditor({ settings, winRate = 40 }: { settings: ArenaSettings; winRate?: number }) {
@@ -19,7 +20,7 @@ export function ArenaSettingsEditor({ settings, winRate = 40 }: { settings: Aren
           return (
             <fieldset key={g} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
               <div className="relative aspect-[16/9]">
-                <Image src={meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
+                <Image src={s.image || meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
                 <legend className="absolute bottom-3 left-4 font-display text-2xl font-bold uppercase text-foreground">{meta.title}</legend>
               </div>
@@ -37,6 +38,13 @@ export function ArenaSettingsEditor({ settings, winRate = 40 }: { settings: Aren
                   Kazanç çarpanı (bahis × çarpan ödenir)
                   <input name={`${g}:multiplier`} type="number" step="0.1" min={1} max={20} defaultValue={s.multiplier} className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none" />
                 </label>
+                <ImageField
+                  name={`${g}:image`}
+                  label="Kapak görseli (boş bırakırsan varsayılan görsel kullanılır)"
+                  defaultValue={s.image ?? ''}
+                  uploadId={`arena-${g}`}
+                  compact
+                />
                 <p className="text-xs leading-relaxed text-muted-foreground">Oyuncu sayısı: {meta.players}</p>
               </div>
             </fieldset>

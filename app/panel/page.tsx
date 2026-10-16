@@ -29,7 +29,7 @@ import { CatalogEditor } from '@/components/panel/catalog-editor'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
-import { TelegramBotSuite } from '@/components/panel/telegram-bot-suite'
+import { ApprovalSection, OddsSection, ShareSection } from '@/components/panel/telegram-bot-suite'
 import { DEFAULT_SUITE, getBotSuite, listOddsDeals, shareStatus } from '@/lib/telegram-bots'
 import { chatStatus } from '@/lib/telegram-chat'
 import { getInviteConfig } from '@/lib/table-invite'
@@ -56,12 +56,13 @@ import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, ty
 import { affLinkViews } from '@/lib/aff-links'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
-import { listProducts, listRequests, pendingCount } from '@/lib/market'
+import { listProducts, listRequests } from '@/lib/market'
 import { SitesManager } from '@/components/panel/sites-manager'
 import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
+import { pendingCounts } from '@/lib/panel-pending'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 import { getOnlineConfig, getTickerConfig } from '@/lib/online-rewards'
@@ -116,14 +117,17 @@ async function telegramPanel() {
   ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
+  const light = (ok: boolean) => (ok ? 'on' : 'off') as 'on' | 'off'
   return (
     <TelegramTabs
       tabs={[
-        { id: 'mirror', label: 'Botlar ve aktarım', content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
-        { id: 'suite', label: 'Bot paketleri', content: <TelegramBotSuite suite={suite} bots={bots} targets={targets} status={shareInfo} deals={oddsDeals} /> },
-        { id: 'chat', label: 'Site sohbeti', content: <TelegramChatSetup bots={bots} status={chat} /> },
+        { id: 'mirror', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
+        { id: 'chat', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
+        { id: 'odds', label: 'Oran Botu', status: light(suite.odds.targetIds.length > 0), content: <OddsSection suite={suite} targets={targets} deals={oddsDeals} /> },
+        { id: 'approvals', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
+        { id: 'share', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
+        { id: 'invite', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
         { id: 'channels', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
-        { id: 'invite', label: 'Davet linkleri', content: <TelegramInviteSetup bots={bots} status={invite} /> },
       ]}
     />
   )
@@ -349,7 +353,8 @@ export default async function PanelPage() {
   ])
   const audit = session.isOwner ? await listAudit().then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
 
-  const marketPending = can('market') ? await pendingCount().catch(() => 0) : 0
+  const pending = await pendingCounts(can).catch(() => ({}) as Record<string, number>)
+  const marketPending = pending.market ?? 0
   const dashCounts = can('users') ? await listMembers({ limit: 1 }).then((r) => r.counts).catch(() => null) : null
   const dashRecent = session.isOwner ? await listAudit(8).catch(() => []) : []
   const dashboard = <PanelDashboard counts={dashCounts} marketPending={marketPending} recent={dashRecent} />
@@ -397,7 +402,7 @@ export default async function PanelPage() {
           badges={badges}
           tasks={tasks}
           market={market}
-          marketPending={marketPending}
+          pending={pending}
           social={social}
           limits={limits}
           games={games}
