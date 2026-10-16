@@ -19,6 +19,8 @@ import {
   updateTournament,
   type TournamentInput,
 } from '@/lib/tournaments'
+import { isTournamentFormat } from '@/lib/tournaments-shared'
+import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import type { ActionState } from './actions'
 
 async function requireAdmin(module: PanelModule) {
@@ -86,7 +88,14 @@ function readTournament(form: FormData): TournamentInput {
   const local = new Date(`${startsRaw}:00Z`)
   if (Number.isNaN(local.getTime())) throw new Error('Başlangıç tarihi geçersiz.')
   const startsAt = new Date(local.getTime() + (Number.isFinite(offset) ? offset : 0) * 60000).toISOString()
+  const rawFormat = form.get('format')
+  const format = isTournamentFormat(rawFormat) ? rawFormat : 'eleme'
+  const maxPlayers = int(form, 'maxPlayers', 'Kişi sayısı', 2, MAX_TOURNAMENT_PLAYERS)
+  if (format === 'lig' && maxPlayers > MAX_LEAGUE_PLAYERS) {
+    throw new Error(`Lig formatında en fazla ${MAX_LEAGUE_PLAYERS} oyuncu olabilir (herkes herkesle oynar).`)
+  }
   return {
+    format,
     game,
     title,
     description: String(form.get('description') ?? '').trim().slice(0, 400),
@@ -94,7 +103,7 @@ function readTournament(form: FormData): TournamentInput {
     entryFee: int(form, 'entryFee', 'Katılım ücreti', 0, 100000),
     prizePool: int(form, 'prizePool', 'Ödül havuzu', 0, 10000000),
     prizeNote: String(form.get('prizeNote') ?? '').trim().slice(0, 120),
-    maxPlayers: int(form, 'maxPlayers', 'Kişi sayısı', 2, MAX_TOURNAMENT_PLAYERS),
+    maxPlayers,
     startsAt,
   }
 }
