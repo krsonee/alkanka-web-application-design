@@ -2,11 +2,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
+import { adjustPoints, awardBadge, listSpecialBadges } from '@/lib/kanka-puan'
 import {
   adjustWallet,
   banMember,
+  giftMember,
   listMembers,
+  logAudit,
+  memberActivity,
   memberDetail,
+  memberLabel,
+  type MemberActivity,
   restoreMember,
   revokeSessions,
   suspendMember,
@@ -64,6 +70,37 @@ export async function walletAction(userId: string, amount: number, reason: strin
   return guard(async () => {
     const balance = await adjustWallet(String(userId), Number(amount), String(reason))
     return `Bakiye güncellendi. Yeni bakiye: ${balance.toLocaleString('tr-TR')} KC`
+  })
+}
+
+export async function memberActivityAction(userId: string): Promise<{ activity: MemberActivity; badges: { id: string; name: string; tier: string }[] } | null> {
+  if (!(await canPanel('users'))) return null
+  const [activity, badges] = await Promise.all([memberActivity(String(userId)), listSpecialBadges().catch(() => [])])
+  return { activity, badges: badges.map((b) => ({ id: b.id, name: b.name, tier: b.tier })) }
+}
+
+export async function giftAction(userId: string, amount: number, message: string) {
+  return guard(async () => {
+    const balance = await giftMember(String(userId), Number(amount), String(message))
+    return `Hediye gönderildi, gelen kutusuna bildirim düştü. Yeni bakiye: ${balance.toLocaleString('tr-TR')} KC`
+  })
+}
+
+export async function memberBadgeAction(userId: string, badgeId: string, note: string) {
+  return guard(async () => {
+    const ok = await awardBadge(String(badgeId), String(userId), `manuel-${Date.now()}`, String(note).trim() || undefined)
+    if (!ok) throw new Error('Rozet verilemedi.')
+    await logAudit('Rozet verildi', await memberLabel(String(userId)), `${badgeId}${note ? ` · ${note}` : ''}`)
+    return 'Rozet verildi, bonus puanı hesabına eklendi.'
+  })
+}
+
+export async function memberPointsAction(userId: string, points: number, note: string) {
+  return guard(async () => {
+    if (String(note).trim().length < 3) throw new Error('Gerekçe yazmalısın.')
+    await adjustPoints(String(userId), Number(points), String(note))
+    await logAudit(Number(points) > 0 ? 'Kanka puanı eklendi' : 'Kanka puanı düşüldü', await memberLabel(String(userId)), `${points} KP · ${note}`)
+    return 'Kanka puanı güncellendi.'
   })
 }
 
