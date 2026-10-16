@@ -29,6 +29,11 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Elini açmak için seri ve perlerinin toplamı en az 101 olmalı ya da en az 5 çift ile çifte gidersin. Açtıktan sonra yerdeki perlere işleyebilirsin.',
     'Eli ilk bitiren kazanır. Açamayan 202, açan elindeki taşlar kadar ceza yer; çifte gidenin cezası ikiye katlanır. Set sonunda en az cezası olan kazanır.',
   ],
+  papaz: [
+    '51 kart: Sinek Papaz desteden çıkarılır, böylece Maça Papaz eşsiz kalır. Kartlar 2-6 oyuncuya dağıtılır.',
+    'Aynı sayı ve aynı renkteki kartlar (siyah-siyah, kırmızı-kırmızı) eş sayılır ve otomatik yere atılır.',
+    'Sıran gelince yanındaki oyuncunun kapalı kartlarından birini seçip çekersin. Kartı biten kurtulur, Maça Papaz elinde kalan kaybeder.',
+  ],
   pisti: [
     '52 kart. Yere 4 kart (3 kapalı), herkese 4 kart dağıtılır. 2 kişi ya da 4 kişi oynanır. 4 kişide eşli (karşılıklı oturanlar eş) ya da tekli seçilebilir.',
     'Yerdeki en üst kartla aynı kartı atan ya da Vale atan yeri toplar. Yerde tek kart varken aynısıyla alırsan pişti: 10 puan, Vale ile Vale pişti 20 puan.',
