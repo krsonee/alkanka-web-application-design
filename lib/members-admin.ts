@@ -196,7 +196,7 @@ export async function memberDetail(userId: string): Promise<MemberDetail | null>
   }
 }
 
-async function memberLabel(userId: string) {
+export async function memberLabel(userId: string) {
   const [u] = await rows<{ name: string | null; email: string }>(sql`SELECT name, email FROM public."user" WHERE id = ${userId}`)
   if (!u) throw new Error('Üye bulunamadı.')
   return `${u.name || 'Kanka'} <${u.email}>`
@@ -251,6 +251,79 @@ export async function adjustWallet(userId: string, amount: number, reason: strin
   if (!r.length) throw new Error('Bakiye eksiye düşemez.')
   await logAudit(n > 0 ? 'Manuel Kanka Coin eklendi' : 'Manuel Kanka Coin düşüldü', label, `${n > 0 ? '+' : ''}${n} KC · ${text}`)
   return Number(r[0].balance)
+}
+
+export type MemberActivity = {
+  games: { id: number; game: string; mode: string; opponent: string; stake: number; result: string; delta: number; createdAt: string }[]
+  gameSummary: { played: number; wins: number; net: number; byGame: { game: string; played: number; net: number }[] }
+  points: { id: number; source: string; points: number; note: string | null; createdAt: string }[]
+  market: { id: number; itemName: string; price: number; status: string; createdAt: string }[]
+  badges: { id: string; name: string; tier: string; count: number; lastAt: string }[]
+  audit: { id: number; actor: string; action: string; detail: string | null; createdAt: string }[]
+}
+
+const iso = (v: unknown) => new Date(String(v)).toISOString()
+
+async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn()
+  } catch {
+    return fallback
+  }
+}
+
+/** Everything the panel shows on the member detail tabs. Each block tolerates a missing table. */
+export async function memberActivity(userId: string): Promise<MemberActivity> {
+  await ensureMemberAdmin()
+  const [u] = await rows<{ email: string }>(sql`SELECT email FROM public."user" WHERE id = ${userId}`)
+  if (!u) throw new Error('Üye bulunamadı.')
+
+  const [games, summary, byGame, points, market, badges, audit] = await Promise.all([
+    safe(() => rows(sql`SELECT id, game, mode, opponent, stake, result, delta, created_at FROM game_history WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 60`), []),
+    safe(() => rows<{ played: string; wins: string; net: string | null }>(sql`SELECT count(*) AS played, count(*) FILTER (WHERE result = 'win') AS wins, sum(delta) AS net FROM game_history WHERE user_id = ${userId}`), []),
+    safe(() => rows<{ game: string; played: string; net: string | null }>(sql`SELECT game, count(*) AS played, sum(delta) AS net FROM game_history WHERE user_id = ${userId} GROUP BY game ORDER BY count(*) DESC`), []),
+    safe(() => rows(sql`SELECT id, source, points, note, created_at FROM kp_events WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 60`), []),
+    safe(() => rows(sql`SELECT id, item_name, price, status, created_at FROM market_requests WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 30`), []),
+    safe(() => rows(sql`SELECT b.id, b.name, b.tier, count(*) AS n, max(a.awarded_at) AS last_at FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id WHERE a.user_id = ${userId} GROUP BY b.id ORDER BY max(a.awarded_at) DESC`), []),
+    rows(sql`SELECT id, actor, action, detail, created_at FROM panel_audit WHERE target LIKE ${`%<${u.email}>%`} ORDER BY created_at DESC LIMIT 60`),
+  ])
+
+  return {
+    games: games.map((g) => ({ id: Number(g.id), game: String(g.game), mode: String(g.mode), opponent: String(g.opponent ?? ''), stake: Number(g.stake), result: String(g.result), delta: Number(g.delta), createdAt: iso(g.created_at) })),
+    gameSummary: {
+      played: Number(summary[0]?.played ?? 0),
+      wins: Number(summary[0]?.wins ?? 0),
+      net: Number(summary[0]?.net ?? 0),
+      byGame: byGame.map((g) => ({ game: g.game, played: Number(g.played), net: Number(g.net ?? 0) })),
+    },
+    points: points.map((p) => ({ id: Number(p.id), source: String(p.source), points: Number(p.points), note: p.note ? String(p.note) : null, createdAt: iso(p.created_at) })),
+    market: market.map((m) => ({ id: Number(m.id), itemName: String(m.item_name), price: Number(m.price), status: String(m.status), createdAt: iso(m.created_at) })),
+    badges: badges.map((b) => ({ id: String(b.id), name: String(b.name), tier: String(b.tier), count: Number(b.n), lastAt: iso(b.last_at) })),
+    audit: audit.map((a) => ({ id: Number(a.id), actor: String(a.actor), action: String(a.action), detail: a.detail ? String(a.detail) : null, createdAt: iso(a.created_at) })),
+  }
+}
+
+/** Credits KC as a gift and drops a note into the member's inbox. */
+export async function giftMember(userId: string, amount: number, message: string) {
+  await ensureMemberAdmin()
+  const n = Math.trunc(Number(amount))
+  if (!Number.isFinite(n) || n <= 0 || n > 100_000) throw new Error('Hediye 1 ile 100.000 KC arasında olmalı.')
+  const text = message.trim().slice(0, 300)
+  const label = await memberLabel(userId)
+  await rows(sql`INSERT INTO wallets (user_id, balance) VALUES (${userId}, 0) ON CONFLICT (user_id) DO NOTHING`)
+  const [r] = await rows<{ balance: number }>(sql`UPDATE wallets SET balance = balance + ${n}, updated_at = now() WHERE user_id = ${userId} RETURNING balance`)
+  const session = await getPanelSession()
+  const { sendMessage } = await import('@/lib/inbox')
+  await sendMessage({
+    userId,
+    targetLabel: label,
+    title: `${n.toLocaleString('tr-TR')} Kanka Coin hediye!`,
+    body: text || 'Alkanka ekibinden sana bir hediye var. Keyfini çıkar kanka!',
+    url: '/market',
+    sentBy: session?.displayName ?? 'Alkanka',
+  }).catch((error) => console.error('[gift inbox]', error))
+  await logAudit('Hediye gönderildi', label, `+${n} KC${text ? ` · ${text}` : ''}`)
+  return Number(r.balance)
 }
 
 export async function revokeSessions(userId: string) {

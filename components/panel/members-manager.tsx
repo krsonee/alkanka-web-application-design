@@ -5,6 +5,7 @@ import { AlertTriangle, Ban, Coins, Link2Off, Lock, LogOut, Search, ShieldCheck,
 import { cn } from '@/lib/utils'
 import {
   banAction,
+  memberActivityAction,
   memberDetailAction,
   restoreAction,
   revokeSessionsAction,
@@ -14,6 +15,7 @@ import {
   walletAction,
 } from '@/app/panel/members-actions'
 import type { MemberDetail, MemberRow, MemberStatus } from '@/lib/members-admin'
+import { MemberActivityTabs, type ActivityTab } from '@/components/panel/member-activity-tabs'
 
 type Filter = MemberStatus | 'tumu'
 
@@ -187,7 +189,11 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
   const [amount, setAmount] = useState('')
   const [walletReason, setWalletReason] = useState('')
 
-  const load = () => memberDetailAction(id).then(setM)
+  const [tab, setTab] = useState<'genel' | ActivityTab>('genel')
+  const [act, setAct] = useState<Awaited<ReturnType<typeof memberActivityAction>> | undefined>(undefined)
+
+  const load = () =>
+    Promise.all([memberDetailAction(id).then(setM), memberActivityAction(id).then(setAct).catch(() => setAct(null))])
   useEffect(() => {
     load()
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -212,12 +218,37 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Üye yönetimi">
       <button aria-label="Kapat" onClick={onClose} className="absolute inset-0 bg-background/70 backdrop-blur-sm" />
-      <aside className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-card">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card px-5 py-4">
-          <h3 className="font-display text-lg font-bold text-foreground">Üye yönetimi</h3>
-          <button onClick={onClose} aria-label="Kapat" className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground">
-            <X className="size-5" aria-hidden="true" />
-          </button>
+      <aside className="relative flex h-full w-full max-w-2xl flex-col overflow-y-auto border-l border-border bg-card">
+        <header className="sticky top-0 z-10 flex flex-col gap-3 border-b border-border bg-card px-5 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-display text-lg font-bold text-foreground">Üye detayı</h3>
+            <button onClick={onClose} aria-label="Kapat" className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground">
+              <X className="size-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div role="tablist" aria-label="Üye detay sekmeleri" className="-mb-px flex gap-1 overflow-x-auto">
+            {(
+              [
+                ['genel', 'Genel ve yönetim'],
+                ['oyunlar', `Oyunlar${act ? ` (${act.activity.gameSummary.played})` : ''}`],
+                ['islemler', 'İşlemler'],
+                ['odul', 'Hediye ve rozet'],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                role="tab"
+                aria-selected={tab === k}
+                onClick={() => setTab(k)}
+                className={cn(
+                  'shrink-0 border-b-2 px-3 py-2 text-sm font-semibold',
+                  tab === k ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </header>
 
         {m === undefined ? (
@@ -259,7 +290,28 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
               </p>
             )}
 
-            {blocked && (
+            {tab !== 'genel' &&
+              (act === undefined ? (
+                <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+              ) : act === null ? (
+                <p className="text-sm text-muted-foreground">Etkinlik bilgisi alınamadı.</p>
+              ) : (
+                <MemberActivityTabs
+                  tab={tab}
+                  userId={m.id}
+                  activity={act.activity}
+                  badges={act.badges}
+                  onDone={(r) => {
+                    setMsg(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error })
+                    if (r.ok) {
+                      load()
+                      onChanged()
+                    }
+                  }}
+                />
+              ))}
+
+            {tab === 'genel' && blocked && (
               <div className="flex flex-col gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
                 <p className="text-sm font-semibold text-foreground">
                   {m.status === 'banli' ? 'Kalıcı banlı' : `Donduruldu · ${m.banUntil ? `${date(m.banUntil)} tarihine kadar` : 'Süresiz'}`}
@@ -273,6 +325,8 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
               </div>
             )}
 
+            {tab === 'genel' && (
+              <>
             <Section icon={<Snowflake className="size-4" aria-hidden="true" />} title="Hesabı dondur">
               <select aria-label="Süre" value={duration} onChange={(e) => setDuration(e.target.value)} className={input}>
                 <option value="1">1 gün</option>
@@ -354,6 +408,8 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
                 )}
               </div>
             </Section>
+              </>
+            )}
           </div>
         )}
       </aside>
