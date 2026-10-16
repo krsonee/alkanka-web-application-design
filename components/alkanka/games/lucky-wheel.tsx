@@ -11,6 +11,7 @@ import { usePoints } from '../points-context'
 
 import { useCatalog } from '../catalog-context'
 import { WHEEL_SEGMENT_COUNT, type WheelSegment as Segment } from '@/lib/rewards-shared'
+import { TableBrand } from '../arena/table-brand'
 
 const SEG_ANGLE = 360 / WHEEL_SEGMENT_COUNT
 const SPIN_MS = 4800
@@ -94,6 +95,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
       </header>
 
       <div className="relative -mx-6 overflow-hidden">
+        <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
         <Image
           src="/images/wheel-stage.png"
           alt=""

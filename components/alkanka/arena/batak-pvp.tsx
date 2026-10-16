@@ -18,6 +18,7 @@ import {
   type BCard,
 } from '@/lib/games/batak'
 import type { Remote } from './remote'
+import { TableBrand } from './table-brand'
 
 const isRed = (s: number) => s === 1 || s === 2
 const suitColor = (s: number) => (isRed(s) ? 'text-tile-red' : 'text-tile-black')
@@ -254,6 +255,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
 
       <section aria-label="Batak masası" className="tavla-wood rounded-[1.75rem] p-1.5 sm:p-2.5">
         <div className="baize-table relative h-[22rem] overflow-hidden rounded-[1.4rem] sm:h-[28rem] lg:h-[31rem]">
+          <TableBrand />
           <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
             <div className="flex flex-col gap-1">
               <span className="w-fit rounded-md bg-background/70 px-2 py-0.5 font-bold text-foreground">{variantLabel(variant)}</span>

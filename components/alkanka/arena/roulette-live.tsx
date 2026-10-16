@@ -15,6 +15,7 @@ import { RouletteWheel, pocketColor } from './roulette-wheel'
 import { Chip, RouletteBoard, betKey, chipTone, parseKey, type BetKind } from './roulette-board'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
+import { TableBrand } from './table-brand'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const colorName = (n: number) => (n === 0 ? 'yeşil' : RED.has(n) ? 'kırmızı' : 'siyah')
@@ -291,7 +292,8 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
 
       <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
         <section className="tavla-wood flex flex-col gap-4 rounded-3xl p-1.5 sm:rounded-[2rem] sm:p-3" aria-label="Rulet masası">
-          <div className="felt-table flex flex-col gap-3 rounded-[1.25rem] p-2 sm:gap-5 sm:rounded-[1.6rem] sm:p-5">
+          <div className="felt-table relative flex flex-col gap-3 rounded-[1.25rem] p-2 sm:gap-5 sm:rounded-[1.6rem] sm:p-5">
+            <TableBrand center={false} />
             <div className="flex flex-col items-center gap-3 sm:gap-5 lg:flex-row lg:items-center">
               <div className="relative aspect-square w-44 shrink-0 sm:w-64 lg:w-72">
                 <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />

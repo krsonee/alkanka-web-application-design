@@ -7,6 +7,7 @@ import { playSound } from '@/lib/sound'
 import { cardName, isPapaz, type PapazEvent, type PapazView } from '@/lib/games/papaz'
 import { BatakCard } from './batak-pvp'
 import type { Remote } from './remote'
+import { TableBrand } from './table-brand'
 
 function eventText(e: PapazEvent, name: (i: number) => string, me: number) {
   const who = e.seat === me ? 'Sen' : name(e.seat)
@@ -98,6 +99,7 @@ export function PapazPvp({ remote }: { remote: Remote<PapazView> }) {
 
   return (
     <div className="baize-table relative flex h-[calc(100dvh-8.75rem)] min-h-[25rem] flex-col overflow-hidden rounded-[1.4rem] p-3 sm:p-4 lg:h-[min(38rem,calc(100dvh-11rem))] lg:min-h-[30rem]">
+      <TableBrand />
       <div className="flex flex-wrap justify-center gap-2">
         {others.map((i) => (
           <SeatChip key={i} v={v} seat={i} name={name(i)} active={!ended && v.turn === i} me={false} />

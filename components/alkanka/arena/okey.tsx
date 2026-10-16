@@ -5,6 +5,7 @@ import { FlipHorizontal2, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
 import { OkeyRack, useRack, type DropKind } from './okey-rack'
+import { TableBrand } from './table-brand'
 import {
   COLOR_NAMES,
   chooseDiscard,
@@ -124,19 +125,7 @@ function FluidTile({ tile, okey, selected, onClick, label }: { tile: Tile; okey:
 
 /** Subtle house branding: an engraved ring in the felt and a brass plaque on the rail, like a real club table. */
 export function FeltBranding() {
-  return (
-    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-      <div className="absolute inset-0 m-auto flex size-[46%] max-h-64 max-w-64 items-center justify-center rounded-full border border-foreground/[0.06] shadow-[inset_0_0_30px_rgb(0_0_0/0.25)]">
-        <div className="absolute inset-3 rounded-full border border-dashed border-foreground/[0.05]" />
-      </div>
-      <span className="absolute inset-x-0 bottom-[16%] text-center font-display text-[11px] font-bold uppercase tracking-[0.6em] text-foreground/[0.07] sm:text-sm">
-        Al Kanka
-      </span>
-      <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-b-md bg-gradient-to-b from-primary/80 to-primary/50 px-3 pb-0.5 pt-px font-display text-[8px] font-bold uppercase tracking-[0.35em] text-primary-foreground shadow-md sm:text-[9px]">
-        Al Kanka Club
-      </span>
-    </div>
-  )
+  return <TableBrand />
 }
 
 export function TileBack({ className }: { className?: string }) {

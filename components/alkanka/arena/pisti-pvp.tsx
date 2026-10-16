@@ -7,6 +7,7 @@ import { playSound } from '@/lib/sound'
 import { RANK_LABEL, sideOf, type PCard, type PistiEvent, type PistiHandResult, type PistiView } from '@/lib/games/pisti'
 import { BatakCard } from './batak-pvp'
 import type { Remote } from './remote'
+import { TableBrand } from './table-brand'
 
 type Place = 'bottom' | 'top' | 'left' | 'right'
 
@@ -190,6 +191,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
 
       <section aria-label="Pişti masası" className="tavla-wood rounded-[1.75rem] p-1.5 sm:p-2.5">
         <div className="baize-table relative h-[calc(100dvh-8.75rem)] min-h-[25rem] overflow-hidden lg:h-[min(38rem,calc(100dvh-11rem))] lg:min-h-[30rem] rounded-[1.4rem]">
+          <TableBrand />
           {/* Scoreboard */}
           <div className="absolute inset-x-2 top-2 z-20 flex items-stretch gap-1.5 sm:inset-x-4 sm:top-3 sm:gap-2">
             {sides.map((side) => {
