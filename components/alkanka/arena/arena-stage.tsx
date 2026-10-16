@@ -90,30 +90,6 @@ function BotMode({ game, settings }: { game: ArenaGame; settings: ArenaGameSetti
   return null
 }
 
-function LocalMode({ game }: { game: ArenaGame }) {
-  const [round, setRound] = useState(0)
-  const [last, setLast] = useState<string | null>(null)
-  const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm">
-        <span className="text-muted-foreground">Aynı cihazda arkadaşınla oyna. KC kullanılmaz, sadece eğlence.</span>
-        {last && <span className="font-semibold text-foreground">Son maç: {last}</span>}
-      </div>
-      <HeadGame
-        key={round}
-        sport={sport}
-        mode="local"
-        names={['Kanka 1', 'Kanka 2']}
-        onEnd={(s) => {
-          setLast(`${s.for} - ${s.against}`)
-          setRound((r) => r + 1)
-        }}
-      />
-    </div>
-  )
-}
-
 export function ArenaStage({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
   const meta = ARENA_META[game]
   const modes = meta.modes.filter((m) => m !== 'pvp' || settings.pvpEnabled)
@@ -183,7 +159,6 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
       {entered && back}
       {entered?.mode === 'bot' && <BotMode game={game} settings={settings} />}
       {entered?.mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} initialStake={entered.bet} />}
-      {entered?.mode === 'local' && <LocalMode game={game} />}
       {modes.includes('pvp') && (
         <div className="mt-4 border-t border-border pt-6">
           <LiveLobby game={game} watching={null} onWatch={watch} />

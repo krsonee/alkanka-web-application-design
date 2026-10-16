@@ -6,7 +6,7 @@ import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Maximize2, Minimize2
 import { cn } from '@/lib/utils'
 
 export type Sport = 'futbol' | 'basket'
-export type HeadMode = 'bot' | 'local'
+export type HeadMode = 'bot'
 export type HeadScore = { for: number; against: number }
 
 const W = 960
@@ -642,33 +642,9 @@ const OVERLAY_BTN =
 
 /**
  * Translucent buttons drawn over the pitch on touch screens.
- * Solo: arrows bottom-left, jump/kick bottom-right. Two players: each gets a 2x2 cluster in their own corner.
+ * Arrows bottom-left, jump/kick bottom-right.
  */
-function OverlayControls({ k1, k2, mode }: { k1: React.RefObject<Keys>; k2: React.RefObject<Keys>; mode: 'bot' | 'local' }) {
-  if (mode === 'local') {
-    const cluster = (keys: React.RefObject<Keys>, corner: 'left' | 'right', label: string) => (
-      <div className={cn('absolute bottom-2 grid grid-cols-2 gap-1.5', corner === 'left' ? 'left-2' : 'right-2')} role="group" aria-label={label}>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} sola`} {...bindKey(keys, 'left')}>
-          <ChevronLeft className="size-5" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} sağa`} {...bindKey(keys, 'right')}>
-          <ChevronRight className="size-5" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} zıpla`} {...bindKey(keys, 'jump')}>
-          <ArrowBigUp className="size-5" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11 border-primary/80')} aria-label={`${label} şut`} {...bindKey(keys, 'kick')}>
-          <Footprints className="size-5" aria-hidden="true" />
-        </button>
-      </div>
-    )
-    return (
-      <div className="pointer-events-none absolute inset-0 lg:hidden">
-        {cluster(k1, 'left', '1. oyuncu')}
-        {cluster(k2, 'right', '2. oyuncu')}
-      </div>
-    )
-  }
+function OverlayControls({ k1 }: { k1: React.RefObject<Keys> }) {
   const size = 'size-14 landscape:size-16'
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-2.5 lg:hidden">
@@ -755,14 +731,13 @@ function RotatePrompt({ sport, paused }: { sport: Sport; paused: boolean }) {
 }
 
 /**
- * Head soccer / head basketball. In "bot" mode the left player faces the bot,
- * in "local" mode two people share one device (WASD + arrows, or touch pads).
+ * Head soccer / head basketball. The left player faces the bot.
  */
 export function HeadGame({
   sport,
   mode,
   onEnd,
-  names = ['Sen', mode === 'bot' ? 'Bot' : 'Kanka 2'],
+  names = ['Sen', 'Bot'],
 }: {
   sport: Sport
   mode: HeadMode
@@ -802,12 +777,8 @@ export function HeadGame({
     const map2: Record<string, keyof Keys> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'jump', ArrowDown: 'kick' }
     const solo: Record<string, keyof Keys> = { ...map2, ...map1 }
     const handle = (down: boolean) => (e: KeyboardEvent) => {
-      const m1 = mode === 'bot' ? solo : map1
-      if (m1[e.code]) {
-        k1.current[m1[e.code]] = down
-        e.preventDefault()
-      } else if (mode === 'local' && map2[e.code]) {
-        k2.current[map2[e.code]] = down
+      if (solo[e.code]) {
+        k1.current[solo[e.code]] = down
         e.preventDefault()
       }
     }
@@ -815,7 +786,6 @@ export function HeadGame({
     const ku = handle(false)
     const blur = () => {
       k1.current = noKeys()
-      k2.current = noKeys()
     }
     window.addEventListener('keydown', kd)
     window.addEventListener('keyup', ku)
@@ -871,7 +841,7 @@ export function HeadGame({
         flashT++
         if (flashT > 70) flash = ''
       }
-      const k2now = mode === 'bot' ? botKeys(p2, ball, sport) : k2.current
+      const k2now = botKeys(p2, ball, sport)
       if (pause > 0) {
         pause--
         stepPlayer(p1, noKeys(), sport)
@@ -917,7 +887,6 @@ export function HeadGame({
       if (pausedRef.current) {
         acc = 0
         k1.current = noKeys()
-        k2.current = noKeys()
       }
       let steps = 0
       while (acc >= STEP_MS && steps < 5) {
@@ -982,7 +951,7 @@ export function HeadGame({
             className={cn('block aspect-video w-full touch-none select-none', fullLandscape && 'h-full')}
             aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
           />
-          <OverlayControls k1={k1} k2={k2} mode={mode} />
+          <OverlayControls k1={k1} />
           {fullLandscape && (
             <button
               type="button"
@@ -996,9 +965,7 @@ export function HeadGame({
         </div>
       </div>
       <p className="hidden text-center text-xs text-muted-foreground lg:block">
-        {mode === 'local'
-          ? '1. oyuncu: A / D hareket, W zıpla, S şut  -  2. oyuncu: ok tuşları, aşağı ok şut'
-          : 'A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut'}
+        A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut
       </p>
     </div>
   )

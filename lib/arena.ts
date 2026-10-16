@@ -3,12 +3,11 @@ export const ARENA_GAMES = ['tavla', 'okey', 'okey101', 'batak', 'pisti', 'monop
 export const SEAT_TABLE_GAMES = ['okey101', 'batak', 'monopoly', 'pisti'] as const
 export type ArenaGame = (typeof ARENA_GAMES)[number]
 
-export type GameMode = 'bot' | 'pvp' | 'local'
+export type GameMode = 'bot' | 'pvp'
 
 export const MODE_LABEL: Record<GameMode, string> = {
   bot: 'Bota karşı',
   pvp: 'Oyuncuya karşı',
-  local: 'Aynı cihazda 2 kişi',
 }
 
 export type ArenaMeta = {
@@ -110,7 +109,7 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
     players: '1v1',
     group: 2,
     category: 'arcade',
-    modes: ['bot', 'local', 'pvp'],
+    modes: ['bot', 'pvp'],
   },
   'kafa-basketbolu': {
     title: 'Kafa Basketbolu',
@@ -119,7 +118,7 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
     players: '1v1',
     group: 2,
     category: 'arcade',
-    modes: ['bot', 'local', 'pvp'],
+    modes: ['bot', 'pvp'],
   },
 }
 

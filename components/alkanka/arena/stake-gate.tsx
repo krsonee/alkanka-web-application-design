@@ -7,7 +7,7 @@ import { Bot, Coins, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-reac
 import { cn } from '@/lib/utils'
 import { ARENA_META, MODE_LABEL, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 
-const MODE_ICON: Record<GameMode, typeof Bot> = { bot: Bot, pvp: Swords, local: Users }
+const MODE_ICON: Record<GameMode, typeof Bot> = { bot: Bot, pvp: Swords }
 
 /** Mode picker shown inside the stake menu; `onEnter` handles every mode StakeGate doesn't start itself. */
 export type ModeSelect = {
@@ -238,13 +238,13 @@ export function StakeGate({
             const m = modeSelect.mode
             if (!m) return
             if (m === 'bot' && !modeSelect.botExternal) return start(bet)
-            if (m !== 'local' && !requireLogin()) return
+            if (!requireLogin()) return
             modeSelect.onEnter(m, bet)
           }}
-          disabled={(modeSelect != null && modeSelect.mode == null) || (modeSelect?.mode !== 'local' && bet > points)}
+          disabled={(modeSelect != null && modeSelect.mode == null) || bet > points}
           className="rounded-xl bg-primary px-6 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/20 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:py-4 sm:text-lg"
         >
-          {!modeSelect || modeSelect.mode === 'bot' ? 'Masaya otur' : modeSelect.mode === 'pvp' ? 'Oyuncu masalarına geç' : modeSelect.mode === 'local' ? 'Aynı cihazda başla' : 'Önce oyun modunu seç'}
+          {!modeSelect || modeSelect.mode === 'bot' ? 'Masaya otur' : modeSelect.mode === 'pvp' ? 'Oyuncu masalarına geç' : 'Önce oyun modunu seç'}
         </button>
         {modeSelect && modeSelect.mode == null && (
           <p className="-mt-3 text-center text-xs text-muted-foreground">Devam etmek için bir oyun modu seçmen gerekiyor.</p>
