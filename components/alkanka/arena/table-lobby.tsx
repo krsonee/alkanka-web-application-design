@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Clock, Coins, Eye, Loader2, LogOut, Plus, Swords, Tro
 import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
+import { VoiceChat } from './voice-chat'
 import { FitToScreen } from './fit-to-screen'
 import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
@@ -691,6 +692,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
               }}
             />
           )}
+          {data.status !== 'bitti' && <VoiceChat key={`v-${id}`} roomId={id} />}
           <SoundToggle />
           <MobileTableChat key={`m-${id}`} tableId={id} />
         </div>
