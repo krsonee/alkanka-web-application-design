@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { panelLogout } from '@/app/panel/auth-actions'
-import { deleteContent, setContent, type HeroOverride, type SlideOverride } from '@/lib/content'
+import { deleteContent, getContent, setContent, type HeroOverride, type SlideOverride } from '@/lib/content'
+import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides, isSafeHref } from '@/lib/custom-slides'
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
@@ -136,7 +137,6 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
   try {
     await requireAdmin('slide')
     const id = String(form.get('id'))
-    if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     const value: SlideOverride = {
       eyebrow: field(form, 'eyebrow'),
       title: field(form, 'title'),
@@ -144,11 +144,47 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       cta: field(form, 'cta'),
       image: imageField(form),
     }
+    if (id.startsWith('c-')) {
+      const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
+      const current = list.find((s) => s.id === id)
+      if (!current) return { message: 'Slayt bulunamadı.' }
+      const href = String(form.get('href') ?? '').trim().slice(0, 300) || '/'
+      if (!isSafeHref(href)) return { message: 'Link / ile ya da https:// ile başlamalı.' }
+      if (!value.title) return { message: 'Başlık boş olamaz.' }
+      const next = list.map((s) =>
+        s.id === id
+          ? { ...s, eyebrow: value.eyebrow || '', title: value.title || '', description: value.description || '', cta: value.cta || 'İncele', image: value.image || s.image, href }
+          : s,
+      )
+      await setContent(CUSTOM_SLIDES_KEY, next)
+      revalidatePath('/')
+      revalidatePath('/panel')
+      return { ok: true, message: 'Kaydedildi.' }
+    }
+    if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     await setContent(`slide:${id}`, value)
     revalidatePath('/')
     return { ok: true, message: 'Kaydedildi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
+  }
+}
+
+export async function addSlide(_: ActionState): Promise<ActionState> {
+  try {
+    await requireAdmin('slide')
+    const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
+    if (list.length >= MAX_CUSTOM_SLIDES) return { message: `En fazla ${MAX_CUSTOM_SLIDES} yeni slayt eklenebilir.` }
+    const id = `c-${Date.now().toString(36)}`
+    await setContent(CUSTOM_SLIDES_KEY, [
+      ...list,
+      { id, eyebrow: 'Yeni slayt', title: 'Başlığı buraya yaz', description: '', cta: 'İncele', href: '/', image: '/images/banner-wheel.png' },
+    ])
+    revalidatePath('/')
+    revalidatePath('/panel')
+    return { ok: true, message: 'Yeni slayt eklendi. Aşağıdan düzenleyip kaydet.' }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Eklenemedi.' }
   }
 }
 
@@ -177,6 +213,13 @@ export async function resetSlide(_: ActionState, form: FormData): Promise<Action
   try {
     await requireAdmin('slide')
     const id = String(form.get('id'))
+    if (id.startsWith('c-')) {
+      const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
+      await setContent(CUSTOM_SLIDES_KEY, list.filter((s) => s.id !== id))
+      revalidatePath('/')
+      revalidatePath('/panel')
+      return { ok: true, message: 'Slayt silindi.' }
+    }
     if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     await deleteContent(`slide:${id}`)
     revalidatePath('/')

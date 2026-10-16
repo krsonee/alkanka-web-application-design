@@ -4,6 +4,7 @@ import { ActivityTicker } from '@/components/alkanka/activity-ticker'
 import { EndingCampaigns, FeaturedSponsors } from '@/components/alkanka/partner-sites'
 import { TopThree } from '@/components/alkanka/top-three'
 import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
+import { CUSTOM_SLIDES_KEY, readCustomSlides } from '@/lib/custom-slides'
 import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
 import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
@@ -31,7 +32,9 @@ export default async function HomePage() {
   ])
   const featured = pickFeatured(sponsors)
   const hidden = readHidden(content[HIDDEN_KEY])
-  const slides = withoutHidden(SLIDES, hidden, 'slide').map((s) => ({ ...s, ...withoutEmpty(content[`slide:${s.id}`] as SlideOverride | undefined) }))
+  const slides = withoutHidden(SLIDES, hidden, 'slide')
+    .map((s) => ({ ...s, ...withoutEmpty(content[`slide:${s.id}`] as SlideOverride | undefined) }))
+    .concat(withoutHidden(readCustomSlides(content[CUSTOM_SLIDES_KEY]), hidden, 'slide'))
 
   return (
     <>
