@@ -37,11 +37,12 @@ import {
   type StudioBrand,
   type StudioJob,
   type StudioKind,
+  TELEGRAM_LIMITS,
 } from '@/lib/studio-types'
 import { cn } from '@/lib/utils'
 
 type StudioView = 'guide' | 'create' | 'brands' | 'library'
-type AnimateOptions = { mode: 'gif' | 'video'; duration: number; audio: boolean; motion: string }
+type AnimateOptions = { mode: 'gif' | 'video' | 'tgsticker' | 'tgicon'; duration: number; audio: boolean; motion: string }
 
 type Props = {
   brands: StudioBrand[]
@@ -465,7 +466,17 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
             </div>
           ))}
           {shown.map((job) => (
-            <JobCard key={job.id} job={job} onRevise={() => setRevising(job)} onAnimate={() => setAnimating(job)} />
+            <JobCard
+              key={job.id}
+              job={job}
+              onRevise={() => setRevising(job)}
+              onAnimate={() => setAnimating(job)}
+              onTelegram={async (mode) => {
+                setError('')
+                await animate(job, { mode, duration, audio, motion })
+                router.refresh()
+              }}
+            />
           ))}
         </div>
       </div>
@@ -473,7 +484,14 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
   )
 }
 
-const KIND_LABEL: Record<StudioKind, string> = { banner: 'Banner', sticker: 'Sticker', gif: 'GIF', video: 'Video' }
+const KIND_LABEL: Record<StudioKind, string> = {
+  banner: 'Banner',
+  sticker: 'Sticker',
+  gif: 'GIF',
+  video: 'Video',
+  tgsticker: 'Telegram hareketli sticker',
+  tgicon: 'Telegram paket ikonu',
+}
 
 function VideoOptions({
   duration,
@@ -532,13 +550,28 @@ function VideoOptions({
   )
 }
 
-function JobCard({ job, onRevise, onAnimate }: { job: StudioJob; onRevise: () => void; onAnimate: () => void }) {
+function JobCard({
+  job,
+  onRevise,
+  onAnimate,
+  onTelegram,
+}: {
+  job: StudioJob
+  onRevise: () => void
+  onAnimate: () => void
+  onTelegram?: (mode: 'tgsticker' | 'tgicon') => void
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  const transparent = job.kind === 'sticker' || job.kind === 'tgsticker' || job.kind === 'tgicon'
   return (
     <figure className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className={cn('flex items-center justify-center', job.kind === 'sticker' ? 'bg-[repeating-conic-gradient(var(--secondary)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4' : 'bg-secondary')}>
-        {job.kind === 'video' ? (
+      <div className={cn('flex items-center justify-center', transparent ? 'bg-[repeating-conic-gradient(var(--secondary)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4' : 'bg-secondary')}>
+        {job.kind === 'tgsticker' ? (
+          <video src={job.url} autoPlay loop muted playsInline className="max-h-80 w-full object-contain">
+            <track kind="captions" />
+          </video>
+        ) : job.kind === 'video' ? (
           <video src={job.url} controls loop muted playsInline preload="metadata" className="max-h-80 w-full bg-foreground object-contain">
             <track kind="captions" />
           </video>
@@ -566,6 +599,16 @@ function JobCard({ job, onRevise, onAnimate }: { job: StudioJob; onRevise: () =>
             <button type="button" onClick={onAnimate} className={ghostBtn}>
               <Film className="size-3.5" aria-hidden /> Hareketlendir
             </button>
+          ) : null}
+          {job.kind === 'sticker' && onTelegram ? (
+            <>
+              <button type="button" onClick={() => onTelegram('tgsticker')} className={ghostBtn} title={TELEGRAM_LIMITS.tgsticker.label}>
+                <Film className="size-3.5" aria-hidden /> Telegram hareketli
+              </button>
+              <button type="button" onClick={() => onTelegram('tgicon')} className={ghostBtn} title={TELEGRAM_LIMITS.tgicon.label}>
+                Paket ikonu
+              </button>
+            </>
           ) : null}
           <button
             type="button"

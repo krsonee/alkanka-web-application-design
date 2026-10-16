@@ -6,6 +6,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  serverExternalPackages: ['ffmpeg-static'],
+  outputFileTracingIncludes: {
+    '/api/studio/animate': ['./node_modules/ffmpeg-static/ffmpeg'],
+  },
   async headers() {
     const noindex = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }]
     const security = [
