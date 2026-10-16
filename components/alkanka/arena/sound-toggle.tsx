@@ -29,7 +29,7 @@ export function actionSound(game: string, type: string): SoundName {
   if (type === 'roll' || type === 'rollDice') return 'dice'
   if (type === 'shoot' || type === 'shot') return 'cue'
   if (type === 'buy' || type === 'pay' || type === 'build') return 'coin'
-  if (game === 'batak') return 'card'
+  if (game === 'batak' || game === 'pisti') return 'card'
   if (game === 'okey' || game === 'okey101') return 'tile'
   if (game === 'tavla' || game === 'monopoly') return 'tile'
   if (game === 'bilardo') return 'cue'

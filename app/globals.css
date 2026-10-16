@@ -450,6 +450,29 @@
   70% { transform: scale(1.02) translateY(-1px); opacity: 1; }
   100% { transform: scale(1) translateY(0); opacity: 1; }
 }
+@keyframes pisti-fly {
+  from { transform: translate(var(--fx), var(--fy)) scale(0.7) rotate(-14deg); opacity: 0.3; }
+  to { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes pisti-sweep {
+  to { transform: translate(var(--tx), var(--ty)) scale(0.45); opacity: 0; }
+}
+@keyframes pisti-burst {
+  0% { transform: scale(0.3) rotate(-8deg); opacity: 0; }
+  60% { transform: scale(1.12) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes pisti-float {
+  from { transform: translate(-50%, 0); opacity: 1; }
+  to { transform: translate(-50%, -48px); opacity: 0; }
+}
+@keyframes pisti-ring {
+  from { box-shadow: 0 0 0 0 var(--gold); }
+  to { box-shadow: 0 0 0 14px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*='pisti-'] { animation-duration: 1ms !important; }
+}
 @keyframes btn-sheen {
   0%, 60% { transform: translateX(-120%) skewX(-20deg); }
   100% { transform: translateX(220%) skewX(-20deg); }

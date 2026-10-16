@@ -19,6 +19,8 @@ import { Okey101Pvp } from './okey101-pvp'
 import { BatakPvp } from './batak-pvp'
 import { BATAK_VARIANTS, type BatakVariant } from '@/lib/games/batak'
 import { MonopolyPvp } from './monopoly-pvp'
+import { PistiPvp } from './pisti-pvp'
+import { PISTI_TARGETS } from '@/lib/games/pisti'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
@@ -36,6 +38,7 @@ export type TableSummary = {
   seats: number
   team: boolean
   bots: number
+  variant?: string | null
   winners: string[]
   spectator: boolean
   status: 'bekliyor' | 'oynaniyor' | 'bitti' | 'iptal'
@@ -67,6 +70,7 @@ const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 3, 5] },
   monopoly: { seats: [2, 3, 4], rounds: [] },
+  pisti: { seats: [2, 4], rounds: [] },
 }
 
 export function TableLobby({
@@ -96,9 +100,15 @@ export function TableLobby({
   const [seatBots, setSeatBots] = useState(0)
   const [seatRounds, setSeatRounds] = useState(seatRule?.rounds[0] ?? 0)
   const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
+  const [pistiTarget, setPistiTarget] = useState('151')
   const humanSeats = seatRule ? seatSeats - seatBots : isOkey ? seats - (seats === 4 ? bots : 0) : 2
   const tableOptions = seatRule
-    ? { seats: seatSeats, bots: seatBots, ...(seatRounds ? { rounds: seatRounds } : {}), ...(game === 'batak' ? { variant: batakVariant } : {}) }
+    ? {
+        seats: seatSeats,
+        bots: seatBots,
+        ...(seatRounds ? { rounds: seatRounds } : {}),
+        ...(game === 'batak' ? { variant: batakVariant } : game === 'pisti' ? { variant: pistiTarget } : {}),
+      }
     : isOkey
       ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 }
       : undefined
@@ -350,6 +360,17 @@ export function TableLobby({
                   </div>
                 </div>
               )}
+              {game === 'pisti' && (
+                <OptionGroup
+                  label="Kaç puana oynanacak"
+                  value={pistiTarget}
+                  options={PISTI_TARGETS.map((t) => ({ value: t.value, label: `${t.label} · ${t.hint}` }))}
+                  onChange={setPistiTarget}
+                />
+              )}
+              {game === 'pisti' && seatSeats === 4 && (
+                <p className="-mt-3 text-xs leading-relaxed text-muted-foreground">4 kişilik masada karşılıklı oturanlar eş olur.</p>
+              )}
               {seatRule.seats.length > 1 && (
                 <OptionGroup
                   label="Masa"
@@ -498,6 +519,11 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
               {t.bots > 0 ? ` + ${t.bots} bot` : ''}
             </span>
             {t.game === 'okey' && <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{t.team ? 'Takımlı' : 'Tekli'}</span>}
+            {t.game === 'pisti' && (
+              <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">
+                {t.variant === '101' ? 101 : 151} puan{t.seats === 4 ? ' · Eşli' : ''}
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -583,7 +609,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   const remote: Remote<unknown> = {
     id,
     // Tavla and bilardo render from seat 0's side for spectators; okey handles seat -1 itself.
-    seat: spectator && !['okey', 'okey101', 'batak', 'monopoly'].includes(data.game) ? 0 : mySeat,
+    seat: spectator && !['okey', 'okey101', 'batak', 'monopoly', 'pisti'].includes(data.game) ? 0 : mySeat,
     state: data.state,
     version: data.version,
     myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
@@ -864,6 +890,7 @@ function GameSurface({ game, remote, done }: { game: string; remote: Remote<unkn
   if (game === 'okey101') return <Okey101Pvp remote={r} />
   if (game === 'batak') return <BatakPvp remote={r} />
   if (game === 'monopoly') return <MonopolyPvp remote={r} />
+  if (game === 'pisti') return <PistiPvp remote={r} />
   if (DUEL.includes(game)) {
     const mine = r.state?.scores?.[r.seat]
     if (mine || done) {

@@ -29,6 +29,11 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Elini açmak için seri ve perlerinin toplamı en az 101 olmalı ya da en az 5 çift ile çifte gidersin. Açtıktan sonra yerdeki perlere işleyebilirsin.',
     'Eli ilk bitiren kazanır. Açamayan 202, açan elindeki taşlar kadar ceza yer; çifte gidenin cezası ikiye katlanır. Set sonunda en az cezası olan kazanır.',
   ],
+  pisti: [
+    '52 kart. Yere 4 kart (3 kapalı), herkese 4 kart dağıtılır. 2 kişi ya da 4 kişi eşli oynanır, karşılıklı oturanlar eştir.',
+    'Yerdeki en üst kartla aynı kartı atan ya da Vale atan yeri toplar. Yerde tek kart varken aynısıyla alırsan pişti: 10 puan, Vale ile Vale pişti 20 puan.',
+    'El sonunda en çok kart 3, her As ve Vale 1, sinek 2 2, karo 10 3 puan. Masada seçilen 101 ya da 151 puana ilk ulaşan kazanır.',
+  ],
   batak: [
     'Klasik: 4 kişi, 13 kart, ihale en az 5. Koz Maça: ihale yok, koz maça, herkes el tahmini yapar. Eşli: 2+2 takım, ihale en az 8, ihalecinin eşi kartlarını açar. Gömmeli: 3 kişi, 16 kart, ihaleci yerdeki 4 kartı alıp 4 kart gömer.',
     'Atılan renge uymak, mümkünse yükseltmek zorundasın. Rengin yoksa koz çakmalısın. Koz kırılmadan kozla açılamaz.',
