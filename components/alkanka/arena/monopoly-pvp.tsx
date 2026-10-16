@@ -48,7 +48,18 @@ const GROUP_COLOR: Record<Group, string> = {
   darkblue: 'oklch(0.38 0.14 265)',
 }
 const LIGHT_GROUPS: Group[] = ['lightblue', 'yellow']
-const TOKEN_COLOR = ['oklch(0.58 0.22 27)', 'oklch(0.52 0.17 255)', 'oklch(0.6 0.16 150)', 'oklch(0.78 0.16 80)']
+const TOKEN_COLOR = [
+  'oklch(0.58 0.22 27)',
+  'oklch(0.52 0.17 255)',
+  'oklch(0.6 0.16 150)',
+  'oklch(0.78 0.16 80)',
+  'oklch(0.55 0.2 320)',
+  'oklch(0.68 0.14 200)',
+  'oklch(0.64 0.18 50)',
+  'oklch(0.45 0.05 260)',
+  'oklch(0.72 0.17 130)',
+  'oklch(0.5 0.12 20)',
+]
 const PAPER = 'oklch(0.93 0.035 150)'
 const PAPER_DEEP = 'oklch(0.89 0.05 152)'
 const INK = 'oklch(0.22 0.02 160)'
@@ -215,10 +226,10 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
       <section aria-label="Oyuncular" className="flex flex-col gap-2 lg:col-start-2 lg:row-start-1">
         {remote.spectator && (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
-            <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun.
+            <Eye className="size-4 text-primary" aria-hidden="true" /> Masay�� izliyorsun.
           </p>
         )}
-        <ul className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+        <ul className={cn('grid gap-2 lg:grid-cols-1', s.seats > 4 ? 'grid-cols-2 sm:grid-cols-3 lg:max-h-96 lg:overflow-y-auto' : 'grid-cols-2')}>
           {s.players.map((p, i) => (
             <PlayerChip
               key={i}
@@ -274,10 +285,12 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
                   const pos = shownPos[i] ?? p.pos
                   const shared = s.players.map((q, k) => (!q.out && (shownPos[k] ?? q.pos) === pos ? k : -1)).filter((k) => k >= 0)
                   const slot = shared.indexOf(i)
-                  const spread = shared.length > 1 ? 1.7 : 0
                   const { x, y } = cellCenter(pos)
-                  const dx = shared.length > 1 ? (slot % 2 === 0 ? -spread : spread) : 0
-                  const dy = shared.length > 2 ? (slot < 2 ? -spread : spread) : 0
+                  // Pawns sharing a square sit on a small ring so up to ten stay visible.
+                  const ring = shared.length > 1 ? (shared.length > 4 ? 2.4 : 1.7) : 0
+                  const angle = (slot / Math.max(1, shared.length)) * Math.PI * 2 - Math.PI / 4
+                  const dx = ring * Math.cos(angle)
+                  const dy = ring * Math.sin(angle)
                   return (
                     <Pawn
                       key={i}
@@ -664,7 +677,7 @@ function BoardCenter({
 
       <div className="relative z-10 flex w-[78%] flex-col items-center gap-[1.6cqw]">
         <span className="rounded-full px-[1.6cqw] py-[0.4cqw] text-[clamp(7px,1.4cqw,12px)] font-bold uppercase tracking-widest" style={{ background: 'oklch(0.22 0.02 160 / 0.08)' }}>
-          Tur {Math.min(s.round, s.maxRounds)}/{s.maxRounds}
+          {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round} · İflasa kadar`}
         </span>
 
         {s.dice && (

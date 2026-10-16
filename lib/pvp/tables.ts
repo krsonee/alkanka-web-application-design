@@ -143,7 +143,7 @@ export async function listMyActiveTables(userId: string) {
 const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 3, 5] },
-  monopoly: { seats: [2, 3, 4], rounds: [] },
+  monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
 }
 
@@ -159,7 +159,7 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
   if (game === 'pisti') {
     const seats = Number(input?.seats) === 4 ? 4 : 2
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
-    return { seats, team: seats === 4, bots, variant: String(normalizeTarget(input?.variant)) }
+    return { seats, team: seats === 4 && input?.team !== false, bots, variant: String(normalizeTarget(input?.variant)) }
   }
   if (rule) {
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]

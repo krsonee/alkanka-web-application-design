@@ -96,7 +96,7 @@ function cushion(b: Ball, axis: 'x' | 'y', spin?: Spin) {
   else b.vx = -b.vx * 0.82
 }
 
-function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball) => void, spin?: Spin) {
+function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball) => void, spin?: Spin, onRail?: (b: Ball) => void) {
   for (let s = 0; s < SUB; s++) {
     for (const b of balls) {
       if (b.in) continue
@@ -115,10 +115,10 @@ function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball)
       if (b.in) continue
       const mouthX = inHorizontalMouth(b.x)
       const mouthY = inVerticalMouth(b.y)
-      if (b.x < R && !mouthY && b.vx < 0) ((b.x = R), cushion(b, 'x', spin))
-      if (b.x > W - R && !mouthY && b.vx > 0) ((b.x = W - R), cushion(b, 'x', spin))
-      if (b.y < R && !mouthX && b.vy < 0) ((b.y = R), cushion(b, 'y', spin))
-      if (b.y > H - R && !mouthX && b.vy > 0) ((b.y = H - R), cushion(b, 'y', spin))
+      if (b.x < R && !mouthY && b.vx < 0) ((b.x = R), cushion(b, 'x', spin), onRail?.(b))
+      if (b.x > W - R && !mouthY && b.vx > 0) ((b.x = W - R), cushion(b, 'x', spin), onRail?.(b))
+      if (b.y < R && !mouthX && b.vy < 0) ((b.y = R), cushion(b, 'y', spin), onRail?.(b))
+      if (b.y > H - R && !mouthX && b.vy > 0) ((b.y = H - R), cushion(b, 'y', spin), onRail?.(b))
       b.x = Math.min(Math.max(b.x, -10), W + 10)
       b.y = Math.min(Math.max(b.y, -10), H + 10)
     }
@@ -159,6 +159,14 @@ function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball)
     }
   }
   for (const b of balls) if (Math.hypot(b.vx, b.vy) < 0.06) b.vx = b.vy = 0
+}
+
+const IN_HAND_MSG = 'Beyaz elinde: beyazı sürükleyip istediğin yere koy, sonra vur.'
+
+function canPlaceCue(balls: Ball[], x: number, y: number) {
+  if (x < R * 1.5 || x > W - R * 1.5 || y < R * 1.5 || y > H - R * 1.5) return false
+  if (POCKETS.some(([px, py]) => Math.hypot(px - x, py - y) < POCKET_R + R)) return false
+  return balls.every((b) => b.id === 0 || b.in || Math.hypot(b.x - x, b.y - y) >= R * 2.1)
 }
 
 function clearPath(balls: Ball[], x1: number, y1: number, x2: number, y2: number, skip: number[]) {
@@ -208,7 +216,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     replay: false,
     angle: Math.PI,
     lastSeq: remote?.state.seq ?? 0,
-    shot: { first: null as number | null, potted: [] as number[], angle: 0, pow: 0, spin: { x: 0, y: 0 } as SpinInput },
+    /** After a foul the incoming player may place the cue ball anywhere on the table before shooting. */
+    ballInHand: remote ? !!remote.state.ballInHand && remote.state.turn === seat : false,
+    shot: { first: null as number | null, potted: [] as number[], rail: false, angle: 0, pow: 0, spin: { x: 0, y: 0 } as SpinInput },
     spin: { side: 0, follow: 0, applied: true } as Spin,
   })
   const [power, setPower] = useState(60)
@@ -243,7 +253,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     balls.current = st.balls.map(fromState)
     g.groups = remoteGroups(st)
     g.turn = st.turn === seat ? 'p' : 'b'
-    sync(g.turn === 'p' ? 'Sıra sende. Nişan al ve vur.' : `${oppName} nişan alıyor...`)
+    g.ballInHand = !!st.ballInHand && g.turn === 'p'
+    sync(g.turn === 'p' ? (g.ballInHand ? IN_HAND_MSG : 'Sıra sende. Nişan al ve vur.') : `${oppName} nişan alıyor...`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remote?.state.seq])
 
@@ -267,25 +278,52 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     cue.vx = Math.cos(angle) * speed
     cue.vy = Math.sin(angle) * speed
     g.spin = { side: sp.x, follow: sp.y, applied: false }
-    g.shot = { first: null, potted: [], angle, pow: pow / 100, spin: sp }
+    g.ballInHand = false
+    g.shot = { first: null, potted: [], rail: false, angle, pow: pow / 100, spin: sp }
     g.moving = true
     sync(g.turn === 'p' ? 'Toplar yuvarlanıyor...' : `${oppName} vurdu...`)
   }
 
-  function sendShot(result: 'win' | 'lose' | null, keepTurn: boolean, note: string) {
+  function sendShot(result: 'win' | 'lose' | null, keepTurn: boolean, note: string, ballInHand = false) {
     if (!remote) return
     const g = game.current
     const groups: [Group | null, Group | null] = [null, null]
     groups[seat] = g.groups.p
     groups[oppSeat] = g.groups.b
-    void remote.send({ type: 'shot', angle: g.shot.angle, pow: g.shot.pow, spinX: g.shot.spin.x, spinY: g.shot.spin.y, balls: balls.current.map(toState), groups, keepTurn, result, note })
+    void remote.send({
+      type: 'shot',
+      angle: g.shot.angle,
+      pow: g.shot.pow,
+      spinX: g.shot.spin.x,
+      spinY: g.shot.spin.y,
+      balls: balls.current.map(toState),
+      groups,
+      keepTurn,
+      result,
+      note,
+      ballInHand,
+    })
   }
 
-  function botShot() {
+  function botShot(inHand = false) {
     const g = game.current
     const list = balls.current
     const cue = list[0]
     const mine = g.groups.b
+    if (inHand) {
+      // With ball in hand the bot sets the cue ball straight behind its easiest target, lined up with a pocket.
+      for (const t of list.filter((b) => !b.in && b.id !== 0 && (mine === null ? b.id !== 8 : groupOf(b.id) === mine))) {
+        const [px, py] = POCKETS.reduce((a, p) => (Math.hypot(p[0] - t.x, p[1] - t.y) < Math.hypot(a[0] - t.x, a[1] - t.y) ? p : a))
+        const d = Math.hypot(px - t.x, py - t.y) || 1
+        const x = t.x - ((px - t.x) / d) * R * 9
+        const y = t.y - ((py - t.y) / d) * R * 9
+        if (canPlaceCue(list, x, y)) {
+          cue.x = x
+          cue.y = y
+          break
+        }
+      }
+    }
     const ownLeft = list.filter((b) => !b.in && groupOf(b.id) === mine)
     const targets = list.filter((b) => {
       if (b.in || b.id === 0) return false
@@ -330,7 +368,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       balls.current = st.balls.map(fromState)
       g.groups = remoteGroups(st)
       g.turn = st.turn === seat ? 'p' : 'b'
-      sync(st.note ? `${st.note}${g.turn === 'p' ? ' Sıra sende.' : ''}` : g.turn === 'p' ? 'Sıra sende.' : `${oppName} yine oynuyor.`)
+      g.ballInHand = !!st.ballInHand && g.turn === 'p'
+      const yours = g.ballInHand ? ` ${IN_HAND_MSG}` : ' Sıra sende.'
+      sync(st.note ? `${st.note}${g.turn === 'p' ? yours : ''}` : g.turn === 'p' ? yours.trim() : `${oppName} yine oynuyor.`)
       return
     }
     const list = balls.current
@@ -356,10 +396,16 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     }
 
     let foul = scratch || first === null
-    if (!foul && myGroup && first !== null) {
+    let wrongFirst = false
+    if (!foul && first !== null) {
       const fg = groupOf(first)
-      foul = fg !== myGroup && !(fg === 'eight' && clearedBefore)
+      // Open table: the black may never be hit first. Assigned group: your own balls first (black only once cleared).
+      wrongFirst = myGroup ? fg !== myGroup && !(fg === 'eight' && clearedBefore) : fg === 'eight'
+      foul = wrongFirst
     }
+    // After contact, some ball has to drop or reach a cushion.
+    const noRail = !foul && potted.length === 0 && !g.shot.rail
+    if (noRail) foul = true
     if (!foul && !myGroup) {
       const firstPot = potted.find((id) => id !== 0 && id !== 8)
       if (firstPot) {
@@ -378,22 +424,30 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     }
     const group = g.groups[shooter]
     const keep = !foul && potted.some((id) => groupOf(id) === group)
-    const label = (w: Who) => (w === 'p' ? 'Sende' : 'Rakipte')
+    const reason = scratch
+      ? 'Beyaz top düştü, faul!'
+      : first === null
+        ? 'Hiçbir topa değmedi, faul!'
+        : wrongFirst
+          ? 'Önce yanlış topa vuruldu, faul!'
+          : noRail
+            ? 'Hiçbir top banda gitmedi, faul!'
+            : ''
     let msg: string
-    if (scratch) msg = `Beyaz top düştü, faul. Sıra ${label(other).toLowerCase()}.`
-    else if (first === null) msg = `Hiçbir topa değmedi, faul. Sıra ${label(other).toLowerCase()}.`
-    else if (foul) msg = `Önce yanlış gruba vuruldu, faul. Sıra ${label(other).toLowerCase()}.`
+    if (foul) msg = shooter === 'p' ? `${reason} Rakip beyazı istediği yere koyar.` : `${reason} ${IN_HAND_MSG}`
     else if (keep) msg = shooter === 'p' ? 'Güzel! Sıra yine sende.' : 'Rakip soktu, yine o oynuyor.'
-    else msg = `Top düşmedi. Sıra ${label(other).toLowerCase()}.`
+    else msg = `Top düşmedi. Sıra ${shooter === 'p' ? 'rakipte' : 'sende'}.`
     if (!keep) g.turn = other
+    g.ballInHand = foul && g.turn === 'p'
     g.moving = false
+    if (foul) playSound('error')
     if (remote) {
-      sync(keep ? 'Güzel! Sıra yine sende.' : `${msg.split('. Sıra')[0]}. Sıra ${oppName} oyuncusunda.`)
-      sendShot(null, keep, scratch ? 'Beyaz düştü, faul.' : first === null ? 'Topa değmedi, faul.' : foul ? 'Yanlış gruba vuruş, faul.' : keep ? 'Rakip top soktu.' : '')
+      sync(keep ? 'Güzel! Sıra yine sende.' : foul ? `${reason} ${oppName} beyazı istediği yere koyar.` : `Top düşmedi. Sıra ${oppName} oyuncusunda.`)
+      sendShot(null, keep, foul ? reason : keep ? 'Rakip top soktu.' : '', foul)
       return
     }
     sync(msg)
-    if (g.turn === 'b') setTimeout(botShot, 1000)
+    if (g.turn === 'b') setTimeout(() => botShot(foul), 1000)
   }
 
   useEffect(() => {
@@ -428,6 +482,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
             g.shot.potted.push(b.id)
           },
           g.spin,
+          () => {
+            if (g.shot.first !== null) g.shot.rail = true
+          },
         )
         const still = balls.current.every((b) => b.in || (b.vx === 0 && b.vy === 0))
         idleFrames = still ? idleFrames + 1 : 0
@@ -555,6 +612,16 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       })
 
       const cue = balls.current[0]
+      if (g.ballInHand && !g.moving && !g.over && g.turn === 'p' && !cue.in) {
+        ctx.save()
+        ctx.setLineDash([4, 5])
+        ctx.strokeStyle = gold
+        ctx.lineWidth = 2.5
+        ctx.beginPath()
+        ctx.arc(cue.x + RAIL, cue.y + RAIL, R * 2.2, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
       if (!g.moving && !g.over && g.turn === 'p' && !cue.in) {
         const hit = castGuide(balls.current, cue, g.angle)
         const len = hit ? hit.t : 1400
@@ -665,6 +732,15 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     game.current.angle = Math.atan2(y - cue.y, x - cue.x)
   }
 
+  const tablePoint = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * (W + RAIL * 2) - RAIL,
+      y: ((e.clientY - rect.top) / rect.height) * (H + RAIL * 2) - RAIL,
+    }
+  }
+  const placing = useRef<number | null>(null)
+
   const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
   const [aimLocked, setAimLocked] = useState(false)
   const lockedRef = useRef(false)
@@ -677,12 +753,26 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     e.currentTarget.focus({ preventScroll: true })
     if (!canAim()) return
     e.currentTarget.setPointerCapture(e.pointerId)
+    const cue = balls.current[0]
+    const pt = tablePoint(e)
+    if (game.current.ballInHand && Math.hypot(pt.x - cue.x, pt.y - cue.y) < R * 3) {
+      placing.current = e.pointerId
+      return
+    }
     drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }
     aimAt(e)
   }
 
   function onPointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
     if (!canAim()) return
+    if (placing.current === e.pointerId) {
+      const pt = tablePoint(e)
+      if (canPlaceCue(balls.current, pt.x, pt.y)) {
+        balls.current[0].x = pt.x
+        balls.current[0].y = pt.y
+      }
+      return
+    }
     const d = drag.current
     if (d && d.id === e.pointerId) {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) d.moved = true
@@ -693,6 +783,10 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   }
 
   function onPointerUp(e: ReactPointerEvent<HTMLCanvasElement>) {
+    if (placing.current === e.pointerId) {
+      placing.current = null
+      return
+    }
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
     drag.current = null

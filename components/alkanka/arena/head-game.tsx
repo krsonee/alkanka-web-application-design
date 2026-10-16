@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Smartphone } from 'lucide-react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import NextImage from 'next/image'
+import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Maximize2, Minimize2, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type Sport = 'futbol' | 'basket'
-export type HeadMode = 'bot' | 'local'
+export type HeadMode = 'bot'
 export type HeadScore = { for: number; against: number }
 
 const W = 960
@@ -641,33 +642,9 @@ const OVERLAY_BTN =
 
 /**
  * Translucent buttons drawn over the pitch on touch screens.
- * Solo: arrows bottom-left, jump/kick bottom-right. Two players: each gets a 2x2 cluster in their own corner.
+ * Arrows bottom-left, jump/kick bottom-right.
  */
-function OverlayControls({ k1, k2, mode }: { k1: React.RefObject<Keys>; k2: React.RefObject<Keys>; mode: 'bot' | 'local' }) {
-  if (mode === 'local') {
-    const cluster = (keys: React.RefObject<Keys>, corner: 'left' | 'right', label: string) => (
-      <div className={cn('absolute bottom-2 grid grid-cols-2 gap-1.5', corner === 'left' ? 'left-2' : 'right-2')} role="group" aria-label={label}>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} sola`} {...bindKey(keys, 'left')}>
-          <ChevronLeft className="size-5" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} sağa`} {...bindKey(keys, 'right')}>
-          <ChevronRight className="size-5" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11')} aria-label={`${label} zıpla`} {...bindKey(keys, 'jump')}>
-          <ArrowBigUp className="size-5" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, 'size-11 border-primary/80')} aria-label={`${label} şut`} {...bindKey(keys, 'kick')}>
-          <Footprints className="size-5" aria-hidden="true" />
-        </button>
-      </div>
-    )
-    return (
-      <div className="pointer-events-none absolute inset-0 lg:hidden">
-        {cluster(k1, 'left', '1. oyuncu')}
-        {cluster(k2, 'right', '2. oyuncu')}
-      </div>
-    )
-  }
+function OverlayControls({ k1 }: { k1: React.RefObject<Keys> }) {
   const size = 'size-14 landscape:size-16'
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-2.5 lg:hidden">
@@ -691,15 +668,76 @@ function OverlayControls({ k1, k2, mode }: { k1: React.RefObject<Keys>; k2: Reac
   )
 }
 
+function useMedia(query: string) {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(query)
+      m.addEventListener('change', cb)
+      return () => m.removeEventListener('change', cb)
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  )
+}
+
+const PHONE_PORTRAIT = '(pointer: coarse) and (orientation: portrait)'
+
+function requestLandscape() {
+  const el = document.documentElement
+  const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }
+  el.requestFullscreen?.()
+    .then(() => orientation.lock?.('landscape'))
+    .catch(() => {})
+}
+
+function RotatePrompt({ sport, paused }: { sport: Sport; paused: boolean }) {
+  return (
+    <div
+      role="alert"
+      className="flex min-h-[60dvh] flex-col items-center justify-center gap-5 rounded-2xl border border-primary/30 bg-card px-6 py-8 text-center shadow-xl"
+    >
+      <div className="relative">
+        <NextImage
+          src="/images/mascots/jako-duyuru.png"
+          alt="Jako maskot"
+          width={160}
+          height={160}
+          className="size-36 animate-[jako-bob_1.6s_ease-in-out_infinite] object-contain drop-shadow-xl"
+        />
+        <span className="absolute -bottom-1 -right-3 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+          <Smartphone className="size-6 animate-[phone-rotate_2s_ease-in-out_infinite]" aria-hidden="true" />
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        <p className="text-balance font-display text-2xl font-black uppercase tracking-tight text-foreground">
+          {paused ? 'Maç durdu kanka!' : 'Telefonu yan çevir kanka!'}
+        </p>
+        <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+          {paused
+            ? 'Dik tutunca saha sığmıyor. Telefonu tekrar yan çevir, maç kaldığı yerden devam etsin.'
+            : `${sport === 'futbol' ? 'Kafa topu' : 'Kafa basketbolu'} yatay ekranda çok daha rahat oynanır. Telefonu yan çevirdiğin an maç başlar.`}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={requestLandscape}
+        className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-md transition-transform active:scale-95"
+      >
+        <Maximize2 className="size-4" aria-hidden="true" />
+        Tam ekran yatay aç
+      </button>
+    </div>
+  )
+}
+
 /**
- * Head soccer / head basketball. In "bot" mode the left player faces the bot,
- * in "local" mode two people share one device (WASD + arrows, or touch pads).
+ * Head soccer / head basketball. The left player faces the bot.
  */
 export function HeadGame({
   sport,
   mode,
   onEnd,
-  names = ['Sen', mode === 'bot' ? 'Bot' : 'Kanka 2'],
+  names = ['Sen', 'Bot'],
 }: {
   sport: Sport
   mode: HeadMode
@@ -715,17 +753,32 @@ export function HeadGame({
   const namesRef = useRef(names)
   namesRef.current = names
 
+  const touch = useMedia('(pointer: coarse)')
+  const portrait = useMedia('(orientation: portrait)')
+  const [started, setStarted] = useState(false)
+  const [over, setOver] = useState(false)
+  const [minimized, setMinimized] = useState(false)
+  const needRotate = touch && portrait && !over
+  const fullLandscape = touch && !portrait && started && !over && !minimized
+  const pausedRef = useRef(false)
+  pausedRef.current = needRotate
+
+  useEffect(() => {
+    if (!needRotate && !window.matchMedia(PHONE_PORTRAIT).matches) setStarted(true)
+  }, [needRotate])
+
+  useEffect(() => {
+    if (!over) return
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+  }, [over])
+
   useEffect(() => {
     const map1: Record<string, keyof Keys> = { KeyA: 'left', KeyD: 'right', KeyW: 'jump', KeyS: 'kick', Space: 'kick' }
     const map2: Record<string, keyof Keys> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'jump', ArrowDown: 'kick' }
     const solo: Record<string, keyof Keys> = { ...map2, ...map1 }
     const handle = (down: boolean) => (e: KeyboardEvent) => {
-      const m1 = mode === 'bot' ? solo : map1
-      if (m1[e.code]) {
-        k1.current[m1[e.code]] = down
-        e.preventDefault()
-      } else if (mode === 'local' && map2[e.code]) {
-        k2.current[map2[e.code]] = down
+      if (solo[e.code]) {
+        k1.current[solo[e.code]] = down
         e.preventDefault()
       }
     }
@@ -733,7 +786,6 @@ export function HeadGame({
     const ku = handle(false)
     const blur = () => {
       k1.current = noKeys()
-      k2.current = noKeys()
     }
     window.addEventListener('keydown', kd)
     window.addEventListener('keyup', ku)
@@ -746,6 +798,7 @@ export function HeadGame({
   }, [mode])
 
   useEffect(() => {
+    if (!started) return
     const ctx = canvas.current?.getContext('2d')
     if (!ctx) return
     const bg = paintBackground(sport)
@@ -788,7 +841,7 @@ export function HeadGame({
         flashT++
         if (flashT > 70) flash = ''
       }
-      const k2now = mode === 'bot' ? botKeys(p2, ball, sport) : k2.current
+      const k2now = botKeys(p2, ball, sport)
       if (pause > 0) {
         pause--
         stepPlayer(p1, noKeys(), sport)
@@ -831,6 +884,10 @@ export function HeadGame({
     function frame(now: number) {
       acc += Math.min(80, now - last)
       last = now
+      if (pausedRef.current) {
+        acc = 0
+        k1.current = noKeys()
+      }
       let steps = 0
       while (acc >= STEP_MS && steps < 5) {
         step()
@@ -850,6 +907,7 @@ export function HeadGame({
       if (flash) drawFlash(c, flash, flashT)
       if (left <= 0 && !ended) {
         ended = true
+        setOver(true)
         endRef.current({ for: sc[0], against: sc[1] })
         return
       }
@@ -865,33 +923,49 @@ export function HeadGame({
       cancelAnimationFrame(raf)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [sport, mode])
+  }, [sport, mode, started])
 
   return (
     <div className="flex flex-col gap-3">
       <p className="sr-only" aria-live="polite">
         Skor {announce}
       </p>
-      <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-background shadow-xl">
-        <canvas
-          ref={canvas}
-          width={W}
-          height={H}
-          className="block aspect-video w-full touch-none select-none"
-          aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
-        />
-        <OverlayControls k1={k1} k2={k2} mode={mode} />
-      </div>
-      <div className="flex flex-col gap-3 lg:hidden">
-        <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground portrait:flex landscape:hidden">
-          <Smartphone className="size-3.5 rotate-90" aria-hidden="true" />
-          Daha geniş saha için telefonu yan çevir
-        </p>
+      {needRotate && <RotatePrompt sport={sport} paused={started} />}
+      <div
+        className={cn(
+          needRotate && 'hidden',
+          fullLandscape &&
+            'fixed inset-0 z-[70] flex items-center justify-center bg-background pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
+        )}
+      >
+        <div
+          className={cn(
+            'relative overflow-hidden rounded-2xl border border-primary/30 bg-background shadow-xl',
+            fullLandscape && 'aspect-video h-full max-w-full rounded-none border-0',
+          )}
+        >
+          <canvas
+            ref={canvas}
+            width={W}
+            height={H}
+            className={cn('block aspect-video w-full touch-none select-none', fullLandscape && 'h-full')}
+            aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
+          />
+          <OverlayControls k1={k1} />
+          {fullLandscape && (
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              className="absolute left-2 top-2 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm"
+              aria-label="Tam ekrandan çık"
+            >
+              <Minimize2 className="size-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       <p className="hidden text-center text-xs text-muted-foreground lg:block">
-        {mode === 'local'
-          ? '1. oyuncu: A / D hareket, W zıpla, S şut  -  2. oyuncu: ok tuşları, aşağı ok şut'
-          : 'A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut'}
+        A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut
       </p>
     </div>
   )

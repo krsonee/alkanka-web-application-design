@@ -81,6 +81,8 @@ export type BilardoState = {
   shot: { angle: number; pow: number; spinX?: number; spinY?: number; by: number; seq: number } | null
   seq: number
   note: string
+  /** The player to move after a foul may place the cue ball anywhere. */
+  ballInHand?: boolean
 }
 
 export type DuelState = {
@@ -101,7 +103,7 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
   if (game === 'okey101') return runOkey101Bots(initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
   if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant })).state
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
-  if (game === 'pisti') return runPistiBots(initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant })).state
+  if (game === 'pisti') return runPistiBots(initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant, team: opts?.team })).state
   if (game === 'tavla') {
     let a = 0
     let b = 0
@@ -362,7 +364,7 @@ export function autoMove(state: PvpState): ActResult | null {
   }
   if (state.kind === 'bilardo') {
     return {
-      state: { ...state, turn: other(state.turn), shot: null, seq: state.seq + 1, note: 'Süre doldu, sıra rakibe geçti' },
+      state: { ...state, turn: other(state.turn), shot: null, seq: state.seq + 1, ballInHand: true, note: 'Süre doldu, faul. Beyaz rakipte.' },
       outcome: null,
     }
   }
@@ -407,6 +409,7 @@ function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
     shot: { angle, pow, spinX: clampSpin(a.spinX), spinY: clampSpin(a.spinY), by: seat, seq },
     turn: keep ? seat : other(seat),
     note: typeof a.note === 'string' ? a.note.slice(0, 80) : '',
+    ballInHand: !keep && a.ballInHand === true,
   }
   if (a.result === 'win') return { state: next, outcome: { winnerSeat: seat } }
   if (a.result === 'lose') return { state: next, outcome: { winnerSeat: other(seat) } }
