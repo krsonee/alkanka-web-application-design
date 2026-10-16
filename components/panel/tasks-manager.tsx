@@ -20,6 +20,15 @@ const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 te
 const EMPTY: TaskInput = { id: null, title: '', detail: '', points: 10, link: '', needsApproval: true, active: true, sort: 0, period: 'once', startsAt: '', endsAt: '' }
 const LINK_ERROR = 'Bağlantı https:// ile başlamalı.'
 
+const TASK_TEMPLATES: Partial<TaskInput>[] = [
+  { title: '3 Tavla maçı tamamla', detail: 'Bugün 3 tavla maçını sonuna kadar oyna.', points: 30, period: 'daily', needsApproval: false },
+  { title: '1 Okey masası kazan', detail: 'Canlı Okey masasında bir eli kazan.', points: 40, period: 'daily', needsApproval: false },
+  { title: '101 Okey oyna', detail: 'Bir 101 Okey masasına otur ve oyunu bitir.', points: 25, period: 'daily', needsApproval: false },
+  { title: 'Batak ligi: 5 el kazan', detail: 'Bu hafta Batak masalarında toplam 5 el kazan.', points: 75, period: 'weekly', needsApproval: false },
+  { title: 'Bilardo düellosu kazan', detail: 'Amerikan Bilardo masasında bir rakibi yen.', points: 50, period: 'weekly', needsApproval: false },
+  { title: 'Maç davetini Telegram\u2019da paylaş', detail: 'Masa davet linkini bir Telegram grubunda paylaş, ekran görüntüsünü gönder.', points: 20, period: 'daily', needsApproval: true },
+]
+
 export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: PendingClaim[] }) {
   const [editing, setEditing] = useState<TaskInput | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -60,6 +69,21 @@ export function TasksManager({ tasks, claims }: { tasks: TaskRecord[]; claims: P
           Yeni görev
         </button>
         {msg && <p className={cn('text-sm', msg.ok ? 'text-success' : 'text-destructive')} aria-live="polite">{msg.text}</p>}
+      </div>
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
+        <p className="text-xs font-semibold text-muted-foreground">Hazır oyun görevleri (tıkla, formu doldursun, istersen düzenleyip kaydet)</p>
+        <div className="flex flex-wrap gap-2">
+          {TASK_TEMPLATES.map((t) => (
+            <button
+              key={t.title}
+              type="button"
+              onClick={() => setEditing({ ...EMPTY, ...t, sort: tasks.length })}
+              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
+            >
+              {t.title}
+            </button>
+          ))}
+        </div>
       </div>
       {editing && <TaskForm value={editing} pending={pending} onCancel={() => setEditing(null)} onSave={save} />}
       {tasks.length === 0 ? (

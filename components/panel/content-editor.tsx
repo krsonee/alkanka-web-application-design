@@ -268,6 +268,13 @@ export function ContentEditor({
   )
 }
 
+const SLIDE_PRESETS = [
+  { label: 'Tavla turnuvası', eyebrow: 'Büyük Tavla Turnuvası', title: 'Zarı at, kupayı kap', description: 'Yüksek ödüllü tavla turnuvasına kaydını şimdi yap, yerini kapan kazansın.', cta: 'Turnuvaya katıl' },
+  { label: 'Ücretsiz Okey & 101', eyebrow: 'Canlı Masalar', title: 'Okey ve 101 masaları seni bekliyor', description: 'Ücretsiz canlı masalara otur, kankalarınla aynı masada taşları diz.', cta: 'Masaya otur' },
+  { label: 'Batak ligi', eyebrow: 'Batak Ligi', title: 'Koz senden, zafer senden', description: 'Haftalık Batak liginde puan topla, sıralamanın zirvesine çık.', cta: 'Lige katıl' },
+  { label: 'Bilardo düellosu', eyebrow: 'Amerikan Bilardo', title: 'Istakanı hazırla', description: 'Birebir bilardo düellolarında rakibini yen, Kanka Coin kazan.', cta: 'Düelloya başla' },
+]
+
 function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
   const isSlide = item.kind === 'slide'
   const [saveState, saveAction, saving] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
@@ -355,6 +362,30 @@ function ItemCard({ item, library }: { item: EditorItem; library: string[] }) {
           </p>
         </div>
 
+        {isSlide && (
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-2">
+            <span className="text-xs font-semibold text-muted-foreground">Hazır oyun slaytları (metni doldurur, kaydetmeyi unutma)</span>
+            <div className="flex flex-wrap gap-1.5">
+              {SLIDE_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={(e) => {
+                    const form = e.currentTarget.form
+                    if (!form) return
+                    for (const key of ['eyebrow', 'title', 'description', 'cta'] as const) {
+                      const el = form.elements.namedItem(key) as HTMLInputElement | HTMLTextAreaElement | null
+                      if (el) el.value = p[key]
+                    }
+                  }}
+                  className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <Text name="eyebrow" label="Üst etiket" value={value('eyebrow')} placeholder={item.defaults.eyebrow} />
         <Text name="title" label="Başlık" value={value('title')} placeholder={item.defaults.title} />
         <Text name="description" label="Açıklama" value={value('description')} placeholder={item.defaults.description} multiline />
