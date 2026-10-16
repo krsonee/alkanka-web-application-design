@@ -26,6 +26,7 @@ import {
 } from "@/app/actions/arena";
 import { cn } from "@/lib/utils";
 import { formatAC, usePoints } from "../points-context";
+import { VoiceChat } from "./voice-chat";
 import { useIdle } from "../use-idle";
 import { PlayingCard } from "./blackjack";
 import {
@@ -569,6 +570,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">
+              <VoiceChat key={`v-${data.tableNo}`} roomId={`blackjack-masa-${data.tableNo}`} />
               <MobileTableChat key={`m-${data.tableNo}`} tableId={`blackjack-masa-${data.tableNo}`} />
               <span className="rounded-full border border-primary/40 bg-background/70 px-3 py-1 text-xs font-bold tabular-nums text-foreground">
                 {phaseLabel}
