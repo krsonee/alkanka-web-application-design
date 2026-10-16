@@ -1,5 +1,6 @@
 'use client'
 
+import { TasksGuide } from '@/components/panel/area-guides'
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus } from 'lucide-react'
@@ -68,6 +69,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
 
   return (
     <div className="flex flex-col gap-4">
+      <TasksGuide />
       <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
         Görev adı, kısa açıklama ve puan burada durur. Kayıt silinmez; yayından çıkarmak için aktif kutusunu kapat.
       </p>

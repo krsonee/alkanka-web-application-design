@@ -1,6 +1,7 @@
 'use client'
 
 import { HideButton } from '@/components/panel/hide-button'
+import { KpGuide } from '@/components/panel/area-guides'
 import { useState, useTransition } from 'react'
 import { Minus, Plus, Search, Trash2, Undo2 } from 'lucide-react'
 import {
@@ -53,6 +54,7 @@ export function KpManager({ levels, rules, badges, awards, board, autoLabels, on
   const [tab, setTab] = useState<Tab>('levels')
   return (
     <div className="flex flex-col gap-5">
+      <KpGuide />
       <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4">
         <h2 className="font-display text-lg font-bold text-foreground">Kanka Puan ve rozet sistemi</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">

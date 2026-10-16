@@ -5,6 +5,7 @@ import { Pencil, Search, Trash2 } from 'lucide-react'
 import { deleteMemberLimit, saveMemberLimit, searchMembersForLimit } from '@/app/panel/limits-actions'
 import type { MemberLimit } from '@/lib/member-limits'
 import { cn } from '@/lib/utils'
+import { LimitsGuide } from '@/components/panel/area-guides'
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
 
@@ -76,8 +77,17 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
     })
   }
 
+  const counts = {
+    win: limits.filter((l) => l.dailyWinLimit !== null).length,
+    game: limits.filter((l) => l.dailyGameLimit !== null).length,
+    market: limits.filter((l) => l.marketBan || l.marketSpendLimit !== null).length,
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      <LimitsGuide />
+      <div className="grid grid-cols-12 gap-6">
+    <div className="col-span-12 flex flex-col gap-4 lg:col-span-7">
       <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
         Üyeye gizli sınır koy. Üye kısıtlandığını görmez; sınıra gelince sadece &quot;şu an yapılamıyor&quot; gibi genel bir mesaj alır.
         Günler Türkiye saatiyle gece yarısı sıfırlanır. Boş bırakılan alan sınırsızdır.
@@ -163,7 +173,27 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
           </div>
         </div>
       )}
+      {!target && results.length === 0 && (
+        <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+          Kısıtlama koymak için yukarıdan üye ara ve seç. Ayarlar burada açılır.
+        </p>
+      )}
+    </div>
 
+    <aside className="col-span-12 flex flex-col gap-4 lg:col-span-5">
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Kazanç sınırı', value: counts.win },
+          { label: 'Oyun sınırı', value: counts.game },
+          { label: 'Market sınırı', value: counts.market },
+        ].map((c) => (
+          <div key={c.label} className="flex flex-col gap-1 rounded-xl border border-border bg-card p-3">
+            <span className="font-display text-2xl font-bold tabular-nums text-foreground">{c.value}</span>
+            <span className="text-xs text-muted-foreground">{c.label}</span>
+          </div>
+        ))}
+      </div>
+      <h3 className="text-sm font-semibold text-foreground">Kısıtlanan üyeler ({limits.length})</h3>
       <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
         {limits.length === 0 && <li className="p-4 text-sm text-muted-foreground">Kısıtlanmış üye yok.</li>}
         {limits.map((l) => (
@@ -184,6 +214,8 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
           </li>
         ))}
       </ul>
+    </aside>
+      </div>
     </div>
   )
 }

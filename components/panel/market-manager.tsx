@@ -1,5 +1,6 @@
 'use client'
 
+import { MarketGuide } from '@/components/panel/area-guides'
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
@@ -34,6 +35,7 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
 
   return (
     <div className="flex flex-col gap-5">
+      <MarketGuide />
       <div className="flex flex-wrap items-center gap-2">
         {(
           [
