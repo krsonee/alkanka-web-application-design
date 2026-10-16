@@ -25,6 +25,36 @@ export type OnlineStatus = {
   granted: OnlineGrant[]
 }
 
+export type TickerKinds = { gorev: boolean; rozet: boolean; online: boolean }
+export type TickerAnnouncement = { id: string; text: string }
+export type TickerConfig = {
+  enabled: boolean
+  toast: boolean
+  kinds: TickerKinds
+  announcements: TickerAnnouncement[]
+}
+
+export const MAX_ANNOUNCEMENTS = 10
+export const DEFAULT_TICKER: TickerConfig = {
+  enabled: true,
+  toast: true,
+  kinds: { gorev: true, rozet: true, online: true },
+  announcements: [],
+}
+
+export function cleanTickerConfig(input: Partial<TickerConfig> | null | undefined): TickerConfig {
+  const k = input?.kinds ?? DEFAULT_TICKER.kinds
+  return {
+    enabled: input?.enabled ?? true,
+    toast: input?.toast ?? true,
+    kinds: { gorev: k.gorev !== false, rozet: k.rozet !== false, online: k.online !== false },
+    announcements: (Array.isArray(input?.announcements) ? input.announcements : [])
+      .map((a) => ({ id: String(a?.id || '').slice(0, 40), text: String(a?.text || '').trim().slice(0, 140) }))
+      .filter((a) => a.id && a.text)
+      .slice(0, MAX_ANNOUNCEMENTS),
+  }
+}
+
 export const IDLE_MINUTES = 10
 export const MAX_ONLINE_HOURS = 48
 

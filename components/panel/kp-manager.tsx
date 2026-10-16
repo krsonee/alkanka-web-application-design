@@ -14,6 +14,7 @@ import {
   updateLevels,
   updateOnlineRewards,
   updateRules,
+  updateTicker,
   upsertBadge,
 } from '@/app/panel/kp-actions'
 import type { AutoKind, AwardRow, ContestRow, LeaderRow, SpecialBadge } from '@/lib/kanka-puan'
@@ -21,15 +22,25 @@ import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, RULE_FIELDS, type BadgeTier, 
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { ICONS, LevelEmblem, SpecialEmblem } from '@/components/alkanka/kp/emblem'
 import { cn } from '@/lib/utils'
-import { DEFAULT_ONLINE, IDLE_MINUTES, MAX_ONLINE_HOURS, type OnlineConfig, type OnlineTier } from '@/lib/online-rewards-shared'
+import {
+  DEFAULT_ONLINE,
+  IDLE_MINUTES,
+  MAX_ANNOUNCEMENTS,
+  MAX_ONLINE_HOURS,
+  type OnlineConfig,
+  type OnlineTier,
+  type TickerConfig,
+  type TickerKinds,
+} from '@/lib/online-rewards-shared'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
-type Tab = 'levels' | 'rules' | 'badges' | 'award' | 'board' | 'online'
+type Tab = 'levels' | 'rules' | 'badges' | 'award' | 'board' | 'online' | 'ticker'
 
 type Props = {
   online: OnlineConfig
+  ticker: TickerConfig
   levels: LevelDef[]
   rules: PointRules
   badges: SpecialBadge[]
@@ -38,7 +49,7 @@ type Props = {
   autoLabels: Record<AutoKind, string>
 }
 
-export function KpManager({ levels, rules, badges, awards, board, autoLabels, online }: Props) {
+export function KpManager({ levels, rules, badges, awards, board, autoLabels, online, ticker }: Props) {
   const [tab, setTab] = useState<Tab>('levels')
   return (
     <div className="flex flex-col gap-5">
@@ -57,6 +68,7 @@ export function KpManager({ levels, rules, badges, awards, board, autoLabels, on
             ['award', 'Rozet ver'],
             ['board', 'KP sıralaması'],
             ['online', 'Online ödülleri'],
+            ['ticker', 'Kazananlar şeridi'],
           ] as const
         ).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cn('h-9 shrink-0 whitespace-nowrap rounded-md px-3 text-xs font-bold', tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
@@ -70,6 +82,108 @@ export function KpManager({ levels, rules, badges, awards, board, autoLabels, on
       {tab === 'award' && <AwardDesk badges={badges} awards={awards} autoLabels={autoLabels} />}
       {tab === 'board' && <Board board={board} />}
       {tab === 'online' && <OnlineEditor initial={online} />}
+      {tab === 'ticker' && <TickerEditor initial={ticker} />}
+    </div>
+  )
+}
+
+const KIND_LABELS: [keyof TickerKinds, string][] = [
+  ['gorev', 'Görev kazananları'],
+  ['rozet', 'Rozet kazananları'],
+  ['online', 'Online ödülü alanlar'],
+]
+
+function TickerEditor({ initial }: { initial: TickerConfig }) {
+  const [cfg, setCfg] = useState(initial)
+  const [text, setText] = useState('')
+  const { pending, status, run } = useAction()
+  const add = () => {
+    const t = text.trim()
+    if (!t || cfg.announcements.length >= MAX_ANNOUNCEMENTS) return
+    setCfg((c) => ({ ...c, announcements: [...c.announcements, { id: Date.now().toString(36), text: t.slice(0, 140) }] }))
+    setText('')
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Sitenin üstündeki kayan şerit. Hangi kazananların görüneceğini seç, istersen kendi duyurularını ekle. Duyurular şeridin başında gösterilir ve yeni eklendiğinde üyelere küçük bildirim olarak düşer.
+        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <input type="checkbox" checked={cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} className="size-4 accent-primary" />
+            Şerit açık
+          </label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <input type="checkbox" checked={cfg.toast} onChange={(e) => setCfg((c) => ({ ...c, toast: e.target.checked }))} className="size-4 accent-primary" />
+            Yeni kazanımda bildirim göster
+          </label>
+        </div>
+      </div>
+
+      <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+        <legend className="px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Şeritte gösterilenler</legend>
+        <div className="flex flex-wrap gap-4">
+          {KIND_LABELS.map(([k, label]) => (
+            <label key={k} className="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" checked={cfg.kinds[k]} onChange={(e) => setCfg((c) => ({ ...c, kinds: { ...c.kinds, [k]: e.target.checked } }))} className="size-4 accent-primary" />
+              {label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+        <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          Duyurular ({cfg.announcements.length}/{MAX_ANNOUNCEMENTS})
+        </span>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={text}
+            maxLength={140}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                e.preventDefault()
+                add()
+              }
+            }}
+            placeholder="Örn: Bu akşam 21:00'de Okey turnuvası, kaçırma!"
+            className={field}
+            aria-label="Yeni duyuru"
+          />
+          <button onClick={add} disabled={!text.trim() || cfg.announcements.length >= MAX_ANNOUNCEMENTS} className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-40">
+            <Plus className="size-4" aria-hidden /> Duyuru ekle
+          </button>
+        </div>
+        {cfg.announcements.length ? (
+          <ul className="flex flex-col gap-2">
+            {cfg.announcements.map((a, i) => (
+              <li key={a.id} className="flex items-center gap-2 rounded-lg border border-border bg-background p-2">
+                <input
+                  value={a.text}
+                  maxLength={140}
+                  onChange={(e) => setCfg((c) => ({ ...c, announcements: c.announcements.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)) }))}
+                  className={cn(field, 'border-transparent bg-transparent')}
+                  aria-label="Duyuru metni"
+                />
+                <button onClick={() => setCfg((c) => ({ ...c, announcements: c.announcements.filter((_, j) => j !== i) }))} aria-label="Duyuruyu sil" className="shrink-0 rounded-md p-2 text-muted-foreground hover:text-destructive">
+                  <Trash2 className="size-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Henüz duyuru yok. Şeritte yalnızca kazananlar görünür.</p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={() => run(() => updateTicker(cfg))} disabled={pending} className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-60">
+          {pending ? 'Kaydediliyor...' : 'Kaydet'}
+        </button>
+        <StatusLine status={status} />
+      </div>
     </div>
   )
 }

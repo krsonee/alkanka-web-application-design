@@ -22,8 +22,15 @@ import {
   type PointRules,
 } from '@/lib/kanka-puan'
 
-import { saveOnlineConfig } from '@/lib/online-rewards'
-import type { OnlineConfig } from '@/lib/online-rewards-shared'
+import { saveOnlineConfig, saveTickerConfig } from '@/lib/online-rewards'
+import type { OnlineConfig, TickerConfig } from '@/lib/online-rewards-shared'
+
+export async function updateTicker(cfg: TickerConfig) {
+  return guard(async () => {
+    await saveTickerConfig(cfg)
+    return 'Kazananlar şeridi kaydedildi.'
+  })
+}
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 

@@ -6,7 +6,10 @@ import { credit } from '@/lib/member'
 import { ensureTasks } from '@/lib/tasks'
 import {
   cleanOnlineConfig,
+  cleanTickerConfig,
   DEFAULT_ONLINE,
+  DEFAULT_TICKER,
+  type TickerConfig,
   MAX_ONLINE_HOURS,
   nextReward,
   rewardForHour,
@@ -104,8 +107,34 @@ export async function readOnlineStatus(userId: string): Promise<OnlineStatus> {
   return statusFor(cfg, active ? Number(s.minutes) : 0, { member: true, active })
 }
 
-export type FeedKind = 'gorev' | 'rozet' | 'online'
+const TICKER_KEY = 'winners_ticker'
+
+export async function getTickerConfig(): Promise<TickerConfig> {
+  await ensureOnline()
+  const [row] = await rows<{ value: Partial<TickerConfig> }>(sql`SELECT value FROM kp_settings WHERE key = ${TICKER_KEY}`)
+  return row ? cleanTickerConfig(row.value) : DEFAULT_TICKER
+}
+
+export async function saveTickerConfig(input: TickerConfig) {
+  await ensureOnline()
+  const cfg = cleanTickerConfig(input)
+  await rows(sql`INSERT INTO kp_settings (key, value) VALUES (${TICKER_KEY}, ${JSON.stringify(cfg)}::jsonb)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+}
+
+export type FeedKind = 'gorev' | 'rozet' | 'online' | 'duyuru'
 export type FeedItem = { id: string; kind: FeedKind; name: string; title: string; coin: number; kp: number; at: string }
+export type Feed = { enabled: boolean; toast: boolean; items: FeedItem[] }
+
+/** Ticker payload: panel announcements first, then wins filtered by the panel's chosen kinds. */
+export async function tickerFeed(): Promise<Feed> {
+  const cfg = await getTickerConfig()
+  if (!cfg.enabled) return { enabled: false, toast: false, items: [] }
+  const wins = (await winnersFeed()).filter((i) => cfg.kinds[i.kind as keyof TickerConfig['kinds']])
+  const now = new Date().toISOString()
+  const notes: FeedItem[] = cfg.announcements.map((a) => ({ id: `d${a.id}`, kind: 'duyuru', name: '', title: a.text, coin: 0, kp: 0, at: now }))
+  return { enabled: true, toast: cfg.toast, items: [...notes, ...wins] }
+}
 
 /** Recent public wins across tasks, badges and online streaks. Names are reduced to first names. */
 export async function winnersFeed(limit = 30): Promise<FeedItem[]> {

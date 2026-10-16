@@ -3,18 +3,28 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { Award, Clock, ListChecks, X, type LucideIcon } from 'lucide-react'
-import type { FeedItem, FeedKind } from '@/lib/online-rewards'
+import { Award, Clock, ListChecks, Megaphone, X, type LucideIcon } from 'lucide-react'
+import type { Feed, FeedItem, FeedKind } from '@/lib/online-rewards'
 import { usePoints } from '@/components/alkanka/points-context'
 import { RewardChips } from './reward-chips'
 import { cn } from '@/lib/utils'
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<{ items: FeedItem[] }>)
+const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<Feed>)
 
 const KIND: Record<FeedKind, { icon: LucideIcon; verb: string; tone: string }> = {
   gorev: { icon: ListChecks, verb: 'görevi tamamladı', tone: 'bg-primary/15 text-primary' },
   rozet: { icon: Award, verb: 'rozetini kazandı', tone: 'bg-ruby/15 text-ruby' },
   online: { icon: Clock, verb: 'ödülünü aldı', tone: 'bg-live/15 text-live' },
+  duyuru: { icon: Megaphone, verb: '', tone: 'bg-primary text-primary-foreground' },
+}
+
+function Line({ item }: { item: FeedItem }) {
+  if (item.kind === 'duyuru') return <span className="font-semibold text-foreground">{item.title}</span>
+  return (
+    <>
+      <span className="font-bold text-foreground">{item.name}</span> <span className="text-foreground/90">{item.title}</span> {KIND[item.kind].verb}
+    </>
+  )
 }
 
 function ago(iso: string) {
@@ -34,7 +44,7 @@ function FeedEntry({ item }: { item: FeedItem }) {
         <Icon className="size-3.5" aria-hidden="true" />
       </span>
       <span className="whitespace-nowrap text-xs text-muted-foreground">
-        <span className="font-bold text-foreground">{item.name}</span> <span className="text-foreground/90">{item.title}</span> {k.verb}
+        <Line item={item} />
       </span>
       <RewardChips coin={item.coin} kp={item.kind === 'gorev' ? 0 : item.kp} size="xs" className="flex-nowrap" />
       <span className="text-[10px] text-muted-foreground/70">{ago(item.at)}</span>
@@ -58,7 +68,7 @@ export function WinnersTicker() {
     }
     const fresh = data.items.find((i) => !seen.current!.has(i.id))
     data.items.forEach((i) => seen.current!.add(i.id))
-    if (fresh && fresh.name !== member?.name?.split(' ')[0]) setToast(fresh)
+    if (fresh && data.toast && (fresh.kind === 'duyuru' || fresh.name !== member?.name?.split(' ')[0])) setToast(fresh)
   }, [data, member])
 
   useEffect(() => {
@@ -91,7 +101,7 @@ export function WinnersTicker() {
           <ul className="sr-only">
             {items.slice(0, 10).map((item) => (
               <li key={item.id}>
-                {item.name} {item.title} {KIND[item.kind].verb}
+                <Line item={item} />
               </li>
             ))}
           </ul>
@@ -107,7 +117,7 @@ export function WinnersTicker() {
             })()}
           </span>
           <span className="min-w-0 truncate text-xs text-muted-foreground">
-            <span className="font-bold text-foreground">{toast.name}</span> {toast.title} {KIND[toast.kind].verb}
+            <Line item={toast} />
           </span>
           <RewardChips coin={toast.coin} kp={toast.kind === 'gorev' ? 0 : toast.kp} size="xs" className="shrink-0 flex-nowrap" />
           <button onClick={() => setToast(null)} aria-label="Bildirimi kapat" className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-foreground">

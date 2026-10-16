@@ -64,7 +64,7 @@ import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
-import { getOnlineConfig } from '@/lib/online-rewards'
+import { getOnlineConfig, getTickerConfig } from '@/lib/online-rewards'
 import { BrandingEditor } from '@/components/panel/branding-editor'
 import { getBranding } from '@/lib/branding'
 import { LimitsManager } from '@/components/panel/limits-manager'
@@ -136,8 +136,8 @@ async function marketPanel() {
 }
 
 async function kpPanel() {
-  const [cfg, badges, awards, board, online] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig()])
-  return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} />
+    const [cfg, badges, awards, board, online, ticker] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig()])
+    return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} />
 }
 
 async function staffPanel() {
