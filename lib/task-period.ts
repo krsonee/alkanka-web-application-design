@@ -39,6 +39,14 @@ export function periodKey(period: TaskPeriod, date = new Date()) {
   return ''
 }
 
+/** Absolute start of the current period in Turkey time; null for one-off tasks. */
+export function periodStart(period: TaskPeriod, date = new Date()): Date | null {
+  const key = periodKey(period, date)
+  if (!key) return null
+  const day = key.startsWith('M') ? `${key.slice(1)}-01` : key.slice(1)
+  return new Date(`${day}T00:00:00+03:00`)
+}
+
 export function periodFromKey(key: string): TaskPeriod {
   return key.startsWith('D') ? 'daily' : key.startsWith('W') ? 'weekly' : key.startsWith('M') ? 'monthly' : 'once'
 }

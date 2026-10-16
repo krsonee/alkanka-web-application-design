@@ -2,7 +2,8 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureKp } from '@/lib/kanka-puan'
 import { credit, getBalance } from '@/lib/member'
-import { isPeriod, periodFromKey, periodKey, type TaskPeriod } from '@/lib/task-period'
+import { isPeriod, periodFromKey, periodKey, periodStart, type TaskPeriod } from '@/lib/task-period'
+import { isAutoKind, isTaskKind, KIND_META, TASK_GAMES, TASK_PLATFORMS, type TaskKind } from '@/lib/task-kinds'
 
 export type TaskRecord = {
   id: number
@@ -16,6 +17,9 @@ export type TaskRecord = {
   period: TaskPeriod
   startsAt: string | null
   endsAt: string | null
+  kind: TaskKind
+  target: number
+  param: string | null
 }
 
 export type TaskInput = {
@@ -30,6 +34,9 @@ export type TaskInput = {
   period: TaskPeriod
   startsAt: string
   endsAt: string
+  kind: TaskKind
+  target: number
+  param: string
 }
 
 function taskRef(id: number, period: TaskPeriod, key = periodKey(period)) {
@@ -79,6 +86,9 @@ export function ensureTasks() {
     await rows(sql`ALTER TABLE task_claims ADD COLUMN IF NOT EXISTS period_key text NOT NULL DEFAULT ''`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS task_claims_period_uniq ON task_claims (user_id, task_id, period_key)`)
     await rows(sql`ALTER TABLE task_claims DROP CONSTRAINT IF EXISTS task_claims_user_id_task_id_key`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'manual'`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target int NOT NULL DEFAULT 1`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS param text`)
   })().catch((error) => {
     ready = null
     throw error
@@ -113,12 +123,15 @@ function mapTask(row: Record<string, unknown>): TaskRecord {
     period: isPeriod(row.period) ? row.period : 'once',
     startsAt: row.starts_at ? new Date(String(row.starts_at)).toISOString() : null,
     endsAt: row.ends_at ? new Date(String(row.ends_at)).toISOString() : null,
+    kind: isTaskKind(row.kind) ? row.kind : 'manual',
+    target: Math.max(1, Number(row.target ?? 1) || 1),
+    param: row.param ? String(row.param) : null,
   }
 }
 
 export async function listTasks(): Promise<TaskRecord[]> {
   await ensureTasks()
-  const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at FROM tasks ORDER BY sort, id`)
+  const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param FROM tasks ORDER BY sort, id`)
   return found.map(mapTask)
 }
 
@@ -198,20 +211,30 @@ export async function saveTask(input: TaskInput): Promise<number> {
   const startsAt = cleanDate(input.startsAt, 'Başlangıç')
   const endsAt = cleanDate(input.endsAt, 'Bitiş')
   if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) throw new Error('Bitiş, başlangıçtan sonra olmalı.')
+  if (!isTaskKind(input.kind)) throw new Error('Görev türü geçersiz.')
+  const kind = input.kind
+  const meta = KIND_META[kind]
+  const target = meta.counted ? Number(input.target) : 1
+  if (!Number.isInteger(target) || target < 1 || target > 1000) throw new Error('Hedef sayı 1 ile 1000 arasında olmalı.')
+  const rawParam = clip(input.param, 60)
+  const param = !meta.param || !rawParam ? null : rawParam
+  if (param && meta.param === 'game' && !TASK_GAMES.some((g) => g.value === param)) throw new Error('Oyun geçersiz.')
+  if (param && meta.param === 'platform' && !TASK_PLATFORMS.some((g) => g.value === param)) throw new Error('Platform geçersiz.')
+  const approval = isAutoKind(kind) ? false : needsApproval
   await ensureTasks()
   const active = Boolean(input.active)
   if (input.id != null && input.id !== 0) {
     const id = Number(input.id)
     if (!Number.isInteger(id) || id < 1) throw new Error('Görev bulunamadı.')
     const updated = await rows<{ id: number }>(sql`UPDATE tasks SET
-      title = ${title}, detail = ${detail}, points = ${points}, link = ${link}, needs_approval = ${needsApproval}, active = ${active}, sort = ${sort},
-      period = ${period}, starts_at = ${startsAt}, ends_at = ${endsAt}
+      title = ${title}, detail = ${detail}, points = ${points}, link = ${link}, needs_approval = ${approval}, active = ${active}, sort = ${sort},
+      period = ${period}, starts_at = ${startsAt}, ends_at = ${endsAt}, kind = ${kind}, target = ${target}, param = ${param}
       WHERE id = ${id} RETURNING id`)
     if (!updated.length) throw new Error('Görev bulunamadı.')
     return id
   }
-  const inserted = await rows<{ id: number }>(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at)
-    VALUES (${title}, ${detail}, ${points}, ${link}, ${needsApproval}, ${active}, ${sort}, ${period}, ${startsAt}, ${endsAt}) RETURNING id`)
+  const inserted = await rows<{ id: number }>(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param)
+    VALUES (${title}, ${detail}, ${points}, ${link}, ${approval}, ${active}, ${sort}, ${period}, ${startsAt}, ${endsAt}, ${kind}, ${target}, ${param}) RETURNING id`)
   return Number(inserted[0]?.id)
 }
 
@@ -269,4 +292,46 @@ export async function rejectClaim(claimId: number): Promise<void> {
   await ensureTasks()
   const updated = await rows<{ id: number }>(sql`UPDATE task_claims SET status = 'reddedildi' WHERE id = ${claimId} AND status = 'beklemede' RETURNING id`)
   if (!updated.length) throw new Error('Talep bulunamadı.')
+}
+
+/** Counts what the member actually did in the task's current period, straight from the source tables. */
+export async function taskProgress(userId: string, task: TaskRecord): Promise<number> {
+  if (task.kind === 'manual') return 0
+  const start = periodStart(task.period)
+  const floor = task.startsAt ? Date.parse(task.startsAt) : 0
+  const since = new Date(Math.max(start?.getTime() ?? 0, floor)).toISOString()
+  const p = task.param
+  const count = async (query: ReturnType<typeof sql>) => Number((await rows<{ n: string }>(query).catch(() => []))[0]?.n ?? 0)
+  switch (task.kind) {
+    case 'game_play':
+    case 'game_win': {
+      const win = task.kind === 'game_win'
+      return count(sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND created_at >= ${since}
+        AND mode NOT IN ('odul', 'harcama', 'admin') AND result <> 'refund'
+        AND (${win}::boolean IS FALSE OR result = 'win') AND (${p}::text IS NULL OR game = ${p})`)
+    }
+    case 'sponsor_visit': {
+      let siteKey: string | null = null
+      if (p) {
+        const { activeSiteRecordId } = await import('@/lib/sites')
+        siteKey = await activeSiteRecordId(p).catch(() => null)
+        if (!siteKey) return 0
+      }
+      return count(sql`SELECT count(*) AS n FROM link_clicks WHERE user_id = ${userId} AND created_at >= ${since} AND (${siteKey}::text IS NULL OR site_id = ${siteKey})`)
+    }
+    case 'sponsor_link':
+      return count(sql`SELECT count(*) AS n FROM sponsor_accounts WHERE user_id = ${userId} AND status = 'approved' AND (${p}::text IS NULL OR site_id = ${p})`)
+    case 'invite':
+      return count(sql`SELECT count(*) AS n FROM referrals WHERE referrer_id = ${userId} AND created_at >= ${since}`)
+    case 'social_link':
+      return count(sql`SELECT count(*) AS n FROM social_accounts WHERE user_id = ${userId} AND status = 'verified' AND (${p}::text IS NULL OR platform = ${p})`)
+    case 'telegram_link':
+      return count(sql`SELECT count(*) AS n FROM tg_links WHERE user_id = ${userId}`)
+  }
+}
+
+export async function taskProgressMap(userId: string, tasks: TaskRecord[]): Promise<Record<number, number>> {
+  const auto = tasks.filter((t) => t.kind !== 'manual')
+  const values = await Promise.all(auto.map((t) => taskProgress(userId, t).catch(() => 0)))
+  return Object.fromEntries(auto.map((t, i) => [t.id, Math.min(values[i], t.target)]))
 }

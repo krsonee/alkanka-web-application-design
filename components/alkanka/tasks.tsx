@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import { Check, CalendarCheck, Flame } from 'lucide-react'
 import { checkInAction, completeTaskAction } from '@/app/actions/tasks'
 import { PERIODS, STREAK_DAYS, type TaskPeriod } from '@/lib/task-period'
+import { KIND_META, kindHref, type TaskKind } from '@/lib/task-kinds'
 import { cn } from '@/lib/utils'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
@@ -18,6 +19,10 @@ export type PublicTask = {
   link: string | null
   needsApproval: boolean
   period: TaskPeriod
+  kind: TaskKind
+  target: number
+  param: string | null
+  progress: number
   claim: 'beklemede' | 'onaylandi' | 'reddedildi' | null
   done: boolean
 }
@@ -192,7 +197,7 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
           <ul className="flex flex-col gap-2 xl:col-span-2">
             {tasks.map((task) => {
               const state = statusOf(task, claims[task.id], Boolean(done[task.id]))
-              const label = state === 'done' ? 'Tamam' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : `+${formatAC(task.points)}`
+              const label = state === 'done' ? 'Tamam' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? `Ödülü al +${formatAC(task.points)}` : `+${formatAC(task.points)}`
               const locked = state !== 'open' || pending
               const className = 'shrink-0 rounded-lg border border-primary/40 px-3 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/10 disabled:border-transparent disabled:bg-primary/10'
               return (
@@ -205,9 +210,19 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                       <span className="truncate text-sm font-semibold text-foreground">{task.title}</span>
                     </span>
                     {task.detail ? <span className="truncate text-xs text-muted-foreground">{task.detail}</span> : null}
+                    {task.kind !== 'manual' && task.target > 1 && state === 'open' ? (
+                      <span className="mt-1 flex w-full max-w-48 items-center gap-2" aria-label={`İlerleme ${task.progress}/${task.target}`}>
+                        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                          <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round((task.progress / task.target) * 100)}%` }} />
+                        </span>
+                        <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{task.progress}/{task.target}</span>
+                      </span>
+                    ) : null}
                     <DetailButton onClick={() => setDetail(task)} label="Nasıl yapılır?" />
                   </div>
-                  {task.link && state === 'open' ? (
+                  {state === 'open' && task.kind !== 'manual' && task.progress < task.target ? (
+                    <GoButton task={task} className={className} onBlocked={() => requireLogin()} />
+                  ) : task.link && state === 'open' ? (
                     <a href={task.link} target="_blank" rel="noopener noreferrer" onClick={(event) => openTask(event, task)} className={className}>
                       {label}
                     </a>
@@ -234,6 +249,7 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                 facts: [
                   { label: 'Ödül', value: `+${formatAC(selected.points)} KC` },
                   { label: 'Tekrar', value: PERIOD_LABEL[selected.period] },
+                  ...(selected.kind !== 'manual' ? [{ label: 'İlerleme', value: `${selected.progress}/${selected.target}` }] : []),
                   {
                     label: 'Durum',
                     value: statusOf(selected, claims[selected.id], Boolean(done[selected.id])) === 'done'
@@ -247,7 +263,9 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                 ],
                 steps: selected.detail ? [selected.detail] : undefined,
                 rules: [
-                  selected.needsApproval ? 'Puan, kontrol tamamlanınca yazılır.' : 'Puan görevi tamamlayınca yazılır.',
+                  selected.kind !== 'manual'
+                    ? `Otomatik kontrol edilir. ${KIND_META[selected.kind].hint}`
+                    : selected.needsApproval ? 'Puan, kontrol tamamlanınca yazılır.' : 'Puan görevi tamamlayınca yazılır.',
                   ...(selected.link ? ['Bağlantı yeni sekmede açılır.'] : []),
                   PERIOD_RULE[selected.period],
                 ],
@@ -259,12 +277,19 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
             <button
               type="button"
               onClick={() => {
+                const go = selected.kind !== 'manual' && selected.progress < selected.target ? kindHref(selected.kind, selected.param) : null
+                if (go) {
+                  if (!requireLogin()) return
+                  if (go.external) window.open(go.href, '_blank', 'noopener')
+                  else window.location.assign(go.href)
+                  return
+                }
                 if (selected.link) window.open(selected.link, '_blank', 'noopener,noreferrer')
                 complete(selected)
               }}
               className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground"
             >
-              {`Görevi yap, +${formatAC(selected.points)} KC`}
+              {selected.kind !== 'manual' && selected.progress >= selected.target ? `Ödülü al, +${formatAC(selected.points)} KC` : `Görevi yap, +${formatAC(selected.points)} KC`}
             </button>
           ) : null
         }
@@ -284,5 +309,24 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
         }
       />
     </section>
+  )
+}
+
+function GoButton({ task, className, onBlocked }: { task: PublicTask; className: string; onBlocked: () => boolean }) {
+  const go = kindHref(task.kind, task.param)
+  if (!go) return null
+  const text = task.target > 1 ? `Yap ${task.progress}/${task.target}` : 'Görevi yap'
+  return (
+    <a
+      href={go.href}
+      target={go.external ? '_blank' : undefined}
+      rel={go.external ? 'noopener' : undefined}
+      onClick={(event) => {
+        if (!onBlocked()) event.preventDefault()
+      }}
+      className={className}
+    >
+      {text}
+    </a>
   )
 }
