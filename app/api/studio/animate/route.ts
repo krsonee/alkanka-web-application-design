@@ -1,14 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
 import { addJob, getJob, readFile, storeFile } from '@/lib/studio'
-import { makeGif, makeVideo } from '@/lib/studio-animate'
+import { AI_GIF_SECONDS, makeGif, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { makeStickerIcon, makeVideoSticker } from '@/lib/studio-telegram'
 import { VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
 
 export const maxDuration = 300
 
-type Mode = 'gif' | 'video' | 'tgsticker' | 'tgicon'
-const MODES: Mode[] = ['gif', 'video', 'tgsticker', 'tgicon']
+type Mode = 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgicon'
+const MODES: Mode[] = ['gif', 'aigif', 'video', 'tgsticker', 'tgicon']
 
 export async function POST(request: NextRequest) {
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
@@ -35,6 +35,17 @@ export async function POST(request: NextRequest) {
     const result =
       mode === 'gif'
         ? { data: await makeGif(image), contentType: 'image/gif', ext: 'gif', cost: 0, folder: 'gifs' }
+        : mode === 'aigif'
+          ? {
+              data: await videoToGif(
+                await makeVideo({ image, format: source.format, motion, duration: AI_GIF_SECONDS, audio: false }),
+                source.format === '1:1',
+              ),
+              contentType: 'image/gif',
+              ext: 'gif',
+              cost: videoCost(AI_GIF_SECONDS, false),
+              folder: 'gifs',
+            }
         : mode === 'tgsticker'
           ? { data: await makeVideoSticker(image), contentType: 'video/webm', ext: 'webm', cost: 0, folder: 'stickers' }
           : mode === 'tgicon'
@@ -52,10 +63,11 @@ export async function POST(request: NextRequest) {
         ? `Telegram hareketli sticker · ${Math.round(result.data.length / 1024)} KB`
         : mode === 'tgicon'
           ? `Telegram paket ikonu · ${Math.round(result.data.length / 1024)} KB`
-          : motion || (mode === 'gif' ? 'Parlama efektli hareketli banner' : `${duration} sn video`)
+          : motion ||
+            (mode === 'gif' ? 'Işık ve parıltı efektli GIF' : mode === 'aigif' ? 'Yapay zeka hareketli GIF' : `${duration} sn video`)
     const job = await addJob({
       brandId: source.brandId,
-      kind: mode,
+      kind: mode === 'aigif' ? 'gif' : mode,
       format: telegram ? '1:1' : mode === 'video' && source.format === '1:1' ? '9:16' : source.format,
       prompt,
       pathname,

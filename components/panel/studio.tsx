@@ -42,7 +42,7 @@ import {
 import { cn } from '@/lib/utils'
 
 type StudioView = 'guide' | 'create' | 'brands' | 'library'
-type AnimateOptions = { mode: 'gif' | 'video' | 'tgsticker' | 'tgicon'; duration: number; audio: boolean; motion: string }
+type AnimateOptions = { mode: 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgicon'; duration: number; audio: boolean; motion: string }
 
 type Props = {
   brands: StudioBrand[]
@@ -164,7 +164,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
   }
 
   async function animate(job: StudioJob, options: AnimateOptions) {
-    const isVideo = options.mode === 'video'
+    const isVideo = options.mode === 'video' || options.mode === 'aigif'
     if (isVideo) setVideoRuns((n) => n + 1)
     else setRunning((n) => n + 1)
     try {
@@ -191,7 +191,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
     router.refresh()
   }
 
-  async function runAnimation(mode: 'gif' | 'video') {
+  async function runAnimation(mode: 'gif' | 'aigif' | 'video') {
     if (!animating) return
     setError('')
     const job = animating
@@ -343,7 +343,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
 
         {kind === 'gif' ? (
           <p className="rounded-xl bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
-            Önce banner üretilir, sonra üstünden parlama geçen ve hafif nefes alan döngülü bir GIF yapılır. GIF adımı ücretsizdir, logo ve yazılar hiç bozulmaz.
+            Önce banner üretilir, sonra sabit banner üstünden ışık süpürmesi, yanıp sönen yıldız parıltıları ve kenar parlaması olan döngülü bir GIF yapılır. Ücretsizdir, logo ve yazılar hiç kıpırdamaz. Karakterin gerçekten hareket etmesini istersen banner hazır olunca &quot;Hareketlendir&quot; içinden &quot;Yapay zeka GIF&quot; seç.
           </p>
         ) : null}
         {kind === 'video' ? (
@@ -430,7 +430,10 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => runAnimation('gif')} className={ghostBtn}>
-                <Film className="size-3.5" aria-hidden /> GIF yap · ücretsiz
+                <Film className="size-3.5" aria-hidden /> Efekt GIF · ücretsiz
+              </button>
+              <button type="button" onClick={() => runAnimation('aigif')} className={ghostBtn}>
+                <Film className="size-3.5" aria-hidden /> Yapay zeka GIF · ~{usd(videoCost(4, false))}
               </button>
               <button type="button" onClick={() => runAnimation('video')} className={primaryBtn}>
                 <Clapperboard className="size-4" aria-hidden /> Video üret · ~{usd(videoCost(duration, audio))}
