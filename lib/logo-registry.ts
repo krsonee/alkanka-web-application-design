@@ -1,9 +1,13 @@
 import { PREDICTIONS, SPECIAL_ODDS } from '@/components/alkanka/data'
 import { splitMatch } from '@/lib/split-match'
-import { siteOptions } from '@/lib/sites'
+import { listSites, toPublicSponsor } from '@/lib/sites'
 
 export async function listLogoSponsors() {
-  return (await siteOptions()).map((s) => ({ id: s.id, label: s.name, initials: s.initials }))
+  const all = await listSites().catch(() => [])
+  return all
+    .filter((site) => site.slug)
+    .map(toPublicSponsor)
+    .map((s) => ({ id: s.id, label: s.name, initials: s.initials }))
 }
 
 export const LOGO_TEAMS = Array.from(

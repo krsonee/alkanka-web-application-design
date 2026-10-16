@@ -12,6 +12,7 @@ import {
 import type { ActionState } from '@/app/panel/actions'
 import type { BlogPost } from '@/lib/blog'
 import { DEAL_LABELS, type Deal, type Verification } from '@/lib/deal-types'
+import { ImageField } from '@/components/panel/image-field'
 
 type Props = { posts: BlogPost[]; deals: Deal[]; publishing: boolean; verification: Verification; siteUrl: string }
 
@@ -133,7 +134,7 @@ function BlogEditor({ posts }: { posts: BlogPost[] }) {
         </label>
         <label className={label}>
           Kapak görseli linki (isteğe bağlı)
-          <input name="cover" maxLength={500} defaultValue={editing?.cover} placeholder="https://..." className={input} />
+          <ImageField key={editing?.slug ?? 'new'} name="cover" defaultValue={editing?.cover ?? ''} uploadId="guide-cover" />
         </label>
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" name="published" defaultChecked={editing?.published ?? true} className="size-4 accent-primary" />

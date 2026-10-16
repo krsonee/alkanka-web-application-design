@@ -53,6 +53,7 @@ import { MarketManager } from '@/components/panel/market-manager'
 import { GrowthManager } from '@/components/panel/growth-manager'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
+import { affLinkViews } from '@/lib/aff-links'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
 import { listProducts, listRequests, pendingCount } from '@/lib/market'
@@ -286,6 +287,8 @@ export default async function PanelPage() {
         accounts={await adminSponsorAccounts().catch(() => [])}
         period={currentPeriod()}
         siteUrl={SITE_URL}
+        affLinks={await affLinkViews().catch(() => [])}
+        affSites={(await listSites().catch(() => [])).map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
       />
     )),
     section(session, 'community', 'Topluluk', async () => (

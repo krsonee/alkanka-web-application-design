@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import { saveShare, type ActionState } from '@/app/panel/actions'
 import type { ShareSettings } from '@/lib/share'
+import { ImageField } from '@/components/panel/image-field'
 
 const input =
   'h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none'
@@ -61,10 +62,14 @@ export function ShareEditor({ saved }: { saved: ShareSettings }) {
             Site adı
             <input name="siteName" value={draft.siteName} onChange={set('siteName')} maxLength={40} placeholder={FALLBACK.siteName} className={input} />
           </label>
-          <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
-            Görsel / logo linki (1200×630)
-            <input name="image" value={draft.image} onChange={set('image')} placeholder="https://… veya /images/…" className={input} />
-          </label>
+          <ImageField
+            name="image"
+            label="Görsel (1200×630)"
+            value={draft.image}
+            onChange={(url) => setDraft((d) => ({ ...d, image: url }))}
+            uploadId="og"
+            hint="Bilgisayardan yükle, galeriden seç ya da link yapıştır."
+          />
         </div>
         <div className="flex flex-col gap-2">
           <span className="text-xs font-semibold text-muted-foreground">Önizleme</span>
