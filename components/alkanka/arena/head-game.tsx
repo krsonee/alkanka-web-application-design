@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import NextImage from 'next/image'
 import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Maximize2, Minimize2, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TableBrand } from './table-brand'
 
 export type Sport = 'futbol' | 'basket'
 export type HeadMode = 'bot'
@@ -952,6 +953,7 @@ export function HeadGame({
             aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
           />
           <OverlayControls k1={k1} />
+          <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
           {fullLandscape && (
             <button
               type="button"

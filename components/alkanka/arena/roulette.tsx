@@ -7,6 +7,7 @@ import { spinRoulette } from '@/app/actions/arena'
 import { RED, WHEEL, betLabel, betReturn, type RouletteBet } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
+import { TableBrand } from './table-brand'
 
 const SEG = 360 / WHEEL.length
 const numColor = (n: number) => (n === 0 ? 'zero' : RED.has(n) ? 'red' : 'black')
@@ -19,6 +20,7 @@ function Wheel({ rotation, result }: { rotation: number; result: number | null }
   }).join(',')
   return (
     <div className="relative mx-auto aspect-square w-full max-w-72">
+      <TableBrand center={false} plaque={false} />
       <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1 border-x-8 border-t-14 border-x-transparent border-t-primary" aria-hidden="true" />
       <div className="absolute inset-0 rounded-full border-8 border-wood p-1 shadow-2xl">
         <div

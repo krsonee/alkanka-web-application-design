@@ -22,13 +22,15 @@ import { initOkey101, okey101BotTurn, okey101Step, runOkey101Bots, viewOkey101, 
 import { batakBotTurn, batakStep, initBatak, runBatakBots, viewBatak, type BatakState } from '@/lib/games/batak'
 import { initMonopoly, monopolyBotTurn, monopolyStep, runMonopolyBots, type MonopolyState } from '@/lib/games/monopoly'
 import { initPisti, pistiBotTurn, pistiStep, runPistiBots, viewPisti, type PistiState } from '@/lib/games/pisti'
+import { initPapaz, papazBotTurn, papazStep, runPapazBots, viewPapaz, type PapazState } from '@/lib/games/papaz'
 
-export const PVP_GAMES = ['tavla', 'okey', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu', 'okey101', 'batak', 'monopoly', 'pisti'] as const
+export const PVP_GAMES = ['tavla', 'okey', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu', 'okey101', 'batak', 'monopoly', 'pisti', 'papaz'] as const
 /** Multi-seat games with server-side bots that can fill any empty seat. */
-export const SEAT_GAMES = ['okey101', 'batak', 'monopoly', 'pisti'] as const
+export const SEAT_GAMES = ['okey101', 'batak', 'monopoly', 'pisti', 'papaz'] as const
 export const isSeatGame = (g: string) => (SEAT_GAMES as readonly string[]).includes(g)
-type SeatState = Okey101State | BatakState | MonopolyState | PistiState
-const isSeatState = (s: PvpState): s is SeatState => s.kind === 'okey101' || s.kind === 'batak' || s.kind === 'monopoly' || s.kind === 'pisti'
+type SeatState = Okey101State | BatakState | MonopolyState | PistiState | PapazState
+const isSeatState = (s: PvpState): s is SeatState =>
+  s.kind === 'okey101' || s.kind === 'batak' || s.kind === 'monopoly' || s.kind === 'pisti' || s.kind === 'papaz'
 /** Games where both players play their own round and the scores are compared. */
 export const DUEL_GAMES = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu'] as const
 export const isDuelGame = (g: string) => (DUEL_GAMES as readonly string[]).includes(g)
@@ -90,7 +92,7 @@ export type DuelState = {
   scores: [{ for: number; against: number } | null, { for: number; against: number } | null]
 }
 
-export type PvpState = TavlaState | OkeyState | BilardoState | DuelState | Okey101State | BatakState | MonopolyState | PistiState
+export type PvpState = TavlaState | OkeyState | BilardoState | DuelState | Okey101State | BatakState | MonopolyState | PistiState | PapazState
 
 /** winnerSeats lists every seat that shares the win (team okey). An empty list means nobody at the table is paid. */
 export type Outcome = { winnerSeat: number | null; winnerSeats?: number[]; draw?: boolean; replay?: boolean } | null
@@ -103,6 +105,7 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
   if (game === 'okey101') return runOkey101Bots(initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
   if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant })).state
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
+  if (game === 'papaz') return runPapazBots(initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats })).state
   if (game === 'pisti') return runPistiBots(initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant, team: opts?.team })).state
   if (game === 'tavla') {
     let a = 0
@@ -158,18 +161,21 @@ function seatStep(s: SeatState, seat: number, a: Action) {
   if (s.kind === 'okey101') return okey101Step(s, seat, a)
   if (s.kind === 'batak') return batakStep(s, seat, a)
   if (s.kind === 'pisti') return pistiStep(s, seat, a)
+  if (s.kind === 'papaz') return papazStep(s, seat, a)
   return monopolyStep(s, seat, a)
 }
 function seatBots(s: SeatState) {
   if (s.kind === 'okey101') return runOkey101Bots(s)
   if (s.kind === 'batak') return runBatakBots(s)
   if (s.kind === 'pisti') return runPistiBots(s)
+  if (s.kind === 'papaz') return runPapazBots(s)
   return runMonopolyBots(s)
 }
 function seatBotTurn(s: SeatState, seat: number) {
   if (s.kind === 'okey101') return okey101BotTurn(s, seat)
   if (s.kind === 'batak') return batakBotTurn(s, seat)
   if (s.kind === 'pisti') return pistiBotTurn(s, seat)
+  if (s.kind === 'papaz') return papazBotTurn(s, seat)
   return monopolyBotTurn(s, seat)
 }
 const seatCount = (s: SeatState) => s.seats
@@ -442,6 +448,7 @@ export function viewState(state: PvpState | null, seat: number) {
   if (state.kind === 'okey101') return viewOkey101(state, seat)
   if (state.kind === 'batak') return viewBatak(state, seat)
   if (state.kind === 'pisti') return viewPisti(state, seat)
+  if (state.kind === 'papaz') return viewPapaz(state, seat)
   if (state.kind === 'okey') {
     const n = okeySeats(state)
     return {

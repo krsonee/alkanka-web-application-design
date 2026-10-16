@@ -7,6 +7,7 @@ import type { BallState, BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
+import { TableBrand } from './table-brand'
 
 const W = 1000
 const H = 500
@@ -906,6 +907,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           aria-label="Bilardo masası. İmleçle nişan al, tıklayarak nişanı kilitle. Sol-sağ ok tuşlarıyla döndür, yukarı-aşağı ile gücü ayarla, boşluk ile vur."
           className={cn('aspect-[1076/576] w-full touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary', yourTurn ? 'cursor-crosshair' : 'cursor-wait')}
         />
+        <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />
         {yourTurn && (
           <span
             className={cn(

@@ -1,0 +1,82 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { canPanel } from '@/lib/admin-auth'
+import {
+  adjustWallet,
+  banMember,
+  listMembers,
+  memberDetail,
+  restoreMember,
+  revokeSessions,
+  suspendMember,
+  unlinkTelegram,
+  type MemberDetail,
+  type MemberRow,
+  type MemberStatus,
+} from '@/lib/members-admin'
+
+type Result = { ok: true; message: string } | { ok: false; error: string }
+
+async function guard(fn: () => Promise<string>): Promise<Result> {
+  if (!(await canPanel('users'))) return { ok: false, error: 'Bu işlem için yetkin yok ya da oturum süren doldu.' }
+  try {
+    const message = await fn()
+    revalidatePath('/panel')
+    return { ok: true, message }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'İşlem yapılamadı.' }
+  }
+}
+
+export async function searchMembersAction(q: string, status: MemberStatus | 'tumu'): Promise<{ members: MemberRow[]; counts: Record<MemberStatus | 'tumu', number> } | null> {
+  if (!(await canPanel('users'))) return null
+  return listMembers({ q: q.slice(0, 80), status })
+}
+
+export async function memberDetailAction(userId: string): Promise<MemberDetail | null> {
+  if (!(await canPanel('users'))) return null
+  return memberDetail(String(userId))
+}
+
+export async function suspendAction(userId: string, duration: string, reason: string) {
+  return guard(async () => {
+    await suspendMember(String(userId), String(duration), String(reason))
+    return 'Hesap donduruldu, açık oturumları kapatıldı.'
+  })
+}
+
+export async function banAction(userId: string, reason: string, ipBlock: boolean) {
+  return guard(async () => {
+    await banMember(String(userId), String(reason), !!ipBlock)
+    return ipBlock ? 'Üye kalıcı banlandı, IP adresi de engellendi.' : 'Üye kalıcı banlandı.'
+  })
+}
+
+export async function restoreAction(userId: string) {
+  return guard(async () => {
+    await restoreMember(String(userId))
+    return 'Hesap tekrar açıldı.'
+  })
+}
+
+export async function walletAction(userId: string, amount: number, reason: string) {
+  return guard(async () => {
+    const balance = await adjustWallet(String(userId), Number(amount), String(reason))
+    return `Bakiye güncellendi. Yeni bakiye: ${balance.toLocaleString('tr-TR')} KC`
+  })
+}
+
+export async function revokeSessionsAction(userId: string) {
+  return guard(async () => {
+    await revokeSessions(String(userId))
+    return 'Tüm oturumlar kapatıldı. Üye tekrar giriş yapmak zorunda.'
+  })
+}
+
+export async function unlinkTelegramAction(userId: string) {
+  return guard(async () => {
+    await unlinkTelegram(String(userId))
+    return 'Telegram bağlantısı kaldırıldı.'
+  })
+}

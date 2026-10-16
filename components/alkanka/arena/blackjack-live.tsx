@@ -38,6 +38,7 @@ import {
 import { BlackjackTables, BlackjackWatchers } from "./blackjack-tables";
 import { TableChat } from "./table-chat";
 import { MobileTableChat } from "./mobile-table-chat";
+import { TableBrand } from './table-brand'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 type Seat = NonNullable<BlackjackLiveState["seats"][number]>;
@@ -587,6 +588,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
           <div className="mx-auto w-full max-w-[min(100%,58svh)] rounded-[999px] bg-wood p-2 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:max-w-none sm:p-3.5">
             <div className="felt-table relative mx-auto aspect-square w-full rounded-[999px] border-2 border-primary/40 sm:aspect-[16/9]">
+              <TableBrand corners={false} jako={false} />
               <div
                 className="pointer-events-none absolute inset-3 rounded-[999px] border border-primary/15 sm:inset-5"
                 aria-hidden="true"

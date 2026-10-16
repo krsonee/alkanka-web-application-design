@@ -364,6 +364,44 @@
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
+@keyframes wheel-bulb {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px var(--gold); }
+  50% { opacity: 0.35; box-shadow: 0 0 2px 0 var(--gold); }
+}
+
+@keyframes wheel-coin-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(8deg); }
+}
+
+@keyframes jako-idle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(-1.5deg); }
+}
+
+@keyframes jako-spin {
+  0% { transform: translateX(0) rotate(0deg); }
+  22% { transform: translateX(-10px) rotate(-7deg) scale(0.98); }
+  48% { transform: translateX(18px) rotate(9deg) scale(1.04); }
+  70% { transform: translateX(4px) rotate(2deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+@keyframes jako-cheer {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-14px) rotate(-4deg); }
+  50% { transform: translateY(0) rotate(0deg); }
+  75% { transform: translateY(-8px) rotate(3deg); }
+}
+
+@keyframes wheel-ring-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-bulb, .wheel-coin, .wheel-jako, .wheel-ring { animation: none !important; }
+}
+
 @keyframes glow {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }

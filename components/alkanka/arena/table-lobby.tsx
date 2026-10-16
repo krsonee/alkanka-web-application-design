@@ -21,6 +21,7 @@ import { BatakPvp } from './batak-pvp'
 import { BATAK_VARIANTS, type BatakVariant } from '@/lib/games/batak'
 import { MonopolyPvp } from './monopoly-pvp'
 import { PistiFinalScore, PistiPvp } from './pisti-pvp'
+import { PapazPvp } from './papaz-pvp'
 import { PISTI_TARGETS } from '@/lib/games/pisti'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
@@ -72,6 +73,7 @@ const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   batak: { seats: [4], rounds: [1, 3, 5] },
   monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
+  papaz: { seats: [2, 3, 4, 5, 6], rounds: [] },
 }
 
 export function TableLobby({
@@ -623,7 +625,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   const remote: Remote<unknown> = {
     id,
     // Tavla and bilardo render from seat 0's side for spectators; okey handles seat -1 itself.
-    seat: spectator && !['okey', 'okey101', 'batak', 'monopoly', 'pisti'].includes(data.game) ? 0 : mySeat,
+    seat: spectator && !['okey', 'okey101', 'batak', 'monopoly', 'pisti', 'papaz'].includes(data.game) ? 0 : mySeat,
     state: data.state,
     version: data.version,
     myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
@@ -633,7 +635,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     send,
   }
 
-  const immersive = data.game === 'pisti' && data.status === 'oynaniyor'
+  const immersive = (data.game === 'pisti' || data.game === 'papaz') && data.status === 'oynaniyor'
 
   return (
     <RoomShell
@@ -917,6 +919,7 @@ function GameSurface({ game, remote, done }: { game: string; remote: Remote<unkn
   if (game === 'batak') return <BatakPvp remote={r} />
   if (game === 'monopoly') return <MonopolyPvp remote={r} />
   if (game === 'pisti') return <PistiPvp remote={r} />
+  if (game === 'papaz') return <PapazPvp remote={r} />
   if (DUEL.includes(game)) {
     const mine = r.state?.scores?.[r.seat]
     if (mine || done) {

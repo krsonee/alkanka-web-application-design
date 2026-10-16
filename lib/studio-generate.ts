@@ -1,6 +1,7 @@
 import 'server-only'
 import { generateText } from 'ai'
 import sharp from 'sharp'
+import { fitStaticSticker } from '@/lib/studio-telegram'
 import { readFile } from '@/lib/studio'
 import type { StudioBrand, StudioKind } from '@/lib/studio-types'
 
@@ -93,11 +94,11 @@ async function chromaKeySticker(image: Buffer) {
       data[i + 1] = Math.max(r, b)
     }
   }
-  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+  const trimmed = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
     .trim({ threshold: 1 })
-    .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .webp({ quality: 92 })
+    .png()
     .toBuffer()
+  return fitStaticSticker(trimmed)
 }
 
 export async function runGeneration(input: Input) {

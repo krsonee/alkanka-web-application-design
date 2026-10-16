@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { rows, sql } from '@/lib/db'
 import { getSignupBonus } from '@/lib/site-texts'
+import { isBanned } from '@/lib/members-admin'
 
 export const SIGNUP_BONUS = 250
 
@@ -12,6 +13,7 @@ export async function getMember(): Promise<Member | null> {
   try {
     const session = await auth.api.getSession({ headers: await headers() })
     if (!session?.user) return null
+    if (await isBanned(session.user.id)) return null
     return { id: session.user.id, name: session.user.name || 'Kanka', email: session.user.email }
   } catch (error) {
     console.error('[member] oturum okunamadı', error)

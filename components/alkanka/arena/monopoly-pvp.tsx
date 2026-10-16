@@ -35,6 +35,7 @@ import {
 } from '@/lib/games/monopoly'
 import type { Remote } from './remote'
 import { EventFeed, EventSpotlight, MoneyFloat, useEventFeed, useMoneyDeltas, type GameEvent } from './monopoly-events'
+import { TableBrand } from './table-brand'
 
 // Physical board colours of the classic edition; these are game material, not UI theme.
 const GROUP_COLOR: Record<Group, string> = {
@@ -641,6 +642,7 @@ function BoardCenter({
         background: `radial-gradient(ellipse at 50% 45%, ${PAPER} 0%, ${PAPER_DEEP} 100%)`,
       }}
     >
+      <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
       <div
         className="absolute left-[7%] top-[9%] flex aspect-[5/3] w-[24%] -rotate-[42deg] items-center justify-center rounded-[1cqw] border-[0.35cqw] border-dashed shadow-[0_3px_0_oklch(0_0_0/0.15)]"
         style={{ background: GROUP_COLOR.orange, borderColor: WHITE }}

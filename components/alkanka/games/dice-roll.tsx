@@ -11,6 +11,7 @@ import { playMini } from '@/app/actions/wallet'
 import { usePoints } from '../points-context'
 import { useCatalog } from '../catalog-context'
 import { diceReward } from '@/lib/rewards-shared'
+import { TableBrand } from '../arena/table-brand'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -90,6 +91,7 @@ export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
 
   return (
     <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
+      <TableBrand center={false} />
       <header className="flex items-start justify-between gap-4">
         <div className="flex flex-col items-start gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">Mini oyun</span>

@@ -9,6 +9,7 @@ import { BrandLogo } from '../logo-selector'
 import { TileBack, TileFace, TurnSteps } from './okey'
 import { OkeyRack, useRack } from './okey-rack'
 import { findWinningDiscard, okeyFrom, type Okey as OkeyValue, type Tile } from './okey-engine'
+import { TableBrand } from './table-brand'
 
 type OkeyView = OkeyState & { deckCount: number; handCounts: number[]; oppSeat: number; seats: number; team: boolean; bots: number[]; last: OkeyLast[] }
 
@@ -85,6 +86,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
       )}
       <div className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl sm:p-3">
         <div className="relative flex min-h-72 flex-col justify-between gap-3 rounded-xl bg-felt p-2 sm:min-h-96 sm:p-5">
+          <TableBrand />
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-15">
             <BrandLogo />
           </div>

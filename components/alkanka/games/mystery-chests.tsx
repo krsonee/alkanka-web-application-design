@@ -13,6 +13,7 @@ import { DetailButton, DetailModal } from '../detail-modal'
 
 import { useCatalog } from '../catalog-context'
 import { CHEST_IDS } from '@/lib/rewards-shared'
+import { TableBrand } from '../arena/table-brand'
 
 const rulesFor = (dailyPlays: number) => [
   `Günde ${dailyPlays} sandık hakkın var, haklar her gün 00:00’da yenilenir.`,
@@ -68,6 +69,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
 
   return (
     <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
+      <TableBrand center={false} />
       <header className="flex items-start justify-between gap-4">
         <div className="flex flex-col items-start gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-gold">Günlük bonus</span>

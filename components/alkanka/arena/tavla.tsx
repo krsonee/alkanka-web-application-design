@@ -8,6 +8,7 @@ import type { TavlaState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
+import { TableBrand } from './table-brand'
 import {
   applyMove,
   botPlan,
@@ -295,7 +296,8 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           document.body,
         )}
       <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
-      <div className="tavla-wood rounded-2xl p-1.5 sm:p-3">
+      <div className="tavla-wood relative rounded-2xl p-1.5 sm:p-3">
+      <TableBrand center={false} corners={false} jako={false} />
       <div className="flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
         <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-5">
           <div className="flex h-[42%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>

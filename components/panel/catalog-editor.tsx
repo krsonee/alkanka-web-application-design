@@ -157,6 +157,13 @@ function FieldInput({ field, item, set, sponsors, library }: { field: Field; ite
   )
 }
 
+const EVENT_TEMPLATES: Item[] = [
+  { kind: 'Haftalık', title: 'Tavla Haftası', subtitle: 'En çok maç kazanan ödülü alır', hoursLeft: 168, entry: 0, prize: '5.000 KC', description: 'Hafta boyunca tavla masalarında en çok galibiyet alan ilk 3 oyuncu ödül kazanır.', steps: ['Tavla masasına otur', 'Maçları sonuna kadar oyna', 'Sıralamayı takip et'], rules: ['Yarıda bırakılan maçlar sayılmaz', 'Aynı rakiple en fazla 5 maç sayılır'], prizes: ['1. 2.500 KC', '2. 1.500 KC', '3. 1.000 KC'] },
+  { kind: 'Günlük', title: 'Okey Gecesi', subtitle: 'Bu akşam canlı Okey masaları', hoursLeft: 24, entry: 0, prize: '1.000 KC', description: 'Bu gece Okey ve 101 Okey masalarında en çok el kazanan oyuncu ödülü alır.', steps: ['Okey ya da 101 masasına otur', 'El kazan', 'Gece yarısı sonuçları gör'], rules: ['Sadece canlı masalar sayılır'], prizes: ['1. 1.000 KC'] },
+  { kind: 'Haftalık', title: 'Batak Ligi', subtitle: 'Haftalık puan yarışı', hoursLeft: 168, entry: 50, prize: '3.000 KC', description: 'Batak masalarında kazandığın her el lig puanı getirir. Hafta sonunda zirvedekiler kazanır.', steps: ['Lige katıl', 'Batak masalarında el kazan', 'Lig tablosunu takip et'], rules: ['Katılım ücreti bir kez alınır'], prizes: ['1. 1.500 KC', '2. 1.000 KC', '3. 500 KC'] },
+  { kind: 'Özel', title: 'Bilardo Düellosu', subtitle: 'Birebir eleme turnuvası', hoursLeft: 72, entry: 100, prize: '2.000 KC', description: 'Amerikan Bilardo düellolarında rakiplerini eleyerek finale çık.', steps: ['Kaydını yap', 'Eşleşmeni bekle', 'Düelloyu kazan'], rules: ['Faul kuralları geçerlidir', 'Süreyi dolduran faul yer'], prizes: ['Şampiyon 2.000 KC'] },
+]
+
 function ListEditor({ kind, initial, sponsors, library, hidden }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[] }) {
   const schema = SCHEMAS[kind]
   const [items, setItems] = useState<Item[]>(initial)
@@ -201,6 +208,27 @@ function ListEditor({ kind, initial, sponsors, library, hidden }: { kind: Kind; 
           Yeni ekle
         </button>
       </header>
+
+      {kind === 'events' && (
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
+          <span className="text-xs font-semibold text-muted-foreground">Hazır oyun etkinlikleri (listeye ekler, düzenleyip kaydet)</span>
+          <div className="flex flex-wrap gap-1.5">
+            {EVENT_TEMPLATES.map((t) => (
+              <button
+                key={String(t.title)}
+                type="button"
+                onClick={() => {
+                  setItems((list) => [{ ...schema.blank(), ...t, id: `events-${Date.now().toString(36)}` }, ...list])
+                  setOpen(0)
+                }}
+                className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
+              >
+                {String(t.title)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <ul className="flex flex-col gap-2">
         {items.map((item, i) => {

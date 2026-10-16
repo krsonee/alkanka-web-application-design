@@ -30,7 +30,7 @@ export function AccountSettings({
     setMsg(res.ok ? { ok: true, text: res.message ?? okText } : { ok: false, text: res.error ?? 'Olmadı.' })
 
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
+    <div className="grid grid-cols-12 items-start gap-6 [&>*]:col-span-12 lg:[&>section]:col-span-6">
       {msg && (
         <p className={cn('text-sm', msg.ok ? 'text-success' : 'text-destructive')} aria-live="polite">
           {msg.text}
@@ -177,7 +177,7 @@ export function AccountSettings({
         <h2 className="font-semibold text-foreground">Şifre</h2>
         {isOwner ? (
           <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
-            Ana yönetici (@{username}) şifresi Vercel ortam değişkeni ADMIN_PASSWORD&apos;dan gelir. Değiştirmek için v0 sağ üst menü, Vars bölümünden ADMIN_PASSWORD değerini güncelle.
+            Ana yönetici (@{username}) şifresi güvenli sunucu ayarlarında saklanır ve panelden değiştirilemez. Değiştirmek için site sahibinin proje ayarlarından güncellemesi gerekir.
           </p>
         ) : (
           <form

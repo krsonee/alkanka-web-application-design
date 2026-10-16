@@ -21,8 +21,8 @@ export function PushSender({ total, members, log, configured }: Props) {
   const [state, action, pending] = useActionState<ActionState, FormData>(sendPushAction, {})
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <form action={action} className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
+    <div className="grid grid-cols-12 gap-6">
+      <form action={action} className="col-span-12 flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 lg:col-span-7">
         <div className="flex items-center gap-2">
           <Bell className="size-5 text-primary" aria-hidden />
           <h2 className="font-display text-xl font-bold uppercase text-foreground">Bildirim gönder</h2>
@@ -82,7 +82,7 @@ export function PushSender({ total, members, log, configured }: Props) {
         </div>
       </form>
 
-      <aside className="flex flex-col gap-4">
+      <aside className="col-span-12 flex flex-col gap-4 lg:col-span-5">
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1 rounded-2xl border border-border bg-card p-4">
             <Smartphone className="size-4 text-primary" aria-hidden />
