@@ -1,5 +1,6 @@
 'use client'
 
+import { SeoGuide } from '@/components/panel/area-guides'
 import { useActionState, useState, useTransition } from 'react'
 import { ExternalLink, FileText, Loader2, Search, Trash2, Zap } from 'lucide-react'
 import {
@@ -24,6 +25,7 @@ const label = 'flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground
 export function SeoManager({ posts, deals, publishing, verification, siteUrl }: Props) {
   return (
     <div className="flex flex-col gap-6">
+      <SeoGuide />
       <SearchConsoleCard verification={verification} siteUrl={siteUrl} />
       <BlogEditor posts={posts} />
       <DealsCard deals={deals} publishing={publishing} />

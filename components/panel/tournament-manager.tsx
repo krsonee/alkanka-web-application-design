@@ -4,6 +4,7 @@ import { HideButton } from '@/components/panel/hide-button'
 import { useActionState, type ReactNode } from 'react'
 import { Loader2, Play, Plus, Shuffle, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TournamentGuide } from '@/components/panel/area-guides'
 import { ARENA_GAMES, ARENA_META } from '@/lib/arena'
 import { FORMAT_LABEL, FORMAT_SHORT, STATUS_LABEL, TOURNAMENT_FORMATS, type Tournament } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
@@ -265,6 +266,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
 export function TournamentManager({ tournaments, hidden = [] }: { tournaments: Tournament[]; hidden?: string[] }) {
   return (
     <div className="flex flex-col gap-6">
+      <TournamentGuide />
       <section className="flex flex-col gap-4 rounded-2xl border border-primary/40 bg-card p-5">
         <div className="flex flex-col gap-1">
           <h2 className="font-display text-xl font-bold uppercase text-foreground">Yeni turnuva oluştur</h2>
