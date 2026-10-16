@@ -364,6 +364,20 @@
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
+@keyframes wheel-bulb {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px var(--gold); }
+  50% { opacity: 0.35; box-shadow: 0 0 2px 0 var(--gold); }
+}
+
+@keyframes wheel-coin-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(8deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-bulb, .wheel-coin { animation: none !important; }
+}
+
 @keyframes glow {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
