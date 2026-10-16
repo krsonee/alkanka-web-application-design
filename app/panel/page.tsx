@@ -69,6 +69,16 @@ import { listLimits } from '@/lib/member-limits'
 import { StaffManager, type StaffRow } from '@/components/panel/staff-manager'
 import { AccountSettings } from '@/components/panel/account-settings'
 import { cleanPermissions } from '@/lib/panel-modules'
+import { MembersManager } from '@/components/panel/members-manager'
+import { AuditLog } from '@/components/panel/audit-log'
+import { listAudit, listMembers } from '@/lib/members-admin'
+import { levelMap } from '@/lib/kanka-puan'
+
+async function usersPanel() {
+  const [{ members, counts }, levels, cfg] = await Promise.all([listMembers(), levelMap().catch(() => ({}) as Record<string, number>), getKpConfig()])
+  const names = Object.fromEntries(Object.entries(levels).map(([id, n]) => [id, cfg.levels[n - 1]?.name ?? 'Çaylak']))
+  return <MembersManager initial={members} counts={counts} levels={names} />
+}
 
 function failed(label: string) {
   return <p className="text-sm text-destructive">{label} yüklenemedi.</p>
@@ -209,6 +219,7 @@ export default async function PanelPage() {
     messages,
     rewards,
     catalog,
+    users,
   ] = await Promise.all([
     section(session, 'texts', 'Site yazıları', () => <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />),
     section(session, 'branding', 'Logo ayarları', async () => {
@@ -315,7 +326,9 @@ export default async function PanelPage() {
       const [{ rewards: _rewards, ...catalog }, hidden, options] = await Promise.all([getCatalog({ includeHidden: true }), getHidden(), siteOptions()])
       return <CatalogEditor catalog={catalog} sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))} library={IMAGE_LIBRARY} hidden={hidden} />
     }),
+    section(session, 'users', 'Tüm üyeler', usersPanel),
   ])
+  const audit = session.isOwner ? await listAudit().then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
 
   const marketPending = can('market') ? await pendingCount().catch(() => 0) : 0
   const staff = session.isOwner ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
@@ -341,7 +354,9 @@ export default async function PanelPage() {
       </header>
       <div className="mx-auto max-w-7xl px-4 py-6">
         <ContentEditor
-          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio']))}
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
+          users={users}
+          audit={audit}
           isOwner={session.isOwner}
           slides={slides}
           heroes={heroes}

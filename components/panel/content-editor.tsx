@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import Image from 'next/image'
-import { ExternalLink, ImageIcon, RotateCcw, Save } from 'lucide-react'
+import { ChevronDown, ExternalLink, ImageIcon, RotateCcw, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { JAKO_POSES } from '@/lib/site-registry'
@@ -11,7 +11,7 @@ import { HideButton } from '@/components/panel/hide-button'
 
 type Fields = { eyebrow?: string; title?: string; description?: string; cta?: string; speech?: string; image?: string; pose?: string }
 
-type PanelTab = PanelModule | 'staff' | 'account'
+type PanelTab = PanelModule | 'staff' | 'account' | 'audit'
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
@@ -53,7 +53,11 @@ export function ContentEditor({
   limits,
   staff,
   account,
+  users,
+  audit,
 }: {
+  users: React.ReactNode
+  audit: React.ReactNode
   allowed: string[]
   isOwner: boolean
   branding: React.ReactNode
@@ -103,18 +107,27 @@ export function ContentEditor({
     })),
     {
       label: 'Ayarlar',
-      items: [...(isOwner ? [{ id: 'staff' as PanelTab, label: 'Personel & yetkiler' }] : []), { id: 'account' as PanelTab, label: 'Hesabım & 2FA' }],
+      items: [
+        ...(isOwner ? [{ id: 'staff' as PanelTab, label: 'Personel & yetkiler' }, { id: 'audit' as PanelTab, label: 'İşlem logları' }] : []),
+        { id: 'account' as PanelTab, label: 'Hesabım & 2FA' },
+      ],
     },
   ].filter((g) => g.items.length > 0)
   const tabs = groups.flatMap((g) => g.items.map((i) => i.id))
   const initial: PanelTab = marketPending > 0 && tabs.includes('market') ? 'market' : (tabs[0] ?? 'account')
   const [tab, setTab] = useState<PanelTab>(initial)
   const [filter, setFilter] = useState('')
+  const groupOf = (id: PanelTab) => groups.find((g) => g.items.some((i) => i.id === id))?.label ?? ''
+  const [open, setOpen] = useState<string[]>(() => [groupOf(initial)])
   useEffect(() => {
     const saved = window.location.hash.replace('#', '') as PanelTab
-    if (tabs.includes(saved)) setTab(saved)
+    if (tabs.includes(saved)) {
+      setTab(saved)
+      setOpen((o) => Array.from(new Set([...o, groupOf(saved)])))
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  const toggle = (label: string) => setOpen((o) => (o.includes(label) ? o.filter((l) => l !== label) : [...o, label]))
   const items = tab === 'slide' ? slides : heroes
   const q = filter.trim().toLocaleLowerCase('tr')
   const shown = groups
@@ -137,11 +150,24 @@ export function ContentEditor({
           placeholder="Bölüm ara…"
           className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
         />
-        <div className="flex gap-3 overflow-x-auto lg:flex-col lg:overflow-visible">
-          {shown.map((g) => (
-            <div key={g.label} className="flex shrink-0 flex-col gap-1">
-              <span className="px-2 text-xs font-semibold uppercase tracking-wider text-primary">{g.label}</span>
-              <div className="flex gap-1 lg:flex-col">
+        <div className="flex max-h-[60dvh] flex-col gap-1 overflow-y-auto lg:max-h-none lg:overflow-visible">
+          {shown.map((g) => {
+            const expanded = !!q || open.includes(g.label)
+            const active = g.items.some((i) => i.id === tab)
+            return (
+            <div key={g.label} className="flex flex-col gap-1">
+              <button
+                onClick={() => toggle(g.label)}
+                aria-expanded={expanded}
+                className={cn(
+                  'flex items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider hover:bg-secondary',
+                  active ? 'text-primary' : 'text-muted-foreground',
+                )}
+              >
+                {g.label}
+                <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} aria-hidden="true" />
+              </button>
+              <div className={cn('flex-col gap-1 pl-1', expanded ? 'flex' : 'hidden')}>
                 {g.items.map((i) => (
                   <button
                     key={i.id}
@@ -157,7 +183,8 @@ export function ContentEditor({
                 ))}
               </div>
             </div>
-          ))}
+            )
+          })}
           {shown.length === 0 && <p className="px-2 text-sm text-muted-foreground">Bölüm bulunamadı.</p>}
         </div>
       </nav>
@@ -166,6 +193,10 @@ export function ContentEditor({
         <p className="text-sm text-muted-foreground">Bu bölüme erişim yetkin yok.</p>
       ) : tab === 'staff' ? (
         staff
+      ) : tab === 'audit' ? (
+        audit
+      ) : tab === 'users' ? (
+        users
       ) : tab === 'account' ? (
         account
       ) : tab === 'branding' ? (
