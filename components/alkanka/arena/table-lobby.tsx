@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import useSWR from 'swr'
-import { ArrowLeft, Check, Clock, Coins, Eye, Loader2, Plus, Swords, Trophy, Users, X } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Coins, Eye, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
 import { FitToScreen } from './fit-to-screen'
 import { cn } from '@/lib/utils'
-import { claimTableTimeout, closeTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
+import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
@@ -162,9 +162,20 @@ export function TableLobby({
             <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Masalarım</h3>
             {mine.map((t) => (
               <TableRowCard key={t.id} t={t}>
-                <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
-                  {t.status === 'bekliyor' ? 'Masaya dön' : 'Oyuna dön'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <LeaveTableButton
+                    id={t.id}
+                    running={t.status === 'oynaniyor'}
+                    stake={t.stake}
+                    onDone={() => {
+                      refresh()
+                      void mutate()
+                    }}
+                  />
+                  <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+                    {t.status === 'bekliyor' ? 'Masaya dön' : 'Oyuna dön'}
+                  </button>
+                </div>
               </TableRowCard>
             ))}
           </div>
@@ -602,7 +613,20 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             onExpire={() => void mutate()}
           />
         )}
-        <MobileTableChat key={`m-${id}`} tableId={id} />
+        <div className="flex items-center gap-2">
+          {!spectator && mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (
+            <LeaveTableButton
+              id={id}
+              running
+              stake={data.stake}
+              onDone={() => {
+                refresh()
+                onLeave()
+              }}
+            />
+          )}
+          <MobileTableChat key={`m-${id}`} tableId={id} />
+        </div>
       </div>
 
       {msg && (
@@ -618,6 +642,17 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
             <p className="text-pretty text-sm text-muted-foreground">Masan açık. Bir kanka oturduğunda oyun otomatik başlar.</p>
             {mySeat >= 0 && !data.tournamentId && <InviteButton tableId={id} />}
+            {mySeat > 0 && !data.tournamentId && (
+              <LeaveTableButton
+                id={id}
+                running={false}
+                stake={data.stake}
+                onDone={() => {
+                  refresh()
+                  onLeave()
+                }}
+              />
+            )}
             {mySeat === 0 && !data.tournamentId && (
               <button
                 disabled={busy}
@@ -842,6 +877,56 @@ function RoomShell({ children, onLeave, title }: { children: React.ReactNode; on
         <h3 className="truncate font-bold text-foreground">{title ?? 'Masa'}</h3>
       </div>
       {children}
+    </div>
+  )
+}
+
+function LeaveTableButton({ id, running, stake, onDone }: { id: string; running: boolean; stake: number; onDone: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
+      >
+        <LogOut className="size-4" aria-hidden="true" />
+        Masadan kalk
+      </button>
+    )
+  }
+
+  return (
+    <div role="alertdialog" aria-label="Masadan kalkmayı onayla" className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">
+        {error ?? (running ? `Hükmen kaybedersin (-${formatAC(stake)} KC).` : 'Bahsin iade edilir.')}
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          setError(null)
+          const r = await leaveGameTable(id)
+          setBusy(false)
+          if (!r.ok) {
+            setError(r.error ?? 'Kalkamadın, tekrar dene.')
+            return
+          }
+          setConfirming(false)
+          onDone()
+        }}
+        className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-2 text-sm font-bold text-foreground disabled:opacity-60"
+      >
+        {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+        Kalk
+      </button>
+      <button type="button" disabled={busy} onClick={() => setConfirming(false)} className="rounded-lg px-2 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground">
+        Vazgeç
+      </button>
     </div>
   )
 }

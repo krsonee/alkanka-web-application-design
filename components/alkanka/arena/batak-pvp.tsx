@@ -413,13 +413,14 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
       </section>
 
       <section aria-label="Puan tablosu" className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex items-center gap-3 border-b border-border px-3 py-2.5 sm:px-4">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+        <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5 sm:gap-3 sm:px-4 sm:py-2.5">
+          <span className="hidden size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary sm:flex">
             <Trophy className="size-4" aria-hidden="true" />
           </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold text-foreground">Puan tablosu</h3>
-            <p className="text-xs tabular-nums text-muted-foreground">
+          <Trophy className="size-3.5 shrink-0 text-primary sm:hidden" aria-hidden="true" />
+          <div className="flex min-w-0 flex-1 items-baseline gap-2 sm:flex-col sm:items-start sm:gap-0">
+            <h3 className="text-xs font-bold text-foreground sm:text-sm">Puan tablosu</h3>
+            <p className="truncate text-[11px] tabular-nums text-muted-foreground sm:text-xs">
               El {s.handNo}/{s.handsTotal} · {variantLabel(variant)}
             </p>
           </div>
@@ -427,14 +428,14 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
             type="button"
             onClick={() => setShowScores((v) => !v)}
             aria-expanded={showScores}
-            className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-bold text-foreground transition-colors hover:bg-secondary"
+            className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-bold text-foreground transition-colors hover:bg-secondary sm:px-2.5 sm:py-1.5 sm:text-xs"
           >
             {showScores ? 'Gizle' : 'El el'}
             <ChevronDown className={cn('size-3.5 transition-transform', showScores && 'rotate-180')} aria-hidden="true" />
           </button>
         </div>
 
-        <ol className={cn('grid gap-2 p-2 sm:gap-3 sm:p-3', n === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
+        <ol className={cn('grid gap-1.5 p-1.5 sm:gap-3 sm:p-3', n === 3 ? 'grid-cols-3' : 'grid-cols-4')}>
           {ranking.map((seat, rank) => {
             const last = s.results.at(-1)?.scores[seat]
             const goal = variant === 'koz-maca' ? s.bids[seat] : s.bidder === seat ? s.highBid : null
@@ -445,34 +446,37 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               <li
                 key={seat}
                 className={cn(
-                  'relative flex min-w-0 flex-col gap-2 rounded-xl border p-2.5 sm:p-3',
+                  'relative flex min-w-0 flex-col gap-1 rounded-lg border p-1.5 sm:gap-2 sm:rounded-xl sm:p-3',
                   leader ? 'border-gold/60 bg-gold/10' : isMe ? 'border-primary/40 bg-primary/5' : 'border-border bg-secondary/40',
                   s.turn === seat && 'ring-2 ring-gold/50',
                 )}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-1 sm:gap-2">
                   <span
                     className={cn(
-                      'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-black tabular-nums',
+                      'flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black tabular-nums sm:size-6 sm:text-xs',
                       leader ? 'bg-gold text-gold-foreground' : 'bg-background text-muted-foreground ring-1 ring-border',
                     )}
                   >
-                    {leader ? <Crown className="size-3.5" aria-label="Lider" /> : rank + 1}
+                    {leader ? <Crown className="size-2.5 sm:size-3.5" aria-label="Lider" /> : rank + 1}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">{nameOf(seat)}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-foreground sm:text-sm">{nameOf(seat)}</span>
                   {s.bidder === seat && variant !== 'koz-maca' && (
-                    <span className="shrink-0 rounded bg-gold px-1 text-[10px] font-bold text-gold-foreground">İhale</span>
+                    <span className="hidden shrink-0 rounded bg-gold px-1 text-[10px] font-bold text-gold-foreground sm:inline">İhale</span>
+                  )}
+                  {s.bidder === seat && variant !== 'koz-maca' && (
+                    <span className="size-1.5 shrink-0 rounded-full bg-gold sm:hidden" aria-label="İhale" />
                   )}
                 </div>
 
-                <div className="flex items-end justify-between gap-2">
-                  <span className={cn('font-display text-2xl font-black leading-none tabular-nums sm:text-3xl', s.totals[seat] < 0 ? 'text-destructive' : 'text-foreground')}>
+                <div className="flex items-end justify-between gap-1 sm:gap-2">
+                  <span className={cn('font-display text-lg font-black leading-none tabular-nums sm:text-3xl', s.totals[seat] < 0 ? 'text-destructive' : 'text-foreground')}>
                     {s.totals[seat]}
                   </span>
                   {last != null && (
                     <span
                       className={cn(
-                        'rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums',
+                        'rounded px-1 py-0.5 text-[10px] font-bold leading-none tabular-nums sm:rounded-md sm:px-1.5 sm:text-xs',
                         last < 0 ? 'bg-destructive/15 text-destructive' : last > 0 ? 'bg-primary/15 text-primary' : 'bg-background text-muted-foreground',
                       )}
                       aria-label={`Son el ${last}`}
@@ -482,15 +486,15 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                   )}
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between text-[11px] tabular-nums text-muted-foreground">
-                    <span>Bu el</span>
+                <div className="flex flex-col gap-0.5 sm:gap-1">
+                  <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground sm:text-[11px]">
+                    <span className="hidden sm:inline">Bu el</span>
                     <span className="font-semibold text-foreground">
                       {taken}
-                      {goal != null ? ` / ${goal}` : ''} el
+                      {goal != null ? `/${goal}` : ''} el
                     </span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-background" aria-hidden="true">
+                  <div className="h-1 overflow-hidden sm:h-1.5 rounded-full bg-background" aria-hidden="true">
                     <div
                       className={cn('h-full rounded-full transition-[width] duration-500', goal != null && taken >= goal ? 'bg-primary' : 'bg-gold')}
                       style={{ width: `${Math.min(100, (taken / Math.max(1, goal ?? maxTricks)) * 100)}%` }}

@@ -6,7 +6,7 @@ import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/membe
 import { getArenaSettings } from '@/lib/arena-server'
 import { ARENA_META, isArenaGame } from '@/lib/arena'
 import { bjAct, bjDeal, bjPayout, bjPublic, betLabel, betReturn, validBet, type BjState, type RouletteBet } from '@/lib/casino'
-import { actOnTable, cancelTable, claimTimeout, createTable, joinTable } from '@/lib/pvp/tables'
+import { actOnTable, cancelTable, claimTimeout, createTable, joinTable, leaveTable } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
@@ -276,6 +276,15 @@ export async function inviteToTable(id: string) {
 export async function playMove(id: string, version: number, action: { type: string; [k: string]: unknown }) {
   try {
     await actOnTable(await member(), id, version, action)
+    return { ok: true as const }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function leaveGameTable(id: string) {
+  try {
+    await leaveTable(await member(), id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)

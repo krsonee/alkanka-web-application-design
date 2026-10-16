@@ -34,6 +34,7 @@ import {
   type MonopolyState,
 } from '@/lib/games/monopoly'
 import type { Remote } from './remote'
+import { EventFeed, EventSpotlight, MoneyFloat, useEventFeed, useMoneyDeltas, type GameEvent } from './monopoly-events'
 
 // Physical board colours of the classic edition; these are game material, not UI theme.
 const GROUP_COLOR: Record<Group, string> = {
@@ -82,34 +83,71 @@ function cellCenter(i: number) {
   return { x: ((x + w / 2) / UNITS) * 100, y: ((y + h / 2) / UNITS) * 100 }
 }
 
-/** Walks each pawn one square at a time toward its real position so moves read as movement, not teleports. */
-function useWalkingPawns(target: number[]) {
+const TURN_GAP_MS = 650
+
+/**
+ * Walks pawns one square at a time, one player at a time, in turn order starting
+ * from whoever held the turn before this update — so a batch of bot moves that
+ * arrives in a single server response still plays out sequentially.
+ */
+function useWalkingPawns(target: number[], turn: number) {
   const [shown, setShown] = useState(target)
+  const [walker, setWalker] = useState<number | null>(null)
   const shownRef = useRef(target)
+  const startRef = useRef(turn)
+  const turnRef = useRef(turn)
   const key = target.join(',')
 
   useEffect(() => {
     const goal = key.split(',').map(Number)
-    if (shownRef.current.length !== goal.length) {
+    const n = goal.length
+    if (shownRef.current.length !== n) {
       shownRef.current = goal
       setShown(goal)
+      startRef.current = turnRef.current
       return
     }
-    const id = window.setInterval(() => {
-      const next = shownRef.current.map((p, i) => {
-        const t = goal[i]
-        if (p === t) return p
-        const steps = (t - p + 40) % 40
-        return steps > 12 ? t : (p + 1) % 40
-      })
+    const start = startRef.current
+    const order = Array.from({ length: n }, (_, k) => (start + k) % n)
+    let timer = 0
+    let current: number | null = null
+
+    const tick = () => {
+      const seat = order.find((i) => shownRef.current[i] !== goal[i])
+      if (seat === undefined) {
+        current = null
+        setWalker(null)
+        startRef.current = turnRef.current
+        return
+      }
+      if (current !== null && current !== seat) {
+        current = seat
+        setWalker(seat)
+        timer = window.setTimeout(tick, TURN_GAP_MS)
+        return
+      }
+      current = seat
+      setWalker(seat)
+      const p = shownRef.current[seat]
+      const t = goal[seat]
+      const steps = (t - p + 40) % 40
+      const next = [...shownRef.current]
+      next[seat] = steps > 12 ? t : (p + 1) % 40
       shownRef.current = next
       setShown(next)
-      if (next.every((p, i) => p === goal[i])) window.clearInterval(id)
-    }, STEP_MS)
-    return () => window.clearInterval(id)
+      timer = window.setTimeout(tick, next[seat] === t ? TURN_GAP_MS : STEP_MS)
+    }
+
+    timer = window.setTimeout(tick, STEP_MS)
+    return () => window.clearTimeout(timer)
   }, [key])
 
-  return shown
+  useEffect(() => {
+    turnRef.current = turn
+    if (shownRef.current.every((p, i) => p === target[i])) startRef.current = turn
+  }, [turn, target])
+
+  return { shown, walker }
 }
 
 function SquareIcon({ i, className }: { i: number; className: string }) {
@@ -148,13 +186,19 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   const me = remote.spectator ? -1 : remote.seat
   const myTurn = remote.myTurn
   const [focus, setFocus] = useState<number | null>(null)
-  const [tab, setTab] = useState<'deed' | 'props' | 'log'>('props')
+  const [tab, setTab] = useState<'deed' | 'props'>('props')
   const nameOf = (seat: number) => (seat === me ? 'Sen' : remote.names[seat] ?? `Oyuncu ${seat + 1}`)
   const fill = (t: string) => t.replace(/@(\d)/g, (_, d) => nameOf(Number(d)))
 
   const realPos = useMemo(() => s.players.map((p) => p.pos), [s.players])
-  const shownPos = useWalkingPawns(realPos)
+  const { shown: shownPos, walker } = useWalkingPawns(realPos, s.turn)
   const walking = shownPos.some((p, i) => p !== realPos[i])
+  const shownTurn = walking && walker !== null ? walker : s.turn
+  const { feed, batch } = useEventFeed(s.log, walking)
+  const { displayMoney, deltas } = useMoneyDeltas(
+    s.players.map((p) => p.money),
+    walking,
+  )
 
   const myPlayer = me >= 0 ? s.players[me] : null
   const myProps = me >= 0 ? BOARD.map((_, i) => i).filter((i) => s.owner[i] === me) : []
@@ -180,7 +224,8 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               key={i}
               seat={i}
               name={nameOf(i)}
-              money={p.money}
+              money={displayMoney[i] ?? p.money}
+              delta={deltas ? { id: deltas.id, value: deltas.values[i] ?? 0 } : null}
               worth={netWorth(s, i)}
               isBot={s.bots.includes(i)}
               inJail={p.inJail}
@@ -216,9 +261,11 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               <BoardCenter
                 s={s}
                 walking={walking}
-                activeName={active ? nameOf(s.turn) : ''}
+                activeName={active ? nameOf(shownTurn) : ''}
                 activeSquareIndex={active?.pos ?? 0}
                 note={s.note ? fill(s.note) : myTurn ? 'Sıra sende, zarları at.' : `${nameOf(s.turn)} oynuyor`}
+                batch={batch}
+                nameOf={nameOf}
               />
 
               <div className="pointer-events-none absolute inset-0" aria-hidden="true">
@@ -239,7 +286,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
                       y={y + dy}
                       stepKey={pos}
                       moving={pos !== p.pos}
-                      active={s.turn === i}
+                      active={shownTurn === i}
                       zIndex={Math.round((y + dy) * 10)}
                     />
                   )
@@ -250,7 +297,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
         </div>
       </div>
 
-      <section aria-label="Hamle" className="lg:col-start-2 lg:row-start-2">
+      <section aria-label="Hamle" className="flex flex-col gap-3 lg:col-start-2 lg:row-start-2">
         <ActionPanel
           s={s}
           me={me}
@@ -258,20 +305,20 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
           busy={remote.busy}
           walking={walking}
           send={remote.send}
-          activeName={active ? nameOf(s.turn) : ''}
+          activeName={active ? nameOf(shownTurn) : ''}
           activeSquareIndex={active?.pos ?? 0}
           ownerName={activeSquare && s.owner[active!.pos] != null ? nameOf(s.owner[active!.pos]!) : null}
           onOpenDeed={openDeed}
         />
+        <EventFeed feed={feed} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
       </section>
 
       <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card lg:col-start-2 lg:row-start-3">
-        <div role="tablist" aria-label="Panel" className="grid grid-cols-3 gap-1 border-b border-border p-1.5">
+        <div role="tablist" aria-label="Panel" className="grid grid-cols-2 gap-1 border-b border-border p-1.5">
           {(
             [
               ['props', `Mülklerim${myProps.length ? ` · ${myProps.length}` : ''}`],
               ['deed', 'Tapu'],
-              ['log', 'Akış'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -349,15 +396,6 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               </ul>
             ))}
 
-          {tab === 'log' && (
-            <ol className="flex max-h-80 flex-col gap-1.5 overflow-y-auto text-sm leading-relaxed text-muted-foreground" aria-live="polite">
-              {[...s.log].reverse().slice(0, 40).map((l, k) => (
-                <li key={`${k}-${l}`} className={cn(k === 0 && 'font-semibold text-foreground')}>
-                  {fill(l)}
-                </li>
-              ))}
-            </ol>
-          )}
         </div>
       </section>
     </div>
@@ -368,6 +406,7 @@ function PlayerChip({
   seat,
   name,
   money,
+  delta,
   worth,
   isBot,
   inJail,
@@ -378,6 +417,7 @@ function PlayerChip({
   seat: number
   name: string
   money: number
+  delta: { id: number; value: number } | null
   worth: number
   isBot: boolean
   inJail: boolean
@@ -388,7 +428,8 @@ function PlayerChip({
   return (
     <li
       className={cn(
-        'flex min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 transition-colors sm:gap-3 sm:p-2',
+        'relative flex min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 transition-colors sm:gap-3 sm:p-2',
+        delta && delta.value < 0 && 'motion-safe:animate-[bj-lose-shake_450ms_ease-in-out]',
         active ? 'border-primary bg-primary/10' : 'border-border',
         out && 'opacity-45 grayscale',
       )}
@@ -415,6 +456,7 @@ function PlayerChip({
         </p>
       </div>
       {active && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" aria-label="Sırada" />}
+      {delta && delta.value !== 0 && <MoneyFloat key={delta.id} id={delta.id} delta={delta.value} />}
     </li>
   )
 }
@@ -554,10 +596,27 @@ function Pawn({ seat, x, y, stepKey, moving, active, zIndex }: { seat: number; x
   )
 }
 
-function BoardCenter({ s, walking, activeName, activeSquareIndex, note }: { s: MonopolyState; walking: boolean; activeName: string; activeSquareIndex: number; note: string }) {
+function BoardCenter({
+  s,
+  walking,
+  activeName,
+  activeSquareIndex,
+  note,
+  batch,
+  nameOf,
+}: {
+  s: MonopolyState
+  walking: boolean
+  activeName: string
+  activeSquareIndex: number
+  note: string
+  batch: GameEvent[]
+  nameOf: (seat: number) => string
+}) {
   const sq = BOARD[activeSquareIndex]
   const color = sq.type === 'property' ? GROUP_COLOR[sq.group] : INK
   const rollKey = `${s.turn}-${s.round}-${s.dice?.join('') ?? 'x'}`
+  const hasSpotlight = !walking && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info')
 
   return (
     <div
@@ -588,7 +647,13 @@ function BoardCenter({ s, walking, activeName, activeSquareIndex, note }: { s: M
         </span>
       </div>
 
-      <div className="relative -rotate-[42deg] select-none" aria-hidden="true">
+      <div
+        className={cn(
+          'pointer-events-none absolute inset-0 flex -rotate-[42deg] select-none items-center justify-center transition-opacity duration-500',
+          hasSpotlight ? 'opacity-15' : s.dice ? 'opacity-30' : 'opacity-100',
+        )}
+        aria-hidden="true"
+      >
         <span
           className="block rounded-[0.8cqw] border-[0.5cqw] px-[3cqw] py-[0.6cqw] font-display text-[6.4cqw] font-black uppercase leading-none tracking-wide shadow-[0_0.8cqw_0_oklch(0_0_0/0.18)]"
           style={{ background: GROUP_COLOR.red, borderColor: WHITE, color: WHITE }}
@@ -609,31 +674,24 @@ function BoardCenter({ s, walking, activeName, activeSquareIndex, note }: { s: M
           </div>
         )}
 
-        {s.card ? (
-          <div
-            key={s.card.text}
-            className="w-full max-w-[90%] rounded-[1.2cqw] border-[0.4cqw] p-[2cqw] text-center shadow-[0_10px_20px_-8px_oklch(0_0_0/0.5)] motion-safe:animate-[card-flip-in_450ms_ease-out_both]"
-            style={{ background: s.card.deck === 'chance' ? GROUP_COLOR.orange : GROUP_COLOR.lightblue, borderColor: WHITE, color: s.card.deck === 'chance' ? WHITE : INK }}
-          >
-            <p className="text-[clamp(7px,1.4cqw,12px)] font-black uppercase tracking-widest">{s.card.deck === 'chance' ? 'Şans' : 'Kamu fonu'}</p>
-            <p className="mt-[0.6cqw] text-pretty text-[clamp(9px,1.8cqw,15px)] font-semibold leading-snug">{s.card.text}</p>
+        {s.dice && (walking || !hasSpotlight) && (
+          <div className="flex max-w-full items-center gap-[1cqw] overflow-hidden rounded-full py-[0.6cqw] pl-[0.6cqw] pr-[2cqw] shadow-md" style={{ background: WHITE }}>
+            <span className="flex size-[3.6cqw] min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
+              <MapPin className="size-[60%]" aria-hidden="true" />
+            </span>
+            <span className="truncate text-[clamp(9px,1.7cqw,14px)] font-bold">
+              {walking ? `${activeName} ilerliyor…` : `${activeName} · ${sq.name}`}
+            </span>
           </div>
-        ) : (
-          s.dice && (
-            <div className="flex max-w-full items-center gap-[1cqw] overflow-hidden rounded-full bg-[oklch(0.985_0_0)] py-[0.6cqw] pl-[0.6cqw] pr-[2cqw] shadow-md">
-              <span className="flex size-[3.6cqw] min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
-                <MapPin className="size-[60%]" aria-hidden="true" />
-              </span>
-              <span className="truncate text-[clamp(9px,1.7cqw,14px)] font-bold">
-                {walking ? `${activeName} ilerliyor…` : `${activeName} · ${sq.name}`}
-              </span>
-            </div>
-          )
         )}
 
-        <p className="text-pretty text-center text-[clamp(9px,1.7cqw,15px)] font-semibold leading-snug" aria-live="polite">
-          {note}
-        </p>
+        {!walking && <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />}
+
+        {note && !hasSpotlight && (
+          <p className="text-pretty text-center text-[clamp(9px,1.7cqw,15px)] font-semibold leading-snug" aria-live="polite">
+            {note}
+          </p>
+        )}
       </div>
     </div>
   )
