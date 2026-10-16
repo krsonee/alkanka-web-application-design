@@ -95,6 +95,31 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     if (!playPhase || s.taken != null || remote.busy) return
     act({ type: 'discard', tileId })
   }
+  // Which table melds can take a given hand tile — drives highlighting, drag targets and one-tap işleme.
+  const canLayOff = playPhase && !!opened && s.taken == null
+  const fitsMeld = (tileId: number, meldId: number) => {
+    const t = byId.get(tileId)
+    const m = s.melds.find((x) => x.id === meldId)
+    if (!t || !m || m.kind === 'pair') return false
+    const an = analyzeMeld([...m.tiles, t], okey)
+    return an != null && an.kind === m.kind
+  }
+  const fitsFor = (tileId: number | null) => (tileId == null ? [] : s.melds.filter((m) => fitsMeld(tileId, m.id)).map((m) => m.id))
+  const selectedFits = canLayOff ? fitsFor(selected) : []
+  const [dragHover, setDragHover] = useState<number | null>(null)
+  const addTile = (tileId: number, meldId: number) => {
+    if (!canLayOff || remote.busy) return
+    if (hand.length <= 1) return setLocalError('Atmak için elinde en az bir taş kalmalı.')
+    if (!fitsMeld(tileId, meldId)) return setLocalError('Bu taş bu pere işlenmiyor. Sarı yanan perlerden birine bırak.')
+    act({ type: 'add', meldId, tileIds: [tileId] })
+  }
+  const layOffable = canLayOff && hand.length > 1 ? hand.filter((t) => s.melds.some((m) => fitsMeld(t.id, m.id))) : []
+  const autoLayOff = () => {
+    const t = layOffable[0]
+    if (!t) return
+    const target = fitsFor(t.id)[0]
+    if (target != null) addTile(t.id, target)
+  }
   const ids = (list: Segment[]) => list.map((g) => g.tiles.map((t) => t.id))
   const layDown = () => {
     const list = opened === 'cift' ? pairs : pairsAllowed ? [...runs, ...pairs] : runs
@@ -255,22 +280,32 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             </div>
 
             {s.melds.length > 0 && (
-              <div className="flex max-h-36 w-full flex-wrap content-start justify-center gap-1 overflow-y-auto sm:max-h-56 sm:gap-1.5" aria-label="Yerdeki perler">
+              <div className="flex max-h-40 w-full flex-wrap content-start justify-center gap-1.5 overflow-y-auto p-1 sm:max-h-64 sm:gap-2" aria-label="Yerdeki perler">
                 {s.melds.map((m) => {
-                  const canAdd = playPhase && !!opened && m.kind !== 'pair' && selected != null
+                  const fits = selectedFits.includes(m.id)
+                  const dimmed = selected != null && canLayOff && !fits
+                  const hovered = dragHover === m.id
                   return (
                     <button
                       key={m.id}
                       type="button"
-                      disabled={!canAdd || remote.busy}
-                      onClick={() => selected != null && act({ type: 'add', meldId: m.id, tileIds: [selected] })}
-                      aria-label={`${nameOf(m.owner)} peri${canAdd ? ', seçili taşı işle' : ''}`}
+                      data-drop={canLayOff && m.kind !== 'pair' ? `meld:${m.id}` : undefined}
+                      disabled={!fits || remote.busy}
+                      onClick={() => selected != null && addTile(selected, m.id)}
+                      aria-label={`${nameOf(m.owner)} peri${fits ? ', seçili taşı buraya işle' : ''}`}
                       className={cn(
-                        'flex gap-px rounded-md bg-background/30 p-0.5 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] disabled:cursor-default',
-                        canAdd && 'ring-2 ring-primary',
-                        m.owner === mySeat && 'outline outline-1 outline-primary/50',
+                        'relative flex gap-px rounded-md bg-background/30 p-1 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-150 disabled:cursor-default',
+                        fits && 'cursor-pointer ring-2 ring-primary hover:-translate-y-0.5 hover:bg-primary/25',
+                        hovered && 'scale-105 bg-primary/30 ring-4 ring-primary',
+                        dimmed && 'opacity-40',
+                        m.owner === mySeat && !fits && 'outline outline-1 outline-primary/50',
                       )}
                     >
+                      {fits && (
+                        <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-1.5 text-[9px] font-bold uppercase leading-4 text-primary-foreground shadow">
+                          İşle
+                        </span>
+                      )}
                       {m.tiles.map((t) => (
                         <TileFace key={t.id} tile={t} okey={okey} size="xs" />
                       ))}
@@ -327,8 +362,28 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             rack={rack}
             marks={marks}
             onDoubleTile={(t) => discard(t.id)}
-            onDropOut={(id, kind) => kind === 'discard' && discard(id)}
+            onDropHover={(kind) => setDragHover(kind?.startsWith('meld:') ? Number(kind.slice(5)) : null)}
+            onDropOut={(id, kind) => {
+              setDragHover(null)
+              if (kind === 'discard') discard(id)
+              else if (kind.startsWith('meld:')) addTile(id, Number(kind.slice(5)))
+            }}
           />
+          {layOffable.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2">
+              <span className="text-xs font-semibold text-foreground">
+                {layOffable.length} taşın yere işlenebilir. Taşı seç, sarı yanan pere dokun ya da sürükleyip bırak.
+              </span>
+              <button
+                type="button"
+                disabled={remote.busy}
+                onClick={autoLayOff}
+                className="rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground disabled:opacity-50"
+              >
+                Hızlı işle
+              </button>
+            </div>
+          )}
           <p className="text-center text-[11px] leading-snug text-muted-foreground">
             Taşları sürükleyip diz. Yan yana duran taşlar bir grup sayılır, boşluk grubu ayırır; geçerli perlerin altı sarı çizilir.
           </p>

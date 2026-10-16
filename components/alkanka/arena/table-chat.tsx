@@ -6,6 +6,7 @@ import { Loader2, MessageCircle, Send, Smile } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
+import { playSound } from '@/lib/sound'
 
 export const QUICK = ['👍', '😂', '🔥', '😮', '😡', '👏', '🎲', '🍀']
 const EMOJIS = [
@@ -38,10 +39,18 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
   const messages = data?.messages ?? []
   const lastId = messages.at(-1)?.id
 
+  const seenId = useRef<number | null | undefined>(undefined)
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [lastId])
+    if (!data) return
+    // Skip the initial load; afterwards chime only for messages from others.
+    if (seenId.current !== undefined && lastId != null && lastId !== seenId.current) {
+      const prev = seenId.current ?? -1
+      if (messages.some((m) => m.id > prev && m.userId !== member?.id)) playSound('message')
+    }
+    seenId.current = lastId ?? null
+  }, [lastId, data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async (override?: string) => {
     const body = (override ?? text).trim()
@@ -59,6 +68,7 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
       setError((await r.json().catch(() => ({}))).error ?? 'Gönderilemedi.')
       return
     }
+    playSound('sent')
     if (override == null) setText('')
     setPickerOpen(false)
     mutate()

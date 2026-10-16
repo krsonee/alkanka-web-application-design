@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
 import { ONLY_EMOJI, QUICK } from './table-chat'
+import { playSound } from '@/lib/sound'
 
 type ChatMessage = { id: number; userId: string; name: string; player: boolean; body: string; at: string }
 type Toast = { id: number; name: string; body: string; mine: boolean }
@@ -52,6 +53,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
     const fresh = messages.filter((m) => m.id > (seenRef.current ?? 0))
     seenRef.current = lastId
     if (fresh.length === 0) return
+    if (fresh.some((m) => m.userId !== member?.id)) playSound('message')
 
     const emojis = fresh.filter((m) => ONLY_EMOJI.test(m.body))
     const texts = fresh.filter((m) => !ONLY_EMOJI.test(m.body))
@@ -105,6 +107,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
       setError((await r.json().catch(() => ({}))).error ?? 'Gönderilemedi.')
       return
     }
+    playSound('sent')
     if (override == null) setText('')
     mutate()
   }
