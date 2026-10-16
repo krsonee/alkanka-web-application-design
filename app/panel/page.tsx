@@ -71,6 +71,7 @@ import { AccountSettings } from '@/components/panel/account-settings'
 import { cleanPermissions } from '@/lib/panel-modules'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
+import { PanelDashboard } from '@/components/panel/dashboard'
 import { listAudit, listMembers } from '@/lib/members-admin'
 import { levelMap } from '@/lib/kanka-puan'
 
@@ -331,6 +332,9 @@ export default async function PanelPage() {
   const audit = session.isOwner ? await listAudit().then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
 
   const marketPending = can('market') ? await pendingCount().catch(() => 0) : 0
+  const dashCounts = can('users') ? await listMembers({ limit: 1 }).then((r) => r.counts).catch(() => null) : null
+  const dashRecent = session.isOwner ? await listAudit(8).catch(() => []) : []
+  const dashboard = <PanelDashboard counts={dashCounts} marketPending={marketPending} recent={dashRecent} />
   const staff = session.isOwner ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
 
   return (
@@ -357,6 +361,7 @@ export default async function PanelPage() {
           allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
           users={users}
           audit={audit}
+          dashboard={dashboard}
           isOwner={session.isOwner}
           slides={slides}
           heroes={heroes}
