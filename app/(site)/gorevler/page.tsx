@@ -1,6 +1,7 @@
 import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Tasks } from '@/components/alkanka/tasks'
+import { OnlineRewards } from '@/components/alkanka/kp/online-rewards'
 import { getMember } from '@/lib/member'
 import { getStreak, type StreakState } from '@/lib/checkin'
 import { completedTaskIds, listPublicTasks, taskClaimMap, taskProgressMap, type ClaimStatus } from '@/lib/tasks'
@@ -34,6 +35,7 @@ export default async function TasksPage() {
         streak={streak}
         tasks={tasks.map((task) => ({ id: task.id, title: task.title, detail: task.detail, points: task.points, link: task.link, needsApproval: task.needsApproval, period: task.period, kind: task.kind, target: task.target, param: task.param, progress: progress[task.id] ?? 0, claim: claims[task.id] ?? null, done: finished.has(task.id) }))}
       />
+      <OnlineRewards />
     </>
   )
 }
