@@ -9,6 +9,7 @@ import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
+import { playSound } from '@/lib/sound'
 import {
   applyMove,
   botPlan,
@@ -493,6 +494,7 @@ export function Tavla({ finish }: GameApi) {
   }
 
   function showRoll(d: number[]) {
+    playSound('dice')
     setRolled(d)
     setDice(d)
     setRollKey((k) => k + 1)
@@ -520,6 +522,7 @@ export function Tavla({ finish }: GameApi) {
       left = spendDie(left, m.die)
     }
     const hit = seq.some((m) => m.hit)
+    playSound(hit ? 'pocket' : 'move')
     setBoard(next)
     setDice(left)
     setSelected(null)
@@ -559,6 +562,7 @@ export function Tavla({ finish }: GameApi) {
           timers.push(
             setTimeout(() => {
               current = applyMove(current, 'b', m)
+              playSound(m.hit ? 'pocket' : 'move')
               left = spendDie(left, m.die)
               setBoard(current)
               setDice(left)

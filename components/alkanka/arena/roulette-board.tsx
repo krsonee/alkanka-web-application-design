@@ -1,7 +1,8 @@
 'use client'
 
-import type { CSSProperties, ReactNode } from 'react'
-import { RED, type RouletteBet } from '@/lib/casino'
+import { useState, type CSSProperties, type ReactNode } from 'react'
+import { RED, betLabel, betNumbers, betReturn, type RouletteBet } from '@/lib/casino'
+import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
 export type BetKind = RouletteBet['kind']
@@ -20,12 +21,13 @@ export function chipTone(value: number, values: number[]) {
 
 const short = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n))
 
-export function Chip({ amount, tone, size = 'md', active }: { amount: number; tone: string; size?: 'sm' | 'md' | 'lg'; active?: boolean }) {
+export function Chip({ amount, tone, size = 'md', active }: { amount: number; tone: string; size?: 'xs' | 'sm' | 'md' | 'lg'; active?: boolean }) {
   const isGold = tone === 'var(--primary)'
   return (
     <span
       className={cn(
         'relative flex shrink-0 items-center justify-center rounded-full border-2 border-dashed font-bold shadow-lg',
+        size === 'xs' && 'size-5 border text-[8px]',
         size === 'sm' && 'size-6 text-[9px]',
         size === 'md' && 'size-8 text-[10px]',
         size === 'lg' && 'size-12 text-xs',
@@ -49,50 +51,47 @@ type BoardProps = {
   chipValues: number[]
 }
 
-function wins(kind: BetKind, value: number | undefined, n: number | null) {
-  if (n === null) return false
-  if (kind === 'number') return value === n
-  if (n === 0) return false
-  if (kind === 'red') return RED.has(n)
-  if (kind === 'black') return !RED.has(n)
-  if (kind === 'even') return n % 2 === 0
-  if (kind === 'odd') return n % 2 === 1
-  if (kind === 'low') return n <= 18
-  if (kind === 'high') return n >= 19
-  return Math.ceil(n / 12) === value
+type Ctx = BoardProps & { compact: boolean; hover: number[]; setHover: (n: number[]) => void }
+
+const wins = (kind: BetKind, value: number | undefined, n: number | null) => n !== null && betReturn({ kind, value, amount: 1 }, n) > 0
+
+const OUTSIDE_NUMBERS: Partial<Record<BetKind, (n: number) => boolean>> = {
+  red: (n) => RED.has(n),
+  black: (n) => !RED.has(n),
+  even: (n) => n % 2 === 0,
+  odd: (n) => n % 2 === 1,
+  low: (n) => n <= 18,
+  high: (n) => n >= 19,
+}
+const ALL = Array.from({ length: 36 }, (_, i) => i + 1)
+const covered = (kind: BetKind, value?: number) => betNumbers(kind, value) ?? ALL.filter(OUTSIDE_NUMBERS[kind] ?? (() => false))
+
+function bet(c: Ctx, kind: BetKind, value?: number) {
+  if (c.disabled) return
+  playSound('chip')
+  c.onBet(kind, value)
 }
 
-function Cell({
-  kind,
-  value,
-  style,
-  className,
-  children,
-  label,
-  p,
-}: {
-  kind: BetKind
-  value?: number
-  style?: CSSProperties
-  className?: string
-  children: ReactNode
-  label: string
-  p: BoardProps
-}) {
+function Cell({ kind, value, style, className, children, c }: { kind: BetKind; value?: number; style?: CSSProperties; className?: string; children: ReactNode; c: Ctx }) {
   const k = betKey(kind, value)
-  const amount = p.mine.get(k) ?? 0
-  const other = p.others.get(k) ?? 0
-  const won = wins(kind, value, p.winner)
+  const amount = c.mine.get(k) ?? 0
+  const other = c.others.get(k) ?? 0
+  const won = wins(kind, value, c.winner)
+  const lit = kind === 'number' && value !== undefined && c.hover.includes(value)
   return (
     <button
       type="button"
-      onClick={() => p.onBet(kind, value)}
-      disabled={p.disabled}
-      aria-label={`${label}${amount ? `, bahsin ${amount}` : ''}`}
+      onClick={() => bet(c, kind, value)}
+      onPointerEnter={() => c.setHover(covered(kind, value))}
+      onPointerLeave={() => c.setHover([])}
+      disabled={c.disabled}
+      aria-label={`${betLabel({ kind, value })}${amount ? `, bahsin ${amount}` : ''}`}
       style={style}
       className={cn(
-        'relative flex min-h-11 items-center justify-center border border-foreground/40 font-display text-sm font-bold text-foreground transition-colors',
+        'relative flex items-center justify-center border border-foreground/40 font-display font-bold text-foreground transition-colors',
+        c.compact ? 'min-h-0 border-foreground/35 p-0' : 'min-h-11 text-sm',
         'enabled:hover:bg-foreground/15 disabled:cursor-not-allowed',
+        lit && 'bg-foreground/20',
         won && 'z-10 bg-primary/35 ring-2 ring-inset ring-primary',
         className,
       )}
@@ -105,102 +104,157 @@ function Cell({
       )}
       {amount > 0 && (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Chip amount={amount} tone={chipTone(amount, p.chipValues)} size="sm" />
+          <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size={c.compact ? 'xs' : 'sm'} />
         </span>
       )}
     </button>
   )
 }
 
-const NUMBERS = Array.from({ length: 36 }, (_, i) => i + 1)
-const OUTSIDE: { kind: BetKind; label: string; text: ReactNode }[] = [
-  { kind: 'low', label: '1-18', text: '1-18' },
-  { kind: 'even', label: 'Çift', text: 'ÇİFT' },
-  { kind: 'red', label: 'Kırmızı', text: <span className="size-5 rotate-45 bg-[var(--rl-red)]" aria-hidden="true" /> },
-  { kind: 'black', label: 'Siyah', text: <span className="size-5 rotate-45 border border-foreground/50 bg-[var(--rl-black)]" aria-hidden="true" /> },
-  { kind: 'odd', label: 'Tek', text: 'TEK' },
-  { kind: 'high', label: '19-36', text: '19-36' },
-]
-const numBg = (n: number) => ({ background: n === 0 ? 'var(--rl-green)' : RED.has(n) ? 'var(--rl-red)' : 'var(--rl-black)' })
-
-function Horizontal(p: BoardProps) {
+/** Invisible target sitting on a line or corner between numbers, for split / corner / street / six-line bets. */
+function Spot({ kind, value, x, y, c }: { kind: BetKind; value: number; x: number; y: number; c: Ctx }) {
+  const k = betKey(kind, value)
+  const amount = c.mine.get(k) ?? 0
+  const other = c.others.get(k) ?? 0
+  const won = wins(kind, value, c.winner)
+  const label = betLabel({ kind, value })
   return (
-    <div className="hidden grid-cols-[3rem_repeat(12,minmax(0,1fr))] overflow-hidden rounded-lg border-2 border-foreground/50 md:grid">
-      <Cell p={p} kind="number" value={0} label="Sayı 0" style={{ gridColumn: 1, gridRow: '1 / span 3', ...numBg(0) }} className="rounded-l-[2rem]">
-        0
-      </Cell>
-      {NUMBERS.map((n) => (
-        <Cell
-          key={n}
-          p={p}
-          kind="number"
-          value={n}
-          label={`Sayı ${n}`}
-          style={{ gridColumn: Math.ceil(n / 3) + 1, gridRow: 3 - ((n - 1) % 3), ...numBg(n) }}
-          className="h-14"
-        >
-          {n}
-        </Cell>
-      ))}
-      {[1, 2, 3].map((d) => (
-        <Cell key={d} p={p} kind="dozen" value={d} label={`${d}. düzine`} style={{ gridColumn: `${(d - 1) * 4 + 2} / span 4`, gridRow: 4 }}>
-          {d}. 12
-        </Cell>
-      ))}
-      {OUTSIDE.map((o, i) => (
-        <Cell key={o.kind} p={p} kind={o.kind} label={o.label} style={{ gridColumn: `${i * 2 + 2} / span 2`, gridRow: 5 }}>
-          {o.text}
-        </Cell>
-      ))}
-    </div>
+    <button
+      type="button"
+      onClick={() => bet(c, kind, value)}
+      onPointerEnter={() => c.setHover(covered(kind, value))}
+      onPointerLeave={() => c.setHover([])}
+      onFocus={() => c.setHover(covered(kind, value))}
+      onBlur={() => c.setHover([])}
+      disabled={c.disabled}
+      aria-label={`${label}${amount ? `, bahsin ${amount}` : ''}`}
+      title={label}
+      style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
+      className={cn(
+        'group absolute z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full disabled:cursor-not-allowed',
+        c.compact ? 'size-3.5' : 'size-5',
+      )}
+    >
+      {amount > 0 ? (
+        <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size="xs" active={won} />
+      ) : (
+        <span
+          className={cn(
+            'rounded-full transition-all',
+            c.compact ? 'size-1.5' : 'size-2',
+            other > 0 ? 'bg-muted-foreground' : 'bg-transparent',
+            'group-enabled:group-hover:size-full group-enabled:group-hover:bg-primary/70 group-focus-visible:size-full group-focus-visible:bg-primary/70',
+          )}
+          aria-hidden="true"
+        />
+      )}
+    </button>
   )
 }
 
-const MOBILE_OUTSIDE: Record<string, ReactNode> = {
-  red: <span className="size-3.5 rotate-45 bg-[var(--rl-red)]" aria-hidden="true" />,
-  black: <span className="size-3.5 rotate-45 border border-foreground/50 bg-[var(--rl-black)]" aria-hidden="true" />,
+/** Column i (0-11) left to right, row r (0-2) top to bottom; the top row holds 3, 6, 9... */
+const numAt = (i: number, r: number) => 3 * i + (3 - r)
+
+function Spots({ c }: { c: Ctx }) {
+  const spots: { kind: BetKind; value: number; x: number; y: number }[] = []
+  for (let r = 0; r < 3; r++) spots.push({ kind: 'split', value: numAt(0, r), x: 0, y: (r + 0.5) / 3 })
+  for (let i = 0; i < 12; i++) {
+    for (let r = 0; r < 3; r++) {
+      const n = numAt(i, r)
+      if (i < 11) spots.push({ kind: 'split', value: n * 100 + n + 3, x: (i + 1) / 12, y: (r + 0.5) / 3 })
+      if (r < 2) spots.push({ kind: 'split', value: (n - 1) * 100 + n, x: (i + 0.5) / 12, y: (r + 1) / 3 })
+      if (r < 2 && i < 11) spots.push({ kind: 'corner', value: numAt(i, r + 1), x: (i + 1) / 12, y: (r + 1) / 3 })
+    }
+    spots.push({ kind: 'street', value: 3 * i + 1, x: (i + 0.5) / 12, y: 1 })
+    if (i < 11) spots.push({ kind: 'line', value: 3 * i + 1, x: (i + 1) / 12, y: 1 })
+  }
+  return (
+    <>
+      {spots.map((s) => (
+        <Spot key={betKey(s.kind, s.value)} {...s} c={c} />
+      ))}
+    </>
+  )
 }
 
-/** Same horizontal layout as the real felt, scaled down so the whole board fits a phone without scrolling. */
-function Compact(p: BoardProps) {
-  const cell = 'min-h-0 border-foreground/35 p-0'
+const OUTSIDE: { kind: BetKind; text: ReactNode; compact?: ReactNode }[] = [
+  { kind: 'low', text: '1-18' },
+  { kind: 'even', text: 'ÇİFT' },
+  {
+    kind: 'red',
+    text: <span className="size-5 rotate-45 bg-[var(--rl-red)]" aria-hidden="true" />,
+    compact: <span className="size-3.5 rotate-45 bg-[var(--rl-red)]" aria-hidden="true" />,
+  },
+  {
+    kind: 'black',
+    text: <span className="size-5 rotate-45 border border-foreground/50 bg-[var(--rl-black)]" aria-hidden="true" />,
+    compact: <span className="size-3.5 rotate-45 border border-foreground/50 bg-[var(--rl-black)]" aria-hidden="true" />,
+  },
+  { kind: 'odd', text: 'TEK' },
+  { kind: 'high', text: '19-36' },
+]
+const numBg = (n: number) => ({ background: n === 0 ? 'var(--rl-green)' : RED.has(n) ? 'var(--rl-red)' : 'var(--rl-black)' })
+
+function Layout({ c }: { c: Ctx }) {
+  const h = c.compact ? 'h-10 text-[11px]' : 'h-14'
+  const sub = c.compact ? 'h-9 text-[10px]' : ''
   return (
-    <div className="grid grid-cols-[1.6rem_repeat(12,minmax(0,1fr))] overflow-hidden rounded-md border-2 border-foreground/50 md:hidden">
-      <Cell p={p} kind="number" value={0} label="Sayı 0" style={{ gridColumn: 1, gridRow: '1 / span 3', ...numBg(0) }} className={cn(cell, 'rounded-l-2xl text-xs')}>
+    <div
+      className={cn(
+        'grid overflow-hidden border-2 border-foreground/50',
+        c.compact ? 'grid-cols-[1.6rem_minmax(0,1fr)_1.6rem] rounded-md md:hidden' : 'hidden grid-cols-[3rem_minmax(0,1fr)_3rem] rounded-lg md:grid',
+      )}
+    >
+      <Cell c={c} kind="number" value={0} style={numBg(0)} className={cn(c.compact ? 'rounded-l-2xl text-xs' : 'rounded-l-[2rem]')}>
         0
       </Cell>
-      {NUMBERS.map((n) => (
-        <Cell
-          key={n}
-          p={p}
-          kind="number"
-          value={n}
-          label={`Sayı ${n}`}
-          style={{ gridColumn: Math.ceil(n / 3) + 1, gridRow: 3 - ((n - 1) % 3), ...numBg(n) }}
-          className={cn(cell, 'h-10 text-[11px]')}
-        >
-          {n}
-        </Cell>
-      ))}
-      {[1, 2, 3].map((d) => (
-        <Cell key={d} p={p} kind="dozen" value={d} label={`${d}. düzine`} style={{ gridColumn: `${(d - 1) * 4 + 2} / span 4`, gridRow: 4 }} className={cn(cell, 'h-9 text-[11px]')}>
-          {d}. 12
-        </Cell>
-      ))}
-      {OUTSIDE.map((o, i) => (
-        <Cell key={o.kind} p={p} kind={o.kind} label={o.label} style={{ gridColumn: `${i * 2 + 2} / span 2`, gridRow: 5 }} className={cn(cell, 'h-9 text-[10px]')}>
-          {MOBILE_OUTSIDE[o.kind] ?? o.text}
-        </Cell>
-      ))}
+      <div className="relative grid grid-cols-12 grid-rows-3">
+        {[0, 1, 2].flatMap((r) =>
+          Array.from({ length: 12 }, (_, i) => {
+            const n = numAt(i, r)
+            return (
+              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={h}>
+                {n}
+              </Cell>
+            )
+          }),
+        )}
+        <Spots c={c} />
+      </div>
+      <div className="grid grid-rows-3">
+        {[3, 2, 1].map((col) => (
+          <Cell key={col} c={c} kind="column" value={col} className={cn(c.compact ? 'text-[9px]' : 'text-xs')}>
+            2:1
+          </Cell>
+        ))}
+      </div>
+      <div className="col-start-2 grid grid-cols-3">
+        {[1, 2, 3].map((d) => (
+          <Cell key={d} c={c} kind="dozen" value={d} className={cn(sub, c.compact && 'text-[11px]')}>
+            {d}. 12
+          </Cell>
+        ))}
+      </div>
+      <div className="col-start-2 grid grid-cols-6">
+        {OUTSIDE.map((o) => (
+          <Cell key={o.kind} c={c} kind={o.kind} className={sub}>
+            {c.compact ? (o.compact ?? o.text) : o.text}
+          </Cell>
+        ))}
+      </div>
     </div>
   )
 }
 
 export function RouletteBoard(p: BoardProps) {
+  const [hover, setHover] = useState<number[]>([])
   return (
-    <>
-      <Horizontal {...p} />
-      <Compact {...p} />
-    </>
+    <div className="flex flex-col gap-1.5">
+      <Layout c={{ ...p, compact: false, hover, setHover }} />
+      <Layout c={{ ...p, compact: true, hover, setHover }} />
+      <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+        Çizgiye koy: ayrık 18x · Köşeye: 9x · Alt kenar: sokak 12x, iki sıra arası altılı 6x · 2:1 kolon 3x
+      </p>
+    </div>
   )
 }

@@ -5,6 +5,7 @@ import NextImage from 'next/image'
 import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Maximize2, Minimize2, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TableBrand } from './table-brand'
+import { playSound } from '@/lib/sound'
 
 export type Sport = 'futbol' | 'basket'
 export type HeadMode = 'bot'
@@ -830,6 +831,7 @@ export function HeadGame({
 
     function goal(scorer: 0 | 1, pts: number) {
       sc[scorer] += pts
+      playSound('goal')
       setAnnounce(`${sc[0]} - ${sc[1]}`)
       flash = sport === 'futbol' ? 'GOL!' : 'BASKET!'
       flashT = 0

@@ -61,7 +61,8 @@ export const RULES: Record<ArenaGame, string[]> = {
   ],
   rulet: [
     'Avrupa ruleti (tek sıfır). Herkes aynı canlı masada oynar, top sunucuda atılır.',
-    'Sayıya 36x, düzineye 3x, renk / tek-çift / alt-üst 2x öder.',
+    'Sayı 36x. Çizgiler de oynanır: iki sayı arası (ayrık) 18x, alt kenar (sokak, 3 sayı) 12x, dört sayının köşesi 9x, iki sokak arası (altılı) 6x.',
+    'Düzine ve 2:1 kolon 3x, renk / tek-çift / 1-18 / 19-36 2x öder. Sıfır gelirse dış bahisler kaybeder.',
     'Kanka masasında aynı başlangıç fişiyle 5 tur oynarsınız, fişi çok olan kazanır.',
   ],
   'kafa-topu': [

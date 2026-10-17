@@ -16,6 +16,7 @@ import {
   Trophy,
 } from "lucide-react";
 import type { ArenaGameSettings } from "@/lib/arena";
+import { playSound } from "@/lib/sound";
 import type { BlackjackLiveState } from "@/lib/blackjack-live";
 import {
   actBlackjackTable,
@@ -440,6 +441,8 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     if (lastPhase.current !== phase) {
       lastPhase.current = phase;
       setError("");
+      if (phase === "play") playSound("card");
+      if (phase === "bet") playSound("turn");
     }
   }, [phase]);
 
@@ -527,6 +530,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     const res = await actBlackjackTable(a);
     setBusy(false);
     if (!res.ok) return setError(res.error);
+    playSound(a === "stand" ? "tick" : "card");
     setBalance(res.balance);
     mutate();
   }

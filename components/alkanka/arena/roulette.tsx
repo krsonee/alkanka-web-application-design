@@ -4,14 +4,15 @@ import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { spinRoulette } from '@/app/actions/arena'
-import { RED, WHEEL, betLabel, betReturn, type RouletteBet } from '@/lib/casino'
+import { RED, WHEEL, betReturn, type RouletteBet } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
+import { playSound } from '@/lib/sound'
 import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
+import { RouletteBoard, betKey, parseKey, type BetKind } from './roulette-board'
 
 const SEG = 360 / WHEEL.length
 const numColor = (n: number) => (n === 0 ? 'zero' : RED.has(n) ? 'red' : 'black')
-const betKey = (b: Pick<RouletteBet, 'kind' | 'value'>) => `${b.kind}:${b.value ?? ''}`
 
 function Wheel({ rotation, result }: { rotation: number; result: number | null }) {
   const gradient = WHEEL.map((n, i) => {
@@ -49,47 +50,18 @@ function Wheel({ rotation, result }: { rotation: number; result: number | null }
   )
 }
 
-function Board({ bets, onBet, disabled }: { bets: Map<string, number>; onBet: (b: Omit<RouletteBet, 'amount'>) => void; disabled: boolean }) {
-  const cell = (label: string, b: Omit<RouletteBet, 'amount'>, cls: string) => {
-    const amount = bets.get(betKey(b))
-    return (
-      <button
-        key={betKey(b)}
-        disabled={disabled}
-        onClick={() => onBet(b)}
-        className={cn('relative flex min-h-10 items-center justify-center rounded-md border border-foreground/15 text-xs font-bold text-foreground transition-colors hover:border-primary disabled:cursor-not-allowed sm:text-sm', cls)}
-        aria-label={`${betLabel({ ...b, amount: 0 })}${amount ? `, bahis ${amount}` : ''}`}
-      >
-        {label}
-        {amount ? (
-          <span className="absolute -right-1 -top-1 z-10 flex min-w-6 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-            {amount}
-          </span>
-        ) : null}
-      </button>
-    )
-  }
-  const tone = (n: number) => (numColor(n) === 'red' ? 'bg-[oklch(0.5_0.19_25)]' : 'bg-[oklch(0.2_0.01_260)]')
+const NO_OTHERS = new Map<string, number>()
+
+function Board({ t, chipValues }: { t: ReturnType<typeof useRouletteTable>; chipValues: number[] }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="grid grid-cols-[2.5rem_1fr] gap-1.5">
-        {cell('0', { kind: 'number', value: 0 }, 'bg-felt')}
-        <div className="grid grid-cols-6 gap-1 sm:grid-cols-12">
-          {Array.from({ length: 36 }, (_, i) => i + 1).map((n) => cell(String(n), { kind: 'number', value: n }, tone(n)))}
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {[1, 2, 3].map((d) => cell(`${d}. 12`, { kind: 'dozen', value: d }, 'bg-felt'))}
-      </div>
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
-        {cell('1-18', { kind: 'low' }, 'bg-felt')}
-        {cell('Çift', { kind: 'even' }, 'bg-felt')}
-        {cell('Kırmızı', { kind: 'red' }, 'bg-[oklch(0.5_0.19_25)]')}
-        {cell('Siyah', { kind: 'black' }, 'bg-[oklch(0.2_0.01_260)]')}
-        {cell('Tek', { kind: 'odd' }, 'bg-felt')}
-        {cell('19-36', { kind: 'high' }, 'bg-felt')}
-      </div>
-    </div>
+    <RouletteBoard
+      mine={t.bets}
+      others={NO_OTHERS}
+      onBet={t.place}
+      disabled={t.spinning}
+      winner={t.spinning || t.bets.size ? null : t.result}
+      chipValues={chipValues}
+    />
   )
 }
 
@@ -101,24 +73,24 @@ function useRouletteTable(chipValues: number[]) {
   const [spinning, setSpinning] = useState(false)
   const total = [...bets.values()].reduce((a, b) => a + b, 0)
 
-  function place(b: Omit<RouletteBet, 'amount'>) {
-    setBets((m) => new Map(m).set(betKey(b), (m.get(betKey(b)) ?? 0) + chip))
+  function place(kind: BetKind, value?: number) {
+    const k = betKey(kind, value)
+    setBets((m) => new Map(m).set(k, (m.get(k) ?? 0) + chip))
   }
   function list(): RouletteBet[] {
-    return [...bets.entries()].map(([k, amount]) => {
-      const [kind, value] = k.split(':')
-      return { kind: kind as RouletteBet['kind'], value: value === '' ? undefined : Number(value), amount }
-    })
+    return [...bets.entries()].map(([k, amount]) => ({ ...parseKey(k), amount }))
   }
   function animateTo(n: number) {
     const idx = WHEEL.indexOf(n)
     const target = 360 - (idx * SEG + SEG / 2)
     setRotation((r) => r - (r % 360) + 360 * 6 + target)
     setSpinning(true)
+    playSound('spin')
     return new Promise<void>((resolve) =>
       setTimeout(() => {
         setSpinning(false)
         setResult(n)
+        playSound('ball')
         resolve()
       }, 4600),
     )
@@ -169,6 +141,7 @@ export function RouletteHouse({ settings }: { settings: ArenaGameSettings }) {
     if (!res.ok) return setError(res.error)
     await t.animateTo(res.number)
     setBalance(res.balance)
+    playSound(res.returned > 0 ? 'win' : 'lose')
     setMsg(res.returned > 0 ? `${formatAC(res.returned)} kazandın!` : 'Bu tur olmadı.')
     t.setBets(new Map())
   }
@@ -183,7 +156,7 @@ export function RouletteHouse({ settings }: { settings: ArenaGameSettings }) {
         </div>
       </div>
       <div className="relative flex flex-col gap-4">
-        <Board bets={t.bets} onBet={t.place} disabled={t.spinning} />
+        <Board t={t} chipValues={settings.bets} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <ChipRack values={settings.bets} chip={t.chip} setChip={t.setChip} />
           <div className="flex items-center gap-2">
@@ -201,7 +174,7 @@ export function RouletteHouse({ settings }: { settings: ArenaGameSettings }) {
           </div>
         </div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <p className="text-xs text-muted-foreground">Tek sayı 36x, düzine 3x, renk/tek-çift/yarı 2x öder. Sayı sunucuda çekilir.</p>
+        <p className="text-xs text-muted-foreground">Sayı 36x, ayrık 18x, sokak 12x, köşe 9x, altılı 6x, düzine / kolon 3x, renk / tek-çift / yarı 2x öder. Sayı sunucuda çekilir.</p>
       </div>
     </div>
   )
@@ -223,6 +196,7 @@ export function RouletteDuel({ onDone }: { onDone: (score: { for: number; agains
     setChips((c) => c - t.total)
     await t.animateTo(n)
     const back = bets.reduce((a, b) => a + betReturn(b, n), 0)
+    playSound(back > 0 ? 'coin' : 'lose')
     const after = chips - t.total + back
     setChips(after)
     t.setBets(new Map())
@@ -247,7 +221,7 @@ export function RouletteDuel({ onDone }: { onDone: (score: { for: number; agains
           <ResultBadge n={t.spinning ? null : t.result} />
         </div>
         <div className="flex flex-col gap-4">
-          <Board bets={t.bets} onBet={t.place} disabled={t.spinning} />
+          <Board t={t} chipValues={[10, 25, 50, 100]} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <ChipRack values={[10, 25, 50, 100]} chip={t.chip} setChip={t.setChip} />
             <button onClick={go} disabled={t.spinning || t.total === 0 || t.total > chips} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50">
