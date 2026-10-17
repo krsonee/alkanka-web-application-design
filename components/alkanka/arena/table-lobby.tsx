@@ -90,7 +90,19 @@ export function TableLobby({
   initialStake?: number
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
-  const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeId, setActiveIdState] = useState<string | null>(null)
+  // The open table lives in the URL so a page refresh drops the player straight back into it.
+  const setActiveId = useCallback((id: string | null) => {
+    setActiveIdState(id)
+    const url = new URL(window.location.href)
+    if (id) url.searchParams.set('masa', id)
+    else url.searchParams.delete('masa')
+    window.history.replaceState(window.history.state, '', url)
+  }, [])
+  useEffect(() => {
+    const id = new URL(window.location.href).searchParams.get('masa')
+    if (id && /^[\w-]{1,64}$/.test(id)) setActiveIdState(id)
+  }, [])
   const [stake, setStake] = useState(initialStake && settings.bets.includes(initialStake) ? initialStake : (settings.bets[0] ?? 25))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -477,9 +489,10 @@ function OptionGroup({
   options: { value: string; label: string; disabled?: boolean }[]
   onChange: (v: string) => void
 }) {
+  const stacked = options.length > 3
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-20 shrink-0 text-xs font-semibold leading-tight text-muted-foreground">{label}</span>
+    <div className={cn('flex gap-3', stacked ? 'flex-col gap-1.5' : 'items-center')}>
+      <span className={cn('shrink-0 text-xs font-semibold leading-tight text-muted-foreground', !stacked && 'w-20')}>{label}</span>
       <div
         className={cn('min-w-0 flex-1 gap-1 rounded-xl bg-secondary/60 p-1', options.length > 5 ? 'grid grid-cols-5' : 'flex')}
         role="radiogroup"
@@ -494,7 +507,7 @@ function OptionGroup({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'min-w-0 flex-1 truncate rounded-lg px-1.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 sm:text-sm',
+              'min-w-0 flex-1 whitespace-nowrap rounded-lg px-1 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 sm:text-sm',
               value === o.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
             )}
           >

@@ -132,6 +132,9 @@ export function OkeyRack({
   const byId = new Map(hand.map((t) => [t.id, t]))
   const [over, setOver] = useState<number | null>(null)
   const [ghost, setGhost] = useState<{ id: number; x: number; y: number } | null>(null)
+  const ghostEl = useRef<HTMLDivElement | null>(null)
+  const overRef = useRef<number | null>(null)
+  const frame = useRef<number | null>(null)
   const press = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
   const lastTap = useRef<{ id: number; t: number } | null>(null)
@@ -182,12 +185,28 @@ export function OkeyRack({
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const p = press.current
     if (!p) return
-    if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 8) return
-    p.moved = true
-    setGhost({ id: p.id, x: e.clientX, y: e.clientY })
-    const t = targetAt(e.clientX, e.clientY)
-    setOver(t.slot)
-    setHover(t.kind)
+    if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 6) return
+    const x = e.clientX
+    const y = e.clientY
+    if (!p.moved) {
+      p.moved = true
+      setGhost({ id: p.id, x, y })
+    }
+    if (ghostEl.current) {
+      ghostEl.current.style.left = `${x}px`
+      ghostEl.current.style.top = `${y}px`
+    }
+    if (frame.current != null) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null
+      if (!press.current?.moved) return
+      const t = targetAt(x, y)
+      if (overRef.current !== t.slot) {
+        overRef.current = t.slot
+        setOver(t.slot)
+      }
+      setHover(t.kind)
+    })
   }
 
   const endDrag = (e: PointerEvent<HTMLDivElement>, cancelled = false) => {
@@ -196,6 +215,9 @@ export function OkeyRack({
     if (!p?.moved) return
     suppressClick.current = true
     setTimeout(() => (suppressClick.current = false), 0)
+    if (frame.current != null) cancelAnimationFrame(frame.current)
+    frame.current = null
+    overRef.current = null
     setGhost(null)
     setOver(null)
     setHover(null)
@@ -209,7 +231,11 @@ export function OkeyRack({
   const ghostTile = ghost ? byId.get(ghost.id) : undefined
 
   return (
-    <div className="flex flex-col gap-1 rounded-xl bg-wood p-1.5 shadow-inner sm:gap-2 sm:p-3" role="group" aria-label="Istakan, iki sıra">
+    <div
+      className="mx-auto flex w-full max-w-[44rem] flex-col gap-1 rounded-xl bg-wood p-1.5 shadow-inner sm:gap-1.5 sm:p-2"
+      role="group"
+      aria-label="Istakan, iki sıra"
+    >
       {[0, 1].map((row) => (
         <div key={row} className="grid grid-cols-14 gap-0.5 border-b-4 border-background/30 pb-1 sm:gap-1">
           {rack.slots.slice(row * RACK_COLS, row * RACK_COLS + RACK_COLS).map((id, c) => {
@@ -277,8 +303,9 @@ export function OkeyRack({
 
       {ghost && ghostTile && (
         <div
+          ref={ghostEl}
           aria-hidden="true"
-          className="pointer-events-none fixed z-[80] h-14 w-10 -translate-x-1/2 -translate-y-[70%] rotate-3 drop-shadow-2xl sm:h-16 sm:w-12"
+          className="pointer-events-none fixed z-[80] h-12 w-9 -translate-x-1/2 -translate-y-[70%] rotate-3 drop-shadow-2xl will-change-[left,top] sm:h-14 sm:w-10"
           style={{ left: ghost.x, top: ghost.y }}
         >
           <TileFace tile={ghostTile} okey={okey} size="fluid" selected />
