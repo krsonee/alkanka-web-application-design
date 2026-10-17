@@ -104,18 +104,74 @@ export const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 3
 /** European wheel order, clockwise from 0. */
 export const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26]
 
-export type RouletteBet = { kind: 'number' | 'red' | 'black' | 'even' | 'odd' | 'low' | 'high' | 'dozen'; value?: number; amount: number }
-
-export function betLabel(b: RouletteBet) {
-  const map = { red: 'Kırmızı', black: 'Siyah', even: 'Çift', odd: 'Tek', low: '1-18', high: '19-36' } as const
-  if (b.kind === 'number') return `Sayı ${b.value}`
-  if (b.kind === 'dozen') return `${b.value}. düzine`
-  return map[b.kind]
+export type RouletteBet = {
+  kind: 'number' | 'split' | 'street' | 'corner' | 'line' | 'column' | 'red' | 'black' | 'even' | 'odd' | 'low' | 'high' | 'dozen'
+  /** number: the number. split: low*100+high. street/line: first number of the row. corner: lowest of the four. column/dozen: 1-3. */
+  value?: number
+  amount: number
 }
 
-/** Total returned for one bet (stake included). */
+const range = (from: number, count: number, step = 1) => Array.from({ length: count }, (_, i) => from + i * step)
+
+/** Numbers covered by an inside bet or a column, or null when the bet is malformed. Outside bets return null. */
+export function betNumbers(kind: RouletteBet['kind'], value: number | undefined): number[] | null {
+  if (!Number.isInteger(value)) return null
+  const v = value!
+  switch (kind) {
+    case 'number':
+      return v >= 0 && v <= 36 ? [v] : null
+    case 'split': {
+      const a = Math.floor(v / 100)
+      const b = v % 100
+      if (b < 1 || b > 36 || a >= b) return null
+      if (a === 0) return b <= 3 ? [0, b] : null
+      const sideBySide = b === a + 1 && a % 3 !== 0
+      const stacked = b === a + 3
+      return sideBySide || stacked ? [a, b] : null
+    }
+    case 'street':
+      return v >= 1 && v <= 34 && v % 3 === 1 ? range(v, 3) : null
+    case 'line':
+      return v >= 1 && v <= 31 && v % 3 === 1 ? range(v, 6) : null
+    case 'corner':
+      return v >= 1 && v <= 32 && v % 3 !== 0 ? [v, v + 1, v + 3, v + 4] : null
+    case 'column':
+      return v >= 1 && v <= 3 ? range(v, 12, 3) : null
+    case 'dozen':
+      return v >= 1 && v <= 3 ? range((v - 1) * 12 + 1, 12) : null
+    default:
+      return null
+  }
+}
+
+const OUTSIDE_LABEL = { red: 'Kırmızı', black: 'Siyah', even: 'Çift', odd: 'Tek', low: '1-18', high: '19-36' } as const
+
+export function betLabel(b: Pick<RouletteBet, 'kind' | 'value'>) {
+  const nums = betNumbers(b.kind, b.value) ?? []
+  switch (b.kind) {
+    case 'number':
+      return `Sayı ${b.value}`
+    case 'split':
+      return `Ayrık ${nums.join('-')}`
+    case 'street':
+      return `Sokak ${nums[0]}-${nums[2]}`
+    case 'corner':
+      return `Köşe ${nums.join('-')}`
+    case 'line':
+      return `Altılı ${nums[0]}-${nums[5]}`
+    case 'column':
+      return `${b.value}. kolon`
+    case 'dozen':
+      return `${b.value}. düzine`
+    default:
+      return OUTSIDE_LABEL[b.kind]
+  }
+}
+
+/** Total returned for one bet (stake included). Inside bets pay 36 / covered numbers, e.g. split 18x, corner 9x. */
 export function betReturn(b: RouletteBet, n: number) {
-  if (b.kind === 'number') return b.value === n ? b.amount * 36 : 0
+  const nums = betNumbers(b.kind, b.value)
+  if (nums) return nums.includes(n) ? (b.amount * 36) / nums.length : 0
   if (n === 0) return 0
   const win =
     (b.kind === 'red' && RED.has(n)) ||
@@ -124,15 +180,13 @@ export function betReturn(b: RouletteBet, n: number) {
     (b.kind === 'odd' && n % 2 === 1) ||
     (b.kind === 'low' && n <= 18) ||
     (b.kind === 'high' && n >= 19)
-  if (b.kind === 'dozen') return Math.ceil(n / 12) === b.value ? b.amount * 3 : 0
   return win ? b.amount * 2 : 0
 }
 
 export function validBet(b: RouletteBet) {
   if (!Number.isInteger(b.amount) || b.amount <= 0) return false
-  if (b.kind === 'number') return Number.isInteger(b.value) && b.value! >= 0 && b.value! <= 36
-  if (b.kind === 'dozen') return b.value === 1 || b.value === 2 || b.value === 3
-  return ['red', 'black', 'even', 'odd', 'low', 'high'].includes(b.kind)
+  if (b.kind in OUTSIDE_LABEL) return b.value === undefined || b.value === null
+  return betNumbers(b.kind, b.value) !== null
 }
 
 /** Shared live roulette table timing. Client and server derive the same phase from the clock. */

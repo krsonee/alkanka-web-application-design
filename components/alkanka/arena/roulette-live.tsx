@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
 import { RouletteWheel, pocketColor } from './roulette-wheel'
+import { playSound } from '@/lib/sound'
 import { Chip, RouletteBoard, betKey, chipTone, parseKey, type BetKind } from './roulette-board'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
@@ -174,8 +175,15 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     if (lastPhase.current !== clock.phase) {
       lastPhase.current = clock.phase
       mutate()
-      if (clock.phase === 'spin') setDraft(new Map())
-      if (clock.phase === 'bet') setError('')
+      if (clock.phase === 'spin') {
+        setDraft(new Map())
+        playSound('spin')
+      }
+      if (clock.phase === 'result') playSound('ball')
+      if (clock.phase === 'bet') {
+        setError('')
+        playSound('turn')
+      }
     }
   }, [clock.phase, mutate])
 
@@ -206,6 +214,13 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const progress = betting ? Math.max(0, (clock.phaseEndsAt - clock.now) / RL_BET_MS) : 0
   const myResult = clock.phase === 'result' && me && me.returned !== null ? me.returned - me.total : null
 
+  const announced = useRef<number | null>(null)
+  useEffect(() => {
+    if (myResult === null || announced.current === clock.roundId) return
+    announced.current = clock.roundId
+    playSound(myResult > 0 ? 'win' : myResult < 0 ? 'lose' : 'coin')
+  }, [myResult, clock.roundId])
+
   function place(kind: BetKind, value?: number) {
     if (!betting || !requireLogin()) return
     const k = betKey(kind, value)
@@ -222,6 +237,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     setSending(false)
     if (!res.ok) return setError(res.error)
     setBalance(res.balance)
+    playSound('coin')
     setLastConfirmed(bets)
     setDraft(new Map())
     mutate()
@@ -368,7 +384,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               </span>
             )}
           </div>
-          <p className="text-pretty text-xs leading-relaxed text-muted-foreground">Sayıya 36x, düzine 3x, renk / tek-çift / alt-üst 2x öder. Top sunucuda atılır, herkes aynı turu görür.</p>
+          <p className="text-pretty text-xs leading-relaxed text-muted-foreground">Sayı 36x, ayrık 18x, sokak 12x, köşe 9x, altılı 6x, düzine / kolon 3x, renk / tek-çift / alt-üst 2x öder. Top sunucuda atılır, herkes aynı turu görür.</p>
           </div>
         </section>
 

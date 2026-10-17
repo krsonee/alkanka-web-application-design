@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { blackjackAct, blackjackDeal } from '@/app/actions/arena'
 import { RANKS, SUITS, handValue, bjAct, bjDeal, bjPayout, bjPublic, type BjPublic, type BjState, type Card } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
+import { playSound } from '@/lib/sound'
 import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
 
@@ -260,6 +261,7 @@ export function BlackjackHouse({ settings }: { settings: ArenaGameSettings }) {
     const res = await blackjackDeal(bet)
     setBusy(false)
     if (!res.ok) return setError(res.error)
+    playSound('card')
     setId(res.id)
     setDealKey((k) => k + 1)
     setHand(res.hand)
@@ -272,6 +274,7 @@ export function BlackjackHouse({ settings }: { settings: ArenaGameSettings }) {
     const res = await blackjackAct(id, a)
     setBusy(false)
     if (!res.ok) return setError(res.error)
+    playSound(a === 'stand' ? 'tick' : 'card')
     setHand(res.hand)
     setBalance(res.balance)
   }
@@ -328,6 +331,7 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
 
   function act(a: 'hit' | 'stand' | 'double') {
     if (a === 'double') setChips((c) => c - state.bet)
+    playSound(a === 'stand' ? 'tick' : 'card')
     const next = bjAct(state, a)
     setState(next)
     settle(next)
@@ -336,6 +340,7 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
   function nextHand() {
     if (handNo >= DUEL_HANDS) return onDone({ for: chips, against: 0 })
     const s = bjDeal(DUEL_BET)
+    playSound('card')
     setChips((c) => c - DUEL_BET)
     setHandNo((n) => n + 1)
     setState(s)

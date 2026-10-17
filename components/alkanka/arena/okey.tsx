@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
 import { OkeyRack, useRack, type DropKind } from './okey-rack'
 import { TableBrand } from './table-brand'
+import { playSound } from '@/lib/sound'
 import {
   COLOR_NAMES,
   chooseDiscard,
@@ -166,6 +167,7 @@ export function Okey({ finish }: GameApi) {
   const winning = useMemo(() => (phase === 'discard' ? findWinningDiscard(hand, okey) : null), [hand, okey, phase])
 
   function end(result: 'win' | 'lose' | 'draw', note: string) {
+    playSound(result === 'win' ? 'win' : result === 'lose' ? 'lose' : 'tick')
     setPhase('over')
     setMessage(note)
     setTimeout(() => finish(result, note), 1200)
@@ -176,6 +178,7 @@ export function Okey({ finish }: GameApi) {
     if (!deck.length) return end('draw', 'Ortada taş kalmadı, el berabere bitti.')
     const nextDeck = [...deck]
     const tile = nextDeck.pop()!
+    playSound('tile')
     setGame({ ...game, deck: nextDeck, hands: [[...hand, tile], ...hands.slice(1)] })
     setSelected(tile.id)
     setFresh(tile.id)
@@ -189,6 +192,7 @@ export function Okey({ finish }: GameApi) {
     if (!pile.length) return
     const tile = pile[pile.length - 1]
     const nextDiscards = discards.map((d, i) => (i === 3 ? d.slice(0, -1) : d))
+    playSound('tile')
     setGame({ ...game, discards: nextDiscards, hands: [[...hand, tile], ...hands.slice(1)] })
     setSelected(tile.id)
     setFresh(tile.id)
@@ -200,6 +204,7 @@ export function Okey({ finish }: GameApi) {
     if (phase !== 'discard' || tileId === null) return
     const tile = hand.find((t) => t.id === tileId)
     if (!tile) return
+    playSound('tile')
     setGame({
       ...game,
       hands: [hand.filter((t) => t.id !== tileId), ...hands.slice(1)],
@@ -257,6 +262,7 @@ export function Okey({ finish }: GameApi) {
           }
           setGame(state)
           setActive(bot)
+          playSound('tile')
           if (win) {
             end('lose', `${BOT_NAMES[bot - 1]} elini açtı. Bu masa onun.`)
             return

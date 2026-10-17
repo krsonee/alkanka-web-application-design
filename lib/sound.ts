@@ -19,6 +19,11 @@ export type SoundName =
   | 'coin'
   | 'tick'
   | 'error'
+  | 'chip'
+  | 'spin'
+  | 'ball'
+  | 'goal'
+  | 'move'
 
 const MUTE_KEY = 'alkanka:sound-muted'
 const listeners = new Set<() => void>()
@@ -96,6 +101,33 @@ function noise(opts: { at?: number; dur: number; freq: number; q?: number; vol?:
 }
 
 const SOUNDS: Record<SoundName, () => void> = {
+  chip: () => {
+    noise({ dur: 0.035, freq: 3200, q: 5, vol: 0.5 })
+    noise({ at: 0.04, dur: 0.03, freq: 2800, q: 5, vol: 0.3 })
+  },
+  // The ball rattles around the wheel and slows down over a few seconds.
+  spin: () => {
+    let t = 0
+    for (let i = 0; i < 34; i++) {
+      t += 0.05 + (i / 34) ** 2 * 0.22
+      noise({ at: t, dur: 0.03, freq: 2600 + Math.random() * 900, q: 6, vol: 0.32 })
+    }
+  },
+  ball: () => {
+    noise({ dur: 0.05, freq: 1900, q: 3, vol: 0.6 })
+    noise({ at: 0.12, dur: 0.04, freq: 1700, q: 3, vol: 0.35 })
+    noise({ at: 0.2, dur: 0.03, freq: 1600, q: 3, vol: 0.2 })
+  },
+  goal: () =>
+    tones([
+      { f: 784, dur: 0.12, type: 'square', vol: 0.08 },
+      { f: 988, at: 0.1, dur: 0.12, type: 'square', vol: 0.08 },
+      { f: 1175, at: 0.2, dur: 0.35, type: 'square', vol: 0.08 },
+    ]),
+  move: () => {
+    noise({ dur: 0.05, freq: 900, q: 2, vol: 0.55 })
+    tones([{ f: 320, dur: 0.06, type: 'triangle', vol: 0.12 }])
+  },
   turn: () => tones([{ f: 660, dur: 0.14, type: 'triangle' }, { f: 990, at: 0.12, dur: 0.22, type: 'triangle' }]),
   join: () => tones([{ f: 523, dur: 0.12 }, { f: 659, at: 0.09, dur: 0.12 }, { f: 784, at: 0.18, dur: 0.2 }]),
   leave: () => tones([{ f: 659, dur: 0.14 }, { f: 440, at: 0.12, dur: 0.24 }]),
