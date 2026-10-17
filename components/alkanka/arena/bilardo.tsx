@@ -1,179 +1,293 @@
 'use client'
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { BallState, BilardoState } from '@/lib/pvp/rules'
+import type { BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
 import { TableBrand } from './table-brand'
+import {
+  FALLBACK_SEED,
+  H,
+  POCKETS,
+  POCKET_R,
+  R,
+  RAIL,
+  W,
+  canPlaceCue,
+  fromState,
+  groupOf,
+  isStill,
+  needsCall,
+  newEvents,
+  rack,
+  resolveShot,
+  seeded,
+  startShot,
+  stepShot,
+  type Ball,
+  type Group,
+  type Groups,
+  type ShotEvents,
+  type ShotInput,
+  type Spin,
+  type StepHooks,
+} from '@/lib/games/bilardo'
 
-const W = 1000
-const H = 500
-const RAIL = 38
-const R = 12
-// Scale: 1000 units = 100" playing surface (9 ft table), ball 2.25" ≈ 22.5 units.
-// Pocket mouths follow WPA sizing: corner ≈ 4.6", side ≈ 5.2" (cushion nose to nose).
-const POCKET_R = 22
-const CORNER_MOUTH = 14
-const SIDE_MOUTH = 16
-const MAX_SPEED = 30
-const SUB = 8
-const FRICTION = Math.pow(0.987, 1 / SUB)
-const FOLLOW_GAIN = 0.62
-const ENGLISH_GAIN = 0.42
-
+const CW = W + RAIL * 2
+const CH = H + RAIL * 2
 const BALL_COLORS = ['#f5f1e6', '#f2c230', '#2559c9', '#d4382c', '#6b3fa0', '#ef7d22', '#1f8a4c', '#8a2432', '#141414']
-const POCKETS = [
-  [-6, -6],
-  [W / 2, -8],
-  [W + 6, -6],
-  [-6, H + 6],
-  [W / 2, H + 8],
-  [W + 6, H + 6],
-] as const
+const STRIKE_MS = 110
+const DROP_MS = 320
+const IN_HAND_MSG = 'Beyaz elinde: beyazı sürükleyip istediğin yere koy.'
 
-const inHorizontalMouth = (x: number) => x < CORNER_MOUTH || x > W - CORNER_MOUTH || Math.abs(x - W / 2) < SIDE_MOUTH
-const inVerticalMouth = (y: number) => y < CORNER_MOUTH || y > H - CORNER_MOUTH
-
-type Ball = { id: number; x: number; y: number; vx: number; vy: number; in: boolean }
-/** Cue-ball spin. `side` > 0 is right english, `follow` > 0 is top spin, < 0 is draw. */
-type Spin = { side: number; follow: number; applied: boolean }
+type Vec3 = [number, number, number]
+type Roll = { n: Vec3; m: Vec3 }
 type SpinInput = { x: number; y: number }
-type Group = 'solid' | 'stripe'
-type Who = 'p' | 'b'
+type Drop = { id: number; x: number; y: number; p: number; t0: number }
 
-const groupOf = (id: number): Group | 'eight' | 'cue' => (id === 0 ? 'cue' : id === 8 ? 'eight' : id < 8 ? 'solid' : 'stripe')
+const other = (s: number) => (s === 0 ? 1 : 0)
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 
-function seeded(seedText: string) {
-  let h = 2166136261
-  for (let i = 0; i < seedText.length; i++) h = Math.imul(h ^ seedText.charCodeAt(i), 16777619)
-  return () => {
-    h = Math.imul(h ^ (h >>> 15), 2246822507)
-    h = Math.imul(h ^ (h >>> 13), 3266489909)
-    return ((h ^= h >>> 16) >>> 0) / 4294967296
-  }
+/** Rotates v around the in-plane unit axis (kx, ky, 0) by `a` radians (Rodrigues). */
+function rotate(v: Vec3, kx: number, ky: number, a: number): Vec3 {
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  const dot = kx * v[0] + ky * v[1]
+  const x = v[0] * c + ky * v[2] * s + kx * dot * (1 - c)
+  const y = v[1] * c - kx * v[2] * s + ky * dot * (1 - c)
+  const z = v[2] * c + (kx * v[1] - ky * v[0]) * s
+  const l = Math.hypot(x, y, z) || 1
+  return [x / l, y / l, z / l]
 }
 
-const toState = (b: Ball): BallState => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, inPocket: b.in })
-const fromState = (b: BallState): Ball => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, in: b.inPocket })
+const initialRoll = (id: number): Roll => (id > 8 ? { n: [1, 0, 0], m: [0, 0, 1] } : { n: [0, 0, 1], m: [1, 0, 0] })
 
-function rack(rand: () => number = Math.random): Ball[] {
-  const balls: Ball[] = [{ id: 0, x: W * 0.25, y: H / 2, vx: 0, vy: 0, in: false }]
-  const pool = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15]
-    .map((id) => ({ id, k: rand() }))
-    .sort((a, b) => a.k - b.k)
-    .map((x) => x.id)
-  const apexX = W * 0.7
-  let k = 0
-  for (let row = 0; row < 5; row++) {
-    for (let i = 0; i <= row; i++) {
-      const isEight = row === 2 && i === 1
-      const id = isEight ? 8 : pool[k++]
-      balls.push({ id, x: apexX + row * R * 1.75, y: H / 2 + (i - row / 2) * R * 2.02, vx: 0, vy: 0, in: false })
-    }
-  }
-  return balls
+/** Draws a marking on the ball surface that points along `v`, foreshortened as it rolls away. Returns true if it faces the viewer. */
+function surfaceSpot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, v: Vec3, size: number, color: string) {
+  if (v[2] <= -0.2) return false
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.ellipse(x + v[0] * r * 0.9, y + v[1] * r * 0.9, size * r * Math.max(0.18, v[2]), size * r, Math.atan2(v[1], v[0]), 0, Math.PI * 2)
+  ctx.fill()
+  return v[2] > 0.5
 }
 
-function cushion(b: Ball, axis: 'x' | 'y', spin?: Spin) {
-  if (spin && b.id === 0 && Math.abs(spin.side) > 0.01) {
-    const sp = Math.hypot(b.vx, b.vy) || 1
-    // English pushes the rebound toward the shooter's side of the spin, along the rail.
-    const rx = -b.vy / sp
-    const ry = b.vx / sp
-    if (axis === 'y') {
-      b.vy = -b.vy * 0.82
-      b.vx += rx * spin.side * ENGLISH_GAIN * sp
-    } else {
-      b.vx = -b.vx * 0.82
-      b.vy += ry * spin.side * ENGLISH_GAIN * sp
-    }
-    spin.side *= 0.5
-    return
-  }
-  if (axis === 'y') b.vy = -b.vy * 0.82
-  else b.vx = -b.vx * 0.82
-}
+function drawBall(ctx: CanvasRenderingContext2D, b: { id: number; x: number; y: number }, roll: Roll, scale = 1) {
+  const r = R * scale
+  const { x, y, id } = b
+  const shadow = ctx.createRadialGradient(x + 3, y + 4, r * 0.2, x + 3, y + 4, r * 1.25)
+  shadow.addColorStop(0, 'rgba(0,0,0,0.45)')
+  shadow.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = shadow
+  ctx.beginPath()
+  ctx.arc(x + 3, y + 4, r * 1.25, 0, Math.PI * 2)
+  ctx.fill()
 
-function step(balls: Ball[], onHit: (a: Ball, b: Ball) => void, onPot: (b: Ball) => void, spin?: Spin, onRail?: (b: Ball) => void) {
-  for (let s = 0; s < SUB; s++) {
-    for (const b of balls) {
-      if (b.in) continue
-      b.x += b.vx / SUB
-      b.y += b.vy / SUB
-      b.vx *= FRICTION
-      b.vy *= FRICTION
-      for (const [px, py] of POCKETS) {
-        if (Math.hypot(b.x - px, b.y - py) < POCKET_R) {
-          b.in = true
-          b.vx = b.vy = 0
-          onPot(b)
-          break
-        }
-      }
-      if (b.in) continue
-      const mouthX = inHorizontalMouth(b.x)
-      const mouthY = inVerticalMouth(b.y)
-      if (b.x < R && !mouthY && b.vx < 0) ((b.x = R), cushion(b, 'x', spin), onRail?.(b))
-      if (b.x > W - R && !mouthY && b.vx > 0) ((b.x = W - R), cushion(b, 'x', spin), onRail?.(b))
-      if (b.y < R && !mouthX && b.vy < 0) ((b.y = R), cushion(b, 'y', spin), onRail?.(b))
-      if (b.y > H - R && !mouthX && b.vy > 0) ((b.y = H - R), cushion(b, 'y', spin), onRail?.(b))
-      b.x = Math.min(Math.max(b.x, -10), W + 10)
-      b.y = Math.min(Math.max(b.y, -10), H + 10)
-    }
-    for (let i = 0; i < balls.length; i++) {
-      const a = balls[i]
-      if (a.in) continue
-      for (let j = i + 1; j < balls.length; j++) {
-        const b = balls[j]
-        if (b.in) continue
-        const dx = b.x - a.x
-        const dy = b.y - a.y
-        const d = Math.hypot(dx, dy)
-        if (d === 0 || d >= R * 2) continue
-        const nx = dx / d
-        const ny = dy / d
-        const overlap = (R * 2 - d) / 2
-        a.x -= nx * overlap
-        a.y -= ny * overlap
-        b.x += nx * overlap
-        b.y += ny * overlap
-        const rel = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny
-        if (rel <= 0) continue
-        const cue = spin && !spin.applied ? (a.id === 0 ? a : b.id === 0 ? b : null) : null
-        const pre = cue ? { vx: cue.vx, vy: cue.vy, sp: Math.hypot(cue.vx, cue.vy) } : null
-        const imp = rel * 0.97
-        a.vx -= imp * nx
-        a.vy -= imp * ny
-        b.vx += imp * nx
-        b.vy += imp * ny
-        if (cue && pre && spin && pre.sp > 0) {
-          // Top spin keeps the cue ball rolling forward, draw pulls it back along the shot line.
-          cue.vx += (pre.vx / pre.sp) * spin.follow * FOLLOW_GAIN * pre.sp
-          cue.vy += (pre.vy / pre.sp) * spin.follow * FOLLOW_GAIN * pre.sp
-          spin.applied = true
-        }
-        onHit(a, b)
-      }
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.clip()
+  const stripe = id > 8
+  ctx.fillStyle = stripe ? BALL_COLORS[id - 8] : BALL_COLORS[id]
+  ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  if (stripe) {
+    const neg: Vec3 = [-roll.n[0], -roll.n[1], -roll.n[2]]
+    surfaceSpot(ctx, x, y, r, roll.n, 0.66, BALL_COLORS[0])
+    surfaceSpot(ctx, x, y, r, neg, 0.66, BALL_COLORS[0])
+  }
+  if (id === 0) {
+    surfaceSpot(ctx, x, y, r, roll.n, 0.14, '#c0392b')
+  } else {
+    const p = stripe ? roll.m : roll.n
+    if (surfaceSpot(ctx, x, y, r, p, 0.46, BALL_COLORS[0]) && scale > 0.6) {
+      ctx.fillStyle = '#141414'
+      ctx.font = `bold ${Math.round(8 * scale)}px system-ui, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(id), x + p[0] * r * 0.9, y + p[1] * r * 0.9 + 0.5)
     }
   }
-  for (const b of balls) if (Math.hypot(b.vx, b.vy) < 0.06) b.vx = b.vy = 0
+  const shine = ctx.createRadialGradient(x - r * 0.4, y - r * 0.45, 1, x, y, r * 1.2)
+  shine.addColorStop(0, 'rgba(255,255,255,0.65)')
+  shine.addColorStop(0.3, 'rgba(255,255,255,0)')
+  shine.addColorStop(1, 'rgba(0,0,0,0.4)')
+  ctx.fillStyle = shine
+  ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  ctx.restore()
 }
 
-const IN_HAND_MSG = 'Beyaz elinde: beyazı sürükleyip istediğin yere koy, sonra vur.'
+function drawCue(ctx: CanvasRenderingContext2D, cx: number, cy: number, angle: number, back: number) {
+  const sx = cx - Math.cos(angle) * (R + back)
+  const sy = cy - Math.sin(angle) * (R + back)
+  const ex = cx - Math.cos(angle) * (R + back + 360)
+  const ey = cy - Math.sin(angle) * (R + back + 360)
+  ctx.save()
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)'
+  ctx.lineWidth = 8
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(sx + 4, sy + 6)
+  ctx.lineTo(ex + 4, ey + 6)
+  ctx.stroke()
+  const stick = ctx.createLinearGradient(sx, sy, ex, ey)
+  stick.addColorStop(0, '#2b6cb0')
+  stick.addColorStop(0.012, '#f2e7cf')
+  stick.addColorStop(0.05, '#f2e7cf')
+  stick.addColorStop(0.06, '#c9a46a')
+  stick.addColorStop(0.7, '#7a4a25')
+  stick.addColorStop(0.72, '#e2b33c')
+  stick.addColorStop(0.73, '#3a2214')
+  stick.addColorStop(1, '#1d120a')
+  ctx.strokeStyle = stick
+  ctx.lineWidth = 7
+  ctx.beginPath()
+  ctx.moveTo(sx, sy)
+  ctx.lineTo(ex, ey)
+  ctx.stroke()
+  ctx.restore()
+}
 
-function canPlaceCue(balls: Ball[], x: number, y: number) {
-  if (x < R * 1.5 || x > W - R * 1.5 || y < R * 1.5 || y > H - R * 1.5) return false
-  if (POCKETS.some(([px, py]) => Math.hypot(px - x, py - y) < POCKET_R + R)) return false
-  return balls.every((b) => b.id === 0 || b.in || Math.hypot(b.x - x, b.y - y) >= R * 2.1)
+/** The static table (wood, felt, cushions, pockets, markings) is painted once and blitted every frame. */
+function paintTable(dpr: number) {
+  const c = document.createElement('canvas')
+  c.width = CW * dpr
+  c.height = CH * dpr
+  const ctx = c.getContext('2d')!
+  const css = getComputedStyle(document.documentElement)
+  const felt = css.getPropertyValue('--felt').trim() || '#1b2a44'
+  const wood = css.getPropertyValue('--wood').trim() || '#4a3020'
+  const gold = css.getPropertyValue('--primary').trim() || '#e2b33c'
+  ctx.scale(dpr, dpr)
+  ctx.fillStyle = wood
+  ctx.beginPath()
+  ctx.roundRect(0, 0, CW, CH, 26)
+  ctx.fill()
+  ctx.save()
+  ctx.beginPath()
+  ctx.roundRect(0, 0, CW, CH, 26)
+  ctx.clip()
+  for (let y = 0; y < CH; y += 3) {
+    const a = 0.05 + 0.05 * Math.sin(y * 0.37) * Math.sin(y * 0.071)
+    ctx.fillStyle = a > 0.05 ? `rgba(255,220,170,${a.toFixed(3)})` : `rgba(0,0,0,${(0.1 - a).toFixed(3)})`
+    ctx.fillRect(0, y, CW, 1.5)
+  }
+  const railShade = ctx.createLinearGradient(0, 0, 0, CH)
+  railShade.addColorStop(0, 'rgba(255,255,255,0.14)')
+  railShade.addColorStop(0.5, 'rgba(0,0,0,0)')
+  railShade.addColorStop(1, 'rgba(0,0,0,0.35)')
+  ctx.fillStyle = railShade
+  ctx.fillRect(0, 0, CW, CH)
+  ctx.restore()
+  ctx.strokeStyle = gold
+  ctx.globalAlpha = 0.5
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.roundRect(8, 8, CW - 16, CH - 16, 20)
+  ctx.stroke()
+  ctx.globalAlpha = 1
+  ctx.translate(RAIL, RAIL)
+  ctx.fillStyle = felt
+  ctx.fillRect(0, 0, W, H)
+  const nc = document.createElement('canvas')
+  nc.width = nc.height = 96
+  const nx = nc.getContext('2d')
+  if (nx) {
+    const img = nx.createImageData(96, 96)
+    for (let i = 0; i < img.data.length; i += 4) {
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.random() * 255
+      img.data[i + 3] = 14
+    }
+    nx.putImageData(img, 0, 0)
+    const pattern = ctx.createPattern(nc, 'repeat')
+    if (pattern) {
+      ctx.fillStyle = pattern
+      ctx.fillRect(0, 0, W, H)
+    }
+  }
+  const light = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W * 0.6)
+  light.addColorStop(0, 'rgba(255,255,255,0.1)')
+  light.addColorStop(1, 'rgba(0,0,0,0.34)')
+  ctx.fillStyle = light
+  ctx.fillRect(0, 0, W, H)
+  const cushion = 10
+  ;[
+    [0, 0, W, cushion, 0, 0, 0, cushion],
+    [0, H - cushion, W, cushion, 0, H, 0, H - cushion],
+    [0, 0, cushion, H, 0, 0, cushion, 0],
+    [W - cushion, 0, cushion, H, W, 0, W - cushion, 0],
+  ].forEach(([x, y, w, h, x0, y0, x1, y1]) => {
+    const cg = ctx.createLinearGradient(x0, y0, x1, y1)
+    cg.addColorStop(0, 'rgba(0,0,0,0.45)')
+    cg.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = cg
+    ctx.fillRect(x, y, w, h)
+  })
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.globalAlpha = 0.1
+  ctx.strokeStyle = gold
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.ellipse(W / 2, H / 2, 150, 70, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.globalAlpha = 0.13
+  ctx.fillStyle = gold
+  ctx.font = '900 64px system-ui, sans-serif'
+  ctx.fillText('AL KANKA', W / 2, H / 2 - 4)
+  ctx.globalAlpha = 0.1
+  ctx.font = '700 16px system-ui, sans-serif'
+  ctx.fillText('alkanka.com', W / 2, H / 2 + 40)
+  ctx.restore()
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+  ctx.beginPath()
+  ctx.moveTo(W * 0.25, 0)
+  ctx.lineTo(W * 0.25, H)
+  ctx.stroke()
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'
+  ctx.beginPath()
+  ctx.arc(W * 0.7, H / 2, 2.5, 0, Math.PI * 2)
+  ctx.fill()
+  for (const [px, py] of POCKETS) {
+    const pg = ctx.createRadialGradient(px, py, POCKET_R * 0.2, px, py, POCKET_R * 1.15)
+    pg.addColorStop(0, '#000000')
+    pg.addColorStop(0.75, '#05070c')
+    pg.addColorStop(1, 'rgba(5,7,12,0)')
+    ctx.fillStyle = pg
+    ctx.beginPath()
+    ctx.arc(px, py, POCKET_R * 1.15, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = gold
+    ctx.globalAlpha = 0.3
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.arc(px, py, POCKET_R, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+  ;[0.125, 0.25, 0.375, 0.625, 0.75, 0.875].forEach((f) => {
+    ctx.fillStyle = gold
+    ctx.beginPath()
+    ctx.arc(W * f, -RAIL / 2, 3, 0, Math.PI * 2)
+    ctx.arc(W * f, H + RAIL / 2, 3, 0, Math.PI * 2)
+    ctx.fill()
+  })
+  ;[0.25, 0.5, 0.75].forEach((f) => {
+    ctx.fillStyle = gold
+    ctx.beginPath()
+    ctx.arc(-RAIL / 2, H * f, 3, 0, Math.PI * 2)
+    ctx.arc(W + RAIL / 2, H * f, 3, 0, Math.PI * 2)
+    ctx.fill()
+  })
+  return { canvas: c, gold }
 }
 
 function clearPath(balls: Ball[], x1: number, y1: number, x2: number, y2: number, skip: number[]) {
   const dx = x2 - x1
   const dy = y2 - y1
-  const len2 = dx * dx + dy * dy
+  const len2 = dx * dx + dy * dy || 1
   for (const b of balls) {
     if (b.in || skip.includes(b.id)) continue
     const t = Math.max(0, Math.min(1, ((b.x - x1) * dx + (b.y - y1) * dy) / len2))
@@ -200,120 +314,195 @@ function castGuide(balls: Ball[], cue: Ball, angle: number) {
   return best
 }
 
+const pocketAt = (x: number, y: number) => POCKETS.findIndex(([px, py]) => Math.hypot(px - x, py - y) < POCKET_R * 2.6)
+
 export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote?: Remote<BilardoState> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const feltNoise = useRef<CanvasPattern | null>(null)
+  const remoteRef = useRef(remote)
+  remoteRef.current = remote
   const seat = remote?.seat ?? 0
-  const oppSeat = seat === 0 ? 1 : 0
-  const remoteGroups = (st: BilardoState): Record<Who, Group | null> => ({ p: st.groups[seat], b: st.groups[oppSeat] })
-  const balls = useRef<Ball[]>(
-    remote && remote.state.balls.length ? remote.state.balls.map(fromState) : rack(remote ? seeded(remote.names.join('|') + (remote.id ?? '')) : Math.random),
-  )
+  const oppSeat = other(seat)
+  const oppName = remote ? remote.names[oppSeat] || 'Rakip' : 'Baykuş'
+
+  const startBalls = () =>
+    remote ? (remote.state.balls.length ? remote.state.balls.map(fromState) : rack(seeded(FALLBACK_SEED))) : rack(Math.random)
+  const balls = useRef<Ball[]>(startBalls())
+  const rolls = useRef(new Map<number, Roll>())
+  const drops = useRef<Drop[]>([])
+  const pullRef = useRef(0)
   const game = useRef({
-    turn: (remote ? (remote.state.turn === seat ? 'p' : 'b') : 'p') as Who,
-    groups: (remote ? remoteGroups(remote.state) : { p: null, b: null }) as Record<Who, Group | null>,
+    turn: remote ? remote.state.turn : 0,
+    shooter: 0,
+    groups: (remote ? [remote.state.groups[0], remote.state.groups[1]] : [null, null]) as Groups,
+    broken: remote ? (remote.state.broken ?? remote.state.seq > 0) : false,
     moving: false,
     over: false,
     replay: false,
+    pending: false,
+    failed: false,
     angle: Math.PI,
     lastSeq: remote?.state.seq ?? 0,
-    /** After a foul the incoming player may place the cue ball anywhere on the table before shooting. */
-    ballInHand: remote ? !!remote.state.ballInHand && remote.state.turn === seat : false,
-    shot: { first: null as number | null, potted: [] as number[], rail: false, angle: 0, pow: 0, spin: { x: 0, y: 0 } as SpinInput },
+    ballInHand: remote ? !!remote.state.ballInHand : false,
+    call: null as number | null,
     spin: { side: 0, follow: 0, applied: true } as Spin,
+    ev: newEvents() as ShotEvents,
+    strike: null as { t0: number; input: ShotInput; back: number } | null,
+    pottedOrder: balls.current.filter((b) => b.in && b.id !== 0).map((b) => b.id),
   })
-  const [power, setPower] = useState(60)
+
+  const [keyPower, setKeyPowerState] = useState(0.6)
+  const keyPowerRef = useRef(keyPower)
+  const setKeyPower = (v: number) => {
+    keyPowerRef.current = v
+    setKeyPowerState(v)
+  }
   const [spin, setSpinState] = useState<SpinInput>({ x: 0, y: 0 })
   const spinRef = useRef(spin)
   const setSpin = (v: SpinInput) => {
     spinRef.current = v
     setSpinState(v)
   }
-  const oppName = remote ? remote.names[oppSeat] || 'Rakip' : 'Rakip · Baykuş'
-  const [ui, setUi] = useState({
-    turn: game.current.turn,
-    moving: false,
-    message: remote ? (game.current.turn === 'p' ? 'Sıra sende. Nişan al ve vur.' : `${oppName} nişan alıyor...`) : 'Açılış vuruşu sende. İstekayı nişan al ve vur.',
-    groups: { ...game.current.groups },
-    potted: balls.current.filter((b) => b.in && b.id !== 0).map((b) => b.id),
-  })
+  const [aimLocked, setAimLocked] = useState(false)
+  const lockedRef = useRef(false)
+  const lock = (v: boolean) => {
+    lockedRef.current = v
+    setAimLocked(v)
+  }
 
+  const mustCallNow = () => {
+    const g = game.current
+    return g.turn === seat && g.broken && needsCall(balls.current, g.groups, seat)
+  }
+
+  const turnMessage = (note: string) => {
+    const g = game.current
+    if (g.over) return note
+    let tail: string
+    if (g.turn !== seat) tail = `${oppName} oynuyor.`
+    else if (g.ballInHand) tail = IN_HAND_MSG
+    else if (!g.broken) tail = 'Açılış vuruşu sende.'
+    else if (mustCallNow()) tail = 'Siyah sırası: önce masada bir delik seç, sonra vur.'
+    else tail = 'Sıra sende.'
+    return note ? `${note} ${tail}` : tail
+  }
+
+  const snapshot = (message: string) => {
+    const g = game.current
+    return {
+      turn: g.turn,
+      busy: g.moving || !!g.strike || g.pending,
+      over: g.over,
+      message,
+      groups: [g.groups[0], g.groups[1]] as Groups,
+      potted: [...g.pottedOrder],
+      inTable: balls.current.filter((b) => !b.in).map((b) => b.id),
+      ballInHand: g.ballInHand && g.turn === seat,
+      call: g.call,
+      mustCall: mustCallNow(),
+    }
+  }
+  const [ui, setUi] = useState(() => snapshot(turnMessage(remote?.state.note ?? '')))
+  const sync = (message?: string) => setUi((u) => snapshot(message ?? u.message))
+
+  const keepPottedOrder = () => {
+    const g = game.current
+    const inIds = balls.current.filter((b) => b.in && b.id !== 0).map((b) => b.id)
+    g.pottedOrder = [...g.pottedOrder.filter((id) => inIds.includes(id)), ...inIds.filter((id) => !g.pottedOrder.includes(id))]
+  }
+
+  function applyRemote(st: BilardoState) {
+    const g = game.current
+    g.lastSeq = st.seq
+    balls.current = st.balls.length ? st.balls.map(fromState) : rack(seeded(FALLBACK_SEED))
+    g.groups = [st.groups[0], st.groups[1]]
+    g.turn = st.turn
+    g.broken = st.broken ?? st.seq > 0
+    g.ballInHand = !!st.ballInHand
+    g.pending = false
+    g.failed = false
+    g.replay = false
+    g.call = null
+    keepPottedOrder()
+    sync(turnMessage(st.note))
+  }
+
+  function shoot(input: ShotInput) {
+    const g = game.current
+    if (g.moving || g.strike || g.over || balls.current[0].in) return
+    g.shooter = g.turn
+    g.ballInHand = false
+    g.strike = { t0: performance.now(), input, back: 14 + input.pow * 80 }
+    sync(g.turn === seat ? 'Toplar yuvarlanıyor...' : `${oppName} vurdu...`)
+  }
+
+  // Remote updates: replay the rival's shot from the current (previous) positions, otherwise snap to the server state.
   useEffect(() => {
     if (!remote) return
     const g = game.current
     const st = remote.state
-    if (g.moving || st.seq <= g.lastSeq) return
-    g.lastSeq = st.seq
-    if (st.shot && st.shot.by !== seat && st.shot.seq === st.seq) {
-      // Replay the rival's shot from the synced positions, then snap to the authoritative result.
+    if (g.moving || g.strike || st.seq <= g.lastSeq) return
+    const shot = st.shot
+    if (shot && shot.by !== seat && shot.seq === st.seq && st.seq === g.lastSeq + 1) {
       g.replay = true
-      g.turn = 'b'
-      shoot(st.shot.angle, st.shot.pow * 100, true, { x: st.shot.spinX ?? 0, y: st.shot.spinY ?? 0 })
+      g.turn = shot.by
+      if (typeof shot.cueX === 'number' && typeof shot.cueY === 'number') {
+        balls.current[0].x = shot.cueX
+        balls.current[0].y = shot.cueY
+      }
+      const dx = shot.dx ?? Math.cos(shot.angle ?? 0)
+      const dy = shot.dy ?? Math.sin(shot.angle ?? 0)
+      shoot({ dx, dy, pow: shot.pow, spinX: shot.spinX ?? 0, spinY: shot.spinY ?? 0 })
       return
     }
-    balls.current = st.balls.map(fromState)
-    g.groups = remoteGroups(st)
-    g.turn = st.turn === seat ? 'p' : 'b'
-    g.ballInHand = !!st.ballInHand && g.turn === 'p'
-    sync(g.turn === 'p' ? (g.ballInHand ? IN_HAND_MSG : 'Sıra sende. Nişan al ve vur.') : `${oppName} nişan alıyor...`)
+    applyRemote(st)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remote?.state.seq])
 
-  const sync = (message?: string) => {
+  function settle() {
     const g = game.current
-    setUi((u) => ({
-      turn: g.turn,
-      moving: g.moving,
-      message: message ?? u.message,
-      groups: { ...g.groups },
-      potted: balls.current.filter((b) => b.in && b.id !== 0).map((b) => b.id),
-    }))
+    g.moving = false
+    const r0 = remoteRef.current
+    if (r0) {
+      const st = r0.state
+      if (st.seq > g.lastSeq || g.failed) applyRemote(st)
+      else sync('Sonuç onaylanıyor...')
+      return
+    }
+    const r = resolveShot(balls.current, g.ev, { shooter: g.shooter, groups: g.groups, broken: g.broken, call: g.call })
+    g.broken = true
+    g.groups = r.groups
+    g.call = null
+    keepPottedOrder()
+    if (r.foul) playSound('error')
+    if (r.winner !== null) {
+      g.over = true
+      const won = r.winner === seat
+      sync(`${r.note} ${won ? 'Masa senin!' : 'Masa rakibin.'}`)
+      setTimeout(() => finish?.(won ? 'win' : 'lose', r.note), 1300)
+      return
+    }
+    g.turn = r.keep ? g.shooter : other(g.shooter)
+    g.ballInHand = r.ballInHand
+    sync(turnMessage(r.note))
+    if (g.turn !== seat) setTimeout(botShot, 900)
   }
 
-  function shoot(angle: number, pow: number, replay = false, sp: SpinInput = { x: 0, y: 0 }) {
+  function botShot() {
     const g = game.current
-    const cue = balls.current[0]
-    if (g.moving || g.over || cue.in) return
-    if (remote && !replay && (g.turn !== 'p' || remote.busy)) return
-    const speed = (pow / 100) * MAX_SPEED
-    cue.vx = Math.cos(angle) * speed
-    cue.vy = Math.sin(angle) * speed
-    g.spin = { side: sp.x, follow: sp.y, applied: false }
-    g.ballInHand = false
-    g.shot = { first: null, potted: [], rail: false, angle, pow: pow / 100, spin: sp }
-    g.moving = true
-    sync(g.turn === 'p' ? 'Toplar yuvarlanıyor...' : `${oppName} vurdu...`)
-  }
-
-  function sendShot(result: 'win' | 'lose' | null, keepTurn: boolean, note: string, ballInHand = false) {
-    if (!remote) return
-    const g = game.current
-    const groups: [Group | null, Group | null] = [null, null]
-    groups[seat] = g.groups.p
-    groups[oppSeat] = g.groups.b
-    void remote.send({
-      type: 'shot',
-      angle: g.shot.angle,
-      pow: g.shot.pow,
-      spinX: g.shot.spin.x,
-      spinY: g.shot.spin.y,
-      balls: balls.current.map(toState),
-      groups,
-      keepTurn,
-      result,
-      note,
-      ballInHand,
-    })
-  }
-
-  function botShot(inHand = false) {
-    const g = game.current
+    if (g.over) return
     const list = balls.current
     const cue = list[0]
-    const mine = g.groups.b
-    if (inHand) {
-      // With ball in hand the bot sets the cue ball straight behind its easiest target, lined up with a pocket.
-      for (const t of list.filter((b) => !b.in && b.id !== 0 && (mine === null ? b.id !== 8 : groupOf(b.id) === mine))) {
+    const me = g.turn
+    const mine = g.groups[me]
+    if (!g.broken) {
+      const apex = list.filter((b) => b.id !== 0 && !b.in).sort((a, b) => a.x - b.x)[0]
+      const ang = Math.atan2(apex.y - cue.y + (Math.random() - 0.5) * 6, apex.x - cue.x)
+      return shoot({ dx: Math.cos(ang), dy: Math.sin(ang), pow: 1, spinX: 0, spinY: 0 })
+    }
+    const onBlack = needsCall(list, g.groups, me)
+    const legal = (b: Ball) => !b.in && b.id !== 0 && (onBlack ? b.id === 8 : mine === null ? b.id !== 8 : groupOf(b.id) === mine)
+    if (g.ballInHand) {
+      for (const t of list.filter(legal)) {
         const [px, py] = POCKETS.reduce((a, p) => (Math.hypot(p[0] - t.x, p[1] - t.y) < Math.hypot(a[0] - t.x, a[1] - t.y) ? p : a))
         const d = Math.hypot(px - t.x, py - t.y) || 1
         const x = t.x - ((px - t.x) / d) * R * 9
@@ -325,15 +514,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         }
       }
     }
-    const ownLeft = list.filter((b) => !b.in && groupOf(b.id) === mine)
-    const targets = list.filter((b) => {
-      if (b.in || b.id === 0) return false
-      if (b.id === 8) return mine !== null && ownLeft.length === 0
-      return mine === null || groupOf(b.id) === mine
-    })
-    let best: { angle: number; score: number; dist: number } | null = null
-    for (const t of targets) {
-      for (const [px, py] of POCKETS) {
+    let best: { angle: number; score: number; dist: number; pocket: number } | null = null
+    for (const t of list.filter(legal)) {
+      POCKETS.forEach(([px, py], pocket) => {
         const tx = px - t.x
         const ty = py - t.y
         const td = Math.hypot(tx, ty)
@@ -343,291 +526,161 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         const ay = gy - cue.y
         const ad = Math.hypot(ax, ay)
         const cos = (ax * tx + ay * ty) / (ad * td)
-        if (cos < 0.35) continue
-        if (!clearPath(list, cue.x, cue.y, gx, gy, [0, t.id])) continue
-        if (!clearPath(list, t.x, t.y, px, py, [t.id])) continue
+        if (cos < 0.35) return
+        if (!clearPath(list, cue.x, cue.y, gx, gy, [0, t.id])) return
+        if (!clearPath(list, t.x, t.y, px, py, [t.id])) return
         const score = cos * 2 - (ad + td) / 900
-        if (!best || score > best.score) best = { angle: Math.atan2(ay, ax), score, dist: ad + td }
-      }
+        if (!best || score > best.score) best = { angle: Math.atan2(ay, ax), score, dist: ad + td, pocket }
+      })
     }
-    if (!best) {
-      const near = targets.sort((a, b) => Math.hypot(a.x - cue.x, a.y - cue.y) - Math.hypot(b.x - cue.x, b.y - cue.y))[0]
-      const angle = near ? Math.atan2(near.y - cue.y, near.x - cue.x) : Math.random() * Math.PI * 2
-      return shoot(angle + (Math.random() - 0.5) * 0.05, 55, false, { x: 0, y: 0 })
+    const chosen = best as { angle: number; score: number; dist: number; pocket: number } | null
+    if (onBlack) {
+      const eight = list.find((b) => b.id === 8)!
+      g.call =
+        chosen?.pocket ??
+        POCKETS.reduce((bi, p, i) => (Math.hypot(p[0] - eight.x, p[1] - eight.y) < Math.hypot(POCKETS[bi][0] - eight.x, POCKETS[bi][1] - eight.y) ? i : bi), 0)
+      sync(`${oppName} siyah için delik seçti.`)
     }
-    const noise = (Math.random() - 0.5) * 0.028
+    if (!chosen) {
+      const near = list.filter(legal).sort((a, b) => Math.hypot(a.x - cue.x, a.y - cue.y) - Math.hypot(b.x - cue.x, b.y - cue.y))[0]
+      const ang = (near ? Math.atan2(near.y - cue.y, near.x - cue.x) : Math.random() * Math.PI * 2) + (Math.random() - 0.5) * 0.05
+      return shoot({ dx: Math.cos(ang), dy: Math.sin(ang), pow: 0.55, spinX: 0, spinY: 0 })
+    }
+    const ang = chosen.angle + (Math.random() - 0.5) * 0.028
     // A little draw keeps the bot's cue ball from following the object ball in.
-    shoot(best.angle + noise, Math.min(95, 30 + best.dist / 18), false, { x: 0, y: -0.25 })
+    shoot({ dx: Math.cos(ang), dy: Math.sin(ang), pow: Math.min(0.95, 0.3 + chosen.dist / 1800), spinX: 0, spinY: -0.25 })
   }
 
-  function settle() {
+  const canAim = () => {
     const g = game.current
-    if (remote && g.replay) {
-      const st = remote.state
-      g.replay = false
-      g.moving = false
-      balls.current = st.balls.map(fromState)
-      g.groups = remoteGroups(st)
-      g.turn = st.turn === seat ? 'p' : 'b'
-      g.ballInHand = !!st.ballInHand && g.turn === 'p'
-      const yours = g.ballInHand ? ` ${IN_HAND_MSG}` : ' Sıra sende.'
-      sync(st.note ? `${st.note}${g.turn === 'p' ? yours : ''}` : g.turn === 'p' ? yours.trim() : `${oppName} yine oynuyor.`)
-      return
-    }
-    const list = balls.current
-    const shooter = g.turn
-    const other: Who = shooter === 'p' ? 'b' : 'p'
-    const { first, potted } = g.shot
-    const cue = list[0]
-    const scratch = cue.in
-    const myGroup = g.groups[shooter]
-    const clearedBefore = myGroup !== null && list.filter((b) => groupOf(b.id) === myGroup && (!b.in || potted.includes(b.id))).length === 0
-
-    if (potted.includes(8)) {
-      g.over = true
-      const won = clearedBefore && !scratch
-      const playerWon = (shooter === 'p') === won
-      sync(won ? (shooter === 'p' ? 'Siyahı deliğe yolladın!' : 'Rakip siyahı soktu.') : shooter === 'p' ? 'Siyah erken düştü.' : 'Rakip siyahı erken soktu!')
-      if (remote) {
-        sendShot(won ? 'win' : 'lose', false, won ? 'Siyah kurallı düştü.' : 'Siyah erken düştü.')
-        return
-      }
-      setTimeout(() => finish?.(playerWon ? 'win' : 'lose', playerWon ? (won ? 'Grubunu temizleyip siyahı soktun.' : 'Rakip siyahı kuralsız soktu, masa senin.') : won ? 'Rakip grubunu temizleyip siyahı soktu.' : 'Siyahı grubunu bitirmeden soktun.'), 1100)
-      return
-    }
-
-    let foul = scratch || first === null
-    let wrongFirst = false
-    if (!foul && first !== null) {
-      const fg = groupOf(first)
-      // Open table: the black may never be hit first. Assigned group: your own balls first (black only once cleared).
-      wrongFirst = myGroup ? fg !== myGroup && !(fg === 'eight' && clearedBefore) : fg === 'eight'
-      foul = wrongFirst
-    }
-    // After contact, some ball has to drop or reach a cushion.
-    const noRail = !foul && potted.length === 0 && !g.shot.rail
-    if (noRail) foul = true
-    if (!foul && !myGroup) {
-      const firstPot = potted.find((id) => id !== 0 && id !== 8)
-      if (firstPot) {
-        const grp = groupOf(firstPot) as Group
-        g.groups[shooter] = grp
-        g.groups[other] = grp === 'solid' ? 'stripe' : 'solid'
-      }
-    }
-    if (scratch) {
-      cue.in = false
-      cue.vx = cue.vy = 0
-      let x = W * 0.25
-      while (list.some((b) => b.id !== 0 && !b.in && Math.hypot(b.x - x, b.y - H / 2) < R * 2.2)) x += R * 2.5
-      cue.x = x
-      cue.y = H / 2
-    }
-    const group = g.groups[shooter]
-    const keep = !foul && potted.some((id) => groupOf(id) === group)
-    const reason = scratch
-      ? 'Beyaz top düştü, faul!'
-      : first === null
-        ? 'Hiçbir topa değmedi, faul!'
-        : wrongFirst
-          ? 'Önce yanlış topa vuruldu, faul!'
-          : noRail
-            ? 'Hiçbir top banda gitmedi, faul!'
-            : ''
-    let msg: string
-    if (foul) msg = shooter === 'p' ? `${reason} Rakip beyazı istediği yere koyar.` : `${reason} ${IN_HAND_MSG}`
-    else if (keep) msg = shooter === 'p' ? 'Güzel! Sıra yine sende.' : 'Rakip soktu, yine o oynuyor.'
-    else msg = `Top düşmedi. Sıra ${shooter === 'p' ? 'rakipte' : 'sende'}.`
-    if (!keep) g.turn = other
-    g.ballInHand = foul && g.turn === 'p'
-    g.moving = false
-    if (foul) playSound('error')
-    if (remote) {
-      sync(keep ? 'Güzel! Sıra yine sende.' : foul ? `${reason} ${oppName} beyazı istediği yere koyar.` : `Top düşmedi. Sıra ${oppName} oyuncusunda.`)
-      sendShot(null, keep, foul ? reason : keep ? 'Rakip top soktu.' : '', foul)
-      return
-    }
-    sync(msg)
-    if (g.turn === 'b') setTimeout(() => botShot(foul), 1000)
+    const r = remoteRef.current
+    return !g.moving && !g.strike && !g.over && !g.pending && g.turn === seat && !balls.current[0].in && (!r || (!r.busy && !r.spectator))
   }
 
+  function fire(pow: number) {
+    const g = game.current
+    if (!canAim() || pow < 0.03) return
+    if (mustCallNow() && g.call === null) {
+      playSound('error')
+      sync('Önce siyah için bir delik seç: masadaki deliklerden birine dokun.')
+      return
+    }
+    const cue = balls.current[0]
+    const input: ShotInput = { dx: Math.cos(g.angle), dy: Math.sin(g.angle), pow: clamp01(pow), spinX: spinRef.current.x, spinY: spinRef.current.y }
+    const r = remoteRef.current
+    if (r) {
+      g.pending = true
+      g.failed = false
+      const placed = g.ballInHand ? { cueX: cue.x, cueY: cue.y } : {}
+      void r.send({ type: 'shot', ...input, ...placed, call: mustCallNow() ? g.call : null }).then((ok) => {
+        if (ok) return
+        g.failed = true
+        if (!g.moving && !g.strike) applyRemote(remoteRef.current!.state)
+      })
+    }
+    shoot(input)
+    lock(false)
+    setSpin({ x: 0, y: 0 })
+  }
+
+  // Render + physics loop.
   useEffect(() => {
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
-    const css = getComputedStyle(document.documentElement)
-    const felt = css.getPropertyValue('--felt').trim() || '#1b2a44'
-    const wood = css.getPropertyValue('--wood').trim() || '#4a3020'
-    const gold = css.getPropertyValue('--primary').trim() || '#e2b33c'
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const CW = W + RAIL * 2
-    const CH = H + RAIL * 2
     canvas.width = CW * dpr
     canvas.height = CH * dpr
+    const { canvas: bg, gold } = paintTable(dpr)
     let raf = 0
-    let idleFrames = 0
+    let lastHitSound = 0
+    const rollOf = (id: number) => {
+      let r = rolls.current.get(id)
+      if (!r) rolls.current.set(id, (r = initialRoll(id)))
+      return r
+    }
+    const hooks: StepHooks = {
+      hit: (_a, _b, rel) => {
+        const now = performance.now()
+        if (rel > 1.2 && now - lastHitSound > 45) {
+          lastHitSound = now
+          playSound('tile')
+        }
+      },
+      pot: (b, p) => {
+        playSound('pocket')
+        drops.current.push({ id: b.id, x: b.x, y: b.y, p, t0: performance.now() })
+        if (b.id !== 0 && !game.current.pottedOrder.includes(b.id)) game.current.pottedOrder.push(b.id)
+      },
+    }
 
-    const draw = () => {
+    const draw = (now: number) => {
       const g = game.current
+      const list = balls.current
+      if (g.strike && now - g.strike.t0 >= STRIKE_MS) {
+        g.spin = startShot(list, g.strike.input)
+        g.ev = newEvents()
+        g.strike = null
+        g.moving = true
+        playSound('tile')
+      }
       if (g.moving) {
-        step(
-          balls.current,
-          (a, b) => {
-            if (Math.hypot(a.vx - b.vx, a.vy - b.vy) > 1.5) playSound('tile')
-            if (g.shot.first === null) {
-              if (a.id === 0) g.shot.first = b.id
-              else if (b.id === 0) g.shot.first = a.id
-            }
-          },
-          (b) => {
-            playSound('pocket')
-            g.shot.potted.push(b.id)
-          },
-          g.spin,
-          () => {
-            if (g.shot.first !== null) g.shot.rail = true
-          },
-        )
-        const still = balls.current.every((b) => b.in || (b.vx === 0 && b.vy === 0))
-        idleFrames = still ? idleFrames + 1 : 0
-        if (idleFrames > 4) {
-          idleFrames = 0
-          settle()
-        }
+        const prev = list.map((b) => [b.x, b.y])
+        stepShot(list, g.spin, g.ev, hooks)
+        list.forEach((b, i) => {
+          const dx = b.x - prev[i][0]
+          const dy = b.y - prev[i][1]
+          const d = Math.hypot(dx, dy)
+          if (d > 0.01 && !b.in) {
+            const r = rollOf(b.id)
+            r.n = rotate(r.n, -dy / d, dx / d, d / R)
+            r.m = rotate(r.m, -dy / d, dx / d, d / R)
+          }
+        })
+        if (isStill(list)) settle()
       }
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.clearRect(0, 0, CW, CH)
-      ctx.fillStyle = wood
-      ctx.beginPath()
-      ctx.roundRect(0, 0, CW, CH, 26)
-      ctx.fill()
-      ctx.save()
-      ctx.beginPath()
-      ctx.roundRect(0, 0, CW, CH, 26)
-      ctx.clip()
-      for (let y = 0; y < CH; y += 3) {
-        const a = 0.05 + 0.05 * Math.sin(y * 0.37) * Math.sin(y * 0.071)
-        ctx.fillStyle = a > 0.05 ? `rgba(255,220,170,${a.toFixed(3)})` : `rgba(0,0,0,${(0.1 - a).toFixed(3)})`
-        ctx.fillRect(0, y, CW, 1.5)
-      }
-      const railShade = ctx.createLinearGradient(0, 0, 0, CH)
-      railShade.addColorStop(0, 'rgba(255,255,255,0.14)')
-      railShade.addColorStop(0.5, 'rgba(0,0,0,0)')
-      railShade.addColorStop(1, 'rgba(0,0,0,0.35)')
-      ctx.fillStyle = railShade
-      ctx.fillRect(0, 0, CW, CH)
-      ctx.restore()
-      ctx.strokeStyle = gold
-      ctx.globalAlpha = 0.5
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.roundRect(8, 8, CW - 16, CH - 16, 20)
-      ctx.stroke()
-      ctx.globalAlpha = 1
-      ctx.translate(RAIL, RAIL)
-      ctx.fillStyle = felt
-      ctx.fillRect(0, 0, W, H)
-      if (!feltNoise.current) {
-        const nc = document.createElement('canvas')
-        nc.width = 96
-        nc.height = 96
-        const nx = nc.getContext('2d')
-        if (nx) {
-          const img = nx.createImageData(96, 96)
-          for (let i = 0; i < img.data.length; i += 4) {
-            const v = Math.random() * 255
-            img.data[i] = img.data[i + 1] = img.data[i + 2] = v
-            img.data[i + 3] = 14
-          }
-          nx.putImageData(img, 0, 0)
-          feltNoise.current = ctx.createPattern(nc, 'repeat')
-        }
-      }
-      if (feltNoise.current) {
-        ctx.fillStyle = feltNoise.current
-        ctx.fillRect(0, 0, W, H)
-      }
-      const grad = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W * 0.6)
-      grad.addColorStop(0, 'rgba(255,255,255,0.08)')
-      grad.addColorStop(1, 'rgba(0,0,0,0.32)')
-      ctx.fillStyle = grad
-      ctx.fillRect(0, 0, W, H)
-      const cushion = 10
-      ;[
-        [0, 0, W, cushion, 0, 0, 0, cushion],
-        [0, H - cushion, W, cushion, 0, H, 0, H - cushion],
-        [0, 0, cushion, H, 0, 0, cushion, 0],
-        [W - cushion, 0, cushion, H, W, 0, W - cushion, 0],
-      ].forEach(([x, y, w, h, x0, y0, x1, y1]) => {
-        const cg = ctx.createLinearGradient(x0, y0, x1, y1)
-        cg.addColorStop(0, 'rgba(0,0,0,0.45)')
-        cg.addColorStop(1, 'rgba(0,0,0,0)')
-        ctx.fillStyle = cg
-        ctx.fillRect(x, y, w, h)
-      })
-      ctx.save()
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.globalAlpha = 0.1
-      ctx.strokeStyle = gold
-      ctx.lineWidth = 3
-      ctx.beginPath()
-      ctx.ellipse(W / 2, H / 2, 150, 70, 0, 0, Math.PI * 2)
-      ctx.stroke()
-      ctx.globalAlpha = 0.13
-      ctx.fillStyle = gold
-      ctx.font = '900 64px system-ui, sans-serif'
-      ctx.fillText('AL KANKA', W / 2, H / 2 - 4)
-      ctx.globalAlpha = 0.1
-      ctx.font = '700 16px system-ui, sans-serif'
-      ctx.fillText('alkanka.com', W / 2, H / 2 + 40)
-      ctx.restore()
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)'
-      ctx.beginPath()
-      ctx.moveTo(W * 0.25, 0)
-      ctx.lineTo(W * 0.25, H)
-      ctx.stroke()
-      for (const [px, py] of POCKETS) {
-        const pg = ctx.createRadialGradient(px, py, POCKET_R * 0.2, px, py, POCKET_R * 1.15)
-        pg.addColorStop(0, '#000000')
-        pg.addColorStop(0.75, '#05070c')
-        pg.addColorStop(1, 'rgba(5,7,12,0)')
-        ctx.fillStyle = pg
-        ctx.beginPath()
-        ctx.arc(px, py, POCKET_R * 1.15, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.strokeStyle = gold
-        ctx.globalAlpha = 0.3
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.arc(px, py, POCKET_R, 0, Math.PI * 2)
-        ctx.stroke()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(bg, 0, 0)
+      ctx.setTransform(dpr, 0, 0, dpr, RAIL * dpr, RAIL * dpr)
+
+      const cue = list[0]
+      const aiming = canAim()
+      const mustCall = aiming && mustCallNow()
+      if (mustCall || g.call !== null) {
+        const pulse = 0.5 + 0.5 * Math.sin(now / 220)
+        POCKETS.forEach(([px, py], i) => {
+          if (g.call !== null && g.call !== i) return
+          ctx.strokeStyle = gold
+          ctx.globalAlpha = g.call === i ? 0.95 : 0.25 + pulse * 0.35
+          ctx.lineWidth = g.call === i ? 4 : 2.5
+          ctx.beginPath()
+          ctx.arc(px, py, POCKET_R + 6 + (g.call === i ? 0 : pulse * 3), 0, Math.PI * 2)
+          ctx.stroke()
+        })
         ctx.globalAlpha = 1
       }
-      ;[0.125, 0.25, 0.375, 0.625, 0.75, 0.875].forEach((f) => {
-        ctx.fillStyle = gold
-        ctx.beginPath()
-        ctx.arc(W * f, -RAIL / 2, 3, 0, Math.PI * 2)
-        ctx.arc(W * f, H + RAIL / 2, 3, 0, Math.PI * 2)
-        ctx.fill()
-      })
 
-      const cue = balls.current[0]
-      if (g.ballInHand && !g.moving && !g.over && g.turn === 'p' && !cue.in) {
+      if (g.ballInHand && aiming && !cue.in) {
         ctx.save()
         ctx.setLineDash([4, 5])
         ctx.strokeStyle = gold
         ctx.lineWidth = 2.5
         ctx.beginPath()
-        ctx.arc(cue.x + RAIL, cue.y + RAIL, R * 2.2, 0, Math.PI * 2)
+        ctx.arc(cue.x, cue.y, R * 2.2, 0, Math.PI * 2)
         ctx.stroke()
         ctx.restore()
       }
-      if (!g.moving && !g.over && g.turn === 'p' && !cue.in) {
-        const hit = castGuide(balls.current, cue, g.angle)
+
+      if (aiming) {
+        const hit = castGuide(list, cue, g.angle)
         const len = hit ? hit.t : 1400
         const gx = cue.x + Math.cos(g.angle) * len
         const gy = cue.y + Math.sin(g.angle) * len
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(0, 0, W, H)
+        ctx.clip()
         ctx.setLineDash([6, 8])
         ctx.strokeStyle = 'rgba(255,255,255,0.55)'
         ctx.lineWidth = 2
@@ -637,78 +690,50 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ctx.stroke()
         ctx.setLineDash([])
         if (hit) {
-          ctx.strokeStyle = 'rgba(255,255,255,0.7)'
+          ctx.strokeStyle = 'rgba(255,255,255,0.75)'
           ctx.beginPath()
           ctx.arc(gx, gy, R, 0, Math.PI * 2)
           ctx.stroke()
-          const nx = hit.ball.x - gx
-          const ny = hit.ball.y - gy
-          const nd = Math.hypot(nx, ny)
+          const nx = (hit.ball.x - gx) / (2 * R)
+          const ny = (hit.ball.y - gy) / (2 * R)
           ctx.strokeStyle = gold
+          ctx.lineWidth = 2.5
           ctx.beginPath()
           ctx.moveTo(hit.ball.x, hit.ball.y)
-          ctx.lineTo(hit.ball.x + (nx / nd) * 90, hit.ball.y + (ny / nd) * 90)
+          ctx.lineTo(hit.ball.x + nx * 110, hit.ball.y + ny * 110)
+          ctx.stroke()
+          const ux = Math.cos(g.angle)
+          const uy = Math.sin(g.angle)
+          const dot = ux * nx + uy * ny
+          const tx = ux - dot * nx
+          const ty = uy - dot * ny
+          ctx.strokeStyle = 'rgba(255,255,255,0.4)'
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.moveTo(gx, gy)
+          ctx.lineTo(gx + tx * 70, gy + ty * 70)
           ctx.stroke()
         }
-      }
-
-      for (const b of balls.current) {
-        if (b.in) continue
-        ctx.fillStyle = 'rgba(0,0,0,0.35)'
-        ctx.beginPath()
-        ctx.arc(b.x + 3, b.y + 4, R, 0, Math.PI * 2)
-        ctx.fill()
-        const stripe = b.id > 8
-        ctx.save()
-        ctx.beginPath()
-        ctx.arc(b.x, b.y, R, 0, Math.PI * 2)
-        ctx.clip()
-        ctx.fillStyle = stripe ? BALL_COLORS[0] : BALL_COLORS[b.id]
-        ctx.fillRect(b.x - R, b.y - R, R * 2, R * 2)
-        if (stripe) {
-          ctx.fillStyle = BALL_COLORS[b.id - 8]
-          ctx.fillRect(b.x - R, b.y - R * 0.55, R * 2, R * 1.1)
-        }
-        const shine = ctx.createRadialGradient(b.x - R * 0.4, b.y - R * 0.45, 1, b.x, b.y, R * 1.2)
-        shine.addColorStop(0, 'rgba(255,255,255,0.6)')
-        shine.addColorStop(0.35, 'rgba(255,255,255,0)')
-        shine.addColorStop(1, 'rgba(0,0,0,0.35)')
-        ctx.fillStyle = shine
-        ctx.fillRect(b.x - R, b.y - R, R * 2, R * 2)
         ctx.restore()
-        if (b.id) {
-          ctx.fillStyle = BALL_COLORS[0]
-          ctx.beginPath()
-          ctx.arc(b.x, b.y, R * 0.45, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.fillStyle = '#141414'
-          ctx.font = 'bold 8px system-ui'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(String(b.id), b.x, b.y + 0.5)
-        }
       }
 
-      if (!g.moving && !g.over && g.turn === 'p' && !cue.in) {
-        const back = 22 + (power / 100) * 40
-        const sx = cue.x - Math.cos(g.angle) * back
-        const sy = cue.y - Math.sin(g.angle) * back
-        const ex = cue.x - Math.cos(g.angle) * (back + 340)
-        const ey = cue.y - Math.sin(g.angle) * (back + 340)
-        const stick = ctx.createLinearGradient(sx, sy, ex, ey)
-        stick.addColorStop(0, '#f2e7cf')
-        stick.addColorStop(0.04, '#f2e7cf')
-        stick.addColorStop(0.05, '#2b6cb0')
-        stick.addColorStop(0.07, '#c9a46a')
-        stick.addColorStop(0.75, '#7a4a25')
-        stick.addColorStop(1, '#1d120a')
-        ctx.strokeStyle = stick
-        ctx.lineWidth = 7
-        ctx.lineCap = 'round'
-        ctx.beginPath()
-        ctx.moveTo(sx, sy)
-        ctx.lineTo(ex, ey)
-        ctx.stroke()
+      for (const b of list) if (!b.in) drawBall(ctx, b, rollOf(b.id))
+
+      drops.current = drops.current.filter((d) => now - d.t0 < DROP_MS)
+      for (const d of drops.current) {
+        const t = (now - d.t0) / DROP_MS
+        const [px, py] = POCKETS[d.p]
+        ctx.globalAlpha = 1 - t * t
+        drawBall(ctx, { id: d.id, x: d.x + (px - d.x) * t, y: d.y + (py - d.y) * t }, rollOf(d.id), 1 - t * 0.55)
+        ctx.globalAlpha = 1
+      }
+
+      if (g.strike) {
+        const t = Math.min(1, (now - g.strike.t0) / STRIKE_MS)
+        const ang = Math.atan2(g.strike.input.dy, g.strike.input.dx)
+        drawCue(ctx, cue.x, cue.y, ang, g.strike.back * (1 - t * t))
+      } else if (aiming && !cue.in) {
+        drawCue(ctx, cue.x, cue.y, g.angle, 14 + pullRef.current * 80)
       }
 
       raf = requestAnimationFrame(draw)
@@ -716,47 +741,39 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [power])
+  }, [])
 
-  const canAim = () => {
-    const g = game.current
-    return !g.moving && !g.over && g.turn === 'p' && !balls.current[0].in
-  }
-
-  /** Points the cue at the pointer. Ignores positions on top of the cue ball, where atan2 swings wildly. */
-  function aimAt(e: ReactPointerEvent<HTMLCanvasElement>) {
+  const tablePoint = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * (W + RAIL * 2) - RAIL
-    const y = ((e.clientY - rect.top) / rect.height) * (H + RAIL * 2) - RAIL
+    return { x: ((e.clientX - rect.left) / rect.width) * CW - RAIL, y: ((e.clientY - rect.top) / rect.height) * CH - RAIL }
+  }
+  /** Points the cue at the pointer. Ignores positions on top of the cue ball, where atan2 swings wildly. */
+  const aimAt = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const { x, y } = tablePoint(e)
     const cue = balls.current[0]
     if (Math.hypot(x - cue.x, y - cue.y) < R * 1.5) return
     game.current.angle = Math.atan2(y - cue.y, x - cue.x)
   }
-
-  const tablePoint = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return {
-      x: ((e.clientX - rect.left) / rect.width) * (W + RAIL * 2) - RAIL,
-      y: ((e.clientY - rect.top) / rect.height) * (H + RAIL * 2) - RAIL,
-    }
-  }
   const placing = useRef<number | null>(null)
-
   const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
-  const [aimLocked, setAimLocked] = useState(false)
-  const lockedRef = useRef(false)
-  const lock = (v: boolean) => {
-    lockedRef.current = v
-    setAimLocked(v)
-  }
 
   function onPointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
     e.currentTarget.focus({ preventScroll: true })
     if (!canAim()) return
+    const g = game.current
+    const pt = tablePoint(e)
+    if (mustCallNow()) {
+      const p = pocketAt(pt.x, pt.y)
+      if (p >= 0) {
+        g.call = p
+        playSound('tile')
+        sync('Delik seçildi. Şimdi nişan al ve vur.')
+        return
+      }
+    }
     e.currentTarget.setPointerCapture(e.pointerId)
     const cue = balls.current[0]
-    const pt = tablePoint(e)
-    if (game.current.ballInHand && Math.hypot(pt.x - cue.x, pt.y - cue.y) < R * 3) {
+    if (g.ballInHand && Math.hypot(pt.x - cue.x, pt.y - cue.y) < R * 3) {
       placing.current = e.pointerId
       return
     }
@@ -795,44 +812,35 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     lock(d.moved ? true : !lockedRef.current)
   }
 
-  const powerRef = useRef(power)
-  powerRef.current = power
-
-  // Keyboard works anywhere on the page (no need to click the table first), except while typing in a field.
+  // Keyboard works anywhere on the page, except while typing in a field.
   useEffect(() => {
     const held = new Set<string>()
     let raf = 0
     let last = 0
     let heldFor = 0
     const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
-
     const tick = (now: number) => {
       const dt = Math.min(50, now - (last || now))
       last = now
       heldFor += dt
       const dir = (held.has('right') ? 1 : 0) - (held.has('left') ? 1 : 0)
       if (dir && canAim()) {
-        // Starts precise, then speeds up the longer the key is held, so full turns don't feel stuck.
+        // Starts precise, then speeds up the longer the key is held.
         const base = held.has('fine') ? 0.15 : Math.min(2.4, 0.5 + heldFor / 600)
         game.current.angle += dir * base * (dt / 1000)
       }
       raf = dir ? requestAnimationFrame(tick) : 0
     }
-
     const down = (e: KeyboardEvent) => {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
       const k = e.key
       if (k === 'ArrowLeft' || k === 'a' || k === 'A') held.add('left')
       else if (k === 'ArrowRight' || k === 'd' || k === 'D') held.add('right')
-      else if (k === 'ArrowUp' || k === 'w' || k === 'W') setPower((p) => Math.min(100, p + 5))
-      else if (k === 'ArrowDown' || k === 's' || k === 'S') setPower((p) => Math.max(5, p - 5))
+      else if (k === 'ArrowUp' || k === 'w' || k === 'W') setKeyPower(Math.min(1, Math.round((keyPowerRef.current + 0.05) * 100) / 100))
+      else if (k === 'ArrowDown' || k === 's' || k === 'S') setKeyPower(Math.max(0.05, Math.round((keyPowerRef.current - 0.05) * 100) / 100))
       else if (k === ' ' || k === 'Enter') {
         if (e.repeat) return e.preventDefault()
-        if (canAim()) {
-          shoot(game.current.angle, powerRef.current, false, spinRef.current)
-          lock(false)
-          setSpin({ x: 0, y: 0 })
-        }
+        fire(keyPowerRef.current)
       } else return
       held[e.shiftKey ? 'add' : 'delete']('fine')
       e.preventDefault()
@@ -862,85 +870,176 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const fire = () => {
-    shoot(game.current.angle, power, false, spinRef.current)
-    lock(false)
-    setSpin({ x: 0, y: 0 })
-  }
-
-  const yourTurn = ui.turn === 'p' && !ui.moving
-  const groupLabel = (g: Group | null) => (g === 'solid' ? 'Düz (1-7)' : g === 'stripe' ? 'Çizgili (9-15)' : 'Belirlenmedi')
-  const remaining = (g: Group | null) => (g ? [1, 2, 3, 4, 5, 6, 7].map((n) => (g === 'solid' ? n : n + 8)).filter((n) => !ui.potted.includes(n)) : [])
+  const yourTurn = ui.turn === seat && !ui.busy && !ui.over
+  const groupLabel = (g: Group | null) => (g === 'solid' ? 'Düz (1-7)' : g === 'stripe' ? 'Çizgili (9-15)' : 'Masa açık')
+  const remaining = (g: Group | null) => (g ? [1, 2, 3, 4, 5, 6, 7].map((n) => (g === 'solid' ? n : n + 8)).filter((n) => ui.inTable.includes(n)) : [])
+  const hint = !yourTurn
+    ? null
+    : ui.mustCall && ui.call === null
+      ? 'Siyah için bir deliğe dokun'
+      : ui.ballInHand
+        ? 'Beyazı sürükle · Gücü çekip bırak'
+        : aimLocked
+          ? 'Nişan kilitli · Gücü çekip bırak'
+          : 'Nişan al · Sağdaki gücü aşağı çek, bırak'
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {(['p', 'b'] as const).map((w) => (
-          <div key={w} className={cn('flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3', ui.turn === w ? 'border-primary glow-gold' : 'border-border')}>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-foreground">{w === 'p' ? 'Sen' : oppName}</span>
-              <span className="text-xs text-muted-foreground">{groupLabel(ui.groups[w])}</span>
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-2">
+        {[seat, oppSeat].map((s) => (
+          <div
+            key={s}
+            className={cn(
+              'flex min-w-0 flex-col gap-2 rounded-xl border bg-card px-3 py-2.5 transition-colors sm:flex-row sm:items-center sm:justify-between sm:px-4',
+              ui.turn === s && !ui.over ? 'border-primary glow-gold' : 'border-border',
+            )}
+          >
+            <div className="flex min-w-0 flex-col">
+              <span className="flex items-center gap-2 truncate text-sm font-bold text-foreground">
+                {ui.turn === s && !ui.over && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden="true" />}
+                {s === seat ? 'Sen' : oppName}
+              </span>
+              <span className="text-xs text-muted-foreground">{groupLabel(ui.groups[s])}</span>
             </div>
-            <div className="flex flex-wrap justify-end gap-1">
-              {remaining(ui.groups[w]).map((n) => (
-                <span
-                  key={n}
-                  className="flex size-5 items-center justify-center rounded-full text-[9px] font-bold text-tile-black"
-                  style={{ background: n > 8 ? `linear-gradient(${BALL_COLORS[0]} 25%, ${BALL_COLORS[n - 8]} 25% 75%, ${BALL_COLORS[0]} 75%)` : BALL_COLORS[n] }}
-                >
-                  <span className="flex size-3 items-center justify-center rounded-full bg-checker-light">{n}</span>
-                </span>
+            <div className="flex flex-wrap gap-1 sm:justify-end">
+              {remaining(ui.groups[s]).map((n) => (
+                <BallChip key={n} n={n} />
               ))}
+              {ui.groups[s] && remaining(ui.groups[s]).length === 0 && <BallChip n={8} />}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          tabIndex={0}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={() => (drag.current = null)}
-          aria-label="Bilardo masası. İmleçle nişan al, tıklayarak nişanı kilitle. Sol-sağ ok tuşlarıyla döndür, yukarı-aşağı ile gücü ayarla, boşluk ile vur."
-          className={cn('aspect-[1076/576] w-full touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary', yourTurn ? 'cursor-crosshair' : 'cursor-wait')}
-        />
-        <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />
-        {yourTurn && (
-          <span
+      <div className="flex items-stretch gap-2 sm:gap-3">
+        <div className="relative min-w-0 flex-1">
+          <canvas
+            ref={canvasRef}
+            tabIndex={0}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={() => ((drag.current = null), (placing.current = null))}
+            aria-label="Bilardo masası. Sürükleyerek nişan al, sağdaki güç çubuğunu aşağı çekip bırakarak vur. Ok tuşlarıyla döndür, boşluk ile vur."
             className={cn(
-              'pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider shadow-md backdrop-blur-sm',
-              aimLocked ? 'bg-primary text-primary-foreground' : 'bg-background/70 text-foreground',
+              'block aspect-[1076/576] w-full touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary',
+              yourTurn ? 'cursor-crosshair' : 'cursor-wait',
             )}
-          >
-            {aimLocked ? 'Nişan kilitli · Boşluk ile vur' : 'Nişan al · Tıkla ve kilitle'}
-          </span>
-        )}
+          />
+          <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />
+          <SpinControl value={spin} onChange={setSpin} disabled={!yourTurn} />
+          {hint && (
+            <span
+              className={cn(
+                'pointer-events-none absolute left-1/2 top-2 max-w-[70%] -translate-x-1/2 truncate rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md backdrop-blur-sm sm:top-3 sm:text-[11px]',
+                aimLocked || ui.mustCall ? 'bg-primary text-primary-foreground' : 'bg-background/75 text-foreground',
+              )}
+            >
+              {hint}
+            </span>
+          )}
+        </div>
+        <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center">
-        <p className="flex-1 text-sm font-semibold text-foreground" aria-live="polite">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold leading-relaxed text-foreground text-pretty" aria-live="polite">
           {ui.message}
         </p>
-        <SpinPad value={spin} onChange={setSpin} disabled={!yourTurn} />
-        <label className="flex items-center gap-3 text-sm text-muted-foreground">
-          Güç
-          <input type="range" min={5} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="w-full flex-1 accent-primary sm:w-36 sm:flex-none" />
-          <span className="w-9 font-display font-bold text-foreground">{power}</span>
-        </label>
-        <button
-          onClick={fire}
-          disabled={!yourTurn}
-          className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40"
-        >
-          <Target className="size-4" aria-hidden="true" />
-          {ui.turn === 'b' ? 'Rakip nişan alıyor' : 'Vur'}
-        </button>
+        <div className="flex shrink-0 flex-col gap-1.5 sm:items-end">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Sokulan toplar</span>
+          <div className="flex min-h-6 flex-wrap items-center gap-1 rounded-full bg-secondary px-2 py-1">
+            {ui.potted.length === 0 ? (
+              <span className="px-1 text-xs text-muted-foreground">Henüz yok</span>
+            ) : (
+              ui.potted.map((n) => <BallChip key={n} n={n} />)
+            )}
+          </div>
+        </div>
       </div>
 
       <KeyGuide />
+    </div>
+  )
+}
+
+function BallChip({ n }: { n: number }) {
+  return (
+    <span
+      className="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-tile-black shadow-sm"
+      style={{ background: n > 8 ? `linear-gradient(${BALL_COLORS[0]} 25%, ${BALL_COLORS[n - 8]} 25% 75%, ${BALL_COLORS[0]} 75%)` : BALL_COLORS[n] }}
+      aria-label={`${n} numaralı top`}
+    >
+      <span className="flex size-3 items-center justify-center rounded-full bg-checker-light">{n}</span>
+    </span>
+  )
+}
+
+/** Vertical cue-pull bar: drag down to pull the cue back, release to strike. Dragging back to the top cancels. */
+function PowerBar({
+  disabled,
+  preset,
+  pullRef,
+  onRelease,
+}: {
+  disabled: boolean
+  preset: number
+  pullRef: React.MutableRefObject<number>
+  onRelease: (pow: number) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const active = useRef<{ id: number; y: number } | null>(null)
+  const [pull, setPullState] = useState(0)
+  const setPull = (v: number) => {
+    pullRef.current = v
+    setPullState(v)
+  }
+  const shown = pull > 0 ? pull : preset
+  return (
+    <div
+      ref={ref}
+      role="slider"
+      tabIndex={-1}
+      aria-label="Vuruş gücü: aşağı çekip bırak"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(shown * 100)}
+      aria-disabled={disabled}
+      onPointerDown={(e) => {
+        if (disabled) return
+        e.currentTarget.setPointerCapture(e.pointerId)
+        active.current = { id: e.pointerId, y: e.clientY }
+        setPull(0)
+      }}
+      onPointerMove={(e) => {
+        const a = active.current
+        if (!a || a.id !== e.pointerId) return
+        const h = (ref.current?.getBoundingClientRect().height ?? 200) * 0.8
+        setPull(clamp01((e.clientY - a.y) / h))
+      }}
+      onPointerUp={(e) => {
+        const a = active.current
+        if (!a || a.id !== e.pointerId) return
+        active.current = null
+        const v = pullRef.current
+        setPull(0)
+        if (!disabled) onRelease(v)
+      }}
+      onPointerCancel={() => {
+        active.current = null
+        setPull(0)
+      }}
+      className={cn(
+        'flex w-11 shrink-0 touch-none select-none flex-col items-center gap-2 rounded-2xl border border-border bg-card px-1 py-2 sm:w-14',
+        disabled ? 'opacity-40' : 'cursor-grab active:cursor-grabbing',
+      )}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Güç</span>
+      <div className="relative w-3 flex-1 rounded-full bg-secondary">
+        <div className="absolute inset-x-0 top-0 rounded-full bg-primary" style={{ height: `${pull * 100}%` }} />
+        <div className="absolute -inset-x-1.5 h-0.5 rounded-full bg-foreground/60" style={{ top: `${preset * 100}%` }} aria-hidden="true" />
+      </div>
+      <span className="font-display text-xs font-bold tabular-nums text-foreground">{Math.round(shown * 100)}</span>
     </div>
   )
 }
@@ -952,8 +1051,37 @@ function spinLabel({ x, y }: SpinInput) {
   return [v, h].filter(Boolean).join(' · ') || 'Hafif'
 }
 
+/** Small cue-ball icon on the table corner; opens the contact-point picker. */
+function SpinControl({ value, onChange, disabled }: { value: SpinInput; onChange: (v: SpinInput) => void; disabled: boolean }) {
+  const [open, setOpen] = useState(false)
+  const show = open && !disabled
+  return (
+    <div className="absolute left-[4.5%] top-[9%] z-10 flex flex-col items-start gap-2">
+      <button
+        type="button"
+        aria-expanded={show}
+        aria-label={`Falso: ${spinLabel(value)}. Değiştirmek için aç.`}
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        className="relative size-8 rounded-full bg-checker-light shadow-[inset_-4px_-5px_9px_rgb(0_0_0/0.25),0_3px_8px_rgb(0_0_0/0.45)] outline-none ring-primary focus-visible:ring-2 disabled:opacity-50 sm:size-10"
+      >
+        <span
+          aria-hidden="true"
+          className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive sm:size-2.5"
+          style={{ left: `${50 + value.x * 50}%`, top: `${50 - value.y * 50}%` }}
+        />
+      </button>
+      {show && (
+        <div className="rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur">
+          <SpinPad value={value} onChange={onChange} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Cue-ball contact point picker: drag the tip marker anywhere on the ball to set english and follow/draw. */
-function SpinPad({ value, onChange, disabled }: { value: SpinInput; onChange: (v: SpinInput) => void; disabled: boolean }) {
+function SpinPad({ value, onChange }: { value: SpinInput; onChange: (v: SpinInput) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const set = (clientX: number, clientY: number) => {
     const r = ref.current?.getBoundingClientRect()
@@ -976,16 +1104,14 @@ function SpinPad({ value, onChange, disabled }: { value: SpinInput; onChange: (v
       <div
         ref={ref}
         role="slider"
-        tabIndex={disabled ? -1 : 0}
+        tabIndex={0}
         aria-label="Falso noktası"
         aria-valuetext={spinLabel(value)}
-        aria-disabled={disabled}
         onPointerDown={(e) => {
-          if (disabled) return
           e.currentTarget.setPointerCapture(e.pointerId)
           set(e.clientX, e.clientY)
         }}
-        onPointerMove={(e) => !disabled && e.buttons && set(e.clientX, e.clientY)}
+        onPointerMove={(e) => e.buttons && set(e.clientX, e.clientY)}
         onDoubleClick={() => onChange({ x: 0, y: 0 })}
         onKeyDown={(e) => {
           const map: Record<string, [number, number]> = { ArrowUp: [0, 0.1], ArrowDown: [0, -0.1], ArrowLeft: [-0.1, 0], ArrowRight: [0.1, 0] }
@@ -995,16 +1121,13 @@ function SpinPad({ value, onChange, disabled }: { value: SpinInput; onChange: (v
           e.stopPropagation()
           nudge(m[0], m[1])
         }}
-        className={cn(
-          'relative size-14 shrink-0 touch-none rounded-full bg-checker-light shadow-[inset_-6px_-8px_14px_rgb(0_0_0/0.25),0_4px_10px_rgb(0_0_0/0.35)] outline-none focus-visible:ring-2 focus-visible:ring-primary',
-          disabled ? 'opacity-40' : 'cursor-crosshair',
-        )}
+        className="relative size-20 shrink-0 cursor-crosshair touch-none rounded-full bg-checker-light shadow-[inset_-6px_-8px_14px_rgb(0_0_0/0.25),0_4px_10px_rgb(0_0_0/0.35)] outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span aria-hidden="true" className="absolute inset-x-1/2 inset-y-2 w-px -translate-x-1/2 bg-checker-dark/20" />
-        <span aria-hidden="true" className="absolute inset-y-1/2 inset-x-2 h-px -translate-y-1/2 bg-checker-dark/20" />
+        <span aria-hidden="true" className="absolute inset-x-2 inset-y-1/2 h-px -translate-y-1/2 bg-checker-dark/20" />
         <span
           aria-hidden="true"
-          className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive ring-2 ring-checker-light transition-[left,top] duration-75"
+          className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive ring-2 ring-checker-light"
           style={{ left: `${50 + value.x * 50}%`, top: `${50 - value.y * 50}%` }}
         />
       </div>
@@ -1023,7 +1146,7 @@ function SpinPad({ value, onChange, disabled }: { value: SpinInput; onChange: (v
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex min-w-6 items-center justify-center rounded-md border border-border border-b-2 bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-bold text-foreground">
+    <kbd className="inline-flex min-w-6 items-center justify-center rounded-md border border-b-2 border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-bold text-foreground">
       {children}
     </kbd>
   )
@@ -1032,17 +1155,18 @@ function Kbd({ children }: { children: React.ReactNode }) {
 function KeyGuide() {
   const rows: { keys: React.ReactNode; label: string }[] = [
     { keys: <span className="text-xs font-semibold text-foreground">Fare</span>, label: 'İmleçle nişan al, tıklayınca nişan kilitlenir' },
-    { keys: <span className="text-xs font-semibold text-foreground">Sürükle</span>, label: 'Basılı tutup çevirerek istakayı her yöne döndür' },
-    { keys: (<><Kbd>←</Kbd><Kbd>→</Kbd></>), label: 'İstakayı döndür (basılı tut, hızlanır)' },
+    { keys: <span className="text-xs font-semibold text-foreground">Güç çubuğu</span>, label: 'Aşağı çek, bırakınca vurur. Yukarı geri getirirsen iptal' },
+    { keys: (<><Kbd>←</Kbd><Kbd>→</Kbd></>), label: 'İstekayı döndür (basılı tut, hızlanır)' },
     { keys: (<><Kbd>Shift</Kbd><span className="text-muted-foreground">+</span><Kbd>←→</Kbd></>), label: 'İnce ayar' },
-    { keys: (<><Kbd>↑</Kbd><Kbd>↓</Kbd></>), label: 'Vuruş gücü ±5' },
-    { keys: (<><Kbd>Boşluk</Kbd><Kbd>Enter</Kbd></>), label: 'Vur' },
-    { keys: <span className="text-xs font-semibold text-foreground">Falso</span>, label: 'Beyaz topta noktayı sürükle: üst = takip, alt = geri çekme, sağ/sol = bant falsosu' },
+    { keys: (<><Kbd>↑</Kbd><Kbd>↓</Kbd></>), label: 'Klavye vuruş gücü ±5 (çubuktaki çizgi)' },
+    { keys: (<><Kbd>Boşluk</Kbd><Kbd>Enter</Kbd></>), label: 'Klavye gücüyle vur' },
+    { keys: <span className="text-xs font-semibold text-foreground">Falso</span>, label: 'Masanın köşesindeki beyaz topa dokun: üst = takip, alt = geri çekme' },
+    { keys: <span className="text-xs font-semibold text-foreground">Siyah</span>, label: 'Grubun bitince siyahı atacağın deliğe dokunup seç' },
   ]
   return (
-    <details className="group hidden rounded-2xl border border-border bg-card md:block" open>
+    <details className="group hidden rounded-2xl border border-border bg-card md:block">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-foreground">
-        Tuş rehberi
+        Tuş rehberi ve kurallar
         <span className="text-xs font-medium text-muted-foreground group-open:hidden">Göster</span>
         <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Gizle</span>
       </summary>
@@ -1055,7 +1179,7 @@ function KeyGuide() {
         ))}
       </ul>
       <p className="border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-        Tuşlar masaya tıklamadan da çalışır. Sohbete yazarken devre dışı kalır. W A S D tuşları da kullanılabilir.
+        Açılışta top düşmezse en az 4 top banda gitmeli. Açılıştan sonra masa açıktır, ilk sokulan top grubunu belirler. Açılışta düşen siyah yerine konur.
       </p>
     </details>
   )

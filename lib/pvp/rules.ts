@@ -17,6 +17,7 @@ import {
   wantsDiscard,
   type Tile,
 } from '@/components/alkanka/arena/okey-engine'
+import * as Pool from '@/lib/games/bilardo'
 
 import { initOkey101, okey101BotTurn, okey101Step, runOkey101Bots, viewOkey101, type Okey101State } from '@/lib/games/okey101'
 import { batakBotTurn, batakStep, initBatak, runBatakBots, viewBatak, type BatakState } from '@/lib/games/batak'
@@ -80,11 +81,26 @@ export type BilardoState = {
   balls: BallState[]
   groups: [('solid' | 'stripe') | null, ('solid' | 'stripe') | null]
   turn: number
-  shot: { angle: number; pow: number; spinX?: number; spinY?: number; by: number; seq: number } | null
+  /** The last shot, replayed by the other clients from the previous positions. Legacy shots only carry `angle`. */
+  shot: {
+    dx?: number
+    dy?: number
+    angle?: number
+    pow: number
+    spinX?: number
+    spinY?: number
+    cueX?: number
+    cueY?: number
+    call?: number | null
+    by: number
+    seq: number
+  } | null
   seq: number
   note: string
   /** The player to move after a foul may place the cue ball anywhere. */
   ballInHand?: boolean
+  /** False until the opening break has been played. */
+  broken?: boolean
 }
 
 export type DuelState = {
@@ -146,7 +162,7 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
     return runBots(state).state
   }
   if (game === 'bilardo') {
-    return { kind: 'bilardo', balls: [], groups: [null, null], turn: 0, shot: null, seq: 0, note: 'Açılış vuruşu' }
+    return { kind: 'bilardo', balls: Pool.rack().map(Pool.toState), groups: [null, null], turn: 0, shot: null, seq: 0, note: 'Açılış vuruşu', broken: false }
   }
   return { kind: 'duel', scores: [null, null] }
 }
@@ -397,28 +413,51 @@ const clampSpin = (v: unknown) => {
   return Number.isFinite(n) ? Math.max(-1, Math.min(1, n)) : 0
 }
 
+/**
+ * The client only sends the cue input (direction, power, spin, cue placement, called pocket).
+ * The server re-simulates the shot with the shared deterministic engine and applies 8-ball rules itself,
+ * so a client can never report fake positions or a fake win.
+ */
 function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
   if (s.turn !== seat) throw new Error('Sıra sende değil')
   if (a.type !== 'shot') throw new Error('Bilinmeyen hamle')
-  const angle = Number(a.angle)
+  const dx = Number(a.dx)
+  const dy = Number(a.dy)
   const pow = Number(a.pow)
-  if (!Number.isFinite(angle) || !Number.isFinite(pow) || pow < 0 || pow > 1) throw new Error('Geçersiz vuruş')
-  const balls = Array.isArray(a.balls) ? (a.balls as BallState[]).slice(0, 16) : s.balls
-  const groups = (Array.isArray(a.groups) ? a.groups : s.groups) as BilardoState['groups']
-  const keep = a.keepTurn === true
+  if (![dx, dy, pow].every(Number.isFinite) || (dx === 0 && dy === 0) || pow <= 0 || pow > 1) throw new Error('Geçersiz vuruş')
+  const start = s.balls.length ? s.balls : Pool.rack(Pool.seeded(Pool.FALLBACK_SEED)).map(Pool.toState)
+  const balls = start.map(Pool.fromState)
+  let cueX: number | undefined
+  let cueY: number | undefined
+  if (s.ballInHand && a.cueX !== undefined && a.cueX !== null) {
+    const x = Number(a.cueX)
+    const y = Number(a.cueY)
+    if (!Pool.canPlaceCue(balls, x, y)) throw new Error('Beyaz buraya konamaz')
+    balls[0].x = cueX = x
+    balls[0].y = cueY = y
+  }
+  const broken = s.broken ?? s.seq > 0
+  const mustCall = broken && Pool.needsCall(balls, s.groups, seat)
+  const rawCall = a.call === null || a.call === undefined ? NaN : Number(a.call)
+  const call = mustCall && Number.isInteger(rawCall) && rawCall >= 0 && rawCall < Pool.POCKETS.length ? rawCall : null
+  if (mustCall && call === null) throw new Error('Siyah için delik seç')
+  const spinX = clampSpin(a.spinX)
+  const spinY = clampSpin(a.spinY)
+  const ev = Pool.simulate(balls, { dx, dy, pow, spinX, spinY })
+  const r = Pool.resolveShot(balls, ev, { shooter: seat, groups: s.groups, broken, call })
   const seq = s.seq + 1
   const next: BilardoState = {
     ...s,
-    balls,
-    groups,
+    balls: balls.map(Pool.toState),
+    groups: r.groups,
     seq,
-    shot: { angle, pow, spinX: clampSpin(a.spinX), spinY: clampSpin(a.spinY), by: seat, seq },
-    turn: keep ? seat : other(seat),
-    note: typeof a.note === 'string' ? a.note.slice(0, 80) : '',
-    ballInHand: !keep && a.ballInHand === true,
+    shot: { dx, dy, pow, spinX, spinY, cueX, cueY, call, by: seat, seq },
+    turn: r.winner !== null || r.keep ? seat : other(seat),
+    note: r.note,
+    ballInHand: r.ballInHand,
+    broken: true,
   }
-  if (a.result === 'win') return { state: next, outcome: { winnerSeat: seat } }
-  if (a.result === 'lose') return { state: next, outcome: { winnerSeat: other(seat) } }
+  if (r.winner !== null) return { state: next, outcome: { winnerSeat: r.winner } }
   return { state: next, outcome: null }
 }
 
