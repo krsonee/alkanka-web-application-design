@@ -40,7 +40,8 @@ export type Group = 'solid' | 'stripe'
 export type Groups = [Group | null, Group | null]
 /** Cue-ball spin. `side` > 0 is right english, `follow` > 0 is top spin, < 0 is draw. */
 export type Spin = { side: number; follow: number; applied: boolean }
-export type ShotInput = { angle: number; pow: number; spinX: number; spinY: number }
+/** Direction is sent as a vector (not an angle) so no client's Math.cos/sin can make replays diverge. */
+export type ShotInput = { dx: number; dy: number; pow: number; spinX: number; spinY: number }
 export type ShotEvents = { first: number | null; potted: number[]; pocketOf: Record<number, number>; rail: boolean; railBalls: number[] }
 export type StepHooks = { hit?: (a: Ball, b: Ball, rel: number) => void; pot?: (b: Ball, pocket: number) => void }
 
@@ -107,8 +108,9 @@ function cushion(b: Ball, axis: 'x' | 'y', spin: Spin) {
 export function startShot(balls: Ball[], shot: ShotInput): Spin {
   const cue = balls[0]
   const speed = Math.max(0, Math.min(1, shot.pow)) * MAX_SPEED
-  cue.vx = Math.cos(shot.angle) * speed
-  cue.vy = Math.sin(shot.angle) * speed
+  const len = dist(shot.dx, shot.dy) || 1
+  cue.vx = (shot.dx / len) * speed
+  cue.vy = (shot.dy / len) * speed
   return { side: shot.spinX, follow: shot.spinY, applied: false }
 }
 
