@@ -119,6 +119,29 @@ export function canAddToTable(tile: Tile, melds: Meld101[], ok: Okey) {
   })
 }
 
+/** Index of the joker in a table meld that the given real tile can replace, or -1. */
+export function jokerSwapIndex(tile: Tile, meld: Meld101, ok: Okey) {
+  if (meld.kind === 'pair' || isJoker(tile, ok)) return -1
+  for (let i = 0; i < meld.tiles.length; i++) {
+    if (!isJoker(meld.tiles[i], ok)) continue
+    const swapped = meld.tiles.map((t, k) => (k === i ? tile : t))
+    const a = analyzeMeld(swapped, ok)
+    if (a && a.kind === meld.kind && a.ordered.length === meld.tiles.length) return i
+  }
+  return -1
+}
+
+/** True when an unopened player could open their hand using this side tile. */
+export function canOpenWithTile(hand: Tile[], tile: Tile, ok: Okey) {
+  const all = [...hand, tile]
+  const best = bestPartition(all, ok)
+  const groups = leaveOne(best.groups, all.length, ok)
+  const value = groups.reduce((sum, g) => sum + (analyzeMeld(g, ok)?.value ?? 0), 0)
+  if (value >= OPEN_MIN && groups.flat().some((t) => t.id === tile.id)) return true
+  const pairs = leaveOne(findPairs(all, ok), all.length, ok)
+  return pairs.length >= PAIR_MIN && pairs.flat().some((t) => t.id === tile.id)
+}
+
 // ---------- Bot search ----------
 
 type Cand = { need: [number, number][]; jokers: number; value: number }
@@ -387,8 +410,12 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
     if (s.phase !== 'draw') throw new Error('Önce taş at')
     if (a.from === 'discard') {
       if (s.noTake) throw new Error('Bu tur yandan taş alamazsın, desteden çek.')
-      const t = discards[leftOf101(seat, n)].pop()
+      const t = discards[leftOf101(seat, n)].at(-1)
       if (!t) throw new Error('Alınacak taş yok')
+      if (!s.opened[seat] && !canOpenWithTile(hands[seat], t, ok)) {
+        throw new Error('Elin açmıyor: yandan taş alamazsın, ortadan çek.')
+      }
+      discards[leftOf101(seat, n)].pop()
       hands[seat].push(t)
       return {
         state: { ...s, hands, discards, phase: 'play', taken: s.opened[seat] ? null : t.id, log: pushLog(s, { seat, text: 'yandan aldı', tile: t }) },
@@ -424,7 +451,7 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
     const placed = placeGroups(s, seat, groups, mode)
     if (mode === 'seri' && placed.value < OPEN_MIN) throw new Error(`Açmak için en az ${OPEN_MIN} sayı gerekir (şu an ${placed.value}).`)
     if (mode === 'cift' && groups.length < PAIR_MIN) throw new Error(`Çiftten açmak için en az ${PAIR_MIN} çift gerekir.`)
-    if (s.taken != null && !groups.flat().includes(s.taken)) throw new Error('Yandan aldığın taşı açtığın perlerde kullanmalısın.')
+    if (s.taken != null && !groups.flat().includes(s.taken)) throw new Error('Yandan aldığın taşı açtı��ın perlerde kullanmalısın.')
     hands[seat] = placed.rest
     const opened = s.opened.map((o, i) => (i === seat ? mode : o))
     const openedTurn = s.openedTurn.map((o, i) => (i === seat ? s.turnNo : o))
@@ -475,6 +502,30 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
         hands,
         melds: s.melds.map((m) => (m.id === meld.id ? { ...m, tiles: an.ordered } : m)),
         log: pushLog(s, { seat, text: 'taş işledi', tile: picked[0] }),
+      },
+      winners: null,
+    }
+  }
+
+  if (a.type === 'swapJoker') {
+    if (!s.opened[seat]) throw new Error('Okeyi almak için önce elini açmalısın')
+    if (s.taken != null) throw new Error('Önce yandan aldığın taşla elini aç')
+    const meld = s.melds.find((m) => m.id === Number(a.meldId))
+    if (!meld) throw new Error('Per bulunamadı')
+    const idx = hands[seat].findIndex((t) => t.id === Number(a.tileId))
+    if (idx < 0) throw new Error('Taş elinde değil')
+    const tile = hands[seat][idx]
+    const j = jokerSwapIndex(tile, meld, ok)
+    if (j < 0) throw new Error('Bu taş perdeki okeyin yerini tutmuyor')
+    const joker = meld.tiles[j]
+    hands[seat].splice(idx, 1, joker)
+    const swapped = analyzeMeld(meld.tiles.map((t, k) => (k === j ? tile : t)), ok)!
+    return {
+      state: {
+        ...s,
+        hands,
+        melds: s.melds.map((m) => (m.id === meld.id ? { ...m, tiles: swapped.ordered } : m)),
+        log: pushLog(s, { seat, text: 'gerçek taşı koyup okeyi aldı', tile }),
       },
       winners: null,
     }
@@ -535,10 +586,7 @@ export function okey101BotTurn(state: Okey101State, seat: number): Step101 {
     let from: 'pile' | 'discard' = 'pile'
     if (top && !s.noTake) {
       if (s.opened[seat]) from = isJoker(top, ok) || canAddToTable(top, s.melds, ok) ? 'discard' : 'pile'
-      else {
-        const best = bestPartition([...s.hands[seat], top], ok)
-        if (best.value >= OPEN_MIN && best.groups.flat().some((t) => t.id === top.id)) from = 'discard'
-      }
+      else if (canOpenWithTile(s.hands[seat], top, ok)) from = 'discard'
     }
     const r = run({ type: 'draw', from })
     if (r.winners || s.turn !== seat || s.handNo !== state.handNo) return r

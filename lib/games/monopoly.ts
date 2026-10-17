@@ -384,7 +384,10 @@ function afterMove(s: MonopolyState, seat: number) {
 function finishIfOver(s: MonopolyState): number[] | null {
   const live = alive(s)
   if (live.length <= 1) return live
-  if (s.maxRounds > 0 && s.round > s.maxRounds) {
+  // Once every human is bankrupt only bots are left; nobody would ever trigger their turns,
+  // so the table froze. Settle it right away by net worth instead.
+  const botsOnly = live.every((i) => s.bots.includes(i))
+  if (botsOnly || (s.maxRounds > 0 && s.round > s.maxRounds)) {
     const worth = live.map((i) => netWorth(s, i))
     const max = Math.max(...worth)
     return live.filter((_, k) => worth[k] === max)

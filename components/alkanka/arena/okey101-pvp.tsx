@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownToLine, Bot, ChevronDown, Eye, Trophy, Undo2, Wand2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { analyzeMeld, bestPartition, findPairs, leftOf101, OPEN_MIN, PAIR_MIN, type HandResult, type Okey101View } from '@/lib/games/okey101'
+import { analyzeMeld, bestPartition, canOpenWithTile, findPairs, jokerSwapIndex, leftOf101, OPEN_MIN, PAIR_MIN, type HandResult, type Okey101View } from '@/lib/games/okey101'
 import type { Remote } from './remote'
 import { FeltBranding, TileBack, TileFace } from './okey'
 import { okeyFrom, sortHand, type Tile } from './okey-engine'
@@ -106,6 +106,15 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   }
   const fitsFor = (tileId: number | null) => (tileId == null ? [] : s.melds.filter((m) => fitsMeld(tileId, m.id)).map((m) => m.id))
   const selectedFits = canLayOff ? fitsFor(selected) : []
+  const swapsFor = (tileId: number | null) => {
+    const t = tileId == null ? undefined : byId.get(tileId)
+    return t ? s.melds.filter((m) => jokerSwapIndex(t, m, okey) >= 0).map((m) => m.id) : []
+  }
+  const selectedSwaps = canLayOff ? swapsFor(selected) : []
+  const swapJoker = (tileId: number, meldId: number) => {
+    if (!canLayOff || remote.busy) return
+    act({ type: 'swapJoker', meldId, tileId })
+  }
   const [dragHover, setDragHover] = useState<number | null>(null)
   const addTile = (tileId: number, meldId: number) => {
     if (!canLayOff || remote.busy) return
@@ -155,7 +164,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const topSeat = n === 4 ? at(2) : n === 2 ? at(1) : null
   const top = (seat: number | null) => (seat == null ? undefined : s.discards[seat]?.[s.discards[seat].length - 1])
   const sideTop = mySeat >= 0 ? top(leftOf101(mySeat, n)) : top(leftSeat)
-  const canTakeSide = drawPhase && !!sideTop && !s.noTake && !remote.busy
+  const sideOpens = !!sideTop && (!!opened || canOpenWithTile(hand, sideTop, okey))
+  const canTakeSide = drawPhase && !!sideTop && !s.noTake && !remote.busy && sideOpens
 
   // 101: lowest running total leads. Ties share the same rank.
   const hasStandings = s.results.length > 0
@@ -182,7 +192,9 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     s.note ||
     (myTurn
       ? s.phase === 'draw'
-        ? 'Sıra sende: ortadan çek ya da soldan gelen taşı al.'
+        ? sideTop && !sideOpens
+          ? 'Sıra sende: elin açmadığı için yandan alamazsın, ortadan çek.'
+          : 'Sıra sende: ortadan çek ya da soldan gelen taşı al.'
         : s.taken != null
           ? 'Yandan aldığın taşla elini açmalısın, yoksa geri ver (101 ceza).'
           : opened
@@ -282,7 +294,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             {s.melds.length > 0 && (
               <div className="flex max-h-40 w-full flex-wrap content-start justify-center gap-1.5 overflow-y-auto p-1 sm:max-h-64 sm:gap-2" aria-label="Yerdeki perler">
                 {s.melds.map((m) => {
-                  const fits = selectedFits.includes(m.id)
+                  const swap = !selectedFits.includes(m.id) && selectedSwaps.includes(m.id)
+                  const fits = selectedFits.includes(m.id) || swap
                   const dimmed = selected != null && canLayOff && !fits
                   const hovered = dragHover === m.id
                   return (
@@ -291,8 +304,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
                       type="button"
                       data-drop={canLayOff && m.kind !== 'pair' ? `meld:${m.id}` : undefined}
                       disabled={!fits || remote.busy}
-                      onClick={() => selected != null && addTile(selected, m.id)}
-                      aria-label={`${nameOf(m.owner)} peri${fits ? ', seçili taşı buraya işle' : ''}`}
+                      onClick={() => selected != null && (swap ? swapJoker(selected, m.id) : addTile(selected, m.id))}
+                      aria-label={`${nameOf(m.owner)} peri${swap ? ', gerçek taşı koyup okeyi al' : fits ? ', seçili taşı buraya işle' : ''}`}
                       className={cn(
                         'relative flex gap-px rounded-md bg-background/30 p-1 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-150 disabled:cursor-default',
                         fits && 'cursor-pointer ring-2 ring-primary hover:-translate-y-0.5 hover:bg-primary/25',
@@ -303,7 +316,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
                     >
                       {fits && (
                         <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-1.5 text-[9px] font-bold uppercase leading-4 text-primary-foreground shadow">
-                          İşle
+                          {swap ? 'Okeyi al' : 'İşle'}
                         </span>
                       )}
                       {m.tiles.map((t) => (
@@ -366,7 +379,11 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             onDropOut={(id, kind) => {
               setDragHover(null)
               if (kind === 'discard') discard(id)
-              else if (kind.startsWith('meld:')) addTile(id, Number(kind.slice(5)))
+              else if (kind.startsWith('meld:')) {
+                const meldId = Number(kind.slice(5))
+                if (!fitsMeld(id, meldId) && swapsFor(id).includes(meldId)) swapJoker(id, meldId)
+                else addTile(id, meldId)
+              }
             }}
           />
           {layOffable.length > 0 && (
