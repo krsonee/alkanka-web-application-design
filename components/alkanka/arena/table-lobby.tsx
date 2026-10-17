@@ -8,6 +8,7 @@ import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
 import { VoiceChat } from './voice-chat'
 import { FitToScreen } from './fit-to-screen'
+import { LandscapeFit } from './landscape-fit'
 import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
@@ -765,8 +766,12 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
               <FitToScreen>
                 <GameSurface game={data.game} remote={remote} done={ended} />
               </FitToScreen>
-            ) : (
+            ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' ? (
               <GameSurface game={data.game} remote={remote} done={ended} />
+            ) : (
+              <LandscapeFit>
+                <GameSurface game={data.game} remote={remote} done={ended} />
+              </LandscapeFit>
             )}
           </div>
         )}

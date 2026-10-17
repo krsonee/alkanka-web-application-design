@@ -13,7 +13,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     start_url: '/?kaynak=uygulama',
     scope: '/',
     display: 'standalone',
-    orientation: 'portrait',
+    orientation: 'any',
     background_color: '#0b0e17',
     theme_color: '#0b0e17',
     lang: 'tr',

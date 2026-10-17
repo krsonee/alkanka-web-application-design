@@ -62,7 +62,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   else if (myDiscard)
     message = winning
       ? 'Elin bitmeye hazır! Bitiren taşı seç ve "Eli bitir" de.'
-      : `2. adım: atacağın taşı seç ve "Taşı at" de.${fresh != null ? ' Yeni gelen taş "Yeni" etiketli.' : ''}`
+      : `2. adım: taşı "Taşı at" butonuna sürükle, çift tıkla ya da seçip butona bas.${fresh != null ? ' Yeni gelen taş "Yeni" etiketli.' : ''}`
   else message = `${nameOf(s.turn)} oynuyor...`
 
   const seatProps = (i: number) => ({
@@ -151,6 +151,11 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
               onDoubleTile={(tile) => {
                 if (myDiscard && !remote.busy) void remote.send({ type: 'discard', tileId: tile.id })
               }}
+              onDropOut={(tileId, kind) => {
+                if (!myDiscard || remote.busy) return
+                if (kind === 'discard') void remote.send({ type: 'discard', tileId })
+                else if (kind === 'finish' && winning) void remote.send({ type: 'finish', tileId })
+              }}
             />
           </div>
         )}
@@ -167,6 +172,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
             </button>
             <div className="grid grid-cols-2 gap-2 sm:flex">
               <button
+                data-drop={myDiscard && winning ? 'finish' : undefined}
                 onClick={() => selected != null && void remote.send({ type: 'finish', tileId: selected })}
                 disabled={!myDiscard || selected == null || !winning || remote.busy}
                 className="flex items-center justify-center gap-1.5 rounded-xl border border-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary hover:bg-primary/10 disabled:opacity-40"
@@ -175,6 +181,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
                 Eli bitir
               </button>
               <button
+                data-drop={myDiscard ? 'discard' : undefined}
                 onClick={() => selected != null && void remote.send({ type: 'discard', tileId: selected })}
                 disabled={!myDiscard || selected == null || remote.busy}
                 className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40"
