@@ -881,7 +881,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ? 'Beyazı sürükle · Gücü çekip bırak'
         : aimLocked
           ? 'Nişan kilitli · Gücü çekip bırak'
-          : 'Nişan al · Sağdaki gücü aşağı çek, bırak'
+          : 'Nişan al · Alttaki gücü sağa çek, bırak'
 
   return (
     <div className="flex flex-col gap-3">
@@ -911,8 +911,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ))}
       </div>
 
-      <div className="flex items-stretch gap-2 sm:gap-3">
-        <div className="relative min-w-0 flex-1">
+      <div className="flex flex-col gap-2 sm:gap-3">
+        <div className="relative">
           <canvas
             ref={canvasRef}
             tabIndex={0}
@@ -920,14 +920,13 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={() => ((drag.current = null), (placing.current = null))}
-            aria-label="Bilardo masası. Sürükleyerek nişan al, sağdaki güç çubuğunu aşağı çekip bırakarak vur. Ok tuşlarıyla döndür, boşluk ile vur."
+            aria-label="Bilardo masası. Sürükleyerek nişan al, alttaki güç çubuğunu sağa çekip bırakarak vur. Ok tuşlarıyla döndür, boşluk ile vur."
             className={cn(
               'block aspect-[1076/576] w-full touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary',
               yourTurn ? 'cursor-crosshair' : 'cursor-wait',
             )}
           />
           <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />
-          <SpinControl value={spin} onChange={setSpin} disabled={!yourTurn} />
           {hint && (
             <span
               className={cn(
@@ -939,7 +938,24 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
             </span>
           )}
         </div>
-        <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+        <div
+          className={cn(
+            'flex items-center gap-2 rounded-2xl border bg-card p-2 transition-colors sm:gap-3 sm:p-2.5',
+            yourTurn ? 'border-primary/40' : 'border-border',
+          )}
+        >
+          <SpinControl value={spin} onChange={setSpin} disabled={!yourTurn} />
+          <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+          <button
+            type="button"
+            disabled={!yourTurn}
+            onClick={() => fire(keyPowerRef.current)}
+            className="flex h-12 shrink-0 flex-col items-center justify-center rounded-xl bg-primary px-4 text-primary-foreground shadow-md outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-40 disabled:hover:brightness-100 sm:px-6"
+          >
+            <span className="font-display text-sm font-extrabold uppercase leading-none tracking-wider">Vur</span>
+            <span className="mt-1 text-[10px] font-bold tabular-nums leading-none opacity-80">%{Math.round(keyPower * 100)}</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -975,7 +991,7 @@ function BallChip({ n }: { n: number }) {
   )
 }
 
-/** Vertical cue-pull bar: drag down to pull the cue back, release to strike. Dragging back to the top cancels. */
+/** Horizontal cue-pull track: drag right to pull the cue back, release to strike. Dragging back to the start cancels. */
 function PowerBar({
   disabled,
   preset,
@@ -994,13 +1010,14 @@ function PowerBar({
     pullRef.current = v
     setPullState(v)
   }
-  const shown = pull > 0 ? pull : preset
+  const pulling = pull > 0
+  const shown = pulling ? pull : preset
   return (
     <div
       ref={ref}
       role="slider"
       tabIndex={-1}
-      aria-label="Vuruş gücü: aşağı çekip bırak"
+      aria-label="Vuruş gücü: sağa çekip bırak"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(shown * 100)}
@@ -1008,14 +1025,14 @@ function PowerBar({
       onPointerDown={(e) => {
         if (disabled) return
         e.currentTarget.setPointerCapture(e.pointerId)
-        active.current = { id: e.pointerId, y: e.clientY }
+        active.current = { id: e.pointerId, y: e.clientX }
         setPull(0)
       }}
       onPointerMove={(e) => {
         const a = active.current
         if (!a || a.id !== e.pointerId) return
-        const h = (ref.current?.getBoundingClientRect().height ?? 200) * 0.8
-        setPull(clamp01((e.clientY - a.y) / h))
+        const w = (ref.current?.getBoundingClientRect().width ?? 240) * 0.75
+        setPull(clamp01((e.clientX - a.y) / w))
       }}
       onPointerUp={(e) => {
         const a = active.current
@@ -1030,16 +1047,33 @@ function PowerBar({
         setPull(0)
       }}
       className={cn(
-        'flex w-11 shrink-0 touch-none select-none flex-col items-center gap-2 rounded-2xl border border-border bg-card px-1 py-2 sm:w-14',
+        'relative h-12 min-w-0 flex-1 touch-none select-none overflow-hidden rounded-xl bg-secondary',
         disabled ? 'opacity-40' : 'cursor-grab active:cursor-grabbing',
       )}
     >
-      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Güç</span>
-      <div className="relative w-3 flex-1 rounded-full bg-secondary">
-        <div className="absolute inset-x-0 top-0 rounded-full bg-primary" style={{ height: `${pull * 100}%` }} />
-        <div className="absolute -inset-x-1.5 h-0.5 rounded-full bg-foreground/60" style={{ top: `${preset * 100}%` }} aria-hidden="true" />
+      <div aria-hidden="true" className="absolute inset-0 flex justify-evenly">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className="my-3 w-px bg-foreground/10" />
+        ))}
       </div>
-      <span className="font-display text-xs font-bold tabular-nums text-foreground">{Math.round(shown * 100)}</span>
+      <div
+        aria-hidden="true"
+        className={cn('absolute inset-y-0 left-0 bg-primary', !pulling && 'transition-[width] duration-200')}
+        style={{ width: `${pull * 100}%` }}
+      />
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-2 w-0.5 -translate-x-1/2 rounded-full bg-foreground/50"
+        style={{ left: `${preset * 100}%` }}
+      />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-between gap-2 px-3">
+        <span className={cn('truncate text-xs font-bold uppercase tracking-wider', pulling ? 'text-primary-foreground' : 'text-muted-foreground')}>
+          {pulling ? (pull < 0.05 ? 'Bırakırsan iptal' : 'Bırak, vursun') : 'Güç · sağa çek'}
+        </span>
+        <span className={cn('font-display text-base font-extrabold tabular-nums', pulling && pull > 0.85 ? 'text-primary-foreground' : 'text-foreground')}>
+          {Math.round(shown * 100)}
+        </span>
+      </div>
     </div>
   )
 }
@@ -1051,28 +1085,37 @@ function spinLabel({ x, y }: SpinInput) {
   return [v, h].filter(Boolean).join(' · ') || 'Hafif'
 }
 
-/** Small cue-ball icon on the table corner; opens the contact-point picker. */
+/** Cue-ball button in the shot dock; opens the contact-point picker above it. */
 function SpinControl({ value, onChange, disabled }: { value: SpinInput; onChange: (v: SpinInput) => void; disabled: boolean }) {
   const [open, setOpen] = useState(false)
   const show = open && !disabled
   return (
-    <div className="absolute left-[4.5%] top-[9%] z-10 flex flex-col items-start gap-2">
+    <div className="relative shrink-0">
       <button
         type="button"
         aria-expanded={show}
         aria-label={`Falso: ${spinLabel(value)}. Değiştirmek için aç.`}
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className="relative size-8 rounded-full bg-checker-light shadow-[inset_-4px_-5px_9px_rgb(0_0_0/0.25),0_3px_8px_rgb(0_0_0/0.45)] outline-none ring-primary focus-visible:ring-2 disabled:opacity-50 sm:size-10"
+        className={cn(
+          'flex h-12 items-center gap-2.5 rounded-xl bg-secondary px-2 outline-none transition-colors hover:bg-secondary/70 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 sm:pr-3',
+          show && 'ring-2 ring-primary',
+        )}
       >
-        <span
-          aria-hidden="true"
-          className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive sm:size-2.5"
-          style={{ left: `${50 + value.x * 50}%`, top: `${50 - value.y * 50}%` }}
-        />
+        <span className="relative size-8 shrink-0 rounded-full bg-checker-light shadow-[inset_-3px_-4px_7px_rgb(0_0_0/0.25)]">
+          <span
+            aria-hidden="true"
+            className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive"
+            style={{ left: `${50 + value.x * 50}%`, top: `${50 - value.y * 50}%` }}
+          />
+        </span>
+        <span className="hidden flex-col items-start sm:flex">
+          <span className="text-[10px] font-bold uppercase leading-none tracking-wider text-muted-foreground">Falso</span>
+          <span className="mt-1 text-xs font-semibold leading-none text-foreground">{spinLabel(value)}</span>
+        </span>
       </button>
       {show && (
-        <div className="rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur">
+        <div className="absolute bottom-full left-0 z-20 mb-2 rounded-2xl border border-border bg-card p-3 shadow-xl">
           <SpinPad value={value} onChange={onChange} />
         </div>
       )}
@@ -1155,12 +1198,12 @@ function Kbd({ children }: { children: React.ReactNode }) {
 function KeyGuide() {
   const rows: { keys: React.ReactNode; label: string }[] = [
     { keys: <span className="text-xs font-semibold text-foreground">Fare</span>, label: 'İmleçle nişan al, tıklayınca nişan kilitlenir' },
-    { keys: <span className="text-xs font-semibold text-foreground">Güç çubuğu</span>, label: 'Aşağı çek, bırakınca vurur. Yukarı geri getirirsen iptal' },
+    { keys: <span className="text-xs font-semibold text-foreground">Güç çubuğu</span>, label: 'Sağa çek, bırakınca vurur. Başa geri getirirsen iptal' },
     { keys: (<><Kbd>←</Kbd><Kbd>→</Kbd></>), label: 'İstekayı döndür (basılı tut, hızlanır)' },
     { keys: (<><Kbd>Shift</Kbd><span className="text-muted-foreground">+</span><Kbd>←→</Kbd></>), label: 'İnce ayar' },
     { keys: (<><Kbd>↑</Kbd><Kbd>↓</Kbd></>), label: 'Klavye vuruş gücü ±5 (çubuktaki çizgi)' },
     { keys: (<><Kbd>Boşluk</Kbd><Kbd>Enter</Kbd></>), label: 'Klavye gücüyle vur' },
-    { keys: <span className="text-xs font-semibold text-foreground">Falso</span>, label: 'Masanın köşesindeki beyaz topa dokun: üst = takip, alt = geri çekme' },
+    { keys: <span className="text-xs font-semibold text-foreground">Falso</span>, label: 'Alttaki beyaz topa dokun: üst = takip, alt = geri çekme' },
     { keys: <span className="text-xs font-semibold text-foreground">Siyah</span>, label: 'Grubun bitince siyahı atacağın deliğe dokunup seç' },
   ]
   return (
