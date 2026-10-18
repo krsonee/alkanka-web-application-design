@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Play, Plus, Save, Trash2 } from 'lucide-react'
+import { Copy, Play, Plus, Save, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
 import { CemberDemo } from './cember-demo'
 import {
   CONDITION_KINDS,
+  DEFAULT_CEMBER,
+  MAX_EVENTS,
   MAX_PLAYERS,
+  MIN_SLOT_GAP_MIN,
+  NOTICE_MINUTES,
   WINDOW_LABEL,
   conditionText,
   prizeText,
@@ -22,7 +26,7 @@ import {
 import { cn } from '@/lib/utils'
 
 type Option = { id: string; name: string }
-type RecentRound = { slot: string; players: number; winner: string | null; prize: string; paid: boolean }
+type RecentRound = { slot: string; title: string; players: number; winner: string | null; prize: string; paid: boolean }
 
 const PRIZE_TYPES: Record<PrizeType, string> = { coin: 'Kanka Coin (KC)', kp: 'Kanka Puan (KP)', badge: 'Rozet', market: 'Market ödülü' }
 
@@ -37,17 +41,43 @@ export function CemberEditor({
   items,
   recent,
 }: {
-  initial: CemberConfig
+  initial: CemberConfig[]
   tasks: Option[]
   games: Option[]
   badges: Option[]
   items: Option[]
   recent: RecentRound[]
 }) {
-  const [cfg, setCfg] = useState(initial)
+  const [events, setEvents] = useState<CemberConfig[]>(initial.length ? initial : [{ ...DEFAULT_CEMBER, id: uid() }])
+  const [sel, setSel] = useState(0)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
-  const set = (patch: Partial<CemberConfig>) => setCfg((c) => ({ ...c, ...patch }))
+  const cfg = events[Math.min(sel, events.length - 1)]
+  const set = (patch: Partial<CemberConfig>) => setEvents((list) => list.map((e) => (e.id === cfg.id ? { ...e, ...patch } : e)))
+
+  const addEvent = (from?: CemberConfig) => {
+    if (events.length >= MAX_EVENTS) return setMsg({ ok: false, text: `En fazla ${MAX_EVENTS} etkinlik kurabilirsin.` })
+    const base = from ?? DEFAULT_CEMBER
+    const next: CemberConfig = {
+      ...base,
+      id: uid(),
+      title: from ? `${from.title} (kopya)`.slice(0, 40) : `Jako Çemberi ${events.length + 1}`,
+      // New events start with no hours so they never clash with an existing schedule on save.
+      hours: [],
+      extraSlots: [],
+      conditions: base.conditions.map((c) => ({ ...c, id: uid() })),
+      prizes: base.prizes.map((p) => ({ ...p, id: uid() })),
+    }
+    setEvents((list) => [...list, next])
+    setSel(events.length)
+    setMsg(null)
+  }
+
+  const removeEvent = () => {
+    if (!confirm(`"${cfg.title}" silinsin mi? Kaydet'e basınca kalıcı olur.`)) return
+    setEvents((list) => list.filter((e) => e.id !== cfg.id))
+    setSel((s) => Math.max(0, s - 1))
+  }
 
   const names: Record<string, string> = {}
   badges.forEach((b) => (names[`b:${b.id}`] = b.name))
@@ -62,34 +92,101 @@ export function CemberEditor({
 
   const save = () =>
     start(async () => {
-      const r = await saveCember(cfg)
+      const r = await saveCember(events)
+      if (r.events) setEvents(r.events)
       setMsg({ ok: r.ok, text: r.message })
     })
 
   const test = () =>
     start(async () => {
-      const saved = await saveCember(cfg)
+      const saved = await saveCember(events)
       if (!saved.ok) return setMsg({ ok: false, text: saved.message })
-      const r = await startTestRound(60)
+      if (saved.events) setEvents(saved.events)
+      const r = await startTestRound(cfg.id, 60)
       setMsg({ ok: r.ok, text: r.message })
     })
+
+  const hoursLabel = (e: CemberConfig) => {
+    const perHour = slotMinutes(e).length
+    const total = e.hours.length * perHour
+    return e.enabled ? (total ? `Günde ${total} tur` : 'Saat seçilmedi') : 'Kapalı'
+  }
+
+  if (!cfg) {
+    return (
+      <div className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-6">
+        <p className="text-sm text-muted-foreground">Hiç etkinlik yok.</p>
+        <button type="button" onClick={() => addEvent()} className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground">
+          <Plus className="size-4" aria-hidden /> Etkinlik ekle
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <CemberDemo title={cfg.title} prize={prizeText(cfg.prizes, names)} />
+
+      <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" aria-label="Etkinlikler">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-display text-lg font-bold uppercase text-foreground">Etkinlikler</h2>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Her etkinliğin kendi saatleri, şartları ve ödülü olur. Turlar arasında en az {MIN_SLOT_GAP_MIN} dakika olmalı. Her turdan {NOTICE_MINUTES}{' '}
+              dakika önce sitede ve Telegram&apos;da duyuru çıkar.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => addEvent(cfg)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold">
+              <Copy className="size-4" aria-hidden /> Kopyala
+            </button>
+            <button type="button" onClick={() => addEvent()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-bold text-primary-foreground">
+              <Plus className="size-4" aria-hidden /> Yeni etkinlik
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1" role="tablist">
+          {events.map((e, i) => (
+            <button
+              key={e.id}
+              type="button"
+              role="tab"
+              aria-selected={e.id === cfg.id}
+              onClick={() => setSel(i)}
+              className={cn(
+                'flex min-w-36 shrink-0 flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors',
+                e.id === cfg.id ? 'border-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50',
+              )}
+            >
+              <span className="max-w-44 truncate text-sm font-semibold text-foreground">{e.title || 'Adsız'}</span>
+              <span className="text-xs text-muted-foreground">
+                {hoursLabel(e)} · {prizeText(e.prizes, names) || 'Ödül yok'}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <h2 className="font-display text-lg font-bold uppercase text-foreground">Jako Çemberi</h2>
+            <h2 className="font-display text-lg font-bold uppercase text-foreground">{cfg.title || 'Etkinlik'}</h2>
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground text-pretty">
-              Şartları tamamlayan üyeler (en fazla {MAX_PLAYERS}) seçtiğin saatlerde çembere girer. Sitede olan herkese pencere açılır, tek tur oynanır,
-              kazanana ödül otomatik verilir ve sohbete duyuru düşer.
+              Şartları tamamlayan üyeler (en fazla {MAX_PLAYERS}) seçtiğin saatlerde çembere girer. Sitede olan herkese pencere açılır, oyunlar o sırada
+              durur, kazanana ödül otomatik verilir ve sohbete duyuru düşer.
             </p>
           </div>
+          <div className="flex items-center gap-3">
+            {events.length > 1 && (
+              <button type="button" onClick={removeEvent} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm text-muted-foreground hover:text-destructive">
+                <Trash2 className="size-4" aria-hidden /> Sil
+              </button>
+            )}
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} className="size-4 accent-primary" />
             Etkinlik açık
           </label>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -352,7 +449,7 @@ export function CemberEditor({
           disabled={pending}
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-60"
         >
-          <Save className="size-4" aria-hidden /> {pending ? 'Kaydediliyor...' : 'Kaydet'}
+          <Save className="size-4" aria-hidden /> {pending ? 'Kaydediliyor...' : 'Tümünü kaydet'}
         </button>
         <button
           type="button"
@@ -360,7 +457,7 @@ export function CemberEditor({
           disabled={pending}
           className="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-4 text-sm font-bold disabled:opacity-60"
         >
-          <Play className="size-4" aria-hidden /> 1 dakika sonra ek tur başlat
+          <Play className="size-4" aria-hidden /> Bu etkinlik için 1 dk sonra test turu
         </button>
         {msg && (
           <p role="status" className={msg.ok ? 'text-sm text-primary' : 'text-sm text-destructive'}>
@@ -379,6 +476,7 @@ export function CemberEditor({
               <thead className="text-xs text-muted-foreground">
                 <tr>
                   <th className="py-2 pr-3 font-medium">Saat</th>
+                  <th className="py-2 pr-3 font-medium">Etkinlik</th>
                   <th className="py-2 pr-3 font-medium">Katılımcı</th>
                   <th className="py-2 pr-3 font-medium">Kazanan</th>
                   <th className="py-2 pr-3 font-medium">Ödül</th>
@@ -391,6 +489,7 @@ export function CemberEditor({
                     <td className="py-2 pr-3 tabular-nums">
                       {new Date(r.slot).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
+                    <td className="py-2 pr-3">{r.title}</td>
                     <td className="py-2 pr-3 tabular-nums">{r.players}</td>
                     <td className="py-2 pr-3 font-semibold">{r.winner ?? '—'}</td>
                     <td className="py-2 pr-3">{r.prize}</td>

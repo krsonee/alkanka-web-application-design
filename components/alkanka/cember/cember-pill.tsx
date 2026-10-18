@@ -137,6 +137,21 @@ export function CemberButton() {
                   ? 'Çemberdesin! Saat gelince pencere kendiliğinden açılır.'
                   : 'Şartları tamamlarsan otomatik olarak çembere eklenirsin.'}
             </p>
+            {status.upcoming.length > 1 && (
+              <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Sıradaki turlar</span>
+                <ul className="flex flex-col gap-1 text-xs">
+                  {status.upcoming.slice(1, 5).map((u) => (
+                    <li key={u.slot} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate">
+                        <span className="font-mono tabular-nums text-gold">{clock(u.slot)}</span> {u.title}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">{u.prizeText}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {status.last && (
               <p className="text-xs text-muted-foreground">
                 Son kazanan: <span className="font-semibold text-foreground">{status.last.winnerName}</span> · {status.last.prizeText}

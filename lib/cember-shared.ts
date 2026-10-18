@@ -20,6 +20,7 @@ export type PrizeType = 'coin' | 'kp' | 'badge' | 'market'
 export type CemberPrize = { id: string; type: PrizeType; amount: number; ref: string | null; label: string }
 
 export type CemberConfig = {
+  id: string
   enabled: boolean
   title: string
   hours: number[]
@@ -34,6 +35,7 @@ export type CemberConfig = {
 }
 
 export const DEFAULT_CEMBER: CemberConfig = {
+  id: 'e1',
   enabled: true,
   title: 'Jako Çemberi',
   hours: Array.from({ length: 24 }, (_, h) => h),
@@ -46,6 +48,11 @@ export const DEFAULT_CEMBER: CemberConfig = {
 }
 
 export const MAX_PLAYERS = 500
+export const MAX_EVENTS = 30
+/** Rounds of different events must be at least this far apart so two windows never overlap. */
+export const MIN_SLOT_GAP_MIN = 3
+/** Site + Telegram heads-up this many minutes before each round. */
+export const NOTICE_MINUTES = 3
 
 export const EVERY_OPTIONS = [0, 5, 10, 15, 20, 30] as const
 
@@ -57,9 +64,9 @@ export function slotMinutes(cfg: Pick<CemberConfig, 'minute' | 'every'>): number
   return out
 }
 /** Mascot intro + countdown before the ring starts spinning. */
-export const INTRO_SECONDS = 9
-/** Winner celebration before the window closes itself. */
-export const RESULT_SECONDS = 9
+export const INTRO_SECONDS = 5
+/** Winner celebration before the window closes itself (viewers can close it sooner). */
+export const RESULT_SECONDS = 6
 
 export type Participant = { id: string; name: string; image: string | null }
 
@@ -78,8 +85,11 @@ export type CemberStatus = {
   now: string
   title: string
   nextSlot: string | null
+  eventId: string | null
   prizeText: string
   conditions: string[]
+  /** Next few rounds across all events, soonest first. */
+  upcoming: { slot: string; title: string; prizeText: string }[]
   last: { slot: string; winnerName: string; prizeText: string; players: number } | null
 }
 

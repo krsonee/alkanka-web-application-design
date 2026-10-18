@@ -19,6 +19,9 @@ import {
   type CemberStatus,
   type Participant,
   EVERY_OPTIONS,
+  MAX_EVENTS,
+  MIN_SLOT_GAP_MIN,
+  NOTICE_MINUTES,
   slotMinutes,
 } from '@/lib/cember-shared'
 
@@ -37,6 +40,8 @@ function ensure() {
       slot timestamptz PRIMARY KEY, title text NOT NULL, seed bigint NOT NULL, participants jsonb NOT NULL,
       winner_index int, winner_id text, winner_name text, steps int NOT NULL DEFAULT 0, prizes jsonb NOT NULL DEFAULT '[]'::jsonb,
       prize_text text NOT NULL DEFAULT '', paid boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS event_id text`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS cember_notices (slot timestamptz PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
     throw error
@@ -51,7 +56,7 @@ const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback
 }
 
-export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined): CemberConfig {
+export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, fallbackId = 'e1'): CemberConfig {
   const c = { ...DEFAULT_CEMBER, ...(raw ?? {}) }
   const hours = [...new Set((Array.isArray(c.hours) ? c.hours : []).map((h) => clampInt(h, 0, 23, 0)))].sort((a, b) => a - b)
   const conditions: CemberCondition[] = (Array.isArray(c.conditions) ? c.conditions : [])
@@ -78,6 +83,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined): 
     .filter((p) => (p.type === 'badge' || p.type === 'market' ? !!p.ref : true))
   const now = Date.now()
   return {
+    id: String(raw?.id || fallbackId).replace(/[^\w-]/g, '').slice(0, 20) || fallbackId,
     enabled: c.enabled !== false,
     title: String(c.title || DEFAULT_CEMBER.title).slice(0, 40),
     hours,
@@ -94,32 +100,78 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined): 
   }
 }
 
-let configCache: { at: number; value: CemberConfig } | null = null
+/** Stored value is `{ events: [...] }`; older saves held a single event object and are read as a one-item list. */
+export function normalizeEvents(raw: unknown): CemberConfig[] {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+  const list: Partial<CemberConfig>[] = Array.isArray(obj?.events)
+    ? (obj.events as Partial<CemberConfig>[])
+    : obj && Object.keys(obj).length
+      ? [obj as Partial<CemberConfig>]
+      : [DEFAULT_CEMBER]
+  const seen = new Set<string>()
+  return list.slice(0, MAX_EVENTS).map((e, i) => {
+    let ev = normalizeConfig(e, `e${i + 1}`)
+    if (seen.has(ev.id)) ev = { ...ev, id: `${ev.id.slice(0, 14)}${i}${Math.floor(Math.random() * 1e4)}` }
+    seen.add(ev.id)
+    return ev
+  })
+}
 
-export async function getCemberConfig(): Promise<CemberConfig> {
+let configCache: { at: number; value: CemberConfig[] } | null = null
+
+export async function getCemberEvents(): Promise<CemberConfig[]> {
   if (configCache && Date.now() - configCache.at < 5_000) return configCache.value
   await ensure()
-  const r = await rows<{ value: Partial<CemberConfig> }>(sql`SELECT value FROM kp_settings WHERE key = ${SETTINGS_KEY}`)
-  const value = normalizeConfig(r[0]?.value)
+  const r = await rows<{ value: unknown }>(sql`SELECT value FROM kp_settings WHERE key = ${SETTINGS_KEY}`)
+  const value = normalizeEvents(r[0]?.value)
   configCache = { at: Date.now(), value }
   return value
 }
 
-export async function saveCemberConfig(input: Partial<CemberConfig>) {
-  await ensure()
-  const value = normalizeConfig(input)
-  if (!value.conditions.length) throw new Error('En az bir katılım şartı ekle.')
-  if (!value.prizes.length) throw new Error('En az bir ödül ekle.')
-  await rows(sql`INSERT INTO kp_settings (key, value) VALUES (${SETTINGS_KEY}, ${JSON.stringify(value)}::jsonb)
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
-  configCache = null
-  return value
+const hhmm = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+/** Two enabled events must never start within MIN_SLOT_GAP_MIN of each other, or their windows would collide on screen. */
+function findClash(events: CemberConfig[]): string | null {
+  const points: { m: number; ev: CemberConfig }[] = []
+  for (const ev of events) {
+    if (!ev.enabled) continue
+    const mins = slotMinutes(ev)
+    for (const h of ev.hours) for (const m of mins) points.push({ m: h * 60 + m, ev })
+  }
+  points.sort((a, b) => a.m - b.m)
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]
+    const b = points[(i + 1) % points.length]
+    if (a.ev.id === b.ev.id) continue
+    const gap = (b.m - a.m + 1440) % 1440
+    if (gap < MIN_SLOT_GAP_MIN) {
+      return `"${a.ev.title}" (${hhmm(a.m)}) ile "${b.ev.title}" (${hhmm(b.m)}) çakışıyor. İki etkinlik arasında en az ${MIN_SLOT_GAP_MIN} dakika olmalı.`
+    }
+  }
+  return null
 }
 
-export async function scheduleTestRound(delaySeconds: number) {
-  const cfg = await getCemberConfig()
+export async function saveCemberEvents(input: Partial<CemberConfig>[]) {
+  await ensure()
+  const events = normalizeEvents({ events: Array.isArray(input) ? input : [] })
+  for (const ev of events) {
+    if (!ev.conditions.length) throw new Error(`"${ev.title}" için en az bir katılım şartı ekle.`)
+    if (!ev.prizes.length) throw new Error(`"${ev.title}" için en az bir ödül ekle.`)
+  }
+  const clash = findClash(events)
+  if (clash) throw new Error(clash)
+  await rows(sql`INSERT INTO kp_settings (key, value) VALUES (${SETTINGS_KEY}, ${JSON.stringify({ events })}::jsonb)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+  configCache = null
+  return events
+}
+
+export async function scheduleTestRound(eventId: string, delaySeconds: number) {
+  const events = await getCemberEvents()
+  const ev = events.find((e) => e.id === eventId)
+  if (!ev) throw new Error('Etkinlik bulunamadı, önce kaydet.')
   const at = new Date(Math.ceil((Date.now() + delaySeconds * 1000) / 1000) * 1000).toISOString()
-  await saveCemberConfig({ ...cfg, extraSlots: [...cfg.extraSlots, at] })
+  await saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, enabled: true, extraSlots: [...e.extraSlots, at] } : e)))
   return at
 }
 
@@ -130,19 +182,35 @@ function trDayStart(at: number) {
   return tr - (tr % 86400_000) - TR_OFFSET_MS
 }
 
-function slotsAround(cfg: CemberConfig, now: number): number[] {
-  const out = new Set<number>()
+type Slot = { at: number; ev: CemberConfig }
+
+/** Every enabled event's rounds from yesterday to tomorrow, soonest first; one event per instant. */
+function slotsAround(events: CemberConfig[], now: number): Slot[] {
+  const out = new Map<number, CemberConfig>()
   const today = trDayStart(now)
-  const minutes = slotMinutes(cfg)
-  for (const day of [today - 86400_000, today, today + 86400_000]) {
-    for (const h of cfg.hours) for (const m of minutes) out.add(day + h * 3600_000 + m * 60_000)
+  for (const ev of events) {
+    if (!ev.enabled) continue
+    const minutes = slotMinutes(ev)
+    for (const day of [today - 86400_000, today, today + 86400_000]) {
+      for (const h of ev.hours) for (const m of minutes) {
+        const at = day + h * 3600_000 + m * 60_000
+        if (!out.has(at)) out.set(at, ev)
+      }
+    }
+    for (const s of ev.extraSlots) {
+      const at = Date.parse(s)
+      if (!out.has(at)) out.set(at, ev)
+    }
   }
-  for (const s of cfg.extraSlots) out.add(Date.parse(s))
-  return [...out].sort((a, b) => a - b)
+  return [...out].map(([at, ev]) => ({ at, ev })).sort((a, b) => a.at - b.at)
 }
 
-function isScheduled(cfg: CemberConfig, slot: number) {
-  return slotsAround(cfg, slot).includes(slot)
+function eventForSlot(events: CemberConfig[], slot: number) {
+  return slotsAround(events, slot).find((s) => s.at === slot)?.ev ?? null
+}
+
+function nextEntry(events: CemberConfig[], now: number) {
+  return slotsAround(events, now).find((s) => s.at > now - LIVE_WINDOW_MS) ?? null
 }
 
 // --- Conditions ----------------------------------------------------------
@@ -241,10 +309,12 @@ async function labelMaps(cfg: CemberConfig) {
 }
 
 export async function myCemberStatus(userId: string | null): Promise<CemberMe> {
-  const cfg = await getCemberConfig()
   if (!userId) return { signedIn: false, userId: null, eligible: false, progress: [] }
-  const { describe } = await labelMaps(cfg)
   const now = Date.now()
+  // Progress is shown for whichever event runs next, since each event can have its own conditions.
+  const cfg = nextEntry(await getCemberEvents(), now)?.ev
+  if (!cfg) return { signedIn: true, userId, eligible: false, progress: [] }
+  const { describe } = await labelMaps(cfg)
   const progress = await Promise.all(
     cfg.conditions.map(async (c) => {
       const value = (await conditionValues(c, now, userId)).get(userId) ?? 0
@@ -304,8 +374,8 @@ async function finalize(slot: number): Promise<RoundRow | null> {
     if (!existing.paid) await payRound(existing).catch(() => {})
     return existing
   }
-  const cfg = await getCemberConfig()
-  if (!cfg.enabled || !isScheduled(cfg, slot)) return null
+  const cfg = eventForSlot(await getCemberEvents(), slot)
+  if (!cfg) return null
 
   const ids = await eligibleIds(cfg, slot)
   const seed = randomInt(1, 2 ** 31 - 1)
@@ -360,9 +430,9 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   const { names } = await labelMaps(cfg)
   const text = prizeText(cfg.prizes, names)
 
-  const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid)
+  const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id)
     VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${seed}, ${JSON.stringify(participants)}::jsonb, ${sim.winner}, ${winner?.id ?? null},
-      ${winner?.name ?? null}, ${sim.steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!winner})
+      ${winner?.name ?? null}, ${sim.steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!winner}, ${cfg.id})
     ON CONFLICT (slot) DO NOTHING RETURNING *`)
   const row = inserted[0] ?? (await loadRound(slot))
   if (inserted[0] && winner) await payRound(inserted[0]).catch((e) => console.error('[cember] pay failed', e))
@@ -431,24 +501,39 @@ export async function getRound(slotIso: string): Promise<{ state: 'wait' | 'none
 }
 
 export async function getCemberStatus(): Promise<CemberStatus> {
-  const cfg = await getCemberConfig()
+  const events = await getCemberEvents()
   const now = Date.now()
-  const slots = slotsAround(cfg, now)
-  const next = cfg.enabled ? slots.find((s) => s > now - LIVE_WINDOW_MS) ?? null : null
+  const slots = slotsAround(events, now)
+  const nextIdx = slots.findIndex((s) => s.at > now - LIVE_WINDOW_MS)
+  const next = nextIdx >= 0 ? slots[nextIdx] : null
+  const cfg = next?.ev ?? events[0] ?? DEFAULT_CEMBER
   const { names, describe } = await labelMaps(cfg)
 
   // Settle the most recent due slot even if nobody had the page open at that minute.
-  const due = [...slots].reverse().find((s) => s <= now)
-  if (cfg.enabled && due && now - due < 26 * 3600_000) await getRound(new Date(due).toISOString()).catch(() => null)
+  const due = [...slots].reverse().find((s) => s.at <= now)
+  if (due && now - due.at < 26 * 3600_000) await getRound(new Date(due.at).toISOString()).catch(() => null)
+
+  const upcoming =
+    nextIdx >= 0
+      ? await Promise.all(
+          slots.slice(nextIdx, nextIdx + 6).map(async (s) => ({
+            slot: new Date(s.at).toISOString(),
+            title: s.ev.title,
+            prizeText: s.ev === cfg ? prizeText(s.ev.prizes, names) : prizeText(s.ev.prizes, (await labelMaps(s.ev)).names),
+          })),
+        )
+      : []
 
   const last = await rows<RoundRow>(sql`SELECT * FROM cember_rounds WHERE winner_name IS NOT NULL ORDER BY slot DESC LIMIT 1`).catch(() => [])
   return {
-    enabled: cfg.enabled,
+    enabled: !!next,
     now: new Date(now).toISOString(),
     title: cfg.title,
-    nextSlot: next ? new Date(next).toISOString() : null,
+    nextSlot: next ? new Date(next.at).toISOString() : null,
+    eventId: next?.ev.id ?? null,
     prizeText: prizeText(cfg.prizes, names),
     conditions: cfg.conditions.map(describe),
+    upcoming,
     last: last[0]
       ? { slot: new Date(last[0].slot).toISOString(), winnerName: last[0].winner_name ?? '', prizeText: last[0].prize_text, players: last[0].participants.length }
       : null,
@@ -457,16 +542,49 @@ export async function getCemberStatus(): Promise<CemberStatus> {
 
 /** Daily cron safety net: settle any round in the past day that nobody triggered. */
 export async function settleMissedRounds() {
-  const cfg = await getCemberConfig()
-  if (!cfg.enabled) return 0
+  const events = await getCemberEvents()
   const now = Date.now()
   let settled = 0
-  for (const s of slotsAround(cfg, now)) {
-    if (s > now || now - s > 26 * 3600_000) continue
-    const r = await getRound(new Date(s).toISOString()).catch(() => null)
+  for (const s of slotsAround(events, now)) {
+    if (s.at > now || now - s.at > 26 * 3600_000) continue
+    const r = await getRound(new Date(s.at).toISOString()).catch(() => null)
     if (r?.state === 'ready') settled++
   }
   return settled
+}
+
+const trClock = (at: number) => new Date(at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
+
+/**
+ * Heads-up NOTICE_MINUTES before each round: Telegram group announcement + push to members already in the ring.
+ * Runs off the public status poll; the notices table makes it fire once per slot no matter how many instances call it.
+ */
+export async function sendUpcomingNotices() {
+  const events = await getCemberEvents()
+  const now = Date.now()
+  const due = slotsAround(events, now).filter((s) => s.at > now && s.at - now <= NOTICE_MINUTES * 60_000 + 15_000)
+  for (const s of due) {
+    const claimed = await rows(sql`INSERT INTO cember_notices (slot) VALUES (${new Date(s.at).toISOString()}) ON CONFLICT DO NOTHING RETURNING slot`)
+    if (!claimed.length) continue
+    const { names, describe } = await labelMaps(s.ev)
+    const prize = prizeText(s.ev.prizes, names)
+    const mins = Math.max(1, Math.round((s.at - now) / 60_000))
+    const conditions = s.ev.conditions.map(describe).join(', ')
+    const ids = (await eligibleIds(s.ev, now).catch(() => [] as string[])).slice(0, 2000)
+    await Promise.allSettled([
+      import('@/lib/telegram-chat').then(({ announceToChat }) =>
+        announceToChat(
+          `${s.ev.title} ${mins} dakika sonra (${trClock(s.at)}) başlıyor! Ödül: ${prize}. Şartlar: ${conditions}. ` +
+            `Şu an ${ids.length} kanka çemberde, siteye gir canlı izle.`,
+        ),
+      ),
+      ids.length
+        ? import('@/lib/push').then(({ sendToUsers }) =>
+            sendToUsers(ids, { title: `${s.ev.title} ${mins} dk sonra!`, body: `Çemberdesin kanka, ${trClock(s.at)} itibarıyla izlemeye gel. Ödül: ${prize}`, url: '/' }),
+          )
+        : null,
+    ])
+  }
 }
 
 // --- Table pause ---------------------------------------------------------
@@ -489,11 +607,9 @@ export async function cemberPauseWindows(): Promise<PauseWindow[]> {
       const s = new Date(x.slot).getTime()
       windows.push([s, s + (INTRO_SECONDS + Number(x.steps) * STEP + RESULT_SECONDS) * 1000 + 3000])
     }
-    const cfg = await getCemberConfig()
-    if (cfg.enabled) {
-      for (const s of slotsAround(cfg, now)) {
-        if (s <= now && now - s < 90_000 && !windows.some((w) => w[0] === s)) windows.push([s, now + 5000])
-      }
+    // A slot that started but has not been settled yet (first viewer still loading) is paused until it is.
+    for (const s of slotsAround(await getCemberEvents(), now)) {
+      if (s.at <= now && now - s.at < 90_000 && !windows.some((w) => w[0] === s.at)) windows.push([s.at, now + 5000])
     }
   } catch (e) {
     console.error('[cember] pause windows failed', e)
@@ -516,5 +632,5 @@ export function isPausedAt(t: number, windows: PauseWindow[]) {
 export async function recentRounds(limit = 12) {
   await ensure()
   const r = await rows<RoundRow>(sql`SELECT * FROM cember_rounds ORDER BY slot DESC LIMIT ${limit}`)
-  return r.map((x) => ({ slot: new Date(x.slot).toISOString(), players: x.participants.length, winner: x.winner_name, prize: x.prize_text, paid: x.paid }))
+  return r.map((x) => ({ slot: new Date(x.slot).toISOString(), title: x.title, players: x.participants.length, winner: x.winner_name, prize: x.prize_text, paid: x.paid }))
 }
