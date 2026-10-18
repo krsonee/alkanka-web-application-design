@@ -21,6 +21,10 @@ const SOLVER_PASSES = 2
 export const MAX_SECONDS = 210
 /** Goals stay shut for the first seconds so the pile settles before anyone can drop. */
 export const WARMUP = 2.5
+/** Small rounds would otherwise end in a couple of seconds; eliminations are spread so every round plays at least this long. */
+export const MIN_SECONDS = 24
+/** A lone qualifier still gets a short lap on the pitch before being crowned. */
+const SOLO_SECONDS = 6
 
 const TAU = 6.283185307179586
 const PI = 3.141592653589793
@@ -121,7 +125,7 @@ export function createSim(count: number, seed: number): SimState {
     rotation: rotationAt(0, phase, dir),
     gapHalf: gapHalfAt(0, radius, phase),
     order: [],
-    winner: count === 1 ? 0 : null,
+    winner: null,
     phase,
     dir,
   }
@@ -216,6 +220,8 @@ export function stepSim(s: SimState) {
 
   for (let pass = 0; pass < SOLVER_PASSES; pass++) collide(s)
 
+  const pace = n > 1 ? Math.max(0, (MIN_SECONDS - WARMUP) / (n - 1)) : 0
+  const goalsOpen = t >= WARMUP + pace * (s.order.length + s.leaving + 1)
   const exits: number[] = []
   for (let i = 0; i < n; i++) {
     const b = balls[i]
@@ -229,7 +235,7 @@ export function stepSim(s: SimState) {
     const nx = b.x / dist
     const ny = b.y / dist
     // The last ball still on the pitch can never leave: that ball is the winner.
-    if (t >= WARMUP && s.alive - s.leaving > 1 && inGap(b.x, b.y, dist, s.rotation, s.gapHalf)) {
+    if (goalsOpen && s.alive - s.leaving > 1 && inGap(b.x, b.y, dist, s.rotation, s.gapHalf)) {
       b.out = true
       b.outStep = s.step
       s.leaving += 1
@@ -266,7 +272,7 @@ export function stepSim(s: SimState) {
   }
 
   s.step += 1
-  if (s.alive === 1) {
+  if (s.alive === 1 && (n > 1 || t >= SOLO_SECONDS)) {
     s.winner = balls.findIndex((b) => b.alive)
     return
   }

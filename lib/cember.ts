@@ -25,7 +25,8 @@ import {
 const TR_OFFSET_MS = 3 * 3600_000
 const SETTINGS_KEY = 'cember'
 /** A slot stays "current" this long so late visitors can still join the live round. */
-const LIVE_WINDOW_MS = 5 * 60_000
+/** Matches the client's live window: once a round's window passes, the countdown moves on to the next slot. */
+const LIVE_WINDOW_MS = (INTRO_SECONDS + 75) * 1000
 
 let ready: Promise<void> | null = null
 function ensure() {
@@ -96,7 +97,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined): 
 let configCache: { at: number; value: CemberConfig } | null = null
 
 export async function getCemberConfig(): Promise<CemberConfig> {
-  if (configCache && Date.now() - configCache.at < 20_000) return configCache.value
+  if (configCache && Date.now() - configCache.at < 5_000) return configCache.value
   await ensure()
   const r = await rows<{ value: Partial<CemberConfig> }>(sql`SELECT value FROM kp_settings WHERE key = ${SETTINGS_KEY}`)
   const value = normalizeConfig(r[0]?.value)
@@ -284,6 +285,18 @@ async function loadRound(slot: number) {
 
 const pending = new Map<number, Promise<RoundRow | null>>()
 
+const CROWD_THRESHOLD = 10
+const CROWD_BOTS = 50
+const BOT_PREFIX = 'bot:'
+const BOT_NAMES = [
+  'kartal34', 'sessizjako', 'gececi', 'mavisimsek', 'efe_07', 'kanka_burak', 'zeyno', 'denizkizi', 'baronn', 'tilki55',
+  'yigit.tr', 'melisa_', 'karabela', 'pasa16', 'aslanpenc', 'mertoo', 'cansu35', 'gokhan61', 'serseri', 'lodos',
+  'ecrin', 'kral_umut', 'jakosever', 'nehir', 'turbo06', 'emircan', 'sila.k', 'bozkurt', 'ayaz', 'kanarya',
+  'harun42', 'duman', 'elif_jk', 'reis01', 'kuzgun', 'ozan27', 'irmak', 'sahin', 'tosun', 'berk_',
+  'selin.aa', 'kaptan', 'volkan', 'yaren', 'cakal', 'onur09', 'ruzgar', 'asli', 'kemal33', 'pars',
+]
+const isBot = (id: string | null | undefined) => !!id && id.startsWith(BOT_PREFIX)
+
 /** Settles a due slot exactly once: snapshot the qualifiers, pick a seed, simulate, store, pay. */
 async function finalize(slot: number): Promise<RoundRow | null> {
   const existing = await loadRound(slot)
@@ -314,7 +327,35 @@ async function finalize(slot: number): Promise<RoundRow | null> {
       return { id, name: (u.name ?? 'Kanka').slice(0, 24), image }
     })
 
+  const realCount = participants.length
+  if (realCount > 0 && realCount < CROWD_THRESHOLD) {
+    const names = [...BOT_NAMES]
+    for (let i = names.length - 1; i > 0; i--) {
+      const j = Math.floor(pick() * (i + 1))
+      ;[names[i], names[j]] = [names[j], names[i]]
+    }
+    for (let i = 0; i < CROWD_BOTS; i++) {
+      const base = names[i % names.length]
+      participants.push({ id: `${BOT_PREFIX}${i}`, name: i < names.length ? base : `${base}${i}`, image: null })
+    }
+  }
+
   const sim = participants.length ? runSim(participants.length, seed) : { winner: null, steps: 0 }
+
+  // The physics outcome depends only on the ball count and seed, so the winning slot is fixed before identities are assigned.
+  // Seat a random real player there and shuffle everyone else across the remaining slots: bots can never win.
+  if (sim.winner !== null && participants.length > realCount) {
+    const real = participants.slice(0, realCount)
+    const bots = participants.slice(realCount)
+    const champ = real.splice(Math.floor(pick() * real.length), 1)[0]
+    const rest = [...real, ...bots]
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(pick() * (i + 1))
+      ;[rest[i], rest[j]] = [rest[j], rest[i]]
+    }
+    rest.splice(sim.winner, 0, champ)
+    participants.splice(0, participants.length, ...rest)
+  }
   const winner = sim.winner !== null ? participants[sim.winner] : null
   const { names } = await labelMaps(cfg)
   const text = prizeText(cfg.prizes, names)
@@ -332,7 +373,7 @@ async function payRound(row: RoundRow) {
   const claimed = await rows<{ winner_id: string | null; prizes: CemberPrize[] }>(sql`UPDATE cember_rounds SET paid = true
     WHERE slot = ${row.slot} AND paid = false RETURNING winner_id, prizes`)
   const c = claimed[0]
-  if (!c?.winner_id) return
+  if (!c?.winner_id || isBot(c.winner_id)) return
   const userId = c.winner_id
   const name = row.winner_name ?? 'Kanka'
   const slotKey = new Date(row.slot).toISOString().slice(0, 16)
