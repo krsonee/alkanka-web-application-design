@@ -219,6 +219,11 @@
 @utility bj-seat-active {
   animation: bj-seat-pulse 1.6s ease-in-out infinite;
 }
+@keyframes cember-jako {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-10px) rotate(3deg); }
+}
+
 @keyframes carousel-progress {
   from {
     transform: scaleX(0);

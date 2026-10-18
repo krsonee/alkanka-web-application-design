@@ -21,7 +21,7 @@ type TableBrandProps = {
  */
 export function TableBrand({ className, center = true, plaque = 'top', corners = true, jako = true }: TableBrandProps) {
   return (
-    <div className={cn('pointer-events-none absolute inset-0 select-none overflow-hidden', className)} aria-hidden="true">
+    <div data-game-table className={cn('pointer-events-none absolute inset-0 select-none overflow-hidden', className)} aria-hidden="true">
       {center && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-[0.09]">
           <div className="relative flex size-28 items-center justify-center rounded-full border-2 border-primary sm:size-40">

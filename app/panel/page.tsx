@@ -12,6 +12,7 @@ import { LegalEditor } from '@/components/panel/legal-editor'
 import { ReferralEditor } from '@/components/panel/referral-editor'
 import { getReferralSettings } from '@/lib/referral-settings'
 import { AmbientEditor } from '@/components/panel/ambient-editor'
+import { CemberPanel } from '@/components/panel/cember-panel'
 import { getAmbientSettings } from '@/lib/ambient-tables'
 import { LEGAL_KEY, mergeLegal, type LegalOverrides } from '@/lib/legal-shared'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
@@ -342,6 +343,7 @@ export default async function PanelPage() {
       />
     )),
     section(session, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
+    section(session, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     section(session, 'telegram', 'Telegram', telegramPanel),
     section(session, 'push', 'Bildirimler', async () => {
       const stats = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))

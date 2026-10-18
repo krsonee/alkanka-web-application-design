@@ -23,6 +23,7 @@ import { WinnersTicker } from '@/components/alkanka/kp/winners-ticker'
 import { JakoAlerts } from '@/components/alkanka/jako-alerts'
 import { CatalogProvider } from '@/components/alkanka/catalog-context'
 import { getCatalog } from '@/lib/catalog'
+import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [logos, texts, social, sponsors, catalog] = await Promise.all([
@@ -59,6 +60,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <ReferralLinker />
         <KpHeartbeat />
         <JakoAlerts />
+        <CemberOverlay />
       </PwaProvider>
       </PointsProvider>
     </BrandProvider>

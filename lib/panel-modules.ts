@@ -42,6 +42,7 @@ export const PANEL_GROUPS = [
       { id: 'rewards', label: 'Çark, zar, sandık ödülleri' },
       { id: 'catalog', label: 'Etkinlik, bilet, tahmin, kampanya, bonus' },
       { id: 'tournaments', label: 'Turnuvalar' },
+      { id: 'cember', label: 'Jako Çemberi' },
     ],
   },
   {
