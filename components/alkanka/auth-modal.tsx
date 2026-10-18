@@ -232,7 +232,17 @@ export function AuthModal() {
                   <Field label="Telefon (isteğe bağlı)" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="05XX XXX XX XX" maxLength={20} />
                   <label className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
                     <input type="checkbox" required className="mt-0.5 accent-[var(--primary)]" />
-                    18 yaşından büyüğüm, kullanım şartlarını ve kuralları kabul ediyorum.
+                    <span>
+                      18 yaşından büyüğüm.{' '}
+                      <a href="/yasal/kullanim-kosullari" target="_blank" rel="noopener" className="font-semibold text-primary hover:underline">
+                        Kullanım koşullarını
+                      </a>{' '}
+                      kabul ediyorum,{' '}
+                      <a href="/yasal/kvkk" target="_blank" rel="noopener" className="font-semibold text-primary hover:underline">
+                        KVKK aydınlatma metnini
+                      </a>{' '}
+                      okudum.
+                    </span>
                   </label>
                 </>
               )}

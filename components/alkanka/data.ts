@@ -86,9 +86,70 @@ export type Slide = {
   cta: string
   href: string
   image: string
+  chips?: string[]
 }
 
 export const SLIDES: Slide[] = [
+  {
+    id: 'g-okey',
+    eyebrow: 'Okey',
+    title: 'Masalar kuruldu, okey taşı seni bekliyor',
+    description: 'Gerçek oyunculara ya da bota karşı klasik okey. Çifte git, eli bitir, Kanka Puan topla.',
+    cta: 'Okey oyna',
+    href: '/oyunlar/okey',
+    image: '/images/slides/okey.png',
+    chips: ['4 oyuncu', 'Bota karşı', 'Sesli sohbet'],
+  },
+  {
+    id: 'g-tavla',
+    eyebrow: 'Tavla',
+    title: 'Zarları at, mars et, sıralamaya çık',
+    description: 'Kırık, kapı, mars ve çift zar. Kahvehane tavlası artık cebinde, hem de ödüllü.',
+    cta: 'Tavla oyna',
+    href: '/oyunlar/tavla',
+    image: '/images/slides/tavla.png',
+    chips: ['2 oyuncu', 'Mars 3 kat', 'Hızlı maç'],
+  },
+  {
+    id: 'g-pisti',
+    eyebrow: 'Pişti',
+    title: 'Valeyi vur, pişti yap, 20 puanı kap',
+    description: 'Yerdeki karta aynısını at, pişti yap. Kısa eller, hızlı puan.',
+    cta: 'Pişti oyna',
+    href: '/oyunlar/pisti',
+    image: '/images/slides/pisti.png',
+    chips: ['2-4 oyuncu', 'Vale pişti 20', 'Kısa el'],
+  },
+  {
+    id: 'g-batak',
+    eyebrow: 'Batak',
+    title: 'İhaleyi al, kozu konuştur',
+    description: 'Eşli ya da tekli batak. İhale yap, elleri topla, batmadan masadan kalk.',
+    cta: 'Batak oyna',
+    href: '/oyunlar/batak',
+    image: '/images/slides/batak.png',
+    chips: ['4 oyuncu', 'İhaleli', 'Koz maça'],
+  },
+  {
+    id: 'g-okey101',
+    eyebrow: '101 Okey',
+    title: '101’i aç, eli yere indir',
+    description: 'Seri ve per diz, 101 ile el aç, ceza yemeden bitir. Okey severlerin büyük oyunu.',
+    cta: '101 oyna',
+    href: '/oyunlar/okey101',
+    image: '/images/slides/okey101.png',
+    chips: ['4 oyuncu', 'Eşli mod', 'Ceza puanı'],
+  },
+  {
+    id: 'g-bilardo',
+    eyebrow: 'Bilardo',
+    title: 'Açılış vuruşu senden',
+    description: 'Istakayı ayarla, falsoyu ver, toplarını cebe indir. Sıra sende kanka.',
+    cta: 'Bilardo oyna',
+    href: '/oyunlar/bilardo',
+    image: '/images/slides/bilardo.png',
+    chips: ['2 oyuncu', '8 top', 'Fizik motoru'],
+  },
   {
     id: 's1',
     eyebrow: 'Günlük ödül',

@@ -1,3 +1,4 @@
+import { getReferralSettings } from '@/lib/referral-settings'
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -13,9 +14,6 @@ import { SITE_URL } from '@/lib/seo'
 import { getKpConfig, getKpStatus, levelTier, type KpBreakdown } from '@/lib/kanka-puan'
 import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import {
-  REFERRAL_MIN_GAMES,
-  REFERRED_REWARD,
-  REFERRER_REWARD,
   alertHits,
   getProfile,
   getRefCode,
@@ -245,10 +243,10 @@ async function OverviewTab({
   referrals: Referral[]
   telegram: boolean
 }) {
-  const [code, alerts, hits] = await Promise.all([getRefCode(memberId), listAlerts(memberId), alertHits(memberId)])
+  const [code, alerts, hits, refSettings] = await Promise.all([getRefCode(memberId), listAlerts(memberId), alertHits(memberId), getReferralSettings()])
   const { breakdown, level } = kpStatus
-  const ready = referrals.filter((r) => !r.rewarded && r.games >= REFERRAL_MIN_GAMES).length
-  const pending = referrals.filter((r) => !r.rewarded && r.games < REFERRAL_MIN_GAMES).length
+  const ready = referrals.filter((r) => !r.rewarded && r.games >= refSettings.minGames).length
+  const pending = referrals.filter((r) => !r.rewarded && r.games < refSettings.minGames).length
   const maxSource = Math.max(1, ...KP_SOURCES.map(([k]) => breakdown[k]))
 
   return (
@@ -281,9 +279,9 @@ async function OverviewTab({
           url={`${SITE_URL}/davet/${code}`}
           pending={pending}
           ready={ready}
-          reward={REFERRER_REWARD}
-          friendReward={REFERRED_REWARD}
-          minGames={REFERRAL_MIN_GAMES}
+          reward={refSettings.referrer}
+          friendReward={refSettings.referred}
+          minGames={refSettings.minGames}
         />
         <AlertsCard alerts={alerts} telegramLinked={telegram} />
       </div>
@@ -315,7 +313,7 @@ async function OverviewTab({
               <li key={i} className="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-sm">
                 <span className="font-semibold text-foreground">{r.name}</span>
                 <span className={r.rewarded ? 'text-gold' : 'text-muted-foreground'}>
-                  {r.rewarded ? 'Ödül alındı' : `${Math.min(r.games, REFERRAL_MIN_GAMES)}/${REFERRAL_MIN_GAMES} oyun`}
+                  {r.rewarded ? 'Ödül alındı' : `${Math.min(r.games, refSettings.minGames)}/${refSettings.minGames} oyun`}
                 </span>
               </li>
             ))}

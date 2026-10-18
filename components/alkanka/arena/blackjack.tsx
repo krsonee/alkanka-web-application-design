@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { Hand, Layers, Plus, RotateCcw } from 'lucide-react'
+import { Flag, Hand, Layers, Plus, RotateCcw, ShieldCheck, Split } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { blackjackAct, blackjackDeal } from '@/app/actions/arena'
-import { RANKS, SUITS, handValue, bjAct, bjDeal, bjPayout, bjPublic, type BjPublic, type BjState, type Card } from '@/lib/casino'
+import { RANKS, SUITS, handValue, bjAct, bjActionCost, bjDeal, bjPayout, bjPublic, type BjAction, type BjPublic, type BjState, type Card } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import { playSound } from '@/lib/sound'
 import { formatAC, usePoints } from '../points-context'
@@ -68,7 +68,8 @@ export function PlayingCard({ card, hidden, index = 0, small }: { card?: Card; h
   )
 }
 
-const RESULT_TEXT: Record<string, string> = { blackjack: 'Blackjack!', win: 'Kazandın', push: 'Berabere', loss: 'Krupiye aldı' }
+const RESULT_TEXT: Record<string, string> = { blackjack: 'Blackjack!', win: 'Kazandın', push: 'Berabere', loss: 'Krupiye aldı', surrender: 'Teslim oldun' }
+const HAND_RESULT: Record<string, string> = { blackjack: 'BJ', win: 'Kazandı', push: 'Berabere', loss: 'Kaybetti', surrender: 'Teslim' }
 const DEAL_STEP_MS = 650
 
 type Slot = { who: 'p' | 'd'; i: number }
@@ -112,17 +113,24 @@ function BjTable({
   hand,
   dealKey,
   busy,
-  canDouble,
+  funds,
   onAct,
   footer,
 }: {
   hand: BjPublic | null
   dealKey: number
   busy: boolean
-  canDouble: boolean
-  onAct: (a: 'hit' | 'stand' | 'double') => void
+  /** KC (or practice chips) available for doubling, splitting and insurance. */
+  funds: number
+  onAct: (a: BjAction) => void
   footer: React.ReactNode
 }) {
+  const extra = hand?.activeBet ?? 0
+  const insureCost = Math.floor((hand?.hands[0]?.bet ?? 0) / 2)
+  const canDouble = !!hand?.canDouble && funds >= extra
+  const canSplit = !!hand?.canSplit && funds >= extra
+  const canSurrender = !!hand?.canSurrender
+  const multi = (hand?.hands.length ?? 0) > 1
   const playerCount = hand?.player.length ?? 0
   const dealerCount = hand ? hand.dealer.length + (hand.dealerHidden ? 1 : 0) : 0
   const order = dealOrder(playerCount, dealerCount)
@@ -139,9 +147,15 @@ function BjTable({
     ? 'Bahsini seç, kartları dağıtayım.'
     : dealing
       ? 'Kartlar geliyor...'
-      : hand.phase === 'player'
-        ? 'Kart mı, dur mu?'
-        : hand.result === 'loss'
+      : hand.phase === 'insurance'
+        ? 'Bende As açık. Sigorta ister misin?'
+        : hand.phase === 'player'
+          ? multi
+            ? `${hand.active + 1}. el: kart mı, dur mu?`
+            : 'Kart mı, dur mu?'
+          : hand.result === 'surrender'
+            ? 'Teslim oldun, bahsinin yarısı iade.'
+            : hand.result === 'loss'
           ? 'Bu el benim, bir dahakine!'
           : hand.result === 'push'
             ? 'Berabere, bahsin iade.'
@@ -196,7 +210,7 @@ function BjTable({
             <p
               className={cn(
                 'pop-in rounded-full px-5 py-2 font-display text-xl font-bold uppercase',
-                hand.result === 'loss' ? 'bg-secondary text-foreground' : 'bg-primary text-primary-foreground',
+                hand.result === 'loss' || hand.result === 'surrender' ? 'bg-secondary text-foreground' : 'bg-primary text-primary-foreground',
               )}
               role="status"
             >
@@ -205,6 +219,32 @@ function BjTable({
           )}
         </div>
 
+        {hand && multi ? (
+          <div className="relative flex w-full flex-wrap items-start justify-center gap-3">
+            {hand.hands.map((h, i) => {
+              const current = hand.phase === 'player' && i === hand.active
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    'flex flex-col items-center gap-2 rounded-2xl border-2 px-2 py-2 transition-colors',
+                    current ? 'border-primary bg-background/40' : 'border-dashed border-primary/30',
+                  )}
+                  aria-current={current ? 'true' : undefined}
+                >
+                  <div className="flex justify-center -space-x-5">
+                    {h.cards.map((c, ci) => <PlayingCard key={`h${i}-${ci}-${c.r}-${c.s}`} card={c} small />)}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <span className={cn('rounded-full px-2 py-0.5 tabular-nums', current ? 'bg-primary text-primary-foreground' : 'bg-background/70 text-foreground')}>{h.value}</span>
+                    <span className="text-foreground/80">{formatAC(h.bet)}</span>
+                    {h.result && <span className="text-primary">{HAND_RESULT[h.result]}</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
         <div className="relative flex flex-col items-center gap-2">
           <div className="relative flex min-h-28 min-w-32 items-center justify-center rounded-[50%] border-2 border-dashed border-primary/40 px-4 py-2 sm:min-h-36 sm:min-w-44">
             {hand && (
@@ -219,20 +259,47 @@ function BjTable({
           </div>
           {pShown > 0 && <ValueBadge value={`Senin elin ${handValue(playerCards)}`} />}
         </div>
+        )}
+        {hand && hand.insurance > 0 && (
+          <p className="relative text-xs font-semibold text-foreground/80">Sigorta: {formatAC(hand.insurance)}</p>
+        )}
       </div>
 
       <div className="relative flex flex-wrap items-center justify-center gap-2 px-2 pb-2 pt-4">
-        {hand?.phase === 'player' || (hand && dealing) ? (
+        {hand?.phase === 'insurance' && !dealing ? (
+          <>
+            <button
+              disabled={busy || funds < insureCost}
+              onClick={() => onAct('insure')}
+              className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50"
+            >
+              <ShieldCheck className="size-4" aria-hidden="true" /> Sigorta al ({formatAC(insureCost)})
+            </button>
+            <button disabled={busy} onClick={() => onAct('noInsure')} className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50">
+              Sigorta yok
+            </button>
+          </>
+        ) : hand?.phase === 'player' || hand?.phase === 'insurance' || (hand && dealing) ? (
           <>
             <button disabled={busy || dealing} onClick={() => onAct('hit')} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50">
               <Plus className="size-4" aria-hidden="true" /> Kart çek
             </button>
-            <button disabled={busy} onClick={() => onAct('stand')} className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50">
+            <button disabled={busy || dealing} onClick={() => onAct('stand')} className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50">
               <Hand className="size-4" aria-hidden="true" /> Dur
             </button>
             {canDouble && (
-              <button disabled={busy} onClick={() => onAct('double')} className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50">
+              <button disabled={busy || dealing} onClick={() => onAct('double')} className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50">
                 <Layers className="size-4" aria-hidden="true" /> İkiye katla
+              </button>
+            )}
+            {canSplit && (
+              <button disabled={busy || dealing} onClick={() => onAct('split')} className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50">
+                <Split className="size-4" aria-hidden="true" /> Böl
+              </button>
+            )}
+            {canSurrender && (
+              <button disabled={busy || dealing} onClick={() => onAct('surrender')} className="flex items-center gap-2 rounded-xl border border-border bg-background/70 px-5 py-3 text-sm font-bold uppercase text-muted-foreground disabled:opacity-50">
+                <Flag className="size-4" aria-hidden="true" /> Teslim ol
               </button>
             )}
           </>
@@ -268,13 +335,14 @@ export function BlackjackHouse({ settings }: { settings: ArenaGameSettings }) {
     setBalance(res.balance)
   }
 
-  async function act(a: 'hit' | 'stand' | 'double') {
+  async function act(a: BjAction) {
     if (!id || busy) return
     setBusy(true)
+    setError('')
     const res = await blackjackAct(id, a)
     setBusy(false)
     if (!res.ok) return setError(res.error)
-    playSound(a === 'stand' ? 'tick' : 'card')
+    playSound(a === 'hit' || a === 'double' || a === 'split' ? 'card' : 'tick')
     setHand(res.hand)
     setBalance(res.balance)
   }
@@ -285,7 +353,7 @@ export function BlackjackHouse({ settings }: { settings: ArenaGameSettings }) {
         hand={hand}
         dealKey={dealKey}
         busy={busy}
-        canDouble={!!hand && hand.player.length === 2 && points >= hand.bet}
+        funds={points}
         onAct={act}
         footer={
           <div className="flex flex-col items-center gap-3">
@@ -310,7 +378,9 @@ export function BlackjackHouse({ settings }: { settings: ArenaGameSettings }) {
         }
       />
       {error && <p role="alert" className="text-center text-sm text-destructive">{error}</p>}
-      <p className="text-center text-xs text-muted-foreground">Blackjack 3:2 öder, krupiye 17’de durur. Kartlar sunucuda karılır.</p>
+      <p className="text-center text-xs leading-relaxed text-muted-foreground text-pretty">
+        Blackjack 3:2, sigorta 2:1 öder, krupiye 17’de durur. Aynı değerli iki kartı 4 ele kadar bölebilir, ilk iki kartta teslim olup bahsinin yarısını geri alabilirsin. Kartlar sunucuda karılır.
+      </p>
     </div>
   )
 }
@@ -329,9 +399,10 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
     if (s.phase === 'done') setChips((c) => c + bjPayout(s))
   }
 
-  function act(a: 'hit' | 'stand' | 'double') {
-    if (a === 'double') setChips((c) => c - state.bet)
-    playSound(a === 'stand' ? 'tick' : 'card')
+  function act(a: BjAction) {
+    const cost = bjActionCost(state, a)
+    if (cost) setChips((c) => c - cost)
+    playSound(a === 'hit' || a === 'double' || a === 'split' ? 'card' : 'tick')
     const next = bjAct(state, a)
     setState(next)
     settle(next)
@@ -361,7 +432,7 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
         hand={bjPublic(state)}
         dealKey={handNo}
         busy={false}
-        canDouble={state.player.length === 2 && chips >= state.bet}
+        funds={chips}
         onAct={act}
         footer={
           <button onClick={nextHand} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground">

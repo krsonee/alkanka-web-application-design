@@ -5,7 +5,26 @@ import { pool } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
 import { ARENA_META, isArenaGame } from '@/lib/arena'
-import { bjAct, bjDeal, bjPayout, bjPublic, betLabel, betReturn, validBet, type BjState, type RouletteBet } from '@/lib/casino'
+import {
+  bjAct,
+  bjActionCost,
+  bjCanDouble,
+  bjCanSplit,
+  bjCanSurrender,
+  bjDeal,
+  bjNormalize,
+  bjPayout,
+  bjPublic,
+  bjWagered,
+  betLabel,
+  betReturn,
+  validBet,
+  type BjAction,
+  type BjState,
+  type RouletteBet,
+} from '@/lib/casino'
+
+const BJ_ACTIONS: BjAction[] = ['hit', 'stand', 'double', 'split', 'surrender', 'insure', 'noInsure']
 import { actOnTable, cancelTable, claimTimeout, createTable, joinTable, leaveTable } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
@@ -84,10 +103,11 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
 /* ---------------- Blackjack (server RNG) ---------------- */
 
 async function settleBlackjack(m: { id: string; name: string }, id: string, state: BjState, stake: number) {
-  const payout = await capPayout(m.id, state.bet, bjPayout(state))
+  const wagered = bjWagered(state)
+  const payout = await capPayout(m.id, wagered, bjPayout(state))
   if (payout) await credit(m.id, payout)
-  const result = state.result === 'push' ? 'draw' : state.result === 'loss' ? 'loss' : 'win'
-  await recordHistory({ userId: m.id, userName: m.name, game: 'blackjack', mode: 'bot', opponent: 'Krupiye', stake: state.bet, result, delta: payout - state.bet, tableId: id })
+  const result = payout > wagered ? 'win' : payout === wagered ? 'draw' : 'loss'
+  await recordHistory({ userId: m.id, userName: m.name, game: 'blackjack', mode: 'bot', opponent: 'Krupiye', stake: wagered, result, delta: payout - wagered, tableId: id })
   void stake
 }
 
@@ -114,17 +134,20 @@ export async function blackjackDeal(stake: number) {
   }
 }
 
-export async function blackjackAct(id: string, action: 'hit' | 'stand' | 'double') {
+export async function blackjackAct(id: string, action: BjAction) {
   try {
     const m = await member()
+    if (!BJ_ACTIONS.includes(action)) throw new Error('Geçersiz hamle.')
     const r = await pool.query(`SELECT * FROM solo_sessions WHERE id = $1 AND user_id = $2 AND game = 'blackjack' AND status = 'acik'`, [id, m.id])
     const row = r.rows[0]
     if (!row) throw new Error('El bulunamadı.')
-    const prev = row.state as BjState
-    if (action === 'double') {
-      if (prev.player.length !== 2) throw new Error('Sadece ilk iki kartta ikiye katlayabilirsin.')
-      if (!(await debit(m.id, prev.bet))) throw new Error('İkiye katlamak için yeterli KC yok.')
-    }
+    const prev = bjNormalize(row.state as BjState)
+    if (action === 'double' && !bjCanDouble(prev)) throw new Error('Sadece ilk iki kartta ikiye katlayabilirsin.')
+    if (action === 'split' && !bjCanSplit(prev)) throw new Error('Sadece aynı değerdeki iki kart bölünebilir.')
+    if (action === 'surrender' && !bjCanSurrender(prev)) throw new Error('Teslim olmak sadece ilk iki kartta mümkün.')
+    if ((action === 'insure' || action === 'noInsure') !== (prev.phase === 'insurance')) throw new Error('Bu hamle şu an yapılamaz.')
+    const cost = bjActionCost(prev, action)
+    if (cost && !(await debit(m.id, cost))) throw new Error('Bu hamle için yeterli KC yok.')
     const state = bjAct(prev, action)
     const upd = await pool.query(`UPDATE solo_sessions SET state = $3::jsonb, status = $4 WHERE id = $1 AND user_id = $2 AND status = 'acik' RETURNING id`, [
       id,
@@ -133,7 +156,7 @@ export async function blackjackAct(id: string, action: 'hit' | 'stand' | 'double
       state.phase === 'done' ? 'bitti' : 'acik',
     ])
     if (!upd.rowCount) {
-      if (action === 'double') await credit(m.id, prev.bet)
+      if (cost) await credit(m.id, cost)
       throw new Error('El zaten bitti.')
     }
     if (state.phase === 'done') await settleBlackjack(m, id, state, Number(row.stake))
@@ -260,11 +283,11 @@ export async function openTable(game: string, stake: number, options?: { seats?:
   }
 }
 
-export async function sitAtTable(id: string) {
+export async function sitAtTable(id: string, expectedStake?: number) {
   try {
     const m = await member()
     await assertCanPlay(m.id)
-    await joinTable(m, id)
+    await joinTable(m, id, typeof expectedStake === 'number' && Number.isFinite(expectedStake) ? expectedStake : undefined)
     return { ok: true as const }
   } catch (e) {
     return fail(e)

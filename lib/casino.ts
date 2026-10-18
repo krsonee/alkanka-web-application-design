@@ -28,74 +28,214 @@ export function handValue(hand: Card[]) {
 
 export const isBlackjack = (hand: Card[]) => hand.length === 2 && handValue(hand) === 21
 
-export type BjPhase = 'player' | 'done'
-export type BjResult = 'blackjack' | 'win' | 'push' | 'loss' | null
-export type BjState = { deck: Card[]; player: Card[]; dealer: Card[]; bet: number; phase: BjPhase; result: BjResult; doubled: boolean }
+export type BjPhase = 'insurance' | 'player' | 'done'
+export type BjResult = 'blackjack' | 'win' | 'push' | 'loss' | 'surrender' | null
+export type BjAction = 'hit' | 'stand' | 'double' | 'split' | 'surrender' | 'insure' | 'noInsure'
+export type BjHand = { cards: Card[]; bet: number; doubled: boolean; done: boolean; result: BjResult; fromSplit: boolean }
+export type BjState = {
+  deck: Card[]
+  dealer: Card[]
+  phase: BjPhase
+  hands: BjHand[]
+  active: number
+  insurance: number
+  /** Overall outcome shown on the table; per-hand outcomes live in `hands`. */
+  result: BjResult
+  // Legacy fields from single-hand sessions, kept so unfinished hands still load.
+  player?: Card[]
+  bet?: number
+  doubled?: boolean
+}
+
+export const BJ_MAX_HANDS = 4
+const tenValue = (c: Card) => Math.min(10, c.r)
+
+/** Upgrades sessions saved before split support existed. */
+export function bjNormalize(s: BjState): BjState {
+  if (Array.isArray(s.hands)) return s
+  return {
+    deck: s.deck,
+    dealer: s.dealer,
+    phase: s.phase,
+    hands: [{ cards: s.player ?? [], bet: s.bet ?? 0, doubled: !!s.doubled, done: s.phase === 'done', result: s.result, fromSplit: false }],
+    active: 0,
+    insurance: 0,
+    result: s.result,
+  }
+}
 
 export function bjDeal(bet: number): BjState {
   const deck = shoe()
-  const player = [deck.pop()!, deck.pop()!]
+  const cards = [deck.pop()!, deck.pop()!]
   const dealer = [deck.pop()!, deck.pop()!]
-  const s: BjState = { deck, player, dealer, bet, phase: 'player', result: null, doubled: false }
-  if (isBlackjack(player) || isBlackjack(dealer)) return bjSettle(s)
+  const s: BjState = {
+    deck,
+    dealer,
+    phase: 'player',
+    hands: [{ cards, bet, doubled: false, done: false, result: null, fromSplit: false }],
+    active: 0,
+    insurance: 0,
+    result: null,
+  }
+  if (isBlackjack(cards)) return bjSettle(s)
+  // Ace showing: offer insurance before the dealer peeks.
+  if (dealer[0].r === 1) return { ...s, phase: 'insurance' }
+  if (isBlackjack(dealer)) return bjSettle(s)
   return s
+}
+
+function aggregate(hands: BjHand[]): BjResult {
+  const rs = hands.map((h) => h.result)
+  if (rs.includes('blackjack')) return 'blackjack'
+  if (rs.includes('win')) return 'win'
+  if (rs.every((r) => r === 'surrender')) return 'surrender'
+  if (rs.includes('push')) return 'push'
+  return 'loss'
 }
 
 function bjSettle(s: BjState): BjState {
   const dealer = [...s.dealer]
   const deck = [...s.deck]
-  const pv = handValue(s.player)
-  const pBj = isBlackjack(s.player)
   const dBj = isBlackjack(dealer)
-  if (!pBj && pv <= 21 && !dBj) while (handValue(dealer) < 17) dealer.push(deck.pop()!)
+  const natural = (h: BjHand) => !h.fromSplit && isBlackjack(h.cards)
+  const live = s.hands.some((h) => h.result !== 'surrender' && handValue(h.cards) <= 21 && !natural(h))
+  if (live && !dBj) while (handValue(dealer) < 17) dealer.push(deck.pop()!)
   const dv = handValue(dealer)
-  let result: BjResult
-  if (pBj && dBj) result = 'push'
-  else if (pBj) result = 'blackjack'
-  else if (dBj) result = 'loss'
-  else if (pv > 21) result = 'loss'
-  else if (dv > 21 || pv > dv) result = 'win'
-  else if (pv === dv) result = 'push'
-  else result = 'loss'
-  return { ...s, deck, dealer, phase: 'done', result }
+  const hands = s.hands.map((h): BjHand => {
+    if (h.result === 'surrender') return { ...h, done: true }
+    const pv = handValue(h.cards)
+    const pBj = natural(h)
+    let result: BjResult
+    if (pBj && dBj) result = 'push'
+    else if (pBj) result = 'blackjack'
+    else if (dBj) result = 'loss'
+    else if (pv > 21) result = 'loss'
+    else if (dv > 21 || pv > dv) result = 'win'
+    else if (pv === dv) result = 'push'
+    else result = 'loss'
+    return { ...h, done: true, result }
+  })
+  return { ...s, deck, dealer, hands, phase: 'done', result: aggregate(hands) }
 }
 
-export function bjAct(s: BjState, action: 'hit' | 'stand' | 'double'): BjState {
-  if (s.phase !== 'player') return s
-  const deck = [...s.deck]
-  if (action === 'hit') {
-    const player = [...s.player, deck.pop()!]
-    const next = { ...s, deck, player }
-    return handValue(player) >= 21 ? bjSettle(next) : next
-  }
-  if (action === 'double') {
-    if (s.player.length !== 2) return s
-    const player = [...s.player, deck.pop()!]
-    return bjSettle({ ...s, deck, player, bet: s.bet * 2, doubled: true })
-  }
+/** Moves to the next unfinished hand, or lets the dealer play once every hand is done. */
+function advance(s: BjState): BjState {
+  const next = s.hands.findIndex((h, i) => i > s.active && !h.done)
+  if (next !== -1) return { ...s, active: next }
   return bjSettle(s)
 }
 
-/** Total returned to the player (stake included). */
-export function bjPayout(s: BjState) {
-  if (s.result === 'blackjack') return Math.floor(s.bet * 2.5)
-  if (s.result === 'win') return s.bet * 2
-  if (s.result === 'push') return s.bet
+export function bjCanSplit(s: BjState) {
+  const h = s.hands[s.active]
+  return s.phase === 'player' && !!h && h.cards.length === 2 && tenValue(h.cards[0]) === tenValue(h.cards[1]) && s.hands.length < BJ_MAX_HANDS
+}
+export function bjCanDouble(s: BjState) {
+  const h = s.hands[s.active]
+  return s.phase === 'player' && !!h && h.cards.length === 2 && !(h.fromSplit && h.cards[0].r === 1)
+}
+export function bjCanSurrender(s: BjState) {
+  return s.phase === 'player' && s.hands.length === 1 && s.hands[0].cards.length === 2
+}
+/** Extra KC an action takes from the player before it is applied. */
+export function bjActionCost(s: BjState, action: BjAction) {
+  const h = s.hands[s.active]
+  if (action === 'double' || action === 'split') return h?.bet ?? 0
+  if (action === 'insure') return Math.floor((s.hands[0]?.bet ?? 0) / 2)
   return 0
 }
 
-export function bjPublic(s: BjState) {
-  const hide = s.phase === 'player'
+export function bjAct(input: BjState, action: BjAction): BjState {
+  const s = bjNormalize(input)
+  const deck = [...s.deck]
+
+  if (s.phase === 'insurance') {
+    if (action !== 'insure' && action !== 'noInsure') return s
+    const next: BjState = { ...s, phase: 'player', insurance: action === 'insure' ? bjActionCost(s, 'insure') : 0 }
+    return isBlackjack(s.dealer) ? bjSettle(next) : next
+  }
+  if (s.phase !== 'player') return s
+
+  const hands = s.hands.map((h) => ({ ...h, cards: [...h.cards] }))
+  const h = hands[s.active]
+  const finish = (st: BjState) => {
+    st.hands[st.active].done = true
+    return advance(st)
+  }
+
+  if (action === 'hit') {
+    h.cards.push(deck.pop()!)
+    const next = { ...s, deck, hands }
+    return handValue(h.cards) >= 21 ? finish(next) : next
+  }
+  if (action === 'double') {
+    if (!bjCanDouble(s)) return s
+    h.cards.push(deck.pop()!)
+    h.bet *= 2
+    h.doubled = true
+    return finish({ ...s, deck, hands })
+  }
+  if (action === 'split') {
+    if (!bjCanSplit(s)) return s
+    const aces = h.cards[0].r === 1
+    const a: BjHand = { cards: [h.cards[0], deck.pop()!], bet: h.bet, doubled: false, done: aces, result: null, fromSplit: true }
+    const b: BjHand = { cards: [h.cards[1], deck.pop()!], bet: h.bet, doubled: false, done: aces, result: null, fromSplit: true }
+    hands.splice(s.active, 1, a, b)
+    const next = { ...s, deck, hands }
+    if (aces) return bjSettle(next)
+    // A split hand that lands on 21 needs no decision.
+    if (handValue(a.cards) === 21) return finish(next)
+    return next
+  }
+  if (action === 'surrender') {
+    if (!bjCanSurrender(s)) return s
+    hands[0] = { ...h, done: true, result: 'surrender' }
+    return bjSettle({ ...s, hands })
+  }
+  if (action === 'stand') return finish({ ...s, deck, hands })
+  return s
+}
+
+/** Everything the player put on the table, insurance included. */
+export function bjWagered(input: BjState) {
+  const s = bjNormalize(input)
+  return s.hands.reduce((t, h) => t + h.bet, 0) + s.insurance
+}
+
+/** Total returned to the player (stakes included). Insurance pays 2:1 when the dealer has blackjack. */
+export function bjPayout(input: BjState) {
+  const s = bjNormalize(input)
+  let total = s.insurance && isBlackjack(s.dealer) ? s.insurance * 3 : 0
+  for (const h of s.hands) {
+    if (h.result === 'blackjack') total += Math.floor(h.bet * 2.5)
+    else if (h.result === 'win') total += h.bet * 2
+    else if (h.result === 'push') total += h.bet
+    else if (h.result === 'surrender') total += Math.floor(h.bet / 2)
+  }
+  return total
+}
+
+export function bjPublic(input: BjState) {
+  const s = bjNormalize(input)
+  const hide = s.phase !== 'done'
+  const first = s.hands[0]
   return {
-    player: s.player,
+    hands: s.hands.map((h) => ({ cards: h.cards, bet: h.bet, doubled: h.doubled, result: s.phase === 'done' ? h.result : null, value: handValue(h.cards) })),
+    active: s.active,
+    player: first.cards,
     dealer: hide ? [s.dealer[0]] : s.dealer,
     dealerHidden: hide,
-    bet: s.bet,
+    bet: bjWagered(s),
+    insurance: s.insurance,
     phase: s.phase,
     result: s.result,
-    doubled: s.doubled,
-    playerValue: handValue(s.player),
+    doubled: first.doubled,
+    canSplit: bjCanSplit(s),
+    canDouble: bjCanDouble(s),
+    canSurrender: bjCanSurrender(s),
+    activeBet: s.hands[s.active]?.bet ?? 0,
+    playerValue: handValue(first.cards),
     dealerValue: hide ? handValue([s.dealer[0]]) : handValue(s.dealer),
+    payout: s.phase === 'done' ? bjPayout(s) : 0,
   }
 }
 export type BjPublic = ReturnType<typeof bjPublic>

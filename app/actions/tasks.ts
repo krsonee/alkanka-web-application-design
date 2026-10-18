@@ -4,12 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { getMember } from '@/lib/member'
 import { awardTask, listPublicTasks, requestTaskApproval, taskProgress } from '@/lib/tasks'
 import { checkIn } from '@/lib/checkin'
+import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
 export async function checkInAction(): Promise<
   { ok: true; claimed: boolean; streak: number; reward: number; balance: number } | { ok: false; error: string }
 > {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Ödül için giriş yapmalısın.' }
+  if (await hitRateLimit(`checkin:${member.id}`, 5, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   try {
     const result = await checkIn(member.id)
     revalidatePath('/gorevler')
@@ -25,6 +27,7 @@ export async function completeTaskAction(taskId: number): Promise<
 > {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Puan için giriş yapmalısın.' }
+  if (await hitRateLimit(`task:${member.id}`, 10, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   try {
     const task = (await listPublicTasks()).find((item) => item.id === taskId)
     if (!task) return { ok: false, error: 'Görev bulunamadı.' }

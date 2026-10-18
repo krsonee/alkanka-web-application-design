@@ -24,7 +24,7 @@ function InstallBanner() {
     const evaluate = () => {
       const hiddenUntil = Number(localStorage.getItem(BANNER_KEY) ?? 0)
       if (hiddenUntil > Date.now() || !localStorage.getItem(TOUR_KEY)) return
-      timer = setTimeout(() => setVisible(true), 2500)
+      timer = setTimeout(() => setVisible(true), 45000)
     }
     evaluate()
     window.addEventListener(TOUR_DONE_EVENT, evaluate)

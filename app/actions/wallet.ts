@@ -7,6 +7,7 @@ import { isHidden } from '@/lib/hidden-shared'
 import { diceReward, wheelBigIndices, type RewardConfig } from '@/lib/rewards-shared'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
+import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
 type WalletResult = { ok: true; balance: number } | { ok: false; error: string; balance?: number }
 
@@ -55,6 +56,7 @@ export async function getMiniStatus(): Promise<MiniStatus> {
 export async function claimReward(source: string, amount: number): Promise<WalletResult> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Ödül almak için giriş yapmalısın.' }
+  if (await hitRateLimit(`reward:${member.id}`, 10, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   const limit = REWARD_LIMITS[source]
   if (!limit) return { ok: false, error: 'Geçersiz ödül.' }
   const value = Math.floor(Number(amount))
@@ -93,6 +95,7 @@ export type MiniOutcome =
 export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; balance: number } & MiniOutcome) | { ok: false; error: string; balance?: number }> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Oynamak için giriş yapmalısın.' }
+  if (await hitRateLimit(`mini:${member.id}`, 6, 30)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   const limit = REWARD_LIMITS[game]
   if (!limit) return { ok: false, error: 'Geçersiz oyun.' }
   if (isHidden(await getHidden(), 'mini', game)) return { ok: false, error: `${limit.label} şu an kapalı.` }
@@ -137,6 +140,7 @@ export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; 
 export async function spendKC(source: string, amount: number): Promise<WalletResult> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Bu işlem için giriş yapmalısın.' }
+  if (await hitRateLimit(`spend:${member.id}`, 10, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   const label = SPEND_SOURCES[source]
   if (!label) return { ok: false, error: 'Geçersiz işlem.' }
   const value = Math.floor(Number(amount))

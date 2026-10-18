@@ -12,6 +12,14 @@ const LINKS = [
   { label: 'SSS', href: '/sss' },
 ]
 
+const LEGAL_LINKS = [
+  { label: 'Kullanım Koşulları', href: '/yasal/kullanim-kosullari' },
+  { label: 'Gizlilik', href: '/yasal/gizlilik' },
+  { label: 'KVKK', href: '/yasal/kvkk' },
+  { label: 'Çerezler', href: '/yasal/cerez' },
+  { label: 'Sorumlu Oyun', href: '/yasal/sorumlu-oyun' },
+]
+
 export function Footer() {
   return (
     <footer className="flex flex-col gap-6 border-t border-border pt-8 pb-24 lg:pb-8">
@@ -50,9 +58,22 @@ export function Footer() {
           </a>
         </nav>
       </div>
+      <nav aria-label="Yasal" className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+        {LEGAL_LINKS.map((l) => (
+          <a key={l.href} href={l.href} className="text-muted-foreground transition-colors hover:text-primary">
+            {l.label}
+          </a>
+        ))}
+      </nav>
       <div className="flex flex-col justify-between gap-2 border-t border-border pt-4 text-xs text-muted-foreground sm:flex-row">
         <span>© 2026 AL KANKA — Tüm hakları saklıdır.</span>
-        <span>18+ · Sorumlu davran · info@alkanka.com</span>
+        <span>
+          18+ ·{' '}
+          <a href="/yasal/sorumlu-oyun" className="hover:text-primary">
+            Sorumlu oyun
+          </a>{' '}
+          · info@alkanka.com
+        </span>
       </div>
     </footer>
   )

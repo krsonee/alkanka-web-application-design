@@ -46,12 +46,18 @@ export async function linkReferralAction(): Promise<ActionResult> {
   if (!code) return { ok: true }
   store.delete('alk_ref')
   const linked = await attachReferral(member.id, code).catch(() => false)
-  return { ok: true, message: linked ? 'Davet bağlandı. 3 oyun oyna, ikiniz de KC kazanın.' : undefined }
+  if (!linked) return { ok: true }
+  const { getReferralSettings } = await import('@/lib/referral-settings')
+  const s = await getReferralSettings()
+  const welcome = s.welcome > 0 ? `Hoş geldin bonusu ${s.welcome} KC hesabında. ` : ''
+  return { ok: true, message: `${welcome}${s.minGames} oyun oyna, ikiniz de ekstra KC kazanın.` }
 }
 
 export async function claimReferralAction(): Promise<ActionResult> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Giriş yapmalısın.' }
+  const { hitRateLimit, RATE_LIMIT_MESSAGE } = await import('@/lib/rate-limit')
+  if (await hitRateLimit(`refclaim:${member.id}`, 5, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   const r = await claimReferralRewards(member.id)
   revalidatePath('/profil')
   if (r.blocked) return { ok: false, error: 'Hesabın incelemede. Davet ödülleri onaydan sonra açılır.' }

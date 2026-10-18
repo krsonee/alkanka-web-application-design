@@ -200,7 +200,7 @@ export async function removeEntry(entryId: number) {
   }
 }
 
-async function autoStartDue() {
+export async function autoStartDue() {
   const due = await pool.query(
     `SELECT id FROM tournaments t WHERE status = 'kayit' AND starts_at <= now()
        AND (SELECT count(*) FROM tournament_entries e WHERE e.tournament_id = t.id) >= 2`,

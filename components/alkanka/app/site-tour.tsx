@@ -18,13 +18,7 @@ const STEPS: Step[] = [
     targets: [],
     pose: 'merhaba',
     title: 'Hoş geldin kanka!',
-    body: 'Ben Jako. Sana siteyi 30 saniyede gezdireyim, nerede ne var bir bak.',
-  },
-  {
-    targets: ['[data-tour="coins"]'],
-    pose: 'kazandi',
-    title: 'Kanka Coin bakiyen',
-    body: 'Oyunlardan, görevlerden ve tahminlerden kazandığın KC burada birikir. Hepsi gerçek bakiye, hesabına kaydedilir.',
+    body: 'Ben Jako. Burada ücretsiz oynar, Kanka Coin toplar, coinleri marketten ödüle çevirirsin. 3 adımda göstereyim.',
   },
   {
     targets: ['[data-tour-nav="oyunlar"]', '[data-tour="mobile-oyunlar"]'],
@@ -35,27 +29,15 @@ const STEPS: Step[] = [
   {
     targets: ['[data-tour-nav="cark"]', '[data-tour="tile-cark"]'],
     pose: 'sandik',
-    title: 'Ücretsiz çark ve sandık',
-    body: 'Çarkı 6 saatte bir, sandığı günde bir kez bedava aç. Geri sayım kartın üstünde görünür.',
-  },
-  {
-    targets: ['[data-tour-nav="market"]', '[data-tour="mobile-market"]'],
-    pose: 'market',
-    title: 'Puan marketi',
-    body: 'Biriktirdiğin KC ile rozet, ekstra hak ve hediyeler al.',
+    title: 'Ücretsiz çark, sandık ve görevler',
+    body: 'Çarkı 6 saatte bir, sandığı günde bir kez bedava aç. Günlük ve haftalık görevlerle ekstra KC topla.',
+    link: { href: '/gorevler', label: 'Görevlere bak' },
   },
   {
     targets: ['[data-tour="account"]'],
     pose: 'duyuru',
-    title: 'Hesabın',
-    body: 'Kayıt olana Kanka Coin hoş geldin hediyesi. Giriş yaptıktan sonra oyun geçmişine buradan ulaşırsın.',
-  },
-  {
-    targets: ['[data-tour-nav="uygulama"]'],
-    pose: 'telegram',
-    title: `Uygulamayı indir, +${APP_BONUS} KC`,
-    body: 'Siteyi telefonuna uygulama olarak ekle, uygulamadan giriş yap, bonus anında yüklensin. Kampanya bildirimleri de ilk sana gelsin.',
-    link: { href: '/uygulama', label: 'Nasıl indirilir?' },
+    title: 'Kayıt ol, hediyeni al',
+    body: `Kayıt olana hoş geldin Kanka Coin hediyesi. Siteyi uygulama olarak eklersen +${APP_BONUS} KC daha.`,
   },
 ]
 
@@ -101,7 +83,7 @@ export function SiteTour() {
   useEffect(() => {
     window.addEventListener(TOUR_START_EVENT, start)
     let timer: ReturnType<typeof setTimeout> | undefined
-    if (!localStorage.getItem(TOUR_KEY)) timer = setTimeout(start, 1200)
+    if (!localStorage.getItem(TOUR_KEY)) timer = setTimeout(start, 6000)
     return () => {
       window.removeEventListener(TOUR_START_EVENT, start)
       clearTimeout(timer)
