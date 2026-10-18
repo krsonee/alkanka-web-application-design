@@ -241,6 +241,7 @@ export default async function PanelPage() {
     limits,
     games,
     tournaments,
+    cember,
     telegram,
     push,
     studio,
@@ -398,7 +399,7 @@ export default async function PanelPage() {
       </header>
       <div className="mx-auto max-w-7xl px-4 py-6">
         <ContentEditor
-          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
           users={users}
           audit={audit}
           dashboard={dashboard}
@@ -424,6 +425,7 @@ export default async function PanelPage() {
           limits={limits}
           games={games}
           tournaments={tournaments}
+          cember={cember}
           telegram={telegram}
           push={push}
           messages={messages}

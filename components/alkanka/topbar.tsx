@@ -14,6 +14,7 @@ import { formatAC, usePoints } from './points-context'
 import { MemberRank } from './kp/member-rank'
 import { SiteSearch, type SearchSponsor } from './site-search'
 import { RadioPlayer } from './radio-player'
+import { CemberButton } from './cember/cember-pill'
 import type { SocialLinks } from '@/lib/social-shared'
 
 function PointsPill() {
@@ -257,6 +258,7 @@ export function Topbar({ social, sponsors = [] }: { social: SocialLinks; sponsor
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
           <BadgeButton />
           <PointsPill />
+          <CemberButton />
           <RadioPlayer />
           <a
             href={TELEGRAM_URL}
