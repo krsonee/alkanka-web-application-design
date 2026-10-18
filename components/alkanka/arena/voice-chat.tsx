@@ -109,6 +109,31 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
 
   const localTrack = () => stream.current?.getAudioTracks()[0] ?? null
 
+  /** Asks the browser for the mic and explains exactly why it failed, so the user knows what to fix. */
+  const requestMic = async (): Promise<MediaStream | null> => {
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setError('Mikrofon sadece güvenli (https) bağlantıda çalışır.')
+      return null
+    }
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      setError(null)
+      return s
+    } catch (e) {
+      const name = (e as DOMException)?.name
+      setError(
+        name === 'NotAllowedError' || name === 'SecurityError'
+          ? 'Mikrofon izni engelli. Adres çubuğundaki kilit simgesine tıklayıp Mikrofon’u "İzin ver" yap, sonra mikrofon butonuna tekrar bas.'
+          : name === 'NotFoundError' || name === 'OverconstrainedError'
+            ? 'Mikrofon bulunamadı. Cihazına mikrofon bağlı olduğundan emin ol.'
+            : name === 'NotReadableError'
+              ? 'Mikrofon başka bir uygulama tarafından kullanılıyor. O uygulamayı kapatıp tekrar dene.'
+              : 'Mikrofon açılamadı, tekrar dene.',
+      )
+      return null
+    }
+  }
+
   const call = useCallback(
     async (id: string) => {
       attempts.current.set(id, Date.now())
@@ -183,11 +208,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
           setCanSpeak(data.canSpeak)
           pcs.current.forEach((_, id) => closePeer(id))
           attempts.current.clear()
-          if (data.canSpeak && !stream.current) {
-            stream.current = await navigator.mediaDevices
-              .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-              .catch(() => null)
-          }
+          if (data.canSpeak && !stream.current) stream.current = await requestMic()
           if (!data.canSpeak) {
             stream.current?.getTracks().forEach((t) => t.stop())
             stream.current = null
@@ -245,10 +266,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
     speakRef.current = data.canSpeak
     setCanSpeak(data.canSpeak)
     if (data.canSpeak) {
-      stream.current = await navigator.mediaDevices
-        .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-        .catch(() => null)
-      if (!stream.current) setError('Mikrofon izni verilmedi, sadece dinleyebilirsin.')
+      stream.current = await requestMic()
       const t = localTrack()
       if (t) t.enabled = false
     }
@@ -259,7 +277,20 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
     void tick()
   }
 
-  const toggleMic = () => {
+  const [, forceRender] = useState(0)
+  const toggleMic = async () => {
+    if (!localTrack()) {
+      // No mic yet (permission denied or dismissed): ask again on this tap, then relink peers so they get the track.
+      const s = await requestMic()
+      if (!s) return
+      stream.current = s
+      pcs.current.forEach((_, id) => closePeer(id))
+      attempts.current.clear()
+      mutedRef.current = false
+      setMuted(false)
+      forceRender((n) => n + 1)
+      return
+    }
     const t = localTrack()
     if (!t) return
     const next = !mutedRef.current
@@ -316,10 +347,10 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
       <button
         type="button"
         onClick={toggleMic}
-        disabled={!hasMic}
-        aria-pressed={!muted}
-        aria-label={!hasMic ? 'İzleyiciler sadece dinler' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
-        title={!hasMic ? 'İzleyiciler sadece dinler' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
+        disabled={!canSpeak}
+        aria-pressed={hasMic && !muted}
+        aria-label={!canSpeak ? 'İzleyiciler sadece dinler' : !hasMic ? 'Mikrofon izni ver' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
+        title={!canSpeak ? 'İzleyiciler sadece dinler' : !hasMic ? 'Mikrofon izni ver' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
         className={cn(
           'flex size-8 items-center justify-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
           hasMic && !muted ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-muted-foreground',

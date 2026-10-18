@@ -19,6 +19,7 @@ export type ModeSelect = {
 }
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
+import { LandscapeFit } from './landscape-fit'
 
 export type GameResult = 'win' | 'lose' | 'draw'
 export type GameApi = { bet: number; finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void }
@@ -96,7 +97,11 @@ export function StakeGate({
           </span>
         </div>
         <div key={phase.round} className="mx-auto w-full max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]">
-          {children({ bet: phase.bet, finish })}
+          {game === 'kafa-topu' || game === 'kafa-basketbolu' ? (
+            children({ bet: phase.bet, finish })
+          ) : (
+            <LandscapeFit>{children({ bet: phase.bet, finish })}</LandscapeFit>
+          )}
         </div>
       </div>
     )

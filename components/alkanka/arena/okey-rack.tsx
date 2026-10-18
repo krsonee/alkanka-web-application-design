@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, type PointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { MousePointerClick, Move, Pointer, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TileFace } from './okey'
@@ -176,13 +177,31 @@ export function OkeyRack({
     onDropHover?.(kind)
   }
 
+  // Listeners live on window instead of pointer capture: capturing on pointerdown retargets the
+  // follow-up click to the wrapper, so trackpad/mouse taps never reached the tile button.
   const onPointerDown = (e: PointerEvent<HTMLDivElement>, id: number) => {
     if (e.button !== 0) return
     press.current = { id, x: e.clientX, y: e.clientY, moved: false }
-    e.currentTarget.setPointerCapture(e.pointerId)
+    const move = (ev: globalThis.PointerEvent) => onPointerMove(ev)
+    const up = (ev: globalThis.PointerEvent) => {
+      cleanup()
+      endDrag(ev)
+    }
+    const cancel = (ev: globalThis.PointerEvent) => {
+      cleanup()
+      endDrag(ev, true)
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
   }
 
-  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+  const onPointerMove = (e: { clientX: number; clientY: number; preventDefault?: () => void }) => {
     const p = press.current
     if (!p) return
     if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 6) return
@@ -209,7 +228,7 @@ export function OkeyRack({
     })
   }
 
-  const endDrag = (e: PointerEvent<HTMLDivElement>, cancelled = false) => {
+  const endDrag = (e: { clientX: number; clientY: number }, cancelled = false) => {
     const p = press.current
     press.current = null
     if (!p?.moved) return
@@ -260,10 +279,8 @@ export function OkeyRack({
                 {tile ? (
                   <div
                     onPointerDown={(e) => onPointerDown(e, tile.id)}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={(e) => endDrag(e)}
-                    onPointerCancel={(e) => endDrag(e, true)}
-                    className={cn('size-full touch-none select-none', ghost?.id === tile.id && 'opacity-30')}
+                    onDragStart={(e) => e.preventDefault()}
+                    className={cn('size-full cursor-grab touch-none select-none', ghost?.id === tile.id && 'cursor-grabbing opacity-30')}
                   >
                     <RackTile
                       tile={tile}
@@ -301,16 +318,19 @@ export function OkeyRack({
         ))}
       </ul>
 
-      {ghost && ghostTile && (
-        <div
-          ref={ghostEl}
-          aria-hidden="true"
-          className="pointer-events-none fixed z-[80] h-12 w-9 -translate-x-1/2 -translate-y-[70%] rotate-3 drop-shadow-2xl will-change-[left,top] sm:h-14 sm:w-10"
-          style={{ left: ghost.x, top: ghost.y }}
-        >
-          <TileFace tile={ghostTile} okey={okey} size="fluid" selected />
-        </div>
-      )}
+      {ghost &&
+        ghostTile &&
+        createPortal(
+          <div
+            ref={ghostEl}
+            aria-hidden="true"
+            className="pointer-events-none fixed z-[80] h-12 w-9 -translate-x-1/2 -translate-y-[70%] rotate-3 drop-shadow-2xl will-change-[left,top] sm:h-14 sm:w-10"
+            style={{ left: ghost.x, top: ghost.y }}
+          >
+            <TileFace tile={ghostTile} okey={okey} size="fluid" selected />
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
