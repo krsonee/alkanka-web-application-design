@@ -9,6 +9,10 @@ import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/cont
 import { TEXTS_KEY, type SiteTexts } from '@/lib/site-texts-shared'
 import { TextsEditor } from '@/components/panel/texts-editor'
 import { LegalEditor } from '@/components/panel/legal-editor'
+import { ReferralEditor } from '@/components/panel/referral-editor'
+import { getReferralSettings } from '@/lib/referral-settings'
+import { AmbientEditor } from '@/components/panel/ambient-editor'
+import { getAmbientSettings } from '@/lib/ambient-tables'
 import { LEGAL_KEY, mergeLegal, type LegalOverrides } from '@/lib/legal-shared'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
@@ -289,6 +293,9 @@ export default async function PanelPage() {
     section(session, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
     section(session, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
     section(session, 'growth', 'Büyüme', async () => (
+      <div className="flex flex-col gap-6">
+      <ReferralEditor settings={await getReferralSettings()} />
+      <AmbientEditor settings={await getAmbientSettings()} />
       <GrowthManager
         sites={(await siteOptions()).map((s) => ({ id: s.id, name: s.name }))}
         recordNames={Object.fromEntries((await listSites().catch(() => [])).map((site) => [String(site.id), site.name]))}
@@ -302,6 +309,7 @@ export default async function PanelPage() {
         affLinks={await affLinkViews().catch(() => [])}
         affSites={(await listSites().catch(() => [])).map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
       />
+      </div>
     )),
     section(session, 'community', 'Topluluk', async () => (
       <CommunityManager

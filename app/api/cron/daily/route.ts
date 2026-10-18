@@ -36,11 +36,29 @@ async function remindStreaks() {
   return due.length
 }
 
+/** Pays out invites whose friends crossed the game threshold, so inviters don't have to remember to claim. */
+async function payReferrals() {
+  const { referrersWithReadyRewards, claimReferralRewards } = await import('@/lib/community')
+  let paid = 0
+  for (const userId of await referrersWithReadyRewards()) {
+    const r = await claimReferralRewards(userId).catch(() => null)
+    if (!r?.count) continue
+    paid += r.count
+    await sendToUsers([userId], {
+      title: 'Davet ödülün geldi kanka',
+      body: `${r.count} arkadaşın şartı tamamladı, ${r.total} KC hesabına eklendi.`,
+      url: '/profil',
+    }).catch(() => {})
+  }
+  return paid
+}
+
 export async function GET(req: Request) {
   if (!(await authorized(req))) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
-  const [tournaments, reminders] = await Promise.allSettled([autoStartDue(), remindStreaks()])
+  const [tournaments, reminders, referrals] = await Promise.allSettled([autoStartDue(), remindStreaks(), payReferrals()])
   return Response.json({
     tournaments: tournaments.status === 'fulfilled' ? 'ok' : String(tournaments.reason),
     streakReminders: reminders.status === 'fulfilled' ? reminders.value : String(reminders.reason),
+    referralsPaid: referrals.status === 'fulfilled' ? referrals.value : String(referrals.reason),
   })
 }

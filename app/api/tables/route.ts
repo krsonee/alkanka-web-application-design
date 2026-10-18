@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getMember } from '@/lib/member'
 import { listMyActiveTables, listOpenTables, sweepIdleTables, tableView } from '@/lib/pvp/tables'
 import { myTournamentTables } from '@/lib/tournaments'
+import { AMBIENT_DEFAULTS, ambientTables, getAmbientSettings } from '@/lib/ambient-tables'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +16,9 @@ export async function GET(req: Request) {
     m ? myTournamentTables(m.id) : Promise.resolve([]),
   ])
   const strip = (t: ReturnType<typeof tableView>) => ({ ...t, state: null })
+  const ambient = game ? ambientTables(game, await getAmbientSettings().catch(() => AMBIENT_DEFAULTS)) : []
   return NextResponse.json({
-    open: open.map((t) => strip(tableView(t, m?.id ?? null))),
+    open: [...open.map((t) => strip(tableView(t, m?.id ?? null))), ...ambient],
     mine: mine.filter((t) => !t.tournamentId).map((t) => strip(tableView(t, m?.id ?? null))),
     tournament: tour,
   })

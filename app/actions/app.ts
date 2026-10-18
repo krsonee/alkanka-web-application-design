@@ -20,6 +20,8 @@ function ensureTable() {
 export async function claimAppBonus(platform: string): Promise<BonusResult> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Bonus için giriş yapmalısın.' }
+  const { hitRateLimit, RATE_LIMIT_MESSAGE } = await import('@/lib/rate-limit')
+  if (await hitRateLimit(`appbonus:${member.id}`, 5, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   const safePlatform = ['android', 'ios', 'desktop'].includes(platform) ? platform : 'desktop'
   await ensureTable()
   const inserted = await rows(sql`INSERT INTO app_installs (user_id, platform) VALUES (${member.id}, ${safePlatform})

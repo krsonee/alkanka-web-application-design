@@ -55,6 +55,7 @@ export type TableSummary = {
   turn: number | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   state: any
+  ambient?: boolean
 }
 type LobbyData = {
   open: TableSummary[]
@@ -246,9 +247,15 @@ export function TableLobby({
             <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Oynanan masalar</h3>
             {watchable.map((t) => (
               <TableRowCard key={t.id} t={t}>
-                <button onClick={() => setActiveId(t.id)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground hover:bg-secondary">
-                  <Eye className="size-4" aria-hidden="true" /> İzle
-                </button>
+                {t.ambient ? (
+                  <span className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-muted-foreground">
+                    <Users className="size-4" aria-hidden="true" /> Masa dolu
+                  </span>
+                ) : (
+                  <button onClick={() => setActiveId(t.id)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground hover:bg-secondary">
+                    <Eye className="size-4" aria-hidden="true" /> İzle
+                  </button>
+                )}
               </TableRowCard>
             ))}
           </div>
