@@ -213,9 +213,10 @@ export async function createTable(m: Member, game: string, stake: number, input?
   return String(r.rows[0].id)
 }
 
-export async function joinTable(m: Member, id: string) {
+export async function joinTable(m: Member, id: string, expectedStake?: number) {
   const t = await getTableRow(id)
   if (!t || t.status !== 'bekliyor' || t.tournamentId) throw new Error('Masa artık müsait değil.')
+  if (expectedStake !== undefined && expectedStake !== t.stake) throw new Error(`Bu masanın bahsi ${t.stake} KC. Listeyi yenileyip tekrar dene.`)
   if (t.players.some((p) => p.id === m.id)) return
   const taken = new Set(t.players.map((p) => p.seat))
   const seat = Array.from({ length: t.seats }, (_, i) => i).find((i) => !taken.has(i))

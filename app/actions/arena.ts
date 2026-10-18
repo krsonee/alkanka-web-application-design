@@ -283,11 +283,11 @@ export async function openTable(game: string, stake: number, options?: { seats?:
   }
 }
 
-export async function sitAtTable(id: string) {
+export async function sitAtTable(id: string, expectedStake?: number) {
   try {
     const m = await member()
     await assertCanPlay(m.id)
-    await joinTable(m, id)
+    await joinTable(m, id, typeof expectedStake === 'number' && Number.isFinite(expectedStake) ? expectedStake : undefined)
     return { ok: true as const }
   } catch (e) {
     return fail(e)

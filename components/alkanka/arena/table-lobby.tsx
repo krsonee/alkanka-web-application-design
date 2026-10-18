@@ -108,6 +108,7 @@ export function TableLobby({
   const [stake, setStake] = useState(initialStake && settings.bets.includes(initialStake) ? initialStake : (settings.bets[0] ?? 25))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [betFilter, setBetFilter] = useState<number | null>(null)
   const isOkey = game === 'okey'
   const [seats, setSeats] = useState<2 | 4>(4)
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
@@ -148,7 +149,9 @@ export function TableLobby({
 
   if (activeId) return <TableRoom id={activeId} onLeave={() => { setActiveId(null); mutate() }} />
 
-  const open = (data?.open ?? []).filter((t) => t.status === 'bekliyor' && t.seat < 0)
+  const allOpen = (data?.open ?? []).filter((t) => t.status === 'bekliyor' && t.seat < 0)
+  const openBets = Array.from(new Set(allOpen.map((t) => t.stake))).sort((a, b) => a - b)
+  const open = betFilter == null ? allOpen : allOpen.filter((t) => t.stake === betFilter || t.id === invitedId)
   const watchable = (data?.open ?? []).filter((t) => t.status === 'oynaniyor' && t.seat < 0)
   const mine = data?.mine ?? []
   const tour = (data?.tournament ?? []).filter((t) => t.game === game)
@@ -213,9 +216,33 @@ export function TableLobby({
         )}
 
         <div className="flex flex-col gap-2">
-          <h3 id="lobby-title" className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-            Açık masalar
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="lobby-title" className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+              Açık masalar
+            </h3>
+            {openBets.length > 1 && (
+              <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Bahse göre filtrele">
+                {[null, ...openBets].map((b) => (
+                  <button
+                    key={b ?? 'all'}
+                    type="button"
+                    role="radio"
+                    aria-checked={betFilter === b}
+                    onClick={() => setBetFilter(b)}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1 text-xs font-bold tabular-nums transition-colors',
+                      betFilter === b ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-secondary/70',
+                    )}
+                  >
+                    {b == null ? 'Tümü' : `${formatAC(b)} KC`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {open.length > 0 && (
+            <p className="text-xs leading-relaxed text-muted-foreground">Oturduğun masanın bahsi kesilir. Masayı açan bahsi belirler.</p>
+          )}
           {!data && (
             <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Masalar yükleniyor
@@ -231,12 +258,12 @@ export function TableLobby({
               <button
                 disabled={busy || (member != null && points < t.stake)}
                 onClick={async () => {
-                  const r = await run(() => sitAtTable(t.id))
+                  const r = await run(() => sitAtTable(t.id, t.stake))
                   if (r?.ok) setActiveId(t.id)
                 }}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-50"
               >
-                Otur · {formatAC(t.stake)}
+                Otur · {formatAC(t.stake)} KC
               </button>
             </TableRowCard>
           ))}

@@ -47,6 +47,7 @@ export function StakeGate({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const session = useRef<string | null>(null)
+  const pvpMode = modeSelect?.mode === 'pvp'
 
   async function start(amount: number) {
     if (busy || !requireLogin()) return
@@ -201,6 +202,12 @@ export function StakeGate({
           </fieldset>
         )}
 
+        {pvpMode ? (
+          <p className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm leading-relaxed text-foreground">
+            Oyuncu masalarında bahsi masayı açan belirler. Bir masaya oturduğunda o masanın bahsi kesilir; kendi masanı açarken bahsi lobide seçersin.
+          </p>
+        ) : (
+        <>
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-2 text-sm font-semibold text-foreground sm:mb-3">Bahsini seç</legend>
           <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
@@ -236,6 +243,8 @@ export function StakeGate({
             </dd>
           </div>
         </dl>
+        </>
+        )}
 
         <button
           onClick={() => {
@@ -246,7 +255,7 @@ export function StakeGate({
             if (!requireLogin()) return
             modeSelect.onEnter(m, bet)
           }}
-          disabled={(modeSelect != null && modeSelect.mode == null) || bet > points}
+          disabled={(modeSelect != null && modeSelect.mode == null) || (!pvpMode && bet > points)}
           className="rounded-xl bg-primary px-6 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/20 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:py-4 sm:text-lg"
         >
           {!modeSelect || modeSelect.mode === 'bot' ? 'Masaya otur' : modeSelect.mode === 'pvp' ? 'Oyuncu masalarına geç' : 'Önce oyun modunu seç'}
