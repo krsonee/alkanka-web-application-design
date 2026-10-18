@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
-import { Gift, Trophy, Users } from 'lucide-react'
-import { INTRO_SECONDS, RESULT_SECONDS, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
+import { Gift, Trophy, Users, X } from 'lucide-react'
+import { INTRO_SECONDS, NOTICE_MINUTES, RESULT_SECONDS, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
 import { CemberArena, type ArenaEvent } from './cember-arena'
 import { CemberConfetti } from './cember-confetti'
 import { cemberFetch as fetchJson, serverNow } from './cember-clock'
@@ -21,6 +21,7 @@ export function CemberOverlay() {
   const [tick, setTick] = useState(0)
   const [activeSlot, setActiveSlot] = useState<string | null>(null)
   const [compact, setCompact] = useState(false)
+  const [dismissed, setDismissed] = useState<string[]>([])
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000)
@@ -46,8 +47,26 @@ export function CemberOverlay() {
 
   if (pathname?.startsWith('/panel')) return null
 
+  const nowMs = serverNow()
+  const notice = activeSlot
+    ? null
+    : (status?.upcoming ?? []).find((u) => {
+        const left = Date.parse(u.slot) - nowMs
+        return left > 0 && left <= NOTICE_MINUTES * 60_000 && !dismissed.includes(u.slot)
+      })
+
   return (
     <>
+      {notice && (
+        <CemberNotice
+          title={notice.title}
+          prize={notice.prizeText}
+          left={Date.parse(notice.slot) - nowMs}
+          eligible={!!me?.eligible && status?.nextSlot === notice.slot}
+          signedIn={!!me?.signedIn}
+          onClose={() => setDismissed((d) => [...d, notice.slot])}
+        />
+      )}
       {activeSlot && (
         <CemberStage
           key={activeSlot}
@@ -191,7 +210,16 @@ export function CemberStage({
               <Users className="size-3.5 text-gold" aria-hidden />
               {total > 0 && phase !== 'intro' ? `${alive} / ${total}` : `${total} kanka`}
             </span>
-            {isDemo ? (
+            {phase === 'result' || phase === 'empty' ? (
+              <button
+                type="button"
+                onClick={() => doneRef.current()}
+                aria-label="Kapat"
+                className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 normal-case tracking-normal text-foreground hover:border-gold/60"
+              >
+                <X className="size-3.5" aria-hidden /> Kapat
+              </button>
+            ) : isDemo ? (
               <button
                 type="button"
                 onClick={() => doneRef.current()}
@@ -240,6 +268,13 @@ export function CemberStage({
                   <span className={compact ? 'text-sm' : 'text-lg'}>{iWon ? 'Kazandın kanka!' : `${winnerP.name} kazandı`}</span>
                 </div>
                 {prize && <span className="rounded-full bg-background/85 px-3 py-1 text-sm font-semibold text-gold">{prize}</span>}
+                <button
+                  type="button"
+                  onClick={() => doneRef.current()}
+                  className="pointer-events-auto mt-1 rounded-full border border-border bg-background/90 px-4 py-1.5 text-sm font-semibold text-foreground hover:border-gold/60"
+                >
+                  Kapat
+                </button>
               </div>
             )}
             {phase === 'result' && <CemberConfetti />}
@@ -258,6 +293,51 @@ export function CemberStage({
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+function CemberNotice({
+  title,
+  prize,
+  left,
+  eligible,
+  signedIn,
+  onClose,
+}: {
+  title: string
+  prize: string
+  left: number
+  eligible: boolean
+  signedIn: boolean
+  onClose: () => void
+}) {
+  const s = Math.max(0, Math.ceil(left / 1000))
+  const mmss = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-3 top-16 z-[85] flex items-center gap-3 rounded-2xl border border-gold/50 bg-popover/95 p-3 shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-4 duration-500 sm:inset-x-auto sm:left-1/2 sm:w-[26rem] sm:-translate-x-1/2"
+    >
+      <MascotBadge src="/images/mascots/jako-duyuru.png" className="size-12 border-2" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="truncate font-display text-sm font-bold text-foreground">
+          {title} <span className="font-mono tabular-nums text-gold">{mmss}</span> sonra
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {prize ? `Ödül: ${prize} · ` : ''}
+          {eligible ? 'Çemberdesin, oyunların o sırada duracak.' : signedIn ? 'Şartları tamamla, çembere gir.' : 'Giriş yap, şartları tamamla.'}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Bildirimi kapat"
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+      >
+        <X className="size-4" aria-hidden />
+      </button>
     </div>
   )
 }
