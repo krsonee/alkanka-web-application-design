@@ -51,6 +51,7 @@ export type TableSummary = {
   tournamentId: number | null
   roundNo: number | null
   updatedAt: string
+  paused?: boolean
   seat: number
   turn: number | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -724,6 +725,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             <TurnClock
               key={`${data.version}-${data.turn}`}
               updatedAt={data.updatedAt}
+              paused={Boolean(data.paused)}
               seconds={TURN_SECONDS[data.game as ArenaGame] ?? 30}
               mine={data.turn === mySeat}
               onExpire={() => void mutate()}
@@ -928,13 +930,34 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   )
 }
 
-function TurnClock({ updatedAt, seconds, mine, onExpire }: { updatedAt: string; seconds: number; mine: boolean; onExpire: () => void }) {
+function TurnClock({
+  updatedAt,
+  seconds,
+  mine,
+  paused,
+  onExpire,
+}: {
+  updatedAt: string
+  seconds: number
+  mine: boolean
+  paused: boolean
+  onExpire: () => void
+}) {
   const deadline = new Date(updatedAt).getTime() + seconds * 1000
-  const [now, setNow] = useState(() => Date.now())
+  const [tick, setNow] = useState(() => Date.now())
+  // While a Çember round is on screen the server keeps the clock frozen; mirror that locally.
+  const [frozenAt, setFrozenAt] = useState<number | null>(null)
+  if (paused && frozenAt === null) setFrozenAt(tick)
+  if (!paused && frozenAt !== null) setFrozenAt(null)
+  const now = paused ? (frozenAt ?? tick) : tick
   const left = Math.max(0, Math.ceil((deadline - now) / 1000))
-  const expired = left === 0
+  const expired = left === 0 && !paused
 
   useEffect(() => {
+    if (paused) {
+      const t = setInterval(onExpire, 3000)
+      return () => clearInterval(t)
+    }
     if (expired) {
       onExpire()
       return
@@ -955,7 +978,7 @@ function TurnClock({ updatedAt, seconds, mine, onExpire }: { updatedAt: string; 
         />
       </div>
       <span className={cn('w-16 text-right text-xs font-bold tabular-nums', urgent ? 'text-destructive' : 'text-foreground')}>
-        {expired ? 'Süre doldu' : `${mine ? 'Sen ' : ''}${left} sn`}
+        {paused ? 'Durdu' : expired ? 'Süre doldu' : `${mine ? 'Sen ' : ''}${left} sn`}
       </span>
     </div>
   )

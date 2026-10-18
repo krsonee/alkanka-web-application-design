@@ -62,31 +62,36 @@ export function CemberOverlay() {
   )
 }
 
-function CemberStage({
+export function CemberStage({
   slot,
   status,
   meId,
   compact,
   onDone,
+  demo,
 }: {
   slot: string
   status: CemberStatus | null
   meId: string | null
   compact: boolean
   onDone: () => void
+  /** Local preview round: skips the server fetch and grants nothing. */
+  demo?: CemberRound
 }) {
   const slotMs = Date.parse(slot)
   const startAt = slotMs + INTRO_SECONDS * 1000
-  const [round, setRound] = useState<CemberRound | null>(null)
+  const [round, setRound] = useState<CemberRound | null>(demo ?? null)
   const [phase, setPhase] = useState<Phase>(serverNow() >= startAt ? 'play' : 'intro')
-  const [alive, setAlive] = useState(0)
+  const [alive, setAlive] = useState(demo?.participants.length ?? 0)
   const [feed, setFeed] = useState<{ key: number; name: string }[]>([])
   const [winner, setWinner] = useState<number | null>(null)
   const [now, setNow] = useState(serverNow())
   const doneRef = useRef(onDone)
   doneRef.current = onDone
+  const isDemo = !!demo
 
   useEffect(() => {
+    if (isDemo) return
     let stop = false
     let tries = 0
     const load = async () => {
@@ -110,7 +115,7 @@ function CemberStage({
     return () => {
       stop = true
     }
-  }, [slot])
+  }, [slot, isDemo])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -195,6 +200,15 @@ function CemberStage({
               )}
             </div>
           </div>
+          {isDemo && (
+            <button
+              type="button"
+              onClick={() => doneRef.current()}
+              className="ml-auto rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
+            >
+              Demo · Kapat
+            </button>
+          )}
           {total > 0 && phase !== 'intro' && (
             <div className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-sm tabular-nums">
               <Users className="size-4 text-gold" aria-hidden />

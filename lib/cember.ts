@@ -2,10 +2,12 @@ import 'server-only'
 import { randomInt } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
-import { runSim, mulberry } from '@/lib/cember-sim'
+import { runSim, mulberry, STEP } from '@/lib/cember-sim'
 import {
   CONDITION_KINDS,
   DEFAULT_CEMBER,
+  INTRO_SECONDS,
+  RESULT_SECONDS,
   MAX_PLAYERS,
   conditionText,
   prizeText,
@@ -420,6 +422,50 @@ export async function settleMissedRounds() {
     if (r?.state === 'ready') settled++
   }
   return settled
+}
+
+// --- Table pause ---------------------------------------------------------
+
+type PauseWindow = [start: number, end: number]
+let pauseCache: { at: number; windows: PauseWindow[] } | null = null
+
+/** Time ranges in which a Çember round is on everyone's screen; table clocks must not run during these. */
+export async function cemberPauseWindows(): Promise<PauseWindow[]> {
+  const now = Date.now()
+  if (pauseCache && now - pauseCache.at < 5000) return pauseCache.windows
+  const windows: PauseWindow[] = []
+  try {
+    await ensure()
+    const r = await rows<{ slot: string | Date; steps: number; n: number }>(
+      sql`SELECT slot, steps, jsonb_array_length(participants) AS n FROM cember_rounds WHERE slot > now() - interval '6 hours'`,
+    )
+    for (const x of r) {
+      if (Number(x.n) <= 0) continue
+      const s = new Date(x.slot).getTime()
+      windows.push([s, s + (INTRO_SECONDS + Number(x.steps) * STEP + RESULT_SECONDS) * 1000 + 3000])
+    }
+    const cfg = await getCemberConfig()
+    if (cfg.enabled) {
+      for (const s of slotsAround(cfg, now)) {
+        if (s <= now && now - s < 90_000 && !windows.some((w) => w[0] === s)) windows.push([s, now + 5000])
+      }
+    }
+  } catch (e) {
+    console.error('[cember] pause windows failed', e)
+  }
+  pauseCache = { at: now, windows }
+  return windows
+}
+
+/** Milliseconds of [from, to] that fall inside a pause window. */
+export function pausedMs(from: number, to: number, windows: PauseWindow[]) {
+  let total = 0
+  for (const [s, e] of windows) total += Math.max(0, Math.min(to, e) - Math.max(from, s))
+  return total
+}
+
+export function isPausedAt(t: number, windows: PauseWindow[]) {
+  return windows.some(([s, e]) => t >= s && t < e)
 }
 
 export async function recentRounds(limit = 12) {

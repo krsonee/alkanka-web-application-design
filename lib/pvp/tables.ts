@@ -44,6 +44,39 @@ export type TableRow = {
   createdAt: string
 }
 
+/** Çember rounds freeze every table clock; failures here must never block a game. */
+async function tablePauses() {
+  try {
+    const { cemberPauseWindows } = await import('@/lib/cember')
+    return await cemberPauseWindows()
+  } catch {
+    return []
+  }
+}
+
+function pausedMs(from: number, to: number, windows: [number, number][]) {
+  let total = 0
+  for (const [s, e] of windows) total += Math.max(0, Math.min(to, e) - Math.max(from, s))
+  return total
+}
+
+/** Idle time since `since`, not counting any time a Çember round was on screen. */
+export async function activeIdleMs(since: number) {
+  const now = Date.now()
+  return now - since - pausedMs(since, now, await tablePauses())
+}
+
+/** Shifts the turn clock reference forward by the paused time so clients render the frozen clock. */
+export async function pausedClock(updatedAt: string) {
+  const since = new Date(updatedAt).getTime()
+  const now = Date.now()
+  const windows = await tablePauses()
+  return {
+    updatedAt: new Date(since + pausedMs(since, now, windows)).toISOString(),
+    paused: windows.some(([s, e]) => now >= s && now < e),
+  }
+}
+
 export const TURN_TIMEOUT_MS = 3 * 60 * 1000
 export const DUEL_TIMEOUT_MS = 10 * 60 * 1000
 export const IDLE_KICK_MS = 15 * 60 * 1000
@@ -379,10 +412,12 @@ export async function kickIdlePlayers(t: TableRow): Promise<boolean> {
   // Older tables have no per-player activity yet; fall back to the last table update.
   const fallback = new Date(t.options.lastActs ? t.createdAt : t.updatedAt).getTime()
   const state = t.state
+  const pauses = await tablePauses()
   const idle = humans(t).filter((p) => {
     if (state.kind === 'duel' && state.scores[p.seat]) return false
     const last = t.options.lastActs?.[p.id]
-    return now - (last ? new Date(last).getTime() : fallback) >= IDLE_KICK_MS
+    const since = last ? new Date(last).getTime() : fallback
+    return now - since - pausedMs(since, now, pauses) >= IDLE_KICK_MS
   })
   let changed = false
   for (const p of idle) {
@@ -425,7 +460,7 @@ export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
   const limit = TURN_SECONDS[t.game as keyof typeof TURN_SECONDS]
   const turn = currentTurn(t.state)
   if (!limit || turn == null) return t
-  if (Date.now() - new Date(t.updatedAt).getTime() < limit * 1000) return t
+  if ((await activeIdleMs(new Date(t.updatedAt).getTime())) < limit * 1000) return t
   if (t.players.find((p) => p.seat === turn)?.bot) return t
   const result = autoMove(t.state)
   if (!result) return t
@@ -444,7 +479,7 @@ export async function claimTimeout(m: Member, id: string) {
   if (!t || t.status !== 'oynaniyor' || !t.state) throw new Error('Oyun aktif değil.')
   const seat = t.players.find((p) => p.id === m.id && !p.bot)?.seat
   if (seat === undefined) throw new Error('Bu masada oyuncu değilsin.')
-  const idle = Date.now() - new Date(t.updatedAt).getTime()
+  const idle = await activeIdleMs(new Date(t.updatedAt).getTime())
   if (t.state.kind === 'duel') {
     if (!t.state.scores[seat] || t.state.scores[seat ? 0 : 1]) throw new Error('Henüz talep edemezsin.')
     if (idle < DUEL_TIMEOUT_MS) throw new Error('Rakibin için süre dolmadı.')
