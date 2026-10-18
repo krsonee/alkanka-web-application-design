@@ -55,8 +55,14 @@ async function payReferrals() {
 
 export async function GET(req: Request) {
   if (!(await authorized(req))) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
-  const [tournaments, reminders, referrals] = await Promise.allSettled([autoStartDue(), remindStreaks(), payReferrals()])
+  const [tournaments, reminders, referrals, cember] = await Promise.allSettled([
+    autoStartDue(),
+    remindStreaks(),
+    payReferrals(),
+    import('@/lib/cember').then(({ settleMissedRounds }) => settleMissedRounds()),
+  ])
   return Response.json({
+    cemberSettled: cember.status === 'fulfilled' ? cember.value : String(cember.reason),
     tournaments: tournaments.status === 'fulfilled' ? 'ok' : String(tournaments.reason),
     streakReminders: reminders.status === 'fulfilled' ? reminders.value : String(reminders.reason),
     referralsPaid: referrals.status === 'fulfilled' ? referrals.value : String(referrals.reason),

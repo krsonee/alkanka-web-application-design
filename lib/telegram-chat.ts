@@ -381,3 +381,20 @@ export async function sendFromSite(userId: string, rawText: string) {
     VALUES (${config.chatId}, ${sent.message_id}, ${Number(link[0].tg_id)}, ${userId}, ${author}, ${text}, 'site')
     ON CONFLICT DO NOTHING`)
 }
+
+/** System announcement posted by the bot into the group and the on-site chat feed. */
+export async function announceToChat(text: string, author = 'Jako') {
+  const config = await getChatConfig()
+  if (!config) return
+  await ensureChatTables()
+  const token = await botToken(config.botId)
+  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
+    chat_id: config.chatId,
+    text: `<b>${escapeHtml(author)}</b>: ${escapeHtml(text)}`,
+    parse_mode: 'HTML',
+    link_preview_options: { is_disabled: true },
+  }).catch(() => null)
+  await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin)
+    VALUES (${config.chatId}, ${sent?.message_id ?? null}, NULL, NULL, ${author}, ${text}, 'site')
+    ON CONFLICT DO NOTHING`)
+}
