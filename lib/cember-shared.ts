@@ -24,6 +24,8 @@ export type CemberConfig = {
   title: string
   hours: number[]
   minute: number
+  /** Minutes between rounds inside each selected hour; 0 = once per hour at `minute`. */
+  every: number
   maxPlayers: number
   conditions: CemberCondition[]
   prizes: CemberPrize[]
@@ -36,6 +38,7 @@ export const DEFAULT_CEMBER: CemberConfig = {
   title: 'Jako Çemberi',
   hours: Array.from({ length: 24 }, (_, h) => h),
   minute: 0,
+  every: 0,
   maxPlayers: 500,
   conditions: [{ id: 'c1', kind: 'gorev', target: 1, window: 'gun', param: null, label: '' }],
   prizes: [{ id: 'p1', type: 'coin', amount: 25, ref: null, label: '' }],
@@ -43,6 +46,16 @@ export const DEFAULT_CEMBER: CemberConfig = {
 }
 
 export const MAX_PLAYERS = 500
+
+export const EVERY_OPTIONS = [0, 5, 10, 15, 20, 30] as const
+
+/** Minutes within an hour at which a round starts. */
+export function slotMinutes(cfg: Pick<CemberConfig, 'minute' | 'every'>): number[] {
+  if (!cfg.every) return [cfg.minute]
+  const out: number[] = []
+  for (let m = cfg.minute % cfg.every; m < 60; m += cfg.every) out.push(m)
+  return out
+}
 /** Mascot intro + countdown before the ring starts spinning. */
 export const INTRO_SECONDS = 9
 /** Winner celebration before the window closes itself. */

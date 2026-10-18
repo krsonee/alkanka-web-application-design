@@ -18,6 +18,8 @@ import {
   type CemberRound,
   type CemberStatus,
   type Participant,
+  EVERY_OPTIONS,
+  slotMinutes,
 } from '@/lib/cember-shared'
 
 const TR_OFFSET_MS = 3 * 3600_000
@@ -79,6 +81,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined): 
     title: String(c.title || DEFAULT_CEMBER.title).slice(0, 40),
     hours,
     minute: clampInt(c.minute, 0, 59, 0),
+    every: (EVERY_OPTIONS as readonly number[]).includes(Number(c.every)) ? Number(c.every) : 0,
     maxPlayers: clampInt(c.maxPlayers, 2, MAX_PLAYERS, MAX_PLAYERS),
     conditions,
     prizes,
@@ -129,8 +132,9 @@ function trDayStart(at: number) {
 function slotsAround(cfg: CemberConfig, now: number): number[] {
   const out = new Set<number>()
   const today = trDayStart(now)
+  const minutes = slotMinutes(cfg)
   for (const day of [today - 86400_000, today, today + 86400_000]) {
-    for (const h of cfg.hours) out.add(day + h * 3600_000 + cfg.minute * 60_000)
+    for (const h of cfg.hours) for (const m of minutes) out.add(day + h * 3600_000 + m * 60_000)
   }
   for (const s of cfg.extraSlots) out.add(Date.parse(s))
   return [...out].sort((a, b) => a - b)

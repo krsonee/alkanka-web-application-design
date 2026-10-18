@@ -4,19 +4,23 @@
  *
  * Determinism rules: only +, -, *, / and Math.sqrt / Math.floor / Math.abs (all exactly specified by IEEE-754 / ECMAScript).
  * Never use Math.sin/cos/atan2/hypot/pow/exp here: their precision is engine-dependent.
+ *
+ * Feel: balls pile up under gravity inside a pitch-shaped ring. Two goals sit opposite each other on the rim,
+ * spin around with the pitch and keep breathing (narrow ↔ wide). The spinning rim drags the pile, so whenever a
+ * goal sweeps under the crowd a few drop out one by one.
  */
 
 export const STEP = 1 / 60
 export const ARENA = 1
-const GRAVITY = 1.15
-const MAX_SPEED = 3.2
-const BALL_BOUNCE = 0.94
-const WALL_BOUNCE = 1.0
-const MIN_KICK = 0.55
-const SPIN = 0.85
+const GRAVITY = 1.7
+const MAX_SPEED = 3.4
+const BALL_BOUNCE = 0.55
+const WALL_BOUNCE = 0.62
+const RIM_GRIP = 0.22
+const SOLVER_PASSES = 2
 export const MAX_SECONDS = 210
-/** Goals stay shut for the first seconds so the crowd spreads out before anyone can drop. */
-export const WARMUP = 3.5
+/** Goals stay shut for the first seconds so the pile settles before anyone can drop. */
+export const WARMUP = 2.5
 
 const TAU = 6.283185307179586
 const PI = 3.141592653589793
@@ -47,96 +51,101 @@ export function mulberry(seed: number) {
   }
 }
 
-export type Ball = { x: number; y: number; vx: number; vy: number; alive: boolean; out: boolean; outAt: number }
+export type Ball = { x: number; y: number; vx: number; vy: number; alive: boolean; out: boolean; outAt: number; outStep: number }
 
 export type SimState = {
   balls: Ball[]
   step: number
   alive: number
+  /** Balls already through a goal but not yet counted. */
+  leaving: number
   radius: number
   rotation: number
   gapHalf: number
   /** Indexes in elimination order. */
   order: number[]
   winner: number | null
+  /** Per-run phase offsets so every round moves differently. */
+  phase: number
+  dir: number
 }
 
 export function targetRadius(alive: number) {
-  return Math.min(0.085, 0.37 / Math.sqrt(Math.max(alive, 1)))
+  return Math.min(0.078, Math.sqrt(0.34 / Math.max(alive, 1)))
 }
 
-/** Goal half-width in radians: it keeps breathing (shrink/grow) and slowly widens so the round always finishes. */
-export function gapHalfAt(t: number, radius: number, alive = 99) {
-  const duel = alive <= 2 ? 0.7 : alive <= 4 ? 0.85 : 1
-  const base = (0.13 + Math.min(0.1, t * 0.0009)) * duel + (t > 120 ? (t - 120) * 0.0015 : 0)
-  const breathe = 1 + 0.42 * dsin(t * 1.85) * (0.75 + 0.25 * dsin(t * 0.53 + 1.3))
-  return Math.max(radius * 1.05 + 0.03, Math.min(0.5, base * breathe))
+/** Goal half-width in radians: always breathing, never wider than ~25°, slowly loosening late so a round always ends. */
+export function gapHalfAt(t: number, radius: number, phase = 0) {
+  const breathe = 0.5 + 0.5 * dsin(t * 1.35 + phase)
+  const wobble = 0.72 + 0.28 * dsin(t * 0.47 + phase * 1.7)
+  const late = t > 75 ? Math.min(0.12, (t - 75) * 0.0018) : 0
+  return Math.min(0.46, radius * 1.18 + 0.045 + 0.2 * breathe * wobble + late)
 }
 
-export function rotationAt(t: number) {
-  return t * SPIN + 0.55 * dsin(t * 0.31) + 0.25 * dsin(t * 0.87 + 2)
+export function rotationAt(t: number, phase = 0, dir = 1) {
+  return phase * 3 + dir * (0.6 * t + 2.1 * dsin(t * 0.32 + phase))
+}
+
+function omegaAt(t: number, phase: number, dir: number) {
+  return dir * (0.6 + 2.1 * 0.32 * dcos(t * 0.32 + phase))
 }
 
 export function createSim(count: number, seed: number): SimState {
   const rand = mulberry(seed)
   const balls: Ball[] = []
   const golden = 2.399963229728653
-  for (let i = 0; i < count; i++) {
-    const d = Math.sqrt((i + 0.5) / Math.max(count, 1)) * 0.78
-    const a = i * golden + rand() * 0.2
-    const speed = 0.4 + rand() * 0.6
-    const dir = rand() * TAU
-    balls.push({ x: dcos(a) * d, y: dsin(a) * d, vx: dcos(dir) * speed, vy: dsin(dir) * speed, alive: true, out: false, outAt: 0 })
-  }
   const radius = targetRadius(count)
-  const state: SimState = { balls, step: 0, alive: count, radius, rotation: 0, gapHalf: gapHalfAt(0, radius), order: [], winner: count === 1 ? 0 : null }
-  return state
+  const spread = Math.min(0.86, 0.2 + radius * Math.sqrt(count) * 1.05)
+  for (let i = 0; i < count; i++) {
+    const d = Math.sqrt((i + 0.5) / Math.max(count, 1)) * spread
+    const a = i * golden + rand() * 0.15
+    balls.push({
+      x: dcos(a) * d,
+      y: dsin(a) * d,
+      vx: (rand() - 0.5) * 0.8,
+      vy: (rand() - 0.5) * 0.8,
+      alive: true,
+      out: false,
+      outAt: 0,
+      outStep: 0,
+    })
+  }
+  const phase = rand() * TAU
+  const dir = rand() < 0.5 ? -1 : 1
+  return {
+    balls,
+    step: 0,
+    alive: count,
+    leaving: 0,
+    radius,
+    rotation: rotationAt(0, phase, dir),
+    gapHalf: gapHalfAt(0, radius, phase),
+    order: [],
+    winner: count === 1 ? 0 : null,
+    phase,
+    dir,
+  }
 }
 
 function inGap(x: number, y: number, dist: number, rotation: number, gapHalf: number) {
   const ux = x / dist
   const uy = y / dist
-  const gx = dcos(rotation)
-  const gy = dsin(rotation)
-  const dot = ux * gx + uy * gy
+  const dot = ux * dcos(rotation) + uy * dsin(rotation)
   const limit = dcos(gapHalf)
   return dot > limit || -dot > limit
 }
 
-export function stepSim(s: SimState) {
-  if (s.winner !== null) return
-  const t = s.step * STEP
-  s.radius += (targetRadius(s.alive) - s.radius) * 0.03
-  s.rotation = rotationAt(t)
-  s.gapHalf = gapHalfAt(t, s.radius, s.alive)
-  const r = s.radius
+function collide(s: SimState) {
   const balls = s.balls
   const n = balls.length
-
-  for (let i = 0; i < n; i++) {
-    const b = balls[i]
-    if (!b.alive) continue
-    b.vy += GRAVITY * STEP
-    const sp2 = b.vx * b.vx + b.vy * b.vy
-    if (sp2 > MAX_SPEED * MAX_SPEED) {
-      const k = MAX_SPEED / Math.sqrt(sp2)
-      b.vx *= k
-      b.vy *= k
-    }
-    b.x += b.vx * STEP
-    b.y += b.vy * STEP
-  }
-
-  // Uniform grid broad phase; only balls still inside the ring collide with each other.
+  const r = s.radius
   const cell = r * 2
   const cols = Math.floor((ARENA * 2 + 1) / cell) + 1
   const grid = new Map<number, number[]>()
   for (let i = 0; i < n; i++) {
     const b = balls[i]
     if (!b.alive || b.out) continue
-    const cx = Math.floor((b.x + ARENA + 0.5) / cell)
-    const cy = Math.floor((b.y + ARENA + 0.5) / cell)
-    const key = cy * cols + cx
+    const key = Math.floor((b.y + ARENA + 0.5) / cell) * cols + Math.floor((b.x + ARENA + 0.5) / cell)
     const list = grid.get(key)
     if (list) list.push(i)
     else grid.set(key, [i])
@@ -178,48 +187,81 @@ export function stepSim(s: SimState) {
       }
     }
   }
+}
 
-  const tangentSpeed = SPIN * ARENA * 0.35
+export function stepSim(s: SimState) {
+  if (s.winner !== null) return
+  const t = s.step * STEP
+  s.radius += (targetRadius(s.alive) - s.radius) * 0.02
+  s.rotation = rotationAt(t, s.phase, s.dir)
+  s.gapHalf = gapHalfAt(t, s.radius, s.phase)
+  const omega = omegaAt(t, s.phase, s.dir)
+  const r = s.radius
+  const balls = s.balls
+  const n = balls.length
+
+  for (let i = 0; i < n; i++) {
+    const b = balls[i]
+    if (!b.alive) continue
+    b.vy += GRAVITY * STEP
+    const sp2 = b.vx * b.vx + b.vy * b.vy
+    if (sp2 > MAX_SPEED * MAX_SPEED) {
+      const k = MAX_SPEED / Math.sqrt(sp2)
+      b.vx *= k
+      b.vy *= k
+    }
+    b.x += b.vx * STEP
+    b.y += b.vy * STEP
+  }
+
+  for (let pass = 0; pass < SOLVER_PASSES; pass++) collide(s)
+
   const exits: number[] = []
   for (let i = 0; i < n; i++) {
     const b = balls[i]
     if (!b.alive) continue
     const dist = Math.sqrt(b.x * b.x + b.y * b.y)
     if (b.out) {
-      if (dist > ARENA + r * 2.2) exits.push(i)
+      if (dist > ARENA + r * 1.2 || s.step - b.outStep > 45) exits.push(i)
       continue
     }
     if (dist + r <= ARENA || dist === 0) continue
-    if (t >= WARMUP && inGap(b.x, b.y, dist, s.rotation, s.gapHalf)) {
-      b.out = true
-      continue
-    }
     const nx = b.x / dist
     const ny = b.y / dist
+    // The last ball still on the pitch can never leave: that ball is the winner.
+    if (t >= WARMUP && s.alive - s.leaving > 1 && inGap(b.x, b.y, dist, s.rotation, s.gapHalf)) {
+      b.out = true
+      b.outStep = s.step
+      s.leaving += 1
+      const vn = b.vx * nx + b.vy * ny
+      if (vn < 0.9) {
+        b.vx += (0.9 - vn) * nx
+        b.vy += (0.9 - vn) * ny
+      }
+      continue
+    }
     b.x = nx * (ARENA - r)
     b.y = ny * (ARENA - r)
     const vn = b.vx * nx + b.vy * ny
     if (vn > 0) {
       b.vx -= (1 + WALL_BOUNCE) * vn * nx
       b.vy -= (1 + WALL_BOUNCE) * vn * ny
-      // The spinning rim drags balls along its tangent, which keeps the pile moving.
-      b.vx += -ny * tangentSpeed * 0.12
-      b.vy += nx * tangentSpeed * 0.12
-      const sp = Math.sqrt(b.vx * b.vx + b.vy * b.vy)
-      if (sp < MIN_KICK) {
-        const k = MIN_KICK / Math.max(sp, 0.0001)
-        b.vx *= k
-        b.vy *= k
-      }
     }
+    // The spinning rim grips the ball and drags it along, so the pile keeps rolling toward the goals.
+    const tx = -ny
+    const ty = nx
+    const vt = b.vx * tx + b.vy * ty
+    const push = (omega * ARENA - vt) * RIM_GRIP
+    b.vx += tx * push
+    b.vy += ty * push
   }
 
   for (const i of exits) {
-    if (s.alive <= 1) break
     const b = balls[i]
     b.alive = false
     b.outAt = s.step
     s.alive -= 1
+    s.leaving -= 1
     s.order.push(i)
   }
 

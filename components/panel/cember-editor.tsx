@@ -16,6 +16,8 @@ import {
   type ConditionKind,
   type ConditionWindow,
   type PrizeType,
+  EVERY_OPTIONS,
+  slotMinutes,
 } from '@/lib/cember-shared'
 import { cn } from '@/lib/utils'
 
@@ -90,13 +92,24 @@ export function CemberEditor({
           </label>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">Etkinlik adı</span>
             <input className={input} value={cfg.title} maxLength={40} onChange={(e) => set({ title: e.target.value })} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold">Dakika</span>
+            <span className="font-semibold">Sıklık</span>
+            <select className={input} value={cfg.every} onChange={(e) => set({ every: Number(e.target.value) })}>
+              {EVERY_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n === 0 ? 'Saatte bir' : `Her ${n} dakikada bir`}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-muted-foreground">Seçili saatlerin içinde tekrarlanır</span>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">{cfg.every ? 'Başlangıç dakikası' : 'Dakika'}</span>
             <input
               type="number"
               className={input}
@@ -105,7 +118,9 @@ export function CemberEditor({
               value={cfg.minute}
               onChange={(e) => set({ minute: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
             />
-            <span className="text-xs text-muted-foreground">0 = saat başı, 30 = buçuk</span>
+            <span className="text-xs text-muted-foreground">
+              {cfg.every ? `Turlar: ${slotMinutes(cfg).map((m) => `:${String(m).padStart(2, '0')}`).join(' ')}` : '0 = saat başı, 30 = buçuk'}
+            </span>
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">En fazla katılımcı</span>
@@ -148,7 +163,7 @@ export function CemberEditor({
                   cfg.hours.includes(h) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
                 )}
               >
-                {String(h).padStart(2, '0')}:{String(cfg.minute).padStart(2, '0')}
+                {cfg.every ? `${String(h).padStart(2, '0')}:xx` : `${String(h).padStart(2, '0')}:${String(cfg.minute).padStart(2, '0')}`}
               </button>
             ))}
           </div>
