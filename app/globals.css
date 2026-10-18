@@ -219,6 +219,15 @@
 @utility bj-seat-active {
   animation: bj-seat-pulse 1.6s ease-in-out infinite;
 }
+@keyframes carousel-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 @keyframes bj-seat-pulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
   50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 45%, transparent); }
