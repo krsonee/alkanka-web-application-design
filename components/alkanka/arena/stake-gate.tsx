@@ -222,7 +222,9 @@ export function StakeGate({
               >
                 <input type="radio" name="bet" value={b} checked={bet === b} onChange={() => setBet(b)} className="sr-only" />
                 <span className="font-display text-base font-bold text-foreground sm:text-lg">{formatAC(b)}</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-[11px]">KC</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-[11px]">
+                  {b > points ? 'Yetersiz' : 'KC'}
+                </span>
               </label>
             ))}
           </div>

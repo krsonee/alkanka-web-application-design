@@ -46,7 +46,7 @@ const NAMES = [
 ]
 const SUFFIX = ['', '', '', '34', '06', '35', '_tr', '07', '16', '61', 'kral', '01', '42', '55', 'reis', '27']
 const SEATS: Record<string, number> = { okey: 4, okey101: 4, batak: 4, papaz: 4, monopoly: 4, pisti: 2, tavla: 2, bilardo: 2 }
-const STAKES = [50, 100, 100, 250, 250, 500, 1000]
+const STAKES = [25, 50, 50, 100, 100, 250, 250, 500, 1000, 2500]
 const SLOT_MS = 9 * 60_000
 
 function rng(seed: number) {

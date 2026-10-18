@@ -141,7 +141,7 @@ export type ArenaGameSettings = {
 }
 export type ArenaSettings = Record<ArenaGame, ArenaGameSettings>
 
-const base = { enabled: true, pvpEnabled: true, bets: [25, 50, 100, 250], commission: 10 }
+const base = { enabled: true, pvpEnabled: true, bets: [10, 25, 50, 100, 250, 500, 1000, 2500], commission: 10 }
 
 export const DEFAULT_ARENA: ArenaSettings = {
   tavla: { ...base, multiplier: 2 },
