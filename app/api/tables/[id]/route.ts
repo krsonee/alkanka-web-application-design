@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getMember } from '@/lib/member'
-import { enforceTurnClock, getTableRow, kickIdlePlayers, tableView } from '@/lib/pvp/tables'
+import { enforceTurnClock, getTableRow, kickIdlePlayers, pausedClock, tableView } from '@/lib/pvp/tables'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,5 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const kicked = await kickIdlePlayers(row).catch(() => false)
   const fresh = kicked ? ((await getTableRow(id)) ?? row) : row
   const t = await enforceTurnClock(fresh)
-  return NextResponse.json(tableView(t, m?.id ?? null))
+  const view = tableView(t, m?.id ?? null)
+  const clock = t.status === 'oynaniyor' ? await pausedClock(t.updatedAt) : { updatedAt: t.updatedAt, paused: false }
+  return NextResponse.json({ ...view, ...clock })
 }
