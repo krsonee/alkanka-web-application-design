@@ -184,46 +184,48 @@ export function CemberStage({
           : 'inset-0 items-center justify-center bg-background/90 p-3 backdrop-blur-md',
       )}
     >
-      <div className={cn('relative flex w-full flex-col items-center gap-3', compact ? 'p-3' : 'max-w-xl')}>
-        <header className="flex w-full items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <img src="/images/mascots/jako-duyuru.png" alt="" className={cn('object-contain', compact ? 'size-8' : 'size-11')} />
-            <div className="flex flex-col">
-              <h2 id="cember-title" className={cn('font-display font-bold leading-tight text-gold', compact ? 'text-sm' : 'text-xl')}>
-                {title}
-              </h2>
-              {prize && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Gift className="size-3.5 text-gold" aria-hidden />
-                  {prize}
-                </span>
-              )}
-            </div>
+      <div className={cn('relative flex w-full flex-col items-center', compact ? 'gap-2 p-3' : 'max-w-md gap-4')}>
+        <header className="flex w-full flex-col items-center gap-2 text-center">
+          <div className="flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <span className="flex items-center gap-1.5 tabular-nums">
+              <Users className="size-3.5 text-gold" aria-hidden />
+              {total > 0 && phase !== 'intro' ? `${alive} / ${total}` : `${total} kanka`}
+            </span>
+            {isDemo ? (
+              <button
+                type="button"
+                onClick={() => doneRef.current()}
+                className="rounded-full border border-border bg-card px-3 py-1 normal-case tracking-normal text-muted-foreground hover:text-foreground"
+              >
+                Demo · Kapat
+              </button>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <span className="size-1.5 animate-pulse rounded-full bg-live" aria-hidden />
+                Canlı
+              </span>
+            )}
           </div>
-          {isDemo && (
-            <button
-              type="button"
-              onClick={() => doneRef.current()}
-              className="ml-auto rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
-            >
-              Demo · Kapat
-            </button>
-          )}
-          {total > 0 && phase !== 'intro' && (
-            <div className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-sm tabular-nums">
-              <Users className="size-4 text-gold" aria-hidden />
-              <span className="font-semibold">{alive}</span>
-              <span className="text-muted-foreground">/ {total}</span>
-            </div>
+          <h2
+            id="cember-title"
+            className={cn('font-display font-black uppercase italic leading-none tracking-tight text-gold text-balance', compact ? 'text-lg' : 'text-3xl sm:text-4xl')}
+          >
+            {title}
+          </h2>
+          {prize && (
+            <span className="flex items-center gap-1.5 rounded-full border border-gold/50 bg-gold/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gold">
+              <Gift className="size-3.5" aria-hidden />
+              {prize}
+            </span>
           )}
         </header>
 
         {phase === 'intro' && <Intro compact={compact} countdown={countdown} total={total} prize={prize} />}
 
         {phase === 'empty' && (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <img src="/images/mascots/jako-uzgun.png" alt="" className="size-28 object-contain" />
-            <p className="font-display text-lg font-semibold">Bu turda şartları tamamlayan çıkmadı</p>
+          <div className="flex flex-col items-center gap-4 py-10 text-center">
+            <MascotBadge src="/images/mascots/jako-uzgun.png" className="size-28" />
+            <p className="font-display text-lg font-bold text-balance">Bu turda şartları tamamlayan çıkmadı</p>
             <p className="text-sm text-muted-foreground">Görevleri yap, bir sonraki çemberde sen de ol kanka.</p>
           </div>
         )}
@@ -244,27 +246,15 @@ export function CemberStage({
           </div>
         )}
 
-        {phase === 'play' && !compact && (
-          <ul className="flex min-h-7 w-full flex-wrap items-center justify-center gap-1.5" aria-live="polite" aria-label="Son elenenler">
-            {feed.map((f, i) => (
-              <li
-                key={f.key}
-                className={cn(
-                  'rounded-full border border-ruby/40 bg-ruby/10 px-2.5 py-0.5 text-xs text-foreground animate-in fade-in slide-in-from-top-1',
-                  i > 0 && 'opacity-60',
-                )}
-              >
-                <span className="text-ruby">Elendi</span> {f.name}
-              </li>
-            ))}
-          </ul>
-        )}
+        <p className="sr-only" aria-live="polite">
+          {feed[0] ? `${feed[0].name} elendi` : ''}
+        </p>
 
         {phase === 'play' && !round && <p className="py-16 text-sm text-muted-foreground">Çember hazırlanıyor...</p>}
 
         {!compact && phase !== 'empty' && (
           <p className="text-center text-xs text-muted-foreground text-pretty">
-            Kalelere giren elenir, kaleler nefes alır gibi daralıp açılır. Çemberde kalan son kanka kazanır.
+            Kaleye düşen elenir · Çemberde kalan son kanka kazanır
           </p>
         )}
       </div>
@@ -272,17 +262,22 @@ export function CemberStage({
   )
 }
 
+function MascotBadge({ src, alt = '', className }: { src: string; alt?: string; className?: string }) {
+  return (
+    <div className={cn('relative shrink-0 overflow-hidden rounded-full border-4 border-gold bg-card shadow-[0_0_40px_-8px] shadow-gold/60', className)}>
+      <img src={src || '/placeholder.svg'} alt={alt} className="size-full scale-110 object-cover" />
+    </div>
+  )
+}
+
 function Intro({ compact, countdown, total, prize }: { compact: boolean; countdown: number; total: number; prize: string }) {
   return (
     <div className={cn('flex flex-col items-center gap-4 text-center', compact ? 'py-3' : 'py-8')}>
-      <div className="relative">
-        <div className="absolute inset-0 rounded-full bg-gold/15 blur-2xl" aria-hidden />
-        <img
-          src="/images/mascots/jako-duyuru.png"
-          alt="Jako maskotu çemberi duyuruyor"
-          className={cn('relative object-contain animate-[cember-jako_1.4s_ease-in-out_infinite]', compact ? 'size-24' : 'size-44 sm:size-56')}
-        />
-      </div>
+      <MascotBadge
+        src="/images/mascots/jako-duyuru.png"
+        alt="Jako maskotu çemberi duyuruyor"
+        className={cn('animate-[cember-jako_1.4s_ease-in-out_infinite]', compact ? 'size-24' : 'size-40 sm:size-48')}
+      />
       <div className="flex flex-col gap-1">
         <p className={cn('font-display font-bold text-balance', compact ? 'text-base' : 'text-2xl sm:text-3xl')}>Çember birazdan dönüyor!</p>
         <p className="text-sm text-muted-foreground">
