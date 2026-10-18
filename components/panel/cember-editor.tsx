@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Play, Plus, Save, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
+import { CemberDemo } from './cember-demo'
 import {
   CONDITION_KINDS,
   MAX_PLAYERS,
@@ -73,6 +74,7 @@ export function CemberEditor({
 
   return (
     <div className="flex flex-col gap-6">
+      <CemberDemo title={cfg.title} prize={prizeText(cfg.prizes, names)} />
       <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
