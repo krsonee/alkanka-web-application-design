@@ -33,6 +33,7 @@ export function ContentEditor({
   texts,
   games,
   tournaments,
+  cember,
   push,
   messages,
   rewards,
@@ -77,6 +78,7 @@ export function ContentEditor({
   texts: React.ReactNode
   games: React.ReactNode
   tournaments: React.ReactNode
+  cember: React.ReactNode
   push: React.ReactNode
   messages: React.ReactNode
   rewards: React.ReactNode
@@ -236,6 +238,8 @@ export function ContentEditor({
         games
       ) : tab === 'tournaments' ? (
         tournaments
+      ) : tab === 'cember' ? (
+        cember
       ) : tab === 'push' ? (
         push
       ) : tab === 'messages' ? (

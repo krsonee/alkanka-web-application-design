@@ -6,24 +6,11 @@ import useSWR from 'swr'
 import { Gift, Trophy, Users } from 'lucide-react'
 import { INTRO_SECONDS, RESULT_SECONDS, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
 import { CemberArena, type ArenaEvent } from './cember-arena'
-import { CemberPill } from './cember-pill'
 import { CemberConfetti } from './cember-confetti'
+import { cemberFetch as fetchJson, serverNow } from './cember-clock'
 import { cn } from '@/lib/utils'
 
 const SEEN_KEY = 'ak-cember-seen'
-let clockOffset = 0
-
-const fetchJson = async (url: string) => {
-  const res = await fetch(url, { cache: 'no-store' })
-  const date = res.headers.get('date')
-  if (url.includes('/me') && date) {
-    const server = Date.parse(date)
-    if (Number.isFinite(server)) clockOffset = server + 500 - Date.now()
-  }
-  return res.json()
-}
-
-const serverNow = () => Date.now() + clockOffset
 
 type Phase = 'intro' | 'play' | 'result' | 'empty'
 
@@ -61,7 +48,6 @@ export function CemberOverlay() {
 
   return (
     <>
-      {status?.enabled && !activeSlot && <CemberPill status={status} me={me ?? null} now={serverNow()} />}
       {activeSlot && (
         <CemberStage
           key={activeSlot}
