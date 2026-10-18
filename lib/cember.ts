@@ -25,7 +25,8 @@ import {
 const TR_OFFSET_MS = 3 * 3600_000
 const SETTINGS_KEY = 'cember'
 /** A slot stays "current" this long so late visitors can still join the live round. */
-const LIVE_WINDOW_MS = 5 * 60_000
+/** Matches the client's live window: once a round's window passes, the countdown moves on to the next slot. */
+const LIVE_WINDOW_MS = (INTRO_SECONDS + 75) * 1000
 
 let ready: Promise<void> | null = null
 function ensure() {
@@ -96,7 +97,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined): 
 let configCache: { at: number; value: CemberConfig } | null = null
 
 export async function getCemberConfig(): Promise<CemberConfig> {
-  if (configCache && Date.now() - configCache.at < 20_000) return configCache.value
+  if (configCache && Date.now() - configCache.at < 5_000) return configCache.value
   await ensure()
   const r = await rows<{ value: Partial<CemberConfig> }>(sql`SELECT value FROM kp_settings WHERE key = ${SETTINGS_KEY}`)
   const value = normalizeConfig(r[0]?.value)

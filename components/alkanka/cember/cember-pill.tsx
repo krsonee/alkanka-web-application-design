@@ -31,7 +31,7 @@ function OrbitIcon({ live }: { live: boolean }) {
 
 /** Topbar entry for Jako Çemberi, styled like the radio button: animated orbit icon, time or countdown, conditions popover. */
 export function CemberButton() {
-  const { data: status } = useSWR<CemberStatus>('/api/cember', cemberFetch, { refreshInterval: 60_000, revalidateOnFocus: true })
+  const { data: status } = useSWR<CemberStatus>('/api/cember', cemberFetch, { refreshInterval: 20_000, revalidateOnFocus: true })
   const { data: me } = useSWR<CemberMe>('/api/cember/me', cemberFetch, { refreshInterval: 180_000, revalidateOnFocus: false })
   const [open, setOpen] = useState(false)
   const [now, setNow] = useState(() => serverNow())

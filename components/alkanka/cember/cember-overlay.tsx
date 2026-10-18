@@ -16,7 +16,7 @@ type Phase = 'intro' | 'play' | 'result' | 'empty'
 
 export function CemberOverlay() {
   const pathname = usePathname()
-  const { data: status } = useSWR<CemberStatus>('/api/cember', fetchJson, { refreshInterval: 60_000, revalidateOnFocus: true })
+  const { data: status } = useSWR<CemberStatus>('/api/cember', fetchJson, { refreshInterval: 20_000, revalidateOnFocus: true })
   const { data: me } = useSWR<CemberMe>('/api/cember/me', fetchJson, { refreshInterval: 180_000, revalidateOnFocus: false })
   const [tick, setTick] = useState(0)
   const [activeSlot, setActiveSlot] = useState<string | null>(null)
