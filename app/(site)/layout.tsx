@@ -48,7 +48,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const tgUrl = (username?: string | null) => (username ? `https://t.me/${username.replace(/^@/, '')}` : TELEGRAM_URL)
   const telegram: TelegramLinks = {
     duyuru: tgUrl(channels?.duyuru),
-    sohbet: chatConfig?.inviteUrl || social.telegram || TELEGRAM_URL,
+    sohbet: social.telegram || chatConfig?.inviteUrl || TELEGRAM_URL,
     ozelOran: tgUrl(channels?.['ozel-oran']),
     promo: tgUrl(channels?.promo),
   }

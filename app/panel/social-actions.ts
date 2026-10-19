@@ -5,6 +5,7 @@ import { canPanel } from '@/lib/admin-auth'
 import {
   createSocialEvent,
   deleteSocialEvent,
+  getSocialLinks,
   reviewEntry,
   saveSocialLinks,
   setSocialAccountStatus,
@@ -21,6 +22,11 @@ const fail = (error: unknown): Result => ({ ok: false, message: error instanceof
 function refresh() {
   revalidatePath('/panel')
   revalidatePath('/', 'layout')
+}
+
+export async function getSocialLinksAction(): Promise<SocialLinks> {
+  if (!(await canPanel('social'))) return {}
+  return getSocialLinks().catch(() => ({}))
 }
 
 export async function saveSocialLinksAction(links: SocialLinks): Promise<Result> {

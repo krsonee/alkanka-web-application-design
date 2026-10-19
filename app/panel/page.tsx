@@ -455,6 +455,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'social', 'Sosyal medya', async () => (
       <SocialManager
         links={await getSocialLinks().catch(() => ({}) as SocialLinks)}
+        channels={await getChannelUsernames().catch(() => null)}
         accounts={await adminSocialAccounts().catch(() => [])}
         events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
         entries={await adminEntries().catch(() => [])}
