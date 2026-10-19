@@ -878,3 +878,126 @@
   .tg-cta, .tg-cta-avatar, .tg-cta-btn, .tg-cta-btn svg { animation: none; transition: none; }
   .tg-cta::after, .tg-cta-ping::before { animation: none; display: none; }
 }
+
+/* Sponsor detail page */
+.sd-rise { animation: sd-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.sd-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 120% at 0% 0%, color-mix(in oklch, var(--primary) 16%, transparent), transparent 60%),
+    radial-gradient(60% 90% at 100% 100%, color-mix(in oklch, var(--primary) 8%, transparent), transparent 60%),
+    var(--card);
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, var(--border));
+  box-shadow: 0 24px 60px -32px color-mix(in oklch, var(--primary) 55%, transparent);
+}
+.sd-hero::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background: conic-gradient(from 0deg, transparent 0deg, color-mix(in oklch, var(--primary) 14%, transparent) 60deg, transparent 120deg);
+  animation: sd-orbit 14s linear infinite;
+}
+.sd-hero::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: calc(1.5rem - 1px);
+  background:
+    radial-gradient(80% 120% at 0% 0%, color-mix(in oklch, var(--primary) 12%, transparent), transparent 60%),
+    var(--card);
+}
+.sd-logo-wrap {
+  background:
+    radial-gradient(70% 80% at 50% 45%, color-mix(in oklch, var(--primary) 24%, var(--background)) 0%, var(--background) 75%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--primary) 40%, transparent),
+    inset 0 1px 0 color-mix(in oklch, var(--primary) 60%, transparent),
+    0 14px 34px -18px color-mix(in oklch, var(--primary) 80%, transparent);
+}
+.sd-logo {
+  filter: drop-shadow(0 6px 18px color-mix(in oklch, var(--primary) 40%, transparent));
+  animation: sd-float 5s ease-in-out infinite;
+}
+.sd-logo-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, color-mix(in oklch, var(--primary) 22%, transparent) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: sd-sheen 5.5s ease-in-out infinite;
+}
+.sd-tier {
+  color: var(--primary-foreground);
+  background: linear-gradient(90deg, var(--primary), color-mix(in oklch, var(--primary) 70%, var(--foreground)), var(--primary));
+  background-size: 200% 100%;
+  box-shadow: 0 6px 18px -8px color-mix(in oklch, var(--primary) 80%, transparent);
+  animation: sd-shine 3.5s linear infinite;
+}
+.sd-cta {
+  box-shadow: 0 12px 28px -12px color-mix(in oklch, var(--primary) 85%, transparent);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+}
+.sd-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, color-mix(in oklch, var(--foreground) 35%, transparent) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: sd-sheen 3.2s ease-in-out infinite;
+}
+.sd-cta svg { transition: transform 0.3s ease; }
+.sd-cta:hover { transform: translateY(-2px); filter: brightness(1.06); }
+.sd-cta:hover svg { transform: translateX(4px); }
+.sd-live-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: oklch(0.72 0.17 150);
+}
+.sd-live-dot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: tg-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.sd-stat, .sd-panel, .sd-other {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--primary) 5%, var(--card)), var(--card));
+  border: 1px solid var(--border);
+  transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.sd-stat:hover, .sd-other:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--primary) 45%, var(--border));
+  box-shadow: 0 14px 30px -18px color-mix(in oklch, var(--primary) 60%, transparent);
+}
+.sd-stat-icon {
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent);
+  transition: transform 0.4s ease;
+}
+.sd-stat:hover .sd-stat-icon { transform: rotate(-8deg) scale(1.08); }
+.sd-perk {
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+  border: 1px solid transparent;
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+}
+.sd-perk:hover {
+  border-color: color-mix(in oklch, var(--primary) 30%, transparent);
+  background: color-mix(in oklch, var(--primary) 7%, transparent);
+  transform: translateX(3px);
+}
+@keyframes sd-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sd-orbit { to { transform: rotate(360deg); } }
+@keyframes sd-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes sd-sheen { 0%, 55% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+@keyframes sd-shine { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sd-rise, .sd-hero::before, .sd-logo, .sd-logo-sheen, .sd-tier, .sd-cta::before, .sd-live-dot::before { animation: none; }
+  .sd-logo-sheen, .sd-cta::before { display: none; }
+}

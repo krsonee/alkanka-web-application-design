@@ -230,28 +230,41 @@ function MainSponsorCompact({ sponsor }: { sponsor: Sponsor }) {
 export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   return (
     <div className="@container">
-    <article className="panel-gold border-flow group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
-      <div className="relative flex h-28 items-center justify-center border-b border-border bg-background px-3 pt-9 pb-3 sm:h-36 sm:px-5 sm:pt-11 sm:pb-4 @2xl:h-auto @2xl:w-56 @2xl:border-r @2xl:border-b-0 @5xl:w-72">
-        <SponsorLogoPlate sponsor={sponsor} className="max-h-14 sm:max-h-20 md:max-h-24" />
-        <span className="absolute top-2 left-2 sm:top-3 sm:left-3">
-          <TierTag tier={sponsor.tier} />
+    <article className="sd-hero sd-rise group flex flex-col overflow-hidden rounded-2xl @2xl:flex-row @2xl:items-stretch">
+      <div className="sd-logo-wrap relative flex h-24 items-center justify-center overflow-hidden px-3 pt-7 pb-2 sm:h-28 sm:px-5 sm:pt-8 @2xl:h-auto @2xl:w-52 @2xl:pt-3 @5xl:w-64">
+        <span aria-hidden className="sd-logo-sheen" />
+        <SponsorLogoPlate sponsor={sponsor} className="sd-logo relative max-h-11 sm:max-h-14 md:max-h-16" />
+        <span className="absolute top-2 left-2 flex items-center gap-1.5">
+          <TierTag tier={sponsor.tier} className="px-1.5 text-[9px]" />
+        </span>
+        <span className="absolute top-2.5 right-2.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span aria-hidden className="sd-live-dot" />
+          Aktif
         </span>
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-4 sm:gap-2 sm:p-5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="font-display text-lg font-bold text-foreground sm:text-xl">{sponsor.name}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5 sm:p-4">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+          <span className="font-display text-base font-bold text-foreground sm:text-lg">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <p className="font-display text-xl font-bold text-primary text-balance sm:text-2xl">{sponsor.welcome}</p>
-        <ul className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {sponsor.perks.slice(0, 4).map((p) => (
-            <li key={p} className="flex min-w-0 items-center gap-2 overflow-hidden text-sm text-muted-foreground">
-              <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
+        <p className="font-display text-lg font-bold text-primary text-balance sm:text-xl">{sponsor.welcome}</p>
+        <ul className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2">
+          {sponsor.perks.slice(0, 3).map((p, i) => (
+            <li
+              key={p}
+              className="sd-perk sd-rise flex min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 py-1 text-xs text-muted-foreground"
+              style={{ animationDelay: `${120 + i * 80}ms` }}
+            >
+              <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
               <span className="block min-w-0 flex-1 truncate">{p}</span>
             </li>
           ))}
         </ul>
-        <GoButton site={sponsor.id} label="Hemen kayıt ol" className="mt-1.5 h-11 sm:mt-2 sm:h-12 sm:self-start sm:px-8" />
+        <GoButton
+          site={sponsor.id}
+          label="Hemen kayıt ol"
+          className="sd-cta relative mt-1 h-10 overflow-hidden sm:self-start sm:px-8"
+        />
       </div>
       <div className="relative hidden min-h-56 overflow-hidden bg-background @3xl:block @3xl:w-64 @5xl:w-96">
         <Image
@@ -290,7 +303,15 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
           <span className="truncate text-sm font-bold text-primary">{sponsor.welcome}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <GoButton site={sponsor.id} label="Git" className="h-9 shrink-0 px-3" />
+        <div className="flex w-20 shrink-0 flex-col gap-1.5">
+          <GoButton site={sponsor.id} label="Git" className="h-8 w-full px-2" />
+          <Link
+            href={`/siteler/${sponsor.id}`}
+            className="flex h-8 w-full items-center justify-center rounded-lg border border-border text-[11px] font-bold uppercase tracking-wider text-foreground transition-colors hover:border-primary/50 hover:bg-secondary"
+          >
+            İncele
+          </Link>
+        </div>
       </div>
 
       <div className="hidden h-full flex-col sm:flex">
