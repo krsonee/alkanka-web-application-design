@@ -21,19 +21,62 @@ const fmt = (n: number) => n.toLocaleString('tr-TR')
 
 function Bar({ value }: { value: number }) {
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10" aria-hidden="true">
-      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
+    <div className="relative h-2 w-full overflow-hidden rounded-full bg-foreground/10" aria-hidden="true">
+      <div
+        className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-bronze via-primary to-primary shadow-[0_0_12px_-2px_var(--primary)]"
+        style={{ width: `${Math.max(4, Math.min(100, value))}%` }}
+      >
+        <span className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-foreground/50 to-transparent motion-safe:animate-[hub-shimmer_2.4s_ease-in-out_infinite]" />
+      </div>
     </div>
   )
 }
 
-const tileClass = 'group flex min-w-0 flex-col gap-2.5 rounded-xl border border-border/70 bg-background/50 p-3.5 transition-colors'
+const tileClass =
+  'glass-card border-flow group relative flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl p-4 transition-transform duration-300'
 
-function Tile({ href, children, label }: { href?: string; children: React.ReactNode; label: string }) {
-  if (!href) return <div aria-label={label} className={tileClass}>{children}</div>
+function Tile({
+  href,
+  children,
+  label,
+  icon: Icon,
+  title,
+  delay,
+}: {
+  href?: string
+  children: React.ReactNode
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  delay: string
+}) {
+  const inner = (
+    <>
+      <Icon className="pointer-events-none absolute -right-4 -bottom-5 size-24 text-primary/[0.07] transition-transform duration-500 group-hover:-rotate-12 group-hover:scale-110" aria-hidden="true" />
+      <span className="relative flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 shadow-[0_0_16px_-4px_var(--primary)]">
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+          {title}
+        </span>
+        {href && (
+          <ArrowRight className="size-4 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+        )}
+      </span>
+      <div className="relative flex flex-col gap-2.5">{children}</div>
+    </>
+  )
+  const style = { '--flow-delay': delay, '--flow-opacity': 0.45 } as React.CSSProperties
+  if (!href)
+    return (
+      <div aria-label={label} className={tileClass} style={style}>
+        {inner}
+      </div>
+    )
   return (
-    <Link href={href} aria-label={label} className={`${tileClass} hover:border-primary/50`}>
-      {children}
+    <Link href={href} aria-label={label} className={`${tileClass} hover:-translate-y-0.5`} style={style}>
+      {inner}
     </Link>
   )
 }
@@ -45,39 +88,57 @@ export function MemberHub({ data }: { data: HubData }) {
   const goalLeft = goal ? Math.max(0, goal.price - data.balance) : 0
 
   return (
-    <section aria-labelledby="hub-title" className="panel-gold flex flex-col gap-4 rounded-2xl p-4 md:p-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Bugünkü durumun</p>
-          <h2 id="hub-title" className="font-display text-xl font-bold text-foreground text-balance md:text-2xl">
-            Hoş geldin {data.name}
+    <section
+      aria-labelledby="hub-title"
+      className="hub-surface border-flow relative flex flex-col gap-4 overflow-hidden rounded-2xl p-4 md:gap-5 md:p-6"
+      style={{ '--flow-speed': '9s', '--flow-opacity': 0.9 } as React.CSSProperties}
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-primary/[0.06] to-transparent motion-safe:animate-[hub-sheen_7s_ease-in-out_infinite]"
+      />
+      <div className="relative flex flex-wrap items-end justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/80">
+            <span className="relative flex size-2" aria-hidden="true">
+              <span className="absolute inline-flex size-full rounded-full bg-live opacity-75 motion-safe:animate-ping" />
+              <span className="relative inline-flex size-2 rounded-full bg-live" />
+            </span>
+            Bugünkü durumun
+          </p>
+          <h2 id="hub-title" className="truncate font-display text-2xl font-bold text-foreground md:text-3xl">
+            Hoş geldin <span className="bg-gradient-to-r from-primary to-bronze bg-clip-text text-transparent">{data.name}</span>
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5 text-sm font-bold text-primary">
+          <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-primary to-bronze px-3.5 py-1.5 text-sm font-bold text-primary-foreground shadow-[0_0_20px_-6px_var(--primary)] ring-1 ring-primary/40">
             <Coins className="size-4" aria-hidden="true" />
             <span className="tabular-nums">{fmt(data.balance)}</span> KC
           </span>
           <Link
             href="/gorevler"
-            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/50"
+            className="glass-card flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold text-foreground transition-colors hover:text-primary"
           >
-            <Flame className={data.checkedToday ? 'size-4 text-primary' : 'size-4 text-muted-foreground'} aria-hidden="true" />
+            <Flame
+              className={
+                data.checkedToday
+                  ? 'size-4 text-primary motion-safe:animate-[hub-flicker_1.6s_ease-in-out_infinite]'
+                  : 'size-4 text-muted-foreground'
+              }
+              aria-hidden="true"
+            />
             {data.streak > 0 ? `${data.streak}. gün serisi` : 'Seriyi başlat'}
           </Link>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Tile href="/gorevler" label="Günlük görevlere git">
-          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <ListChecks className="size-4 text-primary" aria-hidden="true" />
-            Günlük görevler
-          </span>
+      <div className="relative grid gap-3 md:grid-cols-3">
+        <Tile href="/gorevler" label="Günlük görevlere git" icon={ListChecks} title="Günlük görevler" delay="0s">
           {data.tasksTotal > 0 ? (
             <>
-              <p className="font-display text-2xl font-bold text-foreground tabular-nums">
-                {data.tasksDone}/{data.tasksTotal}
+              <p className="font-display text-3xl font-bold text-foreground tabular-nums">
+                {data.tasksDone}
+                <span className="text-lg text-muted-foreground">/{data.tasksTotal}</span>
               </p>
               <Bar value={taskPct} />
               <p className="text-xs text-muted-foreground">
@@ -89,14 +150,10 @@ export function MemberHub({ data }: { data: HubData }) {
           )}
         </Tile>
 
-        <Tile label="Jako Çemberi durumu">
-          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <CircleDot className="size-4 text-primary" aria-hidden="true" />
-            {cember?.title || 'Jako Çemberi'}
-          </span>
+        <Tile label="Jako Çemberi durumu" icon={CircleDot} title={cember?.title || 'Jako Çemberi'} delay="-2s">
           {cember?.enabled && cember.nextSlot ? (
             <>
-              <p className="font-display text-2xl font-bold text-foreground">
+              <p className="font-display text-3xl font-bold text-foreground tabular-nums">
                 <Countdown target={cember.nextSlot} />
               </p>
               {cember.prizeText && <p className="truncate text-xs font-semibold text-primary">{cember.prizeText}</p>}
@@ -114,14 +171,10 @@ export function MemberHub({ data }: { data: HubData }) {
           )}
         </Tile>
 
-        <Tile href="/market" label="Market hedefine git">
-          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <Target className="size-4 text-primary" aria-hidden="true" />
-            Market hedefin
-          </span>
+        <Tile href="/market" label="Market hedefine git" icon={Target} title="Market hedefin" delay="-4s">
           {goal ? (
             <div className="flex items-center gap-3">
-              <span className="relative size-12 shrink-0 overflow-hidden rounded-lg">
+              <span className="relative size-14 shrink-0 overflow-hidden rounded-lg ring-1 ring-primary/30">
                 <Image src={goal.image || '/images/tile-market.png'} alt="" fill sizes="48px" className="object-cover" />
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">

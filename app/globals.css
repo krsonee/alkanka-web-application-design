@@ -143,6 +143,93 @@
     0 0 0 1px color-mix(in oklch, var(--gold) 40%, transparent),
     0 0 36px -10px color-mix(in oklch, var(--gold) 60%, transparent);
 }
+@property --flow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes flow-spin {
+  to {
+    --flow-angle: 360deg;
+  }
+}
+@keyframes hub-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@keyframes hub-flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  40% { transform: scale(1.12) rotate(-6deg); opacity: 0.85; }
+  70% { transform: scale(0.95) rotate(4deg); opacity: 1; }
+}
+@keyframes hub-sheen {
+  0% { transform: translateX(-120%) skewX(-18deg); }
+  60%, 100% { transform: translateX(320%) skewX(-18deg); }
+}
+
+/* Rotating light that travels around the frame; set --flow-delay per element to stagger. */
+@utility border-flow {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    padding: 1px;
+    border-radius: inherit;
+    background: conic-gradient(
+      from var(--flow-angle),
+      transparent 0deg,
+      color-mix(in oklch, var(--primary) 95%, transparent) 50deg,
+      transparent 110deg,
+      transparent 180deg,
+      color-mix(in oklch, var(--accent) 75%, transparent) 230deg,
+      transparent 290deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: var(--flow-opacity, 0.7);
+    animation: flow-spin var(--flow-speed, 6s) linear infinite;
+    animation-delay: var(--flow-delay, 0s);
+    transition: opacity 300ms;
+    pointer-events: none;
+    z-index: 2;
+  }
+  &:hover::before,
+  &:focus-visible::before {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &::before {
+      animation: none;
+    }
+  }
+}
+
+@utility hub-surface {
+  background:
+    radial-gradient(110% 90% at 0% 0%, color-mix(in oklch, var(--primary) 18%, transparent) 0%, transparent 55%),
+    radial-gradient(80% 80% at 100% 100%, color-mix(in oklch, var(--accent) 14%, transparent) 0%, transparent 60%),
+    radial-gradient(circle at 1px 1px, color-mix(in oklch, var(--foreground) 9%, transparent) 1px, transparent 0) 0 0 / 22px 22px,
+    linear-gradient(160deg, color-mix(in oklch, var(--card) 100%, var(--primary) 4%) 0%, var(--background) 100%);
+  border: 1px solid color-mix(in oklch, var(--primary) 22%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
+    0 24px 60px -30px color-mix(in oklch, var(--primary) 45%, transparent);
+}
+
+@utility glass-card {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--foreground) 5%, transparent) 0%, color-mix(in oklch, var(--background) 55%, transparent) 100%);
+  border: 1px solid color-mix(in oklch, var(--foreground) 9%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent);
+  backdrop-filter: blur(10px);
+}
+
 @utility no-scrollbar {
   scrollbar-width: none;
   &::-webkit-scrollbar {
