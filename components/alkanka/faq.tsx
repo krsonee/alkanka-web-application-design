@@ -192,14 +192,14 @@ export function Faq({ groups }: { groups: FaqGroup[] }) {
         </div>
 
         {!searching && popular.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,#000_88%,transparent)] md:[mask-image:none]">
-            <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-primary">Çok soruldu</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-full text-xs font-semibold uppercase tracking-wider text-primary sm:w-auto">Çok soruldu</span>
             {popular.map((item) => (
               <button
                 key={item.slug}
                 type="button"
                 onClick={() => focusQuestion(item.slug)}
-                className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                className="max-w-full truncate rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
               >
                 {item.q}
               </button>
@@ -212,19 +212,19 @@ export function Faq({ groups }: { groups: FaqGroup[] }) {
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-6">
-        <nav aria-label="Soru kategorileri" className="lg:sticky lg:top-24 lg:self-start">
-          <ul className="flex gap-2 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,#000_85%,transparent)] lg:flex-col lg:overflow-visible lg:[mask-image:none]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-6">
+        <nav aria-label="Soru kategorileri" className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:flex lg:flex-col">
             {groups.map((entry) => {
               const active = !searching && cat === entry.id
               return (
-                <li key={entry.id} className="shrink-0">
+                <li key={entry.id} className="min-w-0">
                   <button
                     type="button"
                     aria-pressed={active}
                     onClick={() => selectCategory(entry.id)}
                     className={cn(
-                      'flex w-full items-center justify-between gap-3 rounded-lg border px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-colors',
+                      'flex h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 text-xs font-semibold uppercase tracking-wider transition-colors',
                       active
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-muted-foreground hover:text-foreground',
