@@ -98,6 +98,8 @@ import { PanelDashboard } from '@/components/panel/dashboard'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { listAudit, listMembers } from '@/lib/members-admin'
 import { levelMap } from '@/lib/kanka-puan'
+import { AvatarManager } from '@/components/panel/avatar-manager'
+import { COVERS, avatarStats, listCatalog } from '@/lib/avatars'
 
 async function usersPanel() {
   const [{ members, counts }, levels, cfg] = await Promise.all([listMembers(), levelMap().catch(() => ({}) as Record<string, number>), getKpConfig()])
@@ -185,7 +187,18 @@ async function telegramPanel() {
 async function marketPanel() {
   const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
-  return <MarketManager products={products} requests={requests} sponsors={sponsors} />
+  const [avatars, stats, coverRows] = await Promise.all([
+    listCatalog({ includeInactive: true }),
+    avatarStats(),
+    rows<{ id: string; n: string }>(sql`SELECT cover_id AS id, count(*) AS n FROM member_look WHERE cover_id IS NOT NULL GROUP BY cover_id`).catch(() => []),
+  ])
+  const coverUsage = Object.fromEntries(coverRows.map((r) => [r.id, Number(r.n)]))
+  return (
+    <div className="flex flex-col gap-8">
+      <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} />
+      <MarketManager products={products} requests={requests} sponsors={sponsors} />
+    </div>
+  )
 }
 
 async function kpPanel() {

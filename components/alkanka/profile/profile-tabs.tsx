@@ -17,7 +17,7 @@ export type ProfileTab = (typeof PROFILE_TABS)[number]['id']
 export function ProfileTabs({ active, unread = 0 }: { active: ProfileTab; unread?: number }) {
   return (
     <nav aria-label="Profil bölümleri" className="sticky top-16 z-10 -mx-4 border-b border-border bg-background/90 px-4 backdrop-blur lg:-mx-6 lg:px-6">
-      <ul role="tablist" className="flex gap-1 overflow-x-auto">
+      <ul role="tablist" className="no-scrollbar flex snap-x gap-1 overflow-x-auto overscroll-x-contain">
         {PROFILE_TABS.map((t) => {
           const selected = t.id === active
           const badge = t.id === 'mesajlar' && unread > 0 && !selected
