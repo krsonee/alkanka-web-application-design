@@ -4,7 +4,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Compass, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { APP_BONUS } from '@/lib/app-config'
 import { JakoAvatar, type JakoPose } from '../jako'
 
 export const TOUR_KEY = 'alk_tour_done'
@@ -37,7 +36,7 @@ const STEPS: Step[] = [
     targets: ['[data-tour="account"]'],
     pose: 'duyuru',
     title: 'Kayıt ol, hediyeni al',
-    body: `Kayıt olana hoş geldin Kanka Coin hediyesi. Siteyi uygulama olarak eklersen +${APP_BONUS} KC daha.`,
+    body: `Kayıt olana hoş geldin Kanka Coin hediyesi. Siteyi uygulama olarak ekleyip bildirimleri açana ekstra KC var.`,
   },
 ]
 

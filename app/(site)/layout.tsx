@@ -14,6 +14,7 @@ import { getSiteTexts } from '@/lib/site-texts'
 import { getSocialLinks } from '@/lib/social'
 import { listPublicSponsors } from '@/lib/sites'
 import { TextsProvider } from '@/components/alkanka/texts-context'
+import { getAppSettings } from '@/lib/app-settings'
 import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
 import { AppPrompts } from '@/components/alkanka/app/app-prompts'
 import { SiteTour } from '@/components/alkanka/app/site-tour'
@@ -27,13 +28,14 @@ import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
 import { TvDockProvider } from '@/components/alkanka/kankatv/tv-dock'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [logos, texts, social, sponsors, catalog, chatConfig] = await Promise.all([
+  const [logos, texts, social, sponsors, catalog, chatConfig, appSettings] = await Promise.all([
     getLogos(),
     getSiteTexts(),
     getSocialLinks().catch(() => ({})),
     listPublicSponsors().catch(() => []),
     getCatalog(),
     getChatConfig().catch(() => null),
+    getAppSettings(),
   ])
   const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
@@ -43,7 +45,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
-      <PwaProvider>
+      <PwaProvider settings={appSettings}>
       <TvDockProvider>
         <Sidebar social={social} />
         {chatLive && <LiveRail />}

@@ -29,6 +29,8 @@ import { listTournaments } from '@/lib/tournaments'
 import { pushStats } from '@/lib/push'
 import { getQuestConfig, questWinnersThisWeek } from '@/lib/kp-extras'
 import { PushSender } from '@/components/panel/push-sender'
+import { AppRewardsEditor } from '@/components/panel/app-rewards-editor'
+import { getAppSettings } from '@/lib/app-settings'
 import { MessageSender } from '@/components/panel/message-sender'
 import { listSent } from '@/lib/inbox'
 import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
@@ -401,8 +403,16 @@ export default async function PanelPage() {
     section(session, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     section(session, 'telegram', 'Telegram', telegramPanel),
     section(session, 'push', 'Bildirimler', async () => {
-      const stats = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
-      return <PushSender {...stats} configured={stats.total > 0} />
+      const [stats, appSettings] = await Promise.all([
+        pushStats().catch(() => ({ total: 0, members: 0, log: [] })),
+        getAppSettings(),
+      ])
+      return (
+        <div className="flex flex-col gap-6">
+          <AppRewardsEditor settings={appSettings} />
+          <PushSender {...stats} configured={stats.total > 0} />
+        </div>
+      )
     }),
     section(session, 'studio', 'Stüdyo', async () => (
       <Studio
