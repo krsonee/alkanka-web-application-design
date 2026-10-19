@@ -53,24 +53,24 @@ export function EarnActions({
   const actions = buildActions(rules, today, telegramLinked).filter((a) => rules[a.key] > 0)
 
   return (
-    <ul className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-      {actions.map((a) => {
+    <ul className="kp-stagger grid grid-cols-2 gap-2 lg:grid-cols-3">
+      {actions.map((a, idx) => {
         const pct = a.cap && a.cap.max > 0 ? Math.min(100, Math.round((a.cap.value / a.cap.max) * 100)) : null
         const full = a.done || pct === 100
         const external = a.href.startsWith('http')
         const Icon = a.icon
         return (
-          <li key={a.key}>
+          <li key={a.key} style={{ '--i': idx } as React.CSSProperties}>
             <Link
               href={a.href}
               {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               className={cn(
-                'group flex h-full flex-col gap-2 rounded-xl border bg-card p-3 transition-colors hover:border-gold/50',
+                'kp-card group flex h-full flex-col gap-2 rounded-xl border bg-card p-3 hover:border-gold/50',
                 full ? 'border-live/30' : 'border-border',
               )}
             >
               <span className="flex items-center gap-2.5">
-                <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg', full ? 'bg-live/15 text-live' : 'bg-gold/15 text-gold')}>
+                <span className={cn('kp-icon grid size-8 shrink-0 place-items-center rounded-lg', full ? 'bg-live/15 text-live' : 'bg-gold/15 text-gold')}>
                   {full ? <Check className="size-4" aria-hidden /> : <Icon className="size-4" aria-hidden />}
                 </span>
                 <span className="min-w-0 flex-1 text-sm font-semibold leading-tight text-foreground">{a.label}</span>
@@ -88,7 +88,7 @@ export function EarnActions({
                     </span>
                   </span>
                   <span className="h-1 overflow-hidden rounded-full bg-muted" aria-hidden>
-                    <span className={cn('block h-full rounded-full', full ? 'bg-live' : 'bg-gold')} style={{ width: `${pct}%` }} />
+                    <span className={cn('kp-fill block h-full rounded-full', full ? 'bg-live' : 'bg-gold')} style={{ width: `${pct}%` }} />
                   </span>
                 </span>
               ) : (

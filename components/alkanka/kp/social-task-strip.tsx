@@ -17,23 +17,23 @@ const STATE_TEXT = { open: 'Tek seferlik', pending: 'Onay bekliyor', done: 'Tama
 export function SocialTaskStrip({ items }: { items: SocialTaskItem[] }) {
   if (!items.length) return null
   return (
-    <ul className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-      {items.map((t) => {
+    <ul className="kp-stagger grid grid-cols-2 gap-2 lg:grid-cols-3">
+      {items.map((t, idx) => {
         const platform = t.param && isPlatform(t.param) ? t.param : null
         const done = t.state === 'done'
         return (
-          <li key={t.id}>
+          <li key={t.id} style={{ '--i': idx } as React.CSSProperties}>
             <Link
               href="/gorevler"
               className={cn(
-                'group flex h-full flex-col gap-2 rounded-xl border bg-card p-3 transition-colors hover:border-gold/50',
+                'kp-card group flex h-full flex-col gap-2 rounded-xl border bg-card p-3 hover:border-gold/50',
                 done ? 'border-primary/40' : 'border-border',
               )}
             >
               <span className="flex items-center gap-2.5">
                 <span
                   className={cn(
-                    'flex size-8 shrink-0 items-center justify-center rounded-lg',
+                    'kp-icon flex size-8 shrink-0 items-center justify-center rounded-lg',
                     done ? 'bg-primary/15 text-primary' : platform ? PLATFORM_TINT[platform] : 'bg-secondary text-muted-foreground',
                   )}
                 >

@@ -3,7 +3,7 @@ import { ChevronRight, Trophy, Users } from 'lucide-react'
 import { pageMeta } from '@/lib/seo'
 import { getMember } from '@/lib/member'
 import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, levelReach, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
-import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
+import { LevelEmblem, ROLE_BADGES, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { ProgressHero } from '@/components/alkanka/kp/progress-hero'
 import { EarnActions } from '@/components/alkanka/kp/earn-actions'
 import { LevelSections } from '@/components/alkanka/kp/level-sections'
@@ -96,6 +96,7 @@ export default async function BadgesPage() {
         description={`${cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.`}
         image="/images/badges/hero-jako-rozet.png"
         stats={heroStats}
+        compact
       >
           <div className="flex flex-wrap gap-2">
             {groups.map((g) => (
@@ -107,7 +108,7 @@ export default async function BadgesPage() {
           </div>
       </PageHero>
 
-      <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:hidden">
+      <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
         {[
           { href: '#kazan', label: 'KP kazan' },
           ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),
@@ -115,7 +116,7 @@ export default async function BadgesPage() {
           { href: '#gizli', label: 'Gizli' },
           { href: '#akis', label: 'Akış' },
         ].map((l) => (
-          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground">
+          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-gold/50 hover:text-gold">
             {l.label}
           </a>
         ))}
@@ -183,13 +184,15 @@ export default async function BadgesPage() {
         <AutoScrollRow label="Değerli rozetler" className="-mx-4 scroll-px-4 gap-3 px-4 pb-1 sm:mx-0 sm:scroll-px-0 sm:px-0">
           {specials.map((b) => {
             const owners = holders[b.id] ?? []
+            const role = ROLE_BADGES[b.id]
+            const tier = role?.tier ?? b.tier
             return (
-              <li key={b.id} className={cn('flex w-[calc(50%-0.375rem)] shrink-0 snap-start flex-col gap-2 rounded-2xl border p-3 sm:gap-3 sm:p-4 xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[b.tier])}>
+              <li key={b.id} className={cn('flex w-[calc(50%-0.375rem)] shrink-0 snap-start flex-col gap-2 rounded-2xl border p-3 sm:gap-3 sm:p-4 xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[tier])}>
                 <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
-                  <SpecialEmblem icon={b.icon} tier={b.tier} size="md" className="sm:hidden" />
-                  <SpecialEmblem icon={b.icon} tier={b.tier} size="lg" className="hidden sm:flex" />
+                  <SpecialEmblem icon={b.icon} tier={tier} size="md" className="sm:hidden" />
+                  <SpecialEmblem icon={b.icon} tier={tier} size="lg" className="hidden sm:flex" />
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:gap-1">
-                    <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[b.tier])}>{TIER_NAMES[b.tier]}</span>
+                    <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[tier])}>{role?.label ?? TIER_NAMES[b.tier]}</span>
                     <span className="font-display text-sm font-bold leading-tight text-foreground sm:text-base">{b.name}</span>
                     {b.bonus > 0 && <span className="font-display text-xs font-bold text-gold sm:text-sm">+{fmt(b.bonus)} KP</span>}
                   </div>

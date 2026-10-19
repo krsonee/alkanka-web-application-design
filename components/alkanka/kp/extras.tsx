@@ -8,10 +8,10 @@ const fmt = (n: number) => n.toLocaleString('tr-TR')
 export function StreakCard({ streak }: { streak: Streak }) {
   const next = streak.current < 7 ? 7 : streak.current < 30 ? 30 : null
   return (
-    <section aria-label="Günlük seri" className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+    <section aria-label="Günlük seri" className="kp-card flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center gap-3">
         <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', streak.current > 0 ? 'bg-gold/15 text-gold' : 'bg-muted text-muted-foreground')}>
-          <Flame className="size-6" aria-hidden />
+          <Flame className={cn('size-6', streak.current > 0 && 'kp-flame')} aria-hidden />
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="font-display text-xl font-bold leading-tight text-foreground">
@@ -26,7 +26,12 @@ export function StreakCard({ streak }: { streak: Streak }) {
         {streak.week.map((d, i) => (
           <li key={i} className="flex flex-col items-center gap-1">
             <span
-              className={cn('flex size-7 items-center justify-center rounded-full border', d.active ? 'border-gold bg-gold text-gold-foreground' : 'border-border bg-background text-muted-foreground')}
+              className={cn(
+                'flex size-7 items-center justify-center rounded-full border',
+                d.active ? 'border-gold bg-gold text-gold-foreground' : 'border-border bg-background text-muted-foreground',
+                i === 6 && d.active ? 'kp-today' : 'kp-dot',
+              )}
+              style={{ '--i': i } as React.CSSProperties}
               aria-label={`${d.day}: ${d.active ? 'aktif' : 'yok'}`}
             >
               <Flame className="size-3.5" aria-hidden />
@@ -46,10 +51,10 @@ export function StreakCard({ streak }: { streak: Streak }) {
 
 export function WeeklyStarCard({ star }: { star: WeeklyStar }) {
   return (
-    <section aria-label="Haftanın kankası" className="flex flex-col gap-3 rounded-2xl border border-gold/30 bg-gold/5 p-4">
+    <section aria-label="Haftanın kankası" className="kp-card kp-glow flex flex-col gap-3 rounded-2xl border border-gold/30 bg-gold/5 p-4" style={{ '--i': 2 } as React.CSSProperties}>
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-gold">
-          <Crown className="size-3.5" aria-hidden /> Haftanın kankası
+          <Crown className="kp-crown size-3.5" aria-hidden /> Haftanın kankası
         </span>
         <span className="rounded-full bg-background/70 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
           {star.daysLeft > 0 ? `${star.daysLeft} gün kaldı` : 'Bu gece bitiyor'}
