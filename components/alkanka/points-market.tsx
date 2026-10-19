@@ -26,6 +26,45 @@ const STATUS = {
 
 type Filter = 'hepsi' | 'sponsor' | 'alkanka'
 
+const BONUS_IMAGES: [RegExp, string][] = [
+  [/free\s*spin|freespin|çevirme|spin/i, '/images/market/bonus-freespin.png'],
+  [/free\s*bet|freebet|bedava bahis|bahis/i, '/images/market/bonus-freebet.png'],
+  [/kasa|sandık|kutu|case/i, '/images/market/bonus-case.png'],
+  [/yatırım|deposit|kayıp|cashback|bonus/i, '/images/market/bonus-deposit.png'],
+]
+
+function productImage(item: MarketProduct) {
+  if (item.image) return item.image
+  if (item.kind !== 'sponsor') return '/images/tile-market.png'
+  const text = `${item.name} ${item.description}`
+  return BONUS_IMAGES.find(([re]) => re.test(text))?.[1] ?? '/images/market/bonus-deposit.png'
+}
+
+function SponsorTag({ item, className }: { item: MarketProduct; className?: string }) {
+  const body = (
+    <>
+      {item.sponsorLogo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.sponsorLogo} alt="" className="size-6 shrink-0 rounded object-contain" />
+      ) : (
+        <Handshake className="size-4 shrink-0 text-primary" aria-hidden="true" />
+      )}
+      <span className="truncate">{item.sponsorName}</span>
+    </>
+  )
+  const cls = cn(
+    'flex max-w-full items-center gap-2 rounded-lg border border-primary/40 bg-background/90 px-2 py-1 text-sm font-bold text-foreground backdrop-blur',
+    className,
+  )
+  return item.sponsorSlug ? (
+    <Link href={`/siteler/${item.sponsorSlug}`} className={cn(cls, 'hover:border-primary')} aria-label={`${item.sponsorName} sitesine git`}>
+      {body}
+    </Link>
+  ) : (
+    <span className={cls}>{body}</span>
+  )
+}
+
 export function PointsMarket({ items }: { items: MarketProduct[] }) {
   const { points, member, setBalance, requireLogin } = usePoints()
   const [filter, setFilter] = useState<Filter>('hepsi')
@@ -129,28 +168,20 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
               <li key={item.id} className="panel-gold flex flex-col overflow-hidden rounded-xl">
                 <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
                   <Image
-                    src={item.image || '/images/tile-market.png'}
+                    src={productImage(item)}
                     alt=""
                     fill
                     sizes="(min-width: 1536px) 20vw, (min-width: 768px) 30vw, 50vw"
                     className={cn('object-cover', soldOut && 'opacity-50 grayscale')}
                   />
-                  <div className="absolute inset-x-0 top-0 flex flex-wrap gap-1 p-2">
+                  <div className="absolute inset-x-0 top-0 flex p-2">
                     <span className="rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-foreground">{item.type}</span>
-                    {item.kind === 'sponsor' && item.sponsorName && (
-                      item.sponsorSlug ? (
-                        <Link href={`/siteler/${item.sponsorSlug}`} className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-accent-foreground">
-                          <Handshake className="size-3" aria-hidden="true" />
-                          {item.sponsorName}
-                        </Link>
-                      ) : (
-                        <span className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-accent-foreground">
-                          <Handshake className="size-3" aria-hidden="true" />
-                          {item.sponsorName}
-                        </span>
-                      )
-                    )}
                   </div>
+                  {item.kind === 'sponsor' && item.sponsorName && (
+                    <div className="absolute inset-x-0 bottom-0 flex p-2">
+                      <SponsorTag item={item} />
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-1 flex-col gap-3 p-3">
                   <div className="flex flex-col items-start gap-0.5">
@@ -194,7 +225,7 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
           detail && {
             eyebrow: detail.kind === 'sponsor' ? `${detail.sponsorName} · ${detail.type}` : detail.type,
             title: detail.name,
-            image: detail.image || '/images/tile-market.png',
+            image: productImage(detail),
             description: detail.description,
             facts: [
               { label: 'Fiyat', value: `${formatAC(detail.price)} KC` },
