@@ -15,6 +15,8 @@ import { LevelUpCelebration } from '@/components/alkanka/kp/level-up-celebration
 import { PageHero } from '@/components/alkanka/page-hero'
 import { AutoScrollRow } from '@/components/alkanka/auto-scroll-row'
 import { cn } from '@/lib/utils'
+import { getHiddenBadges, getLiveFeed, getStreak, getWeeklyStar } from '@/lib/kp-extras'
+import { HiddenBadges, LiveFeed, StreakCard, WeeklyStarCard } from '@/components/alkanka/kp/extras'
 
 export const metadata = pageMeta('rozetler')
 export const dynamic = 'force-dynamic'
@@ -52,6 +54,12 @@ export default async function BadgesPage() {
     cfgPromise.then((c) => levelReach(c.levels.length)).catch(() => ({ total: 0, reached: [] as number[] })),
     loadSocialTasks(member?.id ?? null),
   ])
+  const [streak, weekly, feed] = await Promise.all([
+    member ? getStreak(member.id).catch(() => null) : Promise.resolve(null),
+    getWeeklyStar(member?.id ?? null),
+    getLiveFeed(8).catch(() => []),
+  ])
+  const hidden = await getHiddenBadges(member?.id ?? null, streak?.best ?? 0).catch(() => [])
   const myLevel = me?.level.index ?? -1
   const myTier = me ? levelTier(me.level.index + 1) : null
   const heroStats = me
@@ -98,6 +106,8 @@ export default async function BadgesPage() {
           { href: '#kazan', label: 'KP kazan' },
           ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),
           { href: '#degerli', label: 'Değerli' },
+          { href: '#gizli', label: 'Gizli' },
+          { href: '#akis', label: 'Akış' },
         ].map((l) => (
           <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground">
             {l.label}
@@ -113,6 +123,11 @@ export default async function BadgesPage() {
           <a href="#giris" className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground">Giriş yap, puan kazan</a>
         </div>
       )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {streak && <StreakCard streak={streak} />}
+        <WeeklyStarCard star={weekly} />
+      </div>
 
       <section aria-labelledby="kazan" className="flex scroll-mt-32 flex-col gap-3">
         <div className="flex flex-col gap-1">
@@ -184,6 +199,10 @@ export default async function BadgesPage() {
           })}
         </AutoScrollRow>
       </section>
+
+      {hidden.length > 0 && <HiddenBadges badges={hidden} signedIn={!!member} />}
+
+      <LiveFeed items={feed} />
     </div>
   )
 }
