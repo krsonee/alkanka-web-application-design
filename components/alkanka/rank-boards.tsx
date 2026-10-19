@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { LevelEmblem, RankChip, SpecialEmblem } from './kp/emblem'
 import { MemberRank } from './kp/member-rank'
 import { jakoSrc } from './jako'
+import { Marquee } from './home/marquee'
 
 export type BoardPeriod = 'gun' | 'hafta' | 'ay'
 export type KpParts = { time: number; games: number; tasks: number; chat: number; league: number; referrals: number }
@@ -321,22 +322,27 @@ function PrizeShowcase({ prizes, periodNoun }: { prizes: Prize[]; periodNoun: st
         <Gift className="size-3.5 text-primary" aria-hidden /> {periodNoun} ödülleri
       </h2>
       {prizes.length ? (
-        <ul className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+        <Marquee
+          label={`${periodNoun} ödülleri`}
+          duration={Math.max(30, prizes.length * 9)}
+          repeat={Math.max(2, Math.ceil(6 / prizes.length))}
+          itemClassName="w-72"
+        >
           {prizes.map((p) => (
-            <li key={p.id} className="flex min-w-[15rem] flex-1 snap-start items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
+            <div key={p.id} className="flex h-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
               <SpecialEmblem icon={p.icon} tier={p.tier} size="sm" />
-              <span className="flex min-w-0 flex-col">
+              <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm font-semibold text-foreground">{p.name}</span>
-                <span className="truncate text-[11px] text-muted-foreground">{p.label}</span>
+                <span className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">{p.label}</span>
               </span>
               {p.bonus > 0 && (
-                <span className="ml-auto shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-bold text-primary tabular-nums">
+                <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-bold text-primary tabular-nums">
                   +{fmt(p.bonus)} KP
                 </span>
               )}
-            </li>
+            </div>
           ))}
-        </ul>
+        </Marquee>
       ) : (
         <p className="rounded-xl border border-dashed border-border px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
           Günlük tabloda rozet yok, şöhret var. Haftalık ve aylık şampiyonlar rozet ve KP bonusu kazanır.
@@ -351,28 +357,28 @@ function PrizeShowcase({ prizes, periodNoun }: { prizes: Prize[]; periodNoun: st
 const PODIUM_STYLE = {
   1: {
     order: 'order-2',
-    block: 'h-28 from-primary/45 to-primary/5 border-primary/50',
+    block: 'h-28 md:h-44 from-primary/45 to-primary/5 border-primary/50',
     cap: 'bg-primary',
     num: 'text-primary',
-    avatar: 'size-16 bg-primary text-primary-foreground text-xl',
+    avatar: 'size-16 md:size-24 bg-primary text-primary-foreground text-xl md:text-3xl',
     value: 'bg-primary text-primary-foreground',
     delay: 260,
   },
   2: {
     order: 'order-1',
-    block: 'h-20 from-foreground/25 to-foreground/[0.03] border-foreground/25',
+    block: 'h-20 md:h-32 from-foreground/25 to-foreground/[0.03] border-foreground/25',
     cap: 'bg-foreground/70',
     num: 'text-foreground/70',
-    avatar: 'size-12 bg-foreground/80 text-background text-base',
+    avatar: 'size-12 md:size-20 bg-foreground/80 text-background text-base md:text-2xl',
     value: 'bg-foreground/10 text-foreground',
     delay: 120,
   },
   3: {
     order: 'order-3',
-    block: 'h-14 from-bronze/40 to-bronze/[0.04] border-bronze/45',
+    block: 'h-14 md:h-24 from-bronze/40 to-bronze/[0.04] border-bronze/45',
     cap: 'bg-bronze',
     num: 'text-bronze',
-    avatar: 'size-12 bg-bronze text-background text-base',
+    avatar: 'size-12 md:size-20 bg-bronze text-background text-base md:text-2xl',
     value: 'bg-bronze/15 text-bronze',
     delay: 0,
   },
@@ -388,7 +394,7 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
   const top = rows.slice(0, 3)
   if (!top.length) return null
   return (
-    <ol aria-label="İlk üç" className="grid grid-cols-3 items-end gap-2 px-3 pt-8">
+    <ol aria-label="İlk üç" className="mx-auto grid w-full grid-cols-3 items-end gap-2 px-3 pt-8 md:max-w-2xl md:gap-5 md:px-6 md:pt-14">
       {top.map((u) => {
         const s = PODIUM_STYLE[u.rank as 1 | 2 | 3]
         const first = u.rank === 1
@@ -399,7 +405,7 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
               <span className="relative flex items-center justify-center">
                 {first && (
                   <>
-                    <Crown className="podium-crown absolute -top-6 left-1/2 size-6 fill-primary/30 text-primary" aria-hidden />
+                    <Crown className="podium-crown absolute -top-6 left-1/2 size-6 fill-primary/30 text-primary md:-top-9 md:size-9" aria-hidden />
                     <span className="podium-halo absolute -inset-1 rounded-full" aria-hidden />
                   </>
                 )}
@@ -414,11 +420,11 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
                   {u.name.charAt(0).toUpperCase()}
                 </span>
               </span>
-              <span className="w-full truncate text-center text-xs font-semibold text-foreground">
+              <span className="w-full truncate text-center text-xs font-semibold text-foreground md:text-base">
                 {u.name}
                 {isMe && <span className="text-primary"> (sen)</span>}
               </span>
-              <span className={cn('rounded-full px-2 py-0.5 font-display text-xs font-bold tabular-nums', s.value)}>
+              <span className={cn('rounded-full px-2 py-0.5 font-display text-xs font-bold tabular-nums md:px-3 md:py-1 md:text-sm', s.value)}>
                 {fmt(u.value)} <span className="text-[10px] font-medium opacity-75">{unit}</span>
               </span>
             </div>
@@ -440,7 +446,7 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
                   ))}
                 </>
               )}
-              <span className={cn('relative pt-2 font-display text-3xl font-black leading-none', s.num)}>
+              <span className={cn('relative pt-2 font-display text-3xl font-black leading-none md:pt-4 md:text-5xl', s.num)}>
                 <span className="sr-only">Sıra </span>
                 {u.rank}
               </span>
@@ -606,11 +612,11 @@ export function RankBoards({
       <PrizeShowcase prizes={prizes[period]} periodNoun={periodMeta.noun} />
 
       <section aria-labelledby="tablo-baslik" className="panel-gold flex flex-col overflow-hidden rounded-2xl">
-        <header className="flex flex-col gap-3 border-b border-border p-3.5">
-          <h2 id="tablo-baslik" className="font-display text-lg font-bold text-foreground">
+        <header className="flex flex-col gap-3 border-b border-border p-3.5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-4 md:px-5 md:py-4">
+          <h2 id="tablo-baslik" className="font-display text-lg font-bold text-foreground md:text-xl">
             {periodMeta.noun} liderleri
           </h2>
-          <div role="tablist" aria-label="Kategori" className="relative grid grid-cols-5 rounded-xl bg-secondary p-1">
+          <div role="tablist" aria-label="Kategori" className="relative grid grid-cols-5 rounded-xl bg-secondary p-1 md:w-full md:max-w-lg">
             <span
               className="seg-indicator absolute inset-y-1 left-1 rounded-lg border border-primary/40 bg-card shadow-sm"
               style={{ width: 'calc((100% - 0.5rem) / 5)', transform: `translateX(${CATEGORIES.findIndex((c) => c.id === category) * 100}%)` }}
@@ -631,12 +637,12 @@ export function RankBoards({
                     setVisible(PAGE)
                   }}
                   className={cn(
-                    'relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-[11px] font-semibold transition-colors',
+                    'relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-[11px] font-semibold transition-colors md:flex-row md:gap-1.5 md:py-2 md:text-xs',
                     active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   <Icon className={cn('size-4 transition-transform', active && 'scale-110 text-primary')} aria-hidden />
-                  <span className="w-full truncate px-0.5 text-center">{c.short}</span>
+                  <span className="w-full truncate px-0.5 text-center md:w-auto">{c.short}</span>
                 </button>
               )
             })}
