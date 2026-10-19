@@ -732,6 +732,84 @@
   100% { transform: translateX(220%) skewX(-20deg); }
 }
 
+.seg-switch {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 92%, var(--primary)) 0%, var(--card) 100%);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--foreground) 6%, transparent), 0 10px 30px -18px color-mix(in oklab, var(--primary) 60%, transparent);
+}
+.seg-switch::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--seg-angle, 0deg), transparent 0 70%, var(--primary) 85%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: seg-orbit 6s linear infinite;
+  opacity: 0.7;
+}
+@property --seg-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes seg-orbit {
+  to { --seg-angle: 360deg; }
+}
+.seg-thumb {
+  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.5, 1), width 0.35s ease;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--primary) 85%, var(--foreground)) 0%, var(--primary) 45%, color-mix(in oklab, var(--primary) 80%, var(--background)) 100%);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--primary) 60%, transparent),
+    0 8px 24px -6px color-mix(in oklab, var(--primary) 70%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--foreground) 35%, transparent);
+  overflow: hidden;
+}
+.seg-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 45%, transparent), transparent);
+  animation: btn-sheen 3.2s ease-in-out infinite;
+}
+.seg-thumb[data-moving='true'] {
+  animation: seg-squash 0.55s ease;
+}
+@keyframes seg-squash {
+  0% { scale: 1 1; }
+  35% { scale: 1.04 0.9; }
+  70% { scale: 0.99 1.03; }
+  100% { scale: 1 1; }
+}
+.seg-tab[aria-selected='true'] .seg-icon {
+  animation: seg-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.seg-tab:not([aria-selected='true']):hover .seg-icon {
+  transform: rotate(-12deg) scale(1.1);
+}
+@keyframes seg-pop {
+  0% { transform: scale(0.6) rotate(-25deg); }
+  60% { transform: scale(1.25) rotate(8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.seg-tab[aria-selected='true'] .seg-count {
+  animation: seg-count 0.5s ease 0.1s both;
+}
+@keyframes seg-count {
+  from { opacity: 0; transform: translateY(6px) scale(0.7); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seg-switch::before, .seg-thumb::after { animation: none; }
+  .seg-thumb { transition: none; }
+}
+
 @keyframes phone-rotate {
   0%, 20% { transform: rotate(0deg); }
   50%, 80% { transform: rotate(90deg); }
