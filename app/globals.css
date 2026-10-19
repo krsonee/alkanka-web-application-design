@@ -531,6 +531,19 @@
   50% { box-shadow: 0 0 0 5px color-mix(in oklch, var(--primary) 0%, transparent); }
 }
 .animate-badge-pulse { animation: badge-pulse 2.4s ease-out infinite; }
+  @keyframes badge-ring {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--gold) 55%, transparent); }
+  60% { box-shadow: 0 0 0 9px color-mix(in oklch, var(--gold) 0%, transparent); }
+  }
+  .animate-badge-pulse { animation: badge-ring 2s ease-out infinite; }
+  @keyframes badge-glint {
+  0%, 82%, 100% { filter: brightness(1); }
+  90% { filter: brightness(1.35) drop-shadow(0 0 6px color-mix(in oklch, var(--gold) 70%, transparent)); }
+  }
+  .badge-glint { animation: badge-glint 4.5s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+  .animate-badge-pulse, .badge-glint { animation: none; }
+  }
 
 @keyframes levelup-emblem {
   0% { opacity: 0; transform: scale(0.3) rotateY(540deg); }

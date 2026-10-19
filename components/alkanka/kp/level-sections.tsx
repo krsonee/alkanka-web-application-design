@@ -164,7 +164,10 @@ function TierBlock({
                     <Target className="hidden size-3 sm:block" aria-hidden /> Hedef
                   </span>
                 )}
-                <span className={cn('relative flex rounded-full', isNext && 'animate-badge-pulse')}>
+                <span
+                  className={cn('relative flex rounded-full', isNext && 'animate-badge-pulse', !locked && !isNext && 'badge-glint')}
+                  style={!locked && !isNext ? { animationDelay: `${(i % 5) * 0.9}s` } : undefined}
+                >
                   <LevelEmblem level={i + 1} size="md" locked={locked && !isNext} className="lg:hidden" />
                   <LevelEmblem level={i + 1} size="lg" locked={locked && !isNext} className="hidden lg:flex" />
                 </span>
