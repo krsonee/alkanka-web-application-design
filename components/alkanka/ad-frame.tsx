@@ -3,18 +3,20 @@ import { cn } from '@/lib/utils'
 
 function AdBox({ slot, label, className }: { slot?: AdSlot; label: string; className?: string }) {
   if (!slot?.image) return null
-  return (
-    <a
-      href={slot.href || '#'}
-      target="_blank"
-      rel="noopener noreferrer sponsored"
-      className={cn('group relative block overflow-hidden rounded-xl border border-border bg-card', className)}
-    >
+  const boxClass = cn('group relative block overflow-hidden rounded-xl border border-border bg-card', className)
+  const inner = (
+    <>
       {/* eslint-disable-next-line @next/next/no-img-element -- ad creatives (often animated GIFs) are set in the panel from any https host */}
       <img src={slot.image} alt={slot.alt || label} className="size-full object-cover" loading="lazy" />
       <span className="absolute top-1.5 right-1.5 rounded bg-background/85 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
         Reklam
       </span>
+    </>
+  )
+  if (!slot.href) return <div className={boxClass}>{inner}</div>
+  return (
+    <a href={slot.href} target="_blank" rel="noopener noreferrer sponsored" className={boxClass}>
+      {inner}
     </a>
   )
 }
