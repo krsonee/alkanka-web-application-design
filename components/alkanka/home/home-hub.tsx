@@ -1,9 +1,14 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, CircleCheck, CircleDot, Coins, Flame, Gamepad2, Gift, ListChecks, ShoppingBag, Target } from 'lucide-react'
+import { ArrowRight, CircleCheck, CircleDot, Coins, Crown, Flame, Gamepad2, Gift, ListChecks, ShoppingBag, Target } from 'lucide-react'
 import type { MarketProduct } from '@/lib/market'
 import type { CemberMe, CemberStatus } from '@/lib/cember-shared'
+import { publicRankName } from '@/lib/kanka-puan-shared'
+import type { PodiumRow } from '@/components/alkanka/top-three'
 import { Countdown } from './countdown'
+import { SnapSlider } from './snap-slider'
+
+type MyRank = { rank: number; points: number } | null
 
 export type HubData = {
   name: string
@@ -33,7 +38,7 @@ function Bar({ value }: { value: number }) {
 }
 
 const tileClass =
-  'glass-card border-flow group relative flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl p-4 transition-transform duration-300'
+  'glass-card border-flow group relative flex h-full min-w-0 flex-col gap-2.5 overflow-hidden rounded-xl p-3.5 transition-transform duration-300'
 
 function Tile({
   href,
@@ -52,11 +57,11 @@ function Tile({
 }) {
   const inner = (
     <>
-      <Icon className="pointer-events-none absolute -right-4 -bottom-5 size-24 text-primary/[0.07] transition-transform duration-500 group-hover:-rotate-12 group-hover:scale-110" aria-hidden="true" />
+      <Icon className="pointer-events-none absolute -right-3 -bottom-4 size-20 text-primary/[0.07] transition-transform duration-500 group-hover:-rotate-12 group-hover:scale-110" aria-hidden="true" />
       <span className="relative flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 shadow-[0_0_16px_-4px_var(--primary)]">
-            <Icon className="size-4" aria-hidden="true" />
+        <span className="flex min-w-0 items-center gap-2 truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 shadow-[0_0_16px_-4px_var(--primary)]">
+            <Icon className="size-3.5" aria-hidden="true" />
           </span>
           {title}
         </span>
@@ -64,7 +69,7 @@ function Tile({
           <ArrowRight className="size-4 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
         )}
       </span>
-      <div className="relative flex flex-col gap-2.5">{children}</div>
+      <div className="relative flex flex-col gap-2">{children}</div>
     </>
   )
   const style = { '--flow-delay': delay, '--flow-opacity': 0.45 } as React.CSSProperties
@@ -81,7 +86,53 @@ function Tile({
   )
 }
 
-export function MemberHub({ data }: { data: HubData }) {
+const MEDAL = {
+  1: 'bg-primary text-primary-foreground ring-primary/40 shadow-[0_0_18px_-4px_var(--primary)]',
+  2: 'bg-foreground/85 text-background ring-foreground/20',
+  3: 'bg-bronze text-background ring-bronze/30',
+} as const
+
+function RankTile({ podium, me }: { podium: PodiumRow[]; me: MyRank }) {
+  const top = podium
+    .filter((r) => r.points > 0)
+    .slice(0, 3)
+    .map((r, i) => ({ ...r, rank: (i + 1) as 1 | 2 | 3, name: publicRankName(r.name) }))
+  return (
+    <Tile href="/siralama" label="Sıralamaya git" icon={Crown} title="Sıralama" delay="-6s">
+      {top.length ? (
+        <ol className="flex flex-col gap-1" aria-label="İlk üç">
+          {top.map((u) => (
+            <li key={u.userId} className="flex items-center gap-2 text-sm">
+              <span
+                className={`flex size-5 shrink-0 items-center justify-center rounded-full font-display text-[11px] font-black ring-2 ${MEDAL[u.rank]}`}
+              >
+                {u.rank}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">{u.name}</span>
+              <span className="shrink-0 text-xs font-bold text-primary tabular-nums">{fmt(u.points)} KP</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-sm text-muted-foreground">Sıralama yakında başlıyor.</p>
+      )}
+      <p className="mt-auto flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs ring-1 ring-primary/25">
+        {me ? (
+          <>
+            <span className="text-foreground">
+              Sen <span className="font-display font-bold text-primary tabular-nums">{fmt(me.rank)}.</span> sıradasın
+            </span>
+            <span className="font-semibold text-foreground tabular-nums">{fmt(me.points)} KP</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">İlk oyununu oyna, sıralamaya gir.</span>
+        )}
+      </p>
+    </Tile>
+  )
+}
+
+export function MemberHub({ data, podium = [], me = null }: { data: HubData; podium?: PodiumRow[]; me?: MyRank }) {
   const { cember, cemberMe, goal } = data
   const taskPct = data.tasksTotal ? (data.tasksDone / data.tasksTotal) * 100 : 0
   const missing = cemberMe?.progress.filter((p) => !p.done) ?? []
@@ -90,7 +141,7 @@ export function MemberHub({ data }: { data: HubData }) {
   return (
     <section
       aria-labelledby="hub-title"
-      className="hub-surface border-flow relative flex flex-col gap-4 overflow-hidden rounded-2xl p-4 md:gap-5 md:p-6"
+      className="hub-surface border-flow relative flex flex-col gap-3 overflow-hidden rounded-2xl p-3.5 md:gap-4 md:p-5"
       style={{ '--flow-speed': '9s', '--flow-opacity': 0.9 } as React.CSSProperties}
     >
       <span
@@ -106,18 +157,18 @@ export function MemberHub({ data }: { data: HubData }) {
             </span>
             Bugünkü durumun
           </p>
-          <h2 id="hub-title" className="truncate font-display text-2xl font-bold text-foreground md:text-3xl">
+          <h2 id="hub-title" className="truncate font-display text-xl font-bold text-foreground md:text-2xl">
             Hoş geldin <span className="bg-gradient-to-r from-primary to-bronze bg-clip-text text-transparent">{data.name}</span>
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-primary to-bronze px-3.5 py-1.5 text-sm font-bold text-primary-foreground shadow-[0_0_20px_-6px_var(--primary)] ring-1 ring-primary/40">
+          <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-primary to-bronze px-3 py-1 text-xs md:text-sm font-bold text-primary-foreground shadow-[0_0_20px_-6px_var(--primary)] ring-1 ring-primary/40">
             <Coins className="size-4" aria-hidden="true" />
             <span className="tabular-nums">{fmt(data.balance)}</span> KC
           </span>
           <Link
             href="/gorevler"
-            className="glass-card flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold text-foreground transition-colors hover:text-primary"
+            className="glass-card flex items-center gap-1.5 rounded-full px-3 py-1 text-xs md:text-sm font-semibold text-foreground transition-colors hover:text-primary"
           >
             <Flame
               className={
@@ -132,13 +183,19 @@ export function MemberHub({ data }: { data: HubData }) {
         </div>
       </div>
 
-      <div className="relative grid gap-3 md:grid-cols-3">
+      <SnapSlider
+        label="Bugünkü durum kartları"
+        autoplay={6000}
+        className="relative"
+        itemClassName="w-[84%] sm:w-[calc(50%-0.375rem)] lg:w-[calc(33.333%-0.5rem)]"
+      >
+        <RankTile podium={podium} me={me} />
         <Tile href="/gorevler" label="Günlük görevlere git" icon={ListChecks} title="Günlük görevler" delay="0s">
           {data.tasksTotal > 0 ? (
             <>
-              <p className="font-display text-3xl font-bold text-foreground tabular-nums">
+              <p className="font-display text-2xl font-bold leading-none text-foreground tabular-nums">
                 {data.tasksDone}
-                <span className="text-lg text-muted-foreground">/{data.tasksTotal}</span>
+                <span className="text-base text-muted-foreground">/{data.tasksTotal}</span>
               </p>
               <Bar value={taskPct} />
               <p className="text-xs text-muted-foreground">
@@ -153,7 +210,7 @@ export function MemberHub({ data }: { data: HubData }) {
         <Tile label="Jako Çemberi durumu" icon={CircleDot} title={cember?.title || 'Jako Çemberi'} delay="-2s">
           {cember?.enabled && cember.nextSlot ? (
             <>
-              <p className="font-display text-3xl font-bold text-foreground tabular-nums">
+              <p className="font-display text-2xl font-bold leading-none text-foreground tabular-nums">
                 <Countdown target={cember.nextSlot} />
               </p>
               {cember.prizeText && <p className="truncate text-xs font-semibold text-primary">{cember.prizeText}</p>}
@@ -174,7 +231,7 @@ export function MemberHub({ data }: { data: HubData }) {
         <Tile href="/market" label="Market hedefine git" icon={Target} title="Market hedefin" delay="-4s">
           {goal ? (
             <div className="flex items-center gap-3">
-              <span className="relative size-14 shrink-0 overflow-hidden rounded-lg ring-1 ring-primary/30">
+              <span className="relative size-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-primary/30">
                 <Image src={goal.image || '/images/tile-market.png'} alt="" fill sizes="48px" className="object-cover" />
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -195,7 +252,7 @@ export function MemberHub({ data }: { data: HubData }) {
             <p className="text-sm text-muted-foreground">Marketteki ödüllere göz at.</p>
           )}
         </Tile>
-      </div>
+      </SnapSlider>
     </section>
   )
 }
@@ -262,12 +319,15 @@ export function MarketShowcase({ products, balance }: { products: MarketProduct[
           <ArrowRight className="size-3.5" aria-hidden="true" />
         </Link>
       </div>
-      <ul className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 no-scrollbar md:mx-0 md:grid md:grid-cols-3 md:px-0 xl:grid-cols-6">
+      <SnapSlider
+        label="Market ödülleri"
+        autoplay={5000}
+        itemClassName="w-[40%] sm:w-[calc(25%-0.5625rem)] lg:w-[calc(16.666%-0.625rem)]"
+      >
         {products.map((p) => {
           const affordable = balance !== null && balance >= p.price
           return (
-            <li key={p.id} className="w-36 shrink-0 snap-start md:w-auto">
-              <Link href="/market" className="panel-gold group flex h-full flex-col overflow-hidden rounded-xl">
+              <Link key={p.id} href="/market" className="panel-gold group flex h-full flex-col overflow-hidden rounded-xl">
                 <span className="relative block aspect-square overflow-hidden">
                   <Image
                     src={p.image || '/images/tile-market.png'}
@@ -289,10 +349,9 @@ export function MarketShowcase({ products, balance }: { products: MarketProduct[
                   </span>
                 </span>
               </Link>
-            </li>
           )
         })}
-      </ul>
+      </SnapSlider>
     </section>
   )
 }

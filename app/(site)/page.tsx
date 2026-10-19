@@ -80,24 +80,21 @@ export default async function HomePage() {
 
   const myIndex = member ? ranking.findIndex((r) => r.userId === member.id) : -1
   const me = member && myIndex >= 0 ? { rank: myIndex + 1, points: ranking[myIndex].kp } : null
+  const podium = ranking.slice(0, 3).map((row) => ({ userId: row.userId, name: row.name, points: row.kp }))
 
   return (
     <>
       <SiteJsonLd />
       <h1 className="sr-only">AL KANKA: sponsorlar, kampanyalar ve ücretsiz mini oyunlar</h1>
       <div className="flex flex-col gap-4">
-        {hub ? <MemberHub data={hub} /> : <GuestHero bonus={bonus} />}
+        {hub ? <MemberHub data={hub} podium={podium} me={me} /> : <GuestHero bonus={bonus} />}
         <QuickTiles />
       </div>
       <BannerCarousel slides={slides} />
       <MarketShowcase products={products.slice(0, 6)} balance={hub?.balance ?? null} />
       <FeaturedSponsors main={featured.main} mains={featured.mains} cards={featured.cards} total={featured.total} />
       <EndingCampaigns />
-      <TopThree
-        rows={ranking.slice(0, 3).map((row) => ({ userId: row.userId, name: row.name, points: row.kp }))}
-        me={me}
-        signedIn={Boolean(member)}
-      />
+      {!hub && <TopThree rows={podium} me={me} signedIn={Boolean(member)} />}
     </>
   )
 }
