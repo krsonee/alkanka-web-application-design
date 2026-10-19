@@ -65,7 +65,7 @@ export function InstallGuide({ installClaimed, pushClaimed }: { installClaimed: 
         </p>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <InstallStep done={installDone} />
         <PushStep done={pushDone} />
       </div>
@@ -124,7 +124,7 @@ function InstallStep({ done }: { done: boolean }) {
     if (ready && platform === 'ios') setGuide('ios')
   }, [ready, platform])
 
-  if (done) {
+  if (standalone && done) {
     return (
       <StepCard n={1} title="Ana ekrana ekle" reward={installBonus} done>
         <p className="text-sm leading-relaxed text-muted-foreground">Uygulama kurulu, bonusun hesabına yüklendi.</p>
@@ -147,7 +147,12 @@ function InstallStep({ done }: { done: boolean }) {
   }
 
   return (
-    <StepCard n={1} title="Ana ekrana ekle" reward={installBonus} done={false}>
+    <StepCard n={1} title="Ana ekrana ekle" reward={installBonus} done={done}>
+      {done && (
+        <p className="rounded-xl border border-live/30 bg-live/10 p-3 text-sm leading-relaxed text-foreground">
+          Bonusun hesabında. Başka bir telefona da kurmak istersen adımlar aşağıda.
+        </p>
+      )}
       {guide === 'android' && canPrompt && (
         <button
           type="button"
@@ -200,10 +205,12 @@ function InstallStep({ done }: { done: boolean }) {
           )
         })}
       </ol>
-      <p className="rounded-xl bg-secondary p-3 text-sm leading-relaxed text-foreground">
-        Son adım: simgeden aç ve kullanıcı adınla giriş yap, <span className="font-bold text-primary">{installBonus} KC</span>{' '}
-        anında yüklenir. Mağaza gerekmez, yer kaplamaz.
-      </p>
+      {!done && (
+        <p className="rounded-xl bg-secondary p-3 text-sm leading-relaxed text-foreground">
+          Son adım: simgeden aç ve kullanıcı adınla giriş yap, <span className="font-bold text-primary">{installBonus} KC</span>{' '}
+          anında yüklenir. Mağaza gerekmez, yer kaplamaz.
+        </p>
+      )}
     </StepCard>
   )
 }
