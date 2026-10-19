@@ -70,9 +70,9 @@ export function TournamentCard({ t }: { t: Tournament }) {
   return (
     <article className="flex flex-col overflow-hidden rounded-3xl border border-border bg-card">
       <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div className="relative h-32 sm:h-44 md:h-auto md:min-h-full">
-          <Image src={meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 768px) 40vw, 100vw" className="object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/20 to-transparent md:bg-gradient-to-r md:from-transparent md:via-transparent md:to-card" />
+<div className="relative aspect-[16/10] md:aspect-auto md:h-auto md:min-h-full">
+<Image src={meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 768px) 40vw, 100vw" className="object-cover object-[center_35%]" />
+<div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-card to-transparent md:inset-0 md:h-auto md:bg-gradient-to-r md:from-transparent md:via-transparent md:to-card" />
           <span className={cn('absolute left-3 top-3 rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider md:left-4 md:top-4 md:px-2.5 md:py-1 md:text-xs', STATUS_STYLE[t.status])}>{STATUS_LABEL[t.status]}</span>
         </div>
 
