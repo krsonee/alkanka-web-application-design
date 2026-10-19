@@ -240,6 +240,27 @@ export async function getKpStatus(userId: string): Promise<KpStatus> {
   }
 }
 
+export type KpToday = {
+  total: number
+  breakdown: KpBreakdown
+  weekTotal: number
+  weekDays: number
+}
+
+/** Today's and this week's KP for one member; powers the daily progress card and pace estimate. */
+export async function getKpToday(userId: string): Promise<KpToday> {
+  const cfg = await getKpConfig()
+  const [[day], [week]] = await Promise.all([totals(cfg.rules, userId, 1, 'gun'), totals(cfg.rules, userId, 1, 'hafta')])
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Istanbul', weekday: 'short' }).format(new Date())
+  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(weekday) + 1 || 1
+  return {
+    total: day?.total ?? 0,
+    breakdown: day?.breakdown ?? (Object.fromEntries(SOURCE_KEYS.map((k) => [k, 0])) as KpBreakdown),
+    weekTotal: week?.total ?? 0,
+    weekDays,
+  }
+}
+
 export type LeaderRow = { userId: string; name: string; kp: number; level: number; levelName: string; badge: string; specials: number; breakdown: KpBreakdown }
 
 export type PredictionRow = { userId: string; name: string; points: number; hits: number; exact: number; picks: number }

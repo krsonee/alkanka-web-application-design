@@ -3,8 +3,10 @@ import Link from 'next/link'
 import { ChevronRight, Trophy, Users } from 'lucide-react'
 import { pageMeta } from '@/lib/seo'
 import { getMember } from '@/lib/member'
-import { AUTO_LABELS, RULE_FIELDS, badgeHolders, getKpConfig, getKpStatus, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
+import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
 import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
+import { ProgressHero } from '@/components/alkanka/kp/progress-hero'
+import { EarnActions } from '@/components/alkanka/kp/earn-actions'
 import { PageHero } from '@/components/alkanka/page-hero'
 import { AutoScrollRow } from '@/components/alkanka/auto-scroll-row'
 import { cn } from '@/lib/utils'
@@ -19,22 +21,30 @@ const TIER_TAGLINE: Record<string, string> = {
   elmas: 'Parlayanlar ligi. Az kişi buraya ulaşır.',
   efsane: 'Altın Papağan’a giden son basamaklar.',
 }
-const TIER_BAR: Record<string, string> = { bronz: 'bg-bronze', altin: 'bg-gold', elmas: 'bg-accent', efsane: 'bg-ruby' }
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
 export default async function BadgesPage() {
   const member = await getMember()
-  const [cfg, specials, holders, me] = await Promise.all([
+  const [cfg, specials, holders, me, today] = await Promise.all([
     getKpConfig(),
     listSpecialBadges(),
     badgeHolders(),
     member ? getKpStatus(member.id) : Promise.resolve(null),
+    member ? getKpToday(member.id).catch(() => null) : Promise.resolve(null),
   ])
   const myLevel = me?.level.index ?? -1
-  const earnRules = RULE_FIELDS.filter((f) => !f.key.endsWith('Cap') && cfg.rules[f.key] > 0)
-  const next = me && cfg.levels[me.level.index + 1]
-  const progress = me && next ? Math.min(100, Math.round(((me.kp - me.level.min) / (next.min - me.level.min)) * 100)) : 100
-  const myTier = me ? levelTier(me.level.index + 1) : 'altin'
+  const myTier = me ? levelTier(me.level.index + 1) : null
+  const heroStats = me
+    ? [
+        { label: 'Seviyen', value: `${me.level.index + 1}/${cfg.levels.length}` },
+        { label: 'Ligin', value: TIER_NAMES[myTier ?? 'bronz'] },
+        { label: 'Değerli rozetin', value: String(me.badges.length) },
+      ]
+    : [
+        { label: 'Seviye', value: String(cfg.levels.length) },
+        { label: 'Lig', value: '4' },
+        { label: 'Değerli rozet', value: String(specials.length) },
+      ]
 
   const groups: { tier: string; items: { l: (typeof cfg.levels)[number]; i: number }[] }[] = []
   cfg.levels.forEach((l, i) => {
@@ -51,11 +61,7 @@ export default async function BadgesPage() {
         title="Puan topla, rozetini kap"
         description={`${cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.`}
         image="/images/badges/hero-jako-rozet.png"
-        stats={[
-          { label: 'Seviye', value: String(cfg.levels.length) },
-          { label: 'Lig', value: String(groups.length) },
-          { label: 'Değerli rozet', value: String(specials.length) },
-        ]}
+        stats={heroStats}
       >
           <div className="flex flex-wrap gap-2">
             {groups.map((g) => (
@@ -79,30 +85,8 @@ export default async function BadgesPage() {
         ))}
       </nav>
 
-      {me ? (
-        <Link
-          href="/profil"
-          className={cn('flex flex-row items-center gap-3 rounded-2xl border p-3 transition-colors hover:border-gold/50 sm:gap-4 sm:p-4', TIER_BG[myTier])}
-        >
-          <LevelEmblem level={me.level.index + 1} size="md" className="sm:hidden" />
-          <LevelEmblem level={me.level.index + 1} size="lg" className="hidden sm:flex" />
-          <span className="flex min-w-0 flex-1 flex-col gap-2">
-            <span className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="flex items-baseline gap-2">
-                <span className="font-display text-lg font-bold text-foreground">{me.level.name}</span>
-                <span className={cn('text-xs font-bold uppercase tracking-wider', TIER_TEXT[myTier])}>
-                  {TIER_NAMES[myTier]} · Lv {me.level.index + 1}
-                </span>
-              </span>
-              <span className="font-display text-sm font-bold tabular-nums text-gold">{fmt(me.kp)} KP</span>
-            </span>
-            <span className="h-2 overflow-hidden rounded-full bg-background/70" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Sonraki seviyeye ilerleme">
-              <span className={cn('block h-full rounded-full', TIER_BAR[myTier])} style={{ width: `${progress}%` }} />
-            </span>
-            <span className="text-xs text-muted-foreground">{next ? `${next.name} için ${fmt(next.min - me.kp)} KP kaldı` : 'Zirvedesin kanka!'}</span>
-          </span>
-          <ChevronRight className="hidden size-5 text-muted-foreground sm:block" aria-hidden />
-        </Link>
+      {me && today ? (
+        <ProgressHero me={me} today={today} levels={cfg.levels} rules={cfg.rules} />
       ) : (
         <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-gold/25 bg-gold/5 p-4 sm:flex-row sm:items-center">
           <p className="text-sm text-foreground">Giriş yap, ilk rozetin <span className="font-bold text-gold">Çaylak</span> hemen senin olsun.</p>
@@ -111,19 +95,13 @@ export default async function BadgesPage() {
       )}
 
       <section aria-labelledby="kazan" className="flex scroll-mt-32 flex-col gap-3">
-        <h2 id="kazan" className="font-display text-lg font-bold text-foreground">Nasıl KP kazanılır?</h2>
-        <ul className="grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-3">
-          {earnRules.map((f) => (
-            <li
-              key={f.key}
-              className="flex flex-col-reverse items-start gap-1 rounded-xl border border-border bg-card px-2.5 py-2 text-xs leading-snug text-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2.5 sm:text-sm"
-            >
-              <span className="text-pretty">{f.label}</span>
-              <span className="shrink-0 rounded-full bg-gold/15 px-2.5 py-0.5 font-display text-xs font-bold tabular-nums text-gold">+{cfg.rules[f.key]}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs text-muted-foreground">Günde en fazla {cfg.rules.minuteDailyCap} dakika ve {cfg.rules.chatDailyCap} sohbet mesajı puan kazandırır.</p>
+        <div className="flex flex-col gap-1">
+          <h2 id="kazan" className="font-display text-lg font-bold text-foreground">{me ? 'Bugün KP kazan' : 'Nasıl KP kazanılır?'}</h2>
+          <p className="text-xs text-muted-foreground">
+            Karta dokun, hemen başla. Günde en fazla {cfg.rules.minuteDailyCap} dakika ve {cfg.rules.chatDailyCap} sohbet mesajı sayılır.
+          </p>
+        </div>
+        <EarnActions rules={cfg.rules} today={today?.breakdown ?? null} telegramLinked={(me?.breakdown.telegram ?? 0) > 0} />
       </section>
 
       <section aria-labelledby="seviyeler" className="flex flex-col gap-4">
