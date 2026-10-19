@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { LevelEmblem, RankChip, SpecialEmblem } from './kp/emblem'
 import { MemberRank } from './kp/member-rank'
 import { jakoSrc } from './jako'
+import { AvatarFill } from './member-avatar'
 import { Marquee } from './home/marquee'
 
 export type BoardPeriod = 'gun' | 'hafta' | 'ay'
@@ -419,7 +420,7 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
                   )}
                   aria-hidden
                 >
-                  {u.name.charAt(0).toUpperCase()}
+                  <AvatarFill userId={u.userId} name={u.name} />
                 </span>
               </span>
               <span className="w-full truncate text-center text-xs font-semibold text-foreground md:text-base">

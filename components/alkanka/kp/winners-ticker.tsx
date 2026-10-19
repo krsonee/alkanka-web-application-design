@@ -7,6 +7,7 @@ import { Award, Banknote, Clock, ListChecks, Megaphone, X, type LucideIcon } fro
 import type { Feed, FeedItem, FeedKind } from '@/lib/online-rewards'
 import { usePoints } from '@/components/alkanka/points-context'
 import { RewardChips } from './reward-chips'
+import { MemberAvatar } from '@/components/alkanka/member-avatar'
 import { cn } from '@/lib/utils'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<Feed>)
@@ -44,6 +45,7 @@ function FeedEntry({ item }: { item: FeedItem }) {
       <span className={cn('flex size-6 items-center justify-center rounded-full', k.tone)}>
         <Icon className="size-3.5" aria-hidden="true" />
       </span>
+      {item.userId && <MemberAvatar userId={item.userId} name={item.name} size="sm" />}
       <span className="whitespace-nowrap text-xs text-muted-foreground">
         <Line item={item} />
       </span>

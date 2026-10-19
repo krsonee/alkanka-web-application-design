@@ -123,7 +123,7 @@ export async function saveTickerConfig(input: TickerConfig) {
 }
 
 export type FeedKind = 'gorev' | 'rozet' | 'online' | 'cekim' | 'duyuru'
-export type FeedItem = { id: string; kind: FeedKind; name: string; title: string; coin: number; kp: number; at: string }
+export type FeedItem = { id: string; kind: FeedKind; name: string; title: string; coin: number; kp: number; at: string; userId?: string }
 export type Feed = { enabled: boolean; toast: boolean; items: FeedItem[] }
 
 /** Ticker payload: panel announcements first, then wins filtered by the panel's chosen kinds. */
@@ -140,15 +140,15 @@ export async function tickerFeed(): Promise<Feed> {
 export async function winnersFeed(limit = 30): Promise<FeedItem[]> {
   await Promise.all([ensureOnline(), ensureTasks()])
   const [events, awards] = await Promise.all([
-    rows<{ id: number; source: string; points: number; coins: number; note: string | null; title: string | null; name: string | null; created_at: string }>(sql`
-      SELECT e.id, e.source, e.points, e.coins, e.note, t.title, u.name, e.created_at
+    rows<{ id: number; source: string; points: number; coins: number; note: string | null; title: string | null; name: string | null; user_id: string; created_at: string }>(sql`
+      SELECT e.id, e.source, e.points, e.coins, e.note, t.title, u.name, e.user_id, e.created_at
       FROM kp_events e
       LEFT JOIN public."user" u ON u.id = e.user_id
       LEFT JOIN tasks t ON e.source = 'gorev' AND t.id::text = split_part(e.ref, ':', 1)
       WHERE e.source IN ('gorev', 'online') AND e.created_at > now() - interval '48 hours'
       ORDER BY e.created_at DESC LIMIT ${limit}`),
-    rows<{ id: number; badge: string; bonus: number; name: string | null; awarded_at: string }>(sql`
-      SELECT a.id, b.name AS badge, b.bonus, u.name, a.awarded_at
+    rows<{ id: number; badge: string; bonus: number; name: string | null; user_id: string; awarded_at: string }>(sql`
+      SELECT a.id, b.name AS badge, b.bonus, u.name, a.user_id, a.awarded_at
       FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id LEFT JOIN public."user" u ON u.id = a.user_id
       WHERE a.awarded_at > now() - interval '7 days' AND a.badge_id NOT IN ('moderator', 'sponsor-destek')
       ORDER BY a.awarded_at DESC LIMIT ${limit}`),
@@ -165,6 +165,7 @@ export async function winnersFeed(limit = 30): Promise<FeedItem[]> {
       coin: e.source === 'gorev' ? Number(e.points) : Number(e.coins),
       kp: Number(e.points),
       at: new Date(e.created_at).toISOString(),
+      userId: e.user_id,
     })),
     ...awards.map((a) => ({
       id: `a${a.id}`,
@@ -174,6 +175,7 @@ export async function winnersFeed(limit = 30): Promise<FeedItem[]> {
       coin: 0,
       kp: Number(a.bonus),
       at: new Date(a.awarded_at).toISOString(),
+      userId: a.user_id,
     })),
     ...payouts.map((w) => ({
       id: `w${w.id}`,

@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { Award, LayoutDashboard, Link2, Mail, MessageSquareText, Settings } from 'lucide-react'
+import { Award, LayoutDashboard, Link2, Mail, MessageSquareText, Palette, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const PROFILE_TABS = [
   { id: 'genel', label: 'Genel bakış', icon: LayoutDashboard },
+  { id: 'gorunum', label: 'Avatar & görünüm', icon: Palette },
   { id: 'mesajlar', label: 'Mesajlar', icon: Mail },
   { id: 'rozetler', label: 'Rozetlerim', icon: Award },
   { id: 'hesaplar', label: 'Bağlı hesaplar', icon: Link2 },

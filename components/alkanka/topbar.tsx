@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { Award, ChevronDown, Coins, History, Link2, LogOut, Mail, Menu, MessageSquareText, Search, Send, Settings, UserRound } from 'lucide-react'
+import { Award, ChevronDown, Coins, History, Link2, LogOut, Mail, Menu, MessageSquareText, Palette, Search, Send, Settings, UserRound } from 'lucide-react'
 import { getInboxStatus, type InboxStatus } from '@/app/actions/inbox'
+import { getLookSummary, type LookSummary } from '@/app/actions/look'
+import { AvatarFace } from './member-avatar'
 import { cn } from '@/lib/utils'
 import { authClient } from '@/lib/auth-client'
 import { TELEGRAM_URL } from './data'
@@ -69,6 +71,7 @@ function BadgeButton() {
 
 const MENU = [
   { href: '/profil', label: 'Profilim', icon: UserRound },
+  { href: '/profil?sekme=gorunum', label: 'Avatar & görünüm', icon: Palette },
   { href: '/profil?sekme=rozetler', label: 'Rozetlerim', icon: Award },
   { href: '/profil?sekme=hesaplar', label: 'Bağlı hesaplar', icon: Link2 },
   { href: '/profil?sekme=ayarlar', label: 'Hesap ayarları', icon: Settings },
@@ -97,6 +100,9 @@ function AccountMenu() {
     refreshInterval: 30_000,
     revalidateOnFocus: true,
   })
+  const { data: look } = useSWR<LookSummary | null>(member ? 'look-summary' : null, () => getLookSummary(), {
+    revalidateOnFocus: false,
+  })
   const unread = inbox?.unread ?? 0
   const unreadLabel = unread > 9 ? '9+' : String(unread)
 
@@ -115,8 +121,8 @@ function AccountMenu() {
           open ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50',
         )}
       >
-        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-display text-[11px] font-bold text-primary-foreground">
-          {member.name.slice(0, 1).toUpperCase()}
+        <span className="relative flex shrink-0">
+          <AvatarFace src={look?.avatar} name={member.name} size="sm" />
           {unread > 0 && (
             <span className="absolute -right-1.5 -top-1.5 flex" aria-hidden="true">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-60" />
@@ -136,14 +142,39 @@ function AccountMenu() {
           aria-label="Hesap menüsü"
           className="absolute right-0 top-11 z-50 w-64 overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-background/60"
         >
-          <div className="flex items-center gap-3 border-b border-border bg-primary/[0.06] px-4 py-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-display text-sm font-bold text-primary-foreground">
-              {member.name.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-bold text-foreground">{member.name}</span>
-              <span className="text-xs tabular-nums text-muted-foreground">{points.toLocaleString('tr-TR')} KC bakiye</span>
-            </span>
+          <div className="flex flex-col gap-2.5 border-b border-border bg-primary/[0.06] px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Link href="/profil?sekme=gorunum" onClick={() => setOpen(false)} aria-label="Avatarını değiştir" className="rounded-full ring-2 ring-gold/60 ring-offset-2 ring-offset-popover">
+                <AvatarFace src={look?.avatar} name={member.name} size="md" />
+              </Link>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-bold text-foreground">{member.name}</span>
+                <span className="text-xs tabular-nums text-muted-foreground">{points.toLocaleString('tr-TR')} KC bakiye</span>
+              </span>
+            </div>
+            {look && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold">
+                  <span className="text-gold">Seviye {look.level} · {look.levelName}</span>
+                  <span className="tabular-nums text-muted-foreground">{look.kp.toLocaleString('tr-TR')} KP</span>
+                </div>
+                <div
+                  role="progressbar"
+                  aria-label={look.nextName ? `${look.nextName} seviyesine ilerleme` : 'En yüksek seviye'}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(look.progress)}
+                  className="h-1.5 overflow-hidden rounded-full bg-secondary"
+                >
+                  <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, Math.max(2, look.progress))}%` }} />
+                </div>
+                {!look.avatar && (
+                  <Link href="/profil?sekme=gorunum" onClick={() => setOpen(false)} className="text-[11px] font-bold text-gold hover:underline">
+                    Avatarını seç, hoş geldin ödülünü al
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
           <div className="p-1.5 pb-0">
             <Link

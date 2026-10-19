@@ -4,6 +4,7 @@ import { ArrowUpRight, Crown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import { jakoSrc } from './jako'
+import { AvatarFill } from './member-avatar'
 
 export type PodiumRow = { userId: string; name: string; points: number }
 
@@ -137,12 +138,12 @@ export function TopThree({
                 <span className="relative shrink-0">
                   <span
                     className={cn(
-                      'flex size-11 items-center justify-center rounded-full font-display text-base font-bold ring-4',
+                      'relative flex size-11 items-center justify-center rounded-full font-display text-base font-bold ring-4',
                       r.avatar,
                     )}
                     aria-hidden="true"
                   >
-                    {u.name.charAt(0).toUpperCase()}
+                    <AvatarFill userId={u.userId} name={u.name} />
                   </span>
                   <span
                     className={cn(

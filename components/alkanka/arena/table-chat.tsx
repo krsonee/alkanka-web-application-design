@@ -6,6 +6,7 @@ import { Loader2, MessageCircle, Send, Smile } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
+import { MemberAvatar } from '../member-avatar'
 import { playSound } from '@/lib/sound'
 
 export const QUICK = ['👍', '😂', '🔥', '😮', '😡', '👏', '🎲', '🍀']
@@ -102,6 +103,7 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
         {data && messages.length === 0 && <li className="text-muted-foreground">Henüz mesaj yok. İlk selamı sen ver.</li>}
         {messages.map((m) => (
           <li key={m.id} className="leading-relaxed text-pretty">
+            <MemberAvatar userId={m.userId} name={m.name} size="xs" className="mr-1.5 inline-flex align-middle" />
             <span className={cn('font-bold', m.userId === member?.id ? 'text-primary' : 'text-foreground')}>{m.name}</span>
             {!m.player && <span className="ml-1 rounded bg-secondary px-1 text-[10px] font-semibold uppercase text-muted-foreground">izleyici</span>}
             <span className="text-muted-foreground">: </span>
