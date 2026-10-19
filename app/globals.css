@@ -494,6 +494,75 @@
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
+
+.marquee-track {
+  animation: marquee var(--marquee-duration, 45s) linear infinite;
+  will-change: transform;
+}
+.marquee-viewport:hover .marquee-track,
+.marquee-viewport:focus-within .marquee-track,
+.marquee-viewport[data-paused='true'] .marquee-track {
+  animation-play-state: paused;
+}
+@media (min-width: 768px) {
+  .marquee-track { animation: none; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+  .marquee-viewport { overflow-x: auto; }
+}
+
+@keyframes bonus-orbit {
+  to { transform: rotate(1turn); }
+}
+@keyframes bonus-drift {
+  to { background-position: 56px 0, 0 0; }
+}
+.bonus-aura {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--border);
+}
+.bonus-aura::before {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  z-index: -2;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 62%,
+    color-mix(in oklch, var(--primary) 85%, transparent) 75%,
+    transparent 88%
+  );
+  animation: bonus-orbit 7s linear infinite;
+}
+.bonus-aura::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: calc(var(--radius) * 1.6);
+  background:
+    repeating-linear-gradient(115deg, color-mix(in oklch, var(--primary) 7%, transparent) 0 1px, transparent 1px 14px),
+    radial-gradient(120% 90% at 100% 0%, color-mix(in oklch, var(--primary) 16%, var(--card)) 0%, var(--card) 55%);
+  animation: bonus-drift 6s linear infinite;
+}
+.bonus-aura .bonus-sheen {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 45%;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, color-mix(in oklch, var(--primary) 14%, transparent), transparent);
+  animation: counter-sheen 5.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bonus-aura::before,
+  .bonus-aura::after,
+  .bonus-aura .bonus-sheen { animation: none; }
+}
 @keyframes wheel-bulb {
   0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px var(--gold); }
   50% { opacity: 0.35; box-shadow: 0 0 2px 0 var(--gold); }

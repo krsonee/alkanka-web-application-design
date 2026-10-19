@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, Search, ShieldCheck, SlidersHorizontal, Star, Zap } from 'lucide-react'
+import { Marquee } from './home/marquee'
+import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, ScrollText, Search, ShieldCheck, SlidersHorizontal, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCatalog } from './catalog-context'
 import {
@@ -11,10 +12,12 @@ import {
   TIER_INFO,
   sponsorById,
   tierRank,
+  type Bonus,
   type Campaign,
   type Sponsor,
   type SponsorTier,
 } from './data'
+import { DetailModal, type DetailContent } from './detail-modal'
 import { JakoTip } from './jako'
 import { TeamLogo, splitMatch, useLogos } from './logo-context'
 import { SectionHeading } from './section-heading'
@@ -479,6 +482,21 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
   )
 }
 
+function ChipRail({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div className={className}>
+      <div className="md:hidden">
+        <Marquee label={label} itemClassName="flex" duration={24}>
+          {children}
+        </Marquee>
+      </div>
+      <div className="hidden flex-wrap gap-2 md:flex" role="group" aria-label={label}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function CopyCode({ code }: { code: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -492,9 +510,136 @@ function CopyCode({ code }: { code: string }) {
       className="flex h-9 items-center justify-between gap-2 rounded-lg border border-dashed border-primary/50 bg-background px-3 font-mono text-xs font-bold tracking-wider text-primary"
       aria-label={`${code} kodunu kopyala`}
     >
-      {code}
+      <span className="flex items-center gap-2">
+        <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Kod</span>
+        {code}
+      </span>
       {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
     </button>
+  )
+}
+
+const BONUS_TYPE_RULES: Record<Bonus['type'], { about: string; rules: string[] }> = {
+  'Hoş geldin': {
+    about: 'Sponsor sitede yeni hesap açan ve ilk yatırımını yapan üyelere tanımlanan hoş geldin bonusu.',
+    rules: [
+      'Sadece sponsor sitede ilk kez hesap açan yeni üyeler yararlanabilir.',
+      'Bonus, ilk yatırım onaylandıktan sonra canlı destekten talep edilmelidir.',
+      'Yatırım yapıldıktan sonra bonus alınmadan oyun oynanmamalıdır.',
+      'Çevrim yalnızca slot oyunlarında tamamlanır; canlı casino ve spor çevrime sayılmaz.',
+    ],
+  },
+  Yatırım: {
+    about: 'Mevcut üyelerin yaptığı yatırımlara eklenen ekstra bakiye bonusu.',
+    rules: [
+      'Bonus her yatırımda bir kez talep edilebilir.',
+      'Yatırım sonrası bakiye kullanılmadan canlı destekten talep edilmelidir.',
+      'Aktif başka bir bonus varken yatırım bonusu tanımlanmaz.',
+      'Çevrim tamamlanmadan yapılan çekim taleplerinde bonus ve kazancı silinir.',
+    ],
+  },
+  Kayıp: {
+    about: 'Belirlenen dönem içindeki net kayıplar üzerinden hesaplanan iade bonusu.',
+    rules: [
+      'Kayıp, ilgili dönemdeki toplam yatırım eksi toplam çekim üzerinden hesaplanır.',
+      'Dönem içinde bonus kullanılan yatırımlar hesaplamaya dahil edilmez.',
+      'Bonus, dönem bitiminden sonraki ilk iş günü canlı destekten talep edilir.',
+      'Talep sırasında hesap bakiyesinin 5 ₺ altında olması gerekir.',
+    ],
+  },
+  Freespin: {
+    about: 'Seçili slot oyunlarında kullanılabilen ücretsiz dönüş hakları.',
+    rules: [
+      'Freespinler yalnızca sponsorun belirlediği slot oyunlarında geçerlidir.',
+      'Haklar tanımlandıktan sonra 24 saat içinde kullanılmalıdır.',
+      'Freespin kazançları bonus bakiyesi olarak tanımlanır ve çevrime tabidir.',
+      'Tek hesap, tek IP ve tek cihaz kuralı geçerlidir.',
+    ],
+  },
+  Deneme: {
+    about: 'Yatırım yapmadan siteyi denemen için verilen ücretsiz başlangıç bakiyesi.',
+    rules: [
+      'Sadece yeni üyelere ve hesap başına bir kez verilir.',
+      'Telefon numarası ve kimlik doğrulaması tamamlanmış olmalıdır.',
+      'Deneme bonusundan elde edilebilecek maksimum çekim tutarı sponsor tarafından sınırlandırılır.',
+      'Çekim talebinden önce en az bir yatırım yapılması istenebilir.',
+    ],
+  },
+}
+
+const BONUS_COMMON_RULES = [
+  'Bonusu almak için siteye AL KANKA üzerindeki “Siteye git” butonuyla gitmelisin.',
+  'Çoklu hesap veya kötüye kullanım tespit edilirse bonus ve kazançlar iptal edilir.',
+  'Sponsor site, kampanya şartlarını önceden haber vermeksizin değiştirme hakkına sahiptir.',
+]
+
+function bonusDetail(b: Bonus, sponsorName?: string): DetailContent {
+  const info = BONUS_TYPE_RULES[b.type] ?? { about: 'Sponsor siteye özel bonus.', rules: [] }
+  return {
+    eyebrow: `${b.type} bonusu · ${sponsorName ?? 'Sponsor'}`,
+    title: b.title,
+    description: info.about,
+    facts: [
+      { label: 'Tutar', value: b.amount },
+      { label: 'Çevrim şartı', value: b.wager },
+      ...(b.code ? [{ label: 'Bonus kodu', value: b.code }] : []),
+      { label: 'Sponsor', value: sponsorName ?? '-' },
+    ],
+    steps: [
+      '“Siteye git” butonuyla sponsor siteye geç ve hesabını oluştur.',
+      b.code ? `Yatırım ekranında ${b.code} kodunu gir.` : 'Yatırımını yap ve bakiyeyi kullanmadan bekle.',
+      'Canlı destekten bonusu talep et, tanımlandıktan sonra oyuna başla.',
+    ],
+    rules: [...info.rules, ...BONUS_COMMON_RULES],
+    note: 'Bonusu talep etmeden oyun oynarsan hak kaybedebilirsin kanka, önce talep et.',
+  }
+}
+
+function BonusCard({ b, onRules }: { b: Bonus; onRules: () => void }) {
+  const s = sponsorById(b.sponsorId)
+  return (
+    <li className="bonus-aura flex flex-col gap-3 rounded-2xl p-4">
+      <span aria-hidden="true" className="bonus-sheen" />
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/30 bg-background">
+          {s && <SponsorLogoPlate sponsor={s} compact className="size-full text-base" />}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
+              {b.type}
+            </span>
+            <span className="truncate text-xs font-semibold text-muted-foreground">{s?.name}</span>
+          </span>
+          <h3 className="font-display text-lg font-bold leading-tight text-foreground text-balance">{b.title}</h3>
+        </div>
+      </div>
+
+      <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-background/70 text-xs">
+        <div className="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+          <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Tutar</dt>
+          <dd className="truncate font-display text-sm font-bold text-primary">{b.amount}</dd>
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5 border-l border-border px-3 py-2">
+          <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Şart</dt>
+          <dd className="truncate font-display text-sm font-bold text-foreground">{b.wager}</dd>
+        </div>
+      </dl>
+
+      {b.code && <CopyCode code={b.code} />}
+
+      <div className="mt-auto grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onRules}
+          className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-primary/45 bg-primary/10 px-3 text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:border-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
+          <ScrollText className="size-3.5" aria-hidden="true" />
+          Kurallar
+        </button>
+        <GoButton site={b.sponsorId} label="Siteye git" />
+      </div>
+    </li>
   )
 }
 
@@ -502,55 +647,30 @@ export function BonusBoard() {
   const { bonuses: BONUSES } = useCatalog()
   const types = ['Tümü', ...Array.from(new Set(BONUSES.map((b) => b.type)))]
   const [type, setType] = useState('Tümü')
+  const [detail, setDetail] = useState<Bonus | null>(null)
   const list = BONUSES.filter((b) => type === 'Tümü' || b.type === type)
+  const detailSponsor = detail ? sponsorById(detail.sponsorId) : undefined
 
   return (
     <section aria-label="Bonus listesi" className="flex flex-col gap-4">
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      <ChipRail label="Bonus türleri">
         {types.map((t) => (
           <Chip key={t} active={type === t} onClick={() => setType(type === t ? 'Tümü' : t)}>
             {t}
             <Count n={t === 'Tümü' ? BONUSES.length : BONUSES.filter((b) => b.type === t).length} active={type === t} />
           </Chip>
         ))}
-      </div>
-      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {list.map((b) => {
-          const s = sponsorById(b.sponsorId)
-          return (
-            <li key={b.id} className="panel-gold group flex flex-col gap-3 rounded-xl p-3 sm:p-4">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
-                  {s && <SponsorLogoPlate sponsor={s} compact className="size-full max-h-10 text-lg" />}
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
-                      {b.type}
-                    </span>
-                    <span className="truncate font-semibold">{s?.name}</span>
-                  </span>
-                  <h3 className="truncate font-display text-base font-bold text-foreground">{b.title}</h3>
-                </div>
-              </div>
-              <dl className="grid grid-cols-2 gap-2 rounded-lg bg-background px-3 py-2 text-xs text-muted-foreground">
-                <div className="flex min-w-0 flex-col">
-                  <dt>Tutar</dt>
-                  <dd className="truncate font-semibold text-foreground">{b.amount}</dd>
-                </div>
-                <div className="flex min-w-0 flex-col">
-                  <dt>Şart</dt>
-                  <dd className="truncate font-semibold text-foreground">{b.wager}</dd>
-                </div>
-              </dl>
-              <div className="mt-auto flex gap-2">
-                {b.code && <CopyCode code={b.code} />}
-                <GoButton site={b.sponsorId} label="Bonusu al" className="h-9 flex-1" />
-              </div>
-            </li>
-          )
-        })}
+      </ChipRail>
+      <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+        {list.map((b) => (
+          <BonusCard key={b.id} b={b} onRules={() => setDetail(b)} />
+        ))}
       </ul>
+      <DetailModal
+        onClose={() => setDetail(null)}
+        content={detail && bonusDetail(detail, detailSponsor?.name)}
+        action={detail && <GoButton site={detail.sponsorId} label="Siteye git" className="h-11 w-full" />}
+      />
     </section>
   )
 }
@@ -611,19 +731,39 @@ export function OddsBoard() {
   )
 }
 
+const CAMPAIGN_TAG_ART: Record<string, string> = {
+  Spor: '/images/campaign-art/spor.png',
+  Turnuva: '/images/campaign-art/turnuva.png',
+  İade: '/images/campaign-art/iade.png',
+  Telegram: '/images/campaign-art/telegram.png',
+  Yatırım: '/images/campaign-art/yatirim.png',
+  Freespin: '/images/campaign-art/freespin.png',
+  Çekiliş: '/images/campaign-art/cekilis.png',
+}
+// Stock placeholder art gets swapped for tag-specific art; custom panel uploads are kept as-is.
+const STOCK_CAMPAIGN_ART = /^\/images\/(banner-|tile-|hero-chest)/
+
+function campaignArt(c: Campaign) {
+  const tagged = CAMPAIGN_TAG_ART[c.tag]
+  if (tagged && (!c.image || STOCK_CAMPAIGN_ART.test(c.image))) return tagged
+  return c.image || '/placeholder.svg'
+}
+
 function CampaignCard({ c, className, compact }: { c: Campaign; className?: string; compact?: boolean }) {
   const s = sponsorById(c.sponsorId)
   const urgent = c.hoursLeft <= 24
   return (
-    <li className={cn('panel-gold group flex overflow-hidden rounded-xl', compact ? 'flex-row md:flex-col' : 'flex-col', className)}>
+    <li className={cn('panel-gold group flex overflow-hidden rounded-xl', compact ? 'flex-row items-center md:flex-col md:items-stretch' : 'flex-col', className)}>
       <div
         className={cn(
           'relative overflow-hidden',
-          compact ? 'w-28 shrink-0 sm:w-36 md:aspect-[16/8] md:w-auto' : 'aspect-[16/7] sm:aspect-[16/9]',
+          compact
+            ? 'my-3 ml-3 size-24 shrink-0 rounded-lg border border-border sm:size-28 md:m-0 md:aspect-[16/8] md:size-auto md:w-full md:rounded-none md:border-0'
+            : 'aspect-[16/7] sm:aspect-[16/9]',
         )}
       >
         <Image
-          src={c.image || '/placeholder.svg'}
+          src={campaignArt(c)}
           alt=""
           fill
           sizes={compact ? '(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 144px' : '(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw'}
@@ -704,7 +844,7 @@ export function CampaignBoard() {
       </article>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="flex flex-1 gap-2 overflow-x-auto no-scrollbar">
+        <ChipRail label="Kampanya etiketleri" className="min-w-0 flex-1">
           {tags.map((t) => (
             <Chip
               key={t}
@@ -718,7 +858,7 @@ export function CampaignBoard() {
               <Count n={t === 'Tümü' ? CAMPAIGNS.length - 1 : CAMPAIGNS.slice(1).filter((c) => c.tag === t).length} active={tag === t} />
             </Chip>
           ))}
-        </div>
+        </ChipRail>
         <div className="flex items-center gap-2">
           <Chip active={todayOnly} onClick={() => setTodayOnly((v) => !v)}>
             <Clock className="size-3.5" aria-hidden="true" />

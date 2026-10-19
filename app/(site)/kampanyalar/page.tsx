@@ -24,6 +24,7 @@ export default async function CampaignsPage() {
         description="AL KANKA etkinlikleri ve sponsor sitelerin bonusları tek yerde. Yeni kampanyalar ilk Telegram kanalına düşer."
         pose="duyuru"
         speech="Yeni kampanya düştü kankalar!"
+        compact
         stats={[
           { label: 'AL KANKA etkinliği', value: String(EVENTS.length) },
           { label: 'Sponsor bonusu', value: String(BONUSES.length + CAMPAIGNS.length) },
