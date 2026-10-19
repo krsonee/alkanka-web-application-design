@@ -104,7 +104,7 @@ function EventCards() {
   return (
     <>
       <div className="-mx-4 md:hidden">
-        <Marquee label="Etkinlikler" itemClassName="w-[72vw] max-w-xs" duration={EVENTS.length * 11}>
+        <Marquee label="Etkinlikler" itemClassName="w-[64vw] max-w-[17.5rem]" duration={EVENTS.length * 16}>
           {EVENTS.map(card)}
         </Marquee>
       </div>
