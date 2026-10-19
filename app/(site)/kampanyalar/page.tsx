@@ -4,7 +4,7 @@ import { EditableHero } from '@/components/alkanka/editable-hero'
 import { CampaignHub } from '@/components/alkanka/campaign-hub'
 import { AdFrame } from '@/components/alkanka/ad-frame'
 import { getCatalog } from '@/lib/catalog'
-import { EndingCampaigns, MainSponsorRotator } from '@/components/alkanka/partner-sites'
+import { MainSponsorRotator } from '@/components/alkanka/partner-sites'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 
 export const metadata = pageMeta('kampanyalar')
@@ -31,7 +31,6 @@ export default async function CampaignsPage() {
         ]}
       />
       <AdFrame page="kampanyalar">
-        <EndingCampaigns showAll={false} />
         {mains.length > 0 && <MainSponsorRotator sponsors={mains} />}
         <Suspense>
           <CampaignHub />

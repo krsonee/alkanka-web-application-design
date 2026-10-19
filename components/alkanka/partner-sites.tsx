@@ -197,11 +197,11 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
           <Meta sponsor={sponsor} />
         </div>
         <p className="font-display text-xl font-bold text-primary text-balance sm:text-2xl">{sponsor.welcome}</p>
-        <ul className="grid min-w-0 gap-1.5 sm:grid-cols-2">
+        <ul className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2">
           {sponsor.perks.slice(0, 4).map((p) => (
-            <li key={p} className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+            <li key={p} className="flex min-w-0 items-center gap-2 overflow-hidden text-sm text-muted-foreground">
               <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              <span className="min-w-0 truncate">{p}</span>
+              <span className="block min-w-0 flex-1 truncate">{p}</span>
             </li>
           ))}
         </ul>
@@ -514,40 +514,38 @@ export function BonusBoard() {
           </Chip>
         ))}
       </div>
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {list.map((b) => {
           const s = sponsorById(b.sponsorId)
           return (
-            <li key={b.id} className="panel-gold group flex flex-col overflow-hidden rounded-xl">
-              <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-4">
-                {s && <SponsorLogoPlate sponsor={s} />}
-                <span className="absolute top-3 left-3 rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
-                  {b.type}
-                </span>
+            <li key={b.id} className="panel-gold group flex flex-col gap-3 rounded-xl p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
+                  {s && <SponsorLogoPlate sponsor={s} compact className="size-full max-h-10 text-lg" />}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
+                      {b.type}
+                    </span>
+                    <span className="truncate font-semibold">{s?.name}</span>
+                  </span>
+                  <h3 className="truncate font-display text-base font-bold text-foreground">{b.title}</h3>
+                </div>
               </div>
-              <div className="flex flex-1 flex-col gap-3 p-4">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold text-muted-foreground">{s?.name}</span>
-                  <h3 className="font-display text-lg font-bold text-foreground">{b.title}</h3>
+              <dl className="grid grid-cols-2 gap-2 rounded-lg bg-background px-3 py-2 text-xs text-muted-foreground">
+                <div className="flex min-w-0 flex-col">
+                  <dt>Tutar</dt>
+                  <dd className="truncate font-semibold text-foreground">{b.amount}</dd>
                 </div>
-                <dl className="flex gap-6 text-xs text-muted-foreground">
-                  <div className="flex flex-col">
-                    <dt>Tutar</dt>
-                    <dd className="font-semibold text-foreground">{b.amount}</dd>
-                  </div>
-                  <div className="flex flex-col">
-                    <dt>Şart</dt>
-                    <dd className="font-semibold text-foreground">{b.wager}</dd>
-                  </div>
-                </dl>
-                <div className="mt-auto flex flex-col gap-2 sm:flex-row">
-                  {b.code && (
-                    <div className="sm:flex-1">
-                      <CopyCode code={b.code} />
-                    </div>
-                  )}
-                  <GoButton site={b.sponsorId} label="Bonusu al" className="h-9 sm:flex-1" />
+                <div className="flex min-w-0 flex-col">
+                  <dt>Şart</dt>
+                  <dd className="truncate font-semibold text-foreground">{b.wager}</dd>
                 </div>
+              </dl>
+              <div className="mt-auto flex gap-2">
+                {b.code && <CopyCode code={b.code} />}
+                <GoButton site={b.sponsorId} label="Bonusu al" className="h-9 flex-1" />
               </div>
             </li>
           )
@@ -613,32 +611,47 @@ export function OddsBoard() {
   )
 }
 
-function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
+function CampaignCard({ c, className, compact }: { c: Campaign; className?: string; compact?: boolean }) {
   const s = sponsorById(c.sponsorId)
   const urgent = c.hoursLeft <= 24
   return (
-    <li className={cn('panel-gold group flex flex-col overflow-hidden rounded-xl', className)}>
-      <div className="relative aspect-[16/7] overflow-hidden sm:aspect-[16/9]">
+    <li className={cn('panel-gold group flex overflow-hidden rounded-xl', compact ? 'flex-row md:flex-col' : 'flex-col', className)}>
+      <div
+        className={cn(
+          'relative overflow-hidden',
+          compact ? 'w-28 shrink-0 sm:w-36 md:aspect-[16/8] md:w-auto' : 'aspect-[16/7] sm:aspect-[16/9]',
+        )}
+      >
         <Image
           src={c.image || '/placeholder.svg'}
           alt=""
           fill
-          sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
+          sizes={compact ? '(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 144px' : '(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw'}
           className="object-cover transition-transform duration-500 group-hover:scale-105"
         />
-        <span className="absolute top-3 left-3 rounded-md bg-background/90 px-2 py-0.5 text-xs font-semibold text-primary">{c.tag}</span>
+        <span className={cn('absolute top-3 left-3 rounded-md bg-background/90 px-2 py-0.5 text-xs font-semibold text-primary', compact && 'hidden md:inline')}>{c.tag}</span>
         <span
           className={cn(
-            'absolute top-3 right-3 flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold',
+            'absolute top-3 right-3 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold',
             urgent ? 'bg-destructive text-foreground' : 'bg-background/90 text-foreground',
+            compact ? 'hidden md:flex' : 'flex',
           )}
         >
           <Clock className="size-3" aria-hidden="true" />
           {c.ends}
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-3.5 sm:gap-2 sm:p-4">
-        <h3 className="font-semibold text-foreground">{c.title}</h3>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5 sm:gap-2 sm:p-4">
+        {compact && (
+          <span className="flex items-center gap-2 text-[11px] font-semibold md:hidden">
+            <span className="text-primary">{c.tag}</span>
+            <span className={cn('flex items-center gap-1', urgent ? 'text-destructive' : 'text-muted-foreground')}>
+              <Clock className="size-3" aria-hidden="true" />
+              {c.ends}
+            </span>
+          </span>
+        )}
+        <h3 className={cn('font-semibold text-foreground', compact && 'line-clamp-1 md:line-clamp-none')}>{c.title}</h3>
         <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:line-clamp-none">{c.description}</p>
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <span className="text-xs text-muted-foreground">{s?.name}</span>
@@ -671,22 +684,22 @@ export function CampaignBoard() {
 
   return (
     <section aria-label="Kampanyalar" className="flex flex-col gap-6">
-      <article className="panel-gold relative isolate flex min-h-80 overflow-hidden rounded-2xl md:min-h-96">
-  <div className="absolute inset-x-0 top-0 -z-20 h-56 md:inset-0 md:h-auto">
-  <Image src={featured.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 1100px, 100vw" className="object-cover object-[65%_center] md:object-center" />
-  </div>
-  <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-56 bg-gradient-to-t from-card to-transparent to-50% md:inset-0 md:h-auto md:bg-gradient-to-r md:from-card md:via-card/70 md:to-transparent md:to-100%" />
-  <div className="flex max-w-xl flex-col justify-end gap-3 p-5 pt-48 sm:p-8 sm:pt-48 md:justify-center md:pt-8">
+      <article className="panel-gold relative isolate flex overflow-hidden rounded-2xl md:min-h-72">
+        <div className="absolute inset-x-0 top-0 -z-20 h-40 md:inset-0 md:h-auto">
+          <Image src={featured.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 1100px, 100vw" className="object-cover object-[65%_center] md:object-center" />
+        </div>
+        <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-40 bg-gradient-to-t from-card to-transparent to-60% md:inset-0 md:h-auto md:bg-gradient-to-r md:from-card md:via-card/70 md:to-transparent md:to-100%" />
+        <div className="flex max-w-xl flex-col justify-end gap-2.5 p-5 pt-32 sm:gap-3 sm:p-8 sm:pt-32 md:justify-center md:pt-8">
           <span className="self-start rounded-md bg-primary px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
             Haftanın kampanyası
           </span>
           <h2 className="font-display text-2xl font-bold text-foreground text-balance sm:text-3xl">{featured.title}</h2>
-          <p className="leading-relaxed text-muted-foreground">{featured.description}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">{featured.description}</p>
           <span className="flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="size-4 text-primary" aria-hidden="true" />
             {featured.ends} · {fs?.name}
           </span>
-          <GoButton site={fs?.id} label="Kampanyaya katıl" className="mt-auto h-12 self-start" />
+          <GoButton site={fs?.id} label="Kampanyaya katıl" className="mt-2 h-11 w-full sm:w-auto sm:self-start" />
         </div>
       </article>
 
@@ -730,9 +743,9 @@ export function CampaignBoard() {
           Bu filtreye uyan kampanya kalmadı. Yenileri ilk Telegram’a düşüyor, takipte kal.
         </JakoTip>
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
           {shown.map((c) => (
-            <CampaignCard key={c.id} c={c} />
+            <CampaignCard key={c.id} c={c} compact />
           ))}
         </ul>
       )}
