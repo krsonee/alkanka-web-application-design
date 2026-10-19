@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Coins, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { type EventItem } from './data'
+import { TELEGRAM_URL, type EventItem } from './data'
 import { useCatalog } from './catalog-context'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
@@ -221,8 +221,16 @@ export function Events({ view }: { view: 'biletler' | 'tahminler' }) {
     <section aria-label={view === 'biletler' ? 'Biletler' : 'Tahminler'} className="flex flex-col gap-5">
       {view === 'biletler' ? (
         <>
-          <JakoTip pose="duyuru" title="Jako duyuruyor">
-            Bilet çekilişi her pazar 21:00&apos;de canlı yayında! Ne kadar çok bilet, o kadar çok şans kanka.
+          <JakoTip pose="promo" title="Jako fısıldıyor">
+            Özel oranlar ve promo kodlar önce Telegram&apos;a düşer, sonra biter kanka.{' '}
+            <a
+              href={TELEGRAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-primary underline-offset-2 hover:underline"
+            >
+              Kanala katıl, kaçırma.
+            </a>
           </JakoTip>
           <EventCards />
         </>

@@ -33,10 +33,14 @@ export function CampaignHub() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div role="tablist" aria-label="Kampanya türü" className="seg-switch grid grid-cols-2 rounded-2xl border border-border p-1.5">
+      <div
+        role="tablist"
+        aria-label="Kampanya türü"
+        className="seg-switch grid grid-cols-2 rounded-full border border-border/70 bg-card p-1"
+      >
         <span
           aria-hidden="true"
-          className="seg-thumb pointer-events-none absolute inset-y-1.5 left-1.5 w-[calc(50%-0.375rem)] rounded-xl"
+          className="seg-thumb pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-primary"
           style={{ transform: `translateX(${tab === 'bonuslar' ? '100%' : '0%'})` }}
         />
         {TABS.map((t) => {
@@ -51,23 +55,16 @@ export function CampaignHub() {
               aria-controls={`kampanya-${t.id}`}
               onClick={() => select(t.id)}
               className={cn(
-                'seg-tab relative z-10 flex min-h-12 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-bold leading-tight transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:gap-2.5 sm:px-3 sm:text-sm sm:uppercase sm:tracking-wider',
+                'seg-tab flex h-11 min-w-0 items-center justify-center gap-2 rounded-full px-3 text-[13px] font-semibold transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-12 sm:text-sm',
                 active ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
+              <Icon className="seg-icon size-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{t.label}</span>
               <span
                 className={cn(
-                  'seg-icon flex size-7 shrink-0 items-center justify-center rounded-lg transition-transform duration-300',
-                  active ? 'bg-primary-foreground/15' : 'bg-secondary',
-                )}
-              >
-                <Icon className="size-4" aria-hidden="true" />
-              </span>
-              <span className="text-balance text-center sm:truncate">{t.label}</span>
-              <span
-                className={cn(
-                  'seg-count hidden min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] tabular-nums sm:inline',
-                  active ? 'bg-primary-foreground text-primary' : 'bg-secondary text-muted-foreground',
+                  'hidden text-xs tabular-nums transition-opacity duration-300 sm:inline',
+                  active ? 'opacity-60' : 'opacity-50',
                 )}
               >
                 {counts[t.id]}

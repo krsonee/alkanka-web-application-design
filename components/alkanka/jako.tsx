@@ -13,6 +13,7 @@ export type JakoPose =
   | 'market'
   | 'uzgun'
   | 'telegram'
+  | 'promo'
 
 export function jakoSrc(pose: JakoPose) {
   return pose === 'jako' ? '/images/mascots/jako.png' : `/images/mascots/jako-${pose}.png`
