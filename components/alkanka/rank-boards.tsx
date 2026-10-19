@@ -492,11 +492,11 @@ function PodiumStage({ leader }: { leader: string }) {
         <div className="stage-spot absolute inset-x-0 bottom-0 h-full" />
         <div className="relative size-56 lg:size-64 xl:size-72">
           <Image
-            src="/images/mascots/jako-kazandi.png"
+            src="/images/mascots/jako-kazandi-cut.png"
             alt=""
             fill
             sizes="288px"
-            className="stage-mask object-cover mix-blend-lighten"
+            className="object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.55)]"
           />
         </div>
       </div>
@@ -508,11 +508,11 @@ function PodiumStage({ leader }: { leader: string }) {
         <div className="stage-spot absolute inset-x-0 bottom-0 h-full" style={{ animationDelay: '-2.5s' }} />
         <div className="relative size-56 lg:size-64 xl:size-72">
           <Image
-            src="/images/mascots/jako-merhaba.png"
+            src="/images/mascots/jako-merhaba-cut.png"
             alt=""
             fill
             sizes="288px"
-            className="stage-mask object-cover mix-blend-lighten"
+            className="object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.55)]"
           />
         </div>
       </div>
