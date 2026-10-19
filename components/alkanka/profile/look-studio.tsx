@@ -31,10 +31,14 @@ export function LookStudio({ initial }: { initial: LookState }) {
   const { refresh } = usePoints()
 
   const group: AvatarGroup = section === 'takim' ? 'takim' : 'jako'
-  const shown = state.avatars.filter((a) => a.group === group)
+  const teamJerseyId = state.team ? `takim-${state.team}` : null
+  const shown = state.avatars
+    .filter((a) => a.group === group)
+    .sort((x, y) => (section === 'takim' ? Number(y.id === teamJerseyId) - Number(x.id === teamJerseyId) : 0))
+  const activeTeam = TEAMS.find((t) => t.id === state.team) ?? null
   const focused = shown.find((a) => a.id === focus) ?? shown.find((a) => a.id === state.avatarId) ?? shown[0] ?? null
 
-  const act = (fn: () => ReturnType<typeof chooseAvatarAction>) =>
+  const act = (fn: () => ReturnType<typeof chooseAvatarAction>, focusAfter?: string | null) =>
     start(async () => {
       const res = await fn()
       if (!res.ok) {
@@ -42,6 +46,7 @@ export function LookStudio({ initial }: { initial: LookState }) {
         return
       }
       setState(res.state)
+      if (focusAfter) setFocus(focusAfter)
       setNotice({ tone: 'ok', text: res.message })
       mutate(AVATAR_MAP_KEY)
       mutate('look-summary')
@@ -98,18 +103,18 @@ export function LookStudio({ initial }: { initial: LookState }) {
             {section === 'takim' && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-semibold text-muted-foreground">
-                  Taraftar rengin (profilinde adının yanında görünür)
+                  Taraftar rengin: profilinde adının yanında rozet olarak görünür, o renklerin forması da listenin başına gelir.
                 </p>
-                <ul className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+                <ul className="flex flex-wrap gap-2">
                   {TEAMS.map((t) => {
                     const active = state.team === t.id
                     return (
-                      <li key={t.id} className="shrink-0">
+                      <li key={t.id}>
                         <button
                           type="button"
                           disabled={pending}
                           aria-pressed={active}
-                          onClick={() => act(() => setTeamAction(active ? null : t.id))}
+                          onClick={() => act(() => setTeamAction(active ? null : t.id), active ? null : `takim-${t.id}`)}
                           className={cn(
                             'flex items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 text-xs font-semibold transition-colors',
                             active ? 'border-gold bg-gold/10 text-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
@@ -123,6 +128,15 @@ export function LookStudio({ initial }: { initial: LookState }) {
                     )
                   })}
                 </ul>
+                {activeTeam && (
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                    <span>Profilinde şöyle görünür:</span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
+                      <span aria-hidden className="size-3.5 rounded-full border border-border" style={{ background: `linear-gradient(90deg, ${activeTeam.colors[0]} 50%, ${activeTeam.colors[1]} 50%)` }} />
+                      {activeTeam.name} taraftarı
+                    </span>
+                  </div>
+                )}
                 <p className="pt-1 text-xs leading-relaxed text-muted-foreground">
                   Formalı Jako&apos;lar: bazıları ücretsiz, bazıları seviye (KP) ile açılır, bazıları KC ile satın alınır.
                 </p>
@@ -154,6 +168,9 @@ export function LookStudio({ initial }: { initial: LookState }) {
                         </span>
                       )}
                     </span>
+                    {a.id === teamJerseyId && (
+                      <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-gold px-1.5 py-0.5 text-[9px] font-bold text-gold-foreground">Takımın</span>
+                    )}
                     <span className="w-full truncate text-center text-[11px] font-semibold text-foreground">{a.name}</span>
                     <StatusChip a={a} />
                   </button>
