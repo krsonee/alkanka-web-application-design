@@ -2,7 +2,7 @@
 
 import { SeoGuide } from '@/components/panel/area-guides'
 import { useActionState, useState, useTransition } from 'react'
-import { ExternalLink, FileText, Loader2, Search, Trash2, Zap } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FileText, Loader2, Search, Trash2, Zap } from 'lucide-react'
 import {
   deleteDealAction,
   deletePostAction,
@@ -74,6 +74,14 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
           <label key={k} className={label}>
             {k === 'google' ? 'Google' : k === 'bing' ? 'Bing' : 'Yandex'} doğrulama kodu
             <input name={k} defaultValue={verification[k]} placeholder="<meta name=... content=...> ya da sadece kod" className={input} />
+            {verification[k] ? (
+              <span className="flex items-center gap-1.5 font-medium text-primary">
+                <CheckCircle2 className="size-3.5" aria-hidden />
+                Kod sitede yayında, doğrulama tamam
+              </span>
+            ) : (
+              <span className="font-normal">Henüz bağlanmadı</span>
+            )}
           </label>
         ))}
       </div>
