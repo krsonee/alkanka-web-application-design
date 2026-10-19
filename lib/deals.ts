@@ -154,5 +154,8 @@ export async function setVerification(v: Verification) {
 export function extractVerificationCode(input: string) {
   const trimmed = input.trim()
   const fromMeta = trimmed.match(/content=["']([^"']+)["']/i)
-  return (fromMeta ? fromMeta[1] : trimmed).replace(/[^A-Za-z0-9_\-]/g, '').slice(0, 120)
+  const raw = fromMeta ? fromMeta[1] : trimmed
+  // DNS TXT formatı da yapıştırılabiliyor: "google-site-verification=KOD", "yandex-verification: KOD"
+  const withoutPrefix = raw.replace(/^\s*(google-site-verification|yandex-verification|msvalidate\.01)\s*[=:]\s*/i, '')
+  return withoutPrefix.replace(/[^A-Za-z0-9_\-]/g, '').slice(0, 120)
 }

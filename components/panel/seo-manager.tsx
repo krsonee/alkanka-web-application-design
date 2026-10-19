@@ -55,8 +55,11 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
           <a href="https://search.google.com/search-console" target="_blank" rel="noopener" className="font-semibold text-primary underline">
             Google Search Console
           </a>
-          {"'a gir, \"Mülk ekle\" de ve \"URL öneki\" olarak "}
-          <code className="rounded bg-secondary px-1 text-foreground">{siteUrl}</code> yaz.
+          {"'a gir, \"Mülk ekle\" de ve sağdaki "}
+          <strong className="text-foreground">{'"URL öneki"'}</strong>
+          {' kutusuna '}
+          <code className="rounded bg-secondary px-1 text-foreground">{siteUrl}</code>
+          {' yaz. Soldaki "Alan adı" kutusunu seçme, o DNS kaydı ister ve buradan çalışmaz.'}
         </li>
         <li>{'"HTML etiketi" yöntemini seç, verilen <meta ...> satırını aşağıya yapıştır ve kaydet.'}</li>
         <li>{"Search Console'da \"Doğrula\" de."}</li>
