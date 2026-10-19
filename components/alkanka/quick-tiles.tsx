@@ -1,16 +1,12 @@
 import Image from 'next/image'
 import { ArrowUpRight } from 'lucide-react'
 import { QUICK_TILES } from './data'
-import { SnapSlider } from './home/snap-slider'
+import { Marquee } from './home/marquee'
 
 export function QuickTiles() {
   return (
     <nav aria-label="Hızlı erişim">
-      <SnapSlider
-        label="Hızlı erişim kutuları"
-        autoplay={4500}
-        itemClassName="w-[40%] sm:w-[calc(25%-0.5625rem)] lg:w-[calc(16.666%-0.625rem)]"
-      >
+      <Marquee label="Hızlı erişim kutuları" duration={45} itemClassName="w-36 sm:w-44 lg:w-52">
         {QUICK_TILES.map((tile, i) => (
           <a
             key={tile.id}
@@ -18,13 +14,13 @@ export function QuickTiles() {
             data-tour={`tile-${tile.id}`}
             aria-label={tile.cta}
             style={{ '--flow-delay': `${-i * 1.1}s`, '--flow-opacity': 0.55 } as React.CSSProperties}
-            className="border-flow group relative flex aspect-[5/4] flex-col justify-end overflow-hidden rounded-xl bg-card ring-1 ring-primary/15 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_-16px_var(--primary)] lg:aspect-[4/3]"
+            className="border-flow group relative flex aspect-[5/4] flex-col justify-end overflow-hidden rounded-xl bg-card ring-1 ring-primary/15 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_-16px_var(--primary)]"
           >
             <Image
               src={tile.image || '/placeholder.svg'}
               alt=""
               fill
-              sizes="(min-width: 1024px) 180px, (min-width: 640px) 25vw, 40vw"
+              sizes="(min-width: 1024px) 208px, (min-width: 640px) 176px, 144px"
               className="object-cover transition-transform duration-700 group-hover:scale-110"
             />
             <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent" />
@@ -43,7 +39,7 @@ export function QuickTiles() {
             </span>
           </a>
         ))}
-      </SnapSlider>
+      </Marquee>
     </nav>
   )
 }
