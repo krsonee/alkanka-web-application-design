@@ -383,7 +383,6 @@ export const MARKET_ITEMS: MarketItem[] = [
   { id: 'cark-hakki', name: '+3 Ekstra Çark Hakkı', type: 'EKSTRA HAK', price: 900, stock: 42, total: 100, image: '/images/tile-wheel.png', limit: 5, description: 'Günlük ücretsiz hakkına ek olarak 3 çark çevirme hakkı.', delivery: 'Haklar anında hesabına tanımlanır.', rules: ['Haklar 7 gün içinde kullanılmalıdır.', 'Günde en fazla 5 paket alınabilir.'] },
   { id: 'zar-hakki', name: '+5 Ekstra Zar Hakkı', type: 'EKSTRA HAK', price: 750, stock: 0, total: 80, image: '/images/tile-dice.png', limit: 5, description: 'Zar oyununda 5 ekstra atış hakkı. Düşeş jackpotu bu haklarla da geçerli.', delivery: 'Haklar anında hesabına tanımlanır.', rules: ['Haklar 7 gün içinde kullanılmalıdır.', 'Stok her pazartesi yenilenir.'] },
   { id: 'seri-kalkani', name: 'Seri Kalkanı (7 gün)', type: 'EKSTRA HAK', price: 1200, stock: 9, total: 30, image: '/images/tile-tasks.png', limit: 2, description: 'Bir günü kaçırdığında giriş serinin sıfırlanmasını engeller.', delivery: 'Kalkan aktif edilir, ihtiyaç anında otomatik kullanılır.', rules: ['Kalkan 7 gün boyunca geçerlidir.', 'Aynı anda en fazla 1 kalkan aktif olabilir.'] },
-  { id: 'vip-telegram', name: 'VIP Telegram Erişimi', type: 'VIP', price: 6000, stock: 5, total: 10, image: '/images/banner-telegram.png', refOnly: true, limit: 1, description: 'Kodların herkesten önce düştüğü kapalı VIP Telegram kanalına 30 günlük erişim.', delivery: 'Davet linki 24 saat içinde Telegram’dan gönderilir.', rules: ['Sadece referans linkiyle kayıt olan üyeler alabilir.', 'Telegram kullanıcı adının profilde kayıtlı olması gerekir.'] },
   { id: 'gizemli-kutu', name: 'Gizemli Hediye Kutusu', type: 'HEDİYE', price: 3500, stock: 3, total: 15, image: '/images/tile-chest.png', limit: 1, description: 'İçinden rozet, çekiliş bileti, VIP geçiş veya fiziksel hediye çıkabilen sürpriz kutu.', delivery: 'Kutu sandık ekranında açılır. Fiziksel hediyeler için destek seninle iletişime geçer.', rules: ['Haftada 1 adet alınabilir.', 'Fiziksel hediyeler sadece Türkiye içi gönderilir.'] },
   { id: 'cekilis-bileti', name: 'Çekiliş Bileti x5', type: 'HEDİYE', price: 1000, stock: 0, total: 200, image: '/images/banner-events.png', limit: 4, description: 'Haftalık bilet çekilişi için 5 ekstra bilet. Kazanma şansını artırır.', delivery: 'Biletler o haftanın çekilişine otomatik eklenir.', rules: ['Haftada en fazla 4 paket (20 bilet) alınabilir.', 'Biletler sonraki haftaya devretmez.'] },
   { id: 'profil-cercevesi', name: 'Özel Profil Çerçevesi', type: 'ROZET', price: 1800, stock: 27, total: 40, image: '/images/hero-chest.png', limit: 1, description: 'Profil fotoğrafının etrafında hareketli altın çerçeve.', delivery: 'Anında profiline eklenir.', rules: ['Hesap başına 1 adet alınabilir.'] },
@@ -460,7 +459,7 @@ export const EVENTS: EventItem[] = [
     steps: ['100 Kanka Coin ile maratona kayıt ol.', 'Her çark çevirişin 1 puan kazandırır.', 'Jackpot dilimi 10 bonus puan verir.', 'Ay sonunda ilk 300 ödül alır.'],
     rules: ['Kayıt ücreti iade edilmez.', 'Sadece kayıt sonrası çevirmeler sayılır.', 'Bot veya otomatik tıklama kullanımı kalıcı yasak sebebidir.'],
     prizes: [
-      { place: '1.', prize: 'VIP Telegram + 30.000 KC' },
+      { place: '1.', prize: '30.000 KC + Özel rozet' },
       { place: '2.-3.', prize: '15.000 KC' },
       { place: '4.-50.', prize: '2.000 KC' },
       { place: '51.-300.', prize: '500 KC' },
@@ -578,8 +577,8 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
     id: 'telegram',
     label: 'Telegram',
     items: [
-      { q: 'Promo kodları nereden takip ederim?', a: '@AlkankaOfficial kanalı kodların ilk düştüğü yerdir. Bildirimleri açarsan kontenjan dolmadan kodu alırsın.' },
-      { q: 'VIP Telegram kanalına nasıl girerim?', a: 'Puan marketinden VIP Telegram Erişimi alarak veya 7 günlük seriyi tamamlayarak VIP kanala davet alırsın.' },
+      { q: 'Promo kodları nereden takip ederim?', a: 'Kodlar ilk olarak AL KANKA Promo Kod kanalına düşer. Bildirimleri açarsan kontenjan dolmadan kodu alırsın.' },
+      { q: 'Hangi Telegram kanallarınız var?', a: 'Dört kanalımız var: AL KANKA Resmi (duyurular ve güncel adresler), AL KANKA Özel Oran (artırılmış oranlar), AL KANKA Promo Kod (kodların ilk düştüğü yer) ve AL KANKA Sohbet (topluluk sohbeti). Hepsine sitedeki Sohbet bölümünden de ulaşabilirsin.' },
       { q: 'Anlık turnuvalardan nasıl haberdar olurum?', a: 'Mobil uygulamada bildirimleri açarsan turnuva başlamadan telefonuna haber gelir. Telegram kanalında ve Turnuvalar sayfasında da güncel takvim yer alır.' },
     ],
   },

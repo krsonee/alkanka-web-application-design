@@ -18,7 +18,7 @@ const CTA_RULES: { match: RegExp; cta: Cta }[] = [
   { match: /seviye|siralama/, cta: { href: '/siralama', label: 'Sıralamada yerini gör' } },
   { match: /turnuva/, cta: { href: '/turnuvalar', label: 'Turnuvalara göz at' } },
   { match: /partner|sponsor/, cta: { href: '/sponsorlar', label: 'Sponsorları incele' } },
-  { match: /promo|telegram|vip/, cta: { href: TELEGRAM_URL, label: 'Telegram kanalına katıl', external: true } },
+  { match: /promo|telegram|kanal/, cta: { href: TELEGRAM_URL, label: 'Telegram kanallarına katıl', external: true } },
   { match: /gorev/, cta: { href: '/gorevler', label: 'Görevlere git' } },
   { match: /kampanya|oran/, cta: { href: '/kampanyalar', label: 'Kampanyalara bak' } },
   { match: /market|kalkan/, cta: { href: '/market', label: 'Markete git' } },
