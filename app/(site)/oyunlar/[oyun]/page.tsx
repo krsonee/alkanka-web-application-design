@@ -34,8 +34,8 @@ export default async function GamePage({ params }: { params: Promise<{ oyun: str
   const isOpen = (k: string) => (isArenaGame(k) ? settings[k].enabled : !isHidden(hidden, 'mini', k))
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-3">
         <Link href="/oyunlar" className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" aria-hidden="true" />
           Tüm oyunlar

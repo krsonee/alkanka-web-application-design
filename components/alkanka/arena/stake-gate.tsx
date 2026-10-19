@@ -207,8 +207,8 @@ export function StakeGate({
 
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card lg:grid lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative h-36 sm:h-56 lg:h-auto lg:min-h-full">
-        <Image src={settings.image || meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+      <div className="relative aspect-[4/3] lg:aspect-auto lg:min-h-full">
+        <Image src={settings.image || meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover object-top" />
         <span className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" aria-hidden="true" />
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-4 lg:p-8">
           <span className="flex w-fit items-center gap-1.5 rounded-md bg-background/90 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary">
@@ -248,7 +248,7 @@ export function StakeGate({
 
         {pvpMode ? (
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Gerçek kankalarla oyna. Açık bir masaya otur ya da kendi masanı aç, bahsi masa sahibi belirler.
+            Ger��ek kankalarla oyna. Açık bir masaya otur ya da kendi masanı aç, bahsi masa sahibi belirler.
           </p>
         ) : (
           <fieldset className="flex min-w-0 flex-col gap-2">
@@ -259,7 +259,7 @@ export function StakeGate({
                 Bakiye {formatAC(points)}
               </span>
             </legend>
-            <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
+            <div className="grid grid-cols-4 gap-2">
               {settings.bets.map((b) => {
                 const active = bet === b
                 const short = b > points
@@ -267,7 +267,7 @@ export function StakeGate({
                   <label
                     key={b}
                     className={cn(
-                      'flex shrink-0 cursor-pointer snap-start flex-col items-center rounded-xl border px-4 py-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary',
+                      'flex min-w-0 cursor-pointer flex-col items-center rounded-xl border px-1 py-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary',
                       active ? 'border-primary bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'border-border bg-surface text-foreground hover:border-primary/50',
                       short && !active && 'opacity-45',
                     )}
@@ -284,7 +284,7 @@ export function StakeGate({
           </fieldset>
         )}
 
-        <div className="sticky bottom-[calc(6rem+env(safe-area-inset-bottom))] z-10 -mx-4 flex items-center gap-3 border-y border-border bg-card/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border lg:bottom-4">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
           <div className="flex min-w-0 flex-1 flex-col">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {pvpMode ? `Oyuncu masası · ${formatAC(bet)} KC bahis` : `Botu yenersen · ${formatAC(bet)} KC bahis`}

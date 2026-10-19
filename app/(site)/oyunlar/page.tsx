@@ -11,6 +11,7 @@ export default async function GamesPage() {
   return (
     <>
       <EditableHero slug="oyunlar"
+        compact
         image="/images/heroes/oyunlar.png"
         highlights={['Canlı rakiplerle masa', 'Ücretsiz çark ve sandık', 'Kazancını katla']}
         eyebrow="Oyunlar"
