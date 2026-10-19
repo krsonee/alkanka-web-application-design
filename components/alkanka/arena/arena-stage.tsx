@@ -127,7 +127,7 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
       className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
     >
       <ArrowLeft className="size-4" aria-hidden="true" />
-      Mod ve bahis seçimine dön
+      Geri
     </button>
   )
 

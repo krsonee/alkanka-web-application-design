@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, Lock } from 'lucide-react'
 import { GameStage } from '@/components/alkanka/games/game-stage'
 import { ArenaStage } from '@/components/alkanka/arena/arena-stage'
+import { GameTabs } from '@/components/alkanka/arena/game-tabs'
 import { ARENA_GAMES, ARENA_META, isArenaGame } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
 import { getHidden } from '@/lib/catalog'
@@ -39,20 +40,12 @@ export default async function GamePage({ params }: { params: Promise<{ oyun: str
           <ArrowLeft className="size-4" aria-hidden="true" />
           Tüm oyunlar
         </Link>
-        <nav aria-label="Oyun seç" className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">
-          {Object.keys(TITLES)
+        <GameTabs
+          current={oyun}
+          items={Object.keys(TITLES)
             .filter(isOpen)
-            .map((k) => (
-              <Link
-                key={k}
-                href={`/oyunlar/${k}`}
-                aria-current={k === oyun ? 'page' : undefined}
-                className="shrink-0 rounded-md px-3 py-1.5 text-sm font-semibold text-muted-foreground aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground"
-              >
-                {TITLES[k]}
-              </Link>
-            ))}
-        </nav>
+            .map((k) => ({ key: k, title: TITLES[k] }))}
+        />
       </div>
       <h1 className="sr-only">{TITLES[oyun]}</h1>
       {isOpen(oyun) ? (

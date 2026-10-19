@@ -6,6 +6,7 @@ import { Dices, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TavlaState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
+import { loadSaved, useSaveGame } from './saved-game'
 import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
@@ -455,16 +456,31 @@ function ControlBar({
 
 type Phase = 'roll' | 'move' | 'bot' | 'over'
 
-export function Tavla({ finish }: GameApi) {
-  const [board, setBoard] = useState<Board>(initialBoard)
-  const [dice, setDice] = useState<number[]>([])
-  const [rolled, setRolled] = useState<number[]>([])
+type TavlaSave = { board: Board; dice: number[]; rolled: number[]; phase: Phase; snapshot: { board: Board; dice: number[] } | null; message: string }
+
+export function Tavla({ finish, saveKey }: GameApi) {
+  const [saved] = useState(() => loadSaved<TavlaSave>(saveKey))
+  const [board, setBoard] = useState<Board>(saved?.board ?? initialBoard)
+  const [dice, setDice] = useState<number[]>(saved?.dice ?? [])
+  const [rolled, setRolled] = useState<number[]>(saved?.rolled ?? [])
   const [rollKey, setRollKey] = useState(0)
-  const [phase, setPhase] = useState<Phase>('roll')
+  const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'roll')
   const [selected, setSelected] = useState<From | null>(null)
-  const [snapshot, setSnapshot] = useState<{ board: Board; dice: number[] } | null>(null)
-  const [message, setMessage] = useState('Sıra sende. Zarı at kanka.')
+  const [snapshot, setSnapshot] = useState<{ board: Board; dice: number[] } | null>(saved?.snapshot ?? null)
+  const [message, setMessage] = useState(saved?.message ?? 'Sıra sende. Zarı at kanka.')
   const [lastBot, setLastBot] = useState<Move[]>([])
+  const botStart = useRef<Board | null>(null)
+  if (phase === 'bot' && !botStart.current) botStart.current = board
+  if (phase !== 'bot') botStart.current = null
+
+  useSaveGame(
+    saveKey,
+    phase === 'over'
+      ? null
+      : phase === 'bot'
+        ? { board: botStart.current ?? board, dice: [], rolled, phase, snapshot: null, message: 'Rakip oynuyor...' }
+        : { board, dice, rolled, phase, snapshot, message },
+  )
 
   const legal = useMemo(() => (phase === 'move' ? legalMoves(board, 'p', dice) : []), [board, dice, phase])
 

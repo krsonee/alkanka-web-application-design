@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { FlipHorizontal2, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
+import { loadSaved, useSaveGame, writeSaved } from './saved-game'
 import { OkeyRack, useRack, type DropKind } from './okey-rack'
 import { TableBrand } from './table-brand'
 import { playSound } from '@/lib/sound'
@@ -143,11 +144,15 @@ function deal() {
   return { deck, indicator, okey, hands, discards: [[], [], [], []] as Tile[][] }
 }
 
-export function Okey({ finish }: GameApi) {
-  const [game, setGame] = useState(deal)
-  const [phase, setPhase] = useState<Phase>('discard')
-  const [active, setActive] = useState(0)
-  const [message, setMessage] = useState('Elinde 15 taş var. Bir taş seçip at, oyun başlasın.')
+type OkeySave = { game: ReturnType<typeof deal>; phase: Phase; message: string }
+
+export function Okey({ finish, saveKey }: GameApi) {
+  const [saved] = useState(() => loadSaved<OkeySave>(saveKey))
+  const [game, setGame] = useState(() => saved?.game ?? deal())
+  const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'discard')
+  const [active, setActive] = useState(saved?.phase === 'bots' ? 1 : 0)
+  const [message, setMessage] = useState(saved?.message ?? 'Elinde 15 taş var. Bir taş seçip at, oyun başlasın.')
+  useSaveGame(saveKey, phase === 'over' || phase === 'bots' ? null : { game, phase, message })
   const [fresh, setFresh] = useState<number | null>(null)
   const [dropOver, setDropOver] = useState<'discard' | 'finish' | null>(null)
 
@@ -205,11 +210,13 @@ export function Okey({ finish }: GameApi) {
     const tile = hand.find((t) => t.id === tileId)
     if (!tile) return
     playSound('tile')
-    setGame({
+    const next = {
       ...game,
       hands: [hand.filter((t) => t.id !== tileId), ...hands.slice(1)],
       discards: discards.map((d, i) => (i === 0 ? [...d, tile] : d)),
-    })
+    }
+    setGame(next)
+    writeSaved(saveKey, { game: next, phase: 'bots', message: 'Rakipler oynuyor...' } satisfies OkeySave)
     setSelected(null)
     setFresh(null)
     setActive(1)
