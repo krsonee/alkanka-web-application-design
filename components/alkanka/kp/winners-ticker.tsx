@@ -84,8 +84,9 @@ export function WinnersTicker() {
 
   return (
     <>
-      <div className="group relative flex h-9 items-center overflow-hidden border-b border-border bg-surface">
-        <Link href="/gorevler" className="relative z-10 flex h-full shrink-0 items-center gap-2 bg-surface pl-3 pr-3 text-[10px] font-bold uppercase tracking-widest text-primary sm:pl-4 lg:pl-6">
+      <div className="mx-auto w-full max-w-screen-2xl px-4 pt-4 lg:px-6">
+      <div className="group relative flex h-10 items-center overflow-hidden rounded-xl border border-border bg-surface">
+        <Link href="/gorevler" className="relative z-10 flex h-full shrink-0 items-center gap-2 border-r border-border bg-surface px-3 text-[10px] font-bold uppercase tracking-widest text-primary sm:px-4">
           <span className="relative flex size-2">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-live opacity-60" />
             <span className="relative inline-flex size-2 rounded-full bg-live" />
@@ -107,6 +108,7 @@ export function WinnersTicker() {
             ))}
           </ul>
         </div>
+      </div>
       </div>
 
       {toast && (
