@@ -193,10 +193,13 @@ async function marketPanel() {
   ])
   const coverUsage = Object.fromEntries(coverRows.map((r) => [r.id, Number(r.n)]))
   return (
-    <div className="flex flex-col gap-8">
-      <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} />
-      <MarketManager products={products} requests={requests} sponsors={sponsors} />
-    </div>
+    <TelegramTabs
+      label="Market bölümleri"
+      tabs={[
+        { id: 'products', label: `Ürünler & talepler${requests.length ? ` (${requests.length})` : ''}`, content: <MarketManager products={products} requests={requests} sponsors={sponsors} /> },
+        { id: 'avatars', label: 'Avatarlar & kapaklar', content: <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} /> },
+      ]}
+    />
   )
 }
 
@@ -306,10 +309,13 @@ export default async function PanelPage() {
     users,
   ] = await Promise.all([
     section(session, 'texts', 'Site yazıları', () => (
-      <div className="flex flex-col gap-10">
-        <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} />
-        <LegalEditor docs={mergeLegal(content[LEGAL_KEY] as LegalOverrides | undefined)} />
-      </div>
+      <TelegramTabs
+        label="Site yazıları"
+        tabs={[
+          { id: 'texts', label: 'Site yazıları', content: <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} /> },
+          { id: 'legal', label: 'Yasal metinler', content: <LegalEditor docs={mergeLegal(content[LEGAL_KEY] as LegalOverrides | undefined)} /> },
+        ]}
+      />
     )),
     section(session, 'branding', 'Logo ayarları', async () => {
       const b = await getBranding()
@@ -318,24 +324,39 @@ export default async function PanelPage() {
     section(session, 'logo', 'Logolar', async () => {
       const logoSponsors = await listLogoSponsors()
       return (
-      <>
-        <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} />
-        <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} />
-        <LogoEditor
-          kind="sponsors"
-          title={`Site logoları (${logoSponsors.length})`}
-          hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
-          items={logoSponsors}
-          saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
+        <TelegramTabs
+          label="Paylaşım, reklam ve logolar"
+          tabs={[
+            { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
+            { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} /> },
+            {
+              id: 'sponsor-logos',
+              label: `Sponsor logoları (${logoSponsors.length})`,
+              content: (
+                <LogoEditor
+                  kind="sponsors"
+                  title={`Site logoları (${logoSponsors.length})`}
+                  hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
+                  items={logoSponsors}
+                  saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
+                />
+              ),
+            },
+            {
+              id: 'team-logos',
+              label: `Takım logoları (${LOGO_TEAMS.length})`,
+              content: (
+                <LogoEditor
+                  kind="teams"
+                  title={`Takım logoları (${LOGO_TEAMS.length})`}
+                  hint="Özel oranlar ve maç tahminlerinde takım adının yanında görünür."
+                  items={LOGO_TEAMS}
+                  saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
+                />
+              ),
+            },
+          ]}
         />
-        <LogoEditor
-          kind="teams"
-          title={`Takım logoları (${LOGO_TEAMS.length})`}
-          hint="Özel oranlar ve maç tahminlerinde takım adının yanında görünür."
-          items={LOGO_TEAMS}
-          saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
-        />
-      </>
       )
     }),
     section(session, 'seo', 'SEO', async () => (
@@ -358,25 +379,48 @@ export default async function PanelPage() {
       return <TourSettingsEditor settings={settings} stats={stats} />
     }),
     section(session, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
-    section(session, 'growth', 'Büyüme', async () => (
-      <div className="flex flex-col gap-6">
-      <ReferralEditor settings={await getReferralSettings()} />
-      <AmbientEditor settings={await getAmbientSettings()} />
-      <GrowthManager
-        sites={(await siteOptions()).map((s) => ({ id: s.id, name: s.name }))}
-        recordNames={Object.fromEntries((await listSites().catch(() => [])).map((site) => [String(site.id), site.name]))}
-        links={await getSiteLinks().catch(() => ({}))}
-        followers={await followerCounts().catch(() => ({}))}
-        report={await trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 }))}
-        flagged={await flaggedMembers().catch(() => [])}
-        accounts={await adminSponsorAccounts().catch(() => [])}
-        period={currentPeriod()}
-        siteUrl={SITE_URL}
-        affLinks={await affLinkViews().catch(() => [])}
-        affSites={(await listSites().catch(() => [])).map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
-      />
-      </div>
-    )),
+    section(session, 'growth', 'Büyüme', async () => {
+      const [referral, ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
+        getReferralSettings(),
+        getAmbientSettings(),
+        siteOptions(),
+        listSites().catch(() => []),
+        getSiteLinks().catch(() => ({})),
+        followerCounts().catch(() => ({})),
+        trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 })),
+        flaggedMembers().catch(() => []),
+        adminSponsorAccounts().catch(() => []),
+        affLinkViews().catch(() => []),
+      ])
+      return (
+        <TelegramTabs
+          label="Büyüme bölümleri"
+          tabs={[
+            {
+              id: 'traffic',
+              label: 'Trafik & hesaplar',
+              content: (
+                <GrowthManager
+                  sites={options.map((s) => ({ id: s.id, name: s.name }))}
+                  recordNames={Object.fromEntries(allSites.map((site) => [String(site.id), site.name]))}
+                  links={links}
+                  followers={followers}
+                  report={report}
+                  flagged={flagged}
+                  accounts={accounts}
+                  period={currentPeriod()}
+                  siteUrl={SITE_URL}
+                  affLinks={affLinks}
+                  affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
+                />
+              ),
+            },
+            { id: 'referral', label: 'Davet sistemi', content: <ReferralEditor settings={referral} /> },
+            { id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> },
+          ]}
+        />
+      )
+    }),
     section(session, 'community', 'Topluluk', async () => (
       <CommunityManager
         reviews={await pendingReviews().catch(() => [])}
@@ -430,10 +474,13 @@ export default async function PanelPage() {
         getAppSettings(),
       ])
       return (
-        <div className="flex flex-col gap-6">
-          <AppRewardsEditor settings={appSettings} />
-          <PushSender {...stats} configured={stats.total > 0} />
-        </div>
+        <TelegramTabs
+          label="Bildirim bölümleri"
+          tabs={[
+            { id: 'send', label: 'Bildirim gönder', content: <PushSender {...stats} configured={stats.total > 0} /> },
+            { id: 'app-rewards', label: 'Uygulama ödülleri', content: <AppRewardsEditor settings={appSettings} /> },
+          ]}
+        />
       )
     }),
     section(session, 'studio', 'Stüdyo', async () => (
