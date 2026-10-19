@@ -271,7 +271,7 @@ async function siteOrigin() {
   return SITE_URL.replace(/\/$/, '')
 }
 
-async function sendToTargets(targetIds: number[], text: string) {
+export async function sendToTargets(targetIds: number[], text: string) {
   const { botToken, listTargets } = await import('@/lib/telegram-mirror')
   const targets = (await listTargets()).filter((t) => t.active && targetIds.includes(t.id))
   if (!targets.length) throw new Error('Seçili aktif hedef grup yok')

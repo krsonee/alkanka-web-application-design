@@ -43,6 +43,9 @@ import { DEFAULT_ODDS_BOT } from '@/lib/special-odds-shared'
 import { KankaTvManager } from '@/components/panel/kankatv-manager'
 import { getTvConfig, tvBotStatus, tvStats } from '@/lib/kankatv-engage'
 import { DEFAULT_TV } from '@/lib/kankatv-shared'
+import { TvBetsManager } from '@/components/panel/tv-bets-manager'
+import { adminMarkets, betsBotStatus, betsLog, betsStats, getBetsConfig } from '@/lib/tv-bets'
+import { DEFAULT_BETS } from '@/lib/tv-bets-shared'
 import { DEFAULT_SUITE, getBotSuite, shareStatus } from '@/lib/telegram-bots'
 import { chatStatus } from '@/lib/telegram-chat'
 import { getInviteConfig } from '@/lib/table-invite'
@@ -138,6 +141,13 @@ async function telegramPanel() {
     tvBotStatus().catch(() => ({ lastRunAt: null, lastError: null, sent: 0, tracked: 0 })),
     tvStats().catch(() => ({ watchersToday: 0, minutesToday: 0, coinsToday: 0, predictionsToday: 0, openPredictions: 0, follows: 0 })),
   ])
+  const [betsConfig, betsStatus, betsToday, betsMarkets, betsHistory] = await Promise.all([
+    getBetsConfig().catch(() => DEFAULT_BETS),
+    betsBotStatus().catch(() => ({ lastRunAt: null, lastError: null, sent: 0, opened: 0, settled: 0, voided: 0 })),
+    betsStats().catch(() => ({ betsToday: 0, stakedToday: 0, paidToday: 0, burnedToday: 0, openMarkets: 0, openStake: 0, players: 0 })),
+    adminMarkets().catch(() => []),
+    betsLog().catch(() => []),
+  ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
   const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
@@ -153,6 +163,12 @@ async function telegramPanel() {
           label: 'KankaTV Gol Botu',
           status: light((tvConfig.goalBot.enabled || tvConfig.goalBot.push) && !tvStatus.lastError),
           content: <KankaTvManager config={tvConfig} status={tvStatus} stats={tvToday} targets={targets} cronUrl={tvCronUrl} />,
+        },
+        {
+          id: 'tvbets',
+          label: 'KankaTV Canlı Etkinlik',
+          status: light(betsConfig.enabled && !betsStatus.lastError),
+          content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
         },
         { id: 'approvals', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
         { id: 'share', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },

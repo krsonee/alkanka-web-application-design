@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { PageHero } from '../page-hero'
 import { MatchEngage, WatchBar, useTvEngage } from './engage'
 import { useTvDock } from './tv-dock'
+import { LiveEvents } from './live-events'
 import {
   CHANNEL_GROUPS,
   SPORTS,
@@ -766,16 +767,26 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
   )
 }
 
+/** Opens in the group with the most playable live streams, on its most watched stream. */
+function pickStartChannel(channels: Channel[]) {
+  const playable = channels.filter((c) => c.live && c.embedUrl)
+  if (!playable.length) return (channels.find((c) => c.live) ?? channels[0]).slug
+  const counts = new Map<ChannelGroup, number>()
+  for (const c of playable) counts.set(c.group, (counts.get(c.group) ?? 0) + 1)
+  const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+  return playable.filter((c) => c.group === best).sort((a, b) => (b.viewers ?? 0) - (a.viewers ?? 0))[0].slug
+}
+
 export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: ScoreBoard; initialChannels: Channel[] }) {
   const { data: channels = initialChannels } = useSWR<Channel[]>('/api/kankatv/channels', fetcher, {
     fallbackData: initialChannels,
     refreshInterval: 120_000,
   })
   const { channel: docked } = useTvDock()
-  const [tab, setTab] = useState<'matches' | 'channels'>(() => (docked ? 'channels' : 'matches'))
-  const [channel, setChannel] = useState<string>(
-    () => docked?.slug ?? initialChannels.find((c) => c.live)?.slug ?? initialChannels[0].slug,
+  const [tab, setTab] = useState<'matches' | 'channels'>(() =>
+    docked || initialChannels.some((c) => c.live && c.embedUrl) ? 'channels' : 'matches',
   )
+  const [channel, setChannel] = useState<string>(() => docked?.slug ?? pickStartChannel(initialChannels))
   const totalLive = Object.values(initialBoard.liveCounts).reduce((a, b) => a + b, 0)
 
   const watch = (slug: string) => {
@@ -831,6 +842,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
       ) : (
         <ChannelsTab channels={channels} selected={channel} onSelect={setChannel} />
       )}
+      <LiveEvents />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { getCronKey } from '@/lib/telegram-mirror'
 import { scanGoals, settlePredictions } from '@/lib/kankatv-engage'
+import { syncBets } from '@/lib/tv-bets'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -19,6 +20,10 @@ export async function GET(req: Request) {
   if (!key || !(matches(key, process.env.CRON_SECRET) || matches(key, await getCronKey()))) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
-  const [scan, settled] = await Promise.all([scanGoals(), settlePredictions({ limit: 100 })])
-  return Response.json({ ok: true, scan, settled })
+  const [scan, settled, bets] = await Promise.all([
+    scanGoals(),
+    settlePredictions({ limit: 100 }),
+    syncBets().catch((e: Error) => ({ error: e.message })),
+  ])
+  return Response.json({ ok: true, scan, settled, bets })
 }

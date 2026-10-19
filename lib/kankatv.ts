@@ -340,6 +340,65 @@ export async function getGameSnapshot(id: number): Promise<GameSnapshot | null> 
   }
 }
 
+export type GameLive = GameSnapshot & {
+  league: string
+  /** Elapsed minute; 0 before kick-off. */
+  minute: number
+  statusGroup: number
+  startTime: string
+  corners: number | null
+  reds: number
+}
+
+const STAT_CORNERS = 8
+const STAT_REDS = 2
+
+async function gameStats(id: number): Promise<{ corners: number | null; reds: number | null }> {
+  try {
+    const res = await fetch(`${API}/game/stats/?${BASE_QUERY}&games=${id}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(6000) })
+    if (!res.ok) return { corners: null, reds: null }
+    const { statistics = [] } = (await res.json()) as { statistics?: { id: number; value?: string | number }[] }
+    const sum = (statId: number) => {
+      const list = statistics.filter((s) => s.id === statId)
+      if (!list.length) return null
+      return list.reduce((acc, s) => acc + (Number.parseInt(String(s.value ?? 0), 10) || 0), 0)
+    }
+    return { corners: sum(STAT_CORNERS), reds: sum(STAT_REDS) }
+  } catch {
+    return { corners: null, reds: null }
+  }
+}
+
+/** Full live state for auto-settled TV events: score, goal order, minute, corners and red cards. */
+export async function getGameLive(id: number): Promise<GameLive | null> {
+  try {
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(6000) })
+    if (!res.ok) return null
+    const { game } = (await res.json()) as {
+      game?: RawGame & NonNullable<RawDetail['game']> & { gameTime?: number; competitionDisplayName?: string }
+    }
+    if (!game) return null
+    const homeId = game.homeCompetitor.id
+    const state = toState(game.statusGroup)
+    const stats = state === 'pre' ? { corners: 0, reds: 0 } : await gameStats(id)
+    const redEvents = (game.events ?? []).filter((e) => e.eventType.id === 3).length
+    return {
+      state,
+      league: tidy(game.competitionDisplayName),
+      minute: state === 'pre' ? 0 : Math.max(0, Math.floor(Number(game.gameTime ?? 0))),
+      statusGroup: game.statusGroup,
+      startTime: game.startTime,
+      home: { id: homeId, name: game.homeCompetitor.name.trim(), score: Math.max(0, game.homeCompetitor.score ?? 0) },
+      away: { id: game.awayCompetitor.id, name: game.awayCompetitor.name.trim(), score: Math.max(0, game.awayCompetitor.score ?? 0) },
+      goals: (game.events ?? []).filter((e) => e.eventType.id === 1).map((e) => (e.competitorId === homeId ? 'home' : 'away')),
+      corners: stats.corners,
+      reds: Math.max(stats.reds ?? 0, redEvents),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function getMatchDetail(id: number): Promise<MatchDetail> {
   try {
     const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, next: { revalidate: 30 } })
