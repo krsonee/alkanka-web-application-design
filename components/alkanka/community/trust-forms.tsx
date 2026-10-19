@@ -6,13 +6,16 @@ import { addComplaintAction, addReviewAction } from '@/app/actions/community'
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { StatusLine, useAction } from './use-action'
+import { WithdrawForm } from './withdraw-form'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
-export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteId: string; siteName: string; initialMode?: 'review' | 'complaint' }) {
+type Mode = 'review' | 'complaint' | 'cekim'
+
+export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteId: string; siteName: string; initialMode?: Mode }) {
   const { member } = usePoints()
-  const [mode, setMode] = useState<'review' | 'complaint'>(initialMode)
+  const [mode, setMode] = useState<Mode>(initialMode)
   const review = useAction()
   const complaint = useAction()
   const [rating, setRating] = useState(0)
@@ -33,21 +36,23 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
 
   return (
     <div className="panel-gold flex flex-col gap-4 rounded-xl p-5">
-      <div role="tablist" className="grid grid-cols-2 gap-1 rounded-lg bg-background p-1">
-        {(['review', 'complaint'] as const).map((m) => (
+      <div role="tablist" className="grid grid-cols-3 gap-1 rounded-lg bg-background p-1">
+        {(['review', 'complaint', 'cekim'] as const).map((m) => (
           <button
             key={m}
             role="tab"
             aria-selected={mode === m}
             onClick={() => setMode(m)}
-            className={cn('h-9 rounded-md text-xs font-bold uppercase tracking-wider', mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}
+            className={cn('h-9 rounded-md px-1 text-[11px] font-bold uppercase tracking-wide', mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}
           >
-            {m === 'review' ? 'Yorum yaz' : 'Şikâyet bildir'}
+            {m === 'review' ? 'Yorum' : m === 'complaint' ? 'Şikâyet' : 'Çekim paylaş'}
           </button>
         ))}
       </div>
 
-      {mode === 'review' ? (
+      {mode === 'cekim' ? (
+        <WithdrawForm siteId={siteId} siteName={siteName} />
+      ) : mode === 'review' ? (
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {

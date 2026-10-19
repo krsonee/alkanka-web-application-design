@@ -9,6 +9,8 @@ import { TrustForms } from '@/components/alkanka/community/trust-forms'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { PageHero } from '@/components/alkanka/page-hero'
 import { AutoRail } from '@/components/alkanka/auto-rail'
+import { WithdrawWall } from '@/components/alkanka/community/withdraw-wall'
+import { recentWithdrawals, siteWithdrawals, withdrawStats } from '@/lib/withdrawals'
 import { cn } from '@/lib/utils'
 
 export const metadata: Metadata = {
@@ -21,10 +23,10 @@ export const dynamic = 'force-dynamic'
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
 
 const STEPS = [
-  { icon: PenLine, title: 'Yaz', text: 'Doğrulanmış üye olarak yorum ya da şikâyet bırak.' },
+  { icon: PenLine, title: 'Paylaş', text: 'Yorum, şikâyet ya da çekim ekran görüntüsü gönder.' },
   { icon: SearchCheck, title: 'İnceleriz', text: 'Ekip içeriği kontrol eder, sahte kayıtları ayıklar.' },
   { icon: Send, title: 'İletiriz', text: 'Şikâyet siteye iletilir, yanıt burada yayınlanır.' },
-  { icon: CheckCircle2, title: 'Çözülür', text: 'Çözüm oranı her sitenin karnesine işlenir.' },
+  { icon: CheckCircle2, title: 'Ödüllenir', text: 'Onaylı çekime ödül, çözülen şikâyete karne puanı.' },
 ]
 
 function score(t: SiteTrust) {
@@ -53,18 +55,24 @@ function resolveRate(t: SiteTrust) {
 export default async function TrustPage({ searchParams }: { searchParams: Promise<{ site?: string; tab?: string }> }) {
   const { site, tab } = await searchParams
   const table = await siteTrustTable()
-  const view = tab === 'sikayet' ? 'sikayet' : 'yorum'
+  const view = tab === 'sikayet' ? 'sikayet' : tab === 'cekim' ? 'cekim' : 'yorum'
+  const [stats, recent] = await Promise.all([withdrawStats().catch(() => []), recentWithdrawals(8).catch(() => [])])
+  const statOf = (id: string) => stats.find((s) => s.siteId === id)
+  const totalWithdraws = stats.reduce((a, s) => a + s.count, 0)
   const totals = table.reduce((a, t) => ({ reviews: a.reviews + t.reviews, complaints: a.complaints + t.complaints, resolved: a.resolved + t.resolved }), { reviews: 0, complaints: 0, resolved: 0 })
   const ranked = [...table].sort((a, b) => score(b) - score(a) || b.reviews - a.reviews)
   const current = ranked.find((item) => item.slug === site) ?? ranked.find((item) => item.siteId === site) ?? ranked[0]
   if (current && site && site !== current.slug) {
-    permanentRedirect(`/guven?site=${current.slug}${view === 'sikayet' ? '&tab=sikayet' : ''}`)
+    permanentRedirect(`/guven?site=${current.slug}${view !== 'yorum' ? `&tab=${view}` : ''}`)
   }
   const sponsor = current ? asSponsor(current) : null
   const selected = current?.siteId ?? ''
-  const [reviews, complaints] = current ? await Promise.all([siteReviews(selected), siteComplaints(selected)]) : [[], []]
+  const [reviews, complaints, withdraws] = current
+    ? await Promise.all([siteReviews(selected), siteComplaints(selected), siteWithdrawals(selected).catch(() => [])])
+    : [[], [], []]
   const rate = current ? resolveRate(current) : null
-  const href = (slug: string, t = view) => `/guven?site=${slug}${t === 'sikayet' ? '&tab=sikayet' : ''}`
+  const currentStat = current ? statOf(current.siteId) : undefined
+  const href = (slug: string, t: string = view) => `/guven?site=${slug}${t !== 'yorum' ? `&tab=${t}` : ''}`
 
   return (
     <div className="flex flex-col gap-6">
@@ -74,22 +82,47 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
         description="Yorumları yalnızca doğrulanmış AL KANKA üyeleri yazar. Puanlar, şikâyetler ve çözüm oranları herkese açık."
         image="/images/heroes/guven.png"
         tone="accent"
-        stats={[
-          { label: 'Yorum', value: String(totals.reviews) },
-          { label: 'Şikâyet', value: String(totals.complaints) },
-          { label: 'Çözüm oranı', value: totals.complaints ? `%${Math.round((totals.resolved / totals.complaints) * 100)}` : '-' },
-        ]}
+        compact
+        stats={
+          totals.reviews || totals.complaints || totalWithdraws
+            ? [
+                { label: 'Yorum', value: String(totals.reviews) },
+                { label: 'Onaylı çekim', value: String(totalWithdraws) },
+                { label: 'Çözüm oranı', value: totals.complaints ? `%${Math.round((totals.resolved / totals.complaints) * 100)}` : '-' },
+              ]
+            : undefined
+        }
       />
-      <section aria-labelledby="nasil" className="flex flex-col gap-3">
-        <h2 id="nasil" className="font-display text-lg font-bold text-foreground sm:sr-only">Nasıl işler?</h2>
-        <ol className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {STEPS.map(({ icon: Icon, title, text }, i) => (
-            <li key={title} className="relative flex flex-col items-start gap-2 rounded-xl border-2 border-primary/30 bg-card p-3 sm:flex-row sm:gap-3 sm:border sm:border-border">
-              <span className="absolute right-2.5 top-2 font-display text-2xl font-bold leading-none text-primary/25 sm:hidden" aria-hidden>
-                {i + 1}
+
+      {recent.length > 0 && (
+        <section aria-label="Son onaylı çekimler" className="relative -mx-4 overflow-hidden border-y border-border bg-card py-2 sm:mx-0 sm:rounded-xl sm:border">
+          <div className="flex w-max animate-marquee gap-6 pl-4 motion-reduce:animate-none">
+            {[...recent, ...recent].map((s, i) => (
+              <span key={`${s.id}-${i}`} aria-hidden={i >= recent.length} className="flex shrink-0 items-center gap-2 text-xs">
+                <BadgeCheck className="size-3.5 text-live" aria-hidden />
+                <b className="text-foreground">{s.userName}</b>
+                <span className="text-muted-foreground">{s.siteName} çekimi</span>
+                <b className="tabular-nums text-primary">{s.amount.toLocaleString('tr-TR')} TL</b>
               </span>
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground sm:size-9 sm:bg-primary/15 sm:text-primary">
-                <Icon className="size-5 sm:size-4" aria-hidden />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section aria-labelledby="nasil" className="flex flex-col gap-2">
+        <h2 id="nasil" className="sr-only">Nasıl işler?</h2>
+        <ol className="no-scrollbar -mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-4 sm:px-0">
+          {STEPS.map(({ icon: Icon, title, text }, i) => (
+            <li
+              key={title}
+              className="flex w-60 shrink-0 animate-rise snap-start items-start gap-3 rounded-xl border border-border bg-card p-3 motion-reduce:animate-none sm:w-auto"
+              style={{ animationDelay: `${i * 80}ms` }}
+            >
+              <span className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Icon className="size-4" aria-hidden />
+                <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground" aria-hidden>
+                  {i + 1}
+                </span>
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="text-sm font-bold text-foreground">{title}</span>
@@ -144,6 +177,10 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                     <span>{t.reviews} yorum</span>
                     <span>{r === null ? 'Şikâyet yok' : `%${r} çözüm`}</span>
                   </span>
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-live">
+                    <BadgeCheck className="size-3" aria-hidden />
+                    {statOf(t.siteId)?.count ?? 0} onaylı çekim
+                  </span>
                 </Link>
               </li>
             )
@@ -187,13 +224,28 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                 </dd>
               </div>
             </dl>
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-live/10 px-3 py-2 text-xs text-foreground">
+              <span className="flex items-center gap-1 font-bold text-live">
+                <BadgeCheck className="size-3.5" aria-hidden />
+                {currentStat?.count ?? 0} onaylı çekim
+              </span>
+              {currentStat?.count ? (
+                <>
+                  <span>Toplam {currentStat.total.toLocaleString('tr-TR')} TL</span>
+                  {currentStat.last && <span className="text-muted-foreground">Son: {fmtDate(currentStat.last)}</span>}
+                </>
+              ) : (
+                <span className="text-muted-foreground">İlk çekimi sen paylaş, ödülü kap.</span>
+              )}
+            </p>
           </section>
 
-          <div role="tablist" aria-label="İçerik" className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-card p-1 sm:w-fit">
+          <div role="tablist" aria-label="İçerik" className="grid w-full grid-cols-3 gap-1 rounded-lg border border-border bg-card p-1 sm:w-fit">
             {(
               [
-                ['yorum', `Yorumlar (${reviews.length})`],
-                ['sikayet', `Şikâyetler (${complaints.length})`],
+                ['yorum', `Yorum (${reviews.length})`],
+                ['sikayet', `Şikâyet (${complaints.length})`],
+                ['cekim', `Çekim (${withdraws.length})`],
               ] as const
             ).map(([id, label]) => (
               <Link
@@ -202,14 +254,16 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                 aria-selected={view === id}
                 href={href(current.slug, id)}
                 scroll={false}
-                className={cn('flex h-9 items-center justify-center rounded-md px-4 text-xs font-bold uppercase tracking-wider', view === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+                className={cn('flex h-9 items-center justify-center rounded-md px-2 text-[11px] font-bold uppercase tracking-wide sm:px-4 sm:text-xs', view === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
               >
                 {label}
               </Link>
             ))}
           </div>
 
-          {view === 'yorum' ? (
+          {view === 'cekim' ? (
+            <WithdrawWall shares={withdraws} showSite={false} className="xl:grid-cols-3" empty={`${current.name} için henüz onaylı çekim yok. İlk çekimini paylaş, ödülünü al.`} />
+          ) : view === 'yorum' ? (
             reviews.length ? (
               <ul className="flex flex-col gap-3">
                 {reviews.map((r) => (
@@ -265,12 +319,20 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
         </div>
 
         <aside className="flex flex-col gap-3 xl:sticky xl:top-20 xl:self-start">
-          <TrustForms siteId={selected} siteName={current.name} initialMode={view === 'sikayet' ? 'complaint' : 'review'} />
+          <TrustForms siteId={selected} siteName={current.name} initialMode={view === 'sikayet' ? 'complaint' : view === 'cekim' ? 'cekim' : 'review'} />
           <p className="px-1 text-xs leading-relaxed text-muted-foreground">
             Şifre, kart veya kimlik bilgisi paylaşma. Hakaret ve reklam içeren kayıtlar yayınlanmaz.
           </p>
         </aside>
       </div>
+
+      <section aria-labelledby="cekim-duvari" className="flex flex-col gap-3">
+        <div className="flex items-end justify-between gap-2">
+          <h2 id="cekim-duvari" className="font-display text-lg font-bold text-foreground">Çekim duvarı</h2>
+          <span className="text-xs text-muted-foreground">Tüm sitelerden son onaylılar</span>
+        </div>
+        <WithdrawWall shares={recent} empty="Henüz onaylı çekim yok. Çekim paylaş sekmesinden ilk paylaşımı sen yap." />
+      </section>
       </>
       )}
     </div>

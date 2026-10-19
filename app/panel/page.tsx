@@ -360,6 +360,17 @@ export default async function PanelPage() {
         complaints={await adminComplaints().catch(() => [])}
         matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
+        withdraw={await (async () => {
+          const w = await import('@/lib/withdrawals')
+          const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
+            w.adminWithdrawals().catch(() => []),
+            w.getWithdrawSettings().catch(() => w.WITHDRAW_DEFAULTS),
+            w.listSiteRewards().catch(() => []),
+            siteOptions().catch(() => []),
+            w.listWithdrawBlocks().catch(() => []),
+          ])
+          return { shares, settings, siteRewards, sites: sites.map((s) => ({ id: s.id, name: s.name })), blocks }
+        })()}
       />
     )),
     section(session, 'badges', 'Rozet sistemi', kpPanel),

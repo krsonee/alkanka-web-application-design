@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { Award, Clock, ListChecks, Megaphone, X, type LucideIcon } from 'lucide-react'
+import { Award, Banknote, Clock, ListChecks, Megaphone, X, type LucideIcon } from 'lucide-react'
 import type { Feed, FeedItem, FeedKind } from '@/lib/online-rewards'
 import { usePoints } from '@/components/alkanka/points-context'
 import { RewardChips } from './reward-chips'
@@ -15,6 +15,7 @@ const KIND: Record<FeedKind, { icon: LucideIcon; verb: string; tone: string }> =
   gorev: { icon: ListChecks, verb: 'görevi tamamladı', tone: 'bg-primary/15 text-primary' },
   rozet: { icon: Award, verb: 'rozetini kazandı', tone: 'bg-ruby/15 text-ruby' },
   online: { icon: Clock, verb: 'ödülünü aldı', tone: 'bg-live/15 text-live' },
+  cekim: { icon: Banknote, verb: 'çekti', tone: 'bg-live/15 text-live' },
   duyuru: { icon: Megaphone, verb: '', tone: 'bg-primary text-primary-foreground' },
 }
 

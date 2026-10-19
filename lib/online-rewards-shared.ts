@@ -25,7 +25,7 @@ export type OnlineStatus = {
   granted: OnlineGrant[]
 }
 
-export type TickerKinds = { gorev: boolean; rozet: boolean; online: boolean }
+export type TickerKinds = { gorev: boolean; rozet: boolean; online: boolean; cekim: boolean }
 export type TickerAnnouncement = { id: string; text: string }
 export type TickerConfig = {
   enabled: boolean
@@ -38,7 +38,7 @@ export const MAX_ANNOUNCEMENTS = 10
 export const DEFAULT_TICKER: TickerConfig = {
   enabled: true,
   toast: true,
-  kinds: { gorev: true, rozet: true, online: true },
+  kinds: { gorev: true, rozet: true, online: true, cekim: true },
   announcements: [],
 }
 
@@ -47,7 +47,7 @@ export function cleanTickerConfig(input: Partial<TickerConfig> | null | undefine
   return {
     enabled: input?.enabled ?? true,
     toast: input?.toast ?? true,
-    kinds: { gorev: k.gorev !== false, rozet: k.rozet !== false, online: k.online !== false },
+    kinds: { gorev: k.gorev !== false, rozet: k.rozet !== false, online: k.online !== false, cekim: (k as Partial<TickerKinds>).cekim !== false },
     announcements: (Array.isArray(input?.announcements) ? input.announcements : [])
       .map((a) => ({ id: String(a?.id || '').slice(0, 40), text: String(a?.text || '').trim().slice(0, 140) }))
       .filter((a) => a.id && a.text)

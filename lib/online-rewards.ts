@@ -122,7 +122,7 @@ export async function saveTickerConfig(input: TickerConfig) {
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
 }
 
-export type FeedKind = 'gorev' | 'rozet' | 'online' | 'duyuru'
+export type FeedKind = 'gorev' | 'rozet' | 'online' | 'cekim' | 'duyuru'
 export type FeedItem = { id: string; kind: FeedKind; name: string; title: string; coin: number; kp: number; at: string }
 export type Feed = { enabled: boolean; toast: boolean; items: FeedItem[] }
 
@@ -153,6 +153,9 @@ export async function winnersFeed(limit = 30): Promise<FeedItem[]> {
       WHERE a.awarded_at > now() - interval '7 days' AND a.badge_id NOT IN ('moderator', 'sponsor-destek')
       ORDER BY a.awarded_at DESC LIMIT ${limit}`),
   ])
+  const payouts = await import('@/lib/withdrawals')
+    .then((m) => m.withdrawFeed(15))
+    .catch(() => [])
   const items: FeedItem[] = [
     ...events.map((e) => ({
       id: `e${e.id}`,
@@ -171,6 +174,15 @@ export async function winnersFeed(limit = 30): Promise<FeedItem[]> {
       coin: 0,
       kp: Number(a.bonus),
       at: new Date(a.awarded_at).toISOString(),
+    })),
+    ...payouts.map((w) => ({
+      id: `w${w.id}`,
+      kind: 'cekim' as const,
+      name: w.siteUsername,
+      title: `${w.siteName} üzerinden ${w.amount.toLocaleString('tr-TR')} TL`,
+      coin: w.rewardCoin,
+      kp: w.rewardKp,
+      at: w.resolvedAt,
     })),
   ]
   return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit)

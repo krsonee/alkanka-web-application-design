@@ -173,6 +173,7 @@ const KIND_LABELS: [keyof TickerKinds, string][] = [
   ['gorev', 'Görev kazananları'],
   ['rozet', 'Rozet kazananları'],
   ['online', 'Online ödülü alanlar'],
+  ['cekim', 'Onaylı çekim paylaşımları'],
 ]
 
 function TickerEditor({ initial }: { initial: TickerConfig }) {
