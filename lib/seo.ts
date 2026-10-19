@@ -124,12 +124,6 @@ export const PAGE_SEO = {
     description: 'Bonus kodları nasıl kullanılır, özel oran nedir, deneme bonusu nasıl alınır? Güncel rehber yazıları.',
     keywords: ['bonus rehberi', 'deneme bonusu nasıl alınır', 'özel oran nedir', 'promo kod nasıl kullanılır'],
   },
-  firsatlar: {
-    path: '/firsatlar',
-    title: 'Günün Fırsatları: Özel Oranlar ve Promo Kodlar',
-    description: 'Resmi kanallarda paylaşılan özel oranlar, promo kodlar ve bonus fırsatları anında burada.',
-    keywords: ['günün promo kodları', 'güncel promo kod', 'özel oran', 'bugünün bonusları'],
-  },
 } satisfies Record<string, PageSeo>
 
 export type PageKey = keyof typeof PAGE_SEO

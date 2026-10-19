@@ -10,6 +10,12 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '/api/studio/animate': ['./node_modules/ffmpeg-static/ffmpeg'],
   },
+  async redirects() {
+    return [
+      { source: '/firsatlar', destination: '/ozel-oranlar', permanent: true },
+      { source: '/firsatlar/:slug*', destination: '/ozel-oranlar', permanent: true },
+    ]
+  },
   async headers() {
     const noindex = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }]
     const security = [

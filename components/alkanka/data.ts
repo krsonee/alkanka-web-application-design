@@ -40,7 +40,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
   { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, badge: 'Canlı' },
-  { id: 'firsatlar', label: 'Günün fırsatları', href: '/firsatlar', icon: Zap },
   { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, badge: 'Yeni' },
   { id: 'turnuvalar', label: 'Turnuvalar', href: '/turnuvalar', icon: Swords },
   { id: 'market', label: 'Puan marketi', href: '/market', icon: ShoppingBag },

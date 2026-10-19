@@ -210,7 +210,7 @@ function DealsCard({ deals, publishing }: { deals: Deal[]; publishing: boolean }
         </label>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
-        {'Telegram botunun paylaştığı her post /firsatlar altında ayrı bir sayfa olur. Her gün yeni sayfa eklendiği için Google siteyi daha sık tarar.'}
+        {'Açıksa Telegram botunun paylaştığı özel oran postları siteye kaydedilir ve Özel oranlar sayfasında görünür. Kapatırsan yeni postlar siteye düşmez.'}
       </p>
       {deals.length === 0 ? (
         <p className="text-sm text-muted-foreground">Henüz fırsat sayfası yok.</p>
@@ -218,7 +218,7 @@ function DealsCard({ deals, publishing }: { deals: Deal[]; publishing: boolean }
         <ul className="flex flex-col gap-2">
           {deals.map((d) => (
             <li key={d.id} className="flex items-center gap-2 rounded-xl border border-border p-2">
-              <a href={`/firsatlar/${d.slug}`} target="_blank" className="flex min-w-0 flex-1 flex-col">
+              <a href={d.link || '/ozel-oranlar'} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm font-semibold text-foreground">{d.title}</span>
                 <span className="text-xs text-muted-foreground">
                   {d.brand} · {DEAL_LABELS[d.kind]}
