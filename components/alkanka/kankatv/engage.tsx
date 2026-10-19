@@ -26,8 +26,8 @@ const fetcher = (url: string) =>
     return r.json() as Promise<TvEngage>
   })
 
-export function useTvEngage(refreshInterval = 20_000) {
-  return useSWR<TvEngage>(`/api/kankatv/engage?viewer=${viewerId()}`, fetcher, { refreshInterval, revalidateOnFocus: true })
+export function useTvEngage(refreshInterval = 20_000, enabled = true) {
+  return useSWR<TvEngage>(enabled ? `/api/kankatv/engage?viewer=${viewerId()}` : null, fetcher, { refreshInterval, revalidateOnFocus: true })
 }
 
 async function post<T>(body: Record<string, unknown>): Promise<T> {
@@ -41,8 +41,10 @@ async function post<T>(body: Record<string, unknown>): Promise<T> {
 
 type Floating = { key: number; kind: Reaction; left: number }
 
-export function WatchBar({ playing }: { playing: boolean }) {
-  const { data, mutate } = useTvEngage(10_000)
+export function WatchBar({ playing, demo }: { playing: boolean; demo?: TvEngage }) {
+  const live = useTvEngage(10_000, !demo)
+  const data = demo ?? live.data
+  const mutate = live.mutate
   const { refresh, requireLogin } = usePoints()
   const [floating, setFloating] = useState<Floating[]>([])
   const seen = useRef<Set<number>>(new Set())
@@ -68,7 +70,18 @@ export function WatchBar({ playing }: { playing: boolean }) {
   }, [data?.reactions])
 
   useEffect(() => {
-    if (!playing || !data?.member || !watchOn) return
+    if (!demo || !demo.config.reactions) return
+    const id = setInterval(() => {
+      const key = -Date.now()
+      const kind = REACTIONS[Math.floor(Math.random() * REACTIONS.length)]
+      setFloating((f) => [...f, { key, kind, left: 10 + Math.random() * 80 }].slice(-20))
+      setTimeout(() => setFloating((f) => f.filter((x) => x.key !== key)), 2600)
+    }, 900)
+    return () => clearInterval(id)
+  }, [demo])
+
+  useEffect(() => {
+    if (demo || !playing || !data?.member || !watchOn) return
     const tick = async () => {
       if (document.visibilityState !== 'visible') return
       try {
@@ -87,6 +100,7 @@ export function WatchBar({ playing }: { playing: boolean }) {
     const key = -Date.now()
     setFloating((f) => [...f, { key, kind, left: 10 + Math.random() * 80 }].slice(-20))
     setTimeout(() => setFloating((f) => f.filter((x) => x.key !== key)), 2600)
+    if (demo) return
     try {
       setError(null)
       await post({ action: 'react', kind })
@@ -185,8 +199,11 @@ function matchOdds(data: TvEngage, match: Match) {
   })
 }
 
-export function MatchEngage({ match, football }: { match: Match; football: boolean }) {
-  const { data, mutate } = useTvEngage()
+export function MatchEngage({ match, football, demo }: { match: Match; football: boolean; demo?: TvEngage }) {
+  const live = useTvEngage(20_000, !demo)
+  const [demoState, setDemoState] = useState(demo)
+  const data = demoState ?? live.data
+  const mutate = live.mutate
   const { requireLogin } = usePoints()
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
@@ -194,6 +211,18 @@ export function MatchEngage({ match, football }: { match: Match; football: boole
   const cfg = data.config
 
   const run = async (key: string, body: Record<string, unknown>, ok: string) => {
+    if (demoState) {
+      setDemoState((d) => {
+        if (!d) return d
+        if (body.action === 'predict') {
+          return { ...d, predictions: [{ id: Date.now(), gameId: match.id, home: match.home.name, away: match.away.name, pick: body.pick as PredictPick, status: 'open' as const, coin: 0, createdAt: new Date().toISOString() }, ...d.predictions] }
+        }
+        const teamId = body.teamId as number
+        return { ...d, follows: d.follows.includes(teamId) ? d.follows.filter((t) => t !== teamId) : [...d.follows, teamId] }
+      })
+      setMessage({ ok: true, text: ok })
+      return
+    }
     if (!data.member) return requireLogin()
     setBusy(key)
     setMessage(null)
