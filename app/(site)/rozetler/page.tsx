@@ -96,17 +96,7 @@ export default async function BadgesPage() {
         description={`${cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.`}
         image="/images/badges/hero-jako-rozet.png"
         stats={heroStats}
-        compact
-      >
-          <div className="flex flex-wrap gap-2">
-            {groups.map((g) => (
-              <span key={g.tier} className={cn('inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-xs font-semibold', TIER_BG[g.tier], TIER_TEXT[g.tier])}>
-                <LevelEmblem level={g.items[0].i + 1} size="xs" />
-                {TIER_NAMES[g.tier]}
-              </span>
-            ))}
-          </div>
-      </PageHero>
+      />
 
       <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
         {[
