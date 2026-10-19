@@ -27,6 +27,7 @@ import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
 import { pushStats } from '@/lib/push'
+import { getQuestConfig, questWinnersThisWeek } from '@/lib/kp-extras'
 import { PushSender } from '@/components/panel/push-sender'
 import { MessageSender } from '@/components/panel/message-sender'
 import { listSent } from '@/lib/inbox'
@@ -186,8 +187,8 @@ async function marketPanel() {
 }
 
 async function kpPanel() {
-    const [cfg, badges, awards, board, online, ticker] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig()])
-    return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} />
+  const [cfg, badges, awards, board, online, ticker, quest, questWinners] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek()])
+  return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} quest={quest} questWinners={questWinners} />
 }
 
 async function staffPanel() {

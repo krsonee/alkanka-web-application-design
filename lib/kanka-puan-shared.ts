@@ -15,7 +15,23 @@ export type PointRules = {
   review: number
   referral: number
   telegram: number
+  streak7: number
+  streak30: number
 }
+
+export type QuestMetric = 'tahmin' | 'oyun' | 'gorev' | 'sohbet' | 'dakika'
+
+export const QUEST_METRICS: { id: QuestMetric; label: string; unit: string }[] = [
+  { id: 'tahmin', label: 'Tahmin ligi tahmini', unit: 'tahmin' },
+  { id: 'oyun', label: 'Oynanan oyun', unit: 'oyun' },
+  { id: 'gorev', label: 'Tamamlanan görev', unit: 'görev' },
+  { id: 'sohbet', label: 'Sohbet mesajı', unit: 'mesaj' },
+  { id: 'dakika', label: 'Sitede geçirilen dakika', unit: 'dakika' },
+]
+
+export type WeeklyQuestConfig = { enabled: boolean; title: string; badgeId: string; metric: QuestMetric; target: number }
+
+export const DEFAULT_QUEST: WeeklyQuestConfig = { enabled: false, title: 'Hafta Kâhini', badgeId: '', metric: 'tahmin', target: 10 }
 
 export const DEFAULT_RULES: PointRules = {
   minute: 1,
@@ -29,6 +45,8 @@ export const DEFAULT_RULES: PointRules = {
   review: 40,
   referral: 100,
   telegram: 50,
+  streak7: 50,
+  streak30: 300,
 }
 
 export const RULE_FIELDS: { key: keyof PointRules; label: string; hint: string; unit: string }[] = [
@@ -43,6 +61,8 @@ export const RULE_FIELDS: { key: keyof PointRules; label: string; hint: string; 
   { key: 'review', label: 'Onaylanan site yorumu', hint: 'Güven merkezinde yayınlanan yorum', unit: 'KP / yorum' },
   { key: 'referral', label: 'Getirilen arkadaş', hint: 'Davet ödülü onaylanan her arkadaş', unit: 'KP / kişi' },
   { key: 'telegram', label: 'Telegram bağlama', hint: 'Hesabını Telegram’a bağlayana bir kez', unit: 'KP' },
+  { key: 'streak7', label: '7 günlük seri bonusu', hint: 'Üst üste 7 gün gelen üyeye her seride bir kez', unit: 'KP' },
+  { key: 'streak30', label: '30 günlük seri bonusu', hint: 'Üst üste 30 gün gelen üyeye her seride bir kez', unit: 'KP' },
 ]
 
 export const DEFAULT_LEVELS: LevelDef[] = [

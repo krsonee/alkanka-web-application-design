@@ -15,8 +15,9 @@ import { LevelUpCelebration } from '@/components/alkanka/kp/level-up-celebration
 import { PageHero } from '@/components/alkanka/page-hero'
 import { AutoScrollRow } from '@/components/alkanka/auto-scroll-row'
 import { cn } from '@/lib/utils'
-import { getHiddenBadges, getLiveFeed, getStreak, getWeeklyStar } from '@/lib/kp-extras'
+import { badgeShowcase, getHiddenBadges, getLeagueRivals, getLiveFeed, getStreak, getWeeklyQuest, getWeeklyStar } from '@/lib/kp-extras'
 import { HiddenBadges, LiveFeed, StreakCard, WeeklyStarCard } from '@/components/alkanka/kp/extras'
+import { LeagueRivals, WeeklyQuestCard } from '@/components/alkanka/kp/quest-rivals'
 
 export const metadata = pageMeta('rozetler')
 export const dynamic = 'force-dynamic'
@@ -59,7 +60,12 @@ export default async function BadgesPage() {
     getWeeklyStar(member?.id ?? null),
     getLiveFeed(8).catch(() => []),
   ])
-  const hidden = await getHiddenBadges(member?.id ?? null, streak?.best ?? 0).catch(() => [])
+  const [hidden, quest, league, showcase] = await Promise.all([
+    getHiddenBadges(member?.id ?? null, streak?.best ?? 0).catch(() => []),
+    getWeeklyQuest(member?.id ?? null).catch(() => null),
+    member ? getLeagueRivals(member.id).catch(() => null) : Promise.resolve(null),
+    badgeShowcase(specials).catch(() => null),
+  ])
   const myLevel = me?.level.index ?? -1
   const myTier = me ? levelTier(me.level.index + 1) : null
   const heroStats = me
@@ -129,6 +135,10 @@ export default async function BadgesPage() {
         <WeeklyStarCard star={weekly} />
       </div>
 
+      {quest && <WeeklyQuestCard quest={quest} signedIn={!!member} />}
+
+      {league && league.rivals.length > 1 && <LeagueRivals tier={league.tier} rivals={league.rivals} />}
+
       <section aria-labelledby="kazan" className="flex scroll-mt-32 flex-col gap-3">
         <div className="flex flex-col gap-1">
           <h2 id="kazan" className="font-display text-lg font-bold text-foreground">{me ? 'Bugün KP kazan' : 'Nasıl KP kazanılır?'}</h2>
@@ -186,14 +196,42 @@ export default async function BadgesPage() {
                 </div>
                 <p className="line-clamp-3 text-pretty text-xs leading-relaxed text-muted-foreground sm:line-clamp-none">{b.description}</p>
                 {b.auto && <p className="hidden text-[11px] text-muted-foreground sm:block">{AUTO_LABELS[b.auto]}</p>}
-                <p className="mt-auto flex items-center gap-1.5 border-t border-border pt-2 text-[11px] text-muted-foreground sm:pt-3">
-                  <Users className="size-3.5 shrink-0" aria-hidden />
-                  {owners.length ? (
-                    <span className="truncate text-foreground">{owners.map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}</span>
+                {showcase?.leaders[b.id] && (
+                  <p className="rounded-lg bg-background/70 px-2 py-1.5 text-[11px] leading-snug text-foreground">
+                    <span className="font-bold text-gold">Şu an önde:</span> {showcase.leaders[b.id].name} · {showcase.leaders[b.id].detail}
+                  </p>
+                )}
+                <div className="mt-auto flex items-center gap-2 border-t border-border pt-2 text-[11px] text-muted-foreground sm:pt-3">
+                  {(showcase?.owners[b.id] ?? []).length ? (
+                    <>
+                      <span className="flex shrink-0 -space-x-2" aria-hidden>
+                        {showcase!.owners[b.id].slice(0, 3).map((o, i) =>
+                          o.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={i} src={o.image} alt="" className="size-6 rounded-full border-2 border-card object-cover" />
+                          ) : (
+                            <span key={i} className="flex size-6 items-center justify-center rounded-full border-2 border-card bg-muted text-[10px] font-bold text-foreground">
+                              {o.name.charAt(0).toUpperCase()}
+                            </span>
+                          ),
+                        )}
+                      </span>
+                      <span className="truncate text-foreground">
+                        {showcase!.owners[b.id].map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}
+                      </span>
+                    </>
+                  ) : owners.length ? (
+                    <>
+                      <Users className="size-3.5 shrink-0" aria-hidden />
+                      <span className="truncate text-foreground">{owners.map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}</span>
+                    </>
                   ) : (
-                    'Henüz sahibi yok, ilk sen ol.'
+                    <>
+                      <Users className="size-3.5 shrink-0" aria-hidden />
+                      Henüz sahibi yok, ilk sen ol.
+                    </>
                   )}
-                </p>
+                </div>
               </li>
             )
           })}

@@ -377,11 +377,18 @@ export async function isRoleHolder(userId: string): Promise<boolean> {
 export async function pingActive(userId: string) {
   const cfg = await getKpConfig()
   if (cfg.rules.minute > 0 && !(await isRoleHolder(userId))) {
-    await rows(sql`INSERT INTO kp_events (user_id, source, points, ref)
+    const [inserted] = await rows<{ first: boolean }>(sql`INSERT INTO kp_events (user_id, source, points, ref)
       SELECT ${userId}, 'sure', ${cfg.rules.minute}, to_char(now() AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM-DD"T"HH24:MI')
       WHERE (SELECT count(*) FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) < ${cfg.rules.minuteDailyCap}
-      ON CONFLICT DO NOTHING`)
+      ON CONFLICT DO NOTHING
+      RETURNING NOT EXISTS (SELECT 1 FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
+        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS first`)
+    // The first minute of a new day can complete a 7 or 30 day streak, so the bonus is checked only then.
+    if (inserted?.first) {
+      const { getStreak } = await import('@/lib/kp-extras')
+      await getStreak(userId).catch(() => null)
+    }
   }
   const [row] = await totals(cfg.rules, userId)
   const kp = row?.total ?? 0
