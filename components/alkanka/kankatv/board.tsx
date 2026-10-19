@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, ExternalLink, Flag, Percent, Radio, Search, 
 import { cn } from '@/lib/utils'
 import { PageHero } from '../page-hero'
 import { MatchEngage, WatchBar, useTvEngage } from './engage'
+import { useTvDock } from './tv-dock'
 import {
   CHANNEL_GROUPS,
   SPORTS,
@@ -530,7 +531,16 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
     return () => observer.disconnect()
   }, [])
   useEffect(() => setMiniDismissed(false), [current.slug])
-  const floating = Boolean(engage?.config.miniPlayer) && showPlayer && !slotVisible && !miniDismissed
+  const miniEnabled = Boolean(engage?.config.miniPlayer)
+  const floating = miniEnabled && showPlayer && !slotVisible && !miniDismissed
+  const dock = useTvDock()
+  const { open: dockOpen, close: dockClose } = dock
+  const dockChannels = useMemo(() => channels.filter((c) => c.live && c.embedUrl), [channels])
+  const watchOn = Boolean(engage?.config.watch.enabled && engage.config.watch.coin > 0 && engage.member)
+  useEffect(() => {
+    if (miniEnabled && showPlayer && !miniDismissed) dockOpen(current, dockChannels, watchOn)
+    else dockClose()
+  }, [current, dockChannels, miniEnabled, showPlayer, miniDismissed, watchOn, dockOpen, dockClose])
   const [group, setGroup] = useState<ChannelGroup>(current.group)
   const groupCounts = useMemo(() => {
     const counts = {} as Record<ChannelGroup, number>
@@ -761,8 +771,11 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
     fallbackData: initialChannels,
     refreshInterval: 120_000,
   })
-  const [tab, setTab] = useState<'matches' | 'channels'>('matches')
-  const [channel, setChannel] = useState<string>(() => initialChannels.find((c) => c.live)?.slug ?? initialChannels[0].slug)
+  const { channel: docked } = useTvDock()
+  const [tab, setTab] = useState<'matches' | 'channels'>(() => (docked ? 'channels' : 'matches'))
+  const [channel, setChannel] = useState<string>(
+    () => docked?.slug ?? initialChannels.find((c) => c.live)?.slug ?? initialChannels[0].slug,
+  )
   const totalLive = Object.values(initialBoard.liveCounts).reduce((a, b) => a + b, 0)
 
   const watch = (slug: string) => {

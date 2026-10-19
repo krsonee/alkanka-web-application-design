@@ -24,6 +24,7 @@ import { JakoAlerts } from '@/components/alkanka/jako-alerts'
 import { CatalogProvider } from '@/components/alkanka/catalog-context'
 import { getCatalog } from '@/lib/catalog'
 import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
+import { TvDockProvider } from '@/components/alkanka/kankatv/tv-dock'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [logos, texts, social, sponsors, catalog, chatConfig] = await Promise.all([
@@ -43,6 +44,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     <BrandProvider>
       <PointsProvider>
       <PwaProvider>
+      <TvDockProvider>
         <Sidebar social={social} />
         {chatLive && <LiveRail />}
         <div className={chatLive ? 'min-h-dvh lg:pl-64 xl:pr-80' : 'min-h-dvh lg:pl-64'}>
@@ -62,6 +64,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <KpHeartbeat />
         <JakoAlerts />
         <CemberOverlay />
+      </TvDockProvider>
       </PwaProvider>
       </PointsProvider>
     </BrandProvider>

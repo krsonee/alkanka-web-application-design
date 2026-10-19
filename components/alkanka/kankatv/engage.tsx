@@ -5,7 +5,7 @@ import useSWR from 'swr'
 import { Bell, BellOff, Coins, Eye, Loader2, Percent, Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from '@/components/alkanka/points-context'
-import { PICK_LABELS, REACTION_LABELS, REACTIONS, type PredictPick, type Reaction, type TvEngage } from '@/lib/kankatv-shared'
+import { PICK_LABELS, REACTION_EMOJI, REACTION_LABELS, REACTIONS, type PredictPick, type Reaction, type TvEngage } from '@/lib/kankatv-shared'
 import type { Match } from '@/lib/kankatv'
 
 const VIEWER_KEY = 'kankatv-viewer'
@@ -121,9 +121,9 @@ export function WatchBar({ playing, demo }: { playing: boolean; demo?: TvEngage 
             <span
               key={f.key}
               style={{ left: `${f.left}%` }}
-              className="tv-float absolute bottom-0 rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground shadow"
+              className="tv-float absolute bottom-0 text-3xl leading-none drop-shadow-md"
             >
-              {REACTION_LABELS[f.kind]}
+              {REACTION_EMOJI[f.kind]}
             </span>
           ))}
         </div>
@@ -167,17 +167,24 @@ export function WatchBar({ playing, demo }: { playing: boolean; demo?: TvEngage 
       )}
 
       {cfg.reactions && (
-        <div className="flex gap-1.5 overflow-x-auto" role="group" aria-label="Canlı tepki gönder">
-          {REACTIONS.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => react(r)}
-              className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-primary hover:text-primary active:scale-95"
-            >
-              {REACTION_LABELS[r]}
-            </button>
-          ))}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Tepki at, herkes görsün
+          </span>
+          <div className="flex items-center justify-between gap-1.5" role="group" aria-label="Canlı tepki gönder">
+            {REACTIONS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => react(r)}
+                aria-label={REACTION_LABELS[r]}
+                title={REACTION_LABELS[r]}
+                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-background text-xl leading-none transition-transform hover:-translate-y-0.5 hover:border-primary active:scale-90"
+              >
+                <span aria-hidden="true">{REACTION_EMOJI[r]}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}

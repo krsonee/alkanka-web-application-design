@@ -37,6 +37,15 @@ export const REACTION_LABELS: Record<Reaction, string> = {
   kalp: 'Kalp',
 }
 
+export const REACTION_EMOJI: Record<Reaction, string> = {
+  gol: '⚽',
+  ates: '🔥',
+  kahkaha: '😂',
+  alkis: '👏',
+  sok: '😱',
+  kalp: '❤️',
+}
+
 export type PredictPick = 'home' | 'away' | 'none'
 export const PICK_LABELS: Record<PredictPick, string> = { home: 'Ev sahibi', away: 'Deplasman', none: 'Gol yok' }
 
