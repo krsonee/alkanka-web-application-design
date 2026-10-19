@@ -806,3 +806,75 @@
   .coupon-card, .coupon-art { animation: none; }
   .coupon-sheen { display: none; }
 }
+
+.tg-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in oklch, var(--accent) 14%, transparent), transparent 55%),
+    var(--card);
+  border: 1px solid color-mix(in oklch, var(--accent) 22%, var(--border));
+  transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+}
+.tg-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(110deg, transparent 35%, color-mix(in oklch, var(--accent) 10%, transparent) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: tg-sweep 6s ease-in-out infinite;
+}
+.tg-cta:hover {
+  border-color: color-mix(in oklch, var(--accent) 50%, var(--border));
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px -16px color-mix(in oklch, var(--accent) 45%, transparent);
+}
+.tg-cta-avatar {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 35%, transparent);
+  animation: tg-bob 4s ease-in-out infinite;
+}
+.tg-cta-ping {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--card);
+}
+.tg-cta-ping::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: tg-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.tg-cta-btn {
+  transition: transform 0.25s ease, filter 0.25s ease;
+}
+.tg-cta-btn svg { transition: transform 0.3s ease; }
+.tg-cta:hover .tg-cta-btn { filter: brightness(1.08); }
+.tg-cta:hover .tg-cta-btn svg { transform: translate(3px, -3px); }
+@keyframes tg-sweep {
+  0%, 60% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes tg-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes tg-ping {
+  75%, 100% { transform: scale(2.4); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-cta, .tg-cta-avatar, .tg-cta-btn, .tg-cta-btn svg { animation: none; transition: none; }
+  .tg-cta::after, .tg-cta-ping::before { animation: none; display: none; }
+}

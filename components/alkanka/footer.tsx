@@ -1,5 +1,6 @@
+import Image from 'next/image'
+import { ArrowUpRight, Send } from 'lucide-react'
 import { TELEGRAM_URL } from './data'
-import { JakoAvatar } from './jako'
 import { BrandLogo } from './logo-selector'
 
 const LINKS = [
@@ -27,17 +28,31 @@ export function Footer() {
         href={TELEGRAM_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="panel-gold flex flex-wrap items-center gap-3 rounded-2xl p-4 transition-colors hover:border-primary/50 sm:flex-nowrap sm:gap-4 sm:p-5"
+        className="tg-cta flex flex-wrap items-center gap-4 rounded-2xl p-4 sm:flex-nowrap sm:gap-5 sm:p-5"
       >
-        <JakoAvatar pose="telegram" size="sm" className="sm:size-32" />
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="tg-cta-avatar size-20 sm:size-24">
+          <Image
+            src="/images/mascots/jako-telegram-hd.png"
+            alt="Telefonunda Telegram açık olan Jako maskotu"
+            width={192}
+            height={192}
+            className="size-full object-cover"
+          />
+          <span className="tg-cta-ping" aria-hidden="true" />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-accent">
+            <Send className="size-3.5" aria-hidden="true" />
+            @AlkankaOfficial
+          </span>
           <span className="font-display text-base font-bold text-foreground text-balance sm:text-lg">Kaçırma kanka, Jako her şeyi Telegram’da öter!</span>
-          <span className="text-sm leading-relaxed text-muted-foreground">
+          <span className="text-sm leading-relaxed text-muted-foreground text-pretty">
             Yeni bonus kodları, özel oranlar ve etkinlik duyuruları ilk orada.
           </span>
         </span>
-        <span className="w-full rounded-lg bg-accent px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wider text-accent-foreground sm:w-auto">
+        <span className="tg-cta-btn flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-xs font-bold uppercase tracking-wider text-accent-foreground sm:w-auto">
           Kanala katıl
+          <ArrowUpRight className="size-4" aria-hidden="true" />
         </span>
       </a>
       <div className="flex flex-col justify-between gap-6 md:flex-row md:items-start">

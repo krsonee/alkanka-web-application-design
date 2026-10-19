@@ -38,7 +38,31 @@ const banners = [
 const tiles = ['wheel', 'market', 'tasks', 'dice', 'chest', 'predict'].map((t) => `/images/tile-${t}.png`)
 const mascots = JAKO_POSES.map((p) => (p === 'jako' ? '/images/mascots/jako.png' : `/images/mascots/jako-${p}.png`))
 
-export const IMAGE_LIBRARY = [...banners, ...heroes, ...tiles, ...mascots]
+const campaignArt = [
+  'c1-derbi',
+  'c2-vip-yaz',
+  'c3-cashback',
+  'c4-telegram-drop',
+  'c5-cifte-yatirim',
+  'c6-freespin',
+  'c7-sampiyonlar',
+  'c8-vip-cekilis',
+  'c9-kripto',
+  'c10-canli-casino',
+  'c11-slot-turnuva',
+  'c12-anket',
+  'spor',
+  'turnuva',
+  'iade',
+  'telegram',
+  'yatirim',
+  'freespin',
+  'cekilis',
+  'sponsor-strip',
+].map((n) => `/images/campaign-art/${n}.png`)
+const extras = ['/images/wheel-stage.png', '/images/mascots/jako-telegram-hd.png']
+
+export const IMAGE_LIBRARY = [...new Set([...campaignArt, ...banners, ...heroes, ...tiles, ...mascots, ...extras])]
 
 export function isAllowedImage(value: string) {
   return (

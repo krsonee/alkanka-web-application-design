@@ -231,7 +231,7 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   return (
     <div className="@container">
     <article className="panel-gold border-flow group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
-      <div className="relative flex h-24 items-center justify-center border-b border-border bg-background p-3 sm:h-32 sm:p-5 @2xl:h-auto @2xl:w-56 @2xl:border-r @2xl:border-b-0 @5xl:w-72">
+      <div className="relative flex h-28 items-center justify-center border-b border-border bg-background px-3 pt-9 pb-3 sm:h-36 sm:px-5 sm:pt-11 sm:pb-4 @2xl:h-auto @2xl:w-56 @2xl:border-r @2xl:border-b-0 @5xl:w-72">
         <SponsorLogoPlate sponsor={sponsor} className="max-h-14 sm:max-h-20 md:max-h-24" />
         <span className="absolute top-2 left-2 sm:top-3 sm:left-3">
           <TierTag tier={sponsor.tier} />
@@ -278,9 +278,9 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
         <Link
           href={`/siteler/${sponsor.id}`}
           aria-label={`${sponsor.name} detayları`}
-          className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background p-1.5"
+          className="sponsor-logo-plate flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background px-2 py-1.5"
         >
-          <SponsorLogoPlate sponsor={sponsor} compact className="max-w-full max-h-full text-base" />
+          <SponsorLogoPlate sponsor={sponsor} compact className="h-full max-h-full w-full max-w-full text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
         </Link>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-1.5">
@@ -294,7 +294,7 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
       </div>
 
       <div className="hidden h-full flex-col sm:flex">
-      <div className="relative flex h-28 items-center justify-center border-b border-border bg-background p-4">
+      <div className="relative flex h-32 items-center justify-center border-b border-border bg-background px-4 pt-10 pb-3">
         <SponsorLogoPlate sponsor={sponsor} className="max-h-16" />
         <span className="absolute top-2.5 right-2.5">
           <TierTag tier={sponsor.tier} />
@@ -587,7 +587,7 @@ const BONUS_TYPE_RULES: Record<Bonus['type'], { about: string; rules: string[] }
     about: 'Belirlenen dönem içindeki net kayıplar üzerinden hesaplanan iade bonusu.',
     rules: [
       'Kayıp, ilgili dönemdeki toplam yatırım eksi toplam çekim üzerinden hesaplanır.',
-      'Dönem içinde bonus kullanılan yatırımlar hesaplamaya dahil edilmez.',
+      'Dönem içinde bonus kullanılan yat��rımlar hesaplamaya dahil edilmez.',
       'Bonus, dönem bitiminden sonraki ilk iş günü canlı destekten talep edilir.',
       'Talep sırasında hesap bakiyesinin 5 ₺ altında olması gerekir.',
     ],
@@ -788,7 +788,24 @@ const CAMPAIGN_TAG_ART: Record<string, string> = {
 // Stock placeholder art gets swapped for tag-specific art; custom panel uploads are kept as-is.
 const STOCK_CAMPAIGN_ART = /^\/images\/(banner-|tile-|hero-chest)/
 
+const CAMPAIGN_ID_ART: Record<string, string> = {
+  c1: '/images/campaign-art/c1-derbi.png',
+  c2: '/images/campaign-art/c2-vip-yaz.png',
+  c3: '/images/campaign-art/c3-cashback.png',
+  c4: '/images/campaign-art/c4-telegram-drop.png',
+  c5: '/images/campaign-art/c5-cifte-yatirim.png',
+  c6: '/images/campaign-art/c6-freespin.png',
+  c7: '/images/campaign-art/c7-sampiyonlar.png',
+  c8: '/images/campaign-art/c8-vip-cekilis.png',
+  c9: '/images/campaign-art/c9-kripto.png',
+  c10: '/images/campaign-art/c10-canli-casino.png',
+  c11: '/images/campaign-art/c11-slot-turnuva.png',
+  c12: '/images/campaign-art/c12-anket.png',
+}
+
 function campaignArt(c: Campaign) {
+  const isStock = !c.image || STOCK_CAMPAIGN_ART.test(c.image)
+  if (isStock && CAMPAIGN_ID_ART[c.id]) return CAMPAIGN_ID_ART[c.id]
   const tagged = CAMPAIGN_TAG_ART[c.tag]
   if (tagged && (!c.image || STOCK_CAMPAIGN_ART.test(c.image))) return tagged
   return c.image || '/placeholder.svg'
@@ -814,7 +831,7 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
             className="object-cover transition-transform duration-700 group-hover:scale-110"
           />
         </div>
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-card/70" />
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-card/40" />
         <span aria-hidden="true" className="coupon-sheen" />
         <span className="absolute bottom-2 left-2 rounded-md bg-background/85 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
           {c.tag}
