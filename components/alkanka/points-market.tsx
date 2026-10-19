@@ -27,17 +27,17 @@ const STATUS = {
 type Filter = 'hepsi' | 'sponsor' | 'alkanka'
 
 const BONUS_IMAGES: [RegExp, string][] = [
-  [/free\s*spin|freespin|çevirme|spin/i, '/images/market/bonus-freespin.png'],
-  [/free\s*bet|freebet|bedava bahis|bahis/i, '/images/market/bonus-freebet.png'],
-  [/kasa|sandık|kutu|case/i, '/images/market/bonus-case.png'],
-  [/yatırım|deposit|kayıp|cashback|bonus/i, '/images/market/bonus-deposit.png'],
+  [/free\s*spin|freespin|çevirme|spin/i, '/images/market/maskot-freespin.png'],
+  [/free\s*bet|freebet|bedava bahis|bahis/i, '/images/market/maskot-freebet.png'],
+  [/kasa|sandık|kutu|case/i, '/images/market/maskot-case.png'],
+  [/yatırım|deposit|kayıp|cashback|bonus/i, '/images/market/maskot-deposit.png'],
 ]
 
 function productImage(item: MarketProduct) {
   if (item.image) return item.image
   if (item.kind !== 'sponsor') return '/images/tile-market.png'
   const text = `${item.name} ${item.description}`
-  return BONUS_IMAGES.find(([re]) => re.test(text))?.[1] ?? '/images/market/bonus-deposit.png'
+  return BONUS_IMAGES.find(([re]) => re.test(text))?.[1] ?? '/images/market/maskot-deposit.png'
 }
 
 function SponsorTag({ item, className }: { item: MarketProduct; className?: string }) {
@@ -45,15 +45,17 @@ function SponsorTag({ item, className }: { item: MarketProduct; className?: stri
     <>
       {item.sponsorLogo ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.sponsorLogo} alt="" className="size-6 shrink-0 rounded object-contain" />
+        <img src={item.sponsorLogo} alt={item.sponsorName ?? ''} className="h-7 w-auto max-w-32 object-contain" />
       ) : (
-        <Handshake className="size-4 shrink-0 text-primary" aria-hidden="true" />
+        <>
+          <Handshake className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="truncate">{item.sponsorName}</span>
+        </>
       )}
-      <span className="truncate">{item.sponsorName}</span>
     </>
   )
   const cls = cn(
-    'flex max-w-full items-center gap-2 rounded-lg border border-primary/40 bg-background/90 px-2 py-1 text-sm font-bold text-foreground backdrop-blur',
+    'flex max-w-full items-center gap-2 rounded-lg border border-primary/40 bg-background/90 px-2.5 py-1 text-sm font-bold text-foreground backdrop-blur',
     className,
   )
   return item.sponsorSlug ? (
