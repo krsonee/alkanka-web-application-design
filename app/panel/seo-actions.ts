@@ -56,7 +56,7 @@ export async function deletePostAction(id: number) {
 export async function deleteDealAction(id: number) {
   if (!(await canPanel('seo'))) return
   await deleteDeal(id)
-  revalidatePath('/firsatlar', 'layout')
+  revalidatePath('/ozel-oranlar')
   revalidatePath('/panel')
 }
 

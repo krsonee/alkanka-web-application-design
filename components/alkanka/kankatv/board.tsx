@@ -4,9 +4,12 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternal
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { ChevronDown, ChevronRight, ExternalLink, Flag, Percent, Radio, Search, Send, Trophy, Tv, Volume1, Volume2, VolumeX } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, Flag, Percent, Radio, Search, Send, Trophy, Tv, Volume1, Volume2, VolumeX, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageHero } from '../page-hero'
+import { MatchEngage, WatchBar, useTvEngage } from './engage'
+import { useTvDock } from './tv-dock'
+import { LiveEvents } from './live-events'
 import {
   CHANNEL_GROUPS,
   SPORTS,
@@ -154,6 +157,7 @@ function MatchDetails({ match, sport }: { match: Match; sport: SportSlug }) {
           Özel oranlar
         </Link>
       </div>
+      <MatchEngage match={match} football={sport === 'futbol'} />
     </div>
   )
 }
@@ -290,7 +294,7 @@ function MatchesTab({
         >
           <Radio className="size-5 shrink-0 text-live" aria-hidden="true" />
           <span className="flex-1 text-sm text-foreground">
-            <span className="font-bold">{liveChannel.name}</span> şu an canlı yayında. Ücretsiz izle.
+            <span className="font-bold">{liveChannel.name}</span> şu an canlı yay��nda. Ücretsiz izle.
           </span>
           <span className="text-xs font-bold uppercase tracking-wider text-live">İzle</span>
         </button>
@@ -378,7 +382,7 @@ function MatchesTab({
           </button>
         ))}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {isLoading && !data ? 'Yükleniyor…' : `${total} maç · ${board.competitions.length} lig`}
+          {isLoading && !data ? 'Y��kleniyor…' : `${total} maç · ${board.competitions.length} lig`}
         </span>
       </div>
 
@@ -516,6 +520,28 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
   }
   const playerFailed = useYouTubeFailure(frameRef, playerSrc)
   const showPlayer = Boolean(current.embedUrl) && !playerFailed
+  const { data: engage } = useTvEngage(10_000)
+  const slotRef = useRef<HTMLDivElement>(null)
+  const [slotVisible, setSlotVisible] = useState(true)
+  const [miniDismissed, setMiniDismissed] = useState(false)
+  useEffect(() => {
+    const el = slotRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(([entry]) => setSlotVisible(entry.isIntersecting), { threshold: 0.25 })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  useEffect(() => setMiniDismissed(false), [current.slug])
+  const miniEnabled = Boolean(engage?.config.miniPlayer)
+  const floating = miniEnabled && showPlayer && !slotVisible && !miniDismissed
+  const dock = useTvDock()
+  const { open: dockOpen, close: dockClose } = dock
+  const dockChannels = useMemo(() => channels.filter((c) => c.live && c.embedUrl), [channels])
+  const watchOn = Boolean(engage?.config.watch.enabled && engage.config.watch.coin > 0 && engage.member)
+  useEffect(() => {
+    if (miniEnabled && showPlayer && !miniDismissed) dockOpen(current, dockChannels, watchOn)
+    else dockClose()
+  }, [current, dockChannels, miniEnabled, showPlayer, miniDismissed, watchOn, dockOpen, dockClose])
   const [group, setGroup] = useState<ChannelGroup>(current.group)
   const groupCounts = useMemo(() => {
     const counts = {} as Record<ChannelGroup, number>
@@ -567,12 +593,24 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
 
     <div className="flex flex-col gap-5 lg:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div ref={slotRef} className="relative aspect-video w-full">
         <div
           className={cn(
-            'relative aspect-video w-full overflow-hidden rounded-xl border',
+            'overflow-hidden rounded-xl border',
+            floating ? 'fixed bottom-24 right-3 z-40 aspect-video w-60 shadow-2xl sm:w-80' : 'absolute inset-0',
             showPlayer ? 'border-border bg-foreground' : 'border-primary/30 bg-card',
           )}
         >
+          {floating && (
+            <button
+              type="button"
+              onClick={() => setMiniDismissed(true)}
+              aria-label="Mini oynatıcıyı kapat"
+              className="absolute right-1.5 top-1.5 z-10 flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
           {showPlayer ? (
             playerSrc && (
               <iframe
@@ -658,9 +696,11 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
             </div>
           )}
         </div>
+        </div>
         {showPlayer && playerSrc && (
           <SoundControls muted={muted} volume={volume} isYouTube={isYouTube} onToggle={toggleSound} onVolume={changeVolume} />
         )}
+        <WatchBar playing={showPlayer && Boolean(playerSrc)} />
         {current.title && (
           <p className="line-clamp-2 text-sm font-semibold text-foreground text-pretty">
             {current.name} · <span className="font-normal text-muted-foreground">{current.title}</span>
@@ -727,13 +767,33 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
   )
 }
 
+/** A live Kanka streamer wins first; otherwise the group with the most playable live streams, on its most watched stream. */
+function pickStartChannel(channels: Channel[]) {
+  const byViewers = (a: Channel, b: Channel) => (b.viewers ?? 0) - (a.viewers ?? 0)
+  const liveMembers = channels.filter((c) => c.group === 'uye' && c.live)
+  if (liveMembers.length) {
+    const playableMember = liveMembers.filter((c) => c.embedUrl).sort(byViewers)[0]
+    return (playableMember ?? liveMembers.sort(byViewers)[0]).slug
+  }
+  const playable = channels.filter((c) => c.live && c.embedUrl)
+  if (!playable.length) return (channels.find((c) => c.live) ?? channels[0]).slug
+  const counts = new Map<ChannelGroup, number>()
+  for (const c of playable) counts.set(c.group, (counts.get(c.group) ?? 0) + 1)
+  const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+  return playable.filter((c) => c.group === best).sort((a, b) => (b.viewers ?? 0) - (a.viewers ?? 0))[0].slug
+}
+
 export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: ScoreBoard; initialChannels: Channel[] }) {
   const { data: channels = initialChannels } = useSWR<Channel[]>('/api/kankatv/channels', fetcher, {
     fallbackData: initialChannels,
     refreshInterval: 120_000,
   })
-  const [tab, setTab] = useState<'matches' | 'channels'>('matches')
-  const [channel, setChannel] = useState<string>(() => initialChannels.find((c) => c.live)?.slug ?? initialChannels[0].slug)
+  const { channel: docked } = useTvDock()
+  const [tab, setTab] = useState<'matches' | 'channels'>(() =>
+    docked || initialChannels.some((c) => c.live && c.embedUrl) ? 'channels' : 'matches',
+  )
+  const [pickedChannel, setChannel] = useState<string | null>(() => docked?.slug ?? null)
+  const channel = pickedChannel ?? pickStartChannel(channels)
   const totalLive = Object.values(initialBoard.liveCounts).reduce((a, b) => a + b, 0)
 
   const watch = (slug: string) => {
@@ -748,8 +808,9 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
         title="KankaTV"
         description="Futbol, basketbol ve voleybolda tüm liglerin canlı skorları kendiliğinden güncellenir. E-spor, şans oyunları, TV ve spor yayınlarını buradan ücretsiz izle."
         image="/images/heroes/kankatv.png"
-        tone="live"
-        stats={[
+  tone="live"
+  compact
+  stats={[
           { label: 'Canlı maç', value: String(totalLive) },
           { label: 'Yayındaki kanal', value: String(channels.filter((c) => c.live).length) },
           { label: 'Kanal', value: String(channels.length) },
@@ -788,6 +849,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
       ) : (
         <ChannelsTab channels={channels} selected={channel} onSelect={setChannel} />
       )}
+      <LiveEvents />
     </div>
   )
 }

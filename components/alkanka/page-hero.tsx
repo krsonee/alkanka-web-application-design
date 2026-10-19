@@ -21,8 +21,10 @@ export function PageHero({
   highlights,
   image,
   tone = 'gold',
+  compact = false,
   children,
 }: {
+  compact?: boolean
   eyebrow: string
   title: string
   description: string
@@ -60,16 +62,33 @@ export function PageHero({
 
       {image && (
         <div
-          className="relative -z-10 aspect-[1584/672] w-full sm:absolute sm:inset-y-0 sm:right-0 sm:h-full sm:w-auto sm:max-w-[68%]"
+          className={cn(
+            '-z-10',
+            compact
+              ? 'absolute inset-y-0 right-0 w-[58%] opacity-45 sm:w-auto sm:max-w-[48%] sm:opacity-100 sm:aspect-[1584/672]'
+              : 'relative aspect-[1584/672] w-full sm:absolute sm:inset-y-0 sm:right-0 sm:h-full sm:w-auto sm:max-w-[68%]',
+          )}
           style={{ maskImage: 'linear-gradient(to right, transparent, #000 32%)', WebkitMaskImage: 'linear-gradient(to right, transparent, #000 32%)' }}
         >
           <Image src={image || '/placeholder.svg'} alt="" fill priority sizes="(min-width: 1024px) 900px, 100vw" className="object-cover object-right" />
-          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent sm:hidden" />
+          {!compact && <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent sm:hidden" />}
         </div>
       )}
+      {image && compact && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 bg-gradient-to-r from-card via-card/85 to-card/20 sm:via-card/70 sm:to-transparent"
+        />
+      )}
 
-      <div className={cn('relative flex flex-col justify-center gap-6 p-4 sm:min-h-72 sm:p-8', image && '-mt-6 pt-0 sm:mt-0 sm:pt-8')}>
-        <div className="flex flex-col gap-4 sm:max-w-[52%]">
+      <div
+        className={cn(
+          'relative flex flex-col justify-center',
+          compact ? 'gap-4 p-4 sm:min-h-48 sm:p-6' : 'gap-6 p-4 sm:min-h-72 sm:p-8',
+          image && !compact && '-mt-6 pt-0 sm:mt-0 sm:pt-8',
+        )}
+      >
+        <div className={cn('flex flex-col', compact ? 'gap-3 sm:max-w-[60%]' : 'gap-4 sm:max-w-[52%]')}>
           <nav aria-label="Konum" className="flex items-center gap-1 text-xs text-muted-foreground">
             <Link href="/" className="hover:text-foreground">
               Ana sayfa
@@ -78,11 +97,23 @@ export function PageHero({
             <span className={cn('font-semibold', t.text)}>{eyebrow}</span>
           </nav>
           <div className="flex flex-col gap-2">
-            <h1 className="font-display text-3xl font-bold uppercase tracking-tight text-foreground text-balance sm:text-4xl">
+            <h1
+              className={cn(
+                'font-display font-bold uppercase tracking-tight text-foreground text-balance',
+                compact ? 'text-2xl sm:text-3xl' : 'text-3xl sm:text-4xl',
+              )}
+            >
               {title}
             </h1>
             <span aria-hidden="true" className={cn('h-1 w-14 rounded-full', t.bar)} />
-            <p className="max-w-xl pt-1 text-sm leading-relaxed text-muted-foreground text-pretty sm:text-base">{description}</p>
+            <p
+              className={cn(
+                'max-w-xl pt-1 text-sm font-medium leading-relaxed text-foreground/90 text-pretty [text-shadow:0_1px_8px_oklch(0_0_0/0.85)]',
+                compact ? 'line-clamp-2 sm:line-clamp-none' : 'sm:text-base',
+              )}
+            >
+              {description}
+            </p>
           </div>
           {highlights && highlights.length > 0 && (
             <ul className="flex flex-wrap gap-2">
@@ -94,7 +125,20 @@ export function PageHero({
               ))}
             </ul>
           )}
-          {stats && (
+          {stats && compact && (
+            <dl className="flex flex-wrap gap-2">
+              {stats.map((s) => (
+                <div
+                  key={s.label}
+                  className="flex items-baseline gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 backdrop-blur"
+                >
+                  <dd className={cn('font-display text-sm font-bold tabular-nums', t.text)}>{s.value}</dd>
+                  <dt className="text-xs text-muted-foreground">{s.label}</dt>
+                </div>
+              ))}
+            </dl>
+          )}
+          {stats && !compact && (
             <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3 backdrop-blur sm:flex sm:w-fit sm:flex-wrap sm:gap-x-8">
               {stats.map((s) => (
                 <div key={s.label} className="flex flex-col">

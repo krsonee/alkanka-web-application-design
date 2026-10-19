@@ -16,7 +16,10 @@ export type Catalog = {
   predictions: Prediction[]
   campaigns: Campaign[]
   bonuses: Bonus[]
+  order: CategoryOrder
 }
+
+export type CategoryOrder = { campaignTags: string[]; bonusTypes: string[] }
 
 export const CATALOG_KEYS = {
   rewards: 'rewards:mini',
@@ -24,7 +27,10 @@ export const CATALOG_KEYS = {
   predictions: 'catalog:predictions',
   campaigns: 'catalog:campaigns',
   bonuses: 'catalog:bonuses',
+  order: 'catalog:order',
 } as const
+
+export const DEFAULT_ORDER: CategoryOrder = { campaignTags: [], bonusTypes: [] }
 
 export const DEFAULT_CATALOG: Catalog = {
   rewards: DEFAULT_REWARDS,
@@ -32,6 +38,20 @@ export const DEFAULT_CATALOG: Catalog = {
   predictions: PREDICTIONS,
   campaigns: CAMPAIGNS,
   bonuses: BONUSES,
+  order: DEFAULT_ORDER,
+}
+
+export function cleanOrder(raw: unknown): CategoryOrder {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const names = (v: unknown) =>
+    Array.from(new Set((Array.isArray(v) ? v : []).map((s) => (typeof s === 'string' ? s.trim().slice(0, 20) : '')).filter(Boolean))).slice(0, 40)
+  return { campaignTags: names(r.campaignTags), bonusTypes: names(r.bonusTypes) }
+}
+
+/** Saved order first, then any category the panel hasn't ranked yet in its natural order. */
+export function sortByOrder(values: string[], order: string[]): string[] {
+  const unique = Array.from(new Set(values))
+  return [...order.filter((v) => unique.includes(v)), ...unique.filter((v) => !order.includes(v))]
 }
 
 export const EVENT_KINDS: EventItem['kind'][] = ['Günlük', 'Haftalık', 'Aylık']
@@ -148,5 +168,6 @@ export function mergeCatalog(all: Record<string, unknown>): Catalog {
     predictions: pick(CATALOG_KEYS.predictions, cleanPredictions, PREDICTIONS),
     campaigns: pick(CATALOG_KEYS.campaigns, cleanCampaigns, CAMPAIGNS),
     bonuses: pick(CATALOG_KEYS.bonuses, cleanBonuses, BONUSES),
+    order: cleanOrder(all[CATALOG_KEYS.order]),
   }
 }

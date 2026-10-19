@@ -12,6 +12,8 @@ const PREVIEW_SECONDS = 5
 
 const MEMBER_ONLY = ['/gorevler', '/tahminler', '/biletler', '/turnuvalar', '/market', '/rozetler', '/oyunlar', '/siralama', '/kankatv', '/profil']
 
+const OPEN_PAGES = ['/kankatv/onizleme']
+
 const PERKS = [
   { icon: Gift, label: 'Günlük çark, sandık ve görevler' },
   { icon: Trophy, label: 'Turnuva, tahmin ligi ve biletler' },
@@ -28,7 +30,7 @@ export function GuestGate() {
   const [remaining, setRemaining] = useState(PREVIEW_SECONDS)
   const [dismissed, setDismissed] = useState(false)
 
-  const isGuest = !loading && !member
+  const isGuest = !loading && !member && !OPEN_PAGES.includes(pathname)
   const hard = isMemberOnly(pathname)
 
   useEffect(() => {

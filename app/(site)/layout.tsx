@@ -3,7 +3,7 @@ import { PointsProvider } from '@/components/alkanka/points-context'
 import { Sidebar } from '@/components/alkanka/sidebar'
 import { Topbar } from '@/components/alkanka/topbar'
 import { LiveRail } from '@/components/alkanka/live-rail'
-import { TelegramBubble } from '@/components/alkanka/telegram-bubble'
+import { getChatConfig } from '@/lib/telegram-chat'
 import { MobileNav } from '@/components/alkanka/mobile-nav'
 import { Footer } from '@/components/alkanka/footer'
 import { AuthModal } from '@/components/alkanka/auth-modal'
@@ -24,15 +24,18 @@ import { JakoAlerts } from '@/components/alkanka/jako-alerts'
 import { CatalogProvider } from '@/components/alkanka/catalog-context'
 import { getCatalog } from '@/lib/catalog'
 import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
+import { TvDockProvider } from '@/components/alkanka/kankatv/tv-dock'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [logos, texts, social, sponsors, catalog] = await Promise.all([
+  const [logos, texts, social, sponsors, catalog, chatConfig] = await Promise.all([
     getLogos(),
     getSiteTexts(),
     getSocialLinks().catch(() => ({})),
     listPublicSponsors().catch(() => []),
     getCatalog(),
+    getChatConfig().catch(() => null),
   ])
+  const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
   return (
     <TextsProvider value={texts}>
@@ -41,9 +44,10 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     <BrandProvider>
       <PointsProvider>
       <PwaProvider>
+      <TvDockProvider>
         <Sidebar social={social} />
-        <LiveRail />
-        <div className="min-h-dvh lg:pl-64 xl:pr-80">
+        {chatLive && <LiveRail />}
+        <div className={chatLive ? 'min-h-dvh lg:pl-64 xl:pr-80' : 'min-h-dvh lg:pl-64'}>
           <Topbar social={social} sponsors={searchSponsors} />
           <WinnersTicker />
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
@@ -52,7 +56,6 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           </main>
         </div>
         <MobileNav />
-        <TelegramBubble />
         <AuthModal />
         <GuestGate />
         <AppPrompts />
@@ -61,6 +64,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <KpHeartbeat />
         <JakoAlerts />
         <CemberOverlay />
+      </TvDockProvider>
       </PwaProvider>
       </PointsProvider>
     </BrandProvider>

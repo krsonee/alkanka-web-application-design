@@ -74,6 +74,29 @@ function LinksForm({ links }: { links: SocialLinks }) {
           </label>
         ))}
       </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">Telegram kanalı</span>
+          <input
+            type="url"
+            value={values.telegram ?? ''}
+            onChange={(e) => setValues((v) => ({ ...v, telegram: e.target.value }))}
+            placeholder="https://t.me/AlkankaOfficial"
+            className={input}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">Ana sayfa &quot;Katıl&quot; butonu linki</span>
+          <input
+            type="text"
+            value={values.join ?? ''}
+            onChange={(e) => setValues((v) => ({ ...v, join: e.target.value }))}
+            placeholder="https://t.me/... veya /kampanyalar"
+            className={input}
+          />
+          <span className="text-xs text-muted-foreground">Boş kalırsa Telegram kanalına yönlendirir.</span>
+        </label>
+      </div>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={pending} className={btn}>
           {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}

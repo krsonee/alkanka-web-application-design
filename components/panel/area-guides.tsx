@@ -182,7 +182,7 @@ const SEO_STEPS: GuideStep[] = [
         <li>Her rehber yazısı Google’da ayrı bir sayfa olarak çıkar. <b>Başlık</b>a aranan kelimeyi koy (ör. “Deneme bonusu veren siteler 2026”).</li>
         <li><b>Adres</b> boşsa başlıktan üretilir. <b>Özet</b> Google sonucunda başlığın altında görünür, 200 karakteri geçmesin.</li>
         <li>İçerikte <span className={code}>## </span> ile ara başlık, <span className={code}>- </span> ile madde açarsın.</li>
-        <li><b>Fırsat sayfaları</b>: Kutu açıksa Telegram botunun paylaştığı her post <span className={code}>/firsatlar</span> altında ayrı sayfa olur, Google siteyi daha sık tarar.</li>
+        <li><b>Telegram postları</b>: Kutu açıksa botun paylaştığı özel oran postları <span className={code}>/ozel-oranlar</span> sayfasına düşer.</li>
       </ol>
     ),
   },

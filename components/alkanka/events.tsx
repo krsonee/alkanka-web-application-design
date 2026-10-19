@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Coins, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { type EventItem } from './data'
+import { TELEGRAM_URL, type EventItem } from './data'
 import { useCatalog } from './catalog-context'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
+import { Marquee } from './home/marquee'
 import { TeamLogo } from './logo-context'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
@@ -58,10 +59,8 @@ function EventCards() {
     setJoined((j) => ({ ...j, [id]: true }))
   }
 
-  return (
-    <ul className="grid gap-3 md:grid-cols-3">
-      {EVENTS.map((e) => (
-        <li key={e.id} className="panel-gold flex flex-col overflow-hidden rounded-xl">
+  const card = (e: EventItem) => (
+        <article key={e.id} className="panel-gold flex h-full flex-col overflow-hidden rounded-xl">
           <div className="relative h-28 overflow-hidden">
             <Image src={e.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 768px) 30vw, 100vw" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
@@ -82,12 +81,13 @@ function EventCards() {
               </span>
               <span className="text-primary">{t(`event.${e.id}.prize`, e.prize)}</span>
             </div>
+            <div className="mt-auto flex items-stretch gap-2">
             <DetailButton onClick={() => setDetail(e)} />
             <button
               type="button"
               onClick={() => join(e.id, e.entry)}
               disabled={joined[e.id]}
-              className="mt-auto flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-primary/15 disabled:text-primary"
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-primary/15 disabled:text-primary"
             >
               {joined[e.id] ? 'Katıldın' : e.entry === 0 ? 'Ücretsiz katıl' : (
                 <>
@@ -96,9 +96,23 @@ function EventCards() {
                 </>
               )}
             </button>
+            </div>
           </div>
-        </li>
-      ))}
+        </article>
+  )
+
+  return (
+    <>
+      <div className="-mx-4 md:hidden">
+        <Marquee label="Etkinlikler" itemClassName="w-[64vw] max-w-[17.5rem]" duration={EVENTS.length * 16}>
+          {EVENTS.map(card)}
+        </Marquee>
+      </div>
+      <ul aria-label="Etkinlikler" className="hidden gap-3 md:grid md:grid-cols-3">
+        {EVENTS.map((e) => (
+          <li key={e.id}>{card(e)}</li>
+        ))}
+      </ul>
       <DetailModal
         onClose={() => setDetail(null)}
         content={
@@ -129,7 +143,7 @@ function EventCards() {
           )
         }
       />
-    </ul>
+    </>
   )
 }
 
@@ -216,8 +230,16 @@ export function Events({ view }: { view: 'biletler' | 'tahminler' }) {
     <section aria-label={view === 'biletler' ? 'Biletler' : 'Tahminler'} className="flex flex-col gap-5">
       {view === 'biletler' ? (
         <>
-          <JakoTip pose="duyuru" title="Jako duyuruyor">
-            Bilet çekilişi her pazar 21:00&apos;de canlı yayında! Ne kadar çok bilet, o kadar çok şans kanka.
+          <JakoTip pose="promo" title="Jako fısıldıyor">
+            Özel oranlar ve promo kodlar önce Telegram&apos;a düşer, sonra biter kanka.{' '}
+            <a
+              href={TELEGRAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-primary underline-offset-2 hover:underline"
+            >
+              Kanala katıl, kaçırma.
+            </a>
           </JakoTip>
           <EventCards />
         </>

@@ -5,6 +5,8 @@ import { getContent, setContent } from '@/lib/content'
 import { ensureKp } from '@/lib/kanka-puan'
 import {
   cleanHandle,
+  isJoinUrl,
+  isTelegramUrl,
   isPlatform,
   isPlatformUrl,
   type AccountStatus,
@@ -55,9 +57,19 @@ export async function getSocialLinks(): Promise<SocialLinks> {
 export async function saveSocialLinks(input: SocialLinks) {
   const out: SocialLinks = {}
   for (const [key, raw] of Object.entries(input)) {
-    if (!isPlatform(key)) continue
     const url = String(raw ?? '').trim()
     if (!url) continue
+    if (key === 'telegram') {
+      if (!isTelegramUrl(url)) throw new Error('Telegram adresi geçersiz. https://t.me/... linkini yapıştır.')
+      out.telegram = url
+      continue
+    }
+    if (key === 'join') {
+      if (!isJoinUrl(url)) throw new Error('Katıl linki geçersiz. https:// ile başlayan bir link ya da /kayit gibi site içi yol gir.')
+      out.join = url
+      continue
+    }
+    if (!isPlatform(key)) continue
     if (!isPlatformUrl(key, url)) throw new Error(`${key} adresi geçersiz. https:// ile başlayan profil linkini yapıştır.`)
     out[key] = url
   }

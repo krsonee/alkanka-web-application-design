@@ -3,18 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, Search, ShieldCheck, Star, Zap } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, ScrollText, Search, ShieldCheck, SlidersHorizontal, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCatalog } from './catalog-context'
+import { sortByOrder } from '@/lib/catalog-shared'
 import {
   SPECIAL_ODDS,
   TIER_INFO,
   sponsorById,
   tierRank,
+  type Bonus,
   type Campaign,
   type Sponsor,
   type SponsorTier,
 } from './data'
+import { DetailModal, type DetailContent } from './detail-modal'
 import { JakoTip } from './jako'
 import { TeamLogo, splitMatch, useLogos } from './logo-context'
 import { SectionHeading } from './section-heading'
@@ -109,16 +112,28 @@ export function SponsorLogoPlate({ sponsor, className, compact }: { sponsor: Spo
   )
 }
 
+const validPayout = (payout: string) => /\d/.test(payout) ? payout.trim() : ''
+
 function Meta({ sponsor }: { sponsor: Sponsor }) {
+  const payout = validPayout(sponsor.payout)
   return (
-    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+    <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
       <Star className="size-3 fill-primary text-primary" aria-hidden="true" />
       {sponsor.rating.toFixed(1)}
-      <span aria-hidden="true">·</span>
-      <Zap className="size-3" aria-hidden="true" />
-      {sponsor.payout} çekim
+      {payout && (
+        <>
+          <span aria-hidden="true">·</span>
+          <Zap className="size-3" aria-hidden="true" />
+          {payout} çekim
+        </>
+      )}
     </span>
   )
+}
+
+const TIER_FRAME: Partial<Record<SponsorTier, string>> = {
+  ana: 'border-primary/60 shadow-[0_0_24px_-12px] shadow-primary/70',
+  elit: 'border-foreground/25',
 }
 
 function GoButton({ label = 'Siteye git', className, site }: { label?: string; className?: string; site?: string }) {
@@ -169,31 +184,88 @@ export function TierTag({ tier, className }: { tier: SponsorTier; className?: st
   )
 }
 
+function MainSponsorCompact({ sponsor }: { sponsor: Sponsor }) {
+  return (
+    <article className="bonus-aura rounded-xl p-px">
+      <div className="relative isolate flex items-center gap-3 overflow-hidden rounded-[calc(var(--radius)*1.6)] p-3 sm:gap-5 sm:p-4">
+        <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 -z-10 w-full overflow-hidden sm:w-2/3">
+          <Image
+            src="/images/campaign-art/sponsor-strip.png"
+            alt=""
+            fill
+            sizes="(min-width: 640px) 66vw, 100vw"
+            className="sponsor-strip-art object-cover object-right opacity-70"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-card via-card/80 to-card/10" />
+        </div>
+        <span aria-hidden className="bonus-sheen" />
+
+        <div className="sponsor-logo-plate relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl px-2 py-1.5 h-14 w-24 sm:h-20 sm:w-40 sm:px-4">
+          <SponsorLogoPlate sponsor={sponsor} compact className="max-h-full max-w-full text-lg drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]" />
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-display text-sm font-bold text-foreground sm:text-base">{sponsor.name}</span>
+            <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
+          </span>
+          <p className="line-clamp-1 font-display text-base font-bold text-primary sm:text-xl">{sponsor.welcome}</p>
+          <ul className="hidden min-w-0 flex-wrap gap-1.5 md:flex">
+            {sponsor.perks.slice(0, 3).map((p) => (
+              <li
+                key={p}
+                className="flex max-w-56 min-w-0 items-center gap-1 rounded-full border border-primary/25 bg-background/60 px-2 py-0.5 text-[11px] text-foreground/80 backdrop-blur"
+              >
+                <Check className="size-3 shrink-0 text-primary" aria-hidden="true" />
+                <span className="truncate">{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <GoButton site={sponsor.id} label="Kayıt ol" className="h-9 shrink-0 px-3 shadow-[0_6px_20px_-8px] shadow-primary sm:h-11 sm:px-6" />
+      </div>
+    </article>
+  )
+}
+
 export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   return (
     <div className="@container">
-    <article className="panel-gold group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
-      <div className="relative flex aspect-[16/5] items-center justify-center border-b border-border bg-background p-3 sm:aspect-[16/7] sm:p-6 @2xl:aspect-auto @2xl:w-60 @2xl:border-r @2xl:border-b-0 @5xl:w-80">
-        <SponsorLogoPlate sponsor={sponsor} className="max-h-16 sm:max-h-none md:max-h-28" />
-        <span className="absolute top-2 left-2 sm:top-3 sm:left-3">
-          <TierTag tier={sponsor.tier} />
+    <article className="sd-hero sd-rise group flex flex-col overflow-hidden rounded-2xl @2xl:flex-row @2xl:items-stretch">
+      <div className="sd-logo-wrap relative flex h-24 items-center justify-center overflow-hidden px-3 pt-7 pb-2 sm:h-28 sm:px-5 sm:pt-8 @2xl:h-auto @2xl:w-52 @2xl:pt-3 @5xl:w-64">
+        <span aria-hidden className="sd-logo-sheen" />
+        <SponsorLogoPlate sponsor={sponsor} className="sd-logo relative max-h-11 sm:max-h-14 md:max-h-16" />
+        <span className="absolute top-2 left-2 flex items-center gap-1.5">
+          <TierTag tier={sponsor.tier} className="px-1.5 text-[9px]" />
+        </span>
+        <span className="absolute top-2.5 right-2.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span aria-hidden className="sd-live-dot" />
+          Aktif
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-4 sm:gap-2 sm:p-5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="font-display text-lg font-bold text-foreground sm:text-xl">{sponsor.name}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5 sm:p-4">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+          <span className="font-display text-base font-bold text-foreground sm:text-lg">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <p className="font-display text-xl font-bold text-primary text-balance sm:text-2xl">{sponsor.welcome}</p>
-        <ul className="grid gap-1.5 sm:grid-cols-2">
-          {sponsor.perks.map((p) => (
-            <li key={p} className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              {p}
+        <p className="font-display text-lg font-bold text-primary text-balance sm:text-xl">{sponsor.welcome}</p>
+        <ul className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2">
+          {sponsor.perks.slice(0, 3).map((p, i) => (
+            <li
+              key={p}
+              className="sd-perk sd-rise flex min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 py-1 text-xs text-muted-foreground"
+              style={{ animationDelay: `${120 + i * 80}ms` }}
+            >
+              <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="block min-w-0 flex-1 truncate">{p}</span>
             </li>
           ))}
         </ul>
-        <GoButton site={sponsor.id} label="Hemen kayıt ol" className="mt-1.5 h-11 sm:mt-2 sm:h-12 sm:self-start sm:px-8" />
+        <GoButton
+          site={sponsor.id}
+          label="Hemen kayıt ol"
+          className="sd-cta relative mt-1 h-10 overflow-hidden sm:self-start sm:px-8"
+        />
       </div>
       <div className="relative hidden min-h-56 overflow-hidden bg-background @3xl:block @3xl:w-64 @5xl:w-96">
         <Image
@@ -215,21 +287,49 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
 
 function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
   return (
-    <li className="panel-gold group flex flex-col overflow-hidden rounded-xl transition-colors hover:border-primary/60">
-      <div className="relative flex aspect-[16/8] items-center justify-center border-b border-border bg-background p-4">
-        <SponsorLogoPlate sponsor={sponsor} />
-        <span className="absolute top-3 right-3">
+    <li className={cn('panel-gold group overflow-hidden rounded-xl transition-colors hover:border-primary/60', TIER_FRAME[sponsor.tier])}>
+      <div className="flex items-center gap-3 p-3 sm:hidden">
+        <Link
+          href={`/siteler/${sponsor.id}`}
+          aria-label={`${sponsor.name} detayları`}
+          className="sponsor-logo-plate flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background px-2 py-1.5"
+        >
+          <SponsorLogoPlate sponsor={sponsor} compact className="h-full max-h-full w-full max-w-full text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
+        </Link>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
+            <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
+          </span>
+          <span className="truncate text-sm font-bold text-primary">{sponsor.welcome}</span>
+          <Meta sponsor={sponsor} />
+        </div>
+        <div className="flex w-20 shrink-0 flex-col gap-1.5">
+          <GoButton site={sponsor.id} label="Git" className="h-8 w-full px-2" />
+          <Link
+            href={`/siteler/${sponsor.id}`}
+            className="flex h-8 w-full items-center justify-center rounded-lg border border-border text-[11px] font-bold uppercase tracking-wider text-foreground transition-colors hover:border-primary/50 hover:bg-secondary"
+          >
+            İncele
+          </Link>
+        </div>
+      </div>
+
+      <div className="hidden h-full flex-col sm:flex">
+      <div className="relative flex h-32 items-center justify-center border-b border-border bg-background px-4 pt-10 pb-3">
+        <SponsorLogoPlate sponsor={sponsor} className="max-h-16" />
+        <span className="absolute top-2.5 right-2.5">
           <TierTag tier={sponsor.tier} />
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex flex-1 flex-col gap-2.5 p-3.5">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <div className="flex flex-col gap-1">
-          <p className="font-display text-lg font-bold text-primary">{sponsor.welcome}</p>
-          <p className="text-sm leading-relaxed text-muted-foreground">{sponsor.perks.join(' · ')}</p>
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="truncate font-display text-base font-bold text-primary">{sponsor.welcome}</p>
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{sponsor.perks.join(' · ')}</p>
         </div>
         <div className="mt-auto flex gap-2">
           <Link
@@ -240,6 +340,7 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
           </Link>
           <GoButton site={sponsor.id} className="flex-1" />
         </div>
+      </div>
       </div>
     </li>
   )
@@ -291,6 +392,7 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
   const [sort, setSort] = useState<(typeof SORTS)[number]['id']>('onerilen')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [visible, setVisible] = useState(PAGE)
+  const [toolsOpen, setToolsOpen] = useState(false)
 
   const pool = useMemo(
     () => sponsors.filter((s) => s.tier !== 'degil').sort((a, b) => tierRank(a.tier) - tierRank(b.tier)),
@@ -336,15 +438,31 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
         description={`${pool.length} sponsor, her gün kontrol ediliyor. Kategoriye göre filtrele, ara veya sırala.`}
       />
 
-      <div className="sticky top-16 z-20 -mx-1 flex flex-col gap-3 rounded-xl border border-border bg-surface/95 p-3 backdrop-blur-md lg:flex-row lg:items-center">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {filters.map((f) => (
-            <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(tier === f.id ? 'all' : f.id)}>
-              {f.label}
-              <Count n={counts[f.id]} active={tier === f.id} />
-            </Chip>
-          ))}
+      <div className="-mx-1 flex flex-col gap-2 rounded-xl border border-border bg-surface/95 p-2 backdrop-blur-md lg:sticky lg:top-16 lg:z-20 lg:flex-row lg:items-center lg:gap-3 lg:p-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto no-scrollbar">
+            {filters.map((f) => (
+              <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(tier === f.id ? 'all' : f.id)}>
+                {f.label}
+                <Count n={counts[f.id]} active={tier === f.id} />
+              </Chip>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setToolsOpen((o) => !o)}
+            aria-expanded={toolsOpen}
+            aria-controls="sponsor-tools"
+            aria-label="Arama ve sıralama"
+            className={cn(
+              'flex size-8 shrink-0 items-center justify-center rounded-lg border transition-colors lg:hidden',
+              toolsOpen || query ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-card text-muted-foreground',
+            )}
+          >
+            <SlidersHorizontal className="size-4" aria-hidden="true" />
+          </button>
         </div>
+        <div id="sponsor-tools" className={cn('flex-col gap-2 lg:flex lg:flex-1 lg:flex-row lg:items-center lg:gap-3', toolsOpen ? 'flex' : 'hidden')}>
         <label className="relative flex-1">
           <span className="sr-only">Sponsor ara</span>
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -392,6 +510,7 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
             })}
           </div>
         </div>
+        </div>
       </div>
 
       {tier !== 'all' && <p className="text-sm leading-relaxed text-muted-foreground">{TIER_INFO[tier].description}</p>}
@@ -407,7 +526,7 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
             : `“${query}” ile eşleşen sponsor yok. Başka bir isim dene veya filtreyi temizle.`}
         </JakoTip>
       ) : view === 'grid' ? (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
           {shown.map((s) => (
             <SponsorCard key={s.id} sponsor={s} />
           ))}
@@ -428,6 +547,14 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
   )
 }
 
+function ChipRail({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className={cn('flex flex-wrap gap-1.5 sm:gap-2', className)}>
+      {children}
+    </div>
+  )
+}
+
 function CopyCode({ code }: { code: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -441,67 +568,167 @@ function CopyCode({ code }: { code: string }) {
       className="flex h-9 items-center justify-between gap-2 rounded-lg border border-dashed border-primary/50 bg-background px-3 font-mono text-xs font-bold tracking-wider text-primary"
       aria-label={`${code} kodunu kopyala`}
     >
-      {code}
+      <span className="flex items-center gap-2">
+        <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Kod</span>
+        {code}
+      </span>
       {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
     </button>
   )
 }
 
+const BONUS_TYPE_RULES: Record<Bonus['type'], { about: string; rules: string[] }> = {
+  'Hoş geldin': {
+    about: 'Sponsor sitede yeni hesap açan ve ilk yatırımını yapan üyelere tanımlanan hoş geldin bonusu.',
+    rules: [
+      'Sadece sponsor sitede ilk kez hesap açan yeni üyeler yararlanabilir.',
+      'Bonus, ilk yatırım onaylandıktan sonra canlı destekten talep edilmelidir.',
+      'Yatırım yapıldıktan sonra bonus alınmadan oyun oynanmamalıdır.',
+      'Çevrim yalnızca slot oyunlarında tamamlanır; canlı casino ve spor çevrime sayılmaz.',
+    ],
+  },
+  Yatırım: {
+    about: 'Mevcut üyelerin yaptığı yatırımlara eklenen ekstra bakiye bonusu.',
+    rules: [
+      'Bonus her yatırımda bir kez talep edilebilir.',
+      'Yatırım sonrası bakiye kullanılmadan canlı destekten talep edilmelidir.',
+      'Aktif başka bir bonus varken yatırım bonusu tanımlanmaz.',
+      'Çevrim tamamlanmadan yapılan çekim taleplerinde bonus ve kazancı silinir.',
+    ],
+  },
+  Kayıp: {
+    about: 'Belirlenen dönem içindeki net kayıplar üzerinden hesaplanan iade bonusu.',
+    rules: [
+      'Kayıp, ilgili dönemdeki toplam yatırım eksi toplam çekim üzerinden hesaplanır.',
+      'Dönem içinde bonus kullanılan yat��rımlar hesaplamaya dahil edilmez.',
+      'Bonus, dönem bitiminden sonraki ilk iş günü canlı destekten talep edilir.',
+      'Talep sırasında hesap bakiyesinin 5 ₺ altında olması gerekir.',
+    ],
+  },
+  Freespin: {
+    about: 'Seçili slot oyunlarında kullanılabilen ücretsiz dönüş hakları.',
+    rules: [
+      'Freespinler yalnızca sponsorun belirlediği slot oyunlarında geçerlidir.',
+      'Haklar tanımlandıktan sonra 24 saat içinde kullanılmalıdır.',
+      'Freespin kazançları bonus bakiyesi olarak tanımlanır ve çevrime tabidir.',
+      'Tek hesap, tek IP ve tek cihaz kuralı geçerlidir.',
+    ],
+  },
+  Deneme: {
+    about: 'Yatırım yapmadan siteyi denemen için verilen ücretsiz başlangıç bakiyesi.',
+    rules: [
+      'Sadece yeni üyelere ve hesap başına bir kez verilir.',
+      'Telefon numarası ve kimlik doğrulaması tamamlanmış olmalıdır.',
+      'Deneme bonusundan elde edilebilecek maksimum çekim tutarı sponsor tarafından sınırlandırılır.',
+      'Çekim talebinden önce en az bir yatırım yapılması istenebilir.',
+    ],
+  },
+}
+
+const BONUS_COMMON_RULES = [
+  'Bonusu almak için siteye AL KANKA üzerindeki “Siteye git” butonuyla gitmelisin.',
+  'Çoklu hesap veya kötüye kullanım tespit edilirse bonus ve kazançlar iptal edilir.',
+  'Sponsor site, kampanya şartlarını önceden haber vermeksizin değiştirme hakkına sahiptir.',
+]
+
+function bonusDetail(b: Bonus, sponsorName?: string): DetailContent {
+  const info = BONUS_TYPE_RULES[b.type] ?? { about: 'Sponsor siteye özel bonus.', rules: [] }
+  return {
+    eyebrow: `${b.type} bonusu · ${sponsorName ?? 'Sponsor'}`,
+    title: b.title,
+    description: info.about,
+    facts: [
+      { label: 'Tutar', value: b.amount },
+      { label: 'Çevrim şartı', value: b.wager },
+      ...(b.code ? [{ label: 'Bonus kodu', value: b.code }] : []),
+      { label: 'Sponsor', value: sponsorName ?? '-' },
+    ],
+    steps: [
+      '“Siteye git” butonuyla sponsor siteye geç ve hesabını oluştur.',
+      b.code ? `Yatırım ekranında ${b.code} kodunu gir.` : 'Yatırımını yap ve bakiyeyi kullanmadan bekle.',
+      'Canlı destekten bonusu talep et, tanımlandıktan sonra oyuna başla.',
+    ],
+    rules: [...info.rules, ...BONUS_COMMON_RULES],
+    note: 'Bonusu talep etmeden oyun oynarsan hak kaybedebilirsin kanka, önce talep et.',
+  }
+}
+
+function BonusCard({ b, onRules }: { b: Bonus; onRules: () => void }) {
+  const s = sponsorById(b.sponsorId)
+  return (
+    <li className="bonus-aura flex flex-col gap-3 rounded-2xl p-4">
+      <span aria-hidden="true" className="bonus-sheen" />
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/30 bg-background">
+          {s && <SponsorLogoPlate sponsor={s} compact className="size-full text-base" />}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
+              {b.type}
+            </span>
+            <span className="truncate text-xs font-semibold text-muted-foreground">{s?.name}</span>
+          </span>
+          <h3 className="font-display text-lg font-bold leading-tight text-foreground text-balance">{b.title}</h3>
+        </div>
+      </div>
+
+      <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-background/70 text-xs">
+        <div className="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+          <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Tutar</dt>
+          <dd className="truncate font-display text-sm font-bold text-primary">{b.amount}</dd>
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5 border-l border-border px-3 py-2">
+          <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Şart</dt>
+          <dd className="truncate font-display text-sm font-bold text-foreground">{b.wager}</dd>
+        </div>
+      </dl>
+
+      {b.code && <CopyCode code={b.code} />}
+
+      <div className="mt-auto grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onRules}
+          className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-primary/45 bg-primary/10 px-3 text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:border-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
+          <ScrollText className="size-3.5" aria-hidden="true" />
+          Kurallar
+        </button>
+        <GoButton site={b.sponsorId} label="Siteye git" />
+      </div>
+    </li>
+  )
+}
+
 export function BonusBoard() {
-  const { bonuses: BONUSES } = useCatalog()
-  const types = ['Tümü', ...Array.from(new Set(BONUSES.map((b) => b.type)))]
+  const { bonuses: BONUSES, order } = useCatalog()
+  const types = ['Tümü', ...sortByOrder(BONUSES.map((b) => b.type), order?.bonusTypes ?? [])]
   const [type, setType] = useState('Tümü')
+  const [detail, setDetail] = useState<Bonus | null>(null)
   const list = BONUSES.filter((b) => type === 'Tümü' || b.type === type)
+  const detailSponsor = detail ? sponsorById(detail.sponsorId) : undefined
 
   return (
     <section aria-label="Bonus listesi" className="flex flex-col gap-4">
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      <ChipRail label="Bonus türleri">
         {types.map((t) => (
           <Chip key={t} active={type === t} onClick={() => setType(type === t ? 'Tümü' : t)}>
             {t}
             <Count n={t === 'Tümü' ? BONUSES.length : BONUSES.filter((b) => b.type === t).length} active={type === t} />
           </Chip>
         ))}
-      </div>
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {list.map((b) => {
-          const s = sponsorById(b.sponsorId)
-          return (
-            <li key={b.id} className="panel-gold group flex flex-col overflow-hidden rounded-xl">
-              <div className="relative flex aspect-[16/7] items-center justify-center border-b border-border bg-background p-4">
-                {s && <SponsorLogoPlate sponsor={s} />}
-                <span className="absolute top-3 left-3 rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
-                  {b.type}
-                </span>
-              </div>
-              <div className="flex flex-1 flex-col gap-3 p-4">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold text-muted-foreground">{s?.name}</span>
-                  <h3 className="font-display text-lg font-bold text-foreground">{b.title}</h3>
-                </div>
-                <dl className="flex gap-6 text-xs text-muted-foreground">
-                  <div className="flex flex-col">
-                    <dt>Tutar</dt>
-                    <dd className="font-semibold text-foreground">{b.amount}</dd>
-                  </div>
-                  <div className="flex flex-col">
-                    <dt>Şart</dt>
-                    <dd className="font-semibold text-foreground">{b.wager}</dd>
-                  </div>
-                </dl>
-                <div className="mt-auto flex flex-col gap-2 sm:flex-row">
-                  {b.code && (
-                    <div className="sm:flex-1">
-                      <CopyCode code={b.code} />
-                    </div>
-                  )}
-                  <GoButton site={b.sponsorId} label="Bonusu al" className="h-9 sm:flex-1" />
-                </div>
-              </div>
-            </li>
-          )
-        })}
+      </ChipRail>
+      <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+        {list.map((b) => (
+          <BonusCard key={b.id} b={b} onRules={() => setDetail(b)} />
+        ))}
       </ul>
+      <DetailModal
+        onClose={() => setDetail(null)}
+        content={detail && bonusDetail(detail, detailSponsor?.name)}
+        action={detail && <GoButton site={detail.sponsorId} label="Siteye git" className="h-11 w-full" />}
+      />
     </section>
   )
 }
@@ -562,39 +789,94 @@ export function OddsBoard() {
   )
 }
 
+const CAMPAIGN_TAG_ART: Record<string, string> = {
+  Spor: '/images/campaign-art/spor.png',
+  Turnuva: '/images/campaign-art/turnuva.png',
+  İade: '/images/campaign-art/iade.png',
+  Telegram: '/images/campaign-art/telegram.png',
+  Yatırım: '/images/campaign-art/yatirim.png',
+  Freespin: '/images/campaign-art/freespin.png',
+  Çekiliş: '/images/campaign-art/cekilis.png',
+}
+// Stock placeholder art gets swapped for tag-specific art; custom panel uploads are kept as-is.
+const STOCK_CAMPAIGN_ART = /^\/images\/(banner-|tile-|hero-chest)/
+
+const CAMPAIGN_ID_ART: Record<string, string> = {
+  c1: '/images/campaign-art/c1-derbi.png',
+  c2: '/images/campaign-art/c2-vip-yaz.png',
+  c3: '/images/campaign-art/c3-cashback.png',
+  c4: '/images/campaign-art/c4-telegram-drop.png',
+  c5: '/images/campaign-art/c5-cifte-yatirim.png',
+  c6: '/images/campaign-art/c6-freespin.png',
+  c7: '/images/campaign-art/c7-sampiyonlar.png',
+  c8: '/images/campaign-art/c8-vip-cekilis.png',
+  c9: '/images/campaign-art/c9-kripto.png',
+  c10: '/images/campaign-art/c10-canli-casino.png',
+  c11: '/images/campaign-art/c11-slot-turnuva.png',
+  c12: '/images/campaign-art/c12-anket.png',
+}
+
+function campaignArt(c: Campaign) {
+  const isStock = !c.image || STOCK_CAMPAIGN_ART.test(c.image)
+  if (isStock && CAMPAIGN_ID_ART[c.id]) return CAMPAIGN_ID_ART[c.id]
+  const tagged = CAMPAIGN_TAG_ART[c.tag]
+  if (tagged && (!c.image || STOCK_CAMPAIGN_ART.test(c.image))) return tagged
+  return c.image || '/placeholder.svg'
+}
+
 function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
   const s = sponsorById(c.sponsorId)
   const urgent = c.hoursLeft <= 24
   return (
-    <li className={cn('panel-gold group flex flex-col overflow-hidden rounded-xl', className)}>
-      <div className="relative aspect-[16/7] overflow-hidden sm:aspect-[16/9]">
-        <Image
-          src={c.image || '/placeholder.svg'}
-          alt=""
-          fill
-          sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-        />
-        <span className="absolute top-3 left-3 rounded-md bg-background/90 px-2 py-0.5 text-xs font-semibold text-primary">{c.tag}</span>
-        <span
-          className={cn(
-            'absolute top-3 right-3 flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold',
-            urgent ? 'bg-destructive text-foreground' : 'bg-background/90 text-foreground',
-          )}
-        >
-          <Clock className="size-3" aria-hidden="true" />
-          {c.ends}
+    <li
+      className={cn(
+        'coupon-card group relative flex min-h-40 overflow-hidden rounded-2xl border border-border bg-card transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_16px_36px_-20px] hover:shadow-primary/50',
+        className,
+      )}
+    >
+      <div className="relative w-28 shrink-0 overflow-hidden bg-background sm:w-36">
+        <div className="coupon-art absolute inset-0">
+          <Image
+            src={campaignArt(c)}
+            alt=""
+            fill
+            sizes="144px"
+            className="object-cover transition-transform duration-700 group-hover:scale-110"
+          />
+        </div>
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-card/40" />
+        <span aria-hidden="true" className="coupon-sheen" />
+        <span className="absolute bottom-2 left-2 rounded-md bg-background/85 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
+          {c.tag}
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-3.5 sm:gap-2 sm:p-4">
-        <h3 className="font-semibold text-foreground">{c.title}</h3>
-        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground sm:line-clamp-none">{c.description}</p>
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <span className="text-xs text-muted-foreground">{s?.name}</span>
-          <a href="#kayit" className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary hover:underline">
-            Katıl
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
-          </a>
+
+      <div aria-hidden="true" className="relative w-0">
+        <span className="absolute -top-2 -left-2 size-4 rounded-full border border-border bg-background" />
+        <span className="absolute -bottom-2 -left-2 size-4 rounded-full border border-border bg-background" />
+        <span className="absolute inset-y-3 left-0 border-l border-dashed border-primary/30" />
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5 sm:p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background p-0.5">
+            {s ? <SponsorLogoPlate sponsor={s} compact className="size-full text-[10px]" /> : null}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{s?.name}</span>
+          <span
+            className={cn(
+              'flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums',
+              urgent ? 'bg-destructive/15 text-destructive' : 'bg-secondary text-muted-foreground',
+            )}
+          >
+            {urgent ? <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-destructive" /> : <Clock className="size-3" aria-hidden="true" />}
+            {c.ends}
+          </span>
+        </div>
+        <h3 className="line-clamp-2 font-display text-base font-bold leading-snug text-foreground text-pretty">{c.title}</h3>
+        <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.description}</p>
+        <div className="mt-auto flex justify-end pt-1">
+          <GoButton site={s?.id} label="Katıl" className="h-8 rounded-full px-4 text-[11px]" />
         </div>
       </div>
     </li>
@@ -604,8 +886,8 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
 const CAMPAIGN_PAGE = 6
 
 export function CampaignBoard() {
-  const { campaigns: CAMPAIGNS } = useCatalog()
-  const tags = ['Tümü', ...Array.from(new Set(CAMPAIGNS.map((c) => c.tag)))]
+  const { campaigns: CAMPAIGNS, order } = useCatalog()
+  const tags = ['Tümü', ...sortByOrder(CAMPAIGNS.map((c) => c.tag), order?.campaignTags ?? [])]
   const [tag, setTag] = useState('Tümü')
   const [sort, setSort] = useState<'bitis' | 'uzun'>('bitis')
   const [todayOnly, setTodayOnly] = useState(false)
@@ -620,27 +902,27 @@ export function CampaignBoard() {
 
   return (
     <section aria-label="Kampanyalar" className="flex flex-col gap-6">
-      <article className="panel-gold relative isolate flex min-h-80 overflow-hidden rounded-2xl md:min-h-96">
-  <div className="absolute inset-x-0 top-0 -z-20 h-56 md:inset-0 md:h-auto">
-  <Image src={featured.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 1100px, 100vw" className="object-cover object-[65%_center] md:object-center" />
-  </div>
-  <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-56 bg-gradient-to-t from-card to-transparent to-50% md:inset-0 md:h-auto md:bg-gradient-to-r md:from-card md:via-card/70 md:to-transparent md:to-100%" />
-  <div className="flex max-w-xl flex-col justify-end gap-3 p-5 pt-48 sm:p-8 sm:pt-48 md:justify-center md:pt-8">
+      <article className="panel-gold relative isolate flex overflow-hidden rounded-2xl md:min-h-72">
+        <div className="absolute inset-x-0 top-0 -z-20 h-40 md:inset-0 md:h-auto">
+          <Image src={featured.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 1100px, 100vw" className="object-cover object-[65%_center] md:object-center" />
+        </div>
+        <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-40 bg-gradient-to-t from-card to-transparent to-60% md:inset-0 md:h-auto md:bg-gradient-to-r md:from-card md:via-card/70 md:to-transparent md:to-100%" />
+        <div className="flex max-w-xl flex-col justify-end gap-2.5 p-5 pt-32 sm:gap-3 sm:p-8 sm:pt-32 md:justify-center md:pt-8">
           <span className="self-start rounded-md bg-primary px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
             Haftanın kampanyası
           </span>
           <h2 className="font-display text-2xl font-bold text-foreground text-balance sm:text-3xl">{featured.title}</h2>
-          <p className="leading-relaxed text-muted-foreground">{featured.description}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">{featured.description}</p>
           <span className="flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="size-4 text-primary" aria-hidden="true" />
             {featured.ends} · {fs?.name}
           </span>
-          <GoButton site={fs?.id} label="Kampanyaya katıl" className="mt-auto h-12 self-start" />
+          <GoButton site={fs?.id} label="Kampanyaya katıl" className="mt-2 h-11 w-full sm:w-auto sm:self-start" />
         </div>
       </article>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="flex flex-1 gap-2 overflow-x-auto no-scrollbar">
+        <ChipRail label="Kampanya etiketleri" className="min-w-0 flex-1">
           {tags.map((t) => (
             <Chip
               key={t}
@@ -654,7 +936,7 @@ export function CampaignBoard() {
               <Count n={t === 'Tümü' ? CAMPAIGNS.length - 1 : CAMPAIGNS.slice(1).filter((c) => c.tag === t).length} active={tag === t} />
             </Chip>
           ))}
-        </div>
+        </ChipRail>
         <div className="flex items-center gap-2">
           <Chip active={todayOnly} onClick={() => setTodayOnly((v) => !v)}>
             <Clock className="size-3.5" aria-hidden="true" />
@@ -679,7 +961,7 @@ export function CampaignBoard() {
           Bu filtreye uyan kampanya kalmadı. Yenileri ilk Telegram’a düşüyor, takipte kal.
         </JakoTip>
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
           {shown.map((c) => (
             <CampaignCard key={c.id} c={c} />
           ))}
@@ -702,7 +984,7 @@ function SeeAllLink({ href, label = 'Tümünü gör' }: { href: string; label?: 
   )
 }
 
-export function MainSponsorRotator({ sponsors }: { sponsors: Sponsor[] }) {
+export function MainSponsorRotator({ sponsors, compact = false }: { sponsors: Sponsor[]; compact?: boolean }) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
 
@@ -726,7 +1008,7 @@ export function MainSponsorRotator({ sponsors }: { sponsors: Sponsor[] }) {
       aria-label="Ana sponsorlar"
     >
       <div key={current.id} className="motion-safe:animate-slide-in" aria-live={paused ? 'polite' : 'off'}>
-        <MainSponsor sponsor={current} />
+        {compact ? <MainSponsorCompact sponsor={current} /> : <MainSponsor sponsor={current} />}
       </div>
       {sponsors.length > 1 && (
         <div className="flex items-center justify-center gap-2">
@@ -785,9 +1067,64 @@ export function FeaturedSponsors({
 
 const SLIDE_GAP = 12
 
+const FALLBACK_IMAGES = ['/images/banner-events.png', '/images/banner-wheel.png', '/images/hero-chest.png', '/images/banner-telegram.png', '/images/wheel-stage.png']
+
+function uniqueImages(list: Campaign[]): Campaign[] {
+  const used = new Set<string>()
+  return list.map((c) => {
+    const image = !used.has(c.image) ? c.image : (FALLBACK_IMAGES.find((src) => !used.has(src)) ?? c.image)
+    used.add(image)
+    return image === c.image ? c : { ...c, image }
+  })
+}
+
+function EndingCard({ c, index }: { c: Campaign; index: number }) {
+  const s = sponsorById(c.sponsorId)
+  const urgent = c.hoursLeft <= 24
+  const left = Math.max(6, Math.min(100, (c.hoursLeft / 168) * 100))
+  return (
+    <li className="ending-card group w-full shrink-0 snap-center rounded-2xl md:w-auto" style={{ animationDelay: `${index * 90}ms` }}>
+      <div className="ending-inner relative flex h-full overflow-hidden rounded-[calc(1rem-1px)]">
+        <div className="relative w-24 shrink-0 overflow-hidden sm:w-28">
+          <Image src={campaignArt(c)} alt="" fill sizes="112px" className="ending-art object-cover" />
+          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent to-card" />
+          <span aria-hidden="true" className="ending-sheen" />
+          <span className="absolute left-1.5 top-1.5 rounded-md bg-background/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
+            {c.tag}
+          </span>
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-3 pl-2 pr-3">
+          <div className="flex items-center gap-1.5">
+            <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-background">
+              {s ? <SponsorLogoPlate sponsor={s} compact className="size-full text-[8px]" /> : null}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{s?.name}</span>
+            <span className={cn('ending-timer flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums', urgent && 'is-urgent')}>
+              <Clock className="size-3" aria-hidden="true" />
+              {c.ends}
+            </span>
+          </div>
+          <h3 className="line-clamp-1 font-display text-sm font-bold leading-snug text-foreground">{c.title}</h3>
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.description}</p>
+          <div className="mt-auto flex items-center gap-3 pt-1">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Kalan süre</span>
+              <span className="ending-bar" role="progressbar" aria-label="Kalan süre" aria-valuenow={Math.round(left)} aria-valuemin={0} aria-valuemax={100}>
+                <span className={cn('ending-bar-fill', urgent && 'is-urgent')} style={{ width: `${left}%` }} />
+              </span>
+            </div>
+            <GoButton site={s?.id} label="Katıl" className="ending-cta h-8 shrink-0 rounded-full px-4 text-[11px]" />
+          </div>
+        </div>
+      </div>
+    </li>
+  )
+}
+
 export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
   const { campaigns: CAMPAIGNS } = useCatalog()
-  const list = [...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3)
+  const list = uniqueImages([...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3))
   const trackRef = useRef<HTMLUListElement>(null)
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -831,8 +1168,8 @@ export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
         aria-label="Bitmek üzere olan kampanyalar"
         className="flex snap-x snap-mandatory gap-3 overflow-x-auto no-scrollbar md:grid md:grid-cols-3 md:gap-4 md:overflow-visible"
       >
-        {list.map((c) => (
-          <CampaignCard key={c.id} c={c} className="w-full shrink-0 snap-center md:w-auto" />
+        {list.map((c, i) => (
+          <EndingCard key={c.id} c={c} index={i} />
         ))}
       </ul>
       {list.length > 1 && (

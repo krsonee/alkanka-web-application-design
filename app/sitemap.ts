@@ -6,7 +6,7 @@ import { listPublicSponsors } from '@/lib/sites'
 
 export const revalidate = 3600
 
-const DAILY = new Set(['/', '/bonuslar', '/ozel-oranlar', '/kampanyalar', '/firsatlar'])
+const DAILY = new Set(['/', '/bonuslar', '/ozel-oranlar', '/kampanyalar'])
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date()
@@ -28,6 +28,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...['cark', 'sandik', 'zar'].map((g) => ({ url: `${SITE_URL}/oyunlar/${g}`, lastModified: now, changeFrequency: 'weekly' as const, priority: 0.5 })),
     ...sponsors.map((s) => ({ url: `${SITE_URL}/siteler/${s.id}`, lastModified: now, changeFrequency: 'weekly' as const, priority: 0.8 })),
     ...posts.map((p) => ({ url: `${SITE_URL}/rehber/${p.slug}`, lastModified: new Date(p.updatedAt), changeFrequency: 'monthly' as const, priority: 0.7 })),
-    ...deals.map((d) => ({ url: `${SITE_URL}/firsatlar/${d.slug}`, lastModified: new Date(d.createdAt), changeFrequency: 'never' as const, priority: 0.5 })),
   ]
 }

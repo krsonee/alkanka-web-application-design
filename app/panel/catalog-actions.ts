@@ -8,6 +8,7 @@ import {
   cleanBonuses,
   cleanCampaigns,
   cleanEvents,
+  cleanOrder,
   cleanPredictions,
 } from '@/lib/catalog-shared'
 import { mergeRewards, type RewardConfig } from '@/lib/rewards-shared'
@@ -44,6 +45,18 @@ export async function saveCatalogList(kind: ListKind, items: unknown): Promise<R
     return { ok: true, message: 'Kaydedildi, sitede hemen geçerli.' }
   } catch (error) {
     console.error(`[catalog:${kind}] kaydedilemedi`, error)
+    return { ok: false, error: 'Kaydedilemedi.' }
+  }
+}
+
+export async function saveCategoryOrder(input: unknown): Promise<Result> {
+  if (!(await canPanel('catalog'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
+  try {
+    await setContent(CATALOG_KEYS.order, cleanOrder(input))
+    revalidatePath('/', 'layout')
+    return { ok: true, message: 'Sıralama kaydedildi, sitede hemen geçerli.' }
+  } catch (error) {
+    console.error('[catalog:order] kaydedilemedi', error)
     return { ok: false, error: 'Kaydedilemedi.' }
   }
 }

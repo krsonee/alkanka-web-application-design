@@ -1,100 +1,45 @@
-'use client'
-
-import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import { ArrowUpRight } from 'lucide-react'
 import { QUICK_TILES } from './data'
+import { Marquee } from './home/marquee'
 
-function DistributedCounter({ total }: { total: number | null }) {
-  const [value, setValue] = useState(total ?? 0)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (total == null || total <= 0) return
-    const el = ref.current
-    if (!el) return
-    let raf = 0
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return
-      observer.disconnect()
-      const start = performance.now()
-      const from = total * 0.82
-      const tick = (now: number) => {
-        const t = Math.min(1, (now - start) / 1600)
-        const eased = 1 - Math.pow(1 - t, 3)
-        setValue(Math.round(from + (total - from) * eased))
-        if (t < 1) raf = requestAnimationFrame(tick)
-      }
-      raf = requestAnimationFrame(tick)
-    })
-    observer.observe(el)
-    return () => {
-      observer.disconnect()
-      cancelAnimationFrame(raf)
-    }
-  }, [total])
-
-  if (total == null || total <= 0) {
-    return (
-      <div className="panel-gold flex items-center justify-center rounded-2xl px-6 py-5 text-center">
-        <p className="text-sm font-medium text-muted-foreground">Topluluk puanı yakında burada birikecek</p>
-      </div>
-    )
-  }
-
+export function QuickTiles() {
   return (
-    <div
-      ref={ref}
-      className="panel-gold relative flex items-center justify-between gap-3 overflow-hidden rounded-xl px-4 py-2.5 sm:px-6 sm:py-3"
-    >
-      <span className="counter-sheen" aria-hidden="true" />
-      <span className="relative flex min-w-0 items-center gap-2.5">
-        <span className="relative flex size-2 shrink-0" aria-hidden="true">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-          <span className="relative inline-flex size-2 rounded-full bg-primary" />
-        </span>
-        <span className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          <span className="sm:hidden">Topluluğa dağıtılan</span>
-          <span className="hidden sm:inline">Bugüne kadar topluluğa dağıttık</span>
-        </span>
-      </span>
-      <p className="relative flex shrink-0 items-baseline gap-1.5 font-display font-bold tabular-nums">
-        <span className="text-xl text-primary sm:text-2xl">{value.toLocaleString('tr-TR')}</span>
-        <span className="text-xs uppercase tracking-wider text-foreground">Kanka Coin</span>
-      </p>
-    </div>
-  )
-}
-
-export function QuickTiles({ distributed }: { distributed: number | null }) {
-  return (
-    <section aria-label="Hızlı erişim" className="flex flex-col gap-4">
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <nav aria-label="Hızlı erişim">
+      <Marquee label="Hızlı erişim kutuları" duration={45} itemClassName="w-36 sm:w-44 lg:w-52">
         {QUICK_TILES.map((tile, i) => (
-          <li key={tile.id} className="animate-rise" style={{ animationDelay: `${i * 60}ms` }}>
-            <a
-                href={tile.href}
-                data-tour={`tile-${tile.id}`}
-
-              className="panel-gold group flex h-full flex-col gap-3 rounded-xl p-2.5 transition-all hover:-translate-y-0.5 hover:glow-gold"
-            >
-              <span className="relative block aspect-[16/10] overflow-hidden rounded-lg">
-                <Image
-                  src={tile.image}
-                  alt=""
-                  fill
-                  sizes="(min-width: 1280px) 160px, (min-width: 640px) 30vw, 45vw"
-                  className="object-cover transition-transform duration-500 group-hover:scale-110"
-                />
+          <a
+            key={tile.id}
+            href={tile.href}
+            data-tour={`tile-${tile.id}`}
+            aria-label={tile.cta}
+            style={{ '--flow-delay': `${-i * 1.1}s`, '--flow-opacity': 0.55 } as React.CSSProperties}
+            className="border-flow group relative flex aspect-[5/4] flex-col justify-end overflow-hidden rounded-xl bg-card ring-1 ring-primary/15 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_-16px_var(--primary)]"
+          >
+            <Image
+              src={tile.image || '/placeholder.svg'}
+              alt=""
+              fill
+              sizes="(min-width: 1024px) 208px, (min-width: 640px) 176px, 144px"
+              className="object-cover transition-transform duration-700 group-hover:scale-110"
+            />
+            <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent" />
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-foreground/15 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]"
+            />
+            <span className="relative flex items-end justify-between gap-1.5 p-2.5">
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate font-display text-sm font-bold text-foreground">{tile.label}</span>
+                <span className="truncate text-[11px] font-semibold text-primary">{tile.cta}</span>
               </span>
-              <span className="text-center font-display text-base font-bold text-foreground">{tile.label}</span>
-              <span className="rounded-md bg-primary py-2 text-center text-[11px] font-bold uppercase tracking-wider text-primary-foreground">
-                {tile.cta}
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary ring-1 ring-primary/40 transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                <ArrowUpRight className="size-3.5" aria-hidden="true" />
               </span>
-            </a>
-          </li>
+            </span>
+          </a>
         ))}
-      </ul>
-      <DistributedCounter total={distributed} />
-    </section>
+      </Marquee>
+    </nav>
   )
 }

@@ -40,7 +40,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
   { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, badge: 'Canlı' },
-  { id: 'firsatlar', label: 'Günün fırsatları', href: '/firsatlar', icon: Zap },
   { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, badge: 'Yeni' },
   { id: 'turnuvalar', label: 'Turnuvalar', href: '/turnuvalar', icon: Swords },
   { id: 'market', label: 'Puan marketi', href: '/market', icon: ShoppingBag },
@@ -349,7 +348,7 @@ export const CAMPAIGNS: Campaign[] = [
   { id: 'c7', sponsorId: 'kuzey', title: 'Şampiyonlar Ligi gecesi', description: 'Salı ve çarşamba maçlarında kombine kuponlara %15 ekstra kazanç.', ends: '1 gün kaldı', image: '/images/tile-predict.png', tag: 'Spor', hoursLeft: 26 },
   { id: 'c8', sponsorId: 'monarch', title: 'Monarch VIP çekilişi', description: 'Ay sonuna kadar yatırım yapan herkes iPhone ve tatil çekilişine katılır.', ends: '18 gün kaldı', image: '/images/tile-chest.png', tag: 'Çekiliş', hoursLeft: 432 },
   { id: 'c9', sponsorId: 'kraken', title: 'Kripto yatırımına %25 ekstra', description: 'USDT ve BTC yatırımlarında %25 ekstra bonus, anında çekim.', ends: '6 gün kaldı', image: '/images/tile-dice.png', tag: 'Yatırım', hoursLeft: 144 },
-  { id: 'c10', sponsorId: 'goldline', title: 'Goldline canlı casino haftası', description: 'Canlı casino kayıplarına günlük %20 iade, çevrimsiz.', ends: '4 g��n kaldı', image: '/images/banner-wheel.png', tag: 'İade', hoursLeft: 96 },
+  { id: 'c10', sponsorId: 'goldline', title: 'Goldline canlı casino haftası', description: 'Canlı casino kayıplarına günlük %20 iade, çevrimsiz.', ends: '4 gün kaldı', image: '/images/banner-wheel.png', tag: 'İade', hoursLeft: 96 },
   { id: 'c11', sponsorId: 'truva', title: 'Truva slot turnuvası', description: '250.000 ₺ ödül havuzu. En yüksek çarpanı yakalayan ilk 100 kişi kazanır.', ends: '7 gün kaldı', image: '/images/hero-chest.png', tag: 'Turnuva', hoursLeft: 168 },
   { id: 'c12', sponsorId: 'clickwave', title: 'Telegram anket ödülü', description: 'Kanaldaki haftalık ankete katılan ilk 300 kişiye 25 freespin.', ends: 'Bugün', image: '/images/banner-telegram.png', tag: 'Telegram', hoursLeft: 5 },
 ]
