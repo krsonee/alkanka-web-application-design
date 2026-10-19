@@ -2,7 +2,24 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import Image from 'next/image'
-import { ChevronRight, LayoutDashboard, ExternalLink, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
+import {
+  ChevronRight,
+  LayoutDashboard,
+  ExternalLink,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+  Search,
+  Globe,
+  Handshake,
+  Users,
+  Gamepad2,
+  Send,
+  Wrench,
+  Settings,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { addSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { ImageField } from '@/components/panel/image-field'
@@ -60,7 +77,13 @@ export function ContentEditor({
   users,
   audit,
   dashboard,
+  userName,
+  siteUrl,
+  logout,
 }: {
+  userName: string
+  siteUrl: string
+  logout: React.ReactNode
   dashboard: React.ReactNode
   users: React.ReactNode
   audit: React.ReactNode
@@ -96,132 +119,163 @@ export function ContentEditor({
   pending?: Record<string, number>
   sponsors: React.ReactNode
 }) {
-  const groups = [
+  const groups: NavGroup[] = [
     ...PANEL_GROUPS.map((g) => ({
-      label: g.label,
+      id: g.id as string,
+      label: g.label as string,
       items: g.modules
         .filter((m) => m.id !== 'roles' && allowed.includes(m.id))
         .map((m) => ({
           id: m.id as PanelTab,
           pending: pending[m.id] ?? 0,
+          hint: m.hint as string,
           label:
             m.id === 'slide'
                 ? `Slider (${slides.length})`
                 : m.id === 'hero'
                   ? `Sayfa başlıkları (${heroes.length})`
-                  : m.label,
+                  : (m.label as string),
         })),
     })),
     {
+      id: 'settings',
       label: 'Ayarlar',
       items: [
-        ...(isOwner ? [{ id: 'staff' as PanelTab, label: 'Personel & yetkiler', pending: 0 }, { id: 'audit' as PanelTab, label: 'İşlem logları', pending: 0 }] : []),
-        { id: 'account' as PanelTab, label: 'Hesabım & 2FA', pending: 0 },
+        ...(isOwner
+          ? [
+              { id: 'staff' as PanelTab, label: 'Personel & yetkiler', hint: 'Çalışan hesapları ve hangi bölüme girebilecekleri', pending: 0 },
+              { id: 'audit' as PanelTab, label: 'İşlem logları', hint: 'Kim, ne zaman, ne yaptı', pending: 0 },
+            ]
+          : []),
+        { id: 'account' as PanelTab, label: 'Hesabım & 2FA', hint: 'Şifre ve iki adımlı doğrulama', pending: 0 },
       ],
     },
   ].filter((g) => g.items.length > 0)
   const tabs: PanelTab[] = ['dashboard', ...groups.flatMap((g) => g.items.map((i) => i.id))]
-  const initial: PanelTab = 'dashboard'
-  const [tab, setTab] = useState<PanelTab>(initial)
+  const [tab, setTab] = useState<PanelTab>('dashboard')
   const [filter, setFilter] = useState('')
-  const groupOf = (id: PanelTab) => groups.find((g) => g.items.some((i) => i.id === id))?.label ?? ''
-  const [open, setOpen] = useState<string[]>(() => [groupOf(initial)])
   useEffect(() => {
-    const saved = window.location.hash.replace('#', '') as PanelTab
-    if (tabs.includes(saved)) {
-      setTab(saved)
-      setOpen((o) => Array.from(new Set([...o, groupOf(saved)])))
+    const sync = () => {
+      const saved = window.location.hash.replace('#', '') as PanelTab
+      if (tabs.includes(saved)) setTab(saved)
     }
+    sync()
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const toggle = (label: string) => setOpen((o) => (o.includes(label) ? o.filter((l) => l !== label) : [...o, label]))
   const items = tab === 'slide' ? slides : heroes
   const q = filter.trim().toLocaleLowerCase('tr')
   const shown = groups
-    .map((g) => ({ ...g, items: q ? g.items.filter((i) => i.label.toLocaleLowerCase('tr').includes(q) || g.label.toLocaleLowerCase('tr').includes(q)) : g.items }))
+    .map((g) => ({
+      ...g,
+      items: q
+        ? g.items.filter((i) => `${i.label} ${i.hint} ${g.label}`.toLocaleLowerCase('tr').includes(q))
+        : g.items,
+    }))
     .filter((g) => g.items.length > 0)
   const pick = (id: PanelTab) => {
     setTab(id)
     window.history.replaceState(null, '', `#${id}`)
+    window.scrollTo({ top: 0 })
   }
+  const currentGroup = groups.find((g) => g.items.some((i) => i.id === tab))
+  const current = currentGroup?.items.find((i) => i.id === tab)
+  const totalPending = groups.reduce((n, g) => n + g.items.reduce((m, i) => m + i.pending, 0), 0)
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      <nav aria-label="Panel bölümleri" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:w-64 lg:shrink-0 lg:overflow-y-auto lg:overflow-x-hidden">
-        <label className="sr-only" htmlFor="panel-nav-filter">
-          Bölüm ara
-        </label>
-        <input
-          id="panel-nav-filter"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Bölüm ara…"
-          className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-        />
-        <button
-          onClick={() => pick('dashboard')}
-          aria-current={tab === 'dashboard' ? 'page' : undefined}
-          className={cn(
-            'flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold',
-            tab === 'dashboard' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary',
+    <div className="flex min-h-dvh min-w-[1024px] bg-background">
+      <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col border-r border-border bg-card">
+        <div className="flex flex-col gap-0.5 border-b border-border px-4 py-4">
+          <span className="font-display text-base font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {userName}
+            {isOwner ? ' · Ana yönetici' : ' · Personel'}
+          </span>
+        </div>
+        <div className="px-3 pt-3">
+          <label className="sr-only" htmlFor="panel-nav-filter">
+            Bölüm ara
+          </label>
+          <div className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5">
+            <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <input
+              id="panel-nav-filter"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Bölüm ara (ör. ban, logo, bot)"
+              className="h-8 w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        </div>
+        <nav aria-label="Panel bölümleri" className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
+          {!q && (
+            <NavButton active={tab === 'dashboard'} onClick={() => pick('dashboard')} label="Genel bakış" pending={totalPending} icon={LayoutDashboard} />
           )}
-        >
-          <LayoutDashboard className="size-4" aria-hidden="true" />
-          Dashboard
-        </button>
-        <div className="flex max-h-[60dvh] flex-col gap-1 overflow-y-auto overflow-x-hidden lg:max-h-none lg:overflow-visible">
           {shown.map((g) => {
-            const expanded = !!q || open.includes(g.label)
-            const active = g.items.some((i) => i.id === tab)
+            const Icon = GROUP_ICONS[g.id] ?? Wrench
             return (
-            <div key={g.label} className="flex flex-col gap-1">
-              <button
-                onClick={() => toggle(g.label)}
-                aria-expanded={expanded}
-                className={cn(
-                  'flex items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider hover:bg-secondary',
-                  active ? 'text-primary' : 'text-muted-foreground',
-                )}
-              >
-                <span className="truncate">{g.label}</span>
-                {!expanded && g.items.some((i) => i.pending > 0) ? (
-                  <span className="ml-auto mr-1 size-2 shrink-0 rounded-full bg-destructive" aria-label="Bekleyen işlem var" />
-                ) : null}
-                <ChevronRight className={cn('size-4 shrink-0 transition-transform duration-200', expanded && 'rotate-90')} aria-hidden="true" />
-              </button>
-              <div className={cn('ml-2 flex-col gap-1 border-l border-border pl-3', expanded ? 'flex' : 'hidden')}>
+              <div key={g.id} className="flex flex-col gap-0.5">
+                <span className="flex items-center gap-2 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Icon className="size-3.5" aria-hidden="true" />
+                  {g.label}
+                </span>
                 {g.items.map((i) => (
-                  <button
-                    key={i.id}
-                    onClick={() => pick(i.id)}
-                    aria-current={tab === i.id ? 'page' : undefined}
-                    className={cn(
-                      'flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium',
-                      tab === i.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                    )}
-                  >
-                    <span className="truncate">{i.label}</span>
-                    {i.pending > 0 ? (
-                      <span className="shrink-0 rounded-full bg-destructive px-2 py-0.5 text-xs font-bold tabular-nums text-destructive-foreground">
-                        {i.pending > 99 ? '99+' : i.pending}
-                        <span className="sr-only"> bekleyen</span>
-                      </span>
-                    ) : null}
-                  </button>
+                  <NavButton key={i.id} active={tab === i.id} onClick={() => pick(i.id)} label={i.label} pending={i.pending} />
                 ))}
               </div>
-            </div>
             )
           })}
           {shown.length === 0 && <p className="px-2 text-sm text-muted-foreground">Bölüm bulunamadı.</p>}
+        </nav>
+        <div className="flex items-center gap-2 border-t border-border p-3">
+          <a
+            href={siteUrl}
+            target="_blank"
+            rel="noopener"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border px-3 py-2 text-[13px] text-foreground hover:bg-secondary"
+          >
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+            Siteyi aç
+          </a>
+          {logout}
         </div>
-      </nav>
-      <div className="min-w-0 flex-1">
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-6 border-b border-border bg-background/95 px-8 backdrop-blur">
+          <div className="flex min-w-0 flex-col">
+            <div className="flex items-center gap-1.5 text-[13px]">
+              <span className="text-muted-foreground">{currentGroup?.label ?? 'Panel'}</span>
+              <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              <h1 className="truncate font-semibold text-foreground">{current?.label ?? 'Genel bakış'}</h1>
+            </div>
+            <p className="truncate text-xs text-muted-foreground">{current?.hint ?? 'Bekleyen işler ve bölümlerin haritası'}</p>
+          </div>
+          {totalPending > 0 && tab !== 'dashboard' && (
+            <button
+              onClick={() => pick('dashboard')}
+              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-[13px] text-foreground hover:bg-secondary"
+            >
+              Bekleyen iş
+              <span className="rounded-full bg-destructive px-1.5 text-xs font-bold tabular-nums text-destructive-foreground">{totalPending}</span>
+            </button>
+          )}
+        </header>
+        <div
+          className={cn(
+            'mx-auto w-full max-w-6xl px-8 py-6',
+            '[&_h2.font-display]:text-lg [&_h3.font-display]:text-base [&_.text-2xl]:text-xl',
+          )}
+        >
       {!tabs.includes(tab) ? (
         <p className="text-sm text-muted-foreground">Bu bölüme erişim yetkin yok.</p>
       ) : tab === 'staff' ? (
         staff
       ) : tab === 'dashboard' ? (
-        dashboard
+        <div className="flex flex-col gap-8">
+          {dashboard}
+          <SectionMap groups={groups} onPick={pick} />
+        </div>
       ) : tab === 'audit' ? (
         audit
       ) : tab === 'users' ? (
@@ -282,8 +336,90 @@ export function ContentEditor({
           ))}
         </div>
       )}
+        </div>
       </div>
     </div>
+  )
+}
+
+type NavItem = { id: PanelTab; label: string; hint: string; pending: number }
+type NavGroup = { id: string; label: string; items: NavItem[] }
+
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  site: Globe,
+  sponsors: Handshake,
+  members: Users,
+  games: Gamepad2,
+  telegram: Send,
+  tools: Wrench,
+  settings: Settings,
+}
+
+function NavButton({ active, onClick, label, pending, icon: Icon }: { active: boolean; onClick: () => void; label: string; pending: number; icon?: LucideIcon }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition-colors',
+        active ? 'bg-primary text-primary-foreground' : 'text-foreground/80 hover:bg-secondary hover:text-foreground',
+      )}
+    >
+      {Icon && <Icon className="size-4 shrink-0" aria-hidden="true" />}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {pending > 0 && (
+        <span
+          className={cn(
+            'shrink-0 rounded-full px-1.5 text-[11px] font-bold tabular-nums',
+            active ? 'bg-primary-foreground text-primary' : 'bg-destructive text-destructive-foreground',
+          )}
+        >
+          {pending > 99 ? '99+' : pending}
+          <span className="sr-only"> bekleyen</span>
+        </span>
+      )}
+    </button>
+  )
+}
+
+function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: PanelTab) => void }) {
+  return (
+    <section aria-labelledby="map-title" className="flex flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <h2 id="map-title" className="text-sm font-semibold text-foreground">
+          Ne yapmak istiyorsun?
+        </h2>
+        <p className="text-xs text-muted-foreground">Her bölümün altında ne işe yaradığı yazıyor. Tıkla, direkt oraya git.</p>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {groups.map((g) => {
+          const Icon = GROUP_ICONS[g.id] ?? Wrench
+          return (
+            <div key={g.id} className="flex flex-col rounded-lg border border-border bg-card">
+              <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+                <Icon className="size-4 text-primary" aria-hidden="true" />
+                <h3 className="text-[13px] font-semibold uppercase tracking-wider text-foreground">{g.label}</h3>
+              </div>
+              <ul className="flex flex-col p-1.5">
+                {g.items.map((i) => (
+                  <li key={i.id}>
+                    <button onClick={() => onPick(i.id)} className="flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left hover:bg-secondary">
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-[13px] font-medium text-foreground">{i.label}</span>
+                        <span className="text-xs leading-relaxed text-muted-foreground">{i.hint}</span>
+                      </span>
+                      {i.pending > 0 && (
+                        <span className="mt-0.5 shrink-0 rounded-full bg-destructive px-1.5 text-[11px] font-bold tabular-nums text-destructive-foreground">{i.pending}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

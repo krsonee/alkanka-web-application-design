@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import Link from 'next/link'
 import { adminConfigured } from '@/lib/admin-auth'
 import { getPanelSession, type PanelSession } from '@/lib/panel-auth'
 import type { PanelModule } from '@/lib/panel-modules'
@@ -466,26 +465,11 @@ export default async function PanelPage() {
   const staff = session.isOwner ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
 
   return (
-    <main className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
-          <div className="flex flex-col">
-            <span className="font-display text-lg font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
-            <span className="text-xs text-muted-foreground">
-              {session.displayName}
-              {session.isOwner ? ' · Ana yönetici' : ''}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href={SITE_URL} target="_blank" rel="noopener" className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary">
-              Siteyi aç
-            </Link>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
-      <div className="mx-auto max-w-7xl px-4 py-6">
+    <main className="min-h-dvh overflow-x-auto bg-background">
         <ContentEditor
+          userName={session.displayName}
+          siteUrl={SITE_URL}
+          logout={<LogoutButton />}
           allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'tour', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
           users={users}
           audit={audit}
@@ -521,7 +505,6 @@ export default async function PanelPage() {
           staff={staff}
           account={<AccountSettings username={session.username} isOwner={session.isOwner} totpEnabled={session.totpEnabled} totpRequired={session.totpRequired} />}
         />
-      </div>
     </main>
   )
 }

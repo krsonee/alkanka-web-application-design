@@ -16,27 +16,20 @@ const STAT_LABELS: { key: MemberStatus | 'tumu'; label: string }[] = [
 
 export function PanelDashboard({ counts, marketPending, recent }: Props) {
   return (
-    <section aria-labelledby="dash-title" className="flex flex-1 flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h2 id="dash-title" className="font-display text-2xl font-bold uppercase tracking-tight text-foreground">
-          Dashboard
-        </h2>
-        <p className="text-sm text-muted-foreground">Sitenin genel durumu ve bekleyen işler.</p>
-      </div>
-
+    <section aria-label="Genel bakış" className="flex flex-1 flex-col gap-5">
       {counts && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-5 divide-x divide-border rounded-lg border border-border bg-card">
           {STAT_LABELS.map((s) => (
-            <div key={s.key} className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4">
+            <div key={s.key} className="flex flex-col gap-0.5 px-4 py-3">
               <span className="text-xs text-muted-foreground">{s.label}</span>
-              <span className="font-display text-2xl font-bold text-foreground">{counts[s.key].toLocaleString('tr-TR')}</span>
+              <span className="text-xl font-semibold tabular-nums text-foreground">{counts[s.key].toLocaleString('tr-TR')}</span>
             </div>
           ))}
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 lg:col-span-5">
+      <div className="grid grid-cols-12 gap-5">
+        <div className="col-span-5 flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
           <h3 className="text-sm font-semibold text-foreground">Bekleyen işler</h3>
           <a href="#market" className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2 text-sm text-foreground hover:bg-secondary/70">
             Market onayları
@@ -53,7 +46,7 @@ export function PanelDashboard({ counts, marketPending, recent }: Props) {
           <p className="text-xs leading-relaxed text-muted-foreground">Bağlantılara tıklayınca ilgili bölüm açılır.</p>
         </div>
 
-        <div className="col-span-12 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 lg:col-span-7">
+        <div className="col-span-7 flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
           <h3 className="text-sm font-semibold text-foreground">Son yönetici işlemleri</h3>
           {recent.length === 0 ? (
             <p className="text-sm text-muted-foreground">Henüz kayıt yok.</p>
