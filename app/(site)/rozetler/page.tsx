@@ -1,12 +1,13 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronRight, Trophy, Users } from 'lucide-react'
 import { pageMeta } from '@/lib/seo'
 import { getMember } from '@/lib/member'
-import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
+import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, levelReach, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
 import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { ProgressHero } from '@/components/alkanka/kp/progress-hero'
 import { EarnActions } from '@/components/alkanka/kp/earn-actions'
+import { LevelSections, TIER_NAMES } from '@/components/alkanka/kp/level-sections'
+import { LevelUpCelebration } from '@/components/alkanka/kp/level-up-celebration'
 import { PageHero } from '@/components/alkanka/page-hero'
 import { AutoScrollRow } from '@/components/alkanka/auto-scroll-row'
 import { cn } from '@/lib/utils'
@@ -14,23 +15,18 @@ import { cn } from '@/lib/utils'
 export const metadata = pageMeta('rozetler')
 export const dynamic = 'force-dynamic'
 
-const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
-const TIER_TAGLINE: Record<string, string> = {
-  bronz: 'Yolculuk burada başlar. Kalkanını kazan.',
-  altin: 'Masanın müdavimi ol, altını hisset.',
-  elmas: 'Parlayanlar ligi. Az kişi buraya ulaşır.',
-  efsane: 'Altın Papağan’a giden son basamaklar.',
-}
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
 export default async function BadgesPage() {
   const member = await getMember()
-  const [cfg, specials, holders, me, today] = await Promise.all([
-    getKpConfig(),
+  const cfgPromise = getKpConfig()
+  const [cfg, specials, holders, me, today, reach] = await Promise.all([
+    cfgPromise,
     listSpecialBadges(),
     badgeHolders(),
     member ? getKpStatus(member.id) : Promise.resolve(null),
     member ? getKpToday(member.id).catch(() => null) : Promise.resolve(null),
+    cfgPromise.then((c) => levelReach(c.levels.length)).catch(() => ({ total: 0, reached: [] as number[] })),
   ])
   const myLevel = me?.level.index ?? -1
   const myTier = me ? levelTier(me.level.index + 1) : null
@@ -104,51 +100,11 @@ export default async function BadgesPage() {
         <EarnActions rules={cfg.rules} today={today?.breakdown ?? null} telegramLinked={(me?.breakdown.telegram ?? 0) > 0} />
       </section>
 
-      <section aria-labelledby="seviyeler" className="flex flex-col gap-4">
-        <h2 id="seviyeler" className="font-display text-lg font-bold text-foreground">Seviyeler</h2>
-        {groups.map((g) => (
-          <article key={g.tier + g.items[0].i} id={`lig-${g.tier}`} className={cn('scroll-mt-32 overflow-hidden rounded-2xl border', TIER_BG[g.tier])}>
-            <header className="relative flex h-20 items-center overflow-hidden sm:h-28 md:h-32">
-              <Image src={`/images/badges/tier-${g.tier}.png`} alt="" fill sizes="(min-width: 1024px) 900px, 100vw" className="object-cover object-right" />
-              <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
-              <div className="relative flex flex-col gap-1 px-5">
-                <span className={cn('font-display text-2xl font-bold', TIER_TEXT[g.tier])}>{TIER_NAMES[g.tier]} Ligi</span>
-                <span className="text-xs text-muted-foreground">
-                  Lv {g.items[0].i + 1}–{g.items.at(-1)!.i + 1} · {TIER_TAGLINE[g.tier]}
-                </span>
-              </div>
-            </header>
-            <ol className="flex snap-x snap-mandatory gap-2 overflow-x-auto p-3 pt-4 no-scrollbar sm:grid sm:snap-none sm:grid-cols-3 sm:overflow-visible lg:grid-cols-5">
-              {g.items.map(({ l, i }) => {
-                const current = i === myLevel
-                const locked = member ? i > myLevel : false
-                return (
-                  <li
-                    key={i}
-                    className={cn(
-                      'relative flex w-28 shrink-0 snap-start flex-col items-center gap-1.5 rounded-xl border bg-card/80 px-2 pb-2.5 pt-3 text-center sm:w-auto sm:gap-2 sm:pb-3 sm:pt-4',
-                      current ? 'border-gold ring-2 ring-gold/30' : 'border-border',
-                    )}
-                  >
-                    {current && (
-                      <span className="absolute -top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold uppercase text-gold-foreground">Sen</span>
-                    )}
-                    <LevelEmblem level={i + 1} size="md" locked={locked} className="sm:hidden" />
-                    <LevelEmblem level={i + 1} size="lg" locked={locked} className="hidden sm:flex" />
-                    <span className="flex flex-col">
-                      <span className={cn('text-sm font-bold', locked ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
-                      <span className="text-[11px] text-muted-foreground">{l.badge}</span>
-                    </span>
-                    <span className={cn('rounded-full px-2 py-0.5 font-display text-[11px] font-bold tabular-nums', locked ? 'bg-muted text-muted-foreground' : cn('bg-background/60', TIER_TEXT[g.tier]))}>
-                      {fmt(l.min)} KP
-                    </span>
-                  </li>
-                )
-              })}
-            </ol>
-          </article>
-        ))}
-      </section>
+      <LevelSections groups={groups} levels={cfg.levels} myLevel={myLevel} myKp={me?.kp ?? 0} signedIn={!!member} reach={reach} />
+
+      {member && me && (
+        <LevelUpCelebration userId={member.id} level={me.level.index + 1} name={me.level.name} badge={me.level.badge} />
+      )}
 
       <section aria-labelledby="degerli" className="flex scroll-mt-32 flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">

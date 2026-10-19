@@ -297,6 +297,14 @@ export async function levelMap(): Promise<Record<string, number>> {
   return data
 }
 
+/** How many active members have reached each level (index i → members at level ≥ i+1). */
+export async function levelReach(levelCount: number): Promise<{ total: number; reached: number[] }> {
+  const map = await levelMap()
+  const levels = Object.values(map)
+  const reached = Array.from({ length: levelCount }, (_, i) => (i === 0 ? levels.length : levels.filter((l) => l >= i + 1).length))
+  return { total: levels.length, reached }
+}
+
 export async function leaderboard(limit = 20, period: RankPeriod = 'tum', opts?: { readOnly?: boolean }): Promise<LeaderRow[]> {
   const cfg = opts?.readOnly ? await readKpConfig() : await getKpConfig()
   const list = (await totals(cfg.rules, null, limit, period)).filter((l) => l.total > 0)
