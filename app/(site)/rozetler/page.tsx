@@ -91,6 +91,7 @@ export default async function BadgesPage() {
   return (
     <div className="flex flex-col gap-10">
       <PageHero
+        compact
         eyebrow="Rozet Salonu"
         title="Puan topla, rozetini kap"
         description={`${cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.`}
