@@ -167,7 +167,14 @@ function SiteForm({
       <Field label="Bonus türü" value={v.bonusType} onChange={(bonusType) => set('bonusType', bonusType)} placeholder="Deneme, hoş geldin…" />
       <Field label="Çevrim" value={v.wagerText} onChange={(wagerText) => set('wagerText', wagerText)} />
       <Field label="Bonus kodu" value={v.bonusCode} onChange={(bonusCode) => set('bonusCode', bonusCode)} />
-      <Field label="Çekim süresi" value={v.payout} onChange={(payout) => set('payout', payout)} placeholder="15 dk" />
+      <Field
+        label="Çekim süresi"
+        value={v.payout}
+        onChange={(payout) => set('payout', payout)}
+        placeholder="15 dk"
+        hint="Sayı ile yaz (ör. 15 dk, 2 saat). Sayı yoksa sitede gösterilmez."
+        error={v.payout.trim() && !/\d/.test(v.payout) ? 'Çekim süresi bir sayı içermeli.' : null}
+      />
       <Field label="Site adresi" value={v.url} onChange={(url) => set('url', url)} placeholder="https://" />
       <Field label="Giriş adresi" value={v.entryUrl} onChange={(entryUrl) => set('entryUrl', entryUrl)} placeholder="https://" />
       <Field label="Alan adı" value={v.domain} onChange={(domain) => set('domain', domain)} placeholder="ornek.com" />

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, Search, ShieldCheck, Star, Zap } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, Search, ShieldCheck, SlidersHorizontal, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCatalog } from './catalog-context'
 import {
@@ -109,16 +109,28 @@ export function SponsorLogoPlate({ sponsor, className, compact }: { sponsor: Spo
   )
 }
 
+const validPayout = (payout: string) => /\d/.test(payout) ? payout.trim() : ''
+
 function Meta({ sponsor }: { sponsor: Sponsor }) {
+  const payout = validPayout(sponsor.payout)
   return (
-    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+    <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
       <Star className="size-3 fill-primary text-primary" aria-hidden="true" />
       {sponsor.rating.toFixed(1)}
-      <span aria-hidden="true">·</span>
-      <Zap className="size-3" aria-hidden="true" />
-      {sponsor.payout} çekim
+      {payout && (
+        <>
+          <span aria-hidden="true">·</span>
+          <Zap className="size-3" aria-hidden="true" />
+          {payout} çekim
+        </>
+      )}
     </span>
   )
+}
+
+const TIER_FRAME: Partial<Record<SponsorTier, string>> = {
+  ana: 'border-primary/60 shadow-[0_0_24px_-12px] shadow-primary/70',
+  elit: 'border-foreground/25',
 }
 
 function GoButton({ label = 'Siteye git', className, site }: { label?: string; className?: string; site?: string }) {
@@ -172,24 +184,24 @@ export function TierTag({ tier, className }: { tier: SponsorTier; className?: st
 export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   return (
     <div className="@container">
-    <article className="panel-gold group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
-      <div className="relative flex aspect-[16/5] items-center justify-center border-b border-border bg-background p-3 sm:aspect-[16/7] sm:p-6 @2xl:aspect-auto @2xl:w-60 @2xl:border-r @2xl:border-b-0 @5xl:w-80">
-        <SponsorLogoPlate sponsor={sponsor} className="max-h-16 sm:max-h-none md:max-h-28" />
+    <article className="panel-gold border-flow group flex flex-col overflow-hidden rounded-xl @2xl:flex-row @2xl:items-stretch">
+      <div className="relative flex h-24 items-center justify-center border-b border-border bg-background p-3 sm:h-32 sm:p-5 @2xl:h-auto @2xl:w-56 @2xl:border-r @2xl:border-b-0 @5xl:w-72">
+        <SponsorLogoPlate sponsor={sponsor} className="max-h-14 sm:max-h-20 md:max-h-24" />
         <span className="absolute top-2 left-2 sm:top-3 sm:left-3">
           <TierTag tier={sponsor.tier} />
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-4 sm:gap-2 sm:p-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-4 sm:gap-2 sm:p-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="font-display text-lg font-bold text-foreground sm:text-xl">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
         <p className="font-display text-xl font-bold text-primary text-balance sm:text-2xl">{sponsor.welcome}</p>
-        <ul className="grid gap-1.5 sm:grid-cols-2">
-          {sponsor.perks.map((p) => (
-            <li key={p} className="flex items-center gap-2 text-sm text-muted-foreground">
+        <ul className="grid min-w-0 gap-1.5 sm:grid-cols-2">
+          {sponsor.perks.slice(0, 4).map((p) => (
+            <li key={p} className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
               <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              {p}
+              <span className="min-w-0 truncate">{p}</span>
             </li>
           ))}
         </ul>
@@ -215,21 +227,41 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
 
 function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
   return (
-    <li className="panel-gold group flex flex-col overflow-hidden rounded-xl transition-colors hover:border-primary/60">
-      <div className="relative flex aspect-[16/8] items-center justify-center border-b border-border bg-background p-4">
-        <SponsorLogoPlate sponsor={sponsor} />
-        <span className="absolute top-3 right-3">
+    <li className={cn('panel-gold group overflow-hidden rounded-xl transition-colors hover:border-primary/60', TIER_FRAME[sponsor.tier])}>
+      <div className="flex items-center gap-3 p-3 sm:hidden">
+        <Link
+          href={`/siteler/${sponsor.id}`}
+          aria-label={`${sponsor.name} detayları`}
+          className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background p-1.5"
+        >
+          <SponsorLogoPlate sponsor={sponsor} compact className="max-w-full max-h-full text-base" />
+        </Link>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
+            <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
+          </span>
+          <span className="truncate text-sm font-bold text-primary">{sponsor.welcome}</span>
+          <Meta sponsor={sponsor} />
+        </div>
+        <GoButton site={sponsor.id} label="Git" className="h-9 shrink-0 px-3" />
+      </div>
+
+      <div className="hidden h-full flex-col sm:flex">
+      <div className="relative flex h-28 items-center justify-center border-b border-border bg-background p-4">
+        <SponsorLogoPlate sponsor={sponsor} className="max-h-16" />
+        <span className="absolute top-2.5 right-2.5">
           <TierTag tier={sponsor.tier} />
         </span>
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex flex-1 flex-col gap-2.5 p-3.5">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <div className="flex flex-col gap-1">
-          <p className="font-display text-lg font-bold text-primary">{sponsor.welcome}</p>
-          <p className="text-sm leading-relaxed text-muted-foreground">{sponsor.perks.join(' · ')}</p>
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="truncate font-display text-base font-bold text-primary">{sponsor.welcome}</p>
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{sponsor.perks.join(' · ')}</p>
         </div>
         <div className="mt-auto flex gap-2">
           <Link
@@ -240,6 +272,7 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
           </Link>
           <GoButton site={sponsor.id} className="flex-1" />
         </div>
+      </div>
       </div>
     </li>
   )
@@ -291,6 +324,7 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
   const [sort, setSort] = useState<(typeof SORTS)[number]['id']>('onerilen')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [visible, setVisible] = useState(PAGE)
+  const [toolsOpen, setToolsOpen] = useState(false)
 
   const pool = useMemo(
     () => sponsors.filter((s) => s.tier !== 'degil').sort((a, b) => tierRank(a.tier) - tierRank(b.tier)),
@@ -336,15 +370,31 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
         description={`${pool.length} sponsor, her gün kontrol ediliyor. Kategoriye göre filtrele, ara veya sırala.`}
       />
 
-      <div className="sticky top-16 z-20 -mx-1 flex flex-col gap-3 rounded-xl border border-border bg-surface/95 p-3 backdrop-blur-md lg:flex-row lg:items-center">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {filters.map((f) => (
-            <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(tier === f.id ? 'all' : f.id)}>
-              {f.label}
-              <Count n={counts[f.id]} active={tier === f.id} />
-            </Chip>
-          ))}
+      <div className="-mx-1 flex flex-col gap-2 rounded-xl border border-border bg-surface/95 p-2 backdrop-blur-md lg:sticky lg:top-16 lg:z-20 lg:flex-row lg:items-center lg:gap-3 lg:p-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto no-scrollbar">
+            {filters.map((f) => (
+              <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(tier === f.id ? 'all' : f.id)}>
+                {f.label}
+                <Count n={counts[f.id]} active={tier === f.id} />
+              </Chip>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setToolsOpen((o) => !o)}
+            aria-expanded={toolsOpen}
+            aria-controls="sponsor-tools"
+            aria-label="Arama ve sıralama"
+            className={cn(
+              'flex size-8 shrink-0 items-center justify-center rounded-lg border transition-colors lg:hidden',
+              toolsOpen || query ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-card text-muted-foreground',
+            )}
+          >
+            <SlidersHorizontal className="size-4" aria-hidden="true" />
+          </button>
         </div>
+        <div id="sponsor-tools" className={cn('flex-col gap-2 lg:flex lg:flex-1 lg:flex-row lg:items-center lg:gap-3', toolsOpen ? 'flex' : 'hidden')}>
         <label className="relative flex-1">
           <span className="sr-only">Sponsor ara</span>
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -392,6 +442,7 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
             })}
           </div>
         </div>
+        </div>
       </div>
 
       {tier !== 'all' && <p className="text-sm leading-relaxed text-muted-foreground">{TIER_INFO[tier].description}</p>}
@@ -407,7 +458,7 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
             : `“${query}” ile eşleşen sponsor yok. Başka bir isim dene veya filtreyi temizle.`}
         </JakoTip>
       ) : view === 'grid' ? (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
           {shown.map((s) => (
             <SponsorCard key={s.id} sponsor={s} />
           ))}
