@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Crown, Lock, Minus, Plus } from 'lucide-react'
+import { Clock, Crown, Lock, Minus, Plus } from 'lucide-react'
 import { savePickAction } from '@/app/actions/community'
 import type { LeagueMatch, LeagueRow } from '@/lib/community'
 import { cn } from '@/lib/utils'
@@ -13,11 +13,11 @@ import { MemberRank } from '../kp/member-rank'
 function Stepper({ value, onChange, label, disabled }: { value: number; onChange: (n: number) => void; label: string; disabled: boolean }) {
   return (
     <div className="flex items-center gap-1" role="group" aria-label={label}>
-      <button type="button" disabled={disabled || value <= 0} onClick={() => onChange(value - 1)} aria-label={`${label} azalt`} className="flex size-8 items-center justify-center rounded-md bg-background text-muted-foreground disabled:opacity-30">
+      <button type="button" disabled={disabled || value <= 0} onClick={() => onChange(value - 1)} aria-label={`${label} azalt`} className="flex size-9 items-center justify-center rounded-md bg-background text-muted-foreground disabled:opacity-30">
         <Minus className="size-4" aria-hidden />
       </button>
-      <span className="w-8 text-center font-display text-2xl font-bold tabular-nums text-foreground" aria-live="polite">{value}</span>
-      <button type="button" disabled={disabled || value >= 20} onClick={() => onChange(value + 1)} aria-label={`${label} artır`} className="flex size-8 items-center justify-center rounded-md bg-background text-muted-foreground disabled:opacity-30">
+      <span className="w-7 text-center font-display text-2xl font-bold tabular-nums text-foreground" aria-live="polite">{value}</span>
+      <button type="button" disabled={disabled || value >= 20} onClick={() => onChange(value + 1)} aria-label={`${label} artır`} className="flex size-9 items-center justify-center rounded-md bg-background text-muted-foreground disabled:opacity-30">
         <Plus className="size-4" aria-hidden />
       </button>
     </div>
@@ -27,45 +27,93 @@ function Stepper({ value, onChange, label, disabled }: { value: number; onChange
 function Crest({ name, src }: { name: string; src: string | null }) {
   if (!src) return <TeamLogo name={name} />
   return (
-    <span className="flex size-12 items-center justify-center rounded-full bg-secondary p-2">
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary p-1.5 sm:size-12 sm:p-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={`${name} logosu`} width={32} height={32} loading="lazy" className="size-8 object-contain" />
+      <img src={src} alt={`${name} logosu`} width={32} height={32} loading="lazy" className="size-7 object-contain sm:size-8" />
     </span>
   )
 }
 
-function MatchCard({ m, now }: { m: LeagueMatch; now: number }) {
+type MatchState = 'open' | 'locked' | 'settled'
+
+function matchState(m: LeagueMatch, now: number): MatchState {
+  if (m.settled) return 'settled'
+  return new Date(m.kickoff).getTime() <= now ? 'locked' : 'open'
+}
+
+function Team({ name, logo }: { name: string; logo: string | null }) {
+  return (
+    <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
+      <Crest name={name} src={logo} />
+      <span className="w-full truncate text-sm font-bold text-foreground">{name}</span>
+    </div>
+  )
+}
+
+function MatchCard({ m, state }: { m: LeagueMatch; state: MatchState }) {
   const { requireLogin } = usePoints()
   const { pending, status, run } = useAction()
   const [home, setHome] = useState(m.myPick?.home ?? 0)
   const [away, setAway] = useState(m.myPick?.away ?? 0)
-  const closed = m.settled || new Date(m.kickoff).getTime() <= now
   const kickoff = new Date(m.kickoff).toLocaleString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   const changed = !m.myPick || m.myPick.home !== home || m.myPick.away !== away
 
-  return (
-    <article className="panel-gold flex flex-col gap-4 rounded-xl p-4">
-      <header className="flex items-center justify-between text-xs">
-        <span className="font-semibold uppercase tracking-wider text-primary">{m.league}</span>
-        <span className="text-muted-foreground">{m.settled ? 'Bitti' : kickoff} · {m.picks} tahmin</span>
-      </header>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-          <Crest name={m.home} src={m.homeLogo} />
-          <span className="w-full truncate text-sm font-bold text-foreground">{m.home}</span>
-          {!m.settled && <Stepper value={home} onChange={setHome} label={`${m.home} golü`} disabled={closed} />}
-        </div>
-        <span className="rounded bg-background px-2 py-1 font-display text-sm font-bold text-muted-foreground tabular-nums">
-          {m.settled ? `${m.homeGoals} - ${m.awayGoals}` : 'VS'}
+  const center =
+    state === 'settled' ? (
+      <span className="flex flex-col items-center gap-0.5">
+        <span className="font-display text-2xl font-bold tabular-nums text-foreground">{m.homeGoals}-{m.awayGoals}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sonuç</span>
+      </span>
+    ) : state === 'locked' ? (
+      <span className="flex flex-col items-center gap-0.5">
+        <span className={cn('font-display text-2xl font-bold tabular-nums', m.myPick ? 'text-primary' : 'text-muted-foreground')}>
+          {m.myPick ? `${m.myPick.home}-${m.myPick.away}` : '–'}
         </span>
-        <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-          <Crest name={m.away} src={m.awayLogo} />
-          <span className="w-full truncate text-sm font-bold text-foreground">{m.away}</span>
-          {!m.settled && <Stepper value={away} onChange={setAway} label={`${m.away} golü`} disabled={closed} />}
-        </div>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{m.myPick ? 'Tahminin' : 'Tahmin yok'}</span>
+      </span>
+    ) : (
+      <span className="rounded bg-background px-2 py-1 font-display text-xs font-bold text-muted-foreground">VS</span>
+    )
+
+  return (
+    <article className={cn('flex flex-col gap-3 rounded-xl p-4', state === 'open' ? 'panel-gold' : 'border border-border bg-card')}>
+      <header className="flex items-center justify-between gap-2 text-xs">
+        <span className="truncate font-semibold uppercase tracking-wider text-primary">{m.league}</span>
+        <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+          {state === 'locked' && <Lock className="size-3" aria-label="Kilitli" />}
+          {state === 'settled' ? 'Bitti' : kickoff}
+        </span>
+      </header>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <Team name={m.home} logo={m.homeLogo} />
+        {center}
+        <Team name={m.away} logo={m.awayLogo} />
       </div>
-      {m.settled ? (
-        <p className="rounded-lg bg-background p-2.5 text-center text-sm text-muted-foreground">
+
+      {state === 'open' && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex justify-center">
+              <Stepper value={home} onChange={setHome} label={`${m.home} golü`} disabled={pending} />
+            </div>
+            <div className="flex justify-center">
+              <Stepper value={away} onChange={setAway} label={`${m.away} golü`} disabled={pending} />
+            </div>
+          </div>
+          <button
+            disabled={pending || !changed}
+            onClick={() => requireLogin() && run(() => savePickAction(m.id, home, away))}
+            className="h-11 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
+          >
+            {pending ? 'Kaydediliyor...' : m.myPick && !changed ? 'Tahmin kayıtlı' : m.myPick ? 'Tahmini güncelle' : 'Tahmini kaydet'}
+          </button>
+          <span className="text-center text-xs text-muted-foreground">{m.picks} kişi tahmin yaptı</span>
+        </>
+      )}
+
+      {state === 'settled' && (
+        <p className="rounded-lg bg-background px-3 py-2 text-center text-xs text-muted-foreground">
           {m.myPick ? (
             <>
               Tahminin {m.myPick.home}-{m.myPick.away} ·{' '}
@@ -77,22 +125,25 @@ function MatchCard({ m, now }: { m: LeagueMatch; now: number }) {
             'Bu maça tahmin yapmadın.'
           )}
         </p>
-      ) : closed ? (
-        <p className="flex items-center justify-center gap-1.5 rounded-lg bg-background p-2.5 text-sm text-muted-foreground">
-          <Lock className="size-4" aria-hidden />
-          {m.myPick ? `Tahminin kilitlendi: ${m.myPick.home}-${m.myPick.away}` : 'Tahminler kapandı'}
-        </p>
-      ) : (
-        <button
-          disabled={pending || !changed}
-          onClick={() => requireLogin() && run(() => savePickAction(m.id, home, away))}
-          className="h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
-        >
-          {pending ? 'Kaydediliyor...' : m.myPick && !changed ? 'Tahmin kayıtlı' : m.myPick ? 'Tahmini güncelle' : 'Tahmini kaydet'}
-        </button>
       )}
       <StatusLine status={status} />
     </article>
+  )
+}
+
+function MatchSection({ id, title, hint, items, state }: { id: string; title: string; hint?: string; items: LeagueMatch[]; state: MatchState }) {
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 id={id} className="font-display text-lg font-bold text-foreground">
+          {title} <span className="text-sm font-semibold text-muted-foreground">({items.length})</span>
+        </h2>
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {items.map((m) => <MatchCard key={m.id} m={m} state={state} />)}
+      </div>
+    </section>
   )
 }
 
@@ -114,51 +165,59 @@ export function League({
   const [scope, setScope] = useState<'week' | 'all'>('week')
   const [now] = useState(() => Date.now())
   const table = scope === 'week' ? week : all
-  const open = matches.filter((m) => !m.settled)
+  const open = matches.filter((m) => matchState(m, now) === 'open')
+  const locked = matches.filter((m) => matchState(m, now) === 'locked')
   const done = matches.filter((m) => m.settled)
+  const myIndex = meId ? week.findIndex((r) => r.userId === meId) : -1
+  const myRow = myIndex >= 0 ? week[myIndex] : null
+  const myPicks = matches.filter((m) => m.myPick).length
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[
-          ['Tam skor', `3 puan + ${exactReward} KC`],
-          ['Doğru taraf', `1 puan + ${outcomeReward} KC`],
-          ['Kapanış', 'Maç başlama saatinde'],
-        ].map(([k, v]) => (
-          <div key={k} className="flex flex-col gap-0.5 rounded-xl border border-border bg-card p-4">
-            <span className="text-xs text-muted-foreground">{k}</span>
-            <span className="font-display text-base font-bold text-foreground">{v}</span>
-          </div>
-        ))}
+      <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
+        <dl className="grid grid-cols-3 divide-x divide-border">
+          {[
+            ['Bu hafta puanın', String(myRow?.points ?? 0)],
+            ['Sıran', myRow ? `#${myIndex + 1}` : '–'],
+            ['Tahminlerin', `${myPicks}/${matches.length}`],
+          ].map(([k, v]) => (
+            <div key={k} className="flex flex-col gap-0.5 p-3 text-center">
+              <dt className="text-[11px] text-muted-foreground">{k}</dt>
+              <dd className="font-display text-xl font-bold tabular-nums text-foreground">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+          <span>Tam skor <b className="text-primary">+{exactReward} KC</b></span>
+          <span aria-hidden>·</span>
+          <span>Doğru taraf <b className="text-primary">+{outcomeReward} KC</b></span>
+          <span aria-hidden>·</span>
+          <span>Maç başında kapanır</span>
+        </p>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
         <div className="flex flex-col gap-6">
-          <section aria-labelledby="acik-maclar" className="flex flex-col gap-3">
-            <h2 id="acik-maclar" className="font-display text-lg font-bold text-foreground">Tahmine açık maçlar</h2>
-            {open.length ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                {open.map((m) => <MatchCard key={m.id} m={m} now={now} />)}
-              </div>
-            ) : (
-              <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Yeni maçlar yakında eklenecek.</p>
-            )}
-          </section>
-          {done.length > 0 && (
-            <section aria-labelledby="biten" className="flex flex-col gap-3">
-              <h2 id="biten" className="font-display text-lg font-bold text-foreground">Sonuçlanan maçlar</h2>
-              <div className="grid gap-3 md:grid-cols-2">
-                {done.map((m) => <MatchCard key={m.id} m={m} now={now} />)}
-              </div>
+          {open.length > 0 ? (
+            <MatchSection id="acik-maclar" title="Tahmine açık" items={open} state="open" />
+          ) : (
+            <section aria-labelledby="acik-maclar" className="flex flex-col gap-3">
+              <h2 id="acik-maclar" className="font-display text-lg font-bold text-foreground">Tahmine açık</h2>
+              <p className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+                <Clock className="size-4" aria-hidden />
+                Yeni maçlar yakında eklenecek.
+              </p>
             </section>
           )}
+          {locked.length > 0 && <MatchSection id="kilitli" title="Sonuç bekleniyor" hint="Tahminler kilitlendi" items={locked} state="locked" />}
+          {done.length > 0 && <MatchSection id="biten" title="Sonuçlanan" items={done} state="settled" />}
         </div>
 
         <aside aria-labelledby="lig-tablosu" className="panel-gold flex flex-col gap-3 self-start rounded-xl p-4 xl:sticky xl:top-20">
           <h2 id="lig-tablosu" className="font-display text-lg font-bold text-foreground">Lig tablosu</h2>
           <div role="tablist" className="grid grid-cols-2 gap-1 rounded-lg bg-background p-1">
             {(['week', 'all'] as const).map((s) => (
-              <button key={s} role="tab" aria-selected={scope === s} onClick={() => setScope(s)} className={cn('h-8 rounded-md text-xs font-bold', scope === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}>
+              <button key={s} role="tab" aria-selected={scope === s} onClick={() => setScope(s)} className={cn('h-9 rounded-md text-xs font-bold', scope === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}>
                 {s === 'week' ? 'Bu hafta' : 'Tüm zamanlar'}
               </button>
             ))}
@@ -178,7 +237,7 @@ export function League({
               ))}
             </ol>
           ) : (
-            <p className="text-sm text-muted-foreground">Sonuçlanan maç olunca tablo oluşur.</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">İlk maçlar sonuçlanınca tablo burada oluşur. Tam skor bilen zirveye oturur.</p>
           )}
         </aside>
       </div>
