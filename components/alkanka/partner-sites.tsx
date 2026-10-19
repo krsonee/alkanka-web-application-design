@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, ScrollText, Search, ShieldCheck, SlidersHorizontal, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCatalog } from './catalog-context'
+import { sortByOrder } from '@/lib/catalog-shared'
 import {
   SPECIAL_ODDS,
   TIER_INFO,
@@ -548,17 +549,8 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
 
 function ChipRail({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
-    <div className={className}>
-      <div
-        role="group"
-        aria-label={label}
-        className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&>*]:snap-start"
-      >
-        {children}
-      </div>
-      <div className="hidden flex-wrap gap-2 md:flex" role="group" aria-label={label}>
-        {children}
-      </div>
+    <div role="group" aria-label={label} className={cn('flex flex-wrap gap-1.5 sm:gap-2', className)}>
+      {children}
     </div>
   )
 }
@@ -710,8 +702,8 @@ function BonusCard({ b, onRules }: { b: Bonus; onRules: () => void }) {
 }
 
 export function BonusBoard() {
-  const { bonuses: BONUSES } = useCatalog()
-  const types = ['Tümü', ...Array.from(new Set(BONUSES.map((b) => b.type)))]
+  const { bonuses: BONUSES, order } = useCatalog()
+  const types = ['Tümü', ...sortByOrder(BONUSES.map((b) => b.type), order?.bonusTypes ?? [])]
   const [type, setType] = useState('Tümü')
   const [detail, setDetail] = useState<Bonus | null>(null)
   const list = BONUSES.filter((b) => type === 'Tümü' || b.type === type)
@@ -894,8 +886,8 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
 const CAMPAIGN_PAGE = 6
 
 export function CampaignBoard() {
-  const { campaigns: CAMPAIGNS } = useCatalog()
-  const tags = ['Tümü', ...Array.from(new Set(CAMPAIGNS.map((c) => c.tag)))]
+  const { campaigns: CAMPAIGNS, order } = useCatalog()
+  const tags = ['Tümü', ...sortByOrder(CAMPAIGNS.map((c) => c.tag), order?.campaignTags ?? [])]
   const [tag, setTag] = useState('Tümü')
   const [sort, setSort] = useState<'bitis' | 'uzun'>('bitis')
   const [todayOnly, setTodayOnly] = useState(false)
@@ -1086,6 +1078,50 @@ function uniqueImages(list: Campaign[]): Campaign[] {
   })
 }
 
+function EndingCard({ c, index }: { c: Campaign; index: number }) {
+  const s = sponsorById(c.sponsorId)
+  const urgent = c.hoursLeft <= 24
+  const left = Math.max(6, Math.min(100, (c.hoursLeft / 168) * 100))
+  return (
+    <li className="ending-card group w-full shrink-0 snap-center rounded-2xl md:w-auto" style={{ animationDelay: `${index * 90}ms` }}>
+      <div className="ending-inner relative flex h-full overflow-hidden rounded-[calc(1rem-1px)]">
+        <div className="relative w-24 shrink-0 overflow-hidden sm:w-28">
+          <Image src={campaignArt(c)} alt="" fill sizes="112px" className="ending-art object-cover" />
+          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent to-card" />
+          <span aria-hidden="true" className="ending-sheen" />
+          <span className="absolute left-1.5 top-1.5 rounded-md bg-background/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
+            {c.tag}
+          </span>
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-3 pl-2 pr-3">
+          <div className="flex items-center gap-1.5">
+            <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-background">
+              {s ? <SponsorLogoPlate sponsor={s} compact className="size-full text-[8px]" /> : null}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{s?.name}</span>
+            <span className={cn('ending-timer flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums', urgent && 'is-urgent')}>
+              <Clock className="size-3" aria-hidden="true" />
+              {c.ends}
+            </span>
+          </div>
+          <h3 className="line-clamp-1 font-display text-sm font-bold leading-snug text-foreground">{c.title}</h3>
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.description}</p>
+          <div className="mt-auto flex items-center gap-3 pt-1">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Kalan süre</span>
+              <span className="ending-bar" role="progressbar" aria-label="Kalan süre" aria-valuenow={Math.round(left)} aria-valuemin={0} aria-valuemax={100}>
+                <span className={cn('ending-bar-fill', urgent && 'is-urgent')} style={{ width: `${left}%` }} />
+              </span>
+            </div>
+            <GoButton site={s?.id} label="Katıl" className="ending-cta h-8 shrink-0 rounded-full px-4 text-[11px]" />
+          </div>
+        </div>
+      </div>
+    </li>
+  )
+}
+
 export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
   const { campaigns: CAMPAIGNS } = useCatalog()
   const list = uniqueImages([...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3))
@@ -1132,8 +1168,8 @@ export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
         aria-label="Bitmek üzere olan kampanyalar"
         className="flex snap-x snap-mandatory gap-3 overflow-x-auto no-scrollbar md:grid md:grid-cols-3 md:gap-4 md:overflow-visible"
       >
-        {list.map((c) => (
-          <CampaignCard key={c.id} c={c} className="w-full shrink-0 snap-center md:w-auto" />
+        {list.map((c, i) => (
+          <EndingCard key={c.id} c={c} index={i} />
         ))}
       </ul>
       {list.length > 1 && (

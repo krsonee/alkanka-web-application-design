@@ -2,9 +2,9 @@
 
 import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
-import { ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
-import { resetCatalog, saveCatalogList } from '@/app/panel/catalog-actions'
-import { BONUS_TYPES, EVENT_KINDS, type Catalog } from '@/lib/catalog-shared'
+import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
+import { BONUS_TYPES, EVENT_KINDS, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
 import type { HiddenMap, HiddenScope } from '@/lib/hidden-shared'
@@ -163,7 +163,70 @@ const EVENT_TEMPLATES: Item[] = [
   { kind: 'Özel', title: 'Bilardo Düellosu', subtitle: 'Birebir eleme turnuvası', hoursLeft: 72, entry: 100, prize: '2.000 KC', description: 'Amerikan Bilardo düellolarında rakiplerini eleyerek finale çık.', steps: ['Kaydını yap', 'Eşleşmeni bekle', 'Düelloyu kazan'], rules: ['Faul kuralları geçerlidir', 'Süreyi dolduran faul yer'], prizes: ['Şampiyon 2.000 KC'] },
 ]
 
-function ListEditor({ kind, initial, sponsors, library, hidden }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[] }) {
+type SaveResult = { ok: true; message: string } | { ok: false; error: string }
+
+function CategoryOrderEditor({ title, values, order, onSave }: { title: string; values: string[]; order: string[]; onSave: (next: string[]) => Promise<SaveResult> }) {
+  const [list, setList] = useState(() => sortByOrder(values, order))
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [pending, start] = useTransition()
+  const synced = sortByOrder(values, list)
+
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir
+    if (j < 0 || j >= synced.length) return
+    const next = [...synced]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setList(next)
+    setStatus(null)
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs font-semibold text-foreground">{title}</span>
+        <span className="text-xs text-muted-foreground">Sitedeki filtre butonları bu sırayla görünür. “Tümü” her zaman en başta kalır.</span>
+      </div>
+      <ol className="flex flex-col gap-1.5">
+        {synced.map((name, i) => (
+          <li key={name} className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+            <span className="w-5 text-xs font-bold tabular-nums text-muted-foreground">{i + 1}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{name}</span>
+            <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${name} yukarı taşı`} className="flex size-8 items-center justify-center rounded-md border border-border text-foreground hover:bg-secondary disabled:opacity-30">
+              <ArrowUp className="size-4" aria-hidden />
+            </button>
+            <button type="button" onClick={() => move(i, 1)} disabled={i === synced.length - 1} aria-label={`${name} aşağı taşı`} className="flex size-8 items-center justify-center rounded-md border border-border text-foreground hover:bg-secondary disabled:opacity-30">
+              <ArrowDown className="size-4" aria-hidden />
+            </button>
+          </li>
+        ))}
+        {synced.length === 0 && <li className="text-xs text-muted-foreground">Henüz kategori yok.</li>}
+      </ol>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await onSave(synced)
+              setStatus(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error })
+            })
+          }
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60"
+        >
+          {pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Save className="size-3.5" aria-hidden />}
+          Sıralamayı kaydet
+        </button>
+        {status && (
+          <p role="status" className={cn('text-xs', status.ok ? 'text-primary' : 'text-destructive')}>
+            {status.text}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[]; order: CategoryOrder; setOrder: (o: CategoryOrder) => void }) {
   const schema = SCHEMAS[kind]
   const [items, setItems] = useState<Item[]>(initial)
   const [open, setOpen] = useState<number | null>(null)
@@ -207,6 +270,24 @@ function ListEditor({ kind, initial, sponsors, library, hidden }: { kind: Kind; 
           Yeni ekle
         </button>
       </header>
+
+      {(kind === 'campaigns' || kind === 'bonuses') && (
+        <CategoryOrderEditor
+          title={kind === 'campaigns' ? 'Kampanya etiketi sıralaması' : 'Bonus türü sıralaması'}
+          values={
+            kind === 'campaigns'
+              ? items.map((x) => String(x.tag || '')).filter(Boolean)
+              : [...items.map((x) => String(x.type || '')).filter(Boolean), ...BONUS_TYPES]
+          }
+          order={kind === 'campaigns' ? order.campaignTags : order.bonusTypes}
+          onSave={async (next) => {
+            const updated = kind === 'campaigns' ? { ...order, campaignTags: next } : { ...order, bonusTypes: next }
+            const r = await saveCategoryOrder(updated)
+            if (r.ok) setOrder(updated)
+            return r
+          }}
+        />
+      )}
 
       {kind === 'events' && (
         <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
@@ -295,6 +376,7 @@ const TABS: { id: Kind; label: string }[] = [
 
 export function CatalogEditor({ catalog, sponsors, library, hidden = {} }: { catalog: Omit<Catalog, 'rewards'>; sponsors: Option[]; library: string[]; hidden?: HiddenMap }) {
   const [tab, setTab] = useState<Kind>('events')
+  const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
   return (
     <div className="flex flex-col gap-4">
       <div role="tablist" aria-label="Katalog bölümleri" className="flex flex-wrap gap-2">
@@ -312,7 +394,7 @@ export function CatalogEditor({ catalog, sponsors, library, hidden = {} }: { cat
         ))}
       </div>
       {TABS.map((t) =>
-        t.id === tab ? <ListEditor key={t.id} kind={t.id} initial={catalog[t.id] as unknown as Item[]} sponsors={sponsors} library={library} hidden={hidden[SCOPE[t.id]] ?? []} /> : null,
+        t.id === tab ? <ListEditor key={t.id} kind={t.id} initial={catalog[t.id] as unknown as Item[]} sponsors={sponsors} library={library} hidden={hidden[SCOPE[t.id]] ?? []} order={order} setOrder={setOrder} /> : null,
       )}
     </div>
   )

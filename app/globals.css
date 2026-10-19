@@ -1001,3 +1001,88 @@
   .sd-rise, .sd-hero::before, .sd-logo, .sd-logo-sheen, .sd-tier, .sd-cta::before, .sd-live-dot::before { animation: none; }
   .sd-logo-sheen, .sd-cta::before { display: none; }
 }
+
+/* "Bitmek üzere" countdown cards: rotating gold rim, drifting art, draining time bar */
+.ending-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 1px;
+  background: var(--border);
+  box-shadow: 0 18px 40px -26px color-mix(in oklch, var(--primary) 70%, transparent);
+  animation: sd-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.ending-card::before {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  z-index: -1;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--primary) 50deg, transparent 110deg, transparent 360deg);
+  animation: sd-orbit 5s linear infinite;
+}
+.ending-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 44px -22px color-mix(in oklch, var(--primary) 85%, transparent);
+}
+.ending-inner {
+  background:
+    radial-gradient(90% 120% at 100% 0%, color-mix(in oklch, var(--primary) 10%, transparent), transparent 60%),
+    var(--card);
+}
+.ending-art { animation: ending-drift 9s ease-in-out infinite alternate; }
+.ending-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, color-mix(in oklch, var(--foreground) 22%, transparent) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: sd-sheen 4.5s ease-in-out infinite;
+}
+.ending-timer {
+  color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent);
+}
+.ending-timer.is-urgent {
+  color: var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--destructive) 40%, transparent);
+  animation: ending-pulse 1.6s ease-in-out infinite;
+}
+.ending-timer svg { animation: ending-tick 2s steps(4) infinite; }
+.ending-bar {
+  position: relative;
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+.ending-bar-fill {
+  position: relative;
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in oklch, var(--primary) 60%, var(--card)), var(--primary));
+  transform-origin: left;
+  animation: ending-fill 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.ending-bar-fill.is-urgent { background: linear-gradient(90deg, color-mix(in oklch, var(--destructive) 55%, var(--card)), var(--destructive)); }
+.ending-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--foreground) 45%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: sd-sheen 2.4s ease-in-out infinite;
+}
+.ending-cta { box-shadow: 0 8px 20px -10px color-mix(in oklch, var(--primary) 90%, transparent); }
+@keyframes ending-drift { from { transform: scale(1.04) translateX(0); } to { transform: scale(1.14) translateX(-4%); } }
+@keyframes ending-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+@keyframes ending-tick { to { transform: rotate(360deg); } }
+@keyframes ending-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .ending-card, .ending-card::before, .ending-art, .ending-sheen, .ending-timer, .ending-timer svg, .ending-bar-fill, .ending-bar-fill::after { animation: none; }
+  .ending-sheen, .ending-bar-fill::after { display: none; }
+}
