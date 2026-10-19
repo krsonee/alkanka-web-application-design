@@ -294,7 +294,7 @@ function MatchesTab({
         >
           <Radio className="size-5 shrink-0 text-live" aria-hidden="true" />
           <span className="flex-1 text-sm text-foreground">
-            <span className="font-bold">{liveChannel.name}</span> şu an canlı yayında. Ücretsiz izle.
+            <span className="font-bold">{liveChannel.name}</span> şu an canlı yay��nda. Ücretsiz izle.
           </span>
           <span className="text-xs font-bold uppercase tracking-wider text-live">İzle</span>
         </button>
@@ -786,7 +786,8 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
   const [tab, setTab] = useState<'matches' | 'channels'>(() =>
     docked || initialChannels.some((c) => c.live && c.embedUrl) ? 'channels' : 'matches',
   )
-  const [channel, setChannel] = useState<string>(() => docked?.slug ?? pickStartChannel(initialChannels))
+  const [pickedChannel, setChannel] = useState<string | null>(() => docked?.slug ?? null)
+  const channel = pickedChannel ?? pickStartChannel(channels)
   const totalLive = Object.values(initialBoard.liveCounts).reduce((a, b) => a + b, 0)
 
   const watch = (slug: string) => {
