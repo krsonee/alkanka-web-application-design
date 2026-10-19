@@ -10,6 +10,8 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<{ st
 
 type Status = 'idle' | 'loading' | 'playing' | 'error'
 
+const STREAM_TIMEOUT_MS = 10_000
+
 function Equalizer({ active }: { active: boolean }) {
   return (
     <span aria-hidden="true" className="flex h-3.5 items-end gap-0.5">
@@ -53,6 +55,11 @@ export function RadioPlayer() {
   const [muted, setMuted] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const attemptRef = useRef<{ id: string; index: number } | null>(null)
+  const [broken, setBroken] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => () => clearTimeout(timeoutRef.current ?? undefined), [])
 
   const { data, isLoading } = useSWR(open || current ? '/api/radyo' : null, fetcher, {
     revalidateOnFocus: false,
@@ -72,15 +79,40 @@ export function RadioPlayer() {
   }, [open])
 
   const stations = useMemo(() => {
-    const list = data?.stations ?? []
+    const list = (data?.stations ?? []).filter((s) => !broken.has(s.id))
     const q = query.trim().toLocaleLowerCase('tr-TR')
     if (!q) return list
     return list.filter(
       (s) => s.name.toLocaleLowerCase('tr-TR').includes(q) || s.tags.some((t) => t.toLocaleLowerCase('tr-TR').includes(q)),
     )
-  }, [data, query])
+  }, [data, query, broken])
 
-  const play = async (station: RadioStation) => {
+  const clearTimer = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = null
+  }
+
+  const tryUrl = (station: RadioStation, index: number) => {
+    const audio = audioRef.current
+    if (!audio) return
+    const urls = [station.url, ...(station.fallbacks ?? [])]
+    if (index >= urls.length) {
+      clearTimer()
+      setBroken((prev) => new Set(prev).add(station.id))
+      setStatus('error')
+      return
+    }
+    attemptRef.current = { id: station.id, index }
+    clearTimer()
+    timeoutRef.current = setTimeout(() => tryUrl(station, index + 1), STREAM_TIMEOUT_MS)
+    audio.src = urls[index]
+    audio.play().catch((e: unknown) => {
+      if (e instanceof DOMException && e.name === 'AbortError') return
+      if (attemptRef.current?.id === station.id && attemptRef.current.index === index) tryUrl(station, index + 1)
+    })
+  }
+
+  const play = (station: RadioStation) => {
     const audio = audioRef.current
     if (!audio) return
     if (current?.id === station.id && status === 'playing') {
@@ -90,15 +122,18 @@ export function RadioPlayer() {
     }
     setCurrent(station)
     setStatus('loading')
-    audio.src = station.url
-    try {
-      await audio.play()
-    } catch {
-      setStatus('error')
-    }
+    tryUrl(station, 0)
+  }
+
+  const handleAudioError = () => {
+    const attempt = attemptRef.current
+    if (!current || !attempt || attempt.id !== current.id) return
+    tryUrl(current, attempt.index + 1)
   }
 
   const stop = () => {
+    clearTimer()
+    attemptRef.current = null
     const audio = audioRef.current
     if (audio) {
       audio.pause()
@@ -117,9 +152,12 @@ export function RadioPlayer() {
         ref={audioRef}
         muted={muted}
         preload="none"
-        onPlaying={() => setStatus('playing')}
+        onPlaying={() => {
+          clearTimer()
+          setStatus('playing')
+        }}
         onWaiting={() => setStatus('loading')}
-        onError={() => current && setStatus('error')}
+        onError={handleAudioError}
       />
       <button
         type="button"
@@ -170,7 +208,7 @@ export function RadioPlayer() {
                       <Equalizer active /> Çalıyor
                     </>
                   )}
-                  {status === 'error' && <span className="text-destructive">Yayın açılamadı, başka kanal dene</span>}
+                  {status === 'error' && <span className="text-destructive">Yayın kapalı, listeden kaldırıldı</span>}
                   {status === 'idle' && 'Durduruldu'}
                 </span>
               </span>
@@ -257,7 +295,7 @@ export function RadioPlayer() {
             })}
           </ul>
           <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-            {data?.stations.length ? `${data.stations.length} canlı Türk radyosu` : 'Canlı Türk radyoları'} · Sayfa değiştirsen de çalmaya devam eder
+            {data?.stations.length ? `${data.stations.length - broken.size} canlı Türk radyosu` : 'Canlı Türk radyoları'} · Sayfa değiştirsen de çalmaya devam eder
           </p>
         </div>
       )}
