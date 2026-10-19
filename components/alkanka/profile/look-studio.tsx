@@ -24,15 +24,15 @@ const canDownload = (a: AvatarCard) => a.status === 'selected' || a.status === '
 export function LookStudio({ initial }: { initial: LookState }) {
   const [state, setState] = useState(initial)
   const [section, setSection] = useState<Section>('avatar')
-  const [group, setGroup] = useState<AvatarGroup>('jako')
   const [focus, setFocus] = useState<string | null>(initial.avatarId ?? initial.avatars[0]?.id ?? null)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
   const [pending, start] = useTransition()
   const router = useRouter()
   const { refresh } = usePoints()
 
-  const focused = state.avatars.find((a) => a.id === focus) ?? null
+  const group: AvatarGroup = section === 'takim' ? 'takim' : 'jako'
   const shown = state.avatars.filter((a) => a.group === group)
+  const focused = shown.find((a) => a.id === focus) ?? shown.find((a) => a.id === state.avatarId) ?? shown[0] ?? null
 
   const act = (fn: () => ReturnType<typeof chooseAvatarAction>) =>
     start(async () => {
@@ -92,25 +92,42 @@ export function LookStudio({ initial }: { initial: LookState }) {
         </p>
       )}
 
-      {section === 'avatar' && (
+      {(section === 'avatar' || section === 'takim') && (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="flex min-w-0 flex-col gap-3">
-            <div className="flex gap-2">
-              {(Object.keys(AVATAR_GROUPS) as AvatarGroup[]).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  aria-pressed={group === g}
-                  onClick={() => setGroup(g)}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs font-bold transition-colors',
-                    group === g ? 'border-gold bg-gold/15 text-gold' : 'border-border text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {AVATAR_GROUPS[g]}
-                </button>
-              ))}
-            </div>
+            {section === 'takim' && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Taraftar rengin (profilinde adının yanında görünür)
+                </p>
+                <ul className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+                  {TEAMS.map((t) => {
+                    const active = state.team === t.id
+                    return (
+                      <li key={t.id} className="shrink-0">
+                        <button
+                          type="button"
+                          disabled={pending}
+                          aria-pressed={active}
+                          onClick={() => act(() => setTeamAction(active ? null : t.id))}
+                          className={cn(
+                            'flex items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 text-xs font-semibold transition-colors',
+                            active ? 'border-gold bg-gold/10 text-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <span aria-hidden className="size-5 shrink-0 rounded-full border border-border" style={{ background: `linear-gradient(90deg, ${t.colors[0]} 50%, ${t.colors[1]} 50%)` }} />
+                          {t.name}
+                          {active && <Check className="size-3.5 text-gold" aria-hidden />}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+                <p className="pt-1 text-xs leading-relaxed text-muted-foreground">
+                  Formalı Jako&apos;lar: bazıları ücretsiz, bazıları seviye (KP) ile açılır, bazıları KC ile satın alınır.
+                </p>
+              </div>
+            )}
             <ul className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 xl:grid-cols-5">
               {shown.map((a) => (
                 <li key={a.id}>
@@ -208,34 +225,6 @@ export function LookStudio({ initial }: { initial: LookState }) {
         </ul>
       )}
 
-      {section === 'takim' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm leading-relaxed text-muted-foreground">Taraftarı olduğun renkleri seç; profilinde görünür.</p>
-          <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            {TEAMS.map((t) => {
-              const active = state.team === t.id
-              return (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    aria-pressed={active}
-                    onClick={() => act(() => setTeamAction(active ? null : t.id))}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-xl border p-3 text-left text-sm font-semibold transition-colors',
-                      active ? 'border-gold bg-gold/10 text-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    <span aria-hidden className="size-7 shrink-0 rounded-full border border-border" style={{ background: `linear-gradient(90deg, ${t.colors[0]} 50%, ${t.colors[1]} 50%)` }} />
-                    <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                    {active && <Check className="size-4 text-gold" aria-hidden />}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
     </section>
   )
 }

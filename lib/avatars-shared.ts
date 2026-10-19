@@ -76,6 +76,18 @@ export const DEFAULT_AVATARS: AvatarDef[] = [
   a('takim-yesil-beyaz', 'Yeşil-Beyaz', `${T}/takim-yesil-beyaz.png`, 'takim', 'coin', 750, 55),
   a('takim-turuncu-lacivert', 'Turuncu-Lacivert', `${T}/takim-turuncu-lacivert.png`, 'takim', 'coin', 750, 56),
   a('takim-kaleci-altin', 'Altın Eldiven', `${T}/takim-kaleci-altin.png`, 'takim', 'level', 6, 57),
+  a('takim-kirmizi-beyaz', 'Kırmızı-Beyaz', `${T}/takim-kirmizi-beyaz.png`, 'takim', 'coin', 750, 58),
+  a('takim-kirmizi-siyah', 'Kırmızı-Siyah', `${T}/takim-kirmizi-siyah.png`, 'takim', 'coin', 750, 59),
+  a('takim-kirmizi-yesil', 'Kırmızı-Yeşil', `${T}/takim-kirmizi-yesil.png`, 'takim', 'coin', 750, 60),
+  a('takim-yesil-siyah', 'Yeşil-Siyah', `${T}/takim-yesil-siyah.png`, 'takim', 'coin', 750, 61),
+  a('takim-mor-beyaz', 'Mor-Beyaz', `${T}/takim-mor-beyaz.png`, 'takim', 'coin', 750, 62),
+  a('takim-mavi-beyaz', 'Mavi-Beyaz', `${T}/takim-mavi-beyaz.png`, 'takim', 'coin', 750, 63),
+  a('takim-tribun', 'Tribün Lideri', `${T}/takim-tribun.png`, 'takim', 'level', 3, 70),
+  a('takim-golcu', 'Golcü Jako', `${T}/takim-golcu.png`, 'takim', 'level', 4, 71),
+  a('takim-hakem', 'Hakem Jako', `${T}/takim-hakem.png`, 'takim', 'level', 5, 72),
+  a('takim-kaptan', 'Kaptan Jako', `${T}/takim-kaptan.png`, 'takim', 'coin', 1250, 73),
+  a('takim-hoca', 'Hoca Jako', `${T}/takim-hoca.png`, 'takim', 'coin', 1500, 74),
+  a('takim-sampiyon', 'Şampiyon Jako', `${T}/takim-sampiyon.png`, 'takim', 'level', 8, 75),
 ]
 
 export const COVERS: CoverDef[] = [
@@ -93,6 +105,12 @@ export const TEAMS: TeamDef[] = [
   { id: 'bordo-mavi', name: 'Bordo-Mavi', colors: ['#7a1f3d', '#5aa9e6'] },
   { id: 'yesil-beyaz', name: 'Yeşil-Beyaz', colors: ['#0a7d3b', '#f4f4f4'] },
   { id: 'turuncu-lacivert', name: 'Turuncu-Lacivert', colors: ['#f26b1d', '#14254f'] },
+  { id: 'kirmizi-beyaz', name: 'Kırmızı-Beyaz', colors: ['#d71920', '#f4f4f4'] },
+  { id: 'kirmizi-siyah', name: 'Kırmızı-Siyah', colors: ['#d71920', '#111111'] },
+  { id: 'kirmizi-yesil', name: 'Kırmızı-Yeşil', colors: ['#d71920', '#0a7d3b'] },
+  { id: 'yesil-siyah', name: 'Yeşil-Siyah', colors: ['#0a7d3b', '#111111'] },
+  { id: 'mor-beyaz', name: 'Mor-Beyaz', colors: ['#5b2a86', '#f4f4f4'] },
+  { id: 'mavi-beyaz', name: 'Mavi-Beyaz', colors: ['#1e6fd9', '#f4f4f4'] },
   { id: 'milli', name: 'Ay-Yıldız', colors: ['#e30a17', '#f4f4f4'] },
 ]
 
