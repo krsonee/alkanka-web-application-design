@@ -1,71 +1,114 @@
 import Link from 'next/link'
 import { Medal } from 'lucide-react'
-import { leaderboard, predictionBoard, recentAwards } from '@/lib/kanka-puan'
+import { AUTO_LABELS, leaderboard, listSpecialBadges, predictionBoard, recentAwards, type AwardRow } from '@/lib/kanka-puan'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import { getMember } from '@/lib/member'
-import { JakoTip } from './jako'
 import { SpecialEmblem } from './kp/emblem'
-import { RankBoards, type BoardPeriod } from './rank-boards'
+import { RankBoards, type BoardPeriod, type KpRow, type Prize, type TipRow } from './rank-boards'
 
 const PERIODS: BoardPeriod[] = ['gun', 'hafta', 'ay']
+const EMPTY = { gun: [], hafta: [], ay: [] }
 
 async function load() {
   try {
-    const [kp, tips, awards, me] = await Promise.all([
-      Promise.all(PERIODS.map((p) => leaderboard(15, p))),
-      Promise.all(PERIODS.map((p) => predictionBoard(p, 15))),
-      recentAwards({ limit: 8 }),
+    const [kp, tips, badges, awards, me] = await Promise.all([
+      Promise.all(PERIODS.map((p) => leaderboard(200, p))),
+      Promise.all(PERIODS.map((p) => predictionBoard(p, 100))),
+      listSpecialBadges().catch(() => []),
+      recentAwards({ limit: 60 }).catch(() => [] as AwardRow[]),
       getMember().catch(() => null),
     ])
+
+    const kpBy = Object.fromEntries(
+      PERIODS.map((p, i) => [
+        p,
+        kp[i].map<KpRow>((r) => ({
+          userId: r.userId,
+          name: r.name,
+          kp: r.kp,
+          level: r.level,
+          levelName: r.levelName,
+          specials: r.specials,
+          parts: {
+            time: r.breakdown.time,
+            games: r.breakdown.games,
+            tasks: r.breakdown.tasks,
+            chat: r.breakdown.chat,
+            league: r.breakdown.league,
+            referrals: r.breakdown.referrals,
+          },
+        })),
+      ]),
+    ) as Record<BoardPeriod, KpRow[]>
+
+    const autoBadges = badges.filter((b) => b.auto)
+    const prizeFor = (suffix: string): Prize[] =>
+      autoBadges
+        .filter((b) => b.auto?.endsWith(suffix))
+        .map((b) => ({ id: b.id, name: b.name, icon: b.icon, tier: b.tier, bonus: b.bonus, label: b.auto ? AUTO_LABELS[b.auto] : b.description }))
+
+    const championIds = new Set(autoBadges.map((b) => b.id))
+    const champions = awards.filter((a) => championIds.has(a.badgeId)).slice(0, 6)
+
+    const order: BoardPeriod[] = ['hafta', 'ay', 'gun']
+    const initial = kpBy.hafta.length >= 3 ? 'hafta' : order.reduce((best, p) => (kpBy[p].length > kpBy[best].length ? p : best), 'hafta' as BoardPeriod)
+
     return {
-      kp: Object.fromEntries(PERIODS.map((p, i) => [p, kp[i]])) as Record<BoardPeriod, (typeof kp)[number]>,
-      tips: Object.fromEntries(PERIODS.map((p, i) => [p, tips[i]])) as Record<BoardPeriod, (typeof tips)[number]>,
-      awards,
+      kp: kpBy,
+      tips: Object.fromEntries(PERIODS.map((p, i) => [p, tips[i]])) as Record<BoardPeriod, TipRow[]>,
+      prizes: { gun: [], hafta: prizeFor('-hafta'), ay: prizeFor('-ay') } as Record<BoardPeriod, Prize[]>,
+      champions,
       meId: me?.id ?? null,
+      signedIn: Boolean(me),
+      initial,
     }
   } catch (error) {
     console.error('[siralama] veriler yüklenemedi', error)
-    const empty = { gun: [], hafta: [], ay: [] }
-    return { kp: empty, tips: empty, awards: [], meId: null }
+    return { kp: EMPTY, tips: EMPTY, prizes: EMPTY, champions: [] as AwardRow[], meId: null, signedIn: false, initial: 'hafta' as BoardPeriod }
   }
 }
 
-const dateTR = (iso: string) => new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', timeZone: 'Europe/Istanbul' })
+const dateTR = (iso: string) => new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', timeZone: 'Europe/Istanbul' })
+
+function ChampionsWall({ champions }: { champions: AwardRow[] }) {
+  return (
+    <section aria-labelledby="sampiyonlar" className="flex flex-col gap-3">
+      <header className="flex items-center justify-between gap-2 px-1">
+        <h2 id="sampiyonlar" className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
+          <Medal className="size-5 text-primary" aria-hidden /> Şampiyonlar duvarı
+        </h2>
+        <Link href="/rozetler" className="text-xs font-semibold text-primary hover:underline">
+          Tüm rozetler
+        </Link>
+      </header>
+      {champions.length ? (
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {champions.map((a) => (
+            <li key={a.id} className="panel-gold flex items-center gap-3 rounded-xl px-3.5 py-3">
+              <SpecialEmblem icon={a.icon} tier={a.tier} size="md" />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[11px] font-bold uppercase tracking-wider text-primary">{a.badgeName}</span>
+                <span className="truncate font-display text-base font-bold text-foreground">{publicRankName(a.userName)}</span>
+                <span className="truncate text-[11px] text-muted-foreground">{dateTR(a.awardedAt)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-xl border border-dashed border-border px-4 py-4 text-center text-sm text-muted-foreground">
+          Duvar henüz boş. Bu haftanın şampiyonu ilk ismi yazdırır kanka!
+        </p>
+      )}
+    </section>
+  )
+}
 
 export async function Leaderboard() {
-  const { kp, tips, awards, meId } = await load()
+  const data = await load()
   return (
-    <section aria-label="Sıralama" className="flex flex-col gap-5">
-      <JakoTip pose="kazandi" title="Zirveye oyna">
-        Sitede vakit geçir, oyun oyna, görev yap, sohbette aktif ol, tahmin tut. Her dönemin birincisi değerli şampiyon rozetini kapar!
-      </JakoTip>
-
-      <RankBoards kp={kp} tips={tips} meId={meId} />
-
-      <section aria-labelledby="champions" className="panel-gold overflow-hidden rounded-xl">
-        <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <h3 id="champions" className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-foreground">
-            <Medal className="size-4 text-primary" aria-hidden /> Son şampiyonlar
-          </h3>
-          <Link href="/rozetler" className="text-xs font-semibold text-primary hover:underline">Tüm rozetler</Link>
-        </header>
-        {awards.length ? (
-          <ul className="grid sm:grid-cols-2">
-            {awards.map((a) => (
-              <li key={a.id} className="flex items-center gap-3 border-b border-border px-4 py-3 sm:odd:border-r">
-                <SpecialEmblem icon={a.icon} tier={a.tier} size="sm" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-semibold text-foreground">{publicRankName(a.userName)}</span>
-                  <span className="truncate text-[11px] text-muted-foreground">{a.badgeName}{a.note ? ` · ${a.note}` : ''}</span>
-                </span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{dateTR(a.awardedAt)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">Henüz şampiyon rozeti verilmedi. İlk şampiyon sen ol!</p>
-        )}
-      </section>
+    <section aria-label="Sıralama" className="flex flex-col gap-8">
+      <RankBoards kp={data.kp} tips={data.tips} prizes={data.prizes} meId={data.meId} signedIn={data.signedIn} initial={data.initial} />
+      <ChampionsWall champions={data.champions} />
     </section>
   )
 }

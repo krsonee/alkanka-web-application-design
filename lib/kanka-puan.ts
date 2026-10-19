@@ -240,7 +240,7 @@ export async function getKpStatus(userId: string): Promise<KpStatus> {
   }
 }
 
-export type LeaderRow = { userId: string; name: string; kp: number; level: number; levelName: string; badge: string; specials: number }
+export type LeaderRow = { userId: string; name: string; kp: number; level: number; levelName: string; badge: string; specials: number; breakdown: KpBreakdown }
 
 export type PredictionRow = { userId: string; name: string; points: number; hits: number; exact: number; picks: number }
 
@@ -301,6 +301,7 @@ export async function leaderboard(limit = 20, period: RankPeriod = 'tum', opts?:
       levelName: lv.name,
       badge: lv.badge,
       specials: Number(counts.find((c) => c.user_id === l.userId)?.n ?? 0),
+      breakdown: l.breakdown,
     }
   })
 }
