@@ -13,6 +13,7 @@ import { readLeaderboard } from '@/lib/kanka-puan'
 import { getBalance, getMember, SIGNUP_BONUS, type Member } from '@/lib/member'
 import { getSignupBonus } from '@/lib/site-texts'
 import { getStreak } from '@/lib/checkin'
+import { getSocialLinks, type SocialLinks } from '@/lib/social'
 import { completedTaskIds, listPublicTasks } from '@/lib/tasks'
 import { getCemberStatus, myCemberStatus } from '@/lib/cember'
 import { listProducts, type MarketProduct } from '@/lib/market'
@@ -65,12 +66,13 @@ async function loadHub(member: Member, products: MarketProduct[]): Promise<HubDa
 }
 
 export default async function HomePage() {
-  const [content, sponsors, ranking, member, allProducts] = await Promise.all([
+  const [content, sponsors, ranking, member, allProducts, socialLinks] = await Promise.all([
     getAllContent(),
     listPublicSponsors().catch(() => []),
     readLeaderboard(500).catch(() => []),
     getMember().catch(() => null),
     listProducts().catch(() => [] as MarketProduct[]),
+    getSocialLinks().catch(() => ({}) as SocialLinks),
   ])
   const products = allProducts.filter((p) => p.active && p.stock > 0)
   const [hub, bonus] = await Promise.all([
@@ -94,7 +96,7 @@ export default async function HomePage() {
       <SiteJsonLd />
       <h1 className="sr-only">AL KANKA: sponsorlar, kampanyalar ve ücretsiz mini oyunlar</h1>
       <div className="flex flex-col gap-4">
-        {hub ? <MemberHub data={hub} podium={podium} me={me} /> : <GuestHero bonus={bonus} />}
+        {hub ? <MemberHub data={hub} podium={podium} me={me} links={socialLinks} /> : <GuestHero bonus={bonus} />}
         <QuickTiles />
       </div>
       <BannerCarousel slides={slides} />

@@ -8,10 +8,17 @@ export const PLATFORM_LABEL: Record<SocialPlatform, string> = {
   youtube: 'YouTube',
 }
 
-export type SocialLinks = Partial<Record<SocialPlatform, string>>
+/** `telegram` and `join` are hub-only links; they are not member-verifiable platforms. */
+export type SocialLinks = Partial<Record<SocialPlatform | 'telegram' | 'join', string>>
+
+export const DEFAULT_TELEGRAM_LINK = 'https://t.me/AlkankaOfficial'
+
+/** The join button accepts an internal path ("/kayit") or any https link. */
+export const isJoinUrl = (url: string) => /^\/(?!\/)\S*$/.test(url) || /^https:\/\/\S+$/i.test(url)
+export const isTelegramUrl = (url: string) => /^https:\/\/(www\.)?(t\.me|telegram\.me)\/\S+$/i.test(url)
 
 /** Fallbacks shown until the admin saves the real profile links in the panel. */
-export const DEFAULT_SOCIAL_LINKS: Required<SocialLinks> = {
+export const DEFAULT_SOCIAL_LINKS: Record<SocialPlatform, string> = {
   x: 'https://x.com/AlkankaOfficial',
   instagram: 'https://www.instagram.com/alkankaofficial',
   youtube: 'https://www.youtube.com/@AlkankaOfficial',

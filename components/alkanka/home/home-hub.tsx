@@ -1,11 +1,13 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, CircleCheck, CircleDot, Coins, Crown, Flame, Gamepad2, Gift, ListChecks, ShoppingBag, Target, Trophy } from 'lucide-react'
+import { ArrowRight, CircleCheck, CircleDot, Coins, Crown, Flame, Gamepad2, Gift, ListChecks, Send, ShoppingBag, Target, Trophy } from 'lucide-react'
 import type { MarketProduct } from '@/lib/market'
 import type { LeagueMatch } from '@/lib/community'
 import type { CemberMe, CemberStatus } from '@/lib/cember-shared'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import type { PodiumRow } from '@/components/alkanka/top-three'
+import { DEFAULT_SOCIAL_LINKS, DEFAULT_TELEGRAM_LINK, PLATFORM_LABEL, type SocialLinks } from '@/lib/social-shared'
+import { SocialIcon } from '@/components/alkanka/social-icons'
 import { Countdown } from './countdown'
 import { Marquee } from './marquee'
 
@@ -200,7 +202,52 @@ function RankTile({ podium, me }: { podium: PodiumRow[]; me: MyRank }) {
   )
 }
 
-export function MemberHub({ data, podium = [], me = null }: { data: HubData; podium?: PodiumRow[]; me?: MyRank }) {
+const SOCIAL_ORDER = ['telegram', 'instagram', 'youtube', 'x'] as const
+
+function HubSocials({ links }: { links: SocialLinks }) {
+  const href = (p: (typeof SOCIAL_ORDER)[number]) =>
+    p === 'telegram' ? links.telegram || DEFAULT_TELEGRAM_LINK : links[p] || DEFAULT_SOCIAL_LINKS[p]
+  const join = links.join || links.telegram || DEFAULT_TELEGRAM_LINK
+  const external = /^https?:\/\//i.test(join)
+  return (
+    <nav aria-label="AL KANKA topluluk hesapları" className="flex items-center gap-1 rounded-full border border-primary/25 bg-background/40 p-1 backdrop-blur">
+      <ul className="flex items-center gap-1">
+        {SOCIAL_ORDER.map((p) => (
+          <li key={p}>
+            <a
+              href={href(p)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`AL KANKA ${p === 'telegram' ? 'Telegram' : PLATFORM_LABEL[p]} hesabı`}
+              className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-all hover:-translate-y-0.5 hover:bg-primary/15 hover:text-primary md:size-8"
+            >
+              {p === 'telegram' ? <Send className="size-3.5 md:size-4" aria-hidden="true" /> : <SocialIcon platform={p} className="size-3.5 md:size-4" />}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <a
+        href={join}
+        {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        className="flex h-7 items-center gap-1 rounded-full bg-gradient-to-b from-primary to-bronze px-3 text-xs font-bold text-primary-foreground shadow-[0_0_18px_-6px_var(--primary)] transition-transform hover:scale-[1.04] md:h-8 md:px-3.5 md:text-sm"
+      >
+        Katıl
+      </a>
+    </nav>
+  )
+}
+
+export function MemberHub({
+  data,
+  podium = [],
+  me = null,
+  links = {},
+}: {
+  data: HubData
+  podium?: PodiumRow[]
+  me?: MyRank
+  links?: SocialLinks
+}) {
   const { cember, cemberMe, goal } = data
   const taskPct = data.tasksTotal ? (data.tasksDone / data.tasksTotal) * 100 : 0
   const missing = cemberMe?.progress.filter((p) => !p.done) ?? []
@@ -229,11 +276,8 @@ export function MemberHub({ data, podium = [], me = null }: { data: HubData; pod
             Hoş geldin <span className="bg-gradient-to-r from-primary to-bronze bg-clip-text text-transparent">{data.name}</span>
           </h2>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-primary to-bronze px-3 py-1 text-xs md:text-sm font-bold text-primary-foreground shadow-[0_0_20px_-6px_var(--primary)] ring-1 ring-primary/40">
-            <Coins className="size-4" aria-hidden="true" />
-            <span className="tabular-nums">{fmt(data.balance)}</span> KC
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <HubSocials links={links} />
           <Link
             href="/gorevler"
             className="glass-card flex items-center gap-1.5 rounded-full px-3 py-1 text-xs md:text-sm font-semibold text-foreground transition-colors hover:text-primary"
