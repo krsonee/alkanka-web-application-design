@@ -1,8 +1,10 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useState, useTransition } from 'react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import {
+  Loader2,
   ChevronRight,
   LayoutDashboard,
   ExternalLink,
@@ -80,7 +82,9 @@ export function ContentEditor({
   userName,
   siteUrl,
   logout,
+  initialTab,
 }: {
+  initialTab: string
   userName: string
   siteUrl: string
   logout: React.ReactNode
@@ -152,16 +156,17 @@ export function ContentEditor({
     },
   ].filter((g) => g.items.length > 0)
   const tabs: PanelTab[] = ['dashboard', ...groups.flatMap((g) => g.items.map((i) => i.id))]
-  const [tab, setTab] = useState<PanelTab>('dashboard')
+  const router = useRouter()
+  const [loading, startLoading] = useTransition()
+  const [tab, setTab] = useState<PanelTab>(initialTab as PanelTab)
   const [filter, setFilter] = useState('')
   useEffect(() => {
-    const sync = () => {
-      const saved = window.location.hash.replace('#', '') as PanelTab
-      if (tabs.includes(saved)) setTab(saved)
+    // Old bookmarks used #section; move them to ?b=section so the server loads only that section.
+    const legacy = window.location.hash.replace('#', '') as PanelTab
+    if (legacy && tabs.includes(legacy) && legacy !== initialTab) {
+      setTab(legacy)
+      startLoading(() => router.replace(`/panel?b=${legacy}`, { scroll: false }))
     }
-    sync()
-    window.addEventListener('hashchange', sync)
-    return () => window.removeEventListener('hashchange', sync)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const items = tab === 'slide' ? slides : heroes
@@ -175,9 +180,10 @@ export function ContentEditor({
     }))
     .filter((g) => g.items.length > 0)
   const pick = (id: PanelTab) => {
+    if (id === tab) return
     setTab(id)
-    window.history.replaceState(null, '', `#${id}`)
     window.scrollTo({ top: 0 })
+    startLoading(() => router.push(id === 'dashboard' ? '/panel' : `/panel?b=${id}`, { scroll: false }))
   }
   const currentGroup = groups.find((g) => g.items.some((i) => i.id === tab))
   const current = currentGroup?.items.find((i) => i.id === tab)
@@ -267,7 +273,12 @@ export function ContentEditor({
             '[&_h2.font-display]:text-lg [&_h3.font-display]:text-base [&_.text-2xl]:text-xl',
           )}
         >
-      {!tabs.includes(tab) ? (
+      {loading && tab !== 'slide' && tab !== 'hero' && tab !== 'account' ? (
+        <div role="status" className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          {current?.label ?? 'Bölüm'} açılıyor...
+        </div>
+      ) : !tabs.includes(tab) ? (
         <p className="text-sm text-muted-foreground">Bu bölüme erişim yetkin yok.</p>
       ) : tab === 'staff' ? (
         staff

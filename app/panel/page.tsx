@@ -80,7 +80,7 @@ import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
-import { pendingCounts } from '@/lib/panel-pending'
+import { pendingDetail } from '@/lib/panel-pending'
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 import { getOnlineConfig, getTickerConfig } from '@/lib/online-rewards'
@@ -110,8 +110,11 @@ function failed(label: string) {
   return <p className="text-sm text-destructive">{label} yüklenemedi.</p>
 }
 
-/** Loads a panel section only when the signed-in account may see it, so hidden sections never query their data. */
-async function section(session: PanelSession, module: PanelModule, label: string, load: () => Promise<ReactNode> | ReactNode): Promise<ReactNode> {
+type SectionCtx = { session: PanelSession; active: string }
+
+/** Loads a panel section only when it is the open one and the account may see it, so other sections never query their data. */
+async function section({ session, active }: SectionCtx, module: PanelModule, label: string, load: () => Promise<ReactNode> | ReactNode): Promise<ReactNode> {
+  if (active !== module) return null
   if (!session.isOwner && !session.permissions.includes(module)) return null
   try {
     return await load()
@@ -236,8 +239,8 @@ async function staffPanel() {
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
-export default async function PanelPage() {
-  const session = await getPanelSession()
+export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string }> }) {
+  const [session, params] = await Promise.all([getPanelSession(), searchParams])
   if (!session) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-background p-4">
@@ -249,6 +252,8 @@ export default async function PanelPage() {
   const content = await getAllContent()
   const can = (m: PanelModule) => session.isOwner || session.permissions.includes(m)
   const allowed = session.isOwner ? null : session.permissions
+  const active = params.b || 'dashboard'
+  const ctx: SectionCtx = { session, active }
 
   const slides = can('slide')
     ? SLIDES.map((s) => ({
@@ -308,7 +313,7 @@ export default async function PanelPage() {
     catalog,
     users,
   ] = await Promise.all([
-    section(session, 'texts', 'Site yazıları', () => (
+    section(ctx, 'texts', 'Site yazıları', () => (
       <TelegramTabs
         label="Site yazıları"
         tabs={[
@@ -317,11 +322,11 @@ export default async function PanelPage() {
         ]}
       />
     )),
-    section(session, 'branding', 'Logo ayarları', async () => {
+    section(ctx, 'branding', 'Logo ayarları', async () => {
       const b = await getBranding()
       return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
     }),
-    section(session, 'logo', 'Logolar', async () => {
+    section(ctx, 'logo', 'Logolar', async () => {
       const logoSponsors = await listLogoSponsors()
       return (
         <TelegramTabs
@@ -359,7 +364,7 @@ export default async function PanelPage() {
         />
       )
     }),
-    section(session, 'seo', 'SEO', async () => (
+    section(ctx, 'seo', 'SEO', async () => (
       <SeoManager
         posts={await listPosts({ includeDrafts: true })}
         deals={await listDeals(30)}
@@ -368,8 +373,8 @@ export default async function PanelPage() {
         siteUrl={SITE_URL}
       />
     )),
-    section(session, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
-    section(session, 'tour', 'Site turu', async () => {
+    section(ctx, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
+    section(ctx, 'tour', 'Site turu', async () => {
       const { getTourSettings, tourStats } = await import('@/lib/tour')
       const { TourSettingsEditor } = await import('@/components/panel/tour-settings-editor')
       const [settings, stats] = await Promise.all([
@@ -378,8 +383,8 @@ export default async function PanelPage() {
       ])
       return <TourSettingsEditor settings={settings} stats={stats} />
     }),
-    section(session, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
-    section(session, 'growth', 'Büyüme', async () => {
+    section(ctx, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
+    section(ctx, 'growth', 'Büyüme', async () => {
       const [referral, ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
         getReferralSettings(),
         getAmbientSettings(),
@@ -421,7 +426,7 @@ export default async function PanelPage() {
         />
       )
     }),
-    section(session, 'community', 'Topluluk', async () => (
+    section(ctx, 'community', 'Topluluk', async () => (
       <CommunityManager
         reviews={await pendingReviews().catch(() => [])}
         published={await publishedReviews().catch(() => [])}
@@ -441,13 +446,13 @@ export default async function PanelPage() {
         })()}
       />
     )),
-    section(session, 'badges', 'Rozet sistemi', kpPanel),
-    section(session, 'tasks', 'Görevler', async () => {
+    section(ctx, 'badges', 'Rozet sistemi', kpPanel),
+    section(ctx, 'tasks', 'Görevler', async () => {
       const [list, claims, sites] = await Promise.all([listTasks(), listPendingClaims(), siteOptions().catch(() => [])])
       return <TasksManager tasks={list} claims={claims} sites={sites.map((x) => ({ id: x.id, name: x.name }))} />
     }),
-    section(session, 'market', 'Market', marketPanel),
-    section(session, 'social', 'Sosyal medya', async () => (
+    section(ctx, 'market', 'Market', marketPanel),
+    section(ctx, 'social', 'Sosyal medya', async () => (
       <SocialManager
         links={await getSocialLinks().catch(() => ({}) as SocialLinks)}
         accounts={await adminSocialAccounts().catch(() => [])}
@@ -458,17 +463,17 @@ export default async function PanelPage() {
           .catch(() => undefined)}
       />
     )),
-    section(session, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
-    section(session, 'games', 'Oyun ayarları', () => (
+    section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
+    section(ctx, 'games', 'Oyun ayarları', () => (
       <ArenaSettingsEditor
         settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
         winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
       />
     )),
-    section(session, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
-    section(session, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
-    section(session, 'telegram', 'Telegram', telegramPanel),
-    section(session, 'push', 'Bildirimler', async () => {
+    section(ctx, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
+    section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
+    section(ctx, 'telegram', 'Telegram', telegramPanel),
+    section(ctx, 'push', 'Bildirimler', async () => {
       const [stats, appSettings] = await Promise.all([
         pushStats().catch(() => ({ total: 0, members: 0, log: [] })),
         getAppSettings(),
@@ -483,7 +488,7 @@ export default async function PanelPage() {
         />
       )
     }),
-    section(session, 'studio', 'Stüdyo', async () => (
+    section(ctx, 'studio', 'Stüdyo', async () => (
       <Studio
         brands={await listBrands().catch(() => [])}
         assets={await listAssets().catch(() => [])}
@@ -491,29 +496,34 @@ export default async function PanelPage() {
         spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
       />
     )),
-    section(session, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
-    section(session, 'rewards', 'Ödül ayarları', async () => {
+    section(ctx, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
+    section(ctx, 'rewards', 'Ödül ayarları', async () => {
       const [config, hidden] = await Promise.all([getRewardConfig(), getHidden()])
       return <RewardsEditor initial={config} hidden={hidden.mini ?? []} />
     }),
-    section(session, 'catalog', 'Etkinlik ve kampanyalar', async () => {
+    section(ctx, 'catalog', 'Etkinlik ve kampanyalar', async () => {
       const [{ rewards: _rewards, ...catalog }, hidden, options] = await Promise.all([getCatalog({ includeHidden: true }), getHidden(), siteOptions()])
       return <CatalogEditor catalog={catalog} sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))} library={IMAGE_LIBRARY} hidden={hidden} />
     }),
-    section(session, 'users', 'Tüm üyeler', usersPanel),
+    section(ctx, 'users', 'Tüm üyeler', usersPanel),
   ])
-  const audit = session.isOwner ? await listAudit().then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
+  const audit = session.isOwner && active === 'audit' ? await listAudit().then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
 
-  const pending = await pendingCounts(can).catch(() => ({}) as Record<string, number>)
-  const marketPending = pending.market ?? 0
-  const dashCounts = can('users') ? await listMembers({ limit: 1 }).then((r) => r.counts).catch(() => null) : null
-  const dashRecent = session.isOwner ? await listAudit(8).catch(() => []) : []
-  const dashboard = <PanelDashboard counts={dashCounts} marketPending={marketPending} recent={dashRecent} />
-  const staff = session.isOwner ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
+  const onDash = active === 'dashboard'
+  const [detail, dashCounts, dashRecent] = await Promise.all([
+    pendingDetail(can).catch(() => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0 })),
+    onDash && can('users') ? listMembers({ limit: 1 }).then((r) => r.counts).catch(() => null) : null,
+    onDash && session.isOwner ? listAudit(8).catch(() => []) : [],
+  ])
+  const pending: Record<string, number> = { community: detail.reviews + detail.complaints + detail.withdrawals, tasks: detail.claims, market: detail.market }
+  const dashboard = onDash ? <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} /> : null
+  const staff = session.isOwner && active === 'staff' ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
 
   return (
     <main className="min-h-dvh overflow-x-auto bg-background">
         <ContentEditor
+          key={active}
+          initialTab={active}
           userName={session.displayName}
           siteUrl={SITE_URL}
           logout={<LogoutButton />}
