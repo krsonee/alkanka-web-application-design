@@ -36,12 +36,12 @@ const PERIODS: { id: BoardPeriod; label: string; noun: string; note: string }[] 
   { id: 'ay', label: 'Aylık', noun: 'Ayın', note: 'Her ayın 1’inde sıfırlanır' },
 ]
 
-const CATEGORIES: { id: Category; label: string; unit: string; icon: typeof Zap; empty: string; cta: { href: string; label: string } }[] = [
-  { id: 'kp', label: 'Kanka Puan', unit: 'KP', icon: Zap, empty: 'Bu dönem henüz puan toplanmadı.', cta: { href: '/oyunlar', label: 'Oyun oyna' } },
-  { id: 'oyun', label: 'Oyunlar', unit: 'KP', icon: Dices, empty: 'Bu dönem kimse oyun ya da görevden puan almadı.', cta: { href: '/oyunlar', label: 'Oyun oyna' } },
-  { id: 'tahmin', label: 'Tahmin', unit: 'puan', icon: Target, empty: 'Bu dönemde sonuçlanan tahmin yok.', cta: { href: '/tahminler', label: 'Tahmin yap' } },
-  { id: 'sohbet', label: 'Sohbet', unit: 'KP', icon: MessageCircle, empty: 'Bu dönem sohbetten puan alan yok.', cta: { href: '/profil', label: 'Telegram bağla' } },
-  { id: 'davet', label: 'Davet', unit: 'KP', icon: UserPlus, empty: 'Bu dönem davetle puan alan yok.', cta: { href: '/profil', label: 'Davet linkini al' } },
+const CATEGORIES: { id: Category; label: string; short: string; unit: string; icon: typeof Zap; empty: string; cta: { href: string; label: string } }[] = [
+  { id: 'kp', label: 'Kanka Puan', short: 'Genel', unit: 'KP', icon: Zap, empty: 'Bu dönem henüz puan toplanmadı.', cta: { href: '/oyunlar', label: 'Oyun oyna' } },
+  { id: 'oyun', label: 'Oyunlar', short: 'Oyun', unit: 'KP', icon: Dices, empty: 'Bu dönem kimse oyun ya da görevden puan almadı.', cta: { href: '/oyunlar', label: 'Oyun oyna' } },
+  { id: 'tahmin', label: 'Tahmin', short: 'Tahmin', unit: 'puan', icon: Target, empty: 'Bu dönemde sonuçlanan tahmin yok.', cta: { href: '/tahminler', label: 'Tahmin yap' } },
+  { id: 'sohbet', label: 'Sohbet', short: 'Sohbet', unit: 'KP', icon: MessageCircle, empty: 'Bu dönem sohbetten puan alan yok.', cta: { href: '/profil', label: 'Telegram bağla' } },
+  { id: 'davet', label: 'Davet', short: 'Davet', unit: 'KP', icon: UserPlus, empty: 'Bu dönem davetle puan alan yok.', cta: { href: '/profil', label: 'Davet linkini al' } },
 ]
 
 const PAGE = 12
@@ -349,44 +349,102 @@ function PrizeShowcase({ prizes, periodNoun }: { prizes: Prize[]; periodNoun: st
 /* ---------- Podium ---------- */
 
 const PODIUM_STYLE = {
-  1: { order: 'order-2', block: 'h-20 bg-primary text-primary-foreground', avatar: 'size-14 bg-primary text-primary-foreground ring-primary/30', value: 'text-primary' },
-  2: { order: 'order-1', block: 'h-14 bg-foreground/80 text-background', avatar: 'size-12 bg-foreground/85 text-background ring-foreground/15', value: 'text-foreground' },
-  3: { order: 'order-3', block: 'h-10 bg-bronze text-background', avatar: 'size-12 bg-bronze text-background ring-bronze/25', value: 'text-bronze' },
+  1: {
+    order: 'order-2',
+    block: 'h-28 from-primary/45 to-primary/5 border-primary/50',
+    cap: 'bg-primary',
+    num: 'text-primary',
+    avatar: 'size-16 bg-primary text-primary-foreground text-xl',
+    value: 'bg-primary text-primary-foreground',
+    delay: 260,
+  },
+  2: {
+    order: 'order-1',
+    block: 'h-20 from-foreground/25 to-foreground/[0.03] border-foreground/25',
+    cap: 'bg-foreground/70',
+    num: 'text-foreground/70',
+    avatar: 'size-12 bg-foreground/80 text-background text-base',
+    value: 'bg-foreground/10 text-foreground',
+    delay: 120,
+  },
+  3: {
+    order: 'order-3',
+    block: 'h-14 from-bronze/40 to-bronze/[0.04] border-bronze/45',
+    cap: 'bg-bronze',
+    num: 'text-bronze',
+    avatar: 'size-12 bg-bronze text-background text-base',
+    value: 'bg-bronze/15 text-bronze',
+    delay: 0,
+  },
 } as const
+
+const SPARKS = [
+  { left: '18%', delay: '0s' },
+  { left: '50%', delay: '0.8s' },
+  { left: '80%', delay: '1.6s' },
+]
 
 function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string | null }) {
   const top = rows.slice(0, 3)
   if (!top.length) return null
   return (
-    <ol aria-label="İlk üç" className="grid grid-cols-3 items-end gap-2 px-1 pt-2">
+    <ol aria-label="İlk üç" className="grid grid-cols-3 items-end gap-2 px-3 pt-8">
       {top.map((u) => {
         const s = PODIUM_STYLE[u.rank as 1 | 2 | 3]
+        const first = u.rank === 1
+        const isMe = u.userId === meId
         return (
-          <li
-            key={u.userId}
-            className={cn('flex min-w-0 flex-col items-center gap-1.5 motion-safe:animate-[rise_0.5s_ease-out_both]', s.order)}
-            style={{ animationDelay: `${(3 - u.rank) * 90}ms` }}
-          >
-            <span className="relative">
-              {u.rank === 1 && (
-                <Crown className="absolute -top-5 left-1/2 size-5 -translate-x-1/2 text-primary motion-safe:animate-bounce" aria-hidden />
-              )}
-              <span className={cn('flex items-center justify-center rounded-full font-display text-lg font-bold ring-4', s.avatar)} aria-hidden>
-                {u.name.charAt(0).toUpperCase()}
+          <li key={u.userId} className={cn('flex min-w-0 flex-col items-center', s.order)}>
+            <div className="podium-pop flex w-full min-w-0 flex-col items-center gap-1.5 pb-2.5" style={{ animationDelay: `${s.delay + 350}ms` }}>
+              <span className="relative flex items-center justify-center">
+                {first && (
+                  <>
+                    <Crown className="podium-crown absolute -top-6 left-1/2 size-6 fill-primary/30 text-primary" aria-hidden />
+                    <span className="podium-halo absolute -inset-1 rounded-full" aria-hidden />
+                  </>
+                )}
+                <span
+                  className={cn(
+                    'relative flex items-center justify-center rounded-full font-display font-bold ring-2 ring-card',
+                    s.avatar,
+                    isMe && 'outline outline-2 outline-offset-2 outline-primary',
+                  )}
+                  aria-hidden
+                >
+                  {u.name.charAt(0).toUpperCase()}
+                </span>
               </span>
-            </span>
-            <span className="w-full truncate text-center text-xs font-semibold text-foreground">
-              {u.name}
-              {u.userId === meId && <span className="text-primary"> (sen)</span>}
-            </span>
-            <span className={cn('font-display text-sm font-bold leading-none tabular-nums', s.value)}>
-              {fmt(u.value)} <span className="text-[10px] font-medium text-muted-foreground">{unit}</span>
-            </span>
-            <span className={cn('relative flex w-full items-start justify-center overflow-hidden rounded-t-lg pt-1.5 font-display text-xl font-black', s.block)}>
-              {u.rank === 1 && <span className="tier-shine pointer-events-none absolute inset-0 opacity-50" aria-hidden />}
-              <span className="sr-only">Sıra </span>
-              {u.rank}
-            </span>
+              <span className="w-full truncate text-center text-xs font-semibold text-foreground">
+                {u.name}
+                {isMe && <span className="text-primary"> (sen)</span>}
+              </span>
+              <span className={cn('rounded-full px-2 py-0.5 font-display text-xs font-bold tabular-nums', s.value)}>
+                {fmt(u.value)} <span className="text-[10px] font-medium opacity-75">{unit}</span>
+              </span>
+            </div>
+            <div
+              className={cn('podium-block relative flex w-full justify-center overflow-hidden rounded-t-xl border border-b-0 bg-gradient-to-b', s.block)}
+              style={{ animationDelay: `${s.delay}ms` }}
+            >
+              <span className={cn('absolute inset-x-0 top-0 h-1', s.cap)} aria-hidden />
+              {first && (
+                <>
+                  <span className="tier-shine pointer-events-none absolute inset-0 opacity-40" aria-hidden />
+                  {SPARKS.map((sp) => (
+                    <span
+                      key={sp.left}
+                      className="podium-spark absolute bottom-2 size-1 rounded-full bg-primary"
+                      style={{ left: sp.left, animationDelay: sp.delay }}
+                      aria-hidden
+                    />
+                  ))}
+                </>
+              )}
+              <span className={cn('relative pt-2 font-display text-3xl font-black leading-none', s.num)}>
+                <span className="sr-only">Sıra </span>
+                {u.rank}
+              </span>
+            </div>
           </li>
         )
       })}
@@ -552,26 +610,33 @@ export function RankBoards({
           <h2 id="tablo-baslik" className="font-display text-lg font-bold text-foreground">
             {periodMeta.noun} liderleri
           </h2>
-          <div role="tablist" aria-label="Kategori" className="-mx-3.5 flex gap-1.5 overflow-x-auto px-3.5 [scrollbar-width:none]">
+          <div role="tablist" aria-label="Kategori" className="relative grid grid-cols-5 rounded-xl bg-secondary p-1">
+            <span
+              className="seg-indicator absolute inset-y-1 left-1 rounded-lg border border-primary/40 bg-card shadow-sm"
+              style={{ width: 'calc((100% - 0.5rem) / 5)', transform: `translateX(${CATEGORIES.findIndex((c) => c.id === category) * 100}%)` }}
+              aria-hidden
+            />
             {CATEGORIES.map((c) => {
               const Icon = c.icon
+              const active = category === c.id
               return (
                 <button
                   key={c.id}
                   role="tab"
                   type="button"
-                  aria-selected={category === c.id}
+                  aria-selected={active}
+                  aria-label={c.label}
                   onClick={() => {
                     setCategory(c.id)
                     setVisible(PAGE)
                   }}
                   className={cn(
-                    'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors',
-                    category === c.id ? 'border-primary bg-primary/15 text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
+                    'relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-[11px] font-semibold transition-colors',
+                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  <Icon className={cn('size-3.5', category === c.id && 'text-primary')} aria-hidden />
-                  {c.label}
+                  <Icon className={cn('size-4 transition-transform', active && 'scale-110 text-primary')} aria-hidden />
+                  <span className="w-full truncate px-0.5 text-center">{c.short}</span>
                 </button>
               )
             })}
@@ -600,7 +665,7 @@ export function RankBoards({
           </div>
         ) : (
           <>
-            {!q && <Podium rows={rows} unit={cat.unit} meId={meId} />}
+            {!q && <Podium key={`${period}-${category}`} rows={rows} unit={cat.unit} meId={meId} />}
             {listed.length > 0 ? (
               <ol className={cn(!q && 'border-t border-border')}>
                 {listed.map((r) => (
