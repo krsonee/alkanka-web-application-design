@@ -217,6 +217,49 @@
   }
 }
 
+/* Light streak that sweeps across a button every few seconds. */
+@utility btn-sheen {
+  position: relative;
+  overflow: hidden;
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--primary-foreground) 28%, transparent), transparent);
+    animation: hub-sheen 3.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  &:disabled::after {
+    animation: none;
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      animation: none;
+      opacity: 0;
+    }
+  }
+}
+
+/* Cycles a soft highlight through the steps in order: step n lights up at n * 1.2s. */
+@keyframes step-glow {
+  0%, 30%, 100% {
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  8%, 22% {
+    border-color: color-mix(in oklch, var(--primary) 60%, transparent);
+    box-shadow: 0 0 22px -8px color-mix(in oklch, var(--primary) 70%, transparent);
+  }
+}
+@utility step-cycle {
+  animation: step-glow 4.8s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 @utility hub-surface {
   background:
     radial-gradient(110% 90% at 0% 0%, color-mix(in oklch, var(--primary) 18%, transparent) 0%, transparent 55%),

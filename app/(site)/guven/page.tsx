@@ -8,7 +8,7 @@ import { SponsorLogoPlate } from '@/components/alkanka/partner-sites'
 import { TrustForms } from '@/components/alkanka/community/trust-forms'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { PageHero } from '@/components/alkanka/page-hero'
-import { AutoRail } from '@/components/alkanka/auto-rail'
+import { SnapSlider } from '@/components/alkanka/home/snap-slider'
 import { WithdrawWall } from '@/components/alkanka/community/withdraw-wall'
 import { recentWithdrawals, siteWithdrawals, withdrawStats } from '@/lib/withdrawals'
 import { cn } from '@/lib/utils'
@@ -111,14 +111,14 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
 
       <section aria-labelledby="nasil" className="flex flex-col gap-2">
         <h2 id="nasil" className="sr-only">Nasıl işler?</h2>
-        <ol className="no-scrollbar -mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-4 sm:px-0">
+        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {STEPS.map(({ icon: Icon, title, text }, i) => (
             <li
               key={title}
-              className="flex w-60 shrink-0 animate-rise snap-start items-start gap-3 rounded-xl border border-border bg-card p-3 motion-reduce:animate-none sm:w-auto"
-              style={{ animationDelay: `${i * 80}ms` }}
+              className="step-cycle flex items-start gap-2.5 rounded-xl border border-border bg-card p-2.5 sm:gap-3 sm:p-3"
+              style={{ animationDelay: `${i * 1.2}s` }}
             >
-              <span className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <span className="relative flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary sm:size-9">
                 <Icon className="size-4" aria-hidden />
                 <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground" aria-hidden>
                   {i + 1}
@@ -126,7 +126,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="text-sm font-bold text-foreground">{title}</span>
-                <span className="text-xs leading-relaxed text-muted-foreground">{text}</span>
+                <span className="line-clamp-2 text-[11px] leading-snug text-muted-foreground sm:text-xs sm:leading-relaxed">{text}</span>
               </span>
             </li>
           ))}
@@ -146,14 +146,14 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
           </h2>
           <span className="text-xs font-semibold text-primary sm:hidden">Karnesi için siteye dokun</span>
         </div>
-        <AutoRail label="Siteler" className="-mx-4 gap-2 px-4 pb-2 sm:-mx-1 sm:px-1">
+        <SnapSlider label="Siteler" autoplay={3800} itemClassName="w-[calc(50%-0.375rem)] sm:w-44 lg:w-48">
           {ranked.map((t, i) => {
             const s = asSponsor(t)
             const active = t.siteId === selected
             const r = resolveRate(t)
             return (
-              <li key={t.siteId} className="w-[calc(50%-0.25rem)] shrink-0 snap-start sm:w-40">
                 <Link
+                  key={t.siteId}
                   href={href(t.slug)}
                   scroll={false}
                   aria-current={active ? 'page' : undefined}
@@ -182,10 +182,9 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                     {statOf(t.siteId)?.count ?? 0} onaylı çekim
                   </span>
                 </Link>
-              </li>
             )
           })}
-        </AutoRail>
+        </SnapSlider>
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">

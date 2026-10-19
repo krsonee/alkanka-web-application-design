@@ -128,7 +128,7 @@ export function WithdrawForm({ siteId, siteName }: { siteId: string; siteName: s
         </p>
       )}
 
-      <button disabled={busy} className="flex h-10 items-center justify-center gap-2 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60">
+      <button disabled={busy} className="btn-sheen flex h-10 items-center justify-center gap-2 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-60">
         {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
         Onaya gönder
       </button>
