@@ -34,6 +34,7 @@ export default async function OddsPage() {
         pose="dusunen"
         speech="Saat dolmadan kuponunu yap, sonra pişman olma."
         tone="accent"
+        compact
         stats={stats}
       />
       {hasLive ? <LiveOddsBoard deals={deals} /> : <OddsBoard />}
