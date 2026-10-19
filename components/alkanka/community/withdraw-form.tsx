@@ -73,16 +73,25 @@ export function WithdrawForm({ siteId, siteName }: { siteId: string; siteName: s
         {siteName} kullanıcı adın
         <input name="siteUsername" required minLength={3} maxLength={40} autoComplete="off" placeholder="Sitedeki kullanıcı adın" className={field} />
       </label>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
-          Tutar (TL)
-          <input name="amount" required inputMode="decimal" placeholder="2.500" className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
-          Çekim saati
-          <input name="paidAt" type="datetime-local" required max={nowLocal()} defaultValue={nowLocal()} className={field} />
-        </label>
-      </div>
+  <div className="@container">
+  <div className="grid grid-cols-1 gap-2 @sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+  <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground">
+  Tutar (TL)
+  <input name="amount" required inputMode="decimal" placeholder="2.500" className={`${field} min-w-0 tabular-nums`} />
+  </label>
+  <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground">
+  Çekim saati
+  <input
+  name="paidAt"
+  type="datetime-local"
+  required
+  max={nowLocal()}
+  defaultValue={nowLocal()}
+  className={`${field} w-full min-w-0 tabular-nums [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-70 [&::-webkit-calendar-picker-indicator]:hover:opacity-100`}
+  />
+  </label>
+  </div>
+  </div>
 
       <input ref={input} type="file" accept={TYPES.join(',')} className="sr-only" aria-label="Ekran görüntüsü" onChange={(e) => pick(e.target.files?.[0])} />
       {preview ? (
