@@ -33,7 +33,7 @@ export default async function SponsorsPage() {
         stats={stats}
       />
       <AdFrame page="sponsorlar">
-        {featured.mains.length > 0 ? <MainSponsorRotator sponsors={featured.mains} /> : null}
+        {featured.mains.length > 0 ? <MainSponsorRotator sponsors={featured.mains} compact /> : null}
         <SponsorDirectory sponsors={sponsors} mainId={featured.main?.id} />
       </AdFrame>
     </>

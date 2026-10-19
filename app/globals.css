@@ -563,6 +563,23 @@
   .bonus-aura::after,
   .bonus-aura .bonus-sheen { animation: none; }
 }
+
+@keyframes sponsor-pan {
+  0%, 100% { transform: scale(1.08) translateX(0); }
+  50% { transform: scale(1.14) translateX(-3%); }
+}
+.sponsor-strip-art { animation: sponsor-pan 18s ease-in-out infinite; }
+.sponsor-logo-plate {
+  background:
+    radial-gradient(90% 90% at 50% 40%, color-mix(in oklch, var(--primary) 22%, var(--background)) 0%, var(--background) 70%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--primary) 45%, transparent),
+    inset 0 1px 0 color-mix(in oklch, var(--primary) 60%, transparent),
+    0 8px 24px -12px color-mix(in oklch, var(--primary) 70%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sponsor-strip-art { animation: none; }
+}
 @keyframes wheel-bulb {
   0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px var(--gold); }
   50% { opacity: 0.35; box-shadow: 0 0 2px 0 var(--gold); }

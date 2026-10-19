@@ -32,7 +32,7 @@ export default async function CampaignsPage() {
         ]}
       />
       <AdFrame page="kampanyalar">
-        {mains.length > 0 && <MainSponsorRotator sponsors={mains} />}
+        {mains.length > 0 && <MainSponsorRotator sponsors={mains} compact />}
         <Suspense>
           <CampaignHub />
         </Suspense>

@@ -74,6 +74,12 @@ export function PageHero({
           {!compact && <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent sm:hidden" />}
         </div>
       )}
+      {image && compact && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 bg-gradient-to-r from-card via-card/85 to-card/20 sm:via-card/70 sm:to-transparent"
+        />
+      )}
 
       <div
         className={cn(
@@ -102,7 +108,7 @@ export function PageHero({
             <span aria-hidden="true" className={cn('h-1 w-14 rounded-full', t.bar)} />
             <p
               className={cn(
-                'max-w-xl pt-1 text-sm leading-relaxed text-muted-foreground text-pretty',
+                'max-w-xl pt-1 text-sm font-medium leading-relaxed text-foreground/90 text-pretty [text-shadow:0_1px_8px_oklch(0_0_0/0.85)]',
                 compact ? 'line-clamp-2 sm:line-clamp-none' : 'sm:text-base',
               )}
             >

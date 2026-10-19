@@ -184,6 +184,50 @@ export function TierTag({ tier, className }: { tier: SponsorTier; className?: st
   )
 }
 
+function MainSponsorCompact({ sponsor }: { sponsor: Sponsor }) {
+  return (
+    <article className="bonus-aura rounded-xl p-px">
+      <div className="relative isolate flex items-center gap-3 overflow-hidden rounded-[calc(var(--radius)*1.6)] p-3 sm:gap-5 sm:p-4">
+        <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 -z-10 w-full overflow-hidden sm:w-2/3">
+          <Image
+            src="/images/campaign-art/sponsor-strip.png"
+            alt=""
+            fill
+            sizes="(min-width: 640px) 66vw, 100vw"
+            className="sponsor-strip-art object-cover object-right opacity-70"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-card via-card/80 to-card/10" />
+        </div>
+        <span aria-hidden className="bonus-sheen" />
+
+        <div className="sponsor-logo-plate relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl px-2 py-1.5 h-14 w-24 sm:h-20 sm:w-40 sm:px-4">
+          <SponsorLogoPlate sponsor={sponsor} compact className="max-h-full max-w-full text-lg drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]" />
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-display text-sm font-bold text-foreground sm:text-base">{sponsor.name}</span>
+            <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
+          </span>
+          <p className="line-clamp-1 font-display text-base font-bold text-primary sm:text-xl">{sponsor.welcome}</p>
+          <ul className="hidden min-w-0 flex-wrap gap-1.5 md:flex">
+            {sponsor.perks.slice(0, 3).map((p) => (
+              <li
+                key={p}
+                className="flex max-w-56 min-w-0 items-center gap-1 rounded-full border border-primary/25 bg-background/60 px-2 py-0.5 text-[11px] text-foreground/80 backdrop-blur"
+              >
+                <Check className="size-3 shrink-0 text-primary" aria-hidden="true" />
+                <span className="truncate">{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <GoButton site={sponsor.id} label="Kayıt ol" className="h-9 shrink-0 px-3 shadow-[0_6px_20px_-8px] shadow-primary sm:h-11 sm:px-6" />
+      </div>
+    </article>
+  )
+}
+
 export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   return (
     <div className="@container">
@@ -906,7 +950,7 @@ function SeeAllLink({ href, label = 'Tümünü gör' }: { href: string; label?: 
   )
 }
 
-export function MainSponsorRotator({ sponsors }: { sponsors: Sponsor[] }) {
+export function MainSponsorRotator({ sponsors, compact = false }: { sponsors: Sponsor[]; compact?: boolean }) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
 
@@ -930,7 +974,7 @@ export function MainSponsorRotator({ sponsors }: { sponsors: Sponsor[] }) {
       aria-label="Ana sponsorlar"
     >
       <div key={current.id} className="motion-safe:animate-slide-in" aria-live={paused ? 'polite' : 'off'}>
-        <MainSponsor sponsor={current} />
+        {compact ? <MainSponsorCompact sponsor={current} /> : <MainSponsor sponsor={current} />}
       </div>
       {sponsors.length > 1 && (
         <div className="flex items-center justify-center gap-2">
