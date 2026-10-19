@@ -748,8 +748,9 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
         title="KankaTV"
         description="Futbol, basketbol ve voleybolda tüm liglerin canlı skorları kendiliğinden güncellenir. E-spor, şans oyunları, TV ve spor yayınlarını buradan ücretsiz izle."
         image="/images/heroes/kankatv.png"
-        tone="live"
-        stats={[
+  tone="live"
+  compact
+  stats={[
           { label: 'Canlı maç', value: String(totalLive) },
           { label: 'Yayındaki kanal', value: String(channels.filter((c) => c.live).length) },
           { label: 'Kanal', value: String(channels.length) },
