@@ -1206,18 +1206,22 @@
   animation: stage-spin 60s linear infinite;
 }
 .stage-mask {
-  mask-image: radial-gradient(ellipse 48% 52% at 50% 50%, #000 55%, transparent 100%);
+  mask-image:
+    linear-gradient(to top, transparent 0%, #000 22%, #000 82%, transparent 100%),
+    linear-gradient(to right, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  mask-composite: intersect;
 }
 .stage-mascot-in { animation: stage-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both; }
-.stage-float { animation: stage-float 4.5s ease-in-out infinite; }
-.stage-sway { animation: stage-sway 3.2s ease-in-out infinite; }
+.stage-spot {
+  background: radial-gradient(ellipse 55% 70% at 50% 100%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%);
+  animation: stage-spot 5s ease-in-out infinite;
+}
+@keyframes stage-spot { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 .stage-bubble { animation: stage-bubble 6s ease-in-out 1.2s infinite both; }
 .stage-coin { animation-name: stage-coin; animation-timing-function: linear; animation-iteration-count: infinite; }
 
 @keyframes stage-spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
 @keyframes stage-in { from { opacity: 0; transform: translateY(40px) scale(0.92); } to { opacity: 1; transform: none; } }
-@keyframes stage-float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-14px) rotate(2deg); } }
-@keyframes stage-sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg) translateY(-6px); } }
 @keyframes stage-bubble {
   0%, 8% { opacity: 0; transform: translate(-50%, 8px) scale(0.9); }
   14%, 80% { opacity: 1; transform: translate(-50%, 0) scale(1); }
@@ -1230,6 +1234,6 @@
   100% { opacity: 0; transform: translateY(-320px) rotate(540deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stage-rays, .stage-float, .stage-sway, .stage-coin, .stage-mascot-in { animation: none; }
+  .stage-rays, .stage-spot, .stage-coin, .stage-mascot-in { animation: none; }
   .stage-bubble { animation: none; opacity: 1; }
 }

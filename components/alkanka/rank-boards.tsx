@@ -489,7 +489,8 @@ function PodiumStage({ leader }: { leader: string }) {
       ))}
 
       <div className="stage-mascot-in absolute bottom-0 left-[2%] lg:left-[5%] xl:left-[8%]">
-        <div className="stage-float relative size-56 lg:size-64 xl:size-72">
+        <div className="stage-spot absolute inset-x-0 bottom-0 h-full" />
+        <div className="relative size-56 lg:size-64 xl:size-72">
           <Image
             src="/images/mascots/jako-kazandi.png"
             alt=""
@@ -504,7 +505,8 @@ function PodiumStage({ leader }: { leader: string }) {
         <div className="stage-bubble absolute -top-4 left-1/2 z-10 w-max max-w-48 -translate-x-1/2 rounded-2xl rounded-bl-sm border border-primary/40 bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-lg">
           <span className="text-primary">{leader}</span> zirvede, yetiş kanka!
         </div>
-        <div className="stage-sway relative size-56 origin-bottom lg:size-64 xl:size-72">
+        <div className="stage-spot absolute inset-x-0 bottom-0 h-full" style={{ animationDelay: '-2.5s' }} />
+        <div className="relative size-56 lg:size-64 xl:size-72">
           <Image
             src="/images/mascots/jako-merhaba.png"
             alt=""
