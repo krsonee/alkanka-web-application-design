@@ -799,52 +799,50 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
   return (
     <li
       className={cn(
-        'panel-gold group relative flex flex-col overflow-hidden rounded-2xl transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_18px_40px_-20px] hover:shadow-primary/40',
+        'coupon-card group relative flex min-h-40 overflow-hidden rounded-2xl border border-border bg-card transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_16px_36px_-20px] hover:shadow-primary/50',
         className,
       )}
     >
-      <div className="relative aspect-[16/8] overflow-hidden">
+      <div className="relative w-28 shrink-0 overflow-hidden sm:w-36">
         <Image
           src={campaignArt(c)}
           alt=""
           fill
-          sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
-          className="object-cover transition-transform duration-700 group-hover:scale-105"
+          sizes="144px"
+          className="object-cover transition-transform duration-700 group-hover:scale-110"
         />
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-card via-card/20 to-transparent" />
-        <span className="absolute top-3 left-3 rounded-full border border-primary/40 bg-background/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-card/70" />
+        <span className="absolute bottom-2 left-2 rounded-md bg-background/85 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
           {c.tag}
         </span>
-        {urgent && (
-          <span className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-destructive px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-foreground">
-            <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-foreground" />
-            Son gün
-          </span>
-        )}
       </div>
 
-      <div className="relative flex flex-1 flex-col gap-2 px-4 pb-4">
-        <div className="-mt-7 flex items-end gap-3">
-          <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/40 bg-background p-1.5 shadow-lg shadow-background/60">
-            {s ? <SponsorLogoPlate sponsor={s} compact className="size-full text-lg" /> : null}
+      <div aria-hidden="true" className="relative w-0">
+        <span className="absolute -top-2 -left-2 size-4 rounded-full border border-border bg-background" />
+        <span className="absolute -bottom-2 -left-2 size-4 rounded-full border border-border bg-background" />
+        <span className="absolute inset-y-3 left-0 border-l border-dashed border-primary/30" />
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5 sm:p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background p-0.5">
+            {s ? <SponsorLogoPlate sponsor={s} compact className="size-full text-[10px]" /> : null}
           </span>
-          <span className="truncate pb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{s?.name}</span>
-        </div>
-        <h3 className="font-display text-lg font-bold leading-snug text-foreground text-balance">{c.title}</h3>
-        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{c.description}</p>
-
-        <div aria-hidden="true" className="relative -mx-4 mt-auto pt-3">
-          <span className="absolute top-3 -left-2 size-4 -translate-y-1/2 rounded-full bg-background" />
-          <span className="absolute top-3 -right-2 size-4 -translate-y-1/2 rounded-full bg-background" />
-          <span className="mx-4 block border-t border-dashed border-border" />
-        </div>
-
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <span className={cn('flex items-center gap-1.5 text-xs font-semibold tabular-nums', urgent ? 'text-destructive' : 'text-muted-foreground')}>
-            <Clock className="size-3.5" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{s?.name}</span>
+          <span
+            className={cn(
+              'flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums',
+              urgent ? 'bg-destructive/15 text-destructive' : 'bg-secondary text-muted-foreground',
+            )}
+          >
+            {urgent ? <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-destructive" /> : <Clock className="size-3" aria-hidden="true" />}
             {c.ends}
           </span>
-          <GoButton site={s?.id} label="Katıl" className="h-9 rounded-full px-5" />
+        </div>
+        <h3 className="line-clamp-2 font-display text-base font-bold leading-snug text-foreground text-pretty">{c.title}</h3>
+        <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.description}</p>
+        <div className="mt-auto flex justify-end pt-1">
+          <GoButton site={s?.id} label="Katıl" className="h-8 rounded-full px-4 text-[11px]" />
         </div>
       </div>
     </li>

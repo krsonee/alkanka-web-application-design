@@ -8,6 +8,7 @@ import { TELEGRAM_URL, type EventItem } from './data'
 import { useCatalog } from './catalog-context'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
+import { Marquee } from './home/marquee'
 import { TeamLogo } from './logo-context'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
@@ -58,13 +59,8 @@ function EventCards() {
     setJoined((j) => ({ ...j, [id]: true }))
   }
 
-  return (
-    <ul
-      aria-label="Etkinlikler"
-      className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 no-scrollbar md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0"
-    >
-      {EVENTS.map((e) => (
-        <li key={e.id} className="panel-gold flex w-[85%] shrink-0 snap-start flex-col overflow-hidden rounded-xl sm:w-[60%] md:w-auto">
+  const card = (e: EventItem) => (
+        <article key={e.id} className="panel-gold flex h-full flex-col overflow-hidden rounded-xl">
           <div className="relative h-28 overflow-hidden">
             <Image src={e.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 768px) 30vw, 100vw" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
@@ -102,8 +98,21 @@ function EventCards() {
             </button>
             </div>
           </div>
-        </li>
-      ))}
+        </article>
+  )
+
+  return (
+    <>
+      <div className="-mx-4 md:hidden">
+        <Marquee label="Etkinlikler" itemClassName="w-[80vw] max-w-sm" duration={EVENTS.length * 9}>
+          {EVENTS.map(card)}
+        </Marquee>
+      </div>
+      <ul aria-label="Etkinlikler" className="hidden gap-3 md:grid md:grid-cols-3">
+        {EVENTS.map((e) => (
+          <li key={e.id}>{card(e)}</li>
+        ))}
+      </ul>
       <DetailModal
         onClose={() => setDetail(null)}
         content={
@@ -134,7 +143,7 @@ function EventCards() {
           )
         }
       />
-    </ul>
+    </>
   )
 }
 
