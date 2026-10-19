@@ -1,5 +1,8 @@
 export type LevelDef = { name: string; badge: string; min: number }
 
+/** Lives here (not in a client component) so server components get real strings, not a client reference. */
+export const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
+
 export type PointRules = {
   minute: number
   minuteDailyCap: number

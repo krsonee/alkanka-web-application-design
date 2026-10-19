@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import { Check, CalendarCheck, Flame } from 'lucide-react'
 import { checkInAction, completeTaskAction } from '@/app/actions/tasks'
 import { PERIODS, STREAK_DAYS, type TaskPeriod } from '@/lib/task-period'
-import { KIND_META, kindHref, type TaskKind } from '@/lib/task-kinds'
+import { isSocialCheckKind, KIND_META, kindHref, type TaskKind } from '@/lib/task-kinds'
 import { cn } from '@/lib/utils'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
@@ -62,6 +62,7 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
   const [done, setDone] = useState<Record<number, boolean>>(() => Object.fromEntries(tasks.filter((task) => task.done).map((task) => [task.id, true])))
   const [claims, setClaims] = useState<Record<number, PublicTask['claim']>>(() => Object.fromEntries(tasks.filter((task) => task.claim).map((task) => [task.id, task.claim])))
   const [note, setNote] = useState<string | null>(null)
+  const [visited, setVisited] = useState<Record<number, boolean>>({})
   const [pending, start] = useTransition()
   const waiting = tasks.some((task) => statusOf(task, claims[task.id], Boolean(done[task.id])) === 'waiting')
 
@@ -110,6 +111,15 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
       if (typeof result.balance === 'number') setBalance(result.balance)
       setNote(result.message)
     })
+  }
+
+  function visitSocial(event: { preventDefault: () => void }, task: PublicTask) {
+    if (!requireLogin()) {
+      event.preventDefault()
+      return
+    }
+    setVisited((current) => ({ ...current, [task.id]: true }))
+    setNote('İşlemi bağladığın hesapla yap, sonra “Kontrol et”e bas.')
   }
 
   function openTask(event: { preventDefault: () => void }, task: PublicTask) {
@@ -220,7 +230,17 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                     ) : null}
                     <DetailButton onClick={() => setDetail(task)} label="Nasıl yapılır?" />
                   </div>
-                  {state === 'open' && task.kind !== 'manual' && task.progress < task.target ? (
+                  {state === 'open' && isSocialCheckKind(task.kind) ? (
+                    visited[task.id] || !task.link ? (
+                      <button type="button" onClick={() => complete(task)} disabled={pending} className={className}>
+                        {`Kontrol et +${formatAC(task.points)}`}
+                      </button>
+                    ) : (
+                      <a href={task.link} target="_blank" rel="noopener noreferrer" onClick={(event) => visitSocial(event, task)} className={className}>
+                        {task.kind === 'social_like' ? 'Beğen' : task.param === 'youtube' ? 'Abone ol' : 'Takip et'}
+                      </a>
+                    )
+                  ) : state === 'open' && task.kind !== 'manual' && task.progress < task.target ? (
                     <GoButton task={task} className={className} onBlocked={() => requireLogin()} />
                   ) : task.link && state === 'open' ? (
                     <a href={task.link} target="_blank" rel="noopener noreferrer" onClick={(event) => openTask(event, task)} className={className}>
@@ -284,12 +304,20 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                   else window.location.assign(go.href)
                   return
                 }
-                if (selected.link) window.open(selected.link, '_blank', 'noopener,noreferrer')
+                if (isSocialCheckKind(selected.kind) && selected.link && !visited[selected.id]) {
+                  if (!requireLogin()) return
+                  window.open(selected.link, '_blank', 'noopener,noreferrer')
+                  visitSocial({ preventDefault() {} }, selected)
+                  return
+                }
+                if (selected.link && !isSocialCheckKind(selected.kind)) window.open(selected.link, '_blank', 'noopener,noreferrer')
                 complete(selected)
               }}
               className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground"
             >
-              {selected.kind !== 'manual' && selected.progress >= selected.target ? `Ödülü al, +${formatAC(selected.points)} KC` : `Görevi yap, +${formatAC(selected.points)} KC`}
+              {isSocialCheckKind(selected.kind)
+                ? visited[selected.id] || !selected.link ? `Kontrol et, +${formatAC(selected.points)} KC` : `Görevi yap, +${formatAC(selected.points)} KC`
+                : selected.kind !== 'manual' && selected.progress >= selected.target ? `Ödülü al, +${formatAC(selected.points)} KC` : `Görevi yap, +${formatAC(selected.points)} KC`}
             </button>
           ) : null
         }

@@ -6,7 +6,11 @@ import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, levelR
 import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { ProgressHero } from '@/components/alkanka/kp/progress-hero'
 import { EarnActions } from '@/components/alkanka/kp/earn-actions'
-import { LevelSections, TIER_NAMES } from '@/components/alkanka/kp/level-sections'
+import { LevelSections } from '@/components/alkanka/kp/level-sections'
+import { TIER_NAMES } from '@/lib/kanka-puan-shared'
+import { SocialTaskStrip, type SocialTaskItem } from '@/components/alkanka/kp/social-task-strip'
+import { completedTaskIds, listPublicTasks, taskClaimMap } from '@/lib/tasks'
+import { isSocialTaskKind } from '@/lib/task-kinds'
 import { LevelUpCelebration } from '@/components/alkanka/kp/level-up-celebration'
 import { PageHero } from '@/components/alkanka/page-hero'
 import { AutoScrollRow } from '@/components/alkanka/auto-scroll-row'
@@ -17,16 +21,36 @@ export const dynamic = 'force-dynamic'
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
+async function loadSocialTasks(userId: string | null): Promise<SocialTaskItem[]> {
+  try {
+    const tasks = (await listPublicTasks()).filter((t) => isSocialTaskKind(t.kind))
+    if (!tasks.length) return []
+    const [doneIds, claims] = userId ? await Promise.all([completedTaskIds(userId), taskClaimMap(userId)]) : [[], {}]
+    const done = new Set(doneIds)
+    return tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      param: t.param,
+      points: t.points,
+      state: done.has(t.id) ? 'done' : (claims as Record<number, string>)[t.id] === 'beklemede' ? 'pending' : 'open',
+    }))
+  } catch (error) {
+    console.error('[rozetler] social tasks', (error as Error).message)
+    return []
+  }
+}
+
 export default async function BadgesPage() {
   const member = await getMember()
   const cfgPromise = getKpConfig()
-  const [cfg, specials, holders, me, today, reach] = await Promise.all([
+  const [cfg, specials, holders, me, today, reach, socialTasks] = await Promise.all([
     cfgPromise,
     listSpecialBadges(),
     badgeHolders(),
     member ? getKpStatus(member.id) : Promise.resolve(null),
     member ? getKpToday(member.id).catch(() => null) : Promise.resolve(null),
     cfgPromise.then((c) => levelReach(c.levels.length)).catch(() => ({ total: 0, reached: [] as number[] })),
+    loadSocialTasks(member?.id ?? null),
   ])
   const myLevel = me?.level.index ?? -1
   const myTier = me ? levelTier(me.level.index + 1) : null
@@ -98,6 +122,21 @@ export default async function BadgesPage() {
           </p>
         </div>
         <EarnActions rules={cfg.rules} today={today?.breakdown ?? null} telegramLinked={(me?.breakdown.telegram ?? 0) > 0} />
+        {socialTasks.length ? (
+          <div className="mt-6 flex flex-col gap-3">
+            <div className="flex items-end justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <h3 className="font-display text-base font-bold text-foreground">Sosyal görevler</h3>
+                <p className="text-xs text-muted-foreground">Hesabını profilinden bağla, görev o hesapla otomatik kontrol edilsin.</p>
+              </div>
+              <Link href="/profil" className="inline-flex shrink-0 items-center gap-0.5 text-xs font-bold text-gold">
+                Hesap bağla
+                <ChevronRight className="size-3.5" aria-hidden />
+              </Link>
+            </div>
+            <SocialTaskStrip items={socialTasks} />
+          </div>
+        ) : null}
       </section>
 
       <LevelSections groups={groups} levels={cfg.levels} myLevel={myLevel} myKp={me?.kp ?? 0} signedIn={!!member} reach={reach} />
@@ -120,18 +159,19 @@ export default async function BadgesPage() {
           {specials.map((b) => {
             const owners = holders[b.id] ?? []
             return (
-              <li key={b.id} className={cn('flex w-[82%] shrink-0 snap-start flex-col gap-3 rounded-2xl border p-4 sm:w-[calc(50%-0.375rem)] xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[b.tier])}>
-                <div className="flex items-center gap-4">
-                  <SpecialEmblem icon={b.icon} tier={b.tier} size="lg" />
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <li key={b.id} className={cn('flex w-[calc(50%-0.375rem)] shrink-0 snap-start flex-col gap-2 rounded-2xl border p-3 sm:gap-3 sm:p-4 xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[b.tier])}>
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
+                  <SpecialEmblem icon={b.icon} tier={b.tier} size="md" className="sm:hidden" />
+                  <SpecialEmblem icon={b.icon} tier={b.tier} size="lg" className="hidden sm:flex" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:gap-1">
                     <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[b.tier])}>{TIER_NAMES[b.tier]}</span>
-                    <span className="font-display text-base font-bold leading-tight text-foreground">{b.name}</span>
-                    {b.bonus > 0 && <span className="font-display text-sm font-bold text-gold">+{fmt(b.bonus)} KP</span>}
+                    <span className="font-display text-sm font-bold leading-tight text-foreground sm:text-base">{b.name}</span>
+                    {b.bonus > 0 && <span className="font-display text-xs font-bold text-gold sm:text-sm">+{fmt(b.bonus)} KP</span>}
                   </div>
                 </div>
-                <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{b.description}</p>
-                {b.auto && <p className="text-[11px] text-muted-foreground">{AUTO_LABELS[b.auto]}</p>}
-                <p className="mt-auto flex items-center gap-1.5 border-t border-border pt-3 text-[11px] text-muted-foreground">
+                <p className="line-clamp-3 text-pretty text-xs leading-relaxed text-muted-foreground sm:line-clamp-none">{b.description}</p>
+                {b.auto && <p className="hidden text-[11px] text-muted-foreground sm:block">{AUTO_LABELS[b.auto]}</p>}
+                <p className="mt-auto flex items-center gap-1.5 border-t border-border pt-2 text-[11px] text-muted-foreground sm:pt-3">
                   <Users className="size-3.5 shrink-0" aria-hidden />
                   {owners.length ? (
                     <span className="truncate text-foreground">{owners.map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}</span>

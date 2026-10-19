@@ -6,8 +6,7 @@ import { Check, Lock, Target, Users } from 'lucide-react'
 import { LevelEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { Modal } from '@/components/alkanka/modal'
 import { cn } from '@/lib/utils'
-
-export const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
+import { TIER_NAMES } from '@/lib/kanka-puan-shared'
 const TIER_TAGLINE: Record<string, string> = {
   bronz: 'Yolculuk burada başlar. Kalkanını kazan.',
   altin: 'Masanın müdavimi ol, altını hisset.',

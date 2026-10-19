@@ -373,6 +373,9 @@ export default async function PanelPage() {
         accounts={await adminSocialAccounts().catch(() => [])}
         events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
         entries={await adminEntries().catch(() => [])}
+        api={await import('@/lib/social-verify')
+          .then(async (m) => ({ summary: await m.socialApiSummary(), fields: m.API_FIELDS }))
+          .catch(() => undefined)}
       />
     )),
     section(session, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
