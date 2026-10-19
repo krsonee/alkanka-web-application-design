@@ -136,7 +136,7 @@ function TierBlock({
         </button>
       </header>
       <div id={panelId} hidden={!expanded}>
-      <ol ref={listRef} className="flex snap-x snap-mandatory gap-2 overflow-x-auto p-3 pt-4 no-scrollbar sm:grid sm:snap-none sm:grid-cols-3 sm:overflow-visible lg:grid-cols-5">
+      <ol ref={listRef} className="grid grid-cols-5 gap-1.5 p-2 pt-4 sm:gap-2 sm:p-3 sm:pt-4">
         {g.items.map(({ l, i }) => {
           const current = i === myLevel
           const isNext = i === nextIndex
@@ -145,46 +145,48 @@ function TierBlock({
           const span = l.min - (g.items.find((x) => x.i === i - 1)?.l.min ?? 0)
           const pct = isNext && span > 0 ? Math.min(100, Math.round(((span - left) / span) * 100)) : 0
           return (
-            <li key={i} data-level={i} className="flex w-28 shrink-0 snap-start sm:w-auto">
+            <li key={i} data-level={i} className="flex min-w-0">
               <button
                 type="button"
                 onClick={() => onOpen(i)}
                 aria-label={`${l.name} rozeti detayları`}
                 className={cn(
-                  'relative flex w-full flex-col items-center gap-1.5 rounded-xl border px-2 pb-2.5 pt-3 text-center transition-transform active:scale-95 sm:gap-2 sm:pb-3 sm:pt-4',
+                  'relative flex w-full min-w-0 flex-col items-center gap-1.5 rounded-xl border px-1 pb-2 pt-3 text-center transition-transform active:scale-95 sm:gap-2 sm:px-2 sm:pb-3 sm:pt-4',
                   current && 'border-gold bg-card ring-2 ring-gold/30',
                   isNext && 'border-dashed border-gold bg-card shadow-lg shadow-gold/15',
                   !current && !isNext && 'border-border bg-card/80',
                   locked && !isNext && 'opacity-70',
                 )}
               >
-                {current && <span className="absolute -top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold uppercase text-gold-foreground">Sen</span>}
+                {current && <span className="absolute -top-2 rounded-full bg-gold px-1.5 py-0.5 text-[9px] font-bold uppercase text-gold-foreground sm:px-2 sm:text-[10px]">Sen</span>}
                 {isNext && (
-                  <span className="absolute -top-2 inline-flex items-center gap-1 rounded-full border border-gold bg-background px-2 py-0.5 text-[10px] font-bold uppercase text-gold">
-                    <Target className="size-3" aria-hidden /> Hedef
+                  <span className="absolute -top-2 inline-flex items-center gap-0.5 rounded-full border border-gold bg-background px-1.5 py-0.5 text-[9px] font-bold uppercase text-gold sm:gap-1 sm:px-2 sm:text-[10px]">
+                    <Target className="hidden size-3 sm:block" aria-hidden /> Hedef
                   </span>
                 )}
                 <span className={cn('relative flex rounded-full', isNext && 'animate-badge-pulse')}>
-                  <LevelEmblem level={i + 1} size="md" locked={locked && !isNext} className="sm:hidden" />
-                  <LevelEmblem level={i + 1} size="lg" locked={locked && !isNext} className="hidden sm:flex" />
+                  <LevelEmblem level={i + 1} size="md" locked={locked && !isNext} className="lg:hidden" />
+                  <LevelEmblem level={i + 1} size="lg" locked={locked && !isNext} className="hidden lg:flex" />
                 </span>
-                <span className="flex flex-col">
-                  <span className={cn('text-sm font-bold', locked && !isNext ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
-                  <span className="text-[11px] text-muted-foreground">{l.badge}</span>
+                <span className="flex w-full min-w-0 flex-col">
+                  <span className={cn('truncate text-xs font-bold sm:text-sm', locked && !isNext ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
+                  <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{l.badge}</span>
                 </span>
                 {isNext ? (
                   <span className="flex w-full flex-col gap-1">
                     <span className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                       <span className="block h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
                     </span>
-                    <span className="font-display text-[11px] font-bold tabular-nums text-gold">{fmt(left)} KP kaldı</span>
+                    <span className="truncate font-display text-[10px] font-bold tabular-nums text-gold sm:text-[11px]">
+                      {fmt(left)} KP<span className="hidden sm:inline"> kaldı</span>
+                    </span>
                   </span>
                 ) : (
-                  <span className={cn('rounded-full px-2 py-0.5 font-display text-[11px] font-bold tabular-nums', locked ? 'bg-muted text-muted-foreground' : cn('bg-background/60', TIER_TEXT[g.tier]))}>
+                  <span className={cn('max-w-full truncate rounded-full px-1.5 py-0.5 font-display text-[10px] font-bold tabular-nums sm:px-2 sm:text-[11px]', locked ? 'bg-muted text-muted-foreground' : cn('bg-background/60', TIER_TEXT[g.tier]))}>
                     {fmt(l.min)} KP
                   </span>
                 )}
-                <span className="flex items-center gap-1 text-[10px] leading-tight text-muted-foreground">
+                <span className="hidden items-center gap-1 text-[10px] leading-tight text-muted-foreground sm:flex">
                   <Users className="size-3 shrink-0" aria-hidden />
                   {rarity(reach.reached[i] ?? 0, reach.total)}
                 </span>
