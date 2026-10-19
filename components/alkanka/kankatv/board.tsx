@@ -382,7 +382,7 @@ function MatchesTab({
           </button>
         ))}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {isLoading && !data ? 'Yükleniyor…' : `${total} maç · ${board.competitions.length} lig`}
+          {isLoading && !data ? 'Y��kleniyor…' : `${total} maç · ${board.competitions.length} lig`}
         </span>
       </div>
 
@@ -767,8 +767,14 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
   )
 }
 
-/** Opens in the group with the most playable live streams, on its most watched stream. */
+/** A live Kanka streamer wins first; otherwise the group with the most playable live streams, on its most watched stream. */
 function pickStartChannel(channels: Channel[]) {
+  const byViewers = (a: Channel, b: Channel) => (b.viewers ?? 0) - (a.viewers ?? 0)
+  const liveMembers = channels.filter((c) => c.group === 'uye' && c.live)
+  if (liveMembers.length) {
+    const playableMember = liveMembers.filter((c) => c.embedUrl).sort(byViewers)[0]
+    return (playableMember ?? liveMembers.sort(byViewers)[0]).slug
+  }
   const playable = channels.filter((c) => c.live && c.embedUrl)
   if (!playable.length) return (channels.find((c) => c.live) ?? channels[0]).slug
   const counts = new Map<ChannelGroup, number>()
