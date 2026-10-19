@@ -5,11 +5,10 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Clock, Trophy, Users } from 'lucide-react'
 import { ARENA_GAMES, ARENA_META, type ArenaGame, type ArenaSettings } from '@/lib/arena'
-import { jakoSrc, type JakoPose } from '../jako'
 import type { MiniGame } from '@/app/actions/wallet'
 import { formatRemaining, useMiniLock } from './mini-status'
 
-function MiniCard({ game, title, text, pose, limit, index }: (typeof GAME_CARDS)[number] & { index: number }) {
+function MiniCard({ game, title, text, image, limit, index }: (typeof GAME_CARDS)[number] & { index: number }) {
   const { remaining, locked } = useMiniLock(game)
   return (
     <li>
@@ -19,21 +18,17 @@ function MiniCard({ game, title, text, pose, limit, index }: (typeof GAME_CARDS)
         style={{ '--i': index } as CSSProperties}
         className="mini-card group flex h-full items-stretch overflow-hidden rounded-2xl border border-border bg-card transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary sm:flex-col"
       >
-        <div className="relative flex w-28 shrink-0 items-center justify-center overflow-hidden bg-background sm:aspect-[16/10] sm:w-full">
-          <div className="mini-jako absolute -inset-2">
+        <div className="relative w-32 shrink-0 overflow-hidden bg-background sm:aspect-[16/10] sm:w-full">
+          <div className="mini-jako absolute inset-0">
             <Image
-              src={jakoSrc(pose) || '/placeholder.svg'}
+              src={image || '/placeholder.svg'}
               alt=""
               fill
-              sizes="(min-width: 640px) 33vw, 128px"
+              sizes="(min-width: 640px) 33vw, 160px"
               className="object-cover transition-transform duration-500 group-hover:scale-110"
             />
           </div>
-          <div
-            className="mini-halo pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_60%,color-mix(in_oklab,var(--primary)_28%,transparent),transparent_65%)] mix-blend-screen"
-            aria-hidden="true"
-          />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-card to-transparent sm:inset-x-0 sm:inset-y-auto sm:bottom-0 sm:h-10 sm:w-auto sm:bg-gradient-to-t" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-foreground/10" aria-hidden="true" />
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3 sm:p-4">
           <span className="w-fit rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
@@ -66,10 +61,10 @@ function MiniCard({ game, title, text, pose, limit, index }: (typeof GAME_CARDS)
   )
 }
 
-const GAME_CARDS: { game: MiniGame; title: string; text: string; pose: JakoPose; limit: string }[] = [
-  { game: 'cark', title: 'Şans Çarkı', text: 'Her 6 saatte 1 ücretsiz çevirme. Kanka Coin, boost ve promo kod kazan.', pose: 'kazandi', limit: '6 saatte 1' },
-  { game: 'sandik', title: 'Gizemli Sandık', text: 'Günde 1 sandık. Bronz, gümüş, altın: kapağı aç, içinden ne çıkacak?', pose: 'sandik', limit: 'Günde 1' },
-  { game: 'zar', title: 'Zar At', text: 'Günde 3 atış. Çift gelirse kazancın katlanır, düşeş jackpotu açar.', pose: 'zar', limit: 'Günde 3' },
+const GAME_CARDS: { game: MiniGame; title: string; text: string; image: string; limit: string }[] = [
+  { game: 'cark', title: 'Şans Çarkı', text: 'Her 6 saatte 1 ücretsiz çevirme. Kanka Coin, boost ve promo kod kazan.', image: '/images/games/mini-cark.png', limit: '6 saatte 1' },
+  { game: 'sandik', title: 'Gizemli Sandık', text: 'Günde 1 sandık. Bronz, gümüş, altın: kapağı aç, içinden ne çıkacak?', image: '/images/games/mini-sandik.png', limit: 'Günde 1' },
+  { game: 'zar', title: 'Zar At', text: 'Günde 3 atış. Çift gelirse kazancın katlanır, düşeş jackpotu açar.', image: '/images/games/mini-zar.png', limit: 'Günde 3' },
 ]
 
 const SHORT_PLAYERS: Record<ArenaGame, string> = {
