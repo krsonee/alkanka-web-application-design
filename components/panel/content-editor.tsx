@@ -45,6 +45,7 @@ export function ContentEditor({
   badges,
   tasks,
   faqs,
+  tour,
   market,
   pending = {},
   growth,
@@ -90,6 +91,7 @@ export function ContentEditor({
   badges: React.ReactNode
   tasks: React.ReactNode
   faqs: React.ReactNode
+  tour: React.ReactNode
   market: React.ReactNode
   pending?: Record<string, number>
   sponsors: React.ReactNode
@@ -260,6 +262,8 @@ export function ContentEditor({
         tasks
       ) : tab === 'faqs' ? (
         faqs
+      ) : tab === 'tour' ? (
+        tour
       ) : tab === 'market' ? (
         market
       ) : tab === 'studio' ? (

@@ -10,6 +10,7 @@ export const PANEL_GROUPS = [
       { id: 'logo', label: 'Paylaşım, reklam, logolar' },
       { id: 'seo', label: 'SEO & Rehber' },
       { id: 'faqs', label: 'SSS' },
+      { id: 'tour', label: 'Site turu' },
     ],
   },
   {

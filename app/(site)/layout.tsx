@@ -18,6 +18,7 @@ import { getAppSettings } from '@/lib/app-settings'
 import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
 import { AppPrompts } from '@/components/alkanka/app/app-prompts'
 import { SiteTour } from '@/components/alkanka/app/site-tour'
+import { getTourSettings } from '@/lib/tour'
 import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
 import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
 import { WinnersTicker } from '@/components/alkanka/kp/winners-ticker'
@@ -28,7 +29,7 @@ import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
 import { TvDockProvider } from '@/components/alkanka/kankatv/tv-dock'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [logos, texts, social, sponsors, catalog, chatConfig, appSettings] = await Promise.all([
+  const [logos, texts, social, sponsors, catalog, chatConfig, appSettings, tourSettings] = await Promise.all([
     getLogos(),
     getSiteTexts(),
     getSocialLinks().catch(() => ({})),
@@ -36,6 +37,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     getCatalog(),
     getChatConfig().catch(() => null),
     getAppSettings(),
+    getTourSettings(),
   ])
   const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
@@ -61,7 +63,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <AuthModal />
         <GuestGate />
         <AppPrompts />
-        <SiteTour />
+        <SiteTour settings={tourSettings} />
         <ReferralLinker />
         <KpHeartbeat />
         <JakoAlerts />

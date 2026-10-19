@@ -273,6 +273,7 @@ export default async function PanelPage() {
     logos,
     seo,
     faqs,
+    tour,
     sponsors,
     growth,
     community,
@@ -335,6 +336,15 @@ export default async function PanelPage() {
       />
     )),
     section(session, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
+    section(session, 'tour', 'Site turu', async () => {
+      const { getTourSettings, tourStats } = await import('@/lib/tour')
+      const { TourSettingsEditor } = await import('@/components/panel/tour-settings-editor')
+      const [settings, stats] = await Promise.all([
+        getTourSettings(),
+        tourStats().catch(() => ({ done: 0, rewarded: 0, blocked: 0, paidTotal: 0, recentBlocked: [] })),
+      ])
+      return <TourSettingsEditor settings={settings} stats={stats} />
+    }),
     section(session, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
     section(session, 'growth', 'Büyüme', async () => (
       <div className="flex flex-col gap-6">
@@ -463,7 +473,7 @@ export default async function PanelPage() {
       </header>
       <div className="mx-auto max-w-7xl px-4 py-6">
         <ContentEditor
-          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'tour', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
           users={users}
           audit={audit}
           dashboard={dashboard}
@@ -478,6 +488,7 @@ export default async function PanelPage() {
           logos={logos}
           seo={seo}
           faqs={faqs}
+          tour={tour}
           sponsors={sponsors}
           growth={growth}
           community={community}

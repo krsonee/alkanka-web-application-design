@@ -95,6 +95,7 @@ function TelegramCard() {
   return (
     <a
       href={data?.inviteUrl ?? TELEGRAM_URL}
+      data-tour="telegram"
       target="_blank"
       rel="noopener noreferrer"
       className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/10 p-3 transition-colors hover:bg-accent/15"
