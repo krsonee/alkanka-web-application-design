@@ -1,7 +1,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, CircleCheck, CircleDot, Coins, Crown, Flame, Gamepad2, Gift, ListChecks, ShoppingBag, Target } from 'lucide-react'
+import { ArrowRight, CircleCheck, CircleDot, Coins, Crown, Flame, Gamepad2, Gift, ListChecks, ShoppingBag, Target, Trophy } from 'lucide-react'
 import type { MarketProduct } from '@/lib/market'
+import type { LeagueMatch } from '@/lib/community'
 import type { CemberMe, CemberStatus } from '@/lib/cember-shared'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import type { PodiumRow } from '@/components/alkanka/top-three'
@@ -20,9 +21,74 @@ export type HubData = {
   cember: CemberStatus | null
   cemberMe: CemberMe | null
   goal: MarketProduct | null
+  match: LeagueMatch | null
+  exactReward: number
 }
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
+
+function kickoffLabel(iso: string) {
+  const d = new Date(iso)
+  const tz = 'Europe/Istanbul'
+  const day = (x: Date) => x.toLocaleDateString('tr-TR', { timeZone: tz })
+  const now = new Date()
+  const time = d.toLocaleTimeString('tr-TR', { timeZone: tz, hour: '2-digit', minute: '2-digit' })
+  if (day(d) === day(now)) return `Bugün ${time}`
+  if (day(d) === day(new Date(now.getTime() + 864e5))) return `Yarın ${time}`
+  return `${d.toLocaleDateString('tr-TR', { timeZone: tz, day: 'numeric', month: 'short' })} ${time}`
+}
+
+function Crest({ name, src }: { name: string; src: string | null }) {
+  return (
+    <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-foreground/5 ring-1 ring-border md:size-8">
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt={`${name} logosu`} width={28} height={28} loading="lazy" className="size-5 object-contain md:size-6" />
+      ) : (
+        <span className="font-display text-[10px] font-bold text-muted-foreground">{name.slice(0, 2).toUpperCase()}</span>
+      )}
+    </span>
+  )
+}
+
+function PredictionTile({ match, reward }: { match: LeagueMatch | null; reward: number }) {
+  return (
+    <Tile href="/tahminler" label="Skor tahminine git" icon={Trophy} title="Skor tahmini" delay="-8s">
+      {match ? (
+        <>
+          <div className="flex items-center gap-1.5">
+            <Crest name={match.home} src={match.homeLogo} />
+            {match.myPick ? (
+              <span className="flex-1 text-center font-display text-base font-bold leading-none text-primary tabular-nums md:text-lg">
+                {match.myPick.home}
+                <span className="px-0.5 text-muted-foreground">-</span>
+                {match.myPick.away}
+              </span>
+            ) : (
+              <span className="flex-1 text-center font-display text-[11px] font-bold tracking-widest text-muted-foreground">VS</span>
+            )}
+            <Crest name={match.away} src={match.awayLogo} />
+          </div>
+          <p className="truncate text-center text-[11px] font-semibold text-foreground">
+            {match.home} <span className="text-muted-foreground">-</span> {match.away}
+          </p>
+          <p className="mt-auto flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
+            <span className="truncate tabular-nums">{kickoffLabel(match.kickoff)}</span>
+            {match.myPick ? (
+              <span className="shrink-0 font-semibold text-live">Tahmin verildi</span>
+            ) : (
+              <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 font-bold text-primary ring-1 ring-primary/30">
+                +{fmt(reward)} KC
+              </span>
+            )}
+          </p>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">Yeni maçlar yakında, ligi incele.</p>
+      )}
+    </Tile>
+  )
+}
 
 function Bar({ value }: { value: number }) {
   return (
@@ -100,7 +166,7 @@ function RankTile({ podium, me }: { podium: PodiumRow[]; me: MyRank }) {
     .slice(0, 3)
     .map((r, i) => ({ ...r, rank: (i + 1) as 1 | 2 | 3, name: publicRankName(r.name) }))
   return (
-    <Tile href="/siralama" label="Sıralamaya git" icon={Crown} title="Sıralama" delay="-6s" className="col-span-2 lg:col-span-1">
+    <Tile href="/siralama" label="Sıralamaya git" icon={Crown} title="Sıralama" delay="-6s" className="col-span-2 md:col-span-4 lg:col-span-1">
       {top.length ? (
         <ol className="grid grid-cols-3 gap-1.5 lg:grid-cols-1 lg:gap-1" aria-label="İlk üç">
           {top.map((u) => (
@@ -185,7 +251,7 @@ export function MemberHub({ data, podium = [], me = null }: { data: HubData; pod
         </div>
       </div>
 
-      <div className="relative grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-4">
+      <div className="relative grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-2.5 lg:grid-cols-5">
         <RankTile podium={podium} me={me} />
         <Tile href="/gorevler" label="Günlük görevlere git" icon={ListChecks} title="Günlük görevler" delay="0s">
           {data.tasksTotal > 0 ? (
@@ -225,16 +291,18 @@ export function MemberHub({ data, podium = [], me = null }: { data: HubData; pod
           )}
         </Tile>
 
-        <Tile href="/market" label="Market hedefine git" icon={Target} title="Market hedefin" delay="-4s" className="col-span-2 lg:col-span-1">
+        <Tile href="/market" label="Market hedefine git" icon={Target} title="Market hedefin" delay="-4s">
           {goal ? (
-            <div className="flex items-center gap-2.5">
-              <span className="relative size-10 shrink-0 overflow-hidden rounded-lg ring-1 ring-primary/30">
-                <Image src={goal.image || '/images/tile-market.png'} alt="" fill sizes="40px" className="object-cover" />
-              </span>
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <p className="truncate text-xs font-semibold text-foreground md:text-sm">{goal.name}</p>
+            <div className="flex flex-1 flex-col gap-1.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="relative size-8 shrink-0 overflow-hidden rounded-lg ring-1 ring-primary/30">
+                  <Image src={goal.image || '/images/tile-market.png'} alt="" fill sizes="32px" className="object-cover" />
+                </span>
+                <p className="line-clamp-2 min-w-0 text-xs font-semibold leading-snug text-foreground">{goal.name}</p>
+              </div>
+              <div className="mt-auto flex flex-col gap-1">
                 <Bar value={(data.balance / Math.max(1, goal.price)) * 100} />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="truncate text-[11px] text-muted-foreground">
                   {goalLeft > 0 ? (
                     <>
                       <span className="font-bold text-primary tabular-nums">{fmt(goalLeft)} KC</span> kaldı
@@ -246,9 +314,11 @@ export function MemberHub({ data, podium = [], me = null }: { data: HubData; pod
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Marketteki ödüllere göz at.</p>
+            <p className="text-xs text-muted-foreground">Marketteki ödüllere göz at.</p>
           )}
         </Tile>
+
+        <PredictionTile match={data.match} reward={data.exactReward} />
       </div>
     </section>
   )

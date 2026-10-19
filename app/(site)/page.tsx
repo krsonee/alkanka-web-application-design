@@ -16,6 +16,7 @@ import { getStreak } from '@/lib/checkin'
 import { completedTaskIds, listPublicTasks } from '@/lib/tasks'
 import { getCemberStatus, myCemberStatus } from '@/lib/cember'
 import { listProducts, type MarketProduct } from '@/lib/market'
+import { EXACT_REWARD, listLeagueMatches, type LeagueMatch } from '@/lib/community'
 
 export const metadata = pageMeta('anasayfa')
 export const dynamic = 'force-dynamic'
@@ -32,14 +33,18 @@ function SiteJsonLd() {
 }
 
 async function loadHub(member: Member, products: MarketProduct[]): Promise<HubData> {
-  const [balance, streak, tasks, done, cember, cemberMe] = await Promise.all([
+  const [balance, streak, tasks, done, cember, cemberMe, matches] = await Promise.all([
     getBalance(member.id).catch(() => 0),
     getStreak(member.id).catch(() => ({ streak: 0, checkedToday: false })),
     listPublicTasks().catch(() => []),
     completedTaskIds(member.id).catch(() => [] as number[]),
     getCemberStatus().catch(() => null),
     myCemberStatus(member.id).catch(() => null),
+    listLeagueMatches(member.id).catch(() => [] as LeagueMatch[]),
   ])
+  const now = Date.now()
+  const upcoming = matches.filter((m) => !m.settled && new Date(m.kickoff).getTime() > now)
+  const match = upcoming.find((m) => !m.myPick) ?? upcoming[0] ?? null
   const daily = tasks.filter((t) => t.period === 'daily')
   const doneSet = new Set(done)
   const byPrice = [...products].sort((a, b) => a.price - b.price)
@@ -54,6 +59,8 @@ async function loadHub(member: Member, products: MarketProduct[]): Promise<HubDa
     cember,
     cemberMe,
     goal,
+    match,
+    exactReward: EXACT_REWARD,
   }
 }
 
