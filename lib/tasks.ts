@@ -327,6 +327,10 @@ export async function taskProgress(userId: string, task: TaskRecord): Promise<nu
       return count(sql`SELECT count(*) AS n FROM social_accounts WHERE user_id = ${userId} AND status = 'verified' AND (${p}::text IS NULL OR platform = ${p})`)
     case 'telegram_link':
       return count(sql`SELECT count(*) AS n FROM tg_links WHERE user_id = ${userId}`)
+    case 'tv_watch':
+      return count(sql`SELECT count(*) AS n FROM tv_watch_ticks WHERE user_id = ${userId} AND minute >= ${since}`)
+    case 'tv_predict':
+      return count(sql`SELECT count(*) AS n FROM tv_predictions WHERE user_id = ${userId} AND status = 'won' AND settled_at >= ${since}`)
   }
 }
 

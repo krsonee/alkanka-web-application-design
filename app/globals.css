@@ -1086,3 +1086,14 @@
   .ending-card, .ending-card::before, .ending-art, .ending-sheen, .ending-timer, .ending-timer svg, .ending-bar-fill, .ending-bar-fill::after { animation: none; }
   .ending-sheen, .ending-bar-fill::after { display: none; }
 }
+
+/* KankaTV live reactions drifting up from the watch bar */
+.tv-float { animation: tv-float 2.5s ease-out forwards; }
+@keyframes tv-float {
+  0% { transform: translate(-50%, 0) scale(0.8); opacity: 0; }
+  15% { opacity: 1; transform: translate(-50%, -12px) scale(1); }
+  100% { transform: translate(-50%, -150px) scale(1.05); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-float { animation-duration: 1.2s; }
+}

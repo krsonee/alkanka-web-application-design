@@ -285,6 +285,61 @@ export async function getFinalScore(id: number): Promise<{ home: number; away: n
   }
 }
 
+export type LiveGame = {
+  id: number
+  league: string
+  top: boolean
+  clock: string
+  home: { id: number; name: string; score: number }
+  away: { id: number; name: string; score: number }
+}
+
+/** In-play football games with scores, used by the goal-alert scanner. Never cached for long. */
+export async function getLiveFootball(): Promise<LiveGame[]> {
+  const raw = await fetchScores('futbol', 0)
+  if (!raw) return []
+  const comps = new Map((raw.competitions ?? []).map((c) => [c.id, c]))
+  return (raw.games ?? [])
+    .filter((g) => g.statusGroup === 3)
+    .map((g) => {
+      const comp = comps.get(g.competitionId)
+      return {
+        id: g.id,
+        league: tidy(comp?.name),
+        top: FIXTURE_COMPETITIONS.has(g.competitionId) || Boolean(comp && FIXTURE_NAME.test(comp.name) && !/women|kadın|u1\d|u2\d/i.test(comp.name)),
+        clock: g.gameTimeDisplay ?? g.statusText ?? '',
+        home: { id: g.homeCompetitor.id, name: g.homeCompetitor.name.trim(), score: Math.max(0, g.homeCompetitor.score ?? 0) },
+        away: { id: g.awayCompetitor.id, name: g.awayCompetitor.name.trim(), score: Math.max(0, g.awayCompetitor.score ?? 0) },
+      }
+    })
+}
+
+export type GameSnapshot = {
+  state: MatchState
+  home: { id: number; name: string; score: number }
+  away: { id: number; name: string; score: number }
+  /** Sides of every goal in the order they were scored. */
+  goals: ('home' | 'away')[]
+}
+
+export async function getGameSnapshot(id: number): Promise<GameSnapshot | null> {
+  try {
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store' })
+    if (!res.ok) return null
+    const { game } = (await res.json()) as { game?: RawGame & NonNullable<RawDetail['game']> }
+    if (!game) return null
+    const homeId = game.homeCompetitor.id
+    return {
+      state: toState(game.statusGroup),
+      home: { id: homeId, name: game.homeCompetitor.name.trim(), score: Math.max(0, game.homeCompetitor.score ?? 0) },
+      away: { id: game.awayCompetitor.id, name: game.awayCompetitor.name.trim(), score: Math.max(0, game.awayCompetitor.score ?? 0) },
+      goals: (game.events ?? []).filter((e) => e.eventType.id === 1).map((e) => (e.competitorId === homeId ? 'home' : 'away')),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function getMatchDetail(id: number): Promise<MatchDetail> {
   try {
     const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, next: { revalidate: 30 } })

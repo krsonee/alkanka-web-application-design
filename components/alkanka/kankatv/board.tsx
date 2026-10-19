@@ -4,9 +4,10 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternal
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { ChevronDown, ChevronRight, ExternalLink, Flag, Percent, Radio, Search, Send, Trophy, Tv, Volume1, Volume2, VolumeX } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, Flag, Percent, Radio, Search, Send, Trophy, Tv, Volume1, Volume2, VolumeX, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageHero } from '../page-hero'
+import { MatchEngage, WatchBar, useTvEngage } from './engage'
 import {
   CHANNEL_GROUPS,
   SPORTS,
@@ -154,6 +155,7 @@ function MatchDetails({ match, sport }: { match: Match; sport: SportSlug }) {
           Özel oranlar
         </Link>
       </div>
+      <MatchEngage match={match} football={sport === 'futbol'} />
     </div>
   )
 }
@@ -516,6 +518,19 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
   }
   const playerFailed = useYouTubeFailure(frameRef, playerSrc)
   const showPlayer = Boolean(current.embedUrl) && !playerFailed
+  const { data: engage } = useTvEngage(10_000)
+  const slotRef = useRef<HTMLDivElement>(null)
+  const [slotVisible, setSlotVisible] = useState(true)
+  const [miniDismissed, setMiniDismissed] = useState(false)
+  useEffect(() => {
+    const el = slotRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(([entry]) => setSlotVisible(entry.isIntersecting), { threshold: 0.25 })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  useEffect(() => setMiniDismissed(false), [current.slug])
+  const floating = Boolean(engage?.config.miniPlayer) && showPlayer && !slotVisible && !miniDismissed
   const [group, setGroup] = useState<ChannelGroup>(current.group)
   const groupCounts = useMemo(() => {
     const counts = {} as Record<ChannelGroup, number>
@@ -567,12 +582,24 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
 
     <div className="flex flex-col gap-5 lg:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div ref={slotRef} className="relative aspect-video w-full">
         <div
           className={cn(
-            'relative aspect-video w-full overflow-hidden rounded-xl border',
+            'overflow-hidden rounded-xl border',
+            floating ? 'fixed bottom-24 right-3 z-40 aspect-video w-60 shadow-2xl sm:w-80' : 'absolute inset-0',
             showPlayer ? 'border-border bg-foreground' : 'border-primary/30 bg-card',
           )}
         >
+          {floating && (
+            <button
+              type="button"
+              onClick={() => setMiniDismissed(true)}
+              aria-label="Mini oynatıcıyı kapat"
+              className="absolute right-1.5 top-1.5 z-10 flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
           {showPlayer ? (
             playerSrc && (
               <iframe
@@ -658,9 +685,11 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
             </div>
           )}
         </div>
+        </div>
         {showPlayer && playerSrc && (
           <SoundControls muted={muted} volume={volume} isYouTube={isYouTube} onToggle={toggleSound} onVolume={changeVolume} />
         )}
+        <WatchBar playing={showPlayer && Boolean(playerSrc)} />
         {current.title && (
           <p className="line-clamp-2 text-sm font-semibold text-foreground text-pretty">
             {current.name} · <span className="font-normal text-muted-foreground">{current.title}</span>

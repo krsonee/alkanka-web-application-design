@@ -40,6 +40,9 @@ import { ApprovalSection, ShareSection } from '@/components/panel/telegram-bot-s
 import { OddsBotManager } from '@/components/panel/odds-bot-manager'
 import { getOddsBotConfig, listAdminOdds, listOddsSources, oddsBotStatus } from '@/lib/special-odds'
 import { DEFAULT_ODDS_BOT } from '@/lib/special-odds-shared'
+import { KankaTvManager } from '@/components/panel/kankatv-manager'
+import { getTvConfig, tvBotStatus, tvStats } from '@/lib/kankatv-engage'
+import { DEFAULT_TV } from '@/lib/kankatv-shared'
 import { DEFAULT_SUITE, getBotSuite, shareStatus } from '@/lib/telegram-bots'
 import { chatStatus } from '@/lib/telegram-chat'
 import { getInviteConfig } from '@/lib/table-invite'
@@ -130,8 +133,14 @@ async function telegramPanel() {
     getBotSuite().catch(() => DEFAULT_SUITE),
     shareStatus().catch(() => ({ lastError: null, lastRunAt: null, shared: 0 })),
   ])
+  const [tvConfig, tvStatus, tvToday] = await Promise.all([
+    getTvConfig().catch(() => DEFAULT_TV),
+    tvBotStatus().catch(() => ({ lastRunAt: null, lastError: null, sent: 0, tracked: 0 })),
+    tvStats().catch(() => ({ watchersToday: 0, minutesToday: 0, coinsToday: 0, predictionsToday: 0, openPredictions: 0, follows: 0 })),
+  ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
+  const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
   const light = (ok: boolean) => (ok ? 'on' : 'off') as 'on' | 'off'
   return (
     <TelegramTabs
@@ -139,6 +148,12 @@ async function telegramPanel() {
         { id: 'mirror', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
         { id: 'chat', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
         { id: 'odds', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
+        {
+          id: 'kankatv',
+          label: 'KankaTV Gol Botu',
+          status: light((tvConfig.goalBot.enabled || tvConfig.goalBot.push) && !tvStatus.lastError),
+          content: <KankaTvManager config={tvConfig} status={tvStatus} stats={tvToday} targets={targets} cronUrl={tvCronUrl} />,
+        },
         { id: 'approvals', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
         { id: 'share', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
         { id: 'invite', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
