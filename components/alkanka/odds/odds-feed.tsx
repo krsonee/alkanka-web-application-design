@@ -57,8 +57,8 @@ function OddCard({ odd }: { odd: SpecialOdd }) {
   const boost = odd.oldOdd && odd.newOdd ? Math.round((odd.newOdd / odd.oldOdd - 1) * 100) : null
   const ago = minutesSince(odd.openedAt)
   return (
-    <li className={cn('flex flex-col gap-3 rounded-xl border bg-card p-3 md:flex-row md:items-center md:gap-4 md:p-4', open ? 'border-primary/40' : 'border-border')}>
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+    <li className={cn('flex flex-col gap-2 rounded-xl border bg-card px-2.5 py-2 md:flex-row md:items-center md:gap-4 md:p-4', open ? 'border-primary/40' : 'border-border')}>
+      <div className="flex min-w-0 flex-1 flex-col gap-1 md:gap-1.5">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <StateBadge odd={odd} />
           <span className="truncate font-semibold uppercase tracking-wider text-accent">{odd.siteName}</span>
@@ -67,49 +67,49 @@ function OddCard({ odd }: { odd: SpecialOdd }) {
             {open ? `${ago} dk önce` : clock(odd.openedAt)}
           </span>
         </div>
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-2 md:gap-2.5">
           {teams.length > 1 && (
-            <span className="flex shrink-0 -space-x-2">
+            <span className="flex shrink-0 -space-x-1.5 md:-space-x-2">
               {teams.map((t) => (
-                <TeamLogo key={t} name={t} className="size-7 ring-2 ring-card" />
+                <TeamLogo key={t} name={t} className="size-5 ring-2 ring-card md:size-7" />
               ))}
             </span>
           )}
-          <span className={cn('truncate font-display text-base font-bold leading-tight md:text-lg', open ? 'text-foreground' : 'text-muted-foreground')}>{odd.match}</span>
+          <span className={cn('truncate font-display text-sm font-bold leading-tight md:text-lg', open ? 'text-foreground' : 'text-muted-foreground')}>{odd.match}</span>
         </div>
         {(odd.league || odd.kickoff || odd.limit) && (
-          <span className="truncate text-xs text-muted-foreground">{[odd.league, odd.kickoff, odd.limit].filter(Boolean).join(' · ')}</span>
+          <span className="truncate text-[11px] text-muted-foreground md:text-xs">{[odd.league, odd.kickoff, odd.limit].filter(Boolean).join(' · ')}</span>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-background px-3 py-2 md:flex-none">
-          {odd.market && <span className="truncate text-sm text-muted-foreground">{odd.market}</span>}
+      <div className="flex items-center gap-1.5 md:gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-background px-2.5 py-1 md:flex-none md:gap-2 md:px-3 md:py-2">
+          {odd.market && <span className="truncate text-xs text-muted-foreground md:text-sm">{odd.market}</span>}
           {odd.oldOdd != null && (
             <>
-              <span className="text-sm text-muted-foreground line-through tabular-nums">{odd.oldOdd.toFixed(2)}</span>
-              <ArrowRight className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="text-xs text-muted-foreground line-through tabular-nums md:text-sm">{odd.oldOdd.toFixed(2)}</span>
+              <ArrowRight className="size-3 shrink-0 text-primary md:size-3.5" aria-hidden="true" />
             </>
           )}
           {odd.newOdd != null && (
-            <span className={cn('rounded-md px-2 py-0.5 font-display text-base font-bold tabular-nums', open ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground')}>
+            <span className={cn('rounded-md px-1.5 py-0.5 font-display text-sm font-bold tabular-nums md:px-2 md:text-base', open ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground')}>
               {odd.newOdd.toFixed(2)}
             </span>
           )}
-          {boost != null && boost > 0 && <span className="text-xs font-bold text-live tabular-nums">+%{boost}</span>}
+          {boost != null && boost > 0 && <span className="text-[11px] font-bold text-live tabular-nums md:text-xs">+%{boost}</span>}
         </div>
         {open ? (
           <a
             href={odd.link}
             target="_blank"
             rel="noopener noreferrer sponsored"
-            className="flex h-10 shrink-0 items-center justify-center gap-1 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 md:w-28"
+            className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 md:h-10 md:w-28 md:px-4"
           >
             Oyna
             <ArrowUpRight className="size-3.5" aria-hidden="true" />
           </a>
         ) : (
-          <span className="flex h-10 shrink-0 items-center justify-center rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground md:w-28">
+          <span className="flex h-9 shrink-0 items-center justify-center rounded-lg border border-border px-2.5 text-[11px] font-semibold text-muted-foreground md:h-10 md:w-28 md:px-3 md:text-xs">
             {odd.result ? 'Sonuçlandı' : 'Kapandı'}
           </span>
         )}
@@ -246,7 +246,7 @@ export function OddsFeed({ initial, today, channelUrl }: { initial: DayData; tod
       {isLoading && !data ? (
         <ul className="flex flex-col gap-2" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <li key={i} className="h-28 animate-pulse rounded-xl bg-card md:h-20" />
+            <li key={i} className="h-24 animate-pulse rounded-xl bg-card md:h-20" />
           ))}
         </ul>
       ) : grouped ? (
