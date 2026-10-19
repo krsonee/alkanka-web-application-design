@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Marquee } from './home/marquee'
 import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, ScrollText, Search, ShieldCheck, SlidersHorizontal, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCatalog } from './catalog-context'
@@ -529,10 +528,12 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
 function ChipRail({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
     <div className={className}>
-      <div className="md:hidden">
-        <Marquee label={label} itemClassName="flex" duration={24}>
-          {children}
-        </Marquee>
+      <div
+        role="group"
+        aria-label={label}
+        className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&>*]:snap-start"
+      >
+        {children}
       </div>
       <div className="hidden flex-wrap gap-2 md:flex" role="group" aria-label={label}>
         {children}
@@ -803,15 +804,18 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
         className,
       )}
     >
-      <div className="relative w-28 shrink-0 overflow-hidden sm:w-36">
-        <Image
-          src={campaignArt(c)}
-          alt=""
-          fill
-          sizes="144px"
-          className="object-cover transition-transform duration-700 group-hover:scale-110"
-        />
+      <div className="relative w-28 shrink-0 overflow-hidden bg-background sm:w-36">
+        <div className="coupon-art absolute inset-0">
+          <Image
+            src={campaignArt(c)}
+            alt=""
+            fill
+            sizes="144px"
+            className="object-cover transition-transform duration-700 group-hover:scale-110"
+          />
+        </div>
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-card/70" />
+        <span aria-hidden="true" className="coupon-sheen" />
         <span className="absolute bottom-2 left-2 rounded-md bg-background/85 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
           {c.tag}
         </span>

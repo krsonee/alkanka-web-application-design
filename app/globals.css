@@ -769,3 +769,40 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Sponsor campaign coupon cards: staggered entrance, slow art float, hover sheen */
+.coupon-card {
+  animation: coupon-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.coupon-card:nth-child(2) { animation-delay: 70ms; }
+.coupon-card:nth-child(3) { animation-delay: 140ms; }
+.coupon-card:nth-child(4) { animation-delay: 210ms; }
+.coupon-card:nth-child(5) { animation-delay: 280ms; }
+.coupon-card:nth-child(n + 6) { animation-delay: 350ms; }
+.coupon-art {
+  animation: coupon-float 6s ease-in-out infinite;
+}
+.coupon-card:nth-child(even) .coupon-art { animation-delay: -3s; }
+.coupon-sheen {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, color-mix(in oklab, var(--primary) 28%, transparent) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+.coupon-card:hover .coupon-sheen {
+  transition: transform 0.9s ease;
+  transform: translateX(120%);
+}
+@keyframes coupon-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes coupon-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coupon-card, .coupon-art { animation: none; }
+  .coupon-sheen { display: none; }
+}
