@@ -33,7 +33,7 @@ export function InstallGuide({ installClaimed, pushClaimed }: { installClaimed: 
     <div className="flex flex-col gap-4">
       <section
         aria-labelledby="ilerleme"
-        className="flex flex-col gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 sm:p-6"
+        className="app-rise border-flow flex flex-col gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 sm:p-6"
       >
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-0.5">
@@ -50,13 +50,25 @@ export function InstallGuide({ installClaimed, pushClaimed }: { installClaimed: 
               )}
             </h2>
           </div>
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Trophy className="size-6" aria-hidden="true" />
+          <span
+            className={cn(
+              'relative flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground',
+              remaining > 0 && 'app-halo',
+            )}
+          >
+            <Trophy className="app-trophy size-6" aria-hidden="true" />
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2" aria-hidden="true">
           {[installDone, pushDone].map((done, i) => (
-            <span key={i} className={cn('h-2 rounded-full', done ? 'bg-primary' : 'bg-primary/15')} />
+            <span key={i} className="h-2 overflow-hidden rounded-full bg-primary/15">
+              {done && (
+                <span
+                  className="app-bar block h-full rounded-full bg-primary"
+                  style={{ animationDelay: `${300 + i * 250}ms` }}
+                />
+              )}
+            </span>
           ))}
         </div>
         <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
@@ -89,7 +101,12 @@ function StepCard({
   return (
     <section
       aria-label={`${n}. adım: ${title}`}
-      className={cn('flex flex-col gap-4 rounded-2xl border bg-card p-4 sm:p-6', done ? 'border-live/40' : 'border-border')}
+      style={{ animationDelay: `${150 + n * 150}ms`, ['--flow-delay' as string]: `${n * -2}s` }}
+      className={cn(
+        'app-rise flex flex-col gap-4 rounded-2xl border bg-card p-4 sm:p-6',
+        done ? 'border-live/40' : 'border-border',
+        !done && 'border-flow',
+      )}
     >
       <div className="flex items-center gap-3">
         <span
@@ -104,7 +121,7 @@ function StepCard({
         <span
           className={cn(
             'shrink-0 rounded-full px-2.5 py-1 text-xs font-bold',
-            done ? 'bg-live/15 text-live' : 'bg-primary text-primary-foreground',
+            done ? 'bg-live/15 text-live' : 'btn-sheen bg-primary text-primary-foreground',
           )}
         >
           {done ? 'Alındı' : `+${reward} KC`}
@@ -157,9 +174,9 @@ function InstallStep({ done }: { done: boolean }) {
         <button
           type="button"
           onClick={() => promptInstall()}
-          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground"
+          className="btn-sheen flex h-12 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-transform active:scale-95"
         >
-          <Download className="size-4" aria-hidden="true" />
+          <Download className="size-4 motion-safe:animate-bounce" aria-hidden="true" />
           Tek dokunuşla yükle
         </button>
       )}
@@ -190,9 +207,12 @@ function InstallStep({ done }: { done: boolean }) {
         {STEPS[guide].map((s, i) => {
           const Icon = s.icon
           return (
-            <li key={s.title} className="flex gap-3">
+            <li key={`${guide}-${s.title}`} className="app-rise flex gap-3" style={{ animationDelay: `${i * 120}ms` }}>
               <div className="flex flex-col items-center">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-background text-primary">
+                <span
+                  className="step-cycle flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-background text-primary"
+                  style={{ animationDelay: `${i * 1.2}s` }}
+                >
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
                 {i < STEPS[guide].length - 1 && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
@@ -260,9 +280,9 @@ function PushStep({ done }: { done: boolean }) {
             setMsg(await enablePush())
             setBusy(false)
           }}
-          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-accent text-sm font-bold text-accent-foreground disabled:opacity-60"
+          className="btn-sheen flex h-12 items-center justify-center gap-2 rounded-xl bg-accent text-sm font-bold text-accent-foreground transition-transform active:scale-95 disabled:opacity-60"
         >
-          <BellRing className="size-4" aria-hidden="true" />
+          <BellRing className="app-bell size-4" aria-hidden="true" />
           {busy ? 'Açılıyor…' : `Bildirimleri aç, +${pushBonus} KC kap`}
         </button>
         {!member && <p className="text-xs leading-relaxed text-muted-foreground">Bonus için giriş yapmış olman gerekir.</p>}
