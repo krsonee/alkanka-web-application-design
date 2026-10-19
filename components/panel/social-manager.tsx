@@ -3,14 +3,17 @@
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition, type ComponentProps } from 'react'
 import { SocialApiForm } from '@/components/panel/social-api-form'
-import { Check, ExternalLink, Loader2, Trash2, X } from 'lucide-react'
+import { Check, ExternalLink, Loader2, Send, Trash2, X } from 'lucide-react'
 import {
   createSocialEventAction,
   deleteSocialEventAction,
+  getSocialLinksAction,
   reviewEntryAction,
   reviewSocialAccountAction,
   saveSocialLinksAction,
 } from '@/app/panel/social-actions'
+import { saveChannelsAction } from '@/app/panel/telegram-actions'
+import { BROADCAST_CHANNELS, type BroadcastSlug } from '@/lib/telegram-channels-shared'
 import { SocialGuide } from '@/components/panel/social-guide'
 import type { AdminEntry, AdminSocialAccount } from '@/lib/social'
 import { PLATFORM_LABEL, SOCIAL_PLATFORMS, profileUrl, type SocialEvent, type SocialLinks, type SocialPlatform } from '@/lib/social-shared'
@@ -77,16 +80,6 @@ function LinksForm({ links }: { links: SocialLinks }) {
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-foreground">Telegram kanalı</span>
-          <input
-            type="url"
-            value={values.telegram ?? ''}
-            onChange={(e) => setValues((v) => ({ ...v, telegram: e.target.value }))}
-            placeholder="https://t.me/AlkankaOfficial"
-            className={input}
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-foreground">Ana sayfa &quot;Katıl&quot; butonu linki</span>
           <input
             type="text"
@@ -102,6 +95,69 @@ function LinksForm({ links }: { links: SocialLinks }) {
         <button type="submit" disabled={pending} className={btn}>
           {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}
           Kaydet
+        </button>
+        <Note msg={msg} />
+      </div>
+    </form>
+  )
+}
+
+type ChannelValues = Record<BroadcastSlug, string>
+
+function TelegramChannelsForm({ links, channels }: { links: SocialLinks; channels: Record<BroadcastSlug, string | null> | null }) {
+  const [sohbet, setSohbet] = useState(links.telegram ?? '')
+  const [values, setValues] = useState<ChannelValues>(
+    () => Object.fromEntries(BROADCAST_CHANNELS.map((c) => [c.slug, channels?.[c.slug] ? `@${channels[c.slug]}` : ''])) as ChannelValues,
+  )
+  const { pending, msg, run } = useRunner()
+  return (
+    <form
+      className={card}
+      onSubmit={(e) => {
+        e.preventDefault()
+        run(async () => {
+          const latest = await getSocialLinksAction()
+          const social = await saveSocialLinksAction({ ...latest, telegram: sohbet })
+          if (!social.ok) return social
+          const form = new FormData()
+          for (const c of BROADCAST_CHANNELS) form.set(c.slug, values[c.slug])
+          const saved = await saveChannelsAction({}, form)
+          return { ok: Boolean(saved.ok), message: saved.ok ? `Telegram kanalları kaydedildi. ${saved.message ?? ''}` : (saved.message ?? 'Kaydedilemedi.') }
+        })
+      }}
+    >
+      <div className="flex flex-col gap-1">
+        <h3 className="flex items-center gap-2 font-semibold text-foreground">
+          <Send className="size-4 text-accent" aria-hidden="true" />
+          Telegram kanallarımız
+        </h3>
+        <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+          Sol menüdeki Duyuru, Sohbet, Özel oran ve Promo kod butonları buraya gider. Sohbet için davet linkini, diğerleri için
+          kanalın kullanıcı adını (@kanaladi) yaz. Kanallar herkese açık olmalı. Boş bırakılan buton genel Telegram linkine gider.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">Duyuru (Alkanka Resmi)</span>
+          <input value={values.duyuru} onChange={(e) => setValues((v) => ({ ...v, duyuru: e.target.value }))} placeholder="@alkankaresmi" className={input} />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">Sohbet (Alkanka Sohbet)</span>
+          <input type="url" value={sohbet} onChange={(e) => setSohbet(e.target.value)} placeholder="https://t.me/alkankasohbet" className={input} />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">Özel oran (Alkanka Özel Oran)</span>
+          <input value={values['ozel-oran']} onChange={(e) => setValues((v) => ({ ...v, 'ozel-oran': e.target.value }))} placeholder="@alkankaozeloran" className={input} />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">Promo kod (Alkanka Promokod)</span>
+          <input value={values.promo} onChange={(e) => setValues((v) => ({ ...v, promo: e.target.value }))} placeholder="@alkankapromokod" className={input} />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={pending} className={btn}>
+          {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          Kanalları kaydet
         </button>
         <Note msg={msg} />
       </div>
@@ -288,8 +344,10 @@ export function SocialManager({
   events,
   entries,
   api,
-}: {
+  channels = null,
+  }: {
   links: SocialLinks
+  channels?: Record<BroadcastSlug, string | null> | null
   accounts: AdminSocialAccount[]
   events: SocialEvent[]
   entries: AdminEntry[]
@@ -299,6 +357,7 @@ export function SocialManager({
     <div className="flex flex-col gap-6">
       <SocialGuide />
       <LinksForm links={links} />
+  <TelegramChannelsForm links={links} channels={channels} />
       {api ? <SocialApiForm {...api} /> : null}
       <AccountsReview accounts={accounts} />
       <EventsAdmin events={events} entries={entries} />
