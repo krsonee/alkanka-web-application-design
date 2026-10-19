@@ -2,9 +2,8 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Clock, Coins, Trophy, Users } from 'lucide-react'
-import { ARENA_GAMES, ARENA_META, type ArenaSettings } from '@/lib/arena'
-import { formatAC } from '../points-context'
+import { ArrowRight, Clock, Trophy, Users } from 'lucide-react'
+import { ARENA_GAMES, ARENA_META, type ArenaGame, type ArenaSettings } from '@/lib/arena'
 import { jakoSrc, type JakoPose } from '../jako'
 import type { MiniGame } from '@/app/actions/wallet'
 import { formatRemaining, useMiniLock } from './mini-status'
@@ -62,6 +61,21 @@ const GAME_CARDS: { game: MiniGame; title: string; text: string; pose: JakoPose;
   { game: 'zar', title: 'Zar At', text: 'Günde 3 atış. Çift gelirse kazancın katlanır, düşeş jackpotu açar.', pose: 'zar', limit: 'Günde 3' },
 ]
 
+const SHORT_PLAYERS: Record<ArenaGame, string> = {
+  tavla: '1v1',
+  okey: '1v1 · 4',
+  okey101: '2-4',
+  batak: '4 kişi',
+  pisti: '2-4',
+  papaz: '2-6',
+  monopoly: '2-4',
+  bilardo: '1v1',
+  blackjack: 'Krupiye',
+  rulet: 'Masa',
+  'kafa-topu': '1v1',
+  'kafa-basketbolu': '1v1',
+}
+
 export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hiddenMini?: string[] }) {
   const tables = ARENA_GAMES.filter((g) => arena[g].enabled)
   const minis = GAME_CARDS.filter((c) => !hiddenMini.includes(c.game))
@@ -93,20 +107,19 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
                   >
                     <Image src={s.image || meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
                     <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-                    <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                    <span className="absolute left-2 top-2 flex items-center gap-1 whitespace-nowrap rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
                       <Users className="size-3" aria-hidden="true" />
-                      {meta.players}
+                      {SHORT_PLAYERS[g]}
                     </span>
-                    <span className="absolute right-2 top-2 rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{s.multiplier}</span>
+                    {s.multiplier > 1 && (
+                      <span className="absolute right-2 top-2 rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{s.multiplier}</span>
+                    )}
                     <div className="relative flex flex-col gap-1 p-3">
                       <h3 className="font-display text-lg font-bold uppercase leading-tight text-foreground">{meta.title}</h3>
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Coins className="size-3 text-primary" aria-hidden="true" />
-                          {formatAC(s.bets[0])}-{formatAC(s.bets[s.bets.length - 1])}
-                        </span>
-                        <ArrowRight className="size-3.5 text-primary transition-transform group-hover:translate-x-1" aria-label="Masaya otur" />
-                      </div>
+                      <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+                        Masaya otur
+                        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                      </span>
                     </div>
                   </Link>
                 </li>
@@ -123,7 +136,7 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
             Mini oyunlar
           </h2>
         </div>
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <ul className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] *:w-[70%] *:shrink-0 *:snap-start sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0 sm:*:w-auto lg:grid-cols-4 xl:grid-cols-5">
           {minis.map((g) => (
             <MiniCard key={g.game} {...g} />
           ))}

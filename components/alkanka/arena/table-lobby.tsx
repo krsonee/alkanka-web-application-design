@@ -480,7 +480,7 @@ export function TableLobby({
             </div>
           </dl>
           <p className="-mt-1 text-[11px] leading-snug text-muted-foreground text-pretty">
-            %{settings.commission} kesinti. Masa iptal olursa bahis iade edilir.
+            Oyuncu masasında pot kazanana gider, %{settings.commission} kesinti uygulanır. Masa iptal olursa bahis iade edilir.
             {seatRule && humanSeats === 1 ? ' Tek gerçek oyuncuyla oyun hemen botlara karşı başlar.' : ''}
           </p>
           <button
