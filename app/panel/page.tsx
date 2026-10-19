@@ -36,8 +36,11 @@ import { CatalogEditor } from '@/components/panel/catalog-editor'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
-import { ApprovalSection, OddsSection, ShareSection } from '@/components/panel/telegram-bot-suite'
-import { DEFAULT_SUITE, getBotSuite, listOddsDeals, shareStatus } from '@/lib/telegram-bots'
+import { ApprovalSection, ShareSection } from '@/components/panel/telegram-bot-suite'
+import { OddsBotManager } from '@/components/panel/odds-bot-manager'
+import { getOddsBotConfig, listAdminOdds, listOddsSources, oddsBotStatus } from '@/lib/special-odds'
+import { DEFAULT_ODDS_BOT } from '@/lib/special-odds-shared'
+import { DEFAULT_SUITE, getBotSuite, shareStatus } from '@/lib/telegram-bots'
 import { chatStatus } from '@/lib/telegram-chat'
 import { getInviteConfig } from '@/lib/table-invite'
 import { TelegramInviteSetup } from '@/components/panel/telegram-invite-setup'
@@ -109,7 +112,13 @@ async function section(session: PanelSession, module: PanelModule, label: string
 }
 
 async function telegramPanel() {
-  const [bots, targets, sources, log, cronKey, chat, invite, channels, suite, shareInfo, oddsDeals] = await Promise.all([
+  const [oddsConfig, oddsStatus, oddsSources, oddsList] = await Promise.all([
+    getOddsBotConfig().catch(() => DEFAULT_ODDS_BOT),
+    oddsBotStatus().catch(() => ({ webhookUrl: null, pending: 0, lastError: null, lastUpdateAt: null, todayTotal: 0 })),
+    listOddsSources().catch(() => []),
+    listAdminOdds().catch(() => []),
+  ])
+  const [bots, targets, sources, log, cronKey, chat, invite, channels, suite, shareInfo] = await Promise.all([
     listBots().catch(() => []),
     listTargets().catch(() => []),
     listSources().catch(() => []),
@@ -120,7 +129,6 @@ async function telegramPanel() {
     getChannelUsernames().catch(() => null),
     getBotSuite().catch(() => DEFAULT_SUITE),
     shareStatus().catch(() => ({ lastError: null, lastRunAt: null, shared: 0 })),
-    listOddsDeals().catch(() => []),
   ])
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
@@ -130,7 +138,7 @@ async function telegramPanel() {
       tabs={[
         { id: 'mirror', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
         { id: 'chat', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
-        { id: 'odds', label: 'Oran Botu', status: light(suite.odds.targetIds.length > 0), content: <OddsSection suite={suite} targets={targets} deals={oddsDeals} /> },
+        { id: 'odds', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
         { id: 'approvals', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
         { id: 'share', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
         { id: 'invite', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
