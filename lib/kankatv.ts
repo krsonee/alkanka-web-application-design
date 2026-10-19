@@ -368,11 +368,24 @@ export async function getMatchDetail(id: number): Promise<MatchDetail> {
   }
 }
 
-export async function getLiveVideoId(path: string): Promise<string | null> {
+// YouTube's /live page is ~4MB, over Next's 2MB fetch-cache limit, so `revalidate` silently
+// never caches and every request re-downloads it. Cache the parsed id in memory instead.
+const LIVE_ID_TTL = 5 * 60_000
+const liveIdCache = new Map<string, { at: number; value: Promise<string | null> }>()
+
+export function getLiveVideoId(path: string): Promise<string | null> {
+  const hit = liveIdCache.get(path)
+  if (hit && Date.now() - hit.at < LIVE_ID_TTL) return hit.value
+  const value = fetchLiveVideoId(path)
+  liveIdCache.set(path, { at: Date.now(), value })
+  return value
+}
+
+async function fetchLiveVideoId(path: string): Promise<string | null> {
   try {
     const res = await fetch(`https://www.youtube.com/${path}/live`, {
       headers: { ...HEADERS, 'Accept-Language': 'tr' },
-      next: { revalidate: 300 },
+      cache: 'no-store',
     })
     if (!res.ok) return null
     const html = await res.text()
