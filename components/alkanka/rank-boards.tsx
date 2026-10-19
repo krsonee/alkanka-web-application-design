@@ -394,8 +394,8 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
   const top = rows.slice(0, 3)
   if (!top.length) return null
   return (
-    <div className="relative overflow-hidden">
-      <PodiumStage leader={top[0].name} />
+  <div className="relative overflow-hidden md:overflow-visible md:[clip-path:inset(-240px_0_0_0)]">
+  <PodiumStage leader={top[0].name} />
     <ol aria-label="İlk üç" className="relative mx-auto grid w-full grid-cols-3 items-end gap-2 px-3 pt-8 md:max-w-2xl md:gap-5 md:px-6 md:pt-14">
       {top.map((u) => {
         const s = PODIUM_STYLE[u.rank as 1 | 2 | 3]
@@ -473,7 +473,7 @@ const STAGE_COINS = [
 function PodiumStage({ leader }: { leader: string }) {
   return (
     <div className="pointer-events-none absolute inset-0 hidden md:block" aria-hidden>
-      <div className="stage-rays absolute left-1/2 top-1/2 size-[900px] -translate-x-1/2 -translate-y-1/2" />
+      <div className="stage-rays absolute left-1/2 top-[40%] size-[1150px] -translate-x-1/2 -translate-y-1/2" />
       <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-primary/10 to-transparent" />
 
       {STAGE_COINS.map((c) => (
@@ -673,14 +673,27 @@ export function RankBoards({
 
       <PrizeShowcase prizes={prizes[period]} periodNoun={periodMeta.noun} />
 
-      <section aria-labelledby="tablo-baslik" className="panel-gold flex flex-col overflow-hidden rounded-2xl">
-        <header className="flex flex-col gap-3 border-b border-border p-3.5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-4 md:px-5 md:py-4">
-          <h2 id="tablo-baslik" className="font-display text-lg font-bold text-foreground md:text-xl">
+      <section aria-labelledby="tablo-baslik" className="panel-gold relative flex flex-col overflow-hidden rounded-2xl">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 hidden h-64 bg-[radial-gradient(ellipse_60%_100%_at_50%_0%,color-mix(in_oklab,var(--primary)_14%,transparent),transparent_70%)] md:block"
+          aria-hidden
+        />
+        <header className="relative z-10 flex flex-col gap-3 border-b border-border p-3.5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-4 md:border-b-0 md:px-6 md:pb-0 md:pt-5">
+          <div className="hidden md:flex md:items-center md:gap-3">
+            <span className="h-6 w-1 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" aria-hidden />
+            <div className="flex flex-col">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary/80">Kanka Arenası</span>
+              <span className="font-display text-xl font-bold leading-tight text-foreground" aria-hidden>
+                {periodMeta.noun} liderleri
+              </span>
+            </div>
+          </div>
+          <h2 id="tablo-baslik" className="font-display text-lg font-bold text-foreground md:sr-only">
             {periodMeta.noun} liderleri
           </h2>
-          <div role="tablist" aria-label="Kategori" className="relative grid grid-cols-5 rounded-xl bg-secondary p-1 md:w-full md:max-w-lg">
+          <div role="tablist" aria-label="Kategori" className="relative grid grid-cols-5 rounded-xl bg-secondary p-1 md:w-full md:max-w-lg md:rounded-full md:border md:border-primary/15 md:bg-background/50 md:p-1.5 md:shadow-[0_8px_30px_-12px_var(--primary)] md:backdrop-blur-md">
             <span
-              className="seg-indicator absolute inset-y-1 left-1 rounded-lg border border-primary/40 bg-card shadow-sm"
+              className="seg-indicator absolute inset-y-1 left-1 rounded-lg border border-primary/40 bg-card shadow-sm md:inset-y-1.5 md:left-1.5 md:rounded-full md:bg-primary/15 md:shadow-[0_0_16px_-4px_var(--primary)]"
               style={{ width: 'calc((100% - 0.5rem) / 5)', transform: `translateX(${CATEGORIES.findIndex((c) => c.id === category) * 100}%)` }}
               aria-hidden
             />
