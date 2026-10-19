@@ -6,6 +6,7 @@ import { Loader2, MessageCircle, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
+import { MemberAvatar } from '../member-avatar'
 import { ONLY_EMOJI, QUICK } from './table-chat'
 import { playSound } from '@/lib/sound'
 
@@ -197,6 +198,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
               {data && recent.length === 0 && <li className="text-muted-foreground">Masa sessiz. İlk selamı sen ver.</li>}
               {recent.map((m) => (
                 <li key={m.id} className="leading-snug text-pretty">
+                  <MemberAvatar userId={m.userId} name={m.name} size="xs" className="mr-1.5 inline-flex align-middle" />
                   <span className={cn('font-bold', m.userId === member?.id ? 'text-primary' : 'text-foreground')}>{m.name}</span>
                   {!m.player && <span className="ml-1 text-[10px] font-semibold uppercase text-muted-foreground">izleyici</span>}
                   <span className="text-muted-foreground">: </span>

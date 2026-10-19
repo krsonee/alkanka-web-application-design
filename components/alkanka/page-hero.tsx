@@ -84,7 +84,7 @@ export function PageHero({
       <div
         className={cn(
           'relative flex flex-col justify-center',
-          compact ? 'gap-4 p-4 sm:min-h-48 sm:p-6' : 'gap-6 p-4 sm:min-h-72 sm:p-8',
+          compact ? 'h-41 gap-4 p-4 sm:h-48 sm:p-6' : 'gap-6 p-4 sm:min-h-72 sm:p-8',
           image && !compact && '-mt-6 pt-0 sm:mt-0 sm:pt-8',
         )}
       >
@@ -109,13 +109,13 @@ export function PageHero({
             <p
               className={cn(
                 'max-w-xl pt-1 text-sm font-medium leading-relaxed text-foreground/90 text-pretty [text-shadow:0_1px_8px_oklch(0_0_0/0.85)]',
-                compact ? 'line-clamp-2 sm:line-clamp-none' : 'sm:text-base',
+                compact ? 'line-clamp-2' : 'sm:text-base',
               )}
             >
               {description}
             </p>
           </div>
-          {highlights && highlights.length > 0 && (
+          {!compact && highlights && highlights.length > 0 && (
             <ul className="flex flex-wrap gap-2">
               {highlights.map((h) => (
                 <li key={h} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold', t.chip)}>
@@ -124,19 +124,6 @@ export function PageHero({
                 </li>
               ))}
             </ul>
-          )}
-          {stats && compact && (
-            <dl className="flex flex-wrap gap-2">
-              {stats.map((s) => (
-                <div
-                  key={s.label}
-                  className="flex items-baseline gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 backdrop-blur"
-                >
-                  <dd className={cn('font-display text-sm font-bold tabular-nums', t.text)}>{s.value}</dd>
-                  <dt className="text-xs text-muted-foreground">{s.label}</dt>
-                </div>
-              ))}
-            </dl>
           )}
           {stats && !compact && (
             <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3 backdrop-blur sm:flex sm:w-fit sm:flex-wrap sm:gap-x-8">

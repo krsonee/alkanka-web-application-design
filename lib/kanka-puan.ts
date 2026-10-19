@@ -240,7 +240,28 @@ export async function getKpStatus(userId: string): Promise<KpStatus> {
   }
 }
 
-export type LeaderRow = { userId: string; name: string; kp: number; level: number; levelName: string; badge: string; specials: number }
+export type KpToday = {
+  total: number
+  breakdown: KpBreakdown
+  weekTotal: number
+  weekDays: number
+}
+
+/** Today's and this week's KP for one member; powers the daily progress card and pace estimate. */
+export async function getKpToday(userId: string): Promise<KpToday> {
+  const cfg = await getKpConfig()
+  const [[day], [week]] = await Promise.all([totals(cfg.rules, userId, 1, 'gun'), totals(cfg.rules, userId, 1, 'hafta')])
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Istanbul', weekday: 'short' }).format(new Date())
+  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(weekday) + 1 || 1
+  return {
+    total: day?.total ?? 0,
+    breakdown: day?.breakdown ?? (Object.fromEntries(SOURCE_KEYS.map((k) => [k, 0])) as KpBreakdown),
+    weekTotal: week?.total ?? 0,
+    weekDays,
+  }
+}
+
+export type LeaderRow = { userId: string; name: string; kp: number; level: number; levelName: string; badge: string; specials: number; breakdown: KpBreakdown }
 
 export type PredictionRow = { userId: string; name: string; points: number; hits: number; exact: number; picks: number }
 
@@ -276,6 +297,14 @@ export async function levelMap(): Promise<Record<string, number>> {
   return data
 }
 
+/** How many active members have reached each level (index i → members at level ≥ i+1). */
+export async function levelReach(levelCount: number): Promise<{ total: number; reached: number[] }> {
+  const map = await levelMap()
+  const levels = Object.values(map)
+  const reached = Array.from({ length: levelCount }, (_, i) => (i === 0 ? levels.length : levels.filter((l) => l >= i + 1).length))
+  return { total: levels.length, reached }
+}
+
 export async function leaderboard(limit = 20, period: RankPeriod = 'tum', opts?: { readOnly?: boolean }): Promise<LeaderRow[]> {
   const cfg = opts?.readOnly ? await readKpConfig() : await getKpConfig()
   const list = (await totals(cfg.rules, null, limit, period)).filter((l) => l.total > 0)
@@ -301,6 +330,7 @@ export async function leaderboard(limit = 20, period: RankPeriod = 'tum', opts?:
       levelName: lv.name,
       badge: lv.badge,
       specials: Number(counts.find((c) => c.user_id === l.userId)?.n ?? 0),
+      breakdown: l.breakdown,
     }
   })
 }
@@ -347,11 +377,18 @@ export async function isRoleHolder(userId: string): Promise<boolean> {
 export async function pingActive(userId: string) {
   const cfg = await getKpConfig()
   if (cfg.rules.minute > 0 && !(await isRoleHolder(userId))) {
-    await rows(sql`INSERT INTO kp_events (user_id, source, points, ref)
+    const [inserted] = await rows<{ first: boolean }>(sql`INSERT INTO kp_events (user_id, source, points, ref)
       SELECT ${userId}, 'sure', ${cfg.rules.minute}, to_char(now() AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM-DD"T"HH24:MI')
       WHERE (SELECT count(*) FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) < ${cfg.rules.minuteDailyCap}
-      ON CONFLICT DO NOTHING`)
+      ON CONFLICT DO NOTHING
+      RETURNING NOT EXISTS (SELECT 1 FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
+        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS first`)
+    // The first minute of a new day can complete a 7 or 30 day streak, so the bonus is checked only then.
+    if (inserted?.first) {
+      const { getStreak } = await import('@/lib/kp-extras')
+      await getStreak(userId).catch(() => null)
+    }
   }
   const [row] = await totals(cfg.rules, userId)
   const kp = row?.total ?? 0
@@ -566,4 +603,53 @@ export async function rewardTournamentWin(userId: string, tournamentId: number, 
   } catch (error) {
     console.error('[kp] turnuva ödülü verilemedi', error)
   }
+}
+
+/** Rank change per user: positive = climbed, 'yeni' = entered the board since the baseline. */
+export type RankMove = number | 'yeni'
+
+let snapshotsReady: Promise<unknown> | null = null
+function ensureSnapshots() {
+  snapshotsReady ??= rows(sql`CREATE TABLE IF NOT EXISTS kp_rank_snapshots (
+    day date NOT NULL, period text NOT NULL, user_id text NOT NULL, rank int NOT NULL,
+    PRIMARY KEY (day, period, user_id))`).catch((e) => {
+    snapshotsReady = null
+    throw e
+  })
+  return snapshotsReady
+}
+
+/**
+ * Stores today's first-seen ranking once per Istanbul day and compares the current board
+ * against the latest earlier snapshot inside the same period, so arrows mean "since yesterday".
+ */
+export async function rankMoves(period: 'hafta' | 'ay', board: { userId: string }[]): Promise<Record<string, RankMove>> {
+  await ensureSnapshots()
+  const today = sql`(now() AT TIME ZONE 'Europe/Istanbul')::date`
+  if (board.length) {
+    const list = JSON.stringify(board.map((r, i) => ({ u: r.userId, r: i + 1 })))
+    await rows(sql`INSERT INTO kp_rank_snapshots (day, period, user_id, rank)
+      SELECT ${today}, ${period}, t.u, t.r FROM jsonb_to_recordset(${list}::jsonb) AS t(u text, r int)
+      WHERE NOT EXISTS (SELECT 1 FROM kp_rank_snapshots s WHERE s.day = ${today} AND s.period = ${period})
+      ON CONFLICT DO NOTHING`)
+  }
+  const start = sql`date_trunc(${TRUNC[period]}, now() AT TIME ZONE 'Europe/Istanbul')::date`
+  const base = await rows<{ user_id: string; rank: number }>(sql`SELECT user_id, rank FROM kp_rank_snapshots
+    WHERE period = ${period} AND day = (SELECT max(day) FROM kp_rank_snapshots WHERE period = ${period} AND day < ${today} AND day >= ${start})`)
+  if (!base.length) return {}
+  const before = new Map(base.map((b) => [b.user_id, Number(b.rank)]))
+  const moves: Record<string, RankMove> = {}
+  board.forEach((r, i) => {
+    const prev = before.get(r.userId)
+    moves[r.userId] = prev === undefined ? 'yeni' : prev - (i + 1)
+  })
+  return moves
+}
+
+/** Daily cron hook: keeps snapshots flowing even on days nobody opens the ranking page, and prunes old ones. */
+export async function snapshotRanks() {
+  const [hafta, ay] = await Promise.all([leaderboard(200, 'hafta'), leaderboard(200, 'ay')])
+  await Promise.all([rankMoves('hafta', hafta), rankMoves('ay', ay)])
+  await rows(sql`DELETE FROM kp_rank_snapshots WHERE day < (now() AT TIME ZONE 'Europe/Istanbul')::date - 40`)
+  return hafta.length + ay.length
 }

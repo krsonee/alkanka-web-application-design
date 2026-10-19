@@ -298,9 +298,9 @@ export function TableLobby({
             </span>
             <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="w-20 shrink-0 text-xs font-semibold leading-tight text-muted-foreground">Bahis</span>
-            <div className="grid flex-1 grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label="Bahis">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold leading-tight text-muted-foreground">Bahis (KC)</span>
+            <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label="Bahis">
               {settings.bets.map((b) => (
                 <button
                   key={b}
@@ -309,12 +309,11 @@ export function TableLobby({
                   aria-checked={stake === b}
                   onClick={() => setStake(b)}
                   className={cn(
-                    'flex items-baseline justify-center gap-0.5 rounded-lg py-1.5 transition-colors',
+                    'min-w-0 truncate rounded-lg px-1 py-2 text-sm font-bold tabular-nums leading-none transition-colors',
                     stake === b ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
                   )}
                 >
-                  <span className="text-sm font-bold tabular-nums leading-none">{b}</span>
-                  <span className={cn('text-[10px] font-medium leading-none', stake === b ? 'text-primary-foreground/80' : 'text-muted-foreground')}>KC</span>
+                  {b.toLocaleString('tr-TR')}
                 </button>
               ))}
             </div>
@@ -480,7 +479,7 @@ export function TableLobby({
             </div>
           </dl>
           <p className="-mt-1 text-[11px] leading-snug text-muted-foreground text-pretty">
-            %{settings.commission} kesinti. Masa iptal olursa bahis iade edilir.
+            Oyuncu masasında pot kazanana gider, %{settings.commission} kesinti uygulanır. Masa iptal olursa bahis iade edilir.
             {seatRule && humanSeats === 1 ? ' Tek gerçek oyuncuyla oyun hemen botlara karşı başlar.' : ''}
           </p>
           <button

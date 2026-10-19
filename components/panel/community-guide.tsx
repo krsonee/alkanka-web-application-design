@@ -1,7 +1,7 @@
 import { BookOpen, ChevronDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-export type CommunityTab = 'reviews' | 'complaints' | 'league'
+export type CommunityTab = 'reviews' | 'complaints' | 'cekim' | 'league'
 
 type Step = { title: string; body: ReactNode }
 
@@ -85,6 +85,7 @@ const STEPS: Step[] = [
 const HINTS: Record<CommunityTab, string> = {
   reviews: 'Üyelerin site yorumları burada onay bekler. Yayınladıkların /guven sayfasında puana eklenir.',
   complaints: 'Durumu güncelle ve yanıt yaz; üye profilinde görür. Çözülenler sitenin güven kartına yansır.',
+  cekim: 'Üyelerin çekim paylaşımları burada onay bekler. Ödülü (coin, puan, market) her site için ayrı belirleyebilirsin.',
   league: 'Maç ekle, bitince skoru girip sonuçlandır. Tam skor 3, doğru sonuç 1 puan.',
 }
 

@@ -22,6 +22,8 @@ import {
   type PointRules,
 } from '@/lib/kanka-puan'
 
+import { saveQuestConfig } from '@/lib/kp-extras'
+import type { WeeklyQuestConfig } from '@/lib/kanka-puan-shared'
 import { saveOnlineConfig, saveTickerConfig } from '@/lib/online-rewards'
 import type { OnlineConfig, TickerConfig } from '@/lib/online-rewards-shared'
 
@@ -58,6 +60,13 @@ export async function updateRules(rules: PointRules) {
   return guard(async () => {
     await saveRules(rules)
     return 'Puan kuralları kaydedildi.'
+  })
+}
+
+export async function updateWeeklyQuest(cfg: WeeklyQuestConfig) {
+  return guard(async () => {
+    await saveQuestConfig(cfg)
+    return cfg.enabled ? 'Haftalık görev yayında.' : 'Haftalık görev kapatıldı.'
   })
 }
 

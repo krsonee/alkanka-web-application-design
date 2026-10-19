@@ -1,18 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { Star } from 'lucide-react'
+import { AlertTriangle, Gift, MessageSquare, Star } from 'lucide-react'
 import { addComplaintAction, addReviewAction } from '@/app/actions/community'
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { StatusLine, useAction } from './use-action'
+import { WithdrawForm } from './withdraw-form'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
-export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteId: string; siteName: string; initialMode?: 'review' | 'complaint' }) {
+type Mode = 'review' | 'complaint' | 'cekim'
+
+const TABS: { id: Mode; label: string; icon: typeof Star }[] = [
+  { id: 'review', label: 'Yorum', icon: MessageSquare },
+  { id: 'complaint', label: 'Şikâyet', icon: AlertTriangle },
+  { id: 'cekim', label: 'Çekim', icon: Gift },
+]
+
+export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteId: string; siteName: string; initialMode?: Mode }) {
   const { member } = usePoints()
-  const [mode, setMode] = useState<'review' | 'complaint'>(initialMode)
+  const [mode, setMode] = useState<Mode>(initialMode)
   const review = useAction()
   const complaint = useAction()
   const [rating, setRating] = useState(0)
@@ -32,22 +41,40 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
   }
 
   return (
-    <div className="panel-gold flex flex-col gap-4 rounded-xl p-5">
-      <div role="tablist" className="grid grid-cols-2 gap-1 rounded-lg bg-background p-1">
-        {(['review', 'complaint'] as const).map((m) => (
+    <div className="panel-gold border-flow flex flex-col gap-4 rounded-xl p-5" style={{ '--flow-speed': '7s', '--flow-opacity': '0.85' } as React.CSSProperties}>
+      <div role="tablist" className="relative grid grid-cols-3 rounded-lg bg-background p-1">
+        <span
+          aria-hidden
+          className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-md bg-primary shadow-[0_0_18px_-4px_var(--primary)] transition-transform duration-300 ease-out motion-reduce:transition-none"
+          style={{ transform: `translateX(${TABS.findIndex((t) => t.id === mode) * 100}%)` }}
+        />
+        {TABS.map(({ id, label, icon: Icon }) => (
           <button
-            key={m}
+            key={id}
             role="tab"
-            aria-selected={mode === m}
-            onClick={() => setMode(m)}
-            className={cn('h-9 rounded-md text-xs font-bold uppercase tracking-wider', mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}
+            aria-selected={mode === id}
+            onClick={() => setMode(id)}
+            className={cn(
+              'relative z-10 flex h-9 items-center justify-center gap-1 rounded-md px-1 text-[11px] font-bold uppercase tracking-wide transition-colors duration-300',
+              mode === id ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
           >
-            {m === 'review' ? 'Yorum yaz' : 'Şikâyet bildir'}
+            <Icon className="size-3.5 shrink-0" aria-hidden />
+            {label}
+            {id === 'cekim' && mode !== 'cekim' && (
+              <span className="absolute right-1 top-1 flex size-2" aria-hidden>
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-live opacity-75 motion-reduce:animate-none" />
+                <span className="relative inline-flex size-2 rounded-full bg-live" />
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {mode === 'review' ? (
+      <div key={mode} className="animate-rise motion-reduce:animate-none">
+      {mode === 'cekim' ? (
+        <WithdrawForm siteId={siteId} siteName={siteName} />
+      ) : mode === 'review' ? (
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {
@@ -72,7 +99,7 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
             Deneyimin
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} maxLength={1000} placeholder="Çekim hızı, destek, bonus şartları..." className={field} />
           </label>
-          <button disabled={review.pending || rating === 0 || body.trim().length < 20} className="h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-40">
+          <button disabled={review.pending || rating === 0 || body.trim().length < 20} className="btn-sheen h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
             {review.pending ? 'Gönderiliyor...' : 'Yorumu gönder'}
           </button>
           <StatusLine status={review.status} />
@@ -96,13 +123,14 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
             Ne oldu?
             <textarea value={detail} onChange={(e) => setDetail(e.target.value)} rows={5} maxLength={2000} placeholder="Tarih, tutar ve yaşadığın sorunu yaz. Şifre ya da kart bilgisi paylaşma." className={field} />
           </label>
-          <button disabled={complaint.pending || title.trim().length < 5 || detail.trim().length < 30} className="h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-40">
+          <button disabled={complaint.pending || title.trim().length < 5 || detail.trim().length < 30} className="btn-sheen h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
             {complaint.pending ? 'Gönderiliyor...' : 'Şikâyeti gönder'}
           </button>
           <p className="text-xs leading-relaxed text-muted-foreground">Ekibimiz şikâyeti inceleyip siteye iletir. Durumu profilinden takip edersin.</p>
           <StatusLine status={complaint.status} />
         </form>
       )}
+      </div>
     </div>
   )
 }

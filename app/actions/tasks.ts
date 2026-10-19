@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getMember } from '@/lib/member'
-import { awardTask, listPublicTasks, requestTaskApproval, taskProgress } from '@/lib/tasks'
+import { awardTask, listPublicTasks, officialSocialLinks, requestTaskApproval, taskProgress } from '@/lib/tasks'
 import { checkIn } from '@/lib/checkin'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
@@ -31,7 +31,20 @@ export async function completeTaskAction(taskId: number): Promise<
   try {
     const task = (await listPublicTasks()).find((item) => item.id === taskId)
     if (!task) return { ok: false, error: 'Görev bulunamadı.' }
-    if (task.kind !== 'manual') {
+    if (task.kind === 'social_follow' || task.kind === 'social_like') {
+      if (await hitRateLimit(`social-check:${member.id}`, 6, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
+      const { checkSocialTask } = await import('@/lib/social-verify')
+      const official = await officialSocialLinks()
+      const check = await checkSocialTask(member.id, task, official[task.param ?? ''] ?? '')
+      if (check === 'review') {
+        const claim = await requestTaskApproval(member.id, taskId, member.name, true)
+        revalidatePath('/gorevler')
+        revalidatePath('/panel')
+        if (claim.status === 'beklemede') return { ok: true, awarded: false, pending: true, points: claim.points, message: 'Kontrol için onaya gönderildi.' }
+        if (claim.status === 'onaylandi') return { ok: true, awarded: false, pending: false, points: claim.points, message: 'Bu görevin puanı zaten yazılmış.' }
+        return { ok: true, awarded: false, pending: false, points: claim.points, message: 'Bu görev reddedildi.' }
+      }
+    } else if (task.kind !== 'manual') {
       const progress = await taskProgress(member.id, task)
       if (progress < task.target) {
         return { ok: false, error: task.target > 1 ? `Henüz bitmedi: ${progress}/${task.target}. Tamamlayınca ödülü al.` : 'Görev henüz tamamlanmadı. Önce görevi yap, sonra ödülü al.' }

@@ -68,7 +68,7 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
       <div
         ref={viewport}
         className={cn(
-          'panel-gold relative aspect-[16/11] touch-pan-y select-none overflow-hidden rounded-2xl sm:aspect-[21/8]',
+          'panel-gold relative h-72 touch-pan-y select-none overflow-hidden rounded-2xl sm:h-76',
           count > 1 && (dragging ? 'cursor-grabbing' : 'cursor-grab'),
         )}
         onPointerDown={(e) => {
@@ -137,15 +137,15 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
                 />
                 <div
                   className={cn(
-                    'relative flex h-full max-w-xl flex-col justify-end gap-2.5 p-5 pb-10 transition-all duration-700 sm:justify-center sm:gap-3 sm:py-10 sm:pr-10 sm:pl-20',
+                    'relative flex h-full max-w-xl flex-col justify-end gap-2.5 p-5 pb-9 transition-all duration-700 sm:justify-center sm:gap-2.5 sm:py-6 sm:pr-10 sm:pl-20',
                     active ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
                   )}
                 >
                   <span className="w-fit rounded-md bg-primary px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-primary-foreground">
                     {slide.eyebrow}
                   </span>
-                  <h2 className="font-display text-2xl font-bold leading-tight text-foreground text-balance sm:text-4xl">{slide.title}</h2>
-                  <p className="hidden text-sm leading-relaxed text-muted-foreground text-pretty sm:block">{slide.description}</p>
+                  <h2 className="font-display text-2xl font-bold leading-tight text-foreground text-balance sm:text-3xl">{slide.title}</h2>
+                  <p className="hidden text-sm leading-relaxed text-muted-foreground text-pretty sm:line-clamp-2">{slide.description}</p>
                   {slide.chips && slide.chips.length > 0 && (
                     <ul className="flex flex-wrap gap-1.5" aria-label="Oyun özellikleri">
                       {slide.chips.map((chip) => (

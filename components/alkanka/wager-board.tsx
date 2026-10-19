@@ -13,6 +13,25 @@ export async function WagerBoard() {
   const period = currentPeriod()
   const rows = await wagerBoard(period, 20).catch(() => [])
 
+  if (rows.length === 0) {
+    return (
+      <section aria-labelledby="cevrim-baslik" className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary" aria-hidden="true">
+          <Trophy className="size-5" />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h2 id="cevrim-baslik" className="truncate font-display text-sm font-bold text-foreground">
+            Çevrim yarışı · {label(period)}
+          </h2>
+          <p className="text-xs leading-relaxed text-muted-foreground">Sponsor hesabını bağla, veri gelince listeye gir.</p>
+        </div>
+        <Link href="/profil#sponsor-hesaplari" className="inline-flex h-9 shrink-0 items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground">
+          Bağla
+        </Link>
+      </section>
+    )
+  }
+
   return (
     <section aria-labelledby="cevrim-baslik" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">

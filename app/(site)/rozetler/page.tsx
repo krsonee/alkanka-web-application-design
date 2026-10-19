@@ -1,41 +1,72 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronRight, Trophy, Users } from 'lucide-react'
 import { pageMeta } from '@/lib/seo'
 import { getMember } from '@/lib/member'
-import { AUTO_LABELS, RULE_FIELDS, badgeHolders, getKpConfig, getKpStatus, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
-import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
+import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, levelReach, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
+import { LevelEmblem, ROLE_BADGES, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
+import { ProgressHero } from '@/components/alkanka/kp/progress-hero'
+import { EarnActions } from '@/components/alkanka/kp/earn-actions'
+import { LevelSections } from '@/components/alkanka/kp/level-sections'
+import { TIER_NAMES } from '@/lib/kanka-puan-shared'
+import { SocialTaskStrip, type SocialTaskItem } from '@/components/alkanka/kp/social-task-strip'
+import { completedTaskIds, listPublicTasks, taskClaimMap } from '@/lib/tasks'
+import { isSocialTaskKind } from '@/lib/task-kinds'
+import { LevelUpCelebration } from '@/components/alkanka/kp/level-up-celebration'
 import { PageHero } from '@/components/alkanka/page-hero'
 import { AutoScrollRow } from '@/components/alkanka/auto-scroll-row'
 import { cn } from '@/lib/utils'
+import { badgeShowcase, getHiddenBadges, getLeagueRivals, getLiveFeed, getStreak, getWeeklyQuest, getWeeklyStar } from '@/lib/kp-extras'
+import { HiddenBadges, LiveFeed, StreakCard, WeeklyStarCard } from '@/components/alkanka/kp/extras'
+import { LeagueRivals, WeeklyQuestCard } from '@/components/alkanka/kp/quest-rivals'
 
 export const metadata = pageMeta('rozetler')
 export const dynamic = 'force-dynamic'
 
-const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
-const TIER_TAGLINE: Record<string, string> = {
-  bronz: 'Yolculuk burada başlar. Kalkanını kazan.',
-  altin: 'Masanın müdavimi ol, altını hisset.',
-  elmas: 'Parlayanlar ligi. Az kişi buraya ulaşır.',
-  efsane: 'Altın Papağan’a giden son basamaklar.',
-}
-const TIER_BAR: Record<string, string> = { bronz: 'bg-bronze', altin: 'bg-gold', elmas: 'bg-accent', efsane: 'bg-ruby' }
 const fmt = (n: number) => n.toLocaleString('tr-TR')
+
+async function loadSocialTasks(userId: string | null): Promise<SocialTaskItem[]> {
+  try {
+    const tasks = (await listPublicTasks()).filter((t) => isSocialTaskKind(t.kind))
+    if (!tasks.length) return []
+    const [doneIds, claims] = userId ? await Promise.all([completedTaskIds(userId), taskClaimMap(userId)]) : [[], {}]
+    const done = new Set(doneIds)
+    return tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      param: t.param,
+      points: t.points,
+      state: done.has(t.id) ? 'done' : (claims as Record<number, string>)[t.id] === 'beklemede' ? 'pending' : 'open',
+    }))
+  } catch (error) {
+    console.error('[rozetler] social tasks', (error as Error).message)
+    return []
+  }
+}
 
 export default async function BadgesPage() {
   const member = await getMember()
-  const [cfg, specials, holders, me] = await Promise.all([
-    getKpConfig(),
+  const cfgPromise = getKpConfig()
+  const [cfg, specials, holders, me, today, reach, socialTasks] = await Promise.all([
+    cfgPromise,
     listSpecialBadges(),
     badgeHolders(),
     member ? getKpStatus(member.id) : Promise.resolve(null),
+    member ? getKpToday(member.id).catch(() => null) : Promise.resolve(null),
+    cfgPromise.then((c) => levelReach(c.levels.length)).catch(() => ({ total: 0, reached: [] as number[] })),
+    loadSocialTasks(member?.id ?? null),
+  ])
+  const [streak, weekly, feed] = await Promise.all([
+    member ? getStreak(member.id).catch(() => null) : Promise.resolve(null),
+    getWeeklyStar(member?.id ?? null),
+    getLiveFeed(8).catch(() => []),
+  ])
+  const [hidden, quest, league, showcase] = await Promise.all([
+    getHiddenBadges(member?.id ?? null, streak?.best ?? 0).catch(() => []),
+    getWeeklyQuest(member?.id ?? null).catch(() => null),
+    member ? getLeagueRivals(member.id).catch(() => null) : Promise.resolve(null),
+    badgeShowcase(specials).catch(() => null),
   ])
   const myLevel = me?.level.index ?? -1
-  const earnRules = RULE_FIELDS.filter((f) => !f.key.endsWith('Cap') && cfg.rules[f.key] > 0)
-  const next = me && cfg.levels[me.level.index + 1]
-  const progress = me && next ? Math.min(100, Math.round(((me.kp - me.level.min) / (next.min - me.level.min)) * 100)) : 100
-  const myTier = me ? levelTier(me.level.index + 1) : 'altin'
-
   const groups: { tier: string; items: { l: (typeof cfg.levels)[number]; i: number }[] }[] = []
   cfg.levels.forEach((l, i) => {
     const tier = levelTier(i + 1)
@@ -47,62 +78,29 @@ export default async function BadgesPage() {
   return (
     <div className="flex flex-col gap-10">
       <PageHero
+        compact
         eyebrow="Rozet Salonu"
         title="Puan topla, rozetini kap"
         description={`${cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.`}
         image="/images/badges/hero-jako-rozet.png"
-        stats={[
-          { label: 'Seviye', value: String(cfg.levels.length) },
-          { label: 'Lig', value: String(groups.length) },
-          { label: 'Değerli rozet', value: String(specials.length) },
-        ]}
-      >
-          <div className="flex flex-wrap gap-2">
-            {groups.map((g) => (
-              <span key={g.tier} className={cn('inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-xs font-semibold', TIER_BG[g.tier], TIER_TEXT[g.tier])}>
-                <LevelEmblem level={g.items[0].i + 1} size="xs" />
-                {TIER_NAMES[g.tier]}
-              </span>
-            ))}
-          </div>
-      </PageHero>
+      />
 
-      <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:hidden">
+      <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
         {[
           { href: '#kazan', label: 'KP kazan' },
           ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),
           { href: '#degerli', label: 'Değerli' },
+          { href: '#gizli', label: 'Gizli' },
+          { href: '#akis', label: 'Akış' },
         ].map((l) => (
-          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground">
+          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-gold/50 hover:text-gold">
             {l.label}
           </a>
         ))}
       </nav>
 
-      {me ? (
-        <Link
-          href="/profil"
-          className={cn('flex flex-row items-center gap-3 rounded-2xl border p-3 transition-colors hover:border-gold/50 sm:gap-4 sm:p-4', TIER_BG[myTier])}
-        >
-          <LevelEmblem level={me.level.index + 1} size="md" className="sm:hidden" />
-          <LevelEmblem level={me.level.index + 1} size="lg" className="hidden sm:flex" />
-          <span className="flex min-w-0 flex-1 flex-col gap-2">
-            <span className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="flex items-baseline gap-2">
-                <span className="font-display text-lg font-bold text-foreground">{me.level.name}</span>
-                <span className={cn('text-xs font-bold uppercase tracking-wider', TIER_TEXT[myTier])}>
-                  {TIER_NAMES[myTier]} · Lv {me.level.index + 1}
-                </span>
-              </span>
-              <span className="font-display text-sm font-bold tabular-nums text-gold">{fmt(me.kp)} KP</span>
-            </span>
-            <span className="h-2 overflow-hidden rounded-full bg-background/70" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Sonraki seviyeye ilerleme">
-              <span className={cn('block h-full rounded-full', TIER_BAR[myTier])} style={{ width: `${progress}%` }} />
-            </span>
-            <span className="text-xs text-muted-foreground">{next ? `${next.name} için ${fmt(next.min - me.kp)} KP kaldı` : 'Zirvedesin kanka!'}</span>
-          </span>
-          <ChevronRight className="hidden size-5 text-muted-foreground sm:block" aria-hidden />
-        </Link>
+      {me && today ? (
+        <ProgressHero me={me} today={today} levels={cfg.levels} rules={cfg.rules} />
       ) : (
         <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-gold/25 bg-gold/5 p-4 sm:flex-row sm:items-center">
           <p className="text-sm text-foreground">Giriş yap, ilk rozetin <span className="font-bold text-gold">Çaylak</span> hemen senin olsun.</p>
@@ -110,67 +108,45 @@ export default async function BadgesPage() {
         </div>
       )}
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        {streak && <StreakCard streak={streak} />}
+        <WeeklyStarCard star={weekly} />
+      </div>
+
+      {quest && <WeeklyQuestCard quest={quest} signedIn={!!member} />}
+
+      {league && league.rivals.length > 1 && <LeagueRivals tier={league.tier} rivals={league.rivals} />}
+
       <section aria-labelledby="kazan" className="flex scroll-mt-32 flex-col gap-3">
-        <h2 id="kazan" className="font-display text-lg font-bold text-foreground">Nasıl KP kazanılır?</h2>
-        <ul className="grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-3">
-          {earnRules.map((f) => (
-            <li
-              key={f.key}
-              className="flex flex-col-reverse items-start gap-1 rounded-xl border border-border bg-card px-2.5 py-2 text-xs leading-snug text-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2.5 sm:text-sm"
-            >
-              <span className="text-pretty">{f.label}</span>
-              <span className="shrink-0 rounded-full bg-gold/15 px-2.5 py-0.5 font-display text-xs font-bold tabular-nums text-gold">+{cfg.rules[f.key]}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs text-muted-foreground">Günde en fazla {cfg.rules.minuteDailyCap} dakika ve {cfg.rules.chatDailyCap} sohbet mesajı puan kazandırır.</p>
+        <div className="flex flex-col gap-1">
+          <h2 id="kazan" className="font-display text-lg font-bold text-foreground">{me ? 'Bugün KP kazan' : 'Nasıl KP kazanılır?'}</h2>
+          <p className="text-xs text-muted-foreground">
+            Karta dokun, hemen başla. Günde en fazla {cfg.rules.minuteDailyCap} dakika ve {cfg.rules.chatDailyCap} sohbet mesajı sayılır.
+          </p>
+        </div>
+        <EarnActions rules={cfg.rules} today={today?.breakdown ?? null} telegramLinked={(me?.breakdown.telegram ?? 0) > 0} />
+        {socialTasks.length ? (
+          <div className="mt-6 flex flex-col gap-3">
+            <div className="flex items-end justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <h3 className="font-display text-base font-bold text-foreground">Sosyal görevler</h3>
+                <p className="text-xs text-muted-foreground">Hesabını profilinden bağla, görev o hesapla otomatik kontrol edilsin.</p>
+              </div>
+              <Link href="/profil" className="inline-flex shrink-0 items-center gap-0.5 text-xs font-bold text-gold">
+                Hesap bağla
+                <ChevronRight className="size-3.5" aria-hidden />
+              </Link>
+            </div>
+            <SocialTaskStrip items={socialTasks} />
+          </div>
+        ) : null}
       </section>
 
-      <section aria-labelledby="seviyeler" className="flex flex-col gap-4">
-        <h2 id="seviyeler" className="font-display text-lg font-bold text-foreground">Seviyeler</h2>
-        {groups.map((g) => (
-          <article key={g.tier + g.items[0].i} id={`lig-${g.tier}`} className={cn('scroll-mt-32 overflow-hidden rounded-2xl border', TIER_BG[g.tier])}>
-            <header className="relative flex h-20 items-center overflow-hidden sm:h-28 md:h-32">
-              <Image src={`/images/badges/tier-${g.tier}.png`} alt="" fill sizes="(min-width: 1024px) 900px, 100vw" className="object-cover object-right" />
-              <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
-              <div className="relative flex flex-col gap-1 px-5">
-                <span className={cn('font-display text-2xl font-bold', TIER_TEXT[g.tier])}>{TIER_NAMES[g.tier]} Ligi</span>
-                <span className="text-xs text-muted-foreground">
-                  Lv {g.items[0].i + 1}–{g.items.at(-1)!.i + 1} · {TIER_TAGLINE[g.tier]}
-                </span>
-              </div>
-            </header>
-            <ol className="flex snap-x snap-mandatory gap-2 overflow-x-auto p-3 pt-4 no-scrollbar sm:grid sm:snap-none sm:grid-cols-3 sm:overflow-visible lg:grid-cols-5">
-              {g.items.map(({ l, i }) => {
-                const current = i === myLevel
-                const locked = member ? i > myLevel : false
-                return (
-                  <li
-                    key={i}
-                    className={cn(
-                      'relative flex w-28 shrink-0 snap-start flex-col items-center gap-1.5 rounded-xl border bg-card/80 px-2 pb-2.5 pt-3 text-center sm:w-auto sm:gap-2 sm:pb-3 sm:pt-4',
-                      current ? 'border-gold ring-2 ring-gold/30' : 'border-border',
-                    )}
-                  >
-                    {current && (
-                      <span className="absolute -top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold uppercase text-gold-foreground">Sen</span>
-                    )}
-                    <LevelEmblem level={i + 1} size="md" locked={locked} className="sm:hidden" />
-                    <LevelEmblem level={i + 1} size="lg" locked={locked} className="hidden sm:flex" />
-                    <span className="flex flex-col">
-                      <span className={cn('text-sm font-bold', locked ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
-                      <span className="text-[11px] text-muted-foreground">{l.badge}</span>
-                    </span>
-                    <span className={cn('rounded-full px-2 py-0.5 font-display text-[11px] font-bold tabular-nums', locked ? 'bg-muted text-muted-foreground' : cn('bg-background/60', TIER_TEXT[g.tier]))}>
-                      {fmt(l.min)} KP
-                    </span>
-                  </li>
-                )
-              })}
-            </ol>
-          </article>
-        ))}
-      </section>
+      <LevelSections groups={groups} levels={cfg.levels} myLevel={myLevel} myKp={me?.kp ?? 0} signedIn={!!member} reach={reach} />
+
+      {member && me && (
+        <LevelUpCelebration userId={member.id} level={me.level.index + 1} name={me.level.name} badge={me.level.badge} />
+      )}
 
       <section aria-labelledby="degerli" className="flex scroll-mt-32 flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -185,31 +161,66 @@ export default async function BadgesPage() {
         <AutoScrollRow label="Değerli rozetler" className="-mx-4 scroll-px-4 gap-3 px-4 pb-1 sm:mx-0 sm:scroll-px-0 sm:px-0">
           {specials.map((b) => {
             const owners = holders[b.id] ?? []
+            const role = ROLE_BADGES[b.id]
+            const tier = role?.tier ?? b.tier
             return (
-              <li key={b.id} className={cn('flex w-[82%] shrink-0 snap-start flex-col gap-3 rounded-2xl border p-4 sm:w-[calc(50%-0.375rem)] xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[b.tier])}>
-                <div className="flex items-center gap-4">
-                  <SpecialEmblem icon={b.icon} tier={b.tier} size="lg" />
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[b.tier])}>{TIER_NAMES[b.tier]}</span>
-                    <span className="font-display text-base font-bold leading-tight text-foreground">{b.name}</span>
-                    {b.bonus > 0 && <span className="font-display text-sm font-bold text-gold">+{fmt(b.bonus)} KP</span>}
+              <li key={b.id} className={cn('flex w-[calc(50%-0.375rem)] shrink-0 snap-start flex-col gap-2 rounded-2xl border p-3 sm:gap-3 sm:p-4 xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[tier])}>
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
+                  <SpecialEmblem icon={b.icon} tier={tier} size="md" className="sm:hidden" />
+                  <SpecialEmblem icon={b.icon} tier={tier} size="lg" className="hidden sm:flex" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:gap-1">
+                    <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[tier])}>{role?.label ?? TIER_NAMES[b.tier]}</span>
+                    <span className="font-display text-sm font-bold leading-tight text-foreground sm:text-base">{b.name}</span>
+                    {b.bonus > 0 && <span className="font-display text-xs font-bold text-gold sm:text-sm">+{fmt(b.bonus)} KP</span>}
                   </div>
                 </div>
-                <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{b.description}</p>
-                {b.auto && <p className="text-[11px] text-muted-foreground">{AUTO_LABELS[b.auto]}</p>}
-                <p className="mt-auto flex items-center gap-1.5 border-t border-border pt-3 text-[11px] text-muted-foreground">
-                  <Users className="size-3.5 shrink-0" aria-hidden />
-                  {owners.length ? (
-                    <span className="truncate text-foreground">{owners.map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}</span>
+                <p className="line-clamp-3 text-pretty text-xs leading-relaxed text-muted-foreground sm:line-clamp-none">{b.description}</p>
+                {b.auto && <p className="hidden text-[11px] text-muted-foreground sm:block">{AUTO_LABELS[b.auto]}</p>}
+                {showcase?.leaders[b.id] && (
+                  <p className="rounded-lg bg-background/70 px-2 py-1.5 text-[11px] leading-snug text-foreground">
+                    <span className="font-bold text-gold">Şu an önde:</span> {showcase.leaders[b.id].name} · {showcase.leaders[b.id].detail}
+                  </p>
+                )}
+                <div className="mt-auto flex items-center gap-2 border-t border-border pt-2 text-[11px] text-muted-foreground sm:pt-3">
+                  {(showcase?.owners[b.id] ?? []).length ? (
+                    <>
+                      <span className="flex shrink-0 -space-x-2" aria-hidden>
+                        {showcase!.owners[b.id].slice(0, 3).map((o, i) =>
+                          o.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={i} src={o.image} alt="" className="size-6 rounded-full border-2 border-card object-cover" />
+                          ) : (
+                            <span key={i} className="flex size-6 items-center justify-center rounded-full border-2 border-card bg-muted text-[10px] font-bold text-foreground">
+                              {o.name.charAt(0).toUpperCase()}
+                            </span>
+                          ),
+                        )}
+                      </span>
+                      <span className="truncate text-foreground">
+                        {showcase!.owners[b.id].map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}
+                      </span>
+                    </>
+                  ) : owners.length ? (
+                    <>
+                      <Users className="size-3.5 shrink-0" aria-hidden />
+                      <span className="truncate text-foreground">{owners.map((h) => (h.count > 1 ? `${h.name} ×${h.count}` : h.name)).join(', ')}</span>
+                    </>
                   ) : (
-                    'Henüz sahibi yok, ilk sen ol.'
+                    <>
+                      <Users className="size-3.5 shrink-0" aria-hidden />
+                      Henüz sahibi yok, ilk sen ol.
+                    </>
                   )}
-                </p>
+                </div>
               </li>
             )
           })}
         </AutoScrollRow>
       </section>
+
+      {hidden.length > 0 && <HiddenBadges badges={hidden} signedIn={!!member} />}
+
+      <LiveFeed items={feed} />
     </div>
   )
 }

@@ -6,6 +6,8 @@ export type TaskKind =
   | 'sponsor_link'
   | 'invite'
   | 'social_link'
+  | 'social_follow'
+  | 'social_like'
   | 'telegram_link'
   | 'tv_watch'
   | 'tv_predict'
@@ -20,6 +22,8 @@ export const TASK_KINDS: { value: TaskKind; label: string; param: KindParam; cou
   { value: 'sponsor_link', label: 'Sponsor hesabı bağla', param: 'site', counted: false, hint: 'Üyenin sponsor hesabı panelde onaylanınca tamamlanır.' },
   { value: 'invite', label: 'Arkadaş davet et', param: null, counted: true, hint: 'Davet linkiyle kayıt olan üyeler sayılır.' },
   { value: 'social_link', label: 'Sosyal hesap doğrula', param: 'platform', counted: false, hint: 'Üyenin sosyal hesabı doğrulanınca tamamlanır.' },
+  { value: 'social_follow', label: 'Resmi hesabı takip et / abone ol', param: 'platform', counted: false, hint: 'Üyenin bağlı hesabı resmi hesabımızı takip ediyorsa tamamlanır. Platform API’si panelde bağlıysa otomatik, değilse onay kuyruğuna düşer.' },
+  { value: 'social_like', label: 'Gönderiyi beğen', param: 'platform', counted: false, hint: 'Bağlantı alanına gönderi linkini yapıştır. Üyenin bağlı hesabı beğendiyse tamamlanır (X otomatik, diğerleri onaylı).' },
   { value: 'telegram_link', label: 'Telegram bağla', param: null, counted: false, hint: 'Üye Telegram hesabını bağlayınca tamamlanır.' },
   { value: 'tv_watch', label: 'KankaTV izle (dakika)', param: null, counted: true, hint: 'Hedef dakika cinsindendir. Üye KankaTV’de yayın açıkken her dakika sayılır.' },
   { value: 'tv_predict', label: 'KankaTV gol tahmini bil', param: null, counted: true, hint: 'KankaTV’de “sıradaki golü kim atar” tahminini bilen üyeler sayılır.' },
@@ -50,7 +54,12 @@ export const TASK_PLATFORMS = [
   { value: 'instagram', label: 'Instagram' },
   { value: 'x', label: 'X' },
   { value: 'youtube', label: 'YouTube' },
+  { value: 'twitch', label: 'Twitch' },
 ]
+
+/** Social tasks the member does off-site and then asks us to check. */
+export const isSocialCheckKind = (kind: TaskKind) => kind === 'social_follow' || kind === 'social_like'
+export const isSocialTaskKind = (kind: TaskKind) => kind === 'social_link' || isSocialCheckKind(kind)
 
 /** Where the member goes to make progress on an auto task. */
 export function kindHref(kind: TaskKind, param: string | null): { href: string; external: boolean } | null {

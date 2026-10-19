@@ -32,48 +32,63 @@ import {
 
 export const TELEGRAM_URL = 'https://t.me/AlkankaOfficial'
 
-export type NavItem = { id: string; label: string; href: string; icon: LucideIcon; badge?: string }
+/**
+ * `signal` badges are filled at runtime (live stream dot, open task count);
+ * `newUntil` shows a "Yeni" tag that disappears on its own after that date.
+ */
+export type NavItem = {
+  id: string
+  label: string
+  href: string
+  icon: LucideIcon
+  badge?: string
+  signal?: 'live' | 'tasks'
+  newUntil?: string
+}
 
 export const NAV_ITEMS: NavItem[] = [
   { id: 'anasayfa', label: 'Ana sayfa', href: '/', icon: Home },
   { id: 'siteler', label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
   { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
-  { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, badge: 'Canlı' },
-  { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, badge: 'Yeni' },
+  { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, signal: 'live' },
+  { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, newUntil: '2026-10-26' },
   { id: 'turnuvalar', label: 'Turnuvalar', href: '/turnuvalar', icon: Swords },
-  { id: 'market', label: 'Puan marketi', href: '/market', icon: ShoppingBag },
-  { id: 'gorevler', label: 'Görevler', href: '/gorevler', icon: ListChecks },
+  { id: 'market', label: 'Market', href: '/market', icon: ShoppingBag },
+  { id: 'gorevler', label: 'Görevler', href: '/gorevler', icon: ListChecks, signal: 'tasks' },
   { id: 'etkinlikler', label: 'Biletler', href: '/biletler', icon: Ticket },
   { id: 'tahminler', label: 'Tahmin ligi', href: '/tahminler', icon: Flag },
   { id: 'siralama', label: 'Sıralama', href: '/siralama', icon: Trophy },
-  { id: 'rozetler', label: 'Rozetler', href: '/rozetler', icon: Medal, badge: 'Yeni' },
+  { id: 'rozetler', label: 'Rozetler', href: '/rozetler', icon: Medal, newUntil: '2026-10-26' },
   { id: 'guven', label: 'Güven merkezi', href: '/guven', icon: ShieldCheck },
-  { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone, badge: '+500' },
+  { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone },
   { id: 'sss', label: 'SSS', href: '/sss', icon: HelpCircle },
+]
+
+const byId = (id: string) => NAV_ITEMS.find((i) => i.id === id)!
+
+export const TASK_HUB: NavGroup = {
+  kind: 'group',
+  id: 'gorev-merkezi',
+  label: 'Görev Merkezi',
+  icon: Sparkles,
+  items: ['gorevler', 'tahminler', 'turnuvalar'].map(byId),
+}
+
+export type NavSection = { id: string; title: string; entries: NavEntry[] }
+
+/** Sidebar layout: short titled sections so the important pages stand out. */
+export const NAV_SECTIONS: NavSection[] = [
+  { id: 'kesfet', title: 'Keşfet', entries: ['anasayfa', 'oyunlar', 'kankatv', 'siralama'].map(byId) },
+  { id: 'kazan', title: 'Kazan', entries: [TASK_HUB, byId('market'), byId('rozetler'), byId('kampanyalar')] },
+  { id: 'sponsor', title: 'Sponsor', entries: ['siteler', 'ozel-oranlar'].map(byId) },
+  { id: 'destek', title: 'Destek', entries: ['guven', 'sss', 'uygulama'].map(byId) },
 ]
 
 export type NavGroup = { kind: 'group'; id: string; label: string; icon: LucideIcon; items: NavItem[] }
 export type NavEntry = (NavItem & { kind?: 'item' }) | NavGroup
 
-const EVENT_HUB_IDS = ['gorevler', 'tahminler', 'etkinlikler', 'turnuvalar', 'market']
-
-/** Sidebar tree: the event-hub pages sit together under one roof, in the order the community asked for. */
-export const NAV_TREE: NavEntry[] = (() => {
-  const hub: NavGroup = {
-    kind: 'group',
-    id: 'etkinlik-merkezi',
-    label: 'Görev & Etkinlik Merkezi',
-    icon: Sparkles,
-    items: EVENT_HUB_IDS.map((id) => NAV_ITEMS.find((i) => i.id === id)!).filter(Boolean),
-  }
-  const out: NavEntry[] = []
-  for (const item of NAV_ITEMS) {
-    if (!EVENT_HUB_IDS.includes(item.id)) out.push(item)
-    else if (!out.includes(hub)) out.push(hub)
-  }
-  return out
-})()
+export type TelegramLinks = { duyuru: string; sohbet: string; ozelOran: string; promo: string }
 
 export const SECTION_IDS = NAV_ITEMS.map((i) => i.href.split('#')[1]).filter((v, i, a) => a.indexOf(v) === i)
 
@@ -175,15 +190,6 @@ export const SLIDES: Slide[] = [
     cta: 'Kanala katıl',
     href: TELEGRAM_URL,
     image: '/images/mascots/jako-duyuru.png',
-  },
-  {
-    id: 's4',
-    eyebrow: 'Haftalık etkinlik',
-    title: '250.000 Kanka Coin ödüllü bilet çekilişi',
-    description: 'Bilet al, tahmin yap, sıralamada yüksel. Her pazar 21:00’de çekiliş.',
-    cta: 'Bilet al',
-    href: '/biletler',
-    image: '/images/banner-events.png',
   },
 ]
 
@@ -383,7 +389,6 @@ export const MARKET_ITEMS: MarketItem[] = [
   { id: 'cark-hakki', name: '+3 Ekstra Çark Hakkı', type: 'EKSTRA HAK', price: 900, stock: 42, total: 100, image: '/images/tile-wheel.png', limit: 5, description: 'Günlük ücretsiz hakkına ek olarak 3 çark çevirme hakkı.', delivery: 'Haklar anında hesabına tanımlanır.', rules: ['Haklar 7 gün içinde kullanılmalıdır.', 'Günde en fazla 5 paket alınabilir.'] },
   { id: 'zar-hakki', name: '+5 Ekstra Zar Hakkı', type: 'EKSTRA HAK', price: 750, stock: 0, total: 80, image: '/images/tile-dice.png', limit: 5, description: 'Zar oyununda 5 ekstra atış hakkı. Düşeş jackpotu bu haklarla da geçerli.', delivery: 'Haklar anında hesabına tanımlanır.', rules: ['Haklar 7 gün içinde kullanılmalıdır.', 'Stok her pazartesi yenilenir.'] },
   { id: 'seri-kalkani', name: 'Seri Kalkanı (7 gün)', type: 'EKSTRA HAK', price: 1200, stock: 9, total: 30, image: '/images/tile-tasks.png', limit: 2, description: 'Bir günü kaçırdığında giriş serinin sıfırlanmasını engeller.', delivery: 'Kalkan aktif edilir, ihtiyaç anında otomatik kullanılır.', rules: ['Kalkan 7 gün boyunca geçerlidir.', 'Aynı anda en fazla 1 kalkan aktif olabilir.'] },
-  { id: 'vip-telegram', name: 'VIP Telegram Erişimi', type: 'VIP', price: 6000, stock: 5, total: 10, image: '/images/banner-telegram.png', refOnly: true, limit: 1, description: 'Kodların herkesten önce düştüğü kapalı VIP Telegram kanalına 30 günlük erişim.', delivery: 'Davet linki 24 saat içinde Telegram’dan gönderilir.', rules: ['Sadece referans linkiyle kayıt olan üyeler alabilir.', 'Telegram kullanıcı adının profilde kayıtlı olması gerekir.'] },
   { id: 'gizemli-kutu', name: 'Gizemli Hediye Kutusu', type: 'HEDİYE', price: 3500, stock: 3, total: 15, image: '/images/tile-chest.png', limit: 1, description: 'İçinden rozet, çekiliş bileti, VIP geçiş veya fiziksel hediye çıkabilen sürpriz kutu.', delivery: 'Kutu sandık ekranında açılır. Fiziksel hediyeler için destek seninle iletişime geçer.', rules: ['Haftada 1 adet alınabilir.', 'Fiziksel hediyeler sadece Türkiye içi gönderilir.'] },
   { id: 'cekilis-bileti', name: 'Çekiliş Bileti x5', type: 'HEDİYE', price: 1000, stock: 0, total: 200, image: '/images/banner-events.png', limit: 4, description: 'Haftalık bilet çekilişi için 5 ekstra bilet. Kazanma şansını artırır.', delivery: 'Biletler o haftanın çekilişine otomatik eklenir.', rules: ['Haftada en fazla 4 paket (20 bilet) alınabilir.', 'Biletler sonraki haftaya devretmez.'] },
   { id: 'profil-cercevesi', name: 'Özel Profil Çerçevesi', type: 'ROZET', price: 1800, stock: 27, total: 40, image: '/images/hero-chest.png', limit: 1, description: 'Profil fotoğrafının etrafında hareketli altın çerçeve.', delivery: 'Anında profiline eklenir.', rules: ['Hesap başına 1 adet alınabilir.'] },
@@ -460,7 +465,7 @@ export const EVENTS: EventItem[] = [
     steps: ['100 Kanka Coin ile maratona kayıt ol.', 'Her çark çevirişin 1 puan kazandırır.', 'Jackpot dilimi 10 bonus puan verir.', 'Ay sonunda ilk 300 ödül alır.'],
     rules: ['Kayıt ücreti iade edilmez.', 'Sadece kayıt sonrası çevirmeler sayılır.', 'Bot veya otomatik tıklama kullanımı kalıcı yasak sebebidir.'],
     prizes: [
-      { place: '1.', prize: 'VIP Telegram + 30.000 KC' },
+      { place: '1.', prize: '30.000 KC + Özel rozet' },
       { place: '2.-3.', prize: '15.000 KC' },
       { place: '4.-50.', prize: '2.000 KC' },
       { place: '51.-300.', prize: '500 KC' },
@@ -557,6 +562,9 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
       { q: 'AL KANKA nedir ve nasıl çalışır?', a: 'AL KANKA; partner kampanyaları, mini oyunlar ve Telegram topluluğunu tek yerde toplayan bir ödül rehberidir. Görev yap, oyun oyna, Kanka Coin topla ve marketten ödül al.' },
       { q: 'Partner siteler hangi kriterlere göre seçiliyor?', a: 'Lisans, ödeme hızı, kullanıcı yorumları ve destek kalitesi düzenli olarak kontrol edilir. Kriterleri karşılamayan partnerler listeden çıkarılır.' },
       { q: 'Bilgiler ne sıklıkla güncelleniyor?', a: 'Kampanyalar ve özel oranlar günlük, giriş adresleri ise anlık olarak güncellenir. En hızlı bildirim Telegram kanalımızdadır.' },
+      { q: 'Mobil uygulamayı nasıl kurarım, bonusu nasıl alırım?', a: "Mobil uygulama sayfasındaki Android ya da iPhone adımlarını izleyip AL KANKA'yı ana ekranına ekle. Uygulamadan giriş yapınca kurulum bonusu, bildirimleri açınca ek bonus hesabına yüklenir. Her ödül hesap başına bir kez verilir." },
+      { q: 'Çekim paylaşımım nasıl onaylanır?', a: 'Güven merkezindeki Çekim sekmesinden sponsor sitedeki kullanıcı adını, tutarı, çekim saatini ve ekran görüntüsünü gönder. Ekip kontrol edip onaylayınca ödülün hesabına eklenir ve çekimin duvarda herkese görünür.' },
+      { q: 'Hesabımı nasıl silerim?', a: "Telegram'dan destek ekibine yaz. Hesabın sana ait olduğu doğrulandıktan sonra hesabın ve verilerin silinir. Silinen hesabın bakiyesi ve rozetleri geri getirilemez." },
     ],
   },
   {
@@ -566,14 +574,18 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
       { q: 'Kanka Coin nasıl kazanılır?', a: 'Çark, sandık ve masa oyunları, günlük giriş serisi, görevler, tahminler ve etkinlikler ile Kanka Coin kazanırsın.' },
       { q: 'Markette nakit ödül var mı?', a: 'Hayır. Puan marketinde rozet, ekstra oyun hakkı, seri kalkanı, çekiliş bileti ve hediyeler bulunur. Nakit ödül yoktur.' },
       { q: 'Seri kalkanı ne işe yarar?', a: 'Bir günü kaçırdığında 7 günlük giriş serinin sıfırlanmasını engeller. Kalkan otomatik olarak kullanılır.' },
+      { q: 'KC ile KP arasındaki fark ne?', a: 'Kanka Coin (KC) harcanabilir bakiyendir; marketten ödül almak ve oyunlara girmek için kullanılır. Kanka Puanı (KP) ise deneyim puanıdır; harcanmaz, seviyeni ve sıralamadaki yerini belirler.' },
+      { q: 'Seviye nasıl atlanır?', a: 'Görev, oyun ve etkinliklerden kazandığın KP birikir; belirli eşiklere ulaştıkça seviyen yükselir. Yüksek seviye daha iyi ödüllerin ve özel etkinliklerin kilidini açar.' },
+      { q: 'Rozetler ne işe yarar?', a: 'Rozetler başarılarını profilinde gösterir. Bazı rozetler ek KC ödülü ya da özel etkinlik erişimi sağlar.' },
     ],
   },
   {
     id: 'telegram',
     label: 'Telegram',
     items: [
-      { q: 'Promo kodları nereden takip ederim?', a: '@AlkankaOfficial kanalı kodların ilk düştüğü yerdir. Bildirimleri açarsan kontenjan dolmadan kodu alırsın.' },
-      { q: 'VIP Telegram kanalına nasıl girerim?', a: 'Puan marketinden VIP Telegram Erişimi alarak veya 7 günlük seriyi tamamlayarak VIP kanala davet alırsın.' },
+      { q: 'Promo kodları nereden takip ederim?', a: 'Kodlar ilk olarak AL KANKA Promo Kod kanalına düşer. Bildirimleri açarsan kontenjan dolmadan kodu alırsın.' },
+      { q: 'Hangi Telegram kanallarınız var?', a: 'Dört kanalımız var: AL KANKA Resmi (duyurular ve güncel adresler), AL KANKA Özel Oran (artırılmış oranlar), AL KANKA Promo Kod (kodların ilk düştüğü yer) ve AL KANKA Sohbet (topluluk sohbeti). Hepsine sitedeki Sohbet bölümünden de ulaşabilirsin.' },
+      { q: 'Anlık turnuvalardan nasıl haberdar olurum?', a: 'Mobil uygulamada bildirimleri açarsan turnuva başlamadan telefonuna haber gelir. Telegram kanalında ve Turnuvalar sayfasında da güncel takvim yer alır.' },
     ],
   },
   {
@@ -582,6 +594,7 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
     items: [
       { q: 'Hesabım güvende mi?', a: 'Şifreler şifrelenerek saklanır, oturumlar güvenli çerezlerle yönetilir. Kimseyle giriş bilgilerini paylaşma.' },
       { q: 'Yaş sınırı var mı?', a: 'Evet. AL KANKA yalnızca 18 yaş ve üzeri kullanıcılar içindir. Sorumlu davran.' },
+      { q: 'Oyunlarda hile kontrolü var mı?', a: 'Evet. Oyun sonuçları sunucuda doğrulanır. Çoklu hesap, otomasyon ya da şüpheli kazanç tespit edilirse ödüller geri alınır ve hesap kısıtlanabilir.' },
     ],
   },
 ]

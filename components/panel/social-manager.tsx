@@ -1,7 +1,8 @@
 'use client'
 
 import { HideButton } from '@/components/panel/hide-button'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type ComponentProps } from 'react'
+import { SocialApiForm } from '@/components/panel/social-api-form'
 import { Check, ExternalLink, Loader2, Trash2, X } from 'lucide-react'
 import {
   createSocialEventAction,
@@ -286,16 +287,19 @@ export function SocialManager({
   accounts,
   events,
   entries,
+  api,
 }: {
   links: SocialLinks
   accounts: AdminSocialAccount[]
   events: SocialEvent[]
   entries: AdminEntry[]
+  api?: ComponentProps<typeof SocialApiForm>
 }) {
   return (
     <div className="flex flex-col gap-6">
       <SocialGuide />
       <LinksForm links={links} />
+      {api ? <SocialApiForm {...api} /> : null}
       <AccountsReview accounts={accounts} />
       <EventsAdmin events={events} entries={entries} />
     </div>

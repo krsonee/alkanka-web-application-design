@@ -30,9 +30,18 @@ function YoutubeIcon({ className }: IconProps) {
   )
 }
 
+function TwitchIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M4.3 0 1.4 3.4v17.1h5.7V24h3.4l3.4-3.4h4.6L24 15.4V0zm17.4 14.3-3.4 3.4h-5.7l-3.4 3.4v-3.4H4.6V2.3h17.1zM18.3 6.3h-2.3v6.9h2.3zm-6.3 0H9.7v6.9H12z" />
+    </svg>
+  )
+}
+
 export function SocialIcon({ platform, className }: { platform: SocialPlatform; className?: string }) {
   if (platform === 'x') return <XIcon className={className} />
   if (platform === 'instagram') return <InstagramIcon className={className} />
+  if (platform === 'twitch') return <TwitchIcon className={className} />
   return <YoutubeIcon className={className} />
 }
 
@@ -40,6 +49,7 @@ export const PLATFORM_TINT: Record<SocialPlatform, string> = {
   x: 'hover:border-foreground/40 hover:text-foreground',
   instagram: 'hover:border-ruby/50 hover:text-ruby',
   youtube: 'hover:border-destructive/50 hover:text-destructive',
+  twitch: 'hover:border-accent/50 hover:text-accent',
 }
 
 /** The brand's official accounts as three side-by-side tiles. Panel links override the defaults. */
@@ -47,7 +57,7 @@ export function SocialRow({ links, className }: { links: SocialLinks; className?
   return (
     <nav aria-label="AL KANKA sosyal medya hesapları" className={cn('flex flex-col gap-2', className)}>
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bizi takip et</span>
-      <ul className="grid grid-cols-3 gap-2">
+      <ul className="grid grid-cols-4 gap-2">
         {SOCIAL_PLATFORMS.map((p) => (
           <li key={p}>
             <a

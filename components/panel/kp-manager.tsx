@@ -16,10 +16,22 @@ import {
   updateOnlineRewards,
   updateRules,
   updateTicker,
+  updateWeeklyQuest,
   upsertBadge,
 } from '@/app/panel/kp-actions'
 import type { AutoKind, AwardRow, ContestRow, LeaderRow, SpecialBadge } from '@/lib/kanka-puan'
-import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, RULE_FIELDS, type BadgeTier, type LevelDef, type PointRules } from '@/lib/kanka-puan-shared'
+import {
+  BADGE_ICONS,
+  BADGE_TIERS,
+  DEFAULT_LEVELS,
+  QUEST_METRICS,
+  RULE_FIELDS,
+  type BadgeTier,
+  type LevelDef,
+  type PointRules,
+  type QuestMetric,
+  type WeeklyQuestConfig,
+} from '@/lib/kanka-puan-shared'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { ICONS, LevelEmblem, SpecialEmblem } from '@/components/alkanka/kp/emblem'
 import { cn } from '@/lib/utils'
@@ -37,9 +49,11 @@ import {
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
-type Tab = 'levels' | 'rules' | 'badges' | 'award' | 'board' | 'online' | 'ticker'
+type Tab = 'levels' | 'rules' | 'badges' | 'award' | 'board' | 'online' | 'ticker' | 'quest'
 
 type Props = {
+  quest: WeeklyQuestConfig
+  questWinners: number
   online: OnlineConfig
   ticker: TickerConfig
   levels: LevelDef[]
@@ -50,7 +64,7 @@ type Props = {
   autoLabels: Record<AutoKind, string>
 }
 
-export function KpManager({ levels, rules, badges, awards, board, autoLabels, online, ticker }: Props) {
+export function KpManager({ levels, rules, badges, awards, board, autoLabels, online, ticker, quest, questWinners }: Props) {
   const [tab, setTab] = useState<Tab>('levels')
   return (
     <div className="flex flex-col gap-5">
@@ -68,6 +82,7 @@ export function KpManager({ levels, rules, badges, awards, board, autoLabels, on
             ['rules', 'Puan kuralları'],
             ['badges', `Değerli rozetler (${badges.length})`],
             ['award', 'Rozet ver'],
+            ['quest', 'Haftalık görev'],
             ['board', 'KP sıralaması'],
             ['online', 'Online ödülleri'],
             ['ticker', 'Kazananlar şeridi'],
@@ -85,6 +100,71 @@ export function KpManager({ levels, rules, badges, awards, board, autoLabels, on
       {tab === 'board' && <Board board={board} />}
       {tab === 'online' && <OnlineEditor initial={online} />}
       {tab === 'ticker' && <TickerEditor initial={ticker} />}
+      {tab === 'quest' && <QuestEditor initial={quest} badges={badges} winners={questWinners} />}
+    </div>
+  )
+}
+
+function QuestEditor({ initial, badges, winners }: { initial: WeeklyQuestConfig; badges: SpecialBadge[]; winners: number }) {
+  const [cfg, setCfg] = useState(initial)
+  const { pending, status, run } = useAction()
+  const manual = badges.filter((b) => b.active && !b.auto)
+  const metric = QUEST_METRICS.find((m) => m.id === cfg.metric)
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Her hafta Pazartesi sıfırlanan bir görev. Hedefe ulaşan her üye seçtiğin değerli rozeti ve rozetin KP bonusunu anında alır. Görev Rozetler sayfasında herkese gösterilir.
+        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <input type="checkbox" checked={cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} className="size-4 accent-primary" />
+            Görev yayında
+          </label>
+          <span className="text-xs text-muted-foreground">Bu hafta tamamlayan: <b className="tabular-nums text-foreground">{winners}</b> üye</span>
+        </div>
+      </div>
+      <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Görev başlığı
+          <input value={cfg.title} maxLength={40} onChange={(e) => setCfg((c) => ({ ...c, title: e.target.value }))} className={field} placeholder="Örn: Hafta Kâhini" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Ödül rozeti
+          <select value={cfg.badgeId} onChange={(e) => setCfg((c) => ({ ...c, badgeId: e.target.value }))} className={field}>
+            <option value="">Rozet seç</option>
+            {manual.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} (+{b.bonus} KP)
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Ne yapılacak
+          <select value={cfg.metric} onChange={(e) => setCfg((c) => ({ ...c, metric: e.target.value as QuestMetric }))} className={field}>
+            {QUEST_METRICS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Hedef
+          <span className="flex items-center gap-2">
+            <input type="number" min={1} max={10000} value={cfg.target} onChange={(e) => setCfg((c) => ({ ...c, target: Math.max(1, Math.floor(Number(e.target.value) || 1)) }))} className={cn(field, 'tabular-nums')} />
+            <span className="shrink-0 text-sm text-muted-foreground">{metric?.unit}</span>
+          </span>
+        </label>
+      </div>
+      {!manual.length && <p className="text-sm text-muted-foreground">Önce Değerli rozetler sekmesinden otomatik olmayan bir rozet oluştur.</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        <button disabled={pending} onClick={() => run(() => updateWeeklyQuest(cfg))} className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">
+          Kaydet
+        </button>
+        <StatusLine status={status} />
+      </div>
     </div>
   )
 }
@@ -93,6 +173,7 @@ const KIND_LABELS: [keyof TickerKinds, string][] = [
   ['gorev', 'Görev kazananları'],
   ['rozet', 'Rozet kazananları'],
   ['online', 'Online ödülü alanlar'],
+  ['cekim', 'Onaylı çekim paylaşımları'],
 ]
 
 function TickerEditor({ initial }: { initial: TickerConfig }) {

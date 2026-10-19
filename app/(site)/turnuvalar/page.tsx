@@ -19,6 +19,7 @@ export default async function TournamentsPage() {
     <>
       <EditableHero
         slug="turnuvalar"
+        compact
         image="/images/heroes/turnuvalar.png"
         highlights={['Tavla · Okey · Bilardo', 'Canlı eşleşme ağacı', 'Ödül havuzu']}
         eyebrow="Turnuvalar"

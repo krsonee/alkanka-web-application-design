@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { claimAppBonus, getPushKey, subscribePush } from '@/app/actions/app'
-import { APP_BONUS } from '@/lib/app-config'
+import { APP_DEFAULTS, type AppSettings } from '@/lib/app-config'
 import { usePoints } from '../points-context'
 
 export type Platform = 'android' | 'ios' | 'desktop'
@@ -20,6 +20,10 @@ type PwaValue = {
   enablePush: () => Promise<string | null>
   notice: string | null
   clearNotice: () => void
+  installBonus: number
+  pushBonus: number
+  installAwarded: boolean
+  pushAwarded: boolean
 }
 
 const PwaContext = createContext<PwaValue | null>(null)
@@ -48,7 +52,7 @@ function base64ToBytes(base64: string) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0))
 }
 
-export function PwaProvider({ children }: { children: ReactNode }) {
+export function PwaProvider({ children, settings = APP_DEFAULTS }: { children: ReactNode; settings?: AppSettings }) {
   const { member, setBalance } = usePoints()
   const [ready, setReady] = useState(false)
   const [standalone, setStandalone] = useState(false)
@@ -58,6 +62,8 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   const promptRef = useRef<InstallPromptEvent | null>(null)
   const [canPrompt, setCanPrompt] = useState(false)
   const claimedFor = useRef<string | null>(null)
+  const [installAwarded, setInstallAwarded] = useState(false)
+  const [pushAwarded, setPushAwarded] = useState(false)
 
   useEffect(() => {
     const p = detectPlatform()
@@ -99,7 +105,10 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       .then((res) => {
         if (!res.ok) return
         setBalance(res.balance)
-        if (res.awarded) setNotice(`Uygulama bonusu hesabına yüklendi: +${APP_BONUS} KC`)
+        if (res.awarded) {
+          setInstallAwarded(true)
+          setNotice(`Uygulama bonusu hesabına yüklendi: +${res.amount} KC`)
+        }
       })
       .catch((error) => console.error('[pwa] bonus alınamadı', error))
   }, [standalone, member, platform, setBalance])
@@ -128,21 +137,33 @@ export function PwaProvider({ children }: { children: ReactNode }) {
         (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToBytes(await getPushKey()) }))
       const res = await subscribePush(JSON.parse(JSON.stringify(sub)))
       if (!res.ok) return res.error
-      setNotice('Bildirimler açıldı. Kampanya ve promo kodlar ilk sana düşecek.')
+      if (res.awarded) {
+        if (res.balance !== undefined) setBalance(res.balance)
+        setPushAwarded(true)
+        setNotice(`Bildirimler açıldı: +${res.amount} KC hesabında`)
+      } else {
+        setNotice('Bildirimler açıldı. Turnuva ve promo kodlar ilk sana düşecek.')
+      }
       return null
     } catch (error) {
       console.error('[pwa] bildirim aboneliği başarısız', error)
       return 'Bildirimler açılamadı, tekrar dene.'
     }
-  }, [pushState])
+  }, [pushState, setBalance])
 
   useEffect(() => {
     if (pushState !== 'granted' || !member) return
     navigator.serviceWorker.ready
       .then((reg) => reg.pushManager.getSubscription())
       .then((sub) => sub && subscribePush(JSON.parse(JSON.stringify(sub))))
+      .then((res) => {
+        if (!res || !res.ok || !res.awarded) return
+        if (res.balance !== undefined) setBalance(res.balance)
+        setPushAwarded(true)
+        setNotice(`Bildirim bonusu hesabına yüklendi: +${res.amount} KC`)
+      })
       .catch(() => {})
-  }, [pushState, member])
+  }, [pushState, member, setBalance])
 
   useEffect(() => {
     if (!notice) return
@@ -151,8 +172,22 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, [notice])
 
   const value = useMemo(
-    () => ({ ready, standalone, platform, canPrompt, promptInstall, pushState, enablePush, notice, clearNotice: () => setNotice(null) }),
-    [ready, standalone, platform, canPrompt, promptInstall, pushState, enablePush, notice],
+    () => ({
+      ready,
+      standalone,
+      platform,
+      canPrompt,
+      promptInstall,
+      pushState,
+      enablePush,
+      notice,
+      clearNotice: () => setNotice(null),
+      installBonus: settings.installBonus,
+      pushBonus: settings.pushBonus,
+      installAwarded,
+      pushAwarded,
+    }),
+    [ready, standalone, platform, canPrompt, promptInstall, pushState, enablePush, notice, settings, installAwarded, pushAwarded],
   )
 
   return <PwaContext.Provider value={value}>{children}</PwaContext.Provider>

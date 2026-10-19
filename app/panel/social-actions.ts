@@ -12,6 +12,7 @@ import {
   type EventInput,
   type SocialLinks,
 } from '@/lib/social'
+import { PLATFORM_LABEL, type SocialPlatform } from '@/lib/social-shared'
 
 type Result = { ok: boolean; message: string }
 const denied: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -28,6 +29,30 @@ export async function saveSocialLinksAction(links: SocialLinks): Promise<Result>
     await saveSocialLinks(links)
     refresh()
     return { ok: true, message: 'Sosyal medya hesapları kaydedildi.' }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function saveSocialApiAction(platform: SocialPlatform, fields: Record<string, string>): Promise<Result> {
+  if (!(await canPanel('social'))) return denied
+  try {
+    const { saveSocialApi } = await import('@/lib/social-verify')
+    await saveSocialApi(platform, fields)
+    revalidatePath('/panel')
+    return { ok: true, message: `${PLATFORM_LABEL[platform]} bağlantısı kaydedildi.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function clearSocialApiAction(platform: SocialPlatform): Promise<Result> {
+  if (!(await canPanel('social'))) return denied
+  try {
+    const { clearSocialApi } = await import('@/lib/social-verify')
+    await clearSocialApi(platform)
+    revalidatePath('/panel')
+    return { ok: true, message: `${PLATFORM_LABEL[platform]} bağlantısı kaldırıldı.` }
   } catch (error) {
     return fail(error)
   }

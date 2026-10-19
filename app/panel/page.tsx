@@ -27,7 +27,10 @@ import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
 import { pushStats } from '@/lib/push'
+import { getQuestConfig, questWinnersThisWeek } from '@/lib/kp-extras'
 import { PushSender } from '@/components/panel/push-sender'
+import { AppRewardsEditor } from '@/components/panel/app-rewards-editor'
+import { getAppSettings } from '@/lib/app-settings'
 import { MessageSender } from '@/components/panel/message-sender'
 import { listSent } from '@/lib/inbox'
 import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
@@ -95,6 +98,8 @@ import { PanelDashboard } from '@/components/panel/dashboard'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { listAudit, listMembers } from '@/lib/members-admin'
 import { levelMap } from '@/lib/kanka-puan'
+import { AvatarManager } from '@/components/panel/avatar-manager'
+import { COVERS, avatarStats, listCatalog } from '@/lib/avatars'
 
 async function usersPanel() {
   const [{ members, counts }, levels, cfg] = await Promise.all([listMembers(), levelMap().catch(() => ({}) as Record<string, number>), getKpConfig()])
@@ -182,12 +187,23 @@ async function telegramPanel() {
 async function marketPanel() {
   const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
-  return <MarketManager products={products} requests={requests} sponsors={sponsors} />
+  const [avatars, stats, coverRows] = await Promise.all([
+    listCatalog({ includeInactive: true }),
+    avatarStats(),
+    rows<{ id: string; n: string }>(sql`SELECT cover_id AS id, count(*) AS n FROM member_look WHERE cover_id IS NOT NULL GROUP BY cover_id`).catch(() => []),
+  ])
+  const coverUsage = Object.fromEntries(coverRows.map((r) => [r.id, Number(r.n)]))
+  return (
+    <div className="flex flex-col gap-8">
+      <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} />
+      <MarketManager products={products} requests={requests} sponsors={sponsors} />
+    </div>
+  )
 }
 
 async function kpPanel() {
-    const [cfg, badges, awards, board, online, ticker] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig()])
-    return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} />
+  const [cfg, badges, awards, board, online, ticker, quest, questWinners] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek()])
+  return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} quest={quest} questWinners={questWinners} />
 }
 
 async function staffPanel() {
@@ -270,6 +286,7 @@ export default async function PanelPage() {
     logos,
     seo,
     faqs,
+    tour,
     sponsors,
     growth,
     community,
@@ -332,6 +349,15 @@ export default async function PanelPage() {
       />
     )),
     section(session, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
+    section(session, 'tour', 'Site turu', async () => {
+      const { getTourSettings, tourStats } = await import('@/lib/tour')
+      const { TourSettingsEditor } = await import('@/components/panel/tour-settings-editor')
+      const [settings, stats] = await Promise.all([
+        getTourSettings(),
+        tourStats().catch(() => ({ done: 0, rewarded: 0, blocked: 0, paidTotal: 0, recentBlocked: [] })),
+      ])
+      return <TourSettingsEditor settings={settings} stats={stats} />
+    }),
     section(session, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
     section(session, 'growth', 'Büyüme', async () => (
       <div className="flex flex-col gap-6">
@@ -359,6 +385,17 @@ export default async function PanelPage() {
         complaints={await adminComplaints().catch(() => [])}
         matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
+        withdraw={await (async () => {
+          const w = await import('@/lib/withdrawals')
+          const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
+            w.adminWithdrawals().catch(() => []),
+            w.getWithdrawSettings().catch(() => w.WITHDRAW_DEFAULTS),
+            w.listSiteRewards().catch(() => []),
+            siteOptions().catch(() => []),
+            w.listWithdrawBlocks().catch(() => []),
+          ])
+          return { shares, settings, siteRewards, sites: sites.map((s) => ({ id: s.id, name: s.name })), blocks }
+        })()}
       />
     )),
     section(session, 'badges', 'Rozet sistemi', kpPanel),
@@ -373,6 +410,9 @@ export default async function PanelPage() {
         accounts={await adminSocialAccounts().catch(() => [])}
         events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
         entries={await adminEntries().catch(() => [])}
+        api={await import('@/lib/social-verify')
+          .then(async (m) => ({ summary: await m.socialApiSummary(), fields: m.API_FIELDS }))
+          .catch(() => undefined)}
       />
     )),
     section(session, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
@@ -386,8 +426,16 @@ export default async function PanelPage() {
     section(session, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     section(session, 'telegram', 'Telegram', telegramPanel),
     section(session, 'push', 'Bildirimler', async () => {
-      const stats = await pushStats().catch(() => ({ total: 0, members: 0, log: [] }))
-      return <PushSender {...stats} configured={stats.total > 0} />
+      const [stats, appSettings] = await Promise.all([
+        pushStats().catch(() => ({ total: 0, members: 0, log: [] })),
+        getAppSettings(),
+      ])
+      return (
+        <div className="flex flex-col gap-6">
+          <AppRewardsEditor settings={appSettings} />
+          <PushSender {...stats} configured={stats.total > 0} />
+        </div>
+      )
     }),
     section(session, 'studio', 'Stüdyo', async () => (
       <Studio
@@ -438,7 +486,7 @@ export default async function PanelPage() {
       </header>
       <div className="mx-auto max-w-7xl px-4 py-6">
         <ContentEditor
-          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'tour', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
           users={users}
           audit={audit}
           dashboard={dashboard}
@@ -453,6 +501,7 @@ export default async function PanelPage() {
           logos={logos}
           seo={seo}
           faqs={faqs}
+          tour={tour}
           sponsors={sponsors}
           growth={growth}
           community={community}

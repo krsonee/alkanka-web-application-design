@@ -32,6 +32,9 @@ import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { cn } from '@/lib/utils'
 import { listInbox, type InboxMessage } from '@/lib/inbox'
 import { InboxList } from '@/components/alkanka/profile/inbox-list'
+import { coverById, getLookState, teamById, type LookState } from '@/lib/avatars'
+import { LookStudio } from '@/components/alkanka/profile/look-studio'
+import { Download, Gift, Pencil } from 'lucide-react'
 
 export const metadata: Metadata = { title: 'Profilim', robots: { index: false } }
 export const dynamic = 'force-dynamic'
@@ -76,14 +79,18 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     )
   }
 
-  const [kpStatus, kpConfig, profile, referrals, games, inbox] = await Promise.all([
+  const [kpStatus, kpConfig, profile, referrals, games, inbox, look] = await Promise.all([
     getKpStatus(member.id),
     getKpConfig(),
     getProfile(member.id),
     listReferrals(member.id),
     historySummary(member.id),
     listInbox(member.id).catch((error) => (console.error('[inbox] okunamadı', error), [] as InboxMessage[])),
+    getLookState(member.id).catch((error) => (console.error('[avatar] görünüm okunamadı', error), null as LookState | null)),
   ])
+  const avatar = look?.avatars.find((a) => a.id === look.avatarId) ?? null
+  const cover = coverById(look?.coverId)
+  const team = teamById(look?.team)
   const unread = inbox.filter((m) => !m.read).length
   const { level, kp } = kpStatus
   const lv = level.index + 1
@@ -101,19 +108,40 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     <div className="flex flex-col gap-6">
       <section aria-labelledby="profil-ad" className={cn('overflow-hidden rounded-2xl border', TIER_BG[tier])}>
         <div className="relative h-36 md:h-44">
-          <Image src="/images/badges/profile-cover.png" alt="" fill priority sizes="(min-width: 1024px) 1000px, 100vw" className="object-cover" />
+          <Image src={cover.src} alt="" fill priority sizes="(min-width: 1024px) 1000px, 100vw" className="object-cover" />
           <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-          <Link
-            href="/rozetler"
-            className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-semibold text-foreground backdrop-blur hover:border-gold/50"
-          >
-            Tüm seviyeler <ChevronRight className="size-3.5" aria-hidden />
-          </Link>
+          <div className="absolute right-4 top-4 flex gap-2">
+            <Link
+              href="/rozetler"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-semibold text-foreground backdrop-blur hover:border-gold/50"
+            >
+              Seviyeler <ChevronRight className="size-3.5" aria-hidden />
+            </Link>
+          </div>
         </div>
 
         <div className="relative flex flex-col gap-5 px-5 pb-5 md:flex-row md:items-end md:px-6">
-          <div className="-mt-16 shrink-0 rounded-3xl bg-background/80 p-2 backdrop-blur md:-mt-20">
-            <LevelEmblem level={lv} size="xl" />
+          <div className="-mt-16 flex shrink-0 items-end gap-3 md:-mt-20">
+            <Link
+              href="/profil?sekme=gorunum"
+              scroll={false}
+              className="group relative block size-28 overflow-hidden rounded-full border-4 border-gold bg-background md:size-32"
+              aria-label={avatar ? `Avatarın: ${avatar.name}. Değiştir` : 'Avatar seç'}
+            >
+              {avatar ? (
+                <Image src={avatar.src} alt="" fill sizes="128px" className="object-cover" />
+              ) : (
+                <span className="flex size-full items-center justify-center bg-primary font-display text-4xl font-bold text-primary-foreground">
+                  {member.name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-background/80 py-1 text-[10px] font-bold text-foreground opacity-90 transition-opacity group-hover:opacity-100">
+                <Pencil className="size-3" aria-hidden /> {avatar ? 'Değiştir' : 'Avatar seç'}
+              </span>
+            </Link>
+            <div className="mb-1 rounded-2xl bg-background/80 p-1.5 backdrop-blur">
+              <LevelEmblem level={lv} size="md" />
+            </div>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <span className={cn('text-[11px] font-bold uppercase tracking-[0.2em]', TIER_TEXT[tier])}>
@@ -126,7 +154,20 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
                 {level.name}
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">Rozetin: <b className="text-foreground">{level.badge}</b></p>
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span>Rozetin: <b className="text-foreground">{level.badge}</b></span>
+              {team && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="size-3.5 rounded-full border border-border" style={{ background: `linear-gradient(90deg, ${team.colors[0]} 50%, ${team.colors[1]} 50%)` }} />
+                  {team.name} taraftarı
+                </span>
+              )}
+            </p>
+            {look?.rewardPending && (
+              <Link href="/profil?sekme=gorunum" scroll={false} className="inline-flex w-fit items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-bold text-gold hover:bg-gold/25">
+                <Gift className="size-3.5" aria-hidden /> Avatarını seç, +{look.reward} KC kazan
+              </Link>
+            )}
           </div>
           <div className="flex w-full flex-col gap-1.5 md:w-72">
             <div className="flex items-baseline justify-between text-xs">
@@ -161,6 +202,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex min-w-0 flex-col gap-8">
         {tab === 'genel' && <OverviewTab memberId={member.id} kpStatus={kpStatus} rules={kpConfig.rules} referrals={referrals} telegram={profile.stats.telegram} />}
+        {tab === 'gorunum' && (look ? <LookStudio initial={look} /> : <p className="text-sm text-muted-foreground">Görünüm ayarları şu an yüklenemedi, biraz sonra tekrar dene.</p>)}
         {tab === 'rozetler' && <BadgesTab kpStatus={kpStatus} badges={profile.badges} />}
         {tab === 'hesaplar' && <AccountsTab memberId={member.id} />}
         {tab === 'ayarlar' && (

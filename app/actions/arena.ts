@@ -64,6 +64,24 @@ export async function startBotGame(game: string, stake: number) {
   }
 }
 
+/** The member's still-open bot session for this game, so a page refresh resumes it instead of losing the stake. */
+export async function getOpenBotGame(game: string) {
+  try {
+    const m = await member()
+    if (!isArenaGame(game) || !CLIENT_SETTLED.includes(game)) return { ok: true as const, session: null }
+    const r = await pool.query(
+      `SELECT id, stake FROM solo_sessions
+        WHERE user_id = $1 AND game = $2 AND status = 'acik' AND created_at > now() - interval '3 hours'
+        ORDER BY created_at DESC LIMIT 1`,
+      [m.id, game],
+    )
+    const row = r.rows[0]
+    return { ok: true as const, session: row ? { sessionId: String(row.id), stake: Number(row.stake) } : null }
+  } catch {
+    return { ok: true as const, session: null }
+  }
+}
+
 export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 'draw', score?: { for: number; against: number }) {
   try {
     const m = await member()

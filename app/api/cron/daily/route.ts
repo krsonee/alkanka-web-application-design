@@ -55,13 +55,15 @@ async function payReferrals() {
 
 export async function GET(req: Request) {
   if (!(await authorized(req))) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
-  const [tournaments, reminders, referrals, cember] = await Promise.allSettled([
+  const [tournaments, reminders, referrals, cember, ranks] = await Promise.allSettled([
     autoStartDue(),
     remindStreaks(),
     payReferrals(),
     import('@/lib/cember').then(({ settleMissedRounds }) => settleMissedRounds()),
+    import('@/lib/kanka-puan').then(({ snapshotRanks }) => snapshotRanks()),
   ])
   return Response.json({
+    rankSnapshot: ranks.status === 'fulfilled' ? 'ok' : String(ranks.reason),
     cemberSettled: cember.status === 'fulfilled' ? cember.value : String(cember.reason),
     tournaments: tournaments.status === 'fulfilled' ? 'ok' : String(tournaments.reason),
     streakReminders: reminders.status === 'fulfilled' ? reminders.value : String(reminders.reason),

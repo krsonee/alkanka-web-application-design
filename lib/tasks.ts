@@ -131,14 +131,53 @@ function mapTask(row: Record<string, unknown>): TaskRecord {
 
 export async function listTasks(): Promise<TaskRecord[]> {
   await ensureTasks()
+  await seedSocialTasks().catch((error) => console.error('[tasks] social seed', (error as Error).message))
   const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param FROM tasks ORDER BY sort, id`)
   return found.map(mapTask)
 }
 
 export async function listPublicTasks(): Promise<TaskRecord[]> {
   const now = Date.now()
-  return (await listTasks()).filter((task) =>
+  const live = (await listTasks()).filter((task) =>
     task.active && (!task.startsAt || Date.parse(task.startsAt) <= now) && (!task.endsAt || Date.parse(task.endsAt) > now))
+  if (!live.some((t) => t.kind === 'social_follow' && !t.link)) return live
+  const official = await officialSocialLinks()
+  return live.map((t) => (t.kind === 'social_follow' && !t.link && t.param ? { ...t, link: official[t.param] ?? null } : t))
+}
+
+/** Follow tasks point at the panel-managed official profile unless the task sets its own link. */
+export async function officialSocialLinks(): Promise<Record<string, string>> {
+  const { getSocialLinks } = await import('@/lib/social')
+  return (await getSocialLinks().catch(() => ({}))) as Record<string, string>
+}
+
+const SOCIAL_SEED_KEY = 'tasks:social-seed-v1'
+type Seed = { title: string; detail: string; kind: TaskKind; param: string; points: number; active: boolean }
+const SOCIAL_SEED: Seed[] = [
+  { title: 'Instagram hesabını bağla', detail: 'Profilinden Instagram hesabını bağla ve doğrulat.', kind: 'social_link', param: 'instagram', points: 50, active: true },
+  { title: 'X hesabını bağla', detail: 'Profilinden X (Twitter) hesabını bağla ve doğrulat.', kind: 'social_link', param: 'x', points: 50, active: true },
+  { title: 'Twitch hesabını bağla', detail: 'Profilinden Twitch hesabını bağla ve doğrulat.', kind: 'social_link', param: 'twitch', points: 50, active: true },
+  { title: 'YouTube hesabını bağla', detail: 'Profilinden YouTube kanalını bağla ve doğrulat.', kind: 'social_link', param: 'youtube', points: 50, active: true },
+  { title: 'Instagram hesabımızı takip et', detail: 'Bağladığın Instagram hesabıyla bizi takip et.', kind: 'social_follow', param: 'instagram', points: 30, active: true },
+  { title: 'X hesabımızı takip et', detail: 'Bağladığın X hesabıyla bizi takip et.', kind: 'social_follow', param: 'x', points: 30, active: true },
+  { title: 'YouTube kanalımıza abone ol', detail: 'Bağladığın YouTube hesabıyla kanalımıza abone ol.', kind: 'social_follow', param: 'youtube', points: 30, active: true },
+  { title: 'Twitch kanalımızı takip et', detail: 'Bağladığın Twitch hesabıyla kanalımızı takip et.', kind: 'social_follow', param: 'twitch', points: 30, active: true },
+  { title: 'Instagram paylaşımımızı beğen', detail: 'Bağladığın Instagram hesabıyla paylaşımı beğen.', kind: 'social_like', param: 'instagram', points: 15, active: false },
+  { title: 'X paylaşımımızı beğen', detail: 'Bağladığın X hesabıyla paylaşımı beğen.', kind: 'social_like', param: 'x', points: 15, active: false },
+  { title: 'YouTube videomuzu beğen', detail: 'Bağladığın YouTube hesabıyla videoyu beğen.', kind: 'social_like', param: 'youtube', points: 15, active: false },
+]
+
+/** One-time starter set; like tasks start inactive until a post link is added in the panel. */
+export async function seedSocialTasks() {
+  const { getContent, setContent } = await import('@/lib/content')
+  if (await getContent(SOCIAL_SEED_KEY).catch(() => null)) return
+  await ensureTasks()
+  for (const [i, s] of SOCIAL_SEED.entries()) {
+    await rows(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, kind, target, param)
+      SELECT ${s.title}, ${s.detail}, ${s.points}, NULL, false, ${s.active}, ${200 + i}, 'once', ${s.kind}, 1, ${s.param}
+      WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE kind = ${s.kind} AND param = ${s.param})`)
+  }
+  await setContent(SOCIAL_SEED_KEY, { at: new Date().toISOString() })
 }
 
 /** Ids done in the current period: one-off refs are plain ids, recurring refs are `id:periodKey`. */
@@ -220,6 +259,13 @@ export async function saveTask(input: TaskInput): Promise<number> {
   const param = !meta.param || !rawParam ? null : rawParam
   if (param && meta.param === 'game' && !TASK_GAMES.some((g) => g.value === param)) throw new Error('Oyun geçersiz.')
   if (param && meta.param === 'platform' && !TASK_PLATFORMS.some((g) => g.value === param)) throw new Error('Platform geçersiz.')
+  if ((kind === 'social_follow' || kind === 'social_like') && !param) throw new Error('Sosyal görev için platform seç.')
+  if (kind === 'social_like') {
+    if (param === 'twitch') throw new Error('Twitch’te beğeni yok; takip görevi kullan.')
+    if (!link) throw new Error('Beğeni görevi için gönderi linkini yapıştır.')
+    const { isPlatformUrl } = await import('@/lib/social-shared')
+    if (!isPlatformUrl(param as 'x', link)) throw new Error('Gönderi linki seçilen platforma ait değil.')
+  }
   const approval = isAutoKind(kind) ? false : needsApproval
   await ensureTasks()
   const active = Boolean(input.active)
@@ -257,9 +303,10 @@ export async function awardTask(userId: string, taskId: number, claimKey?: strin
   return { awarded, points, balance: await getBalance(userId) }
 }
 
-export async function requestTaskApproval(userId: string, taskId: number, userName = 'Üye'): Promise<{ status: ClaimStatus; points: number }> {
+/** `review` queues auto tasks too (social checks the platform API can't confirm). */
+export async function requestTaskApproval(userId: string, taskId: number, userName = 'Üye', review = false): Promise<{ status: ClaimStatus; points: number }> {
   await ensureTasks()
-  const found = await rows<{ id: number; points: number; period: string; title: string }>(sql`SELECT id, points, period, title FROM tasks WHERE id = ${taskId} AND active AND needs_approval`)
+  const found = await rows<{ id: number; points: number; period: string; title: string }>(sql`SELECT id, points, period, title FROM tasks WHERE id = ${taskId} AND active AND (needs_approval OR ${review}::boolean)`)
   const task = found[0]
   if (!task) throw new Error('Görev bulunamadı.')
   const key = periodKey(isPeriod(task.period) ? task.period : 'once')
@@ -325,6 +372,11 @@ export async function taskProgress(userId: string, task: TaskRecord): Promise<nu
       return count(sql`SELECT count(*) AS n FROM referrals WHERE referrer_id = ${userId} AND created_at >= ${since}`)
     case 'social_link':
       return count(sql`SELECT count(*) AS n FROM social_accounts WHERE user_id = ${userId} AND status = 'verified' AND (${p}::text IS NULL OR platform = ${p})`)
+    case 'social_follow':
+    case 'social_like': {
+      const { socialCheckCount } = await import('@/lib/social-verify')
+      return socialCheckCount(userId, task.id).catch(() => 0)
+    }
     case 'telegram_link':
       return count(sql`SELECT count(*) AS n FROM tg_links WHERE user_id = ${userId}`)
     case 'tv_watch':

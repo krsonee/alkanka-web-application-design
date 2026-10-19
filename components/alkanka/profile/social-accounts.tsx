@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 const inputCls =
   'h-10 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20'
 
-const PLACEHOLDER: Record<SocialPlatform, string> = { x: '@kullaniciadi', instagram: '@kullaniciadi', youtube: '@kanaladi' }
+const PLACEHOLDER: Record<SocialPlatform, string> = { x: '@kullaniciadi', instagram: '@kullaniciadi', youtube: '@kanaladi', twitch: 'kullaniciadi' }
 
 function CopyCode({ code }: { code: string }) {
   const [copied, setCopied] = useState(false)

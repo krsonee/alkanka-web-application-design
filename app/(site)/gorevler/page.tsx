@@ -23,6 +23,7 @@ export default async function TasksPage() {
   return (
     <>
       <EditableHero slug="gorevler"
+        compact
         image="/images/heroes/gorevler.png"
         highlights={['Günlük giriş serisi', '7. gün VIP sandık', 'Ekstra Kanka Coin']}
         eyebrow="Görevler"

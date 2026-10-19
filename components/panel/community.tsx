@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ComponentProps } from 'react'
+import { WithdrawManager } from './withdraw-manager'
 import { Check, Star, Trash2, X } from 'lucide-react'
 import { answerComplaint, createLeagueMatch, finishLeagueMatch, moderateReview, removeComplaint, removeLeagueMatch, removeReview } from '@/app/panel/community-actions'
 import type { Complaint, LeagueMatch, Review } from '@/lib/community'
@@ -19,9 +20,10 @@ type Props = {
   complaints: Complaint[]
   matches: LeagueMatch[]
   siteNames: Record<string, string>
+  withdraw: ComponentProps<typeof WithdrawManager>
 }
 
-export function CommunityManager({ reviews, published, complaints, matches, siteNames }: Props) {
+export function CommunityManager({ reviews, published, complaints, matches, siteNames, withdraw }: Props) {
   const [tab, setTab] = useState<CommunityTab>('reviews')
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'forwarded').length
   return (
@@ -32,6 +34,7 @@ export function CommunityManager({ reviews, published, complaints, matches, site
           [
             ['reviews', `Yorum onayı (${reviews.length})`],
             ['complaints', `Şikâyetler (${openComplaints})`],
+            ['cekim', `Çekim paylaşımları (${withdraw.shares.filter((s) => s.status === 'pending').length})`],
             ['league', `Tahmin ligi (${matches.filter((m) => !m.settled).length})`],
           ] as const
         ).map(([id, label]) => (
@@ -43,6 +46,7 @@ export function CommunityManager({ reviews, published, complaints, matches, site
       <CommunityHint tab={tab} />
       {tab === 'reviews' && <Reviews reviews={reviews} published={published} siteNames={siteNames} />}
       {tab === 'complaints' && <Complaints complaints={complaints} siteNames={siteNames} />}
+      {tab === 'cekim' && <WithdrawManager {...withdraw} />}
       {tab === 'league' && <LeagueAdmin matches={matches} />}
     </div>
   )

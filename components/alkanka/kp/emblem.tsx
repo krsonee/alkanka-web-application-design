@@ -74,6 +74,9 @@ export const TIER_TEXT: Record<string, string> = {
   altin: 'text-gold',
   elmas: 'text-accent',
   efsane: 'text-ruby',
+  kurucu: 'text-amethyst',
+  moderator: 'text-silver',
+  sponsor: 'text-emerald',
 }
 
 export const TIER_BG: Record<string, string> = {
@@ -81,6 +84,16 @@ export const TIER_BG: Record<string, string> = {
   altin: 'bg-gold/10 border-gold/30',
   elmas: 'bg-accent/10 border-accent/30',
   efsane: 'bg-ruby/10 border-ruby/35',
+  kurucu: 'bg-amethyst/10 border-amethyst/40',
+  moderator: 'bg-silver/10 border-silver/35',
+  sponsor: 'bg-emerald/10 border-emerald/35',
+}
+
+/** Staff and founder badges get their own colour instead of a league colour. */
+export const ROLE_BADGES: Record<string, { tier: string; label: string }> = {
+  'kurucu-kanka': { tier: 'kurucu', label: 'Kurucu' },
+  moderator: { tier: 'moderator', label: 'Sistem görevlisi' },
+  'sponsor-destek': { tier: 'sponsor', label: 'Sponsor destek' },
 }
 
 /** Rim metal + face enamel per tier. Efsane pairs a gold rim with ruby enamel (Jako's red tail). */
@@ -89,6 +102,9 @@ const MATERIAL: Record<string, { rim: string; face: string }> = {
   altin: { rim: 'var(--gold)', face: 'var(--gold)' },
   elmas: { rim: 'var(--accent)', face: 'var(--accent)' },
   efsane: { rim: 'var(--gold)', face: 'var(--ruby)' },
+  kurucu: { rim: 'var(--gold)', face: 'var(--amethyst)' },
+  moderator: { rim: 'var(--silver)', face: 'color-mix(in oklch, var(--silver) 70%, var(--accent))' },
+  sponsor: { rim: 'var(--gold)', face: 'var(--emerald)' },
 }
 
 function star(points: number, outer: number, inner: number) {

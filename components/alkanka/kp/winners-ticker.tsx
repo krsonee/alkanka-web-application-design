@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { Award, Clock, ListChecks, Megaphone, X, type LucideIcon } from 'lucide-react'
+import { Award, Banknote, Clock, ListChecks, Megaphone, X, type LucideIcon } from 'lucide-react'
 import type { Feed, FeedItem, FeedKind } from '@/lib/online-rewards'
 import { usePoints } from '@/components/alkanka/points-context'
 import { RewardChips } from './reward-chips'
+import { MemberAvatar } from '@/components/alkanka/member-avatar'
 import { cn } from '@/lib/utils'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<Feed>)
@@ -15,6 +16,7 @@ const KIND: Record<FeedKind, { icon: LucideIcon; verb: string; tone: string }> =
   gorev: { icon: ListChecks, verb: 'görevi tamamladı', tone: 'bg-primary/15 text-primary' },
   rozet: { icon: Award, verb: 'rozetini kazandı', tone: 'bg-ruby/15 text-ruby' },
   online: { icon: Clock, verb: 'ödülünü aldı', tone: 'bg-live/15 text-live' },
+  cekim: { icon: Banknote, verb: 'çekti', tone: 'bg-live/15 text-live' },
   duyuru: { icon: Megaphone, verb: '', tone: 'bg-primary text-primary-foreground' },
 }
 
@@ -43,6 +45,7 @@ function FeedEntry({ item }: { item: FeedItem }) {
       <span className={cn('flex size-6 items-center justify-center rounded-full', k.tone)}>
         <Icon className="size-3.5" aria-hidden="true" />
       </span>
+      {item.userId && <MemberAvatar userId={item.userId} name={item.name} size="sm" />}
       <span className="whitespace-nowrap text-xs text-muted-foreground">
         <Line item={item} />
       </span>
@@ -83,8 +86,9 @@ export function WinnersTicker() {
 
   return (
     <>
-      <div className="group relative flex h-9 items-center overflow-hidden border-b border-border bg-surface">
-        <Link href="/gorevler" className="relative z-10 flex h-full shrink-0 items-center gap-2 bg-surface pl-3 pr-3 text-[10px] font-bold uppercase tracking-widest text-primary sm:pl-4 lg:pl-6">
+      <div className="mx-auto w-full max-w-screen-2xl px-4 pt-4 lg:px-6">
+      <div className="group relative flex h-10 items-center overflow-hidden rounded-xl border border-border bg-surface">
+        <Link href="/gorevler" className="relative z-10 flex h-full shrink-0 items-center gap-2 border-r border-border bg-surface px-3 text-[10px] font-bold uppercase tracking-widest text-primary sm:px-4">
           <span className="relative flex size-2">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-live opacity-60" />
             <span className="relative inline-flex size-2 rounded-full bg-live" />
@@ -106,6 +110,7 @@ export function WinnersTicker() {
             ))}
           </ul>
         </div>
+      </div>
       </div>
 
       {toast && (
