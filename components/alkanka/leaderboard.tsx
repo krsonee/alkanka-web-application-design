@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Medal } from 'lucide-react'
-import { AUTO_LABELS, leaderboard, listSpecialBadges, predictionBoard, recentAwards, type AwardRow } from '@/lib/kanka-puan'
+import { AUTO_LABELS, leaderboard, listSpecialBadges, predictionBoard, rankMoves, recentAwards, type AwardRow, type RankMove } from '@/lib/kanka-puan'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import { getMember } from '@/lib/member'
 import { SpecialEmblem } from './kp/emblem'
@@ -50,6 +50,11 @@ async function load() {
     const championIds = new Set(autoBadges.map((b) => b.id))
     const champions = awards.filter((a) => championIds.has(a.badgeId)).slice(0, 6)
 
+    const [moveHafta, moveAy] = await Promise.all([
+      rankMoves('hafta', kp[1]).catch((e) => (console.error('[siralama] sıra değişimi', e), {})),
+      rankMoves('ay', kp[2]).catch((e) => (console.error('[siralama] sıra değişimi', e), {})),
+    ])
+
     const order: BoardPeriod[] = ['hafta', 'ay', 'gun']
     const initial = kpBy.hafta.length >= 3 ? 'hafta' : order.reduce((best, p) => (kpBy[p].length > kpBy[best].length ? p : best), 'hafta' as BoardPeriod)
 
@@ -58,13 +63,14 @@ async function load() {
       tips: Object.fromEntries(PERIODS.map((p, i) => [p, tips[i]])) as Record<BoardPeriod, TipRow[]>,
       prizes: { gun: [], hafta: prizeFor('-hafta'), ay: prizeFor('-ay') } as Record<BoardPeriod, Prize[]>,
       champions,
+      moves: { gun: {}, hafta: moveHafta, ay: moveAy } as Record<BoardPeriod, Record<string, RankMove>>,
       meId: me?.id ?? null,
       signedIn: Boolean(me),
       initial,
     }
   } catch (error) {
     console.error('[siralama] veriler yüklenemedi', error)
-    return { kp: EMPTY, tips: EMPTY, prizes: EMPTY, champions: [] as AwardRow[], meId: null, signedIn: false, initial: 'hafta' as BoardPeriod }
+    return { kp: EMPTY, tips: EMPTY, prizes: EMPTY, champions: [] as AwardRow[], moves: { gun: {}, hafta: {}, ay: {} } as Record<BoardPeriod, Record<string, RankMove>>, meId: null, signedIn: false, initial: 'hafta' as BoardPeriod }
   }
 }
 
@@ -107,7 +113,7 @@ export async function Leaderboard() {
   const data = await load()
   return (
     <section aria-label="Sıralama" className="flex flex-col gap-8">
-      <RankBoards kp={data.kp} tips={data.tips} prizes={data.prizes} meId={data.meId} signedIn={data.signedIn} initial={data.initial} />
+      <RankBoards kp={data.kp} tips={data.tips} prizes={data.prizes} moves={data.moves} meId={data.meId} signedIn={data.signedIn} initial={data.initial} />
       <ChampionsWall champions={data.champions} />
     </section>
   )

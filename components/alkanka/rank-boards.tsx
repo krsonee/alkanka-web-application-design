@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ChevronDown, Clock, Crown, Dices, Gift, MessageCircle, Search, Share2, Target, UserPlus, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, Clock, Minus, Crown, Dices, Gift, MessageCircle, Search, Share2, Target, UserPlus, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LevelEmblem, RankChip, SpecialEmblem } from './kp/emblem'
 import { MemberRank } from './kp/member-rank'
@@ -13,6 +13,7 @@ export type BoardPeriod = 'gun' | 'hafta' | 'ay'
 export type KpParts = { time: number; games: number; tasks: number; chat: number; league: number; referrals: number }
 export type KpRow = { userId: string; name: string; kp: number; level: number; levelName: string; specials: number; parts: KpParts }
 export type TipRow = { userId: string; name: string; points: number; hits: number; exact: number; picks: number }
+export type RankMove = number | 'yeni'
 export type Prize = { id: string; name: string; icon: string; tier: string; bonus: number; label: string }
 
 type Category = 'kp' | 'oyun' | 'sohbet' | 'davet' | 'tahmin'
@@ -404,7 +405,34 @@ const PART_LABELS: { key: keyof KpParts; label: string }[] = [
   { key: 'referrals', label: 'Davet' },
 ]
 
-function BoardRow({ row, unit, isMe, tip, sticky }: { row: Row; unit: string; isMe: boolean; tip: boolean; sticky?: boolean }) {
+function MoveMark({ move }: { move: RankMove | undefined }) {
+  if (move === undefined) return null
+  if (move === 'yeni') {
+    return <span className="shrink-0 rounded bg-primary/15 px-1 text-[9px] font-bold uppercase tracking-wide text-primary">Yeni</span>
+  }
+  if (move === 0) {
+    return (
+      <span className="flex shrink-0 items-center text-muted-foreground" title="Dünden beri aynı sırada">
+        <Minus className="size-3" aria-hidden />
+        <span className="sr-only">Sıra değişmedi</span>
+      </span>
+    )
+  }
+  const up = move > 0
+  const Icon = up ? ArrowUp : ArrowDown
+  return (
+    <span
+      className={cn('flex shrink-0 items-center gap-0.5 text-[11px] font-bold tabular-nums', up ? 'text-live' : 'text-destructive')}
+      title={`Dünden beri ${Math.abs(move)} sıra ${up ? 'yükseldi' : 'düştü'}`}
+    >
+      <Icon className="size-3" aria-hidden />
+      {Math.abs(move)}
+      <span className="sr-only">{up ? ' sıra yükseldi' : ' sıra düştü'}</span>
+    </span>
+  )
+}
+
+function BoardRow({ row, unit, isMe, tip, sticky, move }: { row: Row; unit: string; isMe: boolean; tip: boolean; sticky?: boolean; move?: RankMove }) {
   const [open, setOpen] = useState(false)
   const parts = row.parts ? PART_LABELS.filter((p) => (row.parts?.[p.key] ?? 0) > 0) : []
   const id = `profil-${sticky ? 's-' : ''}${row.userId}`
@@ -427,6 +455,7 @@ function BoardRow({ row, unit, isMe, tip, sticky }: { row: Row; unit: string; is
               {isMe && <span className="text-primary"> (sen)</span>}
             </span>
             {row.level ? <RankChip level={row.level} /> : tip ? <MemberRank userId={row.userId} /> : null}
+            <MoveMark move={move} />
           </span>
           <span className="truncate text-[11px] text-muted-foreground">{row.detail}</span>
         </span>
@@ -466,6 +495,7 @@ export function RankBoards({
   kp,
   tips,
   prizes,
+  moves,
   meId,
   signedIn,
   initial,
@@ -473,6 +503,7 @@ export function RankBoards({
   kp: Record<BoardPeriod, KpRow[]>
   tips: Record<BoardPeriod, TipRow[]>
   prizes: Record<BoardPeriod, Prize[]>
+  moves: Record<BoardPeriod, Record<string, RankMove>>
   meId: string | null
   signedIn: boolean
   initial: BoardPeriod
@@ -491,6 +522,7 @@ export function RankBoards({
   const cat = CATEGORIES.find((c) => c.id === category)!
   const periodMeta = PERIODS.find((p) => p.id === period)!
   const rows = useMemo(() => buildRows(category, kp[period], tips[period]), [category, kp, tips, period])
+  const periodMoves: Record<string, RankMove> = category === 'kp' ? moves[period] : {}
   const counts = { gun: kp.gun.length, hafta: kp.hafta.length, ay: kp.ay.length }
 
   const q = query.trim().toLocaleLowerCase('tr')
@@ -572,7 +604,7 @@ export function RankBoards({
             {listed.length > 0 ? (
               <ol className={cn(!q && 'border-t border-border')}>
                 {listed.map((r) => (
-                  <BoardRow key={r.userId} row={r} unit={cat.unit} isMe={r.userId === meId} tip={category === 'tahmin'} />
+                  <BoardRow key={r.userId} row={r} unit={cat.unit} isMe={r.userId === meId} tip={category === 'tahmin'} move={periodMoves[r.userId]} />
                 ))}
               </ol>
             ) : q ? (
@@ -592,7 +624,7 @@ export function RankBoards({
                 aria-label="Senin sıran"
                 className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 border-t-2 border-primary bg-card shadow-[0_-8px_24px_-12px] shadow-foreground/20 lg:bottom-0"
               >
-                <BoardRow row={mine} unit={cat.unit} isMe tip={category === 'tahmin'} sticky />
+                <BoardRow row={mine} unit={cat.unit} isMe tip={category === 'tahmin'} sticky move={periodMoves[mine.userId]} />
               </ol>
             )}
           </>

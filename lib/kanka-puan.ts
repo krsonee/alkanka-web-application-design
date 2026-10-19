@@ -568,3 +568,52 @@ export async function rewardTournamentWin(userId: string, tournamentId: number, 
     console.error('[kp] turnuva ödülü verilemedi', error)
   }
 }
+
+/** Rank change per user: positive = climbed, 'yeni' = entered the board since the baseline. */
+export type RankMove = number | 'yeni'
+
+let snapshotsReady: Promise<unknown> | null = null
+function ensureSnapshots() {
+  snapshotsReady ??= rows(sql`CREATE TABLE IF NOT EXISTS kp_rank_snapshots (
+    day date NOT NULL, period text NOT NULL, user_id text NOT NULL, rank int NOT NULL,
+    PRIMARY KEY (day, period, user_id))`).catch((e) => {
+    snapshotsReady = null
+    throw e
+  })
+  return snapshotsReady
+}
+
+/**
+ * Stores today's first-seen ranking once per Istanbul day and compares the current board
+ * against the latest earlier snapshot inside the same period, so arrows mean "since yesterday".
+ */
+export async function rankMoves(period: 'hafta' | 'ay', board: { userId: string }[]): Promise<Record<string, RankMove>> {
+  await ensureSnapshots()
+  const today = sql`(now() AT TIME ZONE 'Europe/Istanbul')::date`
+  if (board.length) {
+    const list = JSON.stringify(board.map((r, i) => ({ u: r.userId, r: i + 1 })))
+    await rows(sql`INSERT INTO kp_rank_snapshots (day, period, user_id, rank)
+      SELECT ${today}, ${period}, t.u, t.r FROM jsonb_to_recordset(${list}::jsonb) AS t(u text, r int)
+      WHERE NOT EXISTS (SELECT 1 FROM kp_rank_snapshots s WHERE s.day = ${today} AND s.period = ${period})
+      ON CONFLICT DO NOTHING`)
+  }
+  const start = sql`date_trunc(${TRUNC[period]}, now() AT TIME ZONE 'Europe/Istanbul')::date`
+  const base = await rows<{ user_id: string; rank: number }>(sql`SELECT user_id, rank FROM kp_rank_snapshots
+    WHERE period = ${period} AND day = (SELECT max(day) FROM kp_rank_snapshots WHERE period = ${period} AND day < ${today} AND day >= ${start})`)
+  if (!base.length) return {}
+  const before = new Map(base.map((b) => [b.user_id, Number(b.rank)]))
+  const moves: Record<string, RankMove> = {}
+  board.forEach((r, i) => {
+    const prev = before.get(r.userId)
+    moves[r.userId] = prev === undefined ? 'yeni' : prev - (i + 1)
+  })
+  return moves
+}
+
+/** Daily cron hook: keeps snapshots flowing even on days nobody opens the ranking page, and prunes old ones. */
+export async function snapshotRanks() {
+  const [hafta, ay] = await Promise.all([leaderboard(200, 'hafta'), leaderboard(200, 'ay')])
+  await Promise.all([rankMoves('hafta', hafta), rankMoves('ay', ay)])
+  await rows(sql`DELETE FROM kp_rank_snapshots WHERE day < (now() AT TIME ZONE 'Europe/Istanbul')::date - 40`)
+  return hafta.length + ay.length
+}
