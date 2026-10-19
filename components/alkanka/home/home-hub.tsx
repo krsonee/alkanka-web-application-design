@@ -8,6 +8,7 @@ import { publicRankName } from '@/lib/kanka-puan-shared'
 import type { PodiumRow } from '@/components/alkanka/top-three'
 import { DEFAULT_SOCIAL_LINKS, DEFAULT_TELEGRAM_LINK, PLATFORM_LABEL, type SocialLinks } from '@/lib/social-shared'
 import { SocialIcon } from '@/components/alkanka/social-icons'
+import { LevelEmblem } from '@/components/alkanka/kp/emblem'
 import { Countdown } from './countdown'
 import { Marquee } from './marquee'
 
@@ -202,6 +203,51 @@ function RankTile({ podium, me }: { podium: PodiumRow[]; me: MyRank }) {
   )
 }
 
+export type HubLevel = { number: number; name: string; progress: number; nextName: string | null; kpLeft: number } | null
+
+function LevelBadge({ level }: { level: NonNullable<HubLevel> }) {
+  const pct = Math.max(0, Math.min(100, level.progress))
+  return (
+    <Link
+      href="/rozetler"
+      aria-label={`Rozet seviyen: ${level.number}. seviye ${level.name}, ilerleme yüzde ${pct}`}
+      className="glass-card group relative flex w-36 shrink-0 items-center gap-2 overflow-hidden rounded-xl py-1 pr-2.5 pl-1 transition-transform hover:-translate-y-0.5 md:w-44"
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-primary/15 to-transparent motion-safe:animate-[sd-sheen_4.5s_ease-in-out_infinite]"
+      />
+      <span className="relative shrink-0 motion-safe:animate-[sd-float_3.2s_ease-in-out_infinite]">
+        <span aria-hidden="true" className="absolute inset-0 rounded-full bg-primary/30 blur-md" />
+        <LevelEmblem level={level.number} size="xs" className="relative" />
+      </span>
+      <span className="relative flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex items-baseline justify-between gap-1 text-[10px] leading-none">
+          <span className="truncate font-display font-bold text-foreground">{level.name}</span>
+          <span className="shrink-0 font-bold text-primary tabular-nums">Sv.{level.number}</span>
+        </span>
+        <span className="relative h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
+          <span
+            className="relative block h-full overflow-hidden rounded-full bg-gradient-to-r from-bronze to-primary shadow-[0_0_10px_-2px_var(--primary)]"
+            style={{ width: `${Math.max(6, pct)}%` }}
+          >
+            <span className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-foreground/50 to-transparent motion-safe:animate-[hub-shimmer_2.4s_ease-in-out_infinite]" />
+          </span>
+        </span>
+        <span className="truncate text-[9px] leading-none text-muted-foreground">
+          {level.nextName ? (
+            <>
+              <span className="font-semibold text-foreground tabular-nums">{fmt(level.kpLeft)} KP</span> kaldı
+            </>
+          ) : (
+            'Zirvedesin kanka'
+          )}
+        </span>
+      </span>
+    </Link>
+  )
+}
+
 const SOCIAL_ORDER = ['telegram', 'instagram', 'youtube', 'x'] as const
 
 function HubSocials({ links }: { links: SocialLinks }) {
@@ -242,11 +288,13 @@ export function MemberHub({
   podium = [],
   me = null,
   links = {},
+  level = null,
 }: {
   data: HubData
   podium?: PodiumRow[]
   me?: MyRank
   links?: SocialLinks
+  level?: HubLevel
 }) {
   const { cember, cemberMe, goal } = data
   const taskPct = data.tasksTotal ? (data.tasksDone / data.tasksTotal) * 100 : 0
@@ -264,6 +312,7 @@ export function MemberHub({
         className="pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-primary/[0.06] to-transparent motion-safe:animate-[hub-sheen_7s_ease-in-out_infinite]"
       />
       <div className="relative flex flex-wrap items-end justify-between gap-3">
+        <div className="flex w-full min-w-0 items-center justify-between gap-3 md:w-auto md:justify-start md:gap-4">
         <div className="flex min-w-0 flex-col gap-1">
           <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/80">
             <span className="relative flex size-2" aria-hidden="true">
@@ -275,6 +324,8 @@ export function MemberHub({
           <h2 id="hub-title" className="truncate font-display text-xl font-bold text-foreground md:text-2xl">
             Hoş geldin <span className="bg-gradient-to-r from-primary to-bronze bg-clip-text text-transparent">{data.name}</span>
           </h2>
+        </div>
+        {level && <LevelBadge level={level} />}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <HubSocials links={links} />

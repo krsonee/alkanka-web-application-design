@@ -9,7 +9,7 @@ import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
 import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 import { HIDDEN_KEY, readHidden, withoutHidden } from '@/lib/hidden-shared'
-import { readLeaderboard } from '@/lib/kanka-puan'
+import { getKpConfig, levelFor, readLeaderboard } from '@/lib/kanka-puan'
 import { getBalance, getMember, SIGNUP_BONUS, type Member } from '@/lib/member'
 import { getSignupBonus } from '@/lib/site-texts'
 import { getStreak } from '@/lib/checkin'
@@ -90,13 +90,18 @@ export default async function HomePage() {
   const myIndex = member ? ranking.findIndex((r) => r.userId === member.id) : -1
   const me = member && myIndex >= 0 ? { rank: myIndex + 1, points: ranking[myIndex].kp } : null
   const podium = ranking.slice(0, 3).map((row) => ({ userId: row.userId, name: row.name, points: row.kp }))
+  const levels = member ? await getKpConfig().then((c) => c.levels).catch(() => []) : []
+  const lv = levels.length ? levelFor(levels, me?.points ?? 0) : null
+  const level = lv
+    ? { number: lv.index + 1, name: lv.name, progress: lv.progress, nextName: lv.next?.name ?? null, kpLeft: lv.next ? Math.max(0, lv.next.min - (me?.points ?? 0)) : 0 }
+    : null
 
   return (
     <>
       <SiteJsonLd />
       <h1 className="sr-only">AL KANKA: sponsorlar, kampanyalar ve ücretsiz mini oyunlar</h1>
       <div className="flex flex-col gap-4">
-        {hub ? <MemberHub data={hub} podium={podium} me={me} links={socialLinks} /> : <GuestHero bonus={bonus} />}
+        {hub ? <MemberHub data={hub} podium={podium} me={me} links={socialLinks} level={level} /> : <GuestHero bonus={bonus} />}
         <QuickTiles />
       </div>
       <BannerCarousel slides={slides} />
