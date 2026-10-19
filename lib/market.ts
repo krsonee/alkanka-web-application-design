@@ -13,6 +13,7 @@ export type MarketProduct = {
   sponsorId: string | null
   sponsorName: string | null
   sponsorSlug: string | null
+  sponsorLogo?: string | null
   type: string
   name: string
   description: string
@@ -116,7 +117,7 @@ async function withSponsorSlugs(items: MarketProduct[]) {
     if (item.kind !== 'sponsor' || !item.sponsorId) return item
     const site = sites.find((row) => String(row.id) === item.sponsorId || row.slug === item.sponsorId)
     if (!site?.active || !site.slug) return item
-    return { ...item, sponsorName: site.name, sponsorSlug: site.slug }
+    return { ...item, sponsorName: site.name, sponsorSlug: site.slug, sponsorLogo: site.logoUrl?.trim() || null }
   })
 }
 
