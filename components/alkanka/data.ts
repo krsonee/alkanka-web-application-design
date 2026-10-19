@@ -72,7 +72,7 @@ export const TASK_HUB: NavGroup = {
   id: 'gorev-merkezi',
   label: 'Görev Merkezi',
   icon: Sparkles,
-  items: ['gorevler', 'tahminler', 'etkinlikler', 'turnuvalar'].map(byId),
+  items: ['gorevler', 'tahminler', 'turnuvalar'].map(byId),
 }
 
 export type NavSection = { id: string; title: string; entries: NavEntry[] }
@@ -190,15 +190,6 @@ export const SLIDES: Slide[] = [
     cta: 'Kanala katıl',
     href: TELEGRAM_URL,
     image: '/images/mascots/jako-duyuru.png',
-  },
-  {
-    id: 's4',
-    eyebrow: 'Haftalık etkinlik',
-    title: '250.000 Kanka Coin ödüllü bilet çekilişi',
-    description: 'Bilet al, tahmin yap, sıralamada yüksel. Her pazar 21:00’de çekiliş.',
-    cta: 'Bilet al',
-    href: '/biletler',
-    image: '/images/banner-events.png',
   },
 ]
 

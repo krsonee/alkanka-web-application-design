@@ -222,9 +222,16 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
         </p>
       ) : (
         <div className="flex flex-col gap-4">
-          <div role="tablist" aria-label="Görev türü" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">
+          <div
+            role="tablist"
+            aria-label="Görev türü"
+            className="grid gap-1 rounded-2xl border border-border bg-card p-1 sm:max-w-xl"
+            style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))` }}
+          >
             {groups.map((group) => {
               const active = group.period === activeTab
+              const complete = group.items.length > 0 && group.done === group.items.length
+              const progress = group.items.length ? (group.done / group.items.length) * 100 : 0
               return (
                 <button
                   key={group.period}
@@ -233,13 +240,21 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                   aria-selected={active}
                   onClick={() => setTab(group.period)}
                   className={cn(
-                    'flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors',
-                    active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
+                    'flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                   )}
                 >
-                  {PERIOD_LABEL[group.period]}
-                  <span className={cn('rounded-full px-1.5 text-[11px] font-bold tabular-nums', active ? 'bg-primary-foreground/15' : 'bg-secondary')}>
-                    {group.done}/{group.items.length}
+                  <span className="truncate text-[13px] font-semibold leading-tight sm:text-sm">{PERIOD_LABEL[group.period]}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={cn('text-[11px] font-bold tabular-nums leading-none', !active && complete && 'text-primary')}>
+                      {group.done}/{group.items.length}
+                    </span>
+                    <span aria-hidden="true" className={cn('h-1 w-6 overflow-hidden rounded-full', active ? 'bg-primary-foreground/20' : 'bg-secondary')}>
+                      <span
+                        className={cn('block h-full rounded-full', active ? 'bg-primary-foreground' : 'bg-primary')}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </span>
                   </span>
                 </button>
               )
