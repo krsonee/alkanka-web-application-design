@@ -785,9 +785,20 @@ export function FeaturedSponsors({
 
 const SLIDE_GAP = 12
 
+const FALLBACK_IMAGES = ['/images/banner-events.png', '/images/banner-wheel.png', '/images/hero-chest.png', '/images/banner-telegram.png', '/images/wheel-stage.png']
+
+function uniqueImages(list: Campaign[]): Campaign[] {
+  const used = new Set<string>()
+  return list.map((c) => {
+    const image = !used.has(c.image) ? c.image : (FALLBACK_IMAGES.find((src) => !used.has(src)) ?? c.image)
+    used.add(image)
+    return image === c.image ? c : { ...c, image }
+  })
+}
+
 export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
   const { campaigns: CAMPAIGNS } = useCatalog()
-  const list = [...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3)
+  const list = uniqueImages([...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3))
   const trackRef = useRef<HTMLUListElement>(null)
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)

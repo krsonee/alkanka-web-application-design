@@ -37,7 +37,40 @@ const RANK = {
   },
 } as const
 
-export function TopThree({ rows }: { rows: PodiumRow[] }) {
+function MyRank({ me, signedIn }: { me: { rank: number; points: number } | null; signedIn: boolean }) {
+  if (!signedIn) {
+    return (
+      <a href="#kayit" className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-primary/40 px-3.5 py-2.5 text-sm transition-colors hover:border-primary">
+        <span className="text-muted-foreground">Sen de sıralamaya gir</span>
+        <span className="font-semibold text-primary">Kayıt ol</span>
+      </a>
+    )
+  }
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/[0.06] px-3.5 py-2.5 text-sm">
+      {me ? (
+        <>
+          <span className="text-foreground">
+            Sen <span className="font-display font-bold text-primary tabular-nums">{me.rank.toLocaleString('tr-TR')}.</span> sıradasın
+          </span>
+          <span className="font-semibold text-foreground tabular-nums">{me.points.toLocaleString('tr-TR')} KP</span>
+        </>
+      ) : (
+        <span className="text-muted-foreground">Henüz puanın yok. İlk oyununu oyna, sıralamaya gir.</span>
+      )}
+    </div>
+  )
+}
+
+export function TopThree({
+  rows,
+  me = null,
+  signedIn = false,
+}: {
+  rows: PodiumRow[]
+  me?: { rank: number; points: number } | null
+  signedIn?: boolean
+}) {
   const top = rows
     .filter((row) => row.points > 0)
     .slice(0, 3)
@@ -152,6 +185,7 @@ export function TopThree({ rows }: { rows: PodiumRow[] }) {
           })}
         </ol>
       )}
+      {!(me && me.rank <= 3) && <MyRank me={me} signedIn={signedIn} />}
     </section>
   )
 }
