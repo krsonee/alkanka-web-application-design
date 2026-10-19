@@ -394,7 +394,9 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
   const top = rows.slice(0, 3)
   if (!top.length) return null
   return (
-    <ol aria-label="İlk üç" className="mx-auto grid w-full grid-cols-3 items-end gap-2 px-3 pt-8 md:max-w-2xl md:gap-5 md:px-6 md:pt-14">
+    <div className="relative overflow-hidden">
+      <PodiumStage leader={top[0].name} />
+    <ol aria-label="İlk üç" className="relative mx-auto grid w-full grid-cols-3 items-end gap-2 px-3 pt-8 md:max-w-2xl md:gap-5 md:px-6 md:pt-14">
       {top.map((u) => {
         const s = PODIUM_STYLE[u.rank as 1 | 2 | 3]
         const first = u.rank === 1
@@ -455,6 +457,64 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
         )
       })}
     </ol>
+    </div>
+  )
+}
+
+const STAGE_COINS = [
+  { left: '6%', size: 22, dur: '9s', delay: '0s' },
+  { left: '15%', size: 14, dur: '11s', delay: '3s' },
+  { left: '24%', size: 18, dur: '10s', delay: '6s' },
+  { left: '76%', size: 16, dur: '10.5s', delay: '1.5s' },
+  { left: '85%', size: 22, dur: '9.5s', delay: '4.5s' },
+  { left: '94%', size: 14, dur: '12s', delay: '7s' },
+]
+
+function PodiumStage({ leader }: { leader: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 hidden md:block" aria-hidden>
+      <div className="stage-rays absolute left-1/2 top-1/2 size-[900px] -translate-x-1/2 -translate-y-1/2" />
+      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-primary/10 to-transparent" />
+
+      {STAGE_COINS.map((c) => (
+        <Image
+          key={c.left}
+          src="/images/mascots/coin.png"
+          alt=""
+          width={c.size}
+          height={c.size}
+          className="stage-coin absolute bottom-0 opacity-0"
+          style={{ left: c.left, animationDuration: c.dur, animationDelay: c.delay }}
+        />
+      ))}
+
+      <div className="stage-mascot-in absolute bottom-0 left-[2%] lg:left-[5%] xl:left-[8%]">
+        <div className="stage-float relative size-56 lg:size-64 xl:size-72">
+          <Image
+            src="/images/mascots/jako-kazandi.png"
+            alt=""
+            fill
+            sizes="288px"
+            className="stage-mask object-cover mix-blend-lighten"
+          />
+        </div>
+      </div>
+
+      <div className="stage-mascot-in absolute bottom-0 right-[2%] lg:right-[5%] xl:right-[8%]" style={{ animationDelay: '250ms' }}>
+        <div className="stage-bubble absolute -top-4 left-1/2 z-10 w-max max-w-48 -translate-x-1/2 rounded-2xl rounded-bl-sm border border-primary/40 bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-lg">
+          <span className="text-primary">{leader}</span> zirvede, yetiş kanka!
+        </div>
+        <div className="stage-sway relative size-56 origin-bottom lg:size-64 xl:size-72">
+          <Image
+            src="/images/mascots/jako-merhaba.png"
+            alt=""
+            fill
+            sizes="288px"
+            className="stage-mask object-cover mix-blend-lighten"
+          />
+        </div>
+      </div>
+    </div>
   )
 }
 
