@@ -67,19 +67,6 @@ export default async function BadgesPage() {
     badgeShowcase(specials).catch(() => null),
   ])
   const myLevel = me?.level.index ?? -1
-  const myTier = me ? levelTier(me.level.index + 1) : null
-  const heroStats = me
-    ? [
-        { label: 'Seviyen', value: `${me.level.index + 1}/${cfg.levels.length}` },
-        { label: 'Ligin', value: TIER_NAMES[myTier ?? 'bronz'] },
-        { label: 'Değerli rozetin', value: String(me.badges.length) },
-      ]
-    : [
-        { label: 'Seviye', value: String(cfg.levels.length) },
-        { label: 'Lig', value: '4' },
-        { label: 'Değerli rozet', value: String(specials.length) },
-      ]
-
   const groups: { tier: string; items: { l: (typeof cfg.levels)[number]; i: number }[] }[] = []
   cfg.levels.forEach((l, i) => {
     const tier = levelTier(i + 1)
@@ -96,7 +83,6 @@ export default async function BadgesPage() {
         title="Puan topla, rozetini kap"
         description={`${cfg.levels.length} seviye, 4 lig, her birinin kendi amblemi. Şampiyonlara ise elle verilen değerli rozetler var.`}
         image="/images/badges/hero-jako-rozet.png"
-        stats={heroStats}
       />
 
       <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">

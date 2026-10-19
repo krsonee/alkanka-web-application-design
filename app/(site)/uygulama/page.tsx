@@ -17,11 +17,6 @@ export default async function AppPage() {
         title={`2 adım, ${total.toLocaleString('tr-TR')} KC`}
         description="Ana ekrana ekle, bildirimleri aç. Turnuvalara ilk sen gir, promo kodları ilk sen kap."
         image="/images/heroes/uygulama.png"
-        stats={[
-          { label: 'Kurulum', value: `+${settings.installBonus} KC` },
-          { label: 'Bildirim', value: `+${settings.pushBonus} KC` },
-          { label: 'Mağaza', value: 'Gerekmez' },
-        ]}
       />
       <InstallGuide installClaimed={progress.install} pushClaimed={progress.push} />
     </>

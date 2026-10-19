@@ -14,6 +14,7 @@ export default async function MarketPage() {
   return (
     <>
       <EditableHero slug="market"
+        compact
         image="/images/heroes/market.png"
         highlights={['Sponsor bonusları', 'Rozet ve ekstra hak', 'Ekip onaylı teslim']}
         eyebrow="Market"

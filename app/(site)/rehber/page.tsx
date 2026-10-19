@@ -11,9 +11,10 @@ export default async function GuidePage() {
   return (
     <>
       <PageHero
+        compact
         eyebrow="Rehber"
-        title="Bonus, promo kod ve kampanya rehberleri"
-        description="Bonusları nasıl alacağını, promo kodları nerede kullanacağını ve kampanyalardan en iyi şekilde nasıl yararlanacağını adım adım anlatıyoruz."
+        title="Bonus ve promo rehberleri"
+        description="Bonus, promo kod ve kampanyalardan en iyi şekilde nasıl yararlanacağını adım adım anlatıyoruz."
         image="/images/heroes/sss.png"
       />
       {posts.length === 0 ? (

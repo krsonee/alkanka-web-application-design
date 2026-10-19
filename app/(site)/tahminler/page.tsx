@@ -18,6 +18,7 @@ export default async function PredictionsPage() {
   return (
     <>
       <EditableHero slug="tahminler"
+        compact
         image="/images/heroes/tahminler.png"
         highlights={['Tam skor 3 puan', 'Doğru taraf 1 puan', 'Haftalık Kanka Coin ödülü']}
         eyebrow="Tahmin ligi"

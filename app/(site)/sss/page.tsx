@@ -21,6 +21,7 @@ export default async function FaqPage() {
     <>
       {groups.length > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(faqLd)} />}
       <EditableHero slug="sss"
+        compact
         image="/images/heroes/sss.png"
         highlights={['Anında arama', 'Tek tıkla cevap', '7/24 Telegram destek']}
         eyebrow="Yardım"

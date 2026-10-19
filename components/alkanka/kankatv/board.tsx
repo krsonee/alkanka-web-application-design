@@ -382,7 +382,7 @@ function MatchesTab({
           </button>
         ))}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {isLoading && !data ? 'Y��kleniyor…' : `${total} maç · ${board.competitions.length} lig`}
+          {isLoading && !data ? 'Y����kleniyor…' : `${total} maç · ${board.competitions.length} lig`}
         </span>
       </div>
 
@@ -794,7 +794,6 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
   )
   const [pickedChannel, setChannel] = useState<string | null>(() => docked?.slug ?? null)
   const channel = pickedChannel ?? pickStartChannel(channels)
-  const totalLive = Object.values(initialBoard.liveCounts).reduce((a, b) => a + b, 0)
 
   const watch = (slug: string) => {
     setChannel(slug)
@@ -808,15 +807,11 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
         title="KankaTV"
         description="Futbol, basketbol ve voleybolda tüm liglerin canlı skorları kendiliğinden güncellenir. E-spor, şans oyunları, TV ve spor yayınlarını buradan ücretsiz izle."
         image="/images/heroes/kankatv.png"
-  tone="live"
-  compact
-  stats={[
-          { label: 'Canlı maç', value: String(totalLive) },
-          { label: 'Yayındaki kanal', value: String(channels.filter((c) => c.live).length) },
-          { label: 'Kanal', value: String(channels.length) },
-        ]}
-      >
-        <div role="tablist" aria-label="KankaTV" className="flex w-full gap-2 sm:w-fit">
+        tone="live"
+        compact
+      />
+
+      <div role="tablist" aria-label="KankaTV" className="flex w-full gap-2 sm:w-fit">
           {(
             [
               ['matches', 'Maçlar', Trophy],
@@ -842,7 +837,6 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
             </button>
           ))}
         </div>
-      </PageHero>
 
       {tab === 'matches' ? (
         <MatchesTab initialBoard={initialBoard} liveChannel={channels.find((c) => c.group === 'spor' && c.live)} onWatch={watch} />
