@@ -24,7 +24,7 @@ export type FaqInput = {
 export type PublicFaqGroup = {
   id: string
   label: string
-  items: { id: string; q: string; a: string }[]
+  items: { id: string; slug: string; q: string; a: string }[]
 }
 
 let ready: Promise<unknown> | null = null
@@ -106,7 +106,7 @@ export async function listPublicFaqs(): Promise<PublicFaqGroup[]> {
       group = { id: label, label, items: [] }
       groups.push(group)
     }
-    group.items.push({ id: String(item.id), q: item.question, a: item.answer })
+    group.items.push({ id: String(item.id), slug: item.slug, q: item.question, a: item.answer })
   }
   return groups
 }

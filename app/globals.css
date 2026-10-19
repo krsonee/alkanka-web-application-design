@@ -1471,3 +1471,11 @@
   .stage-rays, .stage-spot, .stage-coin, .stage-mascot-in { animation: none; }
   .stage-bubble { animation: none; opacity: 1; }
 }
+
+/* SSS: open answer glow + search focus lift */
+.faq-open {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 45%, transparent), 0 10px 30px -14px color-mix(in oklab, var(--primary) 55%, transparent);
+}
+.faq-search:focus-within > svg {
+  color: var(--primary);
+}

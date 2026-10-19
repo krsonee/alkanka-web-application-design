@@ -22,7 +22,7 @@ export default async function FaqPage() {
       {groups.length > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(faqLd)} />}
       <EditableHero slug="sss"
         image="/images/heroes/sss.png"
-        highlights={['Kanka Coin', 'Market ve ödüller', 'Hesap güvenliği']}
+        highlights={['Anında arama', 'Tek tıkla cevap', '7/24 Telegram destek']}
         eyebrow="Yardım"
         title="Sıkça sorulan sorular"
         description="Kanka Coin, market, Telegram ve hesap güvenliği hakkında en çok sorulanlar."

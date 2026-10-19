@@ -557,6 +557,9 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
       { q: 'AL KANKA nedir ve nasıl çalışır?', a: 'AL KANKA; partner kampanyaları, mini oyunlar ve Telegram topluluğunu tek yerde toplayan bir ödül rehberidir. Görev yap, oyun oyna, Kanka Coin topla ve marketten ödül al.' },
       { q: 'Partner siteler hangi kriterlere göre seçiliyor?', a: 'Lisans, ödeme hızı, kullanıcı yorumları ve destek kalitesi düzenli olarak kontrol edilir. Kriterleri karşılamayan partnerler listeden çıkarılır.' },
       { q: 'Bilgiler ne sıklıkla güncelleniyor?', a: 'Kampanyalar ve özel oranlar günlük, giriş adresleri ise anlık olarak güncellenir. En hızlı bildirim Telegram kanalımızdadır.' },
+      { q: 'Mobil uygulamayı nasıl kurarım, bonusu nasıl alırım?', a: "Mobil uygulama sayfasındaki Android ya da iPhone adımlarını izleyip AL KANKA'yı ana ekranına ekle. Uygulamadan giriş yapınca kurulum bonusu, bildirimleri açınca ek bonus hesabına yüklenir. Her ödül hesap başına bir kez verilir." },
+      { q: 'Çekim paylaşımım nasıl onaylanır?', a: 'Güven merkezindeki Çekim sekmesinden sponsor sitedeki kullanıcı adını, tutarı, çekim saatini ve ekran görüntüsünü gönder. Ekip kontrol edip onaylayınca ödülün hesabına eklenir ve çekimin duvarda herkese görünür.' },
+      { q: 'Hesabımı nasıl silerim?', a: "Telegram'dan destek ekibine yaz. Hesabın sana ait olduğu doğrulandıktan sonra hesabın ve verilerin silinir. Silinen hesabın bakiyesi ve rozetleri geri getirilemez." },
     ],
   },
   {
@@ -566,6 +569,9 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
       { q: 'Kanka Coin nasıl kazanılır?', a: 'Çark, sandık ve masa oyunları, günlük giriş serisi, görevler, tahminler ve etkinlikler ile Kanka Coin kazanırsın.' },
       { q: 'Markette nakit ödül var mı?', a: 'Hayır. Puan marketinde rozet, ekstra oyun hakkı, seri kalkanı, çekiliş bileti ve hediyeler bulunur. Nakit ödül yoktur.' },
       { q: 'Seri kalkanı ne işe yarar?', a: 'Bir günü kaçırdığında 7 günlük giriş serinin sıfırlanmasını engeller. Kalkan otomatik olarak kullanılır.' },
+      { q: 'KC ile KP arasındaki fark ne?', a: 'Kanka Coin (KC) harcanabilir bakiyendir; marketten ödül almak ve oyunlara girmek için kullanılır. Kanka Puanı (KP) ise deneyim puanıdır; harcanmaz, seviyeni ve sıralamadaki yerini belirler.' },
+      { q: 'Seviye nasıl atlanır?', a: 'Görev, oyun ve etkinliklerden kazandığın KP birikir; belirli eşiklere ulaştıkça seviyen yükselir. Yüksek seviye daha iyi ödüllerin ve özel etkinliklerin kilidini açar.' },
+      { q: 'Rozetler ne işe yarar?', a: 'Rozetler başarılarını profilinde gösterir. Bazı rozetler ek KC ödülü ya da özel etkinlik erişimi sağlar.' },
     ],
   },
   {
@@ -574,6 +580,7 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
     items: [
       { q: 'Promo kodları nereden takip ederim?', a: '@AlkankaOfficial kanalı kodların ilk düştüğü yerdir. Bildirimleri açarsan kontenjan dolmadan kodu alırsın.' },
       { q: 'VIP Telegram kanalına nasıl girerim?', a: 'Puan marketinden VIP Telegram Erişimi alarak veya 7 günlük seriyi tamamlayarak VIP kanala davet alırsın.' },
+      { q: 'Anlık turnuvalardan nasıl haberdar olurum?', a: 'Mobil uygulamada bildirimleri açarsan turnuva başlamadan telefonuna haber gelir. Telegram kanalında ve Turnuvalar sayfasında da güncel takvim yer alır.' },
     ],
   },
   {
@@ -582,6 +589,7 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
     items: [
       { q: 'Hesabım güvende mi?', a: 'Şifreler şifrelenerek saklanır, oturumlar güvenli çerezlerle yönetilir. Kimseyle giriş bilgilerini paylaşma.' },
       { q: 'Yaş sınırı var mı?', a: 'Evet. AL KANKA yalnızca 18 yaş ve üzeri kullanıcılar içindir. Sorumlu davran.' },
+      { q: 'Oyunlarda hile kontrolü var mı?', a: 'Evet. Oyun sonuçları sunucuda doğrulanır. Çoklu hesap, otomasyon ya da şüpheli kazanç tespit edilirse ödüller geri alınır ve hesap kısıtlanabilir.' },
     ],
   },
 ]
