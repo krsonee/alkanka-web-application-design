@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
-import { Check, Lock, Target, Users } from 'lucide-react'
+import { Check, ChevronDown, Lock, Target, Users } from 'lucide-react'
 import { LevelEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { Modal } from '@/components/alkanka/modal'
 import { cn } from '@/lib/utils'
@@ -42,6 +42,8 @@ export function LevelSections({
 }) {
   const [open, setOpen] = useState<number | null>(null)
   const nextIndex = signedIn && myLevel + 1 < levels.length ? myLevel + 1 : -1
+  const focusLevel = nextIndex >= 0 ? nextIndex : myLevel
+  const openGroup = Math.max(0, groups.findIndex((g) => g.items.some(({ i }) => i === focusLevel)))
 
   return (
     <section aria-labelledby="seviyeler" className="flex flex-col gap-4">
@@ -49,8 +51,8 @@ export function LevelSections({
         <h2 id="seviyeler" className="font-display text-lg font-bold text-foreground">Seviyeler</h2>
         <p className="text-xs text-muted-foreground">Bir rozete dokun, nasıl alınır ve kaç kişide var gör.</p>
       </div>
-      {groups.map((g) => (
-        <TierBlock key={g.tier + g.items[0].i} group={g} myLevel={myLevel} myKp={myKp} signedIn={signedIn} nextIndex={nextIndex} reach={reach} onOpen={setOpen} />
+      {groups.map((g, gi) => (
+        <TierBlock key={g.tier + g.items[0].i} defaultOpen={gi === openGroup} group={g} myLevel={myLevel} myKp={myKp} signedIn={signedIn} nextIndex={nextIndex} reach={reach} onOpen={setOpen} />
       ))}
       <LevelDetail index={open} onClose={() => setOpen(null)} levels={levels} myLevel={myLevel} myKp={myKp} signedIn={signedIn} reach={reach} />
     </section>
@@ -58,6 +60,7 @@ export function LevelSections({
 }
 
 function TierBlock({
+  defaultOpen,
   group: g,
   myLevel,
   myKp,
@@ -66,6 +69,7 @@ function TierBlock({
   reach,
   onOpen,
 }: {
+  defaultOpen: boolean
   group: LevelGroup
   myLevel: number
   myKp: number
@@ -75,27 +79,63 @@ function TierBlock({
   onOpen: (i: number) => void
 }) {
   const listRef = useRef<HTMLOListElement>(null)
+  const [expanded, setExpanded] = useState(defaultOpen)
   const focusIndex = g.items.some(({ i }) => i === nextIndex) ? nextIndex : g.items.some(({ i }) => i === myLevel) ? myLevel : -1
+  const first = g.items[0]
+  const last = g.items.at(-1)!
+  const completed = signedIn && last.i <= myLevel
+  const upcoming = signedIn && first.i > myLevel && first.i !== nextIndex
+  const ownedCount = signedIn ? g.items.filter(({ i }) => i <= myLevel).length : 0
+  const panelId = `lig-${g.tier}-${first.i}-liste`
 
   useEffect(() => {
     const list = listRef.current
-    if (focusIndex < 0 || !list || list.scrollWidth <= list.clientWidth) return
+    if (!expanded || focusIndex < 0 || !list || list.scrollWidth <= list.clientWidth) return
     const card = list.querySelector<HTMLElement>(`[data-level="${focusIndex}"]`)
     if (card) list.scrollLeft = card.offsetLeft - list.offsetLeft - 40
-  }, [focusIndex])
+  }, [focusIndex, expanded])
 
   return (
-    <article id={`lig-${g.tier}`} className={cn('scroll-mt-32 overflow-hidden rounded-2xl border', TIER_BG[g.tier])}>
-      <header className="relative flex h-20 items-center overflow-hidden sm:h-28 md:h-32">
-        <Image src={`/images/badges/tier-${g.tier}.png`} alt="" fill sizes="(min-width: 1024px) 900px, 100vw" className="object-cover object-right" />
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
-        <div className="relative flex flex-col gap-1 px-5">
-          <span className={cn('font-display text-2xl font-bold', TIER_TEXT[g.tier])}>{TIER_NAMES[g.tier]} Ligi</span>
-          <span className="text-xs text-muted-foreground">
-            Lv {g.items[0].i + 1}–{g.items.at(-1)!.i + 1} · {TIER_TAGLINE[g.tier]}
+    <article id={`lig-${g.tier}`} className={cn('scroll-mt-32 overflow-hidden rounded-2xl border', TIER_BG[g.tier], upcoming && !expanded && 'opacity-80')}>
+      <header>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className={cn('relative flex w-full items-center overflow-hidden text-left transition-[height]', expanded ? 'h-20 sm:h-28 md:h-32' : 'h-16 sm:h-20')}
+        >
+          <Image src={`/images/badges/tier-${g.tier}.png`} alt="" fill sizes="(min-width: 1024px) 900px, 100vw" className={cn('object-cover object-right', upcoming && 'grayscale-[60%]')} />
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
+          <div className="relative flex min-w-0 flex-1 flex-col gap-1 px-5">
+            <span className={cn('flex items-center gap-2 font-display font-bold', expanded ? 'text-2xl' : 'text-xl', TIER_TEXT[g.tier])}>
+              {TIER_NAMES[g.tier]} Ligi
+              {completed && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-gold px-2 py-0.5 font-sans text-[10px] font-bold uppercase text-gold-foreground">
+                  <Check className="size-3" aria-hidden /> Tamamlandı
+                </span>
+              )}
+            </span>
+            <span className="truncate text-xs text-muted-foreground">
+              {upcoming ? (
+                <>
+                  <Lock className="mr-1 inline size-3 align-[-2px]" aria-hidden />
+                  {fmt(first.l.min)} KP&apos;de açılır · Lv {first.i + 1}–{last.i + 1}
+                </>
+              ) : (
+                <>
+                  Lv {first.i + 1}–{last.i + 1} · {signedIn ? `${ownedCount}/${g.items.length} rozet` : TIER_TAGLINE[g.tier]}
+                </>
+              )}
+            </span>
+          </div>
+          <span className="relative mr-4 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background/70 text-foreground">
+            <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} aria-hidden />
+            <span className="sr-only">{expanded ? 'Daralt' : 'Genişlet'}</span>
           </span>
-        </div>
+        </button>
       </header>
+      <div id={panelId} hidden={!expanded}>
       <ol ref={listRef} className="flex snap-x snap-mandatory gap-2 overflow-x-auto p-3 pt-4 no-scrollbar sm:grid sm:snap-none sm:grid-cols-3 sm:overflow-visible lg:grid-cols-5">
         {g.items.map(({ l, i }) => {
           const current = i === myLevel
@@ -153,6 +193,7 @@ function TierBlock({
           )
         })}
       </ol>
+      </div>
     </article>
   )
 }
