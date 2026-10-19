@@ -18,6 +18,7 @@ import { SiteSearch, type SearchSponsor } from './site-search'
 import { RadioPlayer } from './radio-player'
 import { CemberButton } from './cember/cember-pill'
 import type { SocialLinks } from '@/lib/social-shared'
+import type { TelegramLinks } from './data'
 
 function PointsPill() {
   const { points, lastGain, member } = usePoints()
@@ -263,9 +264,25 @@ function AccountArea() {
   return <AccountMenu />
 }
 
-export function Topbar({ social, sponsors = [] }: { social: SocialLinks; sponsors?: SearchSponsor[] }) {
+export const OPEN_MENU_EVENT = 'alkanka:open-menu'
+
+export function Topbar({
+  social,
+  sponsors = [],
+  telegram,
+}: {
+  social: SocialLinks
+  sponsors?: SearchSponsor[]
+  telegram: TelegramLinks
+}) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
+
+  useEffect(() => {
+    const openMenu = () => setOpen(true)
+    window.addEventListener(OPEN_MENU_EVENT, openMenu)
+    return () => window.removeEventListener(OPEN_MENU_EVENT, openMenu)
+  }, [])
 
   return (
     <>
@@ -303,7 +320,7 @@ export function Topbar({ social, sponsors = [] }: { social: SocialLinks; sponsor
           <AccountArea />
         </div>
       </header>
-      <MobileDrawer open={open} onClose={close} social={social} />
+      <MobileDrawer open={open} onClose={close} social={social} telegram={telegram} />
     </>
   )
 }

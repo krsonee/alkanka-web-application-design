@@ -1487,3 +1487,11 @@
 .faq-search:focus-within > svg {
   color: var(--primary);
 }
+
+/* Desktop sidebar width; the rail toggles html[data-sidebar] between open and collapsed. */
+:root {
+  --sidebar-w: 16rem;
+}
+:root[data-sidebar='collapsed'] {
+  --sidebar-w: 72px;
+}

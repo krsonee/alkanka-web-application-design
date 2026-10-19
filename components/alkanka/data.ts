@@ -32,48 +32,63 @@ import {
 
 export const TELEGRAM_URL = 'https://t.me/AlkankaOfficial'
 
-export type NavItem = { id: string; label: string; href: string; icon: LucideIcon; badge?: string }
+/**
+ * `signal` badges are filled at runtime (live stream dot, open task count);
+ * `newUntil` shows a "Yeni" tag that disappears on its own after that date.
+ */
+export type NavItem = {
+  id: string
+  label: string
+  href: string
+  icon: LucideIcon
+  badge?: string
+  signal?: 'live' | 'tasks'
+  newUntil?: string
+}
 
 export const NAV_ITEMS: NavItem[] = [
   { id: 'anasayfa', label: 'Ana sayfa', href: '/', icon: Home },
   { id: 'siteler', label: 'Sponsorlar', href: '/sponsorlar', icon: LayoutGrid },
   { id: 'kampanyalar', label: 'Kampanyalar', href: '/kampanyalar', icon: Megaphone },
   { id: 'ozel-oranlar', label: 'Özel oranlar', href: '/ozel-oranlar', icon: Percent },
-  { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, badge: 'Canlı' },
-  { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, badge: 'Yeni' },
+  { id: 'kankatv', label: 'KankaTV', href: '/kankatv', icon: Tv, signal: 'live' },
+  { id: 'oyunlar', label: 'Oyunlar', href: '/oyunlar', icon: Dices, newUntil: '2026-10-26' },
   { id: 'turnuvalar', label: 'Turnuvalar', href: '/turnuvalar', icon: Swords },
-  { id: 'market', label: 'Puan marketi', href: '/market', icon: ShoppingBag },
-  { id: 'gorevler', label: 'Görevler', href: '/gorevler', icon: ListChecks },
+  { id: 'market', label: 'Market', href: '/market', icon: ShoppingBag },
+  { id: 'gorevler', label: 'Görevler', href: '/gorevler', icon: ListChecks, signal: 'tasks' },
   { id: 'etkinlikler', label: 'Biletler', href: '/biletler', icon: Ticket },
   { id: 'tahminler', label: 'Tahmin ligi', href: '/tahminler', icon: Flag },
   { id: 'siralama', label: 'Sıralama', href: '/siralama', icon: Trophy },
-  { id: 'rozetler', label: 'Rozetler', href: '/rozetler', icon: Medal, badge: 'Yeni' },
+  { id: 'rozetler', label: 'Rozetler', href: '/rozetler', icon: Medal, newUntil: '2026-10-26' },
   { id: 'guven', label: 'Güven merkezi', href: '/guven', icon: ShieldCheck },
-  { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone, badge: '+500' },
+  { id: 'uygulama', label: 'Mobil uygulama', href: '/uygulama', icon: Smartphone },
   { id: 'sss', label: 'SSS', href: '/sss', icon: HelpCircle },
+]
+
+const byId = (id: string) => NAV_ITEMS.find((i) => i.id === id)!
+
+export const TASK_HUB: NavGroup = {
+  kind: 'group',
+  id: 'gorev-merkezi',
+  label: 'Görev Merkezi',
+  icon: Sparkles,
+  items: ['gorevler', 'tahminler', 'etkinlikler', 'turnuvalar'].map(byId),
+}
+
+export type NavSection = { id: string; title: string; entries: NavEntry[] }
+
+/** Sidebar layout: short titled sections so the important pages stand out. */
+export const NAV_SECTIONS: NavSection[] = [
+  { id: 'kesfet', title: 'Keşfet', entries: ['anasayfa', 'oyunlar', 'kankatv', 'siralama'].map(byId) },
+  { id: 'kazan', title: 'Kazan', entries: [TASK_HUB, byId('market'), byId('rozetler'), byId('kampanyalar')] },
+  { id: 'sponsor', title: 'Sponsor', entries: ['siteler', 'ozel-oranlar'].map(byId) },
+  { id: 'destek', title: 'Destek', entries: ['guven', 'sss', 'uygulama'].map(byId) },
 ]
 
 export type NavGroup = { kind: 'group'; id: string; label: string; icon: LucideIcon; items: NavItem[] }
 export type NavEntry = (NavItem & { kind?: 'item' }) | NavGroup
 
-const EVENT_HUB_IDS = ['gorevler', 'tahminler', 'etkinlikler', 'turnuvalar', 'market']
-
-/** Sidebar tree: the event-hub pages sit together under one roof, in the order the community asked for. */
-export const NAV_TREE: NavEntry[] = (() => {
-  const hub: NavGroup = {
-    kind: 'group',
-    id: 'etkinlik-merkezi',
-    label: 'Görev & Etkinlik Merkezi',
-    icon: Sparkles,
-    items: EVENT_HUB_IDS.map((id) => NAV_ITEMS.find((i) => i.id === id)!).filter(Boolean),
-  }
-  const out: NavEntry[] = []
-  for (const item of NAV_ITEMS) {
-    if (!EVENT_HUB_IDS.includes(item.id)) out.push(item)
-    else if (!out.includes(hub)) out.push(hub)
-  }
-  return out
-})()
+export type TelegramLinks = { duyuru: string; sohbet: string; ozelOran: string; promo: string }
 
 export const SECTION_IDS = NAV_ITEMS.map((i) => i.href.split('#')[1]).filter((v, i, a) => a.indexOf(v) === i)
 
