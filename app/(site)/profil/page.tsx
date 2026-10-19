@@ -111,13 +111,6 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           <Image src={cover.src} alt="" fill priority sizes="(min-width: 1024px) 1000px, 100vw" className="object-cover" />
           <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
           <div className="absolute right-4 top-4 flex gap-2">
-            <a
-              href="/api/profil-kart"
-              download="alkanka-profil-kartim.png"
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-semibold text-foreground backdrop-blur hover:border-gold/50"
-            >
-              <Download className="size-3.5" aria-hidden /> Profil kartı
-            </a>
             <Link
               href="/rozetler"
               className="inline-flex items-center gap-1 rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-semibold text-foreground backdrop-blur hover:border-gold/50"

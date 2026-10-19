@@ -210,7 +210,7 @@ export function LookStudio({ initial }: { initial: LookState }) {
 
       {section === 'takim' && (
         <div className="flex flex-col gap-3">
-          <p className="text-sm leading-relaxed text-muted-foreground">Taraftarı olduğun renkleri seç; profilinde ve paylaşım kartında görünür.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">Taraftarı olduğun renkleri seç; profilinde görünür.</p>
           <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {TEAMS.map((t) => {
               const active = state.team === t.id
