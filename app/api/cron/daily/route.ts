@@ -53,8 +53,31 @@ async function payReferrals() {
   return paid
 }
 
+const PODIUM_TITLE = { hafta: 'Haftanın', ay: 'Ayın' } as const
+
+/** Freezes last week's/month's top 3 and announces each new podium once on Telegram. */
+async function announcePodiums() {
+  const { settlePodiums } = await import('@/lib/kanka-puan')
+  const { broadcastPodium } = await import('@/lib/telegram-bots')
+  const fresh = await settlePodiums()
+  for (const p of fresh) {
+    await broadcastPodium((origin) =>
+      [
+        `${PODIUM_TITLE[p.kind]} Şampiyon Kürsüsü`,
+        '',
+        ...p.rows.map((r) => `${r.place}. ${r.name} · ${r.kp.toLocaleString('tr-TR')} KP`),
+        '',
+        'Tebrikler kankalar! Yeni dönem başladı, kürsü seni bekliyor.',
+        `${origin}/sampiyonlar`,
+      ].join('\n'),
+    ).catch(() => 0)
+  }
+  return fresh.length
+}
+
 export async function GET(req: Request) {
   if (!(await authorized(req))) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
+  const podiums = await announcePodiums().then(String, (e) => String(e))
   const [tournaments, reminders, referrals, cember, ranks] = await Promise.allSettled([
     autoStartDue(),
     remindStreaks(),
@@ -63,7 +86,8 @@ export async function GET(req: Request) {
     import('@/lib/kanka-puan').then(({ snapshotRanks }) => snapshotRanks()),
   ])
   return Response.json({
-    rankSnapshot: ranks.status === 'fulfilled' ? 'ok' : String(ranks.reason),
+    podiums,
+    rankSnapshot: ranks.status === 'fulfilled' ? ranks.value : String(ranks.reason),
     cemberSettled: cember.status === 'fulfilled' ? cember.value : String(cember.reason),
     tournaments: tournaments.status === 'fulfilled' ? 'ok' : String(tournaments.reason),
     streakReminders: reminders.status === 'fulfilled' ? reminders.value : String(reminders.reason),

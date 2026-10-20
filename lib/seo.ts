@@ -104,6 +104,13 @@ export const PAGE_SEO = {
     image: '/images/heroes/siralama.png',
     keywords: ['liderlik tablosu', 'sıralama'],
   },
+  sampiyonlar: {
+    path: '/sampiyonlar',
+    title: 'Şampiyon Kürsüsü',
+    description: 'Her haftanın ve ayın ilk 3 kankası. Kürsüye çıkanlar burada kalıcı olarak yer alır.',
+    image: '/images/heroes/siralama.png',
+    keywords: ['şampiyonlar', 'haftanın şampiyonu', 'kürsü'],
+  },
   uygulama: {
     path: '/uygulama',
     title: 'Mobil Uygulama: Ana Ekrana Ekle, Bonus Kazan',

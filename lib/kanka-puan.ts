@@ -1,6 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
+import { SPRINT_MULTIPLIER, sprintState } from '@/lib/sprint'
 import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, publicRankName, type BadgeTier, type LevelDef, type PointRules } from '@/lib/kanka-puan-shared'
 
 export * from '@/lib/kanka-puan-shared'
@@ -153,8 +154,12 @@ function periodStart(period: RankPeriod) {
   return sql`(date_trunc(${TRUNC[period]}, now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`
 }
 
-async function totals(rules: PointRules, userId: string | null, limit = 1, period: RankPeriod = 'tum') {
-  const since = periodStart(period)
+type Window = { since: ReturnType<typeof sql>; until: ReturnType<typeof sql> }
+const NO_END = sql`'infinity'::timestamptz`
+
+async function totals(rules: PointRules, userId: string | null, limit = 1, period: RankPeriod = 'tum', win?: Window) {
+  const since = win?.since ?? periodStart(period)
+  const until = win?.until ?? NO_END
   const [chat, tg, awards] = await Promise.all([tableExists('tg_chat_messages'), tableExists('tg_links'), tableExists('kp_awards')])
   const notRoleHolder = awards
     ? sql`AND NOT EXISTS (SELECT 1 FROM kp_awards ra WHERE ra.user_id = ids.user_id AND ra.badge_id IN ('moderator', 'sponsor-destek'))`
@@ -162,23 +167,23 @@ async function totals(rules: PointRules, userId: string | null, limit = 1, perio
   const chatCte = chat
     ? sql`SELECT user_id, sum(least(n, ${rules.chatDailyCap}))::bigint AS v FROM (
         SELECT user_id, date_trunc('day', created_at AT TIME ZONE 'Europe/Istanbul') AS d, count(*) AS n
-        FROM tg_chat_messages WHERE user_id IS NOT NULL AND created_at >= ${since} GROUP BY 1, 2) x GROUP BY user_id`
+        FROM tg_chat_messages WHERE user_id IS NOT NULL AND created_at >= ${since} AND created_at < ${until} GROUP BY 1, 2) x GROUP BY user_id`
     : sql`SELECT NULL::text AS user_id, 0::bigint AS v WHERE false`
   const tgCte = tg
-    ? sql`SELECT user_id, 1::bigint AS v FROM tg_links WHERE coalesce(linked_at, now()) >= ${since}`
+    ? sql`SELECT user_id, 1::bigint AS v FROM tg_links WHERE coalesce(linked_at, now()) >= ${since} AND coalesce(linked_at, now()) < ${until}`
     : sql`SELECT NULL::text AS user_id, 0::bigint AS v WHERE false`
   const r = await rows(sql`WITH
     g AS (SELECT user_id, sum(least(games, ${rules.gameDailyCap})) AS games, sum(tasks) AS tasks FROM (
         SELECT user_id, date_trunc('day', created_at AT TIME ZONE 'Europe/Istanbul') AS d,
           count(*) FILTER (WHERE mode <> 'odul') AS games, count(*) FILTER (WHERE mode = 'odul' AND game = 'gorev') AS tasks
-        FROM game_history WHERE created_at >= ${since} GROUP BY 1, 2) gd GROUP BY user_id),
+        FROM game_history WHERE created_at >= ${since} AND created_at < ${until} GROUP BY 1, 2) gd GROUP BY user_id),
     c AS (${chatCte}),
-    l AS (SELECT user_id, coalesce(sum(points), 0) AS v FROM league_picks WHERE created_at >= ${since} GROUP BY user_id),
-    rv AS (SELECT user_id, count(*) AS v FROM site_reviews WHERE status = 'approved' AND created_at >= ${since} GROUP BY user_id),
-    rf AS (SELECT referrer_id AS user_id, count(*) AS v FROM referrals WHERE rewarded_at IS NOT NULL AND rewarded_at >= ${since} GROUP BY referrer_id),
+    l AS (SELECT user_id, coalesce(sum(points), 0) AS v FROM league_picks WHERE created_at >= ${since} AND created_at < ${until} GROUP BY user_id),
+    rv AS (SELECT user_id, count(*) AS v FROM site_reviews WHERE status = 'approved' AND created_at >= ${since} AND created_at < ${until} GROUP BY user_id),
+    rf AS (SELECT referrer_id AS user_id, count(*) AS v FROM referrals WHERE rewarded_at IS NOT NULL AND rewarded_at >= ${since} AND rewarded_at < ${until} GROUP BY referrer_id),
     t AS (${tgCte}),
     e AS (SELECT user_id, coalesce(sum(points) FILTER (WHERE source = 'sure'), 0) AS time, coalesce(sum(points) FILTER (WHERE source <> 'sure'), 0) AS bonus
-      FROM kp_events WHERE created_at >= ${since} GROUP BY user_id),
+      FROM kp_events WHERE created_at >= ${since} AND created_at < ${until} GROUP BY user_id),
     ids AS (SELECT user_id FROM g UNION SELECT user_id FROM c UNION SELECT user_id FROM l UNION SELECT user_id FROM rv
       UNION SELECT user_id FROM rf UNION SELECT user_id FROM t UNION SELECT user_id FROM e),
     s AS (SELECT ids.user_id,
@@ -201,6 +206,20 @@ async function totals(rules: PointRules, userId: string | null, limit = 1, perio
     const breakdown = Object.fromEntries(SOURCE_KEYS.map((k) => [k, Number(x[k] ?? 0)])) as KpBreakdown
     return { userId: String(x.user_id), name: String(x.name ?? 'Kanka'), total: Math.max(0, Number(x.total ?? 0)), breakdown }
   })
+}
+
+/** Totals for a window where activity after `sprintSince` counts SPRINT_MULTIPLIER times. */
+async function rankedWindow(rules: PointRules, limit: number, win: Window, sprintSince: ReturnType<typeof sql> | null) {
+  if (!sprintSince) return totals(rules, null, limit, 'tum', win)
+  const [base, sprint] = await Promise.all([
+    totals(rules, null, Math.max(limit, 1000), 'tum', win),
+    totals(rules, null, 5000, 'tum', { since: sprintSince, until: win.until }),
+  ])
+  const extra = new Map(sprint.map((s) => [s.userId, Math.floor(s.total * (SPRINT_MULTIPLIER - 1))]))
+  return base
+    .map((b) => ({ ...b, total: b.total + (extra.get(b.userId) ?? 0) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit)
 }
 
 export function levelFor(levels: LevelDef[], kp: number) {
@@ -309,7 +328,11 @@ export async function levelReach(levelCount: number): Promise<{ total: number; r
 
 export async function leaderboard(limit = 20, period: RankPeriod = 'tum', opts?: { readOnly?: boolean }): Promise<LeaderRow[]> {
   const cfg = opts?.readOnly ? await readKpConfig() : await getKpConfig()
-  const list = (await totals(cfg.rules, null, limit, period)).filter((l) => l.total > 0)
+  const sprintOn = period === 'hafta' && sprintState().active
+  const raw = sprintOn
+    ? await rankedWindow(cfg.rules, limit, { since: periodStart('hafta'), until: NO_END }, periodStart('gun'))
+    : await totals(cfg.rules, null, limit, period)
+  const list = raw.filter((l) => l.total > 0)
   if (!list.length) return []
   let counts: { user_id: string; n: string }[] = []
   const awardsReady = !opts?.readOnly || (await tableExists('kp_awards'))
@@ -651,7 +674,123 @@ export async function rankMoves(period: 'hafta' | 'ay', board: { userId: string 
 /** Daily cron hook: keeps snapshots flowing even on days nobody opens the ranking page, and prunes old ones. */
 export async function snapshotRanks() {
   const [hafta, ay] = await Promise.all([leaderboard(200, 'hafta'), leaderboard(200, 'ay')])
-  await Promise.all([rankMoves('hafta', hafta), rankMoves('ay', ay)])
+  const [weekMoves] = await Promise.all([rankMoves('hafta', hafta), rankMoves('ay', ay)])
   await rows(sql`DELETE FROM kp_rank_snapshots WHERE day < (now() AT TIME ZONE 'Europe/Istanbul')::date - 40`)
-  return hafta.length + ay.length
+  const alerts = await overtakeAlerts(hafta, weekMoves).catch((e) => {
+    console.error('[kp] geçildin bildirimi gönderilemedi', e)
+    return 0
+  })
+  return { boards: hafta.length + ay.length, alerts }
+}
+
+const ALERT_TOP = 20
+
+/** "Seni geçtiler": members in the weekly top 20 who dropped since yesterday get one push naming who passed them. */
+async function overtakeAlerts(board: LeaderRow[], moves: Record<string, RankMove>) {
+  const prevRank = (i: number) => {
+    const m = moves[board[i].userId]
+    return typeof m === 'number' ? i + 1 + m : Infinity
+  }
+  const due: { userId: string; title: string; body: string }[] = []
+  board.slice(0, ALERT_TOP).forEach((row, i) => {
+    const move = moves[row.userId]
+    if (typeof move !== 'number' || move >= 0) return
+    const mine = prevRank(i)
+    let passer: LeaderRow | null = null
+    for (let j = i - 1; j >= 0; j--) if (prevRank(j) > mine) { passer = board[j]; break }
+    const now = i + 1
+    due.push({
+      userId: row.userId,
+      title: 'Seni geçtiler kanka!',
+      body: passer
+        ? `${passer.name} seni ${mine}. sıradan geçti, şimdi ${now}. sıradasın. Hafta bitmeden yerini geri al.`
+        : `Haftalık ligde ${mine}. sıradan ${now}. sıraya düştün. Hafta bitmeden yerini geri al.`,
+    })
+  })
+  if (!due.length) return 0
+  await rows(sql`CREATE TABLE IF NOT EXISTS kp_rank_alerts (day date NOT NULL, user_id text NOT NULL, PRIMARY KEY (day, user_id))`)
+  const { sendToUsers } = await import('@/lib/push')
+  let sent = 0
+  for (const d of due) {
+    const fresh = await rows(sql`INSERT INTO kp_rank_alerts (day, user_id) VALUES ((now() AT TIME ZONE 'Europe/Istanbul')::date, ${d.userId})
+      ON CONFLICT DO NOTHING RETURNING user_id`)
+    if (!fresh.length) continue
+    await sendToUsers([d.userId], { title: d.title, body: d.body, url: '/siralama' }).catch(() => {})
+    sent++
+  }
+  return sent
+}
+
+// --- Şampiyon kürsüsü -------------------------------------------------------
+
+export type PodiumKind = 'hafta' | 'ay'
+export type Podium = { kind: PodiumKind; label: string; rows: { place: number; userId: string; name: string; kp: number }[] }
+
+let podiumReady: Promise<unknown> | null = null
+function ensurePodiums() {
+  podiumReady ??= rows(sql`CREATE TABLE IF NOT EXISTS kp_podiums (
+    kind text NOT NULL, label text NOT NULL, place int NOT NULL, user_id text NOT NULL, name text NOT NULL, kp int NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (kind, label, place))`).catch((e) => {
+    podiumReady = null
+    throw e
+  })
+  return podiumReady
+}
+
+const PODIUM_SPAN: Record<PodiumKind, { trunc: string; step: string }> = { hafta: { trunc: 'week', step: '1 week' }, ay: { trunc: 'month', step: '1 month' } }
+
+/**
+ * Freezes the top 3 of the period that just ended (weekly sprint bonus included) so the podium never
+ * changes afterwards. Returns only podiums created by this call, so callers can announce them once.
+ */
+export async function settlePodiums(): Promise<Podium[]> {
+  await ensurePodiums()
+  const cfg = await getKpConfig()
+  const created: Podium[] = []
+  for (const kind of ['hafta', 'ay'] as PodiumKind[]) {
+    const { trunc, step } = PODIUM_SPAN[kind]
+    const startLocal = sql`date_trunc(${trunc}, now() AT TIME ZONE 'Europe/Istanbul')`
+    const until = sql`(${startLocal} AT TIME ZONE 'Europe/Istanbul')`
+    const since = sql`((${startLocal} - ${step}::interval) AT TIME ZONE 'Europe/Istanbul')`
+    const [{ label }] = await rows<{ label: string }>(sql`SELECT to_char(${startLocal} - ${step}::interval, 'YYYY-MM-DD') AS label`)
+    const exists = await rows(sql`SELECT 1 FROM kp_podiums WHERE kind = ${kind} AND label = ${label} LIMIT 1`)
+    if (exists.length) continue
+    const sprintSince = kind === 'hafta' ? sql`(${until} - interval '1 day')` : null
+    const top = (await rankedWindow(cfg.rules, 3, { since, until }, sprintSince)).filter((t) => t.total > 0)
+    if (!top.length) continue
+    const podium: Podium = { kind, label, rows: top.map((t, i) => ({ place: i + 1, userId: t.userId, name: publicRankName(t.name), kp: t.total })) }
+    let inserted = 0
+    for (const r of podium.rows) {
+      const ok = await rows(sql`INSERT INTO kp_podiums (kind, label, place, user_id, name, kp)
+        VALUES (${kind}, ${label}, ${r.place}, ${r.userId}, ${r.name}, ${r.kp}) ON CONFLICT DO NOTHING RETURNING place`)
+      inserted += ok.length
+    }
+    if (inserted) created.push(podium)
+  }
+  return created
+}
+
+/** Past podiums, newest first. Read-only so the public page never creates tables. */
+export async function listPodiums(limit = 12): Promise<Podium[]> {
+  if (!(await tableExists('kp_podiums'))) return []
+  const r = await rows<{ kind: PodiumKind; label: string; place: number; user_id: string; name: string; kp: number }>(sql`
+    SELECT kind, label, place, user_id, name, kp FROM kp_podiums
+    WHERE (kind, label) IN (SELECT kind, label FROM kp_podiums GROUP BY kind, label ORDER BY label DESC LIMIT ${limit})
+    ORDER BY label DESC, kind, place`)
+  const map = new Map<string, Podium>()
+  for (const x of r) {
+    const key = `${x.kind}:${x.label}`
+    if (!map.has(key)) map.set(key, { kind: x.kind, label: String(x.label), rows: [] })
+    map.get(key)!.rows.push({ place: Number(x.place), userId: String(x.user_id), name: String(x.name), kp: Number(x.kp) })
+  }
+  return [...map.values()]
+}
+
+/** Current weekly #1, who wears the Kral Tacı everywhere their name shows. */
+let kingCache: { at: number; id: string | null } | null = null
+export async function weeklyKingId(): Promise<string | null> {
+  if (kingCache && Date.now() - kingCache.at < 60_000) return kingCache.id
+  const top = await readLeaderboard(1, 'hafta')
+  kingCache = { at: Date.now(), id: top[0]?.userId ?? null }
+  return kingCache.id
 }

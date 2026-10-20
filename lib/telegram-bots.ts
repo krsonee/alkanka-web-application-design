@@ -476,6 +476,23 @@ export async function setOddsResult(dealId: number, result: 'won' | 'lost' | nul
   return { posted }
 }
 
+/** Champion podium announcement: goes to every active channel/group the panel has connected. */
+export async function broadcastPodium(build: (origin: string) => string) {
+  await ensureSuiteTables()
+  const suite = await getBotSuite()
+  const text = build(suite.siteOrigin || '').slice(0, MESSAGE_LIMIT)
+  let posted = 0
+  for (const t of await targetsFor([], true)) {
+    try {
+      await callBot(t.token, 'sendMessage', { chat_id: t.chatId, text, disable_web_page_preview: true })
+      posted++
+    } catch (error) {
+      console.error('[kursu] paylaşılamadı', t.title, (error as Error).message)
+    }
+  }
+  return posted
+}
+
 // --- 34. Approval notifier -------------------------------------------------
 
 async function sendApproval(kind: ApprovalKind, vars: { uye: string; detay: string }) {
