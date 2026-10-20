@@ -11,7 +11,17 @@ const { goalBot: _goalBot, ...publicConfig } = DEFAULT_TV
 const demoEngage: TvEngage = {
   config: { ...publicConfig, goalAlerts: true },
   member: true,
-  watch: { minutes: 34, earned: 15, cap: 60, nextIn: 6 },
+  watch: {
+    minutes: 34,
+    earned: 15,
+    cap: 60,
+    nextIn: 6,
+    chests: publicConfig.chests.tiers.map((t) => ({ ...t, opened: 34 >= t.minutes })),
+    streak: 3,
+    goalChest: null,
+  },
+  halftime: [],
+  flash: [],
   viewers: 1284,
   reactions: [],
   predictions: [],

@@ -3,6 +3,7 @@ import { getChannels, getScoreBoard } from '@/lib/kankatv'
 import { getMemberChannels } from '@/lib/member-streams'
 import { KankaTvBoard } from '@/components/alkanka/kankatv/board'
 import { AdFrame } from '@/components/alkanka/ad-frame'
+import { WeeklyWatchers } from '@/components/alkanka/kankatv/weekly-watchers'
 
 export const metadata = pageMeta('kankatv')
 export const revalidate = 30
@@ -12,6 +13,7 @@ export default async function KankaTvPage() {
   return (
     <AdFrame page="kankatv">
       <KankaTvBoard initialBoard={board} initialChannels={[...members, ...channels]} />
+      <WeeklyWatchers />
     </AdFrame>
   )
 }

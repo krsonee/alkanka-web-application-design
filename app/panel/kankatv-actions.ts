@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { getTvConfig, saveTvConfig, scanGoals, settlePredictions, testGoalBot } from '@/lib/kankatv-engage'
+import { parseTiers } from '@/lib/kankatv-shared'
 import type { ActionState } from './actions'
 
 const EXPIRED = { message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -35,6 +36,22 @@ export async function saveTvAction(_: ActionState, form: FormData): Promise<Acti
         topOnly: on(form, 'topOnly'),
         push: on(form, 'push'),
       },
+      chests: { enabled: on(form, 'chestsEnabled'), tiers: parseTiers(String(form.get('chestTiers') ?? '')) },
+      flash: { enabled: on(form, 'flashEnabled'), seconds: num(form, 'flashSeconds'), multiplier: num(form, 'flashMultiplier') },
+      goalChest: {
+        enabled: on(form, 'goalChestEnabled'),
+        min: num(form, 'goalChestMin'),
+        max: num(form, 'goalChestMax'),
+        dailyLimit: num(form, 'goalChestLimit'),
+        topOnly: on(form, 'goalChestTopOnly'),
+      },
+      kickoffPush: on(form, 'kickoffPush'),
+      weekly: {
+        enabled: on(form, 'weeklyEnabled'),
+        prizes: String(form.get('weeklyPrizes') ?? '').split(/[,\s]+/).map(Number).filter((n) => n > 0),
+      },
+      streak: { enabled: on(form, 'streakEnabled'), days: num(form, 'streakDays'), minMinutes: num(form, 'streakMinutes'), coin: num(form, 'streakCoin') },
+      halftime: { enabled: on(form, 'halftimeEnabled'), min: num(form, 'halftimeMin'), max: num(form, 'halftimeMax') },
     })
     refresh()
     return { ok: true, message: 'KankaTV ayarları kaydedildi.' }

@@ -18,6 +18,7 @@ import {
   type TvPublic,
   type TvStats,
   type TvWatchStatus,
+  type TvWeeklyRow,
 } from '@/lib/kankatv-shared'
 
 const CONFIG_KEY = 'kankatv'
@@ -44,6 +45,13 @@ export function ensureTv() {
       created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (user_id, team_id))`)
     await rows(sql`CREATE INDEX IF NOT EXISTS tv_follows_team ON tv_follows (team_id)`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tv_goal_state (game_id bigint PRIMARY KEY, home int NOT NULL, away int NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE tv_goal_state ADD COLUMN IF NOT EXISTS home_name text NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS away_name text NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS halftime boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS changed_at timestamptz NOT NULL DEFAULT now()`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tv_kickoff_sent (game_id bigint PRIMARY KEY, sent_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tv_halftime_plays (user_id text NOT NULL, game_id bigint NOT NULL, coin int NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (user_id, game_id))`)
   })().catch((error) => {
     ready = null
     throw error
@@ -89,7 +97,53 @@ async function watchStatus(userId: string, cfg: TvConfig): Promise<TvWatchStatus
   const earned = Number(e?.n ?? 0)
   const capped = cfg.watch.dailyCap > 0 && earned >= cfg.watch.dailyCap
   const nextIn = !cfg.watch.enabled || cfg.watch.coin <= 0 || capped ? null : cfg.watch.minutes - (minutes % cfg.watch.minutes)
-  return { minutes, earned, cap: cfg.watch.dailyCap, nextIn }
+  const [streak, chest] = await Promise.all([
+    cfg.streak.enabled ? watchStreak(userId, cfg.streak.minMinutes) : 0,
+    cfg.goalChest.enabled
+      ? rows<{ coins: number; created_at: string }>(sql`SELECT coins, created_at FROM kp_events
+          WHERE user_id = ${userId} AND source = 'kankatv-sandik' AND created_at > now() - interval '3 minutes'
+          ORDER BY created_at DESC LIMIT 1`).then((r) => r[0])
+      : undefined,
+  ])
+  return {
+    minutes,
+    earned,
+    cap: cfg.watch.dailyCap,
+    nextIn,
+    chests: cfg.chests.enabled ? cfg.chests.tiers.map((t) => ({ ...t, opened: minutes >= t.minutes })) : [],
+    streak,
+    goalChest: chest ? { coin: Number(chest.coins), at: new Date(chest.created_at).toISOString() } : null,
+  }
+}
+
+const dayMs = 86_400_000
+
+/** Consecutive qualifying days ending today (or yesterday, so the streak survives until today is watched). */
+async function watchStreak(userId: string, minMinutes: number) {
+  const days = await rows<{ day: string }>(sql`SELECT to_char((minute AT TIME ZONE 'Europe/Istanbul')::date, 'YYYY-MM-DD') AS day
+    FROM tv_watch_ticks WHERE user_id = ${userId} AND minute > now() - interval '35 days'
+    GROUP BY 1 HAVING count(*) >= ${minMinutes} ORDER BY 1 DESC`)
+  const set = new Set(days.map((d) => d.day))
+  let cursor = new Date(`${trDay()}T00:00:00Z`).getTime()
+  if (!set.has(new Date(cursor).toISOString().slice(0, 10))) cursor -= dayMs
+  let n = 0
+  while (set.has(new Date(cursor).toISOString().slice(0, 10))) {
+    n++
+    cursor -= dayMs
+  }
+  return n
+}
+
+/** Skewed toward the low end so big wins stay rare. */
+const luckyCoin = (min: number, max: number) => min + Math.floor(Math.random() ** 2 * (max - min + 1))
+
+async function payOnce(userId: string, source: string, ref: string, coin: number, note: string) {
+  if (coin <= 0) return false
+  const inserted = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
+    VALUES (${userId}, ${source}, 0, ${coin}, ${ref}, ${note}) ON CONFLICT DO NOTHING RETURNING id`)
+  if (!inserted.length) return false
+  await credit(userId, coin)
+  return true
 }
 
 /** One tick per minute at most; every full interval of watching pays once, up to the daily cap. */
@@ -113,7 +167,81 @@ export async function tickWatch(userId: string): Promise<TvWatchStatus> {
     await credit(userId, coin)
     paid += coin
   }
+  if (cfg.chests.enabled) {
+    for (const tier of cfg.chests.tiers) {
+      if (status.minutes < tier.minutes) break
+      const tierCoin = await boosted('kankatv', tier.coin)
+      if (await payOnce(userId, 'kankatv-kademe', `${today}:${tier.minutes}`, tierCoin, `KankaTV ${tier.minutes} dk izleme sandığı`)) paid += tierCoin
+    }
+  }
+  if (cfg.streak.enabled && cfg.streak.coin > 0 && status.minutes >= cfg.streak.minMinutes) {
+    const streak = await watchStreak(userId, cfg.streak.minMinutes)
+    if (streak >= cfg.streak.days && streak % cfg.streak.days === 0) {
+      const streakCoin = await boosted('kankatv', cfg.streak.coin)
+      if (await payOnce(userId, 'kankatv-seri', `streak:${today}`, streakCoin, `KankaTV ${streak} gün izleme serisi`)) paid += streakCoin
+    }
+  }
   return paid ? watchStatus(userId, cfg) : status
+}
+
+// --- Half-time scratch card ------------------------------------------------
+
+async function halftimeGames(userId: string | null) {
+  const list = await rows<{ game_id: string; home_name: string; away_name: string; played: boolean }>(sql`SELECT g.game_id, g.home_name, g.away_name,
+      (p.user_id IS NOT NULL) AS played
+    FROM tv_goal_state g LEFT JOIN tv_halftime_plays p ON p.game_id = g.game_id AND p.user_id = ${userId ?? ''}
+    WHERE g.halftime AND g.updated_at > now() - interval '4 minutes' AND g.home_name <> ''
+    ORDER BY g.game_id LIMIT 6`)
+  return list.map((g) => ({ gameId: Number(g.game_id), home: g.home_name, away: g.away_name, played: Boolean(g.played) }))
+}
+
+export async function playHalftime(userId: string, gameId: number) {
+  const cfg = await getTvConfig()
+  if (!cfg.halftime.enabled) throw new Error('Devre arası oyunu şu an kapalı')
+  if (!Number.isSafeInteger(gameId)) throw new Error('Geçersiz maç')
+  const game = (await halftimeGames(userId)).find((g) => g.gameId === gameId)
+  if (!game) throw new Error('Bu maç şu an devre arasında değil')
+  if (game.played) throw new Error('Bu maçın kartını zaten kazıdın')
+  if (await isRoleHolder(userId)) throw new Error('Yetkili hesaplar devre arası ödülü alamaz')
+  const { boosted } = await import('@/lib/boosts')
+  const coin = await boosted('kankatv', luckyCoin(cfg.halftime.min, cfg.halftime.max))
+  const inserted = await rows(sql`INSERT INTO tv_halftime_plays (user_id, game_id, coin) VALUES (${userId}, ${gameId}, ${coin})
+    ON CONFLICT DO NOTHING RETURNING coin`)
+  if (!inserted.length) throw new Error('Bu maçın kartını zaten kazıdın')
+  await payOnce(userId, 'kankatv-devre', `ht:${gameId}`, coin, `Devre arası kazı kazan · ${game.home} - ${game.away}`)
+  return { coin }
+}
+
+// --- Weekly top watchers ---------------------------------------------------
+
+/** offset 0 = this week, 1 = last week. Weeks start Monday, Istanbul time. */
+export async function weeklyWatchers(offset = 0, limit = 10): Promise<{ weekStart: string; list: TvWeeklyRow[] }> {
+  await ensureTv()
+  const [w] = await rows<{ ws: string }>(sql`SELECT to_char(date_trunc('week', now() AT TIME ZONE 'Europe/Istanbul') - make_interval(weeks => ${offset}), 'YYYY-MM-DD') AS ws`)
+  const weekStart = w.ws
+  const list = await rows<{ user_id: string; name: string | null; minutes: string }>(sql`SELECT t.user_id, u.name, count(*) AS minutes
+    FROM tv_watch_ticks t LEFT JOIN public."user" u ON u.id = t.user_id
+    WHERE (t.minute AT TIME ZONE 'Europe/Istanbul') >= ${weekStart}::date
+      AND (t.minute AT TIME ZONE 'Europe/Istanbul') < ${weekStart}::date + 7
+    GROUP BY t.user_id, u.name ORDER BY minutes DESC, t.user_id LIMIT ${limit}`)
+  return { weekStart, list: list.map((r) => ({ userId: r.user_id, name: r.name?.trim() || 'Kanka', minutes: Number(r.minutes) })) }
+}
+
+/** Pays last week's prize table once; safe to call every day. */
+export async function payWeeklyWatchers() {
+  const cfg = await getTvConfig()
+  if (!cfg.weekly.enabled || !cfg.weekly.prizes.length) return 0
+  const { weekStart, list } = await weeklyWatchers(1, cfg.weekly.prizes.length + 5)
+  let paid = 0
+  let rank = 0
+  for (const row of list) {
+    if (rank >= cfg.weekly.prizes.length) break
+    if (await isRoleHolder(row.userId)) continue
+    const prize = cfg.weekly.prizes[rank]
+    rank++
+    if (await payOnce(row.userId, 'kankatv-hafta', `week:${weekStart}:${rank}`, prize, `Haftanın İzleyicisi #${rank} (${row.minutes} dk)`)) paid++
+  }
+  return paid
 }
 
 // --- Presence & reactions -------------------------------------------------
@@ -165,11 +293,20 @@ export async function placePrediction(userId: string, gameId: number, pick: Pred
   const snap = await getGameSnapshot(gameId)
   if (!snap || snap.state === 'post') throw new Error('Bu maç için tahmin kapalı')
   const goals = snap.home.score + snap.away.score
+  const inFlash = cfg.flash.enabled && (await flashWindows(cfg)).some((f) => f.gameId === gameId)
+  const coin = inFlash ? cfg.predict.coin * cfg.flash.multiplier : cfg.predict.coin
   const inserted = await rows(sql`INSERT INTO tv_predictions (user_id, game_id, home, away, base_goals, base_home, base_away, pick, coin)
-    VALUES (${userId}, ${gameId}, ${snap.home.name}, ${snap.away.name}, ${goals}, ${snap.home.score}, ${snap.away.score}, ${pick}, ${cfg.predict.coin})
+    VALUES (${userId}, ${gameId}, ${snap.home.name}, ${snap.away.name}, ${goals}, ${snap.home.score}, ${snap.away.score}, ${pick}, ${coin})
     ON CONFLICT DO NOTHING RETURNING *`)
   if (!inserted.length) throw new Error('Bu skor için zaten tahmin yaptın')
   return toPrediction(inserted[0])
+}
+
+/** Games where a goal (or kickoff) happened within the flash window. */
+async function flashWindows(cfg: TvConfig) {
+  const list = await rows<{ game_id: string; until: string }>(sql`SELECT game_id, changed_at + make_interval(secs => ${cfg.flash.seconds}) AS until
+    FROM tv_goal_state WHERE changed_at > now() - make_interval(secs => ${cfg.flash.seconds}) AND updated_at > now() - interval '3 minutes'`)
+  return list.map((f) => ({ gameId: Number(f.game_id), until: new Date(f.until).toISOString() }))
 }
 
 type OpenRow = { id: number; user_id: string; game_id: string; base_goals: number; base_home: number; base_away: number; pick: PredictPick; coin: number }
@@ -251,15 +388,17 @@ export async function engageState(userId: string | null, opts: { viewer?: string
   const cfg = await getTvConfig()
   if (opts.viewer && cfg.presence) await touchPresence(opts.viewer).catch(() => {})
   if (userId && cfg.predict.enabled) await settlePredictions({ userId, limit: 10 }).catch(() => 0)
-  const [watch, viewers, reactions, predictions, follows, odds] = await Promise.all([
+  const [watch, viewers, reactions, predictions, follows, odds, halftime, flash] = await Promise.all([
     userId ? watchStatus(userId, cfg) : null,
     cfg.presence ? viewerCount() : 0,
     cfg.reactions ? recentReactions(opts.since ?? 0) : [],
     userId && cfg.predict.enabled ? myPredictions(userId) : [],
     userId ? rows<{ team_id: string }>(sql`SELECT team_id FROM tv_follows WHERE user_id = ${userId}`).then((r) => r.map((x) => Number(x.team_id))) : [],
     cfg.oddsBridge ? todaysOdds() : [],
+    cfg.halftime.enabled ? halftimeGames(userId) : [],
+    cfg.flash.enabled && cfg.predict.enabled ? flashWindows(cfg) : [],
   ])
-  return { config: publicConfig(cfg), member: Boolean(userId), watch, viewers, reactions, predictions, follows, odds }
+  return { config: publicConfig(cfg), member: Boolean(userId), watch, viewers, reactions, predictions, follows, odds, halftime, flash }
 }
 
 // --- Goal alerts (bot + push) ---------------------------------------------
@@ -341,6 +480,41 @@ async function announceGoal(cfg: TvConfig, g: LiveGame, side: 'home' | 'away', o
   return { sent, error }
 }
 
+const isHalftime = (clock: string) => /^(ht|iy|i\.y\.?)$|devre\s*aras|half\s*-?\s*time/i.test(clock.trim())
+
+/** Only for games caught in their opening minutes, so a fresh deploy does not spam "kicked off" for every live match. */
+async function announceKickoff(g: LiveGame) {
+  const minute = Number.parseInt(g.clock, 10)
+  if (!Number.isFinite(minute) || minute > 10) return
+  const claimed = await rows(sql`INSERT INTO tv_kickoff_sent (game_id) VALUES (${g.id}) ON CONFLICT DO NOTHING RETURNING game_id`)
+  if (!claimed.length) return
+  const fans = await rows<{ user_id: string }>(sql`SELECT DISTINCT user_id FROM tv_follows WHERE team_id IN (${g.home.id}, ${g.away.id})`)
+  if (!fans.length) return
+  const { sendToUsers } = await import('@/lib/push')
+  await sendToUsers(
+    fans.map((f) => f.user_id),
+    { title: 'Maç başladı!', body: `${g.home.name} - ${g.away.name} · ${g.league}. Canlı izle, coin kazan.`, url: '/kankatv' },
+  )
+}
+
+/** Everyone who ticked the player in the last two minutes gets a random coin, a few times a day at most. */
+async function openGoalChest(cfg: TvConfig, g: LiveGame) {
+  const today = trDay()
+  const watchers = await rows<{ user_id: string }>(sql`SELECT DISTINCT t.user_id FROM tv_watch_ticks t
+    WHERE t.minute >= date_trunc('minute', now()) - interval '2 minutes'
+      AND (SELECT count(*) FROM kp_events e WHERE e.user_id = t.user_id AND e.source = 'kankatv-sandik' AND e.ref LIKE ${`${today}:%`}) < ${cfg.goalChest.dailyLimit}
+    LIMIT 1000`)
+  const { boosted } = await import('@/lib/boosts')
+  let paid = 0
+  for (const w of watchers) {
+    if (await isRoleHolder(w.user_id)) continue
+    const coin = await boosted('kankatv', luckyCoin(cfg.goalChest.min, cfg.goalChest.max))
+    const ref = `${today}:${g.id}:${g.home.score}-${g.away.score}`
+    if (await payOnce(w.user_id, 'kankatv-sandik', ref, coin, `Gol sandığı · ${g.home.name} ${g.home.score}-${g.away.score} ${g.away.name}`)) paid++
+  }
+  return paid
+}
+
 /** Compares live scores to the last seen ones and announces new goals. Throttled so viewer traffic can trigger it safely. */
 export async function scanGoals(force = false): Promise<{ ran: boolean; goals: number; sent: number; error: string | null }> {
   const cfg = await getTvConfig()
@@ -358,9 +532,16 @@ export async function scanGoals(force = false): Promise<{ ran: boolean; goals: n
   let error: string | null = null
   for (const g of games) {
     const [prev] = await rows<{ home: number; away: number }>(sql`SELECT home, away FROM tv_goal_state WHERE game_id = ${g.id}`)
-    await rows(sql`INSERT INTO tv_goal_state (game_id, home, away) VALUES (${g.id}, ${g.home.score}, ${g.away.score})
-      ON CONFLICT (game_id) DO UPDATE SET home = EXCLUDED.home, away = EXCLUDED.away, updated_at = now()`)
-    if (!prev) continue
+    const halftime = isHalftime(g.clock)
+    await rows(sql`INSERT INTO tv_goal_state (game_id, home, away, home_name, away_name, halftime)
+      VALUES (${g.id}, ${g.home.score}, ${g.away.score}, ${g.home.name}, ${g.away.name}, ${halftime})
+      ON CONFLICT (game_id) DO UPDATE SET home = EXCLUDED.home, away = EXCLUDED.away, home_name = EXCLUDED.home_name,
+        away_name = EXCLUDED.away_name, halftime = EXCLUDED.halftime, updated_at = now(),
+        changed_at = CASE WHEN tv_goal_state.home <> EXCLUDED.home OR tv_goal_state.away <> EXCLUDED.away THEN now() ELSE tv_goal_state.changed_at END`)
+    if (!prev) {
+      if (cfg.kickoffPush) await announceKickoff(g).catch(() => {})
+      continue
+    }
     const sides: ('home' | 'away')[] = [
       ...Array(Math.max(0, g.home.score - prev.home)).fill('home'),
       ...Array(Math.max(0, g.away.score - prev.away)).fill('away'),
@@ -371,6 +552,7 @@ export async function scanGoals(force = false): Promise<{ ran: boolean; goals: n
       sent += r.sent
       error = r.error ?? error
     }
+    if (sides.length && cfg.goalChest.enabled && (!cfg.goalChest.topOnly || g.top)) await openGoalChest(cfg, g).catch(() => 0)
   }
   await rows(sql`DELETE FROM tv_goal_state WHERE updated_at < now() - interval '1 day'`)
   await rows(sql`DELETE FROM tv_presence WHERE last_seen < now() - interval '1 hour'`)

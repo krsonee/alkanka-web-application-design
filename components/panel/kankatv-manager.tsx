@@ -1,11 +1,11 @@
 'use client'
 
 import { useActionState } from 'react'
-import { Bell, Bot, Eye, Loader2, Radar, Send, Target, Tv } from 'lucide-react'
+import { Bell, Bot, Eye, Flame, Gift, Loader2, Radar, Send, Target, Ticket, Trophy, Tv, Zap } from 'lucide-react'
 import { runScanAction, saveTvAction, testGoalBotAction } from '@/app/panel/kankatv-actions'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorTarget } from '@/lib/telegram-mirror'
-import { TV_LIMITS, type TvBotStatus, type TvConfig, type TvStats } from '@/lib/kankatv-shared'
+import { TV_LIMITS, tiersText, type TvBotStatus, type TvConfig, type TvStats } from '@/lib/kankatv-shared'
 import { cn } from '@/lib/utils'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -202,6 +202,60 @@ export function KankaTvManager({
             <NumberField name="predictCoin" title="Bilene ödül" value={config.predict.coin} range={TV_LIMITS.predictCoin} suffix="coin" />
             <NumberField name="predictLimit" title="Günlük hak" value={config.predict.dailyLimit} range={TV_LIMITS.dailyLimit} suffix="tahmin" />
           </div>
+        </Card>
+
+        <Card icon={<Gift className="size-4" />} id="tv-chests" title="İzleme sandıkları" desc="Gün içinde izleme süresi her eşiği geçince tek seferlik bonus açılır.">
+          <Toggle name="chestsEnabled" defaultChecked={config.chests.enabled} title="Kademeli sandıklar açık" />
+          <label className={label}>
+            Eşikler (dakika:coin)
+            <input name="chestTiers" defaultValue={tiersText(config.chests.tiers)} className={cn(input, 'font-mono text-xs')} />
+            <span className={hint}>Örnek: 15:10, 30:20, 60:40, 90:75 · en fazla 6 eşik</span>
+          </label>
+        </Card>
+
+        <Card icon={<Flame className="size-4" />} id="tv-streak" title="İzleme serisi" desc="Arka arkaya günlerde yeterince izleyene seri ödülü.">
+          <Toggle name="streakEnabled" defaultChecked={config.streak.enabled} title="Seri ödülü açık" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <NumberField name="streakDays" title="Her" value={config.streak.days} range={[2, 30]} suffix="günde bir" />
+            <NumberField name="streakMinutes" title="Günlük en az" value={config.streak.minMinutes} range={[1, 600]} suffix="dakika" />
+            <NumberField name="streakCoin" title="Ödül" value={config.streak.coin} range={TV_LIMITS.coin} suffix="coin" />
+          </div>
+        </Card>
+
+        <Card icon={<Zap className="size-4" />} id="tv-flash" title="Flaş tahmin" desc="Maç başında veya golden hemen sonra yapılan tahminler katlı öder.">
+          <Toggle name="flashEnabled" defaultChecked={config.flash.enabled} title="Flaş tahmin açık" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <NumberField name="flashSeconds" title="Pencere" value={config.flash.seconds} range={[15, 600]} suffix="saniye" />
+            <NumberField name="flashMultiplier" title="Çarpan" value={config.flash.multiplier} range={[1, 10]} suffix="kat" />
+          </div>
+        </Card>
+
+        <Card icon={<Gift className="size-4" />} id="tv-goalchest" title="Gol sandığı" desc="Gol anında yayını izleyen herkese rastgele coin düşer.">
+          <Toggle name="goalChestEnabled" defaultChecked={config.goalChest.enabled} title="Gol sandığı açık" />
+          <Toggle name="goalChestTopOnly" defaultChecked={config.goalChest.topOnly} title="Sadece büyük ligler" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <NumberField name="goalChestMin" title="En az" value={config.goalChest.min} range={TV_LIMITS.coin} suffix="coin" />
+            <NumberField name="goalChestMax" title="En çok" value={config.goalChest.max} range={TV_LIMITS.coin} suffix="coin" />
+            <NumberField name="goalChestLimit" title="Günlük hak" value={config.goalChest.dailyLimit} range={[1, 100]} suffix="sandık" />
+          </div>
+        </Card>
+
+        <Card icon={<Ticket className="size-4" />} id="tv-halftime" title="Devre arası kazı kazan" desc="Her canlı maçın devre arasında üye bir kart kazır.">
+          <Toggle name="halftimeEnabled" defaultChecked={config.halftime.enabled} title="Kazı kazan açık" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <NumberField name="halftimeMin" title="En az" value={config.halftime.min} range={TV_LIMITS.coin} suffix="coin" />
+            <NumberField name="halftimeMax" title="En çok" value={config.halftime.max} range={TV_LIMITS.coin} suffix="coin" />
+          </div>
+        </Card>
+
+        <Card icon={<Trophy className="size-4" />} id="tv-weekly" title="Haftanın izleyicisi" desc="En çok izleyenler her pazartesi otomatik ödüllenir.">
+          <Toggle name="weeklyEnabled" defaultChecked={config.weekly.enabled} title="Haftalık ödül açık" />
+          <label className={label}>
+            Ödüller (1., 2., 3. …)
+            <input name="weeklyPrizes" defaultValue={config.weekly.prizes.join(', ')} className={cn(input, 'font-mono text-xs')} />
+            <span className={hint}>Virgülle ayır, en fazla 10 sıra. Yetkili hesaplar atlanır.</span>
+          </label>
+          <Toggle name="kickoffPush" defaultChecked={config.kickoffPush} title="Maç başladı bildirimi" desc="Takımını takip edenlere maç başlayınca bildirim gider." />
         </Card>
 
         <Card icon={<Tv className="size-4" />} id="tv-ui" title="Sayfa özellikleri" desc="KankaTV sayfasında hangi parçaların görüneceği.">

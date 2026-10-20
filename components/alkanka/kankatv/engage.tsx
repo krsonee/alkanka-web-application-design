@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Bell, BellOff, Coins, Eye, Loader2, Percent, Target } from 'lucide-react'
+import { Bell, BellOff, Coins, Eye, Flame, Gift, Loader2, Lock, Percent, Target, Ticket, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from '@/components/alkanka/points-context'
 import { PICK_LABELS, REACTION_EMOJI, REACTION_LABELS, REACTIONS, type PredictPick, type Reaction, type TvEngage } from '@/lib/kankatv-shared'
@@ -166,6 +166,47 @@ export function WatchBar({ playing, demo }: { playing: boolean; demo?: TvEngage 
         </div>
       )}
 
+      {data.member && w && w.goalChest && (
+        <p role="status" className="flex items-center gap-2 rounded-lg bg-primary p-2.5 text-sm font-semibold text-primary-foreground">
+          <Gift className="size-4 shrink-0" aria-hidden="true" />
+          GOL SANDIĞI! İzlediğin için +{w.goalChest.coin} coin kazandın.
+        </p>
+      )}
+
+      {data.member && w && (w.chests.length > 0 || w.streak > 0) && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bugünkü sandıklar</span>
+            {w.streak > 0 && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
+                <Flame className="size-3.5 text-primary" aria-hidden="true" />
+                {w.streak} gün seri
+              </span>
+            )}
+          </div>
+          {w.chests.length > 0 && (
+            <ol className="grid grid-cols-4 gap-1.5" aria-label="İzleme sandıkları">
+              {w.chests.slice(0, 4).map((c) => (
+                <li
+                  key={c.minutes}
+                  className={cn(
+                    'flex flex-col items-center gap-0.5 rounded-lg border p-2 text-center',
+                    c.opened ? 'border-primary bg-primary/10' : 'border-border bg-background',
+                  )}
+                >
+                  {c.opened ? <Gift className="size-4 text-primary" aria-hidden="true" /> : <Lock className="size-4 text-muted-foreground" aria-hidden="true" />}
+                  <span className="text-xs font-semibold tabular-nums text-foreground">+{c.coin}</span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">{c.minutes} dk</span>
+                  <span className="sr-only">{c.opened ? 'açıldı' : 'kilitli'}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+
+      {data.halftime.length > 0 && <HalftimeCards games={data.halftime} member={data.member} onDone={() => (demo ? undefined : mutate())} />}
+
       {cfg.reactions && (
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -187,6 +228,64 @@ export function WatchBar({ playing, demo }: { playing: boolean; demo?: TvEngage 
           </div>
         </div>
       )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  )
+}
+
+function HalftimeCards({ games, member, onDone }: { games: TvEngage['halftime']; member: boolean; onDone: () => void }) {
+  const { refresh, requireLogin } = usePoints()
+  const [busy, setBusy] = useState<number | null>(null)
+  const [won, setWon] = useState<Record<number, number>>({})
+  const [error, setError] = useState<string | null>(null)
+
+  const scratch = async (gameId: number) => {
+    if (!member) return requireLogin()
+    setBusy(gameId)
+    setError(null)
+    try {
+      const { coin } = await post<{ coin: number }>({ action: 'scratch', gameId })
+      setWon((w) => ({ ...w, [gameId]: coin }))
+      refresh()
+      onDone()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <Ticket className="size-3.5 text-primary" aria-hidden="true" />
+        Devre arası kazı kazan
+      </span>
+      {games.map((g) => {
+        const prize = won[g.gameId]
+        return (
+          <div key={g.gameId} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-2.5">
+            <span className="min-w-0 truncate text-sm font-medium text-foreground">
+              {g.home} - {g.away}
+            </span>
+            {prize !== undefined ? (
+              <strong role="status" className="shrink-0 text-sm text-primary">+{prize} coin</strong>
+            ) : g.played ? (
+              <span className="shrink-0 text-xs text-muted-foreground">Kazındı</span>
+            ) : (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => scratch(g.gameId)}
+                className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              >
+                {busy === g.gameId && <Loader2 className="size-3 animate-spin" aria-hidden="true" />}
+                Kartı kazı
+              </button>
+            )}
+          </div>
+        )
+      })}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
@@ -248,6 +347,8 @@ export function MatchEngage({ match, football, demo }: { match: Match; football:
   const prediction = data.predictions.find((p) => p.gameId === match.id && p.status === 'open')
   const lastSettled = data.predictions.find((p) => p.gameId === match.id && p.status !== 'open')
   const canPredict = football && cfg.predict.enabled && match.state === 'in'
+  const flashOn = (data.flash ?? []).some((f) => f.gameId === match.id && new Date(f.until).getTime() > Date.now())
+  const flash = flashOn && cfg.flash ? cfg.flash : null
   const canFollow = football && cfg.goalAlerts
 
   if (!odds.length && !canPredict && !canFollow) return null
@@ -258,8 +359,15 @@ export function MatchEngage({ match, football, demo }: { match: Match; football:
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             <Target className="size-3.5 text-primary" aria-hidden="true" />
-            Sıradaki golü kim atar? <span className="normal-case tracking-normal text-primary">+{cfg.predict.coin} coin</span>
+            Sıradaki golü kim atar?{' '}
+            <span className="normal-case tracking-normal text-primary">+{flash && !prediction ? cfg.predict.coin * flash.multiplier : cfg.predict.coin} coin</span>
           </p>
+          {flash && !prediction && (
+            <p className="flex items-center gap-1.5 rounded-lg bg-primary p-2 text-xs font-semibold text-primary-foreground">
+              <Zap className="size-3.5 shrink-0" aria-hidden="true" />
+              FLAŞ TAHMİN · şimdi tahmin et, ödül {flash.multiplier} kat!
+            </p>
+          )}
           {prediction ? (
             <p className="rounded-lg bg-primary/10 p-2.5 text-sm text-foreground">
               Tahminin: <strong>{prediction.pick === 'home' ? match.home.name : prediction.pick === 'away' ? match.away.name : PICK_LABELS.none}</strong>. Gol olunca sonuçlanır.

@@ -79,16 +79,18 @@ export async function GET(req: Request) {
   if (!(await authorized(req))) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
   const podiums = await announcePodiums().then(String, (e) => String(e))
   const trust = await import('@/lib/trust-extra').then(({ runTrustCron }) => runTrustCron()).catch((e) => String(e))
-  const [tournaments, reminders, referrals, cember, ranks, boosts] = await Promise.allSettled([
+  const [tournaments, reminders, referrals, cember, ranks, boosts, tvWeekly] = await Promise.allSettled([
     autoStartDue(),
     remindStreaks(),
     payReferrals(),
     import('@/lib/cember').then(({ settleMissedRounds }) => settleMissedRounds()),
     import('@/lib/kanka-puan').then(({ snapshotRanks }) => snapshotRanks()),
     import('@/lib/boosts').then(({ runBoostCron }) => runBoostCron()),
+    import('@/lib/kankatv-engage').then(({ payWeeklyWatchers }) => payWeeklyWatchers()),
   ])
   return Response.json({
     podiums,
+    tvWeeklyPaid: tvWeekly.status === 'fulfilled' ? tvWeekly.value : String(tvWeekly.reason),
     trust,
     boosts: boosts.status === 'fulfilled' ? boosts.value : String(boosts.reason),
     rankSnapshot: ranks.status === 'fulfilled' ? ranks.value : String(ranks.reason),
