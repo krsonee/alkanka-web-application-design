@@ -134,7 +134,14 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
 
   const groups = PERIOD_ORDER.map((period) => {
     const items = tasks.filter((task) => task.period === period)
-    return { period, items, done: items.filter((task) => statusOf(task, claims[task.id], Boolean(done[task.id])) === 'done').length }
+    const statuses = items.map((task) => statusOf(task, claims[task.id], Boolean(done[task.id])))
+    return {
+      period,
+      items,
+      done: statuses.filter((s) => s === 'done').length,
+      open: statuses.filter((s) => s === 'open' || s === 'rejected').length,
+      reward: items.reduce((sum, task, i) => (statuses[i] === 'done' ? sum : sum + task.points), 0),
+    }
   }).filter((group) => group.items.length > 0)
   const activeTab = groups.some((group) => group.period === tab) ? tab : groups[0]?.period
   const visibleTasks = groups.find((group) => group.period === activeTab)?.items ?? []
@@ -239,11 +246,25 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                   role="tab"
                   aria-selected={active}
                   onClick={() => setTab(group.period)}
+                  aria-label={`${PERIOD_LABEL[group.period]}: ${group.done}/${group.items.length} tamamlandı${group.open ? `, ${group.open} görev seni bekliyor` : ''}`}
                   className={cn(
-                    'flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                    'relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    active
+                      ? 'bg-primary text-primary-foreground'
+                      : group.open > 0
+                        ? 'border border-primary/40 bg-primary/5 text-foreground hover:bg-primary/10'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                   )}
                 >
+                  {!active && group.open > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-1 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold tabular-nums text-primary-foreground shadow"
+                    >
+                      <span className="absolute inset-0 animate-ping rounded-full bg-primary/50" />
+                      <span className="relative">{group.open}</span>
+                    </span>
+                  )}
                   <span className="truncate text-[13px] font-semibold leading-tight sm:text-sm">{PERIOD_LABEL[group.period]}</span>
                   <span className="flex items-center gap-1.5">
                     <span className={cn('text-[11px] font-bold tabular-nums leading-none', !active && complete && 'text-primary')}>
@@ -256,6 +277,11 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                       />
                     </span>
                   </span>
+                  {!active && group.reward > 0 && (
+                    <span aria-hidden="true" className="text-[10px] font-bold leading-none text-primary">
+                      +{formatAC(group.reward)} KC
+                    </span>
+                  )}
                 </button>
               )
             })}

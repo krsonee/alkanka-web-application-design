@@ -477,7 +477,7 @@ async function payRound(row: RoundRow) {
   const headline = `${row.title}: ${name} kazandı!`
   const body = `${players} kanka arasından son kalan sen oldun. Ödülün: ${row.prize_text}.`
   await Promise.allSettled([
-    import('@/lib/inbox').then(({ sendMessage }) => sendMessage({ userId, targetLabel: name, title: headline, body, url: '/', sentBy: row.title })),
+    import('@/lib/inbox').then(({ sendMessage }) => sendMessage({ userId, targetLabel: name, title: headline, body, url: '/market', sentBy: row.title })),
     import('@/lib/push').then(({ sendToUsers }) => sendToUsers([userId], { title: headline, body, url: '/' })),
     import('@/lib/telegram-chat').then(({ announceToChat }) =>
       announceToChat(`${row.title} bitti! ${players} kanka çembere girdi, son kalan ${name} oldu. Ödül: ${row.prize_text}`),

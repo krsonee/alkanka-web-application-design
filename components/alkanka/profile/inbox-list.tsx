@@ -16,6 +16,8 @@ const dayKeyFmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-
 
 type Filter = 'hepsi' | 'ozel' | 'duyuru'
 
+const detailLinkClass = 'flex items-center gap-1.5 self-start text-sm font-bold text-gold underline-offset-4 hover:underline'
+
 function dayLabel(key: string, sample: Date) {
   const today = dayKeyFmt.format(new Date())
   const yesterday = dayKeyFmt.format(new Date(Date.now() - 86_400_000))
@@ -135,11 +137,18 @@ export function InboxList({ messages }: { messages: InboxMessage[] }) {
                     <img src={m.imageUrl} alt={m.title} loading="lazy" className="max-h-96 w-full rounded-xl border border-border bg-secondary object-contain" />
                   )}
                   {m.body && <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground text-pretty">{m.body}</p>}
-                  {m.url && (
-                    <Link href={m.url} className="flex items-center gap-1.5 self-start text-sm font-bold text-gold underline-offset-4 hover:underline">
-                      Detaya git
-                      <ArrowRight className="size-4" aria-hidden />
-                    </Link>
+                  {m.url && m.url !== '/' && (
+                    /^https?:\/\//.test(m.url) ? (
+                      <a href={m.url} target="_blank" rel="noopener noreferrer" className={detailLinkClass}>
+                        Detaya git
+                        <ArrowRight className="size-4" aria-hidden />
+                      </a>
+                    ) : (
+                      <Link href={m.url} className={detailLinkClass}>
+                        Detaya git
+                        <ArrowRight className="size-4" aria-hidden />
+                      </Link>
+                    )
                   )}
                 </li>
               ))}

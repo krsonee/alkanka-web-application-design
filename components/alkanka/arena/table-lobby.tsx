@@ -28,6 +28,7 @@ import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
 import { HeadGame } from './head-game'
+import { useDuelLink } from './duel-link'
 import { MemberRank } from '../kp/member-rank'
 import { playSound } from '@/lib/sound'
 import { SoundToggle, actionSound } from './sound-toggle'
@@ -799,13 +800,13 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
           <div className={cn(spectator && data.game !== 'okey' && 'pointer-events-none')}>
             {spectator ? (
               <FitToScreen>
-                <GameSurface game={data.game} remote={remote} done={ended} />
+                <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
               </FitToScreen>
             ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' ? (
-              <GameSurface game={data.game} remote={remote} done={ended} />
+              <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
               <LandscapeFit>
-                <GameSurface game={data.game} remote={remote} done={ended} />
+                <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
               </LandscapeFit>
             )}
           </div>
@@ -983,7 +984,7 @@ function TurnClock({
   )
 }
 
-function GameSurface({ game, remote, done }: { game: string; remote: Remote<unknown>; done: boolean }) {
+function GameSurface({ game, remote, done, pvp = false }: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = remote as Remote<any>
   if (game === 'tavla') return <TavlaPvp remote={r} />
@@ -1012,9 +1013,31 @@ function GameSurface({ game, remote, done }: { game: string; remote: Remote<unkn
     const submit = (s: { for: number; against: number }) => void r.send({ type: 'score', for: s.for, against: s.against })
     if (game === 'blackjack') return <BlackjackDuel onDone={submit} />
     if (game === 'rulet') return <RouletteDuel onDone={submit} />
-    return <HeadGame sport={game === 'kafa-topu' ? 'futbol' : 'basket'} mode="bot" onEnd={submit} />
+    const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
+    if (pvp && r.id && !r.spectator && (r.seat === 0 || r.seat === 1)) {
+      return <HeadDuel tableId={r.id} sport={sport} host={r.seat === 0} names={[r.names[0] ?? 'Ev sahibi', r.names[1] ?? 'Rakip']} onEnd={submit} />
+    }
+    return <HeadGame sport={sport} mode="bot" onEnd={submit} />
   }
   return null
+}
+
+/** Live 1v1 head game: both humans play the same match over a peer-to-peer link instead of separate bot games. */
+function HeadDuel({
+  tableId,
+  sport,
+  host,
+  names,
+  onEnd,
+}: {
+  tableId: string
+  sport: 'futbol' | 'basket'
+  host: boolean
+  names: [string, string]
+  onEnd: (s: { for: number; against: number }) => void
+}) {
+  const link = useDuelLink(tableId, host)
+  return <HeadGame sport={sport} mode={host ? 'host' : 'guest'} link={link} names={names} onEnd={onEnd} />
 }
 
 function RoomShell({ children, onLeave, title, immersive }: { children: React.ReactNode; onLeave: () => void; title?: string; immersive?: boolean }) {

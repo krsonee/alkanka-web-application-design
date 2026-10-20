@@ -88,7 +88,7 @@ export async function getHouseWinRate() {
 }
 
 export type MiniOutcome =
-  | { game: 'cark'; index: number; points: number }
+  | { game: 'cark'; index: number; points: number; segments: RewardConfig['wheel']['segments'] }
   | { game: 'zar'; dice: [number, number]; points: number }
   | { game: 'sandik'; prizes: number[]; points: number }
 
@@ -112,7 +112,7 @@ export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; 
     const all = segments.map((_, i) => i)
     const pool = all.filter((i) => bigSet.has(i) === big)
     const index = pickFrom(pool.length ? pool : all)
-    outcome = { game, index, points: segments[index].points }
+    outcome = { game, index, points: segments[index].points, segments }
   } else if (game === 'zar') {
     let a = 1
     let b = 1

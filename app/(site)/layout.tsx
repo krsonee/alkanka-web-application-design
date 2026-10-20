@@ -29,6 +29,7 @@ import { JakoAlerts } from '@/components/alkanka/jako-alerts'
 import { CatalogProvider } from '@/components/alkanka/catalog-context'
 import { getCatalog } from '@/lib/catalog'
 import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
+import { SessionGuard } from '@/components/alkanka/session-guard'
 import { TvDockProvider } from '@/components/alkanka/kankatv/tv-dock'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
@@ -85,6 +86,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <KpHeartbeat />
         <JakoAlerts />
         <CemberOverlay />
+        <SessionGuard />
       </TvDockProvider>
       </PwaProvider>
       </PointsProvider>

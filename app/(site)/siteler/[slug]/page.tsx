@@ -105,7 +105,8 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
           <div className="flex flex-col gap-2 md:w-64">
             <a
               href={`/git/${s.id}`}
-              rel="nofollow sponsored"
+              target="_blank"
+              rel="nofollow sponsored noopener"
               className="sd-cta relative inline-flex h-12 items-center justify-center gap-2 overflow-hidden rounded-xl bg-primary px-5 text-sm font-bold uppercase tracking-wide text-primary-foreground"
             >
               <span className="relative">Güncel adrese git</span>

@@ -19,6 +19,7 @@ import {
 } from './data'
 import { DetailModal, type DetailContent } from './detail-modal'
 import { JakoTip } from './jako'
+import { Modal } from './modal'
 import { TeamLogo, splitMatch, useLogos } from './logo-context'
 import { SectionHeading } from './section-heading'
 
@@ -140,7 +141,8 @@ function GoButton({ label = 'Siteye git', className, site }: { label?: string; c
   return (
     <a
       href={site ? `/git/${site}` : '#kayit'}
-      rel={site ? 'nofollow sponsored' : undefined}
+      target={site ? '_blank' : undefined}
+      rel={site ? 'nofollow sponsored noopener' : undefined}
       className={cn(
         'flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90',
         className,
@@ -285,17 +287,77 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
   )
 }
 
+function SponsorPreview({ sponsor, open, onClose }: { sponsor: Sponsor; open: boolean; onClose: () => void }) {
+  return (
+    <Modal open={open} onClose={onClose} title={`${sponsor.name} detayları`}>
+      <div className="flex flex-col gap-5 p-5">
+        <div className="sponsor-logo-plate flex h-28 items-center justify-center overflow-hidden rounded-xl border border-primary/25 bg-background px-6">
+          <SponsorLogoPlate sponsor={sponsor} className="max-h-16" />
+        </div>
+        <header className="flex flex-col gap-1.5">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-xl font-bold text-foreground">{sponsor.name}</span>
+            <TierTag tier={sponsor.tier} />
+          </span>
+          <p className="font-display text-lg font-bold text-primary text-balance">{sponsor.welcome}</p>
+          {sponsor.tagline && <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{sponsor.tagline}</p>}
+        </header>
+        <dl className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-0.5 rounded-lg bg-background p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Puan</dt>
+            <dd className="flex items-center gap-1 font-display text-sm font-bold">
+              <Star className="size-3.5 fill-primary text-primary" aria-hidden="true" />
+              {sponsor.rating.toFixed(1)}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-0.5 rounded-lg bg-background p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Çekim süresi</dt>
+            <dd className="font-display text-sm font-bold">{sponsor.payout || '-'}</dd>
+          </div>
+        </dl>
+        {sponsor.perks.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold">Bonuslar ve avantajlar</h3>
+            <ul className="flex flex-col gap-1.5">
+              {sponsor.perks.map((p) => (
+                <li key={p} className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
+                  <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                  {p}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <GoButton site={sponsor.id} label="Siteye git" className="h-11 flex-1" />
+          <Link
+            href={`/siteler/${sponsor.id}`}
+            className="flex h-11 items-center justify-center gap-1.5 rounded-lg border border-border px-4 text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary"
+          >
+            Tüm detaylar
+            <ArrowRight className="size-3.5" aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
+  const [preview, setPreview] = useState(false)
+  const inspectClass = 'flex items-center justify-center rounded-lg border border-border font-bold uppercase tracking-wider text-foreground transition-colors hover:border-primary/50 hover:bg-secondary'
   return (
     <li className={cn('panel-gold group overflow-hidden rounded-xl transition-colors hover:border-primary/60', TIER_FRAME[sponsor.tier])}>
+      <SponsorPreview sponsor={sponsor} open={preview} onClose={() => setPreview(false)} />
       <div className="flex items-center gap-3 p-3 sm:hidden">
-        <Link
-          href={`/siteler/${sponsor.id}`}
+        <button
+          type="button"
+          onClick={() => setPreview(true)}
           aria-label={`${sponsor.name} detayları`}
           className="sponsor-logo-plate flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background px-2 py-1.5"
         >
           <SponsorLogoPlate sponsor={sponsor} compact className="h-full max-h-full w-full max-w-full text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
-        </Link>
+        </button>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
@@ -306,12 +368,9 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
         </div>
         <div className="flex w-20 shrink-0 flex-col gap-1.5">
           <GoButton site={sponsor.id} label="Git" className="h-8 w-full px-2" />
-          <Link
-            href={`/siteler/${sponsor.id}`}
-            className="flex h-8 w-full items-center justify-center rounded-lg border border-border text-[11px] font-bold uppercase tracking-wider text-foreground transition-colors hover:border-primary/50 hover:bg-secondary"
-          >
+          <button type="button" onClick={() => setPreview(true)} className={cn(inspectClass, 'h-8 w-full text-[11px]')}>
             İncele
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -332,12 +391,9 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
           <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{sponsor.perks.join(' · ')}</p>
         </div>
         <div className="mt-auto flex gap-2">
-          <Link
-            href={`/siteler/${sponsor.id}`}
-            className="flex h-10 items-center justify-center rounded-lg border border-border px-3 text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary"
-          >
+          <button type="button" onClick={() => setPreview(true)} className={cn(inspectClass, 'h-10 px-3 text-xs')}>
             İncele
-          </Link>
+          </button>
           <GoButton site={sponsor.id} className="flex-1" />
         </div>
       </div>

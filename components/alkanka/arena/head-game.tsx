@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import NextImage from 'next/image'
-import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Maximize2, Minimize2, Smartphone } from 'lucide-react'
+import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Loader2, Maximize2, Minimize2, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TableBrand } from './table-brand'
+import type { DuelLink } from './duel-link'
 import { playSound } from '@/lib/sound'
 
 export type Sport = 'futbol' | 'basket'
-export type HeadMode = 'bot'
+/** `bot`: solo vs AI. `host`: seat 0 runs physics and streams it. `guest`: seat 1 sends keys and renders the host's stream. */
+export type HeadMode = 'bot' | 'host' | 'guest'
 export type HeadScore = { for: number; against: number }
 
 const W = 960
@@ -733,20 +735,27 @@ function RotatePrompt({ sport, paused }: { sport: Sport; paused: boolean }) {
 }
 
 /**
- * Head soccer / head basketball. The left player faces the bot.
+ * Head soccer / head basketball. Solo against the bot, or a live 1v1 where the host simulates
+ * and the guest mirrors the host's frames over a peer-to-peer data channel.
  */
 export function HeadGame({
   sport,
   mode,
   onEnd,
   names = ['Sen', 'Bot'],
+  link,
 }: {
   sport: Sport
   mode: HeadMode
   onEnd: (score: HeadScore) => void
   names?: [string, string]
+  link?: DuelLink
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
+  const linkRef = useRef(link)
+  linkRef.current = link
+  const linkReady = mode === 'bot' || link?.status === 'open'
+  const linkLost = mode !== 'bot' && link?.status === 'lost'
   const k1 = useRef<Keys>(noKeys())
   const k2 = useRef<Keys>(noKeys())
   const [announce, setAnnounce] = useState('0 - 0')
@@ -766,8 +775,8 @@ export function HeadGame({
   pausedRef.current = needRotate
 
   useEffect(() => {
-    if (!needRotate && !window.matchMedia(PHONE_PORTRAIT).matches) setStarted(true)
-  }, [needRotate])
+    if (linkReady && !needRotate && !window.matchMedia(PHONE_PORTRAIT).matches) setStarted(true)
+  }, [needRotate, linkReady])
 
   useEffect(() => {
     if (!over) return
@@ -828,6 +837,38 @@ export function HeadGame({
     let flashT = 0
     let stuckFrames = 0
     let anchor = { x: ball.x, y: ball.y }
+    let left = MATCH_SECONDS
+    let remoteKeys: Keys = noKeys()
+    let sentKeys = ''
+    let frameNo = 0
+
+    if (mode !== 'bot' && linkRef.current) {
+      linkRef.current.onMessage.current = (raw) => {
+        const msg = raw as { t: string; [k: string]: unknown }
+        if (mode === 'host' && msg.t === 'k') remoteKeys = { ...noKeys(), ...(msg.k as Partial<Keys>) }
+        if (mode !== 'guest') return
+        if (msg.t === 's') {
+          Object.assign(p1, msg.p1)
+          Object.assign(p2, msg.p2)
+          Object.assign(ball, msg.b)
+          const next = msg.sc as [number, number]
+          if (next[0] !== sc[0] || next[1] !== sc[1]) {
+            playSound('goal')
+            setAnnounce(`${next[0]} - ${next[1]}`)
+          }
+          sc[0] = next[0]
+          sc[1] = next[1]
+          left = msg.l as number
+          flash = msg.f as string
+          flashT = msg.ft as number
+        } else if (msg.t === 'end' && !ended) {
+          const fin = msg.sc as [number, number]
+          ended = true
+          setOver(true)
+          endRef.current({ for: fin[1], against: fin[0] })
+        }
+      }
+    }
 
     function goal(scorer: 0 | 1, pts: number) {
       sc[scorer] += pts
@@ -844,7 +885,7 @@ export function HeadGame({
         flashT++
         if (flashT > 70) flash = ''
       }
-      const k2now = botKeys(p2, ball, sport)
+      const k2now = mode === 'host' && linkRef.current?.status === 'open' ? remoteKeys : botKeys(p2, ball, sport)
       if (pause > 0) {
         pause--
         stepPlayer(p1, noKeys(), sport)
@@ -891,14 +932,26 @@ export function HeadGame({
         acc = 0
         k1.current = noKeys()
       }
-      let steps = 0
-      while (acc >= STEP_MS && steps < 5) {
-        step()
-        acc -= STEP_MS
-        steps++
+      frameNo++
+      const net = linkRef.current
+      if (mode === 'guest') {
+        acc = 0
+        const keys = JSON.stringify(k1.current)
+        if (keys !== sentKeys || frameNo % 10 === 0) {
+          sentKeys = keys
+          net?.send({ t: 'k', k: k1.current })
+        }
+      } else {
+        let steps = 0
+        while (acc >= STEP_MS && steps < 5) {
+          step()
+          acc -= STEP_MS
+          steps++
+        }
+        if (steps === 5) acc = 0
+        left = Math.max(0, MATCH_SECONDS - Math.floor(elapsed / 1000))
+        if (mode === 'host') net?.send({ t: 's', p1, p2, b: ball, sc, l: left, f: flash, ft: flashT })
       }
-      if (steps === 5) acc = 0
-      const left = Math.max(0, MATCH_SECONDS - Math.floor(elapsed / 1000))
       const c = ctx!
       c.drawImage(bg, 0, 0)
       drawGoalOrHoop(c, sport, false)
@@ -908,12 +961,14 @@ export function HeadGame({
       drawGoalOrHoop(c, sport, true)
       drawScoreboard(c, namesRef.current, sc, left)
       if (flash) drawFlash(c, flash, flashT)
-      if (left <= 0 && !ended) {
+      if (mode !== 'guest' && left <= 0 && !ended) {
         ended = true
+        if (mode === 'host') for (let i = 0; i < 3; i++) net?.send({ t: 'end', sc })
         setOver(true)
         endRef.current({ for: sc[0], against: sc[1] })
         return
       }
+      if (ended) return
       raf = requestAnimationFrame(frame)
     }
     const onVis = () => {
@@ -956,6 +1011,15 @@ export function HeadGame({
           />
           <OverlayControls k1={k1} />
           <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
+          {mode !== 'bot' && !over && (!started || linkLost) && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 text-center backdrop-blur-sm">
+              <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
+              <p className="font-semibold text-foreground">{linkLost ? 'Bağlantı koptu, yeniden bağlanılıyor…' : 'Rakibine bağlanılıyor…'}</p>
+              <p className="max-w-xs text-xs text-muted-foreground">
+                {mode === 'host' && linkLost ? 'Bağlantı dönene kadar rakibinin yerine bot oynuyor.' : 'İkiniz de masadayken maç otomatik başlar.'}
+              </p>
+            </div>
+          )}
           {fullLandscape && (
             <button
               type="button"
