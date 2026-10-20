@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, CircleCheck, CircleDot, Coins, Crown, Flame, Gamepad2, Gift, ListChecks, Send, ShoppingBag, Target, Trophy } from 'lucide-react'
 import type { MarketProduct } from '@/lib/market'
+import { productImage } from '@/lib/market-image'
 import type { LeagueMatch } from '@/lib/community'
 import type { CemberMe, CemberStatus } from '@/lib/cember-shared'
 import { publicRankName } from '@/lib/kanka-puan-shared'
@@ -488,7 +489,7 @@ export function MarketShowcase({ products, balance }: { products: MarketProduct[
               <Link key={p.id} href="/market" className="panel-gold group flex h-full flex-col overflow-hidden rounded-xl">
                 <span className="relative block aspect-square overflow-hidden">
                   <Image
-                    src={p.image || '/images/tile-market.png'}
+                    src={productImage(p)}
                     alt=""
                     fill
                     sizes="(min-width: 1280px) 160px, (min-width: 768px) 30vw, 144px"

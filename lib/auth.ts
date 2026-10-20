@@ -43,6 +43,14 @@ export const auth = betterAuth({
       }
       return { context: { ...ctx, body: { ...ctx.body, name } } }
     }),
+    // One active device per member: a fresh login revokes every other session.
+    after: createAuthMiddleware(async (ctx) => {
+      const fresh = ctx.context.newSession
+      if (!fresh) return
+      await pool
+        .query('DELETE FROM "session" WHERE "userId" = $1 AND id <> $2', [fresh.user.id, fresh.session.id])
+        .catch(() => {})
+    }),
   },
   user: {
     changeEmail: { enabled: true, updateEmailWithoutVerification: true },

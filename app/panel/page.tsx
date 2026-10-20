@@ -99,6 +99,7 @@ import { listAudit, listMembers } from '@/lib/members-admin'
 import { levelMap } from '@/lib/kanka-puan'
 import { AvatarManager } from '@/components/panel/avatar-manager'
 import { COVERS, avatarStats, listCatalog } from '@/lib/avatars'
+import { getHouseWinRate } from '@/app/actions/wallet'
 
 async function usersPanel() {
   const [{ members, counts }, levels, cfg] = await Promise.all([listMembers(), levelMap().catch(() => ({}) as Record<string, number>), getKpConfig()])
@@ -499,8 +500,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )),
     section(ctx, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
     section(ctx, 'rewards', 'Ödül ayarları', async () => {
-      const [config, hidden] = await Promise.all([getRewardConfig(), getHidden()])
-      return <RewardsEditor initial={config} hidden={hidden.mini ?? []} />
+      const [config, hidden, winRate] = await Promise.all([getRewardConfig(), getHidden(), getHouseWinRate()])
+      return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} />
     }),
     section(ctx, 'catalog', 'Etkinlik ve kampanyalar', async () => {
       const [{ rewards: _rewards, ...catalog }, hidden, options] = await Promise.all([getCatalog({ includeHidden: true }), getHidden(), siteOptions()])

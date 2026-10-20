@@ -6,6 +6,7 @@ import { resetCatalog, saveRewards } from '@/app/panel/catalog-actions'
 import { WHEEL_TONES, type RewardConfig } from '@/lib/rewards-shared'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
+import { WheelPreview } from '@/components/panel/wheel-preview'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none'
 const label = 'flex flex-col gap-1.5 text-xs font-medium text-muted-foreground'
@@ -40,7 +41,7 @@ function Num({ text, value, onChange, min = 0, max = 100000 }: { text: string; v
   )
 }
 
-export function RewardsEditor({ initial, hidden = [] }: { initial: RewardConfig; hidden?: string[] }) {
+export function RewardsEditor({ initial, hidden = [], winRate = 40 }: { initial: RewardConfig; hidden?: string[]; winRate?: number }) {
   const [cfg, setCfg] = useState(initial)
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
@@ -65,6 +66,7 @@ export function RewardsEditor({ initial, hidden = [] }: { initial: RewardConfig;
   return (
     <div className="flex flex-col gap-5">
       <Card icon={Target} game="cark" hidden={hidden.includes('cark')} title="Şans çarkı" hint="8 dilim. Kısa yazı çarkın üstünde görünür, puan üyenin hesabına geçer.">
+        <WheelPreview segments={cfg.wheel.segments} winRate={winRate} />
         <Num text="Kaç saatte bir çevirebilir" value={cfg.wheel.cooldownHours} min={1} max={168} onChange={(n) => patch('wheel', { cooldownHours: n })} />
         <div className="flex flex-col gap-2">
           {cfg.wheel.segments.map((s, i) => (

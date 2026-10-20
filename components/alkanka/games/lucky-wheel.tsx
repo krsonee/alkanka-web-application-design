@@ -39,7 +39,8 @@ export type MiniGameProps = {
 export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
   const { setBalance } = usePoints()
   const { wheel } = useCatalog().rewards
-  const SEGMENTS = wheel.segments
+  const [serverSegments, setServerSegments] = useState<Segment[] | null>(null)
+  const SEGMENTS = serverSegments ?? wheel.segments
   const locked = lockedFor > 0
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
@@ -59,6 +60,9 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
       return
     }
     const index = res.index
+    // Draw with the exact segments the server paid out from, so the pointer always lands on what was credited.
+    const paid = res.segments[index] ?? { ...SEGMENTS[index], points: res.points }
+    setServerSegments(res.segments)
     const center = index * SEG_ANGLE + SEG_ANGLE / 2
     const jitter = (Math.random() - 0.5) * (SEG_ANGLE * 0.6)
     const target = (360 - center + jitter + 360) % 360
@@ -71,7 +75,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
     if (jakoTimeout.current) clearTimeout(jakoTimeout.current)
     jakoTimeout.current = setTimeout(() => setJakoPhase('idle'), WIND_MS + 500)
     timeout.current = setTimeout(() => {
-      const seg = SEGMENTS[index]
+      const seg = { ...paid, points: res.points }
       setSpinning(false)
       setResult(seg)
       setBalance(res.balance)
