@@ -184,7 +184,7 @@ export async function blackjackAct(id: string, action: BjAction) {
   }
 }
 
-export async function joinBlackjackTable(bet: number, prefer?: number | null, side?: { pairs?: number; t213?: number }, seat?: number | null) {
+export async function joinBlackjackTable(bet: number, prefer?: number | null, side?: { pairs?: number; t213?: number }, seat?: number | null, fresh?: boolean) {
   try {
     const m = await member()
     const s = (await getArenaSettings()).blackjack
@@ -192,7 +192,7 @@ export async function joinBlackjackTable(bet: number, prefer?: number | null, si
     await assertCanPlay(m.id)
     const preferred = Number.isInteger(prefer) && prefer! > 0 ? prefer! : null
     const preferredSeat = preferred && Number.isInteger(seat) && seat! > 0 ? seat! : null
-    const res = await bjLiveJoin(m, bet, s.bets, preferred, { pairs: Number(side?.pairs) || 0, t213: Number(side?.t213) || 0 }, preferredSeat)
+    const res = await bjLiveJoin(m, bet, s.bets, preferred, { pairs: Number(side?.pairs) || 0, t213: Number(side?.t213) || 0 }, preferredSeat, fresh === true)
     return { ok: true as const, ...res }
   } catch (e) {
     return fail(e)
