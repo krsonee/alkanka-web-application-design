@@ -189,20 +189,32 @@ export async function badgeShowcase(badges: { id: string; auto: AutoKind | null 
 
 export type Rival = { name: string; kp: number; level: number; levelName: string; me: boolean; gap: number }
 
-/** Two members just above and two just below you in your own league. */
-export async function getLeagueRivals(userId: string): Promise<{ tier: string; rivals: Rival[] } | null> {
-  const board = await readLeaderboard(300, 'tum')
-  const idx = board.findIndex((r) => r.userId === userId)
-  if (idx < 0) return null
-  const me = board[idx]
-  const tier = levelTier(me.level)
-  const same = board.map((r, i) => ({ r, i })).filter(({ r }) => levelTier(r.level) === tier)
-  const pos = same.findIndex(({ i }) => i === idx)
+/**
+ * Weekly league inside your badge tier: the tier comes from your permanent level badge,
+ * the race uses this week's KP only, so a bad week never costs you the badge.
+ */
+export async function getLeagueRivals(userId: string): Promise<{ tier: string; rivals: Rival[]; place: number; size: number } | null> {
+  const [career, week] = await Promise.all([readLeaderboard(1000, 'tum'), readLeaderboard(1000, 'hafta')])
+  const meCareer = career.find((r) => r.userId === userId)
+  if (!meCareer) return null
+  const tier = levelTier(meCareer.level)
+  const levelOf = new Map(career.map((r) => [r.userId, r]))
+  const same = week.filter((r) => levelTier(levelOf.get(r.userId)?.level ?? r.level) === tier)
+  if (!same.some((r) => r.userId === userId)) same.push({ ...meCareer, kp: 0 })
+  const pos = same.findIndex((r) => r.userId === userId)
+  const myKp = same[pos].kp
   const slice = same.slice(Math.max(0, pos - 2), pos + 3)
-  if (slice.length < 2) return { tier, rivals: [] }
   return {
     tier,
-    rivals: slice.map(({ r }) => ({ name: r.userId === userId ? 'Sen' : r.name, kp: r.kp, level: r.level, levelName: r.levelName, me: r.userId === userId, gap: r.kp - me.kp })),
+    place: pos + 1,
+    size: same.length,
+    rivals:
+      slice.length < 2
+        ? []
+        : slice.map((r) => {
+            const lv = levelOf.get(r.userId) ?? r
+            return { name: r.userId === userId ? 'Sen' : r.name, kp: r.kp, level: lv.level, levelName: lv.levelName, me: r.userId === userId, gap: r.kp - myKp }
+          }),
   }
 }
 

@@ -168,8 +168,10 @@ async function totals(rules: PointRules, userId: string | null, limit = 1, perio
     ? sql`SELECT user_id, 1::bigint AS v FROM tg_links WHERE coalesce(linked_at, now()) >= ${since}`
     : sql`SELECT NULL::text AS user_id, 0::bigint AS v WHERE false`
   const r = await rows(sql`WITH
-    g AS (SELECT user_id, count(*) FILTER (WHERE mode <> 'odul') AS games, count(*) FILTER (WHERE mode = 'odul' AND game = 'gorev') AS tasks
-      FROM game_history WHERE created_at >= ${since} GROUP BY user_id),
+    g AS (SELECT user_id, sum(least(games, ${rules.gameDailyCap})) AS games, sum(tasks) AS tasks FROM (
+        SELECT user_id, date_trunc('day', created_at AT TIME ZONE 'Europe/Istanbul') AS d,
+          count(*) FILTER (WHERE mode <> 'odul') AS games, count(*) FILTER (WHERE mode = 'odul' AND game = 'gorev') AS tasks
+        FROM game_history WHERE created_at >= ${since} GROUP BY 1, 2) gd GROUP BY user_id),
     c AS (${chatCte}),
     l AS (SELECT user_id, coalesce(sum(points), 0) AS v FROM league_picks WHERE created_at >= ${since} GROUP BY user_id),
     rv AS (SELECT user_id, count(*) AS v FROM site_reviews WHERE status = 'approved' AND created_at >= ${since} GROUP BY user_id),

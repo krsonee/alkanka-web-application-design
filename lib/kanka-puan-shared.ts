@@ -7,6 +7,7 @@ export type PointRules = {
   minute: number
   minuteDailyCap: number
   game: number
+  gameDailyCap: number
   task: number
   chat: number
   chatDailyCap: number
@@ -37,6 +38,7 @@ export const DEFAULT_RULES: PointRules = {
   minute: 1,
   minuteDailyCap: 120,
   game: 5,
+  gameDailyCap: 30,
   task: 15,
   chat: 2,
   chatDailyCap: 40,
@@ -53,6 +55,7 @@ export const RULE_FIELDS: { key: keyof PointRules; label: string; hint: string; 
   { key: 'minute', label: 'Sitede geçirilen dakika', hint: 'Sekme açık ve aktifken her dakika', unit: 'KP / dk' },
   { key: 'minuteDailyCap', label: 'Günlük dakika sınırı', hint: 'Günde en fazla bu kadar dakika puan kazandırır', unit: 'dk' },
   { key: 'game', label: 'Oynanan oyun', hint: 'Tavla, okey, batak vb. her masa', unit: 'KP / oyun' },
+  { key: 'gameDailyCap', label: 'Günlük oyun sınırı', hint: 'Günde en fazla bu kadar oyun KP kazandırır (seviye hızını korur)', unit: 'oyun' },
   { key: 'task', label: 'Tamamlanan görev', hint: 'Görevler sayfasındaki her görev', unit: 'KP / görev' },
   { key: 'chat', label: 'Sohbet mesajı', hint: 'Sohbet kanalına yazılan her mesaj', unit: 'KP / mesaj' },
   { key: 'chatDailyCap', label: 'Günlük mesaj sınırı', hint: 'Spamı önler, günde en fazla bu kadar mesaj sayılır', unit: 'mesaj' },
@@ -72,20 +75,21 @@ export const DEFAULT_LEVELS: LevelDef[] = [
   { name: 'Kanka', badge: 'Kanka Eli', min: 500 },
   { name: 'Gedikli', badge: 'Müdavim', min: 850 },
   { name: 'Masa Kurdu', badge: 'Zar Atan', min: 1300 },
-  { name: 'Taktisyen', badge: 'Kroki', min: 1900 },
-  { name: 'Usta', badge: 'Usta Eli', min: 2700 },
-  { name: 'Kurt', badge: 'Gri Kurt', min: 3700 },
-  { name: 'Kaptan', badge: 'Pazubant', min: 5000 },
-  { name: 'Yıldız', badge: 'Parlayan Yıldız', min: 6600 },
-  { name: 'Kahraman', badge: 'Demir Kalkan', min: 8600 },
-  { name: 'Efsane', badge: 'Efsane Mührü', min: 11000 },
-  { name: 'Titan', badge: 'Titan Yumruğu', min: 14000 },
-  { name: 'Sultan', badge: 'Sultan Tuğrası', min: 17500 },
-  { name: 'Şampiyon', badge: 'Altın Kupa', min: 21500 },
-  { name: 'Elmas', badge: 'Saf Elmas', min: 26000 },
-  { name: 'Kral', badge: 'Altın Taç', min: 31500 },
-  { name: 'İmparator', badge: 'İmparator Asası', min: 38000 },
-  { name: 'Al Kanka', badge: 'Altın Papağan', min: 46000 },
+  { name: 'Taktisyen', badge: 'Kroki', min: 2000 },
+  { name: 'Usta', badge: 'Usta Eli', min: 2900 },
+  { name: 'Kurt', badge: 'Gri Kurt', min: 4100 },
+  { name: 'Kaptan', badge: 'Pazubant', min: 5600 },
+  { name: 'Yıldız', badge: 'Parlayan Yıldız', min: 7400 },
+  { name: 'Kahraman', badge: 'Demir Kalkan', min: 9600 },
+  { name: 'Efsane', badge: 'Efsane Mührü', min: 12300 },
+  { name: 'Titan', badge: 'Titan Yumruğu', min: 15600 },
+  { name: 'Sultan', badge: 'Sultan Tuğrası', min: 19600 },
+  { name: 'Şampiyon', badge: 'Altın Kupa', min: 24500 },
+  { name: 'Elmas', badge: 'Saf Elmas', min: 30500 },
+  { name: 'Kral', badge: 'Altın Taç', min: 37500 },
+  { name: 'İmparator', badge: 'İmparator Asası', min: 46000 },
+  { name: 'Cihangir', badge: 'Cihan Mührü', min: 56000 },
+  { name: 'Al Kanka', badge: 'Altın Papağan', min: 68000 },
 ]
 
 export type BadgeTier = 'altin' | 'elmas' | 'efsane'

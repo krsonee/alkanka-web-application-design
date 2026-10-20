@@ -115,7 +115,7 @@ export default async function BadgesPage() {
 
       {quest && <WeeklyQuestCard quest={quest} signedIn={!!member} />}
 
-      {league && league.rivals.length > 1 && <LeagueRivals tier={league.tier} rivals={league.rivals} />}
+      {league && league.rivals.length > 1 && <LeagueRivals tier={league.tier} rivals={league.rivals} place={league.place} size={league.size} />}
 
       <section aria-labelledby="kazan" className="flex scroll-mt-32 flex-col gap-3">
         <div className="flex flex-col gap-1">

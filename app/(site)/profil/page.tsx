@@ -235,7 +235,7 @@ function StatusCard({ levelIndex }: { levelIndex: number }) {
     <section aria-labelledby="statu" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Statün</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Rozet kademen (kalıcı)</span>
           <h2 id="statu" className="font-display text-2xl font-bold leading-none text-gold">{rank.name}</h2>
         </div>
         <span className="rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-bold tabular-nums text-gold">
@@ -265,8 +265,8 @@ function StatusCard({ levelIndex }: { levelIndex: number }) {
       </ul>
       <p className="mt-auto rounded-xl bg-background/60 p-3 text-xs leading-relaxed text-muted-foreground">
         {next
-          ? <>Seviye <b className="text-foreground">{next.fromLevel + 1}</b> olunca <b className="text-gold">{next.name}</b> statüsüne geçersin: {next.perks.join(', ')}.</>
-          : 'En yüksek statüdesin kanka. Tüm ayrıcalıklar açık.'}
+          ? <>Seviye <b className="text-foreground">{next.fromLevel + 1}</b> olunca rozetin <b className="text-gold">{next.name}</b> kademesine geçer: {next.perks.join(', ')}. Kademe hiç düşmez; haftalık ligde düşsen bile rozetin sende kalır.</>
+          : 'En yüksek kademedesin kanka. Tüm ayrıcalıklar açık.'}
       </p>
     </section>
   )

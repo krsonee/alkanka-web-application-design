@@ -369,7 +369,7 @@ function LevelsEditor({ initial }: { initial: LevelDef[] }) {
           <Plus className="size-4" aria-hidden /> Seviye ekle
         </button>
         <button onClick={() => setLevels(DEFAULT_LEVELS)} className="h-10 rounded-lg border border-border px-3 text-sm font-semibold text-muted-foreground hover:text-foreground">
-          Varsayılan 20 seviye
+          Varsayılan 21 seviye
         </button>
         <button disabled={pending} onClick={() => run(() => updateLevels(levels))} className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">
           Kaydet
