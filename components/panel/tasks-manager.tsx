@@ -125,7 +125,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
               </span>
               {!task.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
               <HideButton key={`${task.id}-${task.active}`} kind="task" id={task.id} hidden={!task.active} label={task.title} />
-              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', param: task.param ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
+              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', param: task.param ?? '', chain: task.chain ?? '', badge: task.badge ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                 <Pencil className="size-4" aria-hidden="true" />
               </button>
             </li>
