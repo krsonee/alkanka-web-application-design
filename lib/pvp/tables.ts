@@ -211,6 +211,7 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
 
 export async function createTable(m: Member, game: string, stake: number, input?: Partial<TableOptions>) {
   if (!isPvpGame(game)) throw new Error('Bu oyun için kanka masası yok.')
+  if (game === 'blackjack' || game === 'rulet') throw new Error('Blackjack ve rulet canlı ortak masalarda oynanıyor, oyun sayfasından masaya otur.')
   const settings = (await getArenaSettings())[game]
   if (!settings.enabled || !settings.pvpEnabled) throw new Error('Kanka masaları şu an kapalı.')
   if (!settings.bets.includes(stake)) throw new Error('Geçersiz bahis.')

@@ -252,7 +252,18 @@ export type JoinResult = { balance: number; tableNo: number; seated: boolean }
  */
 export type SideBets = { pairs: number; t213: number }
 
-export async function joinBlackjack(member: Member, bet: number, allowedBets: number[], prefer?: number | null, side: SideBets = { pairs: 0, t213: 0 }, preferSeat: number | null = null): Promise<JoinResult> {
+/** Upper bound on tables with players, so "open my own table" can't be spammed into hundreds of empty rounds. */
+const MAX_OPEN_TABLES = 30
+
+export async function joinBlackjack(
+  member: Member,
+  bet: number,
+  allowedBets: number[],
+  prefer?: number | null,
+  side: SideBets = { pairs: 0, t213: 0 },
+  preferSeat: number | null = null,
+  fresh = false,
+): Promise<JoinResult> {
   if (!allowedBets.includes(bet)) throw new Error('Geçersiz bahis.')
   if (!BJ_SIDE_STAKES.includes(side.pairs) || !BJ_SIDE_STAKES.includes(side.t213)) throw new Error('Geçersiz yan bahis.')
   const total = bet + side.pairs + side.t213
@@ -270,8 +281,16 @@ export async function joinBlackjack(member: Member, bet: number, allowedBets: nu
       }
 
       const nos = await tableNumbers(c)
-      const ordered = prefer && nos.includes(prefer) ? [prefer, ...nos.filter((n) => n !== prefer)] : nos
+      const ordered = fresh ? [] : prefer && nos.includes(prefer) ? [prefer, ...nos.filter((n) => n !== prefer)] : nos
       let waitAt: number | null = null
+
+      if (fresh) {
+        const active = await c.query(
+          `SELECT COUNT(DISTINCT r.table_no)::int AS n FROM blackjack_round r JOIN blackjack_live l ON l.round_id = r.id
+           WHERE r.id IN (SELECT MAX(id) FROM blackjack_round GROUP BY table_no)`,
+        )
+        if (active.rows[0].n >= MAX_OPEN_TABLES) throw new Error(`Şu an ${MAX_OPEN_TABLES} masa açık kanka, boş koltuğu olan bir masaya otur.`)
+      }
 
       for (const no of ordered) {
         let round = await advance(c, no)
@@ -303,8 +322,8 @@ export async function joinBlackjack(member: Member, bet: number, allowedBets: nu
 
       if (waitAt !== null) return { tableNo: waitAt, seated: false, charged: false }
 
-      const fresh = Math.max(...nos) + 1
-      const round = await setPhase(c, (await newRound(c, fresh)).id, 'bet', BJ_BET_MS)
+      const freshNo = Math.max(...nos) + 1
+      const round = await setPhase(c, (await newRound(c, freshNo)).id, 'bet', BJ_BET_MS)
       await c.query(`INSERT INTO blackjack_live (round_id, seat, user_id, user_name, bet, side_pairs, side_213) VALUES ($1,1,$2,$3,$4,$5,$6)`, [
         round.id,
         member.id,
@@ -313,7 +332,7 @@ export async function joinBlackjack(member: Member, bet: number, allowedBets: nu
         side.pairs,
         side.t213,
       ])
-      return { tableNo: fresh, seated: true, charged: true }
+      return { tableNo: freshNo, seated: true, charged: true }
     })
   } catch (e) {
     await credit(member.id, total)

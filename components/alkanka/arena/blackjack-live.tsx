@@ -463,7 +463,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
   const [notice, setNotice] = useState("");
 
-  async function join() {
+  async function join(fresh = false) {
     if (busy || !requireLogin()) return;
     if (totalBet > points) return setError("Bakiyen bu bahis için yetersiz.");
     setBusy(true);
@@ -471,9 +471,10 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     setNotice("");
     const res = await joinBlackjackTable(
       bet,
-      data?.tableNo ?? null,
+      fresh ? null : (data?.tableNo ?? null),
       side,
-      chosenSeat,
+      fresh ? null : chosenSeat,
+      fresh,
     );
     setBusy(false);
     if (!res.ok) {
@@ -487,6 +488,10 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     if (!res.seated)
       setNotice(
         `Masa ${res.tableNo} el oynuyor. Bu el bitince tekrar "Masaya otur"a bas, ilk boş koltuk senin.`,
+      );
+    else if (fresh)
+      setNotice(
+        `Masa ${res.tableNo} senin masan. Kankalar masalar listesinden gelip oturabilir.`,
       );
     else if (data && res.tableNo !== data.tableNo)
       setNotice(
@@ -762,7 +767,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               <SideBetPicker value={side} onChange={setSide} />
               <button
                 disabled={busy}
-                onClick={join}
+                onClick={() => join()}
                 className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50"
               >
                 {busy ? (
@@ -774,6 +779,15 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   ? `Koltuk ${chosenSeat}'e otur`
                   : "Masaya otur"}{" "}
                 · {formatAC(totalBet)}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => join(true)}
+                className="flex items-center gap-2 rounded-xl border border-primary/60 px-5 py-2.5 text-xs font-bold uppercase text-primary hover:bg-primary/10 disabled:opacity-50"
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                Kendi masanı aç
               </button>
               <p className="text-center text-xs text-muted-foreground">
                 {!member
