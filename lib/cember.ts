@@ -87,6 +87,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
     enabled: c.enabled !== false,
     title: String(c.title || DEFAULT_CEMBER.title).slice(0, 40),
     hours,
+    days: [...new Set((Array.isArray(c.days) ? c.days : []).map((d) => clampInt(d, 0, 6, 0)))].sort((a, b) => a - b),
     minute: clampInt(c.minute, 0, 59, 0),
     every: (EVERY_OPTIONS as readonly number[]).includes(Number(c.every)) ? Number(c.every) : 0,
     maxPlayers: clampInt(c.maxPlayers, 2, MAX_PLAYERS, MAX_PLAYERS),
@@ -192,6 +193,7 @@ function slotsAround(events: CemberConfig[], now: number): Slot[] {
     if (!ev.enabled) continue
     const minutes = slotMinutes(ev)
     for (const day of [today - 86400_000, today, today + 86400_000]) {
+      if (ev.days.length && !ev.days.includes((new Date(day + TR_OFFSET_MS).getUTCDay() + 6) % 7)) continue
       for (const h of ev.hours) for (const m of minutes) {
         const at = day + h * 3600_000 + m * 60_000
         if (!out.has(at)) out.set(at, ev)
@@ -264,6 +266,30 @@ async function conditionValues(c: CemberCondition, at: number, userId: string | 
     case 'telegram':
       q = sql`SELECT user_id, 1 AS n FROM tg_links WHERE (${u}::text IS NULL OR user_id = ${u})`
       break
+    case 'tahmin':
+      q = sql`SELECT user_id, count(*) AS n FROM league_picks WHERE created_at >= ${since} AND created_at < ${until}
+        AND (${u}::text IS NULL OR user_id = ${u}) GROUP BY user_id`
+      break
+    case 'tv':
+      q = sql`SELECT user_id, count(*) AS n FROM tv_watch_ticks WHERE minute >= ${since} AND minute < ${until}
+        AND (${u}::text IS NULL OR user_id = ${u}) GROUP BY user_id`
+      break
+    case 'tgkod':
+      q = sql`SELECT e.user_id, count(*) AS n FROM kp_events e JOIN tasks t ON split_part(e.ref, ':', 1) = t.id::text
+        WHERE e.source = 'gorev' AND t.kind = 'secret_code' AND e.created_at >= ${since} AND e.created_at < ${until}
+        AND (${u}::text IS NULL OR e.user_id = ${u}) GROUP BY e.user_id`
+      break
+    case 'sponsor':
+      q = sql`SELECT user_id, 1 AS n FROM sponsor_accounts WHERE status = 'approved'
+        AND (${p}::text IS NULL OR site_id = ${p}) AND (${u}::text IS NULL OR user_id = ${u}) GROUP BY user_id`
+      break
+    case 'haftalik': {
+      const week = windowStart({ ...c, window: 'hafta' }, at)
+      q = sql`SELECT e.user_id, count(*) AS n FROM kp_events e JOIN tasks t ON split_part(e.ref, ':', 1) = t.id::text
+        WHERE e.source = 'gorev' AND t.period = 'weekly' AND e.created_at >= ${week} AND e.created_at < ${until}
+        AND (${u}::text IS NULL OR e.user_id = ${u}) GROUP BY e.user_id`
+      break
+    }
   }
   // Optional modules (Telegram, check-in…) may not have created their table yet; that simply means nobody qualifies.
   const r = await rows<{ user_id: string; n: string }>(q).catch(() => [])
