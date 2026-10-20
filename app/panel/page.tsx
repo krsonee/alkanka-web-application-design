@@ -438,6 +438,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       <CommunityManager
         reviews={await pendingReviews().catch(() => [])}
         published={await publishedReviews().catch(() => [])}
+        proofs={await (await import('@/lib/trust-extra')).pendingProofs().catch(() => [])}
         complaints={await adminComplaints().catch(() => [])}
         matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}

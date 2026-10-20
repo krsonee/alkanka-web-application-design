@@ -12,6 +12,23 @@ import { SnapSlider } from '@/components/alkanka/home/snap-slider'
 import { WithdrawWall } from '@/components/alkanka/community/withdraw-wall'
 import { recentWithdrawals, siteWithdrawals, withdrawStats } from '@/lib/withdrawals'
 import { cn } from '@/lib/utils'
+import { getMember } from '@/lib/member'
+import {
+  complaintTracker,
+  helpfulThisWeek,
+  lastSponsorOfMonth,
+  monthKey,
+  monthLabel,
+  mySponsorVote,
+  reviewExtras,
+  sponsorVoteBoard,
+  HELPFUL_COIN,
+  HELPFUL_KP,
+  type ReviewExtra,
+} from '@/lib/trust-extra'
+import { HelpfulButton } from '@/components/alkanka/community/helpful-button'
+import { SponsorVote } from '@/components/alkanka/community/sponsor-vote'
+import { ShieldCheck, ThumbsUp, Timer, Trophy } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Güven merkezi: site yorumları ve şikâyetler',
@@ -70,6 +87,18 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
   const [reviews, complaints, withdraws] = current
     ? await Promise.all([siteReviews(selected), siteComplaints(selected), siteWithdrawals(selected).catch(() => [])])
     : [[], [], []]
+  const member = await getMember().catch(() => null)
+  const [extras, tracker, voteBoard, myVote, helpfulTop, lastWinner] = await Promise.all([
+    reviewExtras(reviews.map((r) => r.id), member?.id ?? null).catch(() => ({}) as Record<number, ReviewExtra>),
+    complaintTracker().catch(() => null),
+    sponsorVoteBoard().catch(() => []),
+    member ? mySponsorVote(member.id).catch(() => null) : null,
+    helpfulThisWeek().catch(() => []),
+    lastSponsorOfMonth().catch(() => null),
+  ])
+  const voteOptions = ranked
+    .map((t) => ({ siteId: t.siteId, name: t.name, votes: voteBoard.find((v) => v.siteId === t.siteId)?.votes ?? 0 }))
+    .sort((a, b) => b.votes - a.votes)
   const rate = current ? resolveRate(current) : null
   const currentStat = current ? statOf(current.siteId) : undefined
   const href = (slug: string, t: string = view) => `/guven?site=${slug}${t !== 'yorum' ? `&tab=${t}` : ''}`
@@ -271,6 +300,12 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                       <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                         {r.userName.split(' ')[0]}
                         <BadgeCheck className="size-4 text-primary" aria-label="Doğrulanmış üye" />
+                        {extras[r.id]?.verified && (
+                          <span className="flex items-center gap-1 rounded-full bg-live/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-live">
+                            <ShieldCheck className="size-3" aria-hidden />
+                            Kanıtlı
+                          </span>
+                        )}
                       </span>
                       <span className="flex items-center gap-0.5" aria-label={`${r.rating} yıldız`}>
                         {[1, 2, 3, 4, 5].map((n) => (
@@ -279,7 +314,10 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
                       </span>
                     </div>
                     <p className="text-pretty text-sm leading-relaxed text-foreground">{r.body}</p>
-                    <span className="text-xs text-muted-foreground">{fmtDate(r.createdAt)}</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-muted-foreground">{fmtDate(r.createdAt)}</span>
+                      <HelpfulButton reviewId={r.id} count={extras[r.id]?.helpful ?? 0} voted={extras[r.id]?.mine ?? false} own={!member || (extras[r.id]?.own ?? false)} />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -324,6 +362,89 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
           </p>
         </aside>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {tracker && (
+          <section aria-labelledby="sikayet-takip" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="sikayet-takip" className="font-display text-lg font-bold text-foreground">Şikâyet takip sayacı</h2>
+              {tracker.avgDays !== null && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+                  <Timer className="size-3.5" aria-hidden />
+                  Ortalama {tracker.avgDays} günde çözüm
+                </span>
+              )}
+            </div>
+            <dl className="grid grid-cols-3 gap-2">
+              {[
+                ['Bekliyor', tracker.open],
+                ['Sponsora iletildi', tracker.forwarded],
+                ['Çözüldü', tracker.resolved],
+              ].map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-0.5 rounded-lg bg-background p-3">
+                  <dt className="text-[11px] text-muted-foreground">{label}</dt>
+                  <dd className="font-display text-2xl font-bold tabular-nums text-foreground">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {tracker.recentResolved.length ? (
+              <ul className="flex flex-col divide-y divide-border">
+                {tracker.recentResolved.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <CheckCircle2 className="size-4 shrink-0 text-live" aria-hidden />
+                      <span className="truncate text-foreground">{c.title}</span>
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {c.days === 0 ? 'aynı gün' : `${c.days} günde`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Çözülen şikâyetler burada canlı listelenir.</p>
+            )}
+          </section>
+        )}
+
+        <section id="ayin-sponsoru" aria-labelledby="ayin-sponsoru-baslik" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="ayin-sponsoru-baslik" className="font-display text-lg font-bold text-foreground">Ayın güvenilir sponsoru</h2>
+            {lastWinner && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+                <Trophy className="size-3.5" aria-hidden />
+                {monthLabel(lastWinner.month)}: {lastWinner.name}
+              </span>
+            )}
+          </div>
+          <SponsorVote options={voteOptions} mine={myVote} month={monthLabel(monthKey())} />
+        </section>
+      </div>
+
+      <section aria-labelledby="faydali" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <h2 id="faydali" className="font-display text-lg font-bold text-foreground">Haftanın en faydalı yorumcuları</h2>
+          <span className="text-xs text-muted-foreground">
+            Pazartesi birinciye {HELPFUL_KP} KP + {HELPFUL_COIN} KC
+          </span>
+        </div>
+        {helpfulTop.length ? (
+          <ol className="flex flex-wrap gap-2">
+            {helpfulTop.map((h, i) => (
+              <li key={h.userId} className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm', i === 0 ? 'border-primary bg-primary/10' : 'border-border')}>
+                <span className="text-xs font-bold tabular-nums text-muted-foreground">{i + 1}.</span>
+                <b className="text-foreground">{h.name}</b>
+                <span className="flex items-center gap-1 text-xs tabular-nums text-primary">
+                  <ThumbsUp className="size-3" aria-hidden />
+                  {h.votes}
+                </span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-sm text-muted-foreground">Bu hafta henüz faydalı oyu yok. İşine yarayan yorumlara oy ver, yazarı ödül kazansın.</p>
+        )}
+      </section>
 
       <section aria-labelledby="cekim-duvari" className="flex flex-col gap-3">
         <div className="flex items-end justify-between gap-2">

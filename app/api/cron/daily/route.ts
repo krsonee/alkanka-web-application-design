@@ -78,6 +78,7 @@ async function announcePodiums() {
 export async function GET(req: Request) {
   if (!(await authorized(req))) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
   const podiums = await announcePodiums().then(String, (e) => String(e))
+  const trust = await import('@/lib/trust-extra').then(({ runTrustCron }) => runTrustCron()).catch((e) => String(e))
   const [tournaments, reminders, referrals, cember, ranks, boosts] = await Promise.allSettled([
     autoStartDue(),
     remindStreaks(),
@@ -88,6 +89,7 @@ export async function GET(req: Request) {
   ])
   return Response.json({
     podiums,
+    trust,
     boosts: boosts.status === 'fulfilled' ? boosts.value : String(boosts.reason),
     rankSnapshot: ranks.status === 'fulfilled' ? ranks.value : String(ranks.reason),
     cemberSettled: cember.status === 'fulfilled' ? cember.value : String(cember.reason),

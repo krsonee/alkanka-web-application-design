@@ -7,6 +7,9 @@ import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { StatusLine, useAction } from './use-action'
 import { WithdrawForm } from './withdraw-form'
+import { ProofUpload } from './proof-upload'
+
+const proofKp = 30
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
@@ -103,6 +106,7 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
             {review.pending ? 'Gönderiliyor...' : 'Yorumu gönder'}
           </button>
           <StatusLine status={review.status} />
+          <ProofUpload siteId={siteId} kp={proofKp} />
         </form>
       ) : (
         <form

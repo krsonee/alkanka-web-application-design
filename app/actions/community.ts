@@ -79,6 +79,28 @@ export async function addComplaintAction(siteId: string, title: string, body: st
   }, '/guven')
 }
 
+export async function toggleHelpfulAction(reviewId: number): Promise<{ ok: true; voted: boolean; count: number } | { ok: false; error: string }> {
+  const member = await getMember()
+  if (!member) return { ok: false, error: 'Oy vermek için giriş yapmalısın.' }
+  const { hitRateLimit, RATE_LIMIT_MESSAGE } = await import('@/lib/rate-limit')
+  if (await hitRateLimit(`helpful:${member.id}`, 30, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
+  try {
+    const { toggleHelpful } = await import('@/lib/trust-extra')
+    const r = await toggleHelpful(member.id, Number(reviewId))
+    return { ok: true, ...r }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Oy kaydedilemedi.' }
+  }
+}
+
+export async function sponsorVoteAction(siteId: string) {
+  return run(async (m) => {
+    const { castSponsorVote } = await import('@/lib/trust-extra')
+    await castSponsorVote(m.id, String(siteId))
+    return 'Oyun kaydedildi. Ay bitene kadar fikrini değiştirebilirsin.'
+  }, '/guven')
+}
+
 export async function addAlertAction(keyword: string) {
   return run((m) => addAlert(m.id, keyword), '/profil')
 }
