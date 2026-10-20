@@ -2,6 +2,8 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Tasks } from '@/components/alkanka/tasks'
 import { OnlineRewards } from '@/components/alkanka/kp/online-rewards'
+import { MemberPerks } from '@/components/alkanka/kp/member-perks'
+import { getBirthday, getBoostConfig, shieldCount } from '@/lib/boosts'
 import { getMember } from '@/lib/member'
 import { getStreak, type StreakState } from '@/lib/checkin'
 import { bundleTarget, completedTaskIds, inviteLeague, listPublicTasks, taskClaimMap, taskProgressMap, visibleTasksFor, type ClaimStatus } from '@/lib/tasks'
@@ -20,9 +22,14 @@ export default async function TasksPage() {
   ])
   const finished = new Set(done)
   const view = visibleTasksFor(member?.id ?? null, tasks, finished)
-  const [progress, league] = await Promise.all([
+  const [progress, league, perks] = await Promise.all([
     member ? taskProgressMap(member.id, view.tasks).catch(() => ({} as Record<number, number>)) : Promise.resolve({} as Record<number, number>),
     inviteLeague(10),
+    member
+      ? Promise.all([getBoostConfig(), shieldCount(member.id), getBirthday(member.id)])
+          .then(([cfg, shields, birthday]) => ({ shields, shieldPrice: cfg.shieldPrice, birthday, birthdayCoin: cfg.birthday.coin }))
+          .catch(() => null)
+      : Promise.resolve(null),
   ])
   const shown = view.tasks.map((task) => ({
     id: task.id,
@@ -64,6 +71,7 @@ export default async function TasksPage() {
         meId={member?.id ?? null}
       />
       <OnlineRewards />
+      {member && perks && <MemberPerks {...perks} />}
     </>
   )
 }

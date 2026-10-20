@@ -53,12 +53,16 @@ export async function getStreak(userId: string): Promise<Streak> {
 /** Pays the 7 and 30 day streak bonus once per streak run. The run start date is part of the ref, so a new run can earn again. */
 async function claimStreakBonus(userId: string, current: number, runStart: string) {
   const { rules } = await getKpConfig()
+  const { getBoostConfig, boosted } = await import('@/lib/boosts')
+  const boostCfg = await getBoostConfig().catch(() => null)
   const steps: [number, number][] = [
     [7, rules.streak7],
+    [14, boostCfg?.streak14 ?? 0],
     [30, rules.streak30],
   ]
-  for (const [days, points] of steps) {
-    if (current < days || points <= 0) continue
+  for (const [days, base] of steps) {
+    if (current < days || base <= 0) continue
+    const points = await boosted('seri', base)
     await rows(sql`INSERT INTO kp_events (user_id, source, points, ref, note)
       VALUES (${userId}, 'seri', ${points}, ${`${days}:${runStart}`}, ${`${days} günlük seri`}) ON CONFLICT DO NOTHING`)
   }

@@ -556,8 +556,12 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const pot = t.stake * (people.length + (t.options.forfeits ?? 0)) + botBonus
   const prizeEach = humanWinners.length ? Math.floor((pot * (1 - (settings?.commission ?? 0) / 100)) / humanWinners.length) : 0
   const paid = new Map<string, number>()
+  const { boosted } = await import('@/lib/boosts')
+  // The weekend festival multiplies only the profit, never the returned stake.
+  const profit = Math.max(0, prizeEach - t.stake)
+  const boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
   for (const p of humanWinners) {
-    const amount = await capPayout(p.id, t.stake, prizeEach)
+    const amount = await capPayout(p.id, t.stake, boostedPrize)
     paid.set(p.id, amount)
     await credit(p.id, amount)
   }

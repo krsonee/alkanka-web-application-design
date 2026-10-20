@@ -417,7 +417,8 @@ export async function awardTask(userId: string, taskId: number, claimKey?: strin
     if (Number(n) >= cap) throw new Error(`Kontenjan doldu: ilk ${cap} kanka ödülü kaptı.`)
   }
   const base = Math.trunc(Number(task.points))
-  const points = task.kind === 'bundle' && period === 'daily' ? base + (hashOf(`${userId}:${ref}`) % (base + 1)) : base
+  const { boosted } = await import('@/lib/boosts')
+  const points = await boosted('gorev', task.kind === 'bundle' && period === 'daily' ? base + (hashOf(`${userId}:${ref}`) % (base + 1)) : base)
   const inserted = await rows<{ id: number }>(sql`INSERT INTO kp_events (user_id, source, points, ref)
     VALUES (${userId}, 'gorev', ${points}, ${ref})
     ON CONFLICT DO NOTHING

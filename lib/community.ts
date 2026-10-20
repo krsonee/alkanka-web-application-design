@@ -585,10 +585,13 @@ export async function settleLeagueMatch(id: number, home: number, away: number) 
       WHEN sign(home - away) = sign(${home}::int - ${away}::int) THEN 1
       ELSE 0 END
     WHERE match_id = ${id} RETURNING user_id, points`)
+  const { boosted } = await import('@/lib/boosts')
+  const exact = await boosted('tahmin', EXACT_REWARD)
+  const outcome = await boosted('tahmin', OUTCOME_REWARD)
   for (const s of scored) {
     const p = Number(s.points)
-    if (p === 3) await credit(s.user_id, EXACT_REWARD)
-    else if (p === 1) await credit(s.user_id, OUTCOME_REWARD)
+    if (p === 3) await credit(s.user_id, exact)
+    else if (p === 1) await credit(s.user_id, outcome)
   }
   return { picks: scored.length, winners: scored.filter((s) => Number(s.points) > 0).length }
 }

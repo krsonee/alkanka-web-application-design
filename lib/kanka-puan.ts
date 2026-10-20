@@ -402,8 +402,10 @@ export async function isRoleHolder(userId: string): Promise<boolean> {
 export async function pingActive(userId: string) {
   const cfg = await getKpConfig()
   if (cfg.rules.minute > 0 && !(await isRoleHolder(userId))) {
+    const { boosted, onFirstMinuteOfDay } = await import('@/lib/boosts')
+    const minute = await boosted('sure', cfg.rules.minute)
     const [inserted] = await rows<{ first: boolean }>(sql`INSERT INTO kp_events (user_id, source, points, ref)
-      SELECT ${userId}, 'sure', ${cfg.rules.minute}, to_char(now() AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM-DD"T"HH24:MI')
+      SELECT ${userId}, 'sure', ${minute}, to_char(now() AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM-DD"T"HH24:MI')
       WHERE (SELECT count(*) FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) < ${cfg.rules.minuteDailyCap}
       ON CONFLICT DO NOTHING
@@ -411,6 +413,7 @@ export async function pingActive(userId: string) {
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS first`)
     // The first minute of a new day can complete a 7 or 30 day streak, so the bonus is checked only then.
     if (inserted?.first) {
+      await onFirstMinuteOfDay(userId).catch((error) => console.error('[boosts] ilk dakika', (error as Error).message))
       const { getStreak } = await import('@/lib/kp-extras')
       await getStreak(userId).catch(() => null)
     }

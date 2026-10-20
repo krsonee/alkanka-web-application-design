@@ -78,15 +78,17 @@ async function announcePodiums() {
 export async function GET(req: Request) {
   if (!(await authorized(req))) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
   const podiums = await announcePodiums().then(String, (e) => String(e))
-  const [tournaments, reminders, referrals, cember, ranks] = await Promise.allSettled([
+  const [tournaments, reminders, referrals, cember, ranks, boosts] = await Promise.allSettled([
     autoStartDue(),
     remindStreaks(),
     payReferrals(),
     import('@/lib/cember').then(({ settleMissedRounds }) => settleMissedRounds()),
     import('@/lib/kanka-puan').then(({ snapshotRanks }) => snapshotRanks()),
+    import('@/lib/boosts').then(({ runBoostCron }) => runBoostCron()),
   ])
   return Response.json({
     podiums,
+    boosts: boosts.status === 'fulfilled' ? boosts.value : String(boosts.reason),
     rankSnapshot: ranks.status === 'fulfilled' ? ranks.value : String(ranks.reason),
     cemberSettled: cember.status === 'fulfilled' ? cember.value : String(cember.reason),
     tournaments: tournaments.status === 'fulfilled' ? 'ok' : String(tournaments.reason),

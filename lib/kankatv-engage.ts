@@ -103,13 +103,15 @@ export async function tickWatch(userId: string): Promise<TvWatchStatus> {
   const steps = Math.floor(status.minutes / cfg.watch.minutes)
   const maxSteps = cfg.watch.dailyCap > 0 ? Math.floor(cfg.watch.dailyCap / cfg.watch.coin) : steps
   let paid = 0
+  const { boosted } = await import('@/lib/boosts')
+  const coin = await boosted('kankatv', cfg.watch.coin)
   for (let step = 1; step <= Math.min(steps, maxSteps); step++) {
     const inserted = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
-      VALUES (${userId}, 'kankatv', 0, ${cfg.watch.coin}, ${`${today}:${step}`}, ${`KankaTV ${step * cfg.watch.minutes} dk izleme`})
+      VALUES (${userId}, 'kankatv', 0, ${coin}, ${`${today}:${step}`}, ${`KankaTV ${step * cfg.watch.minutes} dk izleme`})
       ON CONFLICT DO NOTHING RETURNING id`)
     if (!inserted.length) continue
-    await credit(userId, cfg.watch.coin)
-    paid += cfg.watch.coin
+    await credit(userId, coin)
+    paid += coin
   }
   return paid ? watchStatus(userId, cfg) : status
 }
