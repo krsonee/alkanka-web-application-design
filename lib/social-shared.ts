@@ -12,7 +12,7 @@ export const PLATFORM_LABEL: Record<SocialPlatform, string> = {
 /** `telegram` and `join` are hub-only links; they are not member-verifiable platforms. */
 export type SocialLinks = Partial<Record<SocialPlatform | 'telegram' | 'join', string>>
 
-export const DEFAULT_TELEGRAM_LINK = 'https://t.me/AlkankaOfficial'
+export const DEFAULT_TELEGRAM_LINK = 'https://t.me/alkankaresmi'
 
 /** The join button accepts an internal path ("/kayit") or any https link. */
 export const isJoinUrl = (url: string) => /^\/(?!\/)\S*$/.test(url) || /^https:\/\/\S+$/i.test(url)
