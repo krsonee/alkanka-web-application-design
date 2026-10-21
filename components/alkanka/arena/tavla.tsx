@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Dices, Undo2 } from 'lucide-react'
+import { Dices, Maximize, Minimize, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TavlaState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
@@ -82,14 +82,21 @@ function useRollAnimation(rolled: number[], rollKey: number) {
   return faces
 }
 
-function Checker({ side, label, glow }: { side: Side; label?: string; glow?: boolean }) {
+function buzz(ms: number) {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(ms)
+}
+
+/** `fit` sizes the checker from its stack container so five of them never spill out of a point, in any orientation. */
+function Checker({ side, label, glow, fit }: { side: Side; label?: string; glow?: boolean; fit?: boolean }) {
   return (
     <span
       className={cn(
-        'relative flex aspect-square w-full max-w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-transform duration-200 sm:text-[11px]',
+        'relative flex aspect-square shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-transform duration-200 sm:text-[11px]',
+        !fit && 'w-full max-w-11',
         side === 'p' ? 'checker-light-3d text-checker-dark' : 'checker-dark-3d text-primary',
         glow && 'z-10 -translate-y-0.5 scale-110 ring-[3px] ring-primary ring-offset-2 ring-offset-felt',
       )}
+      style={fit ? { width: 'min(100cqw, 2.75rem, calc((100cqh - 8px) / 5))' } : undefined}
     >
       {label}
     </span>
@@ -99,12 +106,14 @@ function Checker({ side, label, glow }: { side: Side; label?: string; glow?: boo
 function Stack({ count, side, top, glow, lifted }: { count: number; side: Side; top: boolean; glow: boolean; lifted?: boolean }) {
   const visible = Math.min(count, 5)
   return (
-    <div className={cn('flex h-full w-full flex-col items-center gap-px sm:gap-0.5', !top && 'flex-col-reverse')}>
-      {Array.from({ length: visible }).map((_, i) => (
-        <span key={i} className={cn('flex w-full justify-center', lifted && i === visible - 1 && 'opacity-30')}>
-          <Checker side={side} glow={glow && i === visible - 1 && !lifted} label={i === visible - 1 && count > 5 ? String(count) : undefined} />
-        </span>
-      ))}
+    <div className="h-full w-full" style={{ containerType: 'size' }}>
+      <div className={cn('flex h-full w-full flex-col items-center gap-px', !top && 'flex-col-reverse')}>
+        {Array.from({ length: visible }).map((_, i) => (
+          <span key={i} className={cn('flex w-full justify-center', lifted && i === visible - 1 && 'opacity-30')}>
+            <Checker fit side={side} glow={glow && i === visible - 1 && !lifted} label={i === visible - 1 && count > 5 ? String(count) : undefined} />
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
@@ -121,10 +130,9 @@ type BoardProps = {
   rollKey: number
   highlight: Set<number>
   names: { me: string; opp: string }
-  turn: 'me' | 'opp' | null
 }
 
-function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn }: BoardProps) {
+function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, landscape }: BoardProps & { landscape: boolean }) {
   const opp: Side = me === 'p' ? 'b' : 'p'
   const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
   const routes = useMemo(
@@ -154,6 +162,16 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   const suppressClick = useRef(false)
   const [ghost, setGhost] = useState<{ x: number; y: number; from: From } | null>(null)
   const [hover, setHover] = useState<To | null>(null)
+
+  function playSeq(seq: Move[]) {
+    buzz(18)
+    onPlay(seq)
+  }
+
+  function pick(from: From | null) {
+    if (from != null) buzz(8)
+    onSelect(from)
+  }
 
   function dropAt(x: number, y: number): To | null {
     const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-drop]')
@@ -192,7 +210,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       if (cancelled) return
       const to = dropAt(ev.clientX, ev.clientY)
       const seq = to == null ? undefined : dragRoutes.get(to)
-      if (seq) onPlay(seq)
+      if (seq) playSeq(seq)
     }
     const onUp = (ev: PointerEvent) => finish(ev, false)
     const onCancel = (ev: PointerEvent) => finish(ev, true)
@@ -204,9 +222,9 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   function clickPoint(i: number) {
     if (suppressClick.current) return
     const seq = routes.get(i)
-    if (seq) return onPlay(seq)
+    if (seq) return playSeq(seq)
     if (selected === i) return onSelect(null)
-    if (sources.has(i)) onSelect(i)
+    if (sources.has(i)) pick(i)
   }
 
   const renderPoint = (visual: number, isTop: boolean) => {
@@ -285,7 +303,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   const shown = faces ?? rolled.slice(0, rolled.length === 4 ? 4 : 2)
 
   return (
-    <div className="flex select-none flex-col gap-2">
+    <div className={cn('flex select-none flex-col gap-2', landscape && 'h-full')}>
       {ghost &&
         createPortal(
           <span
@@ -297,10 +315,9 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </span>,
           document.body,
         )}
-      <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
-      <div className="tavla-wood relative rounded-2xl p-1.5 sm:p-3">
+      <div className={cn('tavla-wood relative p-1.5', landscape ? 'min-h-0 flex-1 rounded-xl' : 'rounded-2xl sm:p-3')}>
       <TableBrand center={false} corners={false} jako={false} />
-      <div className="flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
+      <div className={cn('flex w-full', landscape ? 'h-full gap-1.5' : 'aspect-[4/4.1] gap-1 sm:aspect-[16/11] sm:gap-2')}>
         <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-5">
           <div className="flex h-[42%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-25">
@@ -316,13 +333,14 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           onClick={() => {
             if (suppressClick.current) return
             if (selected === 'bar') onSelect(null)
-            else if (barSelectable) onSelect('bar')
+            else if (barSelectable) pick('bar')
           }}
           onPointerDown={(e) => startDrag(e, 'bar')}
           disabled={!barSelectable}
           aria-label={`Kırık pullar: sen ${board.bar[me]}, rakip ${board.bar[opp]}`}
           className={cn(
-            'flex w-6 flex-col items-center justify-between rounded-md bg-wood py-2 sm:w-12 sm:py-3',
+            'flex flex-col items-center justify-between rounded-md bg-wood py-2 sm:py-3',
+            landscape ? 'w-10' : 'w-7 sm:w-12',
             barSelectable && 'cursor-grab touch-none ring-2 ring-primary',
             selected === 'bar' && 'bg-primary/30',
           )}
@@ -344,13 +362,18 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           <div aria-live="polite" className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center gap-1.5 sm:gap-3">
             {shown.length > 0 &&
               shown.map((d, i) => (
-                <Die key={`${rollKey}-${i}`} value={d} used={!faces && usedFlags[i]} className={cn(faces && 'animate-[tumble_0.6s_ease-out]')} />
+                <Die
+                  key={`${rollKey}-${i}`}
+                  value={d}
+                  used={!faces && usedFlags[i]}
+                  className={cn(landscape && 'size-10 p-1.5 sm:size-10 sm:p-1.5', faces && 'animate-[tumble_0.6s_ease-out]')}
+                />
               ))}
           </div>
           <div className="flex h-[42%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
         </div>
 
-        <div className="flex w-8 flex-col justify-between gap-1.5 sm:w-14 sm:gap-2">
+        <div className={cn('flex flex-col justify-between gap-1.5 sm:gap-2', landscape ? 'w-16' : 'w-10 sm:w-14')}>
           <div className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center">
             <span className="line-clamp-1 text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">{names.opp}</span>
             <span className="font-display text-base font-bold text-primary sm:text-lg">{board.off[opp]}</span>
@@ -358,7 +381,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           <button
             type="button"
             data-drop="off"
-            onClick={() => !suppressClick.current && offTarget && onPlay(offTarget)}
+            onClick={() => !suppressClick.current && offTarget && playSeq(offTarget)}
             disabled={!offTarget}
             className={cn(
               'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center transition-transform',
@@ -378,14 +401,15 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   )
 }
 
-function TurnIndicator({ turn, me, opp }: { turn: 'me' | 'opp' | null; me: string; opp: string }) {
+function TurnIndicator({ turn, me, opp, compact }: { turn: 'me' | 'opp' | null; me: string; opp: string; compact?: boolean }) {
   const seat = (who: 'me' | 'opp', name: string, side: 'light' | 'dark') => {
     const active = turn === who
     return (
       <div
         className={cn(
           'flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-2 transition-all',
-          who === 'opp' && 'flex-row-reverse text-right',
+          who === 'opp' && !compact && 'flex-row-reverse text-right',
+          compact && 'flex-none px-2 py-1.5',
           active ? 'border-primary bg-primary/15 shadow-[0_0_18px_-4px_var(--primary)]' : 'border-border bg-card opacity-70',
         )}
       >
@@ -401,23 +425,15 @@ function TurnIndicator({ turn, me, opp }: { turn: 'me' | 'opp' | null; me: strin
     )
   }
   return (
-    <div className="flex items-center gap-2" aria-live="polite" aria-label={turn === 'me' ? 'Sıra sende' : turn === 'opp' ? `Sıra ${opp} oyuncusunda` : 'Oyun bitti'}>
+    <div className={cn('flex gap-2', compact ? 'flex-col' : 'items-center')} aria-live="polite" aria-label={turn === 'me' ? 'Sıra sende' : turn === 'opp' ? `Sıra ${opp} oyuncusunda` : 'Oyun bitti'}>
       {seat('me', me, 'light')}
-      <span className="shrink-0 text-xs font-bold text-muted-foreground">VS</span>
+      {!compact && <span className="shrink-0 text-xs font-bold text-muted-foreground">VS</span>}
       {seat('opp', opp, 'dark')}
     </div>
   )
 }
 
-function ControlBar({
-  message,
-  sub,
-  canUndo,
-  onUndo,
-  canRoll,
-  onRoll,
-  rollLabel,
-}: {
+type ControlProps = {
   message: string
   sub: string
   canUndo: boolean
@@ -425,18 +441,116 @@ function ControlBar({
   canRoll: boolean
   onRoll: () => void
   rollLabel: string
-}) {
+}
+
+function useLandscapePhone() {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: landscape) and (max-height: 520px) and (pointer: coarse)')
+    const sync = () => setOn(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+  return on
+}
+
+function FullscreenButton() {
+  const [supported, setSupported] = useState(false)
+  const [active, setActive] = useState(false)
+  useEffect(() => {
+    setSupported(!!document.fullscreenEnabled)
+    const sync = () => setActive(!!document.fullscreenElement)
+    sync()
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+  if (!supported) return null
+
+  async function toggle() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => {})
+      return
+    }
+    await document.documentElement.requestFullscreen().catch(() => {})
+    const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }
+    orientation.lock?.('landscape').catch(() => {})
+  }
+
   return (
-    <div className="flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-      <div className="flex flex-col">
-        <p className="text-sm font-semibold text-foreground" aria-live="polite">
+    <button
+      type="button"
+      onClick={toggle}
+      className="flex items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary"
+    >
+      {active ? <Minimize className="size-4" aria-hidden="true" /> : <Maximize className="size-4" aria-hidden="true" />}
+      {active ? 'Tam ekrandan çık' : 'Tam ekran'}
+    </button>
+  )
+}
+
+/** Portrait: board above controls. Phone held sideways: the board takes the whole screen and the controls move to a side panel. */
+function TavlaTable({ board, turn, control }: { board: BoardProps; turn: 'me' | 'opp' | null; control: ControlProps }) {
+  const landscape = useLandscapePhone()
+
+  useEffect(() => {
+    if (!landscape) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [landscape])
+
+  if (!landscape) {
+    return (
+      <div className="flex flex-col gap-3 sm:gap-4">
+        <TurnIndicator turn={turn} me={board.names.me} opp={board.names.opp} />
+        <TavlaBoard {...board} landscape={false} />
+        <p className="text-center text-xs text-muted-foreground sm:hidden">Telefonu yan çevir, tam ekran oyna.</p>
+        <ControlBar {...control} />
+      </div>
+    )
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[90] flex gap-2 bg-background"
+      style={{
+        padding:
+          'max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left))',
+      }}
+    >
+      <div className="min-w-0 flex-1">
+        <TavlaBoard {...board} landscape />
+      </div>
+      <aside className="flex w-44 shrink-0 flex-col gap-2 overflow-y-auto">
+        <TurnIndicator compact turn={turn} me={board.names.me} opp={board.names.opp} />
+        <ControlBar {...control} compact />
+        <FullscreenButton />
+      </aside>
+    </div>,
+    document.body,
+  )
+}
+
+function ControlBar({ message, sub, canUndo, onUndo, canRoll, onRoll, rollLabel, compact }: ControlProps & { compact?: boolean }) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-card p-3',
+        compact ? 'min-h-0 flex-1 justify-between gap-2 p-2' : 'sm:flex-row sm:items-center sm:justify-between sm:p-4',
+      )}
+    >
+      <div className={cn('flex flex-col', !compact && 'min-h-[3.25rem] justify-center sm:min-h-0')}>
+        <p className={cn('font-semibold text-foreground', compact ? 'text-xs' : 'line-clamp-2 text-sm')} aria-live="polite">
           {message}
         </p>
         <p className="text-xs text-muted-foreground">{sub}</p>
       </div>
-      <div className="flex gap-2">
+      <div className={cn('flex gap-2', compact && 'flex-col')}>
         {canUndo && (
-          <button onClick={onUndo} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary sm:flex-none">
+          <button onClick={onUndo} className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary sm:flex-none">
             <Undo2 className="size-4" aria-hidden="true" />
             Geri al
           </button>
@@ -444,7 +558,7 @@ function ControlBar({
         <button
           onClick={onRoll}
           disabled={!canRoll}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40 sm:flex-none"
+          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40 sm:flex-none"
         >
           <Dices className="size-4" aria-hidden="true" />
           {rollLabel}
@@ -602,31 +716,31 @@ export function Tavla({ finish, saveKey }: GameApi) {
   }, [phase])
 
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
-      <TavlaBoard
-        board={board}
-        me="p"
-        legal={legal}
-        selected={selected}
-        onSelect={setSelected}
-        onPlay={play}
-        rolled={rolled}
-        dice={dice}
-        rollKey={rollKey}
-        highlight={new Set(lastBot.map((m) => (typeof m.to === 'number' ? m.to : -1)))}
-        names={{ me: 'Sen', opp: 'Rakip' }}
-        turn={phase === 'over' ? null : phase === 'bot' ? 'opp' : 'me'}
-      />
-      <ControlBar
-        message={message}
-        sub={`Kalan yol: sen ${pipCount(board, 'p')} · rakip ${pipCount(board, 'b')}`}
-        canUndo={phase === 'move' && !!snapshot}
-        onUndo={undo}
-        canRoll={phase === 'roll'}
-        onRoll={roll}
-        rollLabel={phase === 'bot' ? 'Rakip oynuyor' : 'Zar at'}
-      />
-    </div>
+    <TavlaTable
+      board={{
+        board,
+        me: 'p',
+        legal,
+        selected,
+        onSelect: setSelected,
+        onPlay: play,
+        rolled,
+        dice,
+        rollKey,
+        highlight: new Set(lastBot.map((m) => (typeof m.to === 'number' ? m.to : -1))),
+        names: { me: 'Sen', opp: 'Rakip' },
+      }}
+      turn={phase === 'over' ? null : phase === 'bot' ? 'opp' : 'me'}
+      control={{
+        message,
+        sub: `Kalan yol: sen ${pipCount(board, 'p')} · rakip ${pipCount(board, 'b')}`,
+        canUndo: phase === 'move' && !!snapshot,
+        onUndo: undo,
+        canRoll: phase === 'roll',
+        onRoll: roll,
+        rollLabel: phase === 'bot' ? 'Rakip oynuyor' : 'Zar at',
+      }}
+    />
   )
 }
 
@@ -680,33 +794,33 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
   else message = `${oppName} oynuyor...`
 
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
-      <TavlaBoard
-        board={board}
-        me={me}
-        legal={legal}
-        selected={selected}
-        onSelect={setSelected}
-        onPlay={(seq) => {
+    <TavlaTable
+      board={{
+        board,
+        me,
+        legal,
+        selected,
+        onSelect: setSelected,
+        onPlay: (seq) => {
           setPending((p) => [...p, ...seq])
           setSelected(null)
-        }}
-        rolled={s.rolled}
-        dice={s.phase === 'move' ? dice : []}
-        rollKey={rollKey}
-        highlight={highlight}
-        names={{ me: 'Sen', opp: oppName }}
-        turn={remote.myTurn ? 'me' : 'opp'}
-      />
-      <ControlBar
-        message={message}
-        sub={`Kalan yol: sen ${pipCount(board, me)} · ${oppName} ${pipCount(board, opp)}`}
-        canUndo={myMove && pending.length > 0 && !remote.busy}
-        onUndo={() => setPending([])}
-        canRoll={remote.myTurn && s.phase === 'roll' && !remote.busy}
-        onRoll={() => void remote.send({ type: 'roll' })}
-        rollLabel={remote.myTurn ? 'Zar at' : 'Rakip oynuyor'}
-      />
-    </div>
+        },
+        rolled: s.rolled,
+        dice: s.phase === 'move' ? dice : [],
+        rollKey,
+        highlight,
+        names: { me: 'Sen', opp: oppName },
+      }}
+      turn={remote.myTurn ? 'me' : 'opp'}
+      control={{
+        message,
+        sub: `Kalan yol: sen ${pipCount(board, me)} · ${oppName} ${pipCount(board, opp)}`,
+        canUndo: myMove && pending.length > 0 && !remote.busy,
+        onUndo: () => setPending([]),
+        canRoll: remote.myTurn && s.phase === 'roll' && !remote.busy,
+        onRoll: () => void remote.send({ type: 'roll' }),
+        rollLabel: remote.myTurn ? 'Zar at' : 'Rakip oynuyor',
+      }}
+    />
   )
 }
