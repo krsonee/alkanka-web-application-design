@@ -15,6 +15,7 @@ export type MirrorSource = {
   lastPostId: number | null
   lastCheckedAt: string | null
   lastError: string | null
+  createdAt: string | null
 }
 
 export type MirrorBot = { id: number; name: string; username: string; tokenHint: string }
@@ -257,6 +258,7 @@ function mapSource(r: Record<string, unknown>): MirrorSource {
     lastPostId: r.last_post_id == null ? null : Number(r.last_post_id),
     lastCheckedAt: r.last_checked_at ? new Date(String(r.last_checked_at)).toISOString() : null,
     lastError: r.last_error ? String(r.last_error) : null,
+    createdAt: r.created_at ? new Date(String(r.created_at)).toISOString() : null,
   }
 }
 
@@ -420,9 +422,14 @@ export async function runMirror(): Promise<MirrorResult> {
       const latest = posts.reduce((max, p) => Math.max(max, p.id), 0)
 
       if (source.lastPostId == null) {
-        await rows(sql`UPDATE tg_sources SET last_post_id = ${latest}, last_checked_at = now(), last_error = NULL WHERE id = ${source.id}`)
+        // Baseline at the moment the source was added, so posts published before the first run are still forwarded.
+        const addedAt = source.createdAt ? Date.parse(source.createdAt) : NaN
+        const before = Number.isNaN(addedAt) ? [] : posts.filter((p) => p.date && Date.parse(p.date) <= addedAt)
+        const baseline = before.length ? before.reduce((max, p) => Math.max(max, p.id), 0) : latest
+        await rows(sql`UPDATE tg_sources SET last_post_id = ${baseline}, last_checked_at = now(), last_error = NULL WHERE id = ${source.id}`)
         result.primed++
-        continue
+        if (baseline === latest) continue
+        source.lastPostId = baseline
       }
       if (!targets.length) throw new Error('Bu kaynağın hedef kanalı durdurulmuş ya da silinmiş')
 
