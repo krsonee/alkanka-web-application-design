@@ -18,6 +18,10 @@ export type SpecialBadge = {
   auto: AutoKind | null
   active: boolean
   holders: number
+  /** 'YYYY-MM': can only be earned in that month, never again. */
+  season?: string | null
+  /** Market discount every holder gets. */
+  perkPct?: number
 }
 
 export type AutoKind = 'tahmin-hafta' | 'tahmin-ay' | 'sohbet-hafta' | 'sohbet-ay' | 'turnuva'
@@ -75,6 +79,12 @@ export function ensureKp() {
     for (const b of ROLE_BADGES) {
       await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, sort)
         VALUES (${b.id}, ${b.name}, ${b.description}, ${b.icon}, 'elmas', 0, NULL, 900) ON CONFLICT DO NOTHING`)
+    }
+    await rows(sql`ALTER TABLE kp_badges ADD COLUMN IF NOT EXISTS season text, ADD COLUMN IF NOT EXISTS perk_pct int NOT NULL DEFAULT 0`)
+    const perks = await rows(sql`INSERT INTO kp_settings (key, value) VALUES ('badge_perks_seeded', 'true'::jsonb) ON CONFLICT DO NOTHING RETURNING key`)
+    if (perks.length) {
+      await rows(sql`UPDATE kp_badges SET perk_pct = CASE tier WHEN 'efsane' THEN 10 WHEN 'elmas' THEN 5 ELSE 3 END
+        WHERE perk_pct = 0 AND id NOT IN ('moderator', 'sponsor-destek')`)
     }
   })().catch((error) => {
     ready = null
@@ -436,6 +446,8 @@ const mapBadge = (r: Record<string, unknown>): SpecialBadge => ({
   auto: (r.auto as AutoKind | null) ?? null,
   active: Boolean(r.active),
   holders: Number(r.holders ?? 0),
+  season: r.season ? String(r.season) : null,
+  perkPct: Number(r.perk_pct ?? 0),
 })
 
 export async function listSpecialBadges(opts: { includeInactive?: boolean } = {}) {
@@ -465,7 +477,10 @@ const slug = (s: string) =>
   s.toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
 
-export type BadgeInput = { id?: string; name: string; description: string; icon: string; tier: BadgeTier; bonus: number; auto: AutoKind | null; active: boolean }
+export type BadgeInput = {
+  id?: string; name: string; description: string; icon: string; tier: BadgeTier; bonus: number; auto: AutoKind | null; active: boolean
+  season?: string | null; perkPct?: number
+}
 
 export async function saveSpecialBadge(input: BadgeInput) {
   await ensureKp()
@@ -477,15 +492,18 @@ export async function saveSpecialBadge(input: BadgeInput) {
   if (!Number.isFinite(bonus) || bonus < 0 || bonus > 100000) throw new Error('Bonus 0 ile 100.000 KP arasında olmalı.')
   const auto = input.auto && input.auto in AUTO_LABELS ? input.auto : null
   const description = input.description.trim().slice(0, 160)
+  const season = input.season && /^\d{4}-(0[1-9]|1[0-2])$/.test(input.season) ? input.season : null
+  const perkPct = Math.floor(Number(input.perkPct ?? 0))
+  if (!Number.isFinite(perkPct) || perkPct < 0 || perkPct > 50) throw new Error('Market indirimi 0 ile 50 arasında olmalı.')
   if (input.id) {
     const r = await rows(sql`UPDATE kp_badges SET name = ${name}, description = ${description}, icon = ${input.icon}, tier = ${input.tier},
-      bonus = ${bonus}, auto = ${auto}, active = ${input.active} WHERE id = ${input.id} RETURNING id`)
+      bonus = ${bonus}, auto = ${auto}, active = ${input.active}, season = ${season}, perk_pct = ${perkPct} WHERE id = ${input.id} RETURNING id`)
     if (!r.length) throw new Error('Rozet bulunamadı.')
     return
   }
   const id = slug(name) || `rozet-${Date.now()}`
-  const r = await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, active, sort)
-    VALUES (${id}, ${name}, ${description}, ${input.icon}, ${input.tier}, ${bonus}, ${auto}, ${input.active},
+  const r = await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, active, season, perk_pct, sort)
+    VALUES (${id}, ${name}, ${description}, ${input.icon}, ${input.tier}, ${bonus}, ${auto}, ${input.active}, ${season}, ${perkPct},
       (SELECT coalesce(max(sort), 0) + 1 FROM kp_badges)) ON CONFLICT DO NOTHING RETURNING id`)
   if (!r.length) throw new Error('Bu isimde bir rozet zaten var.')
 }
@@ -500,8 +518,10 @@ export async function deleteSpecialBadge(id: string) {
 /** Awards a badge once per period and pays its KP bonus. Returns false when that period was already awarded. */
 export async function awardBadge(badgeId: string, userId: string, period = 'tek', note?: string) {
   await ensureKp()
-  const [badge] = await rows<{ bonus: number; name: string }>(sql`SELECT bonus, name FROM kp_badges WHERE id = ${badgeId}`)
+  const [badge] = await rows<{ bonus: number; name: string; season: string | null; open: boolean }>(sql`SELECT bonus, name, season,
+    (season IS NULL OR season = to_char(now() AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM')) AS open FROM kp_badges WHERE id = ${badgeId}`)
   if (!badge) throw new Error('Rozet bulunamadı.')
+  if (!badge.open) throw new Error(`${badge.name} sadece ${badge.season} ayında kazanılabiliyordu, artık verilemez.`)
   const user = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${userId}`)
   if (!user.length) throw new Error('Üye bulunamadı.')
   const r = await rows(sql`INSERT INTO kp_awards (badge_id, user_id, period, note) VALUES (${badgeId}, ${userId}, ${period}, ${note?.slice(0, 120) ?? null})

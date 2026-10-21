@@ -3,6 +3,7 @@ import { Medal } from 'lucide-react'
 import { AUTO_LABELS, leaderboard, listSpecialBadges, predictionBoard, rankMoves, recentAwards, type AwardRow, type RankMove } from '@/lib/kanka-puan'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import { getMember } from '@/lib/member'
+import { pinnedFor } from '@/lib/badge-value'
 import { SpecialEmblem } from './kp/emblem'
 import { SprintBanner } from './sprint-banner'
 import { RankBoards, type BoardPeriod, type KpRow, type Prize, type TipRow } from './rank-boards'
@@ -20,6 +21,8 @@ async function load() {
       getMember().catch(() => null),
     ])
 
+    const ids = [...new Set(kp.flat().map((r) => r.userId))]
+    const pins = await pinnedFor(ids).catch(() => ({}) as Awaited<ReturnType<typeof pinnedFor>>)
     const kpBy = Object.fromEntries(
       PERIODS.map((p, i) => [
         p,
@@ -30,6 +33,7 @@ async function load() {
           level: r.level,
           levelName: r.levelName,
           specials: r.specials,
+          pins: pins[r.userId],
           parts: {
             time: r.breakdown.time,
             games: r.breakdown.games,

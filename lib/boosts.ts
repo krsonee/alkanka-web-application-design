@@ -151,7 +151,9 @@ export async function marketDiscountPct(userId: string) {
     const own = await rows(sql`SELECT 1 FROM kp_awards WHERE user_id = ${userId} AND badge_id = ${cfg.badgeDay.badgeId} LIMIT 1`).catch(() => [])
     if (own.length) pct = Math.max(pct, cfg.badgeDay.pct)
   }
-  return pct
+  const [perk] = await rows<{ p: number | null }>(sql`SELECT max(b.perk_pct) AS p FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
+    WHERE a.user_id = ${userId}`).catch(() => [{ p: 0 }])
+  return Math.max(pct, Number(perk?.p ?? 0))
 }
 
 export const discounted = (price: number, pct: number) => (pct > 0 ? Math.max(1, Math.round(price * (1 - pct / 100))) : price)

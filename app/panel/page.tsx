@@ -66,6 +66,8 @@ import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 import { KpManager } from '@/components/panel/kp-manager'
 import { BoostManager } from '@/components/panel/boost-manager'
 import { getBoostConfig } from '@/lib/boosts'
+import { recentRaffles } from '@/lib/badge-value'
+import { BadgeRaffle } from '@/components/panel/badge-raffle'
 import { AdsEditor } from '@/components/panel/ads-editor'
 import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
@@ -210,10 +212,11 @@ async function marketPanel() {
 }
 
 async function kpPanel() {
-  const [cfg, badges, awards, board, online, ticker, quest, questWinners, boosts] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek(), getBoostConfig()])
+  const [cfg, badges, awards, board, online, ticker, quest, questWinners, boosts, raffles] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek(), getBoostConfig(), recentRaffles().catch(() => [])])
   return (
     <div className="flex flex-col gap-10">
       <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} quest={quest} questWinners={questWinners} />
+      <BadgeRaffle badges={badges.map((b) => ({ id: b.id, name: b.name, holders: b.holders }))} recent={raffles} />
       <BoostManager initial={boosts} />
     </div>
   )
