@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { ArrowDownToLine, Bot, Eye, Layers, Sparkles, Trophy, Undo2, Wand2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -161,6 +161,20 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     return () => clearTimeout(t)
   }, [handPopup])
 
+  // Turn hand-over cue: buzz the phone and flash a banner (the chime itself comes from useTableSounds).
+  const [prevMyTurn, setPrevMyTurn] = useState(remote.myTurn)
+  const [turnFlash, setTurnFlash] = useState(0)
+  if (remote.myTurn !== prevMyTurn) {
+    setPrevMyTurn(remote.myTurn)
+    if (remote.myTurn && !remote.spectator) setTurnFlash((k) => k + 1)
+  }
+  useEffect(() => {
+    if (!turnFlash) return
+    if (typeof navigator !== 'undefined') navigator.vibrate?.([40, 60, 40])
+    const t = setTimeout(() => setTurnFlash(0), 1400)
+    return () => clearTimeout(t)
+  }, [turnFlash])
+
   const nameOf = (seat: number) => (seat === mySeat ? 'Sen' : remote.names[seat] ?? `Oyuncu ${seat + 1}`)
   const lastResult = s.results[s.results.length - 1]
 
@@ -302,10 +316,17 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 
       <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
+        {turnFlash > 0 && (
+          <div key={turnFlash} className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" aria-hidden="true">
+            <span className="turn-flash rounded-full bg-primary px-5 py-2 text-sm font-black uppercase tracking-widest text-primary-foreground shadow-lg">
+              Sıra sende
+            </span>
+          </div>
+        )}
         <div className="relative grid flex-1 grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 p-2 pt-4 sm:gap-3 sm:p-4 sm:pt-6">
-          <Pile tile={top(topSeat)} count={topSeat != null && n === 4 ? s.discards[topSeat].length : 0} okey={okey} hidden={n !== 4} />
+          <Pile tile={top(topSeat)} count={topSeat != null && n === 4 ? s.discards[topSeat].length : 0} okey={okey} hidden={n !== 4} from={[110, -10]} />
           <div className="flex justify-center">{seatPill(topSeat)}</div>
-          <Pile tile={top(rightSeat)} count={rightSeat != null ? s.discards[rightSeat].length : 0} okey={okey} hidden={rightSeat == null} />
+          <Pile tile={top(rightSeat)} count={rightSeat != null ? s.discards[rightSeat].length : 0} okey={okey} hidden={rightSeat == null} from={[10, 110]} />
 
           <div className="flex items-center">{seatPill(n >= 3 ? leftSeat : null, true)}</div>
 
@@ -362,6 +383,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             tile={sideTop}
             count={sideSeat != null ? s.discards[sideSeat].length : 0}
             okey={okey}
+            from={n === 2 ? [90, -160] : [10, -110]}
             label={canTakeSide ? 'Yandan al' : 'Soldan'}
             active={canTakeSide}
             onClick={canTakeSide ? () => act({ type: 'draw', from: 'discard' }) : undefined}
@@ -685,6 +707,7 @@ function Pile({
   active,
   onClick,
   hidden,
+  from,
 }: {
   tile?: Tile
   count: number
@@ -693,6 +716,8 @@ function Pile({
   active?: boolean
   onClick?: () => void
   hidden?: boolean
+  /** Offset (px) the newest tile flies in from — points back at the player who threw it. */
+  from?: [number, number]
 }) {
   if (hidden) return <span />
   const Comp = onClick ? 'button' : 'div'
@@ -709,7 +734,11 @@ function Pile({
     >
       <span className="relative">
         {tile ? (
-          <span key={tile.id} className="block animate-in fade-in zoom-in-75 slide-in-from-top-3 duration-300">
+          <span
+            key={tile.id}
+            className={cn('block', from ? 'tile-fly' : 'animate-in fade-in zoom-in-75 slide-in-from-top-3 duration-300')}
+            style={from ? ({ '--fx': `${from[0]}px`, '--fy': `${from[1]}px` } as CSSProperties) : undefined}
+          >
             <MeldTile tile={tile} okey={okey} />
           </span>
         ) : (
