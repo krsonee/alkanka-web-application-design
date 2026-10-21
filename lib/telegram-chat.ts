@@ -142,7 +142,7 @@ export async function connectChat(botId: number, chatInput: string, siteOrigin: 
   await callBot(token, 'setWebhook', {
     url: `${siteOrigin}/api/telegram/webhook`,
     secret_token: secret,
-    allowed_updates: ['message', 'channel_post', 'callback_query'],
+    allowed_updates: ['message', 'edited_message', 'channel_post', 'callback_query', 'chat_join_request'],
     drop_pending_updates: true,
   })
 

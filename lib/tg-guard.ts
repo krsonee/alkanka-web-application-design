@@ -14,6 +14,7 @@ import {
   setTrusted,
   trustOf,
   weekStart,
+  who,
   type TgCallback,
   type TgJoinRequest,
   type TgUser,
@@ -39,6 +40,8 @@ function ensureGuardTables() {
     await ensureHubTables()
     await rows(sql`ALTER TABLE tg_captcha ADD COLUMN IF NOT EXISTS msg_id bigint`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_autodel (id serial PRIMARY KEY, chat_id text NOT NULL, message_id bigint NOT NULL, due_at timestamptz NOT NULL)`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_wipe (chat_id text PRIMARY KEY, bot_id int NOT NULL, title text NOT NULL DEFAULT '',
+      next_id bigint NOT NULL, total bigint NOT NULL, done bigint NOT NULL DEFAULT 0, started_by text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     guardReady = null
     throw error
@@ -349,7 +352,101 @@ export async function handleGuardCallback(botId: number, q: TgCallback) {
     await del(token, chatId, q.message.message_id)
     return answer('Doğrulandı, artık yazabilirsin!')
   }
+  if (kind === 'wp' && q.message) {
+    const chatId = q.message.chat.id
+    // Channel buttons are visible to every subscriber, so the presser must be an admin.
+    if (!(await isChatAdmin(token, chatId, q.from.id))) return answer('Bu butonu sadece yöneticiler kullanabilir.')
+    await del(token, chatId, q.message.message_id)
+    if (arg === 'no') return answer('Vazgeçildi.')
+    await startWipe(botId, chatId, q.message.chat.title ?? String(chatId), q.message.message_id, who(q.from))
+    await notice(token, chatId, 'Tüm sohbet geçmişi siliniyor. Mesaj sayısına göre birkaç dakika sürebilir.', 30)
+    return answer('Temizlik başladı.')
+  }
   return answer('')
+}
+
+// --- Full chat wipe -----------------------------------------------------------
+
+const WIPE_BATCH = 100
+
+export async function startWipe(botId: number, chatId: number | string, title: string, fromId: number, by: string) {
+  await ensureGuardTables()
+  await rows(sql`INSERT INTO tg_wipe (chat_id, bot_id, title, next_id, total, done, started_by)
+    VALUES (${String(chatId)}, ${botId}, ${title.slice(0, 80)}, ${fromId}, ${fromId}, 0, ${by.slice(0, 80)})
+    ON CONFLICT (chat_id) DO UPDATE SET bot_id = EXCLUDED.bot_id, next_id = EXCLUDED.next_id, total = EXCLUDED.total, done = 0,
+      started_by = EXCLUDED.started_by, created_at = now()`)
+  await modLog({ chatId, chatTitle: title, action: 'Tüm sohbet silme başladı', reason: `${by} · ${fromId} mesaja kadar` })
+}
+
+export async function listWipes() {
+  await ensureGuardTables()
+  const r = await rows<{ chat_id: string; title: string; next_id: string; total: string }>(sql`SELECT chat_id, title, next_id, total FROM tg_wipe ORDER BY created_at`)
+  return r.map((w) => ({ chatId: w.chat_id, title: w.title, left: Number(w.next_id), total: Number(w.total) }))
+}
+
+/** Deletes message ids from newest to oldest in batches; resumes on the next tick when time runs out or Telegram rate-limits. */
+export async function processWipes(budgetMs = 25_000) {
+  await ensureGuardTables()
+  const started = Date.now()
+  const jobs = await rows<{ chat_id: string; bot_id: number; title: string; next_id: string; done: string }>(sql`SELECT * FROM tg_wipe ORDER BY created_at`)
+  for (const job of jobs) {
+    let token: string
+    try {
+      token = await botToken(Number(job.bot_id))
+    } catch {
+      await rows(sql`DELETE FROM tg_wipe WHERE chat_id = ${job.chat_id}`)
+      continue
+    }
+    let next = Number(job.next_id)
+    let done = Number(job.done)
+    while (next >= 1 && Date.now() - started < budgetMs) {
+      const ids: number[] = []
+      for (let id = next; id > Math.max(0, next - WIPE_BATCH); id--) ids.push(id)
+      try {
+        await callBot(token, 'deleteMessages', { chat_id: job.chat_id, message_ids: ids })
+        done += ids.length
+      } catch (error) {
+        const msg = String((error as Error).message)
+        if (/too many requests|retry after/i.test(msg)) break
+        if (/not enough rights|chat not found|bot was kicked|not a member/i.test(msg)) {
+          await rows(sql`DELETE FROM tg_wipe WHERE chat_id = ${job.chat_id}`)
+          await modLog({ chatId: job.chat_id, chatTitle: job.title, action: 'Tüm sohbet silme durdu', reason: `Botun silme yetkisi yok: ${msg}`.slice(0, 300) })
+          next = -1
+          break
+        }
+        // "message can't be deleted" for a batch of service or missing ids; skip and continue.
+      }
+      next -= WIPE_BATCH
+      await new Promise((r) => setTimeout(r, 40))
+    }
+    if (next === -1) continue
+    if (next < 1) {
+      await rows(sql`DELETE FROM tg_wipe WHERE chat_id = ${job.chat_id}`)
+      await notice(token, job.chat_id, 'Sohbet temizliği tamamlandı.', 30)
+      await modLog({ chatId: job.chat_id, chatTitle: job.title, action: 'Tüm sohbet silindi', reason: `${done} mesaj numarası tarandı` })
+    } else {
+      await rows(sql`UPDATE tg_wipe SET next_id = ${next}, done = ${done} WHERE chat_id = ${job.chat_id}`)
+    }
+    if (Date.now() - started >= budgetMs) break
+  }
+}
+
+async function askWipe(token: string, chatId: number | string) {
+  await callBot(token, 'sendMessage', {
+    chat_id: chatId,
+    text: 'DİKKAT: Bu sohbetteki TÜM mesajlar silinecek. Geri alınamaz. Emin misin?',
+    reply_markup: { inline_keyboard: [[{ text: 'Evet, hepsini sil', callback_data: 'wp:yes' }, { text: 'Vazgeç', callback_data: 'wp:no' }]] },
+  }).catch(() => null)
+}
+
+/** /sil typed as a channel post. Only admins can post in a channel, so no extra check is needed. */
+export async function guardChannelPost(botId: number, m: TgMessage) {
+  const text = (m.text ?? '').trim()
+  if (!/^\/sil(?:@\w+)?$/i.test(text)) return false
+  const token = await botToken(botId)
+  await del(token, m.chat.id, m.message_id)
+  await askWipe(token, m.chat.id)
+  return true
 }
 
 // --- Commands ----------------------------------------------------------------
@@ -479,6 +576,7 @@ async function handleCommand(hub: HubConfig, token: string, m: GuardMsg, isAdmin
       break
     case 'sil':
       if (m.reply_to_message) await del(token, m.chat.id, m.reply_to_message.message_id)
+      else await askWipe(token, m.chat.id)
       break
     case 'temizle':
     case 'purge': {

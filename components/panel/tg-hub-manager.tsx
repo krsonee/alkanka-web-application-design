@@ -17,6 +17,7 @@ import {
   sweepGhosts,
   unbanEverywhere,
   wipeUserMessages,
+  wipeWholeChat,
 } from '@/app/panel/tg-hub-actions'
 
 type HookInfo = { ok: boolean; pending: number; lastError: string | null } | null
@@ -474,8 +475,52 @@ function CleanupSection({ d }: { d: TgHubData }) {
   const [tgId, setTgId] = useState('')
   const ghost = useAction()
   const wipe = useAction()
+  const wipeAll = useAction()
+  const [wipeTarget, setWipeTarget] = useState(d.hub.groups[0]?.chatId ?? '')
+  const [confirmWipe, setConfirmWipe] = useState(false)
   return (
     <div className="flex flex-col gap-4">
+      <Card title="Sohbeti komple temizle (tüm geçmiş)" hint="Seçtiğin grup ya da kanaldaki TÜM mesajları en yeniden en eskiye siler. Grupta veya kanalda /sil yazıp çıkan butona basarak da başlatabilirsin. Bir mesaja yanıt olarak /sil yazarsan sadece o mesaj silinir. Bot orada 'Mesajları sil' yetkisiyle yönetici olmalı. Listede olmayan bir kanal için @kullaniciadi ya da -100… ID yazabilirsin.">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            aria-label="Grup veya kanal"
+            className={input}
+            list="tg-wipe-targets"
+            placeholder="@kanal ya da -100…"
+            value={wipeTarget}
+            onChange={(e) => {
+              setWipeTarget(e.target.value)
+              setConfirmWipe(false)
+            }}
+          />
+          <datalist id="tg-wipe-targets">
+            {d.hub.groups.map((g) => (
+              <option key={g.chatId} value={g.chatId}>
+                {g.title}
+              </option>
+            ))}
+          </datalist>
+          {confirmWipe ? (
+            <button
+              type="button"
+              className={btn}
+              disabled={wipeAll.pending}
+              onClick={() => {
+                setConfirmWipe(false)
+                wipeAll.run(() => wipeWholeChat(wipeTarget))
+              }}
+            >
+              {wipeAll.pending ? 'Siliniyor…' : 'Eminim, hepsini sil'}
+            </button>
+          ) : (
+            <button type="button" className={btn} disabled={wipeAll.pending || !wipeTarget.trim()} onClick={() => setConfirmWipe(true)}>
+              {wipeAll.pending ? 'Siliniyor…' : 'Tüm geçmişi sil'}
+            </button>
+          )}
+        </div>
+        {confirmWipe && <p className="text-sm text-destructive">Geri alınamaz. Onaylamak için butona bir kez daha bas.</p>}
+        {wipeAll.note}
+      </Card>
       <Card title="Silinmiş hesapları topluca çıkar" hint="Grubu tarar, 'Silinmiş Hesap' görünen üyeleri çıkarır. Grupta /hayalet yazarak da çalıştırabilirsin. Not: Telegram, kanalların abone listesini botlara vermez; bu sadece gruplarda çalışır.">
         <div className="flex flex-col gap-2 sm:flex-row">
           <select aria-label="Grup" className={input} value={chat} onChange={(e) => setChat(e.target.value)}>

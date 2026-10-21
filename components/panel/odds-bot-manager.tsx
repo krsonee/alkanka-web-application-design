@@ -184,6 +184,7 @@ function SourcesCard({ sources }: { sources: OddsSource[] }) {
                 <span className="truncate text-xs text-muted-foreground">
                   {s.total} oran · {s.lastAt ? `son post ${new Date(s.lastAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' })}` : 'henüz post yok'}
                 </span>
+                {s.webError && <span className="text-xs text-destructive">Okunamıyor: {s.webError}</span>}
               </div>
               <form action={toggleOddsSourceAction}>
                 <input type="hidden" name="id" value={s.id} />

@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables, normalizeChat } from '@/lib/telegram-mirror'
+import { botToken, callBot, ensureTables, fetchChannel, normalizeChat, stripTags } from '@/lib/telegram-mirror'
 import { parseOddsPost } from '@/lib/odds-parse'
 import { isOddsText } from '@/lib/telegram-bots'
 import type { TgMessage } from '@/lib/telegram-chat'
@@ -43,6 +43,9 @@ function ensureOddsTables() {
       status text NOT NULL DEFAULT 'open', result text, opened_at timestamptz NOT NULL DEFAULT now(), filled_at timestamptz, result_at timestamptz,
       UNIQUE (source_chat, source_msg, idx))`)
     await rows(sql`CREATE INDEX IF NOT EXISTS special_odds_opened_idx ON special_odds (opened_at DESC)`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS username text`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS web_last bigint`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS web_error text`)
   })().catch((error) => {
     ready = null
     throw error
@@ -192,6 +195,7 @@ function mapSource(r: Record<string, unknown>): OddsSource {
     active: Boolean(r.active),
     lastAt: r.last_at ? new Date(String(r.last_at)).toISOString() : null,
     total: Number(r.total ?? 0),
+    webError: r.web_error ? String(r.web_error) : null,
   }
 }
 
@@ -301,6 +305,14 @@ async function publishToChannel(config: OddsBotConfig, incoming: Incoming, rewri
       caption: fit(rewritten, CAPTION_LIMIT),
     })
     return res.message_id
+  }
+  if (incoming.photo && /^https?:\/\//.test(incoming.photo)) {
+    const res = await callBot<{ message_id: number }>(token, 'sendPhoto', {
+      chat_id: config.channelId,
+      photo: incoming.photo,
+      caption: fit(rewritten, CAPTION_LIMIT),
+    }).catch(() => null)
+    if (res) return res.message_id
   }
   const res = await callBot<{ message_id: number }>(token, 'sendMessage', {
     chat_id: config.channelId,
@@ -432,10 +444,62 @@ export async function ingestManual(sourceId: number, text: string) {
   return ingest(source, { chatId: source.chatId, messageId, replyTo: null, text: text.trim(), photo: null, edited: false }, null)
 }
 
+const WEB_BATCH = 10
+
+/**
+ * Telegram only pushes channel posts to bots that are admins of that channel. Sponsor channels
+ * are usually run by someone else, so public sources are read from their t.me/s web page instead.
+ * Message ids match the real ones, so a post arriving via both paths is stored once.
+ */
+export async function scrapeOddsSources(config?: OddsBotConfig) {
+  await ensureOddsTables()
+  const cfg = config ?? (await getOddsBotConfig())
+  const token = cfg.botId ? await botToken(cfg.botId).catch(() => null) : null
+  const sources = await rows(sql`SELECT *, 0 AS total FROM odds_sources WHERE active ORDER BY id`)
+  let handled = 0
+  for (const r of sources) {
+    const source = mapSource(r)
+    let username = r.username ? String(r.username) : ''
+    try {
+      if (!username) {
+        if (source.chatId.startsWith('@')) username = source.chatId.slice(1)
+        else if (token) username = (await callBot<{ username?: string }>(token, 'getChat', { chat_id: source.chatId }).catch(() => null))?.username ?? ''
+        if (!username) throw new Error('Kanal herkese açık değil (kullanıcı adı yok). Botu bu kanalda yönetici yap.')
+        await rows(sql`UPDATE odds_sources SET username = ${username} WHERE id = ${source.id}`)
+      }
+      const posts = (await fetchChannel(username)).sort((a, b) => a.id - b.id)
+      if (!posts.length) throw new Error('Kanalın web sayfası okunamadı')
+      let last = r.web_last === null || r.web_last === undefined ? null : Number(r.web_last)
+      if (last === null) {
+        // First run: only posts from the open window, so expired odds are not re-announced.
+        const cutoff = Date.now() - cfg.expireMinutes * 60_000
+        const older = posts.filter((p) => !p.date || new Date(p.date).getTime() < cutoff)
+        last = older.length ? older[older.length - 1].id : posts[0].id - 1
+      }
+      const fresh = posts.filter((p) => p.id > last!).slice(0, WEB_BATCH)
+      for (const post of fresh) {
+        await rows(sql`UPDATE odds_sources SET web_last = GREATEST(COALESCE(web_last, 0), ${post.id}) WHERE id = ${source.id}`)
+        const text = stripTags(post.html).trim()
+        if (!text) continue
+        await ingest(source, { chatId: source.chatId, messageId: post.id, replyTo: null, text, photo: post.photos[0] ?? null, edited: false }, null)
+          .catch((error) => console.error('[odds-bot] web ingest failed', error))
+        handled++
+      }
+      if (!fresh.length) await rows(sql`UPDATE odds_sources SET web_last = ${last} WHERE id = ${source.id} AND web_last IS NULL`)
+      await rows(sql`UPDATE odds_sources SET web_error = NULL WHERE id = ${source.id}`)
+    } catch (error) {
+      await rows(sql`UPDATE odds_sources SET web_error = ${String((error as Error).message).slice(0, 300)} WHERE id = ${source.id}`).catch(() => null)
+    }
+  }
+  return { handled }
+}
+
+
 /** Fallback for when the webhook is not set: pulls updates on each cron run. */
 export async function pollOddsBot() {
   const config = await getOddsBotConfig()
   await expireStaleOdds()
+  await scrapeOddsSources(config).catch((error) => console.error('[odds-bot] web sources', error))
   if (!config.botId || (await getSetting(SECRET_KEY))) return { handled: 0 }
   const token = await botToken(config.botId)
   const offset = Number((await getSetting(OFFSET_KEY)) ?? 0)

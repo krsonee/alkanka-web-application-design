@@ -157,6 +157,27 @@ export async function sweepGhosts(chatId: string): Promise<Result> {
   }
 }
 
+export async function wipeWholeChat(chatInput: string): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const hub = await getHub()
+    if (!hub.guardBotId) return { ok: false, message: 'Önce Bekçi botunu seç.' }
+    if (!chatInput.trim()) return { ok: false, message: 'Grup ya da kanal seç.' }
+    const chat = await resolveChatFor(hub.guardBotId, chatInput)
+    if (!chat.isAdmin) return { ok: false, message: `Bot "${chat.title}" içinde yönetici değil.` }
+    const { callBot, botToken } = await import('@/lib/telegram-mirror')
+    const token = await botToken(hub.guardBotId)
+    // The newest message id is unknown from the panel, so a marker message gives the starting point.
+    const marker = await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: chat.id, text: 'Sohbet temizliği başlıyor…' })
+    const { startWipe, processWipes } = await import('@/lib/tg-guard')
+    await startWipe(hub.guardBotId, chat.id, chat.title, marker.message_id, 'Panel')
+    await processWipes(20_000)
+    return done(`"${chat.title}" temizleniyor. Çok mesaj varsa arka planda dakikada bir devam eder, bitince sohbete "tamamlandı" yazar.`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
 export async function wipeUserMessages(tgIdInput: string): Promise<Result> {
   if (!(await canPanel('telegram'))) return EXPIRED
   const tgId = Number(String(tgIdInput).trim())

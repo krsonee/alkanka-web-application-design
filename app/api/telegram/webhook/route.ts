@@ -1,7 +1,8 @@
-import { getChatConfig, handleUpdate, verifyWebhookSecret, type TgUpdate } from '@/lib/telegram-chat'
-import type { TgCallback } from '@/lib/tg-hub'
+import { getChatConfig, handleUpdate, verifyWebhookSecret } from '@/lib/telegram-chat'
+import type { HubUpdate } from '@/lib/tg-hub'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 export async function POST(request: Request) {
   const authorized = await verifyWebhookSecret(request.headers.get('x-telegram-bot-api-secret-token')).catch((error) => {
@@ -12,12 +13,13 @@ export async function POST(request: Request) {
     return new Response('unauthorized', { status: 401 })
   }
   try {
-    const update = (await request.json()) as TgUpdate & { callback_query?: TgCallback }
-    if (update.callback_query) {
-      const chat = await getChatConfig()
-      const { dmOptOut } = await import('@/lib/tg-hub')
-      if (chat && update.callback_query.data === 'dm:off') await dmOptOut(chat.botId, update.callback_query)
-    } else {
+    const update = (await request.json()) as HubUpdate
+    const chat = await getChatConfig()
+    if (chat) {
+      // The live-chat bot can also hold the guard or support role, so it goes through the shared dispatcher.
+      const { dispatchUpdate } = await import('@/lib/tg-hub')
+      await dispatchUpdate(chat.botId, update)
+    } else if (!update.callback_query) {
       await handleUpdate(update)
     }
   } catch (error) {
