@@ -138,15 +138,13 @@ export function JakoAlerts() {
   }, [push])
 
   const readPopup = useCallback(() => {
-    setPopup((current) => {
-      if (current) {
-        markInboxRead([current.messageId])
-          .then(() => refreshInbox())
-          .catch(() => {})
-      }
-      return null
-    })
-  }, [refreshInbox])
+    if (popup) {
+      markInboxRead([popup.messageId])
+        .then(() => refreshInbox())
+        .catch(() => {})
+    }
+    setPopup(null)
+  }, [popup, refreshInbox])
 
   const reopen = (alert: MessageAlertData) => {
     dismiss(alert.id)
