@@ -7,11 +7,13 @@ export type AppSettings = {
   installBonus: number
   /** KC paid once when the member turns on push notifications. */
   pushBonus: number
+  /** KC paid once when the member has done both. */
+  comboBonus: number
 }
 
-export const APP_DEFAULTS: AppSettings = { installBonus: APP_BONUS, pushBonus: 250 }
+export const APP_DEFAULTS: AppSettings = { installBonus: APP_BONUS, pushBonus: 250, comboBonus: 250 }
 
-export const APP_LIMITS = { installBonus: 10000, pushBonus: 10000 } as const
+export const APP_LIMITS = { installBonus: 10000, pushBonus: 10000, comboBonus: 10000 } as const
 
 const clamp = (value: unknown, fallback: number, max: number) => {
   const n = Math.round(Number(value))
@@ -22,5 +24,6 @@ export function normalizeAppSettings(raw: Partial<AppSettings> | null | undefine
   return {
     installBonus: clamp(raw?.installBonus, APP_DEFAULTS.installBonus, APP_LIMITS.installBonus),
     pushBonus: clamp(raw?.pushBonus, APP_DEFAULTS.pushBonus, APP_LIMITS.pushBonus),
+    comboBonus: clamp(raw?.comboBonus, APP_DEFAULTS.comboBonus, APP_LIMITS.comboBonus),
   }
 }

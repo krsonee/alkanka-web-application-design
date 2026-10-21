@@ -606,7 +606,7 @@ export async function sendUpcomingNotices() {
       ),
       ids.length
         ? import('@/lib/push').then(({ sendToUsers }) =>
-            sendToUsers(ids, { title: `${s.ev.title} ${mins} dk sonra!`, body: `Çemberdesin kanka, ${trClock(s.at)} itibarıyla izlemeye gel. Ödül: ${prize}`, url: '/' }),
+            sendToUsers(ids, { title: `${s.ev.title} ${mins} dk sonra!`, body: `Çemberdesin kanka, ${trClock(s.at)} itibarıyla izlemeye gel. Ödül: ${prize}`, url: '/' }, 'cember'),
           )
         : null,
     ])

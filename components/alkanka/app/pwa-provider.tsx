@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { claimAppBonus, getPushKey, subscribePush } from '@/app/actions/app'
+import { claimAppBonus, getPushKey, reportPush, subscribePush } from '@/app/actions/app'
 import { APP_DEFAULTS, type AppSettings } from '@/lib/app-config'
 import { usePoints } from '../points-context'
 
@@ -164,6 +164,16 @@ export function PwaProvider({ children, settings = APP_DEFAULTS }: { children: R
       })
       .catch(() => {})
   }, [pushState, member, setBalance])
+
+  const reportedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!ready || !member || reportedFor.current === member.id) return
+    reportedFor.current = member.id
+    const check = 'serviceWorker' in navigator && pushState === 'granted'
+      ? navigator.serviceWorker.ready.then((reg) => reg.pushManager.getSubscription()).then(Boolean)
+      : Promise.resolve(false)
+    check.then((subscribed) => reportPush(pushState, subscribed)).catch(() => {})
+  }, [ready, member, pushState])
 
   useEffect(() => {
     if (!notice) return

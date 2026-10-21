@@ -198,7 +198,7 @@ export async function runBoostCron() {
       title: 'Bugün kayıp bonusu günü kanka',
       body: c.text || 'Sponsorunda bugün kayıp bonusu var, talep etmeyi unutma.',
       url: '/kampanyalar',
-    }).catch(() => {})
+    }, 'sponsor').catch(() => {})
     out.cashback += users.length
   }
 

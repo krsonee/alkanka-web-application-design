@@ -165,6 +165,7 @@ function mapTask(row: Record<string, unknown>): TaskRecord {
 export async function listTasks(): Promise<TaskRecord[]> {
   await ensureTasks()
   await seedSocialTasks().catch((error) => console.error('[tasks] social seed', (error as Error).message))
+  await seedAppTask().catch((error) => console.error('[tasks] app seed', (error as Error).message))
   await seedTaskPack().catch((error) => console.error('[tasks] pack seed', (error as Error).message))
   const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param,
     category, pool, chain, chain_step, badge, cap FROM tasks ORDER BY sort, id`)
@@ -279,6 +280,20 @@ export async function seedSocialTasks() {
       WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE kind = ${s.kind} AND param = ${s.param})`)
   }
   await setContent(SOCIAL_SEED_KEY, { at: new Date().toISOString() })
+}
+
+const APP_SEED_KEY = 'tasks:app-seed-v1'
+
+/** Daily app-only task: opening Alkanka from the home-screen app pays extra. */
+export async function seedAppTask() {
+  const { getContent, setContent } = await import('@/lib/content')
+  if (await getContent(APP_SEED_KEY).catch(() => null)) return
+  await ensureTasks()
+  await (await import('@/lib/mobile')).ensureMobile()
+  await rows(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, kind, target, param)
+    SELECT 'Cepten gir kanka', 'Bugün Alkanka’yı ana ekrandaki uygulamadan aç, ekstra puanı kap.', 25, '/uygulama', false, true, 5, 'daily', 'app_login', 1, NULL
+    WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE kind = 'app_login')`)
+  await setContent(APP_SEED_KEY, { at: new Date().toISOString() })
 }
 
 /** Ids done in the current period: one-off refs are plain ids, recurring refs are `id:periodKey`. */
@@ -542,6 +557,8 @@ export async function taskProgress(userId: string, task: TaskRecord): Promise<nu
       return count(sql`SELECT count(*) AS n FROM trust_helpful WHERE user_id = ${userId} AND created_at >= ${since}`)
     case 'login_days':
       return count(sql`SELECT count(DISTINCT ref) AS n FROM kp_events WHERE user_id = ${userId} AND source = 'giris' AND created_at >= ${since}`)
+    case 'app_login':
+      return count(sql`SELECT count(*) AS n FROM app_opens WHERE user_id = ${userId} AND day >= (${since}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date`)
     case 'tournament_join':
       return count(sql`SELECT count(*) AS n FROM tournament_entries WHERE user_id = ${userId} AND created_at >= ${since}`)
     case 'profile':

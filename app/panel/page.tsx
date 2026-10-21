@@ -29,6 +29,8 @@ import { pushStats } from '@/lib/push'
 import { getQuestConfig, questWinnersThisWeek } from '@/lib/kp-extras'
 import { PushSender } from '@/components/panel/push-sender'
 import { AppRewardsEditor } from '@/components/panel/app-rewards-editor'
+import { MobilePanel } from '@/components/panel/mobile-panel'
+import { MOBILE_SEGMENTS, mobileCounts, PUSH_TOPICS } from '@/lib/mobile'
 import { getAppSettings } from '@/lib/app-settings'
 import { MessageSender } from '@/components/panel/message-sender'
 import { listSent } from '@/lib/inbox'
@@ -487,15 +489,18 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     section(ctx, 'telegram', 'Telegram', telegramPanel),
     section(ctx, 'push', 'Bildirimler', async () => {
-      const [stats, appSettings] = await Promise.all([
+      const [stats, appSettings, mCounts] = await Promise.all([
         pushStats().catch(() => ({ total: 0, members: 0, log: [] })),
         getAppSettings(),
+        mobileCounts().catch(() => ({ total: 0, installed: 0, push: 0, both: 0, none: 0, opensToday: 0, turnedOff: 0 })),
       ])
+      const topicLabels = Object.fromEntries(PUSH_TOPICS.map((t) => [t.value, t.label]))
       return (
         <TelegramTabs
           label="Bildirim bölümleri"
           tabs={[
             { id: 'send', label: 'Bildirim gönder', content: <PushSender {...stats} configured={stats.total > 0} /> },
+            { id: 'mobile', label: 'Mobil', content: <MobilePanel counts={mCounts} segments={MOBILE_SEGMENTS} topicLabels={topicLabels} /> },
             { id: 'app-rewards', label: 'Uygulama ödülleri', content: <AppRewardsEditor settings={appSettings} /> },
           ]}
         />

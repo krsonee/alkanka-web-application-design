@@ -37,6 +37,8 @@ import { LookStudio } from '@/components/alkanka/profile/look-studio'
 import { Download, Gift, Pencil } from 'lucide-react'
 import { badgeRarity, frameTiers, getPins, MAX_PINS, rarityLabel } from '@/lib/badge-value'
 import { PinPicker } from '@/components/alkanka/kp/pin-picker'
+import { PushPrefsCard } from '@/components/alkanka/profile/push-prefs'
+import { getPushPrefs, PUSH_TOPICS } from '@/lib/mobile'
 
 export const metadata: Metadata = { title: 'Profilim', robots: { index: false } }
 export const dynamic = 'force-dynamic'
@@ -223,6 +225,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           <section aria-labelledby="hesap" className="flex max-w-xl flex-col gap-3">
             <SectionTitle id="hesap">Hesap ayarları</SectionTitle>
             <AccountSettings email={member.email} />
+            <SectionTitle id="bildirimler">Bildirim tercihleri</SectionTitle>
+            <PushPrefsCard topics={PUSH_TOPICS} initialOff={await getPushPrefs(member.id).catch(() => [])} />
           </section>
         )}
         {tab === 'yorumlar' && <ReviewsTab memberId={member.id} />}

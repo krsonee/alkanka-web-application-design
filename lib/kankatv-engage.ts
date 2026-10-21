@@ -474,6 +474,7 @@ async function announceGoal(cfg: TvConfig, g: LiveGame, side: 'home' | 'away', o
       await sendToUsers(
         fans.map((f) => f.user_id),
         { title: `GOL! ${team}`, body: `${g.home.name} ${vars.skor} ${g.away.name} · ${vars.dakika}`, url: '/kankatv' },
+        'mac',
       ).catch(() => {})
     }
   }
@@ -494,6 +495,7 @@ async function announceKickoff(g: LiveGame) {
   await sendToUsers(
     fans.map((f) => f.user_id),
     { title: 'Maç başladı!', body: `${g.home.name} - ${g.away.name} · ${g.league}. Canlı izle, coin kazan.`, url: '/kankatv' },
+    'mac',
   )
 }
 

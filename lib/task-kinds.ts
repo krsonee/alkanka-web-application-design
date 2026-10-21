@@ -23,6 +23,7 @@ export type TaskKind =
   | 'trust_review'
   | 'trust_helpful'
   | 'login_days'
+  | 'app_login'
   | 'tournament_join'
   | 'profile'
   | 'secret_code'
@@ -66,6 +67,7 @@ export const TASK_KINDS: { value: TaskKind; label: string; param: KindParam; cou
   { value: 'trust_review', label: 'Güven Merkezi yorumu', param: null, counted: true, hint: 'Onaylanmış site yorumları sayılır.' },
   { value: 'trust_helpful', label: 'Yorumu “faydalı” işaretle', param: null, counted: true, hint: 'Güven Merkezi’nde faydalı işaretlenen yorumlar.' },
   { value: 'login_days', label: 'Giriş yapılan gün', param: null, counted: true, hint: 'Dönem içinde giriş ödülü alınan farklı gün sayısı.' },
+  { value: 'app_login', label: 'Uygulamadan giriş', param: null, counted: true, hint: 'Ana ekrana eklenen Alkanka uygulamasından açılan farklı gün sayısı. Tarayıcıdan girişler sayılmaz.' },
   { value: 'tournament_join', label: 'Turnuvaya katıl', param: null, counted: true, hint: 'Kayıt olunan turnuvalar.' },
   { value: 'profile', label: 'Profili tamamla', param: null, counted: false, hint: 'Avatar, kapak veya takım seçince tamamlanır.' },
   { value: 'secret_code', label: 'Gizli kod', param: 'code', counted: false, hint: 'Kodu Telegram kanalında paylaş; sitede doğru kodu giren ödülü alır. Kod üyelere gösterilmez.' },

@@ -66,13 +66,31 @@ export async function pushStats() {
   }
 }
 
-/** Sends to the subscriptions of specific members only (not logged in push_log). */
-export async function sendToUsers(userIds: string[], payload: PushPayload) {
+export type PushTopic = 'mac' | 'cember' | 'flash' | 'sponsor'
+
+let prefsReady: Promise<void> | null = null
+export function ensurePushPrefs() {
+  prefsReady ??= (async () => {
+    await rows(sql`CREATE TABLE IF NOT EXISTS push_prefs (
+      user_id text PRIMARY KEY, off text[] NOT NULL DEFAULT '{}', updated_at timestamptz NOT NULL DEFAULT now())`)
+  })().catch((error) => {
+    prefsReady = null
+    throw error
+  })
+  return prefsReady
+}
+
+const topicFilter = (topic?: PushTopic) =>
+  topic ? sql`AND NOT EXISTS (SELECT 1 FROM push_prefs pp WHERE pp.user_id = push_subscriptions.user_id AND ${topic} = ANY(pp.off))` : sql``
+
+/** Sends to the subscriptions of specific members only (not logged in push_log). Members who muted `topic` are skipped. */
+export async function sendToUsers(userIds: string[], payload: PushPayload, topic?: PushTopic) {
   if (!userIds.length) return { sent: 0, failed: 0 }
   const vapid = await getVapid()
   webpush.setVapidDetails('mailto:destek@alkanka.com', vapid.publicKey, vapid.privateKey)
+  if (topic) await ensurePushPrefs()
   const subs = await rows<{ endpoint: string; p256dh: string; auth: string }>(sql`SELECT endpoint, p256dh, auth FROM push_subscriptions
-    WHERE user_id IN (${sql.join(userIds.map((id) => sql`${id}`), sql`, `)})`)
+    WHERE user_id IN (${sql.join(userIds.map((id) => sql`${id}`), sql`, `)}) ${topicFilter(topic)}`)
   const body = JSON.stringify(payload)
   let sent = 0
   let failed = 0
