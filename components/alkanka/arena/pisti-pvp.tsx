@@ -392,7 +392,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
           </div>
 
           {/* My hand */}
-          <div className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-center gap-2 px-2 pb-3 sm:gap-3 sm:pb-4" aria-label="Elindeki kartlar">
+          <div className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-center gap-2 px-2 pb-3 [--cw:4.4rem] sm:gap-3 sm:pb-4 sm:[--cw:5.2rem] lg:[--cw:5.8rem]" aria-label="Elindeki kartlar">
             {me < 0 && <span className="pb-8 text-xs text-muted-foreground">İzleyici modu</span>}
             {me >= 0 && (
               <span className="absolute bottom-4 left-3 sm:left-5">
