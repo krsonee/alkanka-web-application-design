@@ -167,6 +167,37 @@ export function botPlan(b: Board, dice: number[]): Move[] {
   return bestSeq
 }
 
+export type WinKind = 'normal' | 'mars' | 'agir'
+
+/**
+ * How big a finished game is for the winner. Mars: the loser has borne off nothing.
+ * Ağır mars: on top of that a loser checker is still on the bar or inside the winner's home board.
+ */
+export function winKind(b: Board, winner: Side): WinKind {
+  const loser: Side = winner === 'p' ? 'b' : 'p'
+  if (b.off[loser] > 0) return 'normal'
+  if (b.bar[loser] > 0) return 'agir'
+  for (let i = 0; i < 24; i++) {
+    const inWinnerHome = winner === 'p' ? i <= 5 : i >= 18
+    if (inWinnerHome && own(b.pts[i], loser)) return 'agir'
+  }
+  return 'mars'
+}
+
+export const WIN_POINTS: Record<WinKind, number> = { normal: 1, mars: 2, agir: 3 }
+export const WIN_LABEL: Record<WinKind, string> = { normal: 'Normal galibiyet', mars: 'Mars', agir: 'Ağır Mars' }
+
+/** Rolls the opening dice until they differ. The higher die starts and plays both values. */
+export function openingRoll(): [number, number] {
+  let a = 0
+  let b = 0
+  while (a === b) {
+    a = 1 + Math.floor(Math.random() * 6)
+    b = 1 + Math.floor(Math.random() * 6)
+  }
+  return [a, b]
+}
+
 export function spendDie(dice: number[], die: number) {
   return removeDie(dice, die)
 }

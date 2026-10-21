@@ -139,13 +139,19 @@ export function StakeGate({
           </span>
         </div>
         {phase.resumed && (
-          <p role="status" className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm leading-relaxed text-foreground">
+          <FadingNotice key={phase.round}>
             {SAVE_AWARE.includes(game)
               ? 'Kaldığın yerden devam ediyorsun kanka, bahsin masada duruyor.'
               : 'Yarım kalan masana geri döndün. Bahsin korunuyor, bu el baştan başlıyor.'}
-          </p>
+          </FadingNotice>
         )}
-        <div key={phase.round} className="mx-auto w-full max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]">
+        <div
+          key={phase.round}
+          className={cn(
+            'mx-auto w-full',
+            game === 'tavla' ? 'max-w-[min(100%,76rem,calc((100dvh-9rem)*1.3))]' : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
+          )}
+        >
           {game === 'kafa-topu' || game === 'kafa-basketbolu' ? children(api) : <LandscapeFit>{children(api)}</LandscapeFit>}
         </div>
       </div>
@@ -248,7 +254,7 @@ export function StakeGate({
 
         {pvpMode ? (
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Ger��ek kankalarla oyna. Açık bir masaya otur ya da kendi masanı aç, bahsi masa sahibi belirler.
+            Gerçek kankalarla oyna. Açık bir masaya otur ya da kendi masanı aç, bahsi masa sahibi belirler.
           </p>
         ) : (
           <fieldset className="flex min-w-0 flex-col gap-2">
@@ -336,5 +342,19 @@ export function StakeGate({
         )}
       </div>
     </section>
+  )
+}
+
+function FadingNotice({ children }: { children: ReactNode }) {
+  const [visible, setVisible] = useState(true)
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 4500)
+    return () => clearTimeout(t)
+  }, [])
+  if (!visible) return null
+  return (
+    <p role="status" className="animate-in fade-in rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm leading-relaxed text-foreground">
+      {children}
+    </p>
   )
 }
