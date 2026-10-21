@@ -122,6 +122,9 @@ export function TableLobby({
   const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
   const [pistiTarget, setPistiTarget] = useState('151')
   const [pistiTeam, setPistiTeam] = useState(true)
+  const [tavlaRounds, setTavlaRounds] = useState('1')
+  const isTavla = game === 'tavla'
+  const tavlaHold = isTavla && tavlaRounds === '1' ? stake * 2 : 0
   const humanSeats = seatRule ? seatSeats - seatBots : isOkey ? seats - (seats === 4 ? bots : 0) : 2
   const tableOptions = seatRule
     ? {
@@ -132,7 +135,9 @@ export function TableLobby({
       }
     : isOkey
       ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 }
-      : undefined
+      : isTavla
+        ? { rounds: Number(tavlaRounds) }
+        : undefined
   const lobbyIdle = useIdle()
   const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, {
     refreshInterval: lobbyIdle ? 30000 : 6000,
@@ -319,6 +324,25 @@ export function TableLobby({
               ))}
             </div>
           </div>
+          {isTavla && (
+            <div className="flex flex-col gap-2">
+              <OptionGroup
+                label="Maç"
+                value={tavlaRounds}
+                options={[
+                  { value: '1', label: 'Tek el' },
+                  { value: '3', label: '3 el' },
+                  { value: '5', label: '5 el' },
+                ]}
+                onChange={setTavlaRounds}
+              />
+              <p className="text-[11px] leading-snug text-muted-foreground text-pretty">
+                {tavlaRounds === '1'
+                  ? `Tek elde mars 2 kat, ağır mars 3 kat öder. Mars güvencesi için girişte +${formatAC(tavlaHold)} KC bloke edilir, oyun bitince iade edilir.`
+                  : `${tavlaRounds === '3' ? '2' : '3'} eli ilk alan maçı kazanır. Mars 2, ağır mars 3 el sayılır.`}
+              </p>
+            </div>
+          )}
           {isOkey && (
             <div className="flex flex-col gap-3">
               <OptionGroup

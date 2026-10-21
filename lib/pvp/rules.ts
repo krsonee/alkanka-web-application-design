@@ -2,11 +2,16 @@ import {
   applyMove,
   initialBoard,
   legalMoves,
+  openingRoll,
   rollDice,
   spendDie,
+  winKind,
+  WIN_LABEL,
+  WIN_POINTS,
   type Board,
   type Move,
   type Side,
+  type WinKind,
 } from '@/components/alkanka/arena/tavla-engine'
 import {
   chooseDiscard,
@@ -47,6 +52,14 @@ export type TavlaState = {
   phase: 'roll' | 'move'
   lastMoves: Move[]
   note: string
+  /** Points needed to win the series. 1 means a single game. Older states omit it. */
+  target?: number
+  score?: [number, number]
+  hand?: number
+  /** Result of the previous hand in a series, shown on the board for a moment. */
+  lastHand?: { winner: number; kind: WinKind; points: number } | null
+  /** Seat that won the opening roll for the current hand. */
+  opener?: number
 }
 
 export type OkeyLast = { seat: number; type: 'pile' | 'discard' | 'throw'; tile?: Tile }
@@ -111,7 +124,8 @@ export type DuelState = {
 export type PvpState = TavlaState | OkeyState | BilardoState | DuelState | Okey101State | BatakState | MonopolyState | PistiState | PapazState
 
 /** winnerSeats lists every seat that shares the win (team okey). An empty list means nobody at the table is paid. */
-export type Outcome = { winnerSeat: number | null; winnerSeats?: number[]; draw?: boolean; replay?: boolean } | null
+/** mult > 1 marks a tavla mars (2) or ağır mars (3) that pays a multiple of the stake. */
+export type Outcome = { winnerSeat: number | null; winnerSeats?: number[]; draw?: boolean; replay?: boolean; mult?: number } | null
 
 export type ActResult = { state: PvpState; outcome: Outcome }
 
@@ -124,19 +138,8 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
   if (game === 'papaz') return runPapazBots(initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats })).state
   if (game === 'pisti') return runPistiBots(initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant, team: opts?.team })).state
   if (game === 'tavla') {
-    let a = 0
-    let b = 0
-    while (a === b) [a, b] = rollDice().slice(0, 2)
-    return {
-      kind: 'tavla',
-      board: initialBoard(),
-      dice: [],
-      rolled: [a, b],
-      turn: a > b ? 0 : 1,
-      phase: 'roll',
-      lastMoves: [],
-      note: `Başlangıç zarı ${a} - ${b}`,
-    }
+    const target = [1, 3, 5].includes(Number(opts?.rounds)) ? Number(opts?.rounds) : 1
+    return newTavlaHand({ target, score: [0, 0], hand: 1, lastHand: null })
   }
   if (game === 'okey') {
     const deck = createDeck()
@@ -236,6 +239,40 @@ export function applyAction(state: PvpState, seat: number, action: Action): ActR
   return duelAct(state, seat, action)
 }
 
+/**
+ * Opening roll: seat 0 throws the first die, seat 1 the second. The higher one starts and
+ * plays exactly those two dice, no extra roll (real tavla rule).
+ */
+function newTavlaHand(meta: Pick<TavlaState, 'target' | 'score' | 'hand' | 'lastHand'>): TavlaState {
+  const [a, b] = openingRoll()
+  const turn = a > b ? 0 : 1
+  return {
+    kind: 'tavla',
+    board: initialBoard(),
+    dice: [a, b],
+    rolled: [a, b],
+    turn,
+    phase: 'move',
+    lastMoves: [],
+    note: `Başlangıç zarı ${a} - ${b}`,
+    opener: turn,
+    ...meta,
+  }
+}
+
+function tavlaWin(s: TavlaState, board: Board, seat: number, moves: Move[]): ActResult {
+  const kind = winKind(board, seatSide(seat))
+  const points = WIN_POINTS[kind]
+  const target = s.target ?? 1
+  const finalState: TavlaState = { ...s, board, dice: [], phase: 'roll', lastMoves: moves, note: WIN_LABEL[kind], lastHand: { winner: seat, kind, points } }
+  if (target <= 1) return { state: finalState, outcome: { winnerSeat: seat, mult: points } }
+  const score: [number, number] = [...(s.score ?? [0, 0])] as [number, number]
+  score[seat] += points
+  if (score[seat] >= target) return { state: { ...finalState, score }, outcome: { winnerSeat: seat } }
+  const next = newTavlaHand({ target, score, hand: (s.hand ?? 1) + 1, lastHand: { winner: seat, kind, points } })
+  return { state: { ...next, note: `${WIN_LABEL[kind]} +${points} puan. ${next.note}` }, outcome: null }
+}
+
 function tavlaAct(s: TavlaState, seat: number, a: Action): ActResult {
   if (s.turn !== seat) throw new Error('Sıra sende değil')
   const side = seatSide(seat)
@@ -265,8 +302,8 @@ function tavlaAct(s: TavlaState, seat: number, a: Action): ActResult {
     }
     if (board.off[side] < 15 && dice.length > 0 && legalMoves(board, side, dice).length > 0)
       throw new Error('Tüm zarları oynamalısın')
-    const next: TavlaState = { ...s, board, dice: [], turn: other(seat), phase: 'roll', lastMoves: moves, note: '' }
-    if (board.off[side] >= 15) return { state: next, outcome: { winnerSeat: seat } }
+    if (board.off[side] >= 15) return tavlaWin(s, board, seat, moves)
+    const next: TavlaState = { ...s, board, dice: [], turn: other(seat), phase: 'roll', lastMoves: moves, note: '', opener: undefined }
     return { state: next, outcome: null }
   }
   throw new Error('Bilinmeyen hamle')

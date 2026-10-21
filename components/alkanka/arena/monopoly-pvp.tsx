@@ -228,7 +228,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
       <section aria-label="Oyuncular" className="flex flex-col gap-2 @3xl/mono:col-start-2 @3xl/mono:row-start-1">
         {remote.spectator && (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
-            <Eye className="size-4 text-primary" aria-hidden="true" /> Masay�� izliyorsun.
+            <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun.
           </p>
         )}
         <ul className={cn('grid gap-2 @3xl/mono:grid-cols-1', s.seats > 4 ? 'grid-cols-2 sm:grid-cols-3 @3xl/mono:max-h-96 @3xl/mono:overflow-y-auto' : 'grid-cols-2')}>
