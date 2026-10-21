@@ -19,7 +19,7 @@ import { TavlaPvp } from './tavla'
 import { OkeyPvp } from './okey-pvp'
 import { Okey101Pvp } from './okey101-pvp'
 import { BatakPvp } from './batak-pvp'
-import { BATAK_VARIANTS, type BatakVariant } from '@/lib/games/batak'
+import { BATAK_RULE_OPTIONS, BATAK_VARIANTS, type BatakRules, type BatakVariant } from '@/lib/games/batak'
 import { MonopolyPvp } from './monopoly-pvp'
 import { PistiFinalScore, PistiPvp } from './pisti-pvp'
 import { PapazPvp } from './papaz-pvp'
@@ -75,7 +75,7 @@ const fetcher = async (url: string) => {
 const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
-  batak: { seats: [4], rounds: [1, 3, 5] },
+  batak: { seats: [4], rounds: [1, 31, 51, 101] },
   monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
   papaz: { seats: [2, 3, 4, 5, 6], rounds: [] },
@@ -121,6 +121,8 @@ export function TableLobby({
   const [seatBots, setSeatBots] = useState(0)
   const [seatRounds, setSeatRounds] = useState(seatRule?.rounds[0] ?? 0)
   const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
+  const [batakExtras, setBatakExtras] = useState<(keyof BatakRules)[]>(['batma'])
+  const batakRuleList = BATAK_RULE_OPTIONS.filter((o) => o.variants.includes(batakVariant))
   const [pistiTarget, setPistiTarget] = useState('151')
   const [pistiTeam, setPistiTeam] = useState(true)
   const [okey101Team, setOkey101Team] = useState(false)
@@ -135,7 +137,7 @@ export function TableLobby({
         bots: seatBots,
         ...(seatRounds ? { rounds: seatRounds } : {}),
         ...(game === 'batak'
-          ? { variant: batakVariant }
+          ? { variant: batakVariant, extras: batakExtras.filter((k) => batakRuleList.some((o) => o.key === k)) }
           : game === 'pisti'
             ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam }
             : game === 'okey101'
@@ -510,14 +512,55 @@ export function TableLobby({
               />
               {seatRule.rounds.length > 0 && (
                 <OptionGroup
-                  label={game === 'monopoly' ? 'Süre' : 'El sayısı'}
+                  label={game === 'monopoly' ? 'Süre' : game === 'batak' ? 'Oyun sonu' : 'El sayısı'}
                   value={String(seatRounds)}
                   options={seatRule.rounds.map((n) => ({
                     value: String(n),
-                    label: game === 'monopoly' ? (n >= 999 ? 'İflasa kadar' : `${n} tur`) : `${n} el`,
+                    label: game === 'monopoly' ? (n >= 999 ? 'İflasa kadar' : `${n} tur`) : game === 'batak' ? (n === 1 ? 'Tek el' : `${n} puan`) : `${n} el`,
                   }))}
                   onChange={(v) => setSeatRounds(Number(v))}
                 />
+              )}
+              {game === 'batak' && (
+                <p className="text-[11px] leading-snug text-pretty text-muted-foreground">
+                  {seatRounds === 1
+                    ? 'Tek el oynanır, en yüksek puan kazanır. Eşitlikte ihaleyi alan kazanır.'
+                    : `${seatRounds} puana ilk ulaşan kazanır. Zirvede eşitlik olursa bir el daha oynanır.`}
+                </p>
+              )}
+              {game === 'batak' && batakRuleList.length > 0 && (
+                <fieldset className="flex flex-col gap-2">
+                  <legend className="mb-2 text-xs font-semibold text-muted-foreground">Masa ayarları</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {batakRuleList.map((o) => {
+                      const on = batakExtras.includes(o.key)
+                      return (
+                        <button
+                          key={o.key}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          onClick={() => setBatakExtras((list) => (on ? list.filter((k) => k !== o.key) : [...list, o.key]))}
+                          className={cn(
+                            'flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors',
+                            on ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary/50',
+                          )}
+                        >
+                          <span
+                            className={cn('mt-0.5 flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition-colors', on ? 'bg-primary' : 'bg-muted')}
+                            aria-hidden="true"
+                          >
+                            <span className={cn('size-3 rounded-full bg-background transition-transform', on && 'translate-x-3')} />
+                          </span>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="text-xs font-bold text-foreground">{o.label}</span>
+                            <span className="text-[11px] leading-snug text-muted-foreground">{o.hint}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </fieldset>
               )}
             </div>
           )}
@@ -675,7 +718,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
       // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
       if (d.turn === d.seat) return 5000
       // 101 bots play one turn per poll, so a quicker beat keeps their moves flowing one by one.
-      return d.game === 'okey101' ? 1200 : 2000
+      return d.game === 'okey101' ? 1200 : d.game === 'batak' ? 1000 : 2000
     },
   })
   const [busy, setBusy] = useState(false)
@@ -752,7 +795,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     send,
   }
 
-  const immersive = (data.game === 'pisti' || data.game === 'papaz' || data.game === 'okey101') && data.status === 'oynaniyor'
+  const immersive = ['pisti', 'papaz', 'okey101', 'batak'].includes(data.game) && data.status === 'oynaniyor'
 
   return (
     <RoomShell

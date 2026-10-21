@@ -656,7 +656,7 @@ const BONUS_TYPE_RULES: Record<Bonus['type'], { about: string; rules: string[] }
     about: 'Belirlenen dönem içindeki net kayıplar üzerinden hesaplanan iade bonusu.',
     rules: [
       'Kayıp, ilgili dönemdeki toplam yatırım eksi toplam çekim üzerinden hesaplanır.',
-      'Dönem içinde bonus kullanılan yat��rımlar hesaplamaya dahil edilmez.',
+      'Dönem içinde bonus kullanılan yatırımlar hesaplamaya dahil edilmez.',
       'Bonus, dönem bitiminden sonraki ilk iş günü canlı destekten talep edilir.',
       'Talep sırasında hesap bakiyesinin 5 ₺ altında olması gerekir.',
     ],

@@ -13,7 +13,7 @@ import {
   isSeatGame,
   okeySeats,
   paceBotTurn,
-  BOT_PACE_MS,
+  botPaceMs,
   seatGameToBot,
   seatToBot,
   viewState,
@@ -22,7 +22,7 @@ import {
   type TableOptions,
 } from './rules'
 
-import { normalizeVariant } from '@/lib/games/batak'
+import { normalizeRules, normalizeVariant, rulesToList } from '@/lib/games/batak'
 import { normalizeTarget } from '@/lib/games/pisti'
 
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
@@ -104,6 +104,7 @@ function mapTable(r: Record<string, unknown>): TableRow {
       bots: Number(raw.bots ?? 0),
       ...(raw.rounds ? { rounds: Number(raw.rounds) } : {}),
       ...(raw.variant ? { variant: raw.variant } : {}),
+      ...(Array.isArray(raw.extras) ? { extras: raw.extras.map(String) } : {}),
       winners: raw.winners,
       lastActs: raw.lastActs,
       forfeits: Number(raw.forfeits ?? 0) || 0,
@@ -184,7 +185,7 @@ export async function listMyActiveTables(userId: string) {
 
 const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
-  batak: { seats: [4], rounds: [1, 3, 5] },
+  batak: { seats: [4], rounds: [1, 31, 51, 101] },
   monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
   papaz: { seats: [2, 3, 4, 5, 6], rounds: [] },
@@ -197,7 +198,7 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
     const seats = variant === 'gommeli' ? 3 : 4
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
     const rounds = rule.rounds.includes(Number(input?.rounds)) ? Number(input?.rounds) : rule.rounds[0]
-    return { seats, team: variant === 'esli', bots, rounds, variant }
+    return { seats, team: variant === 'esli', bots, rounds, variant, extras: rulesToList(normalizeRules(input?.extras, variant)) }
   }
   if (game === 'pisti') {
     const seats = Number(input?.seats) === 4 ? 4 : 2
@@ -478,7 +479,7 @@ export async function sweepIdleTables() {
  */
 export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
   if (t.status !== 'oynaniyor' || !t.state) return t
-  const paced = Date.now() - new Date(t.updatedAt).getTime() >= BOT_PACE_MS ? paceBotTurn(t.state) : null
+  const paced = Date.now() - new Date(t.updatedAt).getTime() >= botPaceMs(t.state) ? paceBotTurn(t.state) : null
   if (paced) {
     try {
       await saveState(t, t.version, paced.state)

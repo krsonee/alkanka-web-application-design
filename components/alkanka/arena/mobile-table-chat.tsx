@@ -174,7 +174,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
             id={`quick-chat-${tableId}`}
             role="dialog"
             aria-label="Masa sohbeti"
-            className="animate-in fade-in slide-in-from-top-2 absolute inset-x-2 top-12 z-40 flex flex-col overflow-hidden rounded-2xl border border-primary/40 bg-card/95 shadow-2xl backdrop-blur-md duration-200"
+            className="animate-in fade-in slide-in-from-bottom-4 absolute inset-x-2 bottom-2 z-40 flex max-h-[50%] flex-col overflow-hidden rounded-2xl border border-primary/40 bg-card/95 shadow-2xl backdrop-blur-md duration-200"
           >
             <div className="flex items-center gap-2 border-b border-border px-3 py-2">
               <span className="size-1.5 rounded-full bg-live animate-glow" aria-hidden="true" />

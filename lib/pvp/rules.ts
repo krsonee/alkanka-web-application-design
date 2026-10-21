@@ -26,7 +26,7 @@ import {
 import * as Pool from '@/lib/games/bilardo'
 
 import { initOkey101, okey101BotTurn, okey101Step, runOkey101Bots, viewOkey101, type Okey101State } from '@/lib/games/okey101'
-import { batakBotTurn, batakStep, initBatak, runBatakBots, viewBatak, type BatakState } from '@/lib/games/batak'
+import { batakBotTurn, batakPaceMs, batakStep, initBatak, runBatakBots, viewBatak, type BatakState } from '@/lib/games/batak'
 import { initMonopoly, monopolyBotTurn, monopolyStep, runMonopolyBots, type MonopolyState } from '@/lib/games/monopoly'
 import { initPisti, pistiBotTurn, pistiStep, runPistiBots, viewPisti, type PistiState } from '@/lib/games/pisti'
 import { initPapaz, papazBotTurn, papazStep, runPapazBots, viewPapaz, type PapazState } from '@/lib/games/papaz'
@@ -108,7 +108,7 @@ export type OkeyReveal = {
 export const OKEY_TARGETS = [10, 20, 30] as const
 export const isOkeyScored = (s: OkeyState) => (s.target ?? 0) > 0
 
-export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string }
+export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string; extras?: string[] }
 
 export const okeySeats = (s: OkeyState) => s.seats ?? s.hands.length
 /** In okey you draw from the discard pile of the player who played right before you. */
@@ -161,7 +161,8 @@ export const seatSide = (seat: number): Side => (seat === 0 ? 'p' : 'b')
 
 export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSeats?: number[] }): PvpState {
   if (game === 'okey101') return initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds, team: opts?.team })
-  if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant })).state
+  // Batak bots are paced by the table poll, so the first bids show up one by one.
+  if (game === 'batak') return initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant, rules: opts?.extras })
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
   if (game === 'papaz') return runPapazBots(initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats })).state
   if (game === 'pisti') return runPistiBots(initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant, team: opts?.team })).state
@@ -220,9 +221,15 @@ function seatBotTurn(s: SeatState, seat: number) {
 const seatCount = (s: SeatState) => s.seats
 
 /** Games whose bots play one turn per poll so humans can follow every move. */
-const pacedBots = (s: SeatState) => s.kind === 'okey101'
+const pacedBots = (s: SeatState) => s.kind === 'okey101' || s.kind === 'batak'
 
 export const BOT_PACE_MS = 1100
+
+/** Delay before the next paced bot move for this state. */
+export function botPaceMs(state: PvpState) {
+  if (state.kind === 'batak') return batakPaceMs(state)
+  return BOT_PACE_MS
+}
 
 /** Plays a single paced bot turn when the seat to move belongs to a bot. */
 export function paceBotTurn(state: PvpState): ActResult | null {

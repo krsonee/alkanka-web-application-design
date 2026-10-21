@@ -428,7 +428,7 @@ export async function testTarget(id: number) {
   const r = await rows(sql`SELECT bot_id, chat_id, title FROM tg_targets WHERE id = ${id}`)
   if (!r.length) throw new Error('Kanal bulunamadı')
   const token = await botToken(Number(r[0].bot_id))
-  await callBot(token, 'sendMessage', { chat_id: String(r[0].chat_id), text: 'AL KANKA bot bağlantısı çalı��ıyor.' })
+  await callBot(token, 'sendMessage', { chat_id: String(r[0].chat_id), text: 'AL KANKA bot bağlantısı çalışıyor.' })
   return String(r[0].title)
 }
 

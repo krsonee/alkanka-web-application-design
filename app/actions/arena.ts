@@ -289,7 +289,7 @@ export async function placeLiveRouletteBets(bets: RouletteBet[]) {
 
 /* ---------------- Player tables ---------------- */
 
-export async function openTable(game: string, stake: number, options?: { seats?: number; team?: boolean; bots?: number; rounds?: number }) {
+export async function openTable(game: string, stake: number, options?: { seats?: number; team?: boolean; bots?: number; rounds?: number; variant?: string; extras?: string[] }) {
   try {
     const m = await member()
     await assertCanPlay(m.id)
