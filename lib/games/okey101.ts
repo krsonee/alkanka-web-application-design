@@ -461,7 +461,7 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
     const placed = placeGroups(s, seat, groups, mode)
     if (mode === 'seri' && placed.value < OPEN_MIN) throw new Error(`Açmak için en az ${OPEN_MIN} sayı gerekir (şu an ${placed.value}).`)
     if (mode === 'cift' && groups.length < PAIR_MIN) throw new Error(`Çiftten açmak için en az ${PAIR_MIN} çift gerekir.`)
-    if (s.taken != null && !groups.flat().includes(s.taken)) throw new Error('Yandan aldığın taşı açtı��ın perlerde kullanmalısın.')
+    if (s.taken != null && !groups.flat().includes(s.taken)) throw new Error('Yandan aldığın taşı açtığın perlerde kullanmalısın.')
     hands[seat] = placed.rest
     const opened = s.opened.map((o, i) => (i === seat ? mode : o))
     const openedTurn = s.openedTurn.map((o, i) => (i === seat ? s.turnNo : o))

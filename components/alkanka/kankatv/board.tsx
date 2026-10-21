@@ -294,7 +294,7 @@ function MatchesTab({
         >
           <Radio className="size-5 shrink-0 text-live" aria-hidden="true" />
           <span className="flex-1 text-sm text-foreground">
-            <span className="font-bold">{liveChannel.name}</span> şu an canlı yay��nda. Ücretsiz izle.
+            <span className="font-bold">{liveChannel.name}</span> şu an canlı yayında. Ücretsiz izle.
           </span>
           <span className="text-xs font-bold uppercase tracking-wider text-live">İzle</span>
         </button>
@@ -382,7 +382,7 @@ function MatchesTab({
           </button>
         ))}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {isLoading && !data ? 'Y����kleniyor…' : `${total} maç · ${board.competitions.length} lig`}
+          {isLoading && !data ? 'Yükleniyor…' : `${total} maç · ${board.competitions.length} lig`}
         </span>
       </div>
 

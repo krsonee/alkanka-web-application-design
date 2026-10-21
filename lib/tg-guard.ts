@@ -694,7 +694,7 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
 
     // A channel sender_chat that is not ours means someone is posting as a foreign channel.
     if (m.sender_chat && m.sender_chat.type === 'channel') {
-      await punish(hub, token, m, 'Ba��ka bir kanal adına mesaj', { hard: g.linkAction === 'ban' })
+      await punish(hub, token, m, 'Başka bir kanal adına mesaj', { hard: g.linkAction === 'ban' })
       return true
     }
 
