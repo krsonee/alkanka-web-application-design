@@ -42,6 +42,7 @@ export type TableSummary = {
   seats: number
   team: boolean
   bots: number
+  rounds?: number | null
   variant?: string | null
   winners: string[]
   spectator: boolean
@@ -123,6 +124,7 @@ export function TableLobby({
   const [pistiTarget, setPistiTarget] = useState('151')
   const [pistiTeam, setPistiTeam] = useState(true)
   const [tavlaRounds, setTavlaRounds] = useState('1')
+  const [okeyPoints, setOkeyPoints] = useState('0')
   const isTavla = game === 'tavla'
   const tavlaHold = isTavla && tavlaRounds === '1' ? stake * 2 : 0
   const humanSeats = seatRule ? seatSeats - seatBots : isOkey ? seats - (seats === 4 ? bots : 0) : 2
@@ -134,7 +136,7 @@ export function TableLobby({
         ...(game === 'batak' ? { variant: batakVariant } : game === 'pisti' ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam } : {}),
       }
     : isOkey
-      ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0 }
+      ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0, ...(okeyPoints !== '0' ? { rounds: Number(okeyPoints) } : {}) }
       : isTavla
         ? { rounds: Number(tavlaRounds) }
         : undefined
@@ -370,6 +372,24 @@ export function TableLobby({
                 ]}
                 onChange={(v) => setTeamMode(v === 'team')}
               />
+              <div className="flex flex-col gap-2">
+                <OptionGroup
+                  label="Puan"
+                  value={okeyPoints}
+                  options={[
+                    { value: '0', label: 'Tek el' },
+                    { value: '10', label: '10 puan' },
+                    { value: '20', label: '20 puan' },
+                    { value: '30', label: '30 puan' },
+                  ]}
+                  onChange={setOkeyPoints}
+                />
+                <p className="text-[11px] leading-snug text-muted-foreground text-pretty">
+                  {okeyPoints === '0'
+                    ? 'İlk bitiren masayı kazanır.'
+                    : `Herkes ${okeyPoints} puanla başlar. Bitirene karşı rakipler 2, çift ya da okey atarak bitirişte 4, ikisi birden olursa 8 puan kaybeder. Göstergeyi gösteren rakiplerine 1 puan sildirir. Puanı ilk sıfırlanan olunca en yüksek puanlı kazanır.`}
+                </p>
+              </div>
               {seats === 4 && (
                 <OptionGroup
                   label="Bot koltuğu"
@@ -608,6 +628,9 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
               {t.bots > 0 ? ` + ${t.bots} bot` : ''}
             </span>
             {t.game === 'okey' && <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{t.team ? 'Takımlı' : 'Tekli'}</span>}
+            {t.game === 'okey' && (
+              <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{t.rounds ? `${t.rounds} puan` : 'Tek el'}</span>
+            )}
             {t.game === 'pisti' && (
               <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">
                 {t.variant === '101' ? 101 : 151} puan{t.seats === 4 ? (t.team ? ' · Eşli' : ' · Tekli') : ''}
