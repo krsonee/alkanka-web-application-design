@@ -136,7 +136,7 @@ export function OkeyRack({
   const ghostEl = useRef<HTMLDivElement | null>(null)
   const overRef = useRef<number | null>(null)
   const frame = useRef<number | null>(null)
-  const press = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
+  const press = useRef<{ id: number; x: number; y: number; moved: boolean; threshold: number } | null>(null)
   const suppressClick = useRef(false)
   const lastTap = useRef<{ id: number; t: number } | null>(null)
   const hoverKind = useRef<DropKind | null>(null)
@@ -181,7 +181,9 @@ export function OkeyRack({
   // follow-up click to the wrapper, so trackpad/mouse taps never reached the tile button.
   const onPointerDown = (e: PointerEvent<HTMLDivElement>, id: number) => {
     if (e.button !== 0) return
-    press.current = { id, x: e.clientX, y: e.clientY, moved: false }
+    suppressClick.current = false
+    // Physical clicks on a MacBook trackpad nudge the cursor a few pixels; a small threshold turned them into tiny drags.
+    press.current = { id, x: e.clientX, y: e.clientY, moved: false, threshold: e.pointerType === 'touch' ? 6 : 12 }
     const move = (ev: globalThis.PointerEvent) => onPointerMove(ev)
     const up = (ev: globalThis.PointerEvent) => {
       cleanup()
@@ -204,7 +206,7 @@ export function OkeyRack({
   const onPointerMove = (e: { clientX: number; clientY: number; preventDefault?: () => void }) => {
     const p = press.current
     if (!p) return
-    if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 6) return
+    if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < p.threshold) return
     const x = e.clientX
     const y = e.clientY
     if (!p.moved) {
@@ -232,8 +234,6 @@ export function OkeyRack({
     const p = press.current
     press.current = null
     if (!p?.moved) return
-    suppressClick.current = true
-    setTimeout(() => (suppressClick.current = false), 0)
     if (frame.current != null) cancelAnimationFrame(frame.current)
     frame.current = null
     overRef.current = null
@@ -242,6 +242,11 @@ export function OkeyRack({
     setHover(null)
     if (cancelled) return
     const t = targetAt(e.clientX, e.clientY)
+    // Released over its own slot: keep it a normal tap so the tile still gets selected.
+    if (t.slot != null && rack.slots[t.slot] === p.id) return
+    // Safari can dispatch the click after a 0ms timer, so the guard is cleared on the next press instead.
+    suppressClick.current = true
+    setTimeout(() => (suppressClick.current = false), 400)
     if (t.slot != null) rack.moveTo(p.id, t.slot)
     else if (t.kind) onDropOut?.(p.id, t.kind)
     rack.setSelected(null)
