@@ -59,6 +59,22 @@ export async function setSetting(key: string, value: string) {
   await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${value}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
 }
 
+/** Older live-chat webhooks were set without button clicks or join requests; re-applies the full list hourly. */
+export async function healChatHook() {
+  const last = Number((await getSetting('chat_hook_checked_at')) ?? 0)
+  if (Date.now() - last < 60 * 60 * 1000) return
+  await setSetting('chat_hook_checked_at', String(Date.now()))
+  const botId = Number(await getSetting('chat_bot_id'))
+  const secret = await getSetting('chat_secret')
+  if (!botId || !secret) return
+  const token = await botToken(botId)
+  const info = await callBot<{ url: string; allowed_updates?: string[] }>(token, 'getWebhookInfo')
+  if (!info.url) return
+  const have = info.allowed_updates ?? []
+  if (HOOK_UPDATES.every((u) => have.includes(u))) return
+  await callBot(token, 'setWebhook', { url: info.url, secret_token: secret, allowed_updates: HOOK_UPDATES })
+}
+
 // --- Config ------------------------------------------------------------------
 
 function merge<T extends Record<string, unknown>>(base: T, raw: unknown): T {
@@ -159,7 +175,7 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
   if (update.callback_query) {
     const data = update.callback_query.data ?? ''
     if (data === 'dm:off') return dmOptOut(botId, update.callback_query)
-    if (isGuard && /^(cap|gd):/.test(data)) {
+    if (isGuard && /^(cap|gd|wp):/.test(data)) {
       const { handleGuardCallback } = await import('@/lib/tg-guard')
       return handleGuardCallback(botId, update.callback_query)
     }
@@ -186,6 +202,11 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
     if (removed) return
   }
   if (update.edited_message) return
+
+  if (update.channel_post && isGuard) {
+    const { guardChannelPost } = await import('@/lib/tg-guard')
+    if (await guardChannelPost(botId, update.channel_post)) return
+  }
 
   if (m && isSupport) {
     const { handleSupportMessage } = await import('@/lib/tg-support')

@@ -74,8 +74,11 @@ export async function runWeeklyHub(force = false) {
 /** Runs every minute from the traffic-driven tick. */
 export async function hubTick() {
   const hub = await getHub()
-  const { expireCaptchas, flushAutoDelete } = await import('@/lib/tg-guard')
+  const { expireCaptchas, flushAutoDelete, processWipes } = await import('@/lib/tg-guard')
+  const { healChatHook } = await import('@/lib/tg-hub')
   await Promise.all([
+    processWipes().catch((e) => console.error('[hub-tick] wipe', e)),
+    healChatHook().catch((e) => console.error('[hub-tick] chat hook', e)),
     hub.guard.enabled ? expireCaptchas().catch((e) => console.error('[hub-tick] captcha', e)) : null,
     flushAutoDelete().catch((e) => console.error('[hub-tick] autodel', e)),
     processBroadcasts().catch((e) => console.error('[hub-tick] broadcast', e)),

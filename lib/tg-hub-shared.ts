@@ -37,6 +37,14 @@ export type HubConfig = {
     welcome: string
   }
   report: { enabled: boolean }
+  autoReply: {
+    enabled: boolean
+    cooldownSeconds: number
+    siteUrl: string
+    siteText: string
+    sponsorText: string
+    sponsorLimit: number
+  }
 }
 
 export const DEFAULT_HUB: HubConfig = {
@@ -76,6 +84,14 @@ export const DEFAULT_HUB: HubConfig = {
     welcome: 'Merhaba! Alkanka Destek’e hoş geldin. Sorununu hızlıca çözmek için birkaç soru soracağım.',
   },
   report: { enabled: true },
+  autoReply: {
+    enabled: true,
+    cooldownSeconds: 120,
+    siteUrl: '',
+    siteText: 'Güncel Alkanka adresimiz aşağıda. Butona basman yeterli, eski linkleri kullanma.',
+    sponsorText: 'Güvenilir sponsorlarımız aşağıda. Alkanka üzerinden girersen bonusların ve görevlerin hesabına işlenir.',
+    sponsorLimit: 8,
+  },
 }
 
 export type HubStats = {

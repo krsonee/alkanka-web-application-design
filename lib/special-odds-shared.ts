@@ -32,6 +32,7 @@ export type OddsSource = {
   active: boolean
   lastAt: string | null
   total: number
+  webError: string | null
 }
 
 export type OddsBotConfig = {

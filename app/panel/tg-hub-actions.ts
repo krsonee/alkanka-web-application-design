@@ -31,6 +31,24 @@ const list = (v: unknown, max = 200) =>
     .slice(0, max)
 
 /** Keeps only known fields with safe bounds; chat ids and bot ids are never taken from here. */
+function sanitizeAutoReply(r: HubConfig['autoReply']): HubConfig['autoReply'] {
+  let siteUrl = String(r.siteUrl ?? '').trim()
+  if (siteUrl && !/^https?:\/\//i.test(siteUrl)) siteUrl = `https://${siteUrl}`
+  try {
+    if (siteUrl) siteUrl = new URL(siteUrl).toString()
+  } catch {
+    siteUrl = ''
+  }
+  return {
+    enabled: Boolean(r.enabled),
+    cooldownSeconds: clampInt(r.cooldownSeconds, 10, 3600, 120),
+    siteUrl,
+    siteText: String(r.siteText ?? '').slice(0, 400) || DEFAULT_HUB.autoReply.siteText,
+    sponsorText: String(r.sponsorText ?? '').slice(0, 400) || DEFAULT_HUB.autoReply.sponsorText,
+    sponsorLimit: clampInt(r.sponsorLimit, 1, 20, 8),
+  }
+}
+
 function sanitize(input: HubConfig, current: HubConfig): HubConfig {
   const g = input.guard ?? DEFAULT_HUB.guard
   const c = input.counter ?? DEFAULT_HUB.counter
@@ -71,6 +89,7 @@ function sanitize(input: HubConfig, current: HubConfig): HubConfig {
       welcome: String(s.welcome ?? '').slice(0, 600),
     },
     report: { enabled: Boolean(input.report?.enabled) },
+    autoReply: sanitizeAutoReply(input.autoReply ?? DEFAULT_HUB.autoReply),
   }
 }
 
@@ -152,6 +171,27 @@ export async function sweepGhosts(chatId: string): Promise<Result> {
     const { sweepDeletedAccounts } = await import('@/lib/tg-guard')
     const r = await sweepDeletedAccounts(chatId)
     return done(`${r.checked} hesap kontrol edildi, ${r.removed} silinmiş hesap çıkarıldı.`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function wipeWholeChat(chatInput: string): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const hub = await getHub()
+    if (!hub.guardBotId) return { ok: false, message: 'Önce Bekçi botunu seç.' }
+    if (!chatInput.trim()) return { ok: false, message: 'Grup ya da kanal seç.' }
+    const chat = await resolveChatFor(hub.guardBotId, chatInput)
+    if (!chat.isAdmin) return { ok: false, message: `Bot "${chat.title}" içinde yönetici değil.` }
+    const { callBot, botToken } = await import('@/lib/telegram-mirror')
+    const token = await botToken(hub.guardBotId)
+    // The newest message id is unknown from the panel, so a marker message gives the starting point.
+    const marker = await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: chat.id, text: 'Sohbet temizliği başlıyor…' })
+    const { startWipe, processWipes } = await import('@/lib/tg-guard')
+    await startWipe(hub.guardBotId, chat.id, chat.title, marker.message_id, 'Panel')
+    await processWipes(20_000)
+    return done(`"${chat.title}" temizleniyor. Çok mesaj varsa arka planda dakikada bir devam eder, bitince sohbete "tamamlandı" yazar.`)
   } catch (error) {
     return fail(error)
   }
