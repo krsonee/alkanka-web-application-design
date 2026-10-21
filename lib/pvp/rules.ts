@@ -17,6 +17,7 @@ import {
   chooseDiscard,
   createDeck,
   findWinningDiscard,
+  isJoker,
   isWinningHand,
   okeyFrom,
   wantsDiscard,
@@ -78,7 +79,34 @@ export type OkeyState = {
   phase: 'draw' | 'discard'
   note: string
   last?: OkeyLast[]
+  /** Starting points for a scored game (10, 20 or 30). Missing or 0 means a single hand. */
+  target?: number
+  scores?: number[]
+  hand?: number
+  /** Seat that opened the current hand; the next hand opens one seat to the right. */
+  starter?: number
+  /** Seats that already threw a tile this hand (the indicator can only be shown before that). */
+  played?: boolean[]
+  shown?: boolean[]
+  /** Tile picked from the floor this turn. It cannot be thrown back in the same turn. */
+  takenId?: number | null
+  /** Tiles each seat picked from the floor this hand, public info bots use to avoid feeding them. */
+  taken?: Tile[][]
+  /** The finished hand, revealed to everyone. */
+  reveal?: OkeyReveal | null
 }
+
+export type OkeyReveal = {
+  seat: number
+  tiles: Tile[]
+  kind: 'seri' | 'cift' | 'deste'
+  okeyFinish: boolean
+  penalty: number
+  hand: number
+}
+
+export const OKEY_TARGETS = [10, 20, 30] as const
+export const isOkeyScored = (s: OkeyState) => (s.target ?? 0) > 0
 
 export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string }
 
@@ -142,26 +170,18 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
     return newTavlaHand({ target, score: [0, 0], hand: 1, lastHand: null })
   }
   if (game === 'okey') {
-    const deck = createDeck()
-    const idx = deck.findIndex((t) => !t.fake)
-    const [indicator] = deck.splice(idx, 1)
     const seats = opts?.seats === 4 ? 4 : 2
-    const first = Math.floor(Math.random() * seats)
-    const hands = Array.from({ length: seats }, (_, i) => deck.splice(0, i === first ? 15 : 14))
-    const state: OkeyState = {
-      kind: 'okey',
+    const target = (OKEY_TARGETS as readonly number[]).includes(Number(opts?.rounds)) ? Number(opts?.rounds) : 0
+    const state = dealOkey({
       seats,
       team: seats === 4 && opts?.team === true,
       bots: opts?.botSeats ?? [],
-      deck,
-      indicator,
-      hands,
-      discards: Array.from({ length: seats }, () => []),
-      turn: first,
-      phase: 'discard',
-      note: 'Taşlar dağıtıldı',
-      last: [],
-    }
+      target,
+      scores: target ? Array(seats).fill(target) : undefined,
+      hand: 1,
+      starter: Math.floor(Math.random() * seats),
+      reveal: null,
+    })
     return runBots(state).state
   }
   if (game === 'bilardo') {
@@ -309,12 +329,86 @@ function tavlaAct(s: TavlaState, seat: number, a: Action): ActResult {
   throw new Error('Bilinmeyen hamle')
 }
 
-function okeyWin(s: OkeyState, seat: number): Outcome {
+type OkeyMeta = Pick<OkeyState, 'seats' | 'team' | 'bots' | 'target' | 'scores' | 'hand' | 'starter' | 'reveal'>
+
+/** Deals a fresh hand. The starter gets 15 tiles and opens by throwing one. */
+function dealOkey(meta: OkeyMeta): OkeyState {
+  const seats = meta.seats ?? 2
+  const deck = createDeck()
+  const idx = deck.findIndex((t) => !t.fake)
+  const [indicator] = deck.splice(idx, 1)
+  const first = (meta.starter ?? 0) % seats
+  const hands = Array.from({ length: seats }, (_, i) => deck.splice(0, i === first ? 15 : 14))
+  return {
+    kind: 'okey',
+    ...meta,
+    seats,
+    starter: first,
+    deck,
+    indicator,
+    hands,
+    discards: Array.from({ length: seats }, () => []),
+    turn: first,
+    phase: 'discard',
+    note: meta.hand && meta.hand > 1 ? `${meta.hand}. el dağıtıldı` : 'Taşlar dağıtıldı',
+    last: [],
+    played: Array(seats).fill(false),
+    shown: Array(seats).fill(false),
+    takenId: null,
+    taken: Array.from({ length: seats }, () => []),
+  }
+}
+
+const okeyMeta = (s: OkeyState): OkeyMeta => ({
+  seats: okeySeats(s),
+  team: s.team,
+  bots: s.bots,
+  target: s.target,
+  scores: s.scores,
+  hand: s.hand,
+  starter: s.starter,
+  reveal: s.reveal,
+})
+
+function okeyWinners(s: OkeyState, seat: number): Outcome {
   if (s.team) return { winnerSeat: seat, winnerSeats: [0, 1, 2, 3].filter((x) => teamOf(x) === teamOf(seat)) }
   return { winnerSeat: seat }
 }
 
+/** Seats that lose points when `seat` scores: everyone else, or only the rival team. */
+const rivalsOf = (s: OkeyState, seat: number) =>
+  Array.from({ length: okeySeats(s) }, (_, i) => i).filter((i) => (s.team ? teamOf(i) !== teamOf(seat) : i !== seat))
+
+/** Ends the scored game once anyone hits zero. The highest score (team total in team play) wins; ties go to `fallback`. */
+function scoredOutcome(s: OkeyState, scores: number[], fallback: number): Outcome {
+  if (!scores.some((v) => v <= 0)) return null
+  if (s.team) {
+    const a = scores[0] + scores[2]
+    const b = scores[1] + scores[3]
+    const team = a === b ? teamOf(fallback) : a > b ? 0 : 1
+    const winners = [0, 1, 2, 3].filter((x) => teamOf(x) === team)
+    return { winnerSeat: winners[0], winnerSeats: winners }
+  }
+  const best = Math.max(...scores)
+  const top = scores.map((v, i) => (v === best ? i : -1)).filter((i) => i >= 0)
+  return { winnerSeat: top.includes(fallback) ? fallback : top[0] }
+}
+
+/** Normal finish costs rivals 2, çift or throwing the okey doubles it, both together make 8. */
+export const okeyPenalty = (kind: 'seri' | 'cift', okeyFinish: boolean) => 2 * (kind === 'cift' ? 2 : 1) * (okeyFinish ? 2 : 1)
+
+function nextOkeyHand(s: OkeyState, reveal: OkeyReveal, scores: number[] | undefined, note: string): OkeyState {
+  const next = dealOkey({ ...okeyMeta(s), scores, hand: (s.hand ?? 1) + 1, starter: ((s.starter ?? 0) + 1) % okeySeats(s), reveal })
+  return { ...next, note: `${note} ${next.note}` }
+}
+
 const pushLast = (s: OkeyState, entry: OkeyLast) => [...(s.last ?? []), entry].slice(-8)
+
+export function canShowIndicator(s: OkeyState, seat: number) {
+  if (!isOkeyScored(s) || s.turn !== seat || s.phase !== 'discard') return false
+  if (s.played?.[seat] || s.shown?.[seat]) return false
+  return s.hands[seat]?.some((t) => !t.fake && t.color === s.indicator.color && t.num === s.indicator.num) ?? false
+}
 
 /** One okey step for any seat (human or bot). Does not check whose client sent it. */
 function okeyStep(s: OkeyState, seat: number, a: Action): ActResult {
@@ -322,35 +416,71 @@ function okeyStep(s: OkeyState, seat: number, a: Action): ActResult {
   const n = okeySeats(s)
   const hands = s.hands.map((h) => [...h])
   const discards = s.discards.map((d) => [...d])
+  if (a.type === 'show') {
+    if (!canShowIndicator(s, seat)) throw new Error('Göstergeyi şu an gösteremezsin')
+    const scores = [...(s.scores ?? [])]
+    for (const r of rivalsOf(s, seat)) scores[r] -= 1
+    const shown = [...(s.shown ?? Array(n).fill(false))]
+    shown[seat] = true
+    const next: OkeyState = { ...s, scores, shown, note: 'Gösterge gösterildi, rakipler 1 puan kaybetti' }
+    return { state: next, outcome: scoredOutcome(s, scores, seat) }
+  }
   if (a.type === 'draw') {
     if (s.phase !== 'draw') throw new Error('Önce taş at')
     if (a.from === 'discard') {
       const t = discards[leftOf(seat, n)].pop()
       if (!t) throw new Error('Alınacak taş yok')
       hands[seat].push(t)
-      return { state: { ...s, hands, discards, phase: 'discard', note: '', last: pushLast(s, { seat, type: 'discard', tile: t }) }, outcome: null }
+      const taken = (s.taken ?? Array.from({ length: n }, () => [])).map((x, i) => (i === seat ? [...x, t] : x))
+      return {
+        state: { ...s, hands, discards, phase: 'discard', note: '', takenId: t.id, taken, last: pushLast(s, { seat, type: 'discard', tile: t }) },
+        outcome: null,
+      }
     }
     const deck = [...s.deck]
     const t = deck.shift()
-    if (!t) return { state: s, outcome: { winnerSeat: null, draw: true } }
+    if (!t) return deckOut(s)
     hands[seat].push(t)
-    return { state: { ...s, deck, hands, phase: 'discard', note: '', last: pushLast(s, { seat, type: 'pile' }) }, outcome: null }
+    return { state: { ...s, deck, hands, phase: 'discard', note: '', takenId: null, last: pushLast(s, { seat, type: 'pile' }) }, outcome: null }
   }
   if (a.type === 'discard' || a.type === 'finish') {
     if (s.phase !== 'discard') throw new Error('Önce taş çek')
+    if (s.takenId != null && a.tileId === s.takenId) throw new Error('Yerden aldığın taşı aynı elde geri atamazsın')
     const idx = hands[seat].findIndex((t) => t.id === a.tileId)
     if (idx < 0) throw new Error('Taş bulunamadı')
     const [tile] = hands[seat].splice(idx, 1)
     discards[seat].push(tile)
     const last = pushLast(s, { seat, type: 'throw', tile })
+    const played = [...(s.played ?? Array(n).fill(false))]
+    played[seat] = true
     if (a.type === 'finish') {
-      if (!isWinningHand(hands[seat], okeyFrom(s.indicator))) throw new Error('El henüz bitmedi')
-      return { state: { ...s, hands, discards, last, note: 'El bitti' }, outcome: okeyWin(s, seat) }
+      const ok = okeyFrom(s.indicator)
+      const kind = isWinningHand(hands[seat], ok)
+      if (!kind) throw new Error('El henüz bitmedi')
+      const okeyFinish = isJoker(tile, ok)
+      const penalty = okeyPenalty(kind, okeyFinish)
+      const reveal: OkeyReveal = { seat, tiles: hands[seat], kind, okeyFinish, penalty, hand: s.hand ?? 1 }
+      const label = `${okeyFinish ? 'Okey atarak ' : ''}${kind === 'cift' ? 'çiftten ' : ''}bitti`
+      const done: OkeyState = { ...s, hands, discards, last, played, takenId: null, reveal, note: `El ${label}` }
+      if (!isOkeyScored(s)) return { state: done, outcome: okeyWinners(s, seat) }
+      const scores = [...(s.scores ?? [])]
+      for (const r of rivalsOf(s, seat)) scores[r] -= penalty
+      const end = scoredOutcome(s, scores, seat)
+      if (end) return { state: { ...done, scores }, outcome: end }
+      return { state: nextOkeyHand(s, reveal, scores, `El ${label}, rakipler −${penalty}.`), outcome: null }
     }
-    if (s.deck.length === 0) return { state: { ...s, hands, discards, last }, outcome: { winnerSeat: null, draw: true } }
-    return { state: { ...s, hands, discards, last, turn: (seat + 1) % n, phase: 'draw', note: '' }, outcome: null }
+    const next: OkeyState = { ...s, hands, discards, last, played, takenId: null }
+    if (s.deck.length === 0) return deckOut(next)
+    return { state: { ...next, turn: (seat + 1) % n, phase: 'draw', note: '' }, outcome: null }
   }
   throw new Error('Bilinmeyen hamle')
+}
+
+/** Nobody finished before the pile ran out: a single hand is a draw, a scored game redeals without points. */
+function deckOut(s: OkeyState): ActResult {
+  if (!isOkeyScored(s)) return { state: s, outcome: { winnerSeat: null, draw: true } }
+  const reveal: OkeyReveal = { seat: -1, tiles: [], kind: 'deste', okeyFinish: false, penalty: 0, hand: s.hand ?? 1 }
+  return { state: nextOkeyHand(s, reveal, s.scores, 'Deste bitti, el puansız geçti.'), outcome: null }
 }
 
 /** Plays every consecutive bot turn on the server so bots can never be steered by a client. */
@@ -375,8 +505,17 @@ function okeyBotTurn(state: OkeyState, seat: number): ActResult {
     if (r.outcome) return r
     s = r.state as OkeyState
   }
-  const win = findWinningDiscard(s.hands[seat], ok)
-  const tile = win?.tile ?? chooseDiscard(s.hands[seat], ok)
+  if (canShowIndicator(s, seat)) {
+    const r = okeyStep(s, seat, { type: 'show' })
+    if (r.outcome) return r
+    s = r.state as OkeyState
+  }
+  const n = okeySeats(s)
+  const nextSeat = (seat + 1) % n
+  // In team play the next seat is always a rival, so feeding them is the main thing to avoid.
+  const avoid = s.team && teamOf(nextSeat) === teamOf(seat) ? [] : (s.taken?.[nextSeat] ?? [])
+  const win = findWinningDiscard(s.hands[seat], ok, s.takenId)
+  const tile = win?.tile ?? chooseDiscard(s.hands[seat], ok, { exclude: s.takenId, avoid })
   return okeyStep(s, seat, { type: win ? 'finish' : 'discard', tileId: tile.id })
 }
 

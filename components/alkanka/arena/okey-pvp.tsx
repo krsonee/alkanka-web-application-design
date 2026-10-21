@@ -3,12 +3,12 @@
 import { useMemo, useState } from 'react'
 import { ArrowDownToLine, Bot, Eye, Layers, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { OkeyLast, OkeyState } from '@/lib/pvp/rules'
+import { canShowIndicator, isOkeyScored, type OkeyLast, type OkeyReveal, type OkeyState } from '@/lib/pvp/rules'
 import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
 import { TileBack, TileFace, TurnSteps } from './okey'
 import { OkeyRack, useRack } from './okey-rack'
-import { findWinningDiscard, okeyFrom, type Okey as OkeyValue, type Tile } from './okey-engine'
+import { findWinningDiscard, isJoker, okeyFrom, type Okey as OkeyValue, type Tile } from './okey-engine'
 import { TableBrand } from './table-brand'
 
 type OkeyView = OkeyState & { deckCount: number; handCounts: number[]; oppSeat: number; seats: number; team: boolean; bots: number[]; last: OkeyLast[] }
@@ -41,7 +41,12 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   const fromSeat = leftOf(seat, n)
   const myDraw = !spectator && remote.myTurn && s.phase === 'draw'
   const myDiscard = !spectator && remote.myTurn && s.phase === 'discard'
-  const winning = myDiscard ? findWinningDiscard(hand, okey) : null
+  const takenId = s.takenId ?? null
+  const winning = myDiscard ? findWinningDiscard(hand, okey, takenId) : null
+  const selectedIsTaken = selected != null && selected === takenId
+  const scored = isOkeyScored(s)
+  const canShow = !spectator && canShowIndicator(s, seat)
+  const lowDeck = s.deckCount > 0 && s.deckCount <= 8
   const takeTop = s.discards[fromSeat]?.at(-1)
   const partner = s.team ? (seat + 2) % 4 : -1
 
@@ -61,8 +66,10 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
       : '1. adım: ortadaki desteden taş çek.'
   else if (myDiscard)
     message = winning
-      ? 'Elin bitmeye hazır! Bitiren taşı seç ve "Eli bitir" de.'
-      : `2. adım: taşı "Taşı at" butonuna sürükle, çift tıkla ya da seçip butona bas.${fresh != null ? ' Yeni gelen taş "Yeni" etiketli.' : ''}`
+      ? `Elin bitmeye hazır! Bitiren taşı seç ve "Eli bitir" de.${scored && isJoker(winning.tile, okey) ? ' Okeyi atarak bitirirsen puan 2 katı!' : ''}`
+      : selectedIsTaken
+        ? 'Yerden aldığın taşı bu elde geri atamazsın, başka taş seç.'
+        : `2. adım: taşı "Taşı at" butonuna sürükle, çift tıkla ya da seçip butona bas.${fresh != null ? ' Yeni gelen taş "Yeni" etiketli.' : ''}`
   else message = `${nameOf(s.turn)} oynuyor...`
 
   const seatProps = (i: number) => ({
@@ -77,8 +84,12 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
     okey,
   })
 
+  const onlyIfAllowed = (tileId: number) => tileId !== takenId
+
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
+      {scored && <ScoreBoard s={s} n={n} nameOf={nameOf} seat={spectator ? -1 : seat} />}
+      {s.reveal && <HandReveal reveal={s.reveal} okey={okey} nameOf={nameOf} scored={scored} />}
       {spectator && (
         <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Oyuncuların elleri gizli, atılan taşlar canlı görünür.
@@ -102,6 +113,16 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
                 <TileFace tile={s.indicator} okey={okey} size="sm" />
+                {canShow && (
+                  <button
+                    type="button"
+                    disabled={remote.busy}
+                    onClick={() => void remote.send({ type: 'show' })}
+                    className="mt-1 rounded-lg bg-primary px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
+                  >
+                    Göster (−1 rakip)
+                  </button>
+                )}
               </div>
               <button
                 type="button"
@@ -114,7 +135,9 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
                   <TileBack className="h-14 w-10" />
                   <Layers className="absolute inset-0 m-auto size-4 text-primary" aria-hidden="true" />
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{s.deckCount} taş</span>
+                <span className={cn('text-[10px] font-bold uppercase tracking-wider', lowDeck ? 'text-destructive' : 'text-muted-foreground')}>
+                  {lowDeck ? `Son ${s.deckCount} taş!` : `${s.deckCount} taş`}
+                </span>
               </button>
               {!spectator && (
                 <button
@@ -149,10 +172,10 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
               rack={rack}
               highlight={myDiscard ? fresh : null}
               onDoubleTile={(tile) => {
-                if (myDiscard && !remote.busy) void remote.send({ type: 'discard', tileId: tile.id })
+                if (myDiscard && !remote.busy && onlyIfAllowed(tile.id)) void remote.send({ type: 'discard', tileId: tile.id })
               }}
               onDropOut={(tileId, kind) => {
-                if (!myDiscard || remote.busy) return
+                if (!myDiscard || remote.busy || !onlyIfAllowed(tileId)) return
                 if (kind === 'discard') void remote.send({ type: 'discard', tileId })
                 else if (kind === 'finish' && winning) void remote.send({ type: 'finish', tileId })
               }}
@@ -174,7 +197,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
               <button
                 data-drop={myDiscard && winning ? 'finish' : undefined}
                 onClick={() => selected != null && void remote.send({ type: 'finish', tileId: selected })}
-                disabled={!myDiscard || selected == null || !winning || remote.busy}
+                disabled={!myDiscard || selected == null || !winning || selectedIsTaken || remote.busy}
                 className="flex items-center justify-center gap-1.5 rounded-xl border border-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary hover:bg-primary/10 disabled:opacity-40"
               >
                 <Trophy className="size-4" aria-hidden="true" />
@@ -183,7 +206,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
               <button
                 data-drop={myDiscard ? 'discard' : undefined}
                 onClick={() => selected != null && void remote.send({ type: 'discard', tileId: selected })}
-                disabled={!myDiscard || selected == null || remote.busy}
+                disabled={!myDiscard || selected == null || selectedIsTaken || remote.busy}
                 className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40"
               >
                 <ArrowDownToLine className="size-4" aria-hidden="true" />
@@ -194,6 +217,63 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
         </>
       )}
     </div>
+  )
+}
+
+function ScoreBoard({ s, n, nameOf, seat }: { s: OkeyView; n: number; nameOf: (i: number) => string; seat: number }) {
+  const scores = s.scores ?? []
+  const target = s.target ?? 0
+  return (
+    <section aria-label="Puan durumu" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3">
+      <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        <span>{s.hand ?? 1}. el</span>
+        <span>{target} puandan düşüş · sıfırlanan bitirir</span>
+      </div>
+      <div className={cn('grid gap-2', n === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2')}>
+        {Array.from({ length: n }, (_, i) => {
+          const v = scores[i] ?? target
+          const pct = target ? Math.max(0, Math.min(100, (v / target) * 100)) : 0
+          return (
+            <div key={i} className={cn('flex flex-col gap-1 rounded-xl bg-secondary px-3 py-2', i === seat && 'ring-1 ring-primary')}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-semibold text-foreground">
+                  {i === seat ? 'Sen' : nameOf(i)}
+                  {s.team ? ` · ${i % 2 === 0 ? 'A' : 'B'}` : ''}
+                </span>
+                <span className={cn('font-mono text-sm font-bold tabular-nums', v <= 4 ? 'text-destructive' : 'text-foreground')}>{v}</span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-background" aria-hidden="true">
+                <div className={cn('h-full rounded-full', v <= 4 ? 'bg-destructive' : 'bg-primary')} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function HandReveal({ reveal, okey, nameOf, scored }: { reveal: OkeyReveal; okey: OkeyValue; nameOf: (i: number) => string; scored: boolean }) {
+  if (reveal.kind === 'deste') {
+    return (
+      <p className="rounded-2xl border border-border bg-card px-3 py-2 text-sm text-muted-foreground" aria-live="polite">
+        {reveal.hand}. el: deste bitti, kimse bitiremedi. El puansız geçti.
+      </p>
+    )
+  }
+  const tags = [reveal.kind === 'cift' ? 'Çiftten' : 'Seriden', reveal.okeyFinish ? 'okey atarak' : null].filter(Boolean).join(', ')
+  return (
+    <section aria-label="Biten el" className="flex flex-col gap-2 rounded-2xl border border-primary/40 bg-card p-3" aria-live="polite">
+      <p className="text-sm font-semibold text-foreground">
+        {reveal.hand}. eli {nameOf(reveal.seat)} bitirdi · {tags}
+        {scored && <span className="text-primary"> · rakipler −{reveal.penalty}</span>}
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {reveal.tiles.map((t) => (
+          <TileFace key={t.id} tile={t} okey={okey} size="sm" />
+        ))}
+      </div>
+    </section>
   )
 }
 

@@ -111,8 +111,12 @@ export function isWinningHand(tiles: Tile[], ok: Okey): 'seri' | 'cift' | null {
   return solve(counts, jokers) ? 'seri' : null
 }
 
-export function findWinningDiscard(hand: Tile[], ok: Okey) {
-  for (const t of hand) {
+/** `exclude` is the tile just picked from the floor, which may not be thrown back this turn. */
+export function findWinningDiscard(hand: Tile[], ok: Okey, exclude?: number | null) {
+  // Throwing the okey to finish pays double, so try it first.
+  const ordered = [...hand].sort((a, b) => Number(isJoker(b, ok)) - Number(isJoker(a, ok)))
+  for (const t of ordered) {
+    if (t.id === exclude) continue
     const rest = hand.filter((x) => x.id !== t.id)
     const kind = isWinningHand(rest, ok)
     if (kind) return { tile: t, kind }
@@ -142,11 +146,26 @@ export function handScore(hand: Tile[], ok: Okey) {
   return hand.reduce((acc, t) => acc + Math.min(tileScore(t, hand, ok), 9), 0)
 }
 
-export function chooseDiscard(hand: Tile[], ok: Okey): Tile {
-  let worst = hand[0]
+/** How useful a tile looks to a player who has been collecting `taken` from the floor. */
+function feedRisk(t: Tile, taken: Tile[], ok: Okey) {
+  const v = valueOf(t, ok)
+  let risk = 0
+  for (const o of taken) {
+    if (isJoker(o, ok)) continue
+    const w = valueOf(o, ok)
+    if (w.color === v.color && Math.abs(w.num - v.num) <= 2) risk += 2.5
+    else if (w.num === v.num && w.color !== v.color) risk += 2.5
+  }
+  return Math.min(risk, 6)
+}
+
+export function chooseDiscard(hand: Tile[], ok: Okey, opts: { exclude?: number | null; avoid?: Tile[] } = {}): Tile {
+  const pool = hand.filter((t) => t.id !== opts.exclude && !isJoker(t, ok))
+  const options = pool.length ? pool : hand.filter((t) => t.id !== opts.exclude)
+  let worst = options[0] ?? hand[0]
   let worstScore = Infinity
-  for (const t of hand) {
-    const s = tileScore(t, hand, ok) + Math.random() * 0.3
+  for (const t of options) {
+    const s = tileScore(t, hand, ok) + feedRisk(t, opts.avoid ?? [], ok) + Math.random() * 0.3
     if (s < worstScore) {
       worstScore = s
       worst = t

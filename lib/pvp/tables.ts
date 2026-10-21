@@ -137,6 +137,7 @@ export function tableView(t: TableRow, userId: string | null) {
     seats: t.seats,
     team: t.options.team,
     bots: t.options.bots,
+    rounds: t.options.rounds ?? null,
     variant: t.options.variant ?? null,
     winners: t.options.winners ?? (t.winnerId ? [t.winnerId] : []),
     status: t.status,
@@ -216,7 +217,8 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
   if (typeof input?.team !== 'boolean') throw new Error('Takımlı ya da tekli oyun modunu seçmelisin.')
   if (input.team && seats !== 4) throw new Error('Takımlı okey sadece 4 kişilik masada oynanır.')
   const bots = seats === 4 ? Math.max(0, Math.min(2, Math.floor(Number(input?.bots) || 0))) : 0
-  return { seats, team: input.team, bots }
+  const rounds = [10, 20, 30].includes(Number(input?.rounds)) ? Number(input?.rounds) : 0
+  return { seats, team: input.team, bots, ...(rounds ? { rounds } : {}) }
 }
 
 export async function createTable(m: Member, game: string, stake: number, input?: Partial<TableOptions>) {
