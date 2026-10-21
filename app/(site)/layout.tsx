@@ -33,8 +33,11 @@ import { SessionGuard } from '@/components/alkanka/session-guard'
 import { TvDockProvider } from '@/components/alkanka/kankatv/tv-dock'
 import { BoostStrip } from '@/components/alkanka/boost-strip'
 import { currentBoosts } from '@/lib/boosts'
+import { after } from 'next/server'
+import { runAutoTick } from '@/lib/auto-tick'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  after(() => runAutoTick())
   const [logos, texts, social, sponsors, catalog, chatConfig, appSettings, tourSettings] = await Promise.all([
     getLogos(),
     getSiteTexts(),
