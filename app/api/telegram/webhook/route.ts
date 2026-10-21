@@ -1,4 +1,5 @@
-import { handleUpdate, verifyWebhookSecret, type TgUpdate } from '@/lib/telegram-chat'
+import { getChatConfig, handleUpdate, verifyWebhookSecret, type TgUpdate } from '@/lib/telegram-chat'
+import type { TgCallback } from '@/lib/tg-hub'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,14 @@ export async function POST(request: Request) {
     return new Response('unauthorized', { status: 401 })
   }
   try {
-    await handleUpdate((await request.json()) as TgUpdate)
+    const update = (await request.json()) as TgUpdate & { callback_query?: TgCallback }
+    if (update.callback_query) {
+      const chat = await getChatConfig()
+      const { dmOptOut } = await import('@/lib/tg-hub')
+      if (chat && update.callback_query.data === 'dm:off') await dmOptOut(chat.botId, update.callback_query)
+    } else {
+      await handleUpdate(update)
+    }
   } catch (error) {
     // Returning 200 keeps Telegram from retrying a broken update forever.
     console.error('[telegram-webhook]', error)

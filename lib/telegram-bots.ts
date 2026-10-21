@@ -397,6 +397,9 @@ export async function pollShareBot(): Promise<{ handled: number; error: string |
   const { getChatConfig } = await import('@/lib/telegram-chat')
   const chat = await getChatConfig().catch(() => null)
   if (chat?.botId === share.botId) return { handled: 0, error: null }
+  // A bot that already has a Telegram Merkezi webhook receives source posts there instead of polling.
+  const { hasHook } = await import('@/lib/tg-hub')
+  if (await hasHook(share.botId)) return { handled: 0, error: null }
 
   let handled = 0
   try {
