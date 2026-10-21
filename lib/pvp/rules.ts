@@ -160,7 +160,7 @@ export type ActResult = { state: PvpState; outcome: Outcome }
 export const seatSide = (seat: number): Side => (seat === 0 ? 'p' : 'b')
 
 export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSeats?: number[] }): PvpState {
-  if (game === 'okey101') return runOkey101Bots(initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
+  if (game === 'okey101') return initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds, team: opts?.team })
   if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant })).state
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
   if (game === 'papaz') return runPapazBots(initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats })).state
@@ -219,10 +219,23 @@ function seatBotTurn(s: SeatState, seat: number) {
 }
 const seatCount = (s: SeatState) => s.seats
 
+/** Games whose bots play one turn per poll so humans can follow every move. */
+const pacedBots = (s: SeatState) => s.kind === 'okey101'
+
+export const BOT_PACE_MS = 1100
+
+/** Plays a single paced bot turn when the seat to move belongs to a bot. */
+export function paceBotTurn(state: PvpState): ActResult | null {
+  if (!isSeatState(state) || !pacedBots(state) || !state.bots.includes(state.turn)) return null
+  const r = seatBotTurn(state, state.turn)
+  return { state: r.state, outcome: seatOutcome(r.winners) }
+}
+
 function seatAct(s: SeatState, seat: number, a: Action): ActResult {
   if (s.bots.includes(seat)) throw new Error('Bu koltuk bota devredildi')
   const r = seatStep(s, seat, a)
   if (r.winners) return { state: r.state, outcome: seatOutcome(r.winners) }
+  if (pacedBots(r.state)) return { state: r.state, outcome: null }
   const b = seatBots(r.state)
   return { state: b.state, outcome: seatOutcome(b.winners) }
 }
@@ -233,6 +246,7 @@ export function seatGameToBot(state: PvpState, seat: number): ActResult | null {
   const bots = Array.from(new Set([...state.bots, seat]))
   const s = { ...state, bots, note: 'Ayrılan oyuncunun yerine bot geçti' } as SeatState
   if (bots.length >= seatCount(s)) return { state: s, outcome: { winnerSeat: null, winnerSeats: [] } }
+  if (pacedBots(s)) return { state: s, outcome: null }
   const b = seatBots(s)
   return { state: b.state, outcome: seatOutcome(b.winners) }
 }
@@ -527,6 +541,7 @@ export function autoMove(state: PvpState): ActResult | null {
   if (isSeatState(state)) {
     const r = seatBotTurn(state, state.turn)
     if (r.winners) return { state: r.state, outcome: seatOutcome(r.winners) }
+    if (pacedBots(r.state)) return { state: { ...r.state, note: 'Süre doldu, otomatik hamle yapıldı' } as PvpState, outcome: null }
     const b = seatBots(r.state)
     return { state: { ...b.state, note: b.state.note || 'Süre doldu, otomatik hamle yapıldı' } as PvpState, outcome: seatOutcome(b.winners) }
   }

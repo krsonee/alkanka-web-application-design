@@ -1,9 +1,22 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, Bot, ChevronDown, Eye, Trophy, Undo2, Wand2 } from 'lucide-react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { ArrowDownToLine, Bot, Eye, Layers, Sparkles, Trophy, Undo2, Wand2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { analyzeMeld, bestPartition, canOpenWithTile, findPairs, jokerSwapIndex, leftOf101, OPEN_MIN, PAIR_MIN, type HandResult, type Okey101View } from '@/lib/games/okey101'
+import {
+  analyzeMeld,
+  bestPartition,
+  canOpenWithTile,
+  findPairs,
+  jokerSwapIndex,
+  leftOf101,
+  OPEN_MIN,
+  PAIR_MIN,
+  partnerOf101,
+  rankTotals101,
+  type HandResult,
+  type Okey101View,
+} from '@/lib/games/okey101'
 import type { Remote } from './remote'
 import { FeltBranding, TileBack, TileFace } from './okey'
 import { okeyFrom, sortHand, type Tile } from './okey-engine'
@@ -11,6 +24,7 @@ import { layoutGroups, OkeyRack, RACK_COLS, useRack, type SlotMark } from './oke
 
 type OkeyValue = ReturnType<typeof okeyFrom>
 type Segment = { tiles: Tile[]; slots: number[]; kind: 'run' | 'set' | 'pair'; value: number }
+type MainAction = { label: ReactNode; onClick?: () => void; disabled?: boolean; tone: 'primary' | 'danger' | 'muted'; discard?: boolean }
 
 /** Tiles touching each other on the same rack row form one group; empty slots split groups. */
 function readSegments(slots: (number | null)[], byId: Map<number, Tile>, okey: OkeyValue): Segment[] {
@@ -43,13 +57,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const hand = useMemo(() => (mySeat >= 0 ? s.hands[mySeat] ?? [] : []), [s.hands, mySeat])
   const rack = useRack(hand, okey)
   const [localError, setLocalError] = useState<string | null>(null)
-  const boardRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [])
+  const [scoresOpen, setScoresOpen] = useState(false)
 
   const autoLayout = (mode: 'seri' | 'cift') => {
     const groups = mode === 'seri' ? bestPartition(hand, okey).groups : findPairs(hand, okey)
@@ -139,7 +147,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     act({ type: 'lay', groups: ids(list) })
   }
 
-  // Hand-over popup: shows each finished hand's scores without having to scroll to the score table.
+  // Hand-over popup: shows each finished hand's scores without having to open the score sheet.
   const [seenResults, setSeenResults] = useState(s.results.length)
   const [handPopup, setHandPopup] = useState<HandResult | null>(null)
   if (s.results.length !== seenResults) {
@@ -153,6 +161,20 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     return () => clearTimeout(t)
   }, [handPopup])
 
+  // Turn hand-over cue: buzz the phone and flash a banner (the chime itself comes from useTableSounds).
+  const [prevMyTurn, setPrevMyTurn] = useState(remote.myTurn)
+  const [turnFlash, setTurnFlash] = useState(0)
+  if (remote.myTurn !== prevMyTurn) {
+    setPrevMyTurn(remote.myTurn)
+    if (remote.myTurn && !remote.spectator) setTurnFlash((k) => k + 1)
+  }
+  useEffect(() => {
+    if (!turnFlash) return
+    if (typeof navigator !== 'undefined') navigator.vibrate?.([40, 60, 40])
+    const t = setTimeout(() => setTurnFlash(0), 1400)
+    return () => clearTimeout(t)
+  }, [turnFlash])
+
   const nameOf = (seat: number) => (seat === mySeat ? 'Sen' : remote.names[seat] ?? `Oyuncu ${seat + 1}`)
   const lastResult = s.results[s.results.length - 1]
 
@@ -163,27 +185,28 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const rightSeat = n >= 3 ? at(1) : null
   const topSeat = n === 4 ? at(2) : n === 2 ? at(1) : null
   const top = (seat: number | null) => (seat == null ? undefined : s.discards[seat]?.[s.discards[seat].length - 1])
-  const sideTop = mySeat >= 0 ? top(leftOf101(mySeat, n)) : top(leftSeat)
+  const sideSeat = mySeat >= 0 ? leftOf101(mySeat, n) : leftSeat
+  const sideTop = top(sideSeat)
   const sideOpens = !!sideTop && (!!opened || canOpenWithTile(hand, sideTop, okey))
   const canTakeSide = drawPhase && !!sideTop && !s.noTake && !remote.busy && sideOpens
 
-  // 101: lowest running total leads. Ties share the same rank.
+  // 101: lowest running total leads (team mode adds the partner's score). Ties share the same rank.
   const hasStandings = s.results.length > 0
-  const rankOf = (seat: number) => 1 + s.totals.filter((t) => t < s.totals[seat]).length
-  const standings = s.totals
-    .map((total, seat) => ({ seat, total, rank: rankOf(seat) }))
-    .sort((a, b) => a.total - b.total || a.seat - b.seat)
+  const ranked = rankTotals101(s)
+  const rankOf = (seat: number) => 1 + ranked.filter((t) => t < ranked[seat]).length
+  const partner = s.team && mySeat >= 0 ? partnerOf101(mySeat, n) : null
 
   const seatPill = (seat: number | null, vertical?: boolean) =>
     seat == null ? <span /> : (
       <SeatPill
         rank={hasStandings ? rankOf(seat) : undefined}
-        total={hasStandings ? s.totals[seat] : undefined}
+        total={hasStandings ? ranked[seat] : undefined}
         name={nameOf(seat)}
         bot={s.bots.includes(seat)}
         turn={s.turn === seat}
         count={s.handCounts[seat]}
         status={s.opened[seat] === 'cift' ? 'Çifte gitti' : s.opened[seat] ? 'Açtı' : null}
+        partner={seat === partner}
         vertical={vertical}
       />
     )
@@ -193,77 +216,117 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     (myTurn
       ? s.phase === 'draw'
         ? sideTop && !sideOpens
-          ? 'Sıra sende: elin açmadığı için yandan alamazsın, ortadan çek.'
-          : 'Sıra sende: ortadan çek ya da soldan gelen taşı al.'
+          ? 'Elin açmadığı için yandan alamazsın, ortadan çek.'
+          : 'Ortadan çek ya da soldan gelen taşı al.'
         : s.taken != null
-          ? 'Yandan aldığın taşla elini açmalısın, yoksa geri ver (101 ceza).'
+          ? 'Yandan aldığın taşla elini aç, yoksa geri ver (+101 ceza).'
           : opened
             ? 'Per aç, işle, sonra bir taş at.'
             : `Açmak için ${OPEN_MIN} sayı ya da ${PAIR_MIN} çift. Hazır değilsen taş at.`
       : `${nameOf(s.turn)} oynuyor`)
 
-  const cols = Math.max(11, Math.ceil(hand.length / 2))
-  const slots = cols * 2
+  // One button that always does the next sensible thing; secondary actions sit beside it.
+  const main: MainAction = (() => {
+    if (drawPhase) return { label: 'Ortadan çek', onClick: () => act({ type: 'draw', from: 'deck' }), disabled: remote.busy, tone: 'primary' }
+    if (!playPhase) return { label: `${nameOf(s.turn)} oynuyor`, disabled: true, tone: 'muted' }
+    if (!opened && runValue >= OPEN_MIN)
+      return { label: <>Elini aç <span className="tabular-nums opacity-80">{runValue}</span></>, onClick: () => act({ type: 'open', mode: 'seri', groups: ids(runs) }), disabled: remote.busy, tone: 'primary' }
+    if (!opened && pairs.length >= PAIR_MIN)
+      return { label: <>Çifte git <span className="tabular-nums opacity-80">{pairs.length}</span></>, onClick: () => act({ type: 'open', mode: 'cift', groups: ids(pairs) }), disabled: remote.busy, tone: 'primary' }
+    if (opened && layable.length > 0) return { label: 'Perleri yere aç', onClick: layDown, disabled: remote.busy, tone: 'primary' }
+    if (s.taken != null) return { label: <><Undo2 className="size-4" aria-hidden="true" /> Geri ver</>, onClick: () => act({ type: 'giveBack' }), disabled: remote.busy, tone: 'danger' }
+    return {
+      label: <><ArrowDownToLine className="size-4" aria-hidden="true" /> {selected != null ? 'Seçili taşı at' : 'Atacağın taşı seç'}</>,
+      onClick: () => selected != null && discard(selected),
+      disabled: !canDiscard,
+      tone: selected != null ? 'primary' : 'muted',
+      discard: true,
+    }
+  })()
+  const mainIsDiscard = playPhase && s.taken == null && main.discard === true
+  const showGiveBack = playPhase && s.taken != null && main.tone !== 'danger'
+
+  // Melds grouped by owner so it's clear who opened what; you first, then counter-clockwise.
+  const owners = Array.from({ length: n }, (_, k) => at(k)).filter((seat) => s.melds.some((m) => m.owner === seat))
+
+  const renderMeld = (m: Okey101View['melds'][number]) => {
+    const swap = !selectedFits.includes(m.id) && selectedSwaps.includes(m.id)
+    const fits = selectedFits.includes(m.id) || swap
+    const dimmed = selected != null && canLayOff && !fits
+    const hovered = dragHover === m.id
+    return (
+      <button
+        key={m.id}
+        type="button"
+        data-drop={canLayOff && m.kind !== 'pair' ? `meld:${m.id}` : undefined}
+        disabled={!fits || remote.busy}
+        onClick={() => selected != null && (swap ? swapJoker(selected, m.id) : addTile(selected, m.id))}
+        aria-label={`${nameOf(m.owner)} peri${swap ? ', gerçek taşı koyup okeyi al' : fits ? ', seçili taşı buraya işle' : ''}`}
+        className={cn(
+          'relative flex shrink-0 gap-px rounded-md bg-background/30 p-0.5 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 disabled:cursor-default sm:p-1',
+          fits && 'cursor-pointer ring-2 ring-primary hover:-translate-y-0.5 hover:bg-primary/25',
+          hovered && 'scale-105 bg-primary/30 ring-4 ring-primary',
+          dimmed && 'opacity-40',
+        )}
+      >
+        {fits && (
+          <span className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-1.5 text-[9px] font-bold uppercase leading-4 text-primary-foreground shadow">
+            {swap ? 'Okeyi al' : 'İşle'}
+          </span>
+        )}
+        {m.tiles.map((t) => (
+          <MeldTile key={t.id} tile={t} okey={okey} />
+        ))}
+      </button>
+    )
+  }
+
+  const myTotal = mySeat >= 0 && hasStandings ? ranked[mySeat] : null
 
   return (
-    <div ref={boardRef} className="flex scroll-mt-20 flex-col gap-2 sm:gap-3">
-      {remote.spectator && (
-        <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
-          <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Eller gizli, yere açılan perler canlı görünür.
+    <div data-game-table className="flex flex-col gap-2 sm:gap-3">
+      <div className="flex items-center gap-2">
+        {remote.spectator && (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground">
+            <Eye className="size-3 text-primary" aria-hidden="true" /> İzleyici
+          </span>
+        )}
+        <p
+          className={cn(
+            'min-w-0 flex-1 truncate rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm',
+            myTurn ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground',
+          )}
+          aria-live="polite"
+        >
+          {note}
         </p>
-      )}
+        <button
+          type="button"
+          onClick={() => setScoresOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground hover:bg-secondary"
+          aria-label="Puan tablosunu aç"
+        >
+          <Trophy className="size-3.5 text-primary" aria-hidden="true" />
+          <span className="tabular-nums">
+            {s.handNo}/{s.handsTotal}
+          </span>
+          {myTotal != null && <span className="tabular-nums text-primary">{myTotal}</span>}
+        </button>
+      </div>
 
-      {hasStandings && (
-        <section aria-label="Sıralama" className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-2">
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-              <Trophy className="size-3.5 text-primary" aria-hidden="true" /> Sıralama
-            </span>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {s.handNo}/{s.handsTotal}. el · az puan önde
+      <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
+        <FeltBranding />
+        {turnFlash > 0 && (
+          <div key={turnFlash} className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" aria-hidden="true">
+            <span className="turn-flash rounded-full bg-primary px-5 py-2 text-sm font-black uppercase tracking-widest text-primary-foreground shadow-lg">
+              Sıra sende
             </span>
           </div>
-          <ol className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-            {standings.map(({ seat, total, rank }) => {
-              const leader = rank === 1
-              const gap = total - standings[0].total
-              return (
-                <li
-                  key={seat}
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg border px-2 py-1.5',
-                    leader ? 'border-primary bg-primary/15' : 'border-border bg-secondary',
-                    seat === mySeat && !leader && 'border-foreground/30',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                      leader ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground',
-                    )}
-                  >
-                    {rank}
-                  </span>
-                  <span className={cn('min-w-0 flex-1 truncate text-xs', seat === mySeat ? 'font-bold text-foreground' : 'font-semibold text-foreground')}>
-                    {nameOf(seat)}
-                  </span>
-                  <span className="flex flex-col items-end leading-tight">
-                    <span className={cn('text-xs font-bold tabular-nums', leader ? 'text-primary' : 'text-foreground')}>{total}</span>
-                    {!leader && <span className="text-[9px] tabular-nums text-muted-foreground">+{gap}</span>}
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
-        </section>
-      )}
-
-      <div className="relative overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
-        <FeltBranding />
-        <div className="relative grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 p-2 pt-4 sm:gap-3 sm:p-4 sm:pt-6">
-          <Pile tile={top(topSeat)} count={topSeat != null && n === 4 ? s.discards[topSeat].length : 0} okey={okey} hidden={n !== 4} />
+        )}
+        <div className="relative grid flex-1 grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 p-2 pt-4 sm:gap-3 sm:p-4 sm:pt-6">
+          <Pile tile={top(topSeat)} count={topSeat != null && n === 4 ? s.discards[topSeat].length : 0} okey={okey} hidden={n !== 4} from={[110, -10]} />
           <div className="flex justify-center">{seatPill(topSeat)}</div>
-          <Pile tile={top(rightSeat)} count={rightSeat != null ? s.discards[rightSeat].length : 0} okey={okey} hidden={rightSeat == null} />
+          <Pile tile={top(rightSeat)} count={rightSeat != null ? s.discards[rightSeat].length : 0} okey={okey} hidden={rightSeat == null} from={[10, 110]} />
 
           <div className="flex items-center">{seatPill(n >= 3 ? leftSeat : null, true)}</div>
 
@@ -274,14 +337,17 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
                 disabled={!drawPhase || remote.busy}
                 onClick={() => act({ type: 'draw', from: 'deck' })}
                 aria-label={`Ortadan çek, ${s.deckCount} taş kaldı`}
-                className={cn('flex flex-col items-center gap-1 rounded-lg p-1 disabled:cursor-default', drawPhase && 'animate-pulse ring-2 ring-primary')}
+                className={cn(
+                  'flex flex-col items-center gap-1 rounded-lg p-1 transition-transform disabled:cursor-default',
+                  drawPhase && 'ring-2 ring-primary hover:-translate-y-0.5 active:scale-95',
+                )}
               >
                 <span className="relative h-11 w-9">
                   <TileBack className="absolute left-1 top-1 h-10 w-7" />
                   <TileBack className="absolute left-0.5 top-0.5 h-10 w-7" />
-                  <TileBack className="absolute left-0 top-0 h-10 w-7" />
+                  <TileBack className={cn('absolute left-0 top-0 h-10 w-7', drawPhase && 'animate-bounce')} />
                 </span>
-                <span className={cn('text-[9px] font-bold uppercase tracking-wider', drawPhase ? 'text-primary' : 'text-foreground/60')}>
+                <span className={cn('text-[9px] font-bold uppercase tracking-wider tabular-nums', drawPhase ? 'text-primary' : 'text-foreground/60')}>
                   {drawPhase ? 'Çek' : `${s.deckCount} taş`}
                 </span>
               </button>
@@ -291,40 +357,22 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
               </div>
             </div>
 
-            {s.melds.length > 0 && (
-              <div className="flex max-h-40 w-full flex-wrap content-start justify-center gap-1.5 overflow-y-auto p-1 sm:max-h-64 sm:gap-2" aria-label="Yerdeki perler">
-                {s.melds.map((m) => {
-                  const swap = !selectedFits.includes(m.id) && selectedSwaps.includes(m.id)
-                  const fits = selectedFits.includes(m.id) || swap
-                  const dimmed = selected != null && canLayOff && !fits
-                  const hovered = dragHover === m.id
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      data-drop={canLayOff && m.kind !== 'pair' ? `meld:${m.id}` : undefined}
-                      disabled={!fits || remote.busy}
-                      onClick={() => selected != null && (swap ? swapJoker(selected, m.id) : addTile(selected, m.id))}
-                      aria-label={`${nameOf(m.owner)} peri${swap ? ', gerçek taşı koyup okeyi al' : fits ? ', seçili taşı buraya işle' : ''}`}
-                      className={cn(
-                        'relative flex gap-px rounded-md bg-background/30 p-1 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-150 disabled:cursor-default',
-                        fits && 'cursor-pointer ring-2 ring-primary hover:-translate-y-0.5 hover:bg-primary/25',
-                        hovered && 'scale-105 bg-primary/30 ring-4 ring-primary',
-                        dimmed && 'opacity-40',
-                        m.owner === mySeat && !fits && 'outline outline-1 outline-primary/50',
-                      )}
-                    >
-                      {fits && (
-                        <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-1.5 text-[9px] font-bold uppercase leading-4 text-primary-foreground shadow">
-                          {swap ? 'Okeyi al' : 'İşle'}
-                        </span>
-                      )}
-                      {m.tiles.map((t) => (
-                        <TileFace key={t.id} tile={t} okey={okey} size="xs" />
-                      ))}
-                    </button>
-                  )
-                })}
+            {owners.length > 0 && (
+              <div className="flex w-full flex-col gap-1.5 overflow-y-auto sm:gap-2" aria-label="Yerdeki perler">
+                {owners.map((seat) => (
+                  <div
+                    key={seat}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-lg p-1',
+                      seat === mySeat ? 'bg-primary/10 ring-1 ring-primary/40' : seat === partner ? 'bg-foreground/5 ring-1 ring-foreground/15' : 'bg-background/15',
+                    )}
+                  >
+                    <span className="w-10 shrink-0 truncate text-[9px] font-bold uppercase tracking-wider text-foreground/80 sm:w-16 sm:text-[10px]">
+                      {nameOf(seat)}
+                    </span>
+                    <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pt-2 pb-0.5">{s.melds.filter((m) => m.owner === seat).map(renderMeld)}</div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -333,8 +381,9 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 
           <Pile
             tile={sideTop}
-            count={leftSeat != null ? s.discards[mySeat >= 0 ? leftOf101(mySeat, n) : leftSeat].length : 0}
+            count={sideSeat != null ? s.discards[sideSeat].length : 0}
             okey={okey}
+            from={n === 2 ? [90, -160] : [10, -110]}
             label={canTakeSide ? 'Yandan al' : 'Soldan'}
             active={canTakeSide}
             onClick={canTakeSide ? () => act({ type: 'draw', from: 'discard' }) : undefined}
@@ -350,11 +399,15 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           >
             <span
               className={cn(
-                'flex h-8 w-6 items-center justify-center rounded sm:h-11 sm:w-8',
-                canDiscard ? 'animate-pulse border-2 border-dashed border-primary bg-primary/20' : 'border border-dashed border-foreground/20',
+                'flex h-8 w-6 items-center justify-center rounded transition-colors sm:h-11 sm:w-8',
+                canDiscard ? 'border-2 border-dashed border-primary bg-primary/20' : 'border border-dashed border-foreground/20',
               )}
             >
-              {!canDiscard && top(viewer) && <TileFace tile={top(viewer)!} okey={okey} size="xs" />}
+              {!canDiscard && top(viewer) && (
+                <span key={top(viewer)!.id} className="animate-in fade-in zoom-in-75 slide-in-from-top-3 duration-300">
+                  <TileFace tile={top(viewer)!} okey={okey} size="xs" />
+                </span>
+              )}
             </span>
             <span className={cn('text-[8px] font-bold uppercase tracking-wider sm:text-[9px]', canDiscard ? 'text-primary' : 'text-foreground/50')}>
               {canDiscard ? 'Buraya at' : 'Attığın'}
@@ -363,12 +416,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         </div>
       </div>
 
-      <p className={cn('rounded-lg px-3 py-1.5 text-center text-xs font-semibold sm:text-sm', myTurn ? 'bg-primary/15 text-primary' : 'bg-secondary text-foreground')} aria-live="polite">
-        {note}
-      </p>
-
       {mySeat >= 0 && (
-        <div className="flex flex-col gap-2">
+        <div className={cn('flex flex-col gap-2 rounded-2xl p-1 transition-shadow', myTurn && 'ring-2 ring-primary/60')}>
           <OkeyRack
             hand={hand}
             okey={okey}
@@ -386,82 +435,90 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
               }
             }}
           />
-          {layOffable.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2">
-              <span className="text-xs font-semibold text-foreground">
-                {layOffable.length} taşın yere işlenebilir. Taşı seç, sarı yanan pere dokun ya da sürükleyip bırak.
-              </span>
-              <button
-                type="button"
-                disabled={remote.busy}
-                onClick={autoLayOff}
-                className="rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground disabled:opacity-50"
-              >
-                Hızlı işle
-              </button>
-            </div>
-          )}
-          <p className="text-center text-[11px] leading-snug text-muted-foreground">
-            Taşları sürükleyip diz. Yan yana duran taşlar bir grup sayılır, boşluk grubu ayırır; geçerli perlerin altı sarı çizilir.
-          </p>
 
           {localError && (
-            <p role="alert" className="text-xs text-destructive sm:text-sm">
+            <p role="alert" className="px-1 text-xs text-destructive sm:text-sm">
               {localError}
             </p>
           )}
 
-          <div className="grid grid-cols-3 gap-1.5">
-            {!opened ? (
-              <>
-                <ActionButton
-                  primary
-                  disabled={!playPhase || runValue < OPEN_MIN || remote.busy}
-                  onClick={() => act({ type: 'open', mode: 'seri', groups: ids(runs) })}
-                >
-                  Aç <span className="tabular-nums opacity-80">{runValue}/{OPEN_MIN}</span>
-                </ActionButton>
-                <ActionButton
-                  primary
-                  disabled={!playPhase || pairs.length < PAIR_MIN || remote.busy}
-                  onClick={() => act({ type: 'open', mode: 'cift', groups: ids(pairs) })}
-                >
-                  Çift <span className="tabular-nums opacity-80">{pairs.length}/{PAIR_MIN}</span>
-                </ActionButton>
-              </>
-            ) : (
-              <div className="col-span-2">
-                <ActionButton primary disabled={!playPhase || remote.busy} onClick={layDown}>
-                  Perleri yere aç
-                </ActionButton>
-              </div>
+          <div className="flex items-stretch gap-1.5">
+            <div className="flex shrink-0 overflow-hidden rounded-xl border border-border">
+              <button
+                type="button"
+                onClick={() => autoLayout('seri')}
+                aria-label="Perlere göre diz"
+                className="flex flex-col items-center justify-center gap-0.5 px-2.5 text-[9px] font-bold uppercase text-foreground hover:bg-secondary"
+              >
+                <Wand2 className="size-4 text-primary" aria-hidden="true" /> Seri
+              </button>
+              <button
+                type="button"
+                onClick={() => autoLayout('cift')}
+                aria-label="Çiftlere göre diz"
+                className="flex flex-col items-center justify-center gap-0.5 border-l border-border px-2.5 text-[9px] font-bold uppercase text-foreground hover:bg-secondary"
+              >
+                <Layers className="size-4 text-primary" aria-hidden="true" /> Çift
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={main.onClick}
+              disabled={main.disabled}
+              className={cn(
+                'flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-bold uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-50',
+                main.tone === 'primary' && 'bg-primary text-primary-foreground shadow-lg shadow-primary/25',
+                main.tone === 'danger' && 'bg-destructive text-primary-foreground',
+                main.tone === 'muted' && 'bg-secondary text-muted-foreground',
+              )}
+            >
+              {main.label}
+            </button>
+
+            {playPhase && !mainIsDiscard && s.taken == null && (
+              <button
+                type="button"
+                disabled={!canDiscard}
+                onClick={() => selected != null && discard(selected)}
+                className="flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-destructive/60 px-3 text-[10px] font-bold uppercase text-destructive disabled:opacity-40"
+              >
+                <ArrowDownToLine className="size-4" aria-hidden="true" /> At
+              </button>
             )}
-            {s.taken != null && playPhase ? (
-              <ActionButton disabled={remote.busy} onClick={() => act({ type: 'giveBack' })}>
-                <Undo2 className="size-3.5" aria-hidden="true" /> Geri ver
-              </ActionButton>
-            ) : (
-              <ActionButton danger disabled={!canDiscard} onClick={() => selected != null && discard(selected)}>
-                <ArrowDownToLine className="size-3.5" aria-hidden="true" /> At
-              </ActionButton>
+            {showGiveBack && (
+              <button
+                type="button"
+                disabled={remote.busy}
+                onClick={() => act({ type: 'giveBack' })}
+                className="flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-border px-3 text-[10px] font-bold uppercase text-foreground disabled:opacity-40"
+              >
+                <Undo2 className="size-4" aria-hidden="true" /> Geri ver
+              </button>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => autoLayout('seri')}
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary"
-            >
-              <Wand2 className="size-3.5 text-primary" aria-hidden="true" /> Perlere göre diz
-            </button>
-            <button
-              type="button"
-              onClick={() => autoLayout('cift')}
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary"
-            >
-              <Wand2 className="size-3.5 text-primary" aria-hidden="true" /> Çiftlere göre diz
-            </button>
+          <div className="flex min-h-6 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            {!opened && (
+              <>
+                <span>
+                  Seri <b className={cn('tabular-nums', runValue >= OPEN_MIN ? 'text-primary' : 'text-foreground')}>{runValue}/{OPEN_MIN}</b>
+                </span>
+                <span>
+                  Çift <b className={cn('tabular-nums', pairs.length >= PAIR_MIN ? 'text-primary' : 'text-foreground')}>{pairs.length}/{PAIR_MIN}</b>
+                </span>
+              </>
+            )}
+            {layOffable.length > 0 && (
+              <button
+                type="button"
+                disabled={remote.busy}
+                onClick={autoLayOff}
+                className="flex items-center gap-1 rounded-full bg-primary/15 px-2.5 py-0.5 font-bold text-primary disabled:opacity-50"
+              >
+                <Sparkles className="size-3" aria-hidden="true" /> {layOffable.length} taş işlenir · Hızlı işle
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -492,69 +549,92 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         </div>
       )}
 
-
-      <details className="group rounded-2xl border border-border bg-card">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-bold text-foreground sm:px-4">
-          <span className="flex items-center gap-2">
-            <Trophy className="size-4 text-primary" aria-hidden="true" /> Puan tablosu · {s.handNo}/{s.handsTotal}. el
-          </span>
-          <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
-        </summary>
-        <div className="flex flex-col gap-3 px-3 pb-3 sm:px-4">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-muted-foreground">
-                  <th className="py-1 pr-2 font-semibold">El</th>
-                  {Array.from({ length: n }, (_, i) => (
-                    <th key={i} className="max-w-20 truncate py-1 pr-2 font-semibold">
-                      {nameOf(i)}
-                    </th>
+      {scoresOpen && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-background/70 backdrop-blur-sm sm:items-center" onClick={() => setScoresOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Puan tablosu"
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[85dvh] w-full max-w-lg animate-in slide-in-from-bottom-8 fade-in flex-col gap-3 overflow-y-auto rounded-t-3xl border border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] duration-300 sm:rounded-3xl"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+                <Trophy className="size-4 text-primary" aria-hidden="true" /> Puan tablosu · {s.handNo}/{s.handsTotal}. el
+              </h3>
+              <button type="button" onClick={() => setScoresOpen(false)} aria-label="Kapat" className="flex size-8 items-center justify-center rounded-full hover:bg-secondary">
+                <X className="size-4 text-foreground" aria-hidden="true" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">Az puan önde.{s.team ? ' Eşli oyunda sıralama ortağınla toplam puana göre.' : ''}</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="py-1 pr-2 font-semibold">El</th>
+                    {Array.from({ length: n }, (_, i) => (
+                      <th key={i} className="max-w-20 truncate py-1 pr-2 font-semibold">
+                        {nameOf(i)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="tabular-nums">
+                  {s.results.map((r) => (
+                    <tr key={r.hand} className="border-t border-border">
+                      <td className="py-1 pr-2 text-muted-foreground">{r.hand}</td>
+                      {r.scores.map((sc, i) => (
+                        <td key={i} className={cn('py-1 pr-2', r.finisher === i ? 'font-bold text-primary' : 'text-foreground')}>
+                          {sc}
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="tabular-nums">
-                {s.results.map((r) => (
-                  <tr key={r.hand} className="border-t border-border">
-                    <td className="py-1 pr-2 text-muted-foreground">{r.hand}</td>
-                    {r.scores.map((sc, i) => (
-                      <td key={i} className={cn('py-1 pr-2', r.finisher === i ? 'font-bold text-primary' : 'text-foreground')}>
-                        {sc}
+                  <tr className="border-t border-border font-bold">
+                    <td className="py-1 pr-2 text-muted-foreground">Toplam</td>
+                    {s.totals.map((t, i) => (
+                      <td key={i} className={cn('py-1 pr-2', hasStandings && rankOf(i) === 1 ? 'text-primary' : 'text-foreground')}>
+                        {t + s.penalties[i]}
                       </td>
                     ))}
                   </tr>
+                </tbody>
+              </table>
+            </div>
+            {lastResult && (
+              <p className="text-xs text-muted-foreground">
+                Son el: {lastResult.finisher != null ? `${nameOf(lastResult.finisher)} bitirdi${lastResult.double ? ' (ceza ikiye katlandı)' : ''}` : 'deste bitti'}.
+              </p>
+            )}
+            <div>
+              <h4 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Masa akışı</h4>
+              <ol className="flex flex-col gap-1.5 text-sm">
+                {[...s.log].reverse().slice(0, 20).map((l, i) => (
+                  <li key={`${i}-${l.text}`} className="flex items-center gap-2 text-muted-foreground">
+                    <span className="font-semibold text-foreground">{nameOf(l.seat)}</span>
+                    <span>{l.text}</span>
+                    {l.tile && <TileFace tile={l.tile} okey={okey} size="xs" />}
+                  </li>
                 ))}
-                <tr className="border-t border-border font-bold">
-                  <td className="py-1 pr-2 text-muted-foreground">Toplam</td>
-                  {s.totals.map((t, i) => (
-                    <td key={i} className="py-1 pr-2 text-foreground">
-                      {t + s.penalties[i]}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          {lastResult && (
-            <p className="text-xs text-muted-foreground">
-              Son el: {lastResult.finisher != null ? `${nameOf(lastResult.finisher)} bitirdi${lastResult.double ? ' (ceza ikiye katlandı)' : ''}` : 'deste bitti'}.
-            </p>
-          )}
-          <div>
-            <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Masa akışı</h3>
-            <ol className="flex max-h-48 flex-col gap-1.5 overflow-y-auto text-sm" aria-live="polite">
-              {[...s.log].reverse().slice(0, 14).map((l, i) => (
-                <li key={`${i}-${l.text}`} className="flex items-center gap-2 text-muted-foreground">
-                  <span className="font-semibold text-foreground">{nameOf(l.seat)}</span>
-                  <span>{l.text}</span>
-                  {l.tile && <TileFace tile={l.tile} okey={okey} size="xs" />}
-                </li>
-              ))}
-            </ol>
+              </ol>
+            </div>
           </div>
         </div>
-      </details>
+      )}
     </div>
+  )
+}
+
+function MeldTile({ tile, okey }: { tile: Tile; okey: OkeyValue }) {
+  return (
+    <>
+      <span className="sm:hidden">
+        <TileFace tile={tile} okey={okey} size="xs" />
+      </span>
+      <span className="hidden sm:block">
+        <TileFace tile={tile} okey={okey} size="sm" />
+      </span>
+    </>
   )
 }
 
@@ -567,6 +647,7 @@ function SeatPill({
   vertical,
   rank,
   total,
+  partner,
 }: {
   name: string
   bot: boolean
@@ -576,13 +657,14 @@ function SeatPill({
   vertical?: boolean
   rank?: number
   total?: number
+  partner?: boolean
 }) {
   return (
     <div
       className={cn(
-        'relative flex items-center border backdrop-blur-sm transition-colors',
+        'relative flex items-center border backdrop-blur-sm transition-all duration-300',
         vertical ? 'w-14 flex-col gap-1 rounded-2xl px-1 py-1.5 text-center sm:w-auto sm:flex-row sm:gap-2 sm:rounded-full sm:py-1 sm:pl-1 sm:pr-3 sm:text-left' : 'gap-2 rounded-full py-1 pl-1 pr-3',
-        turn ? 'border-primary bg-background/85 glow-gold' : 'border-foreground/10 bg-background/55',
+        turn ? 'scale-105 border-primary bg-background/85 glow-gold' : 'border-foreground/10 bg-background/55',
       )}
     >
       <span
@@ -598,7 +680,7 @@ function SeatPill({
       <span className="flex min-w-0 flex-col leading-tight">
         <span className={cn('truncate text-[11px] font-bold text-foreground sm:text-xs', vertical ? 'max-w-12 sm:max-w-24' : 'max-w-24')}>{name}</span>
         <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {turn ? <span className="text-primary">Sırada</span> : `${count} taş`}
+          {turn ? <span className="text-primary">Sırada</span> : partner ? 'Eşin' : `${count} taş`}
         </span>
         {status && <span className="text-[9px] font-bold uppercase tracking-wider text-primary">{status}</span>}
       </span>
@@ -625,6 +707,7 @@ function Pile({
   active,
   onClick,
   hidden,
+  from,
 }: {
   tile?: Tile
   count: number
@@ -633,6 +716,8 @@ function Pile({
   active?: boolean
   onClick?: () => void
   hidden?: boolean
+  /** Offset (px) the newest tile flies in from — points back at the player who threw it. */
+  from?: [number, number]
 }) {
   if (hidden) return <span />
   const Comp = onClick ? 'button' : 'div'
@@ -642,21 +727,20 @@ function Pile({
       onClick={onClick}
       aria-label={onClick ? 'Soldan gelen taşı al' : undefined}
       className={cn(
-        'flex flex-col items-center gap-1 self-start rounded-lg bg-background/25 p-1 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)]',
+        'flex flex-col items-center gap-1 self-start rounded-lg bg-background/25 p-1 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)] transition-transform',
         label && 'self-end',
-        active && 'ring-2 ring-primary',
+        active && 'ring-2 ring-primary hover:-translate-y-0.5 active:scale-95',
       )}
     >
       <span className="relative">
         {tile ? (
-          <>
-            <span className="sm:hidden">
-              <TileFace tile={tile} okey={okey} size="xs" />
-            </span>
-            <span className="hidden sm:block">
-              <TileFace tile={tile} okey={okey} size="sm" />
-            </span>
-          </>
+          <span
+            key={tile.id}
+            className={cn('block', from ? 'tile-fly' : 'animate-in fade-in zoom-in-75 slide-in-from-top-3 duration-300')}
+            style={from ? ({ '--fx': `${from[0]}px`, '--fy': `${from[1]}px` } as CSSProperties) : undefined}
+          >
+            <MeldTile tile={tile} okey={okey} />
+          </span>
         ) : (
           <span className="block h-8 w-6 rounded border border-foreground/10 bg-background/20 sm:h-11 sm:w-8" aria-hidden="true" />
         )}
@@ -668,37 +752,5 @@ function Pile({
         <span className={cn('text-[8px] font-bold uppercase tracking-wider sm:text-[9px]', active ? 'animate-pulse text-primary' : 'text-foreground/50')}>{label}</span>
       )}
     </Comp>
-  )
-}
-
-function ActionButton({
-  children,
-  onClick,
-  disabled,
-  primary,
-  danger,
-}: {
-  children: React.ReactNode
-  onClick: () => void
-  disabled?: boolean
-  primary?: boolean
-  danger?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'flex w-full items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide disabled:opacity-40 sm:text-xs',
-        primary
-          ? 'bg-primary text-primary-foreground'
-          : danger
-            ? 'bg-destructive text-primary-foreground'
-            : 'border border-border text-foreground hover:bg-secondary',
-      )}
-    >
-      {children}
-    </button>
   )
 }

@@ -25,7 +25,7 @@ import {
 } from '@/lib/casino'
 
 const BJ_ACTIONS: BjAction[] = ['hit', 'stand', 'double', 'split', 'surrender', 'insure', 'noInsure']
-import { actOnTable, cancelTable, claimTimeout, createTable, joinTable, leaveTable } from '@/lib/pvp/tables'
+import { actOnTable, cancelTable, claimTimeout, createTable, getTableRow, joinTable, leaveTable, pausedClock, tableView } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
@@ -337,8 +337,13 @@ export async function inviteToTable(id: string) {
 
 export async function playMove(id: string, version: number, action: { type: string; [k: string]: unknown }) {
   try {
-    await actOnTable(await member(), id, version, action)
-    return { ok: true as const }
+    const m = await member()
+    await actOnTable(m, id, version, action)
+    // Hand the fresh table back so the client skips a second round trip before unlocking.
+    const t = await getTableRow(id)
+    if (!t) return { ok: true as const, view: null }
+    const clock = t.status === 'oynaniyor' ? await pausedClock(t.updatedAt) : { updatedAt: t.updatedAt, paused: false }
+    return { ok: true as const, view: { ...tableView(t, m.id), ...clock } }
   } catch (e) {
     return fail(e)
   }

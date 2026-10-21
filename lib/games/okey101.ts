@@ -10,6 +10,8 @@ export type Okey101State = {
   kind: 'okey101'
   seats: number
   bots: number[]
+  /** Eşli 101: seats i and i+2 are partners and share one score. */
+  team?: boolean
   deck: Tile[]
   indicator: Tile
   hands: Tile[][]
@@ -283,7 +285,12 @@ function deal(seats: number, dealer: number) {
   return { deck, indicator, hands }
 }
 
-export function initOkey101(opts: { seats?: number; botSeats?: number[]; rounds?: number }): Okey101State {
+export const partnerOf101 = (seat: number, n: number) => (n === 4 ? (seat + 2) % 4 : seat)
+/** Score that decides the ranking: a seat's own total, or the pair's combined total in eşli 101. */
+export const rankTotals101 = (s: Pick<Okey101State, 'totals' | 'team' | 'seats'>) =>
+  s.totals.map((t, i) => (s.team ? t + s.totals[partnerOf101(i, s.seats)] : t))
+
+export function initOkey101(opts: { seats?: number; botSeats?: number[]; rounds?: number; team?: boolean }): Okey101State {
   const seats = opts.seats === 2 ? 2 : 4
   const dealer = Math.floor(Math.random() * seats)
   const d = deal(seats, dealer)
@@ -291,6 +298,7 @@ export function initOkey101(opts: { seats?: number; botSeats?: number[]; rounds?
     kind: 'okey101',
     seats,
     bots: opts.botSeats ?? [],
+    team: seats === 4 && opts.team === true,
     ...d,
     discards: Array.from({ length: seats }, () => []),
     melds: [],
@@ -321,7 +329,8 @@ function endHand(s: Okey101State, finisher: number | null, double: boolean): Ste
   const scores = s.hands.map((h, i) => {
     if (i === finisher) return -PENALTY * mult + s.penalties[i]
     if (!s.opened[i]) return 202 * mult + s.penalties[i]
-    const rest = h.reduce((sum, t) => sum + tilePoints(t, ok), 0)
+    // An okey still in an opened hand is written as 101: it could have been played anywhere.
+    const rest = h.reduce((sum, t) => sum + (isJoker(t, ok) ? PENALTY : tilePoints(t, ok)), 0)
     return rest * (s.opened[i] === 'cift' ? 2 : 1) * mult + s.penalties[i]
   })
   const totals = s.totals.map((t, i) => t + scores[i])
@@ -357,8 +366,9 @@ function endHand(s: Okey101State, finisher: number | null, double: boolean): Ste
       winners: null,
     }
   }
-  const min = Math.min(...totals)
-  const winners = totals.map((t, i) => (t === min ? i : -1)).filter((i) => i >= 0)
+  const ranked = rankTotals101({ totals, team: s.team, seats: s.seats })
+  const min = Math.min(...ranked)
+  const winners = ranked.map((t, i) => (t === min ? i : -1)).filter((i) => i >= 0)
   return { state: { ...s, totals, results, note: `${note} Oyun bitti.` }, winners }
 }
 
@@ -539,8 +549,10 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
     discards[seat].push(tile)
     const joker = isJoker(tile, ok)
     if (hands[seat].length === 0) {
-      const double = joker || s.openedTurn[seat] === s.turnNo
-      return endHand({ ...s, hands, discards, log: pushLog(s, { seat, text: double ? 'okeyle / elden bitirdi!' : 'elini bitirdi!', tile }) }, seat, double)
+      const fromHand = s.openedTurn[seat] === s.turnNo
+      const double = joker || fromHand
+      const text = fromHand ? 'elden bitirdi! (cezalar 2 kat)' : joker ? 'okeyle bitirdi! (cezalar 2 kat)' : 'elini bitirdi!'
+      return endHand({ ...s, hands, discards, log: pushLog(s, { seat, text, tile }) }, seat, double)
     }
     let penalty = 0
     let text = 'taş attı'

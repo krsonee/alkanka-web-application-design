@@ -559,6 +559,7 @@ export function LiveRail() {
       />
     )}
     <aside
+      data-live-rail
       aria-label="Telegram canlı sohbet"
       className={cn(
         'fixed inset-x-0 bottom-0 z-50 h-[85dvh] w-full flex-col overflow-hidden rounded-t-3xl border-t border-accent/40 bg-surface shadow-2xl',

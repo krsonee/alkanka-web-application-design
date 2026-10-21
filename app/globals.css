@@ -548,6 +548,26 @@
   50% { transform: translateX(4px); }
   75% { transform: translateX(-2px); }
 }
+@keyframes tile-fly {
+  0% { transform: translate(var(--fx, 0), var(--fy, 0)) scale(0.7) rotate(-12deg); opacity: 0.2; }
+  70% { transform: translate(0, 0) scale(1.08) rotate(2deg); opacity: 1; }
+  100% { transform: translate(0, 0) scale(1) rotate(0); opacity: 1; }
+}
+.tile-fly {
+  animation: tile-fly 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  position: relative;
+  z-index: 10;
+}
+@keyframes turn-flash {
+  0% { transform: scale(0.6); opacity: 0; }
+  20% { transform: scale(1.06); opacity: 1; }
+  75% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0; }
+}
+.turn-flash { animation: turn-flash 1400ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .tile-fly, .turn-flash { animation-duration: 1ms; }
+}
 @keyframes card-deal {
   from { transform: translate(40px, -60px) rotate(12deg); opacity: 0; }
   to { transform: translate(0, 0) rotate(0); opacity: 1; }
@@ -1494,4 +1514,14 @@
 }
 :root[data-sidebar='collapsed'] {
   --sidebar-w: 72px;
+}
+
+/* While a card-table game is on screen the Telegram rail steps aside so the table gets the width. */
+@media (min-width: 1280px) {
+  body:has([data-game-table]) aside[data-live-rail] {
+    display: none;
+  }
+  body:has([data-game-table]) .xl\:pr-80 {
+    padding-right: 0;
+  }
 }
