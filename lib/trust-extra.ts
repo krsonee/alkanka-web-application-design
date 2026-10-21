@@ -279,7 +279,26 @@ async function settleSponsorMonth() {
 
 // --- T1 Haftalık sponsor karnesi -------------------------------------------
 
-export type KarneRow = { siteId: string; name: string; rating: number | null; reviews: number; resolved: number; complaints: number; withdrawals: number }
+export type KarneRow = {
+  siteId: string
+  name: string
+  rating: number | null
+  reviews: number
+  resolved: number
+  complaints: number
+  withdrawals: number
+  support?: { total: number; resolved: number; avgMin: number | null }
+}
+
+async function supportBySponsor() {
+  try {
+    const { sponsorSupportStats } = await import('@/lib/tg-support')
+    const list = await sponsorSupportStats(7)
+    return new Map(list.map((s) => [s.sponsor.toLocaleLowerCase('tr').trim(), s]))
+  } catch {
+    return new Map()
+  }
+}
 
 export async function weeklyKarne(): Promise<KarneRow[]> {
   await ensureCommunity()
@@ -290,13 +309,19 @@ export async function weeklyKarne(): Promise<KarneRow[]> {
     FROM complaints WHERE status <> 'rejected' AND updated_at > now() - interval '7 days' GROUP BY site_id`)
   const wd = await rows<{ site_id: string; n: string }>(sql`SELECT site_id, count(*) AS n FROM withdraw_shares
     WHERE status = 'approved' AND resolved_at > now() - interval '7 days' GROUP BY site_id`).catch(() => [])
-  const ids = new Set([...rv, ...cp, ...wd].map((x) => x.site_id))
+  const support = await supportBySponsor()
+  const supportIds = Object.entries(names)
+    .filter(([, name]) => support.has(String(name).toLocaleLowerCase('tr').trim()))
+    .map(([id]) => id)
+  const ids = new Set([...rv, ...cp, ...wd].map((x) => x.site_id).concat(supportIds))
   return [...ids]
     .filter((id) => names[id])
     .map((id) => {
       const r = rv.find((x) => x.site_id === id)
       const c = cp.find((x) => x.site_id === id)
+      const s = support.get(String(names[id]).toLocaleLowerCase('tr').trim())
       return {
+        support: s ? { total: s.total, resolved: s.resolved, avgMin: s.avgMin } : undefined,
         siteId: id,
         name: names[id],
         rating: r ? Math.round(Number(r.avg) * 10) / 10 : null,
@@ -317,6 +342,7 @@ export function karneText(list: KarneRow[], origin: string, helpful?: HelpfulLea
       const parts = [k.rating === null ? 'puan yok' : `${k.rating.toFixed(1)}/5 (${k.reviews} yorum)`]
       if (k.withdrawals) parts.push(`${k.withdrawals} onaylı çekim`)
       if (k.complaints) parts.push(`${k.resolved}/${k.complaints} şikâyet çözüldü`)
+      if (k.support?.total) parts.push(`destek ${k.support.resolved}/${k.support.total}${k.support.avgMin != null ? ` (ort. ${k.support.avgMin} dk)` : ''}`)
       return `${i + 1}. ${k.name} · ${parts.join(' · ')}`
     }),
     ...(helpful ? ['', `Haftanın en faydalı yorumcusu: ${helpful.name} (${helpful.votes} oy)`] : []),

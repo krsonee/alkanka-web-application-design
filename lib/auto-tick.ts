@@ -3,6 +3,7 @@ import { rows, sql } from '@/lib/db'
 
 const TELEGRAM_EVERY_SEC = 180
 const KANKATV_EVERY_SEC = 60
+const HUB_EVERY_SEC = 60
 
 /**
  * Atomically claims a time slot so only one request per interval runs the job,
@@ -41,10 +42,17 @@ async function kankatvTick() {
   ])
 }
 
+async function hubTickSlot() {
+  if (!(await claim('auto_tick_hub', HUB_EVERY_SEC))) return
+  const { hubTick } = await import('@/lib/tg-hub-jobs')
+  await hubTick()
+}
+
 /** Keeps bots posting even when no external cron is configured; driven by site traffic. */
 export async function runAutoTick() {
   await Promise.all([
     telegramTick().catch((e) => console.error('[auto-tick] telegram', e)),
     kankatvTick().catch((e) => console.error('[auto-tick] kankatv', e)),
+    hubTickSlot().catch((e) => console.error('[auto-tick] hub', e)),
   ])
 }

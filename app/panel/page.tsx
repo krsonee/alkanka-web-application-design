@@ -101,6 +101,8 @@ import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
+import { TgHubManager } from '@/components/panel/tg-hub-manager'
+import { loadTgHub } from '@/lib/tg-hub-panel'
 import { listAudit, listMembers } from '@/lib/members-admin'
 import { levelMap } from '@/lib/kanka-puan'
 import { AvatarManager } from '@/components/panel/avatar-manager'
@@ -166,9 +168,11 @@ async function telegramPanel() {
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
   const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
   const light = (ok: boolean) => (ok ? 'on' : 'off') as 'on' | 'off'
+  const hubData = await loadTgHub(bots, suite.share.botId ?? null, chat?.linkedMembers ?? 0)
   return (
     <TelegramTabs
       tabs={[
+        { id: 'hub', label: 'Telegram Merkezi', status: light(hubData.hub.guard.enabled || hubData.hub.support.enabled), content: <TgHubManager data={hubData} /> },
         { id: 'mirror', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
         { id: 'chat', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
         { id: 'odds', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
