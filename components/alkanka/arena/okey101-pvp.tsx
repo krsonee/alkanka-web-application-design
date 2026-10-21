@@ -24,7 +24,7 @@ import { layoutGroups, OkeyRack, RACK_COLS, useRack, type SlotMark } from './oke
 
 type OkeyValue = ReturnType<typeof okeyFrom>
 type Segment = { tiles: Tile[]; slots: number[]; kind: 'run' | 'set' | 'pair'; value: number }
-type MainAction = { label: ReactNode; onClick?: () => void; disabled?: boolean; tone: 'primary' | 'danger' | 'muted' }
+type MainAction = { label: ReactNode; onClick?: () => void; disabled?: boolean; tone: 'primary' | 'danger' | 'muted'; discard?: boolean }
 
 /** Tiles touching each other on the same rack row form one group; empty slots split groups. */
 function readSegments(slots: (number | null)[], byId: Map<number, Tile>, okey: OkeyValue): Segment[] {
@@ -225,10 +225,11 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
       label: <><ArrowDownToLine className="size-4" aria-hidden="true" /> {selected != null ? 'Seçili taşı at' : 'Atacağın taşı seç'}</>,
       onClick: () => selected != null && discard(selected),
       disabled: !canDiscard,
-      tone: 'danger',
+      tone: selected != null ? 'primary' : 'muted',
+      discard: true,
     }
   })()
-  const mainIsDiscard = playPhase && s.taken == null && main.tone === 'danger'
+  const mainIsDiscard = playPhase && s.taken == null && main.discard === true
   const showGiveBack = playPhase && s.taken != null && main.tone !== 'danger'
 
   // Melds grouped by owner so it's clear who opened what; you first, then counter-clockwise.
@@ -269,7 +270,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const myTotal = mySeat >= 0 && hasStandings ? ranked[mySeat] : null
 
   return (
-    <div data-game-table className="flex flex-col gap-2 max-lg:min-h-[calc(100dvh-7rem)] sm:gap-3">
+    <div data-game-table className="flex flex-col gap-2 sm:gap-3">
       <div className="flex items-center gap-2">
         {remote.spectator && (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground">

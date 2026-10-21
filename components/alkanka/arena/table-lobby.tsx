@@ -673,7 +673,9 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
       if (d.status === 'bekliyor') return 5000
       if (d.spectator) return 3000
       // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
-      return d.turn === d.seat ? 5000 : 2000
+      if (d.turn === d.seat) return 5000
+      // 101 bots play one turn per poll, so a quicker beat keeps their moves flowing one by one.
+      return d.game === 'okey101' ? 1200 : 2000
     },
   })
   const [busy, setBusy] = useState(false)
@@ -685,7 +687,8 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
       if (!data) return false
       setBusy(true)
       const r = await playMove(id, data.version, action)
-      await mutate()
+      if (r.ok && r.view) await mutate(r.view as TableSummary, { revalidate: false })
+      else await mutate()
       setBusy(false)
       if (!r.ok) {
         playSound('error')

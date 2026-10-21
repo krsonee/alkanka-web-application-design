@@ -12,6 +12,8 @@ import {
   isPvpGame,
   isSeatGame,
   okeySeats,
+  paceBotTurn,
+  BOT_PACE_MS,
   seatGameToBot,
   seatToBot,
   viewState,
@@ -475,7 +477,18 @@ export async function sweepIdleTables() {
  * plays an automatic move for them. The version check in saveState makes concurrent polls safe.
  */
 export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
-  if (t.status !== 'oynaniyor' || !t.state || t.tournamentId) return t
+  if (t.status !== 'oynaniyor' || !t.state) return t
+  const paced = Date.now() - new Date(t.updatedAt).getTime() >= BOT_PACE_MS ? paceBotTurn(t.state) : null
+  if (paced) {
+    try {
+      await saveState(t, t.version, paced.state)
+    } catch {
+      return (await getTableRow(t.id)) ?? t
+    }
+    if (paced.outcome) await finishTable({ ...t, state: paced.state, version: t.version + 1 }, paced.outcome)
+    return (await getTableRow(t.id)) ?? t
+  }
+  if (t.tournamentId) return t
   const limit = TURN_SECONDS[t.game as keyof typeof TURN_SECONDS]
   const turn = currentTurn(t.state)
   if (!limit || turn == null) return t
