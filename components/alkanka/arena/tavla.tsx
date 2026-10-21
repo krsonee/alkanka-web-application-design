@@ -114,6 +114,26 @@ function Checker({ side, label, glow, hint, pulse }: { side: Side; label?: strin
   )
 }
 
+/** Borne-off checkers drawn edge-on, like a real tray; each new one drops in. */
+function OffPile({ count, side, fromTop }: { count: number; side: Side; fromTop?: boolean }) {
+  return (
+    <span className={cn('flex w-full flex-1 gap-px px-0.5', fromTop ? 'flex-col' : 'flex-col-reverse')} aria-hidden="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <span
+          key={i}
+          className={cn(
+            'h-1.5 w-full shrink-0 rounded-[3px] animate-in fade-in duration-300 sm:h-2',
+            fromTop ? 'slide-in-from-bottom-3' : 'slide-in-from-top-3',
+            side === 'p'
+              ? 'bg-checker-light shadow-[inset_0_-1px_0_rgb(0_0_0/0.25),0_1px_1px_rgb(0_0_0/0.5)]'
+              : 'bg-checker-dark shadow-[inset_0_1px_0_color-mix(in_oklch,var(--primary)_45%,transparent),0_1px_1px_rgb(0_0_0/0.5)]',
+          )}
+        />
+      ))}
+    </span>
+  )
+}
+
 function Stack({
   count,
   side,
@@ -487,9 +507,15 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         </div>
 
         <div className="flex w-8 flex-col justify-between gap-1.5 sm:w-16 sm:gap-2">
-          <div data-off="opp" className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center">
-            <span className="line-clamp-1 text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">{names.opp}</span>
-            <span className="font-display text-base font-bold text-primary sm:text-lg">{board.off[opp]}</span>
+          <div
+            data-off="opp"
+            className="flex flex-1 flex-col items-center gap-1 rounded-md bg-felt/70 p-0.5 text-center shadow-[inset_0_2px_6px_rgb(0_0_0/0.5)]"
+            aria-label={`${names.opp} toplanan pullar: ${board.off[opp]}`}
+          >
+            <span className="line-clamp-1 text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">
+              {names.opp} <span className="text-primary">{board.off[opp]}</span>
+            </span>
+            <OffPile count={board.off[opp]} side={opp} fromTop />
           </div>
           <button
             type="button"
@@ -498,15 +524,17 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
             onClick={() => !suppressClick.current && offTarget && playClick(offTarget)}
             disabled={!offTarget}
             className={cn(
-              'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md bg-felt/70 p-0.5 text-center transition-transform',
-              offTarget && 'animate-pulse bg-primary/40 ring-2 ring-primary',
-              hover === 'off' && 'scale-105 bg-primary/70',
+              'flex flex-1 flex-col-reverse items-center gap-1 rounded-md bg-felt/70 p-0.5 text-center shadow-[inset_0_2px_6px_rgb(0_0_0/0.5)] transition-transform',
+              offTarget && 'bg-primary/30 ring-2 ring-primary',
+              hover === 'off' && 'scale-105 bg-primary/60',
             )}
             aria-label={`Toplanan pulların: ${board.off[me]}${offTarget ? ', pulu topla' : ''}`}
           >
-            <span className="text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">Sen</span>
-            <span className="font-display text-base font-bold text-foreground sm:text-lg">{board.off[me]}</span>
-            {offTarget && <span className="text-[8px] font-bold uppercase text-primary sm:text-[9px]">Topla</span>}
+            <span className="text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">
+              Sen <span className="text-foreground">{board.off[me]}</span>
+            </span>
+            {offTarget && <span className="animate-pulse text-[8px] font-bold uppercase text-primary sm:text-[9px]">Topla</span>}
+            <OffPile count={board.off[me]} side={me} />
           </button>
         </div>
       </div>
@@ -785,7 +813,7 @@ export function Tavla({ finish, saveKey }: GameApi) {
       left = spendDie(left, m.die)
     }
     const hit = seq.some((m) => m.hit)
-    playSound(hit ? 'pocket' : 'move')
+    playSound(hit ? 'hit' : seq.some((m) => m.to === 'off') ? 'bearoff' : 'move')
     setBoard(next)
     setDice(left)
     setSelected(null)
@@ -853,7 +881,7 @@ export function Tavla({ finish, saveKey }: GameApi) {
             setTimeout(() => {
               setFly({ key: Date.now() + idx, moves: [m], side: 'b' })
               current = applyMove(current, 'b', m)
-              playSound(m.hit ? 'pocket' : 'move')
+              playSound(m.hit ? 'hit' : m.to === 'off' ? 'bearoff' : 'move')
               left = spendDie(left, m.die)
               setBoard(current)
               setDice(left)

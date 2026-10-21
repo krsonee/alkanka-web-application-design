@@ -24,11 +24,15 @@ export type SoundName =
   | 'ball'
   | 'goal'
   | 'move'
+  | 'hit'
+  | 'bearoff'
 
 const MUTE_KEY = 'alkanka:sound-muted'
 const listeners = new Set<() => void>()
 let ctx: AudioContext | null = null
 let master: GainNode | null = null
+/** Bus for physical sounds: dry to master plus a short room reverb so knocks don't sound "in a vacuum". */
+let room: GainNode | null = null
 let muted = typeof window !== 'undefined' && window.localStorage?.getItem(MUTE_KEY) === '1'
 
 function audio() {
@@ -40,6 +44,20 @@ function audio() {
     master = ctx.createGain()
     master.gain.value = 0.55
     master.connect(ctx.destination)
+
+    room = ctx.createGain()
+    room.connect(master)
+    const irLen = Math.floor(ctx.sampleRate * 0.45)
+    const ir = ctx.createBuffer(2, irLen, ctx.sampleRate)
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch)
+      for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.exp((-i / irLen) * 7)
+    }
+    const verb = ctx.createConvolver()
+    verb.buffer = ir
+    const wet = ctx.createGain()
+    wet.gain.value = 0.22
+    room.connect(verb).connect(wet).connect(master)
   }
   if (ctx.state === 'suspended') void ctx.resume()
   return ctx
@@ -100,6 +118,85 @@ function noise(opts: { at?: number; dur: number; freq: number; q?: number; vol?:
   src.start(start)
 }
 
+const jitter = (v: number, amt = 0.06) => v * (1 + (Math.random() * 2 - 1) * amt)
+
+/**
+ * Modal impact: a tiny noise click excites a few damped resonances, which is how a real
+ * object (wood, ivory, plastic) rings when struck. Partials decay faster the higher they are.
+ */
+function knock(opts: { at?: number; modes: number[]; decay: number; vol: number; click?: number; body?: number }) {
+  const ac = audio()
+  if (!ac || !room) return
+  const start = ac.currentTime + (opts.at ?? 0)
+  const vol = jitter(opts.vol, 0.15)
+
+  opts.modes.forEach((f, i) => {
+    const osc = ac.createOscillator()
+    const g = ac.createGain()
+    osc.frequency.value = jitter(f, 0.04)
+    const d = opts.decay / (1 + i * 0.6)
+    const v = vol / (1 + i * 0.8)
+    g.gain.setValueAtTime(0.0001, start)
+    g.gain.exponentialRampToValueAtTime(v, start + 0.0015)
+    g.gain.exponentialRampToValueAtTime(0.0001, start + d)
+    osc.connect(g).connect(room!)
+    osc.start(start)
+    osc.stop(start + d + 0.02)
+  })
+
+  const len = Math.floor(ac.sampleRate * 0.006)
+  const buf = ac.createBuffer(1, len, ac.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3
+  const src = ac.createBufferSource()
+  src.buffer = buf
+  const hp = ac.createBiquadFilter()
+  hp.type = 'highpass'
+  hp.frequency.value = opts.click ?? 2500
+  const cg = ac.createGain()
+  cg.gain.value = vol * 1.6
+  src.connect(hp).connect(cg).connect(room)
+  src.start(start)
+
+  if (opts.body) {
+    const th = ac.createOscillator()
+    const tg = ac.createGain()
+    th.frequency.setValueAtTime(opts.body, start)
+    th.frequency.exponentialRampToValueAtTime(opts.body * 0.6, start + 0.08)
+    tg.gain.setValueAtTime(0.0001, start)
+    tg.gain.exponentialRampToValueAtTime(vol * 0.9, start + 0.003)
+    tg.gain.exponentialRampToValueAtTime(0.0001, start + 0.09)
+    th.connect(tg).connect(room)
+    th.start(start)
+    th.stop(start + 0.12)
+  }
+}
+
+/** Short sliding friction, e.g. a checker dragged across the felt before it lands. */
+function slide(at: number, dur: number, vol: number) {
+  const ac = audio()
+  if (!ac || !room) return
+  const start = ac.currentTime + at
+  const len = Math.floor(ac.sampleRate * dur)
+  const buf = ac.createBuffer(1, len, ac.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.sin((Math.PI * i) / len)
+  const src = ac.createBufferSource()
+  src.buffer = buf
+  const bp = ac.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.value = 1400
+  bp.Q.value = 0.7
+  const g = ac.createGain()
+  g.gain.value = vol
+  src.connect(bp).connect(g).connect(room)
+  src.start(start)
+}
+
+const WOOD = [190, 470, 910, 1520]
+const IVORY = [1850, 3050, 4400]
+const DIE = [2600, 4100, 5900]
+
 const SOUNDS: Record<SoundName, () => void> = {
   chip: () => {
     noise({ dur: 0.035, freq: 3200, q: 5, vol: 0.5 })
@@ -124,9 +221,22 @@ const SOUNDS: Record<SoundName, () => void> = {
       { f: 988, at: 0.1, dur: 0.12, type: 'square', vol: 0.08 },
       { f: 1175, at: 0.2, dur: 0.35, type: 'square', vol: 0.08 },
     ]),
+  // Checker slides a little, then lands on the wooden board ("tak").
   move: () => {
-    noise({ dur: 0.05, freq: 900, q: 2, vol: 0.55 })
-    tones([{ f: 320, dur: 0.06, type: 'triangle', vol: 0.12 }])
+    slide(0, 0.06, 0.05)
+    knock({ at: 0.05, modes: WOOD, decay: 0.11, vol: 0.32, click: 3000, body: 140 })
+  },
+  // Two checkers clack together, then the hit one lands on the bar.
+  hit: () => {
+    slide(0, 0.05, 0.05)
+    knock({ at: 0.045, modes: IVORY, decay: 0.07, vol: 0.3, click: 4200 })
+    knock({ at: 0.05, modes: WOOD, decay: 0.1, vol: 0.26, body: 150 })
+    knock({ at: 0.2, modes: WOOD.map((f) => f * 1.15), decay: 0.09, vol: 0.18, body: 120 })
+  },
+  // Dropped into the tray: a hollow thunk followed by a small clack on the pile.
+  bearoff: () => {
+    knock({ modes: [150, 380, 760], decay: 0.16, vol: 0.3, click: 1800, body: 110 })
+    knock({ at: 0.07, modes: IVORY, decay: 0.05, vol: 0.12, click: 4500 })
   },
   turn: () => tones([{ f: 660, dur: 0.14, type: 'triangle' }, { f: 990, at: 0.12, dur: 0.22, type: 'triangle' }]),
   join: () => tones([{ f: 523, dur: 0.12 }, { f: 659, at: 0.09, dur: 0.12 }, { f: 784, at: 0.18, dur: 0.2 }]),
@@ -154,8 +264,21 @@ const SOUNDS: Record<SoundName, () => void> = {
     ]),
   message: () => tones([{ f: 880, dur: 0.08, vol: 0.2 }, { f: 1320, at: 0.07, dur: 0.12, vol: 0.18 }]),
   sent: () => tones([{ f: 600, to: 1100, dur: 0.12, vol: 0.15 }]),
+  // Two dice thrown onto wood: each bounces with shrinking gaps and force, then they clink and settle.
   dice: () => {
-    for (let i = 0; i < 6; i++) noise({ at: i * 0.05 + Math.random() * 0.02, dur: 0.04, freq: 2200 + Math.random() * 1500, q: 4, vol: 0.6 })
+    for (let d = 0; d < 2; d++) {
+      let t = d * 0.035 + Math.random() * 0.02
+      let gap = 0.11 + Math.random() * 0.03
+      let v = 0.34
+      for (let b = 0; b < 6; b++) {
+        knock({ at: t, modes: DIE, decay: 0.045, vol: v * 0.7, click: 3800 })
+        knock({ at: t, modes: WOOD.map((f) => f * 1.3), decay: 0.06, vol: v * 0.55, body: b < 2 ? 170 : undefined })
+        t += gap
+        gap *= 0.68
+        v *= 0.62
+      }
+    }
+    knock({ at: 0.24, modes: DIE.map((f) => f * 1.1), decay: 0.04, vol: 0.1, click: 5000 })
   },
   card: () => noise({ dur: 0.06, freq: 1300, q: 0.9, vol: 0.14 }),
   tile: () => {
