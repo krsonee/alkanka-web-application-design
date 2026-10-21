@@ -14,6 +14,7 @@ import {
   saveOddsBotConfig,
   setOddsSourceActive,
   setOddsStatus,
+  updateOddsSourceText,
 } from '@/lib/special-odds'
 import type { OddsPreview } from '@/lib/special-odds-shared'
 import type { ActionState } from './actions'
@@ -84,9 +85,27 @@ export async function disconnectOddsWebhookAction(_: ActionState): Promise<Actio
 export async function addOddsSourceAction(_: ActionState, form: FormData): Promise<ActionState> {
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
-    const title = await addOddsSource({ chat: text(form, 'chat'), siteName: text(form, 'siteName'), siteLink: text(form, 'siteLink'), siteLogo: text(form, 'siteLogo') })
+    const title = await addOddsSource({
+      chat: text(form, 'chat'),
+      siteName: text(form, 'siteName'),
+      siteLink: text(form, 'siteLink'),
+      siteLogo: text(form, 'siteLogo'),
+      replacements: text(form, 'replacements'),
+      footer: text(form, 'footer'),
+    })
     refresh()
     return { ok: true, message: `"${title}" kaynak olarak eklendi.` }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function updateOddsSourceTextAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await updateOddsSourceText(Number(form.get('id')), { siteLink: text(form, 'siteLink'), replacements: text(form, 'replacements'), footer: text(form, 'footer') })
+    refresh()
+    return { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' }
   } catch (error) {
     return { message: errorText(error) }
   }

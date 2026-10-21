@@ -1,7 +1,8 @@
 import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables, fetchChannel, normalizeChat, stripTags } from '@/lib/telegram-mirror'
+import { botToken, callBot, ensureTables, fetchChannel, normalizeChat, sendPhotoFile, stripTags } from '@/lib/telegram-mirror'
+import { applyReplacements, parseReplacements, pickLink } from '@/lib/text-replace'
 import { parseOddsPost } from '@/lib/odds-parse'
 import { isOddsText } from '@/lib/telegram-bots'
 import type { TgMessage } from '@/lib/telegram-chat'
@@ -46,6 +47,8 @@ function ensureOddsTables() {
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS username text`)
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS web_last bigint`)
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS web_error text`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS replacements text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS footer text NOT NULL DEFAULT ''`)
   })().catch((error) => {
     ready = null
     throw error
@@ -192,6 +195,8 @@ function mapSource(r: Record<string, unknown>): OddsSource {
     siteName: String(r.site_name),
     siteLink: String(r.site_link),
     siteLogo: r.site_logo ? String(r.site_logo) : null,
+    replacements: String(r.replacements ?? ''),
+    footer: String(r.footer ?? ''),
     active: Boolean(r.active),
     lastAt: r.last_at ? new Date(String(r.last_at)).toISOString() : null,
     total: Number(r.total ?? 0),
@@ -205,7 +210,15 @@ export async function listOddsSources(): Promise<OddsSource[]> {
   return r.map(mapSource)
 }
 
-export async function addOddsSource(input: { chat: string; siteName: string; siteLink: string; siteLogo: string }) {
+export async function updateOddsSourceText(id: number, input: { siteLink: string; replacements: string; footer: string }) {
+  await ensureOddsTables()
+  const siteLink = input.siteLink.trim()
+  if (!/^https?:\/\/\S+$/i.test(siteLink)) throw new Error('Site linki http(s):// ile başlamalı')
+  await rows(sql`UPDATE odds_sources SET site_link = ${siteLink.slice(0, 400)}, replacements = ${input.replacements.slice(0, 3000)},
+    footer = ${input.footer.trim().slice(0, 300)} WHERE id = ${id}`)
+}
+
+export async function addOddsSource(input: { chat: string; siteName: string; siteLink: string; siteLogo: string; replacements: string; footer: string }) {
   await ensureOddsTables()
   const config = await getOddsBotConfig()
   const siteName = input.siteName.trim().slice(0, 40)
@@ -226,9 +239,11 @@ export async function addOddsSource(input: { chat: string; siteName: string; sit
     }
   }
   const logo = input.siteLogo.trim()
-  await rows(sql`INSERT INTO odds_sources (chat_id, title, site_name, site_link, site_logo)
-    VALUES (${chatId}, ${title.slice(0, 80)}, ${siteName}, ${siteLink.slice(0, 400)}, ${/^https?:\/\/|^\//.test(logo) ? logo.slice(0, 400) : null})
-    ON CONFLICT (chat_id) DO UPDATE SET site_name = EXCLUDED.site_name, site_link = EXCLUDED.site_link, site_logo = EXCLUDED.site_logo, active = true`)
+  await rows(sql`INSERT INTO odds_sources (chat_id, title, site_name, site_link, site_logo, replacements, footer)
+    VALUES (${chatId}, ${title.slice(0, 80)}, ${siteName}, ${siteLink.slice(0, 400)}, ${/^https?:\/\/|^\//.test(logo) ? logo.slice(0, 400) : null},
+      ${input.replacements.slice(0, 3000)}, ${input.footer.trim().slice(0, 300)})
+    ON CONFLICT (chat_id) DO UPDATE SET site_name = EXCLUDED.site_name, site_link = EXCLUDED.site_link, site_logo = EXCLUDED.site_logo,
+      replacements = EXCLUDED.replacements, footer = EXCLUDED.footer, active = true`)
   return title
 }
 
@@ -267,15 +282,22 @@ function classify(text: string, config: OddsBotConfig): OddsPreview['kind'] {
   return isOddsText(text) || /\d[.,]\d{2}/.test(text) ? 'odds' : 'ignore'
 }
 
-export function rewriteText(text: string, source: Pick<OddsSource, 'siteName' | 'siteLink'>, config: Pick<OddsBotConfig, 'footer'>) {
-  const body = text
-    .replace(/https?:\/\/\S+/gi, source.siteLink)
+export function rewriteText(
+  text: string,
+  source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer'>>,
+  config: Pick<OddsBotConfig, 'footer'>,
+) {
+  const rules = parseReplacements(source.replacements ?? '')
+  const replaced = text
+    .replace(/https?:\/\/\S+/gi, (url) => pickLink(url, rules, source.siteLink))
     .replace(/(^|\s)(t\.me|telegram\.me)\/\S+/gi, `$1${source.siteLink}`)
     .replace(/(^|\s)@[A-Za-z0-9_]{4,}/g, '$1')
+  const body = applyReplacements(replaced, rules)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-  const footer = config.footer ? `\n\n${config.footer}` : ''
+  const footerText = source.footer?.trim() || config.footer
+  const footer = footerText ? `\n\n${footerText}` : ''
   return `${body}${footer}`.trim()
 }
 
@@ -307,11 +329,12 @@ async function publishToChannel(config: OddsBotConfig, incoming: Incoming, rewri
     return res.message_id
   }
   if (incoming.photo && /^https?:\/\//.test(incoming.photo)) {
-    const res = await callBot<{ message_id: number }>(token, 'sendPhoto', {
-      chat_id: config.channelId,
-      photo: incoming.photo,
-      caption: fit(rewritten, CAPTION_LIMIT),
-    }).catch(() => null)
+    const res = await sendPhotoFile<{ message_id: number }>(token, { chat_id: config.channelId, caption: fit(rewritten, CAPTION_LIMIT) }, incoming.photo).catch(
+      (error) => {
+        console.error('[odds-bot] photo failed', error)
+        return null
+      },
+    )
     if (res) return res.message_id
   }
   const res = await callBot<{ message_id: number }>(token, 'sendMessage', {
@@ -481,7 +504,7 @@ export async function scrapeOddsSources(config?: OddsBotConfig) {
         await rows(sql`UPDATE odds_sources SET web_last = GREATEST(COALESCE(web_last, 0), ${post.id}) WHERE id = ${source.id}`)
         const text = stripTags(post.html).trim()
         if (!text) continue
-        await ingest(source, { chatId: source.chatId, messageId: post.id, replyTo: null, text, photo: post.photos[0] ?? null, edited: false }, null)
+        await ingest(source, { chatId: source.chatId, messageId: post.id, replyTo: null, text, photo: post.photos[0] ?? post.thumb ?? null, edited: false }, null)
           .catch((error) => console.error('[odds-bot] web ingest failed', error))
         handled++
       }

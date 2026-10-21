@@ -14,7 +14,9 @@ import {
   testTargetAction,
   toggleSourceAction,
   toggleTargetAction,
+  updateSourceTextAction,
 } from '@/app/panel/telegram-actions'
+import { SourceTextEditor, SourceTextFields } from './source-text-fields'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot, MirrorLog, MirrorSource, MirrorTarget } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS, describeFilter } from '@/lib/telegram-filters'
@@ -259,6 +261,7 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) 
               Seçtiğin türlerden ya da yazdığın kelimelerden en az biri geçen postlar paylaşılır. Hiçbirini seçmezsen kanaldaki tüm yeni postlar paylaşılır.
             </p>
           </fieldset>
+          <SourceTextFields footerPlaceholder="Marka giriş ve bonus için tıkla" />
           <button
             disabled={adding}
             className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
@@ -307,6 +310,15 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) 
                       </button>
                     </form>
                   </div>
+                  <SourceTextEditor
+                    id={s.id}
+                    linkName="link"
+                    link={s.link}
+                    replacements={s.replacements}
+                    footer={s.footer}
+                    footerPlaceholder={`${s.brand} giriş ve bonus için tıkla`}
+                    action={updateSourceTextAction}
+                  />
                 </li>
               ))}
             </ul>

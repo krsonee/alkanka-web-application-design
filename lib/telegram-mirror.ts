@@ -3,12 +3,15 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { rows, sql } from '@/lib/db'
 import { filterWords } from '@/lib/telegram-filters'
 import { recordDeal } from '@/lib/deals'
+import { applyReplacements, parseReplacements, pickLink, type ReplaceRule } from '@/lib/text-replace'
 
 export type MirrorSource = {
   id: number
   channel: string
   brand: string
   link: string
+  replacements: string
+  footer: string
   keywords: string
   active: boolean
   targetId: number | null
@@ -33,7 +36,7 @@ export type MirrorLog = {
 
 export type MirrorResult = { checked: number; sent: number; skipped: number; failed: number; primed: number; errors: string[] }
 
-type ScrapedPost = { id: number; html: string; photos: string[]; video: string | null; date?: string | null }
+type ScrapedPost = { id: number; html: string; photos: string[]; video: string | null; thumb?: string | null; date?: string | null }
 type Destination = { token: string; chatId: string; title: string }
 
 const MAX_PER_RUN = 5
@@ -56,6 +59,8 @@ export function ensureTables() {
       keywords text NOT NULL DEFAULT '', active boolean NOT NULL DEFAULT true, last_post_id int,
       last_checked_at timestamptz, last_error text, created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS target_id int REFERENCES tg_targets(id) ON DELETE SET NULL`)
+    await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS replacements text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS footer text NOT NULL DEFAULT ''`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_log (
       id serial PRIMARY KEY, source_id int NOT NULL REFERENCES tg_sources(id) ON DELETE CASCADE, post_id int NOT NULL,
       status text NOT NULL, detail text, created_at timestamptz NOT NULL DEFAULT now(), UNIQUE (source_id, post_id))`)
@@ -116,8 +121,7 @@ export const stripTags = (s: string) =>
 
 const ALLOWED_TAGS: Record<string, string> = { b: 'b', strong: 'b', i: 'i', em: 'i', u: 'u', s: 's', del: 's', code: 'code', pre: 'pre', blockquote: 'blockquote' }
 
-export function toTelegramHtml(html: string, link: string) {
-  const safeLink = escapeHtml(link)
+export function toTelegramHtml(html: string, link: string, rules: ReplaceRule[] = []) {
   return html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<i class="emoji"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/i>/gi, '$1')
@@ -125,6 +129,7 @@ export function toTelegramHtml(html: string, link: string) {
     .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
       const plain = stripTags(label).trim()
       if (href.startsWith('?q=') || /(^|\/\/)(t|telegram)\.me\//i.test(href)) return escapeHtml(plain)
+      const safeLink = escapeHtml(pickLink(href.replace(/&amp;/g, '&'), rules, link))
       if (/^(https?:\/\/|www\.)\S+$/i.test(plain)) return `\u0000a href="${safeLink}"\u0001${safeLink}\u0000/a\u0001`
       return `\u0000a href="${safeLink}"\u0001${escapeHtml(plain)}\u0000/a\u0001`
     })
@@ -160,9 +165,12 @@ export async function fetchChannel(channel: string): Promise<ScrapedPost[]> {
     if (!Number.isInteger(id)) continue
     const text = chunk.match(/class="tgme_widget_message_text[^"]*\bjs-message_text\b[^"]*"[^>]*>([\s\S]*?)<\/div>/)
     const photos = [...chunk.matchAll(/tgme_widget_message_photo_wrap[^"]*"[^>]*background-image:url\('([^']+)'\)/g)].map((m) => m[1])
-    const video = chunk.match(/<video[^>]+src="([^"]+)"/)?.[1] ?? null
+    // Stickers also render as <video>; they are decoration, not post media.
+    const sticker = /tgme_widget_message_(?:video)?sticker/.test(chunk)
+    const video = sticker ? null : (chunk.match(/<video[^>]+src="([^"]+)"/)?.[1] ?? null)
+    const thumb = sticker ? null : (chunk.match(/tgme_widget_message_video_thumb"[^>]*background-image:url\('([^']+)'\)/)?.[1] ?? null)
     const date = chunk.match(/<time[^>]+datetime="([^"]+)"/)?.[1] ?? null
-    posts.push({ id, html: text?.[1] ?? '', photos, video, date })
+    posts.push({ id, html: text?.[1] ?? '', photos, video, thumb, date })
   }
   return posts
 }
@@ -179,6 +187,51 @@ export async function callBot<T = unknown>(token: string, method: string, body: 
   return data.result as T
 }
 
+type UploadKind = 'photo' | 'video'
+type UploadFile = { url: string; kind: UploadKind; name: string }
+// Bot API upload caps: photos 10 MB, other files 50 MB.
+const UPLOAD_LIMIT: Record<UploadKind, number> = { photo: 10 * 1024 * 1024, video: 49 * 1024 * 1024 }
+
+async function download(file: UploadFile) {
+  const res = await fetch(file.url, {
+    cache: 'no-store',
+    headers: { 'user-agent': 'Mozilla/5.0 (compatible; AlkankaBot/1.0)' },
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (!res.ok) throw new Error(`Medya indirilemedi (HTTP ${res.status})`)
+  if (Number(res.headers.get('content-length') ?? 0) > UPLOAD_LIMIT[file.kind]) throw new Error('Medya Telegram yükleme sınırından büyük')
+  const blob = await res.blob()
+  if (blob.size > UPLOAD_LIMIT[file.kind]) throw new Error('Medya Telegram yükleme sınırından büyük')
+  return blob
+}
+
+/**
+ * Telegram often fails to fetch telesco.pe media by URL ("failed to get HTTP URL content") and
+ * refuses remote videos above 20 MB, so media is downloaded here and uploaded as a file.
+ */
+export async function callBotFiles<T = unknown>(token: string, method: string, body: Record<string, unknown>, files: Record<string, UploadFile>): Promise<T> {
+  const form = new FormData()
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined && value !== null) form.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value))
+  }
+  const blobs = await Promise.all(Object.entries(files).map(async ([key, file]) => [key, await download(file), file.name] as const))
+  for (const [key, blob, name] of blobs) form.append(key, blob, name)
+  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', body: form, signal: AbortSignal.timeout(90_000) })
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string; result?: T }
+  if (!data.ok) throw new Error(translateError(data.description ?? `Telegram HTTP ${res.status}`))
+  return data.result as T
+}
+
+/** Sends a photo by upload, falling back to Telegram fetching the URL itself. */
+export async function sendPhotoFile<T = unknown>(token: string, body: Record<string, unknown>, url: string) {
+  try {
+    return await callBotFiles<T>(token, 'sendPhoto', body, { photo: { url, kind: 'photo', name: 'photo.jpg' } })
+  } catch (error) {
+    if (/parse entities|can't parse/i.test(String((error as Error).message))) throw error
+    return callBot<T>(token, 'sendPhoto', { ...body, photo: url })
+  }
+}
+
 function translateError(message: string) {
   if (/unauthorized/i.test(message)) return 'Bot token geçersiz ya da iptal edilmiş'
   if (/chat not found/i.test(message)) return 'Kanal bulunamadı. Kullanıcı adını kontrol et ve botu kanala ekle'
@@ -192,44 +245,59 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
   const visible = parseMode ? stripTags(text).length : text.length
   const fmt = parseMode ? { parse_mode: parseMode } : {}
   const fitsCaption = visible <= CAPTION_LIMIT
-  const message = { text, ...fmt, link_preview_options: { is_disabled: post.photos.length > 0 } }
-
-  if (post.photos.length > 1) {
-    await send('sendMediaGroup', {
-      media: post.photos.slice(0, 10).map((photo, i) => ({ type: 'photo', media: photo, ...(i === 0 && fitsCaption ? { caption: text, ...fmt } : {}) })),
-    })
+  const captioned = fitsCaption ? { caption: text, ...fmt } : {}
+  const photos = post.photos.slice(0, 10)
+  const message = { text, ...fmt, link_preview_options: { is_disabled: Boolean(photos.length || post.video || post.thumb) } }
+  const isParseError = (error: unknown) => /parse entities|can't parse/i.test(String((error as Error).message))
+  const finish = async () => {
     if (!fitsCaption) await send('sendMessage', message)
-    return
   }
-  if (post.photos.length === 1) {
-    await send('sendPhoto', { photo: post.photos[0], ...(fitsCaption ? { caption: text, ...fmt } : {}) })
-    if (!fitsCaption) await send('sendMessage', message)
-    return
+
+  if (photos.length > 1) {
+    try {
+      await callBotFiles(dest.token, 'sendMediaGroup', {
+        chat_id: dest.chatId,
+        media: photos.map((_, i) => ({ type: 'photo', media: `attach://p${i}`, ...(i === 0 ? captioned : {}) })),
+      }, Object.fromEntries(photos.map((url, i) => [`p${i}`, { url, kind: 'photo' as const, name: `p${i}.jpg` }])))
+    } catch (error) {
+      if (isParseError(error)) throw error
+      await send('sendMediaGroup', { media: photos.map((photo, i) => ({ type: 'photo', media: photo, ...(i === 0 ? captioned : {}) })) })
+    }
+    return finish()
   }
   if (post.video) {
     try {
-      await send('sendVideo', { video: post.video, ...(fitsCaption ? { caption: text, ...fmt } : {}) })
-      if (!fitsCaption) await send('sendMessage', message)
-      return
-    } catch {
-      // Telegram rejects remote videos above 20 MB; fall back to text only.
+      await callBotFiles(dest.token, 'sendVideo', { chat_id: dest.chatId, supports_streaming: true, ...captioned }, { video: { url: post.video, kind: 'video', name: 'video.mp4' } })
+      return finish()
+    } catch (error) {
+      if (isParseError(error)) throw error
+      // Too large to upload: the video's cover image below still keeps the post visual.
     }
+  }
+  const still = photos[0] ?? post.thumb
+  if (still) {
+    await sendPhotoFile(dest.token, { chat_id: dest.chatId, ...captioned }, still)
+    return finish()
   }
   await send('sendMessage', message)
 }
 
-function buildMessage(post: ScrapedPost, source: { brand: string; link: string }, note: string) {
+type PostSource = { brand: string; link: string; replacements?: string; footer?: string }
+
+function buildMessage(post: ScrapedPost, source: PostSource, note: string) {
+  const rules = parseReplacements(source.replacements ?? '')
+  const footer = source.footer?.trim() || `${source.brand} giriş ve bonus için tıkla`
   const noteHtml = note ? `\n\n<i>${escapeHtml(note)}</i>` : ''
-  const footerHtml = `\n\n<a href="${escapeHtml(source.link)}"><b>${escapeHtml(source.brand)} giriş ve bonus için tıkla</b></a>`
-  let body = toTelegramHtml(post.html, source.link)
+  const footerHtml = `\n\n<a href="${escapeHtml(source.link)}"><b>${escapeHtml(footer)}</b></a>`
+  let body = applyReplacements(toTelegramHtml(post.html, source.link, rules), rules, escapeHtml)
   if (stripTags(body).length > MESSAGE_LIMIT) body = escapeHtml(stripTags(body).slice(0, MESSAGE_LIMIT).trimEnd() + '…')
   return {
     html: (body + noteHtml + footerHtml).trim(),
-    plain: `${stripTags(body)}${note ? `\n\n${note}` : ''}\n\n${source.brand} giriş ve bonus: ${source.link}`.trim(),
+    plain: `${stripTags(body)}${note ? `\n\n${note}` : ''}\n\n${footer}: ${source.link}`.trim(),
   }
 }
 
-async function sendPost(dest: Destination, post: ScrapedPost, source: { brand: string; link: string }, note = '') {
+async function sendPost(dest: Destination, post: ScrapedPost, source: PostSource, note = '') {
   const { html, plain } = buildMessage(post, source, note)
   try {
     await deliver(dest, post, html, 'HTML')
@@ -252,6 +320,8 @@ function mapSource(r: Record<string, unknown>): MirrorSource {
     channel: String(r.channel),
     brand: String(r.brand),
     link: String(r.link),
+    replacements: String(r.replacements ?? ''),
+    footer: String(r.footer ?? ''),
     keywords: String(r.keywords ?? ''),
     active: Boolean(r.active),
     targetId: r.target_id == null ? null : Number(r.target_id),
@@ -362,12 +432,25 @@ export async function testTarget(id: number) {
   return String(r[0].title)
 }
 
-export async function addSource(input: { channel: string; brand: string; link: string; keywords: string; targetId: number | null }) {
+export async function addSource(input: {
+  channel: string
+  brand: string
+  link: string
+  keywords: string
+  targetId: number | null
+  replacements: string
+  footer: string
+}) {
   await ensureTables()
-  await rows(sql`INSERT INTO tg_sources (channel, brand, link, keywords, target_id)
-    VALUES (${input.channel}, ${input.brand}, ${input.link}, ${input.keywords}, ${input.targetId})
+  await rows(sql`INSERT INTO tg_sources (channel, brand, link, keywords, target_id, replacements, footer)
+    VALUES (${input.channel}, ${input.brand}, ${input.link}, ${input.keywords}, ${input.targetId}, ${input.replacements}, ${input.footer})
     ON CONFLICT (channel) DO UPDATE SET brand = EXCLUDED.brand, link = EXCLUDED.link, keywords = EXCLUDED.keywords,
-      target_id = EXCLUDED.target_id, active = true`)
+      target_id = EXCLUDED.target_id, replacements = EXCLUDED.replacements, footer = EXCLUDED.footer, active = true`)
+}
+
+export async function updateSourceText(id: number, input: { link: string; replacements: string; footer: string }) {
+  await ensureTables()
+  await rows(sql`UPDATE tg_sources SET link = ${input.link}, replacements = ${input.replacements}, footer = ${input.footer} WHERE id = ${id}`)
 }
 
 export async function setSourceActive(id: number, active: boolean) {
@@ -444,7 +527,7 @@ export async function runMirror(): Promise<MirrorResult> {
         await rows(sql`UPDATE tg_sources SET last_post_id = GREATEST(COALESCE(last_post_id, 0), ${post.id}) WHERE id = ${source.id}`)
         if (!claimed.length) continue
 
-        const empty = !stripTags(post.html).trim() && !post.photos.length && !post.video
+        const empty = !stripTags(post.html).trim() && !post.photos.length && !post.video && !post.thumb
         if (empty || !matchesKeywords(post, source.keywords)) {
           await rows(sql`UPDATE tg_log SET status = 'skipped', detail = ${empty ? 'Boş post' : 'Anahtar kelime yok'} WHERE id = ${claimed[0].id}`)
           result.skipped++
@@ -474,7 +557,7 @@ export async function runMirror(): Promise<MirrorResult> {
             postId: post.id,
             brand: source.brand,
             text: stripTags(post.html),
-            photo: post.photos[0] ?? null,
+            photo: post.photos[0] ?? post.thumb ?? null,
             link: source.link,
           }).catch((error) => console.error('[deals] kaydedilemedi', error))
         } else result.failed++
