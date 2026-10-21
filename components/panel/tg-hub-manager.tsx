@@ -420,6 +420,50 @@ function SupportSection({ d }: { d: TgHubData }) {
 
 // --- Counter --------------------------------------------------------------------
 
+function AutoReplySection({ d }: { d: TgHubData }) {
+  const [cfg, setCfg] = useState(d.hub)
+  const a = useAction()
+  const r = cfg.autoReply
+  const set = (patch: Partial<HubConfig['autoReply']>) => setCfg((c) => ({ ...c, autoReply: { ...c.autoReply, ...patch } }))
+  const area = 'min-h-20 rounded-lg border border-border bg-background p-3 text-sm text-foreground'
+  return (
+    <div className="flex flex-col gap-4">
+      <Toggle
+        label="Oto cevap açık"
+        hint="Bekçi botu, sohbet grubunda biri 'site' ya da 'sponsor' yazınca (sitesi, siteye, sponsorlar gibi kelimenin içinde geçse de) kısa bir mesaj ve butonlarla cevap verir. Cevap 10 dakika sonra kendiliğinden silinir."
+        checked={r.enabled}
+        onChange={(v) => set({ enabled: v })}
+      />
+      <Card title="Site linki" hint="Boş bırakırsan sitenin şu anki ana adresi kullanılır. Adres değişirse buraya yeni adresi yaz, bot hemen onu atmaya başlar.">
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Güncel site adresi
+          <input className={input} placeholder="https://alkanka.com" value={r.siteUrl} onChange={(e) => set({ siteUrl: e.target.value })} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          {"'site' yazılınca gidecek mesaj"}
+          <textarea className={area} value={r.siteText} onChange={(e) => set({ siteText: e.target.value })} />
+        </label>
+      </Card>
+      <Card title="Sponsor listesi" hint="Butonlar Sponsorlar sayfasındaki aktif sponsorlardan otomatik gelir ve tıklamalar sitede sayılır. Altında 'Tüm sponsorlar' butonu da olur.">
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          {"'sponsor' yazılınca gidecek mesaj"}
+          <textarea className={area} value={r.sponsorText} onChange={(e) => set({ sponsorText: e.target.value })} />
+        </label>
+        <NumberField label="Kaç sponsor butonu gösterilsin" value={r.sponsorLimit} onChange={(v) => set({ sponsorLimit: v })} suffix="buton" />
+      </Card>
+      <Card title="Spam koruması">
+        <NumberField label="Aynı cevap aynı grupta en erken kaç saniyede bir atılsın" value={r.cooldownSeconds} onChange={(v) => set({ cooldownSeconds: v })} suffix="sn" />
+      </Card>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => saveHubSettings(cfg))}>
+          {a.pending ? 'Kaydediliyor…' : 'Oto cevabı kaydet'}
+        </button>
+        {a.note}
+      </div>
+    </div>
+  )
+}
+
 function CounterSection({ d }: { d: TgHubData }) {
   const [cfg, setCfg] = useState(d.hub)
   const [rewards, setRewards] = useState(d.hub.counter.rewards.join(', '))
@@ -750,6 +794,7 @@ export function TgHubManager({ data }: { data: TgHubData }) {
         { id: 'hub-overview', label: 'Özet & Kayıtlar', content: <OverviewSection d={data} /> },
         { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? 'on' : 'off', content: <GuardSection d={data} /> },
         { id: 'hub-support', label: `Destek${openTickets ? ` (${openTickets})` : ''}`, status: data.hub.support.enabled ? 'on' : 'off', content: <SupportSection d={data} /> },
+        { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? 'on' : 'off', content: <AutoReplySection d={data} /> },
         { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? 'on' : 'off', content: <CounterSection d={data} /> },
         { id: 'hub-clean', label: 'Temizlik', content: <CleanupSection d={data} /> },
         { id: 'hub-dm', label: 'DM Duyuru', content: <BroadcastSection d={data} /> },

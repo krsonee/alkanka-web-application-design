@@ -31,6 +31,24 @@ const list = (v: unknown, max = 200) =>
     .slice(0, max)
 
 /** Keeps only known fields with safe bounds; chat ids and bot ids are never taken from here. */
+function sanitizeAutoReply(r: HubConfig['autoReply']): HubConfig['autoReply'] {
+  let siteUrl = String(r.siteUrl ?? '').trim()
+  if (siteUrl && !/^https?:\/\//i.test(siteUrl)) siteUrl = `https://${siteUrl}`
+  try {
+    if (siteUrl) siteUrl = new URL(siteUrl).toString()
+  } catch {
+    siteUrl = ''
+  }
+  return {
+    enabled: Boolean(r.enabled),
+    cooldownSeconds: clampInt(r.cooldownSeconds, 10, 3600, 120),
+    siteUrl,
+    siteText: String(r.siteText ?? '').slice(0, 400) || DEFAULT_HUB.autoReply.siteText,
+    sponsorText: String(r.sponsorText ?? '').slice(0, 400) || DEFAULT_HUB.autoReply.sponsorText,
+    sponsorLimit: clampInt(r.sponsorLimit, 1, 20, 8),
+  }
+}
+
 function sanitize(input: HubConfig, current: HubConfig): HubConfig {
   const g = input.guard ?? DEFAULT_HUB.guard
   const c = input.counter ?? DEFAULT_HUB.counter
@@ -71,6 +89,7 @@ function sanitize(input: HubConfig, current: HubConfig): HubConfig {
       welcome: String(s.welcome ?? '').slice(0, 600),
     },
     report: { enabled: Boolean(input.report?.enabled) },
+    autoReply: sanitizeAutoReply(input.autoReply ?? DEFAULT_HUB.autoReply),
   }
 }
 

@@ -20,6 +20,7 @@ import {
   type TgUser,
 } from '@/lib/tg-hub'
 import type { HubConfig } from '@/lib/tg-hub-shared'
+import { autoReply } from '@/lib/tg-autoreply'
 
 type GuardMsg = TgMessage & {
   sender_chat?: { id: number; type: string }
@@ -693,7 +694,7 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
 
     // A channel sender_chat that is not ours means someone is posting as a foreign channel.
     if (m.sender_chat && m.sender_chat.type === 'channel') {
-      await punish(hub, token, m, 'Başka bir kanal adına mesaj', { hard: g.linkAction === 'ban' })
+      await punish(hub, token, m, 'Ba��ka bir kanal adına mesaj', { hard: g.linkAction === 'ban' })
       return true
     }
 
@@ -748,5 +749,6 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
 
   await recordMessage(hub, m, textHash)
   await dailyTrustBump(m.from.id)
+  await autoReply(hub, token, m, text).catch((error) => console.error('[tg-autoreply]', error))
   return false
 }
