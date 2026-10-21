@@ -23,7 +23,7 @@ import { BATAK_RULE_OPTIONS, BATAK_VARIANTS, type BatakRules, type BatakVariant 
 import { MonopolyPvp } from './monopoly-pvp'
 import { PistiFinalScore, PistiPvp } from './pisti-pvp'
 import { PapazPvp } from './papaz-pvp'
-import { PISTI_TARGETS } from '@/lib/games/pisti'
+import { DEFAULT_PISTI_RULES, PISTI_RULE_OPTIONS, PISTI_TARGETS, pistiRulesToList, type PistiRules } from '@/lib/games/pisti'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
@@ -125,6 +125,7 @@ export function TableLobby({
   const batakRuleList = BATAK_RULE_OPTIONS.filter((o) => o.variants.includes(batakVariant))
   const [pistiTarget, setPistiTarget] = useState('151')
   const [pistiTeam, setPistiTeam] = useState(true)
+  const [pistiExtras, setPistiExtras] = useState<(keyof PistiRules)[]>(pistiRulesToList(DEFAULT_PISTI_RULES))
   const [okey101Team, setOkey101Team] = useState(false)
   const [tavlaRounds, setTavlaRounds] = useState('1')
   const [okeyPoints, setOkeyPoints] = useState('0')
@@ -139,7 +140,7 @@ export function TableLobby({
         ...(game === 'batak'
           ? { variant: batakVariant, extras: batakExtras.filter((k) => batakRuleList.some((o) => o.key === k)) }
           : game === 'pisti'
-            ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam }
+            ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam, extras: pistiExtras }
             : game === 'okey101'
               ? { team: seatSeats === 4 && okey101Team }
               : {}),
@@ -528,6 +529,43 @@ export function TableLobby({
                     : `${seatRounds} puana ilk ulaşan kazanır. Zirvede eşitlik olursa bir el daha oynanır.`}
                 </p>
               )}
+              {game === 'pisti' && (
+                <fieldset className="flex flex-col gap-2">
+                  <legend className="mb-2 text-xs font-semibold text-muted-foreground">Masa ayarları</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {PISTI_RULE_OPTIONS.map((o) => {
+                      const on = pistiExtras.includes(o.key)
+                      return (
+                        <button
+                          key={o.key}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          onClick={() => setPistiExtras((list) => (on ? list.filter((k) => k !== o.key) : [...list, o.key]))}
+                          className={cn(
+                            'flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors',
+                            on ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary/50',
+                          )}
+                        >
+                          <span
+                            className={cn('mt-0.5 flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition-colors', on ? 'bg-primary' : 'bg-muted')}
+                            aria-hidden="true"
+                          >
+                            <span className={cn('size-3 rounded-full bg-background transition-transform', on && 'translate-x-3')} />
+                          </span>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="text-xs font-bold text-foreground">{o.label}</span>
+                            <span className="text-[11px] leading-snug text-muted-foreground">{o.hint}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] leading-snug text-pretty text-muted-foreground">
+                    En çok kart +3, eşitlikte kimseye verilmez. As ve Vale +1, ♣2 +2, ♦10 +3. Pişti +10, Vale pişti +20.
+                  </p>
+                </fieldset>
+              )}
               {game === 'batak' && batakRuleList.length > 0 && (
                 <fieldset className="flex flex-col gap-2">
                   <legend className="mb-2 text-xs font-semibold text-muted-foreground">Masa ayarları</legend>
@@ -718,7 +756,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
       // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
       if (d.turn === d.seat) return 5000
       // 101 bots play one turn per poll, so a quicker beat keeps their moves flowing one by one.
-      return d.game === 'okey101' ? 1200 : d.game === 'batak' ? 1000 : 2000
+      return d.game === 'okey101' ? 1200 : d.game === 'batak' || d.game === 'pisti' ? 1000 : 2000
     },
   })
   const [busy, setBusy] = useState(false)
@@ -848,6 +886,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             <LeaveTableButton
               id={id}
               running
+              compact={immersive}
               stake={data.stake}
               onDone={() => {
                 refresh()
@@ -1170,7 +1209,7 @@ function RoomShell({ children, onLeave, title, immersive }: { children: React.Re
   )
 }
 
-function LeaveTableButton({ id, running, stake, onDone }: { id: string; running: boolean; stake: number; onDone: () => void }) {
+function LeaveTableButton({ id, running, stake, onDone, compact }: { id: string; running: boolean; stake: number; onDone: () => void; compact?: boolean }) {
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1180,10 +1219,11 @@ function LeaveTableButton({ id, running, stake, onDone }: { id: string; running:
       <button
         type="button"
         onClick={() => setConfirming(true)}
+        aria-label={compact ? 'Masadan kalk' : undefined}
         className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
       >
         <LogOut className="size-4" aria-hidden="true" />
-        Masadan kalk
+        <span className={cn(compact && 'max-lg:sr-only')}>Masadan kalk</span>
       </button>
     )
   }
