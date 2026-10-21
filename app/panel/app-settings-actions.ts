@@ -11,11 +11,12 @@ export async function saveAppSettings(_: ActionState, form: FormData): Promise<A
   const value = normalizeAppSettings({
     installBonus: Number(form.get('installBonus')),
     pushBonus: Number(form.get('pushBonus')),
+    comboBonus: Number(form.get('comboBonus')),
   })
   try {
     await setContent(APP_SETTINGS_KEY, value)
     revalidatePath('/', 'layout')
-    return { ok: true, message: `Kaydedildi: kurulum ${value.installBonus} KC, bildirim ${value.pushBonus} KC.` }
+    return { ok: true, message: `Kaydedildi: kurulum ${value.installBonus} KC, bildirim ${value.pushBonus} KC, ikisi birden +${value.comboBonus} KC.` }
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }
   }

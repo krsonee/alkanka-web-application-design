@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getMember } from '@/lib/member'
-import { awardTask, listPublicTasks, officialSocialLinks, requestTaskApproval, taskProgress } from '@/lib/tasks'
+import { awardTask, bundleTarget, canClaim, codeMatches, officialSocialLinks, requestTaskApproval, taskProgress } from '@/lib/tasks'
 import { checkIn } from '@/lib/checkin'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
@@ -21,7 +21,7 @@ export async function checkInAction(): Promise<
   }
 }
 
-export async function completeTaskAction(taskId: number): Promise<
+export async function completeTaskAction(taskId: number, code?: string): Promise<
   | { ok: true; awarded: boolean; pending: boolean; points: number; balance?: number; message: string }
   | { ok: false; error: string }
 > {
@@ -29,9 +29,17 @@ export async function completeTaskAction(taskId: number): Promise<
   if (!member) return { ok: false, error: 'Puan için giriş yapmalısın.' }
   if (await hitRateLimit(`task:${member.id}`, 10, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   try {
-    const task = (await listPublicTasks()).find((item) => item.id === taskId)
-    if (!task) return { ok: false, error: 'Görev bulunamadı.' }
-    if (task.kind === 'social_follow' || task.kind === 'social_like') {
+    const gate = await canClaim(member.id, taskId)
+    if (!gate.ok) return { ok: false, error: gate.error }
+    const task = gate.task
+    if (task.kind === 'secret_code') {
+      if (await hitRateLimit(`task-code:${member.id}`, 5, 300)) return { ok: false, error: 'Çok fazla deneme yaptın, 5 dakika sonra tekrar dene.' }
+      if (!codeMatches(task.param, String(code ?? ''))) return { ok: false, error: 'Kod yanlış kanka. Telegram kanalına tekrar bak.' }
+    } else if (task.kind === 'bundle') {
+      const progress = await taskProgress(member.id, task)
+      const target = bundleTarget(task, gate.visible)
+      if (progress < target) return { ok: false, error: `Önce diğer görevleri bitir: ${progress}/${target}.` }
+    } else if (task.kind === 'social_follow' || task.kind === 'social_like') {
       if (await hitRateLimit(`social-check:${member.id}`, 6, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
       const { checkSocialTask } = await import('@/lib/social-verify')
       const official = await officialSocialLinks()
@@ -65,7 +73,7 @@ export async function completeTaskAction(taskId: number): Promise<
       pending: false,
       points: result.points,
       balance: result.balance,
-      message: result.awarded ? 'Puan yazıldı.' : 'Bu görevin puanı zaten yazılmış.',
+      message: result.awarded ? `+${result.points} yazıldı.` : 'Bu görevin puanı zaten yazılmış.',
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Görev tamamlanamadı.' }

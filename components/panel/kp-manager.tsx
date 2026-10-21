@@ -369,7 +369,7 @@ function LevelsEditor({ initial }: { initial: LevelDef[] }) {
           <Plus className="size-4" aria-hidden /> Seviye ekle
         </button>
         <button onClick={() => setLevels(DEFAULT_LEVELS)} className="h-10 rounded-lg border border-border px-3 text-sm font-semibold text-muted-foreground hover:text-foreground">
-          Varsayılan 20 seviye
+          Varsayılan 21 seviye
         </button>
         <button disabled={pending} onClick={() => run(() => updateLevels(levels))} className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">
           Kaydet
@@ -410,8 +410,8 @@ function RulesEditor({ initial }: { initial: PointRules }) {
   )
 }
 
-type Draft = { id?: string; name: string; description: string; icon: string; tier: BadgeTier; bonus: number; auto: AutoKind | null; active: boolean }
-const EMPTY: Draft = { name: '', description: '', icon: 'award', tier: 'altin', bonus: 250, auto: null, active: true }
+type Draft = { id?: string; name: string; description: string; icon: string; tier: BadgeTier; bonus: number; auto: AutoKind | null; active: boolean; season?: string | null; perkPct?: number }
+const EMPTY: Draft = { name: '', description: '', icon: 'award', tier: 'altin', bonus: 250, auto: null, active: true, season: null, perkPct: 0 }
 
 function BadgesEditor({ badges, autoLabels }: { badges: SpecialBadge[]; autoLabels: Record<AutoKind, string> }) {
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -448,6 +448,16 @@ function BadgesEditor({ badges, autoLabels }: { badges: SpecialBadge[]; autoLabe
             <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
               Kazanana bonus KP
               <input type="number" min={0} value={draft.bonus} onChange={(e) => setDraft({ ...draft, bonus: Number(e.target.value) })} className={field} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+              Mevsimlik (sadece bu ay verilebilir)
+              <input type="month" value={draft.season ?? ''} onChange={(e) => setDraft({ ...draft, season: e.target.value || null })} className={field} />
+              <span className="font-normal">Boş bırak = her zaman verilebilir. Ay geçince bir daha verilemez.</span>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+              Sahibine market indirimi (%)
+              <input type="number" min={0} max={50} value={draft.perkPct ?? 0} onChange={(e) => setDraft({ ...draft, perkPct: Number(e.target.value) })} className={field} />
+              <span className="font-normal">Birden fazla rozeti olana en yüksek indirim uygulanır.</span>
             </label>
             <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground sm:col-span-2">
               Otomatik yarışma
@@ -493,10 +503,12 @@ function BadgesEditor({ badges, autoLabels }: { badges: SpecialBadge[]; autoLabe
               <span className="text-xs leading-relaxed text-muted-foreground">{b.description}</span>
               <span className="text-xs text-muted-foreground">
                 {b.auto ? autoLabels[b.auto] : 'Elle verilir'} · +{b.bonus} KP · {b.holders} sahibi
+                {b.perkPct ? ` · %${b.perkPct} market indirimi` : ''}
+                {b.season ? ` · Mevsimlik: ${b.season}` : ''}
               </span>
             </div>
             <div className="flex shrink-0 flex-col gap-1">
-              <button onClick={() => setDraft({ id: b.id, name: b.name, description: b.description, icon: b.icon, tier: b.tier, bonus: b.bonus, auto: b.auto, active: b.active })} className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-secondary">
+              <button onClick={() => setDraft({ id: b.id, name: b.name, description: b.description, icon: b.icon, tier: b.tier, bonus: b.bonus, auto: b.auto, active: b.active, season: b.season, perkPct: b.perkPct })} className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-secondary">
                 Düzenle
               </button>
               <HideButton key={`${b.id}-${b.active}`} kind="badge" id={b.id} hidden={!b.active} label={b.name} />

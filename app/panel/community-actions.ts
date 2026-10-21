@@ -37,6 +37,25 @@ export async function moderateReview(id: number, status: 'approved' | 'rejected'
   return guard(() => setReviewStatus(id, status))
 }
 
+export async function decideReviewProof(id: number, ok: boolean) {
+  return guard(async () => {
+    const { decideProof } = await import('@/lib/trust-extra')
+    await decideProof(id, ok)
+    return ok ? 'Yorum doğrulandı, rozet ve KP verildi.' : 'Kanıt reddedildi.'
+  })
+}
+
+export async function postKarneNow() {
+  return guard(async () => {
+    const { weeklyKarne, karneText } = await import('@/lib/trust-extra')
+    const { broadcastPodium } = await import('@/lib/telegram-bots')
+    const list = await weeklyKarne()
+    if (!list.length) return 'Son 7 günde karneye girecek veri yok.'
+    const posted = await broadcastPodium((origin) => karneText(list, origin))
+    return posted ? `Karne ${posted} kanala gönderildi.` : 'Bağlı aktif kanal bulunamadı.'
+  })
+}
+
 export async function removeReview(id: number) {
   return guard(async () => {
     await deleteReview(id)

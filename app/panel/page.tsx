@@ -29,6 +29,8 @@ import { pushStats } from '@/lib/push'
 import { getQuestConfig, questWinnersThisWeek } from '@/lib/kp-extras'
 import { PushSender } from '@/components/panel/push-sender'
 import { AppRewardsEditor } from '@/components/panel/app-rewards-editor'
+import { MobilePanel } from '@/components/panel/mobile-panel'
+import { MOBILE_SEGMENTS, mobileCounts, PUSH_TOPICS } from '@/lib/mobile'
 import { getAppSettings } from '@/lib/app-settings'
 import { MessageSender } from '@/components/panel/message-sender'
 import { listSent } from '@/lib/inbox'
@@ -64,6 +66,10 @@ import { adminComplaints, listLeagueMatches, pendingReviews, publishedReviews } 
 import { siteOptions } from '@/lib/sites'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
 import { KpManager } from '@/components/panel/kp-manager'
+import { BoostManager } from '@/components/panel/boost-manager'
+import { getBoostConfig } from '@/lib/boosts'
+import { recentRaffles } from '@/lib/badge-value'
+import { BadgeRaffle } from '@/components/panel/badge-raffle'
 import { AdsEditor } from '@/components/panel/ads-editor'
 import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
@@ -208,8 +214,14 @@ async function marketPanel() {
 }
 
 async function kpPanel() {
-  const [cfg, badges, awards, board, online, ticker, quest, questWinners] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek()])
-  return <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} quest={quest} questWinners={questWinners} />
+  const [cfg, badges, awards, board, online, ticker, quest, questWinners, boosts, raffles] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek(), getBoostConfig(), recentRaffles().catch(() => [])])
+  return (
+    <div className="flex flex-col gap-10">
+      <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} quest={quest} questWinners={questWinners} />
+      <BadgeRaffle badges={badges.map((b) => ({ id: b.id, name: b.name, holders: b.holders }))} recent={raffles} />
+      <BoostManager initial={boosts} />
+    </div>
+  )
 }
 
 async function staffPanel() {
@@ -431,6 +443,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       <CommunityManager
         reviews={await pendingReviews().catch(() => [])}
         published={await publishedReviews().catch(() => [])}
+        proofs={await (await import('@/lib/trust-extra')).pendingProofs().catch(() => [])}
         complaints={await adminComplaints().catch(() => [])}
         matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
@@ -476,15 +489,18 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     section(ctx, 'telegram', 'Telegram', telegramPanel),
     section(ctx, 'push', 'Bildirimler', async () => {
-      const [stats, appSettings] = await Promise.all([
+      const [stats, appSettings, mCounts] = await Promise.all([
         pushStats().catch(() => ({ total: 0, members: 0, log: [] })),
         getAppSettings(),
+        mobileCounts().catch(() => ({ total: 0, installed: 0, push: 0, both: 0, none: 0, opensToday: 0, turnedOff: 0 })),
       ])
+      const topicLabels = Object.fromEntries(PUSH_TOPICS.map((t) => [t.value, t.label]))
       return (
         <TelegramTabs
           label="Bildirim bölümleri"
           tabs={[
             { id: 'send', label: 'Bildirim gönder', content: <PushSender {...stats} configured={stats.total > 0} /> },
+            { id: 'mobile', label: 'Mobil', content: <MobilePanel counts={mCounts} segments={MOBILE_SEGMENTS} topicLabels={topicLabels} /> },
             { id: 'app-rewards', label: 'Uygulama ödülleri', content: <AppRewardsEditor settings={appSettings} /> },
           ]}
         />

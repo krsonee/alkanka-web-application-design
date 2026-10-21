@@ -2,9 +2,11 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { Tasks } from '@/components/alkanka/tasks'
 import { OnlineRewards } from '@/components/alkanka/kp/online-rewards'
+import { MemberPerks } from '@/components/alkanka/kp/member-perks'
+import { getBirthday, getBoostConfig, shieldCount } from '@/lib/boosts'
 import { getMember } from '@/lib/member'
 import { getStreak, type StreakState } from '@/lib/checkin'
-import { completedTaskIds, listPublicTasks, taskClaimMap, taskProgressMap, type ClaimStatus } from '@/lib/tasks'
+import { bundleTarget, completedTaskIds, inviteLeague, listPublicTasks, taskClaimMap, taskProgressMap, visibleTasksFor, type ClaimStatus } from '@/lib/tasks'
 
 export const metadata = pageMeta('gorevler')
 export const dynamic = 'force-dynamic'
@@ -19,7 +21,37 @@ export default async function TasksPage() {
     member ? getStreak(member.id).catch(() => noStreak) : Promise.resolve(noStreak),
   ])
   const finished = new Set(done)
-  const progress = member ? await taskProgressMap(member.id, tasks).catch(() => ({} as Record<number, number>)) : {}
+  const view = visibleTasksFor(member?.id ?? null, tasks, finished)
+  const [progress, league, perks] = await Promise.all([
+    member ? taskProgressMap(member.id, view.tasks).catch(() => ({} as Record<number, number>)) : Promise.resolve({} as Record<number, number>),
+    inviteLeague(10),
+    member
+      ? Promise.all([getBoostConfig(), shieldCount(member.id), getBirthday(member.id)])
+          .then(([cfg, shields, birthday]) => ({ shields, shieldPrice: cfg.shieldPrice, birthday, birthdayCoin: cfg.birthday.coin }))
+          .catch(() => null)
+      : Promise.resolve(null),
+  ])
+  const shown = view.tasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    detail: task.detail,
+    points: task.points,
+    link: task.link,
+    needsApproval: task.needsApproval,
+    period: task.period,
+    kind: task.kind,
+    target: task.kind === 'bundle' ? bundleTarget(task, view.tasks) : task.target,
+    param: task.kind === 'secret_code' ? null : task.param,
+    progress: progress[task.id] ?? 0,
+    claim: claims[task.id] ?? null,
+    done: finished.has(task.id),
+    category: task.category,
+    chain: task.chain,
+    chainStep: task.chainStep,
+    chainState: view.chainState[task.id] ?? null,
+    badge: task.badge,
+    cap: task.cap,
+  }))
   return (
     <>
       <EditableHero slug="gorevler"
@@ -34,9 +66,12 @@ export default async function TasksPage() {
       />
       <Tasks
         streak={streak}
-        tasks={tasks.map((task) => ({ id: task.id, title: task.title, detail: task.detail, points: task.points, link: task.link, needsApproval: task.needsApproval, period: task.period, kind: task.kind, target: task.target, param: task.param, progress: progress[task.id] ?? 0, claim: claims[task.id] ?? null, done: finished.has(task.id) }))}
+        tasks={shown}
+        inviteLeague={league}
+        meId={member?.id ?? null}
       />
       <OnlineRewards />
+      {member && perks && <MemberPerks {...perks} />}
     </>
   )
 }

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import {
+  ArrowLeft,
   Armchair,
   Check,
   Eye,
@@ -36,7 +37,7 @@ import {
   SidePayoutCard,
   type SideStakes,
 } from "./blackjack-side-bets";
-import { BlackjackTables, BlackjackWatchers } from "./blackjack-tables";
+import { BlackjackLobby, BlackjackTables, BlackjackWatchers } from "./blackjack-tables";
 import { TableChat } from "./table-chat";
 import { MobileTableChat } from "./mobile-table-chat";
 import { TableBrand } from './table-brand'
@@ -383,6 +384,13 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   const idle = useIdle();
   const [seatedHere, setSeatedHere] = useState(false);
   const [viewTable, setViewTable] = useState<number | null>(null);
+  const [entered, setEntered] = useState(false);
+  function enterTable(no: number) {
+    setViewTable(no);
+    setEntered(true);
+    setNotice("");
+    setError("");
+  }
   // Poll quickly only while this viewer is in a hand; spectators and idle tabs poll slowly.
   const { data, mutate } = useSWR<BlackjackLiveState>(
     viewTable ? `/api/blackjack?masa=${viewTable}` : "/api/blackjack",
@@ -485,6 +493,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     setPickedSeat(null);
     setBalance(res.balance);
     setViewTable(res.tableNo);
+    setEntered(true);
     if (!res.seated)
       setNotice(
         `Masa ${res.tableNo} el oynuyor. Bu el bitince tekrar "Masaya otur"a bas, ilk boş koltuk senin.`,
@@ -551,6 +560,19 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     );
   }
 
+  if (!me && !entered) {
+    return (
+      <BlackjackLobby
+        tables={data.tables}
+        busy={busy}
+        openLabel={`Kendi masanı aç · ${formatAC(totalBet)}`}
+        onPick={enterTable}
+        onOpen={() => join(true)}
+        message={error}
+      />
+    );
+  }
+
   const dealer = data.dealer;
   const dealerHidden = data.dealerHidden;
   const phaseLabel =
@@ -570,6 +592,16 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
       >
         <div className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
+            {!me && (
+              <button
+                type="button"
+                onClick={() => setEntered(false)}
+                className="flex items-center gap-1 rounded-full border border-primary/40 bg-background/70 px-3 py-1 text-xs font-bold uppercase text-foreground hover:border-primary"
+              >
+                <ArrowLeft className="size-3.5" aria-hidden="true" />
+                Masalar
+              </button>
+            )}
             <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
               Masa {data.tableNo} · El #{data.roundId % 10000}
             </span>
@@ -847,7 +879,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           tables={data.tables}
           current={data.tableNo}
           locked={!!me}
-          onView={setViewTable}
+          onView={enterTable}
         />
         <TableChat
           key={data.tableNo}

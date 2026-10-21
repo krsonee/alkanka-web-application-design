@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Check, CalendarCheck, Flame, Info } from 'lucide-react'
+import { Check, CalendarCheck, Flame, Info, Lock, Users } from 'lucide-react'
 import { checkInAction, completeTaskAction } from '@/app/actions/tasks'
 import { PERIODS, STREAK_DAYS, type TaskPeriod } from '@/lib/task-period'
-import { isSocialCheckKind, KIND_META, kindHref, type TaskKind } from '@/lib/task-kinds'
+import { isSocialCheckKind, KIND_META, kindHref, TASK_CATEGORIES, type TaskCategory, type TaskKind } from '@/lib/task-kinds'
 import { cn } from '@/lib/utils'
 import { DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
@@ -25,7 +25,15 @@ export type PublicTask = {
   progress: number
   claim: 'beklemede' | 'onaylandi' | 'reddedildi' | null
   done: boolean
+  category?: TaskCategory
+  chain?: string | null
+  chainStep?: number
+  chainState?: 'done' | 'current' | 'locked' | null
+  badge?: string | null
+  cap?: number
 }
+
+type InviteRow = { userId: string; name: string; count: number }
 
 const DAYS = STREAK_DAYS
 const PERIOD_LABEL = Object.fromEntries(PERIODS.map((p) => [p.value, p.label])) as Record<TaskPeriod, string>
@@ -52,8 +60,23 @@ function statusOf(task: PublicTask, local: PublicTask['claim'] | undefined, done
   return 'open' as const
 }
 
-export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak: { streak: number; checkedToday: boolean } }) {
-  const tasks = [...rawTasks].sort((a, b) => PERIOD_ORDER.indexOf(a.period) - PERIOD_ORDER.indexOf(b.period))
+export function Tasks({
+  tasks: rawTasks,
+  streak,
+  inviteLeague = [],
+  meId = null,
+}: {
+  tasks: PublicTask[]
+  streak: { streak: number; checkedToday: boolean }
+  inviteLeague?: InviteRow[]
+  meId?: string | null
+}) {
+  const [category, setCategory] = useState<TaskCategory | 'hepsi'>('hepsi')
+  const [codes, setCodes] = useState<Record<number, string>>({})
+  const categories = TASK_CATEGORIES.filter((c) => rawTasks.some((t) => (t.category ?? 'genel') === c.value))
+  const tasks = [...rawTasks]
+    .filter((t) => category === 'hepsi' || (t.category ?? 'genel') === category)
+    .sort((a, b) => PERIOD_ORDER.indexOf(a.period) - PERIOD_ORDER.indexOf(b.period) || (a.chain ?? '').localeCompare(b.chain ?? '') || (a.chainStep ?? 0) - (b.chainStep ?? 0))
   const { requireLogin, setBalance, refresh } = usePoints()
   const [detail, setDetail] = useState<PublicTask | null>(null)
   const [streakInfo, setStreakInfo] = useState(false)
@@ -93,7 +116,7 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
     if (statusOf(task, claims[task.id], Boolean(done[task.id])) !== 'open' || pending) return
     if (!requireLogin()) return
     start(async () => {
-      const result = await completeTaskAction(task.id)
+      const result = await completeTaskAction(task.id, task.kind === 'secret_code' ? codes[task.id] ?? '' : undefined)
       if (!result.ok) {
         setNote(result.error)
         return
@@ -223,6 +246,25 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
         </JakoTip>
       </article>
 
+      {categories.length > 1 ? (
+        <div role="group" aria-label="Görev kategorisi" className="flex flex-wrap gap-2">
+          {[{ value: 'hepsi' as const, label: 'Hepsi' }, ...categories].map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              aria-pressed={category === c.value}
+              onClick={() => setCategory(c.value)}
+              className={cn(
+                'h-9 rounded-full border px-4 text-xs font-bold transition-colors',
+                category === c.value ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {tasks.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Şu an listelenecek görev yok, yakında burada olacak.
@@ -293,15 +335,46 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
               const label = state === 'done' ? 'Tamamlandı' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? 'Ödülü al' : 'Görevi yap'
               const locked = state !== 'open' || pending
               const className = 'flex h-9 shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100'
+              const chainLocked = task.chainState === 'locked'
               return (
-                <li key={task.id} className={cn('panel-gold flex min-w-0 flex-col gap-3 rounded-xl p-4', state === 'done' && 'opacity-60')}>
+                <li key={task.id} className={cn('panel-gold flex min-w-0 flex-col gap-3 rounded-xl p-4', (state === 'done' || chainLocked) && 'opacity-60')}>
                   <div className="flex items-start justify-between gap-3">
-                    <h4 className="min-w-0 text-sm font-semibold leading-snug text-foreground text-pretty">{task.title}</h4>
+                    <div className="flex min-w-0 flex-col gap-1">
+                      {task.chain ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                          {task.chain === 'sezon' ? 'Sezon Hikâyesi' : 'Yeni Üye Yolculuğu'} · {task.chainStep}. adım
+                        </span>
+                      ) : null}
+                      <h4 className="min-w-0 text-sm font-semibold leading-snug text-foreground text-pretty">{task.title}</h4>
+                    </div>
                     <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold tabular-nums text-primary">
-                      +{formatAC(task.points)} KC
+                      {task.kind === 'bundle' && task.period === 'daily' ? `${formatAC(task.points)}–${formatAC(task.points * 2)}` : `+${formatAC(task.points)}`} KC
                     </span>
                   </div>
                   {task.detail ? <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{task.detail}</p> : null}
+                  {task.badge || (task.cap ?? 0) > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {task.badge ? <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[10px] font-bold text-accent">Rozet ödüllü</span> : null}
+                      {(task.cap ?? 0) > 0 ? <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-bold text-muted-foreground">İlk {task.cap} kanka</span> : null}
+                    </div>
+                  ) : null}
+                  {task.kind === 'secret_code' && state === 'open' ? (
+                    <label className="flex flex-col gap-1">
+                      <span className="sr-only">Gizli kod</span>
+                      <input
+                        value={codes[task.id] ?? ''}
+                        onChange={(e) => setCodes((c) => ({ ...c, [task.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                          if (e.key === 'Enter') complete(task)
+                        }}
+                        placeholder="Telegram’daki kodu yaz"
+                        maxLength={40}
+                        autoComplete="off"
+                        className="h-9 rounded-lg border border-border bg-background px-3 text-sm uppercase tracking-wider text-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                    </label>
+                  ) : null}
                   {task.kind !== 'manual' && task.target > 1 && state === 'open' ? (
                     <span className="flex items-center gap-2" aria-label={`İlerleme ${task.progress}/${task.target}`}>
                       <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
@@ -319,7 +392,16 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
                       <Info className="size-3.5" aria-hidden="true" />
                       Nasıl yapılır?
                     </button>
-                    {state === 'open' && isSocialCheckKind(task.kind) ? (
+                    {chainLocked ? (
+                      <span className="flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-4 text-xs font-bold text-muted-foreground">
+                        <Lock className="size-3.5" aria-hidden="true" />
+                        Önceki adımı bitir
+                      </span>
+                    ) : state === 'open' && (task.kind === 'secret_code' || task.kind === 'bundle') ? (
+                      <button type="button" onClick={() => complete(task)} disabled={pending || (task.kind === 'bundle' && task.progress < task.target)} className={className}>
+                        {task.kind === 'secret_code' ? 'Kodu gönder' : task.period === 'daily' ? 'Sandığı aç' : 'Ödülü al'}
+                      </button>
+                    ) : state === 'open' && isSocialCheckKind(task.kind) ? (
                       visited[task.id] || !task.link ? (
                         <button type="button" onClick={() => complete(task)} disabled={pending} className={className}>
                           Kontrol et
@@ -349,6 +431,31 @@ export function Tasks({ tasks: rawTasks, streak }: { tasks: PublicTask[]; streak
         </div>
       )}
       {note ? <p className="text-sm text-muted-foreground" aria-live="polite">{note}</p> : null}
+      {inviteLeague.length > 0 ? (
+        <article className="panel-gold flex flex-col gap-3 rounded-2xl p-4 sm:p-5">
+          <header className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Users className="size-5" aria-hidden="true" />
+            </span>
+            <div className="flex min-w-0 flex-col">
+              <h3 className="font-display text-lg font-bold text-foreground">Davet Ligi</h3>
+              <p className="text-sm text-muted-foreground">Bu ay en çok aktif kanka getirenler. Sayılması için davet ettiğin kişinin oyun oynaması gerekir.</p>
+            </div>
+          </header>
+          <ol className="flex flex-col gap-1.5">
+            {inviteLeague.map((row, i) => (
+              <li
+                key={row.userId}
+                className={cn('flex items-center gap-3 rounded-lg px-3 py-2 text-sm', row.userId === meId ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-secondary/50')}
+              >
+                <span className={cn('w-6 font-display font-bold tabular-nums', i < 3 ? 'text-primary' : 'text-muted-foreground')}>{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate font-semibold text-foreground">{row.name}</span>
+                <span className="text-xs font-bold tabular-nums text-muted-foreground">{row.count} aktif davet</span>
+              </li>
+            ))}
+          </ol>
+        </article>
+      ) : null}
       <DetailModal
         onClose={() => setDetail(null)}
         content={

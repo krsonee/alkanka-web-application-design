@@ -54,7 +54,8 @@ export async function checkIn(userId: string): Promise<{ claimed: boolean; strea
     return { claimed: false, streak: state.streak, reward: 0, balance: await getBalance(userId) }
   }
   const streak = Number(updated[0].streak)
-  const reward = STREAK_DAYS[streak - 1]?.reward ?? STREAK_DAYS[0].reward
+  const { boosted } = await import('@/lib/boosts')
+  const reward = await boosted('giris', STREAK_DAYS[streak - 1]?.reward ?? STREAK_DAYS[0].reward)
   const inserted = await rows(sql`INSERT INTO kp_events (user_id, source, points, ref) VALUES (${userId}, 'giris', ${reward}, ${today}) ON CONFLICT DO NOTHING RETURNING id`)
   if (inserted.length) await credit(userId, reward)
   return { claimed: true, streak, reward, balance: await getBalance(userId) }

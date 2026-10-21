@@ -29,6 +29,10 @@ export function AppRewardsEditor({ settings }: { settings: AppSettings }) {
           Bildirim açma bonusu (KC)
           <input name="pushBonus" type="number" min={0} max={APP_LIMITS.pushBonus} defaultValue={settings.pushBonus} className={input} />
         </label>
+        <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground sm:col-span-2">
+          İkisi birden ekstra bonus (KC) + &quot;Cepteki Kanka&quot; rozeti yüklemede otomatik
+          <input name="comboBonus" type="number" min={0} max={APP_LIMITS.comboBonus} defaultValue={settings.comboBonus} className={input} />
+        </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button

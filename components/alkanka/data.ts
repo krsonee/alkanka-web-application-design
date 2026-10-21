@@ -30,7 +30,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-export const TELEGRAM_URL = 'https://t.me/AlkankaOfficial'
+export const TELEGRAM_URL = 'https://t.me/alkankaresmi'
 
 /**
  * `signal` badges are filled at runtime (live stream dot, open task count);

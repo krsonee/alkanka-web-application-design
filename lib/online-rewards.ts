@@ -84,8 +84,10 @@ export async function tickOnline(userId: string): Promise<OnlineStatus> {
     const sessionKey = started.getTime().toString(36)
     // Pings arrive every minute, so only the current and previous hour can still be unpaid.
     for (const h of [hours - 1, hours]) {
-      const tier = h >= 1 ? rewardForHour(cfg, h) : null
-      if (!tier) continue
+      const base = h >= 1 ? rewardForHour(cfg, h) : null
+      if (!base) continue
+      const { boosted } = await import('@/lib/boosts')
+      const tier = { ...base, kp: await boosted('online', base.kp), coin: await boosted('online', base.coin) }
       const inserted = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
         VALUES (${userId}, 'online', ${tier.kp}, ${tier.coin}, ${`${sessionKey}:${h}`}, ${`${h} saat kesintisiz online`})
         ON CONFLICT DO NOTHING RETURNING id`)

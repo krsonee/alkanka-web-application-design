@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { BellRing, CheckCircle2, Download, X } from 'lucide-react'
+import useSWR from 'swr'
+import { dismissReminder, getPushReminder } from '@/app/actions/app'
 import { JakoAvatar } from '../jako'
 import { usePoints } from '../points-context'
 import { usePwa } from './pwa-provider'
@@ -176,6 +178,61 @@ function StandalonePushNudge() {
   )
 }
 
+/** A week after a member switches notifications off, Jako asks once more (server tracks timing, at most weekly). */
+function PushComebackReminder() {
+  const { ready, pushState, enablePush } = usePwa()
+  const { member } = usePoints()
+  const { data: due, mutate } = useSWR(ready && member && pushState !== 'unsupported' ? ['push-reminder', member.id] : null, () => getPushReminder())
+  const [busy, setBusy] = useState(false)
+  if (!due) return null
+
+  const close = async () => {
+    mutate(false, { revalidate: false })
+    await dismissReminder()
+  }
+  const denied = pushState === 'denied'
+
+  return (
+    <div role="region" aria-label="Bildirim hatırlatması" className="fixed inset-x-3 bottom-20 z-40 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-96">
+      <div className="flex items-start gap-3 rounded-2xl border border-accent/50 bg-card p-4 shadow-2xl">
+        <JakoAvatar pose="duyuru" size="sm" />
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <p className="text-sm font-bold text-foreground">Bir haftadır sessizsin kanka</p>
+          <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+            {denied
+              ? 'Bildirimler tarayıcı ayarlarından kapalı. Site ayarlarından izin verirsen maçları ve flaş fırsatları kaçırmazsın.'
+              : 'Hepsini açmak zorunda değilsin. Sadece istediğin konuları seçebilirsin.'}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {!denied && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  await enablePush()
+                  setBusy(false)
+                  await close()
+                }}
+                className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-bold text-accent-foreground disabled:opacity-60"
+              >
+                <BellRing className="size-3.5" aria-hidden="true" />
+                {busy ? 'Açılıyor…' : 'Tekrar aç'}
+              </button>
+            )}
+            <Link href="/profil#bildirimler" onClick={close} className="flex h-8 items-center rounded-lg px-2 text-xs font-semibold text-primary hover:underline">
+              Konuları seç
+            </Link>
+          </div>
+        </div>
+        <button type="button" onClick={close} aria-label="Kapat" className="-m-1 flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function NoticeToast() {
   const { notice, clearNotice } = usePwa()
   if (!notice) return null
@@ -203,6 +260,7 @@ export function AppPrompts() {
       <InstallBanner />
       <StandaloneLoginNudge />
       <StandalonePushNudge />
+      <PushComebackReminder />
       <NoticeToast />
     </>
   )

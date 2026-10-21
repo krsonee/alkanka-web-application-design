@@ -13,7 +13,22 @@ import { Marquee } from './home/marquee'
 
 export type BoardPeriod = 'gun' | 'hafta' | 'ay'
 export type KpParts = { time: number; games: number; tasks: number; chat: number; league: number; referrals: number }
-export type KpRow = { userId: string; name: string; kp: number; level: number; levelName: string; specials: number; parts: KpParts }
+export type PinMini = { id: string; name: string; icon: string; tier: 'altin' | 'elmas' | 'efsane' }
+export type KpRow = { userId: string; name: string; kp: number; level: number; levelName: string; specials: number; parts: KpParts; pins?: PinMini[] }
+
+function Pins({ pins }: { pins?: PinMini[] }) {
+  if (!pins?.length) return null
+  return (
+    <span className="flex shrink-0 items-center gap-0.5">
+      {pins.map((p) => (
+        <span key={p.id} title={p.name}>
+          <SpecialEmblem icon={p.icon} tier={p.tier} size="xs" />
+          <span className="sr-only">{p.name}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
 export type TipRow = { userId: string; name: string; points: number; hits: number; exact: number; picks: number }
 export type RankMove = number | 'yeni'
 export type Prize = { id: string; name: string; icon: string; tier: string; bonus: number; label: string }
@@ -30,6 +45,7 @@ type Row = {
   levelName?: string
   specials?: number
   parts?: KpParts
+  pins?: PinMini[]
 }
 
 const PERIODS: { id: BoardPeriod; label: string; noun: string; note: string }[] = [
@@ -107,6 +123,7 @@ function buildRows(category: Category, kp: KpRow[], tips: TipRow[]): Row[] {
       levelName: u.levelName,
       specials: u.specials,
       parts: u.parts,
+      pins: u.pins,
     }))
 }
 
@@ -427,6 +444,7 @@ function Podium({ rows, unit, meId }: { rows: Row[]; unit: string; meId: string 
                 {u.name}
                 {isMe && <span className="text-primary"> (sen)</span>}
               </span>
+              {u.pins?.length ? <span className="flex justify-center"><Pins pins={u.pins} /></span> : null}
               <span className={cn('rounded-full px-2 py-0.5 font-display text-xs font-bold tabular-nums md:px-3 md:py-1 md:text-sm', s.value)}>
                 {fmt(u.value)} <span className="text-[10px] font-medium opacity-75">{unit}</span>
               </span>
@@ -581,6 +599,7 @@ function BoardRow({ row, unit, isMe, tip, sticky, move }: { row: Row; unit: stri
               {row.name}
               {isMe && <span className="text-primary"> (sen)</span>}
             </span>
+            <Pins pins={row.pins} />
             {row.level ? <RankChip level={row.level} /> : tip ? <MemberRank userId={row.userId} /> : null}
             <MoveMark move={move} />
           </span>

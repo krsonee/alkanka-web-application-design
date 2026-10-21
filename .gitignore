@@ -5,6 +5,8 @@ __v0_jsx-dev-runtime.ts
 .snowflake/
 .design-cache/
 .v0-trash/
+.v0-gorseller/
+public/zz-poster/
 .vercel/
 
 # Environment variables

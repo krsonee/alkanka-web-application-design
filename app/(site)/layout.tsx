@@ -31,6 +31,8 @@ import { getCatalog } from '@/lib/catalog'
 import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
 import { SessionGuard } from '@/components/alkanka/session-guard'
 import { TvDockProvider } from '@/components/alkanka/kankatv/tv-dock'
+import { BoostStrip } from '@/components/alkanka/boost-strip'
+import { currentBoosts } from '@/lib/boosts'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [logos, texts, social, sponsors, catalog, chatConfig, appSettings, tourSettings] = await Promise.all([
@@ -43,6 +45,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     getAppSettings(),
     getTourSettings(),
   ])
+  const boosts = await currentBoosts().catch(() => [])
   const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
   const channels = await getChannelUsernames().catch(() => null)
@@ -73,6 +76,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           <Topbar social={social} sponsors={searchSponsors} telegram={telegram} />
           <WinnersTicker />
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
+            {boosts.length > 0 && <BoostStrip boosts={boosts} />}
             {children}
             <Footer />
           </main>

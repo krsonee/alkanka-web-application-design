@@ -177,26 +177,29 @@ export async function requestProduct(member: Member, itemId: string, siteUsernam
   const used = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM market_requests
     WHERE user_id = ${member.id} AND item_id = ${item.id} AND status <> 'reddedildi'`)
   if (Number(used[0]?.c ?? 0) >= item.perUser) throw new Error(`Bu üründen en fazla ${item.perUser} adet alabilirsin.`)
-  await assertCanBuy(member.id, item.price)
+  const { marketDiscountPct, discounted } = await import('@/lib/boosts')
+  const pct = item.kind === 'sponsor' ? 0 : await marketDiscountPct(member.id).catch(() => 0)
+  const price = discounted(item.price, pct)
+  await assertCanBuy(member.id, price)
   const { isRoleHolder } = await import('@/lib/kanka-puan')
   if (await isRoleHolder(member.id)) throw new Error('Görevli hesaplar marketten alışveriş yapamaz.')
 
   const reserved = await rows(sql`UPDATE market_items SET stock = stock - 1 WHERE id = ${item.id} AND stock > 0 RETURNING stock`)
   if (!reserved.length) throw new Error('Stok tükendi.')
-  if (!(await debit(member.id, item.price))) {
+  if (!(await debit(member.id, price))) {
     await rows(sql`UPDATE market_items SET stock = stock + 1 WHERE id = ${item.id}`)
     throw new Error('Kanka Coin bakiyen yetersiz.')
   }
 
   await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, site_username, price)
-    VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${item.price})`)
-  await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: item.price, result: 'loss', delta: -item.price })
+    VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${price})`)
+  await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: price, result: 'loss', delta: -price })
   const { notifyApproval } = await import('@/lib/telegram-bots')
   await notifyApproval('market', {
     uye: member.name,
-    detay: `${item.name} (${item.price} KC)${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
+    detay: `${item.name} (${price} KC${pct ? `, %${pct} indirimli` : ''})${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
   }).catch(() => {})
-  return item
+  return { ...item, price }
 }
 
 type ReqRow = {

@@ -7,6 +7,11 @@ export const CONDITION_KINDS = {
   online: { label: 'Kesintisiz online ödülü al', unit: 'ödül', counted: true, param: null },
   davet: { label: 'Arkadaş davet et', unit: 'davet', counted: true, param: null },
   telegram: { label: 'Telegram hesabını bağla', unit: '', counted: false, param: null },
+  tahmin: { label: 'Maç tahmini yap', unit: 'tahmin', counted: true, param: null },
+  tv: { label: 'KankaTV izle', unit: 'dk', counted: true, param: null },
+  tgkod: { label: 'Telegram gizli kodunu gir', unit: '', counted: false, param: null },
+  sponsor: { label: 'Sponsora kayıtlı ol', unit: '', counted: false, param: 'site' },
+  haftalik: { label: 'Haftalık görev bitir', unit: 'haftalık görev', counted: true, param: null },
 } as const
 
 export type ConditionKind = keyof typeof CONDITION_KINDS
@@ -24,6 +29,8 @@ export type CemberConfig = {
   enabled: boolean
   title: string
   hours: number[]
+  /** Weekdays the event runs (0 = Pazartesi … 6 = Pazar); empty = every day. */
+  days: number[]
   minute: number
   /** Minutes between rounds inside each selected hour; 0 = once per hour at `minute`. */
   every: number
@@ -39,6 +46,7 @@ export const DEFAULT_CEMBER: CemberConfig = {
   enabled: true,
   title: 'Jako Çemberi',
   hours: Array.from({ length: 24 }, (_, h) => h),
+  days: [],
   minute: 0,
   every: 0,
   maxPlayers: 500,
@@ -47,6 +55,46 @@ export const DEFAULT_CEMBER: CemberConfig = {
   extraSlots: [],
 }
 
+export const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'] as const
+
+/**
+ * Önerilen günlük 5 seans + hafta sonu Mega Çember. Her seansın amacı farklı:
+ * site içi tahmin, Telegram, sponsor, KankaTV, arena. Ödüller panelden değiştirilebilir.
+ */
+export function recommendedCemberEvents(opts: { badgeId?: string | null; itemId?: string | null } = {}): CemberConfig[] {
+  const base = { enabled: true, every: 0, maxPlayers: MAX_PLAYERS_DEFAULT, extraSlots: [] as string[], days: [] as number[] }
+  const cond = (id: string, kind: ConditionKind, target = 1, param: string | null = null): CemberCondition => ({ id, kind, target, window: 'gun', param, label: '' })
+  const coin = (id: string, amount: number): CemberPrize => ({ id, type: 'coin', amount, ref: null, label: '' })
+  const market = (id: string, fallbackCoin: number): CemberPrize =>
+    opts.itemId ? { id, type: 'market', amount: 0, ref: opts.itemId, label: '' } : coin(id, fallbackCoin)
+  return [
+    { ...base, id: 'ogle', title: 'Öğle Çemberi', hours: [12], minute: 0, conditions: [cond('c1', 'tahmin', 3)], prizes: [coin('p1', 150)] },
+    { ...base, id: 'telegram', title: 'Telegram Çemberi', hours: [15], minute: 0, conditions: [cond('c1', 'tgkod')], prizes: [market('p1', 300)] },
+    { ...base, id: 'sponsor', title: 'Sponsor Çemberi', hours: [18], minute: 0, conditions: [cond('c1', 'sponsor')], prizes: [coin('p1', 1000)] },
+    {
+      ...base,
+      id: 'primetime',
+      title: 'Prime Time Çemberi',
+      hours: [21],
+      minute: 0,
+      conditions: [cond('c1', 'tv', 20)],
+      prizes: [...(opts.badgeId ? [{ id: 'p0', type: 'badge' as const, amount: 0, ref: opts.badgeId, label: '' }] : []), coin('p1', 200)],
+    },
+    { ...base, id: 'gecekurdu', title: 'Gece Kurdu Çemberi', hours: [23], minute: 30, conditions: [cond('c1', 'oyun', 5)], prizes: [market('p1', 300)] },
+    {
+      ...base,
+      id: 'mega',
+      title: 'Mega Çember',
+      hours: [20],
+      minute: 30,
+      days: [5, 6],
+      conditions: [{ id: 'c1', kind: 'haftalik', target: 4, window: 'hafta', param: null, label: '' }],
+      prizes: [coin('p1', 2500)],
+    },
+  ]
+}
+
+const MAX_PLAYERS_DEFAULT = 500
 export const MAX_PLAYERS = 500
 export const MAX_EVENTS = 30
 /** Rounds of different events must be at least this far apart so two windows never overlap. */
@@ -101,6 +149,11 @@ export function conditionText(c: CemberCondition, taskTitle?: string | null, gam
   const when = WINDOW_LABEL[c.window]
   if (c.kind === 'giris') return 'Bugün günlük girişini yap'
   if (c.kind === 'telegram') return 'Telegram hesabını bağla'
+  if (c.kind === 'tgkod') return 'Bugünkü Telegram gizli kodunu gir'
+  if (c.kind === 'sponsor') return c.param ? `${c.param} sponsoruna kayıtlı ol` : 'Bir sponsora kayıtlı ol'
+  if (c.kind === 'tv') return `${when[0].toUpperCase()}${when.slice(1)} KankaTV'de ${c.target} dk izle`
+  if (c.kind === 'tahmin') return `${when[0].toUpperCase()}${when.slice(1)} ${c.target} maç tahmini yap`
+  if (c.kind === 'haftalik') return `Bu haftanın ${c.target} haftalık görevini bitir`
   if (c.kind === 'gorev' && taskTitle) return `${when[0].toUpperCase()}${when.slice(1)} "${taskTitle}" görevini tamamla`
   const what = gameLabel ? `${gameLabel} ` : ''
   return `${when[0].toUpperCase()}${when.slice(1)} ${c.target} ${what}${meta.unit}${c.kind === 'kp' ? ' kazan' : ''}`.replace(/\s+/g, ' ').trim()

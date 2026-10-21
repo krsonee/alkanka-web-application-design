@@ -1,5 +1,5 @@
 import { getMember } from '@/lib/member'
-import { addReaction, engageState, placePrediction, tickWatch, toggleFollow } from '@/lib/kankatv-engage'
+import { addReaction, engageState, placePrediction, playHalftime, tickWatch, toggleFollow } from '@/lib/kankatv-engage'
 import type { PredictPick } from '@/lib/kankatv-shared'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +34,8 @@ export async function POST(request: Request) {
         return Response.json({ ok: true })
       case 'predict':
         return Response.json({ prediction: await placePrediction(member.id, Number(body.gameId), body.pick as PredictPick) })
+      case 'scratch':
+        return Response.json(await playHalftime(member.id, Number(body.gameId)))
       case 'follow':
         return Response.json({ following: await toggleFollow(member.id, Number(body.teamId), String(body.teamName ?? '')) })
       default:

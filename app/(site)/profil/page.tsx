@@ -35,11 +35,21 @@ import { InboxList } from '@/components/alkanka/profile/inbox-list'
 import { coverById, getLookState, teamById, type LookState } from '@/lib/avatars'
 import { LookStudio } from '@/components/alkanka/profile/look-studio'
 import { Download, Gift, Pencil } from 'lucide-react'
+import { badgeRarity, frameTiers, getPins, MAX_PINS, rarityLabel } from '@/lib/badge-value'
+import { PinPicker } from '@/components/alkanka/kp/pin-picker'
+import { PushPrefsCard } from '@/components/alkanka/profile/push-prefs'
+import { getPushPrefs, PUSH_TOPICS } from '@/lib/mobile'
 
 export const metadata: Metadata = { title: 'Profilim', robots: { index: false } }
 export const dynamic = 'force-dynamic'
 
 const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
+const FRAME_RING: Record<string, string> = {
+  bronz: 'border-bronze',
+  altin: 'border-gold ring-4 ring-gold/30',
+  elmas: 'border-accent ring-4 ring-accent/40',
+  efsane: 'border-ruby ring-4 ring-ruby/40 shadow-lg shadow-ruby/30',
+}
 const TIER_BAR: Record<string, string> = { bronz: 'bg-bronze', altin: 'bg-gold', elmas: 'bg-accent', efsane: 'bg-ruby' }
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
@@ -79,7 +89,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     )
   }
 
-  const [kpStatus, kpConfig, profile, referrals, games, inbox, look] = await Promise.all([
+  const [kpStatus, kpConfig, profile, referrals, games, inbox, look, frames] = await Promise.all([
     getKpStatus(member.id),
     getKpConfig(),
     getProfile(member.id),
@@ -87,7 +97,9 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     historySummary(member.id),
     listInbox(member.id).catch((error) => (console.error('[inbox] okunamadı', error), [] as InboxMessage[])),
     getLookState(member.id).catch((error) => (console.error('[avatar] görünüm okunamadı', error), null as LookState | null)),
+    frameTiers([member.id]).catch(() => ({}) as Record<string, string>),
   ])
+  const frame = frames[member.id] as string | undefined
   const avatar = look?.avatars.find((a) => a.id === look.avatarId) ?? null
   const cover = coverById(look?.coverId)
   const team = teamById(look?.team)
@@ -125,7 +137,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
             <Link
               href="/profil?sekme=gorunum"
               scroll={false}
-              className="group relative block size-28 overflow-hidden rounded-full border-4 border-gold bg-background md:size-32"
+              className={cn(
+                'group relative block size-28 overflow-hidden rounded-full border-4 bg-background md:size-32',
+                frame ? FRAME_RING[frame] : 'border-gold',
+              )}
+              title={frame ? `${TIER_NAMES[frame]} rozet çerçevesi` : undefined}
               aria-label={avatar ? `Avatarın: ${avatar.name}. Değiştir` : 'Avatar seç'}
             >
               {avatar ? (
@@ -203,12 +219,14 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex min-w-0 flex-col gap-8">
         {tab === 'genel' && <OverviewTab memberId={member.id} kpStatus={kpStatus} rules={kpConfig.rules} referrals={referrals} telegram={profile.stats.telegram} />}
         {tab === 'gorunum' && (look ? <LookStudio initial={look} /> : <p className="text-sm text-muted-foreground">Görünüm ayarları şu an yüklenemedi, biraz sonra tekrar dene.</p>)}
-        {tab === 'rozetler' && <BadgesTab kpStatus={kpStatus} badges={profile.badges} />}
+        {tab === 'rozetler' && <BadgesTab memberId={member.id} kpStatus={kpStatus} badges={profile.badges} />}
         {tab === 'hesaplar' && <AccountsTab memberId={member.id} />}
         {tab === 'ayarlar' && (
           <section aria-labelledby="hesap" className="flex max-w-xl flex-col gap-3">
             <SectionTitle id="hesap">Hesap ayarları</SectionTitle>
             <AccountSettings email={member.email} />
+            <SectionTitle id="bildirimler">Bildirim tercihleri</SectionTitle>
+            <PushPrefsCard topics={PUSH_TOPICS} initialOff={await getPushPrefs(member.id).catch(() => [])} />
           </section>
         )}
         {tab === 'yorumlar' && <ReviewsTab memberId={member.id} />}
@@ -235,7 +253,7 @@ function StatusCard({ levelIndex }: { levelIndex: number }) {
     <section aria-labelledby="statu" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Statün</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Rozet kademen (kalıcı)</span>
           <h2 id="statu" className="font-display text-2xl font-bold leading-none text-gold">{rank.name}</h2>
         </div>
         <span className="rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-bold tabular-nums text-gold">
@@ -265,8 +283,8 @@ function StatusCard({ levelIndex }: { levelIndex: number }) {
       </ul>
       <p className="mt-auto rounded-xl bg-background/60 p-3 text-xs leading-relaxed text-muted-foreground">
         {next
-          ? <>Seviye <b className="text-foreground">{next.fromLevel + 1}</b> olunca <b className="text-gold">{next.name}</b> statüsüne geçersin: {next.perks.join(', ')}.</>
-          : 'En yüksek statüdesin kanka. Tüm ayrıcalıklar açık.'}
+          ? <>Seviye <b className="text-foreground">{next.fromLevel + 1}</b> olunca rozetin <b className="text-gold">{next.name}</b> kademesine geçer: {next.perks.join(', ')}. Kademe hiç düşmez; haftalık ligde düşsen bile rozetin sende kalır.</>
+          : 'En yüksek kademedesin kanka. Tüm ayrıcalıklar açık.'}
       </p>
     </section>
   )
@@ -366,10 +384,16 @@ async function OverviewTab({
   )
 }
 
-function BadgesTab({ kpStatus, badges }: { kpStatus: KpStatus; badges: Awaited<ReturnType<typeof getProfile>>['badges'] }) {
+async function BadgesTab({ memberId, kpStatus, badges }: { memberId: string; kpStatus: KpStatus; badges: Awaited<ReturnType<typeof getProfile>>['badges'] }) {
   const earned = badges.filter((b) => b.earned).length
+  const [pins, rarity] = await Promise.all([
+    getPins(memberId).catch(() => [] as string[]),
+    badgeRarity().catch(() => ({}) as Record<string, number>),
+  ])
+  const owned = kpStatus.badges.map((b) => ({ id: b.id, name: b.name, icon: b.icon, tier: b.tier, rarity: rarityLabel(rarity[b.id]) }))
   return (
     <>
+      <PinPicker owned={owned} initial={pins} max={MAX_PINS} />
       <section aria-labelledby="degerli" className="flex flex-col gap-3">
         <SectionTitle id="degerli" action={<Link href="/rozetler" className="text-xs font-semibold text-gold hover:underline">Rozet salonu</Link>}>
           Değerli rozetlerin

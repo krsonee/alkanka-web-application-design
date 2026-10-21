@@ -63,15 +63,19 @@ export function WeeklyQuestCard({ quest, signedIn }: { quest: WeeklyQuest; signe
   )
 }
 
-export function LeagueRivals({ tier, rivals }: { tier: string; rivals: Rival[] }) {
+export function LeagueRivals({ tier, rivals, place, size }: { tier: string; rivals: Rival[]; place?: number; size?: number }) {
   const me = rivals.find((r) => r.me)
   const ahead = rivals.filter((r) => r.gap > 0).at(-1)
   return (
     <section aria-labelledby="lig-rakipler" className={cn('flex flex-col gap-3 rounded-2xl border p-4', TIER_BG[tier])}>
       <div className="flex flex-col gap-0.5">
-        <h2 id="lig-rakipler" className={cn('font-display text-base font-bold', TIER_TEXT[tier])}>{TIER_NAMES[tier]} Ligi&apos;nde yanındakiler</h2>
-        <p className="text-xs text-muted-foreground">
-          {ahead && me ? `${fmt(ahead.gap)} KP daha topla, ${ahead.name} kişisini geç.` : 'Ligin zirvesindesin, arkandakilere dikkat.'}
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="lig-rakipler" className={cn('font-display text-base font-bold', TIER_TEXT[tier])}>{TIER_NAMES[tier]} Ligi · bu hafta</h2>
+          {place && size ? <span className="font-display text-sm font-bold tabular-nums text-foreground">{place}. / {size}</span> : null}
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {ahead && me ? `${fmt(ahead.gap)} KP daha topla, ${ahead.name} kişisini geç. ` : 'Bu hafta kademenin zirvesindesin, arkandakilere dikkat. '}
+          Lig rozetinin kademesine göre kurulur. Sıralama pazartesi sıfırlanır ama rozetin hiç düşmez.
         </p>
       </div>
       <ol className="flex flex-col gap-1.5">

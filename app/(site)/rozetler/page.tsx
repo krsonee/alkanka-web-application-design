@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { ChevronRight, Trophy, Users } from 'lucide-react'
 import { pageMeta } from '@/lib/seo'
 import { getMember } from '@/lib/member'
+import { badgeRarity, getBadgeSets, rarityLabel } from '@/lib/badge-value'
+import { BadgeSets } from '@/components/alkanka/kp/badge-sets'
 import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, levelReach, listSpecialBadges, levelTier } from '@/lib/kanka-puan'
 import { LevelEmblem, ROLE_BADGES, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { ProgressHero } from '@/components/alkanka/kp/progress-hero'
@@ -60,12 +62,15 @@ export default async function BadgesPage() {
     getWeeklyStar(member?.id ?? null),
     getLiveFeed(8).catch(() => []),
   ])
-  const [hidden, quest, league, showcase] = await Promise.all([
+  const [hidden, quest, league, showcase, rarity, sets] = await Promise.all([
     getHiddenBadges(member?.id ?? null, streak?.best ?? 0).catch(() => []),
     getWeeklyQuest(member?.id ?? null).catch(() => null),
     member ? getLeagueRivals(member.id).catch(() => null) : Promise.resolve(null),
     badgeShowcase(specials).catch(() => null),
+    badgeRarity().catch(() => ({}) as Record<string, number>),
+    getBadgeSets(member?.id ?? null).catch(() => []),
   ])
+  const thisMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7)
   const myLevel = me?.level.index ?? -1
   const groups: { tier: string; items: { l: (typeof cfg.levels)[number]; i: number }[] }[] = []
   cfg.levels.forEach((l, i) => {
@@ -90,6 +95,7 @@ export default async function BadgesPage() {
           { href: '#kazan', label: 'KP kazan' },
           ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),
           { href: '#degerli', label: 'Değerli' },
+          { href: '#setler', label: 'Setler' },
           { href: '#gizli', label: 'Gizli' },
           { href: '#akis', label: 'Akış' },
         ].map((l) => (
@@ -115,7 +121,7 @@ export default async function BadgesPage() {
 
       {quest && <WeeklyQuestCard quest={quest} signedIn={!!member} />}
 
-      {league && league.rivals.length > 1 && <LeagueRivals tier={league.tier} rivals={league.rivals} />}
+      {league && league.rivals.length > 1 && <LeagueRivals tier={league.tier} rivals={league.rivals} place={league.place} size={league.size} />}
 
       <section aria-labelledby="kazan" className="flex scroll-mt-32 flex-col gap-3">
         <div className="flex flex-col gap-1">
@@ -175,6 +181,15 @@ export default async function BadgesPage() {
                   </div>
                 </div>
                 <p className="line-clamp-3 text-pretty text-xs leading-relaxed text-muted-foreground sm:line-clamp-none">{b.description}</p>
+                <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                  <span className="rounded-full bg-background/70 px-2 py-0.5 text-foreground">{rarityLabel(rarity[b.id])}</span>
+                  {(b.perkPct ?? 0) > 0 && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-gold">Markette %{b.perkPct} indirim</span>}
+                  {b.season && (
+                    <span className={cn('rounded-full px-2 py-0.5', b.season === thisMonth ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>
+                      {b.season === thisMonth ? 'Sadece bu ay' : `Sınırlı · ${b.season} · artık yok`}
+                    </span>
+                  )}
+                </div>
                 {b.auto && <p className="hidden text-[11px] text-muted-foreground sm:block">{AUTO_LABELS[b.auto]}</p>}
                 {showcase?.leaders[b.id] && (
                   <p className="rounded-lg bg-background/70 px-2 py-1.5 text-[11px] leading-snug text-foreground">
@@ -217,6 +232,8 @@ export default async function BadgesPage() {
           })}
         </AutoScrollRow>
       </section>
+
+      {sets.length > 0 && <BadgeSets sets={sets} badges={specials} signedIn={!!member} />}
 
       {hidden.length > 0 && <HiddenBadges badges={hidden} signedIn={!!member} />}
 

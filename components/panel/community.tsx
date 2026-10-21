@@ -10,6 +10,8 @@ import { StatusLine, useAction } from '@/components/alkanka/community/use-action
 import { cn } from '@/lib/utils'
 import { CommunityGuide, CommunityHint, type CommunityTab } from './community-guide'
 import { FixturePicker } from './fixture-picker'
+import { TrustProofs } from './trust-proofs'
+import type { PendingProof } from '@/lib/trust-extra'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
@@ -21,9 +23,10 @@ type Props = {
   matches: LeagueMatch[]
   siteNames: Record<string, string>
   withdraw: ComponentProps<typeof WithdrawManager>
+  proofs: PendingProof[]
 }
 
-export function CommunityManager({ reviews, published, complaints, matches, siteNames, withdraw }: Props) {
+export function CommunityManager({ reviews, published, complaints, matches, siteNames, withdraw, proofs }: Props) {
   const [tab, setTab] = useState<CommunityTab>('reviews')
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'forwarded').length
   return (
@@ -33,6 +36,7 @@ export function CommunityManager({ reviews, published, complaints, matches, site
         {(
           [
             ['reviews', `Yorum onayı (${reviews.length})`],
+            ['kanit', `Kanıt & karne (${proofs.length})`],
             ['complaints', `Şikâyetler (${openComplaints})`],
             ['cekim', `Çekim paylaşımları (${withdraw.shares.filter((s) => s.status === 'pending').length})`],
             ['league', `Tahmin ligi (${matches.filter((m) => !m.settled).length})`],
@@ -45,6 +49,7 @@ export function CommunityManager({ reviews, published, complaints, matches, site
       </div>
       <CommunityHint tab={tab} />
       {tab === 'reviews' && <Reviews reviews={reviews} published={published} siteNames={siteNames} />}
+      {tab === 'kanit' && <TrustProofs proofs={proofs} siteNames={siteNames} />}
       {tab === 'complaints' && <Complaints complaints={complaints} siteNames={siteNames} />}
       {tab === 'cekim' && <WithdrawManager {...withdraw} />}
       {tab === 'league' && <LeagueAdmin matches={matches} />}

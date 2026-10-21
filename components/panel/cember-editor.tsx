@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Copy, Play, Plus, Save, Trash2 } from 'lucide-react'
+import { Copy, Play, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
 import { CemberDemo } from './cember-demo'
 import {
@@ -21,6 +21,8 @@ import {
   type ConditionWindow,
   type PrizeType,
   EVERY_OPTIONS,
+  WEEKDAY_SHORT,
+  recommendedCemberEvents,
   slotMinutes,
 } from '@/lib/cember-shared'
 import { cn } from '@/lib/utils'
@@ -71,6 +73,13 @@ export function CemberEditor({
     setEvents((list) => [...list, next])
     setSel(events.length)
     setMsg(null)
+  }
+
+  const loadRecommended = () => {
+    if (!confirm('Mevcut etkinliklerin yerine önerilen 5 günlük seans + hafta sonu Mega Çember yüklensin mi? Kaydet\'e basınca kalıcı olur.')) return
+    setEvents(recommendedCemberEvents({ badgeId: badges[0]?.id ?? null, itemId: items[0]?.id ?? null }))
+    setSel(0)
+    setMsg({ ok: true, text: 'Şablon yüklendi. Ödülleri kontrol edip Kaydet\'e bas.' })
   }
 
   const removeEvent = () => {
@@ -136,7 +145,10 @@ export function CemberEditor({
               dakika önce sitede ve Telegram&apos;da duyuru çıkar.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={loadRecommended} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary px-3 text-sm font-semibold text-primary">
+              <Sparkles className="size-4" aria-hidden /> Önerilen 5 seans + Mega
+            </button>
             <button type="button" onClick={() => addEvent(cfg)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold">
               <Copy className="size-4" aria-hidden /> Kopyala
             </button>
@@ -264,6 +276,25 @@ export function CemberEditor({
               </button>
             ))}
           </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-muted-foreground">Günler (hiçbiri seçili değilse her gün)</span>
+            <div className="flex flex-wrap gap-1.5">
+              {WEEKDAY_SHORT.map((d, i) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => set({ days: cfg.days.includes(i) ? cfg.days.filter((x) => x !== i) : [...cfg.days, i].sort((a, b) => a - b) })}
+                  aria-pressed={cfg.days.includes(i)}
+                  className={cn(
+                    'h-9 min-w-12 rounded-lg border px-2 text-xs font-semibold transition-colors',
+                    cfg.days.includes(i) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
+                  )}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -328,6 +359,15 @@ export function CemberEditor({
                       </option>
                     ))}
                   </select>
+                )}
+                {meta.param === 'site' && (
+                  <input
+                    className={input}
+                    value={c.param ?? ''}
+                    onChange={(e) => updCond(c.id, { param: e.target.value.trim() || null })}
+                    placeholder="Sponsor site kimliği (boş = herhangi)"
+                    aria-label="Sponsor site"
+                  />
                 )}
                 {meta.param === 'game' && (
                   <select className={input} value={c.param ?? ''} onChange={(e) => updCond(c.id, { param: e.target.value || null })} aria-label="Oyun">

@@ -3,7 +3,9 @@ import { Medal } from 'lucide-react'
 import { AUTO_LABELS, leaderboard, listSpecialBadges, predictionBoard, rankMoves, recentAwards, type AwardRow, type RankMove } from '@/lib/kanka-puan'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import { getMember } from '@/lib/member'
+import { pinnedFor } from '@/lib/badge-value'
 import { SpecialEmblem } from './kp/emblem'
+import { SprintBanner } from './sprint-banner'
 import { RankBoards, type BoardPeriod, type KpRow, type Prize, type TipRow } from './rank-boards'
 
 const PERIODS: BoardPeriod[] = ['gun', 'hafta', 'ay']
@@ -19,6 +21,8 @@ async function load() {
       getMember().catch(() => null),
     ])
 
+    const ids = [...new Set(kp.flat().map((r) => r.userId))]
+    const pins = await pinnedFor(ids).catch(() => ({}) as Awaited<ReturnType<typeof pinnedFor>>)
     const kpBy = Object.fromEntries(
       PERIODS.map((p, i) => [
         p,
@@ -29,6 +33,7 @@ async function load() {
           level: r.level,
           levelName: r.levelName,
           specials: r.specials,
+          pins: pins[r.userId],
           parts: {
             time: r.breakdown.time,
             games: r.breakdown.games,
@@ -83,9 +88,14 @@ function ChampionsWall({ champions }: { champions: AwardRow[] }) {
         <h2 id="sampiyonlar" className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
           <Medal className="size-5 text-primary" aria-hidden /> Şampiyonlar duvarı
         </h2>
-        <Link href="/rozetler" className="text-xs font-semibold text-primary hover:underline">
-          Tüm rozetler
-        </Link>
+        <span className="flex items-center gap-3">
+          <Link href="/sampiyonlar" className="text-xs font-semibold text-primary hover:underline">
+            Şampiyon kürsüsü
+          </Link>
+          <Link href="/rozetler" className="text-xs font-semibold text-primary hover:underline">
+            Tüm rozetler
+          </Link>
+        </span>
       </header>
       {champions.length ? (
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -113,6 +123,7 @@ export async function Leaderboard() {
   const data = await load()
   return (
     <section aria-label="Sıralama" className="flex flex-col gap-8">
+      <SprintBanner />
       <RankBoards kp={data.kp} tips={data.tips} prizes={data.prizes} moves={data.moves} meId={data.meId} signedIn={data.signedIn} initial={data.initial} />
       <ChampionsWall champions={data.champions} />
     </section>
