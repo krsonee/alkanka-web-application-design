@@ -29,6 +29,8 @@ export type OddsSource = {
   siteName: string
   siteLink: string
   siteLogo: string | null
+  replacements: string
+  footer: string
   active: boolean
   lastAt: string | null
   total: number

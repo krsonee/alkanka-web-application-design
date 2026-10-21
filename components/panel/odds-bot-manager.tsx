@@ -12,7 +12,9 @@ import {
   previewOddsAction,
   saveOddsBotAction,
   toggleOddsSourceAction,
+  updateOddsSourceTextAction,
 } from '@/app/panel/odds-bot-actions'
+import { SourceTextEditor, SourceTextFields } from './source-text-fields'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 import { ODD_RESULT_LABELS, fillMinutes, type OddsBotConfig, type OddsBotStatus, type OddsPreview, type OddsSource, type SpecialOdd } from '@/lib/special-odds-shared'
@@ -167,6 +169,9 @@ function SourcesCard({ sources }: { sources: OddsSource[] }) {
         <label className={label}>Site adı<input name="siteName" required maxLength={40} placeholder="Örn. NovaBet" className={input} /></label>
         <label className={label}>Bizim site linkimiz<input name="siteLink" required type="url" placeholder="https://..." className={input} /></label>
         <label className={label}>Logo adresi (isteğe bağlı)<input name="siteLogo" placeholder="https://.../logo.png" className={input} /></label>
+        <div className="flex flex-col gap-3 md:col-span-2">
+          <SourceTextFields footerPlaceholder="Boş bırakılırsa genel alt yazı kullanılır" />
+        </div>
         <div className="flex flex-col gap-2 md:col-span-2">
           <button type="submit" disabled={pending} className={cn(primaryBtn, 'self-start')}>
             {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}Kaynak ekle
@@ -197,6 +202,15 @@ function SourcesCard({ sources }: { sources: OddsSource[] }) {
                   <Trash2 className="size-4" aria-hidden="true" />
                 </button>
               </form>
+              <SourceTextEditor
+                id={s.id}
+                linkName="siteLink"
+                link={s.siteLink}
+                replacements={s.replacements}
+                footer={s.footer}
+                footerPlaceholder="Boş bırakılırsa genel alt yazı kullanılır"
+                action={updateOddsSourceTextAction}
+              />
             </li>
           ))}
         </ul>

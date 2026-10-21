@@ -17,6 +17,7 @@ import {
   setSourceActive,
   setTargetActive,
   testTarget,
+  updateSourceText,
 } from '@/lib/telegram-mirror'
 import { encodeFilter } from '@/lib/telegram-filters'
 import { saveApprovalSettings, saveOddsSettings, saveShareSettings, setOddsResult, testApproval } from '@/lib/telegram-bots'
@@ -95,9 +96,28 @@ export async function addSourceAction(_: ActionState, form: FormData): Promise<A
   } catch {
     return { message: 'Link https:// ile başlayan geçerli bir adres olmalı.' }
   }
-  await addSource({ channel, brand, link, keywords, targetId })
+  const replacements = String(form.get('replacements') ?? '').slice(0, 3000)
+  const footer = String(form.get('footer') ?? '').trim().slice(0, 300)
+  await addSource({ channel, brand, link, keywords, targetId, replacements, footer })
   revalidatePath('/panel')
   return { ok: true, message: `@${channel} eklendi. İlk kontrolde mevcut postlar atlanır, sadece yeni postlar paylaşılır.` }
+}
+
+export async function updateSourceTextAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  const link = String(form.get('link') ?? '').trim().slice(0, 500)
+  try {
+    if (new URL(link).protocol !== 'https:') throw new Error()
+  } catch {
+    return { message: 'Link https:// ile başlayan geçerli bir adres olmalı.' }
+  }
+  await updateSourceText(Number(form.get('id')), {
+    link,
+    replacements: String(form.get('replacements') ?? '').slice(0, 3000),
+    footer: String(form.get('footer') ?? '').trim().slice(0, 300),
+  })
+  revalidatePath('/panel')
+  return { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' }
 }
 
 export async function toggleSourceAction(form: FormData) {
