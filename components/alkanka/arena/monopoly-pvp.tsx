@@ -223,14 +223,15 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-4">
-      <section aria-label="Oyuncular" className="flex flex-col gap-2 lg:col-start-2 lg:row-start-1">
+    <div className="@container/mono">
+    <div className="flex flex-col gap-3 @3xl/mono:grid @3xl/mono:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] @3xl/mono:grid-rows-[auto_auto_1fr] @3xl/mono:items-start @3xl/mono:gap-4">
+      <section aria-label="Oyuncular" className="flex flex-col gap-2 @3xl/mono:col-start-2 @3xl/mono:row-start-1">
         {remote.spectator && (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
             <Eye className="size-4 text-primary" aria-hidden="true" /> Masay�� izliyorsun.
           </p>
         )}
-        <ul className={cn('grid gap-2 lg:grid-cols-1', s.seats > 4 ? 'grid-cols-2 sm:grid-cols-3 lg:max-h-96 lg:overflow-y-auto' : 'grid-cols-2')}>
+        <ul className={cn('grid gap-2 @3xl/mono:grid-cols-1', s.seats > 4 ? 'grid-cols-2 sm:grid-cols-3 @3xl/mono:max-h-96 @3xl/mono:overflow-y-auto' : 'grid-cols-2')}>
           {s.players.map((p, i) => (
             <PlayerChip
               key={i}
@@ -249,7 +250,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
         </ul>
       </section>
 
-      <div className="lg:col-start-1 lg:row-span-3 lg:row-start-1">
+      <div className="@3xl/mono:col-start-1 @3xl/mono:row-span-3 @3xl/mono:row-start-1">
         <div className="rounded-2xl bg-wood p-1.5 shadow-[0_24px_50px_-20px_oklch(0_0_0/0.8)] sm:p-3">
           <div className="@container mx-auto w-full max-w-[860px]">
             <div
@@ -311,7 +312,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
         </div>
       </div>
 
-      <section aria-label="Hamle" className="flex flex-col gap-3 lg:col-start-2 lg:row-start-2">
+      <section aria-label="Hamle" className="flex flex-col gap-3 @3xl/mono:col-start-2 @3xl/mono:row-start-2">
         <ActionPanel
           s={s}
           me={me}
@@ -327,7 +328,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
         <EventFeed feed={feed} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
       </section>
 
-      <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card lg:col-start-2 lg:row-start-3">
+      <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card @3xl/mono:col-start-2 @3xl/mono:row-start-3">
         <div role="tablist" aria-label="Panel" className="grid grid-cols-2 gap-1 border-b border-border p-1.5">
           {(
             [
@@ -412,6 +413,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
 
         </div>
       </section>
+    </div>
     </div>
   )
 }
