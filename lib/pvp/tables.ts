@@ -206,7 +206,8 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
     const rounds = rule.rounds.includes(Number(input?.rounds)) ? Number(input?.rounds) : rule.rounds[0]
-    return { seats, team: false, bots, ...(rounds ? { rounds } : {}) }
+    const team = game === 'okey101' && seats === 4 && input?.team === true
+    return { seats, team, bots, ...(rounds ? { rounds } : {}) }
   }
   if (game === 'tavla') {
     const rounds = [1, 3, 5].includes(Number(input?.rounds)) ? Number(input?.rounds) : 1

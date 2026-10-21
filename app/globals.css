@@ -1495,3 +1495,13 @@
 :root[data-sidebar='collapsed'] {
   --sidebar-w: 72px;
 }
+
+/* While a card-table game is on screen the Telegram rail steps aside so the table gets the width. */
+@media (min-width: 1280px) {
+  body:has([data-game-table]) aside[data-live-rail] {
+    display: none;
+  }
+  body:has([data-game-table]) .xl\:pr-80 {
+    padding-right: 0;
+  }
+}

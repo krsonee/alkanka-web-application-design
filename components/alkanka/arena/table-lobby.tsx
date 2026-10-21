@@ -123,6 +123,7 @@ export function TableLobby({
   const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
   const [pistiTarget, setPistiTarget] = useState('151')
   const [pistiTeam, setPistiTeam] = useState(true)
+  const [okey101Team, setOkey101Team] = useState(false)
   const [tavlaRounds, setTavlaRounds] = useState('1')
   const [okeyPoints, setOkeyPoints] = useState('0')
   const isTavla = game === 'tavla'
@@ -133,7 +134,13 @@ export function TableLobby({
         seats: seatSeats,
         bots: seatBots,
         ...(seatRounds ? { rounds: seatRounds } : {}),
-        ...(game === 'batak' ? { variant: batakVariant } : game === 'pisti' ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam } : {}),
+        ...(game === 'batak'
+          ? { variant: batakVariant }
+          : game === 'pisti'
+            ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam }
+            : game === 'okey101'
+              ? { team: seatSeats === 4 && okey101Team }
+              : {}),
       }
     : isOkey
       ? { seats, team: teamMode ?? false, bots: seats === 4 ? bots : 0, ...(okeyPoints !== '0' ? { rounds: Number(okeyPoints) } : {}) }
@@ -484,6 +491,17 @@ export function TableLobby({
                   onChange={(v) => setPistiTeam(v === 'team')}
                 />
               )}
+              {game === 'okey101' && seatSeats === 4 && (
+                <OptionGroup
+                  label="Mod"
+                  value={okey101Team ? 'team' : 'solo'}
+                  options={[
+                    { value: 'solo', label: 'Tekli' },
+                    { value: 'team', label: 'Eşli (2+2)' },
+                  ]}
+                  onChange={(v) => setOkey101Team(v === 'team')}
+                />
+              )}
               <OptionGroup
                 label="Bot koltuğu"
                 value={String(seatBots)}
@@ -731,7 +749,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     send,
   }
 
-  const immersive = (data.game === 'pisti' || data.game === 'papaz') && data.status === 'oynaniyor'
+  const immersive = (data.game === 'pisti' || data.game === 'papaz' || data.game === 'okey101') && data.status === 'oynaniyor'
 
   return (
     <RoomShell

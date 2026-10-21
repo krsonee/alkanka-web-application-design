@@ -160,7 +160,7 @@ export type ActResult = { state: PvpState; outcome: Outcome }
 export const seatSide = (seat: number): Side => (seat === 0 ? 'p' : 'b')
 
 export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSeats?: number[] }): PvpState {
-  if (game === 'okey101') return runOkey101Bots(initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
+  if (game === 'okey101') return runOkey101Bots(initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds, team: opts?.team })).state
   if (game === 'batak') return runBatakBots(initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant })).state
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
   if (game === 'papaz') return runPapazBots(initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats })).state
