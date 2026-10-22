@@ -85,7 +85,18 @@ export async function pausedClock(updatedAt: string) {
 export const TURN_TIMEOUT_MS = 3 * 60 * 1000
 export const DUEL_TIMEOUT_MS = 10 * 60 * 1000
 export const IDLE_KICK_MS = 15 * 60 * 1000
-const BOT_NAMES = ['Jako Bot', 'Kanka Bot', 'Usta Bot']
+const BOT_NAMES = [
+  'Jako Bot', 'Kanka Bot', 'Usta Bot', 'Reis Bot', 'Paşa Bot', 'Kartal Bot', 'Baykuş Bot', 'Şahin Bot',
+  'Tilki Bot', 'Aslan Bot', 'Efe Bot', 'Dayı Bot', 'Kaptan Bot', 'Hoca Bot', 'Çakal Bot', 'Bozkurt Bot',
+]
+const pickBotNames = (n: number) => {
+  const pool = [...BOT_NAMES]
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return Array.from({ length: n }, (_, i) => pool[i % pool.length])
+}
 
 function mapTable(r: Record<string, unknown>): TableRow {
   const seats = Number(r.seats ?? 2) || 2
@@ -257,8 +268,9 @@ export async function createTable(m: Member, game: string, stake: number, input?
     throw new Error(hold ? `Bu masa için bakiyende en az ${stake + hold} KC olmalı (mars güvencesi).` : 'Yetersiz Kanka Coin.')
   const humanSeats = opts.seats - opts.bots
   const players: Player[] = [{ id: m.id, name: m.name, seat: 0 }]
+  const botNames = pickBotNames(opts.seats - humanSeats)
   for (let s = humanSeats; s < opts.seats; s++) {
-    players.push({ id: `bot:${s}`, name: BOT_NAMES[(s - humanSeats) % BOT_NAMES.length], seat: s, bot: true })
+    players.push({ id: `bot:${s}`, name: botNames[s - humanSeats], seat: s, bot: true })
   }
   // A table already filled with bots starts right away.
   const full = players.length >= opts.seats

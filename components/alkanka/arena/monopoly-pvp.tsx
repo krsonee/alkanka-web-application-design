@@ -767,17 +767,44 @@ function BoardCenter({
         </span>
       </div>
 
-      <div className="relative z-10 flex w-[78%] flex-col items-center gap-[1.6cqw]">
-        <span className="rounded-full px-[1.6cqw] py-[0.4cqw] text-[clamp(7px,1.4cqw,12px)] font-bold uppercase tracking-widest" style={{ background: 'oklch(0.22 0.02 160 / 0.08)' }}>
-          {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round} · İflasa kadar`}
+      <div className="absolute inset-x-0 top-[3%] z-10 flex justify-center px-[30%]">
+        <span
+          className="truncate rounded-full px-[1.6cqw] py-[0.4cqw] text-[clamp(7px,1.3cqw,12px)] font-bold uppercase tracking-widest"
+          style={{ background: WHITE, boxShadow: '0 1px 3px oklch(0 0 0 / 0.15)' }}
+        >
+          {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round}`}
           {s.rules?.kumbara ? ` · Kumbara ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
         </span>
+      </div>
 
-        {s.dice && (
+      {note && !hasSpotlight && !s.dice && (
+        <p
+          className="absolute inset-x-[28%] bottom-[11%] z-10 truncate rounded-full px-[1.6cqw] py-[0.5cqw] text-center text-[clamp(8px,1.5cqw,14px)] font-bold"
+          style={{ background: WHITE, boxShadow: '0 1px 3px oklch(0 0 0 / 0.15)' }}
+          aria-live="polite"
+        >
+          {note}
+        </p>
+      )}
+
+      <div className="relative z-10 flex w-[78%] flex-col items-center gap-[1.6cqw]">
+        {s.dice ? (
           <div key={rollKey} className="flex gap-[2cqw]">
             <Die value={s.dice[0]} delay={0} />
             <Die value={s.dice[1]} delay={80} />
           </div>
+        ) : (
+          s.lastRoll && (
+            <div className="flex items-center gap-[1.2cqw] rounded-full py-[0.6cqw] pl-[0.6cqw] pr-[1.8cqw] shadow-md" style={{ background: WHITE }}>
+              <span className="flex scale-[0.55] gap-[1cqw] -mx-[2.4cqw] -my-[1.6cqw]">
+                <Die value={s.lastRoll.dice[0]} delay={0} />
+                <Die value={s.lastRoll.dice[1]} delay={0} />
+              </span>
+              <span className="truncate text-[clamp(9px,1.6cqw,14px)] font-bold">
+                {nameOf(s.lastRoll.seat)} attı · {s.lastRoll.dice[0] + s.lastRoll.dice[1]}
+              </span>
+            </div>
+          )
         )}
 
         {s.dice && (walking || !hasSpotlight) && (
@@ -793,7 +820,7 @@ function BoardCenter({
 
         {!walking && <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />}
 
-        {note && !hasSpotlight && (
+        {note && !hasSpotlight && s.dice && (
           <p className="text-pretty text-center text-[clamp(9px,1.7cqw,15px)] font-semibold leading-snug" aria-live="polite">
             {note}
           </p>

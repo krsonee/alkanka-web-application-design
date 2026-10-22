@@ -170,6 +170,8 @@ export type MonopolyState = {
   turn: number
   phase: 'roll' | 'buy' | 'end' | 'auction' | 'debt'
   dice: [number, number] | null
+  /** Survives the turn change so everyone can see what the previous player rolled. */
+  lastRoll?: { seat: number; dice: [number, number] } | null
   again: boolean
   chance: number[]
   chest: number[]
@@ -608,6 +610,7 @@ function roll(s: MonopolyState, seat: number) {
   const sum = a + b
   const dbl = a === b
   s.dice = [a, b]
+  s.lastRoll = { seat, dice: [a, b] }
   s.card = null
   if (p.inJail) {
     if (dbl) {
