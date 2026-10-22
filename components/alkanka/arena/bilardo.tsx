@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
+import { RotateCw, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
@@ -45,18 +46,30 @@ const BALL_COLORS = ['#f5f1e6', '#f2c230', '#2559c9', '#d4382c', '#6b3fa0', '#ef
 const STRIKE_MS = 110
 const DROP_MS = 560
 const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
+const LANDSCAPE_QUERY = '(max-height: 540px) and (orientation: landscape)'
 
-/** Phones held upright get the table rotated 90°, so it fills the screen height instead of a thin strip. */
-function usePortraitPhone() {
+type Layout = 'desktop' | 'portrait' | 'landscape'
+
+/** Phones must be turned sideways: upright shows a rotate prompt, sideways gets a full-screen table. */
+function usePhoneLayout(): Layout {
   return useSyncExternalStore(
     (cb) => {
-      const m = window.matchMedia(PORTRAIT_QUERY)
-      m.addEventListener('change', cb)
-      return () => m.removeEventListener('change', cb)
+      const ms = [PORTRAIT_QUERY, LANDSCAPE_QUERY].map((q) => window.matchMedia(q))
+      ms.forEach((m) => m.addEventListener('change', cb))
+      return () => ms.forEach((m) => m.removeEventListener('change', cb))
     },
-    () => window.matchMedia(PORTRAIT_QUERY).matches,
-    () => false,
+    () => (window.matchMedia(PORTRAIT_QUERY).matches ? 'portrait' : window.matchMedia(LANDSCAPE_QUERY).matches ? 'landscape' : 'desktop'),
+    () => 'desktop',
   )
+}
+
+/** Android browsers allow locking the orientation once in fullscreen; iOS ignores it and relies on the prompt. */
+async function goLandscape() {
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.()
+    const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }
+    await o.lock?.('landscape')
+  } catch {}
 }
 const avatarFor = (seat: number, online: boolean) => `/images/monopoly/pawn-${online ? seat + 1 : seat === 0 ? 1 : 3}.png`
 const IN_HAND_MSG = 'Beyaz elinde: beyazı sürükleyip istediğin yere koy.'
@@ -378,9 +391,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     levelRef.current = v
     setLevelState(v)
   }
-  const vertical = usePortraitPhone()
-  const verticalRef = useRef(vertical)
-  verticalRef.current = vertical
+  const layout = usePhoneLayout()
+  const landscape = layout === 'landscape'
   const [spinOpen, setSpinOpen] = useState(false)
   const [aimLocked, setAimLocked] = useState(false)
   const lockedRef = useRef(false)
@@ -609,8 +621,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.width = (vertical ? CH : CW) * dpr
-    canvas.height = (vertical ? CW : CH) * dpr
+    canvas.width = CW * dpr
+    canvas.height = CH * dpr
     const { canvas: bg, gold } = paintTable(dpr)
     let raf = 0
     let lastHitSound = 0
@@ -662,14 +674,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
 
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      if (vertical) {
-        ctx.setTransform(0, 1, -1, 0, canvas.width, 0)
-        ctx.drawImage(bg, 0, 0)
-        ctx.setTransform(0, dpr, -dpr, 0, canvas.width - RAIL * dpr, RAIL * dpr)
-      } else {
-        ctx.drawImage(bg, 0, 0)
-        ctx.setTransform(dpr, 0, 0, dpr, RAIL * dpr, RAIL * dpr)
-      }
+      ctx.drawImage(bg, 0, 0)
+      ctx.setTransform(dpr, 0, 0, dpr, RAIL * dpr, RAIL * dpr)
 
       const cue = list[0]
       const aiming = canAim()
@@ -781,15 +787,10 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vertical])
+  }, [landscape])
 
   const tablePoint = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    if (verticalRef.current) {
-      const u = ((e.clientX - rect.left) / rect.width) * CH
-      const v = ((e.clientY - rect.top) / rect.height) * CW
-      return { x: v - RAIL, y: CH - u - RAIL }
-    }
     return { x: ((e.clientX - rect.left) / rect.width) * CW - RAIL, y: ((e.clientY - rect.top) / rect.height) * CH - RAIL }
   }
   const rotateAim = (delta: number) => {
@@ -932,12 +933,12 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ? ['Beyazı sürükle · Gücü çekip bırak', 'Beyazı koy']
         : aimLocked
           ? ['Nişan kilitli · Gücü çekip bırak', 'Kilitli']
-          : vertical
-            ? ['', 'Nişan al · Gücü aşağı çek']
+          : landscape
+            ? ['', 'Nişan al · Soldaki gücü aşağı çek']
             : ['Nişan al · Alttaki gücü sağa çek, bırak', 'Nişan al']
 
   const canvasEl = (
-    <div className={cn('relative', vertical && 'min-w-0')}>
+    <div className="relative min-w-0" style={landscape ? { width: 'min(100%, calc((100svh - 1rem) * 1076 / 576))' } : undefined}>
       <canvas
         ref={canvasRef}
         tabIndex={0}
@@ -948,11 +949,11 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         aria-label="Bilardo masası. Sürükleyerek nişan al, güç çubuğunu çekip bırakarak vur. Ok tuşlarıyla döndür, boşluk ile vur."
         className={cn(
           'block touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary',
-          vertical ? 'aspect-[576/1076] h-[calc(100svh-15rem)] max-h-[46rem] min-h-80 w-auto max-w-full' : 'aspect-[1076/576] w-full',
+          'aspect-[1076/576] w-full',
           yourTurn ? 'cursor-crosshair' : 'cursor-wait',
         )}
       />
-      {!vertical && <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />}
+      <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />
       {hint && (
         <span
           className={cn(
@@ -993,8 +994,97 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     </div>
   )
 
+  if (landscape) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-stretch gap-2 bg-background py-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
+        <PowerBar vertical disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+        <div className="relative flex min-w-0 flex-1 items-center justify-center">
+          {canvasEl}
+          {spinOpen && yourTurn && (
+            <div className="absolute bottom-0 right-0 z-10 rounded-2xl border border-border bg-card p-2 shadow-2xl">
+              <SpinPad value={spin} onChange={setSpin} />
+            </div>
+          )}
+        </div>
+        <aside className="flex w-40 shrink-0 flex-col gap-1.5 overflow-y-auto">
+          {[seat, oppSeat].map((s) => (
+            <div
+              key={s}
+              className={cn(
+                'flex min-w-0 items-center gap-1.5 rounded-lg border bg-card px-1.5 py-1',
+                ui.turn === s && !ui.over ? 'border-primary' : 'border-border',
+              )}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={avatarFor(s, !!remote)} alt="" className="size-6 shrink-0 rounded-full bg-secondary object-cover" />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex min-w-0 items-center justify-between gap-1">
+                  <span className="truncate text-xs font-bold text-foreground">{s === seat ? 'Sen' : oppName}</span>
+                  {ui.fouls[s] > 0 && (
+                    <span className="shrink-0 text-[10px] font-bold tabular-nums text-destructive">F{ui.fouls[s]}/{MAX_FOULS}</span>
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-wrap gap-0.5">
+                  {ui.groups[s] ? (
+                    remaining(ui.groups[s]).length === 0 ? <BallChip n={8} /> : remaining(ui.groups[s]).map((n) => <BallChip key={n} n={n} />)
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">{groupLabel(null)}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {!remote && (
+            <div role="radiogroup" aria-label="Bot seviyesi" className="flex gap-0.5 rounded-lg bg-secondary p-0.5">
+              {BOT_LEVELS.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={level === l.id}
+                  onClick={() => setLevel(l.id)}
+                  className={cn(
+                    'flex-1 rounded-md py-1 text-[10px] font-bold transition-colors',
+                    level === l.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+                  )}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="line-clamp-3 text-[11px] font-semibold leading-snug text-foreground" aria-live="polite">
+            {ui.message}
+          </p>
+          <SpinButton value={spin} open={spinOpen && yourTurn} onToggle={() => setSpinOpen((o) => !o)} disabled={!yourTurn} />
+          <AimStrip vertical disabled={!yourTurn} onRotate={rotateAim} />
+        </aside>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn('relative flex flex-col gap-3', layout === 'portrait' && 'max-h-[80svh] overflow-hidden')}>
+      {layout === 'portrait' && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center gap-4 rounded-2xl border border-border bg-card px-6 pt-14 text-center">
+          <span className="flex size-20 items-center justify-center rounded-full bg-primary/15 text-primary">
+            <Smartphone className="size-10 rotate-90" aria-hidden="true" />
+          </span>
+          <h2 className="font-display text-xl font-extrabold text-foreground text-balance">Telefonunu yan çevir</h2>
+          <p className="max-w-xs text-sm leading-relaxed text-muted-foreground text-pretty">
+            Bilardo yatay masada oynanır. Telefonu yan çevirdiğinde masa tam ekran açılır.
+          </p>
+          <button
+            type="button"
+            onClick={goLandscape}
+            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-md transition hover:brightness-110 active:scale-95"
+          >
+            <RotateCw className="size-4" aria-hidden="true" />
+            Tam ekran yatay oyna
+          </button>
+          <p className="text-xs text-muted-foreground">iPhone&apos;da ekran döndürme kilidini kapatman yeterli.</p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2">
         {[seat, oppSeat].map((s) => (
           <div
@@ -1058,14 +1148,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       )}
 
       <div className="flex flex-col gap-2 sm:gap-3">
-        {vertical ? (
-          <div className="flex items-stretch justify-center gap-2">
-            {canvasEl}
-            <PowerBar vertical disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
-          </div>
-        ) : (
-          canvasEl
-        )}
+        {canvasEl}
         <div
           className={cn(
             'flex flex-col gap-2 rounded-2xl border bg-card p-2 transition-colors sm:p-2.5',
@@ -1074,14 +1157,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         >
           <div className="flex items-center gap-2 sm:gap-3">
             <SpinButton value={spin} open={spinOpen && yourTurn} onToggle={() => setSpinOpen((o) => !o)} disabled={!yourTurn} />
-            {vertical ? (
-              <AimStrip disabled={!yourTurn} onRotate={rotateAim} />
-            ) : (
-              <>
-                <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
-                <AimStrip compact disabled={!yourTurn} onRotate={rotateAim} />
-              </>
-            )}
+            <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+            <AimStrip compact disabled={!yourTurn} onRotate={rotateAim} />
             <button
               type="button"
               disabled={!yourTurn}
@@ -1122,43 +1199,56 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
 }
 
 /** Drag sideways to nudge the aim by tiny amounts — the precise control phones lack. */
-function AimStrip({ disabled, onRotate, compact }: { disabled: boolean; onRotate: (delta: number) => void; compact?: boolean }) {
-  const last = useRef<{ id: number; x: number } | null>(null)
+function AimStrip({
+  disabled,
+  onRotate,
+  compact,
+  vertical,
+}: {
+  disabled: boolean
+  onRotate: (delta: number) => void
+  compact?: boolean
+  vertical?: boolean
+}) {
+  const last = useRef<{ id: number; v: number } | null>(null)
   const [offset, setOffset] = useState(0)
   return (
     <div
       role="slider"
       tabIndex={-1}
-      aria-label="İnce nişan: sağa sola sürükle"
+      aria-label={vertical ? 'İnce nişan: yukarı aşağı sürükle' : 'İnce nişan: sağa sola sürükle'}
+      aria-orientation={vertical ? 'vertical' : 'horizontal'}
       aria-valuenow={0}
       aria-disabled={disabled}
       onPointerDown={(e) => {
         if (disabled) return
         e.currentTarget.setPointerCapture(e.pointerId)
-        last.current = { id: e.pointerId, x: e.clientX }
+        last.current = { id: e.pointerId, v: vertical ? e.clientY : e.clientX }
       }}
       onPointerMove={(e) => {
         const l = last.current
         if (!l || l.id !== e.pointerId) return
-        const dx = e.clientX - l.x
-        l.x = e.clientX
-        onRotate(dx * 0.0016)
-        setOffset((o) => (o + dx) % 16)
+        const v = vertical ? e.clientY : e.clientX
+        const d = v - l.v
+        l.v = v
+        onRotate(d * 0.0016)
+        setOffset((o) => (o + d) % 16)
       }}
       onPointerUp={() => (last.current = null)}
       onPointerCancel={() => (last.current = null)}
       className={cn(
-        'relative flex h-12 touch-none select-none items-center justify-center overflow-hidden rounded-xl bg-secondary',
-        compact ? 'w-32 shrink-0' : 'min-w-0 flex-1',
-        disabled ? 'opacity-40' : 'cursor-ew-resize',
+        'relative flex touch-none select-none items-center justify-center overflow-hidden rounded-xl bg-secondary',
+        vertical ? 'min-h-24 flex-1' : 'h-12',
+        !vertical && (compact ? 'w-32 shrink-0' : 'min-w-0 flex-1'),
+        disabled ? 'opacity-40' : vertical ? 'cursor-ns-resize' : 'cursor-ew-resize',
       )}
     >
       <div
         aria-hidden="true"
-        className="absolute inset-y-3 -left-4 -right-4"
+        className={vertical ? 'absolute inset-x-4 -bottom-4 -top-4' : 'absolute inset-y-3 -left-4 -right-4'}
         style={{
-          backgroundImage: 'repeating-linear-gradient(90deg, color-mix(in oklab, var(--foreground) 22%, transparent) 0 1px, transparent 1px 8px)',
-          transform: `translateX(${offset}px)`,
+          backgroundImage: `repeating-linear-gradient(${vertical ? 180 : 90}deg, color-mix(in oklab, var(--foreground) 22%, transparent) 0 1px, transparent 1px 8px)`,
+          transform: vertical ? `translateY(${offset}px)` : `translateX(${offset}px)`,
         }}
       />
       <span className="relative rounded-md bg-secondary px-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">İnce nişan</span>

@@ -11,10 +11,10 @@ export const RAIL = 38
 export const R = 12
 // Scale: 1000 units = 100" playing surface (9 ft table), ball 2.25" ≈ 22.5 units.
 export const POCKET_R = 22
-/** Distance from the corner along each rail to the pocket jaw: a ~2 ball wide diagonal opening. */
-export const CORNER_MOUTH = 32
-/** Half width of a side pocket opening (~2.1 balls wide). */
-export const SIDE_MOUTH = 25
+/** Distance from the corner along each rail to the pocket jaw: a ~1.7 ball wide diagonal opening. */
+export const CORNER_MOUTH = 29
+/** Half width of a side pocket opening (~1.8 balls wide). */
+export const SIDE_MOUTH = 22
 export const MAX_SPEED = 42
 const SUB = 8
 // 0.99 per frame, split across the substeps.
@@ -31,15 +31,15 @@ export const FALLBACK_SEED = 'alkanka-bilardo'
 
 /** Pocket centres, used for called pockets and for the drop animation. */
 export const POCKETS = [
-  [-8, -8],
-  [W / 2, -10],
-  [W + 8, -8],
-  [-8, H + 8],
-  [W / 2, H + 10],
-  [W + 8, H + 8],
+  [-4, -4],
+  [W / 2, -6],
+  [W + 4, -4],
+  [-4, H + 4],
+  [W / 2, H + 6],
+  [W + 4, H + 4],
 ] as const
-/** Drawn hole radius per pocket: the hole reaches exactly to the jaws. */
-export const POCKET_HOLE = [41, 27, 41, 41, 27, 41] as const
+/** Drawn hole radius per pocket: reaches the jaws but stays inside the wooden rail. */
+export const POCKET_HOLE = [33, 23, 33, 33, 23, 33] as const
 
 /** Rounded jaw tips of every pocket. Balls bounce off them, so a ball that clips a jaw rattles out. */
 const JAWS: readonly (readonly [number, number])[] = [
