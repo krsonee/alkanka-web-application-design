@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, type ReactNode } from 'react'
+import useSWR, { useSWRConfig } from 'swr'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 import type { BroadcastRow, HubConfig, HubLogRow, HubStats, LeaderRow, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
@@ -14,6 +15,8 @@ import {
   sendWeeklyNow,
   setRoleBot,
   stopBroadcast,
+  pumpWipes,
+  stopWipe,
   sweepGhosts,
   unbanEverywhere,
   wipeUserMessages,
@@ -240,7 +243,7 @@ function GuardSection({ d }: { d: TgHubData }) {
       <Card title="Güvenlik (saldırı koruması)">
         <div className="grid gap-2 md:grid-cols-2">
           <Toggle label="Yeni gelene doğrulama (captcha)" hint="Katılan kişi 2 dakika içinde butona basmazsa atılır. Botları durdurur." checked={g.captcha} onChange={(v) => set({ captcha: v })} />
-          <Toggle label="Bilinen spam hesap kontrolü" hint="Dünya çapındaki spam listesindeki hesaplar girer girmez banlanır." checked={g.casCheck} onChange={(v) => set({ casCheck: v })} />
+          <Toggle label="Bilinen spam hesap kontrolü" hint="Dünya ��apındaki spam listesindeki hesaplar girer girmez banlanır." checked={g.casCheck} onChange={(v) => set({ casCheck: v })} />
           <Toggle label="Sahte yönetici koruması" hint="Adında Alkanka, admin, destek geçen ve yönetici taklidi yapan hesaplar engellenir." checked={g.impersonation} onChange={(v) => set({ impersonation: v })} />
           <Toggle label="Katıldı/ayrıldı yazılarını sil" checked={g.cleanService} onChange={(v) => set({ cleanService: v })} />
         </div>
@@ -514,6 +517,66 @@ function CounterSection({ d }: { d: TgHubData }) {
 
 // --- Cleanup ---------------------------------------------------------------------
 
+function WipeProgress() {
+  const { data: jobs, mutate } = useSWR('tg-wipe-jobs', () => pumpWipes(), {
+    refreshInterval: (latest) => (latest && latest.length ? 2000 : 15000),
+    revalidateOnFocus: true,
+  })
+  const stop = useAction()
+  if (!jobs?.length) return null
+  return (
+    <Card title="Çalışan temizlikler" hint="Bu sayfa açık kaldıkça temizlik kesintisiz ilerler. Sayfayı kapatırsan siteye gelen trafikle yavaş yavaş devam eder.">
+      <ul className="flex flex-col gap-4">
+        {jobs.map((j) => {
+          const deleted = Math.max(0, j.total - j.left)
+          const pct = j.total ? Math.min(100, Math.round((deleted / j.total) * 100)) : 0
+          return (
+            <li key={j.chatId} className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="flex items-center gap-2 font-medium text-foreground">
+                  <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+                  {j.title}
+                </span>
+                <span className="tabular-nums text-muted-foreground">%{pct}</span>
+              </div>
+              <div
+                className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-label={`${j.title} temizlik ilerlemesi`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pct}
+              >
+                <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="tabular-nums">
+                  {deleted.toLocaleString('tr-TR')} / {j.total.toLocaleString('tr-TR')} mesaj numarası tarandı · kalan {j.left.toLocaleString('tr-TR')}
+                </span>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={stop.pending}
+                  onClick={() =>
+                    stop.run(async () => {
+                      const r = await stopWipe(j.chatId)
+                      await mutate()
+                      return r
+                    })
+                  }
+                >
+                  Durdur
+                </button>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      {stop.note}
+    </Card>
+  )
+}
+
 function CleanupSection({ d }: { d: TgHubData }) {
   const [chat, setChat] = useState(d.hub.groups[0]?.chatId ?? '')
   const [tgId, setTgId] = useState('')
@@ -522,8 +585,11 @@ function CleanupSection({ d }: { d: TgHubData }) {
   const wipeAll = useAction()
   const [wipeTarget, setWipeTarget] = useState(d.hub.groups[0]?.chatId ?? '')
   const [confirmWipe, setConfirmWipe] = useState(false)
+  const { mutate: globalMutate } = useSWRConfig()
+  const mutate = () => globalMutate('tg-wipe-jobs')
   return (
     <div className="flex flex-col gap-4">
+      <WipeProgress />
       <Card title="Sohbeti komple temizle (tüm geçmiş)" hint="Seçtiğin grup ya da kanaldaki TÜM mesajları en yeniden en eskiye siler. Grupta veya kanalda /sil yazıp çıkan butona basarak da başlatabilirsin. Bir mesaja yanıt olarak /sil yazarsan sadece o mesaj silinir. Bot orada 'Mesajları sil' yetkisiyle yönetici olmalı. Listede olmayan bir kanal için @kullaniciadi ya da -100… ID yazabilirsin.">
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
@@ -551,7 +617,11 @@ function CleanupSection({ d }: { d: TgHubData }) {
               disabled={wipeAll.pending}
               onClick={() => {
                 setConfirmWipe(false)
-                wipeAll.run(() => wipeWholeChat(wipeTarget))
+                wipeAll.run(async () => {
+                  const r = await wipeWholeChat(wipeTarget)
+                  await mutate()
+                  return r
+                })
               }}
             >
               {wipeAll.pending ? 'Siliniyor…' : 'Eminim, hepsini sil'}
@@ -565,20 +635,31 @@ function CleanupSection({ d }: { d: TgHubData }) {
         {confirmWipe && <p className="text-sm text-destructive">Geri alınamaz. Onaylamak için butona bir kez daha bas.</p>}
         {wipeAll.note}
       </Card>
-      <Card title="Silinmiş hesapları topluca çıkar" hint="Grubu tarar, 'Silinmiş Hesap' görünen üyeleri çıkarır. Grupta /hayalet yazarak da çalıştırabilirsin. Not: Telegram, kanalların abone listesini botlara vermez; bu sadece gruplarda çalışır.">
+      <Card title="Silinmiş hesapları topluca çıkar" hint="Grubu tarar, 'Silinmiş Hesap' görünen üyeleri çıkarır. Listeden seç ya da @kullaniciadi / -100… ID yaz. Grupta /hayalet yazarak da çalıştırabilirsin.">
         <div className="flex flex-col gap-2 sm:flex-row">
-          <select aria-label="Grup" className={input} value={chat} onChange={(e) => setChat(e.target.value)}>
+          <input
+            aria-label="Grup"
+            className={input}
+            list="tg-ghost-targets"
+            placeholder="@grup ya da -100…"
+            value={chat}
+            onChange={(e) => setChat(e.target.value)}
+          />
+          <datalist id="tg-ghost-targets">
             {d.hub.groups.map((g) => (
               <option key={g.chatId} value={g.chatId}>
                 {g.title}
               </option>
             ))}
-          </select>
-          <button type="button" className={btn} disabled={ghost.pending || !chat} onClick={() => ghost.run(() => sweepGhosts(chat))}>
+          </datalist>
+          <button type="button" className={btn} disabled={ghost.pending || !chat.trim()} onClick={() => ghost.run(() => sweepGhosts(chat))}>
             {ghost.pending ? 'Taranıyor…' : 'Taramayı başlat'}
           </button>
         </div>
         {ghost.note}
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Kanallar için önemli: Telegram, kanal abone listesini hiçbir bota vermez. Kanaldaki silinmiş aboneleri sadece Telegram uygulamasından (Kanal bilgisi &gt; Aboneler) elle çıkarabilirsin. Gruplarda da bot, gruba girdikten sonra yazmış üyeleri tanıyabilir.
+        </p>
       </Card>
       <Card title="Bir kişinin mesajlarını topluca sil" hint="Telegram ID'sini gir (log grubunda her kaydın yanında yazar). Son 48 saatteki tüm mesajları tüm gruplardan silinir.">
         <div className="flex flex-col gap-2 sm:flex-row">

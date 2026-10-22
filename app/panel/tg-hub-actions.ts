@@ -165,15 +165,45 @@ export async function removeHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' 
   return done('Kaldırıldı.')
 }
 
-export async function sweepGhosts(chatId: string): Promise<Result> {
+export async function sweepGhosts(chatInput: string): Promise<Result> {
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
+    const hub = await getHub()
+    if (!hub.guardBotId) return { ok: false, message: 'Önce Bekçi botunu seç (Kurulum sekmesi).' }
+    if (!chatInput.trim()) return { ok: false, message: 'Grup seç ya da @kullaniciadi / -100… ID yaz.' }
+    const chat = await resolveChatFor(hub.guardBotId, chatInput)
+    if (chat.type === 'channel') {
+      return {
+        ok: false,
+        message: `"${chat.title}" bir kanal. Telegram, kanal abone listesini hiçbir bota vermez, bu yüzden silinmiş aboneler bot ile çıkarılamaz. Kanal > Yöneticiler > Aboneler ekranından elle çıkarman gerekir. Kanala bağlı bir tartışma grubu varsa onun ID'sini yazarak orayı tarayabilirsin.`,
+      }
+    }
+    if (!chat.isAdmin) return { ok: false, message: `Bot "${chat.title}" içinde yönetici değil. 'Kullanıcıları yasakla' yetkisiyle yönetici yap.` }
     const { sweepDeletedAccounts } = await import('@/lib/tg-guard')
-    const r = await sweepDeletedAccounts(chatId)
-    return done(`${r.checked} hesap kontrol edildi, ${r.removed} silinmiş hesap çıkarıldı.`)
+    const r = await sweepDeletedAccounts(chat.id, chat.title)
+    if (r.checked === 0) {
+      return { ok: true, message: `"${chat.title}" için kontrol edilecek üye yok. Bot sadece grupta yazmış üyeleri tanıyabilir; bot gruba girdikten sonra mesaj atanlar taranır.` }
+    }
+    return done(`"${chat.title}": ${r.checked} hesap kontrol edildi, ${r.removed} silinmiş hesap çıkarıldı.`)
   } catch (error) {
     return fail(error)
   }
+}
+
+export type WipeJob = { chatId: string; title: string; left: number; total: number; startedBy: string; startedAt: string }
+
+/** Pushes running wipes forward while the panel is open, then reports where each one stands. */
+export async function pumpWipes(): Promise<WipeJob[]> {
+  if (!(await canPanel('telegram'))) return []
+  const { processWipes, listWipes } = await import('@/lib/tg-guard')
+  await processWipes(12_000).catch((e) => console.error('[tg-hub] wipe pump', e))
+  return listWipes()
+}
+
+export async function stopWipe(chatId: string): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  const { cancelWipe } = await import('@/lib/tg-guard')
+  return (await cancelWipe(chatId)) ? done('Temizlik durduruldu.') : { ok: false, message: 'Bu sohbet için çalışan temizlik yok.' }
 }
 
 export async function wipeWholeChat(chatInput: string): Promise<Result> {
@@ -191,7 +221,7 @@ export async function wipeWholeChat(chatInput: string): Promise<Result> {
     const { startWipe, processWipes } = await import('@/lib/tg-guard')
     await startWipe(hub.guardBotId, chat.id, chat.title, marker.message_id, 'Panel')
     await processWipes(20_000)
-    return done(`"${chat.title}" temizleniyor. Çok mesaj varsa arka planda dakikada bir devam eder, bitince sohbete "tamamlandı" yazar.`)
+    return done(`"${chat.title}" temizliği başladı. İlerlemeyi aşağıdaki çubuktan izleyebilirsin; bu sayfa açıkken kesintisiz devam eder.`)
   } catch (error) {
     return fail(error)
   }
