@@ -560,7 +560,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-4 gap-1.5 lg:flex lg:items-center lg:gap-2">
                 <ActionButton onClick={undo} disabled={busy || !actions.length} label="Son fişi geri al">
                   <Undo2 className="size-4" aria-hidden="true" />
                   <span className="text-xs sm:text-sm">Geri al</span>

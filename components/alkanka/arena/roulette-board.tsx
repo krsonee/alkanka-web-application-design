@@ -267,47 +267,55 @@ function HorizontalLayout({ c }: { c: Ctx }) {
   )
 }
 
-const V_OUTSIDE = 'rounded-md bg-background/55 ring-1 ring-inset ring-foreground/15'
+const FELT_CELL = 'bg-felt'
+const SIDEWAYS = 'whitespace-nowrap text-[11px] tracking-[0.18em] [writing-mode:vertical-rl] rotate-180'
 
+/** Portrait felt like live-casino phone tables: outside bets run down the left so the whole layout fits one screen. */
 function VerticalLayout({ c }: { c: Ctx }) {
   return (
-    <div className="flex flex-col gap-1 rounded-2xl bg-felt p-1.5 shadow-lg ring-1 ring-primary/30 md:hidden">
-      <Cell c={c} kind="number" value={0} style={numBg(0)} className="h-10 rounded-b-md rounded-t-2xl text-lg">
-        0
-      </Cell>
-      <div className="relative grid grid-cols-3 gap-1">
-        {Array.from({ length: 12 }, (_, i) =>
-          [0, 1, 2].map((j) => {
-            const n = vNum(i, j)
-            return (
-              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className="h-8 rounded-md text-base shadow-sm">
-                {n}
-              </Cell>
-            )
-          }),
-        )}
-        <Spots c={c} defs={V_SPOTS} />
-      </div>
-      <div className="grid grid-cols-3 gap-1">
-        {[1, 2, 3].map((col) => (
-          <Cell key={col} c={c} kind="column" value={col} className={cn(V_OUTSIDE, 'h-8 text-xs')}>
-            2:1
-          </Cell>
-        ))}
-      </div>
-      <div className="mt-1 grid grid-cols-3 gap-1">
-        {[1, 2, 3].map((d) => (
-          <Cell key={d} c={c} kind="dozen" value={d} className={cn(V_OUTSIDE, 'h-10 text-sm')}>
-            {`${12 * d - 11}-${12 * d}`}
-          </Cell>
-        ))}
-      </div>
-      <div className="grid grid-cols-6 gap-1">
-        {OUTSIDE.map((o) => (
-          <Cell key={o.kind} c={c} kind={o.kind} className={cn(V_OUTSIDE, 'h-10 text-xs')}>
-            {o.text}
-          </Cell>
-        ))}
+    <div className="overflow-hidden rounded-xl bg-foreground/35 p-px shadow-xl ring-1 ring-primary/50 md:hidden">
+      <div className="grid grid-cols-[2.25rem_2.25rem_minmax(0,1fr)] gap-px">
+        <div className={cn(FELT_CELL, 'col-span-2 rounded-tl-[11px]')} aria-hidden="true" />
+        <Cell c={c} kind="number" value={0} style={numBg(0)} className="h-10 rounded-tr-[11px] text-lg">
+          0
+        </Cell>
+
+        <div className="grid grid-rows-6 gap-px">
+          {OUTSIDE.map((o) => (
+            <Cell key={o.kind} c={c} kind={o.kind} className={FELT_CELL}>
+              {typeof o.text === 'string' ? <span className={SIDEWAYS}>{o.text}</span> : o.text}
+            </Cell>
+          ))}
+        </div>
+        <div className="grid grid-rows-3 gap-px">
+          {[1, 2, 3].map((d) => (
+            <Cell key={d} c={c} kind="dozen" value={d} className={FELT_CELL}>
+              <span className={SIDEWAYS}>{`${12 * d - 11}-${12 * d}`}</span>
+            </Cell>
+          ))}
+        </div>
+        <div className="relative grid grid-cols-3 gap-px">
+          {Array.from({ length: 12 }, (_, i) =>
+            [0, 1, 2].map((j) => {
+              const n = vNum(i, j)
+              return (
+                <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className="h-9 text-base">
+                  {n}
+                </Cell>
+              )
+            }),
+          )}
+          <Spots c={c} defs={V_SPOTS} />
+        </div>
+
+        <div className={cn(FELT_CELL, 'col-span-2 rounded-bl-[11px]')} aria-hidden="true" />
+        <div className="grid grid-cols-3 gap-px">
+          {[1, 2, 3].map((col) => (
+            <Cell key={col} c={c} kind="column" value={col} className={cn(FELT_CELL, 'h-9 text-xs', col === 3 && 'rounded-br-[11px]')}>
+              2:1
+            </Cell>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -320,8 +328,11 @@ export function RouletteBoard(p: BoardProps) {
     <div className="flex flex-col gap-1.5">
       <HorizontalLayout c={c} />
       <VerticalLayout c={c} />
-      <p className="text-pretty text-center text-xs leading-relaxed text-muted-foreground">
+      <p className="hidden text-pretty text-center text-xs leading-relaxed text-muted-foreground md:block">
         Çizgiye koy: ayrık · Köşeye: köşe · Kenara: sokak · İki sıra arası: altılı · Sıfır çizgisi: üçlü ve ilk dörtlü
+      </p>
+      <p className="text-pretty text-center text-xs leading-relaxed text-muted-foreground md:hidden">
+        Sayıların arasındaki çizgiye ve köşelere de fiş koyabilirsin.
       </p>
     </div>
   )
