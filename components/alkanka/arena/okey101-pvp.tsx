@@ -404,25 +404,6 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
                 <span className="text-[9px] font-bold uppercase tracking-wider text-foreground/60">Gösterge</span>
               </div>
             </div>
-
-            {owners.length > 0 && (
-              <div className="flex w-full flex-col gap-1.5 overflow-y-auto sm:gap-2" aria-label="Yerdeki perler">
-                {owners.map((seat) => (
-                  <div
-                    key={seat}
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-lg p-1',
-                      seat === mySeat ? 'bg-primary/10 ring-1 ring-primary/40' : seat === partner ? 'bg-foreground/5 ring-1 ring-foreground/15' : 'bg-background/15',
-                    )}
-                  >
-                    <span className="w-10 shrink-0 truncate text-[9px] font-bold uppercase tracking-wider text-foreground/80 sm:w-16 sm:text-[10px]">
-                      {nameOf(seat)}
-                    </span>
-                    <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pt-2 pb-0.5">{s.melds.filter((m) => m.owner === seat).map(renderMeld)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex items-center justify-end">{seatPill(rightSeat, true)}</div>
@@ -462,6 +443,33 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             </span>
           </button>
         </div>
+
+        {owners.length > 0 && (
+          <section className="relative z-10 flex flex-col gap-2 border-t border-foreground/10 bg-background/30 p-2 sm:p-3" aria-label="Yerdeki perler">
+            {owners.map((seat) => {
+              const own = s.melds.filter((m) => m.owner === seat)
+              return (
+                <div
+                  key={seat}
+                  className={cn(
+                    'flex flex-col gap-1 rounded-xl p-2',
+                    seat === mySeat ? 'bg-primary/10 ring-1 ring-primary/40' : seat === partner ? 'bg-foreground/5 ring-1 ring-foreground/15' : 'bg-background/25',
+                  )}
+                >
+                  <p className="flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-wider">
+                    <span className={cn('truncate', seat === mySeat ? 'text-primary' : 'text-foreground')}>
+                      {seat === mySeat ? 'Senin perlerin' : nameOf(seat)}
+                    </span>
+                    <span className="shrink-0 text-foreground/60">
+                      {s.opened[seat] === 'cift' ? 'Çifte gitti' : 'Açtı'} · {own.length} per
+                    </span>
+                  </p>
+                  <div className="flex flex-wrap gap-x-2 gap-y-3 pt-2">{own.map(renderMeld)}</div>
+                </div>
+              )
+            })}
+          </section>
+        )}
       </div>
 
       {mySeat >= 0 && (
@@ -665,16 +673,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 }
 
 function MeldTile({ tile, okey }: { tile: Tile; okey: OkeyValue }) {
-  return (
-    <>
-      <span className="sm:hidden">
-        <TileFace tile={tile} okey={okey} size="xs" />
-      </span>
-      <span className="hidden sm:block">
-        <TileFace tile={tile} okey={okey} size="sm" />
-      </span>
-    </>
-  )
+  return <TileFace tile={tile} okey={okey} size="sm" />
 }
 
 function SeatPill({
