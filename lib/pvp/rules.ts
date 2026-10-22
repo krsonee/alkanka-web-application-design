@@ -142,6 +142,10 @@ export type BilardoState = {
   ballInHand?: boolean
   /** False until the opening break has been played. */
   broken?: boolean
+  /** Consecutive fouls per seat; three in a row lose the frame. */
+  fouls?: [number, number]
+  /** After an illegal break this seat chooses to re-rack and break, or accept the table. */
+  breakChoice?: number | null
 }
 
 export type DuelState = {
@@ -587,12 +591,7 @@ export function autoMove(state: PvpState): ActResult | null {
     const next = runBots(r.state as OkeyState)
     return next.outcome ? next : { ...next, state: { ...next.state, note: 'Süre doldu, otomatik taş atıldı' } as PvpState }
   }
-  if (state.kind === 'bilardo') {
-    return {
-      state: { ...state, turn: other(state.turn), shot: null, seq: state.seq + 1, ballInHand: true, note: 'Süre doldu, faul. Beyaz rakipte.' },
-      outcome: null,
-    }
-  }
+  if (state.kind === 'bilardo') return bilardoTimeout(state)
   return null
 }
 
@@ -621,8 +620,42 @@ const clampSpin = (v: unknown) => {
  * The server re-simulates the shot with the shared deterministic engine and applies 8-ball rules itself,
  * so a client can never report fake positions or a fake win.
  */
+function bilardoTimeout(s: BilardoState): ActResult {
+  const seat = s.turn
+  const seq = s.seq + 1
+  if (s.breakChoice === seat) return { state: { ...s, breakChoice: null, shot: null, seq, note: 'Süre doldu, masa olduğu gibi kabul edildi.' }, outcome: null }
+  const broken = s.broken ?? s.seq > 0
+  if (!broken) {
+    // Running out of time before the break hands the break over; it does not give ball in hand.
+    const balls = s.balls.map(Pool.fromState)
+    if (balls.length) Pool.respotCue(balls)
+    return {
+      state: { ...s, balls: balls.map(Pool.toState), turn: other(seat), shot: null, seq, ballInHand: false, note: 'Süre doldu. Açılış rakipte.' },
+      outcome: null,
+    }
+  }
+  const fouls: [number, number] = [s.fouls?.[0] ?? 0, s.fouls?.[1] ?? 0]
+  fouls[seat] += 1
+  if (fouls[seat] >= Pool.MAX_FOULS) {
+    return { state: { ...s, fouls, shot: null, seq, note: `Süre doldu. Üst üste ${Pool.MAX_FOULS}. faul, masa kaybedildi.` }, outcome: { winnerSeat: other(seat) } }
+  }
+  return { state: { ...s, fouls, turn: other(seat), shot: null, seq, ballInHand: true, note: 'Süre doldu, faul. Beyaz rakipte.' }, outcome: null }
+}
+
 function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
   if (s.turn !== seat) throw new Error('Sıra sende değil')
+  if (s.breakChoice === seat) {
+    if (a.type !== 'breakChoice') throw new Error('Önce açılış kararını ver')
+    const seq = s.seq + 1
+    if (a.choice === 'rerack') {
+      return {
+        state: { ...s, balls: Pool.rack().map(Pool.toState), groups: [null, null], breakChoice: null, broken: false, ballInHand: false, shot: null, seq, note: 'Toplar yeniden dizildi. Açılış vuruşu' },
+        outcome: null,
+      }
+    }
+    if (a.choice === 'accept') return { state: { ...s, breakChoice: null, shot: null, seq, note: 'Masa olduğu gibi kabul edildi.' }, outcome: null }
+    throw new Error('Geçersiz seçim')
+  }
   if (a.type !== 'shot') throw new Error('Bilinmeyen hamle')
   const dx = Number(a.dx)
   const dy = Number(a.dy)
@@ -647,17 +680,20 @@ function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
   const spinX = clampSpin(a.spinX)
   const spinY = clampSpin(a.spinY)
   const ev = Pool.simulate(balls, { dx, dy, pow, spinX, spinY })
-  const r = Pool.resolveShot(balls, ev, { shooter: seat, groups: s.groups, broken, call })
+  const r = Pool.resolveShot(balls, ev, { shooter: seat, groups: s.groups, broken, call, fouls: s.fouls })
   const seq = s.seq + 1
+  const turn = r.winner !== null || r.keep ? seat : other(seat)
   const next: BilardoState = {
     ...s,
     balls: balls.map(Pool.toState),
     groups: r.groups,
+    fouls: r.fouls,
     seq,
     shot: { dx, dy, pow, spinX, spinY, cueX, cueY, call, by: seat, seq },
-    turn: r.winner !== null || r.keep ? seat : other(seat),
+    turn,
     note: r.note,
     ballInHand: r.ballInHand,
+    breakChoice: r.illegalBreak ? turn : null,
     broken: true,
   }
   if (r.winner !== null) return { state: next, outcome: { winnerSeat: r.winner } }
