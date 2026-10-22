@@ -29,7 +29,7 @@ import { initOkey101, okey101BotTurn, okey101Step, runOkey101Bots, viewOkey101, 
 import { batakBotTurn, batakPaceMs, batakStep, initBatak, runBatakBots, viewBatak, type BatakState } from '@/lib/games/batak'
 import { initMonopoly, monopolyBotTurn, monopolyStep, runMonopolyBots, type MonopolyState } from '@/lib/games/monopoly'
 import { initPisti, pistiBotTurn, pistiPaceMs, pistiStep, runPistiBots, viewPisti, type PistiState } from '@/lib/games/pisti'
-import { initPapaz, papazBotTurn, papazStep, runPapazBots, viewPapaz, type PapazState } from '@/lib/games/papaz'
+import { initPapaz, papazBotTurn, papazPaceMs, papazStep, runPapazBots, viewPapaz, type PapazState } from '@/lib/games/papaz'
 
 export const PVP_GAMES = ['tavla', 'okey', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu', 'okey101', 'batak', 'monopoly', 'pisti', 'papaz'] as const
 /** Multi-seat games with server-side bots that can fill any empty seat. */
@@ -164,7 +164,7 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
   // Batak bots are paced by the table poll, so the first bids show up one by one.
   if (game === 'batak') return initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant, rules: opts?.extras })
   if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
-  if (game === 'papaz') return runPapazBots(initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats })).state
+  if (game === 'papaz') return initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats, rules: opts?.extras })
   if (game === 'pisti') return initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant, team: opts?.team, rules: opts?.extras })
   if (game === 'tavla') {
     const target = [1, 3, 5].includes(Number(opts?.rounds)) ? Number(opts?.rounds) : 1
@@ -221,7 +221,7 @@ function seatBotTurn(s: SeatState, seat: number) {
 const seatCount = (s: SeatState) => s.seats
 
 /** Games whose bots play one turn per poll so humans can follow every move. */
-const pacedBots = (s: SeatState) => s.kind === 'okey101' || s.kind === 'batak' || s.kind === 'pisti'
+const pacedBots = (s: SeatState) => s.kind === 'okey101' || s.kind === 'batak' || s.kind === 'pisti' || s.kind === 'papaz'
 
 export const BOT_PACE_MS = 1100
 
@@ -229,6 +229,7 @@ export const BOT_PACE_MS = 1100
 export function botPaceMs(state: PvpState) {
   if (state.kind === 'batak') return batakPaceMs(state)
   if (state.kind === 'pisti') return pistiPaceMs(state)
+  if (state.kind === 'papaz') return papazPaceMs(state)
   return BOT_PACE_MS
 }
 

@@ -24,6 +24,7 @@ import { MonopolyPvp } from './monopoly-pvp'
 import { PistiFinalScore, PistiPvp } from './pisti-pvp'
 import { PapazPvp } from './papaz-pvp'
 import { DEFAULT_PISTI_RULES, PISTI_RULE_OPTIONS, PISTI_TARGETS, pistiRulesToList, type PistiRules } from '@/lib/games/pisti'
+import { PAPAZ_RULE_OPTIONS, type PapazRules } from '@/lib/games/papaz'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
@@ -44,6 +45,7 @@ export type TableSummary = {
   bots: number
   rounds?: number | null
   variant?: string | null
+  extras?: string[] | null
   winners: string[]
   spectator: boolean
   status: 'bekliyor' | 'oynaniyor' | 'bitti' | 'iptal'
@@ -126,6 +128,7 @@ export function TableLobby({
   const [pistiTarget, setPistiTarget] = useState('151')
   const [pistiTeam, setPistiTeam] = useState(true)
   const [pistiExtras, setPistiExtras] = useState<(keyof PistiRules)[]>(pistiRulesToList(DEFAULT_PISTI_RULES))
+  const [papazExtras, setPapazExtras] = useState<(keyof PapazRules)[]>([])
   const [okey101Team, setOkey101Team] = useState(false)
   const [tavlaRounds, setTavlaRounds] = useState('1')
   const [okeyPoints, setOkeyPoints] = useState('0')
@@ -141,7 +144,9 @@ export function TableLobby({
           ? { variant: batakVariant, extras: batakExtras.filter((k) => batakRuleList.some((o) => o.key === k)) }
           : game === 'pisti'
             ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam, extras: pistiExtras }
-            : game === 'okey101'
+            : game === 'papaz'
+              ? { extras: papazExtras }
+              : game === 'okey101'
               ? { team: seatSeats === 4 && okey101Team }
               : {}),
       }
@@ -566,6 +571,43 @@ export function TableLobby({
                   </p>
                 </fieldset>
               )}
+              {game === 'papaz' && (
+                <fieldset className="flex flex-col gap-2">
+                  <legend className="mb-2 text-xs font-semibold text-muted-foreground">Masa ayarları</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {PAPAZ_RULE_OPTIONS.map((o) => {
+                      const on = papazExtras.includes(o.key)
+                      return (
+                        <button
+                          key={o.key}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          onClick={() => setPapazExtras((list) => (on ? list.filter((k) => k !== o.key) : [...list, o.key]))}
+                          className={cn(
+                            'flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors',
+                            on ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary/50',
+                          )}
+                        >
+                          <span
+                            className={cn('mt-0.5 flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition-colors', on ? 'bg-primary' : 'bg-muted')}
+                            aria-hidden="true"
+                          >
+                            <span className={cn('size-3 rounded-full bg-background transition-transform', on && 'translate-x-3')} />
+                          </span>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="text-xs font-bold text-foreground">{o.label}</span>
+                            <span className="text-[11px] leading-snug text-muted-foreground">{o.hint}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] leading-snug text-pretty text-muted-foreground">
+                    En çok kart +3, eşitlikte kimseye verilmez. As ve Vale +1, ♣2 +2, ♦10 +3. Pişti +10, Vale pişti +20.
+                  </p>
+                </fieldset>
+              )}
               {game === 'batak' && batakRuleList.length > 0 && (
                 <fieldset className="flex flex-col gap-2">
                   <legend className="mb-2 text-xs font-semibold text-muted-foreground">Masa ayarları</legend>
@@ -615,7 +657,7 @@ export function TableLobby({
               <dd className="text-xs font-bold tabular-nums text-foreground">{formatAC(stake * humanSeats)} KC</dd>
             </div>
             <div className="flex flex-col gap-0.5 px-1">
-              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{isOkey && teamMode ? 'Takıma' : 'Kazanan'}</dt>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{isOkey && teamMode ? 'Takıma' : game === 'papaz' ? 'Dağıtılan' : 'Kazanan'}</dt>
               <dd className="flex items-center justify-center gap-1 text-xs font-bold tabular-nums text-primary">
                 <Coins className="size-3.5" aria-hidden="true" />
                 {formatAC(stake * humanSeats - Math.round((stake * humanSeats * settings.commission) / 100))} KC
@@ -623,7 +665,9 @@ export function TableLobby({
             </div>
           </dl>
           <p className="-mt-1 text-[11px] leading-snug text-muted-foreground text-pretty">
-            Oyuncu masasında pot kazanana gider, %{settings.commission} kesinti uygulanır. Masa iptal olursa bahis iade edilir.
+            {game === 'papaz'
+              ? `Pot kurtulma sırasına göre bölünür: ilk kurtulan en çok alır, eşsiz kartla kalan kaybeder. %${settings.commission} kesinti uygulanır.`
+              : `Oyuncu masasında pot kazanana gider, %${settings.commission} kesinti uygulanır.`} Masa iptal olursa bahis iade edilir.
             {seatRule && humanSeats === 1 ? ' Tek gerçek oyuncuyla oyun hemen botlara karşı başlar.' : ''}
           </p>
           <button
@@ -730,6 +774,12 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
             {t.game === 'okey' && (
               <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{t.rounds ? `${t.rounds} puan` : 'Tek el'}</span>
             )}
+            {t.game === 'papaz' && (
+              <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">
+                {t.extras?.includes('kiz') ? 'Kız Kimde' : 'Papaz Kimde'}
+                {t.extras?.includes('klasik') ? ' · Klasik' : ''}
+              </span>
+            )}
             {t.game === 'pisti' && (
               <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">
                 {t.variant === '101' ? 101 : 151} puan{t.seats === 4 ? (t.team ? ' · Eşli' : ' · Tekli') : ''}
@@ -756,7 +806,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
       // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
       if (d.turn === d.seat) return 5000
       // 101 bots play one turn per poll, so a quicker beat keeps their moves flowing one by one.
-      return d.game === 'okey101' ? 1200 : d.game === 'batak' || d.game === 'pisti' ? 1000 : 2000
+      return d.game === 'okey101' ? 1200 : d.game === 'batak' || d.game === 'pisti' || d.game === 'papaz' ? 1000 : 2000
     },
   })
   const [busy, setBusy] = useState(false)
