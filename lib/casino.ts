@@ -245,8 +245,8 @@ export const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 3
 export const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26]
 
 export type RouletteBet = {
-  kind: 'number' | 'split' | 'street' | 'corner' | 'line' | 'column' | 'red' | 'black' | 'even' | 'odd' | 'low' | 'high' | 'dozen'
-  /** number: the number. split: low*100+high. street/line: first number of the row. corner: lowest of the four. column/dozen: 1-3. */
+  kind: 'number' | 'split' | 'street' | 'corner' | 'line' | 'column' | 'red' | 'black' | 'even' | 'odd' | 'low' | 'high' | 'dozen' | 'trio' | 'basket'
+  /** number: the number. split: low*100+high. street/line: first number of the row. corner: lowest of the four. column/dozen: 1-3. trio: 1 = 0-1-2, 2 = 0-2-3. basket: 0 (0-1-2-3). */
   value?: number
   amount: number
 }
@@ -279,9 +279,59 @@ export function betNumbers(kind: RouletteBet['kind'], value: number | undefined)
       return v >= 1 && v <= 3 ? range(v, 12, 3) : null
     case 'dozen':
       return v >= 1 && v <= 3 ? range((v - 1) * 12 + 1, 12) : null
+    case 'trio':
+      return v === 1 ? [0, 1, 2] : v === 2 ? [0, 2, 3] : null
+    case 'basket':
+      return v === 0 ? [0, 1, 2, 3] : null
     default:
       return null
   }
+}
+
+/** Even-money bets give half the stake back when the ball lands on 0 (La Partage). */
+export const EVEN_MONEY = new Set<RouletteBet['kind']>(['red', 'black', 'even', 'odd', 'low', 'high'])
+
+type RacetrackUnit = { kind: RouletteBet['kind']; value: number; units: number }
+export type RacetrackKey = 'voisins' | 'tiers' | 'orphelins'
+
+/** Classic French call bets, expanded into ordinary inside bets so the payout rules stay in one place. */
+export const RACETRACK: Record<RacetrackKey, { label: string; hint: string; bets: RacetrackUnit[] }> = {
+  voisins: {
+    label: 'Sıfırın komşuları',
+    hint: '22-25 arası 17 sayı',
+    bets: [
+      { kind: 'trio', value: 2, units: 2 },
+      { kind: 'split', value: 407, units: 1 },
+      { kind: 'split', value: 1215, units: 1 },
+      { kind: 'split', value: 1821, units: 1 },
+      { kind: 'split', value: 1922, units: 1 },
+      { kind: 'corner', value: 25, units: 2 },
+      { kind: 'split', value: 3235, units: 1 },
+    ],
+  },
+  tiers: {
+    label: 'Çarkın üçte biri',
+    hint: '27-33 arası 12 sayı',
+    bets: [508, 1011, 1316, 2324, 2730, 3336].map((value) => ({ kind: 'split' as const, value, units: 1 })),
+  },
+  orphelins: {
+    label: 'Yetimler',
+    hint: 'Kalan 8 sayı',
+    bets: [{ kind: 'number', value: 1, units: 1 }, ...[609, 1417, 1720, 3134].map((value) => ({ kind: 'split' as const, value, units: 1 }))],
+  },
+}
+
+export const racetrackUnits = (key: RacetrackKey) => RACETRACK[key].bets.reduce((a, b) => a + b.units, 0)
+
+export function expandRacetrack(key: RacetrackKey, chip: number): RouletteBet[] {
+  return RACETRACK[key].bets.map((b) => ({ kind: b.kind, value: b.value, amount: b.units * chip }))
+}
+
+/** The number and its neighbours on each side of the wheel, in wheel order. */
+export function neighborNumbers(n: number, reach = 2) {
+  const i = WHEEL.indexOf(n)
+  if (i < 0) return []
+  return Array.from({ length: reach * 2 + 1 }, (_, k) => WHEEL[(i - reach + k + WHEEL.length) % WHEEL.length])
 }
 
 const OUTSIDE_LABEL = { red: 'Kırmızı', black: 'Siyah', even: 'Çift', odd: 'Tek', low: '1-18', high: '19-36' } as const
@@ -303,6 +353,10 @@ export function betLabel(b: Pick<RouletteBet, 'kind' | 'value'>) {
       return `${b.value}. kolon`
     case 'dozen':
       return `${b.value}. düzine`
+    case 'trio':
+      return `Üçlü ${nums.join('-')}`
+    case 'basket':
+      return 'İlk dörtlü 0-1-2-3'
     default:
       return OUTSIDE_LABEL[b.kind]
   }
@@ -312,7 +366,7 @@ export function betLabel(b: Pick<RouletteBet, 'kind' | 'value'>) {
 export function betReturn(b: RouletteBet, n: number) {
   const nums = betNumbers(b.kind, b.value)
   if (nums) return nums.includes(n) ? (b.amount * 36) / nums.length : 0
-  if (n === 0) return 0
+  if (n === 0) return EVEN_MONEY.has(b.kind) ? Math.floor(b.amount / 2) : 0
   const win =
     (b.kind === 'red' && RED.has(n)) ||
     (b.kind === 'black' && !RED.has(n)) ||

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { RED, betLabel, betNumbers, betReturn, type RouletteBet } from '@/lib/casino'
+import { RACETRACK, RED, WHEEL, betLabel, betNumbers, betReturn, racetrackUnits, type RacetrackKey, type RouletteBet } from '@/lib/casino'
 import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
@@ -51,9 +51,10 @@ type BoardProps = {
   chipValues: number[]
 }
 
-type Ctx = BoardProps & { compact: boolean; hover: number[]; setHover: (n: number[]) => void }
+type Ctx = BoardProps & { hover: number[]; setHover: (n: number[]) => void }
 
-const wins = (kind: BetKind, value: number | undefined, n: number | null) => n !== null && betReturn({ kind, value, amount: 1 }, n) > 0
+const wins = (kind: BetKind, value: number | undefined, n: number | null) =>
+  n !== null && betReturn({ kind, value, amount: 2 }, n) > 1
 
 const OUTSIDE_NUMBERS: Partial<Record<BetKind, (n: number) => boolean>> = {
   red: (n) => RED.has(n),
@@ -82,36 +83,36 @@ function Cell({ kind, value, style, className, children, c }: { kind: BetKind; v
     <button
       type="button"
       onClick={() => bet(c, kind, value)}
-      onPointerEnter={() => c.setHover(covered(kind, value))}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && c.setHover(covered(kind, value))}
       onPointerLeave={() => c.setHover([])}
       disabled={c.disabled}
       aria-label={`${betLabel({ kind, value })}${amount ? `, bahsin ${amount}` : ''}`}
       style={style}
       className={cn(
-        'relative flex items-center justify-center border border-foreground/40 font-display font-bold text-foreground transition-colors',
-        c.compact ? 'min-h-0 border-foreground/35 p-0' : 'min-h-11 text-sm',
-        'enabled:hover:bg-foreground/15 disabled:cursor-not-allowed',
-        lit && 'bg-foreground/20',
-        won && 'z-10 bg-primary/35 ring-2 ring-inset ring-primary',
+        'relative flex min-h-0 min-w-0 items-center justify-center p-0 font-display font-bold text-foreground transition-[filter,box-shadow,color]',
+        'enabled:hover:brightness-125 disabled:cursor-not-allowed',
+        lit && 'brightness-150',
         className,
+        won && 'z-10 text-primary ring-2 ring-inset ring-primary shadow-[0_0_14px_var(--primary)]',
+        won && kind === 'number' && 'text-foreground',
       )}
     >
       {children}
       {other > 0 && (
-        <span className="absolute left-0.5 top-0.5 rounded-full bg-background/70 px-1 text-[9px] font-semibold text-muted-foreground" title="Diğer oyuncuların bahsi">
+        <span className="absolute left-0.5 top-0.5 rounded-full bg-background/75 px-1 text-[9px] font-semibold leading-tight text-muted-foreground" title="Diğer oyuncuların bahsi">
           {short(other)}
         </span>
       )}
       {amount > 0 && (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size={c.compact ? 'xs' : 'sm'} />
+        <span className="pointer-events-none absolute bottom-0.5 right-0.5">
+          <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size="xs" />
         </span>
       )}
     </button>
   )
 }
 
-/** Invisible target sitting on a line or corner between numbers, for split / corner / street / six-line bets. */
+/** Target sitting on a line or corner between numbers, for split / corner / street / six-line / trio / first-four bets. */
 function Spot({ kind, value, x, y, c }: { kind: BetKind; value: number; x: number; y: number; c: Ctx }) {
   const k = betKey(kind, value)
   const amount = c.mine.get(k) ?? 0
@@ -122,7 +123,7 @@ function Spot({ kind, value, x, y, c }: { kind: BetKind; value: number; x: numbe
     <button
       type="button"
       onClick={() => bet(c, kind, value)}
-      onPointerEnter={() => c.setHover(covered(kind, value))}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && c.setHover(covered(kind, value))}
       onPointerLeave={() => c.setHover([])}
       onFocus={() => c.setHover(covered(kind, value))}
       onBlur={() => c.setHover([])}
@@ -130,18 +131,14 @@ function Spot({ kind, value, x, y, c }: { kind: BetKind; value: number; x: numbe
       aria-label={`${label}${amount ? `, bahsin ${amount}` : ''}`}
       title={label}
       style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
-      className={cn(
-        'group absolute z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full disabled:cursor-not-allowed',
-        c.compact ? 'size-3.5' : 'size-5',
-      )}
+      className="group absolute z-20 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full disabled:cursor-not-allowed"
     >
       {amount > 0 ? (
         <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size="xs" active={won} />
       ) : (
         <span
           className={cn(
-            'rounded-full transition-all',
-            c.compact ? 'size-1.5' : 'size-2',
+            'size-1.5 rounded-full transition-all',
             other > 0 ? 'bg-muted-foreground' : 'bg-transparent',
             'group-enabled:group-hover:size-full group-enabled:group-hover:bg-primary/70 group-focus-visible:size-full group-focus-visible:bg-primary/70',
           )}
@@ -152,95 +149,173 @@ function Spot({ kind, value, x, y, c }: { kind: BetKind; value: number; x: numbe
   )
 }
 
-/** Column i (0-11) left to right, row r (0-2) top to bottom; the top row holds 3, 6, 9... */
-const numAt = (i: number, r: number) => 3 * i + (3 - r)
+type SpotDef = { kind: BetKind; value: number; x: number; y: number }
 
-function Spots({ c }: { c: Ctx }) {
-  const spots: { kind: BetKind; value: number; x: number; y: number }[] = []
-  for (let r = 0; r < 3; r++) spots.push({ kind: 'split', value: numAt(0, r), x: 0, y: (r + 0.5) / 3 })
+/** Horizontal board: column i (0-11) left to right, row r (0-2) top to bottom; the top row holds 3, 6, 9... */
+const hNum = (i: number, r: number) => 3 * i + (3 - r)
+
+function horizontalSpots(): SpotDef[] {
+  const s: SpotDef[] = []
+  for (let r = 0; r < 3; r++) s.push({ kind: 'split', value: hNum(0, r), x: 0, y: (r + 0.5) / 3 })
+  s.push({ kind: 'trio', value: 2, x: 0, y: 1 / 3 }, { kind: 'trio', value: 1, x: 0, y: 2 / 3 }, { kind: 'basket', value: 0, x: 0, y: 1 })
   for (let i = 0; i < 12; i++) {
     for (let r = 0; r < 3; r++) {
-      const n = numAt(i, r)
-      if (i < 11) spots.push({ kind: 'split', value: n * 100 + n + 3, x: (i + 1) / 12, y: (r + 0.5) / 3 })
-      if (r < 2) spots.push({ kind: 'split', value: (n - 1) * 100 + n, x: (i + 0.5) / 12, y: (r + 1) / 3 })
-      if (r < 2 && i < 11) spots.push({ kind: 'corner', value: numAt(i, r + 1), x: (i + 1) / 12, y: (r + 1) / 3 })
+      const n = hNum(i, r)
+      if (i < 11) s.push({ kind: 'split', value: n * 100 + n + 3, x: (i + 1) / 12, y: (r + 0.5) / 3 })
+      if (r < 2) s.push({ kind: 'split', value: (n - 1) * 100 + n, x: (i + 0.5) / 12, y: (r + 1) / 3 })
+      if (r < 2 && i < 11) s.push({ kind: 'corner', value: hNum(i, r + 1), x: (i + 1) / 12, y: (r + 1) / 3 })
     }
-    spots.push({ kind: 'street', value: 3 * i + 1, x: (i + 0.5) / 12, y: 1 })
-    if (i < 11) spots.push({ kind: 'line', value: 3 * i + 1, x: (i + 1) / 12, y: 1 })
+    s.push({ kind: 'street', value: 3 * i + 1, x: (i + 0.5) / 12, y: 1 })
+    if (i < 11) s.push({ kind: 'line', value: 3 * i + 1, x: (i + 1) / 12, y: 1 })
   }
+  return s
+}
+
+/** Vertical board for phones: row i (0-11) top to bottom, column j (0-2) left to right; row i holds 3i+1..3i+3. */
+const vNum = (i: number, j: number) => 3 * i + j + 1
+
+function verticalSpots(): SpotDef[] {
+  const s: SpotDef[] = []
+  for (let j = 0; j < 3; j++) s.push({ kind: 'split', value: j + 1, x: (j + 0.5) / 3, y: 0 })
+  s.push({ kind: 'trio', value: 1, x: 1 / 3, y: 0 }, { kind: 'trio', value: 2, x: 2 / 3, y: 0 }, { kind: 'basket', value: 0, x: 0, y: 0 })
+  for (let i = 0; i < 12; i++) {
+    for (let j = 0; j < 3; j++) {
+      const n = vNum(i, j)
+      if (j < 2) s.push({ kind: 'split', value: n * 100 + n + 1, x: (j + 1) / 3, y: (i + 0.5) / 12 })
+      if (i < 11) s.push({ kind: 'split', value: n * 100 + n + 3, x: (j + 0.5) / 3, y: (i + 1) / 12 })
+      if (j < 2 && i < 11) s.push({ kind: 'corner', value: n, x: (j + 1) / 3, y: (i + 1) / 12 })
+    }
+    s.push({ kind: 'street', value: 3 * i + 1, x: 0, y: (i + 0.5) / 12 })
+    if (i < 11) s.push({ kind: 'line', value: 3 * i + 1, x: 0, y: (i + 1) / 12 })
+  }
+  return s
+}
+
+const H_SPOTS = horizontalSpots()
+const V_SPOTS = verticalSpots()
+
+function Spots({ c, defs }: { c: Ctx; defs: SpotDef[] }) {
   return (
     <>
-      {spots.map((s) => (
+      {defs.map((s) => (
         <Spot key={betKey(s.kind, s.value)} {...s} c={c} />
       ))}
     </>
   )
 }
 
-const OUTSIDE: { kind: BetKind; text: ReactNode; compact?: ReactNode }[] = [
+const Diamond = ({ tone }: { tone: 'red' | 'black' }) => (
+  <span
+    className={cn('size-4 rotate-45', tone === 'red' ? 'bg-[var(--rl-red)]' : 'border border-foreground/50 bg-[var(--rl-black)]')}
+    aria-hidden="true"
+  />
+)
+
+const OUTSIDE: { kind: BetKind; text: ReactNode }[] = [
   { kind: 'low', text: '1-18' },
   { kind: 'even', text: 'ÇİFT' },
-  {
-    kind: 'red',
-    text: <span className="size-5 rotate-45 bg-[var(--rl-red)]" aria-hidden="true" />,
-    compact: <span className="size-3.5 rotate-45 bg-[var(--rl-red)]" aria-hidden="true" />,
-  },
-  {
-    kind: 'black',
-    text: <span className="size-5 rotate-45 border border-foreground/50 bg-[var(--rl-black)]" aria-hidden="true" />,
-    compact: <span className="size-3.5 rotate-45 border border-foreground/50 bg-[var(--rl-black)]" aria-hidden="true" />,
-  },
+  { kind: 'red', text: <Diamond tone="red" /> },
+  { kind: 'black', text: <Diamond tone="black" /> },
   { kind: 'odd', text: 'TEK' },
   { kind: 'high', text: '19-36' },
 ]
 const numBg = (n: number) => ({ background: n === 0 ? 'var(--rl-green)' : RED.has(n) ? 'var(--rl-red)' : 'var(--rl-black)' })
 
-function Layout({ c }: { c: Ctx }) {
-  const h = c.compact ? 'h-10 text-[11px]' : 'h-14'
-  const sub = c.compact ? 'h-9 text-[10px]' : ''
+const H_LINE = 'border border-foreground/35'
+
+function HorizontalLayout({ c }: { c: Ctx }) {
   return (
-    <div
-      className={cn(
-        'grid overflow-hidden border-2 border-foreground/50',
-        c.compact ? 'grid-cols-[1.6rem_minmax(0,1fr)_1.6rem] rounded-md md:hidden' : 'hidden grid-cols-[3rem_minmax(0,1fr)_3rem] rounded-lg md:grid',
-      )}
-    >
-      <Cell c={c} kind="number" value={0} style={numBg(0)} className={cn(c.compact ? 'rounded-l-2xl text-xs' : 'rounded-l-[2rem]')}>
+    <div className="hidden grid-cols-[3rem_minmax(0,1fr)_3rem] overflow-hidden rounded-lg border-2 border-foreground/50 md:grid">
+      <Cell c={c} kind="number" value={0} style={numBg(0)} className={cn(H_LINE, 'rounded-l-[2rem] text-sm')}>
         0
       </Cell>
       <div className="relative grid grid-cols-12 grid-rows-3">
         {[0, 1, 2].flatMap((r) =>
           Array.from({ length: 12 }, (_, i) => {
-            const n = numAt(i, r)
+            const n = hNum(i, r)
             return (
-              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={h}>
+              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={cn(H_LINE, 'h-14 text-sm')}>
                 {n}
               </Cell>
             )
           }),
         )}
-        <Spots c={c} />
+        <Spots c={c} defs={H_SPOTS} />
       </div>
       <div className="grid grid-rows-3">
         {[3, 2, 1].map((col) => (
-          <Cell key={col} c={c} kind="column" value={col} className={cn(c.compact ? 'text-[9px]' : 'text-xs')}>
+          <Cell key={col} c={c} kind="column" value={col} className={cn(H_LINE, 'text-xs')}>
             2:1
           </Cell>
         ))}
       </div>
       <div className="col-start-2 grid grid-cols-3">
         {[1, 2, 3].map((d) => (
-          <Cell key={d} c={c} kind="dozen" value={d} className={cn(sub, c.compact && 'text-[11px]')}>
+          <Cell key={d} c={c} kind="dozen" value={d} className={cn(H_LINE, 'h-11 text-sm')}>
             {d}. 12
           </Cell>
         ))}
       </div>
       <div className="col-start-2 grid grid-cols-6">
         {OUTSIDE.map((o) => (
-          <Cell key={o.kind} c={c} kind={o.kind} className={sub}>
-            {c.compact ? (o.compact ?? o.text) : o.text}
+          <Cell key={o.kind} c={c} kind={o.kind} className={cn(H_LINE, 'h-11 text-sm')}>
+            {o.text}
           </Cell>
         ))}
+      </div>
+    </div>
+  )
+}
+
+const FELT_CELL = 'bg-felt'
+const SIDEWAYS = 'whitespace-nowrap text-[11px] tracking-[0.18em] [writing-mode:vertical-rl] rotate-180'
+
+/** Portrait felt like live-casino phone tables: outside bets run down the left so the whole layout fits one screen. */
+function VerticalLayout({ c }: { c: Ctx }) {
+  return (
+    <div className="overflow-hidden rounded-xl bg-foreground/35 p-px shadow-xl ring-1 ring-primary/50 md:hidden">
+      <div className="grid grid-cols-[2.25rem_2.25rem_minmax(0,1fr)] gap-px">
+        <div className={cn(FELT_CELL, 'col-span-2 rounded-tl-[11px]')} aria-hidden="true" />
+        <Cell c={c} kind="number" value={0} style={numBg(0)} className="h-10 rounded-tr-[11px] text-lg">
+          0
+        </Cell>
+
+        <div className="grid grid-rows-6 gap-px">
+          {OUTSIDE.map((o) => (
+            <Cell key={o.kind} c={c} kind={o.kind} className={FELT_CELL}>
+              {typeof o.text === 'string' ? <span className={SIDEWAYS}>{o.text}</span> : o.text}
+            </Cell>
+          ))}
+        </div>
+        <div className="grid grid-rows-3 gap-px">
+          {[1, 2, 3].map((d) => (
+            <Cell key={d} c={c} kind="dozen" value={d} className={FELT_CELL}>
+              <span className={SIDEWAYS}>{`${12 * d - 11}-${12 * d}`}</span>
+            </Cell>
+          ))}
+        </div>
+        <div className="relative grid grid-cols-3 gap-px">
+          {Array.from({ length: 12 }, (_, i) =>
+            [0, 1, 2].map((j) => {
+              const n = vNum(i, j)
+              return (
+                <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className="h-9 text-base">
+                  {n}
+                </Cell>
+              )
+            }),
+          )}
+          <Spots c={c} defs={V_SPOTS} />
+        </div>
+
+        <div className={cn(FELT_CELL, 'col-span-2 rounded-bl-[11px]')} aria-hidden="true" />
+        <div className="grid grid-cols-3 gap-px">
+          {[1, 2, 3].map((col) => (
+            <Cell key={col} c={c} kind="column" value={col} className={cn(FELT_CELL, 'h-9 text-xs', col === 3 && 'rounded-br-[11px]')}>
+              2:1
+            </Cell>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -248,13 +323,93 @@ function Layout({ c }: { c: Ctx }) {
 
 export function RouletteBoard(p: BoardProps) {
   const [hover, setHover] = useState<number[]>([])
+  const c = { ...p, hover, setHover }
   return (
     <div className="flex flex-col gap-1.5">
-      <Layout c={{ ...p, compact: false, hover, setHover }} />
-      <Layout c={{ ...p, compact: true, hover, setHover }} />
-      <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-        Çizgiye koy: ayrık 18x · Köşeye: 9x · Alt kenar: sokak 12x, iki sıra arası altılı 6x · 2:1 kolon 3x
+      <HorizontalLayout c={c} />
+      <VerticalLayout c={c} />
+      <p className="hidden text-pretty text-center text-xs leading-relaxed text-muted-foreground md:block">
+        Çizgiye koy: ayrık · Köşeye: köşe · Kenara: sokak · İki sıra arası: altılı · Sıfır çizgisi: üçlü ve ilk dörtlü
+      </p>
+      <p className="text-pretty text-center text-xs leading-relaxed text-muted-foreground md:hidden">
+        Sayıların arasındaki çizgiye ve köşelere de fiş koyabilirsin.
       </p>
     </div>
+  )
+}
+
+const SECTION_NUMBERS: Record<RacetrackKey, number[]> = Object.fromEntries(
+  (Object.keys(RACETRACK) as RacetrackKey[]).map((k) => [k, Array.from(new Set(RACETRACK[k].bets.flatMap((b) => betNumbers(b.kind, b.value) ?? [])))]),
+) as Record<RacetrackKey, number[]>
+
+/** Wheel-ordered strip for neighbour bets plus the three classic French call bets. */
+export function Racetrack({
+  chip,
+  disabled,
+  winner,
+  onCall,
+  onNeighbors,
+}: {
+  chip: number
+  disabled: boolean
+  winner: number | null
+  onCall: (key: RacetrackKey) => void
+  onNeighbors: (n: number) => void
+}) {
+  const [lit, setLit] = useState<number[]>([])
+  const press = (fn: () => void) => {
+    if (disabled) return
+    playSound('chip')
+    fn()
+  }
+  return (
+    <section className="flex min-w-0 flex-col gap-2.5 rounded-xl border border-foreground/25 bg-background/40 p-2.5" aria-labelledby="rl-track">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 id="rl-track" className="font-display text-sm font-bold uppercase tracking-wide text-foreground">
+          Yarış pisti
+        </h3>
+        <span className="text-xs text-muted-foreground">Sayıya dokun: kendisi ve iki yanındaki ikişer komşu (5 fiş)</span>
+      </div>
+      <ol className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1 pb-1 md:flex-wrap md:justify-center" aria-label="Çark sırasıyla sayılar">
+        {WHEEL.map((n) => (
+          <li key={n}>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => press(() => onNeighbors(n))}
+              aria-label={`${n} ve komşuları, ${chip * 5} KC`}
+              className={cn(
+                'flex size-9 items-center justify-center rounded-md border border-foreground/30 font-display text-sm font-bold text-foreground transition disabled:cursor-not-allowed disabled:opacity-60',
+                lit.includes(n) && 'ring-2 ring-inset ring-primary',
+                winner === n && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+              )}
+              style={numBg(n)}
+            >
+              {n}
+            </button>
+          </li>
+        ))}
+      </ol>
+      <div className="grid grid-cols-3 gap-1.5">
+        {(Object.keys(RACETRACK) as RacetrackKey[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            disabled={disabled}
+            onClick={() => press(() => onCall(k))}
+            onPointerEnter={(e) => e.pointerType === 'mouse' && setLit(SECTION_NUMBERS[k])}
+            onPointerLeave={() => setLit([])}
+            onFocus={() => setLit(SECTION_NUMBERS[k])}
+            onBlur={() => setLit([])}
+            className="flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg border border-foreground/30 bg-background/60 px-1.5 py-1.5 text-center transition enabled:hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span className="text-balance text-xs font-bold leading-tight text-foreground">{RACETRACK[k].label}</span>
+            <span className="text-[11px] leading-tight text-muted-foreground">
+              {racetrackUnits(k)} fiş · {racetrackUnits(k) * chip} KC
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
