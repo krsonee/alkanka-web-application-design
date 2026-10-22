@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import type { BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
@@ -8,25 +8,29 @@ import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
 import { TableBrand } from './table-brand'
 import {
+  BOT_LEVELS,
   FALLBACK_SEED,
   H,
+  MAX_FOULS,
   POCKETS,
-  POCKET_R,
+  POCKET_HOLE,
   R,
   RAIL,
   W,
   canPlaceCue,
   fromState,
-  groupOf,
   isStill,
   needsCall,
   newEvents,
+  planShot,
   rack,
   resolveShot,
   seeded,
   startShot,
   stepShot,
   type Ball,
+  type BotLevel,
+  type Fouls,
   type Group,
   type Groups,
   type ShotEvents,
@@ -39,7 +43,22 @@ const CW = W + RAIL * 2
 const CH = H + RAIL * 2
 const BALL_COLORS = ['#f5f1e6', '#f2c230', '#2559c9', '#d4382c', '#6b3fa0', '#ef7d22', '#1f8a4c', '#8a2432', '#141414']
 const STRIKE_MS = 110
-const DROP_MS = 320
+const DROP_MS = 560
+const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
+
+/** Phones held upright get the table rotated 90°, so it fills the screen height instead of a thin strip. */
+function usePortraitPhone() {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(PORTRAIT_QUERY)
+      m.addEventListener('change', cb)
+      return () => m.removeEventListener('change', cb)
+    },
+    () => window.matchMedia(PORTRAIT_QUERY).matches,
+    () => false,
+  )
+}
+const avatarFor = (seat: number, online: boolean) => `/images/monopoly/pawn-${online ? seat + 1 : seat === 0 ? 1 : 3}.png`
 const IN_HAND_MSG = 'Beyaz elinde: beyazı sürükleyip istediğin yere koy.'
 
 type Vec3 = [number, number, number]
@@ -250,23 +269,24 @@ function paintTable(dpr: number) {
   ctx.beginPath()
   ctx.arc(W * 0.7, H / 2, 2.5, 0, Math.PI * 2)
   ctx.fill()
-  for (const [px, py] of POCKETS) {
-    const pg = ctx.createRadialGradient(px, py, POCKET_R * 0.2, px, py, POCKET_R * 1.15)
+  POCKETS.forEach(([px, py], i) => {
+    const pr = POCKET_HOLE[i]
+    const pg = ctx.createRadialGradient(px, py, pr * 0.2, px, py, pr)
     pg.addColorStop(0, '#000000')
-    pg.addColorStop(0.75, '#05070c')
-    pg.addColorStop(1, 'rgba(5,7,12,0)')
+    pg.addColorStop(0.85, '#05070c')
+    pg.addColorStop(1, '#10131a')
     ctx.fillStyle = pg
     ctx.beginPath()
-    ctx.arc(px, py, POCKET_R * 1.15, 0, Math.PI * 2)
+    ctx.arc(px, py, pr, 0, Math.PI * 2)
     ctx.fill()
     ctx.strokeStyle = gold
-    ctx.globalAlpha = 0.3
+    ctx.globalAlpha = 0.35
     ctx.lineWidth = 1.5
     ctx.beginPath()
-    ctx.arc(px, py, POCKET_R, 0, Math.PI * 2)
+    ctx.arc(px, py, pr, 0, Math.PI * 2)
     ctx.stroke()
     ctx.globalAlpha = 1
-  }
+  })
   ;[0.125, 0.25, 0.375, 0.625, 0.75, 0.875].forEach((f) => {
     ctx.fillStyle = gold
     ctx.beginPath()
@@ -282,18 +302,6 @@ function paintTable(dpr: number) {
     ctx.fill()
   })
   return { canvas: c, gold }
-}
-
-function clearPath(balls: Ball[], x1: number, y1: number, x2: number, y2: number, skip: number[]) {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const len2 = dx * dx + dy * dy || 1
-  for (const b of balls) {
-    if (b.in || skip.includes(b.id)) continue
-    const t = Math.max(0, Math.min(1, ((b.x - x1) * dx + (b.y - y1) * dy) / len2))
-    if (Math.hypot(x1 + dx * t - b.x, y1 + dy * t - b.y) < R * 2.05) return false
-  }
-  return true
 }
 
 function castGuide(balls: Ball[], cue: Ball, angle: number) {
@@ -314,7 +322,7 @@ function castGuide(balls: Ball[], cue: Ball, angle: number) {
   return best
 }
 
-const pocketAt = (x: number, y: number) => POCKETS.findIndex(([px, py]) => Math.hypot(px - x, py - y) < POCKET_R * 2.6)
+const pocketAt = (x: number, y: number) => POCKETS.findIndex(([px, py], i) => Math.hypot(px - x, py - y) < POCKET_HOLE[i] + 34)
 
 export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote?: Remote<BilardoState> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -343,6 +351,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     angle: Math.PI,
     lastSeq: remote?.state.seq ?? 0,
     ballInHand: remote ? !!remote.state.ballInHand : false,
+    fouls: (remote?.state.fouls ? [remote.state.fouls[0], remote.state.fouls[1]] : [0, 0]) as Fouls,
+    breakChoice: (remote?.state.breakChoice ?? null) as number | null,
     call: null as number | null,
     spin: { side: 0, follow: 0, applied: true } as Spin,
     ev: newEvents() as ShotEvents,
@@ -362,6 +372,16 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     spinRef.current = v
     setSpinState(v)
   }
+  const [level, setLevelState] = useState<BotLevel>('orta')
+  const levelRef = useRef(level)
+  const setLevel = (v: BotLevel) => {
+    levelRef.current = v
+    setLevelState(v)
+  }
+  const vertical = usePortraitPhone()
+  const verticalRef = useRef(vertical)
+  verticalRef.current = vertical
+  const [spinOpen, setSpinOpen] = useState(false)
   const [aimLocked, setAimLocked] = useState(false)
   const lockedRef = useRef(false)
   const lock = (v: boolean) => {
@@ -378,7 +398,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const g = game.current
     if (g.over) return note
     let tail: string
-    if (g.turn !== seat) tail = `${oppName} oynuyor.`
+    if (g.breakChoice === oppSeat) tail = `${oppName} karar veriyor: yeniden dizmek mi, masayı kabul mü?`
+    else if (g.turn !== seat) tail = `${oppName} oynuyor.`
+    else if (g.breakChoice === seat) tail = 'Açılış kurala aykırı: toplar yeniden dizilip sen açabilir ya da masayı olduğu gibi kabul edebilirsin.'
     else if (g.ballInHand) tail = IN_HAND_MSG
     else if (!g.broken) tail = 'Açılış vuruşu sende.'
     else if (mustCallNow()) tail = 'Siyah sırası: önce masada bir delik seç, sonra vur.'
@@ -399,6 +421,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       ballInHand: g.ballInHand && g.turn === seat,
       call: g.call,
       mustCall: mustCallNow(),
+      fouls: [g.fouls[0], g.fouls[1]] as Fouls,
+      breakChoice: g.breakChoice,
     }
   }
   const [ui, setUi] = useState(() => snapshot(turnMessage(remote?.state.note ?? '')))
@@ -418,6 +442,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     g.turn = st.turn
     g.broken = st.broken ?? st.seq > 0
     g.ballInHand = !!st.ballInHand
+    g.fouls = [st.fouls?.[0] ?? 0, st.fouls?.[1] ?? 0]
+    g.breakChoice = st.breakChoice ?? null
+    if (!g.broken) g.pottedOrder = []
     g.pending = false
     g.failed = false
     g.replay = false
@@ -468,12 +495,21 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       else sync('Sonuç onaylanıyor...')
       return
     }
-    const r = resolveShot(balls.current, g.ev, { shooter: g.shooter, groups: g.groups, broken: g.broken, call: g.call })
+    const r = resolveShot(balls.current, g.ev, { shooter: g.shooter, groups: g.groups, broken: g.broken, call: g.call, fouls: g.fouls })
     g.broken = true
     g.groups = r.groups
+    g.fouls = r.fouls
     g.call = null
     keepPottedOrder()
     if (r.foul) playSound('error')
+    if (r.illegalBreak) {
+      g.turn = other(g.shooter)
+      g.breakChoice = g.turn
+      g.ballInHand = false
+      sync(turnMessage(r.note))
+      if (g.turn !== seat) setTimeout(() => chooseBreak(levelRef.current === 'kolay' ? 'accept' : 'rerack'), 1100)
+      return
+    }
     if (r.winner !== null) {
       g.over = true
       const won = r.winner === seat
@@ -489,72 +525,57 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
 
   function botShot() {
     const g = game.current
-    if (g.over) return
-    const list = balls.current
-    const cue = list[0]
-    const me = g.turn
-    const mine = g.groups[me]
-    if (!g.broken) {
-      const apex = list.filter((b) => b.id !== 0 && !b.in).sort((a, b) => a.x - b.x)[0]
-      const ang = Math.atan2(apex.y - cue.y + (Math.random() - 0.5) * 6, apex.x - cue.x)
-      return shoot({ dx: Math.cos(ang), dy: Math.sin(ang), pow: 1, spinX: 0, spinY: 0 })
+    if (g.over || g.turn === seat) return
+    const plan = planShot(balls.current, {
+      seat: g.turn,
+      groups: g.groups,
+      broken: g.broken,
+      ballInHand: g.ballInHand,
+      fouls: g.fouls,
+      level: levelRef.current,
+    })
+    if (plan.cue) {
+      balls.current[0].x = plan.cue.x
+      balls.current[0].y = plan.cue.y
     }
-    const onBlack = needsCall(list, g.groups, me)
-    const legal = (b: Ball) => !b.in && b.id !== 0 && (onBlack ? b.id === 8 : mine === null ? b.id !== 8 : groupOf(b.id) === mine)
-    if (g.ballInHand) {
-      for (const t of list.filter(legal)) {
-        const [px, py] = POCKETS.reduce((a, p) => (Math.hypot(p[0] - t.x, p[1] - t.y) < Math.hypot(a[0] - t.x, a[1] - t.y) ? p : a))
-        const d = Math.hypot(px - t.x, py - t.y) || 1
-        const x = t.x - ((px - t.x) / d) * R * 9
-        const y = t.y - ((py - t.y) / d) * R * 9
-        if (canPlaceCue(list, x, y)) {
-          cue.x = x
-          cue.y = y
-          break
-        }
-      }
-    }
-    let best: { angle: number; score: number; dist: number; pocket: number } | null = null
-    for (const t of list.filter(legal)) {
-      POCKETS.forEach(([px, py], pocket) => {
-        const tx = px - t.x
-        const ty = py - t.y
-        const td = Math.hypot(tx, ty)
-        const gx = t.x - (tx / td) * R * 2
-        const gy = t.y - (ty / td) * R * 2
-        const ax = gx - cue.x
-        const ay = gy - cue.y
-        const ad = Math.hypot(ax, ay)
-        const cos = (ax * tx + ay * ty) / (ad * td)
-        if (cos < 0.35) return
-        if (!clearPath(list, cue.x, cue.y, gx, gy, [0, t.id])) return
-        if (!clearPath(list, t.x, t.y, px, py, [t.id])) return
-        const score = cos * 2 - (ad + td) / 900
-        if (!best || score > best.score) best = { angle: Math.atan2(ay, ax), score, dist: ad + td, pocket }
-      })
-    }
-    const chosen = best as { angle: number; score: number; dist: number; pocket: number } | null
-    if (onBlack) {
-      const eight = list.find((b) => b.id === 8)!
-      g.call =
-        chosen?.pocket ??
-        POCKETS.reduce((bi, p, i) => (Math.hypot(p[0] - eight.x, p[1] - eight.y) < Math.hypot(POCKETS[bi][0] - eight.x, POCKETS[bi][1] - eight.y) ? i : bi), 0)
+    if (g.broken && needsCall(balls.current, g.groups, g.turn)) {
+      g.call = plan.call
       sync(`${oppName} siyah için delik seçti.`)
     }
-    if (!chosen) {
-      const near = list.filter(legal).sort((a, b) => Math.hypot(a.x - cue.x, a.y - cue.y) - Math.hypot(b.x - cue.x, b.y - cue.y))[0]
-      const ang = (near ? Math.atan2(near.y - cue.y, near.x - cue.x) : Math.random() * Math.PI * 2) + (Math.random() - 0.5) * 0.05
-      return shoot({ dx: Math.cos(ang), dy: Math.sin(ang), pow: 0.55, spinX: 0, spinY: 0 })
+    shoot(plan.input)
+  }
+
+  /** After an illegal break: re-rack so the chooser breaks, or accept the table as it lies. */
+  function chooseBreak(choice: 'rerack' | 'accept') {
+    const g = game.current
+    if (g.breakChoice === null || g.over) return
+    const r = remoteRef.current
+    if (r) {
+      g.pending = true
+      sync('Karar gönderiliyor...')
+      void r.send({ type: 'breakChoice', choice }).then((ok) => {
+        if (!ok) applyRemote(remoteRef.current!.state)
+      })
+      return
     }
-    const ang = chosen.angle + (Math.random() - 0.5) * 0.028
-    // A little draw keeps the bot's cue ball from following the object ball in.
-    shoot({ dx: Math.cos(ang), dy: Math.sin(ang), pow: Math.min(0.95, 0.3 + chosen.dist / 1800), spinX: 0, spinY: -0.25 })
+    g.breakChoice = null
+    if (choice === 'rerack') {
+      balls.current = rack(Math.random)
+      rolls.current.clear()
+      g.groups = [null, null]
+      g.broken = false
+      g.pottedOrder = []
+    }
+    sync(turnMessage(choice === 'rerack' ? 'Toplar yeniden dizildi.' : 'Masa kabul edildi.'))
+    if (g.turn !== seat) setTimeout(botShot, 900)
   }
 
   const canAim = () => {
     const g = game.current
     const r = remoteRef.current
-    return !g.moving && !g.strike && !g.over && !g.pending && g.turn === seat && !balls.current[0].in && (!r || (!r.busy && !r.spectator))
+    return (
+      !g.moving && !g.strike && !g.over && !g.pending && g.breakChoice === null && g.turn === seat && !balls.current[0].in && (!r || (!r.busy && !r.spectator))
+    )
   }
 
   function fire(pow: number) {
@@ -588,8 +609,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.width = CW * dpr
-    canvas.height = CH * dpr
+    canvas.width = (vertical ? CH : CW) * dpr
+    canvas.height = (vertical ? CW : CH) * dpr
     const { canvas: bg, gold } = paintTable(dpr)
     let raf = 0
     let lastHitSound = 0
@@ -641,8 +662,14 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
 
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(bg, 0, 0)
-      ctx.setTransform(dpr, 0, 0, dpr, RAIL * dpr, RAIL * dpr)
+      if (vertical) {
+        ctx.setTransform(0, 1, -1, 0, canvas.width, 0)
+        ctx.drawImage(bg, 0, 0)
+        ctx.setTransform(0, dpr, -dpr, 0, canvas.width - RAIL * dpr, RAIL * dpr)
+      } else {
+        ctx.drawImage(bg, 0, 0)
+        ctx.setTransform(dpr, 0, 0, dpr, RAIL * dpr, RAIL * dpr)
+      }
 
       const cue = list[0]
       const aiming = canAim()
@@ -655,7 +682,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           ctx.globalAlpha = g.call === i ? 0.95 : 0.25 + pulse * 0.35
           ctx.lineWidth = g.call === i ? 4 : 2.5
           ctx.beginPath()
-          ctx.arc(px, py, POCKET_R + 6 + (g.call === i ? 0 : pulse * 3), 0, Math.PI * 2)
+          ctx.arc(px, py, POCKET_HOLE[i] + 6 + (g.call === i ? 0 : pulse * 3), 0, Math.PI * 2)
           ctx.stroke()
         })
         ctx.globalAlpha = 1
@@ -675,6 +702,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       if (aiming) {
         const hit = castGuide(list, cue, g.angle)
         const len = hit ? hit.t : 1400
+        ctx.lineCap = 'round'
         const gx = cue.x + Math.cos(g.angle) * len
         const gy = cue.y + Math.sin(g.angle) * len
         ctx.save()
@@ -700,7 +728,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           ctx.lineWidth = 2.5
           ctx.beginPath()
           ctx.moveTo(hit.ball.x, hit.ball.y)
-          ctx.lineTo(hit.ball.x + nx * 110, hit.ball.y + ny * 110)
+          ctx.lineTo(hit.ball.x + nx * 70, hit.ball.y + ny * 70)
           ctx.stroke()
           const ux = Math.cos(g.angle)
           const uy = Math.sin(g.angle)
@@ -711,7 +739,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           ctx.lineWidth = 1.5
           ctx.beginPath()
           ctx.moveTo(gx, gy)
-          ctx.lineTo(gx + tx * 70, gy + ty * 70)
+          ctx.lineTo(gx + tx * 40, gy + ty * 40)
           ctx.stroke()
         }
         ctx.restore()
@@ -723,9 +751,21 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       for (const d of drops.current) {
         const t = (now - d.t0) / DROP_MS
         const [px, py] = POCKETS[d.p]
-        ctx.globalAlpha = 1 - t * t
-        drawBall(ctx, { id: d.id, x: d.x + (px - d.x) * t, y: d.y + (py - d.y) * t }, rollOf(d.id), 1 - t * 0.55)
-        ctx.globalAlpha = 1
+        // Slides to the pocket centre first, then sinks: shrinks and darkens as it falls.
+        const slide = Math.min(1, t / 0.45)
+        const ease = 1 - (1 - slide) * (1 - slide)
+        const sink = Math.max(0, (t - 0.35) / 0.65)
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(px, py, POCKET_HOLE[d.p], 0, Math.PI * 2)
+        ctx.clip()
+        ctx.globalAlpha = 1 - sink * sink
+        drawBall(ctx, { id: d.id, x: d.x + (px - d.x) * ease, y: d.y + (py - d.y) * ease }, rollOf(d.id), 1 - sink * 0.6)
+        ctx.fillStyle = `rgba(0,0,0,${sink * 0.7})`
+        ctx.beginPath()
+        ctx.arc(d.x + (px - d.x) * ease, d.y + (py - d.y) * ease, R * (1 - sink * 0.6), 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
       }
 
       if (g.strike) {
@@ -741,11 +781,21 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [vertical])
 
   const tablePoint = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
+    if (verticalRef.current) {
+      const u = ((e.clientX - rect.left) / rect.width) * CH
+      const v = ((e.clientY - rect.top) / rect.height) * CW
+      return { x: v - RAIL, y: CH - u - RAIL }
+    }
     return { x: ((e.clientX - rect.left) / rect.width) * CW - RAIL, y: ((e.clientY - rect.top) / rect.height) * CH - RAIL }
+  }
+  const rotateAim = (delta: number) => {
+    if (!canAim()) return
+    game.current.angle += delta
+    lock(true)
   }
   /** Points the cue at the pointer. Ignores positions on top of the cue ball, where atan2 swings wildly. */
   const aimAt = (e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -873,15 +923,75 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   const yourTurn = ui.turn === seat && !ui.busy && !ui.over
   const groupLabel = (g: Group | null) => (g === 'solid' ? 'Düz (1-7)' : g === 'stripe' ? 'Çizgili (9-15)' : 'Masa açık')
   const remaining = (g: Group | null) => (g ? [1, 2, 3, 4, 5, 6, 7].map((n) => (g === 'solid' ? n : n + 8)).filter((n) => ui.inTable.includes(n)) : [])
-  const hint = !yourTurn
+  const choosing = ui.breakChoice === seat && !ui.over && !ui.busy
+  const hint = !yourTurn || choosing
     ? null
     : ui.mustCall && ui.call === null
-      ? 'Siyah için bir deliğe dokun'
+      ? ['Siyah için bir deliğe dokun', 'Delik seç']
       : ui.ballInHand
-        ? 'Beyazı sürükle · Gücü çekip bırak'
+        ? ['Beyazı sürükle · Gücü çekip bırak', 'Beyazı koy']
         : aimLocked
-          ? 'Nişan kilitli · Gücü çekip bırak'
-          : 'Nişan al · Alttaki gücü sağa çek, bırak'
+          ? ['Nişan kilitli · Gücü çekip bırak', 'Kilitli']
+          : vertical
+            ? ['', 'Nişan al · Gücü aşağı çek']
+            : ['Nişan al · Alttaki gücü sağa çek, bırak', 'Nişan al']
+
+  const canvasEl = (
+    <div className={cn('relative', vertical && 'min-w-0')}>
+      <canvas
+        ref={canvasRef}
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => ((drag.current = null), (placing.current = null))}
+        aria-label="Bilardo masası. Sürükleyerek nişan al, güç çubuğunu çekip bırakarak vur. Ok tuşlarıyla döndür, boşluk ile vur."
+        className={cn(
+          'block touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          vertical ? 'aspect-[576/1076] h-[calc(100svh-15rem)] max-h-[46rem] min-h-80 w-auto max-w-full' : 'aspect-[1076/576] w-full',
+          yourTurn ? 'cursor-crosshair' : 'cursor-wait',
+        )}
+      />
+      {!vertical && <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />}
+      {hint && (
+        <span
+          className={cn(
+            'pointer-events-none absolute left-1/2 top-2 max-w-[80%] -translate-x-1/2 truncate rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md backdrop-blur-sm sm:top-3 sm:text-[11px]',
+            aimLocked || ui.mustCall ? 'bg-primary text-primary-foreground' : 'bg-background/75 text-foreground',
+          )}
+        >
+          <span className="md:hidden">{hint[1]}</span>
+          <span className="hidden md:inline">{hint[0] || hint[1]}</span>
+        </span>
+      )}
+      {choosing && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-background/60 p-4 backdrop-blur-sm">
+          <div className="flex max-w-sm flex-col gap-3 rounded-2xl border border-primary/50 bg-card p-4 text-center shadow-2xl">
+            <p className="font-display text-base font-extrabold text-foreground">Açılış kurala aykırı</p>
+            <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+              {oppName} açılışta yeterince top banda göndermedi. Ne yapmak istersin?
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => chooseBreak('rerack')}
+                className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110"
+              >
+                Yeniden diz, ben açayım
+              </button>
+              <button
+                type="button"
+                onClick={() => chooseBreak('accept')}
+                className="flex-1 rounded-xl bg-secondary px-3 py-2.5 text-sm font-bold text-foreground transition hover:bg-secondary/70"
+              >
+                Masayı kabul et
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-3">
@@ -890,71 +1000,103 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           <div
             key={s}
             className={cn(
-              'flex min-w-0 flex-col gap-2 rounded-xl border bg-card px-3 py-2.5 transition-colors sm:flex-row sm:items-center sm:justify-between sm:px-4',
+              'flex min-w-0 items-center gap-2.5 rounded-xl border bg-card px-2.5 py-2 transition-colors sm:px-3',
               ui.turn === s && !ui.over ? 'border-primary glow-gold' : 'border-border',
             )}
           >
-            <div className="flex min-w-0 flex-col">
-              <span className="flex items-center gap-2 truncate text-sm font-bold text-foreground">
-                {ui.turn === s && !ui.over && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden="true" />}
-                {s === seat ? 'Sen' : oppName}
-              </span>
-              <span className="text-xs text-muted-foreground">{groupLabel(ui.groups[s])}</span>
-            </div>
-            <div className="flex flex-wrap gap-1 sm:justify-end">
-              {remaining(ui.groups[s]).map((n) => (
-                <BallChip key={n} n={n} />
-              ))}
-              {ui.groups[s] && remaining(ui.groups[s]).length === 0 && <BallChip n={8} />}
+            <span className={cn('relative size-9 shrink-0 overflow-hidden rounded-full bg-secondary ring-2', ui.turn === s && !ui.over ? 'ring-primary' : 'ring-border')}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={avatarFor(s, !!remote)} alt="" className="size-full object-cover" />
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate text-sm font-bold text-foreground">{s === seat ? 'Sen' : oppName}</span>
+                {ui.fouls[s] > 0 && (
+                  <span className="shrink-0 rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-destructive">
+                    Faul {ui.fouls[s]}/{MAX_FOULS}
+                  </span>
+                )}
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                {ui.groups[s] ? (
+                  <>
+                    {remaining(ui.groups[s]).map((n) => (
+                      <BallChip key={n} n={n} />
+                    ))}
+                    {remaining(ui.groups[s]).length === 0 && <BallChip n={8} />}
+                  </>
+                ) : (
+                  <span className="text-xs text-muted-foreground">{groupLabel(null)}</span>
+                )}
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="flex flex-col gap-2 sm:gap-3">
-        <div className="relative">
-          <canvas
-            ref={canvasRef}
-            tabIndex={0}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={() => ((drag.current = null), (placing.current = null))}
-            aria-label="Bilardo masası. Sürükleyerek nişan al, alttaki güç çubuğunu sağa çekip bırakarak vur. Ok tuşlarıyla döndür, boşluk ile vur."
-            className={cn(
-              'block aspect-[1076/576] w-full touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary',
-              yourTurn ? 'cursor-crosshair' : 'cursor-wait',
-            )}
-          />
-          <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />
-          {hint && (
-            <span
-              className={cn(
-                'pointer-events-none absolute left-1/2 top-2 max-w-[70%] -translate-x-1/2 truncate rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md backdrop-blur-sm sm:top-3 sm:text-[11px]',
-                aimLocked || ui.mustCall ? 'bg-primary text-primary-foreground' : 'bg-background/75 text-foreground',
-              )}
-            >
-              {hint}
-            </span>
-          )}
+      {!remote && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Bot seviyesi</span>
+          <div role="radiogroup" aria-label="Bot seviyesi" className="flex gap-1 rounded-lg bg-secondary p-1">
+            {BOT_LEVELS.map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                role="radio"
+                aria-checked={level === l.id}
+                onClick={() => setLevel(l.id)}
+                className={cn(
+                  'rounded-md px-3 py-1 text-xs font-bold transition-colors',
+                  level === l.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
         </div>
+      )}
+
+      <div className="flex flex-col gap-2 sm:gap-3">
+        {vertical ? (
+          <div className="flex items-stretch justify-center gap-2">
+            {canvasEl}
+            <PowerBar vertical disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+          </div>
+        ) : (
+          canvasEl
+        )}
         <div
           className={cn(
-            'flex items-center gap-2 rounded-2xl border bg-card p-2 transition-colors sm:gap-3 sm:p-2.5',
+            'flex flex-col gap-2 rounded-2xl border bg-card p-2 transition-colors sm:p-2.5',
             yourTurn ? 'border-primary/40' : 'border-border',
           )}
         >
-          <SpinControl value={spin} onChange={setSpin} disabled={!yourTurn} />
-          <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
-          <button
-            type="button"
-            disabled={!yourTurn}
-            onClick={() => fire(keyPowerRef.current)}
-            className="flex h-12 shrink-0 flex-col items-center justify-center rounded-xl bg-primary px-4 text-primary-foreground shadow-md outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-40 disabled:hover:brightness-100 sm:px-6"
-          >
-            <span className="font-display text-sm font-extrabold uppercase leading-none tracking-wider">Vur</span>
-            <span className="mt-1 text-[10px] font-bold tabular-nums leading-none opacity-80">%{Math.round(keyPower * 100)}</span>
-          </button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <SpinButton value={spin} open={spinOpen && yourTurn} onToggle={() => setSpinOpen((o) => !o)} disabled={!yourTurn} />
+            {vertical ? (
+              <AimStrip disabled={!yourTurn} onRotate={rotateAim} />
+            ) : (
+              <>
+                <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+                <AimStrip compact disabled={!yourTurn} onRotate={rotateAim} />
+              </>
+            )}
+            <button
+              type="button"
+              disabled={!yourTurn}
+              onClick={() => fire(keyPowerRef.current)}
+              className="hidden h-12 shrink-0 flex-col items-center justify-center rounded-xl bg-primary px-6 text-primary-foreground shadow-md outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-40 disabled:hover:brightness-100 md:flex"
+            >
+              <span className="font-display text-sm font-extrabold uppercase leading-none tracking-wider">Vur</span>
+              <span className="mt-1 text-[10px] font-bold tabular-nums leading-none opacity-80">%{Math.round(keyPower * 100)}</span>
+            </button>
+          </div>
+          {spinOpen && yourTurn && (
+            <div className="flex justify-center border-t border-border pt-2">
+              <SpinPad value={spin} onChange={setSpin} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -964,7 +1106,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         </p>
         <div className="flex shrink-0 flex-col gap-1.5 sm:items-end">
           <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Sokulan toplar</span>
-          <div className="flex min-h-6 flex-wrap items-center gap-1 rounded-full bg-secondary px-2 py-1">
+          <div className="flex min-h-8 flex-wrap items-center gap-1 rounded-full border border-border bg-background px-2 py-1 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)]">
             {ui.potted.length === 0 ? (
               <span className="px-1 text-xs text-muted-foreground">Henüz yok</span>
             ) : (
@@ -975,6 +1117,51 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       </div>
 
       <KeyGuide />
+    </div>
+  )
+}
+
+/** Drag sideways to nudge the aim by tiny amounts — the precise control phones lack. */
+function AimStrip({ disabled, onRotate, compact }: { disabled: boolean; onRotate: (delta: number) => void; compact?: boolean }) {
+  const last = useRef<{ id: number; x: number } | null>(null)
+  const [offset, setOffset] = useState(0)
+  return (
+    <div
+      role="slider"
+      tabIndex={-1}
+      aria-label="İnce nişan: sağa sola sürükle"
+      aria-valuenow={0}
+      aria-disabled={disabled}
+      onPointerDown={(e) => {
+        if (disabled) return
+        e.currentTarget.setPointerCapture(e.pointerId)
+        last.current = { id: e.pointerId, x: e.clientX }
+      }}
+      onPointerMove={(e) => {
+        const l = last.current
+        if (!l || l.id !== e.pointerId) return
+        const dx = e.clientX - l.x
+        l.x = e.clientX
+        onRotate(dx * 0.0016)
+        setOffset((o) => (o + dx) % 16)
+      }}
+      onPointerUp={() => (last.current = null)}
+      onPointerCancel={() => (last.current = null)}
+      className={cn(
+        'relative flex h-12 touch-none select-none items-center justify-center overflow-hidden rounded-xl bg-secondary',
+        compact ? 'w-32 shrink-0' : 'min-w-0 flex-1',
+        disabled ? 'opacity-40' : 'cursor-ew-resize',
+      )}
+    >
+      <div
+        aria-hidden="true"
+        className="absolute inset-y-3 -left-4 -right-4"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(90deg, color-mix(in oklab, var(--foreground) 22%, transparent) 0 1px, transparent 1px 8px)',
+          transform: `translateX(${offset}px)`,
+        }}
+      />
+      <span className="relative rounded-md bg-secondary px-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">İnce nişan</span>
     </div>
   )
 }
@@ -997,11 +1184,13 @@ function PowerBar({
   preset,
   pullRef,
   onRelease,
+  vertical,
 }: {
   disabled: boolean
   preset: number
   pullRef: React.MutableRefObject<number>
   onRelease: (pow: number) => void
+  vertical?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const active = useRef<{ id: number; y: number } | null>(null)
@@ -1012,6 +1201,63 @@ function PowerBar({
   }
   const pulling = pull > 0
   const shown = pulling ? pull : preset
+  const handlers = {
+    onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (disabled) return
+      e.currentTarget.setPointerCapture(e.pointerId)
+      active.current = { id: e.pointerId, y: vertical ? e.clientY : e.clientX }
+      setPull(0)
+    },
+    onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
+      const a = active.current
+      if (!a || a.id !== e.pointerId) return
+      const rect = ref.current?.getBoundingClientRect()
+      const span = ((vertical ? rect?.height : rect?.width) ?? 240) * (vertical ? 0.6 : 0.75)
+      setPull(clamp01(((vertical ? e.clientY : e.clientX) - a.y) / span))
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLDivElement>) => {
+      const a = active.current
+      if (!a || a.id !== e.pointerId) return
+      active.current = null
+      const v = pullRef.current
+      setPull(0)
+      if (!disabled) onRelease(v)
+    },
+    onPointerCancel: () => {
+      active.current = null
+      setPull(0)
+    },
+  }
+  if (vertical) {
+    return (
+      <div
+        ref={ref}
+        role="slider"
+        tabIndex={-1}
+        aria-label="Vuruş gücü: aşağı çekip bırak"
+        aria-orientation="vertical"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(shown * 100)}
+        aria-disabled={disabled}
+        {...handlers}
+        className={cn(
+          'relative w-12 shrink-0 touch-none select-none overflow-hidden rounded-xl bg-secondary',
+          disabled ? 'opacity-40' : 'cursor-grab active:cursor-grabbing',
+        )}
+      >
+        <div aria-hidden="true" className={cn('absolute inset-x-0 top-0 bg-primary', !pulling && 'transition-[height] duration-200')} style={{ height: `${pull * 100}%` }} />
+        <span aria-hidden="true" className="absolute inset-x-2 h-0.5 -translate-y-1/2 rounded-full bg-foreground/50" style={{ top: `${preset * 100}%` }} />
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-between py-3">
+          <span className={cn('text-[10px] font-bold uppercase', pulling ? 'text-primary-foreground' : 'text-muted-foreground')}>Güç</span>
+          <span className="text-[10px] font-bold uppercase text-muted-foreground [writing-mode:vertical-rl]">
+            {pulling ? (pull < 0.05 ? 'İptal' : 'Bırak') : 'Aşağı çek'}
+          </span>
+          <span className="font-display text-sm font-extrabold tabular-nums text-foreground">{Math.round(shown * 100)}</span>
+        </div>
+      </div>
+    )
+  }
   return (
     <div
       ref={ref}
@@ -1022,30 +1268,7 @@ function PowerBar({
       aria-valuemax={100}
       aria-valuenow={Math.round(shown * 100)}
       aria-disabled={disabled}
-      onPointerDown={(e) => {
-        if (disabled) return
-        e.currentTarget.setPointerCapture(e.pointerId)
-        active.current = { id: e.pointerId, y: e.clientX }
-        setPull(0)
-      }}
-      onPointerMove={(e) => {
-        const a = active.current
-        if (!a || a.id !== e.pointerId) return
-        const w = (ref.current?.getBoundingClientRect().width ?? 240) * 0.75
-        setPull(clamp01((e.clientX - a.y) / w))
-      }}
-      onPointerUp={(e) => {
-        const a = active.current
-        if (!a || a.id !== e.pointerId) return
-        active.current = null
-        const v = pullRef.current
-        setPull(0)
-        if (!disabled) onRelease(v)
-      }}
-      onPointerCancel={() => {
-        active.current = null
-        setPull(0)
-      }}
+      {...handlers}
       className={cn(
         'relative h-12 min-w-0 flex-1 touch-none select-none overflow-hidden rounded-xl bg-secondary',
         disabled ? 'opacity-40' : 'cursor-grab active:cursor-grabbing',
@@ -1085,21 +1308,19 @@ function spinLabel({ x, y }: SpinInput) {
   return [v, h].filter(Boolean).join(' · ') || 'Hafif'
 }
 
-/** Cue-ball button in the shot dock; opens the contact-point picker above it. */
-function SpinControl({ value, onChange, disabled }: { value: SpinInput; onChange: (v: SpinInput) => void; disabled: boolean }) {
-  const [open, setOpen] = useState(false)
-  const show = open && !disabled
+/** Cue-ball button in the shot dock; toggles the contact-point picker inline below the dock so it never covers the table. */
+function SpinButton({ value, open, onToggle, disabled }: { value: SpinInput; open: boolean; onToggle: () => void; disabled: boolean }) {
   return (
     <div className="relative shrink-0">
       <button
         type="button"
-        aria-expanded={show}
+        aria-expanded={open}
         aria-label={`Falso: ${spinLabel(value)}. Değiştirmek için aç.`}
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
         className={cn(
           'flex h-12 items-center gap-2.5 rounded-xl bg-secondary px-2 outline-none transition-colors hover:bg-secondary/70 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 sm:pr-3',
-          show && 'ring-2 ring-primary',
+          open && 'ring-2 ring-primary',
         )}
       >
         <span className="relative size-8 shrink-0 rounded-full bg-checker-light shadow-[inset_-3px_-4px_7px_rgb(0_0_0/0.25)]">
@@ -1114,11 +1335,6 @@ function SpinControl({ value, onChange, disabled }: { value: SpinInput; onChange
           <span className="mt-1 text-xs font-semibold leading-none text-foreground">{spinLabel(value)}</span>
         </span>
       </button>
-      {show && (
-        <div className="absolute bottom-full left-0 z-20 mb-2 rounded-2xl border border-border bg-card p-3 shadow-xl">
-          <SpinPad value={value} onChange={onChange} />
-        </div>
-      )}
     </div>
   )
 }

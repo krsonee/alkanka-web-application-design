@@ -927,7 +927,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     send,
   }
 
-  const immersive = ['pisti', 'papaz', 'okey101', 'batak', 'monopoly'].includes(data.game) && data.status === 'oynaniyor'
+  const immersive = ['pisti', 'papaz', 'okey101', 'batak', 'monopoly', 'bilardo'].includes(data.game) && data.status === 'oynaniyor'
 
   return (
     <RoomShell

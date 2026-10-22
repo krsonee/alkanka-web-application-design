@@ -11,33 +11,51 @@ export const RAIL = 38
 export const R = 12
 // Scale: 1000 units = 100" playing surface (9 ft table), ball 2.25" ≈ 22.5 units.
 export const POCKET_R = 22
-const POCKET_R2 = POCKET_R * POCKET_R
-const CORNER_MOUTH = 14
-const SIDE_MOUTH = 16
-export const MAX_SPEED = 30
+/** Distance from the corner along each rail to the pocket jaw: a ~2 ball wide diagonal opening. */
+export const CORNER_MOUTH = 32
+/** Half width of a side pocket opening (~2.1 balls wide). */
+export const SIDE_MOUTH = 25
+export const MAX_SPEED = 42
 const SUB = 8
-// 0.987 per frame, split across the substeps.
-const FRICTION = 0.9983656820109339
+// 0.99 per frame, split across the substeps.
+const FRICTION = 0.9987444968227265
 const FOLLOW_GAIN = 0.62
 const ENGLISH_GAIN = 0.42
+const RAIL_BOUNCE = 0.88
+const JAW_BOUNCE = 0.6
 const MAX_FRAMES = 6000
 const BREAK_RAIL_BALLS = 4
+export const MAX_FOULS = 3
 
 export const FALLBACK_SEED = 'alkanka-bilardo'
 
+/** Pocket centres, used for called pockets and for the drop animation. */
 export const POCKETS = [
-  [-6, -6],
-  [W / 2, -8],
-  [W + 6, -6],
-  [-6, H + 6],
-  [W / 2, H + 8],
-  [W + 6, H + 6],
+  [-8, -8],
+  [W / 2, -10],
+  [W + 8, -8],
+  [-8, H + 8],
+  [W / 2, H + 10],
+  [W + 8, H + 8],
 ] as const
+/** Drawn hole radius per pocket: the hole reaches exactly to the jaws. */
+export const POCKET_HOLE = [41, 27, 41, 41, 27, 41] as const
+
+/** Rounded jaw tips of every pocket. Balls bounce off them, so a ball that clips a jaw rattles out. */
+const JAWS: readonly (readonly [number, number])[] = [
+  [CORNER_MOUTH, 0], [0, CORNER_MOUTH],
+  [W - CORNER_MOUTH, 0], [W, CORNER_MOUTH],
+  [0, H - CORNER_MOUTH], [CORNER_MOUTH, H],
+  [W - CORNER_MOUTH, H], [W, H - CORNER_MOUTH],
+  [W / 2 - SIDE_MOUTH, 0], [W / 2 + SIDE_MOUTH, 0],
+  [W / 2 - SIDE_MOUTH, H], [W / 2 + SIDE_MOUTH, H],
+]
 
 export type Ball = { id: number; x: number; y: number; vx: number; vy: number; in: boolean }
 export type BallState = { id: number; x: number; y: number; vx: number; vy: number; inPocket: boolean }
 export type Group = 'solid' | 'stripe'
 export type Groups = [Group | null, Group | null]
+export type Fouls = [number, number]
 /** Cue-ball spin. `side` > 0 is right english, `follow` > 0 is top spin, < 0 is draw. */
 export type Spin = { side: number; follow: number; applied: boolean }
 /** Direction is sent as a vector (not an angle) so no client's Math.cos/sin can make replays diverge. */
@@ -51,6 +69,7 @@ export const groupName = (g: Group) => (g === 'solid' ? 'Düz' : 'Çizgili')
 export const toState = (b: Ball): BallState => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, inPocket: b.in })
 export const fromState = (b: BallState): Ball => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, in: !!b.inPocket })
 export const newEvents = (): ShotEvents => ({ first: null, potted: [], pocketOf: {}, rail: false, railBalls: [] })
+const clone = (balls: Ball[]) => balls.map((b) => ({ ...b }))
 
 export function seeded(seedText: string) {
   let h = 2166136261
@@ -62,18 +81,22 @@ export function seeded(seedText: string) {
   }
 }
 
+/** Standard 8-ball rack: black in the middle of the third row, one solid and one stripe in the back corners. */
 export function rack(rand: () => number = Math.random): Ball[] {
   const balls: Ball[] = [{ id: 0, x: W * 0.25, y: H / 2, vx: 0, vy: 0, in: false }]
-  const pool = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15]
+  const shuffled = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15]
     .map((id) => ({ id, k: rand() }))
     .sort((a, b) => a.k - b.k)
     .map((x) => x.id)
+  const solid = shuffled.find((id) => id < 8)!
+  const stripe = shuffled.find((id) => id > 8)!
+  const corners = rand() < 0.5 ? [solid, stripe] : [stripe, solid]
+  const rest = shuffled.filter((id) => id !== solid && id !== stripe)
   const apexX = W * 0.7
   let k = 0
   for (let row = 0; row < 5; row++) {
     for (let i = 0; i <= row; i++) {
-      const isEight = row === 2 && i === 1
-      const id = isEight ? 8 : pool[k++]
+      const id = row === 2 && i === 1 ? 8 : row === 4 && i === 0 ? corners[0] : row === 4 && i === 4 ? corners[1] : rest[k++]
       balls.push({ id, x: apexX + row * R * 1.75, y: H / 2 + (i - row / 2) * R * 2.02, vx: 0, vy: 0, in: false })
     }
   }
@@ -84,6 +107,16 @@ const dist = (dx: number, dy: number) => Math.sqrt(dx * dx + dy * dy)
 const inHorizontalMouth = (x: number) => x < CORNER_MOUTH || x > W - CORNER_MOUTH || Math.abs(x - W / 2) < SIDE_MOUTH
 const inVerticalMouth = (y: number) => y < CORNER_MOUTH || y > H - CORNER_MOUTH
 
+function nearestPocket(x: number, y: number) {
+  let best = 0
+  let bd = Infinity
+  for (let p = 0; p < POCKETS.length; p++) {
+    const d = (x - POCKETS[p][0]) * (x - POCKETS[p][0]) + (y - POCKETS[p][1]) * (y - POCKETS[p][1])
+    if (d < bd) ((bd = d), (best = p))
+  }
+  return best
+}
+
 function cushion(b: Ball, axis: 'x' | 'y', spin: Spin) {
   if (b.id === 0 && Math.abs(spin.side) > 0.01) {
     const sp = dist(b.vx, b.vy) || 1
@@ -91,17 +124,17 @@ function cushion(b: Ball, axis: 'x' | 'y', spin: Spin) {
     const rx = -b.vy / sp
     const ry = b.vx / sp
     if (axis === 'y') {
-      b.vy = -b.vy * 0.82
+      b.vy = -b.vy * RAIL_BOUNCE
       b.vx += rx * spin.side * ENGLISH_GAIN * sp
     } else {
-      b.vx = -b.vx * 0.82
+      b.vx = -b.vx * RAIL_BOUNCE
       b.vy += ry * spin.side * ENGLISH_GAIN * sp
     }
-    spin.side *= 0.5
+    spin.side *= 0.6
     return
   }
-  if (axis === 'y') b.vy = -b.vy * 0.82
-  else b.vx = -b.vx * 0.82
+  if (axis === 'y') b.vy = -b.vy * RAIL_BOUNCE
+  else b.vx = -b.vx * RAIL_BOUNCE
 }
 
 /** Sets the cue ball moving and returns the spin state for the shot. `pow` is 0..1. */
@@ -123,19 +156,16 @@ export function stepShot(balls: Ball[], spin: Spin, ev: ShotEvents, hooks?: Step
       b.y += b.vy / SUB
       b.vx *= FRICTION
       b.vy *= FRICTION
-      for (let p = 0; p < POCKETS.length; p++) {
-        const dx = b.x - POCKETS[p][0]
-        const dy = b.y - POCKETS[p][1]
-        if (dx * dx + dy * dy < POCKET_R2) {
-          b.in = true
-          b.vx = b.vy = 0
-          ev.potted.push(b.id)
-          ev.pocketOf[b.id] = p
-          hooks?.pot?.(b, p)
-          break
-        }
+      // Only pocket mouths have no cushion, so leaving the playing surface means the ball dropped.
+      if (b.x < -1 || b.x > W + 1 || b.y < -1 || b.y > H + 1) {
+        const p = nearestPocket(b.x, b.y)
+        b.in = true
+        b.vx = b.vy = 0
+        ev.potted.push(b.id)
+        ev.pocketOf[b.id] = p
+        hooks?.pot?.(b, p)
+        continue
       }
-      if (b.in) continue
       const mouthX = inHorizontalMouth(b.x)
       const mouthY = inVerticalMouth(b.y)
       let railed = false
@@ -143,12 +173,29 @@ export function stepShot(balls: Ball[], spin: Spin, ev: ShotEvents, hooks?: Step
       if (b.x > W - R && !mouthY && b.vx > 0) ((b.x = W - R), cushion(b, 'x', spin), (railed = true))
       if (b.y < R && !mouthX && b.vy < 0) ((b.y = R), cushion(b, 'y', spin), (railed = true))
       if (b.y > H - R && !mouthX && b.vy > 0) ((b.y = H - R), cushion(b, 'y', spin), (railed = true))
+      if (mouthX || mouthY) {
+        for (let j = 0; j < JAWS.length; j++) {
+          const jx = b.x - JAWS[j][0]
+          const jy = b.y - JAWS[j][1]
+          const d2 = jx * jx + jy * jy
+          if (d2 >= R * R || d2 === 0) continue
+          const d = Math.sqrt(d2)
+          const nx = jx / d
+          const ny = jy / d
+          b.x = JAWS[j][0] + nx * R
+          b.y = JAWS[j][1] + ny * R
+          const vn = b.vx * nx + b.vy * ny
+          if (vn < 0) {
+            b.vx -= (1 + JAW_BOUNCE) * vn * nx
+            b.vy -= (1 + JAW_BOUNCE) * vn * ny
+            railed = true
+          }
+        }
+      }
       if (railed) {
         if (ev.first !== null) ev.rail = true
         if (b.id !== 0 && !ev.railBalls.includes(b.id)) ev.railBalls.push(b.id)
       }
-      b.x = Math.min(Math.max(b.x, -10), W + 10)
-      b.y = Math.min(Math.max(b.y, -10), H + 10)
     }
     for (let i = 0; i < balls.length; i++) {
       const a = balls[i]
@@ -158,6 +205,7 @@ export function stepShot(balls: Ball[], spin: Spin, ev: ShotEvents, hooks?: Step
         if (b.in) continue
         const dx = b.x - a.x
         const dy = b.y - a.y
+        if (dx > R * 2 || dx < -R * 2 || dy > R * 2 || dy < -R * 2) continue
         const d = dist(dx, dy)
         if (d === 0 || d >= R * 2) continue
         const nx = dx / d
@@ -171,7 +219,7 @@ export function stepShot(balls: Ball[], spin: Spin, ev: ShotEvents, hooks?: Step
         if (rel <= 0) continue
         const cue = !spin.applied ? (a.id === 0 ? a : b.id === 0 ? b : null) : null
         const pre = cue ? { vx: cue.vx, vy: cue.vy, sp: dist(cue.vx, cue.vy) } : null
-        const imp = rel * 0.97
+        const imp = rel * 0.98
         a.vx -= imp * nx
         a.vy -= imp * ny
         b.vx += imp * nx
@@ -210,7 +258,7 @@ export function simulate(balls: Ball[], shot: ShotInput): ShotEvents {
 export function canPlaceCue(balls: Ball[], x: number, y: number) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false
   if (x < R * 1.5 || x > W - R * 1.5 || y < R * 1.5 || y > H - R * 1.5) return false
-  if (POCKETS.some(([px, py]) => dist(px - x, py - y) < POCKET_R + R)) return false
+  if (POCKETS.some(([px, py], i) => dist(px - x, py - y) < POCKET_HOLE[i] + R)) return false
   return balls.every((b) => b.id === 0 || b.in || dist(b.x - x, b.y - y) >= R * 2.1)
 }
 
@@ -220,7 +268,8 @@ export function needsCall(balls: Ball[], groups: Groups, seat: number) {
   return g !== null && balls.every((b) => groupOf(b.id) !== g || b.in)
 }
 
-function respotCue(balls: Ball[]) {
+/** Puts the cue ball back on the head spot (or the nearest free point on the head string). */
+export function respotCue(balls: Ball[]) {
   const cue = balls[0]
   cue.in = false
   cue.vx = cue.vy = 0
@@ -243,10 +292,13 @@ function respotEight(balls: Ball[]) {
 
 export type Resolution = {
   groups: Groups
+  fouls: Fouls
   keep: boolean
   foul: boolean
   /** The next player may place the cue ball anywhere. */
   ballInHand: boolean
+  /** Illegal (weak or missed) break: the incoming player picks re-rack or accept the table. */
+  illegalBreak: boolean
   /** Seat that won the frame, if the shot ended it. */
   winner: number | null
   /** Neutral, third-person summary of what happened. */
@@ -258,30 +310,43 @@ export type Resolution = {
 /**
  * Applies 8-ball rules to a finished shot. Mutates `balls` for respots (scratched cue, black on the break).
  * Rules: legal break needs a pot or 4 object balls to a rail; the table stays open after the break;
- * the first legal pot afterwards assigns groups; the black must be hit first and land in the called pocket.
+ * the first legal pot afterwards assigns groups (if both groups drop, the first ball down decides);
+ * the black must be hit first and land in the called pocket; three fouls in a row lose the frame.
  */
-export function resolveShot(balls: Ball[], ev: ShotEvents, o: { shooter: number; groups: Groups; broken: boolean; call: number | null }): Resolution {
+export function resolveShot(
+  balls: Ball[],
+  ev: ShotEvents,
+  o: { shooter: number; groups: Groups; broken: boolean; call: number | null; fouls?: Fouls },
+): Resolution {
   const { shooter } = o
   const other = shooter === 0 ? 1 : 0
   const groups: Groups = [o.groups[0], o.groups[1]]
+  const fouls: Fouls = [o.fouls?.[0] ?? 0, o.fouls?.[1] ?? 0]
   const mine = groups[shooter]
   const scratch = balls[0].in
   const objPotted = ev.potted.filter((id) => id !== 0 && id !== 8)
   const cleared = mine !== null && balls.every((b) => groupOf(b.id) !== mine || (b.in && !ev.potted.includes(b.id)))
-  const base = { groups, assigned: null, winner: null }
-  const foul = (note: string): Resolution => {
+  const base = { groups, assigned: null, winner: null, illegalBreak: false, fouls }
+  const end = (winner: number, note: string): Resolution => ({ ...base, keep: false, foul: false, ballInHand: false, winner, note })
+  const foul = (note: string, counts = true): Resolution => {
     if (scratch) respotCue(balls)
+    if (counts) {
+      fouls[shooter] += 1
+      if (fouls[shooter] >= MAX_FOULS) return end(other, `${note} Üst üste ${MAX_FOULS}. faul, masa kaybedildi.`)
+      if (fouls[shooter] === MAX_FOULS - 1) note += ` Üst üste ${MAX_FOULS - 1}. faul, bir faul daha masayı kaybettirir.`
+    }
     return { ...base, keep: false, foul: true, ballInHand: true, note }
   }
-  const end = (winner: number, note: string): Resolution => ({ ...base, keep: false, foul: false, ballInHand: false, winner, note })
 
   if (!o.broken) {
     const eight = ev.potted.includes(8)
     if (eight) respotEight(balls)
     const spotted = eight ? ' Siyah yerine kondu.' : ''
-    if (scratch) return foul(`Açılışta beyaz düştü, faul.${spotted}`)
-    if (ev.first === null) return foul('Açılışta hiçbir topa değmedi, faul.')
-    if (objPotted.length === 0 && !eight && ev.railBalls.length < BREAK_RAIL_BALLS) return foul('Zayıf açılış: en az 4 top banda gitmeli, faul.')
+    if (scratch) return foul(`Açılışta beyaz düştü, faul.${spotted}`, false)
+    if (ev.first === null || (objPotted.length === 0 && !eight && ev.railBalls.length < BREAK_RAIL_BALLS)) {
+      const why = ev.first === null ? 'Açılışta hiçbir topa değmedi' : 'Zayıf açılış: en az 4 top banda gitmeli'
+      return { ...base, keep: false, foul: true, ballInHand: false, illegalBreak: true, note: `${why}, faul.${spotted}` }
+    }
     const keep = objPotted.length > 0
     return { ...base, keep, foul: false, ballInHand: false, note: `${keep ? 'Açılışta top düştü.' : 'Açılış yapıldı.'}${spotted} Masa açık.` }
   }
@@ -301,6 +366,7 @@ export function resolveShot(balls: Ball[], ev: ShotEvents, o: { shooter: number;
   if (wrongFirst) return foul(cleared ? 'Önce siyaha vurulmalıydı, faul.' : 'Önce yanlış topa vuruldu, faul.')
   if (ev.potted.length === 0 && !ev.rail) return foul('Temastan sonra hiçbir top banda gitmedi, faul.')
 
+  fouls[shooter] = 0
   let assigned: Group | null = null
   if (!mine && objPotted.length) {
     assigned = groupOf(objPotted[0]) as Group
@@ -309,5 +375,192 @@ export function resolveShot(balls: Ball[], ev: ShotEvents, o: { shooter: number;
   }
   const keep = objPotted.some((id) => groupOf(id) === groups[shooter])
   const note = assigned ? `${groupName(assigned)} toplar seçildi.` : keep ? 'Top düştü.' : 'Top düşmedi.'
-  return { groups, assigned, winner: null, keep, foul: false, ballInHand: false, note }
+  return { ...base, groups, fouls, assigned, keep, foul: false, ballInHand: false, note }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Bot
+
+export type BotLevel = 'kolay' | 'orta' | 'zor'
+export const BOT_LEVELS: { id: BotLevel; label: string }[] = [
+  { id: 'kolay', label: 'Kolay' },
+  { id: 'orta', label: 'Orta' },
+  { id: 'zor', label: 'Zor' },
+]
+const AIM_NOISE: Record<BotLevel, number> = { kolay: 0.03, orta: 0.011, zor: 0.003 }
+const SIM_BUDGET: Record<BotLevel, number> = { kolay: 8, orta: 36, zor: 90 }
+
+/** True when the segment is free of balls (other than `skip`) for a ball of radius R travelling along it. */
+export function clearPath(balls: Ball[], x1: number, y1: number, x2: number, y2: number, skip: number[]) {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const len2 = dx * dx + dy * dy || 1
+  for (const b of balls) {
+    if (b.in || skip.includes(b.id)) continue
+    const t = Math.max(0, Math.min(1, ((b.x - x1) * dx + (b.y - y1) * dy) / len2))
+    if (Math.hypot(x1 + dx * t - b.x, y1 + dy * t - b.y) < R * 2.05) return false
+  }
+  return true
+}
+
+type Option = { target: number; pocket: number; angle: number; cut: number; dist: number }
+
+/** Pocket aim point just inside the mouth, so corner shots aim between the jaws. */
+function pocketAim(p: number): [number, number] {
+  const [px, py] = POCKETS[p]
+  return [Math.min(W - 4, Math.max(4, px)), Math.min(H - 4, Math.max(4, py))]
+}
+
+/** Every direct (no bank) pot available from the cue ball's position. */
+function directOptions(balls: Ball[], cx: number, cy: number, legal: (b: Ball) => boolean): Option[] {
+  const out: Option[] = []
+  for (const t of balls) {
+    if (!legal(t)) continue
+    for (let p = 0; p < POCKETS.length; p++) {
+      const [px, py] = pocketAim(p)
+      const tx = px - t.x
+      const ty = py - t.y
+      const td = Math.hypot(tx, ty) || 1
+      // Side pockets refuse steep approaches along the rail.
+      if (p === 1 || p === 4) {
+        if (Math.abs(ty) / td < 0.45) continue
+      }
+      const gx = t.x - (tx / td) * R * 2
+      const gy = t.y - (ty / td) * R * 2
+      const ax = gx - cx
+      const ay = gy - cy
+      const ad = Math.hypot(ax, ay) || 1
+      const cut = (ax * tx + ay * ty) / (ad * td)
+      if (cut < 0.3) continue
+      if (!clearPath(balls, cx, cy, gx, gy, [0, t.id])) continue
+      if (!clearPath(balls, t.x, t.y, px, py, [t.id])) continue
+      out.push({ target: t.id, pocket: p, angle: Math.atan2(ay, ax), cut, dist: ad + td })
+    }
+  }
+  return out
+}
+
+const legalFor = (balls: Ball[], groups: Groups, seat: number) => {
+  const mine = groups[seat]
+  const onBlack = needsCall(balls, groups, seat)
+  return (b: Ball) => !b.in && b.id !== 0 && (onBlack ? b.id === 8 : mine === null ? b.id !== 8 : groupOf(b.id) === mine)
+}
+
+export type BotPlan = { input: ShotInput; cue: { x: number; y: number } | null; call: number | null }
+
+/**
+ * Picks a shot by simulating candidates with the real engine. Stronger levels try more shots,
+ * plan the cue ball for the next pot, play safeties when nothing is on and aim more precisely.
+ */
+export function planShot(
+  start: Ball[],
+  o: { seat: number; groups: Groups; broken: boolean; ballInHand: boolean; fouls?: Fouls; level: BotLevel; rand?: () => number },
+): BotPlan {
+  const rand = o.rand ?? Math.random
+  const level = o.level
+  const other = o.seat === 0 ? 1 : 0
+  const cue0 = start[0]
+
+  if (!o.broken) {
+    const apex = start.filter((b) => b.id !== 0 && !b.in).sort((a, b) => a.x - b.x)[0]
+    const off = (rand() - 0.5) * (level === 'kolay' ? 10 : 4)
+    const ang = Math.atan2(apex.y - cue0.y + off, apex.x - cue0.x)
+    return { input: { dx: Math.cos(ang), dy: Math.sin(ang), pow: level === 'kolay' ? 0.85 : 1, spinX: 0, spinY: 0 }, cue: null, call: null }
+  }
+
+  const onBlack = needsCall(start, o.groups, o.seat)
+  const legal = legalFor(start, o.groups, o.seat)
+
+  const cueSpots: { x: number; y: number }[] = [{ x: cue0.x, y: cue0.y }]
+  if (o.ballInHand) {
+    for (const t of start.filter(legal)) {
+      for (let p = 0; p < POCKETS.length; p++) {
+        const [px, py] = pocketAim(p)
+        const d = Math.hypot(px - t.x, py - t.y) || 1
+        for (const k of [5, 9]) {
+          const x = t.x - ((px - t.x) / d) * R * k
+          const y = t.y - ((py - t.y) / d) * R * k
+          if (canPlaceCue(start, x, y)) cueSpots.push({ x, y })
+        }
+      }
+    }
+  }
+
+  type Cand = { input: ShotInput; cue: { x: number; y: number } | null; call: number | null; pre: number }
+  const cands: Cand[] = []
+  const powers = level === 'kolay' ? [0] : level === 'orta' ? [0, 0.15] : [-0.1, 0, 0.18]
+  const spins = level === 'zor' ? [0, -0.45, 0.4] : level === 'orta' ? [0, -0.3] : [0]
+  for (const spot of cueSpots) {
+    const placed = spot === cueSpots[0] ? null : spot
+    for (const op of directOptions(start, spot.x, spot.y, legal)) {
+      const basePow = Math.min(0.92, 0.22 + op.dist / 1700 + (1 - op.cut) * 0.25)
+      for (const dp of powers) {
+        for (const sy of spins) {
+          cands.push({
+            input: { dx: Math.cos(op.angle), dy: Math.sin(op.angle), pow: Math.max(0.12, Math.min(1, basePow + dp)), spinX: 0, spinY: sy },
+            cue: placed,
+            call: onBlack ? op.pocket : null,
+            pre: op.cut * 2 - op.dist / 900 - Math.abs(dp) - Math.abs(sy) * 0.2,
+          })
+        }
+      }
+    }
+  }
+  cands.sort((a, b) => b.pre - a.pre)
+
+  const evaluate = (c: Cand) => {
+    const balls = clone(start)
+    if (c.cue) ((balls[0].x = c.cue.x), (balls[0].y = c.cue.y))
+    const ev = simulate(balls, c.input)
+    let call = c.call
+    if (onBlack && call === null && ev.pocketOf[8] !== undefined) call = ev.pocketOf[8]
+    const r = resolveShot(balls, ev, { shooter: o.seat, groups: o.groups, broken: true, call, fouls: o.fouls })
+    if (r.winner === o.seat) return { score: 1000, call }
+    if (r.winner === other) return { score: -1000, call }
+    if (r.foul) return { score: -300, call }
+    if (r.keep) {
+      const next = directOptions(balls, balls[0].x, balls[0].y, legalFor(balls, r.groups, o.seat))
+      const bestCut = next.reduce((m, n) => Math.max(m, n.cut), 0)
+      return { score: 200 + next.length * (level === 'kolay' ? 0 : 12) + bestCut * 40, call }
+    }
+    // Missed but legal: prefer leaving the rival as little as possible.
+    const opp = directOptions(balls, balls[0].x, balls[0].y, legalFor(balls, r.groups, other))
+    return { score: -40 - opp.length * 15 - opp.reduce((m, n) => Math.max(m, n.cut), 0) * 30, call }
+  }
+
+  let best: { c: Cand; score: number; call: number | null } | null = null
+  const budget = SIM_BUDGET[level]
+  for (const c of cands.slice(0, budget)) {
+    const e = evaluate(c)
+    if (!best || e.score > best.score) best = { c, score: e.score, call: e.call }
+    if (level !== 'zor' && e.score >= 200) break
+  }
+
+  // Nothing pots: try banks and safeties by sweeping around the table.
+  if (!best || best.score < 200) {
+    const sweep = level === 'kolay' ? 10 : level === 'orta' ? 28 : 56
+    const spot = best?.c.cue ?? (o.ballInHand ? cueSpots[cueSpots.length > 1 ? 1 : 0] : null)
+    for (let i = 0; i < sweep; i++) {
+      const ang = (i / sweep) * Math.PI * 2 + rand() * 0.05
+      for (const pow of level === 'zor' ? [0.3, 0.55] : [0.45]) {
+        const c: Cand = { input: { dx: Math.cos(ang), dy: Math.sin(ang), pow, spinX: 0, spinY: 0 }, cue: spot && spot !== cueSpots[0] ? spot : null, call: null, pre: 0 }
+        const e = evaluate(c)
+        if (!best || e.score > best.score) best = { c, score: e.score, call: e.call }
+      }
+    }
+  }
+
+  if (!best) {
+    const ang = rand() * Math.PI * 2
+    return { input: { dx: Math.cos(ang), dy: Math.sin(ang), pow: 0.5, spinX: 0, spinY: 0 }, cue: null, call: onBlack ? 0 : null }
+  }
+  const noise = (rand() - 0.5) * 2 * AIM_NOISE[level]
+  const ang = Math.atan2(best.c.input.dy, best.c.input.dx) + noise
+  const pow = Math.max(0.1, Math.min(1, best.c.input.pow * (level === 'kolay' ? 0.85 + rand() * 0.3 : 1)))
+  let call = best.call
+  if (onBlack && call === null) {
+    const eight = start.find((b) => b.id === 8)!
+    call = nearestPocket(eight.x, eight.y)
+  }
+  return { input: { ...best.c.input, dx: Math.cos(ang), dy: Math.sin(ang), pow }, cue: best.c.cue, call }
 }
