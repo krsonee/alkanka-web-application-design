@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 import type { PoolClient } from 'pg'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
-import { BJ_BET_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card } from '@/lib/casino'
+import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
 
 /** Every card is derived from the server secret, so nobody can predict the next card but every viewer sees the same table. */
@@ -31,12 +31,52 @@ function sideHits(roundId: number, seat: number) {
 const sideReturn = (stake: number, h: { x: number } | null) => (stake > 0 && h ? stake * (h.x + 1) : 0)
 
 const isNatural = (cards: Card[]) => cards.length === 2 && handValue(cards) === 21
+const tenValue = (c: Card) => Math.min(c.r, 10)
 
-type Outcome = 'blackjack' | 'win' | 'push' | 'loss'
+/** After a split each hand keeps one of the two original cards and draws from its own stream. */
+const splitHand = (roundId: number, seat: number, which: 0 | 1, n: number): Card[] =>
+  n <= 0 ? [] : [cardAt(roundId, `s${seat}`, which), ...Array.from({ length: n - 1 }, (_, k) => cardAt(roundId, `s${seat}h${which}`, k))]
 
-function outcome(player: Card[], doubled: boolean, dealer: Card[]): { result: Outcome; multiplier: number } {
+const SEAT_COLS = 'seat, bet, drawn, stood, doubled, split, drawn2, stood2, doubled2, insurance, ins_decided, surrendered, side_pairs, side_213'
+
+type SeatRow = {
+  seat: number | string
+  bet: number | string
+  drawn: number | string
+  stood: boolean
+  doubled: boolean
+  split: boolean
+  drawn2: number | string
+  stood2: boolean
+  doubled2: boolean
+  insurance: number | string
+  ins_decided: boolean
+  surrendered: boolean
+  side_pairs: number | string
+  side_213: number | string
+}
+
+type Hand = { cards: Card[]; stood: boolean; doubled: boolean }
+
+function handsOf(roundId: number, r: SeatRow): Hand[] {
+  const seat = Number(r.seat)
+  if (!r.split) return [{ cards: seatCards(roundId, seat, Number(r.drawn)), stood: !!r.stood, doubled: !!r.doubled }]
+  return [
+    { cards: splitHand(roundId, seat, 0, Number(r.drawn)), stood: !!r.stood, doubled: !!r.doubled },
+    { cards: splitHand(roundId, seat, 1, Number(r.drawn2)), stood: !!r.stood2, doubled: !!r.doubled2 },
+  ]
+}
+
+const handDone = (h: Hand) => h.stood || handValue(h.cards) >= 21
+/** The hand the player is acting on, or -1 once every hand at the seat is finished. */
+const activeHand = (r: SeatRow, hands: Hand[]) => (r.surrendered ? -1 : hands.findIndex((h) => !handDone(h)))
+
+type Outcome = 'blackjack' | 'win' | 'push' | 'loss' | 'surrender'
+
+/** `canNatural` is false for doubled or split hands: a 21 there is just 21, not a blackjack. */
+function outcome(player: Card[], canNatural: boolean, dealer: Card[]): { result: Outcome; multiplier: number } {
   const pv = handValue(player)
-  const pBj = isNatural(player) && !doubled
+  const pBj = isNatural(player) && canNatural
   const dBj = isNatural(dealer)
   const dv = handValue(dealer)
   if (pv > 21) return { result: 'loss', multiplier: 0 }
@@ -46,6 +86,32 @@ function outcome(player: Card[], doubled: boolean, dealer: Card[]): { result: Ou
   if (dv > 21 || pv > dv) return { result: 'win', multiplier: 2 }
   if (pv === dv) return { result: 'push', multiplier: 1 }
   return { result: 'loss', multiplier: 0 }
+}
+
+type Line = { stake: number; ret: number }
+
+/** Everything a seat staked and gets back, split into main hands, insurance and each side bet, so the table can show why the net came out the way it did. */
+function settleSeat(roundId: number, r: SeatRow) {
+  const dealer = dealerHand(roundId)
+  const seat = Number(r.seat)
+  const bet = Number(r.bet)
+  const hands = handsOf(roundId, r).map((h) => {
+    const stake = bet * (h.doubled ? 2 : 1)
+    if (r.surrendered) return { ...h, stake, result: 'surrender' as Outcome, ret: Math.floor(bet / 2) }
+    const o = outcome(h.cards, !r.split && !h.doubled, dealer)
+    return { ...h, stake, result: o.result, ret: Math.floor(stake * o.multiplier) }
+  })
+  const hits = sideHits(roundId, seat)
+  const ins = Number(r.insurance) || 0
+  const sp = Number(r.side_pairs) || 0
+  const s3 = Number(r.side_213) || 0
+  const main: Line = { stake: hands.reduce((a, h) => a + h.stake, 0), ret: hands.reduce((a, h) => a + h.ret, 0) }
+  const insurance: Line = { stake: ins, ret: isNatural(dealer) ? ins * 3 : 0 }
+  const pairs: Line & { hit: SideHit | null } = { stake: sp, ret: sideReturn(sp, hits.pairs), hit: sp > 0 ? hits.pairs : null }
+  const t213: Line & { hit: SideHit | null } = { stake: s3, ret: sideReturn(s3, hits.t213), hit: s3 > 0 ? hits.t213 : null }
+  const stake = main.stake + insurance.stake + pairs.stake + t213.stake
+  const ret = main.ret + insurance.ret + pairs.ret + t213.ret
+  return { dealer, hands, main, insurance, pairs, t213, stake, ret }
 }
 
 type Round = { id: number; tableNo: number; phase: BlackjackPhase; endsAt: number | null }
@@ -152,7 +218,12 @@ async function advance(c: PoolClient, tableNo: number): Promise<Round> {
     const expired = round.endsAt !== null && Date.now() >= round.endsAt
     if (round.phase === 'waiting') break
 
-    const seats = await c.query(`SELECT id, seat, drawn, stood, ready FROM blackjack_live WHERE round_id = $1`, [round.id])
+    const seats = await c.query(`SELECT id, ready, ${SEAT_COLS} FROM blackjack_live WHERE round_id = $1`, [round.id])
+    const dealerHasBj = () => isNatural(dealerHand(round.id))
+    const finishAll = async () => {
+      await c.query(`UPDATE blackjack_live SET stood = true, stood2 = true WHERE round_id = $1`, [round.id])
+      return setPhase(c, round.id, 'result', BJ_RESULT_MS)
+    }
     if (round.phase === 'bet') {
       if (!seats.rowCount) {
         round = await setPhase(c, round.id, 'waiting', null)
@@ -160,14 +231,23 @@ async function advance(c: PoolClient, tableNo: number): Promise<Round> {
       }
       const allReady = seats.rows.every((s) => s.ready)
       if (!expired && !allReady) break
-      round = await setPhase(c, round.id, 'play', BJ_PLAY_MS)
+      // Dealer peek: an Ace up opens the insurance window first; a ten up with a hidden Ace ends the hand on the spot.
+      const up = cardAt(round.id, 'd', 0)
+      if (up.r === 1) round = await setPhase(c, round.id, 'insurance', BJ_INS_MS)
+      else if (tenValue(up) === 10 && dealerHasBj()) round = await finishAll()
+      else round = await setPhase(c, round.id, 'play', BJ_PLAY_MS)
+      continue
+    }
+    if (round.phase === 'insurance') {
+      const allDecided = seats.rows.every((s) => s.ins_decided)
+      if (!expired && !allDecided) break
+      round = dealerHasBj() ? await finishAll() : await setPhase(c, round.id, 'play', BJ_PLAY_MS)
       continue
     }
     if (round.phase === 'play') {
-      const allDone = seats.rows.every((s) => s.stood || handValue(seatCards(round.id, Number(s.seat), Number(s.drawn))) >= 21)
+      const allDone = seats.rows.every((s) => activeHand(s, handsOf(round.id, s)) === -1)
       if (!expired && !allDone) break
-      await c.query(`UPDATE blackjack_live SET stood = true WHERE round_id = $1 AND stood = false`, [round.id])
-      round = await setPhase(c, round.id, 'result', BJ_RESULT_MS)
+      round = await finishAll()
       continue
     }
     if (round.phase === 'result') {
@@ -198,35 +278,26 @@ async function settleFinished() {
          AND (r.id IS NULL OR r.phase = 'result' OR r.id < (SELECT MAX(r2.id) FROM blackjack_round r2 WHERE r2.table_no = r.table_no))
        ORDER BY l.id LIMIT 60
        FOR UPDATE OF l SKIP LOCKED)
-     RETURNING id, round_id, seat, user_id, user_name, bet, drawn, doubled, side_pairs, side_213`,
+     RETURNING id, round_id, user_id, user_name, ${SEAT_COLS}`,
   )
   for (const row of r.rows) {
-    const roundId = Number(row.round_id)
-    const stake = Number(row.bet) * (row.doubled ? 2 : 1)
-    const cards = seatCards(roundId, Number(row.seat), Number(row.drawn))
-    const dealer = dealerHand(roundId)
-    const { result, multiplier } = outcome(cards, !!row.doubled, dealer)
-    const sidePairs = Number(row.side_pairs) || 0
-    const side213 = Number(row.side_213) || 0
-    const hits = sideHits(roundId, Number(row.seat))
-    const mainWin = Math.floor(stake * multiplier)
-    const sideWin = sideReturn(sidePairs, hits.pairs) + sideReturn(side213, hits.t213)
-    const totalStake = stake + sidePairs + side213
-    const total = await capPayout(String(row.user_id), totalStake, mainWin + sideWin)
-    const returned = Math.min(mainWin, total)
+    const s = settleSeat(Number(row.round_id), row)
+    const total = await capPayout(String(row.user_id), s.stake, s.ret)
+    const returned = Math.min(s.main.ret + s.insurance.ret, total)
     const sideReturned = total - returned
-    await pool.query(`UPDATE blackjack_live SET returned = $2, side_returned = $3 WHERE id = $1`, [row.id, returned, sideReturned])
+    await pool.query(`UPDATE blackjack_live SET returned = $2, side_returned = $3, staked = $4 WHERE id = $1`, [row.id, returned, sideReturned, s.stake])
     if (total) await credit(String(row.user_id), total)
+    const values = s.hands.map((h) => handValue(h.cards))
     await recordHistory({
       userId: String(row.user_id),
       userName: String(row.user_name),
       game: 'blackjack',
       mode: 'masa',
-      opponent: `Krupiye ${handValue(dealer)} · Sen ${handValue(cards)}`,
-      stake: totalStake,
-      result: total > totalStake ? 'win' : total === totalStake ? 'draw' : result === 'push' ? 'draw' : 'loss',
-      delta: total - totalStake,
-      score: handValue(cards),
+      opponent: `Krupiye ${handValue(s.dealer)} · Sen ${values.join(' / ')}${row.surrendered ? ' (teslim)' : ''}`,
+      stake: s.stake,
+      result: total > s.stake ? 'win' : total === s.stake ? 'draw' : 'loss',
+      delta: total - s.stake,
+      score: Math.max(...values),
     })
   }
 }
@@ -384,51 +455,93 @@ export async function leaveTable(member: Member) {
   return { balance: await getBalance(member.id), ...out }
 }
 
-/** Changes the stake for the coming hand while bets are still open; the difference is charged or refunded right away. */
-export async function changeTableBet(member: Member, bet: number, allowedBets: number[]) {
+/**
+ * Changes the main bet and the side bets for the coming hand while bets are still open.
+ * Side bets are optional: pass 0 to take one off. The difference is charged or refunded right away.
+ */
+export async function changeTableBet(member: Member, bet: number, allowedBets: number[], side?: SideBets) {
   if (!allowedBets.includes(bet)) throw new Error('Geçersiz bahis.')
+  if (side && (!BJ_SIDE_STAKES.includes(side.pairs) || !BJ_SIDE_STAKES.includes(side.t213))) throw new Error('Geçersiz yan bahis.')
   await inTx(async (c) => {
     const no = await myTable(c, member)
     const round = await advance(c, no)
     if (round.phase !== 'bet') throw new Error('Bahis sadece kartlar dağıtılmadan değişir.')
-    const r = await c.query(`SELECT id, bet FROM blackjack_live WHERE round_id = $1 AND user_id = $2 FOR UPDATE`, [round.id, member.id])
+    const r = await c.query(`SELECT id, bet, side_pairs, side_213 FROM blackjack_live WHERE round_id = $1 AND user_id = $2 FOR UPDATE`, [round.id, member.id])
     const row = r.rows[0]
     if (!row) throw new Error('Önce masaya otur.')
-    const diff = bet - Number(row.bet)
+    const pairs = side ? side.pairs : Number(row.side_pairs) || 0
+    const t213 = side ? side.t213 : Number(row.side_213) || 0
+    const diff = bet + pairs + t213 - (Number(row.bet) + (Number(row.side_pairs) || 0) + (Number(row.side_213) || 0))
     if (diff > 0 && !(await debitIn(c, member.id, diff))) throw new Error('Yetersiz Kanka Coin.')
     if (diff < 0) await creditIn(c, member.id, -diff)
-    await c.query(`UPDATE blackjack_live SET bet = $2, acted = true WHERE id = $1`, [row.id, bet])
+    await c.query(`UPDATE blackjack_live SET bet = $2, side_pairs = $3, side_213 = $4, acted = true WHERE id = $1`, [row.id, bet, pairs, t213])
   })
   return { balance: await getBalance(member.id) }
 }
 
-export async function actAtTable(member: Member, action: 'hit' | 'stand' | 'double') {
+/** Insurance costs half the main bet and pays 2:1 when the dealer turns out to have blackjack. With a blackjack in hand this is "even money". */
+export async function insureAtTable(member: Member, take: boolean) {
+  await inTx(async (c) => {
+    const no = await myTable(c, member)
+    const round = await advance(c, no)
+    if (round.phase !== 'insurance') throw new Error('Sigorta sadece krupiyenin açık kartı As iken alınır.')
+    const r = await c.query(`SELECT id, bet, ins_decided FROM blackjack_live WHERE round_id = $1 AND user_id = $2 FOR UPDATE`, [round.id, member.id])
+    const row = r.rows[0]
+    if (!row) throw new Error('Bu elde oynamıyorsun.')
+    if (row.ins_decided) throw new Error('Sigorta kararını zaten verdin.')
+    const cost = take ? Math.floor(Number(row.bet) / 2) : 0
+    if (cost > 0 && !(await debitIn(c, member.id, cost))) throw new Error('Sigorta için yeterli KC yok.')
+    await c.query(`UPDATE blackjack_live SET insurance = $2, ins_decided = true, acted = true WHERE id = $1`, [row.id, cost])
+    await advance(c, no)
+  })
+  return { balance: await getBalance(member.id) }
+}
+
+export type TableAction = 'hit' | 'stand' | 'double' | 'split' | 'surrender'
+
+/** Column names for each hand at a seat. Fixed strings, never user input. */
+const HAND_COLS = [
+  { drawn: 'drawn', stood: 'stood', doubled: 'doubled' },
+  { drawn: 'drawn2', stood: 'stood2', doubled: 'doubled2' },
+] as const
+
+export async function actAtTable(member: Member, action: TableAction) {
   await inTx(async (c) => {
     const no = await myTable(c, member)
     const round = await advance(c, no)
     if (round.phase !== 'play') throw new Error('Şu an hamle sırası değil.')
-    const r = await c.query(`SELECT id, seat, bet, drawn FROM blackjack_live WHERE round_id = $1 AND user_id = $2 AND stood = false`, [round.id, member.id])
-    const row = r.rows[0]
+    const r = await c.query(`SELECT id, ${SEAT_COLS} FROM blackjack_live WHERE round_id = $1 AND user_id = $2 FOR UPDATE`, [round.id, member.id])
+    const row = r.rows[0] as (SeatRow & { id: string }) | undefined
     if (!row) throw new Error('Bu elde oynayacak kartın yok.')
-    const drawn = Number(row.drawn)
-    const cards = seatCards(round.id, Number(row.seat), drawn)
-    if (handValue(cards) >= 21) throw new Error('Elin tamamlandı.')
+    const hands = handsOf(round.id, row)
+    const idx = activeHand(row, hands)
+    if (idx < 0) throw new Error('Elin tamamlandı.')
+    const hand = hands[idx]
+    const n = hand.cards.length
+    const seat = Number(row.seat)
+    const bet = Number(row.bet)
+    const col = HAND_COLS[idx]
+    const cardsAfter = (count: number) => (row.split ? splitHand(round.id, seat, idx as 0 | 1, count) : seatCards(round.id, seat, count))
 
     await c.query(`UPDATE blackjack_live SET acted = true WHERE id = $1`, [row.id])
     if (action === 'stand') {
-      await c.query(`UPDATE blackjack_live SET stood = true WHERE id = $1`, [row.id])
+      await c.query(`UPDATE blackjack_live SET ${col.stood} = true WHERE id = $1`, [row.id])
     } else if (action === 'hit') {
-      const next = seatCards(round.id, Number(row.seat), drawn + 1)
-      await c.query(`UPDATE blackjack_live SET drawn = $2, stood = $3 WHERE id = $1`, [row.id, drawn + 1, handValue(next) >= 21])
+      await c.query(`UPDATE blackjack_live SET ${col.drawn} = $2, ${col.stood} = $3 WHERE id = $1`, [row.id, n + 1, handValue(cardsAfter(n + 1)) >= 21])
+    } else if (action === 'double') {
+      if (n !== 2) throw new Error('Sadece ilk iki kartta ikiye katlayabilirsin.')
+      if (!(await debitIn(c, member.id, bet))) throw new Error('İkiye katlamak için yeterli KC yok.')
+      await c.query(`UPDATE blackjack_live SET ${col.drawn} = 3, ${col.doubled} = true, ${col.stood} = true WHERE id = $1`, [row.id])
+    } else if (action === 'split') {
+      if (row.split) throw new Error('Bir el sadece bir kez ikiye ayrılır.')
+      if (n !== 2 || tenValue(hand.cards[0]) !== tenValue(hand.cards[1])) throw new Error('Sadece aynı değerde iki kartı ikiye ayırabilirsin.')
+      if (!(await debitIn(c, member.id, bet))) throw new Error('İkiye ayırmak için yeterli KC yok.')
+      // Split Aces get one card each and stand, like at a real table.
+      const aces = hand.cards[0].r === 1
+      await c.query(`UPDATE blackjack_live SET split = true, drawn = 2, drawn2 = 2, stood = $2, stood2 = $2 WHERE id = $1`, [row.id, aces])
     } else {
-      if (drawn !== 2) throw new Error('Sadece ilk iki kartta ikiye katlayabilirsin.')
-      if (!(await debit(member.id, Number(row.bet)))) throw new Error('İkiye katlamak için yeterli KC yok.')
-      try {
-        await c.query(`UPDATE blackjack_live SET drawn = 3, doubled = true, stood = true WHERE id = $1`, [row.id])
-      } catch (e) {
-        await credit(member.id, Number(row.bet))
-        throw e
-      }
+      if (row.split || n !== 2) throw new Error('Sadece ilk iki kartta teslim olabilirsin.')
+      await c.query(`UPDATE blackjack_live SET surrendered = true, stood = true WHERE id = $1`, [row.id])
     }
     // If that was the last open hand, the dealer reveals right away.
     await advance(c, no)
@@ -436,7 +549,7 @@ export async function actAtTable(member: Member, action: 'hit' | 'stand' | 'doub
   return { balance: await getBalance(member.id) }
 }
 
-const PHASE_TOTAL: Record<BlackjackPhase, number | null> = { waiting: null, bet: BJ_BET_MS, play: BJ_PLAY_MS, result: BJ_RESULT_MS }
+const PHASE_TOTAL: Record<BlackjackPhase, number | null> = { waiting: null, bet: BJ_BET_MS, insurance: BJ_INS_MS, play: BJ_PLAY_MS, result: BJ_RESULT_MS }
 
 /** A spectator counts as watching while their tab keeps polling; idle tabs poll every 30s. */
 const WATCH_WINDOW_S = 45
@@ -489,49 +602,77 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
   const { id: roundId, phase } = round
 
   const rows = await pool.query(
-    `SELECT seat, user_id, user_name, bet, drawn, stood, doubled, ready, side_pairs, side_213, leaving, idle FROM blackjack_live WHERE round_id = $1 ORDER BY seat`,
+    `SELECT user_id, user_name, ready, leaving, idle, ${SEAT_COLS} FROM blackjack_live WHERE round_id = $1 ORDER BY seat`,
     [roundId],
   )
-  const dealing = phase === 'play' || phase === 'result'
+  const dealing = phase === 'insurance' || phase === 'play' || phase === 'result'
   const dealerFull = dealerHand(roundId)
   const reveal = phase === 'result'
   const dealer = !dealing ? [] : reveal ? dealerFull : [dealerFull[0]]
 
   const seats = Array.from({ length: BJ_SEATS }, (_, i) => {
-    const row = rows.rows.find((x) => Number(x.seat) === i + 1)
+    const row = rows.rows.find((x) => Number(x.seat) === i + 1) as (SeatRow & { user_id: string; user_name: string; ready: boolean; leaving: boolean; idle: number }) | undefined
     if (!row) return null
-    const cards = dealing ? seatCards(roundId, i + 1, Number(row.drawn)) : []
-    const value = handValue(cards)
-    const doubled = !!row.doubled
-    const res = reveal ? outcome(cards, doubled, dealerFull) : null
-    const stake = Number(row.bet) * (doubled ? 2 : 1)
+    const bet = Number(row.bet)
+    const handList = dealing ? handsOf(roundId, row) : []
+    const active = phase === 'play' ? activeHand(row, handList) : -1
+    const settled = reveal ? settleSeat(roundId, row) : null
     const hits = dealing ? sideHits(roundId, i + 1) : null
     const sp = Number(row.side_pairs) || 0
     const s3 = Number(row.side_213) || 0
+    const ins = Number(row.insurance) || 0
     const side = {
       pairs: sp,
       t213: s3,
       pairsHit: sp > 0 ? (hits?.pairs ?? null) : null,
       t213Hit: s3 > 0 ? (hits?.t213 ?? null) : null,
       settled: dealing,
-      won: dealing ? sideReturn(sp, hits?.pairs ?? null) + sideReturn(s3, hits?.t213 ?? null) : 0,
     }
+    const hands = handList.map((h, k) => ({
+      cards: h.cards,
+      value: handValue(h.cards),
+      doubled: h.doubled,
+      stake: bet * (h.doubled ? 2 : 1),
+      active: k === active,
+      result: settled?.hands[k].result ?? null,
+      delta: settled ? settled.hands[k].ret - settled.hands[k].stake : null,
+    }))
+    const cur = hands[active]
+    const opening = !!cur && cur.cards.length === 2 && !row.split
+    const line = (l: { stake: number; ret: number }) => (l.stake > 0 ? l.ret - l.stake : null)
     return {
       seat: i + 1,
       name: String(row.user_name),
       mine: member ? row.user_id === member.id : false,
-      bet: stake,
-      cards,
-      value,
-      doubled,
+      baseBet: bet,
+      bet: hands.length ? hands.reduce((a, h) => a + h.stake, 0) : bet,
+      hands,
+      split: !!row.split,
+      surrendered: !!row.surrendered,
+      natural: !row.split && hands.length === 1 && isNatural(hands[0].cards),
+      insurance: ins,
+      insDecided: !!row.ins_decided,
       ready: !!row.ready,
       leaving: !!row.leaving,
       idle: Number(row.idle) || 0,
-      baseBet: Number(row.bet),
-      done: phase === 'play' ? !!row.stood || value >= 21 : phase === 'result',
-      result: res?.result ?? null,
-      delta: res ? Math.floor(stake * res.multiplier) - stake : null,
+      done: phase === 'play' ? active === -1 : phase === 'result',
+      can: {
+        double: !!cur && cur.cards.length === 2,
+        split: opening && tenValue(cur.cards[0]) === tenValue(cur.cards[1]),
+        surrender: opening,
+        insure: phase === 'insurance' && !row.ins_decided,
+      },
       side,
+      /** Per-line gain or loss once the hand is revealed; null lines were not played. */
+      breakdown: settled
+        ? {
+            main: settled.main.ret - settled.main.stake,
+            insurance: line(settled.insurance),
+            pairs: line(settled.pairs),
+            t213: line(settled.t213),
+            net: settled.ret - settled.stake,
+          }
+        : null,
     }
   })
 
@@ -544,16 +685,13 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
   const lastId = prevQ.rowCount ? Number(prevQ.rows[0].round_id) : null
   const prev = lastId
     ? await pool.query(
-        `SELECT user_name, bet, doubled, returned, side_pairs, side_213, COALESCE(side_returned, 0) AS side_returned FROM blackjack_live WHERE round_id = $1 AND returned IS NOT NULL
-         ORDER BY (returned + COALESCE(side_returned, 0) - bet * (CASE WHEN doubled THEN 2 ELSE 1 END) - side_pairs - side_213) DESC LIMIT 6`,
+        `SELECT user_name, returned + COALESCE(side_returned, 0) - COALESCE(staked, bet * (CASE WHEN doubled THEN 2 ELSE 1 END) + side_pairs + side_213) AS won
+         FROM blackjack_live WHERE round_id = $1 AND returned IS NOT NULL ORDER BY won DESC LIMIT 6`,
         [lastId],
       )
-    : { rows: [] as { user_name: string; bet: number; doubled: boolean; returned: number; side_pairs: number; side_213: number; side_returned: number }[] }
+    : { rows: [] as { user_name: string; won: number }[] }
   const winners = prev.rows
-    .map((p) => ({
-      name: String(p.user_name),
-      won: Number(p.returned) + Number(p.side_returned) - Number(p.bet) * (p.doubled ? 2 : 1) - Number(p.side_pairs) - Number(p.side_213),
-    }))
+    .map((p) => ({ name: String(p.user_name), won: Number(p.won) }))
     .filter((w) => w.won > 0)
 
   return {
@@ -567,8 +705,9 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
     seats,
     watchers,
     dealer,
-    dealerHidden: phase === 'play',
+    dealerHidden: phase === 'play' || phase === 'insurance',
     dealerValue: handValue(dealer),
+    dealerBlackjack: reveal && isNatural(dealerFull),
     lastRound: lastId ? { id: lastId, dealerValue: handValue(dealerHand(lastId)), winners } : null,
     balance: member ? await getBalance(member.id) : null,
   }

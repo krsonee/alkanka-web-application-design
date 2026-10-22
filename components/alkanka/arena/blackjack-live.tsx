@@ -12,8 +12,11 @@ import {
   Layers,
   Loader2,
   LogOut,
+  Flag,
   Play,
   Plus,
+  ShieldCheck,
+  Split,
   Trophy,
 } from "lucide-react";
 import type { ArenaGameSettings } from "@/lib/arena";
@@ -22,6 +25,7 @@ import type { BlackjackLiveState } from "@/lib/blackjack-live";
 import {
   actBlackjackTable,
   changeBlackjackBet,
+  insureBlackjackTable,
   joinBlackjackTable,
   leaveBlackjackTable,
   readyBlackjackTable,
@@ -50,15 +54,52 @@ const RESULT_LABEL: Record<string, string> = {
   win: "Kazandı",
   push: "Berabere",
   loss: "Kaybetti",
+  surrender: "Teslim",
 };
-/** Net gain for the hand including side bets; null until the hand is revealed. */
-function seatNet(seat: Seat) {
-  if (seat.delta === null) return null;
-  return seat.delta + seat.side.won - seat.side.pairs - seat.side.t213;
+/** Net gain for the whole seat (hands, insurance and side bets); null until the hand is revealed. */
+const seatNet = (seat: Seat) => seat.breakdown?.net ?? null;
+const signed = (n: number) => (n > 0 ? `+${formatAC(n)}` : n < 0 ? `-${formatAC(-n)}` : "±0");
+
+/** Main-hand verdict, independent of side bets, so a won hand never reads as "Kaybettin". */
+function mainVerdict(seat: Seat) {
+  if (seat.surrendered) return "Teslim oldun";
+  const main = seat.breakdown?.main ?? 0;
+  if (!seat.split && seat.hands[0]?.result === "blackjack") return "Blackjack!";
+  return main > 0 ? "Eli kazandın!" : main < 0 ? "Eli kaybettin" : "Berabere";
+}
+
+/** Line-by-line result so players can see where the net came from. */
+function Breakdown({ seat }: { seat: Seat }) {
+  const b = seat.breakdown;
+  if (!b) return null;
+  const lines = [
+    { label: seat.split ? "Eller (ayrılmış)" : "Ana el", v: b.main as number | null },
+    { label: seat.natural ? "Eşit para" : "Sigorta", v: b.insurance },
+    { label: "Mükemmel Çift", v: b.pairs },
+    { label: "21+3", v: b.t213 },
+  ].filter((l) => l.v !== null) as { label: string; v: number }[];
+  return (
+    <dl className="flex w-full max-w-xs flex-col gap-1 rounded-xl border border-primary/20 bg-background/60 px-3 py-2 text-xs">
+      {lines.map((l) => (
+        <div key={l.label} className="flex items-center justify-between gap-3">
+          <dt className="text-muted-foreground">{l.label}</dt>
+          <dd className={cn("font-bold tabular-nums", l.v > 0 ? "text-primary" : l.v < 0 ? "text-destructive" : "text-foreground")}>
+            {signed(l.v)}
+          </dd>
+        </div>
+      ))}
+      <div className="mt-0.5 flex items-center justify-between gap-3 border-t border-primary/15 pt-1">
+        <dt className="font-bold text-foreground">Net</dt>
+        <dd className={cn("font-black tabular-nums", b.net > 0 ? "text-primary" : b.net < 0 ? "text-destructive" : "text-foreground")}>
+          {signed(b.net)}
+        </dd>
+      </div>
+    </dl>
+  );
 }
 
 function ResultBanner({ seats }: { seats: (Seat | null)[] }) {
-  const played = seats.filter((s): s is Seat => !!s && s.delta !== null);
+  const played = seats.filter((s): s is Seat => !!s && s.breakdown !== null);
   if (played.length === 0) return null;
   const me = played.find((s) => s.mine);
   const base =
@@ -66,6 +107,8 @@ function ResultBanner({ seats }: { seats: (Seat | null)[] }) {
 
   if (me) {
     const net = seatNet(me)!;
+    const main = me.breakdown!.main;
+    const sides = net - main;
     const tone =
       net > 0
         ? "border-primary bg-background/95 shadow-primary/40"
@@ -77,24 +120,19 @@ function ResultBanner({ seats }: { seats: (Seat | null)[] }) {
         <span
           className={cn(
             "font-display text-xl font-black uppercase tracking-wide sm:text-3xl",
-            net > 0 ? "text-primary" : net < 0 ? "text-destructive" : "text-foreground",
+            main > 0 ? "text-primary" : main < 0 ? "text-destructive" : "text-foreground",
           )}
         >
-          {net > 0
-            ? me.result === "blackjack"
-              ? "Blackjack!"
-              : "Kazandın!"
-            : net < 0
-              ? "Kaybettin"
-              : "Berabere"}
+          {mainVerdict(me)}
         </span>
         <span className="text-base font-black tabular-nums text-foreground sm:text-xl">
-          {net > 0
-            ? `+${formatAC(net)}`
-            : net < 0
-              ? `-${formatAC(-net)}`
-              : "Bahsin iade edildi"}
+          Net {signed(net)}
         </span>
+        {sides !== 0 && (
+          <span className="text-[11px] font-semibold tabular-nums text-muted-foreground sm:text-xs">
+            El {signed(main)} · Ek bahisler {signed(sides)}
+          </span>
+        )}
       </div>
     );
   }
@@ -139,7 +177,12 @@ function dealerLine(
   seated: number,
   secondsLeft: number,
   dealerValue: number,
+  dealerBlackjack = false,
 ) {
+  if (phase === "insurance")
+    return `Açık kartım As. Sigorta ister misin? ${secondsLeft} saniye, sonra kapalı karta bakıyorum.`;
+  if (phase === "result" && dealerBlackjack)
+    return "Krupiye blackjack yaptı. Sigortalılar 2:1 alır, kimse kart çekmeden el bitti.";
   if (phase === "waiting")
     return "Masa boş kanka. Bahsini seç, koltuğa otur, kartları hemen dağıtayım!";
   if (phase === "bet")
@@ -292,25 +335,38 @@ function SeatPod({
       )}
       <div
         className={cn(
-          "relative flex min-h-12 justify-center -space-x-6 transition-[opacity,filter] duration-500 sm:min-h-14 sm:-space-x-5",
+          "flex min-h-12 justify-center gap-3 transition-[opacity,filter] duration-500 sm:min-h-14",
           lose && "bj-lose-shake opacity-45 grayscale",
+          seat.surrendered && "opacity-45 grayscale",
         )}
       >
-        {seat.cards.map((c, i) => (
-          <PlayingCard key={`${i}-${c.r}-${c.s}`} card={c} index={i} small />
-        ))}
-        {seat.cards.length > 0 && (
-          <span
+        {seat.hands.map((h, k) => (
+          <div
+            key={k}
+            aria-label={seat.split ? `${k + 1}. el, ${h.value}` : undefined}
             className={cn(
-              "absolute -right-2 -top-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums shadow",
-              seat.value > 21
-                ? "bg-destructive text-primary-foreground"
-                : "bg-foreground text-background",
+              "relative flex justify-center rounded-lg",
+              seat.split ? "-space-x-7 sm:-space-x-6" : "-space-x-6 sm:-space-x-5",
+              h.active && seat.split && "ring-2 ring-primary ring-offset-2 ring-offset-transparent",
+              seat.split && !h.active && phase === "play" && "opacity-70",
             )}
           >
-            {seat.value > 21 ? "Battı" : seat.value}
-          </span>
-        )}
+            {h.cards.map((c, i) => (
+              <PlayingCard key={`${i}-${c.r}-${c.s}`} card={c} index={i} small />
+            ))}
+            <span
+              className={cn(
+                "absolute -right-2 -top-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums shadow",
+                h.value > 21
+                  ? "bg-destructive text-primary-foreground"
+                  : "bg-foreground text-background",
+              )}
+            >
+              {h.value > 21 ? "Battı" : h.value}
+              {h.doubled && " ×2"}
+            </span>
+          </div>
+        ))}
       </div>
       <div
         className={cn(
@@ -344,7 +400,12 @@ function SeatPod({
         </span>
       </div>
       <SideBetTags side={seat.side} />
-      {seat.result ? (
+      {seat.insurance > 0 && phase !== "result" && (
+        <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-foreground">
+          Sigortalı {formatAC(seat.insurance)}
+        </span>
+      )}
+      {seat.breakdown ? (
         <span
           className={cn(
             "pop-in whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-black uppercase tabular-nums shadow",
@@ -355,24 +416,18 @@ function SeatPod({
                 : "bg-secondary text-foreground",
           )}
         >
-          {win
-            ? seat.result === "blackjack"
-              ? "Blackjack!"
-              : "Kazandı"
-            : lose
-              ? "Kaybetti"
-              : RESULT_LABEL.push}
-          {net !== null && net !== 0 && (
-            <>
-              {" "}
-              {win ? "+" : "-"}
-              {formatAC(Math.abs(net))}
-            </>
-          )}
+          {seat.split
+            ? seat.hands.map((h) => RESULT_LABEL[h.result ?? "push"]).join(" / ")
+            : RESULT_LABEL[seat.hands[0]?.result ?? "push"]}
+          {net !== null && net !== 0 && ` ${signed(net)}`}
+        </span>
+      ) : phase === "insurance" ? (
+        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+          {seat.insDecided ? "Karar verdi" : "Düşünüyor"}
         </span>
       ) : phase === "play" && seat.done ? (
         <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-          Durdu
+          {seat.surrendered ? "Teslim oldu" : "Durdu"}
         </span>
       ) : null}
     </div>
@@ -525,19 +580,33 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     mutate();
   }
 
-  async function changeBet(b: number) {
-    if (busy || !me || b === me.baseBet) return;
+  async function changeBet(b: number, s?: SideStakes) {
+    if (busy || !me) return;
+    if (b === me.baseBet && !s) return;
     setBusy(true);
     setError("");
-    const res = await changeBlackjackBet(b);
+    const res = await changeBlackjackBet(b, s);
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setBet(b);
+    if (s) setSide(s);
     setBalance(res.balance);
     mutate();
   }
 
-  async function act(a: "hit" | "stand" | "double") {
+  async function insure(take: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    const res = await insureBlackjackTable(take);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    playSound("tick");
+    setBalance(res.balance);
+    mutate();
+  }
+
+  async function act(a: "hit" | "stand" | "double" | "split" | "surrender") {
     if (busy) return;
     setBusy(true);
     setError("");
@@ -580,7 +649,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
       ? "Oyuncu bekleniyor"
       : phase === "bet"
         ? `Bahis · ${secondsLeft} sn`
-        : phase === "play"
+        : phase === "insurance"
+          ? `Sigorta · ${secondsLeft} sn`
+          : phase === "play"
           ? `Oyun · ${secondsLeft} sn`
           : "Sonuç";
 
@@ -624,7 +695,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
             aria-live="polite"
             className="rounded-xl border border-primary/30 bg-background/70 px-3 py-1.5 text-center text-xs font-semibold text-foreground sm:py-2 sm:text-sm"
           >
-            {dealerLine(phase, seated, secondsLeft, data.dealerValue)}
+            {dealerLine(phase, seated, secondsLeft, data.dealerValue, data.dealerBlackjack)}
           </p>
 
           <div className="mx-auto w-full max-w-[min(100%,58svh)] rounded-[999px] bg-wood p-2 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:max-w-none sm:p-3.5">
@@ -659,8 +730,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 </div>
                 {dealer.length > 0 && (
                   <span className="rounded-full bg-background/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground">
-                    Krupiye {data.dealerValue}
-                    {dealerHidden ? "+" : ""}
+                    {data.dealerBlackjack
+                      ? "Krupiye Blackjack"
+                      : `Krupiye ${data.dealerValue}${dealerHidden ? " · 1 kapalı" : ""}`}
                   </span>
                 )}
               </div>
@@ -678,7 +750,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   Al Kanka
                 </span>
                 <span className="text-pretty text-[9px] font-bold uppercase leading-relaxed tracking-[0.15em] text-primary/70 sm:text-[10px]">
-                  Blackjack 3:2 öder · Krupiye 17’de durur
+                  Blackjack 3:2 öder · Krupiye 17’de durur · Sigorta 2:1
                 </span>
               </div>
 
@@ -704,7 +776,44 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
         </div>
 
         <div className="flex flex-col items-center gap-2 px-2 pb-2 pt-3 sm:gap-3 sm:pt-4">
-          {myTurn ? (
+          {phase === "insurance" && me ? (
+            me.can.insure ? (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-center text-sm font-semibold text-foreground">
+                  {me.natural
+                    ? `Blackjack'in var! Eşit para alırsan krupiye ne açarsa açsın ${formatAC(me.baseBet)} kazanırsın.`
+                    : `Krupiyenin açık kartı As. Sigorta ${formatAC(Math.floor(me.baseBet / 2))}, krupiye blackjack yaparsa 2:1 öder.`}
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    disabled={busy || points < Math.floor(me.baseBet / 2)}
+                    onClick={() => insure(true)}
+                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50"
+                  >
+                    <ShieldCheck className="size-4" aria-hidden="true" />
+                    {me.natural ? "Eşit para al" : `Sigorta al · ${formatAC(Math.floor(me.baseBet / 2))}`}
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => insure(false)}
+                    className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50"
+                  >
+                    {me.natural ? "Hayır, oyna" : "Sigorta yok"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground">
+                Kararın alındı. Diğer oyuncular bekleniyor, sonra krupiye kapalı karta bakacak.
+              </p>
+            )
+          ) : myTurn ? (
+            <div className="flex flex-col items-center gap-2">
+              {me.split && (
+                <p className="text-center text-xs font-bold uppercase tracking-wide text-primary">
+                  {me.hands.findIndex((h) => h.active) + 1}. eli oynuyorsun
+                </p>
+              )}
             <div className="flex flex-wrap justify-center gap-2">
               <button
                 disabled={busy}
@@ -720,7 +829,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               >
                 <Hand className="size-4" aria-hidden="true" /> Dur
               </button>
-              {me.cards.length === 2 && points >= me.bet && (
+              {me.can.double && points >= me.baseBet && (
                 <button
                   disabled={busy}
                   onClick={() => act("double")}
@@ -729,6 +838,26 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   <Layers className="size-4" aria-hidden="true" /> İkiye katla
                 </button>
               )}
+              {me.can.split && points >= me.baseBet && (
+                <button
+                  disabled={busy}
+                  onClick={() => act("split")}
+                  className="flex items-center gap-2 rounded-xl border border-primary/50 bg-background/70 px-5 py-3 text-sm font-bold uppercase text-foreground disabled:opacity-50"
+                >
+                  <Split className="size-4" aria-hidden="true" /> İkiye ayır
+                </button>
+              )}
+              {me.can.surrender && (
+                <button
+                  disabled={busy}
+                  onClick={() => act("surrender")}
+                  title="Bahsinin yarısını geri alıp eli bırakırsın"
+                  className="flex items-center gap-2 rounded-xl border border-border bg-background/50 px-4 py-3 text-xs font-bold uppercase text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  <Flag className="size-4" aria-hidden="true" /> Teslim ol
+                </button>
+              )}
+            </div>
             </div>
           ) : phase === "bet" && me ? (
             <div className="flex flex-col items-center gap-2">
@@ -766,6 +895,10 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   </button>
                 ))}
               </div>
+              <SideBetPicker
+                value={{ pairs: me.side.pairs, t213: me.side.t213 }}
+                onChange={(s) => changeBet(me.baseBet, s)}
+              />
               <p className="text-center text-xs text-muted-foreground">
                 Koltuk {me.seat} senin, kalkana kadar her el burada oynarsın.
                 Basmazsan kartlar {secondsLeft} saniye sonra kendiliğinden
@@ -829,19 +962,24 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                     : "Masadaki boş bir koltuğa dokunup yerini seç, ya da direkt otur, ilk boş koltuk senin."}
               </p>
             </div>
+          ) : phase === "result" && me?.breakdown ? (
+            <div className="flex w-full flex-col items-center gap-2">
+              <Breakdown seat={me} />
+              {!me.leaving && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Koltuğun seni bekliyor, yeni el aynı bahislerle başlıyor. Bahis süresinde değiştirebilirsin.
+                </p>
+              )}
+            </div>
           ) : (
             <p className="text-center text-sm text-muted-foreground">
               {me
                 ? phase === "play"
-                  ? "Elin tamam, diğer oyuncular bekleniyor."
-                  : me.delta !== null && me.delta > 0
-                    ? `Tebrikler, +${formatAC(me.delta)} kazandın!`
-                    : me.delta === 0
-                      ? "Berabere, bahsin iade edildi."
-                      : "Bu el krupiyenin."
+                  ? me.surrendered
+                    ? "Teslim oldun, bahsinin yarısı iade edilecek."
+                    : "Elin tamam, diğer oyuncular bekleniyor."
+                  : "Bu el krupiyenin."
                 : "Bu eli izliyorsun. Bahis süresi açılınca boş koltuğa oturabilirsin."}
-              {me && phase === "result" && !me.leaving &&
-                " Koltuğun seni bekliyor, yeni el aynı bahisle başlıyor."}
             </p>
           )}
           {me && (

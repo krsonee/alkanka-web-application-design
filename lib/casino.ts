@@ -342,7 +342,9 @@ export const BJ_BET_MS = 8_000
 export const BJ_JOIN_GRACE_MS = 3_000
 export const BJ_PLAY_MS = 20_000
 export const BJ_RESULT_MS = 5_000
-export type BlackjackPhase = 'waiting' | 'bet' | 'play' | 'result'
+/** Only runs when the dealer's up card is an Ace: everyone decides on insurance before the dealer peeks. */
+export const BJ_INS_MS = 8_000
+export type BlackjackPhase = 'waiting' | 'bet' | 'insurance' | 'play' | 'result'
 
 /** Optional side bets on the live table. 0 means the side bet is off. */
 export const BJ_SIDE_STAKES = [0, 10, 25, 50]
