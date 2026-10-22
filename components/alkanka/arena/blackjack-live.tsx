@@ -209,8 +209,29 @@ const SEAT_POS: { m: [number, number]; d: [number, number] }[] = [
   { m: [63, 87], d: [91, 47] },
 ];
 
+/**
+ * Mobile slots by offset from the player's own seat, so on a phone you always sit bottom-centre
+ * and the other five seats wrap around you towards the dealer.
+ */
+const MOBILE_SLOTS: [number, number][] = [
+  [50, 80],
+  [23, 73],
+  [12, 46],
+  [17, 20],
+  [88, 46],
+  [77, 73],
+];
+
+/** On phones the decision buttons dock just above the bottom nav so the thumb never has to hunt for them. */
+const MOBILE_BAR =
+  "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-[calc(4rem+env(safe-area-inset-bottom))] max-sm:z-40 max-sm:border-t max-sm:border-primary/40 max-sm:bg-background/95 max-sm:px-3 max-sm:py-3 max-sm:shadow-[0_-12px_30px_-10px_rgb(0_0_0/0.6)] max-sm:backdrop-blur-md";
+
+const CHIP_ROW =
+  "grid w-full grid-cols-4 justify-items-center gap-2 px-1 py-1 sm:flex sm:w-auto sm:flex-wrap sm:justify-center";
+
 function SeatPod({
   index,
+  anchor,
   seat,
   phase,
   selectable = false,
@@ -218,6 +239,7 @@ function SeatPod({
   onSelect,
 }: {
   index: number;
+  anchor: number;
   seat: Seat | null;
   phase: string;
   selectable?: boolean;
@@ -225,9 +247,10 @@ function SeatPod({
   onSelect?: (seat: number) => void;
 }) {
   const pos = SEAT_POS[index];
+  const mobile = MOBILE_SLOTS[(index - anchor + 6) % 6];
   const style = {
-    "--mx": `${pos.m[0]}%`,
-    "--my": `${pos.m[1]}%`,
+    "--mx": `${mobile[0]}%`,
+    "--my": `${mobile[1]}%`,
     "--dx": `${pos.d[0]}%`,
     "--dy": `${pos.d[1]}%`,
   } as React.CSSProperties;
@@ -725,8 +748,8 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
             {dealerLine(phase, seated, secondsLeft, data.dealerValue, data.dealerBlackjack)}
           </p>
 
-          <div className="mx-auto w-full max-w-[min(100%,58svh)] rounded-[999px] bg-wood p-2 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:max-w-none sm:p-3.5">
-            <div className="felt-table relative mx-auto aspect-square w-full rounded-[999px] border-2 border-primary/40 sm:aspect-[16/9]">
+          <div className="mx-auto w-full rounded-t-[2.5rem] rounded-b-[9rem] bg-wood p-2 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:rounded-[999px] sm:p-3.5">
+            <div className="felt-table relative mx-auto aspect-[6/5] w-full rounded-t-[2rem] rounded-b-[8.5rem] border-2 border-primary/40 sm:aspect-[16/9] sm:rounded-[999px]">
               <TableBrand corners={false} jako={false} />
               <div
                 className="pointer-events-none absolute right-[9%] top-[13%] flex flex-col items-center gap-0.5 sm:right-[14%] sm:top-[9%]"
@@ -740,7 +763,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 <span className="text-[9px] font-bold uppercase tracking-wider text-primary/80 sm:text-[10px]">6 deste</span>
               </div>
               <div
-                className="pointer-events-none absolute inset-3 rounded-[999px] border border-primary/15 sm:inset-5"
+                className="pointer-events-none absolute inset-3 rounded-t-[1.5rem] rounded-b-[7.5rem] border border-primary/15 sm:inset-5 sm:rounded-[999px]"
                 aria-hidden="true"
               />
 
@@ -777,7 +800,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
               <div
                 className={cn(
-                  "pointer-events-none absolute left-1/2 top-[56%] flex w-[40%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 text-center transition-opacity sm:top-[50%] sm:w-[34%]",
+                  "pointer-events-none absolute left-1/2 top-[47%] flex w-[44%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 text-center transition-opacity sm:top-[50%] sm:w-[34%]",
                   phase === "result" && "opacity-0",
                 )}
               >
@@ -793,6 +816,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 <SeatPod
                   key={i}
                   index={i}
+                  anchor={me ? me.seat - 1 : 0}
                   seat={s}
                   phase={phase}
                   selectable={canPick}
@@ -816,7 +840,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           )}
           {phase === "insurance" && me ? (
             me.can.insure ? (
-              <div className="flex flex-col items-center gap-2">
+              <div className={cn("flex flex-col items-center gap-2", MOBILE_BAR)}>
                 <p className="text-center text-sm font-semibold text-foreground">
                   {me.natural
                     ? `Blackjack'in var! Eşit para alırsan krupiye ne açarsa açsın ${formatAC(me.baseBet)} kazanırsın.`
@@ -846,13 +870,13 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               </p>
             )
           ) : myTurn ? (
-            <div className="flex flex-col items-center gap-2">
+            <div className={cn("flex flex-col items-center gap-2", MOBILE_BAR)}>
               {me.split && (
                 <p className="text-center text-xs font-bold uppercase tracking-wide text-primary">
                   {me.hands.findIndex((h) => h.active) + 1}. eli oynuyorsun
                 </p>
               )}
-            <div className="flex flex-wrap justify-center gap-2">
+            <div className="flex w-full flex-wrap justify-center gap-2 max-sm:[&>button]:grow max-sm:[&>button]:basis-[calc(50%-0.25rem)] max-sm:[&>button]:justify-center">
               <button
                 disabled={busy}
                 onClick={() => act("hit")}
@@ -916,7 +940,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 </button>
               )}
               <div
-                className="flex max-w-full gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] sm:flex-wrap sm:justify-center"
+                className={CHIP_ROW}
                 role="radiogroup"
                 aria-label="Bu elin bahsi"
               >
@@ -937,7 +961,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 value={{ pairs: me.side.pairs, t213: me.side.t213 }}
                 onChange={(s) => changeBet(me.baseBet, s)}
               />
-              <p className="text-center text-xs text-muted-foreground">
+              <p className="w-full text-pretty px-2 text-center text-xs leading-relaxed text-muted-foreground">
                 Koltuk {me.seat} senin, kalkana kadar her el burada oynarsın.
                 Basmazsan kartlar {secondsLeft} saniye sonra kendiliğinden
                 dağıtılır.
@@ -951,7 +975,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 Ana bahis
               </span>
               <div
-                className="flex max-w-full gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] sm:flex-wrap sm:justify-center"
+                className={CHIP_ROW}
                 role="radiogroup"
                 aria-label="Bahis"
               >
