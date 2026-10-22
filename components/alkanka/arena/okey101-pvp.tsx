@@ -311,14 +311,14 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         onClick={() => selected != null && (swap ? swapJoker(selected, m.id) : addTile(selected, m.id))}
         aria-label={`${nameOf(m.owner)} peri${swap ? ', gerçek taşı koyup okeyi al' : fits ? ', seçili taşı buraya işle' : ''}`}
         className={cn(
-          'relative flex shrink-0 gap-px rounded-md bg-background/30 p-0.5 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 disabled:cursor-default sm:p-1',
+          'relative flex shrink-0 gap-px rounded bg-background/30 p-px shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 disabled:cursor-default sm:p-1',
           fits && 'cursor-pointer ring-2 ring-primary hover:-translate-y-0.5 hover:bg-primary/25',
           hovered && 'scale-105 bg-primary/30 ring-4 ring-primary',
           dimmed && 'opacity-40',
         )}
       >
         {fits && (
-          <span className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-1.5 text-[9px] font-bold uppercase leading-4 text-primary-foreground shadow">
+          <span className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-1.5 text-[8px] font-bold uppercase leading-3 sm:text-[9px] sm:leading-4 text-primary-foreground shadow">
             {swap ? 'Okeyi al' : 'İşle'}
           </span>
         )}
@@ -445,26 +445,26 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         </div>
 
         {owners.length > 0 && (
-          <section className="relative z-10 flex flex-col gap-2 border-t border-foreground/10 bg-background/30 p-2 sm:p-3" aria-label="Yerdeki perler">
+          <section className="relative z-10 flex flex-col gap-1 border-t border-foreground/10 bg-background/30 p-1.5 sm:gap-2 sm:p-3" aria-label="Yerdeki perler">
             {owners.map((seat) => {
               const own = s.melds.filter((m) => m.owner === seat)
               return (
                 <div
                   key={seat}
                   className={cn(
-                    'flex flex-col gap-1 rounded-xl p-2',
+                    'flex flex-col gap-0.5 rounded-lg px-1.5 py-1 sm:gap-1 sm:rounded-xl sm:p-2',
                     seat === mySeat ? 'bg-primary/10 ring-1 ring-primary/40' : seat === partner ? 'bg-foreground/5 ring-1 ring-foreground/15' : 'bg-background/25',
                   )}
                 >
-                  <p className="flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-wider">
-                    <span className={cn('truncate', seat === mySeat ? 'text-primary' : 'text-foreground')}>
+                  <p className="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-wider sm:text-[11px]">
+                    <span className={cn('truncate', seat === mySeat ? 'text-primary' : 'text-foreground/80')}>
                       {seat === mySeat ? 'Senin perlerin' : nameOf(seat)}
                     </span>
-                    <span className="shrink-0 text-foreground/60">
+                    <span className="shrink-0 text-foreground/50">
                       {s.opened[seat] === 'cift' ? 'Çifte gitti' : 'Açtı'} · {own.length} per
                     </span>
                   </p>
-                  <div className="flex flex-wrap gap-x-2 gap-y-3 pt-2">{own.map(renderMeld)}</div>
+                  <div className="flex flex-wrap gap-x-1.5 gap-y-2 pt-1.5 sm:gap-x-2 sm:gap-y-3 sm:pt-2">{own.map(renderMeld)}</div>
                 </div>
               )
             })}
@@ -673,7 +673,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 }
 
 function MeldTile({ tile, okey }: { tile: Tile; okey: OkeyValue }) {
-  return <TileFace tile={tile} okey={okey} size="sm" />
+  return <TileFace tile={tile} okey={okey} size="mini" />
 }
 
 function SeatPill({
