@@ -89,11 +89,12 @@ function Cell({ kind, value, style, className, children, c }: { kind: BetKind; v
       aria-label={`${betLabel({ kind, value })}${amount ? `, bahsin ${amount}` : ''}`}
       style={style}
       className={cn(
-        'relative flex min-h-0 min-w-0 items-center justify-center border border-foreground/35 p-0 font-display font-bold text-foreground transition-colors',
-        'enabled:hover:bg-foreground/15 disabled:cursor-not-allowed',
-        lit && 'bg-foreground/20',
-        won && 'z-10 bg-primary/40 ring-2 ring-inset ring-primary',
+        'relative flex min-h-0 min-w-0 items-center justify-center p-0 font-display font-bold text-foreground transition-[filter,box-shadow,color]',
+        'enabled:hover:brightness-125 disabled:cursor-not-allowed',
+        lit && 'brightness-150',
         className,
+        won && 'z-10 text-primary ring-2 ring-inset ring-primary shadow-[0_0_14px_var(--primary)]',
+        won && kind === 'number' && 'text-foreground',
       )}
     >
       {children}
@@ -220,10 +221,12 @@ const OUTSIDE: { kind: BetKind; text: ReactNode }[] = [
 ]
 const numBg = (n: number) => ({ background: n === 0 ? 'var(--rl-green)' : RED.has(n) ? 'var(--rl-red)' : 'var(--rl-black)' })
 
+const H_LINE = 'border border-foreground/35'
+
 function HorizontalLayout({ c }: { c: Ctx }) {
   return (
     <div className="hidden grid-cols-[3rem_minmax(0,1fr)_3rem] overflow-hidden rounded-lg border-2 border-foreground/50 md:grid">
-      <Cell c={c} kind="number" value={0} style={numBg(0)} className="rounded-l-[2rem] text-sm">
+      <Cell c={c} kind="number" value={0} style={numBg(0)} className={cn(H_LINE, 'rounded-l-[2rem] text-sm')}>
         0
       </Cell>
       <div className="relative grid grid-cols-12 grid-rows-3">
@@ -231,7 +234,7 @@ function HorizontalLayout({ c }: { c: Ctx }) {
           Array.from({ length: 12 }, (_, i) => {
             const n = hNum(i, r)
             return (
-              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className="h-14 text-sm">
+              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={cn(H_LINE, 'h-14 text-sm')}>
                 {n}
               </Cell>
             )
@@ -241,21 +244,21 @@ function HorizontalLayout({ c }: { c: Ctx }) {
       </div>
       <div className="grid grid-rows-3">
         {[3, 2, 1].map((col) => (
-          <Cell key={col} c={c} kind="column" value={col} className="text-xs">
+          <Cell key={col} c={c} kind="column" value={col} className={cn(H_LINE, 'text-xs')}>
             2:1
           </Cell>
         ))}
       </div>
       <div className="col-start-2 grid grid-cols-3">
         {[1, 2, 3].map((d) => (
-          <Cell key={d} c={c} kind="dozen" value={d} className="h-11 text-sm">
+          <Cell key={d} c={c} kind="dozen" value={d} className={cn(H_LINE, 'h-11 text-sm')}>
             {d}. 12
           </Cell>
         ))}
       </div>
       <div className="col-start-2 grid grid-cols-6">
         {OUTSIDE.map((o) => (
-          <Cell key={o.kind} c={c} kind={o.kind} className="h-11 text-sm">
+          <Cell key={o.kind} c={c} kind={o.kind} className={cn(H_LINE, 'h-11 text-sm')}>
             {o.text}
           </Cell>
         ))}
@@ -264,32 +267,20 @@ function HorizontalLayout({ c }: { c: Ctx }) {
   )
 }
 
+const V_OUTSIDE = 'rounded-md bg-background/55 ring-1 ring-inset ring-foreground/15'
+
 function VerticalLayout({ c }: { c: Ctx }) {
   return (
-    <div className="grid grid-cols-[2.5rem_2.25rem_minmax(0,1fr)] overflow-hidden rounded-lg border-2 border-foreground/50 md:hidden">
-      <Cell c={c} kind="number" value={0} style={numBg(0)} className="col-start-3 h-11 rounded-t-[1.5rem] text-base">
+    <div className="flex flex-col gap-1 rounded-2xl bg-felt p-1.5 shadow-lg ring-1 ring-primary/30 md:hidden">
+      <Cell c={c} kind="number" value={0} style={numBg(0)} className="h-10 rounded-b-md rounded-t-2xl text-lg">
         0
       </Cell>
-      <div className="col-start-1 grid grid-rows-6">
-        {OUTSIDE.map((o) => (
-          <Cell key={o.kind} c={c} kind={o.kind} className="text-[11px] [writing-mode:vertical-rl]">
-            {o.text}
-          </Cell>
-        ))}
-      </div>
-      <div className="grid grid-rows-3">
-        {[1, 2, 3].map((d) => (
-          <Cell key={d} c={c} kind="dozen" value={d} className="text-xs [writing-mode:vertical-rl]">
-            {d}. 12
-          </Cell>
-        ))}
-      </div>
-      <div className="relative grid grid-cols-3 grid-rows-12">
+      <div className="relative grid grid-cols-3 gap-1">
         {Array.from({ length: 12 }, (_, i) =>
           [0, 1, 2].map((j) => {
             const n = vNum(i, j)
             return (
-              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className="h-10 text-base">
+              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className="h-8 rounded-md text-base shadow-sm">
                 {n}
               </Cell>
             )
@@ -297,10 +288,24 @@ function VerticalLayout({ c }: { c: Ctx }) {
         )}
         <Spots c={c} defs={V_SPOTS} />
       </div>
-      <div className="col-start-3 grid grid-cols-3">
+      <div className="grid grid-cols-3 gap-1">
         {[1, 2, 3].map((col) => (
-          <Cell key={col} c={c} kind="column" value={col} className="h-10 text-xs">
+          <Cell key={col} c={c} kind="column" value={col} className={cn(V_OUTSIDE, 'h-8 text-xs')}>
             2:1
+          </Cell>
+        ))}
+      </div>
+      <div className="mt-1 grid grid-cols-3 gap-1">
+        {[1, 2, 3].map((d) => (
+          <Cell key={d} c={c} kind="dozen" value={d} className={cn(V_OUTSIDE, 'h-10 text-sm')}>
+            {`${12 * d - 11}-${12 * d}`}
+          </Cell>
+        ))}
+      </div>
+      <div className="grid grid-cols-6 gap-1">
+        {OUTSIDE.map((o) => (
+          <Cell key={o.kind} c={c} kind={o.kind} className={cn(V_OUTSIDE, 'h-10 text-xs')}>
+            {o.text}
           </Cell>
         ))}
       </div>
