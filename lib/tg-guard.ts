@@ -285,7 +285,7 @@ async function screenNewcomer(hub: HubConfig, token: string, chatId: number | st
 export async function handleJoinRequest(botId: number, r: TgJoinRequest) {
   await ensureGuardTables()
   const hub = await getHub()
-  if (!hub.groups.some((g) => g.chatId === String(r.chat.id))) return
+  if (!(await isProtectedChat(hub, r.chat.id))) return
   const token = await botToken(botId)
   const reason = await screenNewcomer(hub, token, r.chat.id, r.chat.title ?? '', r.from)
   if (reason) {
@@ -727,12 +727,21 @@ async function recordMessage(hub: HubConfig, m: GuardMsg, textHash: string | nul
     ON CONFLICT (chat_id, message_id) DO NOTHING`)
 }
 
+/** The site's chat group is always protected, even if it was never added to the guard list. */
+async function isProtectedChat(hub: HubConfig, chatId: number | string) {
+  const id = String(chatId)
+  if (hub.groups.some((g) => g.chatId === id)) return true
+  const { getChatConfig } = await import('@/lib/telegram-chat')
+  const chat = await getChatConfig().catch(() => null)
+  return chat?.chatId === id
+}
+
 /** Returns true when the message was removed and should not reach other handlers. */
 export async function guardMessage(botId: number, raw: TgMessage, edited: boolean): Promise<boolean> {
   await ensureGuardTables()
   const hub = await getHub()
   const m = raw as GuardMsg
-  if (!hub.groups.some((g) => g.chatId === String(m.chat.id))) return false
+  if (!(await isProtectedChat(hub, m.chat.id))) return false
   const token = await botToken(botId)
   const g = hub.guard
 
@@ -794,23 +803,25 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
   const textHash = text ? createHash('sha1').update(normalizeText(text)).digest('hex').slice(0, 16) : null
 
   if (!trust.trusted) {
+    // Record first: a burst arrives as parallel webhooks, so counting before inserting lets every message see zero.
+    await recordMessage(hub, m, textHash)
     const [flood] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_guard_msgs
       WHERE chat_id = ${String(m.chat.id)} AND tg_id = ${m.from.id} AND created_at > now() - make_interval(secs => ${g.floodSeconds})`)
-    if (Number(flood.n) + 1 >= g.floodCount) {
+    if (Number(flood.n) >= g.floodCount) {
       await del(token, m.chat.id, m.message_id)
       await mute(token, m.chat.id, m.from.id, g.floodMuteMinutes).catch(() => null)
       await adjustTrust(m.from.id, -10)
       await notice(token, m.chat.id, `${short(m.from)} çok hızlı yazdığı için ${g.floodMuteMinutes} dakika susturuldu.`)
-      await modLog({ chatId: m.chat.id, chatTitle: m.chat.title, user: m.from, action: `Susturuldu (${g.floodMuteMinutes} dk)`, reason: `Flood: ${g.floodSeconds} sn içinde ${Number(flood.n) + 1} mesaj` })
+      await modLog({ chatId: m.chat.id, chatTitle: m.chat.title, user: m.from, action: `Susturuldu (${g.floodMuteMinutes} dk)`, reason: `Flood: ${g.floodSeconds} sn içinde ${flood.n} mesaj` })
       return true
     }
     if (textHash && g.repeatLimit > 1) {
       const [rep] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_guard_msgs
         WHERE tg_id = ${m.from.id} AND text_hash = ${textHash} AND created_at > now() - interval '10 minutes'`)
-      if (Number(rep.n) + 1 >= g.repeatLimit) {
+      if (Number(rep.n) >= g.repeatLimit) {
         await del(token, m.chat.id, m.message_id)
         await mute(token, m.chat.id, m.from.id, g.floodMuteMinutes).catch(() => null)
-        await modLog({ chatId: m.chat.id, chatTitle: m.chat.title, user: m.from, action: `Susturuldu (${g.floodMuteMinutes} dk)`, reason: `Aynı mesajı ${Number(rep.n) + 1} kez tekrarladı` })
+        await modLog({ chatId: m.chat.id, chatTitle: m.chat.title, user: m.from, action: `Susturuldu (${g.floodMuteMinutes} dk)`, reason: `Aynı mesajı ${rep.n} kez tekrarladı` })
         return true
       }
     }

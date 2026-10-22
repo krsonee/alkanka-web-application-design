@@ -14,6 +14,17 @@ const done = (message: string): Result => {
   return { ok: true, message }
 }
 
+export async function repairTelegramAction(): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const { repairTelegram } = await import('@/lib/tg-health')
+    const fixes = await repairTelegram()
+    return done(fixes.length ? `Düzeltildi: ${fixes.join(' · ')}` : 'Her şey yolunda, düzeltilecek bir şey bulunmadı.')
+  } catch (error) {
+    return fail(error)
+  }
+}
+
 async function siteOrigin() {
   const h = await headers()
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? h.get('x-forwarded-host') ?? h.get('host') ?? ''

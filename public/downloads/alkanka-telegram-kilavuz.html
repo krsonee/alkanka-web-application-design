@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AL Kanka · Telegram Merkezi ve Botlar Kurulum Kılavuzu</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#ffffff; --ink:#14171c; --muted:#5b6472; --brand:#c99a2e; --tg:#2aabee; --line:#e3e6eb; --warn:#b42318; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:880px; margin:0 auto; padding:32px 20px 80px; display:flex; flex-direction:column; gap:20px; }
+  header.top { background:var(--ink); color:#fff; border-radius:16px; padding:28px; display:flex; flex-direction:column; gap:8px; }
+  header.top h1 { margin:0; font-size:28px; line-height:1.2; }
+  header.top p { margin:0; color:#c9ced6; }
+  header.top .tag { color:var(--brand); font-weight:700; letter-spacing:.06em; font-size:12px; text-transform:uppercase; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:10px; }
+  h2 { margin:0; font-size:21px; display:flex; gap:10px; align-items:center; }
+  h2 .n { background:var(--brand); color:var(--ink); border-radius:8px; padding:2px 9px; font-size:15px; }
+  h3 { margin:10px 0 0; font-size:17px; }
+  p, li { margin:0; }
+  ol, ul { margin:0; padding-left:22px; display:flex; flex-direction:column; gap:6px; }
+  code, kbd { background:#eef1f5; border:1px solid var(--line); border-radius:6px; padding:1px 6px; font:14px ui-monospace,Consolas,monospace; }
+  .path { display:inline-block; background:#fff6e0; border:1px solid #f0d99c; border-radius:8px; padding:2px 8px; font-weight:600; font-size:14px; }
+  .box { border-radius:10px; padding:12px 14px; border:1px solid var(--line); background:#f9fafb; }
+  .box.tip { border-color:#bfe3f7; background:#eef8fe; }
+  .box.warn { border-color:#f3c4bf; background:#fef3f2; }
+  .box.warn strong { color:var(--warn); }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#f3f5f8; }
+  nav ol { columns:2; display:block; }
+  nav li { margin-bottom:4px; }
+  a { color:#1570b8; }
+  @media print { body { background:#fff; } section { break-inside:avoid; } nav ol { columns:1; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="top">
+  <span class="tag">AL Kanka · Panel Kılavuzu</span>
+  <h1>Telegram Merkezi ve Botlar: Sıfırdan Kurulum</h1>
+  <p>Hiç bilmeyen biri bile adım adım takip edip kurabilsin diye yazıldı. Sırayla git, adım atlama.</p>
+</header>
+
+<nav>
+<section>
+  <h2>İçindekiler</h2>
+  <ol>
+    <li><a href="#temel">Önce bilmen gereken 5 şey</a></li>
+    <li><a href="#botfather">BotFather'dan bot açmak</a></li>
+    <li><a href="#yetki">Botu grup/kanala yönetici yapmak</a></li>
+    <li><a href="#id">Grup ve kanal ID'sini bulmak</a></li>
+    <li><a href="#ekle">Botu panele eklemek (Bağlantı &amp; Cron)</a></li>
+    <li><a href="#plan">Hangi bot hangi işi yapacak</a></li>
+    <li><a href="#merkez">Telegram Merkezi: Kurulum</a></li>
+    <li><a href="#bekci">Bekçi (güvenlik)</a></li>
+    <li><a href="#destek">Destek botu ve biletler</a></li>
+    <li><a href="#oto">Oto Cevap</a></li>
+    <li><a href="#sayac">Sayaç (haftalık liderlik)</a></li>
+    <li><a href="#temizlik">Temizlik</a></li>
+    <li><a href="#dm">DM Duyuru</a></li>
+    <li><a href="#ozet">Özet &amp; Kayıtlar</a></li>
+    <li><a href="#sohbet">Canlı Sohbet</a></li>
+    <li><a href="#oran">Özel Oran Botu</a></li>
+    <li><a href="#tv">KankaTV Gol Botu ve Canlı Etkinlik</a></li>
+    <li><a href="#bildirim">Bildirim Botu (onaylar)</a></li>
+    <li><a href="#paylasim">Post Paylaşım</a></li>
+    <li><a href="#davet">Davet linkleri ve Kanallar</a></li>
+    <li><a href="#sorun">Bir şey çalışmıyorsa</a></li>
+    <li><a href="#kontrol">Son kontrol listesi</a></li>
+  </ol>
+</section>
+</nav>
+
+<section id="temel">
+  <h2><span class="n">1</span> Önce bilmen gereken 5 şey</h2>
+  <ol>
+    <li><strong>Panelin yeri:</strong> <span class="path">alkanka.com/panel → soldaki menüden Telegram → Telegram botları</span>. Bu kılavuzdaki her şey bu sayfanın üstündeki sekmelerde.</li>
+    <li><strong>Sekmelerin yanındaki nokta:</strong> Yeşil nokta "bağlı ve çalışıyor", kırmızı nokta "kurulmadı ya da hata var" demek. Hedefin bütün kullandığın sekmeleri yeşile çevirmek.</li>
+    <li><strong>Bir bot, tek bir "dinleme" işi yapar.</strong> Telegram'da bir botun mesajları sadece tek bir adrese gönderilebilir (buna webhook denir). Yani Özel Oran botunu Bekçi olarak, KankaTV botunu Destek olarak kullanamazsın. <strong>Her ana iş için ayrı bot aç.</strong> Bot açmak bedava ve 1 dakika sürüyor.</li>
+    <li><strong>Silme yetkisi BotFather'dan gelmez.</strong> BotFather'da açılacak bir "silme özelliği" yok. Bot, mesajları sadece <strong>grupta ya da kanalda yönetici</strong> olduğunda ve "Mesajları sil" izni açıkken silebilir.</li>
+    <li><strong>Takıldığında ilk iş:</strong> <span class="path">Telegram Merkezi → Kurulum → Sistem kontrolü → Kontrol et ve onar</span> düğmesine bas. Silinip yeniden eklenmiş botlardan kalan bozuk ayarları ve yanlış yere bağlanmış bağlantıları kendisi düzeltir.</li>
+  </ol>
+</section>
+
+<section id="botfather">
+  <h2><span class="n">2</span> BotFather'dan bot açmak</h2>
+  <ol>
+    <li>Telegram'da arama kısmına <code>@BotFather</code> yaz. Yanında mavi tik olanı aç ve <kbd>Başlat</kbd>'a bas.</li>
+    <li><code>/newbot</code> yazıp gönder.</li>
+    <li>Botun görünen adını yaz (ör. <code>AL Kanka Bekçi</code>).</li>
+    <li>Kullanıcı adını yaz. Sonu mutlaka <code>bot</code> ile bitmeli (ör. <code>alkankabekcibot</code>).</li>
+    <li>BotFather sana <code>123456789:AAH...</code> gibi uzun bir kod verir. Bu, <strong>botun şifresi (token)</strong>. Kimseyle paylaşma. Bunu kopyala, panele yapıştıracaksın.</li>
+  </ol>
+  <h3>Grupta çalışacak botlar için iki ayar (Bekçi, Sayaç, Post Paylaşım)</h3>
+  <ol>
+    <li>BotFather'a <code>/setprivacy</code> yaz → botunu seç → <strong>Disable</strong>'a bas. Bot böylece gruptaki bütün mesajları görür. Bu yapılmazsa bot sadece kendisine yazılan komutları görür ve küfür ya da spam yakalayamaz.</li>
+    <li><code>/setjoingroups</code> → botunu seç → <strong>Enable</strong>. Böylece bot gruplara eklenebilir.</li>
+  </ol>
+  <div class="box tip">Privacy ayarını değiştirdikten sonra botu gruptan <strong>çıkarıp tekrar ekle</strong>. Telegram yeni ayarı ancak böyle uyguluyor.</div>
+  <h3>İsteğe bağlı güzellikler</h3>
+  <ul>
+    <li><code>/setuserpic</code>: bota AL Kanka logosunu yükle.</li>
+    <li><code>/setdescription</code>: bota ilk kez girenin göreceği tanıtım yazısı (ör. "AL Kanka destek hattı, sorununu yaz").</li>
+  </ul>
+</section>
+
+<section id="yetki">
+  <h2><span class="n">3</span> Botu grup ya da kanala yönetici yapmak</h2>
+  <h3>Grup için</h3>
+  <ol>
+    <li>Grubu aç → üstte grubun adına bas → <kbd>Düzenle</kbd> (kalem) → <kbd>Yöneticiler</kbd> → <kbd>Yönetici ekle</kbd>.</li>
+    <li>Botun kullanıcı adını ara (ör. <code>@alkankabekcibot</code>) ve seç.</li>
+    <li>Şu izinleri <strong>açık</strong> bırak: <em>Mesajları sil</em>, <em>Kullanıcıları yasakla</em>, <em>Kullanıcı davet et (link ile)</em>, <em>Mesaj sabitle</em>. Kaydet.</li>
+  </ol>
+  <h3>Kanal için</h3>
+  <ol>
+    <li>Kanalı aç → kanal adına bas → <kbd>Düzenle</kbd> → <kbd>Yöneticiler</kbd> → <kbd>Yönetici ekle</kbd> → botu seç.</li>
+    <li>Şu izinleri aç: <em>Mesaj gönder</em>, <em>Başkalarının mesajlarını düzenle</em>, <em>Başkalarının mesajlarını sil</em>. Kaydet.</li>
+  </ol>
+  <div class="box warn"><strong>Dikkat:</strong> Panelde "Bot bu grupta değil" ya da "Botun silme yetkisi yok" diye bir hata görürsen sebebi hep buradaki adımlar. Botu yönetici yapmadan panelde hiçbir şey çalışmaz.</div>
+</section>
+
+<section id="id">
+  <h2><span class="n">4</span> Grup ve kanal ID'sini bulmak</h2>
+  <p>Panel, grubu şu iki şekilde kabul eder:</p>
+  <ul>
+    <li><strong>Herkese açık grup ya da kanal:</strong> <code>@alkankacom</code> şeklinde adını ya da <code>https://t.me/alkankacom</code> linkini yazman yeter.</li>
+    <li><strong>Gizli grup:</strong> Bunun için <code>-100</code> ile başlayan sayı ID'si lazım. Bulmak için:
+      <ol>
+        <li>Telegram'da <code>@RawDataBot</code>'u (ya da <code>@getidsbot</code>'u) gruba geçici olarak ekle.</li>
+        <li>Bot gruba hemen bir mesaj atar. O mesajda <code>"chat": {"id": -1001234567890</code> yazan kısımdaki sayı grubun ID'si.</li>
+        <li>Sayıyı kopyala, botu gruptan çıkar.</li>
+      </ol>
+    </li>
+  </ul>
+  <div class="box tip"><strong>Kendi Telegram ID'n</strong> için <code>@userinfobot</code>'a "merhaba" yazman yeter, sana ID'ni söyler. Bir kişinin ID'si de log grubundaki her kaydın yanında yazar.</div>
+</section>
+
+<section id="ekle">
+  <h2><span class="n">5</span> Botu panele eklemek</h2>
+  <p>Bütün botlar panele tek bir yerden eklenir: <span class="path">Telegram botları → Bağlantı &amp; Cron</span></p>
+  <ol>
+    <li><strong>Bot ekle</strong> kutusuna BotFather'ın verdiği token'ın tamamını yapıştır → <kbd>Ekle</kbd>. "@botadi bağlandı" yazısını görmelisin.</li>
+    <li><strong>Hedef kanal ekle:</strong> Botun post atacağı kanalları buraya eklersin. Botu seç → kanalın @adını ya da -100 ID'sini yaz → <kbd>Ekle</kbd> → <kbd>Test</kbd>'e bas. Kanala test mesajı düşüyorsa tamamdır. Post Paylaşım ve Özel Oran botu bu listeden kanal seçer.</li>
+    <li><strong>Kaynak kanal (aynalama):</strong> Başka bir kanaldaki postları senin kanallarına otomatik kopyalamak istiyorsan, kaynak kanalın @adını buraya yazarsın. Bu kanalın herkese açık olması lazım. İstersen post sonuna eklenecek bir yazı da belirleyebilirsin.</li>
+  </ol>
+  <div class="box warn"><strong>Botu silip yeniden ekleme!</strong> Token değiştiyse (BotFather'da <code>/revoke</code> yaptıysan) aynı botu tekrar eklemen yeterli, ayarlar korunur. Botu silersen o botun bağlı olduğu bütün görevler (Bekçi, Paylaşım, Canlı Sohbet...) otomatik kapanır. Tekrar eklediğinde o görevlere yeniden atamak zorunda kalırsın.</div>
+</section>
+
+<section id="plan">
+  <h2><span class="n">6</span> Hangi bot hangi işi yapacak (önerilen düzen)</h2>
+  <table>
+    <tr><th>Bot</th><th>İşi</th><th>Nereden bağlanır</th></tr>
+    <tr><td>Bekçi botu</td><td>Gruplarda küfür, spam, reklam, saldırı koruması, mesaj sayacı, temizlik</td><td>Telegram Merkezi → Kurulum → Bekçi</td></tr>
+    <tr><td>Destek botu</td><td>Üyelerin özelden yazdığı destek talepleri (bilet)</td><td>Telegram Merkezi → Kurulum → Destek botu</td></tr>
+    <tr><td>Postçu botu</td><td>Sponsor grubundaki postları kanallara paylaşır</td><td>Post Paylaşım sekmesi (sonra Kurulum → Postçu → Bağla)</td></tr>
+    <tr><td>Oran botu</td><td>Özel oran postları ve sonuçları</td><td>Özel Oran Botu sekmesi</td></tr>
+    <tr><td>Sohbet botu</td><td>Sitedeki canlı sohbet ile Telegram grubunu bağlar, DM duyuru atar</td><td>Canlı Sohbet sekmesi</td></tr>
+    <tr><td>KankaTV botu</td><td>Gol bildirimleri, canlı etkinlik</td><td>KankaTV Gol Botu / Canlı Etkinlik</td></tr>
+    <tr><td>Bildirim botu</td><td>Market, görev ve şikayet onaylarını ekip grubuna atar</td><td>Bildirim Botu sekmesi</td></tr>
+  </table>
+  <div class="box tip">Bekçi ile Destek aynı bot olabilir; Bildirim botu da Bekçi ile aynı olabilir. Ama <strong>Oran, KankaTV ve Canlı Sohbet</strong> botları her zaman ayrı olmalı. Hepsini ayrı açarsan hiçbir zaman karışmaz.</div>
+</section>
+
+<section id="merkez">
+  <h2><span class="n">7</span> Telegram Merkezi → Kurulum</h2>
+  <p><span class="path">Telegram botları → Telegram Merkezi → Kurulum</span></p>
+  <h3>Sistem kontrolü</h3>
+  <p><kbd>Kontrol et ve onar</kbd> düğmesi silinmiş botlara bakan ayarları temizler ve yanlış bot numarasına bağlanmış webhook'ları düzeltir. Kurulum bittiğinde de bir kez bas. "Her şey yolunda" yazmalı. Bu kontrol ayrıca her sabah otomatik çalışır.</p>
+  <h3>1. Botları görevlere ata</h3>
+  <ol>
+    <li><strong>Bekçi</strong> satırında listeden Bekçi botunu seç → <kbd>Bağla</kbd>. Sağ üstte yeşil "Çalışıyor · anında haber alıyor" yazmalı.</li>
+    <li><strong>Destek botu</strong> satırında Destek botunu seç → <kbd>Bağla</kbd>.</li>
+    <li><strong>Postçu</strong> satırı, Post Paylaşım sekmesini kurduktan sonra burada görünür. <kbd>Bağla</kbd>'ya basarsan paylaşımlar beklemeden anında çıkar.</li>
+  </ol>
+  <div class="box warn"><strong>"Bu bot başka bir iş için webhook kullanıyor"</strong> hatası, Oran ya da KankaTV botunu seçtiğin anlamına gelir. Başka bir bot seç.</div>
+  <h3>2. Korunacak gruplar</h3>
+  <ol>
+    <li>Önce Bekçi botunu gruba ekle ve <a href="#yetki">3. bölümdeki</a> gibi yönetici yap.</li>
+    <li>Grubun @adını ya da -100 ID'sini yaz → <kbd>Ekle</kbd>. Grup aşağıdaki listede görünür. Birden fazla grup ekleyebilirsin.</li>
+  </ol>
+  <h3>3. Kayıt (log) grubu</h3>
+  <ol>
+    <li>Telegram'da sadece senin ve yetkililerin olduğu <strong>gizli</strong> bir grup aç (ör. "AL Kanka Log").</li>
+    <li>Bekçi botunu bu gruba ekleyip yönetici yap.</li>
+    <li>Grubun -100 ID'sini bul (<a href="#id">4. bölüm</a>) → buraya yaz → <kbd>Ekle</kbd>.</li>
+  </ol>
+  <p>Silinen mesajlar, susturmalar, banlar ve pazartesi raporu bu gruba düşer.</p>
+</section>
+
+<section id="bekci">
+  <h2><span class="n">8</span> Bekçi</h2>
+  <p><span class="path">Telegram Merkezi → Bekçi</span></p>
+  <h3>Güvenlik (saldırı koruması)</h3>
+  <p>Bot saldırılarını (aynı anda çok sayıda sahte hesabın girmesi) ve yeni gelen şüpheli hesapları engeller. Aç ve kaydet; varsayılan ayarlar çoğu grup için yeterli.</p>
+  <h3>Kontrolcü (küfür, spam, reklam)</h3>
+  <ul>
+    <li><strong>Yasaklı kelimeler:</strong> Her satıra bir kelime yaz. Büyük ya da küçük harf fark etmez.</li>
+    <li><strong>Uyarı limiti:</strong> Kaç uyarıdan sonra susturulacağı (ör. 3).</li>
+    <li><strong>Susturma süreleri:</strong> 1., 2., 3. susturmada kaç dakika susturulacağı.</li>
+    <li><strong>Flood:</strong> "10 saniyede 5 mesaj" gibi ayarlar. Bunu aşan kişi otomatik susturulur.</li>
+    <li><strong>İzinli siteler:</strong> Link atılmasına izin verdiğin adresler (ör. <code>alkanka.com</code>). Bunlar dışındaki linkler silinir; ayara göre atan kişi uyarılır ya da banlanır.</li>
+    <li><strong>İletilen mesajları engelle:</strong> Başka kanallardan iletilen reklam postlarını siler.</li>
+    <li><strong>Servis mesajlarını temizle:</strong> "X gruba katıldı" yazılarını siler.</li>
+  </ul>
+  <p>En alttaki <kbd>Kaydet</kbd>'e basmayı unutma.</p>
+  <div class="box tip"><strong>Test:</strong> Başka bir hesapla gruba yasaklı bir kelime yaz. Mesaj silinmeli ve log grubuna kayıt düşmeli. Yöneticilerin mesajlarına dokunulmaz, o yüzden testi kendi yönetici hesabınla yapma.</div>
+</section>
+
+<section id="destek">
+  <h2><span class="n">9</span> Destek botu ve biletler</h2>
+  <p><span class="path">Telegram Merkezi → Destek</span></p>
+  <ol>
+    <li><strong>Yetkili grubu:</strong> AL Kanka ekibinin olduğu bir grup aç, Destek botunu ekleyip yönetici yap, ID'sini buraya yaz. Bütün biletler bu gruba düşer.</li>
+    <li><strong>Sponsor destek grupları:</strong> Her sponsor için ayrı bir grup aç (sen, sponsorun yetkilisi ve Destek botu). Sponsor adını ve grubun ID'sini yaz → <kbd>Ekle</kbd>. Üye o sponsoru seçerek bilet açarsa bilet o gruba da düşer ve sponsor yetkilisi gruptan cevap verebilir.</li>
+    <li><strong>Bot ayarları:</strong> Destek bölümünü aç, karşılama mesajını yaz, kaydet.</li>
+  </ol>
+  <h3>Üye nasıl kullanır?</h3>
+  <p>Üye <code>@destekbotun</code>'a özelden yazar → bot "hangi sponsor?" diye sorar → üye seçer → bilet açılır. Gruba düşen bilete <strong>yanıt vererek</strong> cevap yazarsan cevabın üyeye özelden gider. Bileti kapatmak için paneldeki <kbd>Kapat</kbd>'a bas ya da gruptaki butonu kullan.</p>
+  <p>Sponsor karnesi (son 7 gün) sponsorların ne kadar hızlı cevap verdiğini gösterir; bu veri Güven Merkezi'ne de otomatik gider.</p>
+</section>
+
+<section id="oto">
+  <h2><span class="n">10</span> Oto Cevap</h2>
+  <p><span class="path">Telegram Merkezi → Oto Cevap</span></p>
+  <p>Grupta biri "site", "link", "giriş" gibi bir şey yazınca Bekçi botu otomatik olarak site linkini atar; "sponsor" diye sorulunca sponsor butonlarını atar.</p>
+  <ul>
+    <li><strong>Site linki:</strong> Boş bırakırsan sitenin ana adresi kullanılır. Adres değişirse yeni adresi buraya yaz, bot hemen onu atmaya başlar.</li>
+    <li><strong>Sponsor listesi:</strong> Butonlar panelde <em>Sponsor siteler</em> bölümündeki aktif sponsorlardan otomatik gelir. Kaç tane gösterileceğini seçebilirsin.</li>
+    <li><strong>Spam koruması:</strong> Bot aynı cevabı kaç saniyede bir atabilir (ör. 120 sn). Böylece grup boğulmaz.</li>
+  </ul>
+</section>
+
+<section id="sayac">
+  <h2><span class="n">11</span> Sayaç (haftalık en çok yazanlar)</h2>
+  <p><span class="path">Telegram Merkezi → Sayaç</span></p>
+  <ol>
+    <li>Sayacı aç, ilk 3'e verilecek ödülleri (Kanka Coin) yaz, kaydet.</li>
+    <li><strong>Liste hangi gruba atılsın:</strong> Boş bırakırsan ilk korunan gruba atılır.</li>
+    <li>Her pazartesi 00:00'da geçen haftanın listesi gruba atılır. Ödüller, Telegram hesabını siteye bağlamış üyelere otomatik yüklenir.</li>
+  </ol>
+  <p>Hemen denemek için <kbd>Şimdi gönder</kbd> düğmesini kullanabilirsin.</p>
+</section>
+
+<section id="temizlik">
+  <h2><span class="n">12</span> Temizlik</h2>
+  <p><span class="path">Telegram Merkezi → Temizlik</span></p>
+  <h3>Sohbeti komple temizle</h3>
+  <ol>
+    <li>Temizlenecek grup ya da kanalda botun <strong>yönetici</strong> ve <strong>"Mesajları sil" izninin açık</strong> olduğundan emin ol (<a href="#yetki">3. bölüm</a>).</li>
+    <li>Grubu ya da kanalı listeden seç ya da <code>https://t.me/kanaladi</code> şeklinde yaz → <kbd>Başlat</kbd>.</li>
+    <li>"Çalışan temizlikler" kartında ilerlemeyi görürsün. <strong>Panel sayfasını açık bırakırsan</strong> silme kesintisiz ilerler; kapatırsan arka planda daha yavaş devam eder.</li>
+    <li>Gruptan da başlatabilirsin: grupta <code>/sil</code> yaz ve çıkan butona bas.</li>
+  </ol>
+  <div class="box warn"><strong>Telegram'ın kuralı:</strong> Normal gruplarda bot sadece <strong>son 48 saatteki</strong> mesajları silebilir. Daha eski mesajlarda Telegram "silinemez" der ve bot bunları atlar. Kanallarda ve süper gruplarda yönetici bot eski postları da silebilir. Sistem mesajları ("Kanal oluşturuldu" gibi) hiçbir şekilde silinemez. Çok eski bir kanalı tamamen boşaltmanın en hızlı yolu Telegram uygulamasından mesajları seçip toplu silmek ya da yeni kanal açmaktır.</div>
+  <h3>Diğer temizlik araçları</h3>
+  <ul>
+    <li><strong>Silinmiş hesapları çıkar:</strong> Gruptaki "Silinmiş Hesap" görünen üyeleri atar. Kanallarda Telegram abone listesini botlara vermediği için bunu Telegram uygulamasından elle yapman gerekir.</li>
+    <li><strong>Bir kişinin mesajlarını sil:</strong> Kişinin Telegram ID'sini yaz. Son 48 saatteki bütün mesajları bütün gruplardan silinir.</li>
+  </ul>
+  <h3>Grupta kullanılan komutlar</h3>
+  <table>
+    <tr><th>Komut</th><th>Ne yapar</th></tr>
+    <tr><td><code>/temizle 50</code></td><td>Son 50 mesajı siler</td></tr>
+    <tr><td><code>/temizle</code> (bir mesaja yanıt vererek)</td><td>O mesajdan bu yana yazılan her şeyi siler</td></tr>
+    <tr><td><code>/sil</code> (bir mesaja yanıt vererek)</td><td>Sadece o mesajı siler</td></tr>
+    <tr><td><code>/sil</code> (tek başına)</td><td>Komple temizlik butonunu çıkarır</td></tr>
+    <tr><td><code>/hayalet</code></td><td>Silinmiş hesapları çıkarır</td></tr>
+  </table>
+  <p>Bu komutları sadece grup yöneticileri kullanabilir.</p>
+</section>
+
+<section id="dm">
+  <h2><span class="n">13</span> DM Duyuru</h2>
+  <p><span class="path">Telegram Merkezi → DM Duyuru</span></p>
+  <ol>
+    <li>Bu özellik <strong>Canlı Sohbet botunu</strong> kullanır, o yüzden önce <a href="#sohbet">Canlı Sohbet</a>'i kur.</li>
+    <li>Mesajı yaz; istersen buton yazısı ve linki ekle → <kbd>Gönder</kbd>.</li>
+    <li>Mesaj, Telegram hesabını siteye bağlamış bütün üyelere özelden gider. Mesajın altında "Bildirimleri kapat" butonu da olur.</li>
+    <li>"Son duyurular" kartında kaç kişiye gittiğini görürsün. Gönderim devam ederken <kbd>Durdur</kbd> ile kesebilirsin.</li>
+  </ol>
+  <div class="box tip">Bota hiç <kbd>Başlat</kbd> dememiş ya da botu engellemiş kişilere Telegram mesaj göndermeye izin vermez. Sayının bağlı üye sayısından az çıkması normal.</div>
+</section>
+
+<section id="ozet">
+  <h2><span class="n">14</span> Özet &amp; Kayıtlar</h2>
+  <ul>
+    <li><strong>Pazartesi raporu:</strong> Her pazartesi sabahı haftanın özeti log grubuna gelir. <kbd>Şimdi gönder</kbd> ile hemen deneyebilirsin.</li>
+    <li><strong>Son işlemler:</strong> Botun son sildiği, susturduğu ve banladığı kişiler.</li>
+    <li><strong>Gizli güven puanı:</strong> Herkes 50 puanla başlar. Temiz yazdıkça puanı artar, ceza aldıkça düşer. 30'un altındakilerin link ve medya atması engellenir. Yanlışlıkla düşen birini <kbd>Güvenilir</kbd> diye işaretleyebilirsin.</li>
+    <li><strong>Yasaklılar:</strong> Bir grupta banlanan kişi bütün AL Kanka gruplarından banlanır. Banı kaldırmak için <kbd>Banı kaldır</kbd>'a bas; bütün gruplarda kalkar.</li>
+  </ul>
+</section>
+
+<section id="sohbet">
+  <h2><span class="n">15</span> Canlı Sohbet</h2>
+  <p><span class="path">Telegram botları → Canlı Sohbet</span></p>
+  <ol>
+    <li>Bu iş için ayrı bir bot aç (BotFather <code>/newbot</code>) ve <a href="#ekle">Bağlantı &amp; Cron</a>'dan panele ekle.</li>
+    <li>Sohbet grubuna botu ekle ve yönetici yap.</li>
+    <li>Canlı Sohbet sekmesinde botu seç, grubun @adını ya da ID'sini yaz → <kbd>Bağla</kbd>.</li>
+    <li>Sekmenin yanındaki nokta yeşile dönmeli. Sitedeki sohbet kutusundan bir mesaj yaz ve gruba düştüğünü kontrol et.</li>
+  </ol>
+  <p>Üyeler hesaplarını Telegram'a bu bot üzerinden bağlar (profil sayfasındaki "Telegram'ı bağla"). Sayaç ödülleri ve DM duyurular bu bağlantıya göre çalışır.</p>
+</section>
+
+<section id="oran">
+  <h2><span class="n">16</span> Özel Oran Botu</h2>
+  <p><span class="path">Telegram botları → Özel Oran Botu</span></p>
+  <ol>
+    <li>Ayrı bir oran botu aç ve panele ekle. Oran postlarının atılacağı kanalları <a href="#ekle">Bağlantı &amp; Cron</a>'da hedef kanal olarak ekle; bot o kanallarda yönetici olmalı.</li>
+    <li>Özel Oran Botu sekmesinde botu seç, hedef kanalları işaretle, botu aç → <kbd>Kaydet</kbd>. Webhook otomatik kurulur.</li>
+    <li>Postları panelden ya da bota özelden yazarak atarsın. Sonuç girildiğinde (kazandı/kaybetti) "kazandı" yazısı otomatik olarak kanala gider.</li>
+  </ol>
+  <div class="box warn"><strong>Bu botu</strong> Bekçi, Destek ya da Canlı Sohbet olarak <strong>kullanma</strong>. Kullanırsan biri çalışırken diğeri durur.</div>
+</section>
+
+<section id="tv">
+  <h2><span class="n">17</span> KankaTV Gol Botu ve Canlı Etkinlik</h2>
+  <p><span class="path">Telegram botları → KankaTV Gol Botu / KankaTV Canlı Etkinlik</span></p>
+  <ol>
+    <li>KankaTV için ayrı bir bot aç, panele ekle ve gol bildirimlerinin gideceği kanalda yönetici yap.</li>
+    <li>Gol Botu sekmesinde botu ve kanalı seç, açıp kaydet. Takip edilen maçlarda gol olunca kanala otomatik bildirim gider.</li>
+    <li>Canlı Etkinlik sekmesi, KankaTV'deki tahmin ve canlı yayın etkinliklerini aynı bot üzerinden duyurur. Duyuru metnini yaz ve aç.</li>
+  </ol>
+</section>
+
+<section id="bildirim">
+  <h2><span class="n">18</span> Bildirim Botu (onaylar)</h2>
+  <p><span class="path">Telegram botları → Bildirim Botu</span></p>
+  <ol>
+    <li>Ekip için bir onay grubu aç ve bildirim botunu ekle (Bekçi botunu da kullanabilirsin).</li>
+    <li>Botu seç, grubun ID'sini yaz. Market, görev ve şikayet mesaj şablonlarını istersen düzenle, botu aç → <kbd>Kaydet</kbd>.</li>
+    <li><kbd>Test</kbd>'e bas, gruba örnek bildirim düşmeli.</li>
+  </ol>
+  <p>Sitede biri market ürünü aldığında, görev gönderdiğinde ya da şikayet yazdığında gruba bildirim gelir; bildirimin altındaki butonla panele gidip onaylarsın.</p>
+</section>
+
+<section id="paylasim">
+  <h2><span class="n">19</span> Post Paylaşım</h2>
+  <p><span class="path">Telegram botları → Post Paylaşım</span></p>
+  <p><strong>Ne işe yarar?</strong> Sponsorla ortak destek grubuna sponsor yetkilisi bir post atar ve başına tetikleyici kelimeyi (ör. <code>#paylaş</code>) yazar. Bot o postu senin seçtiğin bütün kanallara aynı anda paylaşır.</p>
+  <ol>
+    <li>Postçu botunu sponsor destek grubuna ekle ve <strong>yönetici yap</strong>. Yönetici yapmıyorsan BotFather'da <code>/setprivacy → Disable</code> yapmış olman lazım.</li>
+    <li>Paylaşılacak kanalları Bağlantı &amp; Cron'da bu bot için hedef kanal olarak ekle.</li>
+    <li>Post Paylaşım sekmesinde botu seç, sponsor grubunu yaz, tetikleyici kelimeyi, post sonuna eklenecek yazıyı ve hedef kanalları seç. Aç → <kbd>Kaydet</kbd>.</li>
+    <li><span class="path">Telegram Merkezi → Kurulum → Postçu → Bağla</span>. Böylece paylaşımlar 2-3 dakika beklemeden anında çıkar.</li>
+  </ol>
+</section>
+
+<section id="davet">
+  <h2><span class="n">20</span> Davet linkleri ve Kanallar</h2>
+  <ul>
+    <li><strong>Davet linkleri:</strong> Bir bot ve grup seçersen site, her üyeye kişiye özel davet linki üretir; kimin kimi getirdiği sayılır. Bot o grupta "Kullanıcı davet et" izniyle yönetici olmalı.</li>
+    <li><strong>Kanallar:</strong> Sitenin altındaki ve sayfalardaki Telegram butonlarının hangi kanala gideceğini buraya yazarsın (ör. <code>alkankacom</code>). Sadece kullanıcı adını yaz, <code>@</code> ya da link gerekmez.</li>
+  </ul>
+</section>
+
+<section id="sorun">
+  <h2><span class="n">21</span> Bir şey çalışmıyorsa</h2>
+  <table>
+    <tr><th>Gördüğün</th><th>Sebebi</th><th>Çözüm</th></tr>
+    <tr><td>Sekme kırmızı</td><td>Bot seçilmemiş, bot silinmiş ya da webhook bozuk</td><td>Kurulum → <kbd>Kontrol et ve onar</kbd>, sonra o bölümde botu yeniden seçip <kbd>Bağla</kbd></td></tr>
+    <tr><td>"Bot bu grupta değil"</td><td>Bot gruba eklenmemiş</td><td>Botu gruba ekle ve yönetici yap</td></tr>
+    <tr><td>"Botun silme yetkisi yok"</td><td>Yönetici ama "Mesajları sil" izni kapalı</td><td>Grup → Yöneticiler → bot → izni aç</td></tr>
+    <tr><td>Bekçi küfürü görmüyor</td><td>Privacy açık ya da yazan kişi yönetici</td><td>BotFather <code>/setprivacy → Disable</code>, botu gruptan çıkar-ekle; testi yönetici olmayan hesapla yap</td></tr>
+    <tr><td>"Başka bir iş için webhook kullanıyor"</td><td>Oran ya da KankaTV botunu başka bir role seçtin</td><td>O rol için ayrı bot aç</td></tr>
+    <tr><td>Temizlik eski mesajları silmiyor</td><td>Telegram'ın 48 saat kuralı (normal gruplar)</td><td>Telegram uygulamasından elle toplu sil ya da yeni grup aç</td></tr>
+    <tr><td>"Token formatı hatalı"</td><td>Token eksik kopyalandı</td><td>BotFather'dan kodun tamamını, iki nokta dahil kopyala</td></tr>
+    <tr><td>"Unauthorized"</td><td>Token iptal edilmiş (<code>/revoke</code>)</td><td>BotFather'dan yeni token al ve Bağlantı &amp; Cron'a aynı botu tekrar ekle (silmeden)</td></tr>
+    <tr><td>Paylaşım geç çıkıyor</td><td>Postçu webhook'a bağlanmamış</td><td>Kurulum → Postçu → <kbd>Bağla</kbd></td></tr>
+  </table>
+  <div class="box tip">Telegram tarafında her şey doğruysa ama hâlâ olmuyorsa: aynı bölümü kapat-aç ve tekrar kaydet. Kaydetmek bağlantıyı yeniden kurar.</div>
+</section>
+
+<section id="kontrol">
+  <h2><span class="n">22</span> Son kontrol listesi</h2>
+  <ul>
+    <li>☐ Her iş için ayrı bot açıldı ve hepsi Bağlantı &amp; Cron'da görünüyor</li>
+    <li>☐ Bekçi ve Sayaç botu için <code>/setprivacy → Disable</code> yapıldı</li>
+    <li>☐ Botlar, çalışacakları her grup ve kanalda doğru izinlerle yönetici</li>
+    <li>☐ Kurulum: Bekçi ve Destek "Çalışıyor" diyor, gruplar ve log grubu ekli</li>
+    <li>☐ Bekçi ayarları kaydedildi ve başka hesapla test edildi</li>
+    <li>☐ Destek: yetkili grubu ve sponsor grupları ekli, test bileti açıldı</li>
+    <li>☐ Canlı Sohbet, Özel Oran, Bildirim, Post Paylaşım sekmeleri yeşil</li>
+    <li>☐ <kbd>Kontrol et ve onar</kbd> "Her şey yolunda" diyor</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

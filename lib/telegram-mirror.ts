@@ -377,12 +377,17 @@ export async function addBot(token: string) {
   await ensureTables()
   await rows(sql`INSERT INTO tg_bots (name, username, token_enc) VALUES (${me.first_name}, ${me.username}, ${encrypt(token)})
     ON CONFLICT (username) DO UPDATE SET name = EXCLUDED.name, token_enc = EXCLUDED.token_enc`)
+  const { repairTelegram } = await import('@/lib/tg-health')
+  await repairTelegram().catch((error) => console.error('[telegram] repair after add failed', error))
   return me
 }
 
 export async function deleteBot(id: number) {
   await ensureTables()
+  const { detachBot, repairTelegram } = await import('@/lib/tg-health')
+  await detachBot(id)
   await rows(sql`DELETE FROM tg_bots WHERE id = ${id}`)
+  await repairTelegram().catch((error) => console.error('[telegram] repair after delete failed', error))
 }
 
 export async function botToken(botId: number) {
