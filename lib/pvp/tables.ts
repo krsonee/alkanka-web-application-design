@@ -25,6 +25,7 @@ import {
 import { normalizeRules, normalizeVariant, rulesToList } from '@/lib/games/batak'
 import { normalizePistiRules, normalizeTarget, pistiRulesToList } from '@/lib/games/pisti'
 import { normalizePapazRules, papazRulesToList } from '@/lib/games/papaz'
+import { monoRulesToList, normalizeMonoRules } from '@/lib/games/monopoly'
 
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
 
@@ -188,7 +189,7 @@ export async function listMyActiveTables(userId: string) {
 const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 31, 51, 101] },
-  monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
+  monopoly: { seats: [2, 3, 4, 5, 6, 7, 8], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
   papaz: { seats: [2, 3, 4, 5, 6], rounds: [] },
 }
@@ -211,6 +212,12 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
     return { seats, team: false, bots, extras: papazRulesToList(normalizePapazRules(input?.extras)) }
+  }
+  if (game === 'monopoly') {
+    const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : 4
+    const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
+    const rounds = rule.rounds.includes(Number(input?.rounds)) ? Number(input?.rounds) : rule.rounds[0]
+    return { seats, team: false, bots, rounds, extras: monoRulesToList(normalizeMonoRules(input?.extras)) }
   }
   if (rule) {
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]

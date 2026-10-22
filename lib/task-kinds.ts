@@ -87,7 +87,7 @@ export const TASK_GAMES: { value: string; label: string }[] = [
   { value: 'batak', label: 'Batak' },
   { value: 'pisti', label: 'Pişti' },
   { value: 'papaz', label: 'Papaz Kaçtı' },
-  { value: 'monopoly', label: 'Monopoly' },
+  { value: 'monopoly', label: 'Jakopoly' },
   { value: 'bilardo', label: 'Bilardo' },
   { value: 'blackjack', label: 'Blackjack' },
   { value: 'rulet', label: 'Rulet' },

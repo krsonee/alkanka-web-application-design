@@ -27,7 +27,7 @@ import * as Pool from '@/lib/games/bilardo'
 
 import { initOkey101, okey101BotTurn, okey101Step, runOkey101Bots, viewOkey101, type Okey101State } from '@/lib/games/okey101'
 import { batakBotTurn, batakPaceMs, batakStep, initBatak, runBatakBots, viewBatak, type BatakState } from '@/lib/games/batak'
-import { initMonopoly, monopolyBotTurn, monopolyStep, runMonopolyBots, type MonopolyState } from '@/lib/games/monopoly'
+import { initMonopoly, monoActor, monopolyBotTurn, monopolyPaceMs, monopolyStep, runMonopolyBots, type MonopolyState } from '@/lib/games/monopoly'
 import { initPisti, pistiBotTurn, pistiPaceMs, pistiStep, runPistiBots, viewPisti, type PistiState } from '@/lib/games/pisti'
 import { initPapaz, papazBotTurn, papazPaceMs, papazStep, runPapazBots, viewPapaz, type PapazState } from '@/lib/games/papaz'
 
@@ -163,7 +163,7 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
   if (game === 'okey101') return initOkey101({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds, team: opts?.team })
   // Batak bots are paced by the table poll, so the first bids show up one by one.
   if (game === 'batak') return initBatak({ botSeats: opts?.botSeats, rounds: opts?.rounds, variant: opts?.variant, rules: opts?.extras })
-  if (game === 'monopoly') return runMonopolyBots(initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds })).state
+  if (game === 'monopoly') return initMonopoly({ seats: opts?.seats, botSeats: opts?.botSeats, rounds: opts?.rounds, rules: opts?.extras })
   if (game === 'papaz') return initPapaz({ seats: opts?.seats, botSeats: opts?.botSeats, rules: opts?.extras })
   if (game === 'pisti') return initPisti({ seats: opts?.seats, botSeats: opts?.botSeats, target: opts?.variant, team: opts?.team, rules: opts?.extras })
   if (game === 'tavla') {
@@ -221,7 +221,9 @@ function seatBotTurn(s: SeatState, seat: number) {
 const seatCount = (s: SeatState) => s.seats
 
 /** Games whose bots play one turn per poll so humans can follow every move. */
-const pacedBots = (s: SeatState) => s.kind === 'okey101' || s.kind === 'batak' || s.kind === 'pisti' || s.kind === 'papaz'
+const pacedBots = (s: SeatState) => s.kind === 'okey101' || s.kind === 'batak' || s.kind === 'pisti' || s.kind === 'papaz' || s.kind === 'monopoly'
+/** Monopoly auctions and trade answers can hand the move to a seat other than the turn holder. */
+const actorOf = (s: SeatState) => (s.kind === 'monopoly' ? monoActor(s) : s.turn)
 
 export const BOT_PACE_MS = 1100
 
@@ -230,13 +232,14 @@ export function botPaceMs(state: PvpState) {
   if (state.kind === 'batak') return batakPaceMs(state)
   if (state.kind === 'pisti') return pistiPaceMs(state)
   if (state.kind === 'papaz') return papazPaceMs(state)
+  if (state.kind === 'monopoly') return monopolyPaceMs(state)
   return BOT_PACE_MS
 }
 
 /** Plays a single paced bot turn when the seat to move belongs to a bot. */
 export function paceBotTurn(state: PvpState): ActResult | null {
-  if (!isSeatState(state) || !pacedBots(state) || !state.bots.includes(state.turn)) return null
-  const r = seatBotTurn(state, state.turn)
+  if (!isSeatState(state) || !pacedBots(state) || !state.bots.includes(actorOf(state))) return null
+  const r = seatBotTurn(state, actorOf(state))
   return { state: r.state, outcome: seatOutcome(r.winners) }
 }
 
@@ -548,7 +551,7 @@ function okeyBotTurn(state: OkeyState, seat: number): ActResult {
  */
 export function autoMove(state: PvpState): ActResult | null {
   if (isSeatState(state)) {
-    const r = seatBotTurn(state, state.turn)
+    const r = seatBotTurn(state, actorOf(state))
     if (r.winners) return { state: r.state, outcome: seatOutcome(r.winners) }
     if (pacedBots(r.state)) return { state: { ...r.state, note: 'Süre doldu, otomatik hamle yapıldı' } as PvpState, outcome: null }
     const b = seatBots(r.state)
@@ -714,5 +717,6 @@ export function viewState(state: PvpState | null, seat: number) {
 export function currentTurn(state: PvpState | null): number | null {
   if (!state) return null
   if (state.kind === 'duel') return null
+  if (state.kind === 'monopoly') return monoActor(state)
   return state.turn
 }

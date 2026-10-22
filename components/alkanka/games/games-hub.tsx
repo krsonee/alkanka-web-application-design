@@ -74,7 +74,7 @@ const SHORT_PLAYERS: Record<ArenaGame, string> = {
   batak: '4 kişi',
   pisti: '2-4',
   papaz: '2-6',
-  monopoly: '2-4',
+  monopoly: '2-8',
   bilardo: '1v1',
   blackjack: 'Krupiye',
   rulet: 'Masa',

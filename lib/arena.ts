@@ -76,10 +76,10 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
     modes: ['pvp'],
   },
   monopoly: {
-    title: 'Monopoly',
+    title: 'Jakopoly',
     short: 'Zar at, mülk al, ev ve otel dik. Rakiplerini iflas ettiren son patron kazanır.',
     image: '/images/games/monopoly.png',
-    players: '2-4 kişi, boş koltuğa bot',
+    players: '2-8 kişi, boş koltuğa bot',
     group: 2,
     category: 'masa',
     modes: ['pvp'],
