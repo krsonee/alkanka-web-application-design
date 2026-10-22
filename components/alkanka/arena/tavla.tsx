@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, Dices, Flag, Undo2, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -44,37 +44,53 @@ export function Die({
   used,
   small,
   fill,
+  board,
   className,
+  style,
 }: {
   value: number
   used?: boolean
   small?: boolean
   fill?: boolean
+  board?: boolean
   className?: string
+  style?: CSSProperties
 }) {
   return (
     <span
       role="img"
+      style={style}
       aria-label={`Zar ${value}${used ? ', oynandı' : ''}`}
       className={cn(
-        'grid grid-cols-3 grid-rows-3 gap-0.5 rounded-lg bg-checker-light p-1 shadow-[0_6px_14px_rgb(0_0_0/0.45)] transition-opacity sm:p-1.5',
-        fill ? 'aspect-square h-full' : small ? 'size-8' : 'size-8 sm:size-12',
-        used && 'opacity-35',
+        'grid grid-cols-3 grid-rows-3 bg-checker-light transition-opacity',
+        board
+          ? 'size-7 gap-px rounded-md p-1 shadow-[0_3px_6px_rgb(0_0_0/0.4)] sm:size-9 sm:p-1.5'
+          : 'gap-0.5 rounded-lg p-1 shadow-[0_6px_14px_rgb(0_0_0/0.45)] sm:p-1.5',
+        !board && (fill ? 'aspect-square h-full' : small ? 'size-8' : 'size-8 sm:size-12'),
+        used && 'opacity-30 saturate-0',
         className,
       )}
     >
       {Array.from({ length: 9 }).map((_, i) => (
         <span key={i} className="flex items-center justify-center">
-          {PIPS[value]?.includes(i) && <span className={cn('rounded-full bg-checker-dark', small ? 'size-1.5' : 'size-1.5 sm:size-2')} />}
+          {PIPS[value]?.includes(i) && (
+            <span className={cn('rounded-full bg-checker-dark', board ? 'size-1 sm:size-1.5' : small ? 'size-1.5' : 'size-1.5 sm:size-2')} />
+          )}
         </span>
       ))}
     </span>
   )
 }
 
-/** Rolls through random faces briefly whenever `rollKey` changes, then lands on the real values. */
+export const DOUBLE_NAMES: Record<number, string> = { 1: 'Hepyek', 2: 'Dubara', 3: 'Dü se', 4: 'Dört cihar', 5: 'Dübeş', 6: 'Düşeş' }
+
+/**
+ * Throws the dice whenever `rollKey` changes: faces flicker while they tumble across the felt,
+ * then they land with a knock. `landed` flips on at touchdown so the board can celebrate doubles.
+ */
 function useRollAnimation(rolled: number[], rollKey: number) {
   const [faces, setFaces] = useState<number[] | null>(null)
+  const [landed, setLanded] = useState(0)
   const first = useRef(true)
   useEffect(() => {
     if (first.current) {
@@ -86,15 +102,18 @@ function useRollAnimation(rolled: number[], rollKey: number) {
     const id = setInterval(() => {
       n++
       setFaces(rolled.slice(0, 2).map(() => 1 + Math.floor(Math.random() * 6)))
-      if (n > 7) {
+      if (n > 11) {
         clearInterval(id)
         setFaces(null)
+        setLanded(rollKey)
+        playSound('chip')
+        if (typeof navigator !== 'undefined') navigator.vibrate?.(25)
       }
-    }, 70)
+    }, 75)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rollKey])
-  return faces
+  return { faces, landed }
 }
 
 function Checker({ side, label, glow, hint, pulse }: { side: Side; label?: string; glow?: boolean; hint?: boolean; pulse?: boolean }) {
@@ -256,7 +275,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
     () => (selected != null && sources.has(selected) ? routesFrom(board, me, dice, selected) : new Map<To, Move[]>()),
     [board, me, dice, selected, sources],
   )
-  const faces = useRollAnimation(rolled, rollKey)
+  const { faces, landed } = useRollAnimation(rolled, rollKey)
 
   const usedFlags = useMemo(() => {
     const left = [...dice]
@@ -426,14 +445,34 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   const offTarget = routes.get('off')
   const shown = faces ?? rolled.slice(0, rolled.length === 4 ? 4 : 2)
   // Dice sit in the empty middle band of the roller's own half so they never cover a stack.
+  const diceLeft = turn === 'opp'
+  const isDouble = rolled.length >= 2 && rolled[0] === rolled[1]
+  const celebrate = !faces && isDouble && landed === rollKey && rollKey > 0
   const diceRow = shown.length > 0 && (
-    <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex h-[12%] -translate-y-1/2 items-center justify-center gap-1.5 sm:gap-3">
+    <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-center gap-1.5 sm:gap-2">
       {shown.map((d, i) => (
-        <Die key={`${rollKey}-${i}`} fill value={d} used={!faces && usedFlags[i]} className={cn(faces && 'animate-[tumble_0.6s_ease-out]')} />
+        <Die
+          key={`${rollKey}-${i}`}
+          board
+          value={d}
+          used={!faces && usedFlags[i]}
+          className={cn(
+            faces ? (diceLeft ? 'die-throw-left' : 'die-throw-right') : landed === rollKey && rollKey > 0 && 'die-land',
+            celebrate && 'ring-2 ring-gold shadow-[0_0_12px_var(--gold)]',
+          )}
+          style={faces ? { animationDelay: `${i * 70}ms` } : undefined}
+        />
       ))}
+      {celebrate && (
+        <span
+          key={`dbl-${rollKey}`}
+          className="die-banner absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gold px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-md sm:-top-8"
+        >
+          {DOUBLE_NAMES[rolled[0]]}!
+        </span>
+      )}
     </div>
   )
-  const diceLeft = turn === 'opp'
 
   return (
     <div ref={rootRef} className="flex select-none flex-col gap-2">

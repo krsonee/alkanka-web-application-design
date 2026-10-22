@@ -49,6 +49,54 @@ function readSegments(slots: (number | null)[], byId: Map<number, Tile>, okey: O
   return out
 }
 
+/** Always-visible "how close am I to opening" gauge: series total toward 101 and pair count toward 5. */
+function OpenMeter({ runValue, pairs }: { runValue: number; pairs: number }) {
+  const runReady = runValue >= OPEN_MIN
+  const pairReady = pairs >= PAIR_MIN
+  const pct = Math.min(100, Math.round((runValue / OPEN_MIN) * 100))
+  const near = !runReady && runValue >= OPEN_MIN - 20
+  return (
+    <div className="flex w-full max-w-md items-stretch gap-2" aria-live="polite">
+      <div
+        key={runReady ? 'ready' : 'wait'}
+        className={cn(
+          'flex min-w-0 flex-1 flex-col gap-1 rounded-xl border px-3 py-1.5',
+          runReady ? 'animate-pop border-primary bg-primary/15' : near ? 'border-gold/70 bg-gold/10' : 'border-border bg-card/70',
+        )}
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Elin (seri)</span>
+          <span className="text-sm font-black tabular-nums text-foreground">
+            <span className={cn(runReady ? 'text-primary' : near ? 'text-gold' : 'text-foreground')}>{runValue}</span>
+            <span className="text-muted-foreground"> / {OPEN_MIN}</span>
+          </span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+          <div
+            className={cn('h-full rounded-full transition-[width] duration-500', runReady ? 'bg-primary' : near ? 'bg-gold' : 'bg-muted-foreground/60')}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="truncate text-[10px] text-muted-foreground">
+          {runReady ? 'Açmaya hazırsın!' : `Açmak için ${OPEN_MIN - runValue} sayı daha`}
+        </span>
+      </div>
+      <div
+        className={cn(
+          'flex shrink-0 flex-col items-center justify-center rounded-xl border px-3 py-1.5',
+          pairReady ? 'border-primary bg-primary/15' : 'border-border bg-card/70',
+        )}
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Çift</span>
+        <span className="text-sm font-black tabular-nums">
+          <span className={pairReady ? 'text-primary' : 'text-foreground'}>{pairs}</span>
+          <span className="text-muted-foreground"> / {PAIR_MIN}</span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const s = remote.state
   const n = s.seats
@@ -263,14 +311,14 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         onClick={() => selected != null && (swap ? swapJoker(selected, m.id) : addTile(selected, m.id))}
         aria-label={`${nameOf(m.owner)} peri${swap ? ', gerçek taşı koyup okeyi al' : fits ? ', seçili taşı buraya işle' : ''}`}
         className={cn(
-          'relative flex shrink-0 gap-px rounded-md bg-background/30 p-0.5 shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 disabled:cursor-default sm:p-1',
+          'relative flex shrink-0 gap-px rounded bg-background/30 p-px shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)] transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 disabled:cursor-default sm:p-1',
           fits && 'cursor-pointer ring-2 ring-primary hover:-translate-y-0.5 hover:bg-primary/25',
           hovered && 'scale-105 bg-primary/30 ring-4 ring-primary',
           dimmed && 'opacity-40',
         )}
       >
         {fits && (
-          <span className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-1.5 text-[9px] font-bold uppercase leading-4 text-primary-foreground shadow">
+          <span className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-1.5 text-[8px] font-bold uppercase leading-3 sm:text-[9px] sm:leading-4 text-primary-foreground shadow">
             {swap ? 'Okeyi al' : 'İşle'}
           </span>
         )}
@@ -356,25 +404,6 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
                 <span className="text-[9px] font-bold uppercase tracking-wider text-foreground/60">Gösterge</span>
               </div>
             </div>
-
-            {owners.length > 0 && (
-              <div className="flex w-full flex-col gap-1.5 overflow-y-auto sm:gap-2" aria-label="Yerdeki perler">
-                {owners.map((seat) => (
-                  <div
-                    key={seat}
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-lg p-1',
-                      seat === mySeat ? 'bg-primary/10 ring-1 ring-primary/40' : seat === partner ? 'bg-foreground/5 ring-1 ring-foreground/15' : 'bg-background/15',
-                    )}
-                  >
-                    <span className="w-10 shrink-0 truncate text-[9px] font-bold uppercase tracking-wider text-foreground/80 sm:w-16 sm:text-[10px]">
-                      {nameOf(seat)}
-                    </span>
-                    <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pt-2 pb-0.5">{s.melds.filter((m) => m.owner === seat).map(renderMeld)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex items-center justify-end">{seatPill(rightSeat, true)}</div>
@@ -414,6 +443,33 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             </span>
           </button>
         </div>
+
+        {owners.length > 0 && (
+          <section className="relative z-10 flex flex-col gap-1 border-t border-foreground/10 bg-background/30 p-1.5 sm:gap-2 sm:p-3" aria-label="Yerdeki perler">
+            {owners.map((seat) => {
+              const own = s.melds.filter((m) => m.owner === seat)
+              return (
+                <div
+                  key={seat}
+                  className={cn(
+                    'flex flex-col gap-0.5 rounded-lg px-1.5 py-1 sm:gap-1 sm:rounded-xl sm:p-2',
+                    seat === mySeat ? 'bg-primary/10 ring-1 ring-primary/40' : seat === partner ? 'bg-foreground/5 ring-1 ring-foreground/15' : 'bg-background/25',
+                  )}
+                >
+                  <p className="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-wider sm:text-[11px]">
+                    <span className={cn('truncate', seat === mySeat ? 'text-primary' : 'text-foreground/80')}>
+                      {seat === mySeat ? 'Senin perlerin' : nameOf(seat)}
+                    </span>
+                    <span className="shrink-0 text-foreground/50">
+                      {s.opened[seat] === 'cift' ? 'Çifte gitti' : 'Açtı'} · {own.length} per
+                    </span>
+                  </p>
+                  <div className="flex flex-wrap gap-x-1.5 gap-y-2 pt-1.5 sm:gap-x-2 sm:gap-y-3 sm:pt-2">{own.map(renderMeld)}</div>
+                </div>
+              )
+            })}
+          </section>
+        )}
       </div>
 
       {mySeat >= 0 && (
@@ -499,16 +555,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           </div>
 
           <div className="flex min-h-6 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            {!opened && (
-              <>
-                <span>
-                  Seri <b className={cn('tabular-nums', runValue >= OPEN_MIN ? 'text-primary' : 'text-foreground')}>{runValue}/{OPEN_MIN}</b>
-                </span>
-                <span>
-                  Çift <b className={cn('tabular-nums', pairs.length >= PAIR_MIN ? 'text-primary' : 'text-foreground')}>{pairs.length}/{PAIR_MIN}</b>
-                </span>
-              </>
-            )}
+            {!opened && <OpenMeter runValue={runValue} pairs={pairs.length} />}
             {layOffable.length > 0 && (
               <button
                 type="button"
@@ -626,16 +673,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 }
 
 function MeldTile({ tile, okey }: { tile: Tile; okey: OkeyValue }) {
-  return (
-    <>
-      <span className="sm:hidden">
-        <TileFace tile={tile} okey={okey} size="xs" />
-      </span>
-      <span className="hidden sm:block">
-        <TileFace tile={tile} okey={okey} size="sm" />
-      </span>
-    </>
-  )
+  return <TileFace tile={tile} okey={okey} size="mini" />
 }
 
 function SeatPill({
