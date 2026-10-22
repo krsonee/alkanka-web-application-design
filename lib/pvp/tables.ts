@@ -24,6 +24,7 @@ import {
 
 import { normalizeRules, normalizeVariant, rulesToList } from '@/lib/games/batak'
 import { normalizePistiRules, normalizeTarget, pistiRulesToList } from '@/lib/games/pisti'
+import { normalizePapazRules, papazRulesToList } from '@/lib/games/papaz'
 
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
 
@@ -142,6 +143,7 @@ export function tableView(t: TableRow, userId: string | null) {
     bots: t.options.bots,
     rounds: t.options.rounds ?? null,
     variant: t.options.variant ?? null,
+    extras: t.options.extras ?? null,
     winners: t.options.winners ?? (t.winnerId ? [t.winnerId] : []),
     status: t.status,
     players: t.players,
@@ -204,6 +206,11 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
     const seats = Number(input?.seats) === 4 ? 4 : 2
     const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
     return { seats, team: seats === 4 && input?.team !== false, bots, variant: String(normalizeTarget(input?.variant)), extras: pistiRulesToList(normalizePistiRules(input?.extras)) }
+  }
+  if (game === 'papaz') {
+    const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]
+    const bots = Math.max(0, Math.min(seats - 1, Math.floor(Number(input?.bots) || 0)))
+    return { seats, team: false, bots, extras: papazRulesToList(normalizePapazRules(input?.extras)) }
   }
   if (rule) {
     const seats = rule.seats.includes(Number(input?.seats)) ? Number(input?.seats) : rule.seats[rule.seats.length - 1]
@@ -381,6 +388,8 @@ export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'lea
   }
 
   if (!t.state) return
+  // A Papaz player who is already out keeps the seat and is paid when the game ends.
+  if (t.state.kind === 'papaz' && t.state.loser == null && !t.state.hands[me.seat]?.length) return
   const recordLoss = () =>
     recordHistory({ userId: me.id, userName: me.name, game: t.game, mode: 'pvp', opponent: rivalName(t, me.id), stake: t.stake, result: 'loss', delta: -t.stake, tableId: t.id })
   const others = humans(t).filter((p) => p.id !== me.id)
@@ -572,6 +581,22 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
     return
   }
 
+  if (t.game === 'papaz') {
+    const loser = t.players.find((p) => !winnerSeats.includes(p.seat))
+    const odd = (t.options.extras ?? []).includes('kiz') ? 'Kız' : 'Papaz'
+    if (loser) {
+      await pool
+        .query(`INSERT INTO table_messages (table_id, user_id, user_name, is_player, body) VALUES ($1,$2,$3,$4,$5)`, [
+          t.id,
+          'system',
+          'Alkanka',
+          false,
+          `${odd} ${loser.name} elinde kaldı! Şapka onun kanka.`,
+        ])
+        .catch(() => {})
+    }
+  }
+
   const people = humans(t)
   if (isDraw) {
     for (const p of people) {
@@ -586,13 +611,17 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const botBonus = isSeatGame(t.game) && t.players.some((p) => p.bot) ? t.stake : 0
   // Players who left mid-game leave their stake in the pot.
   const pot = t.stake * (people.length + (t.options.forfeits ?? 0)) + botBonus
-  const prizeEach = humanWinners.length ? Math.floor((pot * (1 - (settings?.commission ?? 0) / 100)) / humanWinners.length) : 0
+  const net = pot * (1 - (settings?.commission ?? 0) / 100)
+  // Papaz Kimde pays by finishing place: winnerSeats is ordered first-out first, earlier places weigh more.
+  const weightOf = (p: TableRow['players'][number]) => (t.game === 'papaz' ? winnerSeats.length - winnerSeats.indexOf(p.seat) : 1)
+  const totalWeight = humanWinners.reduce((a, p) => a + weightOf(p), 0)
   const paid = new Map<string, number>()
   const { boosted } = await import('@/lib/boosts')
-  // The weekend festival multiplies only the profit, never the returned stake.
-  const profit = Math.max(0, prizeEach - t.stake)
-  const boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
   for (const p of humanWinners) {
+    const prizeEach = totalWeight ? Math.floor((net * weightOf(p)) / totalWeight) : 0
+    // The weekend festival multiplies only the profit, never the returned stake.
+    const profit = Math.max(0, prizeEach - t.stake)
+    const boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
     const amount = await capPayout(p.id, t.stake, boostedPrize)
     paid.set(p.id, amount)
     await credit(p.id, amount)
