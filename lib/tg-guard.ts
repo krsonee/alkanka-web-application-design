@@ -43,6 +43,7 @@ function ensureGuardTables() {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_autodel (id serial PRIMARY KEY, chat_id text NOT NULL, message_id bigint NOT NULL, due_at timestamptz NOT NULL)`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_wipe (chat_id text PRIMARY KEY, bot_id int NOT NULL, title text NOT NULL DEFAULT '',
       next_id bigint NOT NULL, total bigint NOT NULL, done bigint NOT NULL DEFAULT 0, started_by text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE tg_wipe ADD COLUMN IF NOT EXISTS note text`)
   })().catch((error) => {
     guardReady = null
     throw error
@@ -388,25 +389,47 @@ async function deleteChunk(token: string, chatId: string, ids: number[]): Promis
   }
 }
 
+const FATAL_WIPE_ERROR = /too many requests|retry after|not enough rights|chat not found|bot was kicked|not a member/i
+
+/**
+ * deleteMessages answers "true" even when it silently skips messages it isn't allowed to delete,
+ * so a single deleteMessage on one id is the only honest way to learn whether old posts are reachable.
+ */
+async function probeDelete(token: string, chatId: string, id: number): Promise<'deleted' | 'gone' | 'too-old'> {
+  try {
+    await callBot(token, 'deleteMessage', { chat_id: chatId, message_id: id })
+    return 'deleted'
+  } catch (error) {
+    const msg = String((error as Error).message)
+    if (FATAL_WIPE_ERROR.test(msg)) throw error
+    return /can't be deleted|cannot be deleted/i.test(msg) ? 'too-old' : 'gone'
+  }
+}
+
+export const WIPE_TOO_OLD_NOTE =
+  'Telegram, botların 48 saatten eski mesajları silmesine izin vermiyor. Bu noktadan eski postlar bot ile silinemez; Telegram uygulamasından elle seçip silmen gerekiyor.'
+
 export async function startWipe(botId: number, chatId: number | string, title: string, fromId: number, by: string) {
   await ensureGuardTables()
   await rows(sql`INSERT INTO tg_wipe (chat_id, bot_id, title, next_id, total, done, started_by)
     VALUES (${String(chatId)}, ${botId}, ${title.slice(0, 80)}, ${fromId}, ${fromId}, 0, ${by.slice(0, 80)})
     ON CONFLICT (chat_id) DO UPDATE SET bot_id = EXCLUDED.bot_id, next_id = EXCLUDED.next_id, total = EXCLUDED.total, done = 0,
-      started_by = EXCLUDED.started_by, created_at = now()`)
+      started_by = EXCLUDED.started_by, note = NULL, created_at = now()`)
   await modLog({ chatId, chatTitle: title, action: 'Tüm sohbet silme başladı', reason: `${by} · ${fromId} mesaja kadar` })
 }
 
 export async function listWipes() {
   await ensureGuardTables()
-  const r = await rows<{ chat_id: string; title: string; next_id: string; total: string; started_by: string; created_at: string }>(
-    sql`SELECT chat_id, title, next_id, total, started_by, created_at FROM tg_wipe ORDER BY created_at`,
+  const r = await rows<{ chat_id: string; title: string; next_id: string; total: string; done: string; note: string | null; started_by: string; created_at: string }>(
+    sql`SELECT chat_id, title, next_id, total, done, note, started_by, created_at FROM tg_wipe ORDER BY created_at`,
   )
   return r.map((w) => ({
     chatId: w.chat_id,
     title: w.title,
     left: Math.max(0, Number(w.next_id)),
     total: Number(w.total),
+    deleted: Number(w.done),
+    note: w.note,
     startedBy: w.started_by,
     startedAt: new Date(w.created_at).toISOString(),
   }))
@@ -423,7 +446,9 @@ export async function cancelWipe(chatId: string) {
 export async function processWipes(budgetMs = 25_000) {
   await ensureGuardTables()
   const started = Date.now()
-  const jobs = await rows<{ chat_id: string; bot_id: number; title: string; next_id: string; total: string; done: string }>(sql`SELECT * FROM tg_wipe ORDER BY created_at`)
+  const jobs = await rows<{ chat_id: string; bot_id: number; title: string; next_id: string; total: string; done: string }>(
+    sql`SELECT * FROM tg_wipe WHERE note IS NULL ORDER BY created_at`,
+  )
   for (const job of jobs) {
     let token: string
     try {
@@ -438,7 +463,23 @@ export async function processWipes(budgetMs = 25_000) {
       const ids: number[] = []
       for (let id = next; id > Math.max(0, next - WIPE_BATCH); id--) ids.push(id)
       try {
-        done += await deleteChunk(token, job.chat_id, ids)
+        const first = await probeDelete(token, job.chat_id, ids[0])
+        const middleId = ids[Math.floor(ids.length / 2)]
+        const middle = middleId > 1 ? await probeDelete(token, job.chat_id, middleId) : 'gone'
+        if (first === 'too-old' && middle === 'too-old') {
+          // Ids grow with time, so everything below this point is older still and equally out of reach.
+          await rows(sql`UPDATE tg_wipe SET next_id = ${next}, done = ${done}, note = ${WIPE_TOO_OLD_NOTE} WHERE chat_id = ${job.chat_id}`)
+          await modLog({ chatId: job.chat_id, chatTitle: job.title, action: 'Tüm sohbet silme durdu', reason: `${next} numaradan eski mesajlar 48 saati geçmiş, bot silemez` })
+          next = -1
+          break
+        }
+        done += (first === 'deleted' ? 1 : 0) + (middle === 'deleted' ? 1 : 0)
+        const rest = ids.filter((id) => id !== ids[0] && id !== middleId)
+        if (rest.length) {
+          await deleteChunk(token, job.chat_id, rest)
+          // deleteMessages can't report how many it really removed; count only when this batch is clearly recent.
+          if (first === 'deleted' || middle === 'deleted') done += rest.length
+        }
       } catch (error) {
         const msg = String((error as Error).message)
         if (/not enough rights|chat not found|bot was kicked|not a member/i.test(msg)) {

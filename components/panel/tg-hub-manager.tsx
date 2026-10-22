@@ -519,7 +519,7 @@ function CounterSection({ d }: { d: TgHubData }) {
 
 function WipeProgress() {
   const { data: jobs, mutate } = useSWR('tg-wipe-jobs', () => pumpWipes(), {
-    refreshInterval: (latest) => (latest && latest.length ? 2000 : 15000),
+    refreshInterval: (latest) => (latest?.some((j) => !j.note) ? 2000 : 15000),
     revalidateOnFocus: true,
   })
   const stop = useAction()
@@ -528,13 +528,16 @@ function WipeProgress() {
     <Card title="Çalışan temizlikler" hint="Bu sayfa açık kaldıkça temizlik kesintisiz ilerler. Sayfayı kapatırsan siteye gelen trafikle yavaş yavaş devam eder.">
       <ul className="flex flex-col gap-4">
         {jobs.map((j) => {
-          const deleted = Math.max(0, j.total - j.left)
-          const pct = j.total ? Math.min(100, Math.round((deleted / j.total) * 100)) : 0
+          const scanned = Math.max(0, j.total - j.left)
+          const pct = j.total ? Math.min(100, Math.round((scanned / j.total) * 100)) : 0
           return (
             <li key={j.chatId} className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="flex items-center gap-2 font-medium text-foreground">
-                  <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+                  <span
+                    className={j.note ? 'size-2 rounded-full bg-destructive' : 'size-2 animate-pulse rounded-full bg-primary'}
+                    aria-hidden="true"
+                  />
                   {j.title}
                 </span>
                 <span className="tabular-nums text-muted-foreground">%{pct}</span>
@@ -549,9 +552,11 @@ function WipeProgress() {
               >
                 <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${pct}%` }} />
               </div>
+              {j.note && <p className="text-sm text-destructive text-pretty">{j.note}</p>}
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span className="tabular-nums">
-                  {deleted.toLocaleString('tr-TR')} / {j.total.toLocaleString('tr-TR')} mesaj numarası tarandı · kalan {j.left.toLocaleString('tr-TR')}
+                  {j.deleted.toLocaleString('tr-TR')} mesaj gerçekten silindi · {scanned.toLocaleString('tr-TR')} /{' '}
+                  {j.total.toLocaleString('tr-TR')} numara tarandı
                 </span>
                 <button
                   type="button"
@@ -565,7 +570,7 @@ function WipeProgress() {
                     })
                   }
                 >
-                  Durdur
+                  {j.note ? 'Kapat' : 'Durdur'}
                 </button>
               </div>
             </li>
@@ -590,7 +595,7 @@ function CleanupSection({ d }: { d: TgHubData }) {
   return (
     <div className="flex flex-col gap-4">
       <WipeProgress />
-      <Card title="Sohbeti komple temizle (tüm geçmiş)" hint="Seçtiğin grup ya da kanaldaki TÜM mesajları en yeniden en eskiye siler. Grupta veya kanalda /sil yazıp çıkan butona basarak da başlatabilirsin. Bir mesaja yanıt olarak /sil yazarsan sadece o mesaj silinir. Bot orada 'Mesajları sil' yetkisiyle yönetici olmalı. Listede olmayan bir kanal için @kullaniciadi ya da -100… ID yazabilirsin.">
+      <Card title="Sohbeti komple temizle (tüm geçmiş)" hint="Seçtiğin grup ya da kanaldaki mesajları en yeniden en eskiye siler. Önemli: Telegram botlara sadece son 48 saatteki mesajları sildirir; daha eski postlara ulaşınca bot durur ve haber verir, onları Telegram uygulamasından elle silmen gerekir. Grupta veya kanalda /sil yazıp çıkan butona basarak da başlatabilirsin. Bir mesaja yanıt olarak /sil yazarsan sadece o mesaj silinir. Bot orada 'Mesajları sil' yetkisiyle yönetici olmalı. Listede olmayan bir kanal için @kullaniciadi ya da -100… ID yazabilirsin.">
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             aria-label="Grup veya kanal"
