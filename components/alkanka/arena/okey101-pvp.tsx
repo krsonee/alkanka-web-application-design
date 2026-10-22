@@ -49,6 +49,54 @@ function readSegments(slots: (number | null)[], byId: Map<number, Tile>, okey: O
   return out
 }
 
+/** Always-visible "how close am I to opening" gauge: series total toward 101 and pair count toward 5. */
+function OpenMeter({ runValue, pairs }: { runValue: number; pairs: number }) {
+  const runReady = runValue >= OPEN_MIN
+  const pairReady = pairs >= PAIR_MIN
+  const pct = Math.min(100, Math.round((runValue / OPEN_MIN) * 100))
+  const near = !runReady && runValue >= OPEN_MIN - 20
+  return (
+    <div className="flex w-full max-w-md items-stretch gap-2" aria-live="polite">
+      <div
+        key={runReady ? 'ready' : 'wait'}
+        className={cn(
+          'flex min-w-0 flex-1 flex-col gap-1 rounded-xl border px-3 py-1.5',
+          runReady ? 'animate-pop border-primary bg-primary/15' : near ? 'border-gold/70 bg-gold/10' : 'border-border bg-card/70',
+        )}
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Elin (seri)</span>
+          <span className="text-sm font-black tabular-nums text-foreground">
+            <span className={cn(runReady ? 'text-primary' : near ? 'text-gold' : 'text-foreground')}>{runValue}</span>
+            <span className="text-muted-foreground"> / {OPEN_MIN}</span>
+          </span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+          <div
+            className={cn('h-full rounded-full transition-[width] duration-500', runReady ? 'bg-primary' : near ? 'bg-gold' : 'bg-muted-foreground/60')}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="truncate text-[10px] text-muted-foreground">
+          {runReady ? 'Açmaya hazırsın!' : `Açmak için ${OPEN_MIN - runValue} sayı daha`}
+        </span>
+      </div>
+      <div
+        className={cn(
+          'flex shrink-0 flex-col items-center justify-center rounded-xl border px-3 py-1.5',
+          pairReady ? 'border-primary bg-primary/15' : 'border-border bg-card/70',
+        )}
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Çift</span>
+        <span className="text-sm font-black tabular-nums">
+          <span className={pairReady ? 'text-primary' : 'text-foreground'}>{pairs}</span>
+          <span className="text-muted-foreground"> / {PAIR_MIN}</span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const s = remote.state
   const n = s.seats
@@ -499,16 +547,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           </div>
 
           <div className="flex min-h-6 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            {!opened && (
-              <>
-                <span>
-                  Seri <b className={cn('tabular-nums', runValue >= OPEN_MIN ? 'text-primary' : 'text-foreground')}>{runValue}/{OPEN_MIN}</b>
-                </span>
-                <span>
-                  Çift <b className={cn('tabular-nums', pairs.length >= PAIR_MIN ? 'text-primary' : 'text-foreground')}>{pairs.length}/{PAIR_MIN}</b>
-                </span>
-              </>
-            )}
+            {!opened && <OpenMeter runValue={runValue} pairs={pairs.length} />}
             {layOffable.length > 0 && (
               <button
                 type="button"

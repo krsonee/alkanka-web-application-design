@@ -546,6 +546,16 @@
   0% { transform: translateY(8px) scale(0.92); opacity: 0; }
   100% { transform: translateY(0) scale(1); opacity: 1; }
 }
+@utility card-nope {
+  animation: card-nope 420ms ease-in-out both;
+}
+@keyframes card-nope {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px) rotate(-3deg); }
+  40% { transform: translateX(6px) rotate(3deg); }
+  60% { transform: translateX(-4px) rotate(-2deg); }
+  80% { transform: translateX(3px); }
+}
 @utility bj-lose-shake {
   animation: bj-lose-shake 500ms ease-in-out both;
 }
@@ -1536,4 +1546,42 @@
   body:has([data-game-table]) .xl\:pr-80 {
     padding-right: 0;
   }
+}
+
+/* Tavla dice: thrown in from the roller's side, tumbling and bouncing before they settle. */
+@keyframes die-throw-right {
+  0% { transform: translate(140%, -60%) rotate(260deg) scale(1.25); opacity: 0; }
+  15% { opacity: 1; }
+  45% { transform: translate(30%, 14%) rotate(70deg) scale(1.08); }
+  65% { transform: translate(-8%, -16%) rotate(-18deg) scale(1.04); }
+  82% { transform: translate(0, 6%) rotate(8deg) scale(1); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes die-throw-left {
+  0% { transform: translate(-140%, -60%) rotate(-260deg) scale(1.25); opacity: 0; }
+  15% { opacity: 1; }
+  45% { transform: translate(-30%, 14%) rotate(-70deg) scale(1.08); }
+  65% { transform: translate(8%, -16%) rotate(18deg) scale(1.04); }
+  82% { transform: translate(0, 6%) rotate(-8deg) scale(1); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes die-land {
+  0% { transform: scale(1.18); }
+  40% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+@keyframes die-banner {
+  0% { transform: translate(-50%, 10px) scale(0.6); opacity: 0; }
+  25% { transform: translate(-50%, 0) scale(1.12); opacity: 1; }
+  40% { transform: translate(-50%, 0) scale(1); }
+  85% { opacity: 1; }
+  100% { transform: translate(-50%, -6px) scale(1); opacity: 0; }
+}
+.die-throw-right { animation: die-throw-right 900ms cubic-bezier(0.25, 0.8, 0.3, 1) both; }
+.die-throw-left { animation: die-throw-left 900ms cubic-bezier(0.25, 0.8, 0.3, 1) both; }
+.die-land { animation: die-land 280ms ease-out; }
+.die-banner { animation: die-banner 1800ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .die-throw-right, .die-throw-left, .die-land { animation: none; }
+  .die-banner { animation-duration: 1ms; animation-iteration-count: 1; opacity: 1; }
 }

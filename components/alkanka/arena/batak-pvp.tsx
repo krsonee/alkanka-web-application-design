@@ -25,6 +25,7 @@ import {
   type BCard,
   type Play,
 } from '@/lib/games/batak'
+import { playSound } from '@/lib/sound'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
 
@@ -72,9 +73,9 @@ export function BatakCard({
         size === 'xs' && 'h-10 w-7 rounded-sm',
         size === 'sm' && 'h-[4.6rem] w-[3.3rem] sm:h-[5.8rem] sm:w-[4.15rem] lg:h-[6.4rem] lg:w-[4.6rem]',
         size === 'md' && 'aspect-[5/7] w-[var(--cw)]',
-        playable && 'ring-2 ring-gold hover:-translate-y-3 focus-visible:-translate-y-3',
-        selected && '-translate-y-5 ring-[3px] ring-accent shadow-xl',
-        dim && 'opacity-60 brightness-[0.6]',
+        playable && !selected && 'ring-2 ring-gold hover:-translate-y-4 hover:shadow-[0_10px_22px_-6px_var(--gold)] focus-visible:-translate-y-4',
+        selected && '-translate-y-7 scale-110 ring-[3px] ring-gold shadow-[0_0_26px_-2px_var(--gold)]',
+        dim && 'opacity-50 brightness-75 grayscale',
         className,
       )}
     >
@@ -219,11 +220,44 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
     setPicked(null)
     void remote.send({ type: 'play', s: c.s, r: c.r })
   }
+
+  const [nope, setNope] = useState<{ id: string; text: string; n: number } | null>(null)
+  const nopeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (nopeTimer.current) clearTimeout(nopeTimer.current)
+  }, [])
+  const reject = (c: BCard, text: string) => {
+    playSound('error')
+    setNope((p) => ({ id: `${c.s}-${c.r}`, text, n: (p?.n ?? 0) + 1 }))
+    if (nopeTimer.current) clearTimeout(nopeTimer.current)
+    nopeTimer.current = setTimeout(() => setNope(null), 1800)
+  }
+  const illegalReason = (c: BCard) => {
+    if (!s.trick.length) {
+      return s.trump != null && c.s === s.trump && !s.broken ? 'Koz kırılmadan kozla açamazsın' : 'Bu kart şu an atılamaz'
+    }
+    const led = s.trick[0].card.s
+    if (hand.some((x) => x.s === led)) {
+      return c.s !== led ? `${SUIT_NAMES[led]} atmak zorundasın` : `Daha büyük ${SUIT_NAMES[led]} atmalısın`
+    }
+    if (s.trump != null && hand.some((x) => x.s === s.trump)) {
+      return c.s !== s.trump ? 'Rengin yok, koz çakmak zorundasın' : 'Daha büyük koz atmalısın'
+    }
+    return 'Bu kart şu an atılamaz'
+  }
+
   /** Touch screens pick first and play on the second tap to avoid mis-taps. */
   const tapCard = (c: BCard, twoStep: boolean) => {
-    if (burying) return toggleBury(c)
-    if (!playing || !isLegal(c)) return
+    if (remote.busy) return
+    if (burying) {
+      if (!canBury.some((x) => sameCard(x, c))) return reject(c, rules.gommeYasak ? 'As ve koz gömülemez' : 'Bu kart gömülemez')
+      playSound('card')
+      return toggleBury(c)
+    }
+    if (!playing) return reject(c, 'Sıra sende değil, bekle')
+    if (!isLegal(c)) return reject(c, illegalReason(c))
     if (!twoStep || (picked && sameCard(picked, c))) return playCard(c)
+    playSound('card')
     setPicked(c)
   }
 
@@ -351,9 +385,11 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
       buryOk,
       selected: (burying && buryPick.some((x) => sameCard(x, c))) || (playing && picked != null && sameCard(picked, c)),
       dim: (playing && !ok) || (burying && !buryOk),
-      disabled: remote.busy || (playing ? !ok : burying ? !buryOk : true),
+      disabled: remote.busy,
+      nope: nope?.id === `${c.s}-${c.r}`,
     }
   }
+  const tappable = !remote.spectator && (s.phase === 'play' || burying)
 
   const activeRules = BATAK_RULE_OPTIONS.filter((o) => rules[o.key])
   const rulesSummary = kozMaca
@@ -435,10 +471,14 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
 
             <div className="absolute inset-x-2 bottom-2 z-20 flex flex-col items-center gap-2">
               <p
-                className={cn('max-w-full truncate rounded-full px-3 py-1 text-center text-xs font-semibold', myTurn ? 'bg-gold text-gold-foreground' : 'bg-background/75 text-foreground')}
+                key={nope ? `nope-${nope.n}` : 'prompt'}
+                className={cn(
+                  'max-w-full truncate rounded-full px-3 py-1 text-center text-xs font-semibold',
+                  nope ? 'bg-destructive text-foreground shadow-lg animate-pop' : myTurn ? 'bg-gold text-gold-foreground' : 'bg-background/75 text-foreground',
+                )}
                 aria-live="polite"
               >
-                {prompt}
+                {nope?.text ?? prompt}
               </p>
 
               {myTurn && (s.phase === 'bid' || s.phase === 'predict') && (
@@ -534,14 +574,15 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                       const st = cardState(c)
                       return (
                         <BatakCard
-                          key={`${c.s}-${c.r}`}
+                          key={`${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
                           card={c}
                           playable={st.ok || st.buryOk}
                           selected={st.selected}
                           dim={st.dim}
                           disabled={st.disabled}
-                          onClick={playing || burying ? () => tapCard(c, true) : undefined}
-                          style={{ marginLeft: i === 0 ? 0 : '-0.55rem', zIndex: i + ri * 20 }}
+                          onClick={tappable ? () => tapCard(c, true) : undefined}
+                          className={cn(st.nope && 'card-nope ring-2 ring-destructive')}
+                          style={{ marginLeft: i === 0 ? 0 : '-0.55rem', zIndex: st.selected ? 60 : i + ri * 20 }}
                         />
                       )
                     })}
@@ -554,19 +595,20 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                   const st = cardState(c)
                   return (
                     <BatakCard
-                      key={`${c.s}-${c.r}`}
+                      key={`${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
                       card={c}
                       playable={st.ok || st.buryOk}
                       selected={st.selected}
                       dim={st.dim}
                       disabled={st.disabled}
-                      onClick={playing || burying ? () => tapCard(c, false) : undefined}
-                      className="origin-bottom"
+                      onClick={tappable ? () => tapCard(c, false) : undefined}
+                      className={cn('origin-bottom', st.nope && 'card-nope ring-2 ring-destructive')}
                       style={{
                         marginLeft: i === 0 ? 0 : `min(0.15rem, calc((100% - ${hand.length} * var(--cw)) / ${Math.max(1, hand.length - 1)}))`,
                         rotate: `${(i - mid) * (hand.length > 13 ? 1.6 : 2.2)}deg`,
-                        translate: `0 ${Math.abs(i - mid) ** 2 * 0.35}px`,
-                        zIndex: i,
+                        // Fan curve via margin: an inline `translate` would override the hover/selected lift classes.
+                        marginTop: `${Math.abs(i - mid) ** 2 * 0.35}px`,
+                        zIndex: st.selected ? 60 : i,
                       }}
                     />
                   )

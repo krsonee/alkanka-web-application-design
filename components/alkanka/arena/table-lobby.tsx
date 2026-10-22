@@ -981,6 +981,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
               id={id}
               running
               compact={immersive}
+              botsOnly={data.players.filter((p) => !p.bot).length === 1}
               stake={data.stake}
               onDone={() => {
                 refresh()
@@ -1303,53 +1304,101 @@ function RoomShell({ children, onLeave, title, immersive }: { children: React.Re
   )
 }
 
-function LeaveTableButton({ id, running, stake, onDone, compact }: { id: string; running: boolean; stake: number; onDone: () => void; compact?: boolean }) {
+function LeaveTableButton({
+  id,
+  running,
+  stake,
+  onDone,
+  compact,
+  botsOnly,
+}: {
+  id: string
+  running: boolean
+  stake: number
+  onDone: () => void
+  compact?: boolean
+  botsOnly?: boolean
+}) {
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const label = running ? 'Oyunu bitir' : 'Masadan kalk'
 
-  if (!confirming) {
-    return (
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        aria-label={compact ? 'Masadan kalk' : undefined}
-        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
-      >
-        <LogOut className="size-4" aria-hidden="true" />
-        <span className={cn(compact && 'max-lg:sr-only')}>Masadan kalk</span>
-      </button>
-    )
-  }
+  const trigger = (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      className={cn(
+        'flex shrink-0 items-center gap-1.5 rounded-lg border border-destructive/50 px-3 py-2 text-sm font-semibold text-destructive transition-colors hover:bg-destructive hover:text-foreground',
+        compact && 'max-lg:px-2.5 max-lg:py-1.5 max-lg:text-xs',
+      )}
+    >
+      <LogOut className="size-4" aria-hidden="true" />
+      {label}
+    </button>
+  )
+
+  if (!running && !confirming) return trigger
 
   return (
-    <div role="alertdialog" aria-label="Masadan kalkmayı onayla" className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted-foreground">
-        {error ?? (running ? `Hükmen kaybedersin (-${formatAC(stake)} KC).` : 'Bahsin iade edilir.')}
-      </span>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true)
-          setError(null)
-          const r = await leaveGameTable(id)
-          setBusy(false)
-          if (!r.ok) {
-            setError(r.error ?? 'Kalkamadın, tekrar dene.')
-            return
-          }
-          setConfirming(false)
-          onDone()
-        }}
-        className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-2 text-sm font-bold text-foreground disabled:opacity-60"
-      >
-        {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
-        Kalk
-      </button>
-      <button type="button" disabled={busy} onClick={() => setConfirming(false)} className="rounded-lg px-2 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground">
-        Vazgeç
-      </button>
-    </div>
+    <>
+      {running && trigger}
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={`leave-${id}`}
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => !busy && setConfirming(false)}
+        >
+          <div
+            className="flex w-full max-w-xs flex-col gap-3 rounded-2xl border border-border bg-card p-5 text-center shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id={`leave-${id}`} className="text-lg font-bold text-foreground">
+              {running ? 'Oyunu bitirmek istiyor musun?' : 'Masadan kalkılsın mı?'}
+            </p>
+            <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+              {error ??
+                (!running
+                  ? 'Bahsin iade edilir.'
+                  : botsOnly
+                    ? `Bot masası kapanır, bahsin (${formatAC(stake)} KC) geri gelmez.`
+                    : `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer.`)}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirming(false)}
+                className="rounded-xl border border-border py-2.5 text-sm font-bold text-foreground hover:bg-secondary"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  setError(null)
+                  const r = await leaveGameTable(id)
+                  setBusy(false)
+                  if (!r.ok) {
+                    setError(r.error ?? 'Kalkamadın, tekrar dene.')
+                    return
+                  }
+                  setConfirming(false)
+                  onDone()
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-destructive py-2.5 text-sm font-bold text-foreground disabled:opacity-60"
+              >
+                {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
+                {running ? 'Bitir' : 'Kalk'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
