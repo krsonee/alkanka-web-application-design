@@ -16,6 +16,7 @@ import {
   setRoleBot,
   stopBroadcast,
   pumpWipes,
+  repairTelegramAction,
   stopWipe,
   sweepGhosts,
   unbanEverywhere,
@@ -184,10 +185,31 @@ function ChatChip({ kind, id, label }: { kind: 'group' | 'log' | 'staff' | 'spon
   )
 }
 
+function RepairCard() {
+  const a = useAction()
+  return (
+    <Card title="Sistem kontrolü" hint="Bir botu silip yeniden eklediysen ya da bir bölüm çalışmıyorsa önce buna bas. Silinmiş botlara bakan ayarları temizler, yanlış yere bakan webhook'ları düzeltir.">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => repairTelegramAction())}>
+          {a.pending ? 'Kontrol ediliyor…' : 'Kontrol et ve onar'}
+        </button>
+        <a className={btnGhost} href="/api/panel/telegram-kilavuz?ac" target="_blank" rel="noreferrer">
+          Kurulum kılavuzunu aç
+        </a>
+        <a className={btnGhost} href="/api/panel/telegram-kilavuz">
+          Kılavuzu indir
+        </a>
+      </div>
+      {a.note}
+    </Card>
+  )
+}
+
 function SetupSection({ d }: { d: TgHubData }) {
   const { hub } = d
   return (
     <div className="flex flex-col gap-4">
+      <RepairCard />
       <Card title="1. Botları görevlere ata" hint="Her rol için ayrı bot önerilir. Aynı bot birden fazla rol yapabilir ama Oran ve KankaTV botlarını burada kullanma.">
         <RoleRow role="guard" label="Bekçi (güvenlik + kontrolcü + sayaç)" hint="Gruplarda küfür, spam, reklam, bot saldırısı ve sahte hesapları engeller; mesajları sayar." botId={hub.guardBotId} bots={d.bots} info={d.guardHook} />
         <RoleRow role="support" label="Destek botu" hint="Üyeler bu bota özelden yazar. Sorun yetkili grubuna ve sponsor grubuna bilet olarak düşer." botId={hub.supportBotId} bots={d.bots} info={d.supportHook} />
