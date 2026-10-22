@@ -197,7 +197,25 @@ export async function pumpWipes(): Promise<WipeJob[]> {
   if (!(await canPanel('telegram'))) return []
   const { processWipes, listWipes } = await import('@/lib/tg-guard')
   await processWipes(12_000).catch((e) => console.error('[tg-hub] wipe pump', e))
-  return listWipes()
+  const jobs = await listWipes()
+  // Revives the background chain if it ever stopped (e.g. a deploy cut it off).
+  if (jobs.length) await kickWipeRunner()
+  return jobs
+}
+
+/** Starts the self-chaining /api/telegram/wipe runner without waiting for it to finish. */
+async function kickWipeRunner() {
+  try {
+    const h = await headers()
+    const host = h.get('x-forwarded-host') ?? h.get('host')
+    if (!host) return
+    const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
+    const { getCronKey } = await import('@/lib/telegram-mirror')
+    const url = `${proto}://${host}/api/telegram/wipe?key=${encodeURIComponent(await getCronKey())}`
+    await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(1500) }).catch(() => null)
+  } catch (error) {
+    console.error('[tg-hub] wipe kick', error)
+  }
 }
 
 export async function stopWipe(chatId: string): Promise<Result> {
@@ -218,10 +236,10 @@ export async function wipeWholeChat(chatInput: string): Promise<Result> {
     const token = await botToken(hub.guardBotId)
     // The newest message id is unknown from the panel, so a marker message gives the starting point.
     const marker = await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: chat.id, text: 'Sohbet temizliği başlıyor…' })
-    const { startWipe, processWipes } = await import('@/lib/tg-guard')
+    const { startWipe } = await import('@/lib/tg-guard')
     await startWipe(hub.guardBotId, chat.id, chat.title, marker.message_id, 'Panel')
-    await processWipes(20_000)
-    return done(`"${chat.title}" temizliği başladı. İlerlemeyi aşağıdaki çubuktan izleyebilirsin; bu sayfa açıkken kesintisiz devam eder.`)
+    await kickWipeRunner()
+    return done(`"${chat.title}" temizliği başladı. Arka planda kendi kendine devam eder, paneli kapatsan da durmaz.`)
   } catch (error) {
     return fail(error)
   }
