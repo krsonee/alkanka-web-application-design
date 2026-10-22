@@ -511,10 +511,30 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     if (lastPhase.current !== phase) {
       lastPhase.current = phase;
       setError("");
-      if (phase === "play") playSound("card");
       if (phase === "bet") playSound("turn");
+      if (phase === "result" && me) {
+        const net = seatNet(me);
+        if (net !== null) playSound(net > 0 ? "win" : net < 0 ? "lose" : "tick");
+      }
     }
-  }, [phase]);
+  }, [phase, me]);
+
+  // One soft "fwip" per card that lands on the felt, spaced like a real deal.
+  const cardCount =
+    (data?.dealer?.length ?? 0) +
+    (data?.dealerHidden ? 1 : 0) +
+    seats.reduce((n, s) => n + (s?.hands ?? []).reduce((m, h) => m + h.cards.length, 0), 0);
+  const lastCount = useRef<{ round: unknown; n: number } | null>(null);
+  useEffect(() => {
+    const round = data?.roundId;
+    const prev = lastCount.current;
+    lastCount.current = { round, n: cardCount };
+    if (!prev || prev.round !== round || cardCount <= prev.n) return;
+    const timers = Array.from({ length: Math.min(cardCount - prev.n, 8) }, (_, i) =>
+      setTimeout(() => playSound("card"), i * 150),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [cardCount, data?.roundId]);
 
   useEffect(() => {
     if (typeof data?.balance === "number" && data.phase === "result")
@@ -708,6 +728,17 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           <div className="mx-auto w-full max-w-[min(100%,58svh)] rounded-[999px] bg-wood p-2 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:max-w-none sm:p-3.5">
             <div className="felt-table relative mx-auto aspect-square w-full rounded-[999px] border-2 border-primary/40 sm:aspect-[16/9]">
               <TableBrand corners={false} jako={false} />
+              <div
+                className="pointer-events-none absolute right-[9%] top-[13%] flex flex-col items-center gap-0.5 sm:right-[14%] sm:top-[9%]"
+                aria-hidden="true"
+              >
+                <div className="relative h-9 w-7 rotate-[18deg] sm:h-12 sm:w-9">
+                  <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-md border border-primary/30 bg-secondary" />
+                  <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded-md border border-primary/40 bg-secondary" />
+                  <div className="absolute inset-0 rounded-md border-2 border-primary/70 bg-[color-mix(in_oklch,var(--wood)_70%,black)] shadow-lg" />
+                </div>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-primary/80 sm:text-[10px]">6 deste</span>
+              </div>
               <div
                 className="pointer-events-none absolute inset-3 rounded-[999px] border border-primary/15 sm:inset-5"
                 aria-hidden="true"

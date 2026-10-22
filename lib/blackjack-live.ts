@@ -6,10 +6,50 @@ import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/mem
 import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
 
-/** Every card is derived from the server secret, so nobody can predict the next card but every viewer sees the same table. */
-function cardAt(roundId: number, who: string, i: number): Card {
+const SHOE_DECKS = 6
+const SHOE_SIZE = 52 * SHOE_DECKS
+const shoeCache = new Map<number, number[]>()
+
+/** Each round deals from a freshly shuffled 6-deck shoe keyed by the server secret: unpredictable, but identical for every viewer. */
+function shoeOf(roundId: number) {
+  const cached = shoeCache.get(roundId)
+  if (cached) return cached
   const secret = process.env.BETTER_AUTH_SECRET ?? 'alkanka-blackjack'
-  const v = createHmac('sha256', secret).update(`bj:${roundId}:${who}:${i}`).digest().readUInt32BE(0) % 52
+  const shoe = Array.from({ length: SHOE_SIZE }, (_, i) => i % 52)
+  let buf = Buffer.alloc(0)
+  let off = 32
+  let block = 0
+  for (let i = shoe.length - 1; i > 0; i--) {
+    if (off >= 32) {
+      buf = createHmac('sha256', secret).update(`bj:${roundId}:shoe:${block++}`).digest()
+      off = 0
+    }
+    const j = buf.readUInt32BE(off) % (i + 1)
+    off += 4
+    ;[shoe[i], shoe[j]] = [shoe[j], shoe[i]]
+  }
+  shoeCache.set(roundId, shoe)
+  if (shoeCache.size > 64) shoeCache.delete(shoeCache.keys().next().value!)
+  return shoe
+}
+
+const OPEN_DEAL = 2 * (BJ_SEATS + 1)
+const SEAT_SLOTS = 32
+
+/**
+ * Maps a card stream position to a unique shoe position. The opening deal follows the real order
+ * (one card to each seat, dealer, then a second round), and later draws come from per-seat blocks.
+ */
+function shoeSlot(who: string, i: number) {
+  if (who === 'd') return i < 2 ? i * (BJ_SEATS + 1) + BJ_SEATS : OPEN_DEAL + BJ_SEATS * SEAT_SLOTS + (i - 2)
+  const m = /^s(\d+)(?:h([01]))?$/.exec(who)
+  const s = Math.max(0, Number(m?.[1] ?? 1) - 1)
+  if (m?.[2] !== undefined) return OPEN_DEAL + s * SEAT_SLOTS + 12 + Number(m[2]) * 10 + i
+  return i < 2 ? i * (BJ_SEATS + 1) + s : OPEN_DEAL + s * SEAT_SLOTS + (i - 2)
+}
+
+function cardAt(roundId: number, who: string, i: number): Card {
+  const v = shoeOf(roundId)[shoeSlot(who, i) % SHOE_SIZE]
   return { r: (v % 13) + 1, s: Math.floor(v / 13) }
 }
 

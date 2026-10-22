@@ -458,7 +458,7 @@
   transform: translateY(-3px);
 }
 @utility card-deal {
-  animation: card-deal 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: card-deal 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @utility pop-in {
   animation: pop 500ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
@@ -576,8 +576,13 @@
   .tile-fly, .turn-flash { animation-duration: 1ms; }
 }
 @keyframes card-deal {
-  from { transform: translate(40px, -60px) rotate(12deg); opacity: 0; }
-  to { transform: translate(0, 0) rotate(0); opacity: 1; }
+  0% { transform: translate(140px, -200px) rotate(-28deg) scale(0.55); opacity: 0; }
+  15% { opacity: 1; }
+  80% { transform: translate(-3px, 2px) rotate(1.5deg) scale(1.02); }
+  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-deal { animation: none; }
 }
 
 @keyframes float {
