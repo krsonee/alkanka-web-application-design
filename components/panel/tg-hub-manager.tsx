@@ -193,10 +193,10 @@ function RepairCard() {
         <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => repairTelegramAction())}>
           {a.pending ? 'Kontrol ediliyor…' : 'Kontrol et ve onar'}
         </button>
-        <a className={btnGhost} href="/api/panel/telegram-kilavuz?ac" target="_blank" rel="noreferrer">
+        <a className={btnGhost} href="/downloads/alkanka-telegram-kilavuz.html" target="_blank" rel="noreferrer">
           Kurulum kılavuzunu aç
         </a>
-        <a className={btnGhost} href="/api/panel/telegram-kilavuz">
+        <a className={btnGhost} href="/downloads/alkanka-telegram-kilavuz.html" download="alkanka-telegram-kilavuz.html">
           Kılavuzu indir
         </a>
       </div>
