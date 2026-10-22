@@ -27,7 +27,7 @@ import {
 const BJ_ACTIONS: BjAction[] = ['hit', 'stand', 'double', 'split', 'surrender', 'insure', 'noInsure']
 import { actOnTable, cancelTable, claimTimeout, createTable, getTableRow, joinTable, leaveTable, pausedClock, tableView } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
-import { placeLiveBets } from '@/lib/roulette-live'
+import { placeLiveBets, withdrawLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
 import { assertRateLimit } from '@/lib/rate-limit'
 import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, joinBlackjack as bjLiveJoin, leaveTable as bjLiveLeave, changeTableBet as bjLiveBet, insureAtTable as bjLiveInsure, type TableAction } from '@/lib/blackjack-live'
@@ -291,7 +291,17 @@ export async function placeLiveRouletteBets(bets: RouletteBet[]) {
     const s = (await getArenaSettings()).rulet
     if (!s.enabled) throw new Error('Rulet şu an kapalı.')
     await assertCanPlay(m.id)
-    const r = await placeLiveBets(m, bets, Math.max(...s.bets))
+    const r = await placeLiveBets(m, bets, Math.max(...s.bets) * 10)
+    return { ok: true as const, ...r }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function withdrawLiveRouletteBets(bets?: RouletteBet[]) {
+  try {
+    const m = await member()
+    const r = await withdrawLiveBets(m, bets)
     return { ok: true as const, ...r }
   } catch (e) {
     return fail(e)
