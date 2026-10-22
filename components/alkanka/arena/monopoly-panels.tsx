@@ -172,7 +172,7 @@ export function AllDeedsPanel({ s, me, nameOf }: { s: MonopolyState; me: number;
         const full = [...counts].find(([, n]) => n === set.cells.length)?.[0]
         const near = [...counts].find(([, n]) => n === set.cells.length - 1 && set.cells.length > 1)?.[0]
         return (
-          <li key={set.label} className="overflow-hidden rounded-xl border border-border">
+          <li key={set.label} className="shrink-0 overflow-hidden rounded-xl border border-border">
             <div className="flex items-center gap-2 px-2.5 py-1.5" style={{ borderLeft: `6px solid ${set.color}` }}>
               <span className="flex-1 text-xs font-bold text-foreground">{set.label}</span>
               {full != null ? (

@@ -526,7 +526,7 @@ export function TableLobby({
                   value={String(seatRounds)}
                   options={seatRule.rounds.map((n) => ({
                     value: String(n),
-                    label: game === 'monopoly' ? (n >= 999 ? 'İflasa kadar' : `${n} tur`) : game === 'batak' ? (n === 1 ? 'Tek el' : `${n} puan`) : `${n} el`,
+                    label: game === 'monopoly' ? (n >= 999 ? 'Sınırsız' : `${n} tur`) : game === 'batak' ? (n === 1 ? 'Tek el' : `${n} puan`) : `${n} el`,
                   }))}
                   onChange={(v) => setSeatRounds(Number(v))}
                 />
