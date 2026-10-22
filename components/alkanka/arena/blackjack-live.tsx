@@ -103,7 +103,7 @@ function ResultBanner({ seats }: { seats: (Seat | null)[] }) {
   if (played.length === 0) return null;
   const me = played.find((s) => s.mine);
   const base =
-    "bj-banner pointer-events-none absolute left-1/2 top-[56%] z-30 flex min-w-44 flex-col items-center gap-0.5 rounded-2xl border-2 px-5 py-3 text-center shadow-2xl sm:top-1/2 sm:min-w-56 sm:px-7 sm:py-4";
+    "bj-strip flex w-full max-w-md flex-wrap items-center justify-center gap-x-3 gap-y-0.5 rounded-2xl border-2 px-4 py-2 text-center shadow-lg";
 
   if (me) {
     const net = seatNet(me)!;
@@ -119,7 +119,7 @@ function ResultBanner({ seats }: { seats: (Seat | null)[] }) {
       <div role="status" className={cn(base, tone)}>
         <span
           className={cn(
-            "font-display text-xl font-black uppercase tracking-wide sm:text-3xl",
+            "font-display text-lg font-black uppercase tracking-wide sm:text-2xl",
             main > 0 ? "text-primary" : main < 0 ? "text-destructive" : "text-foreground",
           )}
         >
@@ -281,11 +281,12 @@ function SeatPod({
       return (
         <div
           style={style}
-          className={cn(place, "flex flex-col items-center gap-1")}
-        >
-          {ring}
-          {label}
-        </div>
+          aria-hidden="true"
+          className={cn(
+            place,
+            "size-6 rounded-full border border-dashed border-primary/20 sm:size-8",
+          )}
+        />
       );
     }
     return (
@@ -352,7 +353,13 @@ function SeatPod({
             )}
           >
             {h.cards.map((c, i) => (
-              <PlayingCard key={`${i}-${c.r}-${c.s}`} card={c} index={i} small />
+              <PlayingCard
+                key={`${i}-${c.r}-${c.s}`}
+                card={c}
+                index={i}
+                small={!seat.mine || seat.split}
+                medium={seat.mine && !seat.split}
+              />
             ))}
             <span
               className={cn(
@@ -717,16 +724,16 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                     priority
                   />
                 </div>
-                <div className="flex min-h-12 justify-center -space-x-6 sm:min-h-14 sm:-space-x-5">
+                <div className="flex min-h-16 justify-center -space-x-6 sm:min-h-20 sm:-space-x-6">
                   {dealer.map((c, i) => (
                     <PlayingCard
                       key={`d-${i}-${c.r}-${c.s}`}
                       card={c}
                       index={i}
-                      small
+                      medium
                     />
                   ))}
-                  {dealerHidden && <PlayingCard hidden small />}
+                  {dealerHidden && <PlayingCard hidden medium />}
                 </div>
                 {dealer.length > 0 && (
                   <span className="rounded-full bg-background/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground">
@@ -737,9 +744,6 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 )}
               </div>
 
-              {phase === "result" && (
-                <ResultBanner key={data.roundId} seats={seats} />
-              )}
               <div
                 className={cn(
                   "pointer-events-none absolute left-1/2 top-[56%] flex w-[40%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 text-center transition-opacity sm:top-[50%] sm:w-[34%]",
@@ -775,7 +779,10 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           />
         </div>
 
-        <div className="flex flex-col items-center gap-2 px-2 pb-2 pt-3 sm:gap-3 sm:pt-4">
+        <div className="flex min-h-44 flex-col items-center gap-2 px-2 pb-2 pt-3 sm:gap-3 sm:pt-4">
+          {phase === "result" && (
+            <ResultBanner key={data.roundId} seats={seats} />
+          )}
           {phase === "insurance" && me ? (
             me.can.insure ? (
               <div className="flex flex-col items-center gap-2">
@@ -878,7 +885,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 </button>
               )}
               <div
-                className="flex flex-wrap justify-center gap-2"
+                className="flex max-w-full gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] sm:flex-wrap sm:justify-center"
                 role="radiogroup"
                 aria-label="Bu elin bahsi"
               >
@@ -913,7 +920,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 Ana bahis
               </span>
               <div
-                className="flex flex-wrap justify-center gap-2"
+                className="flex max-w-full gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] sm:flex-wrap sm:justify-center"
                 role="radiogroup"
                 aria-label="Bahis"
               >
@@ -1013,12 +1020,14 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
       </section>
 
       <aside className="flex h-fit flex-col gap-4" aria-label="Masa bilgileri">
-        <BlackjackTables
-          tables={data.tables}
-          current={data.tableNo}
-          locked={!!me}
-          onView={enterTable}
-        />
+        <div className={cn(me && "hidden lg:block")}>
+          <BlackjackTables
+            tables={data.tables}
+            current={data.tableNo}
+            locked={!!me}
+            onView={enterTable}
+          />
+        </div>
         <TableChat
           key={data.tableNo}
           tableId={`blackjack-masa-${data.tableNo}`}

@@ -338,10 +338,10 @@ export type RoulettePhase = 'bet' | 'spin' | 'result'
 
 export const BJ_SEATS = 6
 /** Live blackjack runs on events: the bet window opens when someone sits and ends early once every seat is ready; play ends once every hand is done. These are only the upper limits. */
-export const BJ_BET_MS = 8_000
+export const BJ_BET_MS = 12_000
 export const BJ_JOIN_GRACE_MS = 3_000
 export const BJ_PLAY_MS = 20_000
-export const BJ_RESULT_MS = 5_000
+export const BJ_RESULT_MS = 6_000
 /** Only runs when the dealer's up card is an Ace: everyone decides on insurance before the dealer peeks. */
 export const BJ_INS_MS = 8_000
 export type BlackjackPhase = 'waiting' | 'bet' | 'insurance' | 'play' | 'result'
