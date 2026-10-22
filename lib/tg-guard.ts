@@ -381,8 +381,24 @@ export async function startWipe(botId: number, chatId: number | string, title: s
 
 export async function listWipes() {
   await ensureGuardTables()
-  const r = await rows<{ chat_id: string; title: string; next_id: string; total: string }>(sql`SELECT chat_id, title, next_id, total FROM tg_wipe ORDER BY created_at`)
-  return r.map((w) => ({ chatId: w.chat_id, title: w.title, left: Number(w.next_id), total: Number(w.total) }))
+  const r = await rows<{ chat_id: string; title: string; next_id: string; total: string; started_by: string; created_at: string }>(
+    sql`SELECT chat_id, title, next_id, total, started_by, created_at FROM tg_wipe ORDER BY created_at`,
+  )
+  return r.map((w) => ({
+    chatId: w.chat_id,
+    title: w.title,
+    left: Math.max(0, Number(w.next_id)),
+    total: Number(w.total),
+    startedBy: w.started_by,
+    startedAt: new Date(w.created_at).toISOString(),
+  }))
+}
+
+export async function cancelWipe(chatId: string) {
+  await ensureGuardTables()
+  const r = await rows<{ title: string }>(sql`DELETE FROM tg_wipe WHERE chat_id = ${chatId} RETURNING title`)
+  if (r[0]) await modLog({ chatId, chatTitle: r[0].title, action: 'Tüm sohbet silme durduruldu', reason: 'Panelden iptal edildi' })
+  return r.length > 0
 }
 
 /** Deletes message ids from newest to oldest in batches; resumes on the next tick when time runs out or Telegram rate-limits. */
@@ -426,7 +442,8 @@ export async function processWipes(budgetMs = 25_000) {
       await notice(token, job.chat_id, 'Sohbet temizliği tamamlandı.', 30)
       await modLog({ chatId: job.chat_id, chatTitle: job.title, action: 'Tüm sohbet silindi', reason: `${done} mesaj numarası tarandı` })
     } else {
-      await rows(sql`UPDATE tg_wipe SET next_id = ${next}, done = ${done} WHERE chat_id = ${job.chat_id}`)
+      // The panel pump and the traffic tick can overlap; never move the cursor backwards.
+      await rows(sql`UPDATE tg_wipe SET next_id = ${next}, done = ${done} WHERE chat_id = ${job.chat_id} AND next_id > ${next}`)
     }
     if (Date.now() - started >= budgetMs) break
   }
@@ -616,11 +633,11 @@ async function handleCommand(hub: HubConfig, token: string, m: GuardMsg, isAdmin
 }
 
 /** Panel helpers that run the same sweeps without a group command. */
-export async function sweepDeletedAccounts(chatId: string) {
+export async function sweepDeletedAccounts(chatId: string, title?: string) {
   const hub = await getHub()
   if (!hub.guardBotId) throw new Error('Önce Bekçi botunu seç')
   const r = await deletedAccountSweep(await botToken(hub.guardBotId), chatId)
-  await modLog({ chatId, chatTitle: hub.groups.find((g) => g.chatId === chatId)?.title, action: 'Silinmiş hesap temizliği', reason: `${r.removed}/${r.checked} hesap çıkarıldı (panelden)` })
+  await modLog({ chatId, chatTitle: title ?? hub.groups.find((g) => g.chatId === chatId)?.title, action: 'Silinmiş hesap temizliği', reason: `${r.removed}/${r.checked} hesap çıkarıldı (panelden)` })
   return r
 }
 
