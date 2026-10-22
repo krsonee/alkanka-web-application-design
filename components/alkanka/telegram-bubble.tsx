@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Send } from 'lucide-react'
 import { OPEN_CHAT_EVENT } from './live-rail'
 import { useChatFeed } from './use-chat-feed'
@@ -29,11 +30,16 @@ export function TelegramBubble() {
   const unread = seenId === null ? 0 : messages.filter((m) => m.id > seenId).length
   const peek = peekId !== null ? messages.find((m) => m.id === peekId) : undefined
 
+  const pathname = usePathname()
+  const onGameTable = pathname.startsWith('/oyunlar/')
+
   const open = () => {
     setSeenId(lastId)
     setPeekId(null)
     window.dispatchEvent(new Event(OPEN_CHAT_EVENT))
   }
+
+  if (onGameTable) return null
 
   return (
     <div className="fixed right-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 flex items-end gap-2 lg:hidden">

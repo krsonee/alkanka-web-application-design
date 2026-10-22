@@ -30,7 +30,7 @@ import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
 import { assertRateLimit } from '@/lib/rate-limit'
-import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, joinBlackjack as bjLiveJoin, leaveTable as bjLiveLeave, changeTableBet as bjLiveBet } from '@/lib/blackjack-live'
+import { actAtTable as bjLiveAct, readyAtTable as bjLiveReady, joinBlackjack as bjLiveJoin, leaveTable as bjLiveLeave, changeTableBet as bjLiveBet, insureAtTable as bjLiveInsure, type TableAction } from '@/lib/blackjack-live'
 
 type Fail = { ok: false; error: string }
 const fail = (error: unknown): Fail => ({ ok: false, error: error instanceof Error ? error.message : 'Bir hata oluştu.' })
@@ -219,21 +219,32 @@ export async function leaveBlackjackTable() {
   }
 }
 
-export async function changeBlackjackBet(bet: number) {
+export async function changeBlackjackBet(bet: number, side?: { pairs?: number; t213?: number }) {
   try {
     const m = await member()
     const s = (await getArenaSettings()).blackjack
-    const res = await bjLiveBet(m, Number(bet), s.bets)
+    const sides = side ? { pairs: Number(side.pairs) || 0, t213: Number(side.t213) || 0 } : undefined
+    const res = await bjLiveBet(m, Number(bet), s.bets, sides)
     return { ok: true as const, ...res }
   } catch (e) {
     return fail(e)
   }
 }
 
-export async function actBlackjackTable(action: 'hit' | 'stand' | 'double') {
+export async function insureBlackjackTable(take: boolean) {
   try {
     const m = await member()
-    if (!['hit', 'stand', 'double'].includes(action)) throw new Error('Geçersiz hamle.')
+    const res = await bjLiveInsure(m, take === true)
+    return { ok: true as const, ...res }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function actBlackjackTable(action: TableAction) {
+  try {
+    const m = await member()
+    if (!['hit', 'stand', 'double', 'split', 'surrender'].includes(action)) throw new Error('Geçersiz hamle.')
     const res = await bjLiveAct(m, action)
     return { ok: true as const, ...res }
   } catch (e) {

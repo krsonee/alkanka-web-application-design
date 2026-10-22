@@ -11,13 +11,15 @@ import { playSound } from '@/lib/sound'
 import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
 
-export function PlayingCard({ card, hidden, index = 0, small }: { card?: Card; hidden?: boolean; index?: number; small?: boolean }) {
+export function PlayingCard({ card, hidden, index = 0, small, medium }: { card?: Card; hidden?: boolean; index?: number; small?: boolean; medium?: boolean }) {
   const red = card && (card.s === 1 || card.s === 2)
-  if (small) {
+  if (small || medium) {
     return (
       <div
         className={cn(
-          'card-deal relative flex h-14 w-10 shrink-0 flex-col items-center justify-center rounded-md border shadow-md sm:h-16 sm:w-11',
+          'card-deal relative flex shrink-0 flex-col items-center justify-center rounded-md border shadow-md',
+          medium ? 'h-16 w-12 sm:h-20 sm:w-14' : 'h-14 w-10 sm:h-16 sm:w-11',
+          medium && '[&>span]:text-base [&>span>span]:text-lg',
           hidden || !card ? 'border-primary/40 bg-secondary' : 'border-border bg-[oklch(0.97_0.01_90)]',
         )}
         style={{ animationDelay: `${index * 90}ms` }}
