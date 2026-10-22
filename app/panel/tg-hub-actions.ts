@@ -190,7 +190,16 @@ export async function sweepGhosts(chatInput: string): Promise<Result> {
   }
 }
 
-export type WipeJob = { chatId: string; title: string; left: number; total: number; startedBy: string; startedAt: string }
+export type WipeJob = {
+  chatId: string
+  title: string
+  left: number
+  total: number
+  deleted: number
+  note: string | null
+  startedBy: string
+  startedAt: string
+}
 
 /** Pushes running wipes forward while the panel is open, then reports where each one stands. */
 export async function pumpWipes(): Promise<WipeJob[]> {
