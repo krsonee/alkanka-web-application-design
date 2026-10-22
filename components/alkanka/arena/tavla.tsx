@@ -44,6 +44,7 @@ export function Die({
   used,
   small,
   fill,
+  board,
   className,
   style,
 }: {
@@ -51,6 +52,7 @@ export function Die({
   used?: boolean
   small?: boolean
   fill?: boolean
+  board?: boolean
   className?: string
   style?: CSSProperties
 }) {
@@ -60,15 +62,20 @@ export function Die({
       style={style}
       aria-label={`Zar ${value}${used ? ', oynandı' : ''}`}
       className={cn(
-        'grid grid-cols-3 grid-rows-3 gap-0.5 rounded-lg bg-checker-light p-1 shadow-[0_6px_14px_rgb(0_0_0/0.45)] transition-opacity sm:p-1.5',
-        fill ? 'aspect-square h-full' : small ? 'size-8' : 'size-8 sm:size-12',
-        used && 'opacity-35',
+        'grid grid-cols-3 grid-rows-3 bg-checker-light transition-opacity',
+        board
+          ? 'size-7 gap-px rounded-md p-1 shadow-[0_3px_6px_rgb(0_0_0/0.4)] sm:size-9 sm:p-1.5'
+          : 'gap-0.5 rounded-lg p-1 shadow-[0_6px_14px_rgb(0_0_0/0.45)] sm:p-1.5',
+        !board && (fill ? 'aspect-square h-full' : small ? 'size-8' : 'size-8 sm:size-12'),
+        used && 'opacity-30 saturate-0',
         className,
       )}
     >
       {Array.from({ length: 9 }).map((_, i) => (
         <span key={i} className="flex items-center justify-center">
-          {PIPS[value]?.includes(i) && <span className={cn('rounded-full bg-checker-dark', small ? 'size-1.5' : 'size-1.5 sm:size-2')} />}
+          {PIPS[value]?.includes(i) && (
+            <span className={cn('rounded-full bg-checker-dark', board ? 'size-1 sm:size-1.5' : small ? 'size-1.5' : 'size-1.5 sm:size-2')} />
+          )}
         </span>
       ))}
     </span>
@@ -442,16 +449,16 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   const isDouble = rolled.length >= 2 && rolled[0] === rolled[1]
   const celebrate = !faces && isDouble && landed === rollKey && rollKey > 0
   const diceRow = shown.length > 0 && (
-    <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex h-[15%] -translate-y-1/2 items-center justify-center gap-2 sm:gap-4">
+    <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-center gap-1.5 sm:gap-2">
       {shown.map((d, i) => (
         <Die
           key={`${rollKey}-${i}`}
-          fill
+          board
           value={d}
           used={!faces && usedFlags[i]}
           className={cn(
             faces ? (diceLeft ? 'die-throw-left' : 'die-throw-right') : landed === rollKey && rollKey > 0 && 'die-land',
-            celebrate && 'ring-[3px] ring-gold shadow-[0_0_22px_2px_var(--gold)]',
+            celebrate && 'ring-2 ring-gold shadow-[0_0_12px_var(--gold)]',
           )}
           style={faces ? { animationDelay: `${i * 70}ms` } : undefined}
         />
@@ -459,7 +466,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       {celebrate && (
         <span
           key={`dbl-${rollKey}`}
-          className="die-banner absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gold px-3 py-1 text-sm font-black uppercase tracking-wider text-gold-foreground shadow-lg sm:-top-11 sm:text-base"
+          className="die-banner absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gold px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-gold-foreground shadow-md sm:-top-8"
         >
           {DOUBLE_NAMES[rolled[0]]}!
         </span>
