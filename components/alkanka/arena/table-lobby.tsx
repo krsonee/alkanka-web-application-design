@@ -25,6 +25,7 @@ import { PistiFinalScore, PistiPvp } from './pisti-pvp'
 import { PapazPvp } from './papaz-pvp'
 import { DEFAULT_PISTI_RULES, PISTI_RULE_OPTIONS, PISTI_TARGETS, pistiRulesToList, type PistiRules } from '@/lib/games/pisti'
 import { PAPAZ_RULE_OPTIONS, type PapazRules } from '@/lib/games/papaz'
+import { MONO_RULE_OPTIONS, type MonoRules } from '@/lib/games/monopoly'
 import { Bilardo } from './bilardo'
 import { BlackjackDuel } from './blackjack'
 import { RouletteDuel } from './roulette'
@@ -78,7 +79,7 @@ const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [2, 4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 31, 51, 101] },
-  monopoly: { seats: [2, 3, 4, 5, 6, 7, 8, 9, 10], rounds: [999, 50, 30] },
+  monopoly: { seats: [2, 3, 4, 5, 6, 7, 8], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
   papaz: { seats: [2, 3, 4, 5, 6], rounds: [] },
 }
@@ -129,6 +130,7 @@ export function TableLobby({
   const [pistiTeam, setPistiTeam] = useState(true)
   const [pistiExtras, setPistiExtras] = useState<(keyof PistiRules)[]>(pistiRulesToList(DEFAULT_PISTI_RULES))
   const [papazExtras, setPapazExtras] = useState<(keyof PapazRules)[]>([])
+  const [monoExtras, setMonoExtras] = useState<(keyof MonoRules)[]>([])
   const [okey101Team, setOkey101Team] = useState(false)
   const [tavlaRounds, setTavlaRounds] = useState('1')
   const [okeyPoints, setOkeyPoints] = useState('0')
@@ -146,6 +148,8 @@ export function TableLobby({
             ? { variant: pistiTarget, team: seatSeats === 4 && pistiTeam, extras: pistiExtras }
             : game === 'papaz'
               ? { extras: papazExtras }
+              : game === 'monopoly'
+              ? { extras: monoExtras }
               : game === 'okey101'
               ? { team: seatSeats === 4 && okey101Team }
               : {}),
@@ -571,6 +575,43 @@ export function TableLobby({
                   </p>
                 </fieldset>
               )}
+              {game === 'monopoly' && (
+                <fieldset className="flex flex-col gap-2">
+                  <legend className="mb-2 text-xs font-semibold text-muted-foreground">Ev kuralları</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {MONO_RULE_OPTIONS.map((o) => {
+                      const on = monoExtras.includes(o.key)
+                      return (
+                        <button
+                          key={o.key}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          onClick={() => setMonoExtras((list) => (on ? list.filter((k) => k !== o.key) : [...list, o.key]))}
+                          className={cn(
+                            'flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors',
+                            on ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary/50',
+                          )}
+                        >
+                          <span
+                            className={cn('mt-0.5 flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition-colors', on ? 'bg-primary' : 'bg-muted')}
+                            aria-hidden="true"
+                          >
+                            <span className={cn('size-3 rounded-full bg-background transition-transform', on && 'translate-x-3')} />
+                          </span>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="text-xs font-bold text-foreground">{o.label}</span>
+                            <span className="text-[11px] leading-snug text-muted-foreground">{o.hint}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] leading-snug text-pretty text-muted-foreground">
+                    Alınmayan tapu mezata çıkar. Oyuncular kendi sıralarında takas teklif edebilir. En iyi oyun 4-6 kişiyle oynanır.
+                  </p>
+                </fieldset>
+              )}
               {game === 'papaz' && (
                 <fieldset className="flex flex-col gap-2">
                   <legend className="mb-2 text-xs font-semibold text-muted-foreground">Masa ayarları</legend>
@@ -774,6 +815,9 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
             {t.game === 'okey' && (
               <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">{t.rounds ? `${t.rounds} puan` : 'Tek el'}</span>
             )}
+            {t.game === 'monopoly' && !!t.extras?.length && (
+              <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Ev kuralları</span>
+            )}
             {t.game === 'papaz' && (
               <span className="rounded bg-secondary px-1.5 py-0.5 font-semibold text-foreground">
                 {t.extras?.includes('kiz') ? 'Kız Kimde' : 'Papaz Kimde'}
@@ -883,7 +927,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     send,
   }
 
-  const immersive = ['pisti', 'papaz', 'okey101', 'batak'].includes(data.game) && data.status === 'oynaniyor'
+  const immersive = ['pisti', 'papaz', 'okey101', 'batak', 'monopoly'].includes(data.game) && data.status === 'oynaniyor'
 
   return (
     <RoomShell

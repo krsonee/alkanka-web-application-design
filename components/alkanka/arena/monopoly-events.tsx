@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
+  ArrowLeftRight,
   Ban,
   Building2,
   Dice5,
@@ -38,6 +39,9 @@ export type EventKind =
   | 'unmortgage'
   | 'roll'
   | 'stuck'
+  | 'auction'
+  | 'trade'
+  | 'debt'
   | 'info'
 
 export type GameEvent = {
@@ -57,6 +61,9 @@ export const EVENT_META: Record<EventKind, Meta> = {
   bankrupt: { icon: Skull, tone: 'loss', priority: 10 },
   rent: { icon: HandCoins, tone: 'loss', priority: 9 },
   jail: { icon: Gavel, tone: 'warn', priority: 8 },
+  trade: { icon: ArrowLeftRight, tone: 'neutral', priority: 8 },
+  debt: { icon: HandCoins, tone: 'loss', priority: 8 },
+  auction: { icon: Gavel, tone: 'neutral', priority: 6 },
   tax: { icon: Landmark, tone: 'loss', priority: 7 },
   chance: { icon: HelpCircle, tone: 'chance', priority: 6 },
   chest: { icon: Package, tone: 'chest', priority: 6 },
@@ -86,10 +93,21 @@ export function parseEvent(raw: string, id: number): GameEvent {
   const base = { id, raw, actor: num(raw.match(/^@(\d)/)?.[1]), target: null, amount: null, detail: '' }
   let m: RegExpMatchArray | null
 
-  if ((m = raw.match(/^@(\d), (.+) için @(\d) oyuncusuna (\d+) ₺ kira ödedi/)))
-    return { ...base, kind: 'rent', target: Number(m[3]), amount: -Number(m[4]), title: 'Kira ödendi', detail: m[2] }
+  if ((m = raw.match(/^@(\d), (.+) için @(\d) oyuncusuna (\d+) ₺ kira ödedi(?: \((.+)\))?/)))
+    return { ...base, kind: 'rent', target: Number(m[3]), amount: -Number(m[4]), title: 'Kira ödendi', detail: m[5] ? `${m[2]} · ${m[5]}` : m[2] }
   if ((m = raw.match(/^@\d (.+) ödedi: (\d+) ₺/))) return { ...base, kind: 'tax', amount: -Number(m[2]), title: 'Vergi ödendi', detail: m[1] }
   if (/Başla'dan geçti/.test(raw)) return { ...base, kind: 'go', amount: 200, title: 'Maaş alındı', detail: "Başla'dan geçti" }
+  if (/Başla'ya tam geldi/.test(raw)) return { ...base, kind: 'go', amount: 400, title: 'Çift maaş', detail: "Başla'ya tam geldi" }
+  if ((m = raw.match(/Otopark kumbarasından (\d+) ₺ aldı/))) return { ...base, kind: 'go', amount: Number(m[1]), title: 'Kumbara patladı', detail: 'Ücretsiz Otopark' }
+  if ((m = raw.match(/^@\d (.+) tapusunu mezatta (\d+) ₺'ye aldı/))) return { ...base, kind: 'auction', amount: -Number(m[2]), title: 'Mezatta aldı', detail: m[1] }
+  if ((m = raw.match(/^(.+) mezata çıktı/))) return { ...base, actor: null, kind: 'auction', title: 'Mezat başladı', detail: m[1] }
+  if ((m = raw.match(/^(.+) mezatta kimseye satılmadı/))) return { ...base, actor: null, kind: 'auction', title: 'Mezat boş geçti', detail: m[1] }
+  if (/mezatta \d+ ₺ teklif verdi/.test(raw)) return { ...base, kind: 'info', title: 'Teklif', detail: raw }
+  if ((m = raw.match(/^@\d ile @(\d) takas yaptı\. (.+)$/))) return { ...base, kind: 'trade', target: Number(m[1]), title: 'Takas yapıldı', detail: m[2] }
+  if ((m = raw.match(/^@\d takası reddetti\.?(.*)$/))) return { ...base, kind: 'trade', title: 'Takas reddedildi', detail: m[1].trim() }
+  if ((m = raw.match(/^@\d, @(\d) oyuncusuna takas teklif etti/))) return { ...base, kind: 'trade', target: Number(m[1]), title: 'Takas teklifi', detail: 'Yanıt bekleniyor' }
+  if ((m = raw.match(/^@\d (\d+) ₺ borç için para bulmalı/))) return { ...base, kind: 'debt', amount: null, title: 'Borç', detail: `${m[1]} ₺ ödemek için ev sat ya da ipotek et` }
+  if ((m = raw.match(/^@\d (\d+) ₺ borcunu ödedi/))) return { ...base, kind: 'debt', amount: -Number(m[1]), title: 'Borç ödendi', detail: '' }
   if ((m = raw.match(/^@\d (.+) tapusunu (\d+) ₺'ye aldı/))) return { ...base, kind: 'buy', amount: -Number(m[2]), title: 'Tapu alındı', detail: m[1] }
   if ((m = raw.match(/^@\d (.+) tapusunu almadı/))) return { ...base, kind: 'pass', title: 'Tapu alınmadı', detail: m[1] }
   if ((m = raw.match(/^@\d (Şans|Kamu Fonu) kartı çekti: (.+)$/))) {
@@ -101,7 +119,7 @@ export function parseEvent(raw: string, id: number): GameEvent {
   if (/hapisten çıktı|kartını kullandı/.test(raw)) return { ...base, kind: 'free', title: 'Hapisten çıktı', detail: /kart/.test(raw) ? 'Çıkış kartı kullanıldı' : 'Çift attı' }
   if (/çıkamadı/.test(raw)) return { ...base, kind: 'stuck', title: 'Hapiste kaldı', detail: 'Çift gelmedi' }
   if (/üst üste 3 çift/.test(raw)) return { ...base, kind: 'jail', title: '3 kez çift', detail: 'Doğrudan hapse' }
-  if (/iflas etti/.test(raw)) return { ...base, kind: 'bankrupt', title: 'İflas etti', detail: 'Mülkler bankaya döndü' }
+  if ((m = raw.match(/iflas etti\.\s*(.*)$/))) return { ...base, kind: 'bankrupt', title: 'İflas etti', detail: m[1] }
   if ((m = raw.match(/^@\d (.+) üzerine (otel|ev) dikti/))) return { ...base, kind: 'build', title: m[2] === 'otel' ? 'Otel dikildi' : 'Ev dikildi', detail: m[1] }
   if ((m = raw.match(/^@\d (.+) üzerindeki bir yapıyı sattı/))) return { ...base, kind: 'sell', title: 'Yapı satıldı', detail: m[1] }
   if ((m = raw.match(/^@\d (.+) tapusunu ipotek etti/))) return { ...base, kind: 'mortgage', title: 'İpotek edildi', detail: m[1] }

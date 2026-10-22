@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
+  ArrowLeftRight,
   Bot,
   Car,
   Dice5,
@@ -18,7 +19,10 @@ import {
   MapPin,
   Package,
   Train,
+  X,
   Zap,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -30,37 +34,29 @@ import {
   JAIL_FINE,
   netWorth,
   unmortgageCost,
+  type Bundle,
   type Group,
   type MonopolyState,
 } from '@/lib/games/monopoly'
 import type { Remote } from './remote'
 import { EventFeed, EventSpotlight, MoneyFloat, useEventFeed, useMoneyDeltas, type GameEvent } from './monopoly-events'
 import { TableBrand } from './table-brand'
+import {
+  AllDeedsPanel,
+  AuctionPanel,
+  DebtPanel,
+  deedColor,
+  deedsOf,
+  FinalStandings,
+  GROUP_COLOR,
+  housesOf,
+  PlayersPanel,
+  TOKEN_COLOR,
+  TradeComposer,
+  TradeOfferCard,
+} from './monopoly-panels'
 
-// Physical board colours of the classic edition; these are game material, not UI theme.
-const GROUP_COLOR: Record<Group, string> = {
-  brown: 'oklch(0.42 0.08 50)',
-  lightblue: 'oklch(0.8 0.09 220)',
-  pink: 'oklch(0.6 0.2 345)',
-  orange: 'oklch(0.7 0.17 55)',
-  red: 'oklch(0.56 0.21 27)',
-  yellow: 'oklch(0.87 0.16 95)',
-  green: 'oklch(0.52 0.13 150)',
-  darkblue: 'oklch(0.38 0.14 265)',
-}
 const LIGHT_GROUPS: Group[] = ['lightblue', 'yellow']
-const TOKEN_COLOR = [
-  'oklch(0.58 0.22 27)',
-  'oklch(0.52 0.17 255)',
-  'oklch(0.6 0.16 150)',
-  'oklch(0.78 0.16 80)',
-  'oklch(0.55 0.2 320)',
-  'oklch(0.68 0.14 200)',
-  'oklch(0.64 0.18 50)',
-  'oklch(0.45 0.05 260)',
-  'oklch(0.72 0.17 130)',
-  'oklch(0.5 0.12 20)',
-]
 const PAPER = 'oklch(0.93 0.035 150)'
 const PAPER_DEEP = 'oklch(0.89 0.05 152)'
 const INK = 'oklch(0.22 0.02 160)'
@@ -198,7 +194,10 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   const me = remote.spectator ? -1 : remote.seat
   const myTurn = remote.myTurn
   const [focus, setFocus] = useState<number | null>(null)
-  const [tab, setTab] = useState<'deed' | 'props'>('props')
+  const [tab, setTab] = useState<PanelTab>('props')
+  const [sheet, setSheet] = useState(false)
+  const [zoom, setZoom] = useState(false)
+  const [composer, setComposer] = useState<{ target: number | null; counter?: { give: Bundle; take: Bundle; to: number } } | null>(null)
   const nameOf = (seat: number) => (seat === me ? 'Sen' : remote.names[seat] ?? `Oyuncu ${seat + 1}`)
   const fill = (t: string) => t.replace(/@(\d)/g, (_, d) => nameOf(Number(d)))
 
@@ -213,210 +212,289 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   )
 
   const myPlayer = me >= 0 ? s.players[me] : null
-  const myProps = me >= 0 ? BOARD.map((_, i) => i).filter((i) => s.owner[i] === me) : []
+  const myProps = me >= 0 ? deedsOf(s, me) : []
   const active = s.players[s.turn]
   const activeSquare = active ? BOARD[active.pos] : null
+  const ownTurn = me >= 0 && s.turn === me && myTurn && !s.auction && !s.trade && !!myPlayer && !myPlayer.out
+  const canManage = ownTurn && !walking
+  const canTrade = canManage && ['roll', 'end', 'debt'].includes(s.phase)
+  const alive = s.players.filter((p) => !p.out).length
 
   const openDeed = (i: number) => {
     setFocus(i)
     setTab('deed')
+    setSheet(true)
   }
+  const startTrade = (target: number | null) => {
+    setComposer({ target })
+    setTab('trade')
+  }
+
+  const tabs: [PanelTab, string][] = [
+    ['props', `Mülklerim${myProps.length ? ` · ${myProps.length}` : ''}`],
+    ['players', 'Oyuncular'],
+    ['all', 'Tüm tapular'],
+    ['log', 'Olaylar'],
+    ...(composer ? ([['trade', 'Takas']] as [PanelTab, string][]) : []),
+    ['deed', 'Tapu'],
+  ]
 
   return (
     <div className="@container/mono">
-    <div className="flex flex-col gap-3 @3xl/mono:grid @3xl/mono:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] @3xl/mono:grid-rows-[auto_auto_1fr] @3xl/mono:items-start @3xl/mono:gap-4">
-      <section aria-label="Oyuncular" className="flex flex-col gap-2 @3xl/mono:col-start-2 @3xl/mono:row-start-1">
-        {remote.spectator && (
-          <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
-            <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun.
-          </p>
-        )}
-        <ul className={cn('grid gap-2 @3xl/mono:grid-cols-1', s.seats > 4 ? 'grid-cols-2 sm:grid-cols-3 @3xl/mono:max-h-96 @3xl/mono:overflow-y-auto' : 'grid-cols-2')}>
-          {s.players.map((p, i) => (
-            <PlayerChip
-              key={i}
-              seat={i}
-              name={nameOf(i)}
-              money={displayMoney[i] ?? p.money}
-              delta={deltas ? { id: deltas.id, value: deltas.values[i] ?? 0 } : null}
-              worth={netWorth(s, i)}
-              isBot={s.bots.includes(i)}
-              inJail={p.inJail}
-              hasCard={p.cards > 0}
-              out={p.out}
-              active={s.turn === i && !p.out}
-            />
-          ))}
-        </ul>
-      </section>
-
-      <div className="@3xl/mono:col-start-1 @3xl/mono:row-span-3 @3xl/mono:row-start-1">
-        <div className="rounded-2xl bg-wood p-1.5 shadow-[0_24px_50px_-20px_oklch(0_0_0/0.8)] sm:p-3">
-          <div className="@container mx-auto w-full max-w-[860px]">
-            <div
-              className="relative grid aspect-square w-full grid-cols-[1.6fr_repeat(9,1fr)_1.6fr] grid-rows-[1.6fr_repeat(9,1fr)_1.6fr] gap-px overflow-hidden rounded-md shadow-[inset_0_0_0_2px_oklch(0.22_0.02_160)]"
-              style={{ background: INK }}
-            >
-              {BOARD.map((_, i) => (
-                <BoardCell
-                  key={i}
-                  i={i}
-                  s={s}
-                  focused={focus === i}
-                  landedColor={!walking && active && !active.out && active.pos === i && s.dice ? TOKEN_COLOR[s.turn] : null}
-                  label={`${BOARD[i].name}${s.owner[i] != null ? `, sahibi ${nameOf(s.owner[i]!)}` : ''}${s.players
-                    .map((p, k) => (!p.out && p.pos === i ? `, ${nameOf(k)} burada` : ''))
-                    .join('')}`}
-                  onSelect={() => openDeed(i)}
-                />
-              ))}
-
-              <BoardCenter
-                s={s}
-                walking={walking}
-                activeName={active ? nameOf(shownTurn) : ''}
-                activeSquareIndex={active?.pos ?? 0}
-                note={s.note ? fill(s.note) : myTurn ? 'Sıra sende, zarları at.' : `${nameOf(s.turn)} oynuyor`}
-                batch={batch}
-                nameOf={nameOf}
+      <div className="flex flex-col gap-3 @3xl/mono:grid @3xl/mono:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] @3xl/mono:grid-rows-[auto_auto_1fr] @3xl/mono:items-start @3xl/mono:gap-4">
+        <section aria-label="Oyuncular" className="flex flex-col gap-2 @3xl/mono:col-start-2 @3xl/mono:row-start-1">
+          {remote.spectator && (
+            <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
+              <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun.
+            </p>
+          )}
+          <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 @3xl/mono:mx-0 @3xl/mono:grid @3xl/mono:max-h-80 @3xl/mono:grid-cols-1 @3xl/mono:overflow-y-auto @3xl/mono:px-0">
+            {s.players.map((p, i) => (
+              <PlayerChip
+                key={i}
+                seat={i}
+                name={nameOf(i)}
+                money={displayMoney[i] ?? p.money}
+                delta={deltas ? { id: deltas.id, value: deltas.values[i] ?? 0 } : null}
+                worth={netWorth(s, i)}
+                deeds={deedsOf(s, i).length}
+                houses={housesOf(s, i)}
+                isBot={s.bots.includes(i)}
+                inJail={p.inJail}
+                hasCard={p.cards > 0}
+                out={p.out}
+                active={s.turn === i && !p.out}
+                onOpen={() => setTab('players')}
               />
+            ))}
+          </ul>
+        </section>
 
-              <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-                {s.players.map((p, i) => {
-                  if (p.out) return null
-                  const pos = shownPos[i] ?? p.pos
-                  const shared = s.players.map((q, k) => (!q.out && (shownPos[k] ?? q.pos) === pos ? k : -1)).filter((k) => k >= 0)
-                  const slot = shared.indexOf(i)
-                  const { x, y } = cellCenter(pos)
-                  // Pawns sharing a square sit on a small ring so up to ten stay visible.
-                  const ring = shared.length > 1 ? (shared.length > 4 ? 2.4 : 1.7) : 0
-                  const angle = (slot / Math.max(1, shared.length)) * Math.PI * 2 - Math.PI / 4
-                  const dx = ring * Math.cos(angle)
-                  const dy = ring * Math.sin(angle)
-                  return (
-                    <Pawn
+        <div className="@3xl/mono:col-start-1 @3xl/mono:row-span-3 @3xl/mono:row-start-1">
+          <div className="relative rounded-2xl bg-wood p-1.5 shadow-[0_24px_50px_-20px_oklch(0_0_0/0.8)] sm:p-3">
+            <button
+              type="button"
+              onClick={() => setZoom((z) => !z)}
+              className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-card/90 px-2.5 py-1.5 text-xs font-bold text-foreground shadow-md backdrop-blur @3xl/mono:hidden"
+              aria-pressed={zoom}
+            >
+              {zoom ? <ZoomOut className="size-4" aria-hidden="true" /> : <ZoomIn className="size-4" aria-hidden="true" />}
+              {zoom ? 'Uzaklaş' : 'Yakınlaş'}
+            </button>
+            <div className={cn('overflow-auto overscroll-contain rounded-md', zoom && 'max-h-[75svh]')}>
+              <div className={cn('@container mx-auto', zoom ? 'w-[180%] max-w-none' : 'w-full max-w-[min(100%,calc(100svh-7rem))]')}>
+                <div
+                  className="relative grid aspect-square w-full grid-cols-[1.6fr_repeat(9,1fr)_1.6fr] grid-rows-[1.6fr_repeat(9,1fr)_1.6fr] gap-px overflow-hidden rounded-md shadow-[inset_0_0_0_2px_oklch(0.22_0.02_160)]"
+                  style={{ background: INK }}
+                >
+                  {BOARD.map((_, i) => (
+                    <BoardCell
                       key={i}
-                      seat={i}
-                      x={x + dx}
-                      y={y + dy}
-                      stepKey={pos}
-                      moving={pos !== p.pos}
-                      active={shownTurn === i}
-                      zIndex={Math.round((y + dy) * 10)}
+                      i={i}
+                      s={s}
+                      focused={focus === i}
+                      landedColor={!walking && active && !active.out && active.pos === i && s.dice ? TOKEN_COLOR[s.turn] : null}
+                      label={`${BOARD[i].name}${s.owner[i] != null ? `, sahibi ${nameOf(s.owner[i]!)}` : ''}${s.players
+                        .map((p, k) => (!p.out && p.pos === i ? `, ${nameOf(k)} burada` : ''))
+                        .join('')}`}
+                      onSelect={() => openDeed(i)}
                     />
-                  )
-                })}
+                  ))}
+
+                  <BoardCenter
+                    s={s}
+                    walking={walking}
+                    activeName={active ? nameOf(shownTurn) : ''}
+                    activeSquareIndex={active?.pos ?? 0}
+                    note={s.note ? fill(s.note) : ownTurn ? 'Sıra sende.' : `${nameOf(s.turn)} oynuyor`}
+                    batch={batch}
+                    nameOf={nameOf}
+                  />
+
+                  <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+                    {s.players.map((p, i) => {
+                      if (p.out) return null
+                      const pos = shownPos[i] ?? p.pos
+                      const shared = s.players.map((q, k) => (!q.out && (shownPos[k] ?? q.pos) === pos ? k : -1)).filter((k) => k >= 0)
+                      const slot = shared.indexOf(i)
+                      const { x, y } = cellCenter(pos)
+                      // Pawns sharing a square sit on a small ring so all of them stay visible.
+                      const ring = shared.length > 1 ? (shared.length > 4 ? 2.4 : 1.7) : 0
+                      const angle = (slot / Math.max(1, shared.length)) * Math.PI * 2 - Math.PI / 4
+                      const dx = ring * Math.cos(angle)
+                      const dy = ring * Math.sin(angle)
+                      return (
+                        <Pawn
+                          key={i}
+                          seat={i}
+                          x={x + dx}
+                          y={y + dy}
+                          stepKey={pos}
+                          moving={pos !== p.pos}
+                          active={shownTurn === i}
+                          zIndex={Math.round((y + dy) * 10)}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <section aria-label="Hamle" className="flex flex-col gap-3 @3xl/mono:col-start-2 @3xl/mono:row-start-2">
-        <ActionPanel
-          s={s}
-          me={me}
-          myTurn={myTurn}
-          busy={remote.busy}
-          walking={walking}
-          send={remote.send}
-          activeName={active ? nameOf(shownTurn) : ''}
-          activeSquareIndex={active?.pos ?? 0}
-          ownerName={activeSquare && s.owner[active!.pos] != null ? nameOf(s.owner[active!.pos]!) : null}
-          onOpenDeed={openDeed}
-        />
-        <EventFeed feed={feed} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
-      </section>
+        <section aria-label="Hamle" className="z-30 flex flex-col gap-3 max-lg:sticky max-lg:bottom-0 max-lg:pb-[env(safe-area-inset-bottom)] @3xl/mono:col-start-2 @3xl/mono:row-start-2">
+          <ActionPanel
+            s={s}
+            me={me}
+            myTurn={myTurn}
+            ownTurn={ownTurn}
+            canTrade={canTrade}
+            busy={remote.busy}
+            walking={walking}
+            send={remote.send}
+            nameOf={nameOf}
+            activeName={active ? nameOf(shownTurn) : ''}
+            activeSquareIndex={active?.pos ?? 0}
+            ownerName={activeSquare && s.owner[active!.pos] != null ? nameOf(s.owner[active!.pos]!) : null}
+            onOpenDeed={openDeed}
+            onTrade={() => startTrade(null)}
+            onCounter={() => {
+              const t = s.trade!
+              setComposer({ target: t.from, counter: { give: t.take, take: t.give, to: t.from } })
+              setTab('trade')
+            }}
+            gameOver={alive <= 1}
+          />
+        </section>
 
-      <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card @3xl/mono:col-start-2 @3xl/mono:row-start-3">
-        <div role="tablist" aria-label="Panel" className="grid grid-cols-2 gap-1 border-b border-border p-1.5">
-          {(
-            [
-              ['props', `Mülklerim${myProps.length ? ` · ${myProps.length}` : ''}`],
-              ['deed', 'Tapu'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              onClick={() => setTab(id)}
-              className={cn(
-                'rounded-lg px-2 py-2 text-xs font-bold transition-colors',
-                tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="p-3">
-          {tab === 'deed' &&
-            (focus != null ? (
-              <DeedCard i={focus} s={s} ownerName={s.owner[focus] != null ? nameOf(s.owner[focus]!) : null} />
-            ) : (
-              <p className="text-sm leading-relaxed text-muted-foreground">Ayrıntılarını görmek için tahtada bir kareye dokun.</p>
+        <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card @3xl/mono:col-start-2 @3xl/mono:row-start-3">
+          <div role="tablist" aria-label="Panel" className="flex gap-1 overflow-x-auto border-b border-border p-1.5">
+            {tabs.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+                className={cn(
+                  'shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-colors',
+                  tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                )}
+              >
+                {label}
+              </button>
             ))}
+          </div>
 
-          {tab === 'props' &&
-            (me < 0 ? (
-              <p className="text-sm text-muted-foreground">İzleyici modundasın.</p>
-            ) : myProps.length === 0 ? (
-              <p className="text-sm leading-relaxed text-muted-foreground">Henüz tapun yok. Sahipsiz bir kareye gelince satın alabilirsin.</p>
-            ) : (
-              <ul className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
-                {myProps.map((i) => {
-                  const sq = BOARD[i]
-                  const color = sq.type === 'property' ? GROUP_COLOR[sq.group] : 'oklch(0.6 0 0)'
-                  return (
-                    <li key={i} className="flex flex-col gap-2 rounded-xl border border-border bg-secondary/40 p-2">
-                      <button type="button" onClick={() => openDeed(i)} className="flex items-center gap-2 text-left text-sm">
-                        <span className="h-6 w-2 shrink-0 rounded-sm" style={{ background: color }} aria-hidden="true" />
-                        <span className={cn('min-w-0 flex-1 truncate font-semibold text-foreground', s.mortgaged[i] && 'line-through opacity-60')}>{sq.name}</span>
-                        {s.houses[i] > 0 && (
-                          <span className="flex items-center gap-0.5 text-xs font-bold text-primary">
-                            {s.houses[i] === 5 ? <Hotel className="size-3.5" aria-label="Otel" /> : <><Home className="size-3.5" aria-hidden="true" /> {s.houses[i]}</>}
+          <div className="p-3">
+            {tab === 'deed' &&
+              (focus != null ? (
+                <DeedCard i={focus} s={s} ownerName={s.owner[focus] != null ? nameOf(s.owner[focus]!) : null} />
+              ) : (
+                <p className="text-sm leading-relaxed text-muted-foreground">Ayrıntılarını görmek için tahtada bir kareye dokun.</p>
+              ))}
+
+            {tab === 'players' && <PlayersPanel s={s} me={me} nameOf={nameOf} canTrade={canTrade} onTrade={startTrade} />}
+            {tab === 'all' && <AllDeedsPanel s={s} me={me} nameOf={nameOf} />}
+            {tab === 'log' && <EventFeed feed={feed} nameOf={nameOf} tokenColor={TOKEN_COLOR} />}
+            {tab === 'trade' &&
+              (composer && me >= 0 && (canTrade || (composer.counter && s.trade?.to === me)) ? (
+                <TradeComposer
+                  key={`${composer.target}-${composer.counter ? 'c' : 'p'}`}
+                  s={s}
+                  me={me}
+                  initialTarget={composer.target}
+                  counter={composer.counter}
+                  nameOf={nameOf}
+                  busy={remote.busy}
+                  send={remote.send}
+                  onClose={() => {
+                    setComposer(null)
+                    setTab('players')
+                  }}
+                />
+              ) : (
+                <p className="text-sm leading-relaxed text-muted-foreground">Takası kendi sıranda, zar atmadan önce ya da turu bitirmeden önce teklif edebilirsin.</p>
+              ))}
+
+            {tab === 'props' &&
+              (me < 0 ? (
+                <p className="text-sm text-muted-foreground">İzleyici modundasın.</p>
+              ) : myProps.length === 0 ? (
+                <p className="text-sm leading-relaxed text-muted-foreground">Henüz tapun yok. Sahipsiz bir kareye gelince satın alabilir ya da mezatta teklif verebilirsin.</p>
+              ) : (
+                <ul className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
+                  {myProps.map((i) => {
+                    const sq = BOARD[i]
+                    const debt = s.phase === 'debt'
+                    return (
+                      <li key={i} className="flex flex-col gap-2 rounded-xl border border-border bg-secondary/40 p-2">
+                        <button type="button" onClick={() => openDeed(i)} className="flex items-center gap-2 text-left text-sm">
+                          <span className="h-6 w-2 shrink-0 rounded-sm" style={{ background: deedColor(i) }} aria-hidden="true" />
+                          <span className={cn('min-w-0 flex-1 truncate font-semibold text-foreground', s.mortgaged[i] && 'line-through opacity-60')}>{sq.name}</span>
+                          {s.houses[i] > 0 && (
+                            <span className="flex items-center gap-0.5 text-xs font-bold text-primary">
+                              {s.houses[i] === 5 ? <Hotel className="size-3.5" aria-label="Otel" /> : <><Home className="size-3.5" aria-hidden="true" /> {s.houses[i]}</>}
+                            </span>
+                          )}
+                        </button>
+                        {canManage && ((!debt && canBuild(s, me, i)) || canSell(s, me, i) || canMortgage(s, me, i) || (!debt && s.mortgaged[i])) && (
+                          <span className="flex flex-wrap gap-1">
+                            {!debt && canBuild(s, me, i) && (
+                              <MiniButton disabled={remote.busy} onClick={() => remote.send({ type: 'build', pos: i })}>
+                                {s.houses[i] === 4 ? 'Otel dik' : 'Ev dik'} · {(sq as { house: number }).house} ₺
+                              </MiniButton>
+                            )}
+                            {canSell(s, me, i) && (
+                              <MiniButton disabled={remote.busy} onClick={() => remote.send({ type: 'sell', pos: i })}>
+                                Ev sat · +{(sq as { house: number }).house / 2} ₺
+                              </MiniButton>
+                            )}
+                            {canMortgage(s, me, i) && (
+                              <MiniButton disabled={remote.busy} onClick={() => remote.send({ type: 'mortgage', pos: i })}>
+                                İpotekle · +{isBuyable(sq) ? sq.price / 2 : 0} ₺
+                              </MiniButton>
+                            )}
+                            {!debt && s.mortgaged[i] && (
+                              <MiniButton disabled={remote.busy || (myPlayer?.money ?? 0) < unmortgageCost(i)} onClick={() => remote.send({ type: 'unmortgage', pos: i })}>
+                                İpoteği kaldır · {unmortgageCost(i)} ₺
+                              </MiniButton>
+                            )}
                           </span>
                         )}
-                      </button>
-                      {myTurn && (canBuild(s, me, i) || canSell(s, me, i) || canMortgage(s, me, i) || s.mortgaged[i]) && (
-                        <span className="flex flex-wrap gap-1">
-                          {canBuild(s, me, i) && (
-                            <MiniButton disabled={remote.busy} onClick={() => remote.send({ type: 'build', pos: i })}>
-                              {s.houses[i] === 4 ? 'Otel dik' : 'Ev dik'}
-                            </MiniButton>
-                          )}
-                          {canSell(s, me, i) && (
-                            <MiniButton disabled={remote.busy} onClick={() => remote.send({ type: 'sell', pos: i })}>
-                              Ev sat
-                            </MiniButton>
-                          )}
-                          {canMortgage(s, me, i) && (
-                            <MiniButton disabled={remote.busy} onClick={() => remote.send({ type: 'mortgage', pos: i })}>
-                              İpotekle
-                            </MiniButton>
-                          )}
-                          {s.mortgaged[i] && (
-                            <MiniButton disabled={remote.busy || (myPlayer?.money ?? 0) < unmortgageCost(i)} onClick={() => remote.send({ type: 'unmortgage', pos: i })}>
-                              İpoteği kaldır · {unmortgageCost(i)} ₺
-                            </MiniButton>
-                          )}
-                        </span>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            ))}
+                      </li>
+                    )
+                  })}
+                </ul>
+              ))}
+          </div>
+        </section>
+      </div>
 
+      {sheet && focus != null && (
+        <div className="fixed inset-0 z-[70] flex items-end bg-background/60 backdrop-blur-sm lg:hidden" onClick={() => setSheet(false)}>
+          <div
+            role="dialog"
+            aria-label={BOARD[focus].name}
+            className="w-full rounded-t-3xl border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl motion-safe:animate-[mono-event-in_300ms_ease-out_both]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <span className="mx-auto h-1 w-10 rounded-full bg-muted" aria-hidden="true" />
+              <button type="button" onClick={() => setSheet(false)} className="absolute right-4 rounded-lg p-1 text-muted-foreground" aria-label="Kapat">
+                <X className="size-5" />
+              </button>
+            </div>
+            <DeedCard i={focus} s={s} ownerName={s.owner[focus] != null ? nameOf(s.owner[focus]!) : null} />
+          </div>
         </div>
-      </section>
-    </div>
+      )}
     </div>
   )
 }
+
+type PanelTab = 'deed' | 'props' | 'players' | 'all' | 'log' | 'trade'
 
 function PlayerChip({
   seat,
@@ -424,54 +502,64 @@ function PlayerChip({
   money,
   delta,
   worth,
+  deeds,
+  houses,
   isBot,
   inJail,
   hasCard,
   out,
   active,
+  onOpen,
 }: {
   seat: number
   name: string
   money: number
   delta: { id: number; value: number } | null
   worth: number
+  deeds: number
+  houses: number
   isBot: boolean
   inJail: boolean
   hasCard: boolean
   out: boolean
   active: boolean
+  onOpen: () => void
 }) {
   return (
-    <li
-      className={cn(
-        'relative flex min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 transition-colors sm:gap-3 sm:p-2',
-        delta && delta.value < 0 && 'motion-safe:animate-[bj-lose-shake_450ms_ease-in-out]',
-        active ? 'border-primary bg-primary/10' : 'border-border',
-        out && 'opacity-45 grayscale',
-      )}
-    >
-      <span className="relative size-9 shrink-0 overflow-hidden rounded-full border-2 sm:size-11" style={{ borderColor: TOKEN_COLOR[seat] }}>
-        <img src={`/images/monopoly/pawn-${seat}.png`} alt="" className="size-full scale-[1.6] object-cover object-[50%_32%]" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1 text-sm font-bold text-foreground">
-          {isBot && <Bot className="size-3.5 shrink-0 text-muted-foreground" aria-label="Bot" />}
-          <span className="truncate">{name}</span>
-          {inJail && <Lock className="size-3.5 shrink-0 text-destructive" aria-label="Hapiste" />}
-          {hasCard && <KeyRound className="size-3.5 shrink-0 text-primary" aria-label="Hapisten çıkış kartı" />}
-        </p>
-        <p className="truncate text-xs tabular-nums text-muted-foreground">
+    <li className="relative shrink-0 snap-start @3xl/mono:shrink">
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cn(
+          'flex w-40 min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 text-left transition-colors @3xl/mono:w-full sm:gap-2.5 sm:p-2',
+          delta && delta.value < 0 && 'motion-safe:animate-[bj-lose-shake_450ms_ease-in-out]',
+          active ? 'border-primary bg-primary/10' : 'border-border',
+          out && 'opacity-45 grayscale',
+        )}
+      >
+        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border-2 sm:size-10" style={{ borderColor: TOKEN_COLOR[seat] }}>
+          <img src={`/images/monopoly/pawn-${seat}.png`} alt="" className="size-full scale-[1.6] object-cover object-[50%_32%]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1 text-sm font-bold text-foreground">
+            {isBot && <Bot className="size-3.5 shrink-0 text-muted-foreground" aria-label="Bot" />}
+            <span className="truncate">{name}</span>
+            {inJail && <Lock className="size-3.5 shrink-0 text-destructive" aria-label="Hapiste" />}
+            {hasCard && <KeyRound className="size-3.5 shrink-0 text-primary" aria-label="Hapisten çıkış kartı" />}
+          </span>
           {out ? (
-            'İflas etti'
+            <span className="block text-xs text-muted-foreground">İflas etti</span>
           ) : (
             <>
-              <span className="font-bold text-foreground">{money.toLocaleString('tr-TR')} ₺</span>
-              <span className="hidden sm:inline"> · servet {worth.toLocaleString('tr-TR')} ₺</span>
+              <span className="block truncate text-xs font-bold tabular-nums text-foreground">{money.toLocaleString('tr-TR')} ₺</span>
+              <span className="block truncate text-[10px] tabular-nums text-muted-foreground">
+                {deeds} tapu · {houses} ev · servet {worth.toLocaleString('tr-TR')}
+              </span>
             </>
           )}
-        </p>
-      </div>
-      {active && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" aria-label="Sırada" />}
+        </span>
+        {active && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" aria-label="Sırada" />}
+      </button>
       {delta && delta.value !== 0 && <MoneyFloat key={delta.id} id={delta.id} delta={delta.value} />}
     </li>
   )
@@ -675,13 +763,14 @@ function BoardCenter({
           className="block rounded-[0.8cqw] border-[0.5cqw] px-[3cqw] py-[0.6cqw] font-display text-[6.4cqw] font-black uppercase leading-none tracking-wide shadow-[0_0.8cqw_0_oklch(0_0_0/0.18)]"
           style={{ background: GROUP_COLOR.red, borderColor: WHITE, color: WHITE }}
         >
-          Monopoly
+          Jakopoly
         </span>
       </div>
 
       <div className="relative z-10 flex w-[78%] flex-col items-center gap-[1.6cqw]">
         <span className="rounded-full px-[1.6cqw] py-[0.4cqw] text-[clamp(7px,1.4cqw,12px)] font-bold uppercase tracking-widest" style={{ background: 'oklch(0.22 0.02 160 / 0.08)' }}>
           {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round} · İflasa kadar`}
+          {s.rules?.kumbara ? ` · Kumbara ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
         </span>
 
         {s.dice && (
@@ -718,87 +807,115 @@ function ActionPanel({
   s,
   me,
   myTurn,
+  ownTurn,
+  canTrade,
   busy,
   walking,
   send,
+  nameOf,
   activeName,
   activeSquareIndex,
   ownerName,
   onOpenDeed,
+  onTrade,
+  onCounter,
+  gameOver,
 }: {
   s: MonopolyState
   me: number
   myTurn: boolean
+  ownTurn: boolean
+  canTrade: boolean
   busy: boolean
   walking: boolean
   send: Remote<MonopolyState>['send']
+  nameOf: (seat: number) => string
   activeName: string
   activeSquareIndex: number
   ownerName: string | null
   onOpenDeed: (i: number) => void
+  onTrade: () => void
+  onCounter: () => void
+  gameOver: boolean
 }) {
   const sq = BOARD[activeSquareIndex]
   const color = sq.type === 'property' ? GROUP_COLOR[sq.group] : 'oklch(0.45 0.02 160)'
   const light = sq.type === 'property' && LIGHT_GROUPS.includes(sq.group)
   const myPlayer = me >= 0 ? s.players[me] : null
-  const canAct = myTurn && myPlayer && !walking
+  const canAct = ownTurn && myPlayer && !walking
+  const highlight = myTurn && !walking
+
+  let body: React.ReactNode
+  if (gameOver) body = <FinalStandings s={s} nameOf={nameOf} />
+  else if (s.trade) body = <TradeOfferCard s={s} me={me} nameOf={nameOf} busy={busy} send={send} onCounter={onCounter} />
+  else if (s.auction && !walking) body = <AuctionPanel s={s} me={me} nameOf={nameOf} busy={busy} send={send} />
+  else if (canAct && s.phase === 'debt' && s.debt) body = <DebtPanel s={s} me={me} busy={busy} send={send} nameOf={nameOf} />
+  else if (canAct)
+    body = (
+      <div className="flex flex-col gap-2">
+        {s.phase === 'roll' && (
+          <>
+            <ActionButton primary disabled={busy} onClick={() => send({ type: 'roll' })}>
+              <Dice5 className="size-5" aria-hidden="true" /> {myPlayer.inJail ? 'Çift için zar at' : 'Zar at'}
+            </ActionButton>
+            {myPlayer.inJail && (
+              <div className="grid grid-cols-2 gap-2">
+                <ActionButton disabled={busy || myPlayer.money < JAIL_FINE} onClick={() => send({ type: 'payJail' })}>
+                  {JAIL_FINE} ₺ öde
+                </ActionButton>
+                <ActionButton disabled={busy || myPlayer.cards === 0} onClick={() => send({ type: 'useCard' })}>
+                  <KeyRound className="size-4" aria-hidden="true" /> Kart
+                </ActionButton>
+              </div>
+            )}
+          </>
+        )}
+        {s.phase === 'buy' && isBuyable(sq) && (
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <ActionButton primary disabled={busy || myPlayer.money < sq.price} onClick={() => send({ type: 'buy' })}>
+              Satın al · {sq.price} ₺
+            </ActionButton>
+            <ActionButton disabled={busy} onClick={() => send({ type: 'pass' })}>
+              <Gavel className="size-4" aria-hidden="true" /> Mezata
+            </ActionButton>
+          </div>
+        )}
+        {s.phase === 'end' && (
+          <ActionButton primary disabled={busy} onClick={() => send({ type: 'end' })}>
+            Turu bitir
+          </ActionButton>
+        )}
+        {canTrade && s.phase !== 'debt' && (
+          <button type="button" onClick={onTrade} className="flex items-center justify-center gap-1.5 rounded-xl py-1.5 text-xs font-bold text-primary hover:bg-primary/10">
+            <ArrowLeftRight className="size-4" aria-hidden="true" /> Takas teklif et
+          </button>
+        )}
+      </div>
+    )
+  else
+    body = (
+      <p className="rounded-xl bg-secondary px-3 py-3 text-center text-sm font-semibold text-muted-foreground">
+        {ownTurn && walking ? 'Piyon yürüyor…' : me < 0 ? 'İzliyorsun' : `${activeName} oynuyor, sıranı bekle`}
+      </p>
+    )
 
   return (
-    <div className={cn('flex flex-col gap-3 rounded-2xl border bg-card p-3', myTurn ? 'border-primary' : 'border-border')}>
-      <button type="button" onClick={() => onOpenDeed(activeSquareIndex)} className="flex items-stretch overflow-hidden rounded-xl border border-border text-left">
-        <span className="flex w-12 shrink-0 items-center justify-center" style={{ background: color, color: light ? INK : WHITE }}>
-          <MapPin className="size-5" aria-hidden="true" />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2">
-          <span className="text-xs text-muted-foreground">{walking ? `${activeName} ilerliyor` : `${activeName} şurada`}</span>
-          <span className="truncate font-bold text-foreground">{sq.name}</span>
-          <span className="truncate text-xs text-muted-foreground">
-            {isBuyable(sq) ? (ownerName ? `Sahibi ${ownerName}${s.mortgaged[activeSquareIndex] ? ' · ipotekli' : ''}` : `Sahipsiz · ${sq.price} ₺`) : sq.type === 'tax' ? `${sq.amount} ₺ vergi` : 'Özel kare'}
+    <div className={cn('flex flex-col gap-3 rounded-2xl border bg-card p-3 max-lg:shadow-[0_-12px_30px_-12px_oklch(0_0_0/0.35)]', highlight ? 'border-primary' : 'border-border')}>
+      {!s.auction && !s.trade && !gameOver && (
+        <button type="button" onClick={() => onOpenDeed(activeSquareIndex)} className="flex items-stretch overflow-hidden rounded-xl border border-border text-left max-lg:hidden">
+          <span className="flex w-12 shrink-0 items-center justify-center" style={{ background: color, color: light ? INK : WHITE }}>
+            <MapPin className="size-5" aria-hidden="true" />
           </span>
-        </span>
-      </button>
-
-      {canAct ? (
-        <div className="flex flex-col gap-2">
-          {s.phase === 'roll' && (
-            <>
-              <ActionButton primary disabled={busy} onClick={() => send({ type: 'roll' })}>
-                <Dice5 className="size-5" aria-hidden="true" /> {myPlayer.inJail ? 'Çift için zar at' : 'Zar at'}
-              </ActionButton>
-              {(myPlayer.inJail && (
-                <div className="grid grid-cols-2 gap-2">
-                  <ActionButton disabled={busy || myPlayer.money < JAIL_FINE} onClick={() => send({ type: 'payJail' })}>
-                    {JAIL_FINE} ₺ öde
-                  </ActionButton>
-                  <ActionButton disabled={busy || myPlayer.cards === 0} onClick={() => send({ type: 'useCard' })}>
-                    <KeyRound className="size-4" aria-hidden="true" /> Kart
-                  </ActionButton>
-                </div>
-              )) ||
-                null}
-            </>
-          )}
-          {s.phase === 'buy' && isBuyable(sq) && (
-            <div className="grid grid-cols-[1fr_auto] gap-2">
-              <ActionButton primary disabled={busy || myPlayer.money < sq.price} onClick={() => send({ type: 'buy' })}>
-                Satın al · {sq.price} ₺
-              </ActionButton>
-              <ActionButton disabled={busy} onClick={() => send({ type: 'pass' })}>
-                Alma
-              </ActionButton>
-            </div>
-          )}
-          {s.phase === 'end' && (
-            <ActionButton primary disabled={busy} onClick={() => send({ type: 'end' })}>
-              Turu bitir
-            </ActionButton>
-          )}
-        </div>
-      ) : (
-        <p className="rounded-xl bg-secondary px-3 py-3 text-center text-sm font-semibold text-muted-foreground">
-          {myTurn && walking ? 'Piyon yürüyor…' : me < 0 ? 'İzliyorsun' : `${activeName} oynuyor, sıranı bekle`}
-        </p>
+          <span className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2">
+            <span className="text-xs text-muted-foreground">{walking ? `${activeName} ilerliyor` : `${activeName} şurada`}</span>
+            <span className="truncate font-bold text-foreground">{sq.name}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {isBuyable(sq) ? (ownerName ? `Sahibi ${ownerName}${s.mortgaged[activeSquareIndex] ? ' · ipotekli' : ''}` : `Sahipsiz · ${sq.price} ₺`) : sq.type === 'tax' ? `${sq.amount} ₺ vergi` : 'Özel kare'}
+            </span>
+          </span>
+        </button>
       )}
+      {body}
     </div>
   )
 }
@@ -819,8 +936,8 @@ function DeedCard({ i, s, ownerName }: { i: number; s: MonopolyState; ownerName:
                 : sq.type === 'jail'
                   ? 'Hapis ya da sadece ziyaret.'
                   : sq.type === 'go'
-                    ? "Başla'dan her geçişte 200 ₺ maaş alınır."
-                    : 'Burada bir şey olmaz, dinlen.'}
+                    ? s.rules?.goDouble ? "Başla'dan geçen 200 ₺, tam gelen 400 ₺ alır." : "Başla'dan her geçişte 200 ₺ maaş alınır."
+                    : sq.type === 'parking' && s.rules?.kumbara ? `Otopark kumbarası: ${s.pot ?? 0} ₺. Buraya gelen hepsini alır.` : 'Burada bir şey olmaz, dinlen.'}
         </p>
       </div>
     )
@@ -842,7 +959,7 @@ function DeedCard({ i, s, ownerName }: { i: number; s: MonopolyState; ownerName:
                 <span className="tabular-nums">{sq.rent[k]} ₺</span>
               </p>
             ))}
-            <p className="mt-1 text-[10px] leading-snug opacity-75">Grubun tamamı sende ise boş arsa kirası iki katıdır. Ev / otel: {sq.house} ₺</p>
+            <p className="mt-1 text-[10px] leading-snug opacity-75">{s.rules?.doubleRent ? 'Ev kuralı: evsiz kira 2 kat. ' : ''}Grubun tamamı sende ise boş arsa kirası iki katıdır. Ev / otel: {sq.house} ₺</p>
           </>
         ) : sq.type === 'rail' ? (
           ['1 istasyon', '2 istasyon', '3 istasyon', '4 istasyon'].map((label, k) => (
