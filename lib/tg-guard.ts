@@ -370,6 +370,24 @@ export async function handleGuardCallback(botId: number, q: TgCallback) {
 
 const WIPE_BATCH = 100
 
+/**
+ * deleteMessages rejects the whole batch when a single id can't be deleted (service message, etc.),
+ * so a failed batch is split in half until only the undeletable ids are left out.
+ */
+async function deleteChunk(token: string, chatId: string, ids: number[]): Promise<number> {
+  try {
+    await callBot(token, 'deleteMessages', { chat_id: chatId, message_ids: ids })
+    return ids.length
+  } catch (error) {
+    const msg = String((error as Error).message)
+    if (/too many requests|retry after|not enough rights|chat not found|bot was kicked|not a member/i.test(msg)) throw error
+    // Splitting all the way to single ids costs ~200 calls per bad batch and stalls the job; small leftovers are skipped.
+    if (ids.length <= 12) return 0
+    const half = Math.ceil(ids.length / 2)
+    return (await deleteChunk(token, chatId, ids.slice(0, half))) + (await deleteChunk(token, chatId, ids.slice(half)))
+  }
+}
+
 export async function startWipe(botId: number, chatId: number | string, title: string, fromId: number, by: string) {
   await ensureGuardTables()
   await rows(sql`INSERT INTO tg_wipe (chat_id, bot_id, title, next_id, total, done, started_by)
@@ -405,7 +423,7 @@ export async function cancelWipe(chatId: string) {
 export async function processWipes(budgetMs = 25_000) {
   await ensureGuardTables()
   const started = Date.now()
-  const jobs = await rows<{ chat_id: string; bot_id: number; title: string; next_id: string; done: string }>(sql`SELECT * FROM tg_wipe ORDER BY created_at`)
+  const jobs = await rows<{ chat_id: string; bot_id: number; title: string; next_id: string; total: string; done: string }>(sql`SELECT * FROM tg_wipe ORDER BY created_at`)
   for (const job of jobs) {
     let token: string
     try {
@@ -420,18 +438,16 @@ export async function processWipes(budgetMs = 25_000) {
       const ids: number[] = []
       for (let id = next; id > Math.max(0, next - WIPE_BATCH); id--) ids.push(id)
       try {
-        await callBot(token, 'deleteMessages', { chat_id: job.chat_id, message_ids: ids })
-        done += ids.length
+        done += await deleteChunk(token, job.chat_id, ids)
       } catch (error) {
         const msg = String((error as Error).message)
-        if (/too many requests|retry after/i.test(msg)) break
         if (/not enough rights|chat not found|bot was kicked|not a member/i.test(msg)) {
           await rows(sql`DELETE FROM tg_wipe WHERE chat_id = ${job.chat_id}`)
           await modLog({ chatId: job.chat_id, chatTitle: job.title, action: 'Tüm sohbet silme durdu', reason: `Botun silme yetkisi yok: ${msg}`.slice(0, 300) })
           next = -1
-          break
         }
-        // "message can't be deleted" for a batch of service or missing ids; skip and continue.
+        // Rate limited: keep the cursor so this batch is retried on the next tick.
+        break
       }
       next -= WIPE_BATCH
       await new Promise((r) => setTimeout(r, 40))
@@ -439,7 +455,9 @@ export async function processWipes(budgetMs = 25_000) {
     if (next === -1) continue
     if (next < 1) {
       await rows(sql`DELETE FROM tg_wipe WHERE chat_id = ${job.chat_id}`)
-      await notice(token, job.chat_id, 'Sohbet temizliği tamamlandı.', 30)
+      // The "temizlik başlıyor" marker is the job's starting id; make sure it never stays behind.
+      await del(token, job.chat_id, Number(job.total))
+      await notice(token, job.chat_id, 'Sohbet temizliği tamamlandı.', 15)
       await modLog({ chatId: job.chat_id, chatTitle: job.title, action: 'Tüm sohbet silindi', reason: `${done} mesaj numarası tarandı` })
     } else {
       // The panel pump and the traffic tick can overlap; never move the cursor backwards.
