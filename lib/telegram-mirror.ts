@@ -131,14 +131,53 @@ export const stripTags = (s: string) =>
 
 const ALLOWED_TAGS: Record<string, string> = { b: 'b', strong: 'b', i: 'i', em: 'i', u: 'u', s: 's', del: 's', code: 'code', pre: 'pre', blockquote: 'blockquote' }
 
+const DEAD_LINK = '\u0002'
+const hasWords = (line: string) => /[\p{L}\p{N}]/u.test(stripTags(line).replace(/[\u20e3\ufe0f]/g, ''))
+const isOrnament = (line: string) => stripTags(line).trim() !== '' && !hasWords(line)
+
+/**
+ * Removed Telegram links leave their label text and decorative separator rows behind
+ * (e.g. "Güncel Giriş", "🔥🔥🔥"). Drop lines that held only dead links, plus ornament-only
+ * rows touching that block, so the mirrored post reads cleanly.
+ */
+function dropDeadLinks(text: string) {
+  const lines = text.split('\n')
+  const remove = lines.map((line) => line.includes(DEAD_LINK) && !hasWords(line.split(DEAD_LINK).join('')))
+  const blank = (i: number) => stripTags(lines[i]).trim() === ''
+  let changed = true
+  while (changed) {
+    changed = false
+    lines.forEach((line, i) => {
+      if (remove[i] || !isOrnament(line)) return
+      for (const step of [-1, 1]) {
+        let j = i + step
+        while (j >= 0 && j < lines.length && blank(j) && !remove[j]) j += step
+        if (j >= 0 && j < lines.length && remove[j]) {
+          remove[i] = true
+          changed = true
+          return
+        }
+      }
+    })
+  }
+  return lines
+    .filter((_, i) => !remove[i])
+    .map((line) => {
+      if (!line.includes(DEAD_LINK)) return line
+      return line.split(DEAD_LINK).join('').replace(/[ \t]{2,}/g, ' ').replace(/\s*[:：👉⬇️➡️]+\s*$/u, '')
+    })
+    .join('\n')
+}
+
 export function toTelegramHtml(html: string, link: string, rules: ReplaceRule[] = []) {
-  return html
+  const converted = html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<i class="emoji"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/i>/gi, '$1')
     .replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/gi, '$1')
     .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
       const plain = stripTags(label).trim()
-      if (href.startsWith('?q=') || /(^|\/\/)(t|telegram)\.me\//i.test(href)) return escapeHtml(plain)
+      if (href.startsWith('?q=')) return escapeHtml(plain)
+      if (/(^|\/\/)(t|telegram)\.me\//i.test(href)) return DEAD_LINK
       const safeLink = escapeHtml(pickLink(href.replace(/&amp;/g, '&'), rules, link))
       if (/^(https?:\/\/|www\.)\S+$/i.test(plain)) return `\u0000a href="${safeLink}"\u0001${safeLink}\u0000/a\u0001`
       return `\u0000a href="${safeLink}"\u0001${escapeHtml(plain)}\u0000/a\u0001`
@@ -153,6 +192,7 @@ export function toTelegramHtml(html: string, link: string, rules: ReplaceRule[] 
     .replace(/>/g, '&gt;')
     .replace(/\u0000/g, '<')
     .replace(/\u0001/g, '>')
+  return dropDeadLinks(converted)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()

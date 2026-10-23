@@ -6,6 +6,8 @@ export type SpecialOdd = {
   sourceId: number | null
   siteName: string
   siteLogo: string | null
+  tag: OddsTag
+  tagText: string
   link: string
   match: string
   league: string
@@ -31,10 +33,28 @@ export type OddsSource = {
   siteLogo: string | null
   replacements: string
   footer: string
+  tag: OddsTag
+  tagText: string
   active: boolean
   lastAt: string | null
   total: number
   webError: string | null
+}
+
+export type OddsTag = 'sponsor' | 'trusted' | 'none'
+
+export const ODDS_TAG_OPTIONS: { value: OddsTag; label: string; defaultText: string }[] = [
+  { value: 'sponsor', label: 'Sponsorumuz', defaultText: 'SPONSORUMUZ' },
+  { value: 'trusted', label: 'Sponsor dışı · Güvenilir site', defaultText: 'SPONSOR DIŞI · GÜVENİLİR SİTE' },
+  { value: 'none', label: 'Etiket yok', defaultText: '' },
+]
+
+export const toOddsTag = (v: unknown): OddsTag => (v === 'sponsor' || v === 'trusted' ? v : 'none')
+
+/** Text shown on the post and on the site card; a custom text overrides the preset. */
+export function oddsTagText(tag: OddsTag, custom: string) {
+  if (tag === 'none') return ''
+  return custom.trim() || ODDS_TAG_OPTIONS.find((o) => o.value === tag)!.defaultText
 }
 
 export type OddsBotConfig = {
