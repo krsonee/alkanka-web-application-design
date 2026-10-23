@@ -220,6 +220,28 @@ export function entitiesToCleanHtml(text: string, entities: { type: string; offs
     .trim()
 }
 
+/** Plain-text version of entitiesToCleanHtml for bots that post without formatting. */
+export function entitiesToCleanText(text: string, entities: { type: string; offset: number; length: number }[] = []) {
+  return stripTags(entitiesToCleanHtml(text, entities)).trim()
+}
+
+/** Plain text of a scraped t.me/s post with hidden-link labels and their ornament rows removed. */
+export function scrapedHtmlToCleanText(html: string) {
+  const marked = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<i class="emoji"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/i>/gi, '$1')
+    .replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/gi, '$1')
+    .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
+      const plain = stripTags(label).trim()
+      if (href.startsWith('?q=') || /^(https?:\/\/|www\.)\S+$/i.test(plain) || /^@\w+$/.test(plain)) return label
+      return DEAD_LINK
+    })
+  return stripTags(dropDeadLinks(marked))
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export function toTelegramHtml(html: string, link: string, rules: ReplaceRule[] = []) {
   const converted = html
     .replace(/<br\s*\/?>/gi, '\n')

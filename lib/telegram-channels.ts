@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables, fetchChannel, normalizeChannel, stripTags } from '@/lib/telegram-mirror'
+import { botToken, callBot, ensureTables, fetchChannel, normalizeChannel, scrapedHtmlToCleanText } from '@/lib/telegram-mirror'
 import { displayName, escapeHtml, getChatConfig, getLink, messageText, type TgMessage } from '@/lib/telegram-chat'
 import {
   BROADCAST_CHANNELS,
@@ -78,7 +78,7 @@ function cachedPosts(username: string) {
     scraped
       .map((p) => ({
         id: p.id,
-        text: stripTags(p.html).replace(/\n{3,}/g, '\n\n').trim(),
+        text: scrapedHtmlToCleanText(p.html),
         photo: p.photos[0] ?? null,
         url: `https://t.me/${username}/${p.id}`,
         createdAt: p.date ? new Date(p.date).toISOString() : null,
