@@ -50,7 +50,7 @@ function SectionHead({ icon, id, title, children }: { icon: React.ReactNode; id:
 
 function BotSelect({ bots, value, name = 'botId' }: { bots: MirrorBot[]; value: number | null; name?: string }) {
   return (
-    <select name={name} defaultValue={value ?? ''} className={input}>
+    <select key={value ?? 'none'} name={name} defaultValue={value ?? ''} className={input}>
       <option value="">Bot seç</option>
       {bots.map((b) => (
         <option key={b.id} value={b.id}>

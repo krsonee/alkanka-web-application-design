@@ -329,8 +329,15 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
 
   const raw = m.text ?? m.caption ?? ''
   if (share.trigger && !raw.toLocaleLowerCase('tr').includes(share.trigger.toLocaleLowerCase('tr'))) return true
-  const body = stripTrigger(raw, share.trigger)
-  const media = hasMedia(m)
+  const trigger = m
+  let body = stripTrigger(raw, share.trigger)
+  let media = hasMedia(m)
+  // "#paylaş" sent as a reply shares the replied-to post instead of the bare trigger message.
+  if (!media && !body && m.reply_to_message) {
+    m = m.reply_to_message
+    body = stripTrigger(m.text ?? m.caption ?? '', share.trigger)
+    media = hasMedia(m)
+  }
   if (!media && !body) return true
 
   const claimed = await rows<{ id: number }>(sql`INSERT INTO tg_share_log (chat_id, message_id, status)
@@ -386,9 +393,9 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
 
   const replyText = links.length ? `${share.replyText}\n${links.join('\n')}` : `Paylaşılamadı. ${detail ?? 'Hedef kanal yok'}`
   await callBot(sourceToken, 'sendMessage', {
-    chat_id: m.chat.id,
+    chat_id: trigger.chat.id,
     text: replyText.slice(0, MESSAGE_LIMIT),
-    reply_parameters: { message_id: m.message_id, allow_sending_without_reply: true },
+    reply_parameters: { message_id: trigger.message_id, allow_sending_without_reply: true },
     link_preview_options: { is_disabled: true },
   }).catch((error) => console.error('[share-bot] reply failed', error))
   return true

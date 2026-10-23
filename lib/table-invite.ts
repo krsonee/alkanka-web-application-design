@@ -113,19 +113,37 @@ export async function sendTableInvite(user: { id: string; name: string }, tableI
     `Masaya otur, oyun hemen başlasın.`,
   ].join('\n')
 
+  let sentId: number | null = null
   try {
     const token = await botToken(config.botId)
-    await callBot(token, 'sendMessage', {
+    const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
       chat_id: config.chatId,
       text,
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       reply_markup: { inline_keyboard: [[{ text: 'Oyuna katıl', url: link }]] },
     })
+    sentId = sent.message_id
   } catch (e) {
     // Release the slot so a Telegram outage doesn't lock the member out.
     await pool.query(`DELETE FROM tg_table_invites WHERE user_id = $1`, [user.id])
     return { ok: false, error: `Telegram'a gönderilemedi: ${(e as Error).message}` }
+  }
+
+  // Bots never receive their own messages, so the invite has to be written into the site chat feed directly.
+  try {
+    const { getChatConfig } = await import('@/lib/telegram-chat')
+    const chat = await getChatConfig()
+    if (chat) {
+      const plain = `Oyuncu aranıyor! ${user.name} bir ${gameTitle} masası açtı${mode}. Bahis: ${table.stake} KC · Boş koltuk: ${Math.max(1, freeSeats)}. Katıl: ${link}`
+      await pool.query(
+        `INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin)
+         VALUES ($1, $2, NULL, $3, 'Jako', $4, 'site') ON CONFLICT DO NOTHING`,
+        [chat.chatId, chat.chatId === config.chatId ? sentId : null, user.id, plain],
+      )
+    }
+  } catch (e) {
+    console.error('[table-invite] site chat insert failed', e)
   }
   return { ok: true, wait: INVITE_COOLDOWN_SECONDS }
 }
