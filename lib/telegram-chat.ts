@@ -29,6 +29,7 @@ export type ChatFeed = {
 export type ChatLink = { tgName: string; tgUsername: string | null }
 
 type TgUser = { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string }
+export type TgEntity = { type: string; offset: number; length: number; url?: string }
 export type TgMessage = {
   message_id: number
   from?: TgUser
@@ -41,6 +42,8 @@ export type TgMessage = {
   reply_to_message?: TgMessage
   text?: string
   caption?: string
+  entities?: TgEntity[]
+  caption_entities?: TgEntity[]
   photo?: { file_id: string; file_size?: number }[]
   video?: { file_id: string; file_size?: number }
   animation?: { file_id: string; file_size?: number }

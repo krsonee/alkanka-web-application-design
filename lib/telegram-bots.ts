@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables, normalizeChat } from '@/lib/telegram-mirror'
+import { botToken, callBot, ensureTables, entitiesToCleanHtml, normalizeChat, stripTags } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
 
@@ -380,6 +380,21 @@ function stripTrigger(text: string, trigger: string) {
   return text.replace(new RegExp(escaped, 'giu'), '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/** Post body as HTML with hidden link labels and their ornament rows removed. */
+function cleanBody(m: TgMessage, trigger: string) {
+  const html = entitiesToCleanHtml(m.text ?? m.caption ?? '', m.entities ?? m.caption_entities ?? [])
+  return stripTrigger(html, trigger ? escapeHtml(trigger) : '')
+}
+
+/** HTML body + append text; falls back to plain text when it would need truncating mid-tag. */
+function composeShare(body: string, append: string, limit: number): { text: string; parse_mode?: 'HTML' } {
+  const tail = append ? `\n\n${escapeHtml(append)}` : ''
+  if (body.length + tail.length <= limit) return { text: `${body}${tail}`.trim(), parse_mode: 'HTML' }
+  return { text: withAppend(stripTags(body), append, limit) }
+}
+
 function withAppend(body: string, append: string, limit: number) {
   const tail = append ? `\n\n${append}` : ''
   const room = limit - tail.length
@@ -409,12 +424,12 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
   const raw = m.text ?? m.caption ?? ''
   if (share.trigger && !raw.toLocaleLowerCase('tr').includes(share.trigger.toLocaleLowerCase('tr'))) return true
   const trigger = m
-  let body = stripTrigger(raw, share.trigger)
+  let body = cleanBody(m, share.trigger)
   let media = hasMedia(m)
   // "#paylaş" sent as a reply shares the replied-to post instead of the bare trigger message.
   if (!media && !body && m.reply_to_message) {
     m = m.reply_to_message
-    body = stripTrigger(m.text ?? m.caption ?? '', share.trigger)
+    body = cleanBody(m, share.trigger)
     media = hasMedia(m)
   }
   const sourceToken = await botToken(viaBotId)
@@ -465,10 +480,14 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
     try {
       let sentId: number
       if (album.length > 1) {
-        const caption = withAppend(body, share.appendText, CAPTION_LIMIT)
+        const caption = composeShare(body, share.appendText, CAPTION_LIMIT)
         const sent = await callBot<{ message_id: number }[]>(sourceToken, 'sendMediaGroup', {
           chat_id: target.chatId,
-          media: album.map((part, i) => ({ type: part.type, media: part.fileId, ...(i === 0 && caption ? { caption } : {}) })),
+          media: album.map((part, i) => ({
+            type: part.type,
+            media: part.fileId,
+            ...(i === 0 && caption.text ? { caption: caption.text, ...(caption.parse_mode ? { parse_mode: caption.parse_mode } : {}) } : {}),
+          })),
         })
         sentId = sent[0].message_id
       } else if (media) {
@@ -478,7 +497,10 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
             chat_id: target.chatId,
             from_chat_id: m.chat.id,
             message_id: m.message_id,
-            caption: withAppend(body, share.appendText, CAPTION_LIMIT),
+            ...(() => {
+              const c = composeShare(body, share.appendText, CAPTION_LIMIT)
+              return { caption: c.text, ...(c.parse_mode ? { parse_mode: c.parse_mode } : {}) }
+            })(),
           })
           sentId = res.message_id
         } catch (error) {
@@ -494,7 +516,7 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
       } else {
         const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', {
           chat_id: target.chatId,
-          text: withAppend(body, share.appendText, MESSAGE_LIMIT),
+          ...composeShare(body, share.appendText, MESSAGE_LIMIT),
         })
         sentId = res.message_id
       }
