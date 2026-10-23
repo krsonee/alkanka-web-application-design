@@ -120,7 +120,7 @@ function RoleRow({ role, label, hint, botId, bots, info }: { role: 'guard' | 'su
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
       <div className="flex flex-col gap-2 sm:flex-row">
-        <select aria-label={`${label} botu`} className={input} value={value} onChange={(e) => setValue(e.target.value)} disabled={role === 'share'}>
+        <select aria-label={`${label} botu`} className={input} value={value} onChange={(e) => setValue(e.target.value)}>
           <option value="">Bot seç</option>
           {bots.map((b) => (
             <option key={b.id} value={b.id}>

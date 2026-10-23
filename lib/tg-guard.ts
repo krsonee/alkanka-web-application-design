@@ -64,8 +64,35 @@ async function isChatAdmin(token: string, chatId: number | string, userId: numbe
   return admin
 }
 
-const del = (token: string, chatId: number | string, messageId: number) =>
-  callBot(token, 'deleteMessage', { chat_id: chatId, message_id: messageId }).catch(() => null)
+/** Mirrored Telegram messages live in the site chat too; whatever the guard removes in Telegram must vanish there as well. */
+let removedReady: Promise<unknown> | null = null
+async function dropFromSite(chatId: number | string, ids: number[]) {
+  if (!ids.length) return
+  const chat = String(chatId)
+  try {
+    removedReady ??= rows(sql`CREATE TABLE IF NOT EXISTS tg_site_removed (chat_id text NOT NULL, tg_message_id bigint NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (chat_id, tg_message_id))`).catch((error) => {
+      removedReady = null
+      throw error
+    })
+    await removedReady
+    await rows(sql`INSERT INTO tg_site_removed (chat_id, tg_message_id) SELECT ${chat}, unnest(${ids}::bigint[]) ON CONFLICT DO NOTHING`)
+    await rows(sql`DELETE FROM tg_chat_messages WHERE chat_id = ${chat} AND tg_message_id = ANY(${ids})`)
+  } catch {
+    // Site cleanup must never block the Telegram moderation action.
+  }
+}
+
+function dropUserFromSite(chatId: number | string, userId: number) {
+  return rows(sql`DELETE FROM tg_chat_messages WHERE chat_id = ${String(chatId)} AND from_tg_id = ${userId}`)
+    .then(() => undefined)
+    .catch(() => undefined)
+}
+
+const del = async (token: string, chatId: number | string, messageId: number) => {
+  await dropFromSite(chatId, [messageId])
+  return callBot(token, 'deleteMessage', { chat_id: chatId, message_id: messageId }).catch(() => null)
+}
 
 async function mute(token: string, chatId: number | string, userId: number, minutes: number) {
   await callBot(token, 'restrictChatMember', {
@@ -97,6 +124,7 @@ async function unmute(token: string, chatId: number | string, userId: number) {
 }
 
 async function ban(token: string, chatId: number | string, userId: number) {
+  await dropUserFromSite(chatId, userId)
   await callBot(token, 'banChatMember', { chat_id: chatId, user_id: userId, revoke_messages: true })
 }
 
@@ -378,6 +406,7 @@ const WIPE_BATCH = 100
 async function deleteChunk(token: string, chatId: string, ids: number[]): Promise<number> {
   try {
     await callBot(token, 'deleteMessages', { chat_id: chatId, message_ids: ids })
+    await dropFromSite(chatId, ids)
     return ids.length
   } catch (error) {
     const msg = String((error as Error).message)
@@ -398,6 +427,7 @@ const FATAL_WIPE_ERROR = /too many requests|retry after|not enough rights|chat n
 async function probeDelete(token: string, chatId: string, id: number): Promise<'deleted' | 'gone' | 'too-old'> {
   try {
     await callBot(token, 'deleteMessage', { chat_id: chatId, message_id: id })
+    await dropFromSite(chatId, [id])
     return 'deleted'
   } catch (error) {
     const msg = String((error as Error).message)
@@ -569,6 +599,7 @@ async function purgeRange(token: string, chatId: number | string, fromId: number
   const ids: number[] = []
   for (let id = Math.max(fromId, toId - PURGE_MAX); id <= toId; id++) ids.push(id)
   let deleted = 0
+  await dropFromSite(chatId, ids)
   for (let i = 0; i < ids.length; i += 100) {
     const ok = await callBot<boolean>(token, 'deleteMessages', { chat_id: chatId, message_ids: ids.slice(i, i + 100) }).catch(() => false)
     if (ok) deleted += ids.slice(i, i + 100).length
@@ -710,6 +741,7 @@ export async function deleteUserMessages(tgId: number) {
   for (const r of list) byChat.set(r.chat_id, [...(byChat.get(r.chat_id) ?? []), Number(r.message_id)])
   let n = 0
   for (const [chatId, ids] of byChat) {
+    await dropFromSite(chatId, ids)
     for (let i = 0; i < ids.length; i += 100) {
       if (await callBot<boolean>(token, 'deleteMessages', { chat_id: chatId, message_ids: ids.slice(i, i + 100) }).catch(() => false)) n += ids.slice(i, i + 100).length
     }
@@ -737,6 +769,19 @@ async function isProtectedChat(hub: HubConfig, chatId: number | string) {
 }
 
 /** Returns true when the message was removed and should not reach other handlers. */
+/** Same Bekçi rules applied to messages typed in the on-site chat, before they reach Telegram. */
+export async function checkSiteText(text: string): Promise<string | null> {
+  const hub = await getHub()
+  const g = hub.guard
+  if (foreignLinks({ text } as GuardMsg, g.allowDomains).length) return 'Sohbette link / reklam paylaşamazsın.'
+  if (findBadWord(text, g.words)) return 'Mesajında küfür / hakaret var, gönderilmedi.'
+  if (g.aiModeration && text.length >= 12) {
+    const verdict = await aiVerdict(text)
+    if (verdict.bad) return 'Mesajın topluluk kurallarına uymuyor, gönderilmedi.'
+  }
+  return null
+}
+
 export async function guardMessage(botId: number, raw: TgMessage, edited: boolean): Promise<boolean> {
   await ensureGuardTables()
   const hub = await getHub()

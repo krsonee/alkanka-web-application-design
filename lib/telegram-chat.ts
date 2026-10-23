@@ -63,6 +63,8 @@ function ensureChatTables() {
     await rows(sql`CREATE INDEX IF NOT EXISTS tg_chat_messages_chat_idx ON tg_chat_messages (chat_id, id DESC)`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS tg_chat_messages_tg_uniq ON tg_chat_messages (chat_id, tg_message_id)
       WHERE tg_message_id IS NOT NULL`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_site_removed (chat_id text NOT NULL, tg_message_id bigint NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (chat_id, tg_message_id))`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_links (
       user_id text PRIMARY KEY, tg_id bigint NOT NULL UNIQUE, tg_username text, tg_name text NOT NULL,
       linked_at timestamptz NOT NULL DEFAULT now())`)
@@ -245,9 +247,11 @@ export async function handleUpdate(update: TgUpdate) {
   const text = messageText(m)
   if (!text) return
   const link = await rows<{ user_id: string }>(sql`SELECT user_id FROM tg_links WHERE tg_id = ${m.from.id}`)
+  // The guard bot gets the same update in parallel; skip anything it already removed from the group.
   await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin)
-    VALUES (${config.chatId}, ${m.message_id}, ${m.from.id}, ${link[0]?.user_id ?? null}, ${displayName(m.from)},
-      ${text.slice(0, 1000)}, 'telegram')
+    SELECT ${config.chatId}, ${m.message_id}, ${m.from.id}, ${link[0]?.user_id ?? null}, ${displayName(m.from)},
+      ${text.slice(0, 1000)}, 'telegram'
+    WHERE NOT EXISTS (SELECT 1 FROM tg_site_removed WHERE chat_id = ${config.chatId} AND tg_message_id = ${m.message_id})
     ON CONFLICT DO NOTHING`)
 }
 
@@ -358,6 +362,14 @@ export async function sendFromSite(userId: string, rawText: string) {
   const last = await rows<{ created_at: string }>(sql`SELECT created_at FROM tg_chat_messages
     WHERE user_id = ${userId} AND origin = 'site' ORDER BY id DESC LIMIT 1`)
   if (last[0] && Date.now() - new Date(last[0].created_at).getTime() < SEND_COOLDOWN_MS) throw new Error('Biraz yavaş kanka, birkaç saniye bekle.')
+
+  const [repeat] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_chat_messages
+    WHERE user_id = ${userId} AND origin = 'site' AND lower(text) = lower(${text}) AND created_at > now() - interval '10 minutes'`)
+  if (Number(repeat?.n ?? 0) >= 2) throw new Error('Aynı mesajı tekrar tekrar gönderemezsin.')
+
+  const { checkSiteText } = await import('@/lib/tg-guard')
+  const blocked = await checkSiteText(text)
+  if (blocked) throw new Error(blocked)
 
   const token = await botToken(config.botId)
   const member = await callBot<{ status: string; can_send_messages?: boolean }>(token, 'getChatMember', {
