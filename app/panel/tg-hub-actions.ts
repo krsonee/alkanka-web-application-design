@@ -2,9 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
 import { DEFAULT_HUB, type HubConfig } from '@/lib/tg-hub-shared'
-import { cancelBroadcast, getHub, queueBroadcast, registerHook, removeGlobalBan, resolveChatFor, saveHub, setTrusted } from '@/lib/tg-hub'
+import { cancelBroadcast, getHub, processBroadcasts, queueBroadcast, registerHook, removeGlobalBan, resolveChatFor, saveHub, setTrusted } from '@/lib/tg-hub'
 
 type Result = { ok: boolean; message: string }
 const EXPIRED: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -314,8 +315,12 @@ export async function sendBroadcast(text: string, buttonText: string, buttonUrl:
   const url = String(buttonUrl ?? '').trim()
   if (url && !/^https:\/\//.test(url)) return { ok: false, message: 'Buton linki https:// ile başlamalı.' }
   try {
+    const { getChatConfig } = await import('@/lib/telegram-chat')
+    if (!(await getChatConfig())) return { ok: false, message: 'Canlı Sohbet botu bağlı değil. Önce Canlı Sohbet sekmesinden botu bağla.' }
     const n = await queueBroadcast(body, String(buttonText ?? '').trim().slice(0, 40), url.slice(0, 300))
-    return done(`Duyuru sıraya alındı, ${n} kişiye gidecek. Gönderim birkaç dakika sürer.`)
+    if (!n) return done('Duyuru kaydedildi ama Telegram hesabını bağlamış üye yok, kimseye gitmeyecek.')
+    after(() => processBroadcasts().catch((e) => console.error('[broadcast] immediate send failed', e)))
+    return done(`Duyuru gönderilmeye başladı, ${n} kişiye gidiyor. Liste kendini yeniler.`)
   } catch (error) {
     return fail(error)
   }
