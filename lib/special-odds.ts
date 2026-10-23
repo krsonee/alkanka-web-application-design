@@ -504,7 +504,7 @@ export async function scrapeOddsSources(config?: OddsBotConfig) {
         await rows(sql`UPDATE odds_sources SET web_last = GREATEST(COALESCE(web_last, 0), ${post.id}) WHERE id = ${source.id}`)
         const text = stripTags(post.html).trim()
         if (!text) continue
-        await ingest(source, { chatId: source.chatId, messageId: post.id, replyTo: null, text, photo: post.photos[0] ?? post.thumb ?? null, edited: false }, null)
+        await ingest(source, { chatId: source.chatId, messageId: post.id, replyTo: null, text, photo: post.photos[0] ?? null, edited: false }, null)
           .catch((error) => console.error('[odds-bot] web ingest failed', error))
         handled++
       }

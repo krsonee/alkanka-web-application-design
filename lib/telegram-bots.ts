@@ -74,6 +74,9 @@ function ensureSuiteTables() {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_share_log (
       id serial PRIMARY KEY, chat_id text NOT NULL, message_id bigint NOT NULL, status text NOT NULL, detail text,
       created_at timestamptz NOT NULL DEFAULT now(), UNIQUE (chat_id, message_id))`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_share_album (
+      chat_id text NOT NULL, group_id text NOT NULL, message_id bigint NOT NULL, type text NOT NULL, file_id text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (chat_id, message_id))`)
     await rows(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS result text`)
     await rows(sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS result_at timestamptz`)
   })().catch((error) => {
@@ -304,6 +307,35 @@ function hasMedia(m: TgMessage) {
   return MEDIA_KEYS.some((k) => record[k] != null)
 }
 
+type AlbumPart = { type: string; fileId: string }
+
+function albumPart(m: TgMessage): { groupId: string; part: AlbumPart } | null {
+  const r = m as unknown as Record<string, unknown>
+  const groupId = r.media_group_id
+  if (!groupId) return null
+  const photos = r.photo as { file_id: string }[] | undefined
+  if (photos?.length) return { groupId: String(groupId), part: { type: 'photo', fileId: photos[photos.length - 1].file_id } }
+  for (const type of ['video', 'document', 'audio'] as const) {
+    const file = r[type] as { file_id?: string } | undefined
+    if (file?.file_id) return { groupId: String(groupId), part: { type, fileId: file.file_id } }
+  }
+  return null
+}
+
+/** Album items arrive as separate updates; wait briefly so the whole album is recorded before sharing. */
+async function albumParts(chatId: string, groupId: string) {
+  let last = 0
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    const count = Number((await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tg_share_album WHERE chat_id = ${chatId} AND group_id = ${groupId}`))[0]?.n ?? 0)
+    if (count === last && attempt > 1) break
+    last = count
+  }
+  const r = await rows<{ type: string; file_id: string }>(sql`SELECT type, file_id FROM tg_share_album
+    WHERE chat_id = ${chatId} AND group_id = ${groupId} ORDER BY message_id LIMIT 10`)
+  return r.map((p) => ({ type: String(p.type), fileId: String(p.file_id) }))
+}
+
 function stripTrigger(text: string, trigger: string) {
   if (!trigger) return text.trim()
   const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -327,6 +359,13 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
   if (!share.enabled || share.botId !== viaBotId || !share.sourceChat || String(m.chat.id) !== share.sourceChat) return false
   if (m.from?.is_bot && m.from.username !== 'GroupAnonymousBot') return true
 
+  const incomingPart = albumPart(m)
+  if (incomingPart) {
+    await rows(sql`INSERT INTO tg_share_album (chat_id, group_id, message_id, type, file_id)
+      VALUES (${share.sourceChat}, ${incomingPart.groupId}, ${m.message_id}, ${incomingPart.part.type}, ${incomingPart.part.fileId})
+      ON CONFLICT DO NOTHING`).catch((error) => console.error('[share-bot] album record failed', error))
+  }
+
   const raw = m.text ?? m.caption ?? ''
   if (share.trigger && !raw.toLocaleLowerCase('tr').includes(share.trigger.toLocaleLowerCase('tr'))) return true
   const trigger = m
@@ -348,11 +387,20 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
   const links: string[] = []
   const failures: string[] = []
   const sourceToken = await botToken(viaBotId)
+  const group = albumPart(m)
+  const album = group ? await albumParts(share.sourceChat, group.groupId) : []
 
   for (const target of targets) {
     try {
       let sentId: number
-      if (media) {
+      if (album.length > 1) {
+        const caption = withAppend(body, share.appendText, CAPTION_LIMIT)
+        const sent = await callBot<{ message_id: number }[]>(sourceToken, 'sendMediaGroup', {
+          chat_id: target.chatId,
+          media: album.map((part, i) => ({ type: part.type, media: part.fileId, ...(i === 0 && caption ? { caption } : {}) })),
+        })
+        sentId = sent[0].message_id
+      } else if (media) {
         // copyMessage only works with the bot that can see the source, so the share bot must also be admin in every target.
         try {
           const res = await callBot<{ message_id: number }>(sourceToken, 'copyMessage', {
