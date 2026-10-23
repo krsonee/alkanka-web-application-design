@@ -20,7 +20,7 @@ import {
   updateSourceText,
 } from '@/lib/telegram-mirror'
 import { encodeFilter } from '@/lib/telegram-filters'
-import { saveApprovalSettings, saveOddsSettings, saveShareSettings, setOddsResult, testApproval } from '@/lib/telegram-bots'
+import { deleteShareRule, saveApprovalSettings, saveOddsSettings, saveShareRule, saveShareSettings, setOddsResult, testApproval } from '@/lib/telegram-bots'
 import { saveChannels } from '@/lib/telegram-channels'
 import { BROADCAST_CHANNELS, type BroadcastSlug } from '@/lib/telegram-channels-shared'
 import type { ActionState } from './actions'
@@ -216,18 +216,41 @@ export async function saveShareAction(_: ActionState, form: FormData): Promise<A
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const enabled = form.get('enabled') === 'on'
-    const title = await saveShareSettings({
-      enabled,
-      botId: Number(form.get('botId')) || null,
+    await saveShareSettings({ enabled, botId: Number(form.get('botId')) || null, siteOrigin: await siteOrigin() })
+    revalidatePath('/panel')
+    return { ok: true, message: enabled ? 'Paylaşım botu açık. Aşağıdan sponsorları ekle.' : 'Paylaşım botu kapatıldı.' }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function saveShareRuleAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const id = String(form.get('id') ?? '')
+    const rule = await saveShareRule({
+      id,
+      name: String(form.get('name') ?? ''),
+      enabled: form.get('ruleEnabled') === 'on',
       sourceChat: String(form.get('sourceChat') ?? ''),
       trigger: String(form.get('trigger') ?? ''),
       appendText: String(form.get('appendText') ?? ''),
       replyText: String(form.get('replyText') ?? ''),
       targetIds: formIds(form, 'targetIds'),
-      siteOrigin: await siteOrigin(),
     })
     revalidatePath('/panel')
-    return { ok: true, message: enabled ? `Paylaşım botu "${title}" grubunu dinliyor.` : 'Paylaşım botu kapatıldı.' }
+    return { ok: true, message: `${id ? 'Kaydedildi' : 'Eklendi'}: "${rule.name}" (${rule.sourceTitle}) grubu dinleniyor.` }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function deleteShareRuleAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await deleteShareRule(String(form.get('id') ?? ''))
+    revalidatePath('/panel')
+    return { ok: true, message: 'Sponsor silindi.' }
   } catch (error) {
     return { message: errorText(error) }
   }

@@ -1,17 +1,19 @@
 'use client'
 
 import { useActionState, useTransition, useState } from 'react'
-import { BellRing, Loader2, Send, Share2, Trophy } from 'lucide-react'
+import { BellRing, Loader2, Pencil, Plus, Send, Share2, Trash2, Trophy } from 'lucide-react'
 import {
+  deleteShareRuleAction,
   saveApprovalsAction,
   saveOddsAction,
   saveShareAction,
+  saveShareRuleAction,
   setOddsResultAction,
   testApprovalAction,
 } from '@/app/panel/telegram-actions'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot, MirrorTarget } from '@/lib/telegram-mirror'
-import type { ApprovalKind, BotSuite, OddsDeal, ShareStatus } from '@/lib/telegram-bots'
+import type { ApprovalKind, BotSuite, OddsDeal, ShareRule, ShareStatus } from '@/lib/telegram-bots'
 
 const input = 'rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
 const label = 'flex flex-col gap-1.5 text-sm font-medium text-foreground'
@@ -78,23 +80,28 @@ function TargetChecks({ targets, selected, emptyText }: { targets: MirrorTarget[
 
 export function ShareSection({ suite, bots, targets, status }: { suite: BotSuite; bots: MirrorBot[]; targets: MirrorTarget[]; status: ShareStatus }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveShareAction, {})
+  const [adding, setAdding] = useState(false)
   const s = suite.share
+  const activeCount = s.rules.filter((r) => r.enabled).length
   return (
     <section aria-labelledby="tg-share-title" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
       <SectionHead icon={<Share2 className="size-4" aria-hidden="true" />} id="tg-share-title" title="Post paylaşım botu">
-        Sponsor destek grubuna tetik kelimesiyle atılan post (yazı, fotoğraf, video) seçtiğin kanallara otomatik paylaşılır, altına sabit metnin
-        eklenir. Bot gruptaki mesaja paylaşım linkleriyle cevap verir.
+        Her sponsorun (Makrobet, Betroza…) kendi destek grubunu ekle. O gruba tetik kelimesiyle atılan post (yazı, fotoğraf, video, albüm) o
+        sponsor için seçtiğin kanallara paylaşılır, altına o sponsorun sabit metni eklenir.
       </SectionHead>
 
       <ul className="flex flex-col gap-1.5 rounded-xl bg-secondary/60 p-4 text-sm leading-relaxed text-muted-foreground">
-        <li>Botu sponsor destek grubuna ve tüm hedef kanallara yönetici olarak ekle.</li>
+        <li>Botu her sponsor destek grubuna ve tüm hedef kanallara yönetici olarak ekle.</li>
         <li>Canlı sohbet botunu seçersen anında çalışır. Başka bot seçersen paylaşım cron her çalıştığında yapılır.</li>
-        <li>Tetik kelimesini boş bırakırsan gruba atılan her post paylaşılır.</li>
+        <li>Tetik kelimesini boş bırakırsan o gruba atılan her post paylaşılır.</li>
       </ul>
 
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
         <span>
-          Durum: <strong className="text-foreground">{s.enabled ? `Açık · ${s.sourceTitle}` : 'Kapalı'}</strong>
+          Durum: <strong className="text-foreground">{s.enabled ? 'Açık' : 'Kapalı'}</strong>
+        </span>
+        <span>
+          Sponsor: <strong className="text-foreground">{activeCount}</strong> aktif / {s.rules.length}
         </span>
         <span>
           Paylaşılan post: <strong className="text-foreground">{status.shared}</strong>
@@ -103,48 +110,150 @@ export function ShareSection({ suite, bots, targets, status }: { suite: BotSuite
       </div>
       {status.lastError && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{status.lastError}</p>}
 
-      <form action={action} className="flex flex-col gap-4">
-        <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <input type="checkbox" name="enabled" defaultChecked={s.enabled} className="size-4 accent-primary" />
-          Paylaşım botu açık
-        </label>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className={label}>
-            Bot
+      <form action={action} className="flex flex-col gap-4 rounded-xl border border-border p-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end">
+          <label className={`${label} flex-1`}>
+            Paylaşım botu (tüm sponsorlar için)
             <BotSelect bots={bots} value={s.botId} />
           </label>
-          <label className={label}>
-            Sponsor destek grubu
-            <input name="sourceChat" defaultValue={s.sourceChat} placeholder="@grupadi ya da -100…" className={input} />
+          <label className="flex items-center gap-2 py-2.5 text-sm font-medium text-foreground">
+            <input type="checkbox" name="enabled" defaultChecked={s.enabled} className="size-4 accent-primary" />
+            Paylaşım botu açık
           </label>
-          <label className={label}>
-            Tetik kelimesi
-            <input name="trigger" defaultValue={s.trigger} maxLength={40} placeholder="#paylaş" className={input} />
-            <span className={hint}>Paylaşılan postta bu kelime silinir.</span>
-          </label>
-          <label className={label}>
-            Gruba verilecek cevap
-            <input name="replyText" defaultValue={s.replyText} maxLength={200} className={input} />
-            <span className={hint}>Altına paylaşılan post linkleri eklenir.</span>
-          </label>
-        </div>
-        <label className={label}>
-          Post altına eklenecek sabit metin
-          <textarea name="appendText" defaultValue={s.appendText} maxLength={600} rows={3} className={input} />
-        </label>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-medium text-foreground">Paylaşılacak kanallar</legend>
-          <TargetChecks targets={targets} selected={s.targetIds} emptyText="Önce yukarıdan hedef kanal ekle." />
-        </fieldset>
-        <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={pending} className={primaryBtn}>
             {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
             Kaydet
           </button>
-          <Status state={state} />
         </div>
+        <Status state={state} />
       </form>
+
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-foreground">Sponsorlar ({s.rules.length})</h3>
+          {!adding && (
+            <button type="button" onClick={() => setAdding(true)} className={primaryBtn} disabled={!s.botId}>
+              <Plus className="size-4" aria-hidden="true" />
+              Sponsor ekle
+            </button>
+          )}
+        </div>
+        {!s.botId && <p className={hint}>Sponsor eklemek için önce paylaşım botunu seçip kaydet.</p>}
+        {adding && <ShareRuleForm targets={targets} onDone={() => setAdding(false)} />}
+        {s.rules.length === 0 && !adding && s.botId && <p className={hint}>Henüz sponsor yok. &quot;Sponsor ekle&quot; ile başla.</p>}
+        {s.rules.map((rule) => (
+          <ShareRuleCard key={rule.id} rule={rule} targets={targets} />
+        ))}
+      </div>
     </section>
+  )
+}
+
+function ShareRuleCard({ rule, targets }: { rule: ShareRule; targets: MirrorTarget[] }) {
+  const [open, setOpen] = useState(false)
+  const [delState, delAction, deleting] = useActionState<ActionState, FormData>(deleteShareRuleAction, {})
+  const targetNames = targets.filter((t) => rule.targetIds.includes(t.id)).map((t) => t.title)
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-background/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className={`size-2 rounded-full ${rule.enabled ? 'bg-primary' : 'bg-muted-foreground'}`} aria-hidden="true" />
+            <strong className="truncate text-sm text-foreground">{rule.name}</strong>
+            {!rule.enabled && <span className="text-xs text-muted-foreground">(kapalı)</span>}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Grup: {rule.sourceTitle} · Tetik: {rule.trigger || 'her post'} · Kanallar: {targetNames.join(', ') || 'yok'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary"
+          >
+            <Pencil className="size-4" aria-hidden="true" />
+            {open ? 'Kapat' : 'Düzenle'}
+          </button>
+          <form
+            action={delAction}
+            onSubmit={(e) => {
+              if (!confirm(`"${rule.name}" sponsoru silinsin mi?`)) e.preventDefault()
+            }}
+          >
+            <input type="hidden" name="id" value={rule.id} />
+            <button
+              type="submit"
+              disabled={deleting}
+              aria-label={`${rule.name} sponsorunu sil`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-60"
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Trash2 className="size-4" aria-hidden="true" />}
+              Sil
+            </button>
+          </form>
+        </div>
+      </div>
+      <Status state={delState} />
+      {open && <ShareRuleForm rule={rule} targets={targets} onDone={() => setOpen(false)} />}
+    </div>
+  )
+}
+
+function ShareRuleForm({ rule, targets, onDone }: { rule?: ShareRule; targets: MirrorTarget[]; onDone: () => void }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(async (prev: ActionState, form: FormData) => {
+    const result = await saveShareRuleAction(prev, form)
+    if (result.ok && !rule) onDone()
+    return result
+  }, {})
+  return (
+    <form action={action} className="flex flex-col gap-4 rounded-xl border border-primary/40 p-4">
+      <input type="hidden" name="id" value={rule?.id ?? ''} />
+      <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <input type="checkbox" name="ruleEnabled" defaultChecked={rule?.enabled ?? true} className="size-4 accent-primary" />
+        Bu sponsor için paylaşım açık
+      </label>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className={label}>
+          Sponsor adı
+          <input name="name" defaultValue={rule?.name ?? ''} maxLength={60} placeholder="Makrobet" className={input} />
+        </label>
+        <label className={label}>
+          Sponsor destek grubu
+          <input name="sourceChat" defaultValue={rule?.sourceChat ?? ''} required placeholder="@grupadi ya da -100…" className={input} />
+        </label>
+        <label className={label}>
+          Tetik kelimesi
+          <input name="trigger" defaultValue={rule?.trigger ?? '#paylaş'} maxLength={40} placeholder="#paylaş" className={input} />
+          <span className={hint}>Paylaşılan postta bu kelime silinir.</span>
+        </label>
+        <label className={label}>
+          Gruba verilecek cevap
+          <input name="replyText" defaultValue={rule?.replyText ?? 'Paylaşıldı:'} maxLength={200} className={input} />
+          <span className={hint}>Altına paylaşılan post linkleri eklenir.</span>
+        </label>
+      </div>
+      <label className={label}>
+        Post altına eklenecek sabit metin
+        <textarea name="appendText" defaultValue={rule?.appendText ?? 'Güncel giriş ve bonuslar: alkanka.com'} maxLength={600} rows={3} className={input} />
+      </label>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-medium text-foreground">Paylaşılacak kanallar</legend>
+        <TargetChecks targets={targets} selected={rule?.targetIds ?? []} emptyText="Önce yukarıdan hedef kanal ekle." />
+      </fieldset>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={pending} className={primaryBtn}>
+          {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+          {rule ? 'Kaydet' : 'Sponsoru ekle'}
+        </button>
+        {!rule && (
+          <button type="button" onClick={onDone} className="rounded-xl border border-border px-4 py-2.5 text-sm text-foreground hover:bg-secondary">
+            Vazgeç
+          </button>
+        )}
+        <Status state={state} />
+      </div>
+    </form>
   )
 }
 
