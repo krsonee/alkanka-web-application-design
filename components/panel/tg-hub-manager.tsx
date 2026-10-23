@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useTransition, type ReactNode } from 'react'
+import { useEffect, useState, useTransition, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import useSWR, { useSWRConfig } from 'swr'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 import type { BroadcastRow, HubConfig, HubLogRow, HubStats, LeaderRow, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
@@ -719,6 +720,13 @@ function BroadcastSection({ d }: { d: TgHubData }) {
   const [bUrl, setBUrl] = useState('')
   const a = useAction()
   const stop = useAction()
+  const router = useRouter()
+  const sending = d.broadcasts.some((b) => b.status === 'queued' || b.status === 'sending')
+  useEffect(() => {
+    if (!sending) return
+    const t = setInterval(() => router.refresh(), 4000)
+    return () => clearInterval(t)
+  }, [sending, router])
   return (
     <div className="flex flex-col gap-4">
       <Card title="DM duyuru gönder" hint={`Hesabını Telegram'a bağlamış ${d.linkedMembers} üyeye Canlı Sohbet botundan özel mesaj gider. Mesajın altında "Bildirimleri kapat" butonu otomatik olur. Haftada 1-2 duyurudan fazlası şikâyete yol açar.`}>
