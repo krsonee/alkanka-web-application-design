@@ -36,7 +36,17 @@ export type MirrorLog = {
 
 export type MirrorResult = { checked: number; sent: number; skipped: number; failed: number; primed: number; errors: string[] }
 
-type ScrapedPost = { id: number; html: string; photos: string[]; video: string | null; thumb?: string | null; date?: string | null }
+type MediaItem = { type: 'photo' | 'video' | 'gif'; url: string | null }
+type ScrapedPost = {
+  id: number
+  html: string
+  photos: string[]
+  video: string | null
+  thumb?: string | null
+  date?: string | null
+  ref?: string
+  items?: MediaItem[]
+}
 type Destination = { token: string; chatId: string; title: string }
 
 const MAX_PER_RUN = 5
@@ -170,9 +180,39 @@ export async function fetchChannel(channel: string): Promise<ScrapedPost[]> {
     const video = sticker ? null : (chunk.match(/<video[^>]+src="([^"]+)"/)?.[1] ?? null)
     const thumb = sticker ? null : (chunk.match(/tgme_widget_message_video_thumb"[^>]*background-image:url\('([^']+)'\)/)?.[1] ?? null)
     const date = chunk.match(/<time[^>]+datetime="([^"]+)"/)?.[1] ?? null
-    posts.push({ id, html: text?.[1] ?? '', photos, video, thumb, date })
+    posts.push({ id, html: text?.[1] ?? '', photos, video, thumb, date, ref, items: sticker ? [] : mediaItems(chunk) })
   }
   return posts
+}
+
+/** Every photo, video and GIF of a post (albums included) in their original order. */
+function mediaItems(chunk: string): MediaItem[] {
+  const tokens = [...chunk.matchAll(/tgme_widget_message_photo_wrap[^"]*"[^>]*background-image:url\('([^']+)'\)|tgme_widget_message_video_player/g)]
+  return tokens.map((token, i) => {
+    if (token[1]) return { type: 'photo', url: token[1] }
+    const segment = chunk.slice(token.index, tokens[i + 1]?.index ?? chunk.length)
+    const tag = segment.match(/<video[^>]+src="([^"]+)"[^>]*>/)
+    // Telegram renders GIFs as muted looping videos.
+    return { type: tag && /\sloop\b/.test(tag[0]) ? 'gif' : 'video', url: tag?.[1] ?? null }
+  })
+}
+
+/** Large videos have no src on the channel page; the single-post embed page usually still carries it. */
+async function resolveMissingVideos(post: ScrapedPost, items: MediaItem[]) {
+  if (!post.ref || !items.some((item) => !item.url)) return items
+  try {
+    const res = await fetch(`https://t.me/${post.ref}?embed=1&mode=tme`, {
+      cache: 'no-store',
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; AlkankaBot/1.0)' },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) return items
+    const embedded = mediaItems(await res.text())
+    if (embedded.length !== items.length) return items
+    return items.map((item, i) => (item.url ? item : { ...item, url: embedded[i].url }))
+  } catch {
+    return items
+  }
 }
 
 export async function callBot<T = unknown>(token: string, method: string, body: Record<string, unknown> = {}): Promise<T> {
@@ -196,7 +236,7 @@ async function download(file: UploadFile) {
   const res = await fetch(file.url, {
     cache: 'no-store',
     headers: { 'user-agent': 'Mozilla/5.0 (compatible; AlkankaBot/1.0)' },
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(file.kind === 'video' ? 60_000 : 30_000),
   })
   if (!res.ok) throw new Error(`Medya indirilemedi (HTTP ${res.status})`)
   if (Number(res.headers.get('content-length') ?? 0) > UPLOAD_LIMIT[file.kind]) throw new Error('Medya Telegram yükleme sınırından büyük')
@@ -246,40 +286,69 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
   const fmt = parseMode ? { parse_mode: parseMode } : {}
   const fitsCaption = visible <= CAPTION_LIMIT
   const captioned = fitsCaption ? { caption: text, ...fmt } : {}
-  const photos = post.photos.slice(0, 10)
-  const message = { text, ...fmt, link_preview_options: { is_disabled: Boolean(photos.length || post.video || post.thumb) } }
   const isParseError = (error: unknown) => /parse entities|can't parse/i.test(String((error as Error).message))
+  const scraped = post.items ?? [
+    ...post.photos.map((url) => ({ type: 'photo' as const, url })),
+    ...(post.video ? [{ type: 'video' as const, url: post.video }] : []),
+  ]
+  if (!scraped.length) {
+    await send('sendMessage', { text, ...fmt })
+    return
+  }
+  const items = await resolveMissingVideos(post, scraped.slice(0, 10))
   const finish = async () => {
-    if (!fitsCaption) await send('sendMessage', message)
+    if (!fitsCaption) await send('sendMessage', { text, ...fmt, link_preview_options: { is_disabled: true } })
   }
+  // Never substitute a video/GIF cover frame: if the real file can't be sent, Telegram's own preview of the original post is used.
+  const viaOriginal = () =>
+    send('sendMessage', {
+      text,
+      ...fmt,
+      link_preview_options: post.ref ? { url: `https://t.me/${post.ref}`, prefer_large_media: true, show_above_text: true } : { is_disabled: true },
+    })
+  if (items.some((item) => !item.url)) return viaOriginal()
 
-  if (photos.length > 1) {
+  try {
+    if (items.length > 1) {
+      // Albums can't hold animations; Telegram plays GIF files inside albums as videos.
+      const media = items.map((item, i) => ({
+        type: item.type === 'photo' ? 'photo' : 'video',
+        media: `attach://m${i}`,
+        ...(item.type === 'photo' ? {} : { supports_streaming: true }),
+        ...(i === 0 ? captioned : {}),
+      }))
+      try {
+        await callBotFiles(dest.token, 'sendMediaGroup', { chat_id: dest.chatId, media }, Object.fromEntries(items.map((item, i) => [
+          `m${i}`,
+          { url: item.url!, kind: item.type === 'photo' ? ('photo' as const) : ('video' as const), name: item.type === 'photo' ? `m${i}.jpg` : `m${i}.mp4` },
+        ])))
+      } catch (error) {
+        if (isParseError(error)) throw error
+        await send('sendMediaGroup', { media: media.map((m, i) => ({ ...m, media: items[i].url })) })
+      }
+      return await finish()
+    }
+
+    const [item] = items
+    if (item.type === 'photo') {
+      await sendPhotoFile(dest.token, { chat_id: dest.chatId, ...captioned }, item.url!)
+      return await finish()
+    }
+    const method = item.type === 'gif' ? 'sendAnimation' : 'sendVideo'
+    const field = item.type === 'gif' ? 'animation' : 'video'
+    const body = { chat_id: dest.chatId, ...(item.type === 'video' ? { supports_streaming: true } : {}), ...captioned }
     try {
-      await callBotFiles(dest.token, 'sendMediaGroup', {
-        chat_id: dest.chatId,
-        media: photos.map((_, i) => ({ type: 'photo', media: `attach://p${i}`, ...(i === 0 ? captioned : {}) })),
-      }, Object.fromEntries(photos.map((url, i) => [`p${i}`, { url, kind: 'photo' as const, name: `p${i}.jpg` }])))
+      await callBotFiles(dest.token, method, body, { [field]: { url: item.url!, kind: 'video', name: item.type === 'gif' ? 'animation.mp4' : 'video.mp4' } })
     } catch (error) {
       if (isParseError(error)) throw error
-      await send('sendMediaGroup', { media: photos.map((photo, i) => ({ type: 'photo', media: photo, ...(i === 0 ? captioned : {}) })) })
+      await callBot(dest.token, method, { ...body, [field]: item.url })
     }
-    return finish()
+    return await finish()
+  } catch (error) {
+    if (isParseError(error)) throw error
+    console.error('[mirror] media send failed, sharing original post instead', error)
+    return viaOriginal()
   }
-  if (post.video) {
-    try {
-      await callBotFiles(dest.token, 'sendVideo', { chat_id: dest.chatId, supports_streaming: true, ...captioned }, { video: { url: post.video, kind: 'video', name: 'video.mp4' } })
-      return finish()
-    } catch (error) {
-      if (isParseError(error)) throw error
-      // Too large to upload: the video's cover image below still keeps the post visual.
-    }
-  }
-  const still = photos[0] ?? post.thumb
-  if (still) {
-    await sendPhotoFile(dest.token, { chat_id: dest.chatId, ...captioned }, still)
-    return finish()
-  }
-  await send('sendMessage', message)
 }
 
 type PostSource = { brand: string; link: string; replacements?: string; footer?: string }
