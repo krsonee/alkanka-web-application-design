@@ -6,17 +6,26 @@ import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
 
 export type ApprovalKind = 'market' | 'task' | 'complaint'
 
+export type ShareRule = {
+  id: string
+  name: string
+  enabled: boolean
+  sourceChat: string
+  sourceTitle: string
+  trigger: string
+  appendText: string
+  replyText: string
+  targetIds: number[]
+}
+
+export const MAX_SHARE_RULES = 30
+
 export type BotSuite = {
   siteOrigin: string
   share: {
     enabled: boolean
     botId: number | null
-    sourceChat: string
-    sourceTitle: string
-    trigger: string
-    appendText: string
-    replyText: string
-    targetIds: number[]
+    rules: ShareRule[]
   }
   odds: { note: string; winText: string; targetIds: number[] }
   approvals: { enabled: boolean; botId: number | null; chatId: string; chatTitle: string; templates: Record<ApprovalKind, string> }
@@ -37,12 +46,7 @@ export const DEFAULT_SUITE: BotSuite = {
   share: {
     enabled: false,
     botId: null,
-    sourceChat: '',
-    sourceTitle: '',
-    trigger: '#paylaş',
-    appendText: 'Güncel giriş ve bonuslar: alkanka.com',
-    replyText: 'Paylaşıldı:',
-    targetIds: [],
+    rules: [],
   },
   odds: {
     note: '',
@@ -90,6 +94,27 @@ const ids = (v: unknown) => (Array.isArray(v) ? v.map(Number).filter((n) => Numb
 const str = (v: unknown, fallback: string) => (typeof v === 'string' ? v : fallback)
 const num = (v: unknown) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null)
 
+export const DEFAULT_RULE = {
+  trigger: '#paylaş',
+  appendText: 'Güncel giriş ve bonuslar: alkanka.com',
+  replyText: 'Paylaşıldı:',
+}
+
+function parseRule(r: Record<string, unknown>, fallbackId: string): ShareRule {
+  const sourceTitle = str(r.sourceTitle, '')
+  return {
+    id: str(r.id, '') || fallbackId,
+    name: str(r.name, '') || sourceTitle,
+    enabled: r.enabled === undefined ? true : Boolean(r.enabled),
+    sourceChat: str(r.sourceChat, ''),
+    sourceTitle,
+    trigger: str(r.trigger, DEFAULT_RULE.trigger),
+    appendText: str(r.appendText, DEFAULT_RULE.appendText),
+    replyText: str(r.replyText, DEFAULT_RULE.replyText),
+    targetIds: ids(r.targetIds),
+  }
+}
+
 function parseSuite(raw: string | undefined): BotSuite {
   let data: Record<string, any> = {}
   try {
@@ -107,12 +132,11 @@ function parseSuite(raw: string | undefined): BotSuite {
     share: {
       enabled: Boolean(s.enabled),
       botId: num(s.botId),
-      sourceChat: str(s.sourceChat, ''),
-      sourceTitle: str(s.sourceTitle, ''),
-      trigger: str(s.trigger, d.share.trigger),
-      appendText: str(s.appendText, d.share.appendText),
-      replyText: str(s.replyText, d.share.replyText),
-      targetIds: ids(s.targetIds),
+      rules: Array.isArray(s.rules)
+        ? s.rules.map((r: Record<string, unknown>, i: number) => parseRule(r, `r${i + 1}`)).filter((r: ShareRule) => r.sourceChat)
+        : s.sourceChat
+          ? [parseRule({ ...s, enabled: true }, 'r1')]
+          : [],
     },
     odds: { note: str(o.note, ''), winText: str(o.winText, d.odds.winText), targetIds: ids(o.targetIds) },
     approvals: {
@@ -169,47 +193,61 @@ async function validTargetIds(input: number[]) {
   return input.filter((id) => known.has(id))
 }
 
-export async function saveShareSettings(input: {
+export async function saveShareSettings(input: { enabled: boolean; botId: number | null; siteOrigin: string }) {
+  const suite = await getBotSuite()
+  if (input.enabled && !input.botId) throw new Error('Paylaşım botunu seç')
+  suite.siteOrigin = input.siteOrigin || suite.siteOrigin
+  suite.share = { ...suite.share, enabled: input.enabled, botId: input.botId }
+  await saveSuite(suite)
+  if (input.enabled) await setSetting('share_last_error', '')
+}
+
+/** Adds a sponsor (id empty) or updates an existing one. Each sponsor has its own support group, texts and target channels. */
+export async function saveShareRule(input: {
+  id: string
+  name: string
   enabled: boolean
-  botId: number | null
   sourceChat: string
   trigger: string
   appendText: string
   replyText: string
   targetIds: number[]
-  siteOrigin: string
 }) {
   const suite = await getBotSuite()
-  let sourceChat = suite.share.sourceChat
-  let sourceTitle = suite.share.sourceTitle
-  if (input.enabled) {
-    if (!input.botId) throw new Error('Paylaşım botunu seç')
-    if (!input.sourceChat.trim()) throw new Error('Sponsor destek grubunu yaz')
-    const targets = await validTargetIds(input.targetIds)
-    if (!targets.length) throw new Error('En az bir hedef kanal seç')
-    const chat = await resolveChat(input.botId, input.sourceChat)
-    if (!chat.isAdmin) {
-      const me = await callBot<{ can_read_all_group_messages?: boolean }>(await botToken(input.botId), 'getMe')
-      if (!me.can_read_all_group_messages) throw new Error('Bot gruptaki mesajları okuyamıyor. Botu grupta yönetici yap ya da BotFather’da /setprivacy → Disable yap')
-    }
-    sourceChat = chat.id
-    sourceTitle = chat.title
-    input.targetIds = targets
+  const botId = suite.share.botId
+  if (!botId) throw new Error('Önce yukarıdan paylaşım botunu seçip kaydet')
+  if (!input.sourceChat.trim()) throw new Error('Sponsor destek grubunu yaz')
+  const existing = suite.share.rules.find((r) => r.id === input.id)
+  if (!existing && suite.share.rules.length >= MAX_SHARE_RULES) throw new Error(`En fazla ${MAX_SHARE_RULES} sponsor eklenebilir`)
+  const targets = await validTargetIds(input.targetIds)
+  if (!targets.length) throw new Error('En az bir hedef kanal seç')
+  const chat = await resolveChat(botId, input.sourceChat)
+  if (!chat.isAdmin) {
+    const me = await callBot<{ can_read_all_group_messages?: boolean }>(await botToken(botId), 'getMe')
+    if (!me.can_read_all_group_messages) throw new Error('Bot gruptaki mesajları okuyamıyor. Botu grupta yönetici yap ya da BotFather’da /setprivacy → Disable yap')
   }
-  suite.siteOrigin = input.siteOrigin || suite.siteOrigin
-  suite.share = {
+  const clash = suite.share.rules.find((r) => r.sourceChat === chat.id && r.id !== existing?.id)
+  if (clash) throw new Error(`Bu grup zaten "${clash.name}" sponsoruna bağlı`)
+  const rule: ShareRule = {
+    id: existing?.id ?? `r${Date.now().toString(36)}`,
+    name: input.name.trim().slice(0, 60) || chat.title,
     enabled: input.enabled,
-    botId: input.botId,
-    sourceChat,
-    sourceTitle,
+    sourceChat: chat.id,
+    sourceTitle: chat.title,
     trigger: input.trigger.trim().slice(0, 40),
     appendText: input.appendText.trim().slice(0, 600),
-    replyText: input.replyText.trim().slice(0, 200) || DEFAULT_SUITE.share.replyText,
-    targetIds: input.targetIds,
+    replyText: input.replyText.trim().slice(0, 200) || DEFAULT_RULE.replyText,
+    targetIds: targets,
   }
+  suite.share.rules = existing ? suite.share.rules.map((r) => (r.id === rule.id ? rule : r)) : [...suite.share.rules, rule]
   await saveSuite(suite)
-  if (input.enabled) await setSetting('share_last_error', '')
-  return sourceTitle
+  return rule
+}
+
+export async function deleteShareRule(id: string) {
+  const suite = await getBotSuite()
+  suite.share.rules = suite.share.rules.filter((r) => r.id !== id)
+  await saveSuite(suite)
 }
 
 export async function saveOddsSettings(input: { note: string; winText: string; targetIds: number[] }) {
@@ -355,8 +393,10 @@ function withAppend(body: string, append: string, limit: number) {
  */
 export async function handleShareMessage(m: TgMessage, viaBotId: number): Promise<boolean> {
   const suite = await getBotSuite()
-  const share = suite.share
-  if (!share.enabled || share.botId !== viaBotId || !share.sourceChat || String(m.chat.id) !== share.sourceChat) return false
+  if (!suite.share.enabled || suite.share.botId !== viaBotId) return false
+  const share = suite.share.rules.find((r) => r.sourceChat === String(m.chat.id))
+  if (!share) return false
+  if (!share.enabled) return true
   if (m.from?.is_bot && m.from.username !== 'GroupAnonymousBot') return true
 
   const incomingPart = albumPart(m)
