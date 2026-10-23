@@ -9,7 +9,9 @@ import type { TgMessage } from '@/lib/telegram-chat'
 import {
   DEFAULT_ODDS_BOT,
   istanbulDay,
+  oddsTagText,
   splitWords,
+  toOddsTag,
   type OddResult,
   type OddsBotConfig,
   type OddsBotStatus,
@@ -49,6 +51,10 @@ function ensureOddsTables() {
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS web_error text`)
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS replacements text NOT NULL DEFAULT ''`)
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS footer text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS tag text NOT NULL DEFAULT 'none'`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS tag_text text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE special_odds ADD COLUMN IF NOT EXISTS tag text NOT NULL DEFAULT 'none'`)
+    await rows(sql`ALTER TABLE special_odds ADD COLUMN IF NOT EXISTS tag_text text NOT NULL DEFAULT ''`)
   })().catch((error) => {
     ready = null
     throw error
@@ -197,6 +203,8 @@ function mapSource(r: Record<string, unknown>): OddsSource {
     siteLogo: r.site_logo ? String(r.site_logo) : null,
     replacements: String(r.replacements ?? ''),
     footer: String(r.footer ?? ''),
+    tag: toOddsTag(r.tag),
+    tagText: String(r.tag_text ?? ''),
     active: Boolean(r.active),
     lastAt: r.last_at ? new Date(String(r.last_at)).toISOString() : null,
     total: Number(r.total ?? 0),
@@ -218,7 +226,25 @@ export async function updateOddsSourceText(id: number, input: { siteLink: string
     footer = ${input.footer.trim().slice(0, 300)} WHERE id = ${id}`)
 }
 
-export async function addOddsSource(input: { chat: string; siteName: string; siteLink: string; siteLogo: string; replacements: string; footer: string }) {
+/** Re-tags the source and its odds still on the site, so a corrected label shows everywhere at once. */
+export async function updateOddsSourceTag(id: number, input: { tag: string; tagText: string }) {
+  await ensureOddsTables()
+  const tag = toOddsTag(input.tag)
+  const tagText = tag === 'none' ? '' : input.tagText.trim().slice(0, 60)
+  await rows(sql`UPDATE odds_sources SET tag = ${tag}, tag_text = ${tagText} WHERE id = ${id}`)
+  await rows(sql`UPDATE special_odds SET tag = ${tag}, tag_text = ${tagText} WHERE source_id = ${id}`)
+}
+
+export async function addOddsSource(input: {
+  chat: string
+  siteName: string
+  siteLink: string
+  siteLogo: string
+  replacements: string
+  footer: string
+  tag: string
+  tagText: string
+}) {
   await ensureOddsTables()
   const config = await getOddsBotConfig()
   const siteName = input.siteName.trim().slice(0, 40)
@@ -239,11 +265,13 @@ export async function addOddsSource(input: { chat: string; siteName: string; sit
     }
   }
   const logo = input.siteLogo.trim()
-  await rows(sql`INSERT INTO odds_sources (chat_id, title, site_name, site_link, site_logo, replacements, footer)
+  const tag = toOddsTag(input.tag)
+  const tagText = tag === 'none' ? '' : input.tagText.trim().slice(0, 60)
+  await rows(sql`INSERT INTO odds_sources (chat_id, title, site_name, site_link, site_logo, replacements, footer, tag, tag_text)
     VALUES (${chatId}, ${title.slice(0, 80)}, ${siteName}, ${siteLink.slice(0, 400)}, ${/^https?:\/\/|^\//.test(logo) ? logo.slice(0, 400) : null},
-      ${input.replacements.slice(0, 3000)}, ${input.footer.trim().slice(0, 300)})
+      ${input.replacements.slice(0, 3000)}, ${input.footer.trim().slice(0, 300)}, ${tag}, ${tagText})
     ON CONFLICT (chat_id) DO UPDATE SET site_name = EXCLUDED.site_name, site_link = EXCLUDED.site_link, site_logo = EXCLUDED.site_logo,
-      replacements = EXCLUDED.replacements, footer = EXCLUDED.footer, active = true`)
+      replacements = EXCLUDED.replacements, footer = EXCLUDED.footer, tag = EXCLUDED.tag, tag_text = EXCLUDED.tag_text, active = true`)
   return title
 }
 
@@ -284,9 +312,11 @@ function classify(text: string, config: OddsBotConfig): OddsPreview['kind'] {
 
 export function rewriteText(
   text: string,
-  source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer'>>,
+  source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer' | 'tag' | 'tagText'>>,
   config: Pick<OddsBotConfig, 'footer'>,
 ) {
+  const tag = oddsTagText(source.tag ?? 'none', source.tagText ?? '')
+  const header = tag ? `[ ${tag} ] · ${source.siteName.toLocaleUpperCase('tr')}\n\n` : ''
   const rules = parseReplacements(source.replacements ?? '')
   const replaced = text
     .replace(/https?:\/\/\S+/gi, (url) => pickLink(url, rules, source.siteLink))
@@ -298,7 +328,7 @@ export function rewriteText(
     .trim()
   const footerText = source.footer?.trim() || config.footer
   const footer = footerText ? `\n\n${footerText}` : ''
-  return `${body}${footer}`.trim()
+  return `${header}${body}${footer}`.trim()
 }
 
 const fit = (text: string, limit: number) => (text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text)
@@ -425,9 +455,10 @@ async function ingest(source: OddsSource, incoming: Incoming, fromChat: string |
   const items = parsed.length ? parsed : [{ match: firstLine.slice(0, 80), league: '', market: '', oldOdd: null, newOdd: null, kickoff: '', limit: '' }]
   for (const [idx, o] of items.entries()) {
     await rows(sql`INSERT INTO special_odds (source_id, source_chat, source_msg, idx, our_msg, site_name, site_logo, link, match, league, market,
-        old_odd, new_odd, kickoff, limit_text, body, photo)
+        old_odd, new_odd, kickoff, limit_text, body, photo, tag, tag_text)
       VALUES (${source.id}, ${source.chatId}, ${incoming.messageId}, ${idx}, ${ourMsg}, ${source.siteName}, ${source.siteLogo}, ${source.siteLink},
-        ${o.match}, ${o.league}, ${o.market}, ${o.oldOdd}, ${o.newOdd}, ${o.kickoff}, ${o.limit}, ${rewritten.slice(0, 4000)}, ${incoming.photo})
+        ${o.match}, ${o.league}, ${o.market}, ${o.oldOdd}, ${o.newOdd}, ${o.kickoff}, ${o.limit}, ${rewritten.slice(0, 4000)}, ${incoming.photo},
+        ${source.tag}, ${source.tagText})
       ON CONFLICT (source_chat, source_msg, idx) DO NOTHING`)
   }
   return { kind, count: items.length }
@@ -558,6 +589,8 @@ function mapOdd(r: Record<string, unknown>): SpecialOdd {
     sourceId: r.source_id == null ? null : Number(r.source_id),
     siteName: String(r.site_name),
     siteLogo: r.site_logo ? String(r.site_logo) : null,
+    tag: toOddsTag(r.tag),
+    tagText: String(r.tag_text ?? ''),
     link: String(r.link),
     match: String(r.match),
     league: String(r.league ?? ''),

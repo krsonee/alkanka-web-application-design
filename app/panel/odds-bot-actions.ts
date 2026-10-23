@@ -14,6 +14,7 @@ import {
   saveOddsBotConfig,
   setOddsSourceActive,
   setOddsStatus,
+  updateOddsSourceTag,
   updateOddsSourceText,
 } from '@/lib/special-odds'
 import type { OddsPreview } from '@/lib/special-odds-shared'
@@ -92,9 +93,22 @@ export async function addOddsSourceAction(_: ActionState, form: FormData): Promi
       siteLogo: text(form, 'siteLogo'),
       replacements: text(form, 'replacements'),
       footer: text(form, 'footer'),
+      tag: text(form, 'tag'),
+      tagText: text(form, 'tagText'),
     })
     refresh()
     return { ok: true, message: `"${title}" kaynak olarak eklendi.` }
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function updateOddsSourceTagAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await updateOddsSourceTag(Number(form.get('id')), { tag: text(form, 'tag'), tagText: text(form, 'tagText') })
+    refresh()
+    return { ok: true, message: 'Etiket kaydedildi.' }
   } catch (error) {
     return { message: errorText(error) }
   }

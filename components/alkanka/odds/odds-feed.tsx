@@ -4,7 +4,7 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { ArrowRight, ArrowUpRight, CalendarDays, Check, Clock, Send, X } from 'lucide-react'
 import { TeamLogo, splitMatch } from '@/components/alkanka/logo-context'
-import { ODD_RESULT_LABELS, fillMinutes, shiftDay, type OddsDayStats, type SpecialOdd } from '@/lib/special-odds-shared'
+import { ODD_RESULT_LABELS, fillMinutes, oddsTagText, shiftDay, type OddsDayStats, type SpecialOdd } from '@/lib/special-odds-shared'
 import { cn } from '@/lib/utils'
 
 type DayData = { day: string; odds: SpecialOdd[]; stats: OddsDayStats }
@@ -62,6 +62,16 @@ function OddCard({ odd }: { odd: SpecialOdd }) {
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <StateBadge odd={odd} />
           <span className="truncate font-semibold uppercase tracking-wider text-accent">{odd.siteName}</span>
+          {oddsTagText(odd.tag, odd.tagText) && (
+            <span
+              className={cn(
+                'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                odd.tag === 'sponsor' ? 'bg-primary/15 text-primary' : 'border border-border bg-secondary text-foreground',
+              )}
+            >
+              {oddsTagText(odd.tag, odd.tagText)}
+            </span>
+          )}
           <span className="ml-auto flex shrink-0 items-center gap-1 tabular-nums">
             <Clock className="size-3" aria-hidden="true" />
             {open ? `${ago} dk önce` : clock(odd.openedAt)}

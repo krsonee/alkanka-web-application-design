@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useState, useTransition } from 'react'
-import { Check, FlaskConical, Link2, ListChecks, Loader2, Plug, Radio, Trash2, Trophy } from 'lucide-react'
+import { Check, FlaskConical, Link2, ListChecks, Loader2, Plug, Radio, Tag, Trash2, Trophy } from 'lucide-react'
 import {
   addOddsSourceAction,
   bulkOddsAction,
@@ -12,12 +12,13 @@ import {
   previewOddsAction,
   saveOddsBotAction,
   toggleOddsSourceAction,
+  updateOddsSourceTagAction,
   updateOddsSourceTextAction,
 } from '@/app/panel/odds-bot-actions'
 import { SourceTextEditor, SourceTextFields } from './source-text-fields'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot } from '@/lib/telegram-mirror'
-import { ODD_RESULT_LABELS, fillMinutes, type OddsBotConfig, type OddsBotStatus, type OddsPreview, type OddsSource, type SpecialOdd } from '@/lib/special-odds-shared'
+import { ODDS_TAG_OPTIONS, ODD_RESULT_LABELS, fillMinutes, oddsTagText, type OddsTag, type OddsBotConfig, type OddsBotStatus, type OddsPreview, type OddsSource, type SpecialOdd } from '@/lib/special-odds-shared'
 import { cn } from '@/lib/utils'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -160,6 +161,66 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
   )
 }
 
+export function TagBadge({ tag, text }: { tag: OddsTag; text: string }) {
+  if (tag === 'none' || !text) return <span className="shrink-0 rounded-md border border-dashed border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">Etiket yok</span>
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+        tag === 'sponsor' ? 'bg-primary/15 text-primary' : 'bg-accent/15 text-accent',
+      )}
+    >
+      {text}
+    </span>
+  )
+}
+
+function TagFields({ tag = 'sponsor', tagText = '' }: { tag?: OddsTag; tagText?: string }) {
+  const [current, setCurrent] = useState<OddsTag>(tag)
+  const preset = ODDS_TAG_OPTIONS.find((o) => o.value === current)!
+  return (
+    <>
+      <label className={label}>
+        Paylaşım etiketi
+        <select name="tag" value={current} onChange={(e) => setCurrent(e.target.value as OddsTag)} className={input}>
+          {ODDS_TAG_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <span className={hint}>Postun en üstünde ve sitedeki oran kartında görünür.</span>
+      </label>
+      <label className={label}>
+        Etiket yazısı (isteğe bağlı)
+        <input name="tagText" defaultValue={tagText} maxLength={60} disabled={current === 'none'} placeholder={preset.defaultText || 'Etiket kapalı'} className={cn(input, 'disabled:opacity-50')} />
+        <span className={hint}>{current === 'none' ? 'Bu kaynağın postlarında etiket olmaz.' : `Boş bırakırsan “${preset.defaultText}” yazar.`}</span>
+      </label>
+    </>
+  )
+}
+
+function TagEditor({ source }: { source: OddsSource }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(updateOddsSourceTagAction, {})
+  return (
+    <details className="w-full rounded-xl border border-border bg-background/50">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-semibold text-foreground">
+        <Tag className="size-3.5" aria-hidden="true" />
+        Etiketi düzenle
+        <span className="font-normal text-muted-foreground">· {oddsTagText(source.tag, source.tagText) || 'etiket yok'}</span>
+      </summary>
+      <form action={action} className="grid gap-3 border-t border-border p-3 md:grid-cols-2">
+        <input type="hidden" name="id" value={source.id} />
+        <TagFields tag={source.tag} tagText={source.tagText} />
+        <div className="flex items-center gap-3 md:col-span-2">
+          <button disabled={pending} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+            {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}Kaydet
+          </button>
+          <Status state={state} />
+        </div>
+      </form>
+    </details>
+  )
+}
+
 function SourcesCard({ sources }: { sources: OddsSource[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(addOddsSourceAction, {})
   return (
@@ -169,6 +230,7 @@ function SourcesCard({ sources }: { sources: OddsSource[] }) {
         <label className={label}>Site adı<input name="siteName" required maxLength={40} placeholder="Örn. NovaBet" className={input} /></label>
         <label className={label}>Bizim site linkimiz<input name="siteLink" required type="url" placeholder="https://..." className={input} /></label>
         <label className={label}>Logo adresi (isteğe bağlı)<input name="siteLogo" placeholder="https://.../logo.png" className={input} /></label>
+        <TagFields />
         <div className="flex flex-col gap-3 md:col-span-2">
           <SourceTextFields footerPlaceholder="Boş bırakılırsa genel alt yazı kullanılır" />
         </div>
@@ -185,7 +247,10 @@ function SourcesCard({ sources }: { sources: OddsSource[] }) {
             <li key={s.id} className="flex flex-wrap items-center gap-3 p-3">
               <span className={cn('size-2.5 shrink-0 rounded-full', s.active ? 'bg-live' : 'bg-muted-foreground')} aria-hidden="true" />
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-semibold text-foreground">{s.siteName} <span className="font-normal text-muted-foreground">· {s.title}</span></span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-foreground">{s.siteName} <span className="font-normal text-muted-foreground">· {s.title}</span></span>
+                  <TagBadge tag={s.tag} text={oddsTagText(s.tag, s.tagText)} />
+                </span>
                 <span className="truncate text-xs text-muted-foreground">
                   {s.total} oran · {s.lastAt ? `son post ${new Date(s.lastAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' })}` : 'henüz post yok'}
                 </span>
@@ -202,6 +267,7 @@ function SourcesCard({ sources }: { sources: OddsSource[] }) {
                   <Trash2 className="size-4" aria-hidden="true" />
                 </button>
               </form>
+              <TagEditor source={s} />
               <SourceTextEditor
                 id={s.id}
                 linkName="siteLink"
