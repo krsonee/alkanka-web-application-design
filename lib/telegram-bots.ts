@@ -144,6 +144,11 @@ async function saveSuite(suite: BotSuite) {
   await setSetting(SUITE_KEY, JSON.stringify(suite))
 }
 
+export async function setShareBot(botId: number) {
+  const suite = await getBotSuite()
+  await saveSuite({ ...suite, share: { ...suite.share, botId } })
+}
+
 async function resolveChat(botId: number, chatInput: string) {
   const chat = normalizeChat(chatInput)
   if (!chat) throw new Error('Grup geçersiz. Örnek: @grupadi ya da -1001234567890')
