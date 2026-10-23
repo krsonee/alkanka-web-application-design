@@ -217,9 +217,9 @@ function SetupSection({ d }: { d: TgHubData }) {
         <RoleRow
           role="share"
           label="Postçu (anında paylaşım)"
-          hint="Bot, Post Paylaşım sekmesinde seçtiğin bottur. Buradan Bağla dersen paylaşımlar 2-3 dakika beklemeden anında çıkar."
+          hint="Paylaşımları yapan bot. Burada seçip Bağla dersen Post Paylaşım sekmesindeki bot da bu olur ve paylaşımlar beklemeden anında çıkar."
           botId={d.shareBotId}
-          bots={d.shareBotId ? d.bots.filter((b) => b.id === d.shareBotId) : []}
+          bots={d.bots}
           info={d.shareHook}
         />
       </Card>

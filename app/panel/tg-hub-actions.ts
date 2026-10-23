@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { after } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
 import { DEFAULT_HUB, type HubConfig } from '@/lib/tg-hub-shared'
+import { setShareBot } from '@/lib/telegram-bots'
 import { cancelBroadcast, getHub, processBroadcasts, queueBroadcast, registerHook, removeGlobalBan, resolveChatFor, saveHub, setTrusted } from '@/lib/tg-hub'
 
 type Result = { ok: boolean; message: string }
@@ -120,8 +121,9 @@ export async function setRoleBot(role: 'guard' | 'support' | 'share', botId: num
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
     if (role === 'share') {
-      if (!botId) return { ok: false, message: 'Bot seç.' }
-    } else {
+  if (!botId) return { ok: false, message: 'Bot seç.' }
+  await setShareBot(botId)
+  } else {
       const hub = await getHub()
       await saveHub(role === 'guard' ? { ...hub, guardBotId: botId } : { ...hub, supportBotId: botId })
       if (!botId) return done('Rol kaldırıldı.')
