@@ -377,20 +377,51 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
     body = stripTrigger(m.text ?? m.caption ?? '', share.trigger)
     media = hasMedia(m)
   }
-  if (!media && !body) return true
+  const sourceToken = await botToken(viaBotId)
+  const answer = (text: string) =>
+    callBot(sourceToken, 'sendMessage', {
+      chat_id: trigger.chat.id,
+      text: text.slice(0, MESSAGE_LIMIT),
+      reply_parameters: { message_id: trigger.message_id, allow_sending_without_reply: true },
+      link_preview_options: { is_disabled: true },
+    }).catch((error) => console.error('[share-bot] reply failed', error))
+
+  if (!media && !body) {
+    if (share.trigger) await answer(`Paylaşmak istediğin postu yanıtlayıp ${share.trigger} yaz.`)
+    return true
+  }
 
   const claimed = await rows<{ id: number }>(sql`INSERT INTO tg_share_log (chat_id, message_id, status)
     VALUES (${share.sourceChat}, ${m.message_id}, 'pending') ON CONFLICT (chat_id, message_id) DO NOTHING RETURNING id`)
-  if (!claimed.length) return true
+  if (!claimed.length) {
+    await answer('Bu post zaten paylaşıldı.')
+    return true
+  }
 
   const targets = await targetsFor(share.targetIds, false)
   const links: string[] = []
   const failures: string[] = []
-  const sourceToken = await botToken(viaBotId)
   const group = albumPart(m)
   const album = group ? await albumParts(share.sourceChat, group.groupId) : []
 
+  type ChatInfo = { id: number; type?: string; username?: string; linked_chat_id?: number }
+  const infos = new Map<string, ChatInfo>()
   for (const target of targets) {
+    infos.set(target.chatId, await callBot<ChatInfo>(sourceToken, 'getChat', { chat_id: target.chatId }).catch(() => ({ id: Number(target.chatId) })))
+  }
+  // A channel's linked discussion group receives every channel post automatically; posting there too would duplicate it.
+  const autoFed = new Set(
+    targets
+      .map((t) => infos.get(t.chatId))
+      .filter((i): i is ChatInfo => i?.type === 'channel' && Boolean(i.linked_chat_id))
+      .map((i) => String(i.linked_chat_id)),
+  )
+
+  for (const target of targets) {
+    if (autoFed.has(target.chatId)) {
+      links.push(`${target.title}: kanaldan otomatik düştü`)
+      continue
+    }
     try {
       let sentId: number
       if (album.length > 1) {
@@ -427,8 +458,7 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
         })
         sentId = res.message_id
       }
-      const info = await callBot<{ id: number; username?: string }>(sourceToken, 'getChat', { chat_id: target.chatId }).catch(() => ({ id: Number(target.chatId) }))
-      const link = postLink(info, sentId)
+      const link = postLink(infos.get(target.chatId) ?? { id: target.chatId }, sentId)
       links.push(link ? `${target.title}: ${link}` : target.title)
     } catch (error) {
       failures.push(`${target.title}: ${String((error as Error).message)}`)
@@ -439,13 +469,8 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
   const detail = failures.length ? failures.join(' | ').slice(0, 300) : null
   await rows(sql`UPDATE tg_share_log SET status = ${status}, detail = ${detail} WHERE id = ${claimed[0].id}`)
 
-  const replyText = links.length ? `${share.replyText}\n${links.join('\n')}` : `Paylaşılamadı. ${detail ?? 'Hedef kanal yok'}`
-  await callBot(sourceToken, 'sendMessage', {
-    chat_id: trigger.chat.id,
-    text: replyText.slice(0, MESSAGE_LIMIT),
-    reply_parameters: { message_id: trigger.message_id, allow_sending_without_reply: true },
-    link_preview_options: { is_disabled: true },
-  }).catch((error) => console.error('[share-bot] reply failed', error))
+  const failed = failures.length ? `\nGitmeyenler:\n${failures.join('\n')}` : ''
+  await answer(links.length ? `${share.replyText}\n${links.join('\n')}${failed}` : `Paylaşılamadı. ${detail ?? 'Hedef kanal yok'}`)
   return true
 }
 
