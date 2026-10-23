@@ -318,7 +318,19 @@ function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefr
                   {timeFormat.format(new Date(m.createdAt))}
                 </time>
               </span>
-              <span className="break-words text-foreground">{m.text}</span>
+              {m.media?.type === 'photo' && (
+                <a href={m.media.url} target="_blank" rel="noopener noreferrer" className="block">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- Proxied Telegram file, not a static asset. */}
+                  <img src={m.media.url} alt={`${m.author} paylaşımı`} loading="lazy" className="max-h-72 w-full rounded-lg border border-border object-contain" />
+                </a>
+              )}
+              {m.media?.type === 'animation' && (
+                <video src={m.media.url} autoPlay loop muted playsInline className="max-h-72 w-full rounded-lg border border-border object-contain" />
+              )}
+              {m.media?.type === 'video' && (
+                <video src={m.media.url} controls preload="metadata" playsInline className="max-h-72 w-full rounded-lg border border-border bg-background object-contain" />
+              )}
+              {m.text && <span className="whitespace-pre-line break-words text-foreground">{m.text}</span>}
             </li>
           ))
         )}

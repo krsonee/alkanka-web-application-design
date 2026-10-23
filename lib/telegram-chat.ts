@@ -10,7 +10,10 @@ export type ChatMessage = {
   text: string
   origin: 'telegram' | 'site'
   createdAt: string
+  media: { type: ChatMediaType; url: string } | null
 }
+
+export type ChatMediaType = 'photo' | 'video' | 'animation'
 
 export type ChatConfig = { botId: number; botUsername: string; chatId: string; title: string; inviteUrl: string | null }
 
@@ -38,8 +41,9 @@ export type TgMessage = {
   reply_to_message?: TgMessage
   text?: string
   caption?: string
-  photo?: unknown[]
-  video?: unknown
+  photo?: { file_id: string; file_size?: number }[]
+  video?: { file_id: string; file_size?: number }
+  animation?: { file_id: string; file_size?: number }
   sticker?: { emoji?: string }
   pinned_message?: TgMessage
   new_chat_members?: TgUser[]
@@ -60,6 +64,8 @@ function ensureChatTables() {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_chat_messages (
       id serial PRIMARY KEY, chat_id text NOT NULL, tg_message_id bigint, from_tg_id bigint, user_id text,
       author text NOT NULL, text text NOT NULL, origin text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE tg_chat_messages ADD COLUMN IF NOT EXISTS media_type text`)
+    await rows(sql`ALTER TABLE tg_chat_messages ADD COLUMN IF NOT EXISTS media_file_id text`)
     await rows(sql`CREATE INDEX IF NOT EXISTS tg_chat_messages_chat_idx ON tg_chat_messages (chat_id, id DESC)`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS tg_chat_messages_tg_uniq ON tg_chat_messages (chat_id, tg_message_id)
       WHERE tg_message_id IS NOT NULL`)
@@ -119,8 +125,37 @@ export function messageText(m: TgMessage) {
   const body = (m.text ?? m.caption ?? '').trim()
   if (m.photo) return body ? `[Fotoğraf] ${body}` : '[Fotoğraf]'
   if (m.video) return body ? `[Video] ${body}` : '[Video]'
+  if (m.animation) return body ? `[GIF] ${body}` : '[GIF]'
   if (m.sticker) return m.sticker.emoji ?? '[Çıkartma]'
   return body
+}
+
+/** Bot API getFile refuses files over 20 MB, so larger videos stay as a text label. */
+const MAX_MEDIA_BYTES = 20 * 1024 * 1024
+
+function chatMedia(m: TgMessage): { type: ChatMediaType; fileId: string } | null {
+  const fits = (f?: { file_size?: number }) => !f?.file_size || f.file_size <= MAX_MEDIA_BYTES
+  if (m.photo?.length) {
+    const best = [...m.photo].reverse().find(fits)
+    return best ? { type: 'photo', fileId: best.file_id } : null
+  }
+  if (m.animation && fits(m.animation)) return { type: 'animation', fileId: m.animation.file_id }
+  if (m.video && fits(m.video)) return { type: 'video', fileId: m.video.file_id }
+  return null
+}
+
+/** Fresh download URL for a stored chat attachment; Telegram file links expire, file ids do not. */
+export async function chatMediaSource(id: number) {
+  const config = await getChatConfig()
+  if (!config) return null
+  const r = await rows<{ media_type: string | null; media_file_id: string | null }>(sql`SELECT media_type, media_file_id
+    FROM tg_chat_messages WHERE id = ${id} AND chat_id = ${config.chatId}`)
+  const fileId = r[0]?.media_file_id
+  if (!fileId) return null
+  const token = await botToken(config.botId)
+  const file = await callBot<{ file_path?: string }>(token, 'getFile', { file_id: fileId })
+  if (!file.file_path) return null
+  return { url: `https://api.telegram.org/file/bot${token}/${file.file_path}`, type: String(r[0].media_type) as ChatMediaType }
 }
 
 // --- Admin setup ---------------------------------------------------------
@@ -244,13 +279,14 @@ export async function handleUpdate(update: TgUpdate) {
   }
   if (m.new_chat_members) return
 
-  const text = messageText(m)
-  if (!text) return
+  const media = chatMedia(m)
+  const text = media ? (m.text ?? m.caption ?? '').trim() : messageText(m)
+  if (!text && !media) return
   const link = await rows<{ user_id: string }>(sql`SELECT user_id FROM tg_links WHERE tg_id = ${m.from.id}`)
   // The guard bot gets the same update in parallel; skip anything it already removed from the group.
-  await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin)
+  await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin, media_type, media_file_id)
     SELECT ${config.chatId}, ${m.message_id}, ${m.from.id}, ${link[0]?.user_id ?? null}, ${displayName(m.from)},
-      ${text.slice(0, 1000)}, 'telegram'
+      ${text.slice(0, 1500)}, 'telegram', ${media?.type ?? null}, ${media?.fileId ?? null}
     WHERE NOT EXISTS (SELECT 1 FROM tg_site_removed WHERE chat_id = ${config.chatId} AND tg_message_id = ${m.message_id})
     ON CONFLICT DO NOTHING`)
 }
@@ -330,7 +366,7 @@ export async function getFeed(): Promise<ChatFeed> {
   const [members, settings, r] = await Promise.all([
     memberCount(config),
     getSettings(['chat_pinned']),
-    rows(sql`SELECT id, author, user_id, text, origin, created_at FROM tg_chat_messages WHERE chat_id = ${config.chatId} ORDER BY id DESC LIMIT 50`),
+    rows(sql`SELECT id, author, user_id, text, origin, created_at, media_type FROM tg_chat_messages WHERE chat_id = ${config.chatId} ORDER BY id DESC LIMIT 50`),
   ])
   return {
     configured: true,
@@ -345,6 +381,7 @@ export async function getFeed(): Promise<ChatFeed> {
       text: String(m.text),
       origin: m.origin === 'site' ? 'site' : 'telegram',
       createdAt: new Date(String(m.created_at)).toISOString(),
+      media: m.media_type ? { type: String(m.media_type) as ChatMediaType, url: `/api/chat/media/${Number(m.id)}` } : null,
     })),
   }
 }
