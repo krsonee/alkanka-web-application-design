@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables } from '@/lib/telegram-mirror'
+import { botToken, callBot, ensureTables, entitiesToCleanText } from '@/lib/telegram-mirror'
 
 export type ChatMessage = {
   id: number
@@ -124,8 +124,13 @@ export function displayName(u?: TgUser) {
   return (full || u.username || 'Telegram').slice(0, 40)
 }
 
+/** Message body with hidden-link labels and their ornament rows removed, like every other site feed. */
+export function cleanBody(m: TgMessage) {
+  return entitiesToCleanText(m.text ?? m.caption ?? '', m.entities ?? m.caption_entities ?? [])
+}
+
 export function messageText(m: TgMessage) {
-  const body = (m.text ?? m.caption ?? '').trim()
+  const body = cleanBody(m)
   if (m.photo) return body ? `[Fotoğraf] ${body}` : '[Fotoğraf]'
   if (m.video) return body ? `[Video] ${body}` : '[Video]'
   if (m.animation) return body ? `[GIF] ${body}` : '[GIF]'
@@ -283,7 +288,7 @@ export async function handleUpdate(update: TgUpdate) {
   if (m.new_chat_members) return
 
   const media = chatMedia(m)
-  const text = media ? (m.text ?? m.caption ?? '').trim() : messageText(m)
+  const text = media ? cleanBody(m) : messageText(m)
   if (!text && !media) return
   const link = await rows<{ user_id: string }>(sql`SELECT user_id FROM tg_links WHERE tg_id = ${m.from.id}`)
   // The guard bot gets the same update in parallel; skip anything it already removed from the group.
