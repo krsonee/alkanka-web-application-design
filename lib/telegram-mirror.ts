@@ -169,6 +169,79 @@ function dropDeadLinks(text: string) {
     .join('\n')
 }
 
+const ENTITY_TAGS: Record<string, string> = {
+  bold: 'b',
+  italic: 'i',
+  underline: 'u',
+  strikethrough: 's',
+  code: 'code',
+  pre: 'pre',
+  blockquote: 'blockquote',
+  expandable_blockquote: 'blockquote',
+  spoiler: 'tg-spoiler',
+}
+
+/**
+ * Rebuilds a Telegram message (text + entities) as HTML for re-posting. Hidden links
+ * (text_link) are removed together with their label and any ornament rows around them,
+ * the same way mirrored channel posts are cleaned.
+ */
+export function entitiesToCleanHtml(text: string, entities: { type: string; offset: number; length: number }[] = []) {
+  const dead = new Array<boolean>(text.length).fill(false)
+  const opens = new Map<number, string[]>()
+  const closes = new Map<number, string[]>()
+  const sorted = [...entities].sort((a, b) => a.offset - b.offset || b.length - a.length)
+  for (const e of sorted) {
+    if (e.type === 'text_link') {
+      for (let i = e.offset; i < Math.min(text.length, e.offset + e.length); i++) dead[i] = true
+      continue
+    }
+    const tag = ENTITY_TAGS[e.type]
+    if (!tag || e.length <= 0) continue
+    opens.set(e.offset, [...(opens.get(e.offset) ?? []), tag])
+    closes.set(e.offset + e.length, [tag, ...(closes.get(e.offset + e.length) ?? [])])
+  }
+  let out = ''
+  for (let i = 0; i <= text.length; i++) {
+    for (const tag of closes.get(i) ?? []) out += `</${tag}>`
+    if (i === text.length) break
+    for (const tag of opens.get(i) ?? []) out += `<${tag}>`
+    if (dead[i]) {
+      if (text[i] === '\n') out += '\n'
+      else if (i === 0 || !dead[i - 1] || text[i - 1] === '\n') out += DEAD_LINK
+      continue
+    }
+    out += escapeHtml(text[i])
+  }
+  return dropDeadLinks(out)
+    .replace(/<(b|i|u|s|code|pre|blockquote|tg-spoiler)>\s*<\/\1>/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** Plain-text version of entitiesToCleanHtml for bots that post without formatting. */
+export function entitiesToCleanText(text: string, entities: { type: string; offset: number; length: number }[] = []) {
+  return stripTags(entitiesToCleanHtml(text, entities)).trim()
+}
+
+/** Plain text of a scraped t.me/s post with hidden-link labels and their ornament rows removed. */
+export function scrapedHtmlToCleanText(html: string) {
+  const marked = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<i class="emoji"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/i>/gi, '$1')
+    .replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/gi, '$1')
+    .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
+      const plain = stripTags(label).trim()
+      if (href.startsWith('?q=') || /^(https?:\/\/|www\.)\S+$/i.test(plain) || /^@\w+$/.test(plain)) return label
+      return DEAD_LINK
+    })
+  return stripTags(dropDeadLinks(marked))
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export function toTelegramHtml(html: string, link: string, rules: ReplaceRule[] = []) {
   const converted = html
     .replace(/<br\s*\/?>/gi, '\n')

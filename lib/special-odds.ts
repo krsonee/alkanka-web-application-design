@@ -1,7 +1,17 @@
 import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables, fetchChannel, normalizeChat, sendPhotoFile, stripTags } from '@/lib/telegram-mirror'
+import {
+  botToken,
+  callBot,
+  ensureTables,
+  entitiesToCleanText,
+  fetchChannel,
+  normalizeChat,
+  scrapedHtmlToCleanText,
+  sendPhotoFile,
+  stripTags,
+} from '@/lib/telegram-mirror'
 import { applyReplacements, parseReplacements, pickLink } from '@/lib/text-replace'
 import { parseOddsPost } from '@/lib/odds-parse'
 import { isOddsText } from '@/lib/telegram-bots'
@@ -470,7 +480,7 @@ function toIncoming(m: TgMessage, edited: boolean): Incoming {
     chatId: String(m.chat.id),
     messageId: m.message_id,
     replyTo: m.reply_to_message?.message_id ?? null,
-    text: m.text ?? m.caption ?? '',
+    text: entitiesToCleanText(m.text ?? m.caption ?? '', m.entities ?? m.caption_entities ?? []),
     photo: photos?.length ? photos[photos.length - 1].file_id : null,
     edited,
   }
@@ -533,7 +543,7 @@ export async function scrapeOddsSources(config?: OddsBotConfig) {
       const fresh = posts.filter((p) => p.id > last!).slice(0, WEB_BATCH)
       for (const post of fresh) {
         await rows(sql`UPDATE odds_sources SET web_last = GREATEST(COALESCE(web_last, 0), ${post.id}) WHERE id = ${source.id}`)
-        const text = stripTags(post.html).trim()
+        const text = scrapedHtmlToCleanText(post.html)
         if (!text) continue
         await ingest(source, { chatId: source.chatId, messageId: post.id, replyTo: null, text, photo: post.photos[0] ?? null, edited: false }, null)
           .catch((error) => console.error('[odds-bot] web ingest failed', error))
