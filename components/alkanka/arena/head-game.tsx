@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import NextImage from 'next/image'
-import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Loader2, Maximize2, Minimize2, Smartphone } from 'lucide-react'
+import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Loader2, Maximize2, Minimize2, Settings2, Smartphone, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TableBrand } from './table-brand'
 import type { DuelLink } from './duel-link'
-import { playSound } from '@/lib/sound'
+import { playSound, setSoundMuted, startCrowdAmbience, useSoundMuted, type SoundName } from '@/lib/sound'
 
 export type Sport = 'futbol' | 'basket'
 /** `bot`: solo vs AI. `host`: seat 0 runs physics and streams it. `guest`: seat 1 sends keys and renders the host's stream. */
@@ -22,19 +22,101 @@ const FOOT = HEAD_R + 30
 const BALL_R = 17
 const MATCH_SECONDS = 60
 const STEP_MS = 1000 / 60
+/** Golden-goal extra time played when regulation ends level. */
+const OVERTIME_SECONDS = 15
+/** Steps (3 s) a player may stand inside their own goal before being pushed out. */
+const CAMP_LIMIT = 180
+const SHOT_CLOCK_STEPS = 720
+/** Steps (0.5 s) of holding kick for a full-power shot. */
+const CHARGE_MAX = 30
+/** Steps (15 s) the host waits for a rival who turned their phone upright. */
+const RIVAL_HOLD_STEPS = 15 * 60
 
-type Player = { x: number; y: number; vx: number; vy: number; face: 1 | -1; kick: number; run: number }
+type Player = {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  face: 1 | -1
+  kick: number
+  run: number
+  charge: number
+  power: number
+  camp: number
+}
 type Ball = { x: number; y: number; vx: number; vy: number; rot: number }
 type Keys = { left: boolean; right: boolean; jump: boolean; kick: boolean }
 const noKeys = (): Keys => ({ left: false, right: false, jump: false, kick: false })
+/** Sounds plus haptic pulses: `h0`/`h1` vibrate one seat's phone, `hb` vibrates both. */
+type EventName = SoundName | 'h0' | 'h1' | 'hb'
+type NetEvent = [EventName, number]
+type Emit = (name: EventName, v?: number) => void
+type Snap = { p1: Player; p2: Player; b: Ball }
+
+/* --------------------------- control preferences --------------------------- */
+
+type BotLevel = 'easy' | 'mid' | 'hard'
+type ControlPrefs = { size: 's' | 'm' | 'l'; opacity: 'low' | 'mid' | 'high'; haptics: boolean; bot: BotLevel }
+const PREFS_KEY = 'alkanka:head-controls'
+const DEFAULT_PREFS: ControlPrefs = { size: 'm', opacity: 'mid', haptics: true, bot: 'mid' }
+let prefs = DEFAULT_PREFS
+let prefsLoaded = false
+const prefListeners = new Set<() => void>()
+
+function readPrefs() {
+  if (!prefsLoaded && typeof window !== 'undefined') {
+    prefsLoaded = true
+    try {
+      prefs = { ...DEFAULT_PREFS, ...JSON.parse(window.localStorage.getItem(PREFS_KEY) ?? '{}') }
+    } catch {
+      prefs = DEFAULT_PREFS
+    }
+  }
+  return prefs
+}
+
+function setPrefs(patch: Partial<ControlPrefs>) {
+  prefs = { ...readPrefs(), ...patch }
+  window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+  prefListeners.forEach((l) => l())
+}
+
+function usePrefs() {
+  return useSyncExternalStore(
+    (l) => {
+      prefListeners.add(l)
+      return () => prefListeners.delete(l)
+    },
+    readPrefs,
+    () => DEFAULT_PREFS,
+  )
+}
+
+function playEvents(list: NetEvent[], seat: 0 | 1) {
+  for (const [name, v] of list) {
+    if (name === 'hb' || name === 'h0' || name === 'h1') {
+      if ((name === 'hb' || name === `h${seat}`) && readPrefs().haptics) navigator.vibrate?.(v)
+    } else playSound(name, v)
+  }
+}
 
 const GOAL_TOP = GROUND - 176
 const GOAL_DEPTH = 74
 const RIM_Y = 236
-const RIM_W = 70
+const RIM_W = 84
+const NET_H = 52
 const BOARD_X = 40
+/** A basket counts 3 when the shooter's last touch was this far from the hoop centre. */
+const THREE_DIST = 330
+/** Steps between bot decisions; a slower reaction makes an easier opponent. */
+const BOT_REACT: Record<BotLevel, number> = { easy: 14, mid: 7, hard: 1 }
 const rimLeft = () => ({ a: BOARD_X + 8, b: BOARD_X + 8 + RIM_W })
 const rimRight = () => ({ a: W - BOARD_X - 8 - RIM_W, b: W - BOARD_X - 8 })
+
+const ARENA_FILL: Record<Sport, string> = {
+  futbol: 'linear-gradient(#0a1630, #1d4f5e 72%, #0b0d12 72%, #0b0d12 78.5%, #2f8a3e 78.5%)',
+  basket: 'linear-gradient(#120d0a, #2a1a12 72%, #0b0d12 72%, #0b0d12 78.5%, #b97a43 78.5%)',
+}
 
 const TEAM = {
   home: { jersey: '#e5b93e', trim: '#1a1a1a', shorts: '#16181d', boot: '#e5b93e' },
@@ -42,8 +124,8 @@ const TEAM = {
 }
 
 function resetPositions(p1: Player, p2: Player, ball: Ball, serveTo: 0 | 1) {
-  Object.assign(p1, { x: 230, y: GROUND - FOOT, vx: 0, vy: 0, face: 1, kick: 0 })
-  Object.assign(p2, { x: W - 230, y: GROUND - FOOT, vx: 0, vy: 0, face: -1, kick: 0 })
+  Object.assign(p1, { x: 230, y: GROUND - FOOT, vx: 0, vy: 0, face: 1, kick: 0, charge: 0, power: 1, camp: 0 })
+  Object.assign(p2, { x: W - 230, y: GROUND - FOOT, vx: 0, vy: 0, face: -1, kick: 0, charge: 0, power: 1, camp: 0 })
   Object.assign(ball, { x: W / 2, y: 150, vx: serveTo === 0 ? -1.2 : 1.2, vy: 0 })
 }
 
@@ -57,7 +139,15 @@ function stepPlayer(p: Player, k: Keys, sport: Sport) {
   if (Math.abs(p.vx) < 0.05) p.vx = 0
   if (target) p.face = target > 0 ? 1 : -1
   if (k.jump && onGround(p)) p.vy = -13.4
-  if (k.kick && p.kick <= 0) p.kick = 16
+  // Hold to charge, release to shoot: a tap is a normal shot, a half-second hold up to 35% harder.
+  if (k.kick) p.charge = Math.min(CHARGE_MAX, p.charge + 1)
+  else if (p.charge > 0) {
+    if (p.kick <= 0) {
+      p.kick = 16
+      p.power = 1 + 0.35 * (p.charge / CHARGE_MAX)
+    }
+    p.charge = 0
+  }
   if (p.kick > 0) p.kick--
   p.vy += G
   p.x += p.vx
@@ -69,6 +159,38 @@ function stepPlayer(p: Player, k: Keys, sport: Sport) {
   if (onGround(p) && p.vx) p.run += Math.abs(p.vx) * 0.12
   const margin = sport === 'futbol' ? GOAL_DEPTH * 0.55 : 24
   p.x = Math.max(HEAD_R + margin, Math.min(W - HEAD_R - margin, p.x))
+}
+
+/** Anti camping: 3 s inside your own goal (or under your own hoop) and the referee pushes you back out to open play. */
+function campRule(p: Player, side: 0 | 1, sport: Sport, emit: Emit) {
+  const out = side === 0 ? 1 : -1
+  const zone = sport === 'futbol' ? GOAL_DEPTH + HEAD_R * 0.6 : BOARD_X + 8 + RIM_W + 20
+  if (p.camp >= CAMP_LIMIT) {
+    p.x += out * 7
+    p.vx = 0
+    if (side === 0 ? p.x > zone + 150 : p.x < W - zone - 150) p.camp = 0
+    return
+  }
+  const inGoal = side === 0 ? p.x < zone : p.x > W - zone
+  if (inGoal) {
+    p.camp++
+    if (p.camp === CAMP_LIMIT) emit('whistle', 0.7)
+  } else p.camp = Math.max(0, p.camp - 2)
+}
+
+function blendPlayer(out: Player, a: Player, b: Player, t: number) {
+  Object.assign(out, b)
+  if (Math.hypot(b.x - a.x, b.y - a.y) > 150) return
+  out.x = a.x + (b.x - a.x) * t
+  out.y = a.y + (b.y - a.y) * t
+}
+
+function blendBall(out: Ball, a: Ball, b: Ball, t: number) {
+  Object.assign(out, b)
+  if (Math.hypot(b.x - a.x, b.y - a.y) > 150) return
+  out.x = a.x + (b.x - a.x) * t
+  out.y = a.y + (b.y - a.y) * t
+  out.rot = a.rot + (b.rot - a.rot) * t
 }
 
 function separatePlayers(a: Player, b: Player) {
@@ -115,7 +237,7 @@ function collideCircle(ball: Ball, cx: number, cy: number, r: number, pvx = 0, p
   return { nx, ny }
 }
 
-function stepBall(ball: Ball, sport: Sport) {
+function stepBall(ball: Ball, sport: Sport, emit: Emit) {
   ball.vy += 0.42
   ball.vx *= 0.996
   ball.x += ball.vx
@@ -126,23 +248,24 @@ function stepBall(ball: Ball, sport: Sport) {
     ball.vx *= 24 / sp
     ball.vy *= 24 / sp
   }
+  const speed = Math.min(24, sp)
   if (ball.y > GROUND - BALL_R) {
+    const impact = ball.vy
     ball.y = GROUND - BALL_R
     ball.vy *= sport === 'basket' ? -0.78 : -0.62
     ball.vx *= 0.97
     if (Math.abs(ball.vy) < 1.2) ball.vy = 0
+    if (impact > 2.5) emit(sport === 'basket' ? 'dribble' : 'bounce', impact / 14)
   }
   if (ball.y < BALL_R) {
     ball.y = BALL_R
     ball.vy = Math.abs(ball.vy) * 0.7
   }
-  if (ball.x < BALL_R) {
-    ball.x = BALL_R
-    ball.vx = Math.max(2, Math.abs(ball.vx) * 0.8)
-  }
-  if (ball.x > W - BALL_R) {
-    ball.x = W - BALL_R
-    ball.vx = -Math.max(2, Math.abs(ball.vx) * 0.8)
+  if (ball.x < BALL_R || ball.x > W - BALL_R) {
+    if (Math.abs(ball.vx) > 3) emit('bounce', Math.abs(ball.vx) / 16)
+    const side = ball.x < BALL_R ? 1 : -1
+    ball.x = side === 1 ? BALL_R : W - BALL_R
+    ball.vx = side * Math.max(2, Math.abs(ball.vx) * 0.8)
   }
   if (sport === 'futbol') {
     for (const side of [0, 1] as const) {
@@ -154,58 +277,77 @@ function stepBall(ball: Ball, sport: Sport) {
           ball.y = GOAL_TOP - BALL_R - 4
           ball.vy = -Math.abs(ball.vy) * 0.55
           ball.vx += side === 0 ? 0.6 : -0.6
+          if (speed > 2.5) emit('post', speed / 14)
         } else if (ball.y > GOAL_TOP) {
           ball.y = GOAL_TOP + BALL_R + 4
           ball.vy = Math.abs(ball.vy) * 0.5
+          if (speed > 2.5) emit('post', speed / 14)
         }
       }
-      collideCircle(ball, postX, GOAL_TOP, 5, 0, 0, 0.6)
+      if (collideCircle(ball, postX, GOAL_TOP, 5, 0, 0, 0.6) && speed > 2.5) emit('post', speed / 14)
     }
   } else {
     for (const side of [0, 1] as const) {
       const bx = side === 0 ? BOARD_X : W - BOARD_X
-      if (ball.y > RIM_Y - 112 && ball.y < RIM_Y + 18 && Math.abs(ball.x - bx) < BALL_R + 5) {
+      // The gap between backboard and wall is narrower than the ball, so treat it as solid instead of letting the ball wedge in.
+      const behindBoard = side === 0 ? ball.x < bx + BALL_R + 5 : ball.x > bx - BALL_R - 5
+      if (ball.y > RIM_Y - 112 && ball.y < RIM_Y + 18 && behindBoard) {
         ball.x = side === 0 ? bx + BALL_R + 5 : bx - BALL_R - 5
         ball.vx = (side === 0 ? 1 : -1) * Math.max(1.5, Math.abs(ball.vx) * 0.7)
+        if (speed > 2) emit('board', speed / 14)
       }
       const rim = side === 0 ? rimLeft() : rimRight()
-      collideCircle(ball, rim.a, RIM_Y, 4, 0, 0, 0.55)
-      collideCircle(ball, rim.b, RIM_Y, 4, 0, 0, 0.55)
+      const rimHit = collideCircle(ball, rim.a, RIM_Y, 4, 0, 0, 0.55) || collideCircle(ball, rim.b, RIM_Y, 4, 0, 0, 0.55)
+      if (rimHit && speed > 2) emit('rim', speed / 14)
+      // A ball rising into the net from below is turned back down, so it can never drop through the hoop afterwards.
+      if (ball.vy < 0 && ball.x > rim.a && ball.x < rim.b && ball.y > RIM_Y && ball.y - BALL_R < RIM_Y + NET_H) {
+        ball.y = RIM_Y + NET_H + BALL_R
+        ball.vy = Math.abs(ball.vy) * 0.35
+        if (speed > 2) emit('rim', speed / 20)
+      }
     }
   }
 }
 
-function hitBall(ball: Ball, p: Player, sport: Sport) {
+/** Returns true when the player touched the ball this step. */
+function hitBall(ball: Ball, p: Player, sport: Sport, emit: Emit, seat: 0 | 1): boolean {
   const footX = p.x + p.face * 26
   const footY = p.y + FOOT - 10
   if (p.kick > 5 && Math.hypot(ball.x - footX, ball.y - footY) < BALL_R + 34) {
-    const power = sport === 'futbol' ? 16 : 11.5
+    const power = (sport === 'futbol' ? 16 : 11.5) * p.power
+    const lift = 1 + (p.power - 1) * 0.6
     ball.vx = p.face * power + p.vx * 0.4
-    ball.vy = sport === 'futbol' ? -8.5 : -15
+    ball.vy = (sport === 'futbol' ? -8.5 : -15) * lift
     ball.x = footX + p.face * (BALL_R + 4)
     p.kick = 5
-    return
+    emit('kick', 0.55 + (p.power - 1) * 1.3)
+    emit(seat === 0 ? 'h0' : 'h1', p.power > 1.2 ? 35 : 18)
+    p.power = 1
+    return true
   }
+  const rel = Math.hypot(ball.vx - p.vx, ball.vy - p.vy)
   const head = collideCircle(ball, p.x, p.y, HEAD_R, p.vx, p.vy, 0.9)
   if (head) {
     if (head.ny < -0.85 && Math.abs(ball.vx) < 1.2) ball.vx += p.face * 2.2
     if (!onGround(p) && head.ny < 0) ball.vy -= 1.5
-    return
+    if (rel > 3) emit('header', rel / 16)
+    return true
   }
-  collideCircle(ball, p.x, p.y + HEAD_R + 14, 16, p.vx, p.vy, 0.5)
-  collideCircle(ball, p.x, p.y + FOOT - 8, 12, p.vx, p.vy, 0.4)
+  const body = collideCircle(ball, p.x, p.y + HEAD_R + 14, 16, p.vx, p.vy, 0.5)
+  const foot = collideCircle(ball, p.x, p.y + FOOT - 8, 12, p.vx, p.vy, 0.4)
+  return !!(body || foot)
 }
 
-function botKeys(bot: Player, ball: Ball, sport: Sport): Keys {
+function botKeys(bot: Player, ball: Ball, sport: Sport, level: BotLevel): Keys {
   const k = noKeys()
   const home = sport === 'futbol' ? W - 160 : W - 200
-  const threat = ball.vx > 3 && ball.x > W * 0.45
+  const threat = level !== 'easy' && ball.vx > 3 && ball.x > W * 0.45
   const targetX = threat ? Math.min(home, Math.max(ball.x + 40, home - 120)) : ball.x + 34
   if (bot.x < targetX - 12) k.right = true
   else if (bot.x > targetX + 12) k.left = true
   const dx = ball.x - bot.x
-  if (Math.abs(dx) < 110 && ball.y < bot.y - 20 && ball.vy > -3 && ball.y > bot.y - 220) k.jump = true
-  if (dx < 0 && dx > -80 && ball.y > bot.y + 10) k.kick = Math.random() < 0.35
+  if (Math.abs(dx) < 110 && ball.y < bot.y - 20 && ball.vy > -3 && ball.y > bot.y - 220) k.jump = level !== 'easy' || Math.random() < 0.55
+  if (dx < 0 && dx > -80 && ball.y > bot.y + 10) k.kick = Math.random() < (level === 'easy' ? 0.15 : 0.35)
   if (dx > 0 && Math.abs(dx) < 50) k.right = true
   return k
 }
@@ -277,6 +419,11 @@ function paintBackground(sport: Sport): HTMLCanvasElement {
       ctx.fill()
     }
   }
+  // The orange ball got lost in the warm crowd, so the stands are dimmed to push them into the background.
+  if (sport === 'basket') {
+    ctx.fillStyle = 'rgba(10,6,4,0.5)'
+    ctx.fillRect(0, standTop, W, standBottom - standTop)
+  }
 
   const boardY = GROUND - 92
   ctx.fillStyle = '#0b0d12'
@@ -338,6 +485,27 @@ function paintBackground(sport: Sport): HTMLCanvasElement {
     ctx.beginPath()
     ctx.ellipse(W / 2, GROUND + 22, 70, 16, 0, 0, Math.PI * 2)
     ctx.stroke()
+    // Each team's three-point line, in its jersey colour: shoot from behind it for 3.
+    const hoopL = BOARD_X + 8 + RIM_W / 2
+    const lines = [
+      [W - hoopL - THREE_DIST, TEAM.home.jersey],
+      [hoopL + THREE_DIST, TEAM.away.jersey],
+    ] as const
+    ctx.font = '900 16px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const [x, color] of lines) {
+      ctx.strokeStyle = color
+      ctx.lineWidth = 3
+      ctx.setLineDash([10, 8])
+      ctx.beginPath()
+      ctx.moveTo(x, fieldTop)
+      ctx.lineTo(x + (x - W / 2) * 0.25, H)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.fillStyle = color
+      ctx.fillText('3', x + (x < W / 2 ? -14 : 14), fieldTop + 22)
+    }
   }
   ctx.fillStyle = 'rgba(255,255,255,0.1)'
   ctx.font = '900 46px sans-serif'
@@ -347,7 +515,7 @@ function paintBackground(sport: Sport): HTMLCanvasElement {
   return c
 }
 
-function drawGoalOrHoop(ctx: CanvasRenderingContext2D, sport: Sport, front: boolean) {
+function drawGoalOrHoop(ctx: CanvasRenderingContext2D, sport: Sport, front: boolean, shake: readonly [number, number] = [0, 0]) {
   if (sport === 'futbol') {
     for (const side of [0, 1] as const) {
       const x0 = side === 0 ? 0 : W - GOAL_DEPTH
@@ -400,28 +568,42 @@ function drawGoalOrHoop(ctx: CanvasRenderingContext2D, sport: Sport, front: bool
       ctx.roundRect(bx - 5, RIM_Y - 112, 10, 130, 3)
       ctx.fill()
       ctx.stroke()
+      ctx.strokeStyle = '#e8501f'
+      ctx.lineWidth = 3
+      ctx.strokeRect(side === 0 ? bx + 5 : bx - 5 - 26, RIM_Y - 44, 26, 30)
     } else {
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)'
-      ctx.lineWidth = 1.5
-      for (let i = 0; i <= 6; i++) {
-        const x = rim.a + (i * RIM_W) / 6
-        const xb = rim.a + RIM_W / 2 + (x - rim.a - RIM_W / 2) * 0.55
+      // After a basket the net swings and stretches for a moment.
+      const s = shake[side]
+      const sway = Math.sin(s * 0.55) * (s / 40) * 7
+      const len = NET_H + s * 0.25
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+      ctx.lineWidth = 1.8
+      for (let i = 0; i <= 7; i++) {
+        const x = rim.a + (i * RIM_W) / 7
+        const xb = rim.a + RIM_W / 2 + (x - rim.a - RIM_W / 2) * 0.55 + sway
         ctx.beginPath()
         ctx.moveTo(x, RIM_Y)
-        ctx.lineTo(xb, RIM_Y + 46)
+        ctx.lineTo(xb, RIM_Y + len)
         ctx.stroke()
       }
       for (let j = 1; j <= 3; j++) {
-        const y = RIM_Y + j * 14
-        const shrink = 1 - (j * 14 * 0.45) / 46
+        const f = j / 4
+        const y = RIM_Y + len * f
+        const inset = (RIM_W * 0.45 * f) / 2
         ctx.beginPath()
-        ctx.moveTo(rim.a + (RIM_W * (1 - shrink)) / 2, y)
-        ctx.lineTo(rim.b - (RIM_W * (1 - shrink)) / 2, y)
+        ctx.moveTo(rim.a + inset + sway * f, y)
+        ctx.lineTo(rim.b - inset + sway * f, y)
         ctx.stroke()
       }
-      ctx.strokeStyle = '#e8501f'
-      ctx.lineWidth = 6
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+      ctx.lineWidth = 10
       ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.moveTo(rim.a, RIM_Y)
+      ctx.lineTo(rim.b, RIM_Y)
+      ctx.stroke()
+      ctx.strokeStyle = '#ff5a1f'
+      ctx.lineWidth = 7
       ctx.beginPath()
       ctx.moveTo(rim.a, RIM_Y)
       ctx.lineTo(rim.b, RIM_Y)
@@ -437,6 +619,7 @@ function drawPlayer(
   kit: (typeof TEAM)['home'],
   img: HTMLImageElement | null,
   label: string,
+  sport: Sport,
 ) {
   const shadowW = 44 * Math.max(0.45, 1 - (GROUND - FOOT - p.y) / 260)
   ctx.fillStyle = 'rgba(0,0,0,0.35)'
@@ -514,9 +697,41 @@ function drawPlayer(
   ctx.fill()
   ctx.fillStyle = '#fff'
   ctx.fillText(label, p.x, p.y - HEAD_R - 13)
+
+  if (p.charge > 3) {
+    const bw = 56
+    const fill = p.charge / CHARGE_MAX
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'
+    ctx.beginPath()
+    ctx.roundRect(p.x - bw / 2, p.y - HEAD_R - 36, bw, 7, 3.5)
+    ctx.fill()
+    ctx.fillStyle = fill >= 1 ? '#ff6b5a' : '#e5b93e'
+    ctx.beginPath()
+    ctx.roundRect(p.x - bw / 2, p.y - HEAD_R - 36, Math.max(7, bw * fill), 7, 3.5)
+    ctx.fill()
+  }
+  if (p.camp > 90 && p.camp < CAMP_LIMIT) {
+    ctx.font = '900 14px sans-serif'
+    ctx.lineWidth = 4
+    ctx.strokeStyle = '#111'
+    const warn = `${sport === 'futbol' ? 'KALEDEN' : 'POTADAN'} ÇIK ${Math.ceil((CAMP_LIMIT - p.camp) / 60)}`
+    ctx.strokeText(warn, p.x, p.y - HEAD_R - 44)
+    ctx.fillStyle = '#ff6b5a'
+    ctx.fillText(warn, p.x, p.y - HEAD_R - 44)
+  }
 }
 
 function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport) {
+  const speed = Math.hypot(b.vx, b.vy)
+  if (speed > 7) {
+    for (let i = 3; i >= 1; i--) {
+      const a = (0.2 * (4 - i)) / 3
+      ctx.fillStyle = sport === 'futbol' ? `rgba(255,255,255,${a})` : `rgba(255,170,90,${a})`
+      ctx.beginPath()
+      ctx.arc(b.x - b.vx * i * 1.3, b.y - b.vy * i * 1.3, BALL_R * (1 - i * 0.12), 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
   ctx.fillStyle = 'rgba(0,0,0,0.3)'
   const sw = BALL_R * Math.max(0.4, 1 - (GROUND - b.y) / 300)
   ctx.beginPath()
@@ -576,9 +791,23 @@ function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport) {
   ctx.beginPath()
   ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2)
   ctx.stroke()
+  if (sport === 'basket') {
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, BALL_R + 2, 0, Math.PI * 2)
+    ctx.stroke()
+  }
 }
 
-function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], sc: [number, number], left: number) {
+function drawScoreboard(
+  ctx: CanvasRenderingContext2D,
+  names: [string, string],
+  sc: [number, number],
+  left: number,
+  overtime: boolean,
+  sport: Sport,
+) {
   const w = 300
   const x = W / 2 - w / 2
   ctx.fillStyle = 'rgba(8,10,14,0.88)'
@@ -604,8 +833,9 @@ function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], 
   ctx.fillStyle = '#ffffff'
   ctx.fillText(`${sc[0]} - ${sc[1]}`, W / 2, 29)
   ctx.font = '700 11px monospace'
-  ctx.fillStyle = left <= 10 ? '#ff6b5a' : '#e5b93e'
-  ctx.fillText(`0:${String(left).padStart(2, '0')}`, W / 2, 49)
+  ctx.fillStyle = overtime || left <= 10 ? '#ff6b5a' : '#e5b93e'
+  const ot = sport === 'futbol' ? 'ALTIN GOL ' : 'ALTIN BASKET '
+  ctx.fillText(`${overtime ? ot : ''}0:${String(left).padStart(2, '0')}`, W / 2, 49)
 }
 
 function drawFlash(ctx: CanvasRenderingContext2D, text: string, t: number) {
@@ -627,12 +857,19 @@ function drawFlash(ctx: CanvasRenderingContext2D, text: string, t: number) {
 
 /* ------------------------------ controls ------------------------------ */
 
-function bindKey(keys: React.RefObject<Keys>, k: keyof Keys) {
+/** Hides the browser bars on Android once the player touches a control in landscape (needs a user gesture). */
+function enterFullscreen() {
+  if (document.fullscreenElement || !window.matchMedia('(pointer: coarse) and (orientation: landscape)').matches) return
+  document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {})
+}
+
+function bindKey(keys: React.RefObject<Keys>, k: keyof Keys, onPress?: () => void) {
   return {
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault()
       e.currentTarget.setPointerCapture(e.pointerId)
       keys.current[k] = true
+      onPress?.()
     },
     onPointerUp: () => (keys.current[k] = false),
     onPointerCancel: () => (keys.current[k] = false),
@@ -642,32 +879,179 @@ function bindKey(keys: React.RefObject<Keys>, k: keyof Keys) {
 }
 
 const OVERLAY_BTN =
-  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground'
+  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground active:opacity-100'
+
+const OVERLAY_PAD =
+  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform'
+const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground opacity-100'
+
+const BTN_SIZE: Record<ControlPrefs['size'], string> = {
+  s: 'size-12 landscape:size-14',
+  m: 'size-14 landscape:size-16',
+  l: 'size-16 landscape:size-20',
+}
+const ICON_SIZE: Record<ControlPrefs['size'], string> = { s: 'size-6', m: 'size-7', l: 'size-8' }
+const BTN_OPACITY: Record<ControlPrefs['opacity'], string> = { low: 'opacity-40', mid: 'opacity-75', high: 'opacity-100' }
+
+/** One touch zone for left/right so sliding the thumb across switches direction without lifting it. */
+function DirectionPad({ k1, size, icon, onPress }: { k1: React.RefObject<Keys>; size: string; icon: string; onPress?: () => void }) {
+  const [dir, setDir] = useState<-1 | 0 | 1>(0)
+  const aim = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const right = e.clientX > r.left + r.width / 2
+    k1.current.left = !right
+    k1.current.right = right
+    setDir(right ? 1 : -1)
+  }
+  const release = () => {
+    k1.current.left = false
+    k1.current.right = false
+    setDir(0)
+  }
+  return (
+    <div
+      role="group"
+      aria-label="Sola ve sağa hareket"
+      className="pointer-events-auto flex touch-none select-none gap-2.5"
+      onPointerDown={(e) => {
+        e.preventDefault()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        aim(e)
+        onPress?.()
+      }}
+      onPointerMove={(e) => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) aim(e)
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <span className={cn(OVERLAY_PAD, size, dir === -1 && OVERLAY_PAD_ON)} aria-hidden="true">
+        <ChevronLeft className={icon} />
+      </span>
+      <span className={cn(OVERLAY_PAD, size, dir === 1 && OVERLAY_PAD_ON)} aria-hidden="true">
+        <ChevronRight className={icon} />
+      </span>
+    </div>
+  )
+}
 
 /**
- * Translucent buttons drawn over the pitch on touch screens.
- * Arrows bottom-left, jump/kick bottom-right.
+ * Translucent buttons on touch screens: arrows bottom-left, jump/kick bottom-right.
+ * In full landscape they sit at the screen corners so they cover less of the goal mouths.
  */
-function OverlayControls({ k1 }: { k1: React.RefObject<Keys> }) {
-  const size = 'size-14 landscape:size-16'
+function OverlayControls({ k1, full, onPress }: { k1: React.RefObject<Keys>; full?: boolean; onPress?: () => void }) {
+  const p = usePrefs()
+  const size = cn(BTN_SIZE[p.size], BTN_OPACITY[p.opacity])
+  const icon = ICON_SIZE[p.size]
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-2.5 lg:hidden">
-      <div className="flex gap-2.5">
-        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Sola" {...bindKey(k1, 'left')}>
-          <ChevronLeft className="size-7" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Sağa" {...bindKey(k1, 'right')}>
-          <ChevronRight className="size-7" aria-hidden="true" />
-        </button>
-      </div>
+    <div
+      className={cn(
+        'pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between p-2.5 lg:hidden',
+        full &&
+          'pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]',
+      )}
+    >
+      <DirectionPad k1={k1} size={size} icon={icon} onPress={onPress} />
       <div className="flex items-end gap-2.5">
-        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Zıpla" {...bindKey(k1, 'jump')}>
-          <ArrowBigUp className="size-7" aria-hidden="true" />
+        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Zıpla" {...bindKey(k1, 'jump', onPress)}>
+          <ArrowBigUp className={icon} aria-hidden="true" />
         </button>
-        <button type="button" className={cn(OVERLAY_BTN, size, 'mb-5 border-primary/80')} aria-label="Şut" {...bindKey(k1, 'kick')}>
-          <Footprints className="size-7" aria-hidden="true" />
+        <button
+          type="button"
+          className={cn(OVERLAY_BTN, size, 'mb-5 border-primary/80')}
+          aria-label="Şut, basılı tutarak güç doldur"
+          {...bindKey(k1, 'kick', onPress)}
+        >
+          <Footprints className={icon} aria-hidden="true" />
         </button>
       </div>
+    </div>
+  )
+}
+
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: readonly (readonly [T, string])[]
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <div role="group" aria-label={label} className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
+        {options.map(([v, text]) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={value === v}
+            onClick={() => onChange(v)}
+            className={cn(
+              'rounded-md px-2 py-1.5 text-xs font-bold transition-colors',
+              value === v ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
+            )}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ToggleRow({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className="flex items-center justify-between gap-3 py-0.5 text-sm font-semibold text-foreground"
+    >
+      {label}
+      <span className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', on ? 'bg-primary' : 'bg-muted')}>
+        <span
+          className={cn(
+            'absolute left-0.5 top-0.5 size-4 rounded-full bg-background shadow transition-transform',
+            on && 'translate-x-4',
+          )}
+        />
+      </span>
+    </button>
+  )
+}
+
+const SIZE_OPTIONS = [['s', 'Küçük'], ['m', 'Orta'], ['l', 'Büyük']] as const
+const OPACITY_OPTIONS = [['low', 'Silik'], ['mid', 'Orta'], ['high', 'Net']] as const
+const BOT_OPTIONS = [['easy', 'Kolay'], ['mid', 'Orta'], ['hard', 'Zor']] as const
+
+function ControlSettings({ pauses, onClose }: { pauses: boolean; onClose: () => void }) {
+  const p = usePrefs()
+  const muted = useSoundMuted()
+  return (
+    <div
+      role="dialog"
+      aria-label="Kontrol ayarları"
+      className="absolute left-2 top-12 z-30 flex max-h-[calc(100%-3.5rem)] w-60 flex-col gap-3 overflow-y-auto rounded-xl border border-primary/30 bg-card/95 p-3 text-card-foreground shadow-xl backdrop-blur-sm"
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-display text-sm font-black uppercase tracking-tight">Kontrol ayarları</p>
+        <button type="button" onClick={onClose} aria-label="Ayarları kapat" className="rounded-md p-1 text-muted-foreground hover:text-foreground">
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      <Segmented label="Tuş boyutu" value={p.size} options={SIZE_OPTIONS} onChange={(size) => setPrefs({ size })} />
+      <Segmented label="Tuş görünürlüğü" value={p.opacity} options={OPACITY_OPTIONS} onChange={(opacity) => setPrefs({ opacity })} />
+      {pauses && <Segmented label="Bot seviyesi" value={p.bot} options={BOT_OPTIONS} onChange={(bot) => setPrefs({ bot })} />}
+      <ToggleRow label="Titreşim" on={p.haptics} onChange={(haptics) => setPrefs({ haptics })} />
+      <ToggleRow label="Ses ve tribün" on={!muted} onChange={(on) => setSoundMuted(!on)} />
+      {pauses && <p className="text-xs leading-relaxed text-muted-foreground">Ayarlar açıkken maç durur.</p>}
     </div>
   )
 }
@@ -769,10 +1153,12 @@ export function HeadGame({
   const [started, setStarted] = useState(false)
   const [over, setOver] = useState(false)
   const [minimized, setMinimized] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [rivalHold, setRivalHold] = useState(false)
   const needRotate = touch && portrait && !over
   const fullLandscape = touch && !portrait && started && !over && !minimized
   const pausedRef = useRef(false)
-  pausedRef.current = needRotate
+  pausedRef.current = needRotate || (mode === 'bot' && settingsOpen)
 
   useEffect(() => {
     if (linkReady && !needRotate && !window.matchMedia(PHONE_PORTRAIT).matches) setStarted(true)
@@ -782,6 +1168,25 @@ export function HeadGame({
     if (!over) return
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
   }, [over])
+
+  // A held thumb outside the buttons used to trigger Android text selection and the Google "tap to define" sheet mid-match.
+  useEffect(() => {
+    if (!touch || !started || over) return
+    const s = document.documentElement.style as CSSStyleDeclaration & { webkitUserSelect: string; webkitTouchCallout: string }
+    const prev = [s.userSelect, s.webkitUserSelect, s.webkitTouchCallout]
+    s.userSelect = 'none'
+    s.webkitUserSelect = 'none'
+    s.webkitTouchCallout = 'none'
+    const block = (e: Event) => e.preventDefault()
+    document.addEventListener('contextmenu', block)
+    document.addEventListener('selectstart', block)
+    window.getSelection()?.removeAllRanges()
+    return () => {
+      ;[s.userSelect, s.webkitUserSelect, s.webkitTouchCallout] = prev
+      document.removeEventListener('contextmenu', block)
+      document.removeEventListener('selectstart', block)
+    }
+  }, [touch, started, over])
 
   useEffect(() => {
     const map1: Record<string, keyof Keys> = { KeyA: 'left', KeyD: 'right', KeyW: 'jump', KeyS: 'kick', Space: 'kick' }
@@ -821,8 +1226,9 @@ export function HeadGame({
     }
     const homeImg = loadImg('/images/sprites/head-jako.png')
     const awayImg = loadImg('/images/sprites/head-rival.png')
-    const p1: Player = { x: 0, y: 0, vx: 0, vy: 0, face: 1, kick: 0, run: 0 }
-    const p2: Player = { x: 0, y: 0, vx: 0, vy: 0, face: -1, kick: 0, run: 0 }
+    const fresh = (face: 1 | -1): Player => ({ x: 0, y: 0, vx: 0, vy: 0, face, kick: 0, run: 0, charge: 0, power: 1, camp: 0 })
+    const p1 = fresh(1)
+    const p2 = fresh(-1)
     const ball: Ball = { x: 0, y: 0, vx: 0, vy: 0, rot: 0 }
     resetPositions(p1, p2, ball, 0)
     const sc: [number, number] = [0, 0]
@@ -832,6 +1238,7 @@ export function HeadGame({
     let acc = 0
     let elapsed = 0
     let ended = false
+    let overtime = false
     let prevBallY = ball.y
     let flash = ''
     let flashT = 0
@@ -839,45 +1246,105 @@ export function HeadGame({
     let anchor = { x: ball.x, y: ball.y }
     let left = MATCH_SECONDS
     let remoteKeys: Keys = noKeys()
+    let remotePaused = false
+    let rivalHoldSteps = 0
+    let shownHold = false
     let sentKeys = ''
     let frameNo = 0
+    let events: NetEvent[] = []
+    let shot: { seat: 0 | 1; x: number } | null = null
+    let clockSeat = -1
+    let clockSteps = 0
+    const netShake: [number, number] = [0, 0]
+    let botK = noKeys()
+    let botWait = 0
+    const emit: Emit = (name, v = 1) => {
+      events.push([name, v])
+    }
+    const seat: 0 | 1 = mode === 'guest' ? 1 : 0
+    // The guest renders one network interval behind, blending the two latest host frames so motion stays smooth.
+    let snapPrev: Snap | null = null
+    let snapNext: Snap | null = null
+    let snapAt = 0
+    let snapGap = STEP_MS
+    let crowdOn = true
+    const stopCrowd = startCrowdAmbience(sport === 'futbol' ? 0.05 : 0.035)
+    const quietCrowd = () => {
+      if (!crowdOn) return
+      crowdOn = false
+      stopCrowd()
+    }
+    const showHold = (v: boolean) => {
+      if (v === shownHold) return
+      shownHold = v
+      setRivalHold(v)
+    }
+    playEvents([['whistle', 1]], seat)
 
     if (mode !== 'bot' && linkRef.current) {
       linkRef.current.onMessage.current = (raw) => {
         const msg = raw as { t: string; [k: string]: unknown }
-        if (mode === 'host' && msg.t === 'k') remoteKeys = { ...noKeys(), ...(msg.k as Partial<Keys>) }
+        if (mode === 'host' && msg.t === 'k') {
+          remoteKeys = { ...noKeys(), ...(msg.k as Partial<Keys>) }
+          remotePaused = !!msg.pz
+        }
         if (mode !== 'guest') return
         if (msg.t === 's') {
-          Object.assign(p1, msg.p1)
-          Object.assign(p2, msg.p2)
-          Object.assign(ball, msg.b)
+          const now = performance.now()
+          const snap: Snap = { p1: msg.p1 as Player, p2: msg.p2 as Player, b: msg.b as Ball }
+          snapPrev = snapNext ?? snap
+          snapNext = snap
+          if (snapAt) snapGap = snapGap * 0.8 + Math.min(100, Math.max(8, now - snapAt)) * 0.2
+          snapAt = now
           const next = msg.sc as [number, number]
-          if (next[0] !== sc[0] || next[1] !== sc[1]) {
-            playSound('goal')
-            setAnnounce(`${next[0]} - ${next[1]}`)
-          }
+          if (next[0] !== sc[0] || next[1] !== sc[1]) setAnnounce(`${next[0]} - ${next[1]}`)
+          if (next[0] > sc[0]) netShake[1] = 40
+          if (next[1] > sc[1]) netShake[0] = 40
           sc[0] = next[0]
           sc[1] = next[1]
           left = msg.l as number
           flash = msg.f as string
           flashT = msg.ft as number
+          overtime = !!msg.ot
+          playEvents((msg.ev as NetEvent[] | undefined) ?? [], seat)
+          showHold(!!msg.pz)
         } else if (msg.t === 'end' && !ended) {
           const fin = msg.sc as [number, number]
           ended = true
+          quietCrowd()
+          playSound('whistleEnd')
           setOver(true)
           endRef.current({ for: fin[1], against: fin[0] })
         }
       }
     }
 
-    function goal(scorer: 0 | 1, pts: number) {
+    function goal(scorer: 0 | 1, pts: number, label = 'GOL!') {
       sc[scorer] += pts
-      playSound('goal')
+      emit(sport === 'futbol' ? 'net' : 'swish')
+      emit('whistle')
+      emit('cheer')
+      emit('hb', 80)
       setAnnounce(`${sc[0]} - ${sc[1]}`)
-      flash = sport === 'futbol' ? 'GOL!' : 'BASKET!'
+      flash = overtime ? (sport === 'futbol' ? 'ALTIN GOL!' : 'ALTIN BASKET!') : label
       flashT = 0
       pause = 80
+      shot = null
+      // The conceding side gets the ball, like possession changing after a score.
       resetPositions(p1, p2, ball, scorer === 0 ? 1 : 0)
+    }
+
+    function basket(scorer: 0 | 1, hoop: 0 | 1, rim: { a: number; b: number }) {
+      const cx = (rim.a + rim.b) / 2
+      const shooter = scorer === 0 ? p1 : p2
+      const three = shot?.seat === scorer && Math.abs(shot.x - cx) > THREE_DIST
+      const dunk = !three && Math.hypot(shooter.x - cx, shooter.y - RIM_Y) < 120
+      netShake[hoop] = 40
+      if (dunk) {
+        emit('board', 0.9)
+        emit('rim', 0.8)
+      }
+      goal(scorer, three ? 3 : 2, three ? 'ÜÇLÜK!' : dunk ? 'SMAÇ!' : 'BASKET!')
     }
 
     function step() {
@@ -885,7 +1352,16 @@ export function HeadGame({
         flashT++
         if (flashT > 70) flash = ''
       }
-      const k2now = mode === 'host' && linkRef.current?.status === 'open' ? remoteKeys : botKeys(p2, ball, sport)
+      let k2now: Keys
+      if (mode === 'host' && linkRef.current?.status === 'open') k2now = remoteKeys
+      else {
+        if (botWait-- <= 0) {
+          const level = readPrefs().bot
+          botK = botKeys(p2, ball, sport, level)
+          botWait = BOT_REACT[level]
+        }
+        k2now = botK
+      }
       if (pause > 0) {
         pause--
         stepPlayer(p1, noKeys(), sport)
@@ -895,11 +1371,32 @@ export function HeadGame({
       elapsed += STEP_MS
       stepPlayer(p1, k1.current, sport)
       stepPlayer(p2, k2now, sport)
+      campRule(p1, 0, sport, emit)
+      campRule(p2, 1, sport, emit)
       separatePlayers(p1, p2)
       prevBallY = ball.y
-      stepBall(ball, sport)
-      hitBall(ball, p1, sport)
-      hitBall(ball, p2, sport)
+      stepBall(ball, sport, emit)
+      if (hitBall(ball, p1, sport, emit, 0)) shot = { seat: 0, x: p1.x }
+      if (hitBall(ball, p2, sport, emit, 1)) shot = { seat: 1, x: p2.x }
+
+      // Shot clock: whoever last touched the ball has 12 s to score, otherwise the ball goes to the rival.
+      if (sport === 'basket') {
+        const holder = shot?.seat ?? -1
+        if (holder !== clockSeat) {
+          clockSeat = holder
+          clockSteps = 0
+        } else if (holder !== -1 && ++clockSteps >= SHOT_CLOCK_STEPS) {
+          emit('whistle', 0.9)
+          flash = 'ATIŞ SÜRESİ!'
+          flashT = 0
+          pause = 60
+          shot = null
+          clockSeat = -1
+          clockSteps = 0
+          resetPositions(p1, p2, ball, holder === 0 ? 1 : 0)
+          return
+        }
+      }
 
       // Unjam: a ball that barely moves while airborne (head-rest, crossbar, wedged against a wall) gets dropped back in.
       if (Math.hypot(ball.x - anchor.x, ball.y - anchor.y) > 8) {
@@ -911,6 +1408,7 @@ export function HeadGame({
           Object.assign(ball, { x: W / 2, y: 120, vx: (Math.random() - 0.5) * 3, vy: 0 })
           anchor = { x: ball.x, y: ball.y }
           stuckFrames = 0
+          shot = null
         }
       }
 
@@ -920,26 +1418,40 @@ export function HeadGame({
       } else if (prevBallY < RIM_Y && ball.y >= RIM_Y && ball.vy > 0) {
         const L = rimLeft()
         const R = rimRight()
-        if (ball.x > L.a + 3 && ball.x < L.b - 3) goal(1, 2)
-        else if (ball.x > R.a + 3 && ball.x < R.b - 3) goal(0, 2)
+        if (ball.x > L.a + 3 && ball.x < L.b - 3) basket(1, 0, L)
+        else if (ball.x > R.a + 3 && ball.x < R.b - 3) basket(0, 1, R)
       }
     }
 
     function frame(now: number) {
       acc += Math.min(80, now - last)
       last = now
-      if (pausedRef.current) {
-        acc = 0
-        k1.current = noKeys()
-      }
       frameNo++
       const net = linkRef.current
+      // A rival who turns their phone upright freezes the match on both screens, for at most 15 s.
+      let rivalPaused = false
+      if (mode === 'host') {
+        const online = net?.status === 'open'
+        rivalPaused = online && remotePaused && rivalHoldSteps < RIVAL_HOLD_STEPS
+        rivalHoldSteps = online && remotePaused ? rivalHoldSteps + 1 : 0
+        showHold(rivalPaused)
+      }
+      if (pausedRef.current || rivalPaused) {
+        acc = 0
+        if (pausedRef.current) k1.current = noKeys()
+      }
       if (mode === 'guest') {
         acc = 0
-        const keys = JSON.stringify(k1.current)
+        const keys = JSON.stringify([k1.current, pausedRef.current])
         if (keys !== sentKeys || frameNo % 10 === 0) {
           sentKeys = keys
-          net?.send({ t: 'k', k: k1.current })
+          net?.send({ t: 'k', k: k1.current, pz: pausedRef.current })
+        }
+        if (snapPrev && snapNext) {
+          const t = Math.min(1, (now - snapAt) / snapGap)
+          blendPlayer(p1, snapPrev.p1, snapNext.p1, t)
+          blendPlayer(p2, snapPrev.p2, snapNext.p2, t)
+          blendBall(ball, snapPrev.b, snapNext.b, t)
         }
       } else {
         let steps = 0
@@ -949,20 +1461,38 @@ export function HeadGame({
           steps++
         }
         if (steps === 5) acc = 0
-        left = Math.max(0, MATCH_SECONDS - Math.floor(elapsed / 1000))
-        if (mode === 'host') net?.send({ t: 's', p1, p2, b: ball, sc, l: left, f: flash, ft: flashT })
+        left = Math.max(0, MATCH_SECONDS + (overtime ? OVERTIME_SECONDS : 0) - Math.floor(elapsed / 1000))
+        if (!ended && left <= 0 && sc[0] === sc[1] && !overtime) {
+          overtime = true
+          left = OVERTIME_SECONDS
+          flash = 'UZATMA!'
+          flashT = 0
+          pause = 90
+          resetPositions(p1, p2, ball, Math.random() < 0.5 ? 0 : 1)
+          emit('whistle')
+        }
+        const out = events
+        events = []
+        playEvents(out, seat)
+        if (mode === 'host')
+          net?.send({ t: 's', p1, p2, b: ball, sc, l: left, f: flash, ft: flashT, ot: overtime, ev: out, pz: pausedRef.current })
       }
+      if (netShake[0] > 0) netShake[0]--
+      if (netShake[1] > 0) netShake[1]--
       const c = ctx!
       c.drawImage(bg, 0, 0)
       drawGoalOrHoop(c, sport, false)
-      drawPlayer(c, p1, TEAM.home, homeImg, namesRef.current[0])
-      drawPlayer(c, p2, TEAM.away, awayImg, namesRef.current[1])
+      drawPlayer(c, p1, TEAM.home, homeImg, namesRef.current[0], sport)
+      drawPlayer(c, p2, TEAM.away, awayImg, namesRef.current[1], sport)
       drawBall(c, ball, sport)
-      drawGoalOrHoop(c, sport, true)
-      drawScoreboard(c, namesRef.current, sc, left)
+      drawGoalOrHoop(c, sport, true, netShake)
+      drawScoreboard(c, namesRef.current, sc, left, overtime, sport)
       if (flash) drawFlash(c, flash, flashT)
-      if (mode !== 'guest' && left <= 0 && !ended) {
+      // Golden goal ends the match once its celebration has played out.
+      if (mode !== 'guest' && !ended && (left <= 0 || (overtime && sc[0] !== sc[1] && !flash))) {
         ended = true
+        quietCrowd()
+        playSound('whistleEnd')
         if (mode === 'host') for (let i = 0; i < 3; i++) net?.send({ t: 'end', sc })
         setOver(true)
         endRef.current({ for: sc[0], against: sc[1] })
@@ -979,6 +1509,7 @@ export function HeadGame({
     raf = requestAnimationFrame(frame)
     return () => {
       cancelAnimationFrame(raf)
+      quietCrowd()
       document.removeEventListener('visibilitychange', onVis)
     }
   }, [sport, mode, started])
@@ -995,6 +1526,8 @@ export function HeadGame({
           fullLandscape &&
             'fixed inset-0 z-[70] flex items-center justify-center bg-background pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
         )}
+        // On phones wider than 16:9 the side bars continue the arena (stands above, floor below) instead of showing black.
+        style={fullLandscape ? { background: ARENA_FILL[sport] } : undefined}
       >
         <div
           className={cn(
@@ -1009,7 +1542,7 @@ export function HeadGame({
             className={cn('block aspect-video w-full touch-none select-none', fullLandscape && 'h-full')}
             aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
           />
-          <OverlayControls k1={k1} />
+          {!fullLandscape && <OverlayControls k1={k1} />}
           <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
           {mode !== 'bot' && !over && (!started || linkLost) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 text-center backdrop-blur-sm">
@@ -1024,16 +1557,39 @@ export function HeadGame({
             <button
               type="button"
               onClick={() => setMinimized(true)}
-              className="absolute left-2 top-2 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm"
+              className="absolute left-2 top-2 z-20 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm"
               aria-label="Tam ekrandan çık"
             >
               <Minimize2 className="size-4" aria-hidden="true" />
             </button>
           )}
+          {!over && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((o) => !o)}
+              aria-expanded={settingsOpen}
+              aria-label="Kontrol ayarları"
+              className={cn(
+                'absolute top-2 z-20 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm',
+                fullLandscape ? 'left-13' : 'left-2',
+              )}
+            >
+              <Settings2 className="size-4" aria-hidden="true" />
+            </button>
+          )}
+          {settingsOpen && !over && <ControlSettings pauses={mode === 'bot'} onClose={() => setSettingsOpen(false)} />}
+          {rivalHold && !over && (
+            <div role="status" className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+              <p className="text-pretty rounded-full bg-background/85 px-4 py-2 text-center text-xs font-bold text-foreground shadow-md backdrop-blur-sm">
+                Rakibin telefonu dik çevirdi, maç bekliyor. 15 sn içinde dönmezse maç devam eder.
+              </p>
+            </div>
+          )}
         </div>
+        {fullLandscape && <OverlayControls k1={k1} full onPress={enterFullscreen} />}
       </div>
       <p className="hidden text-center text-xs text-muted-foreground lg:block">
-        A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut
+        A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut (basılı tut, güçlü şut)
       </p>
     </div>
   )

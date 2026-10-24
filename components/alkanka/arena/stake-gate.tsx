@@ -295,9 +295,9 @@ export function StakeGate({
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {pvpMode ? `Oyuncu masası · ${formatAC(bet)} KC bahis` : `Botu yenersen · ${formatAC(bet)} KC bahis`}
             </span>
-            <span className="truncate font-display text-xl font-bold tabular-nums text-primary">
-              {formatAC(winAmount)} KC
-              <span className="ml-1 text-xs font-medium text-muted-foreground">
+            <span className="flex flex-wrap items-baseline gap-x-1 font-display text-xl font-bold tabular-nums text-primary">
+              <span className="whitespace-nowrap">{formatAC(winAmount)} KC</span>
+              <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
                 {pvpMode ? `%${settings.commission} kesinti` : `${settings.multiplier}x`}
               </span>
             </span>
