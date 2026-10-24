@@ -18,6 +18,9 @@ const POLL_MS = 1200
 const RETRY_MS = 12000
 /** Once answered, ICE gets this long to open the channel before redialling. */
 const CONNECT_MS = 15000
+/** If no direct channel opens within this window, both sides switch to the server relay. */
+const FALLBACK_MS = 9000
+const RELAY_MS = 110
 
 export type DuelLink = {
   status: 'connecting' | 'open' | 'lost'
@@ -47,6 +50,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
   const [status, setStatus] = useState<DuelLink['status']>('connecting')
   const channel = useRef<RTCDataChannel | null>(null)
   const onMessage = useRef<((msg: unknown) => void) | null>(null)
+  const relaySend = useRef<((msg: unknown) => void) | null>(null)
 
   useEffect(() => {
     if (!roomId) return
@@ -61,7 +65,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     const attach = (dc: RTCDataChannel) => {
       channel.current = dc
       dc.onopen = () => alive && setStatus('open')
-      dc.onclose = () => alive && setStatus('lost')
+      dc.onclose = () => alive && !relayMode && setStatus('lost')
       dc.onmessage = (e) => {
         try {
           onMessage.current?.(JSON.parse(e.data as string))
@@ -69,6 +73,58 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
           // Ignore malformed frames.
         }
       }
+    }
+
+    // Server relay fallback: used when no direct peer path opens in time.
+    const startedAt = Date.now()
+    let relayMode = false
+    let relayHeard = false
+    let relayBusy = false
+    let relayTimer: ReturnType<typeof setInterval> | null = null
+    let outbox: { t?: string }[] = []
+    const COALESCE = new Set(['s', 'k', '__hi'])
+
+    const queue = (msg: unknown) => {
+      const m = msg as { t?: string }
+      if (m?.t && COALESCE.has(m.t)) outbox = outbox.filter((o) => o.t !== m.t)
+      outbox.push(m)
+      if (outbox.length > 20) outbox = outbox.slice(-20)
+    }
+    relaySend.current = queue
+
+    const relayTick = async () => {
+      if (!alive || relayBusy) return
+      relayBusy = true
+      if (!relayHeard) queue({ t: '__hi' })
+      const batch = outbox
+      outbox = []
+      try {
+        const r = await post({ action: 'relay', payload: batch })
+        if (r.ok) {
+          const { msgs } = (await r.json()) as { msgs: { t?: string }[] }
+          if (msgs.length && !relayHeard) {
+            relayHeard = true
+            setStatus('open')
+          }
+          for (const m of msgs) if (m?.t !== '__hi') onMessage.current?.(m)
+        } else {
+          outbox = [...batch.filter((m) => m.t === 'end'), ...outbox]
+        }
+      } catch {
+        outbox = [...batch.filter((m) => m.t === 'end'), ...outbox]
+      }
+      relayBusy = false
+    }
+
+    const startRelay = () => {
+      if (relayMode || !alive) return
+      relayMode = true
+      pc?.close()
+      pc = null
+      channel.current = null
+      if (timer) clearTimeout(timer)
+      relayTimer = setInterval(() => void relayTick(), RELAY_MS)
+      void relayTick()
     }
 
     const fresh = () => {
@@ -112,8 +168,12 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     }
 
     const tick = async () => {
-      if (!alive) return
+      if (!alive || relayMode) return
       const open = channel.current?.readyState === 'open'
+      if (!open && Date.now() - startedAt > FALLBACK_MS) {
+        startRelay()
+        return
+      }
       try {
         if (!open) {
           if (shouldDial()) await dial()
@@ -146,13 +206,15 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       } catch {
         // Retried on the next poll.
       }
-      if (alive) timer = setTimeout(tick, open ? POLL_MS * 3 : POLL_MS)
+      if (alive && !relayMode) timer = setTimeout(tick, open ? POLL_MS * 3 : POLL_MS)
     }
 
     void tick()
     return () => {
       alive = false
+      relaySend.current = null
       if (timer) clearTimeout(timer)
+      if (relayTimer) clearInterval(relayTimer)
       pc?.close()
       channel.current = null
     }
@@ -164,6 +226,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     send: (msg) => {
       const dc = channel.current
       if (dc?.readyState === 'open') dc.send(JSON.stringify(msg))
+      else relaySend.current?.(msg)
     },
   }
 }

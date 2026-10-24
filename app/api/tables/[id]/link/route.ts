@@ -24,18 +24,42 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id: room } = await params
   const m = await getMember()
   if (!m) return NextResponse.json({ error: 'Giriş yapmalısın.' }, { status: 401 })
-  if (await hitRateLimit(`link:${m.id}`, 120, 60)) return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 })
-
   const body = (await req.json().catch(() => ({}))) as { action?: string; kind?: string; payload?: unknown }
+  const relay = body.action === 'relay'
+  // The relay fallback polls several times a second, so it gets its own, larger budget.
+  if (await hitRateLimit(relay ? `linkr:${m.id}` : `link:${m.id}`, relay ? 1500 : 120, 60)) {
+    return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 })
+  }
   const opp = await opponentOf(room, m.id)
   if (!opp) return NextResponse.json({ error: 'Bu masada rakibin yok.' }, { status: 404 })
   const key = `game:${room}`
+
+  // Server relay used when a direct peer-to-peer path cannot be opened (strict NAT / mobile networks).
+  if (relay) {
+    const msgs = Array.isArray(body.payload) ? body.payload.slice(0, 20) : []
+    if (msgs.length) {
+      const payload = JSON.stringify(msgs)
+      if (payload.length > MAX_SDP) return NextResponse.json({ error: 'Sinyal çok büyük.' }, { status: 400 })
+      await pool.query(`INSERT INTO voice_signals (room, from_id, to_id, kind, payload) VALUES ($1,$2,$3,'relay',$4::jsonb)`, [
+        key,
+        m.id,
+        opp,
+        payload,
+      ])
+    }
+    const r = await pool.query<{ id: string; payload: unknown[] }>(
+      `DELETE FROM voice_signals WHERE room = $1 AND to_id = $2 AND kind = 'relay' RETURNING id, payload`,
+      [key, m.id],
+    )
+    const rows = r.rows.sort((a, b) => Number(a.id) - Number(b.id))
+    return NextResponse.json({ msgs: rows.flatMap((row) => (Array.isArray(row.payload) ? row.payload : [])) })
+  }
 
   if (body.action === 'signal') {
     if (body.kind !== 'offer' && body.kind !== 'answer') return NextResponse.json({ error: 'Geçersiz sinyal.' }, { status: 400 })
     const payload = JSON.stringify(body.payload ?? {})
     if (payload.length > MAX_SDP) return NextResponse.json({ error: 'Sinyal çok büyük.' }, { status: 400 })
-    if (body.kind === 'offer') await pool.query(`DELETE FROM voice_signals WHERE room = $1`, [key])
+    if (body.kind === 'offer') await pool.query(`DELETE FROM voice_signals WHERE room = $1 AND kind <> 'relay'`, [key])
     await pool.query(`INSERT INTO voice_signals (room, from_id, to_id, kind, payload) VALUES ($1,$2,$3,$4,$5::jsonb)`, [
       key,
       m.id,
@@ -48,7 +72,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (body.action === 'poll') {
     const r = await pool.query(
-      `DELETE FROM voice_signals WHERE room = $1 AND to_id = $2 AND created_at > now() - interval '2 minutes' RETURNING kind, payload`,
+      `DELETE FROM voice_signals WHERE room = $1 AND to_id = $2 AND kind <> 'relay' AND created_at > now() - interval '2 minutes' RETURNING kind, payload`,
       [key, m.id],
     )
     return NextResponse.json({ signals: r.rows })
