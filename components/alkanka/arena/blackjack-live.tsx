@@ -45,6 +45,7 @@ import { BlackjackLobby, BlackjackTables, BlackjackWatchers } from "./blackjack-
 import { TableChat } from "./table-chat";
 import { MobileTableChat } from "./mobile-table-chat";
 import { TableBrand } from './table-brand'
+import { LandscapeFit } from './landscape-fit'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 type Seat = NonNullable<BlackjackLiveState["seats"][number]>;
@@ -707,6 +708,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+      <LandscapeFit label="Canlı Blackjack">
       <section
         className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3"
         aria-label="Canlı blackjack masası"
@@ -1073,6 +1075,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           </p>
         </div>
       </section>
+      </LandscapeFit>
 
       <aside className="flex h-fit flex-col gap-4" aria-label="Masa bilgileri">
         <div className={cn(me && "hidden lg:block")}>
