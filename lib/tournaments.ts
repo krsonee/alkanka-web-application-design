@@ -152,6 +152,11 @@ export async function deleteTournament(id: number) {
 }
 
 export async function joinTournament(m: Member, id: number) {
+  const { withUserLock } = await import('@/lib/user-lock')
+  return withUserLock(`tournament:${id}:${m.id}`, () => joinTournamentLocked(m, id))
+}
+
+async function joinTournamentLocked(m: Member, id: number) {
   const t = await pool.query('SELECT * FROM tournaments WHERE id = $1', [id])
   const row = t.rows[0]
   if (!row || row.status !== 'kayit') throw new Error('Bu turnuvanın kayıtları kapalı.')

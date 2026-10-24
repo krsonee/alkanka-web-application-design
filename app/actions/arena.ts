@@ -167,12 +167,11 @@ export async function blackjackAct(id: string, action: BjAction) {
     const cost = bjActionCost(prev, action)
     if (cost && !(await debit(m.id, cost))) throw new Error('Bu hamle için yeterli KC yok.')
     const state = bjAct(prev, action)
-    const upd = await pool.query(`UPDATE solo_sessions SET state = $3::jsonb, status = $4 WHERE id = $1 AND user_id = $2 AND status = 'acik' RETURNING id`, [
-      id,
-      m.id,
-      JSON.stringify(state),
-      state.phase === 'done' ? 'bitti' : 'acik',
-    ])
+    // Only applies on top of the exact state this action was computed from, so two parallel taps can't both charge.
+    const upd = await pool.query(
+      `UPDATE solo_sessions SET state = $3::jsonb, status = $4 WHERE id = $1 AND user_id = $2 AND status = 'acik' AND state = $5::jsonb RETURNING id`,
+      [id, m.id, JSON.stringify(state), state.phase === 'done' ? 'bitti' : 'acik', JSON.stringify(row.state)],
+    )
     if (!upd.rowCount) {
       if (cost) await credit(m.id, cost)
       throw new Error('El zaten bitti.')

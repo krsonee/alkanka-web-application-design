@@ -64,6 +64,11 @@ export async function shieldCount(userId: string) {
 }
 
 export async function buyShield(userId: string) {
+  const { withUserLock } = await import('@/lib/user-lock')
+  return withUserLock(`shield:${userId}`, () => buyShieldLocked(userId))
+}
+
+async function buyShieldLocked(userId: string) {
   await ensure()
   const cfg = await getBoostConfig()
   if ((await shieldCount(userId)) >= 3) throw new Error('En fazla 3 seri kalkanı biriktirebilirsin.')

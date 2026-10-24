@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Loader2, RotateCcw, ShieldCheck, Trash2, Trophy, Undo2, Users } from 'lucide-react'
+import { Loader2, Maximize2, Minimize2, RotateCcw, ShieldCheck, Trash2, Trophy, Undo2, Users } from 'lucide-react'
 import { RED, RL_BET_MS, rouletteClock, betLabel, betReturn, expandRacetrack, neighborNumbers, type RacetrackKey, type RouletteBet } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import type { RouletteLiveState } from '@/lib/roulette-live'
@@ -17,6 +17,7 @@ import { Chip, Racetrack, RouletteBoard, betKey, chipTone, parseKey, type BetKin
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
 import { TableBrand } from './table-brand'
+import { usePhoneLandscape } from './landscape-fit'
 
 type Stake = Pick<RouletteBet, 'kind' | 'value' | 'amount'>
 
@@ -86,10 +87,10 @@ function WinBadge({ n }: { n: number }) {
   )
 }
 
-function ResultBand({ n, bets }: { n: number; bets: Stake[] }) {
+function ResultBand({ n, bets, paid }: { n: number; bets: Stake[]; paid: number | null }) {
   const total = bets.reduce((a, b) => a + b.amount, 0)
   const lines = bets.map((b) => ({ label: betLabel(b), stake: b.amount, back: betReturn(b, n) })).sort((a, b) => b.back - a.back)
-  const net = lines.reduce((a, l) => a + l.back, 0) - total
+  const net = (paid ?? lines.reduce((a, l) => a + l.back, 0)) - total
   const tone = !total ? 'neutral' : net > 0 ? 'win' : net < 0 ? 'loss' : 'neutral'
   return (
     <div
@@ -121,7 +122,7 @@ function ResultBand({ n, bets }: { n: number; bets: Stake[] }) {
               key={`${l.label}-${i}`}
               className={cn('rounded-full px-2 py-0.5 tabular-nums', l.back > 0 ? 'bg-primary/25 font-semibold text-foreground' : 'bg-background/60 text-muted-foreground line-through')}
             >
-              {l.label} {l.back > 0 ? `+${formatAC(l.back - l.stake)}` : `-${formatAC(l.stake)}`}
+              {l.label} {signed(l.back - l.stake)}
             </li>
           ))}
           {lines.length > 8 && <li className="px-1 text-muted-foreground">+{lines.length - 8} alan</li>}
@@ -178,9 +179,13 @@ function WinnersPanel({ last }: { last: RouletteLiveState['lastRound'] | undefin
         Son tur kazananları
         <NumberPill n={last.number} />
       </h3>
-      <ol className="flex flex-col gap-1.5">
+      <ol key={last.id} className="flex flex-col gap-1.5" aria-live="polite">
         {last.winners.map((w, i) => (
-          <li key={`${w.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm">
+          <li
+            key={`${w.name}-${i}`}
+            className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm animate-in fade-in slide-in-from-right-2 fill-mode-both duration-300"
+            style={{ animationDelay: `${i * 70}ms` }}
+          >
             <span className="flex min-w-0 items-center gap-2">
               <span className="w-4 shrink-0 text-xs font-bold text-primary tabular-nums">{i + 1}</span>
               <span className="truncate font-semibold text-foreground">{w.name}</span>
@@ -289,6 +294,21 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const pendingTotal = Array.from(pending.values()).reduce((a, b) => a + b, 0)
   const tableTotal = mineList.reduce((a, b) => a + b.amount, 0)
 
+  /** Writes the server's saved bets straight into the cached state, so confirmed + pending never counts a chip twice. */
+  function applyMine(roundId: number, bets: Stake[]) {
+    const total = bets.reduce((a, b) => a + b.amount, 0)
+    mutate(
+      (d) => {
+        if (!d || d.roundId !== roundId) return d
+        const rest = d.players.filter((p) => !p.mine)
+        const mineBets = bets.map((b) => ({ kind: b.kind, value: b.value, amount: b.amount }))
+        const players = total > 0 ? [...rest, { name: member?.name ?? 'Sen', total, mine: true, bets: mineBets, returned: null }] : rest
+        return { ...d, players: players.sort((a, b) => b.total - a.total) }
+      },
+      { revalidate: true },
+    )
+  }
+
   async function flush() {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
@@ -303,7 +323,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     const res = await placeLiveRouletteBets(toList(snap) as RouletteBet[])
     if (res.ok) {
       setBalance(res.balance)
-      await mutate()
+      applyMine(res.roundId, res.bets as Stake[])
     }
     const next = new Map(pendingRef.current)
     snap.forEach((v, k) => {
@@ -355,9 +375,18 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     playSound('tick')
   }, [betting, secondsLeft])
 
+  // The server pays a round as soon as betting closes, so any post-bet snapshot of this round already holds the paid balance.
+  // If our clock reaches the result before the server snapshot does, fetch again instead of waiting for the next poll.
+  const settledSnapshot = data && data.roundId === clock.roundId && data.phase === 'result'
   useEffect(() => {
-    if (typeof data?.balance === 'number' && data.phase === 'result') setBalance(data.balance)
-  }, [data?.balance, data?.phase, setBalance])
+    if (clock.phase !== 'result') return
+    if (settledSnapshot) {
+      if (typeof data?.balance === 'number') setBalance(data.balance)
+      return
+    }
+    const t = setTimeout(() => mutate(), 700)
+    return () => clearTimeout(t)
+  }, [clock.phase, settledSnapshot, data?.balance, mutate, setBalance])
 
   const myResult = clock.phase === 'result' && me && me.returned !== null ? me.returned - me.total : null
   const announced = useRef<number | null>(null)
@@ -406,7 +435,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
       return
     }
     setBalance(res.balance)
-    mutate()
+    applyMine(res.roundId, res.bets as Stake[])
   }
 
   async function undo() {
@@ -440,6 +469,24 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const neighbors = (n: number) => addBets(neighborNumbers(n).map((value) => ({ kind: 'number' as const, value, amount: chip })))
   const call = (k: RacetrackKey) => addBets(expandRacetrack(k, chip))
 
+  const landscape = usePhoneLandscape()
+  const [minimized, setMinimized] = useState(false)
+  const fullscreen = landscape && !!member && !minimized
+
+  useEffect(() => {
+    if (!landscape) setMinimized(false)
+  }, [landscape])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const html = document.documentElement
+    const prev = html.style.overflow
+    html.style.overflow = 'hidden'
+    return () => {
+      html.style.overflow = prev
+    }
+  }, [fullscreen])
+
   if (!ready) {
     return (
       <div className="felt-table flex min-h-96 items-center justify-center rounded-3xl border border-primary/30">
@@ -453,6 +500,121 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
 
   return (
     <div className="flex flex-col gap-4 max-lg:pb-48">
+      {fullscreen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Rulet masası tam ekran"
+          className="fixed inset-0 z-[100] flex h-dvh flex-col gap-1.5 bg-background pb-[max(0.375rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-1.5"
+        >
+          <div className="flex h-8 shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground"
+              aria-label="Tam ekrandan çık"
+            >
+              <Minimize2 className="size-4" aria-hidden="true" />
+              Küçült
+            </button>
+            <span className="shrink-0 rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary-foreground">
+              Tur #{clock.roundId % 10000}
+            </span>
+            <ol className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 [mask-image:linear-gradient(to_right,black_85%,transparent)]" aria-label="Son çıkan sayılar">
+              {(data?.history ?? []).slice(0, 14).map((n, i) => (
+                <li key={i} className={cn('rounded-full', i === 0 && 'ring-2 ring-primary ring-offset-1 ring-offset-background')}>
+                  <NumberPill n={n} />
+                </li>
+              ))}
+            </ol>
+            <span className="shrink-0 text-xs text-muted-foreground" aria-live="polite">
+              Masada <strong className="text-foreground tabular-nums">{formatAC(tableTotal)}</strong>
+            </span>
+            <span
+              className={cn(
+                'min-w-16 shrink-0 rounded-lg border border-border bg-card px-2 py-1 text-center font-display text-xs font-bold tabular-nums',
+                betting && secondsLeft <= 5 ? 'text-destructive' : 'text-foreground',
+              )}
+            >
+              {betting ? `${secondsLeft} sn` : clock.phase === 'spin' ? 'Dönüyor' : 'Sonuç'}
+            </span>
+          </div>
+          <div className="h-1 shrink-0 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+            <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear" style={{ width: `${progress * 100}%` }} />
+          </div>
+
+          <section className="tavla-wood flex min-h-0 flex-1 rounded-2xl p-1" aria-label="Rulet masası">
+            <div className="felt-table relative flex min-h-0 flex-1 items-center gap-2 rounded-xl p-1.5">
+              <TableBrand center={false} />
+              <div className="relative aspect-square w-[min(38vw,calc(100dvh-8.5rem))] shrink-0">
+                <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />
+                {showWin && <WinBadge n={number} />}
+              </div>
+              <div className="relative h-full min-w-0 flex-1">
+                {data ? (
+                  <RouletteBoard mine={mine} others={others} onBet={place} disabled={!betting} winner={showWin ? number : null} chipValues={settings.bets} fill />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Masa yükleniyor" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <div className="flex h-11 shrink-0 items-center gap-2">
+            <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-1" role="radiogroup" aria-label="Fiş değeri">
+              {settings.bets.map((v) => (
+                <button key={v} type="button" role="radio" aria-checked={chip === v} onClick={() => setChip(v)} className="shrink-0 rounded-full p-0.5" aria-label={`${v} KC fiş`}>
+                  <Chip amount={v} tone={chipTone(v, settings.bets)} size="md" active={chip === v} />
+                </button>
+              ))}
+            </div>
+            {error && (
+              <p role="alert" className="max-w-48 truncate text-xs text-destructive">
+                {error}
+              </p>
+            )}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {[
+                { label: 'Son fişi geri al', onClick: undo, disabled: busy || !actions.length, icon: <Undo2 className="size-4" aria-hidden="true" /> },
+                { label: 'Masadaki bütün bahislerimi geri al', onClick: clearAll, disabled: busy || !mine.size, icon: <Trash2 className="size-4" aria-hidden="true" /> },
+                { label: 'Bahislerimi ikiye katla', onClick: () => addBets(mineList), disabled: !betting || !mine.size, icon: <span className="font-display text-xs font-bold">2x</span> },
+                {
+                  label: 'Geçen turun bahsini tekrarla',
+                  onClick: () => addBets(lastRoundBets),
+                  disabled: !betting || !lastRoundBets.length || mine.size > 0,
+                  icon: <RotateCcw className="size-4" aria-hidden="true" />,
+                },
+              ].map((a) => (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={a.onClick}
+                  disabled={a.disabled}
+                  aria-label={a.label}
+                  title={a.label}
+                  className="flex size-10 items-center justify-center rounded-xl border border-border bg-card text-foreground transition enabled:active:border-primary disabled:opacity-40"
+                >
+                  {a.icon}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {landscape && member && minimized && (
+        <button
+          type="button"
+          onClick={() => setMinimized(false)}
+          className="fixed right-3 top-20 z-50 flex h-10 items-center gap-1.5 rounded-full border border-primary/60 bg-card px-4 text-sm font-semibold text-foreground shadow-lg"
+        >
+          <Maximize2 className="size-4" aria-hidden="true" />
+          Tam ekran
+        </button>
+      )}
+
       <header className="relative overflow-hidden rounded-3xl border border-primary/30 bg-card">
         <div className="grid grid-cols-[minmax(0,1fr)] items-stretch md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <div className="relative hidden bg-background md:block md:min-h-48">
@@ -513,15 +675,15 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               <div
                 ref={wheelRef}
                 className={cn(
-                  'relative aspect-square shrink-0 transition-[width] duration-500 ease-out lg:w-72',
-                  betting ? 'w-32 sm:w-56' : 'w-64 sm:w-72',
+                  'relative aspect-square shrink-0 transition-[width] duration-500 ease-out lg:w-80',
+                  betting ? 'w-44 sm:w-60' : 'w-[min(86vw,22rem)] sm:w-80',
                 )}
               >
                 <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />
                 {showWin && <WinBadge n={number} />}
               </div>
               <div className="flex w-full min-w-0 flex-1 flex-col gap-3">
-                {showWin && <ResultBand n={number} bets={me?.bets ?? []} />}
+                {showWin && <ResultBand n={number} bets={me?.bets ?? []} paid={me?.returned ?? null} />}
                 {!data ? (
                   <div className="flex justify-center py-16">
                     <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Masa yükleniyor" />

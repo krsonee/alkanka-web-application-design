@@ -167,6 +167,11 @@ export async function deleteProduct(id: string) {
 }
 
 export async function requestProduct(member: Member, itemId: string, siteUsername: string | null) {
+  const { withUserLock } = await import('@/lib/user-lock')
+  return withUserLock(`market:${member.id}`, () => requestProductLocked(member, itemId, siteUsername))
+}
+
+async function requestProductLocked(member: Member, itemId: string, siteUsername: string | null) {
   await ensure()
   const found = await rows<ItemRow>(sql`SELECT * FROM market_items WHERE id = ${itemId} AND active`)
   if (!found[0]) throw new Error('Ürün bulunamadı.')

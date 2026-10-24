@@ -5,30 +5,38 @@ import { RED, WHEEL, rouletteClock, RL_SPIN_MS } from '@/lib/casino'
 
 const SEG = 360 / WHEEL.length
 const C = 200
-const R_OUT = 160
-const R_IN = 108
-const BALL_TRACK = 178
-const BALL_POCKET = 118
+const R_TRACK_OUT = 190
+const R_TRACK_IN = 168
+const R_NUM_OUT = 166
+const R_NUM_IN = 134
+const R_NUM_TEXT = 150
+const R_POCKET_IN = 104
+const BALL_TRACK = 179
+const BALL_POCKET = 119
 const IDLE_SPEED = 0.03
 const WHEEL_TRAVEL = 360
 const BALL_TRAVEL = 360 * 7
 const SPIN_ANIM_MS = RL_SPIN_MS - 1000
 
+const GOLD = 'var(--primary)'
+const IVORY = 'var(--checker-light)'
+
 export const pocketColor = (n: number) => (n === 0 ? 'var(--rl-green)' : RED.has(n) ? 'var(--rl-red)' : 'var(--rl-black)')
+const pocketDepth = (n: number) => `color-mix(in oklch, ${pocketColor(n)} 62%, var(--rl-black))`
 
 function polar(r: number, deg: number) {
   const a = (deg * Math.PI) / 180
   return [C + r * Math.sin(a), C - r * Math.cos(a)] as const
 }
 
-function wedge(i: number) {
+function ring(i: number, rOut: number, rIn: number) {
   const a0 = i * SEG - SEG / 2
   const a1 = a0 + SEG
-  const [x0, y0] = polar(R_OUT, a0)
-  const [x1, y1] = polar(R_OUT, a1)
-  const [x2, y2] = polar(R_IN, a1)
-  const [x3, y3] = polar(R_IN, a0)
-  return `M${x0} ${y0} A${R_OUT} ${R_OUT} 0 0 1 ${x1} ${y1} L${x2} ${y2} A${R_IN} ${R_IN} 0 0 0 ${x3} ${y3}Z`
+  const [x0, y0] = polar(rOut, a0)
+  const [x1, y1] = polar(rOut, a1)
+  const [x2, y2] = polar(rIn, a1)
+  const [x3, y3] = polar(rIn, a0)
+  return `M${x0} ${y0} A${rOut} ${rOut} 0 0 1 ${x1} ${y1} L${x2} ${y2} A${rIn} ${rIn} 0 0 0 ${x3} ${y3}Z`
 }
 
 const easeOutQuad = (p: number) => 1 - (1 - p) ** 2
@@ -57,7 +65,7 @@ function pose(now: number, number: number | null) {
 
 export function RouletteWheel({ clockOffset, number, highlight }: { clockOffset: number; number: number | null; highlight: number | null }) {
   const wheelRef = useRef<SVGGElement>(null)
-  const ballRef = useRef<SVGCircleElement>(null)
+  const ballRef = useRef<SVGGElement>(null)
   const numberRef = useRef(number)
   numberRef.current = number
 
@@ -70,8 +78,7 @@ export function RouletteWheel({ clockOffset, number, highlight }: { clockOffset:
       if (b) {
         if (ball) {
           const [x, y] = polar(ball.r, ball.angle)
-          b.setAttribute('cx', String(x))
-          b.setAttribute('cy', String(y))
+          b.setAttribute('transform', `translate(${x} ${y})`)
           b.style.opacity = '1'
         } else b.style.opacity = '0'
       }
@@ -81,64 +88,113 @@ export function RouletteWheel({ clockOffset, number, highlight }: { clockOffset:
     return () => cancelAnimationFrame(raf)
   }, [clockOffset])
 
+  const dimmed = (n: number) => highlight !== null && highlight !== n
+
   return (
     <svg viewBox="0 0 400 400" className="size-full drop-shadow-2xl" role="img" aria-label={highlight !== null ? `Rulet çarkı, kazanan sayı ${highlight}` : 'Rulet çarkı'}>
       <defs>
-        <radialGradient id="rl-wood" cx="50%" cy="40%" r="60%">
-          <stop offset="70%" stopColor="var(--wood)" />
-          <stop offset="100%" stopColor="color-mix(in oklch, var(--wood) 55%, var(--background))" />
+        <radialGradient id="rl-wood" cx="50%" cy="35%" r="65%">
+          <stop offset="78%" stopColor="color-mix(in oklch, var(--wood) 80%, var(--primary))" />
+          <stop offset="92%" stopColor="var(--wood)" />
+          <stop offset="100%" stopColor="color-mix(in oklch, var(--wood) 50%, var(--background))" />
         </radialGradient>
-        <radialGradient id="rl-cone" cx="45%" cy="40%" r="65%">
-          <stop offset="0%" stopColor="var(--primary)" />
-          <stop offset="70%" stopColor="color-mix(in oklch, var(--primary) 55%, var(--wood))" />
-          <stop offset="100%" stopColor="var(--wood)" />
+        <radialGradient id="rl-track" cx="50%" cy="50%" r="50%">
+          <stop offset="84%" stopColor="color-mix(in oklch, var(--wood) 30%, var(--background))" />
+          <stop offset="95%" stopColor="color-mix(in oklch, var(--wood) 55%, var(--background))" />
+          <stop offset="100%" stopColor="color-mix(in oklch, var(--wood) 25%, var(--background))" />
         </radialGradient>
-        <radialGradient id="rl-ball" cx="35%" cy="35%" r="70%">
-          <stop offset="0%" stopColor="var(--foreground)" />
-          <stop offset="100%" stopColor="color-mix(in oklch, var(--foreground) 55%, var(--background))" />
+        <radialGradient id="rl-cone" cx="42%" cy="36%" r="70%">
+          <stop offset="0%" stopColor="color-mix(in oklch, var(--primary) 80%, var(--checker-light))" />
+          <stop offset="55%" stopColor="var(--primary)" />
+          <stop offset="100%" stopColor="color-mix(in oklch, var(--primary) 45%, var(--wood))" />
         </radialGradient>
+        <radialGradient id="rl-ball" cx="35%" cy="32%" r="70%">
+          <stop offset="0%" stopColor="var(--checker-light)" />
+          <stop offset="65%" stopColor="color-mix(in oklch, var(--checker-light) 80%, var(--rl-black))" />
+          <stop offset="100%" stopColor="color-mix(in oklch, var(--checker-light) 45%, var(--rl-black))" />
+        </radialGradient>
+        <linearGradient id="rl-pocket-shade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--rl-black)" stopOpacity={0.45} />
+          <stop offset="100%" stopColor="var(--rl-black)" stopOpacity={0} />
+        </linearGradient>
       </defs>
+
       <circle cx={C} cy={C} r={199} fill="url(#rl-wood)" />
-      <circle cx={C} cy={C} r={190} fill="color-mix(in oklch, var(--background) 85%, var(--wood))" stroke="color-mix(in oklch, var(--primary) 40%, transparent)" strokeWidth={1.5} />
-      <circle cx={C} cy={C} r={166} fill="none" stroke="color-mix(in oklch, var(--primary) 50%, transparent)" strokeWidth={2} />
+      <circle cx={C} cy={C} r={R_TRACK_OUT + 1} fill="none" stroke={GOLD} strokeOpacity={0.55} strokeWidth={1.5} />
+      <circle cx={C} cy={C} r={R_TRACK_OUT} fill="url(#rl-track)" />
+      {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
+        const [x, y] = polar(R_TRACK_IN + 4, a + 22.5)
+        return <path key={a} d={`M${x} ${y} l0 -3 l3 3 l-3 3Z`} transform={`rotate(${a + 22.5} ${x} ${y})`} fill={GOLD} opacity={0.7} />
+      })}
 
       <g ref={wheelRef}>
+        <circle cx={C} cy={C} r={R_NUM_OUT + 1.5} fill={GOLD} />
+
         {WHEEL.map((n, i) => (
-          <path
-            key={n}
-            d={wedge(i)}
-            fill={pocketColor(n)}
-            stroke="color-mix(in oklch, var(--primary) 70%, var(--background))"
-            strokeWidth={highlight === n ? 3 : 0.8}
-            opacity={highlight !== null && highlight !== n ? 0.75 : 1}
-          />
+          <path key={`n${n}`} d={ring(i, R_NUM_OUT, R_NUM_IN)} fill={pocketColor(n)} opacity={dimmed(n) ? 0.55 : 1} />
         ))}
+
         {WHEEL.map((n, i) => (
           <text
-            key={n}
+            key={`t${n}`}
             x={C}
-            y={C - R_OUT + 17}
+            y={C - R_NUM_TEXT}
             transform={`rotate(${i * SEG} ${C} ${C})`}
             textAnchor="middle"
-            fontSize={14}
-            fontWeight={700}
-            fill="var(--foreground)"
-            className="font-sans"
+            dominantBaseline="central"
+            fontSize={n > 9 ? 17 : 19}
+            fontWeight={800}
+            letterSpacing={n > 9 ? -0.6 : 0}
+            fill={IVORY}
+            opacity={dimmed(n) ? 0.5 : 1}
+            className="font-sans tabular-nums"
           >
             {n}
           </text>
         ))}
-        <circle cx={C} cy={C} r={R_IN} fill="url(#rl-cone)" stroke="var(--primary)" strokeWidth={2} />
-        <circle cx={C} cy={C} r={R_IN - 18} fill="none" stroke="color-mix(in oklch, var(--background) 40%, transparent)" strokeWidth={1} />
-        {[0, 90, 180, 270].map((a) => {
-          const [x, y] = polar(62, a)
-          return <line key={a} x1={C} y1={C} x2={x} y2={y} stroke="var(--primary)" strokeWidth={7} strokeLinecap="round" />
+
+        <circle cx={C} cy={C} r={R_NUM_IN} fill="none" stroke={GOLD} strokeWidth={2.5} />
+
+        {WHEEL.map((n, i) => (
+          <path key={`p${n}`} d={ring(i, R_NUM_IN - 1.25, R_POCKET_IN)} fill={pocketDepth(n)} opacity={dimmed(n) ? 0.55 : 1} />
+        ))}
+        <circle cx={C} cy={C} r={(R_NUM_IN + R_POCKET_IN) / 2} fill="none" stroke="url(#rl-pocket-shade)" strokeWidth={R_NUM_IN - R_POCKET_IN} opacity={0.6} />
+
+        {WHEEL.map((_, i) => {
+          const a = i * SEG - SEG / 2
+          const [x0, y0] = polar(R_POCKET_IN, a)
+          const [x1, y1] = polar(R_NUM_OUT, a)
+          return <line key={`f${i}`} x1={x0} y1={y0} x2={x1} y2={y1} stroke={GOLD} strokeWidth={1.4} strokeOpacity={0.9} />
         })}
-        <circle cx={C} cy={C} r={20} fill="var(--primary)" stroke="var(--wood)" strokeWidth={3} />
-        <circle cx={C} cy={C} r={7} fill="var(--foreground)" opacity={0.8} />
+
+        {highlight !== null && WHEEL.includes(highlight) && (
+          <path d={ring(WHEEL.indexOf(highlight), R_NUM_OUT, R_POCKET_IN)} fill="none" stroke={GOLD} strokeWidth={3.5} strokeLinejoin="round" />
+        )}
+
+        <circle cx={C} cy={C} r={R_POCKET_IN} fill="none" stroke={GOLD} strokeWidth={2.5} />
+        <circle cx={C} cy={C} r={R_POCKET_IN - 2} fill="url(#rl-cone)" />
+        <circle cx={C} cy={C} r={R_POCKET_IN - 22} fill="none" stroke="var(--wood)" strokeOpacity={0.35} strokeWidth={1} />
+        <circle cx={C} cy={C} r={46} fill="none" stroke="var(--wood)" strokeOpacity={0.25} strokeWidth={1} />
+
+        {[0, 90, 180, 270].map((a) => {
+          const [x, y] = polar(64, a)
+          const [kx, ky] = polar(70, a)
+          return (
+            <g key={a}>
+              <line x1={C} y1={C} x2={x} y2={y} stroke="color-mix(in oklch, var(--primary) 55%, var(--wood))" strokeWidth={8} strokeLinecap="round" />
+              <line x1={C} y1={C} x2={x} y2={y} stroke="color-mix(in oklch, var(--primary) 70%, var(--checker-light))" strokeWidth={3} strokeLinecap="round" />
+              <circle cx={kx} cy={ky} r={6} fill="url(#rl-cone)" stroke="color-mix(in oklch, var(--primary) 50%, var(--wood))" strokeWidth={1.5} />
+            </g>
+          )
+        })}
+        <circle cx={C} cy={C} r={22} fill="url(#rl-cone)" stroke="color-mix(in oklch, var(--primary) 50%, var(--wood))" strokeWidth={2.5} />
+        <circle cx={C} cy={C} r={9} fill="color-mix(in oklch, var(--primary) 70%, var(--checker-light))" />
       </g>
 
-      <circle ref={ballRef} r={7.5} fill="url(#rl-ball)" style={{ opacity: 0 }} />
+      <g ref={ballRef} style={{ opacity: 0 }}>
+        <circle cx={1.5} cy={2} r={8} fill="var(--rl-black)" opacity={0.35} />
+        <circle r={8} fill="url(#rl-ball)" />
+      </g>
     </svg>
   )
 }
