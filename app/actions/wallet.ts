@@ -8,6 +8,7 @@ import { diceReward, wheelBigIndices, type RewardConfig } from '@/lib/rewards-sh
 import { rows, sql } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
+import { withUserLock } from '@/lib/user-lock'
 
 type WalletResult = { ok: true; balance: number } | { ok: false; error: string; balance?: number }
 
@@ -66,15 +67,21 @@ export async function claimReward(source: string, amount: number): Promise<Walle
     return { ok: false, error: 'Bu ödül sunucuda belirlenir.', balance: await getBalance(member.id) }
   }
 
-  const today = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM game_history
-    WHERE user_id = ${member.id} AND game = ${source} AND mode = 'odul' AND created_at > date_trunc('day', now())`)
-  if (Number(today[0]?.c ?? 0) >= limit.perDay) {
-    return { ok: false, error: `${limit.label} için bugünkü hakkın doldu.`, balance: await getBalance(member.id) }
+  try {
+    return await withUserLock(`reward:${member.id}:${source}`, async (): Promise<WalletResult> => {
+      const today = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM game_history
+        WHERE user_id = ${member.id} AND game = ${source} AND mode = 'odul'
+          AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`)
+      if (Number(today[0]?.c ?? 0) >= limit.perDay) {
+        return { ok: false, error: `${limit.label} için bugünkü hakkın doldu.`, balance: await getBalance(member.id) }
+      }
+      await credit(member.id, value)
+      await recordHistory({ userId: member.id, userName: member.name, game: source, mode: 'odul', opponent: limit.label, stake: 0, result: 'win', delta: value })
+      return { ok: true, balance: await getBalance(member.id) }
+    })
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Bir hata oluştu.' }
   }
-
-  await credit(member.id, value)
-  await recordHistory({ userId: member.id, userName: member.name, game: source, mode: 'odul', opponent: limit.label, stake: 0, result: 'win', delta: value })
-  return { ok: true, balance: await getBalance(member.id) }
 }
 
 /* ---------- House mini games: outcome decided on the server ---------- */
@@ -98,6 +105,20 @@ export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; 
   if (await hitRateLimit(`mini:${member.id}`, 6, 30)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   const limit = REWARD_LIMITS[game]
   if (!limit) return { ok: false, error: 'Geçersiz oyun.' }
+  try {
+    return await withUserLock(`mini:${member.id}`, () => playMiniLocked(member, game, chest, limit.label))
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Bir hata oluştu.' }
+  }
+}
+
+async function playMiniLocked(
+  member: { id: string; name: string },
+  game: MiniGame,
+  chest: number,
+  label: string,
+): Promise<({ ok: true; balance: number } & MiniOutcome) | { ok: false; error: string; balance?: number }> {
+  const limit = { label }
   if (isHidden(await getHidden(), 'mini', game)) return { ok: false, error: `${limit.label} şu an kapalı.` }
   const config = await getRewardConfig()
   if (await miniNextAt(member.id, game, config)) {
