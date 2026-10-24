@@ -3,7 +3,8 @@ import { createHash, createHmac } from 'node:crypto'
 import type { PoolClient } from 'pg'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
-import { betLabel, betReturn, rouletteClock as clock, validBet, type RouletteBet } from '@/lib/casino'
+import { betLabel, betReturn, RL_BET_MS, rouletteClock as clock, validBet, type RouletteBet } from '@/lib/casino'
+import { roundBots } from '@/lib/roulette-bots'
 import { capPayout } from '@/lib/member-limits'
 
 /** Distinct spots per player per round; chips on the same spot are merged into one entry. */
@@ -174,23 +175,26 @@ export async function liveState(member: Member | null) {
     [c.roundId],
   )
   const n = showNumber ? roundNumber(c.roundId) : null
-  const table = players.rows.map((p) => {
-    const bets = p.bets as RouletteBet[]
-    return {
-      name: String(p.user_name),
-      total: Number(p.total),
-      mine: member ? p.user_id === member.id : false,
-      bets: bets.map((b) => ({ kind: b.kind, value: b.value, amount: b.amount })),
-      returned: c.phase === 'result' && n !== null ? bets.reduce((a, b) => a + betReturn(b, n), 0) : null,
-    }
-  })
+  const realSeats = players.rows.map((p) => ({ name: String(p.user_name), total: Number(p.total), bets: p.bets as RouletteBet[], mine: member ? p.user_id === member.id : false }))
+  const betOffset = c.phase === 'bet' ? RL_BET_MS - (c.phaseEndsAt - c.now) : Infinity
+  const botSeats = roundBots(c.roundId, realSeats.length, new Set(realSeats.map((p) => p.name)))
+    .filter((b) => b.joinsAtMs <= betOffset)
+    .map((b) => ({ name: b.name, total: b.total, bets: b.bets, mine: false }))
+  const table = [...realSeats, ...botSeats]
+    .sort((a, b) => b.total - a.total)
+    .map((p) => ({
+      name: p.name,
+      total: p.total,
+      mine: p.mine,
+      bets: p.bets.map((b) => ({ kind: b.kind, value: b.value, amount: b.amount })),
+      returned: c.phase === 'result' && n !== null ? p.bets.reduce((a, b) => a + betReturn(b, n), 0) : null,
+    }))
   const lastN = roundNumber(lastId)
   const prev = await pool.query(`SELECT user_name, total, bets FROM roulette_bets WHERE round_id = $1 AND total > 0 LIMIT 60`, [lastId])
-  const winners = prev.rows
-    .map((p) => {
-      const won = (p.bets as RouletteBet[]).reduce((a, b) => a + betReturn(b, lastN), 0) - Number(p.total)
-      return { name: String(p.user_name), won }
-    })
+  const prevSeats = prev.rows.map((p) => ({ name: String(p.user_name), total: Number(p.total), bets: p.bets as RouletteBet[] }))
+  const prevBots = roundBots(lastId, prevSeats.length, new Set(prevSeats.map((p) => p.name)))
+  const winners = [...prevSeats, ...prevBots]
+    .map((p) => ({ name: p.name, won: p.bets.reduce((a, b) => a + betReturn(b, lastN), 0) - p.total }))
     .filter((w) => w.won > 0)
     .sort((a, b) => b.won - a.won)
     .slice(0, 8)

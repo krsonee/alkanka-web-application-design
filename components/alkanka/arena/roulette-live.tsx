@@ -179,9 +179,13 @@ function WinnersPanel({ last }: { last: RouletteLiveState['lastRound'] | undefin
         Son tur kazananları
         <NumberPill n={last.number} />
       </h3>
-      <ol className="flex flex-col gap-1.5">
+      <ol key={last.id} className="flex flex-col gap-1.5" aria-live="polite">
         {last.winners.map((w, i) => (
-          <li key={`${w.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm">
+          <li
+            key={`${w.name}-${i}`}
+            className="flex items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm animate-in fade-in slide-in-from-right-2 fill-mode-both duration-300"
+            style={{ animationDelay: `${i * 70}ms` }}
+          >
             <span className="flex min-w-0 items-center gap-2">
               <span className="w-4 shrink-0 text-xs font-bold text-primary tabular-nums">{i + 1}</span>
               <span className="truncate font-semibold text-foreground">{w.name}</span>
