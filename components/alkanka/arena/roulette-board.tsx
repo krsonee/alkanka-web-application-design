@@ -49,6 +49,7 @@ type BoardProps = {
   disabled: boolean
   winner: number | null
   chipValues: number[]
+  fill?: boolean
 }
 
 type Ctx = BoardProps & { hover: number[]; setHover: (n: number[]) => void }
@@ -257,26 +258,34 @@ const numBg = (n: number) => ({ background: n === 0 ? 'var(--rl-green)' : RED.ha
 
 const H_LINE = 'border border-foreground/35'
 
-function HorizontalLayout({ c }: { c: Ctx }) {
+/** `fill` stretches the board to its parent's height, for the sideways phone table where every pixel counts. */
+function HorizontalLayout({ c, fill }: { c: Ctx; fill?: boolean }) {
   return (
-    <div className="hidden grid-cols-[3rem_minmax(0,1fr)_3rem] overflow-hidden rounded-lg border-2 border-foreground/50 md:grid">
+    <div
+      className={cn(
+        'overflow-hidden rounded-lg border-2 border-foreground/50',
+        fill
+          ? 'grid h-full grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] grid-rows-[minmax(0,3fr)_minmax(0,1fr)_minmax(0,1fr)] bg-felt'
+          : 'hidden grid-cols-[3rem_minmax(0,1fr)_3rem] md:grid',
+      )}
+    >
       <Cell c={c} kind="number" value={0} style={numBg(0)} className={cn(H_LINE, 'rounded-l-[2rem] text-sm')}>
         0
       </Cell>
-      <div className="relative grid grid-cols-12 grid-rows-3">
+      <div className={cn('relative grid grid-cols-12 grid-rows-3', fill && 'h-full')}>
         {[0, 1, 2].flatMap((r) =>
           Array.from({ length: 12 }, (_, i) => {
             const n = hNum(i, r)
             return (
-              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={cn(H_LINE, 'h-14 text-sm')}>
+              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={cn(H_LINE, fill ? 'text-sm tabular-nums' : 'h-14 text-sm')}>
                 {n}
               </Cell>
             )
           }),
         )}
-        <Spots c={c} defs={H_SPOTS} />
+        <Spots c={c} defs={H_SPOTS} touch={fill} />
       </div>
-      <div className="grid grid-rows-3">
+      <div className={cn('grid grid-rows-3', fill && 'h-full')}>
         {[3, 2, 1].map((col) => (
           <Cell key={col} c={c} kind="column" value={col} className={cn(H_LINE, 'text-xs')}>
             2:1
@@ -285,14 +294,14 @@ function HorizontalLayout({ c }: { c: Ctx }) {
       </div>
       <div className="col-start-2 grid grid-cols-3">
         {[1, 2, 3].map((d) => (
-          <Cell key={d} c={c} kind="dozen" value={d} className={cn(H_LINE, 'h-11 text-sm')}>
+          <Cell key={d} c={c} kind="dozen" value={d} className={cn(H_LINE, fill ? 'text-xs' : 'h-11 text-sm')}>
             {d}. 12
           </Cell>
         ))}
       </div>
       <div className="col-start-2 grid grid-cols-6">
         {OUTSIDE.map((o) => (
-          <Cell key={o.kind} c={c} kind={o.kind} className={cn(H_LINE, 'h-11 text-sm')}>
+          <Cell key={o.kind} c={c} kind={o.kind} className={cn(H_LINE, fill ? 'text-xs' : 'h-11 text-sm')}>
             {o.text}
           </Cell>
         ))}
@@ -368,6 +377,7 @@ function VerticalLayout({ c }: { c: Ctx }) {
 export function RouletteBoard(p: BoardProps) {
   const [hover, setHover] = useState<number[]>([])
   const c = { ...p, hover, setHover }
+  if (p.fill) return <HorizontalLayout c={c} fill />
   return (
     <div className="flex flex-col gap-1.5">
       <HorizontalLayout c={c} />

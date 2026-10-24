@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Loader2, RotateCcw, ShieldCheck, Trash2, Trophy, Undo2, Users } from 'lucide-react'
+import { Loader2, Maximize2, Minimize2, RotateCcw, ShieldCheck, Trash2, Trophy, Undo2, Users } from 'lucide-react'
 import { RED, RL_BET_MS, rouletteClock, betLabel, betReturn, expandRacetrack, neighborNumbers, type RacetrackKey, type RouletteBet } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import type { RouletteLiveState } from '@/lib/roulette-live'
@@ -17,6 +17,7 @@ import { Chip, Racetrack, RouletteBoard, betKey, chipTone, parseKey, type BetKin
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
 import { TableBrand } from './table-brand'
+import { usePhoneLandscape } from './landscape-fit'
 
 type Stake = Pick<RouletteBet, 'kind' | 'value' | 'amount'>
 
@@ -440,6 +441,24 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const neighbors = (n: number) => addBets(neighborNumbers(n).map((value) => ({ kind: 'number' as const, value, amount: chip })))
   const call = (k: RacetrackKey) => addBets(expandRacetrack(k, chip))
 
+  const landscape = usePhoneLandscape()
+  const [minimized, setMinimized] = useState(false)
+  const fullscreen = landscape && !!member && !minimized
+
+  useEffect(() => {
+    if (!landscape) setMinimized(false)
+  }, [landscape])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const html = document.documentElement
+    const prev = html.style.overflow
+    html.style.overflow = 'hidden'
+    return () => {
+      html.style.overflow = prev
+    }
+  }, [fullscreen])
+
   if (!ready) {
     return (
       <div className="felt-table flex min-h-96 items-center justify-center rounded-3xl border border-primary/30">
@@ -453,6 +472,121 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
 
   return (
     <div className="flex flex-col gap-4 max-lg:pb-48">
+      {fullscreen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Rulet masası tam ekran"
+          className="fixed inset-0 z-[100] flex h-dvh flex-col gap-1.5 bg-background pb-[max(0.375rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-1.5"
+        >
+          <div className="flex h-8 shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground"
+              aria-label="Tam ekrandan çık"
+            >
+              <Minimize2 className="size-4" aria-hidden="true" />
+              Küçült
+            </button>
+            <span className="shrink-0 rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary-foreground">
+              Tur #{clock.roundId % 10000}
+            </span>
+            <ol className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 [mask-image:linear-gradient(to_right,black_85%,transparent)]" aria-label="Son çıkan sayılar">
+              {(data?.history ?? []).slice(0, 14).map((n, i) => (
+                <li key={i} className={cn('rounded-full', i === 0 && 'ring-2 ring-primary ring-offset-1 ring-offset-background')}>
+                  <NumberPill n={n} />
+                </li>
+              ))}
+            </ol>
+            <span className="shrink-0 text-xs text-muted-foreground" aria-live="polite">
+              Masada <strong className="text-foreground tabular-nums">{formatAC(tableTotal)}</strong>
+            </span>
+            <span
+              className={cn(
+                'min-w-16 shrink-0 rounded-lg border border-border bg-card px-2 py-1 text-center font-display text-xs font-bold tabular-nums',
+                betting && secondsLeft <= 5 ? 'text-destructive' : 'text-foreground',
+              )}
+            >
+              {betting ? `${secondsLeft} sn` : clock.phase === 'spin' ? 'Dönüyor' : 'Sonuç'}
+            </span>
+          </div>
+          <div className="h-1 shrink-0 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+            <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear" style={{ width: `${progress * 100}%` }} />
+          </div>
+
+          <section className="tavla-wood flex min-h-0 flex-1 rounded-2xl p-1" aria-label="Rulet masası">
+            <div className="felt-table relative flex min-h-0 flex-1 items-center gap-2 rounded-xl p-1.5">
+              <TableBrand center={false} />
+              <div className="relative aspect-square w-[min(38vw,calc(100dvh-8.5rem))] shrink-0">
+                <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />
+                {showWin && <WinBadge n={number} />}
+              </div>
+              <div className="relative h-full min-w-0 flex-1">
+                {data ? (
+                  <RouletteBoard mine={mine} others={others} onBet={place} disabled={!betting} winner={showWin ? number : null} chipValues={settings.bets} fill />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Masa yükleniyor" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <div className="flex h-11 shrink-0 items-center gap-2">
+            <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-1" role="radiogroup" aria-label="Fiş değeri">
+              {settings.bets.map((v) => (
+                <button key={v} type="button" role="radio" aria-checked={chip === v} onClick={() => setChip(v)} className="shrink-0 rounded-full p-0.5" aria-label={`${v} KC fiş`}>
+                  <Chip amount={v} tone={chipTone(v, settings.bets)} size="md" active={chip === v} />
+                </button>
+              ))}
+            </div>
+            {error && (
+              <p role="alert" className="max-w-48 truncate text-xs text-destructive">
+                {error}
+              </p>
+            )}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {[
+                { label: 'Son fişi geri al', onClick: undo, disabled: busy || !actions.length, icon: <Undo2 className="size-4" aria-hidden="true" /> },
+                { label: 'Masadaki bütün bahislerimi geri al', onClick: clearAll, disabled: busy || !mine.size, icon: <Trash2 className="size-4" aria-hidden="true" /> },
+                { label: 'Bahislerimi ikiye katla', onClick: () => addBets(mineList), disabled: !betting || !mine.size, icon: <span className="font-display text-xs font-bold">2x</span> },
+                {
+                  label: 'Geçen turun bahsini tekrarla',
+                  onClick: () => addBets(lastRoundBets),
+                  disabled: !betting || !lastRoundBets.length || mine.size > 0,
+                  icon: <RotateCcw className="size-4" aria-hidden="true" />,
+                },
+              ].map((a) => (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={a.onClick}
+                  disabled={a.disabled}
+                  aria-label={a.label}
+                  title={a.label}
+                  className="flex size-10 items-center justify-center rounded-xl border border-border bg-card text-foreground transition enabled:active:border-primary disabled:opacity-40"
+                >
+                  {a.icon}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {landscape && member && minimized && (
+        <button
+          type="button"
+          onClick={() => setMinimized(false)}
+          className="fixed right-3 top-20 z-50 flex h-10 items-center gap-1.5 rounded-full border border-primary/60 bg-card px-4 text-sm font-semibold text-foreground shadow-lg"
+        >
+          <Maximize2 className="size-4" aria-hidden="true" />
+          Tam ekran
+        </button>
+      )}
+
       <header className="relative overflow-hidden rounded-3xl border border-primary/30 bg-card">
         <div className="grid grid-cols-[minmax(0,1fr)] items-stretch md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <div className="relative hidden bg-background md:block md:min-h-48">
