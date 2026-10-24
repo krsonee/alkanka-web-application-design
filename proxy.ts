@@ -1,3 +1,4 @@
+import { neon } from '@neondatabase/serverless'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const SITE_ORIGIN = 'https://alkanka.com'
@@ -32,10 +33,37 @@ function routeByHost(request: NextRequest): NextResponse | null {
   return null
 }
 
+const SITE_KEY_TTL = 60_000
+const siteKeyCache = new Map<string, { ok: boolean; at: number }>()
+
+/** The root loading.tsx streams pages, so a missing sponsor can only get a real 404 status here. Fails open on DB errors. */
+async function siteExists(key: string): Promise<boolean> {
+  const hit = siteKeyCache.get(key)
+  if (hit && Date.now() - hit.at < SITE_KEY_TTL) return hit.ok
+  try {
+    const query = neon(process.env.DATABASE_URL!)
+    const found = /^\d+$/.test(key)
+      ? await query`SELECT 1 FROM sites WHERE active AND slug IS NOT NULL AND btrim(slug) <> '' AND (id::text = ${key} OR slug = ${key}) LIMIT 1`
+      : await query`SELECT 1 FROM sites WHERE active AND slug = ${key} LIMIT 1`
+    const ok = found.length > 0
+    if (siteKeyCache.size > 500) siteKeyCache.clear()
+    siteKeyCache.set(key, { ok, at: Date.now() })
+    return ok
+  } catch {
+    return true
+  }
+}
+
 /** First-touch attribution: ?src=sms or ?utm_source=mail on any landing is kept for 30 days. */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const routed = routeByHost(request)
   if (routed) return routed
+
+  const siteMatch = request.nextUrl.pathname.match(/^\/siteler\/([^/]+)\/?$/)
+  if (siteMatch && process.env.DATABASE_URL) {
+    const key = decodeURIComponent(siteMatch[1]).slice(0, 120)
+    if (!(await siteExists(key))) return NextResponse.rewrite(new URL('/__site-not-found', request.url))
+  }
 
   const params = request.nextUrl.searchParams
   const raw = params.get('src') ?? params.get('utm_source')
