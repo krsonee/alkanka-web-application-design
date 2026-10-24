@@ -48,12 +48,14 @@ function InstallBanner() {
       aria-label="Mobil uygulama"
       className="fixed inset-x-3 bottom-20 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:left-auto sm:right-6 sm:bottom-6 sm:w-96 lg:right-[21.5rem] xl:right-[21.5rem]"
     >
-      <div className="flex items-start gap-3 rounded-2xl border border-primary/40 bg-card p-4 shadow-2xl">
-        <JakoAvatar pose="duyuru" size="sm" />
+      <div className="flex items-start gap-3 rounded-2xl border border-primary/40 bg-card p-3 shadow-2xl sm:p-4">
+        <span className="hidden sm:block">
+          <JakoAvatar pose="duyuru" size="sm" />
+        </span>
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex flex-col gap-0.5">
             <p className="text-sm font-bold text-foreground">Uygulamayı kur, +{installBonus + pushBonus} KC kap</p>
-            <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+            <p className="hidden text-pretty text-xs leading-relaxed text-muted-foreground sm:block">
               Ana ekrana ekle +{installBonus} KC, bildirimleri aç +{pushBonus} KC. Turnuva ve promo kodları ilk sen duy.
             </p>
           </div>

@@ -46,6 +46,28 @@ async function member() {
 
 const CLIENT_SETTLED = ['tavla', 'okey', 'bilardo', 'kafa-topu', 'kafa-basketbolu']
 const MIN_WIN_SECONDS: Record<string, number> = { tavla: 60, okey: 45, bilardo: 40, 'kafa-topu': 50, 'kafa-basketbolu': 50 }
+/** Bot results are reported by the browser, so their daily net profit is capped to bound any abuse. */
+const BOT_DAILY_PROFIT_CAP = 1500
+const SCORE_GAMES = ['kafa-topu', 'kafa-basketbolu']
+const MAX_SCORE = 60
+
+function scoreMatches(result: 'win' | 'draw', score?: { for: number; against: number }) {
+  if (!score) return false
+  const f = Number(score.for)
+  const a = Number(score.against)
+  if (![f, a].every((n) => Number.isInteger(n) && n >= 0 && n <= MAX_SCORE)) return false
+  return result === 'win' ? f > a : f === a
+}
+
+async function botProfitToday(userId: string) {
+  const r = await pool.query<{ net: string | null }>(
+    `SELECT sum(delta) AS net FROM game_history
+      WHERE user_id = $1 AND mode = 'bot' AND game = ANY($2::text[])
+        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`,
+    [userId, CLIENT_SETTLED],
+  )
+  return Math.max(0, Number(r.rows[0]?.net ?? 0))
+}
 
 export async function startBotGame(game: string, stake: number) {
   try {
@@ -94,12 +116,28 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
     if (!row) throw new Error('Oyun oturumu bulunamadı.')
     const game = String(row.game) as keyof typeof ARENA_META
     const stake = Number(row.stake)
-    let final = result
-    if (final === 'win' && Number(row.secs) < (MIN_WIN_SECONDS[game] ?? 30)) final = 'loss'
+    let final: 'win' | 'loss' | 'draw' = result === 'win' || result === 'draw' ? result : 'loss'
+    let note: string | undefined
+    if (final === 'win' && Number(row.secs) < (MIN_WIN_SECONDS[game] ?? 30)) {
+      final = 'loss'
+      note = 'Oyun çok kısa sürdüğü için galibiyet sayılmadı.'
+    }
+    if (final !== 'loss' && SCORE_GAMES.includes(game) && !scoreMatches(final, score)) {
+      final = 'loss'
+      note = 'Skor doğrulanamadığı için sonuç kabul edilmedi.'
+    }
     const s = (await getArenaSettings())[game]
     const mars = game === 'tavla' && final === 'win' && score?.for === 15 && score.against === 0
     const winMultiplier = mars ? Math.max(3, s.multiplier) : s.multiplier
-    const payout = await capPayout(m.id, stake, final === 'win' ? Math.floor(stake * winMultiplier) : final === 'draw' ? stake : 0)
+    let gross = final === 'win' ? Math.floor(stake * winMultiplier) : final === 'draw' ? stake : 0
+    if (gross > stake) {
+      const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(m.id)))
+      if (gross - stake > room) {
+        gross = stake + room
+        note = room ? 'Bot maçlarında günlük kazanç sınırına ulaştın.' : 'Bot maçlarında günlük kazanç sınırı doldu; bahsin iade edildi.'
+      }
+    }
+    const payout = await capPayout(m.id, stake, gross)
     if (payout) await credit(m.id, payout)
     await recordHistory({
       userId: m.id,
@@ -112,7 +150,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
       delta: payout - stake,
       score: score ? score.for : null,
     })
-    return { ok: true as const, result: final, payout, balance: await getBalance(m.id) }
+    return { ok: true as const, result: final, payout, note, balance: await getBalance(m.id) }
   } catch (e) {
     return fail(e)
   }

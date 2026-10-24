@@ -20,7 +20,7 @@ async function findSponsor(slug: string) {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
   const s = await findSponsor(slug)
-  if (!s) return { title: 'Site bulunamadı', robots: { index: false } }
+  if (!s) notFound()
   const title = `${s.name} güncel giriş, bonus ve inceleme`
   const description = `${s.name}: ${s.welcome}. Çekim süresi ${s.payout}, puan ${s.rating.toFixed(1)}. Adres değişince haber almak için takip et.`
   return { title, description, alternates: { canonical: `${SITE_URL}/siteler/${s.id}` }, openGraph: { title, description } }

@@ -72,6 +72,9 @@ export function MemberPerks({ shields: initialShields, shieldPrice, birthday: in
               <input
                 id="perk-birthday"
                 type="date"
+                lang="tr-TR"
+                max={new Date().toISOString().slice(0, 10)}
+                min="1920-01-01"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground"

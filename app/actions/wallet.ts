@@ -2,7 +2,7 @@
 
 import { randomInt } from 'node:crypto'
 import { getContent } from '@/lib/content'
-import { getHidden, getRewardConfig } from '@/lib/catalog'
+import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
 import { diceReward, wheelBigIndices, type RewardConfig } from '@/lib/rewards-shared'
 import { rows, sql } from '@/lib/db'
@@ -54,29 +54,34 @@ export async function getMiniStatus(): Promise<MiniStatus> {
   return { cark, sandik, zar, hidden }
 }
 
-export async function claimReward(source: string, amount: number): Promise<WalletResult> {
+/**
+ * Prediction reward. The amount comes from the server catalog, never from the client,
+ * and each prediction pays at most once per member.
+ */
+export async function claimPrediction(matchId: string, optionId: string): Promise<WalletResult> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Ödül almak için giriş yapmalısın.' }
   if (await hitRateLimit(`reward:${member.id}`, 10, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
-  const limit = REWARD_LIMITS[source]
-  if (!limit) return { ok: false, error: 'Geçersiz ödül.' }
-  const value = Math.floor(Number(amount))
-  if (!Number.isInteger(value) || value <= 0 || value > limit.perClaim) return { ok: false, error: 'Geçersiz ödül tutarı.' }
-
-  if (source === 'cark' || source === 'sandik' || source === 'zar') {
-    return { ok: false, error: 'Bu ödül sunucuda belirlenir.', balance: await getBalance(member.id) }
-  }
+  const limit = REWARD_LIMITS.tahmin
+  const { predictions } = await getCatalog()
+  const match = predictions.find((p) => p.id === String(matchId))
+  if (!match || !match.options.some((o) => o.id === String(optionId))) return { ok: false, error: 'Geçersiz tahmin.' }
+  const value = Math.min(limit.perClaim, Math.max(0, Math.round(Number(match.reward) / 5)))
+  if (!value) return { ok: false, error: 'Bu tahmin için ödül yok.' }
+  const ref = `tahmin:${match.id}`
 
   try {
-    return await withUserLock(`reward:${member.id}:${source}`, async (): Promise<WalletResult> => {
-      const today = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM game_history
-        WHERE user_id = ${member.id} AND game = ${source} AND mode = 'odul'
-          AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`)
-      if (Number(today[0]?.c ?? 0) >= limit.perDay) {
+    return await withUserLock(`reward:${member.id}:tahmin`, async (): Promise<WalletResult> => {
+      const r = await rows<{ today: string; done: string }>(sql`SELECT
+          count(*) FILTER (WHERE created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS today,
+          count(*) FILTER (WHERE table_id = ${ref}) AS done
+        FROM game_history WHERE user_id = ${member.id} AND game = 'tahmin' AND mode = 'odul'`)
+      if (Number(r[0]?.done ?? 0) > 0) return { ok: false, error: 'Bu maç için zaten tahmin yaptın.', balance: await getBalance(member.id) }
+      if (Number(r[0]?.today ?? 0) >= limit.perDay) {
         return { ok: false, error: `${limit.label} için bugünkü hakkın doldu.`, balance: await getBalance(member.id) }
       }
       await credit(member.id, value)
-      await recordHistory({ userId: member.id, userName: member.name, game: source, mode: 'odul', opponent: limit.label, stake: 0, result: 'win', delta: value })
+      await recordHistory({ userId: member.id, userName: member.name, game: 'tahmin', mode: 'odul', opponent: limit.label, stake: 0, result: 'win', delta: value, tableId: ref })
       return { ok: true, balance: await getBalance(member.id) }
     })
   } catch (e) {

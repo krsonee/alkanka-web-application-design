@@ -119,7 +119,7 @@ export function StakeGate({
     setBalance(res.balance)
     const final: GameResult = res.result === 'loss' ? 'lose' : res.result
     const mars = game === 'tavla' && final === 'win' && score?.for === 15 && score.against === 0
-    setPhase({ kind: 'done', bet: playedBet, result: final, note: final !== result ? 'Oyun çok kısa sürdüğü için galibiyet sayılmadı.' : note, payout: res.payout, mars })
+    setPhase({ kind: 'done', bet: playedBet, result: final, note: res.note ?? note, payout: res.payout, mars })
   }
 
   if (phase.kind === 'playing') {
