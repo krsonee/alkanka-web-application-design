@@ -131,8 +131,9 @@ export async function placeLiveBets(member: Member, bets: RouletteBet[], spotLim
   const total = clean.reduce((a, b) => a + b.amount, 0)
   await settleFor(member)
   if (!(await debit(member.id, total))) throw new Error('Yetersiz Kanka Coin.')
+  let saved: StoredBet[]
   try {
-    await inTx(async (c) => {
+    saved = await inTx(async (c) => {
       const row = await lockRow(c, c0.roundId, member)
       const next = merge(row.bets, clean)
       if (next.length > MAX_SPOTS) throw new Error(`Bu turda en fazla ${MAX_SPOTS} farklı alana bahis koyabilirsin.`)
@@ -140,28 +141,29 @@ export async function placeLiveBets(member: Member, bets: RouletteBet[], spotLim
       if (over) throw new Error(`${betLabel(over)} için masa limiti ${spotLimit} KC.`)
       assertOpen()
       await saveRow(c, row.id, next)
+      return next
     })
   } catch (e) {
     await credit(member.id, total)
     throw e
   }
-  return { roundId: c0.roundId, balance: await getBalance(member.id) }
+  return { roundId: c0.roundId, bets: saved, balance: await getBalance(member.id) }
 }
 
 /** Takes chips back off the table while betting is still open. With no list, the whole round is cleared. */
 export async function withdrawLiveBets(member: Member, bets?: StoredBet[]) {
   const c0 = assertOpen()
   if (bets && !bets.every((b) => validBet(b as RouletteBet))) throw new Error('Geçersiz bahis.')
-  const refund = await inTx(async (c) => {
+  const { refund, next } = await inTx(async (c) => {
     const row = await lockRow(c, c0.roundId, member)
     const before = row.bets.reduce((a, b) => a + b.amount, 0)
     const next = bets ? merge(row.bets, bets, -1) : []
     const after = next.reduce((a, b) => a + b.amount, 0)
     await saveRow(c, row.id, next)
-    return before - after
+    return { refund: before - after, next }
   })
   if (refund > 0) await credit(member.id, refund)
-  return { roundId: c0.roundId, balance: await getBalance(member.id) }
+  return { roundId: c0.roundId, bets: next, balance: await getBalance(member.id) }
 }
 
 export async function liveState(member: Member | null) {
@@ -171,15 +173,22 @@ export async function liveState(member: Member | null) {
   const lastId = c.phase === 'bet' ? c.roundId - 1 : c.roundId
   const history = Array.from({ length: 14 }, (_, i) => roundNumber(lastId - i))
   const players = await pool.query(
-    `SELECT user_id, user_name, total, bets FROM roulette_bets WHERE round_id = $1 AND total > 0 ORDER BY total DESC LIMIT 40`,
+    `SELECT user_id, user_name, total, bets, settled, returned FROM roulette_bets WHERE round_id = $1 AND total > 0 ORDER BY total DESC LIMIT 40`,
     [c.roundId],
   )
   const n = showNumber ? roundNumber(c.roundId) : null
-  const realSeats = players.rows.map((p) => ({ name: String(p.user_name), total: Number(p.total), bets: p.bets as RouletteBet[], mine: member ? p.user_id === member.id : false }))
+  // Real players show the amount actually credited (after any hidden daily cap), never a client-side estimate.
+  const realSeats = players.rows.map((p) => ({
+    name: String(p.user_name),
+    total: Number(p.total),
+    bets: p.bets as RouletteBet[],
+    mine: member ? p.user_id === member.id : false,
+    paid: p.settled && p.returned !== null ? Number(p.returned) : null,
+  }))
   const betOffset = c.phase === 'bet' ? RL_BET_MS - (c.phaseEndsAt - c.now) : Infinity
   const botSeats = roundBots(c.roundId, realSeats.length, new Set(realSeats.map((p) => p.name)))
     .filter((b) => b.joinsAtMs <= betOffset)
-    .map((b) => ({ name: b.name, total: b.total, bets: b.bets, mine: false }))
+    .map((b) => ({ name: b.name, total: b.total, bets: b.bets, mine: false, paid: null as number | null }))
   const table = [...realSeats, ...botSeats]
     .sort((a, b) => b.total - a.total)
     .map((p) => ({
@@ -187,14 +196,19 @@ export async function liveState(member: Member | null) {
       total: p.total,
       mine: p.mine,
       bets: p.bets.map((b) => ({ kind: b.kind, value: b.value, amount: b.amount })),
-      returned: c.phase === 'result' && n !== null ? p.bets.reduce((a, b) => a + betReturn(b, n), 0) : null,
+      returned: c.phase === 'result' && n !== null ? (p.paid ?? p.bets.reduce((a, b) => a + betReturn(b, n), 0)) : null,
     }))
   const lastN = roundNumber(lastId)
-  const prev = await pool.query(`SELECT user_name, total, bets FROM roulette_bets WHERE round_id = $1 AND total > 0 LIMIT 60`, [lastId])
-  const prevSeats = prev.rows.map((p) => ({ name: String(p.user_name), total: Number(p.total), bets: p.bets as RouletteBet[] }))
-  const prevBots = roundBots(lastId, prevSeats.length, new Set(prevSeats.map((p) => p.name)))
+  const prev = await pool.query(`SELECT user_name, total, bets, settled, returned FROM roulette_bets WHERE round_id = $1 AND total > 0 LIMIT 60`, [lastId])
+  const prevSeats = prev.rows.map((p) => ({
+    name: String(p.user_name),
+    total: Number(p.total),
+    bets: p.bets as RouletteBet[],
+    paid: p.settled && p.returned !== null ? Number(p.returned) : null,
+  }))
+  const prevBots = roundBots(lastId, prevSeats.length, new Set(prevSeats.map((p) => p.name))).map((b) => ({ ...b, paid: null as number | null }))
   const winners = [...prevSeats, ...prevBots]
-    .map((p) => ({ name: p.name, won: p.bets.reduce((a, b) => a + betReturn(b, lastN), 0) - p.total }))
+    .map((p) => ({ name: p.name, won: (p.paid ?? p.bets.reduce((a, b) => a + betReturn(b, lastN), 0)) - p.total }))
     .filter((w) => w.won > 0)
     .sort((a, b) => b.won - a.won)
     .slice(0, 8)

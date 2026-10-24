@@ -87,10 +87,10 @@ function WinBadge({ n }: { n: number }) {
   )
 }
 
-function ResultBand({ n, bets }: { n: number; bets: Stake[] }) {
+function ResultBand({ n, bets, paid }: { n: number; bets: Stake[]; paid: number | null }) {
   const total = bets.reduce((a, b) => a + b.amount, 0)
   const lines = bets.map((b) => ({ label: betLabel(b), stake: b.amount, back: betReturn(b, n) })).sort((a, b) => b.back - a.back)
-  const net = lines.reduce((a, l) => a + l.back, 0) - total
+  const net = (paid ?? lines.reduce((a, l) => a + l.back, 0)) - total
   const tone = !total ? 'neutral' : net > 0 ? 'win' : net < 0 ? 'loss' : 'neutral'
   return (
     <div
@@ -122,7 +122,7 @@ function ResultBand({ n, bets }: { n: number; bets: Stake[] }) {
               key={`${l.label}-${i}`}
               className={cn('rounded-full px-2 py-0.5 tabular-nums', l.back > 0 ? 'bg-primary/25 font-semibold text-foreground' : 'bg-background/60 text-muted-foreground line-through')}
             >
-              {l.label} {l.back > 0 ? `+${formatAC(l.back - l.stake)}` : `-${formatAC(l.stake)}`}
+              {l.label} {signed(l.back - l.stake)}
             </li>
           ))}
           {lines.length > 8 && <li className="px-1 text-muted-foreground">+{lines.length - 8} alan</li>}
@@ -294,6 +294,21 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const pendingTotal = Array.from(pending.values()).reduce((a, b) => a + b, 0)
   const tableTotal = mineList.reduce((a, b) => a + b.amount, 0)
 
+  /** Writes the server's saved bets straight into the cached state, so confirmed + pending never counts a chip twice. */
+  function applyMine(roundId: number, bets: Stake[]) {
+    const total = bets.reduce((a, b) => a + b.amount, 0)
+    mutate(
+      (d) => {
+        if (!d || d.roundId !== roundId) return d
+        const rest = d.players.filter((p) => !p.mine)
+        const mineBets = bets.map((b) => ({ kind: b.kind, value: b.value, amount: b.amount }))
+        const players = total > 0 ? [...rest, { name: member?.name ?? 'Sen', total, mine: true, bets: mineBets, returned: null }] : rest
+        return { ...d, players: players.sort((a, b) => b.total - a.total) }
+      },
+      { revalidate: true },
+    )
+  }
+
   async function flush() {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
@@ -308,7 +323,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     const res = await placeLiveRouletteBets(toList(snap) as RouletteBet[])
     if (res.ok) {
       setBalance(res.balance)
-      await mutate()
+      applyMine(res.roundId, res.bets as Stake[])
     }
     const next = new Map(pendingRef.current)
     snap.forEach((v, k) => {
@@ -360,9 +375,18 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     playSound('tick')
   }, [betting, secondsLeft])
 
+  // The server pays a round as soon as betting closes, so any post-bet snapshot of this round already holds the paid balance.
+  // If our clock reaches the result before the server snapshot does, fetch again instead of waiting for the next poll.
+  const settledSnapshot = data && data.roundId === clock.roundId && data.phase === 'result'
   useEffect(() => {
-    if (typeof data?.balance === 'number' && data.phase === 'result') setBalance(data.balance)
-  }, [data?.balance, data?.phase, setBalance])
+    if (clock.phase !== 'result') return
+    if (settledSnapshot) {
+      if (typeof data?.balance === 'number') setBalance(data.balance)
+      return
+    }
+    const t = setTimeout(() => mutate(), 700)
+    return () => clearTimeout(t)
+  }, [clock.phase, settledSnapshot, data?.balance, mutate, setBalance])
 
   const myResult = clock.phase === 'result' && me && me.returned !== null ? me.returned - me.total : null
   const announced = useRef<number | null>(null)
@@ -411,7 +435,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
       return
     }
     setBalance(res.balance)
-    mutate()
+    applyMine(res.roundId, res.bets as Stake[])
   }
 
   async function undo() {
@@ -659,7 +683,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
                 {showWin && <WinBadge n={number} />}
               </div>
               <div className="flex w-full min-w-0 flex-1 flex-col gap-3">
-                {showWin && <ResultBand n={number} bets={me?.bets ?? []} />}
+                {showWin && <ResultBand n={number} bets={me?.bets ?? []} paid={me?.returned ?? null} />}
                 {!data ? (
                   <div className="flex justify-center py-16">
                     <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Masa yükleniyor" />
