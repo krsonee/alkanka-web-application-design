@@ -26,6 +26,18 @@ export type SoundName =
   | 'move'
   | 'hit'
   | 'bearoff'
+  | 'kick'
+  | 'header'
+  | 'bounce'
+  | 'dribble'
+  | 'post'
+  | 'rim'
+  | 'board'
+  | 'net'
+  | 'swish'
+  | 'whistle'
+  | 'whistleEnd'
+  | 'cheer'
 
 const MUTE_KEY = 'alkanka:sound-muted'
 const listeners = new Set<() => void>()
@@ -193,11 +205,105 @@ function slide(at: number, dur: number, vol: number) {
   src.start(start)
 }
 
+/** Pea whistle: a high tone warbled by the pea rattling inside, plus breath noise. */
+function whistle(at: number, dur: number, vol: number) {
+  const ac = audio()
+  if (!ac || !room) return
+  const start = ac.currentTime + at
+  const osc = ac.createOscillator()
+  osc.frequency.value = jitter(2950, 0.02)
+  const lfo = ac.createOscillator()
+  lfo.type = 'square'
+  lfo.frequency.value = 28
+  const depth = ac.createGain()
+  depth.gain.value = 140
+  lfo.connect(depth).connect(osc.frequency)
+  const g = ac.createGain()
+  g.gain.setValueAtTime(0.0001, start)
+  g.gain.exponentialRampToValueAtTime(vol, start + 0.03)
+  g.gain.setValueAtTime(vol, start + dur - 0.06)
+  g.gain.exponentialRampToValueAtTime(0.0001, start + dur)
+  osc.connect(g).connect(room)
+  for (const node of [osc, lfo]) {
+    node.start(start)
+    node.stop(start + dur + 0.02)
+  }
+  noise({ at, dur, freq: 3400, q: 0.8, vol: vol * 0.25, type: 'highpass' })
+}
+
+/** Crowd roar: two broad noise bands swell up and fade, sprinkled with claps. */
+function crowd(at: number, dur: number, vol: number) {
+  const ac = audio()
+  if (!ac || !room) return
+  const start = ac.currentTime + at
+  const len = Math.floor(ac.sampleRate * dur)
+  const buf = ac.createBuffer(1, len, ac.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1
+  for (const [freq, q, share] of [[750, 0.7, 1], [2100, 1.2, 0.45]] as const) {
+    const src = ac.createBufferSource()
+    src.buffer = buf
+    const bp = ac.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.frequency.setValueAtTime(freq * 0.8, start)
+    bp.frequency.linearRampToValueAtTime(freq, start + 0.4)
+    bp.Q.value = q
+    const g = ac.createGain()
+    g.gain.setValueAtTime(0.0001, start)
+    g.gain.exponentialRampToValueAtTime(vol * share, start + 0.35)
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur)
+    src.connect(bp).connect(g).connect(room)
+    src.start(start)
+  }
+  for (let i = 0; i < 26; i++) {
+    noise({ at: at + 0.2 + Math.random() * dur * 0.7, dur: 0.02, freq: 1400 + Math.random() * 1400, q: 1.4, vol: vol * 0.5 * Math.random() })
+  }
+}
+
 const WOOD = [190, 470, 910, 1520]
 const IVORY = [1850, 3050, 4400]
 const DIE = [2600, 4100, 5900]
+const STEEL = [620, 1710, 3120, 4400]
+const lim = (v: number) => Math.max(0.15, Math.min(1, v))
 
-const SOUNDS: Record<SoundName, () => void> = {
+const SOUNDS: Record<SoundName, (v: number) => void> = {
+  // Boot through leather: a dull low thump with a short slap on top.
+  kick: (v) => {
+    knock({ modes: [92, 210, 470], decay: 0.1, vol: 0.55 * lim(v), click: 1600, body: 105 })
+    noise({ dur: 0.035, freq: 950, q: 1, vol: 0.35 * lim(v) })
+  },
+  header: (v) => knock({ modes: [140, 330], decay: 0.07, vol: 0.4 * lim(v), click: 1200, body: 120 }),
+  // Ball dropping on grass is soft and short.
+  bounce: (v) => {
+    knock({ modes: [118, 260], decay: 0.05, vol: 0.3 * lim(v), click: 900, body: 88 })
+    noise({ dur: 0.03, freq: 500, q: 0.8, vol: 0.12 * lim(v), type: 'lowpass' })
+  },
+  // Basketball on hardwood: hollow rubber "pung" that rings a little.
+  dribble: (v) => knock({ modes: [205, 415, 990], decay: 0.14, vol: 0.42 * lim(v), click: 2200, body: 150 }),
+  post: (v) => knock({ modes: STEEL, decay: 0.7, vol: 0.26 * lim(v), click: 5200 }),
+  rim: (v) => {
+    knock({ modes: [440, 1180, 2350, 3600], decay: 0.5, vol: 0.24 * lim(v), click: 4200 })
+    knock({ at: 0.05, modes: [470, 1250], decay: 0.2, vol: 0.08 * lim(v) })
+  },
+  board: (v) => knock({ modes: WOOD.map((f) => f * 0.75), decay: 0.12, vol: 0.32 * lim(v), click: 2000, body: 100 }),
+  // Ball bulging the goal net: a muffled thud followed by the mesh rustle.
+  net: () => {
+    knock({ modes: [90, 180], decay: 0.08, vol: 0.3, body: 80 })
+    slide(0.02, 0.38, 0.16)
+    noise({ at: 0.04, dur: 0.3, freq: 700, q: 0.6, vol: 0.12, type: 'lowpass' })
+  },
+  swish: () => {
+    noise({ dur: 0.22, freq: 2600, q: 0.5, vol: 0.22, type: 'highpass' })
+    slide(0.05, 0.25, 0.08)
+  },
+  whistle: (v) => whistle(0, 0.32, 0.16 * lim(v)),
+  whistleEnd: () => {
+    whistle(0, 0.28, 0.16)
+    whistle(0.42, 0.28, 0.16)
+    whistle(0.84, 0.9, 0.16)
+  },
+  cheer: (v) => crowd(0, 2.4, 0.3 * lim(v)),
+
   chip: () => {
     noise({ dur: 0.035, freq: 3200, q: 5, vol: 0.5 })
     noise({ at: 0.04, dur: 0.03, freq: 2800, q: 5, vol: 0.3 })
@@ -297,16 +403,53 @@ const SOUNDS: Record<SoundName, () => void> = {
 
 const lastPlayed = new Map<SoundName, number>()
 
-export function playSound(name: SoundName) {
+/** `intensity` (0-1) scales physical sounds like kicks and bounces by how hard the hit was. */
+export function playSound(name: SoundName, intensity = 1) {
   if (muted || typeof window === 'undefined') return
   // Collapse bursts (e.g. several state updates arriving in one poll) into one sound.
   const now = performance.now()
   if (now - (lastPlayed.get(name) ?? 0) < 120) return
   lastPlayed.set(name, now)
   try {
-    SOUNDS[name]()
+    SOUNDS[name](intensity)
   } catch {
     // Audio is a nicety; never let it break gameplay.
+  }
+}
+
+/** Looping stadium murmur under a match. Follows the mute switch; call the returned function to stop it. */
+export function startCrowdAmbience(level = 0.05) {
+  const ac = audio()
+  if (!ac || !room) return () => {}
+  const len = ac.sampleRate * 3
+  const buf = ac.createBuffer(1, len, ac.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1
+  const src = ac.createBufferSource()
+  src.buffer = buf
+  src.loop = true
+  const bp = ac.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.value = 620
+  bp.Q.value = 0.6
+  const g = ac.createGain()
+  g.gain.value = 0.0001
+  const swell = ac.createOscillator()
+  swell.frequency.value = 0.13
+  const swellDepth = ac.createGain()
+  swellDepth.gain.value = level * 0.35
+  swell.connect(swellDepth).connect(g.gain)
+  src.connect(bp).connect(g).connect(room)
+  const apply = () => g.gain.setTargetAtTime(muted ? 0.0001 : level, ac.currentTime, 0.4)
+  apply()
+  listeners.add(apply)
+  src.start()
+  swell.start()
+  return () => {
+    listeners.delete(apply)
+    g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.3)
+    src.stop(ac.currentTime + 1.2)
+    swell.stop(ac.currentTime + 1.2)
   }
 }
 

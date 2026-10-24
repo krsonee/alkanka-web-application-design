@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import NextImage from 'next/image'
-import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Loader2, Maximize2, Minimize2, Smartphone } from 'lucide-react'
+import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Loader2, Maximize2, Minimize2, Settings2, Smartphone, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TableBrand } from './table-brand'
 import type { DuelLink } from './duel-link'
-import { playSound } from '@/lib/sound'
+import { playSound, setSoundMuted, startCrowdAmbience, useSoundMuted, type SoundName } from '@/lib/sound'
 
 export type Sport = 'futbol' | 'basket'
 /** `bot`: solo vs AI. `host`: seat 0 runs physics and streams it. `guest`: seat 1 sends keys and renders the host's stream. */
@@ -22,11 +22,81 @@ const FOOT = HEAD_R + 30
 const BALL_R = 17
 const MATCH_SECONDS = 60
 const STEP_MS = 1000 / 60
+/** Golden-goal extra time played when regulation ends level. */
+const OVERTIME_SECONDS = 15
+/** Steps (3 s) a player may stand inside their own goal before being pushed out. */
+const CAMP_LIMIT = 180
+/** Steps (0.5 s) of holding kick for a full-power shot. */
+const CHARGE_MAX = 30
+/** Steps (15 s) the host waits for a rival who turned their phone upright. */
+const RIVAL_HOLD_STEPS = 15 * 60
 
-type Player = { x: number; y: number; vx: number; vy: number; face: 1 | -1; kick: number; run: number }
+type Player = {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  face: 1 | -1
+  kick: number
+  run: number
+  charge: number
+  power: number
+  camp: number
+}
 type Ball = { x: number; y: number; vx: number; vy: number; rot: number }
 type Keys = { left: boolean; right: boolean; jump: boolean; kick: boolean }
 const noKeys = (): Keys => ({ left: false, right: false, jump: false, kick: false })
+/** Sounds plus haptic pulses: `h0`/`h1` vibrate one seat's phone, `hb` vibrates both. */
+type EventName = SoundName | 'h0' | 'h1' | 'hb'
+type NetEvent = [EventName, number]
+type Emit = (name: EventName, v?: number) => void
+type Snap = { p1: Player; p2: Player; b: Ball }
+
+/* --------------------------- control preferences --------------------------- */
+
+type ControlPrefs = { size: 's' | 'm' | 'l'; opacity: 'low' | 'mid' | 'high'; haptics: boolean }
+const PREFS_KEY = 'alkanka:head-controls'
+const DEFAULT_PREFS: ControlPrefs = { size: 'm', opacity: 'mid', haptics: true }
+let prefs = DEFAULT_PREFS
+let prefsLoaded = false
+const prefListeners = new Set<() => void>()
+
+function readPrefs() {
+  if (!prefsLoaded && typeof window !== 'undefined') {
+    prefsLoaded = true
+    try {
+      prefs = { ...DEFAULT_PREFS, ...JSON.parse(window.localStorage.getItem(PREFS_KEY) ?? '{}') }
+    } catch {
+      prefs = DEFAULT_PREFS
+    }
+  }
+  return prefs
+}
+
+function setPrefs(patch: Partial<ControlPrefs>) {
+  prefs = { ...readPrefs(), ...patch }
+  window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+  prefListeners.forEach((l) => l())
+}
+
+function usePrefs() {
+  return useSyncExternalStore(
+    (l) => {
+      prefListeners.add(l)
+      return () => prefListeners.delete(l)
+    },
+    readPrefs,
+    () => DEFAULT_PREFS,
+  )
+}
+
+function playEvents(list: NetEvent[], seat: 0 | 1) {
+  for (const [name, v] of list) {
+    if (name === 'hb' || name === 'h0' || name === 'h1') {
+      if ((name === 'hb' || name === `h${seat}`) && readPrefs().haptics) navigator.vibrate?.(v)
+    } else playSound(name, v)
+  }
+}
 
 const GOAL_TOP = GROUND - 176
 const GOAL_DEPTH = 74
@@ -42,8 +112,8 @@ const TEAM = {
 }
 
 function resetPositions(p1: Player, p2: Player, ball: Ball, serveTo: 0 | 1) {
-  Object.assign(p1, { x: 230, y: GROUND - FOOT, vx: 0, vy: 0, face: 1, kick: 0 })
-  Object.assign(p2, { x: W - 230, y: GROUND - FOOT, vx: 0, vy: 0, face: -1, kick: 0 })
+  Object.assign(p1, { x: 230, y: GROUND - FOOT, vx: 0, vy: 0, face: 1, kick: 0, charge: 0, power: 1, camp: 0 })
+  Object.assign(p2, { x: W - 230, y: GROUND - FOOT, vx: 0, vy: 0, face: -1, kick: 0, charge: 0, power: 1, camp: 0 })
   Object.assign(ball, { x: W / 2, y: 150, vx: serveTo === 0 ? -1.2 : 1.2, vy: 0 })
 }
 
@@ -57,7 +127,15 @@ function stepPlayer(p: Player, k: Keys, sport: Sport) {
   if (Math.abs(p.vx) < 0.05) p.vx = 0
   if (target) p.face = target > 0 ? 1 : -1
   if (k.jump && onGround(p)) p.vy = -13.4
-  if (k.kick && p.kick <= 0) p.kick = 16
+  // Hold to charge, release to shoot: a tap is a normal shot, a half-second hold up to 35% harder.
+  if (k.kick) p.charge = Math.min(CHARGE_MAX, p.charge + 1)
+  else if (p.charge > 0) {
+    if (p.kick <= 0) {
+      p.kick = 16
+      p.power = 1 + 0.35 * (p.charge / CHARGE_MAX)
+    }
+    p.charge = 0
+  }
   if (p.kick > 0) p.kick--
   p.vy += G
   p.x += p.vx
@@ -69,6 +147,38 @@ function stepPlayer(p: Player, k: Keys, sport: Sport) {
   if (onGround(p) && p.vx) p.run += Math.abs(p.vx) * 0.12
   const margin = sport === 'futbol' ? GOAL_DEPTH * 0.55 : 24
   p.x = Math.max(HEAD_R + margin, Math.min(W - HEAD_R - margin, p.x))
+}
+
+/** Anti goal-camping: 3 s inside your own goal and the referee pushes you back out to open play. */
+function campRule(p: Player, side: 0 | 1, sport: Sport, emit: Emit) {
+  if (sport !== 'futbol') return
+  const out = side === 0 ? 1 : -1
+  if (p.camp >= CAMP_LIMIT) {
+    p.x += out * 7
+    p.vx = 0
+    if (side === 0 ? p.x > GOAL_DEPTH + 150 : p.x < W - GOAL_DEPTH - 150) p.camp = 0
+    return
+  }
+  const inGoal = side === 0 ? p.x < GOAL_DEPTH + HEAD_R * 0.6 : p.x > W - GOAL_DEPTH - HEAD_R * 0.6
+  if (inGoal) {
+    p.camp++
+    if (p.camp === CAMP_LIMIT) emit('whistle', 0.7)
+  } else p.camp = Math.max(0, p.camp - 2)
+}
+
+function blendPlayer(out: Player, a: Player, b: Player, t: number) {
+  Object.assign(out, b)
+  if (Math.hypot(b.x - a.x, b.y - a.y) > 150) return
+  out.x = a.x + (b.x - a.x) * t
+  out.y = a.y + (b.y - a.y) * t
+}
+
+function blendBall(out: Ball, a: Ball, b: Ball, t: number) {
+  Object.assign(out, b)
+  if (Math.hypot(b.x - a.x, b.y - a.y) > 150) return
+  out.x = a.x + (b.x - a.x) * t
+  out.y = a.y + (b.y - a.y) * t
+  out.rot = a.rot + (b.rot - a.rot) * t
 }
 
 function separatePlayers(a: Player, b: Player) {
@@ -115,7 +225,7 @@ function collideCircle(ball: Ball, cx: number, cy: number, r: number, pvx = 0, p
   return { nx, ny }
 }
 
-function stepBall(ball: Ball, sport: Sport) {
+function stepBall(ball: Ball, sport: Sport, emit: Emit) {
   ball.vy += 0.42
   ball.vx *= 0.996
   ball.x += ball.vx
@@ -126,23 +236,24 @@ function stepBall(ball: Ball, sport: Sport) {
     ball.vx *= 24 / sp
     ball.vy *= 24 / sp
   }
+  const speed = Math.min(24, sp)
   if (ball.y > GROUND - BALL_R) {
+    const impact = ball.vy
     ball.y = GROUND - BALL_R
     ball.vy *= sport === 'basket' ? -0.78 : -0.62
     ball.vx *= 0.97
     if (Math.abs(ball.vy) < 1.2) ball.vy = 0
+    if (impact > 2.5) emit(sport === 'basket' ? 'dribble' : 'bounce', impact / 14)
   }
   if (ball.y < BALL_R) {
     ball.y = BALL_R
     ball.vy = Math.abs(ball.vy) * 0.7
   }
-  if (ball.x < BALL_R) {
-    ball.x = BALL_R
-    ball.vx = Math.max(2, Math.abs(ball.vx) * 0.8)
-  }
-  if (ball.x > W - BALL_R) {
-    ball.x = W - BALL_R
-    ball.vx = -Math.max(2, Math.abs(ball.vx) * 0.8)
+  if (ball.x < BALL_R || ball.x > W - BALL_R) {
+    if (Math.abs(ball.vx) > 3) emit('bounce', Math.abs(ball.vx) / 16)
+    const side = ball.x < BALL_R ? 1 : -1
+    ball.x = side === 1 ? BALL_R : W - BALL_R
+    ball.vx = side * Math.max(2, Math.abs(ball.vx) * 0.8)
   }
   if (sport === 'futbol') {
     for (const side of [0, 1] as const) {
@@ -154,12 +265,14 @@ function stepBall(ball: Ball, sport: Sport) {
           ball.y = GOAL_TOP - BALL_R - 4
           ball.vy = -Math.abs(ball.vy) * 0.55
           ball.vx += side === 0 ? 0.6 : -0.6
+          if (speed > 2.5) emit('post', speed / 14)
         } else if (ball.y > GOAL_TOP) {
           ball.y = GOAL_TOP + BALL_R + 4
           ball.vy = Math.abs(ball.vy) * 0.5
+          if (speed > 2.5) emit('post', speed / 14)
         }
       }
-      collideCircle(ball, postX, GOAL_TOP, 5, 0, 0, 0.6)
+      if (collideCircle(ball, postX, GOAL_TOP, 5, 0, 0, 0.6) && speed > 2.5) emit('post', speed / 14)
     }
   } else {
     for (const side of [0, 1] as const) {
@@ -167,29 +280,36 @@ function stepBall(ball: Ball, sport: Sport) {
       if (ball.y > RIM_Y - 112 && ball.y < RIM_Y + 18 && Math.abs(ball.x - bx) < BALL_R + 5) {
         ball.x = side === 0 ? bx + BALL_R + 5 : bx - BALL_R - 5
         ball.vx = (side === 0 ? 1 : -1) * Math.max(1.5, Math.abs(ball.vx) * 0.7)
+        if (speed > 2) emit('board', speed / 14)
       }
       const rim = side === 0 ? rimLeft() : rimRight()
-      collideCircle(ball, rim.a, RIM_Y, 4, 0, 0, 0.55)
-      collideCircle(ball, rim.b, RIM_Y, 4, 0, 0, 0.55)
+      const rimHit = collideCircle(ball, rim.a, RIM_Y, 4, 0, 0, 0.55) || collideCircle(ball, rim.b, RIM_Y, 4, 0, 0, 0.55)
+      if (rimHit && speed > 2) emit('rim', speed / 14)
     }
   }
 }
 
-function hitBall(ball: Ball, p: Player, sport: Sport) {
+function hitBall(ball: Ball, p: Player, sport: Sport, emit: Emit, seat: 0 | 1) {
   const footX = p.x + p.face * 26
   const footY = p.y + FOOT - 10
   if (p.kick > 5 && Math.hypot(ball.x - footX, ball.y - footY) < BALL_R + 34) {
-    const power = sport === 'futbol' ? 16 : 11.5
+    const power = (sport === 'futbol' ? 16 : 11.5) * p.power
+    const lift = 1 + (p.power - 1) * 0.6
     ball.vx = p.face * power + p.vx * 0.4
-    ball.vy = sport === 'futbol' ? -8.5 : -15
+    ball.vy = (sport === 'futbol' ? -8.5 : -15) * lift
     ball.x = footX + p.face * (BALL_R + 4)
     p.kick = 5
+    emit('kick', 0.55 + (p.power - 1) * 1.3)
+    emit(seat === 0 ? 'h0' : 'h1', p.power > 1.2 ? 35 : 18)
+    p.power = 1
     return
   }
+  const rel = Math.hypot(ball.vx - p.vx, ball.vy - p.vy)
   const head = collideCircle(ball, p.x, p.y, HEAD_R, p.vx, p.vy, 0.9)
   if (head) {
     if (head.ny < -0.85 && Math.abs(ball.vx) < 1.2) ball.vx += p.face * 2.2
     if (!onGround(p) && head.ny < 0) ball.vy -= 1.5
+    if (rel > 3) emit('header', rel / 16)
     return
   }
   collideCircle(ball, p.x, p.y + HEAD_R + 14, 16, p.vx, p.vy, 0.5)
@@ -514,6 +634,28 @@ function drawPlayer(
   ctx.fill()
   ctx.fillStyle = '#fff'
   ctx.fillText(label, p.x, p.y - HEAD_R - 13)
+
+  if (p.charge > 3) {
+    const bw = 56
+    const fill = p.charge / CHARGE_MAX
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'
+    ctx.beginPath()
+    ctx.roundRect(p.x - bw / 2, p.y - HEAD_R - 36, bw, 7, 3.5)
+    ctx.fill()
+    ctx.fillStyle = fill >= 1 ? '#ff6b5a' : '#e5b93e'
+    ctx.beginPath()
+    ctx.roundRect(p.x - bw / 2, p.y - HEAD_R - 36, Math.max(7, bw * fill), 7, 3.5)
+    ctx.fill()
+  }
+  if (p.camp > 90 && p.camp < CAMP_LIMIT) {
+    ctx.font = '900 14px sans-serif'
+    ctx.lineWidth = 4
+    ctx.strokeStyle = '#111'
+    const warn = `KALEDEN ÇIK ${Math.ceil((CAMP_LIMIT - p.camp) / 60)}`
+    ctx.strokeText(warn, p.x, p.y - HEAD_R - 44)
+    ctx.fillStyle = '#ff6b5a'
+    ctx.fillText(warn, p.x, p.y - HEAD_R - 44)
+  }
 }
 
 function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport) {
@@ -578,7 +720,7 @@ function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport) {
   ctx.stroke()
 }
 
-function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], sc: [number, number], left: number) {
+function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], sc: [number, number], left: number, overtime: boolean) {
   const w = 300
   const x = W / 2 - w / 2
   ctx.fillStyle = 'rgba(8,10,14,0.88)'
@@ -604,8 +746,8 @@ function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], 
   ctx.fillStyle = '#ffffff'
   ctx.fillText(`${sc[0]} - ${sc[1]}`, W / 2, 29)
   ctx.font = '700 11px monospace'
-  ctx.fillStyle = left <= 10 ? '#ff6b5a' : '#e5b93e'
-  ctx.fillText(`0:${String(left).padStart(2, '0')}`, W / 2, 49)
+  ctx.fillStyle = overtime || left <= 10 ? '#ff6b5a' : '#e5b93e'
+  ctx.fillText(`${overtime ? 'ALTIN GOL ' : ''}0:${String(left).padStart(2, '0')}`, W / 2, 49)
 }
 
 function drawFlash(ctx: CanvasRenderingContext2D, text: string, t: number) {
@@ -649,14 +791,22 @@ function bindKey(keys: React.RefObject<Keys>, k: keyof Keys, onPress?: () => voi
 }
 
 const OVERLAY_BTN =
-  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground'
+  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground active:opacity-100'
 
 const OVERLAY_PAD =
   'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform'
-const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground'
+const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground opacity-100'
+
+const BTN_SIZE: Record<ControlPrefs['size'], string> = {
+  s: 'size-12 landscape:size-14',
+  m: 'size-14 landscape:size-16',
+  l: 'size-16 landscape:size-20',
+}
+const ICON_SIZE: Record<ControlPrefs['size'], string> = { s: 'size-6', m: 'size-7', l: 'size-8' }
+const BTN_OPACITY: Record<ControlPrefs['opacity'], string> = { low: 'opacity-40', mid: 'opacity-75', high: 'opacity-100' }
 
 /** One touch zone for left/right so sliding the thumb across switches direction without lifting it. */
-function DirectionPad({ k1, size, onPress }: { k1: React.RefObject<Keys>; size: string; onPress?: () => void }) {
+function DirectionPad({ k1, size, icon, onPress }: { k1: React.RefObject<Keys>; size: string; icon: string; onPress?: () => void }) {
   const [dir, setDir] = useState<-1 | 0 | 1>(0)
   const aim = (e: React.PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -690,10 +840,10 @@ function DirectionPad({ k1, size, onPress }: { k1: React.RefObject<Keys>; size: 
       onContextMenu={(e) => e.preventDefault()}
     >
       <span className={cn(OVERLAY_PAD, size, dir === -1 && OVERLAY_PAD_ON)} aria-hidden="true">
-        <ChevronLeft className="size-7" />
+        <ChevronLeft className={icon} />
       </span>
       <span className={cn(OVERLAY_PAD, size, dir === 1 && OVERLAY_PAD_ON)} aria-hidden="true">
-        <ChevronRight className="size-7" />
+        <ChevronRight className={icon} />
       </span>
     </div>
   )
@@ -704,7 +854,9 @@ function DirectionPad({ k1, size, onPress }: { k1: React.RefObject<Keys>; size: 
  * In full landscape they sit at the screen corners so they cover less of the goal mouths.
  */
 function OverlayControls({ k1, full, onPress }: { k1: React.RefObject<Keys>; full?: boolean; onPress?: () => void }) {
-  const size = 'size-14 landscape:size-16'
+  const p = usePrefs()
+  const size = cn(BTN_SIZE[p.size], BTN_OPACITY[p.opacity])
+  const icon = ICON_SIZE[p.size]
   return (
     <div
       className={cn(
@@ -713,15 +865,103 @@ function OverlayControls({ k1, full, onPress }: { k1: React.RefObject<Keys>; ful
           'pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]',
       )}
     >
-      <DirectionPad k1={k1} size={size} onPress={onPress} />
+      <DirectionPad k1={k1} size={size} icon={icon} onPress={onPress} />
       <div className="flex items-end gap-2.5">
         <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Zıpla" {...bindKey(k1, 'jump', onPress)}>
-          <ArrowBigUp className="size-7" aria-hidden="true" />
+          <ArrowBigUp className={icon} aria-hidden="true" />
         </button>
-        <button type="button" className={cn(OVERLAY_BTN, size, 'mb-5 border-primary/80')} aria-label="Şut" {...bindKey(k1, 'kick', onPress)}>
-          <Footprints className="size-7" aria-hidden="true" />
+        <button
+          type="button"
+          className={cn(OVERLAY_BTN, size, 'mb-5 border-primary/80')}
+          aria-label="Şut, basılı tutarak güç doldur"
+          {...bindKey(k1, 'kick', onPress)}
+        >
+          <Footprints className={icon} aria-hidden="true" />
         </button>
       </div>
+    </div>
+  )
+}
+
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: readonly (readonly [T, string])[]
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <div role="group" aria-label={label} className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
+        {options.map(([v, text]) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={value === v}
+            onClick={() => onChange(v)}
+            className={cn(
+              'rounded-md px-2 py-1.5 text-xs font-bold transition-colors',
+              value === v ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
+            )}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ToggleRow({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className="flex items-center justify-between gap-3 py-0.5 text-sm font-semibold text-foreground"
+    >
+      {label}
+      <span className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', on ? 'bg-primary' : 'bg-muted')}>
+        <span
+          className={cn(
+            'absolute left-0.5 top-0.5 size-4 rounded-full bg-background shadow transition-transform',
+            on && 'translate-x-4',
+          )}
+        />
+      </span>
+    </button>
+  )
+}
+
+const SIZE_OPTIONS = [['s', 'Küçük'], ['m', 'Orta'], ['l', 'Büyük']] as const
+const OPACITY_OPTIONS = [['low', 'Silik'], ['mid', 'Orta'], ['high', 'Net']] as const
+
+function ControlSettings({ pauses, onClose }: { pauses: boolean; onClose: () => void }) {
+  const p = usePrefs()
+  const muted = useSoundMuted()
+  return (
+    <div
+      role="dialog"
+      aria-label="Kontrol ayarları"
+      className="absolute left-2 top-12 z-30 flex max-h-[calc(100%-3.5rem)] w-60 flex-col gap-3 overflow-y-auto rounded-xl border border-primary/30 bg-card/95 p-3 text-card-foreground shadow-xl backdrop-blur-sm"
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-display text-sm font-black uppercase tracking-tight">Kontrol ayarları</p>
+        <button type="button" onClick={onClose} aria-label="Ayarları kapat" className="rounded-md p-1 text-muted-foreground hover:text-foreground">
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      <Segmented label="Tuş boyutu" value={p.size} options={SIZE_OPTIONS} onChange={(size) => setPrefs({ size })} />
+      <Segmented label="Tuş görünürlüğü" value={p.opacity} options={OPACITY_OPTIONS} onChange={(opacity) => setPrefs({ opacity })} />
+      <ToggleRow label="Titreşim" on={p.haptics} onChange={(haptics) => setPrefs({ haptics })} />
+      <ToggleRow label="Ses ve tribün" on={!muted} onChange={(on) => setSoundMuted(!on)} />
+      {pauses && <p className="text-xs leading-relaxed text-muted-foreground">Ayarlar açıkken maç durur.</p>}
     </div>
   )
 }
@@ -823,10 +1063,12 @@ export function HeadGame({
   const [started, setStarted] = useState(false)
   const [over, setOver] = useState(false)
   const [minimized, setMinimized] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [rivalHold, setRivalHold] = useState(false)
   const needRotate = touch && portrait && !over
   const fullLandscape = touch && !portrait && started && !over && !minimized
   const pausedRef = useRef(false)
-  pausedRef.current = needRotate
+  pausedRef.current = needRotate || (mode === 'bot' && settingsOpen)
 
   useEffect(() => {
     if (linkReady && !needRotate && !window.matchMedia(PHONE_PORTRAIT).matches) setStarted(true)
@@ -894,8 +1136,9 @@ export function HeadGame({
     }
     const homeImg = loadImg('/images/sprites/head-jako.png')
     const awayImg = loadImg('/images/sprites/head-rival.png')
-    const p1: Player = { x: 0, y: 0, vx: 0, vy: 0, face: 1, kick: 0, run: 0 }
-    const p2: Player = { x: 0, y: 0, vx: 0, vy: 0, face: -1, kick: 0, run: 0 }
+    const fresh = (face: 1 | -1): Player => ({ x: 0, y: 0, vx: 0, vy: 0, face, kick: 0, run: 0, charge: 0, power: 1, camp: 0 })
+    const p1 = fresh(1)
+    const p2 = fresh(-1)
     const ball: Ball = { x: 0, y: 0, vx: 0, vy: 0, rot: 0 }
     resetPositions(p1, p2, ball, 0)
     const sc: [number, number] = [0, 0]
@@ -905,6 +1148,7 @@ export function HeadGame({
     let acc = 0
     let elapsed = 0
     let ended = false
+    let overtime = false
     let prevBallY = ball.y
     let flash = ''
     let flashT = 0
@@ -912,31 +1156,65 @@ export function HeadGame({
     let anchor = { x: ball.x, y: ball.y }
     let left = MATCH_SECONDS
     let remoteKeys: Keys = noKeys()
+    let remotePaused = false
+    let rivalHoldSteps = 0
+    let shownHold = false
     let sentKeys = ''
     let frameNo = 0
+    let events: NetEvent[] = []
+    const emit: Emit = (name, v = 1) => {
+      events.push([name, v])
+    }
+    const seat: 0 | 1 = mode === 'guest' ? 1 : 0
+    // The guest renders one network interval behind, blending the two latest host frames so motion stays smooth.
+    let snapPrev: Snap | null = null
+    let snapNext: Snap | null = null
+    let snapAt = 0
+    let snapGap = STEP_MS
+    let crowdOn = true
+    const stopCrowd = startCrowdAmbience(sport === 'futbol' ? 0.05 : 0.035)
+    const quietCrowd = () => {
+      if (!crowdOn) return
+      crowdOn = false
+      stopCrowd()
+    }
+    const showHold = (v: boolean) => {
+      if (v === shownHold) return
+      shownHold = v
+      setRivalHold(v)
+    }
+    playEvents([['whistle', 1]], seat)
 
     if (mode !== 'bot' && linkRef.current) {
       linkRef.current.onMessage.current = (raw) => {
         const msg = raw as { t: string; [k: string]: unknown }
-        if (mode === 'host' && msg.t === 'k') remoteKeys = { ...noKeys(), ...(msg.k as Partial<Keys>) }
+        if (mode === 'host' && msg.t === 'k') {
+          remoteKeys = { ...noKeys(), ...(msg.k as Partial<Keys>) }
+          remotePaused = !!msg.pz
+        }
         if (mode !== 'guest') return
         if (msg.t === 's') {
-          Object.assign(p1, msg.p1)
-          Object.assign(p2, msg.p2)
-          Object.assign(ball, msg.b)
+          const now = performance.now()
+          const snap: Snap = { p1: msg.p1 as Player, p2: msg.p2 as Player, b: msg.b as Ball }
+          snapPrev = snapNext ?? snap
+          snapNext = snap
+          if (snapAt) snapGap = snapGap * 0.8 + Math.min(100, Math.max(8, now - snapAt)) * 0.2
+          snapAt = now
           const next = msg.sc as [number, number]
-          if (next[0] !== sc[0] || next[1] !== sc[1]) {
-            playSound('goal')
-            setAnnounce(`${next[0]} - ${next[1]}`)
-          }
+          if (next[0] !== sc[0] || next[1] !== sc[1]) setAnnounce(`${next[0]} - ${next[1]}`)
           sc[0] = next[0]
           sc[1] = next[1]
           left = msg.l as number
           flash = msg.f as string
           flashT = msg.ft as number
+          overtime = !!msg.ot
+          playEvents((msg.ev as NetEvent[] | undefined) ?? [], seat)
+          showHold(!!msg.pz)
         } else if (msg.t === 'end' && !ended) {
           const fin = msg.sc as [number, number]
           ended = true
+          quietCrowd()
+          playSound('whistleEnd')
           setOver(true)
           endRef.current({ for: fin[1], against: fin[0] })
         }
@@ -945,9 +1223,12 @@ export function HeadGame({
 
     function goal(scorer: 0 | 1, pts: number) {
       sc[scorer] += pts
-      playSound('goal')
+      emit(sport === 'futbol' ? 'net' : 'swish')
+      emit('whistle')
+      emit('cheer')
+      emit('hb', 80)
       setAnnounce(`${sc[0]} - ${sc[1]}`)
-      flash = sport === 'futbol' ? 'GOL!' : 'BASKET!'
+      flash = overtime ? 'ALTIN GOL!' : sport === 'futbol' ? 'GOL!' : 'BASKET!'
       flashT = 0
       pause = 80
       resetPositions(p1, p2, ball, scorer === 0 ? 1 : 0)
@@ -968,11 +1249,13 @@ export function HeadGame({
       elapsed += STEP_MS
       stepPlayer(p1, k1.current, sport)
       stepPlayer(p2, k2now, sport)
+      campRule(p1, 0, sport, emit)
+      campRule(p2, 1, sport, emit)
       separatePlayers(p1, p2)
       prevBallY = ball.y
-      stepBall(ball, sport)
-      hitBall(ball, p1, sport)
-      hitBall(ball, p2, sport)
+      stepBall(ball, sport, emit)
+      hitBall(ball, p1, sport, emit, 0)
+      hitBall(ball, p2, sport, emit, 1)
 
       // Unjam: a ball that barely moves while airborne (head-rest, crossbar, wedged against a wall) gets dropped back in.
       if (Math.hypot(ball.x - anchor.x, ball.y - anchor.y) > 8) {
@@ -1001,18 +1284,32 @@ export function HeadGame({
     function frame(now: number) {
       acc += Math.min(80, now - last)
       last = now
-      if (pausedRef.current) {
-        acc = 0
-        k1.current = noKeys()
-      }
       frameNo++
       const net = linkRef.current
+      // A rival who turns their phone upright freezes the match on both screens, for at most 15 s.
+      let rivalPaused = false
+      if (mode === 'host') {
+        const online = net?.status === 'open'
+        rivalPaused = online && remotePaused && rivalHoldSteps < RIVAL_HOLD_STEPS
+        rivalHoldSteps = online && remotePaused ? rivalHoldSteps + 1 : 0
+        showHold(rivalPaused)
+      }
+      if (pausedRef.current || rivalPaused) {
+        acc = 0
+        if (pausedRef.current) k1.current = noKeys()
+      }
       if (mode === 'guest') {
         acc = 0
-        const keys = JSON.stringify(k1.current)
+        const keys = JSON.stringify([k1.current, pausedRef.current])
         if (keys !== sentKeys || frameNo % 10 === 0) {
           sentKeys = keys
-          net?.send({ t: 'k', k: k1.current })
+          net?.send({ t: 'k', k: k1.current, pz: pausedRef.current })
+        }
+        if (snapPrev && snapNext) {
+          const t = Math.min(1, (now - snapAt) / snapGap)
+          blendPlayer(p1, snapPrev.p1, snapNext.p1, t)
+          blendPlayer(p2, snapPrev.p2, snapNext.p2, t)
+          blendBall(ball, snapPrev.b, snapNext.b, t)
         }
       } else {
         let steps = 0
@@ -1022,8 +1319,21 @@ export function HeadGame({
           steps++
         }
         if (steps === 5) acc = 0
-        left = Math.max(0, MATCH_SECONDS - Math.floor(elapsed / 1000))
-        if (mode === 'host') net?.send({ t: 's', p1, p2, b: ball, sc, l: left, f: flash, ft: flashT })
+        left = Math.max(0, MATCH_SECONDS + (overtime ? OVERTIME_SECONDS : 0) - Math.floor(elapsed / 1000))
+        if (!ended && left <= 0 && sc[0] === sc[1] && !overtime) {
+          overtime = true
+          left = OVERTIME_SECONDS
+          flash = 'UZATMA!'
+          flashT = 0
+          pause = 90
+          resetPositions(p1, p2, ball, Math.random() < 0.5 ? 0 : 1)
+          emit('whistle')
+        }
+        const out = events
+        events = []
+        playEvents(out, seat)
+        if (mode === 'host')
+          net?.send({ t: 's', p1, p2, b: ball, sc, l: left, f: flash, ft: flashT, ot: overtime, ev: out, pz: pausedRef.current })
       }
       const c = ctx!
       c.drawImage(bg, 0, 0)
@@ -1032,10 +1342,13 @@ export function HeadGame({
       drawPlayer(c, p2, TEAM.away, awayImg, namesRef.current[1])
       drawBall(c, ball, sport)
       drawGoalOrHoop(c, sport, true)
-      drawScoreboard(c, namesRef.current, sc, left)
+      drawScoreboard(c, namesRef.current, sc, left, overtime)
       if (flash) drawFlash(c, flash, flashT)
-      if (mode !== 'guest' && left <= 0 && !ended) {
+      // Golden goal ends the match once its celebration has played out.
+      if (mode !== 'guest' && !ended && (left <= 0 || (overtime && sc[0] !== sc[1] && !flash))) {
         ended = true
+        quietCrowd()
+        playSound('whistleEnd')
         if (mode === 'host') for (let i = 0; i < 3; i++) net?.send({ t: 'end', sc })
         setOver(true)
         endRef.current({ for: sc[0], against: sc[1] })
@@ -1052,6 +1365,7 @@ export function HeadGame({
     raf = requestAnimationFrame(frame)
     return () => {
       cancelAnimationFrame(raf)
+      quietCrowd()
       document.removeEventListener('visibilitychange', onVis)
     }
   }, [sport, mode, started])
@@ -1097,17 +1411,39 @@ export function HeadGame({
             <button
               type="button"
               onClick={() => setMinimized(true)}
-              className="absolute left-2 top-2 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm"
+              className="absolute left-2 top-2 z-20 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm"
               aria-label="Tam ekrandan çık"
             >
               <Minimize2 className="size-4" aria-hidden="true" />
             </button>
           )}
+          {!over && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((o) => !o)}
+              aria-expanded={settingsOpen}
+              aria-label="Kontrol ayarları"
+              className={cn(
+                'absolute top-2 z-20 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm',
+                fullLandscape ? 'left-13' : 'left-2',
+              )}
+            >
+              <Settings2 className="size-4" aria-hidden="true" />
+            </button>
+          )}
+          {settingsOpen && !over && <ControlSettings pauses={mode === 'bot'} onClose={() => setSettingsOpen(false)} />}
+          {rivalHold && !over && (
+            <div role="status" className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+              <p className="text-pretty rounded-full bg-background/85 px-4 py-2 text-center text-xs font-bold text-foreground shadow-md backdrop-blur-sm">
+                Rakibin telefonu dik çevirdi, maç bekliyor. 15 sn içinde dönmezse maç devam eder.
+              </p>
+            </div>
+          )}
         </div>
         {fullLandscape && <OverlayControls k1={k1} full onPress={enterFullscreen} />}
       </div>
       <p className="hidden text-center text-xs text-muted-foreground lg:block">
-        A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut
+        A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut (basılı tut, güçlü şut)
       </p>
     </div>
   )
