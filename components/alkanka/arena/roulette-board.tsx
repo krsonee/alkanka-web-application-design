@@ -277,7 +277,7 @@ function HorizontalLayout({ c, fill }: { c: Ctx; fill?: boolean }) {
           Array.from({ length: 12 }, (_, i) => {
             const n = hNum(i, r)
             return (
-              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={cn(H_LINE, fill ? 'text-sm tabular-nums' : 'h-14 text-sm')}>
+              <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className={cn(H_LINE, fill ? 'text-base font-bold tabular-nums sm:text-lg' : 'h-14 text-base font-bold')}>
                 {n}
               </Cell>
             )
@@ -294,14 +294,14 @@ function HorizontalLayout({ c, fill }: { c: Ctx; fill?: boolean }) {
       </div>
       <div className="col-start-2 grid grid-cols-3">
         {[1, 2, 3].map((d) => (
-          <Cell key={d} c={c} kind="dozen" value={d} className={cn(H_LINE, fill ? 'text-xs' : 'h-11 text-sm')}>
+          <Cell key={d} c={c} kind="dozen" value={d} className={cn(H_LINE, fill ? 'text-sm font-semibold' : 'h-11 text-sm')}>
             {d}. 12
           </Cell>
         ))}
       </div>
       <div className="col-start-2 grid grid-cols-6">
         {OUTSIDE.map((o) => (
-          <Cell key={o.kind} c={c} kind={o.kind} className={cn(H_LINE, fill ? 'text-xs' : 'h-11 text-sm')}>
+          <Cell key={o.kind} c={c} kind={o.kind} className={cn(H_LINE, fill ? 'text-sm font-semibold' : 'h-11 text-sm')}>
             {o.text}
           </Cell>
         ))}

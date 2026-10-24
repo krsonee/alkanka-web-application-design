@@ -886,9 +886,9 @@ const OVERLAY_PAD =
 const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground opacity-100'
 
 const BTN_SIZE: Record<ControlPrefs['size'], string> = {
-  s: 'size-12 landscape:size-14',
-  m: 'size-14 landscape:size-16',
-  l: 'size-16 landscape:size-20',
+  s: 'size-14 landscape:size-16',
+  m: 'size-16 landscape:size-20',
+  l: 'size-20 landscape:size-24',
 }
 const ICON_SIZE: Record<ControlPrefs['size'], string> = { s: 'size-6', m: 'size-7', l: 'size-8' }
 const BTN_OPACITY: Record<ControlPrefs['opacity'], string> = { low: 'opacity-40', mid: 'opacity-75', high: 'opacity-100' }
@@ -1545,7 +1545,12 @@ export function HeadGame({
           {!fullLandscape && <OverlayControls k1={k1} />}
           <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
           {mode !== 'bot' && !over && (!started || linkLost) && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 text-center backdrop-blur-sm">
+            <div
+              className={cn(
+                'flex flex-col items-center justify-center gap-2 text-center',
+                touch && !portrait && !started ? 'fixed inset-0 z-[80] bg-background' : 'absolute inset-0 bg-background/80 backdrop-blur-sm',
+              )}
+            >
               <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
               <p className="font-semibold text-foreground">{linkLost ? 'Bağlantı koptu, yeniden bağlanılıyor…' : 'Rakibine bağlanılıyor…'}</p>
               <p className="max-w-xs text-xs text-muted-foreground">

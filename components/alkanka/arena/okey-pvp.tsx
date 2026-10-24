@@ -95,7 +95,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Oyuncuların elleri gizli, atılan taşlar canlı görünür.
         </p>
       )}
-      <div className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl sm:p-3">
+      <div data-ls-main="half" className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl sm:p-3">
         <div className="relative flex min-h-72 flex-col justify-between gap-3 rounded-xl bg-felt p-2 sm:min-h-96 sm:p-5">
           <TableBrand />
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-15">

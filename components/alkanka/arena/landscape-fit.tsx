@@ -59,23 +59,43 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     }
     const i = inner.current
     if (!i) return
+    let frame = 0
     const measure = () => {
       const availW = window.innerWidth - 16
       const availH = window.innerHeight - TOOLBAR_H - 12
-      const width = Math.min(availW, DESIGN_WIDTH)
-      const naturalH = i.scrollHeight
-      if (!naturalH) return
-      const next = Math.min(1, availH / naturalH, availW / width)
-      setScale(next)
-      setBox({ w: width * next, h: naturalH * next })
+      const split = !!i.querySelector(':scope > [data-ls-main], :scope > * > [data-ls-main], [data-ls-wide]')
+      // Split layouts (table left, controls right) want the full width; stacked ones read best narrower.
+      const candidates = split
+        ? [availW, availW * 1.15, availW * 1.3, availW * 1.5]
+        : [Math.min(availW, DESIGN_WIDTH), availW * 0.85, availW, availW * 1.2]
+      const prevWidth = i.style.width
+      let best = { w: candidates[0], h: 0, s: 0 }
+      for (const w of candidates) {
+        i.style.width = `${w}px`
+        const h = i.scrollHeight
+        if (!h) continue
+        const s = Math.min(1, availH / h, availW / w)
+        if (s > best.s + 0.01) best = { w, h, s }
+      }
+      i.style.width = prevWidth
+      if (!best.h) return
+      setScale(best.s)
+      setBox((cur) =>
+        cur && Math.abs(cur.w - best.w * best.s) < 1 && Math.abs(cur.h - best.h * best.s) < 1 ? cur : { w: best.w * best.s, h: best.h * best.s },
+      )
+    }
+    const schedule = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measure)
     }
     measure()
-    const ro = new ResizeObserver(measure)
+    const ro = new ResizeObserver(schedule)
     ro.observe(i)
-    window.addEventListener('resize', measure)
+    window.addEventListener('resize', schedule)
     return () => {
+      cancelAnimationFrame(frame)
       ro.disconnect()
-      window.removeEventListener('resize', measure)
+      window.removeEventListener('resize', schedule)
     }
   }, [fullscreen])
 
@@ -118,8 +138,8 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
         <div style={fullscreen && box ? { width: box.w, height: box.h } : undefined}>
           <div
             ref={inner}
-            className={cn(fullscreen && 'origin-top-left')}
-            style={fullscreen ? { width: Math.min(DESIGN_WIDTH, (box?.w ?? DESIGN_WIDTH * scale) / scale), transform: `scale(${scale})` } : undefined}
+            className={cn(fullscreen && 'ls-split origin-top-left')}
+            style={fullscreen ? { width: box ? box.w / scale : DESIGN_WIDTH, transform: `scale(${scale})` } : undefined}
           >
             {children}
           </div>

@@ -488,7 +488,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           document.body,
         )}
       <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
-      <div className="tavla-wood relative rounded-2xl p-1.5 sm:p-3">
+      <div data-ls-main className="tavla-wood relative rounded-2xl p-1.5 sm:p-3">
       <TableBrand center={false} corners={false} jako={false} />
       <div className="flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
         <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-6">

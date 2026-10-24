@@ -240,7 +240,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   ]
 
   return (
-    <div className="@container/mono">
+    <div data-ls-wide className="@container/mono">
       <div className="flex flex-col gap-3 @3xl/mono:grid @3xl/mono:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] @3xl/mono:grid-rows-[auto_auto_1fr] @3xl/mono:items-start @3xl/mono:gap-4">
         <section aria-label="Oyuncular" className="flex flex-col gap-2 @3xl/mono:col-start-2 @3xl/mono:row-start-1">
           {remote.spectator && (
@@ -282,7 +282,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               {zoom ? 'Uzaklaş' : 'Yakınlaş'}
             </button>
             <div className={cn('overflow-auto overscroll-contain rounded-md', zoom && 'max-h-[75svh]')}>
-              <div className={cn('@container mx-auto', zoom ? 'w-[180%] max-w-none' : 'w-full max-w-[min(100%,calc(100svh-7rem))]')}>
+              <div className={cn('ls-board @container mx-auto', zoom ? 'w-[180%] max-w-none' : 'w-full max-w-[min(100%,calc(100svh-7rem))]')}>
                 <div
                   className="relative grid aspect-square w-full grid-cols-[1.6fr_repeat(9,1fr)_1.6fr] grid-rows-[1.6fr_repeat(9,1fr)_1.6fr] gap-px overflow-hidden rounded-md shadow-[inset_0_0_0_2px_oklch(0.22_0.02_160)]"
                   style={{ background: INK }}
