@@ -51,7 +51,8 @@ const noKeys = (): Keys => ({ left: false, right: false, jump: false, kick: fals
 type EventName = SoundName | 'h0' | 'h1' | 'hb'
 type NetEvent = [EventName, number]
 type Emit = (name: EventName, v?: number) => void
-type Snap = { p1: Player; p2: Player; b: Ball }
+type RemoteMe = Pick<Player, 'x' | 'y' | 'vx' | 'vy' | 'face' | 'kick' | 'power'> & { kn: number }
+const clamp = (v: unknown, lo: number, hi: number) => Math.max(lo, Math.min(hi, Number(v) || 0))
 
 /* --------------------------- control preferences --------------------------- */
 
@@ -1249,7 +1250,21 @@ export function HeadGame({
     let remotePaused = false
     let rivalHoldSteps = 0
     let shownHold = false
-    let sentKeys = ''
+    // Host: the guest moves its own player locally and reports the result, so their controls never wait on the network.
+    let remoteMe: RemoteMe | null = null
+    let remoteQ = -1
+    let hostKn = 0
+    let resets = 0
+    // Guest: jitter buffer of host frames, rendered a short adaptive delay behind the host clock.
+    const buf: { ht: number; p1: Player; b: Ball }[] = []
+    let clockOffset: number | null = null
+    let jitter = 0
+    let lastHt = -Infinity
+    let guestResets = -1
+    let hostFrozen = false
+    let hostPause = false
+    let kickNo = 0
+    let sendQ = 0
     let frameNo = 0
     let events: NetEvent[] = []
     let shot: { seat: 0 | 1; x: number } | null = null
@@ -1262,11 +1277,6 @@ export function HeadGame({
       events.push([name, v])
     }
     const seat: 0 | 1 = mode === 'guest' ? 1 : 0
-    // The guest renders one network interval behind, blending the two latest host frames so motion stays smooth.
-    let snapPrev: Snap | null = null
-    let snapNext: Snap | null = null
-    let snapAt = 0
-    let snapGap = STEP_MS
     let crowdOn = true
     const stopCrowd = startCrowdAmbience(sport === 'futbol' ? 0.05 : 0.035)
     const quietCrowd = () => {
@@ -1285,17 +1295,37 @@ export function HeadGame({
       linkRef.current.onMessage.current = (raw) => {
         const msg = raw as { t: string; [k: string]: unknown }
         if (mode === 'host' && msg.t === 'k') {
+          const q = typeof msg.q === 'number' ? msg.q : -1
+          // Relay requests can overlap; drop key packets older than the newest one (a reloaded guest restarts at 0).
+          if (q >= 0 && q <= remoteQ && remoteQ - q < 600) return
+          remoteQ = q
           remoteKeys = { ...noKeys(), ...(msg.k as Partial<Keys>) }
           remotePaused = !!msg.pz
+          if (msg.me && msg.rs === resets) remoteMe = msg.me as RemoteMe
         }
         if (mode !== 'guest') return
         if (msg.t === 's') {
           const now = performance.now()
-          const snap: Snap = { p1: msg.p1 as Player, p2: msg.p2 as Player, b: msg.b as Ball }
-          snapPrev = snapNext ?? snap
-          snapNext = snap
-          if (snapAt) snapGap = snapGap * 0.8 + Math.min(320, Math.max(8, now - snapAt)) * 0.2
-          snapAt = now
+          const ht = Number(msg.ht) || 0
+          const sample = now - ht
+          if (clockOffset === null || sample < clockOffset) clockOffset = sample
+          else clockOffset += (sample - clockOffset) * 0.002
+          jitter = Math.max(sample - clockOffset, jitter * 0.98)
+          const entry = { ht, p1: msg.p1 as Player, b: msg.b as Ball }
+          let i = buf.length
+          while (i > 0 && buf[i - 1].ht > ht) i--
+          buf.splice(i, 0, entry)
+          if (buf.length > 40) buf.splice(0, buf.length - 40)
+          if (ht < lastHt) return
+          lastHt = ht
+          hostFrozen = !!msg.hz
+          hostPause = !!msg.pa
+          const hostMe = msg.p2 as Player
+          // After a goal or reset the host's word wins; otherwise only a large drift snaps the local player back.
+          if (msg.rs !== guestResets || Math.hypot(hostMe.x - p2.x, hostMe.y - p2.y) > 260) {
+            guestResets = msg.rs as number
+            Object.assign(p2, hostMe)
+          }
           const next = msg.sc as [number, number]
           if (next[0] !== sc[0] || next[1] !== sc[1]) setAnnounce(`${next[0]} - ${next[1]}`)
           if (next[0] > sc[0]) netShake[1] = 40
@@ -1332,6 +1362,7 @@ export function HeadGame({
       shot = null
       // The conceding side gets the ball, like possession changing after a score.
       resetPositions(p1, p2, ball, scorer === 0 ? 1 : 0)
+      resets++
     }
 
     function basket(scorer: 0 | 1, hoop: 0 | 1, rim: { a: number; b: number }) {
@@ -1353,8 +1384,26 @@ export function HeadGame({
         if (flashT > 70) flash = ''
       }
       let k2now: Keys
-      if (mode === 'host' && linkRef.current?.status === 'open') k2now = remoteKeys
-      else {
+      if (mode === 'host' && linkRef.current?.status === 'open') {
+        // Kicks arrive as a counter in the guest's own state, so a quick tap lost between packets still lands.
+        k2now = { ...remoteKeys, kick: false }
+        p2.charge = 0
+        const me = remoteMe
+        if (me && pause <= 0) {
+          remoteMe = null
+          const margin = sport === 'futbol' ? GOAL_DEPTH * 0.55 : 24
+          p2.x = clamp(me.x, HEAD_R + margin, W - HEAD_R - margin)
+          p2.y = clamp(me.y, -400, GROUND - FOOT)
+          p2.vx = clamp(me.vx, -7, 7)
+          p2.vy = clamp(me.vy, -14, 30)
+          p2.face = me.face === -1 ? -1 : 1
+          if (me.kn !== hostKn) {
+            hostKn = me.kn
+            p2.kick = clamp(me.kick, 8, 16)
+            p2.power = clamp(me.power, 1, 1.35)
+          }
+        }
+      } else {
         if (botWait-- <= 0) {
           const level = readPrefs().bot
           botK = botKeys(p2, ball, sport, level)
@@ -1394,6 +1443,7 @@ export function HeadGame({
           clockSeat = -1
           clockSteps = 0
           resetPositions(p1, p2, ball, holder === 0 ? 1 : 0)
+          resets++
           return
         }
       }
@@ -1441,18 +1491,39 @@ export function HeadGame({
         if (pausedRef.current) k1.current = noKeys()
       }
       if (mode === 'guest') {
-        acc = 0
-        const keys = JSON.stringify([k1.current, pausedRef.current])
-        if (keys !== sentKeys || frameNo % 10 === 0) {
-          sentKeys = keys
-          net?.send({ t: 'k', k: k1.current, pz: pausedRef.current })
+        // Own player: simulated right here with zero input lag; the host takes this state as the truth.
+        if (pausedRef.current || hostFrozen) acc = 0
+        let steps = 0
+        while (acc >= STEP_MS && steps < 5) {
+          const before = p2.kick
+          stepPlayer(p2, hostPause ? noKeys() : k1.current, sport)
+          campRule(p2, 1, sport, () => {})
+          if (before <= 0 && p2.kick > 0) kickNo++
+          acc -= STEP_MS
+          steps++
         }
-        if (snapPrev && snapNext) {
-          const t = Math.min(1.15, (now - snapAt) / snapGap)
-          blendPlayer(p1, snapPrev.p1, snapNext.p1, t)
-          blendPlayer(p2, snapPrev.p2, snapNext.p2, t)
-          blendBall(ball, snapPrev.b, snapNext.b, t)
+        if (steps === 5) acc = 0
+        net?.send({
+          t: 'k',
+          q: sendQ++,
+          k: k1.current,
+          pz: pausedRef.current,
+          rs: guestResets,
+          me: { x: p2.x, y: p2.y, vx: p2.vx, vy: p2.vy, face: p2.face, kick: p2.kick, power: p2.power, kn: kickNo },
+        })
+        // Rival and ball: replayed from the jitter buffer a little behind the host clock, so bursty packets still look smooth.
+        if (buf.length && clockOffset !== null) {
+          const delay = Math.min(350, Math.max(45, jitter + 20))
+          const target = now - clockOffset - delay
+          while (buf.length > 2 && buf[1].ht <= target) buf.shift()
+          const a = buf[0]
+          const b = buf[1] ?? a
+          const t = b.ht > a.ht ? Math.max(0, Math.min(1, (target - a.ht) / (b.ht - a.ht))) : 1
+          blendPlayer(p1, a.p1, b.p1, t)
+          blendBall(ball, a.b, b.b, t)
         }
+        const ghost = { ...p1 }
+        separatePlayers(ghost, p2)
       } else {
         let steps = 0
         while (acc >= STEP_MS && steps < 5) {
@@ -1469,13 +1540,30 @@ export function HeadGame({
           flashT = 0
           pause = 90
           resetPositions(p1, p2, ball, Math.random() < 0.5 ? 0 : 1)
+          resets++
           emit('whistle')
         }
         const out = events
         events = []
         playEvents(out, seat)
         if (mode === 'host')
-          net?.send({ t: 's', p1, p2, b: ball, sc, l: left, f: flash, ft: flashT, ot: overtime, ev: out, pz: pausedRef.current })
+          net?.send({
+            t: 's',
+            ht: now,
+            rs: resets,
+            pa: pause > 0,
+            hz: pausedRef.current || rivalPaused,
+            p1,
+            p2,
+            b: ball,
+            sc,
+            l: left,
+            f: flash,
+            ft: flashT,
+            ot: overtime,
+            ev: out,
+            pz: pausedRef.current,
+          })
       }
       if (netShake[0] > 0) netShake[0]--
       if (netShake[1] > 0) netShake[1]--

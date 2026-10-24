@@ -86,22 +86,28 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     let relayMode = false
     let relayFails = 0
     let relayHeard = false
-    let relayBusy = false
+    let relayBusy = 0
     let relayTimer: ReturnType<typeof setInterval> | null = null
     let outbox: { t?: string }[] = []
     const COALESCE = new Set(['s', 'k', '__hi'])
 
     const queue = (msg: unknown) => {
-      const m = msg as { t?: string }
-      if (m?.t && COALESCE.has(m.t)) outbox = outbox.filter((o) => o.t !== m.t)
+      let m = msg as { t?: string; ev?: unknown[] }
+      if (m?.t && COALESCE.has(m.t)) {
+        // Only the newest frame travels, but sound/haptic events from the frames it replaces ride along.
+        const old = outbox.find((o) => o.t === m.t) as { ev?: unknown[] } | undefined
+        if (old?.ev?.length) m = { ...m, ev: [...old.ev, ...(m.ev ?? [])].slice(-24) }
+        outbox = outbox.filter((o) => o.t !== m.t)
+      }
       outbox.push(m)
       if (outbox.length > 20) outbox = outbox.slice(-20)
     }
     relaySend.current = queue
 
     const relayTick = async () => {
-      if (!alive || relayBusy) return
-      relayBusy = true
+      // Two requests in flight halve the gap between frames when each round trip is slow.
+      if (!alive || relayBusy >= 2) return
+      relayBusy++
       if (!relayHeard) queue({ t: '__hi' })
       const batch = outbox
       outbox = []
@@ -124,7 +130,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
         relayFails++
       }
       if (relayFails === RELAY_FAILS_LOST && relayHeard && alive) setStatus('lost')
-      relayBusy = false
+      relayBusy--
     }
 
     const startRelay = () => {
