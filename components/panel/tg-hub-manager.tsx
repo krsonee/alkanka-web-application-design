@@ -189,7 +189,7 @@ function ChatChip({ kind, id, label }: { kind: 'group' | 'log' | 'staff' | 'spon
 function RepairCard() {
   const a = useAction()
   return (
-    <Card title="Sistem kontrolü" hint="Bir botu silip yeniden eklediysen ya da bir bölüm çalışmıyorsa önce buna bas. Silinmiş botlara bakan ayarları temizler, yanlış yere bakan webhook'ları düzeltir.">
+    <Card title="Sistem kontrolü" hint="Bir botu silip yeniden eklediysen ya da bir bölüm çalışm��yorsa önce buna bas. Silinmiş botlara bakan ayarları temizler, yanlış yere bakan webhook'ları düzeltir.">
       <div className="flex flex-wrap gap-2">
         <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => repairTelegramAction())}>
           {a.pending ? 'Kontrol ediliyor…' : 'Kontrol et ve onar'}
@@ -266,7 +266,7 @@ function GuardSection({ d }: { d: TgHubData }) {
       <Card title="Güvenlik (saldırı koruması)">
         <div className="grid gap-2 md:grid-cols-2">
           <Toggle label="Yeni gelene doğrulama (captcha)" hint="Katılan kişi 2 dakika içinde butona basmazsa atılır. Botları durdurur." checked={g.captcha} onChange={(v) => set({ captcha: v })} />
-          <Toggle label="Bilinen spam hesap kontrolü" hint="Dünya ��apındaki spam listesindeki hesaplar girer girmez banlanır." checked={g.casCheck} onChange={(v) => set({ casCheck: v })} />
+          <Toggle label="Bilinen spam hesap kontrolü" hint="Dünya çapındaki spam listesindeki hesaplar girer girmez banlanır." checked={g.casCheck} onChange={(v) => set({ casCheck: v })} />
           <Toggle label="Sahte yönetici koruması" hint="Adında Alkanka, admin, destek geçen ve yönetici taklidi yapan hesaplar engellenir." checked={g.impersonation} onChange={(v) => set({ impersonation: v })} />
           <Toggle label="Katıldı/ayrıldı yazılarını sil" checked={g.cleanService} onChange={(v) => set({ cleanService: v })} />
         </div>
