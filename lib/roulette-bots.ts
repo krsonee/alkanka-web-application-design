@@ -1,9 +1,27 @@
 import { NAMES, SUFFIX } from '@/lib/ambient-tables'
 import { RL_BET_MS, type RouletteBet } from '@/lib/casino'
 
-/** The table is topped up with house players until it holds about this many seats. */
-const TARGET_MIN = 9
-const TARGET_SPREAD = 8
+/** Average seats at each Istanbul hour (0-23): empty before dawn, peaks in the evening. */
+const SEATS_BY_HOUR = [9, 6, 3, 1.2, 0.4, 0.3, 0.8, 1.6, 2.5, 3.5, 4.5, 5.5, 6.5, 7, 7, 7.5, 8.5, 9.5, 11, 13, 15, 16, 15, 12.5]
+const ISTANBUL_OFFSET_MS = 3 * 60 * 60 * 1000
+
+/** Expected seat count for the current Istanbul time, interpolated between hours so the crowd changes gradually. */
+function expectedSeats(nowMs: number) {
+  const local = new Date(nowMs + ISTANBUL_OFFSET_MS)
+  const hour = local.getUTCHours()
+  const t = local.getUTCMinutes() / 60
+  const base = SEATS_BY_HOUR[hour] * (1 - t) + SEATS_BY_HOUR[(hour + 1) % 24] * t
+  const day = local.getUTCDay()
+  const weekend = day === 0 || day === 6 || (day === 5 && hour >= 18)
+  return base * (weekend ? 1.2 : 1)
+}
+
+function seatTarget(r: () => number, nowMs: number) {
+  const expected = expectedSeats(nowMs)
+  if (expected < 2 && r() > expected / 2) return 0
+  const jitter = 0.7 + r() * 0.6
+  return Math.max(0, Math.round(expected * jitter))
+}
 
 export type RouletteBot = { name: string; bets: RouletteBet[]; total: number; joinsAtMs: number }
 
@@ -36,9 +54,9 @@ function botBet(r: () => number, highRoller: boolean): RouletteBet {
  * House players for one round. Seeded by the round id so every viewer sees the same table, and they never touch
  * balances or the database. Real players keep their seats; bots only fill what is left up to the target size.
  */
-export function roundBots(roundId: number, realCount: number, taken: Set<string>): RouletteBot[] {
+export function roundBots(roundId: number, realCount: number, taken: Set<string>, nowMs = Date.now()): RouletteBot[] {
   const r = rng(roundId * 2654435761)
-  const target = TARGET_MIN + Math.floor(r() * TARGET_SPREAD)
+  const target = seatTarget(r, nowMs)
   const count = Math.max(0, target - realCount)
   const used = new Set(taken)
   const bots: RouletteBot[] = []
