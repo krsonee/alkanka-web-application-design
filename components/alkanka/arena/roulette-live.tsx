@@ -514,10 +514,10 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
                 ref={wheelRef}
                 className={cn(
                   'relative aspect-square shrink-0 transition-[width] duration-500 ease-out lg:w-72',
-                  betting ? 'w-32 sm:w-56' : 'w-64 sm:w-72',
-                )}
-              >
-                <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />
+  betting ? 'w-32 sm:w-56' : 'w-[min(20rem,86vw)] sm:w-72',
+  )}
+  >
+  <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} compact={betting} />
                 {showWin && <WinBadge n={number} />}
               </div>
               <div className="flex w-full min-w-0 flex-1 flex-col gap-3">
