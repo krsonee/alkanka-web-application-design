@@ -627,12 +627,19 @@ function drawFlash(ctx: CanvasRenderingContext2D, text: string, t: number) {
 
 /* ------------------------------ controls ------------------------------ */
 
-function bindKey(keys: React.RefObject<Keys>, k: keyof Keys) {
+/** Hides the browser bars on Android once the player touches a control in landscape (needs a user gesture). */
+function enterFullscreen() {
+  if (document.fullscreenElement || !window.matchMedia('(pointer: coarse) and (orientation: landscape)').matches) return
+  document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {})
+}
+
+function bindKey(keys: React.RefObject<Keys>, k: keyof Keys, onPress?: () => void) {
   return {
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault()
       e.currentTarget.setPointerCapture(e.pointerId)
       keys.current[k] = true
+      onPress?.()
     },
     onPointerUp: () => (keys.current[k] = false),
     onPointerCancel: () => (keys.current[k] = false),
@@ -644,27 +651,74 @@ function bindKey(keys: React.RefObject<Keys>, k: keyof Keys) {
 const OVERLAY_BTN =
   'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground'
 
+const OVERLAY_PAD =
+  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform'
+const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground'
+
+/** One touch zone for left/right so sliding the thumb across switches direction without lifting it. */
+function DirectionPad({ k1, size, onPress }: { k1: React.RefObject<Keys>; size: string; onPress?: () => void }) {
+  const [dir, setDir] = useState<-1 | 0 | 1>(0)
+  const aim = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const right = e.clientX > r.left + r.width / 2
+    k1.current.left = !right
+    k1.current.right = right
+    setDir(right ? 1 : -1)
+  }
+  const release = () => {
+    k1.current.left = false
+    k1.current.right = false
+    setDir(0)
+  }
+  return (
+    <div
+      role="group"
+      aria-label="Sola ve sağa hareket"
+      className="pointer-events-auto flex touch-none select-none gap-2.5"
+      onPointerDown={(e) => {
+        e.preventDefault()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        aim(e)
+        onPress?.()
+      }}
+      onPointerMove={(e) => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) aim(e)
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <span className={cn(OVERLAY_PAD, size, dir === -1 && OVERLAY_PAD_ON)} aria-hidden="true">
+        <ChevronLeft className="size-7" />
+      </span>
+      <span className={cn(OVERLAY_PAD, size, dir === 1 && OVERLAY_PAD_ON)} aria-hidden="true">
+        <ChevronRight className="size-7" />
+      </span>
+    </div>
+  )
+}
+
 /**
- * Translucent buttons drawn over the pitch on touch screens.
- * Arrows bottom-left, jump/kick bottom-right.
+ * Translucent buttons on touch screens: arrows bottom-left, jump/kick bottom-right.
+ * In full landscape they sit at the screen corners so they cover less of the goal mouths.
  */
-function OverlayControls({ k1 }: { k1: React.RefObject<Keys> }) {
+function OverlayControls({ k1, full, onPress }: { k1: React.RefObject<Keys>; full?: boolean; onPress?: () => void }) {
   const size = 'size-14 landscape:size-16'
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-2.5 lg:hidden">
-      <div className="flex gap-2.5">
-        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Sola" {...bindKey(k1, 'left')}>
-          <ChevronLeft className="size-7" aria-hidden="true" />
-        </button>
-        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Sağa" {...bindKey(k1, 'right')}>
-          <ChevronRight className="size-7" aria-hidden="true" />
-        </button>
-      </div>
+    <div
+      className={cn(
+        'pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between p-2.5 lg:hidden',
+        full &&
+          'pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]',
+      )}
+    >
+      <DirectionPad k1={k1} size={size} onPress={onPress} />
       <div className="flex items-end gap-2.5">
-        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Zıpla" {...bindKey(k1, 'jump')}>
+        <button type="button" className={cn(OVERLAY_BTN, size)} aria-label="Zıpla" {...bindKey(k1, 'jump', onPress)}>
           <ArrowBigUp className="size-7" aria-hidden="true" />
         </button>
-        <button type="button" className={cn(OVERLAY_BTN, size, 'mb-5 border-primary/80')} aria-label="Şut" {...bindKey(k1, 'kick')}>
+        <button type="button" className={cn(OVERLAY_BTN, size, 'mb-5 border-primary/80')} aria-label="Şut" {...bindKey(k1, 'kick', onPress)}>
           <Footprints className="size-7" aria-hidden="true" />
         </button>
       </div>
@@ -782,6 +836,25 @@ export function HeadGame({
     if (!over) return
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
   }, [over])
+
+  // A held thumb outside the buttons used to trigger Android text selection and the Google "tap to define" sheet mid-match.
+  useEffect(() => {
+    if (!touch || !started || over) return
+    const s = document.documentElement.style as CSSStyleDeclaration & { webkitUserSelect: string; webkitTouchCallout: string }
+    const prev = [s.userSelect, s.webkitUserSelect, s.webkitTouchCallout]
+    s.userSelect = 'none'
+    s.webkitUserSelect = 'none'
+    s.webkitTouchCallout = 'none'
+    const block = (e: Event) => e.preventDefault()
+    document.addEventListener('contextmenu', block)
+    document.addEventListener('selectstart', block)
+    window.getSelection()?.removeAllRanges()
+    return () => {
+      ;[s.userSelect, s.webkitUserSelect, s.webkitTouchCallout] = prev
+      document.removeEventListener('contextmenu', block)
+      document.removeEventListener('selectstart', block)
+    }
+  }, [touch, started, over])
 
   useEffect(() => {
     const map1: Record<string, keyof Keys> = { KeyA: 'left', KeyD: 'right', KeyW: 'jump', KeyS: 'kick', Space: 'kick' }
@@ -1009,7 +1082,7 @@ export function HeadGame({
             className={cn('block aspect-video w-full touch-none select-none', fullLandscape && 'h-full')}
             aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
           />
-          <OverlayControls k1={k1} />
+          {!fullLandscape && <OverlayControls k1={k1} />}
           <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
           {mode !== 'bot' && !over && (!started || linkLost) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 text-center backdrop-blur-sm">
@@ -1031,6 +1104,7 @@ export function HeadGame({
             </button>
           )}
         </div>
+        {fullLandscape && <OverlayControls k1={k1} full onPress={enterFullscreen} />}
       </div>
       <p className="hidden text-center text-xs text-muted-foreground lg:block">
         A / D veya ok tuşları ile hareket, W / yukarı ile zıpla, S / boşluk ile şut
