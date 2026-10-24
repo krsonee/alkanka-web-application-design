@@ -18,9 +18,10 @@ const POLL_MS = 1200
 const RETRY_MS = 12000
 /** Once answered, ICE gets this long to open the channel before redialling. */
 const CONNECT_MS = 15000
-/** If no direct channel opens within this window, both sides switch to the server relay. */
-const FALLBACK_MS = 9000
-const RELAY_MS = 110
+/** Server relay runs from the first second and carries the match until (and unless) a direct channel opens. */
+const RELAY_MS = 35
+/** Consecutive relay failures before the link is shown as lost. */
+const RELAY_FAILS_LOST = 40
 
 export type DuelLink = {
   status: 'connecting' | 'open' | 'lost'
@@ -64,8 +65,14 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
 
     const attach = (dc: RTCDataChannel) => {
       channel.current = dc
-      dc.onopen = () => alive && setStatus('open')
-      dc.onclose = () => alive && !relayMode && setStatus('lost')
+      dc.onopen = () => {
+        if (!alive) return
+        stopRelay()
+        setStatus('open')
+      }
+      dc.onclose = () => {
+        if (alive) startRelay()
+      }
       dc.onmessage = (e) => {
         try {
           onMessage.current?.(JSON.parse(e.data as string))
@@ -76,8 +83,8 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     }
 
     // Server relay fallback: used when no direct peer path opens in time.
-    const startedAt = Date.now()
     let relayMode = false
+    let relayFails = 0
     let relayHeard = false
     let relayBusy = false
     let relayTimer: ReturnType<typeof setInterval> | null = null
@@ -102,6 +109,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
         const r = await post({ action: 'relay', payload: batch })
         if (r.ok) {
           const { msgs } = (await r.json()) as { msgs: { t?: string }[] }
+          relayFails = 0
           if (msgs.length && !relayHeard) {
             relayHeard = true
             setStatus('open')
@@ -109,22 +117,29 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
           for (const m of msgs) if (m?.t !== '__hi') onMessage.current?.(m)
         } else {
           outbox = [...batch.filter((m) => m.t === 'end'), ...outbox]
+          relayFails++
         }
       } catch {
         outbox = [...batch.filter((m) => m.t === 'end'), ...outbox]
+        relayFails++
       }
+      if (relayFails === RELAY_FAILS_LOST && relayHeard && alive) setStatus('lost')
       relayBusy = false
     }
 
     const startRelay = () => {
       if (relayMode || !alive) return
       relayMode = true
-      pc?.close()
-      pc = null
-      channel.current = null
-      if (timer) clearTimeout(timer)
       relayTimer = setInterval(() => void relayTick(), RELAY_MS)
       void relayTick()
+    }
+
+    const stopRelay = () => {
+      if (!relayMode) return
+      relayMode = false
+      if (relayTimer) clearInterval(relayTimer)
+      relayTimer = null
+      outbox = outbox.filter((m) => m.t === 'end')
     }
 
     const fresh = () => {
@@ -132,7 +147,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       channel.current = null
       pc = new RTCPeerConnection(ICE)
       pc.onconnectionstatechange = () => {
-        if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') && alive) setStatus('lost')
+        if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') && alive) startRelay()
       }
       if (!host) pc.ondatachannel = (e) => attach(e.channel)
       return pc
@@ -168,12 +183,8 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     }
 
     const tick = async () => {
-      if (!alive || relayMode) return
+      if (!alive) return
       const open = channel.current?.readyState === 'open'
-      if (!open && Date.now() - startedAt > FALLBACK_MS) {
-        startRelay()
-        return
-      }
       try {
         if (!open) {
           if (shouldDial()) await dial()
@@ -206,9 +217,10 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       } catch {
         // Retried on the next poll.
       }
-      if (alive && !relayMode) timer = setTimeout(tick, open ? POLL_MS * 3 : POLL_MS)
+      if (alive) timer = setTimeout(tick, open ? POLL_MS * 3 : POLL_MS)
     }
 
+    startRelay()
     void tick()
     return () => {
       alive = false

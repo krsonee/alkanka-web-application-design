@@ -70,9 +70,52 @@ function audio() {
     const wet = ctx.createGain()
     wet.gain.value = 0.22
     room.connect(verb).connect(wet).connect(master)
+    loadSamples(ctx)
   }
   if (ctx.state === 'suspended') void ctx.resume()
   return ctx
+}
+
+/** Recorded CC0 / public-domain clips (Wikimedia Commons). Synth versions stay as fallback until they decode. */
+const SAMPLE_URLS = {
+  whistle: '/sounds/whistle.wav',
+  cheer: '/sounds/cheer.ogg',
+  applause: '/sounds/applause.wav',
+} as const
+type SampleName = keyof typeof SAMPLE_URLS
+const samples = new Map<SampleName, AudioBuffer>()
+
+function loadSamples(ac: AudioContext) {
+  for (const [name, url] of Object.entries(SAMPLE_URLS) as [SampleName, string][]) {
+    fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+      .then((data) => ac.decodeAudioData(data))
+      .then((buf) => samples.set(name, buf))
+      .catch(() => {
+        // Browser can't decode this format: the synthesized version keeps playing instead.
+      })
+  }
+}
+
+/** Plays a recorded clip (or a slice of it). Returns false when it isn't available yet. */
+function sample(name: SampleName, opts: { vol: number; at?: number; offset?: number; dur?: number; rate?: number }) {
+  const ac = audio()
+  const buf = samples.get(name)
+  if (!ac || !master || !buf) return false
+  const start = ac.currentTime + (opts.at ?? 0)
+  const offset = opts.offset ?? 0
+  const dur = Math.min(opts.dur ?? buf.duration - offset, buf.duration - offset)
+  const src = ac.createBufferSource()
+  src.buffer = buf
+  src.playbackRate.value = opts.rate ?? jitter(1, 0.03)
+  const g = ac.createGain()
+  g.gain.setValueAtTime(0.0001, start)
+  g.gain.exponentialRampToValueAtTime(opts.vol, start + 0.02)
+  g.gain.setValueAtTime(opts.vol, start + Math.max(0.03, dur - 0.12))
+  g.gain.exponentialRampToValueAtTime(0.0001, start + dur)
+  src.connect(g).connect(master)
+  src.start(start, offset, dur + 0.05)
+  return true
 }
 
 // Browsers only allow audio after a user gesture; unlock on the first interaction so later event sounds play.
@@ -296,13 +339,25 @@ const SOUNDS: Record<SoundName, (v: number) => void> = {
     noise({ dur: 0.22, freq: 2600, q: 0.5, vol: 0.22, type: 'highpass' })
     slide(0.05, 0.25, 0.08)
   },
-  whistle: (v) => whistle(0, 0.32, 0.16 * lim(v)),
+  whistle: (v) => {
+    if (!sample('whistle', { vol: 0.5 * lim(v), offset: 0.06, dur: 0.38 })) whistle(0, 0.32, 0.16 * lim(v))
+  },
   whistleEnd: () => {
+    const real =
+      sample('whistle', { vol: 0.5, offset: 0.06, dur: 0.3 }) &&
+      sample('whistle', { vol: 0.5, at: 0.42, offset: 0.06, dur: 0.3 }) &&
+      sample('whistle', { vol: 0.55, at: 0.84, offset: 0.06, dur: 0.6, rate: 1 })
+    if (real) return
     whistle(0, 0.28, 0.16)
     whistle(0.42, 0.28, 0.16)
     whistle(0.84, 0.9, 0.16)
   },
-  cheer: (v) => crowd(0, 2.4, 0.3 * lim(v)),
+  cheer: (v) => {
+    const vol = lim(v)
+    const a = sample('applause', { vol: 0.55 * vol, offset: 1.4, dur: 3.6 })
+    const b = sample('cheer', { vol: 0.6 * vol, at: 0.05 })
+    if (!a && !b) crowd(0, 2.4, 0.3 * vol)
+  },
 
   chip: () => {
     noise({ dur: 0.035, freq: 3200, q: 5, vol: 0.5 })
@@ -440,16 +495,50 @@ export function startCrowdAmbience(level = 0.05) {
   swellDepth.gain.value = level * 0.35
   swell.connect(swellDepth).connect(g.gain)
   src.connect(bp).connect(g).connect(room)
-  const apply = () => g.gain.setTargetAtTime(muted ? 0.0001 : level, ac.currentTime, 0.4)
+
+  // A real recorded crowd, slowed and muffled into a distant stand murmur, laid under the synth bed.
+  let bed: AudioBufferSourceNode | null = null
+  let bedGain: GainNode | null = null
+  const startBed = () => {
+    const rec = samples.get('applause')
+    if (bed || !rec || !master) return
+    bed = ac.createBufferSource()
+    bed.buffer = rec
+    bed.loop = true
+    bed.loopStart = 1.5
+    bed.loopEnd = Math.min(rec.duration - 0.5, 5.5)
+    bed.playbackRate.value = 0.72
+    const lp = ac.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 900
+    bedGain = ac.createGain()
+    bedGain.gain.value = 0.0001
+    bed.connect(lp).connect(bedGain).connect(master)
+    bed.start(ac.currentTime, 1.5)
+    bedGain.gain.setTargetAtTime(muted ? 0.0001 : level * 2.2, ac.currentTime, 0.8)
+  }
+  const bedTry = setInterval(() => {
+    startBed()
+    if (bed) clearInterval(bedTry)
+  }, 500)
+
+  const apply = () => {
+    g.gain.setTargetAtTime(muted ? 0.0001 : level, ac.currentTime, 0.4)
+    bedGain?.gain.setTargetAtTime(muted ? 0.0001 : level * 2.2, ac.currentTime, 0.4)
+  }
   apply()
   listeners.add(apply)
   src.start()
   swell.start()
+  startBed()
   return () => {
+    clearInterval(bedTry)
     listeners.delete(apply)
     g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.3)
+    bedGain?.gain.setTargetAtTime(0.0001, ac.currentTime, 0.3)
     src.stop(ac.currentTime + 1.2)
     swell.stop(ac.currentTime + 1.2)
+    bed?.stop(ac.currentTime + 1.2)
   }
 }
 
