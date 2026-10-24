@@ -3,10 +3,21 @@
 import { useEffect, useRef, useState } from 'react'
 
 const ICE: RTCConfiguration = {
-  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    // Public relay fallback for mobile/strict NATs where a direct path cannot be punched.
+    {
+      urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  ],
 }
 const POLL_MS = 1200
-const RETRY_MS = 9000
+/** Host waits this long for an answer before sending a fresh offer. */
+const RETRY_MS = 12000
+/** Once answered, ICE gets this long to open the channel before redialling. */
+const CONNECT_MS = 15000
 
 export type DuelLink = {
   status: 'connecting' | 'open' | 'lost'
@@ -71,14 +82,33 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       return pc
     }
 
+    let offerId = ''
+    let answeredAt = 0
+    let lastOfferId = ''
+
     const dial = async () => {
       lastDial = Date.now()
+      answeredAt = 0
+      offerId = Math.random().toString(36).slice(2)
+      const id = offerId
       const conn = fresh()
       attach(conn.createDataChannel('duel', { ordered: false, maxRetransmits: 0 }))
       await conn.setLocalDescription(await conn.createOffer())
       await gathered(conn)
       if (conn !== pc || !conn.localDescription) return
-      await post({ action: 'signal', kind: 'offer', payload: conn.localDescription.toJSON() })
+      const r = await post({ action: 'signal', kind: 'offer', payload: { id, sdp: conn.localDescription.toJSON() } })
+      // Rival not seated yet: try again soon instead of waiting a full retry window.
+      if (!r.ok) lastDial = Date.now() - RETRY_MS + POLL_MS * 2
+    }
+
+    // The host only redials when no answer came back in time, or an answered attempt never opened / failed.
+    const shouldDial = () => {
+      if (!host) return false
+      const now = Date.now()
+      const state = pc?.connectionState
+      if (state === 'failed' || state === 'closed') return true
+      if (answeredAt) return now - answeredAt > CONNECT_MS
+      return now - lastDial > RETRY_MS
     }
 
     const tick = async () => {
@@ -86,21 +116,29 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       const open = channel.current?.readyState === 'open'
       try {
         if (!open) {
-          if (host && Date.now() - lastDial > RETRY_MS) await dial()
+          if (shouldDial()) await dial()
           const r = await post({ action: 'poll' })
           if (r.ok) {
-            const { signals } = (await r.json()) as { signals: { kind: string; payload: RTCSessionDescriptionInit }[] }
-            for (const s of signals) {
-              if (s.kind === 'offer' && !host) {
-                const conn = fresh()
-                await conn.setRemoteDescription(s.payload)
-                await conn.setLocalDescription(await conn.createAnswer())
-                await gathered(conn)
-                if (conn === pc && conn.localDescription) {
-                  await post({ action: 'signal', kind: 'answer', payload: conn.localDescription.toJSON() })
-                }
-              } else if (s.kind === 'answer' && host && pc?.signalingState === 'have-local-offer') {
-                await pc.setRemoteDescription(s.payload)
+            const { signals } = (await r.json()) as {
+              signals: { kind: string; payload: { id?: string; sdp?: RTCSessionDescriptionInit } }[]
+            }
+            const offers = signals.filter((s) => s.kind === 'offer')
+            const latestOffer = offers[offers.length - 1]
+            if (!host && latestOffer?.payload.sdp && latestOffer.payload.id !== lastOfferId) {
+              lastOfferId = latestOffer.payload.id ?? ''
+              const conn = fresh()
+              await conn.setRemoteDescription(latestOffer.payload.sdp)
+              await conn.setLocalDescription(await conn.createAnswer())
+              await gathered(conn)
+              if (conn === pc && conn.localDescription) {
+                await post({ action: 'signal', kind: 'answer', payload: { id: lastOfferId, sdp: conn.localDescription.toJSON() } })
+              }
+            }
+            if (host) {
+              const answer = signals.find((s) => s.kind === 'answer' && s.payload.id === offerId && s.payload.sdp)
+              if (answer?.payload.sdp && pc?.signalingState === 'have-local-offer') {
+                await pc.setRemoteDescription(answer.payload.sdp)
+                answeredAt = Date.now()
               }
             }
           }
