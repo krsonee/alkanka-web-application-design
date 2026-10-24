@@ -406,7 +406,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
 
   return (
     <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-      <div className="flex min-w-0 flex-col gap-3">
+      <div data-ls-main className="flex min-w-0 flex-col gap-3">
         {remote.spectator && (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
             <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Eller gizli, ortaya atılan kartlar canlı görünür.

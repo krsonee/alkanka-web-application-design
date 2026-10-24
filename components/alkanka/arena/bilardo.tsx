@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
-import { RotateCw, Smartphone } from 'lucide-react'
+import { LogOut, RotateCw, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
@@ -1007,6 +1007,15 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           )}
         </div>
         <aside className="flex w-40 shrink-0 flex-col gap-1.5 overflow-y-auto">
+          <a
+            href="/oyunlar"
+            onClick={() => {
+              if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+            }}
+            className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary px-2 text-xs font-bold text-foreground active:scale-95"
+          >
+            <LogOut className="size-4" aria-hidden="true" /> Oyundan çık
+          </a>
           {[seat, oppSeat].map((s) => (
             <div
               key={s}

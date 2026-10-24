@@ -713,7 +713,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
         className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3"
         aria-label="Canlı blackjack masası"
       >
-        <div className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
+        <div data-ls-main className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             {!me && (
               <button
@@ -803,7 +803,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               <div
                 className={cn(
                   "pointer-events-none absolute left-1/2 top-[47%] flex w-[44%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 text-center transition-opacity sm:top-[50%] sm:w-[34%]",
-                  phase === "result" && "opacity-0",
+                  phase !== "bet" && phase !== "waiting" && "opacity-0",
                 )}
               >
                 <span className="font-display text-sm font-bold uppercase tracking-[0.25em] text-primary/30 sm:text-lg">

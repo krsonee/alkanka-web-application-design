@@ -886,9 +886,9 @@ const OVERLAY_PAD =
 const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground opacity-100'
 
 const BTN_SIZE: Record<ControlPrefs['size'], string> = {
-  s: 'size-12 landscape:size-14',
-  m: 'size-14 landscape:size-16',
-  l: 'size-16 landscape:size-20',
+  s: 'size-14 landscape:size-16',
+  m: 'size-16 landscape:size-20',
+  l: 'size-20 landscape:size-24',
 }
 const ICON_SIZE: Record<ControlPrefs['size'], string> = { s: 'size-6', m: 'size-7', l: 'size-8' }
 const BTN_OPACITY: Record<ControlPrefs['opacity'], string> = { low: 'opacity-40', mid: 'opacity-75', high: 'opacity-100' }
