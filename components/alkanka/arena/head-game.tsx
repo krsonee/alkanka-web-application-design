@@ -54,9 +54,10 @@ type Snap = { p1: Player; p2: Player; b: Ball }
 
 /* --------------------------- control preferences --------------------------- */
 
-type ControlPrefs = { size: 's' | 'm' | 'l'; opacity: 'low' | 'mid' | 'high'; haptics: boolean }
+type BotLevel = 'easy' | 'mid' | 'hard'
+type ControlPrefs = { size: 's' | 'm' | 'l'; opacity: 'low' | 'mid' | 'high'; haptics: boolean; bot: BotLevel }
 const PREFS_KEY = 'alkanka:head-controls'
-const DEFAULT_PREFS: ControlPrefs = { size: 'm', opacity: 'mid', haptics: true }
+const DEFAULT_PREFS: ControlPrefs = { size: 'm', opacity: 'mid', haptics: true, bot: 'mid' }
 let prefs = DEFAULT_PREFS
 let prefsLoaded = false
 const prefListeners = new Set<() => void>()
@@ -101,10 +102,20 @@ function playEvents(list: NetEvent[], seat: 0 | 1) {
 const GOAL_TOP = GROUND - 176
 const GOAL_DEPTH = 74
 const RIM_Y = 236
-const RIM_W = 70
+const RIM_W = 84
+const NET_H = 52
 const BOARD_X = 40
+/** A basket counts 3 when the shooter's last touch was this far from the hoop centre. */
+const THREE_DIST = 330
+/** Steps between bot decisions; a slower reaction makes an easier opponent. */
+const BOT_REACT: Record<BotLevel, number> = { easy: 14, mid: 7, hard: 1 }
 const rimLeft = () => ({ a: BOARD_X + 8, b: BOARD_X + 8 + RIM_W })
 const rimRight = () => ({ a: W - BOARD_X - 8 - RIM_W, b: W - BOARD_X - 8 })
+
+const ARENA_FILL: Record<Sport, string> = {
+  futbol: 'linear-gradient(#0a1630, #1d4f5e 72%, #0b0d12 72%, #0b0d12 78.5%, #2f8a3e 78.5%)',
+  basket: 'linear-gradient(#120d0a, #2a1a12 72%, #0b0d12 72%, #0b0d12 78.5%, #b97a43 78.5%)',
+}
 
 const TEAM = {
   home: { jersey: '#e5b93e', trim: '#1a1a1a', shorts: '#16181d', boot: '#e5b93e' },
@@ -149,17 +160,17 @@ function stepPlayer(p: Player, k: Keys, sport: Sport) {
   p.x = Math.max(HEAD_R + margin, Math.min(W - HEAD_R - margin, p.x))
 }
 
-/** Anti goal-camping: 3 s inside your own goal and the referee pushes you back out to open play. */
+/** Anti camping: 3 s inside your own goal (or under your own hoop) and the referee pushes you back out to open play. */
 function campRule(p: Player, side: 0 | 1, sport: Sport, emit: Emit) {
-  if (sport !== 'futbol') return
   const out = side === 0 ? 1 : -1
+  const zone = sport === 'futbol' ? GOAL_DEPTH + HEAD_R * 0.6 : BOARD_X + 8 + RIM_W + 20
   if (p.camp >= CAMP_LIMIT) {
     p.x += out * 7
     p.vx = 0
-    if (side === 0 ? p.x > GOAL_DEPTH + 150 : p.x < W - GOAL_DEPTH - 150) p.camp = 0
+    if (side === 0 ? p.x > zone + 150 : p.x < W - zone - 150) p.camp = 0
     return
   }
-  const inGoal = side === 0 ? p.x < GOAL_DEPTH + HEAD_R * 0.6 : p.x > W - GOAL_DEPTH - HEAD_R * 0.6
+  const inGoal = side === 0 ? p.x < zone : p.x > W - zone
   if (inGoal) {
     p.camp++
     if (p.camp === CAMP_LIMIT) emit('whistle', 0.7)
@@ -277,7 +288,9 @@ function stepBall(ball: Ball, sport: Sport, emit: Emit) {
   } else {
     for (const side of [0, 1] as const) {
       const bx = side === 0 ? BOARD_X : W - BOARD_X
-      if (ball.y > RIM_Y - 112 && ball.y < RIM_Y + 18 && Math.abs(ball.x - bx) < BALL_R + 5) {
+      // The gap between backboard and wall is narrower than the ball, so treat it as solid instead of letting the ball wedge in.
+      const behindBoard = side === 0 ? ball.x < bx + BALL_R + 5 : ball.x > bx - BALL_R - 5
+      if (ball.y > RIM_Y - 112 && ball.y < RIM_Y + 18 && behindBoard) {
         ball.x = side === 0 ? bx + BALL_R + 5 : bx - BALL_R - 5
         ball.vx = (side === 0 ? 1 : -1) * Math.max(1.5, Math.abs(ball.vx) * 0.7)
         if (speed > 2) emit('board', speed / 14)
@@ -285,11 +298,18 @@ function stepBall(ball: Ball, sport: Sport, emit: Emit) {
       const rim = side === 0 ? rimLeft() : rimRight()
       const rimHit = collideCircle(ball, rim.a, RIM_Y, 4, 0, 0, 0.55) || collideCircle(ball, rim.b, RIM_Y, 4, 0, 0, 0.55)
       if (rimHit && speed > 2) emit('rim', speed / 14)
+      // A ball rising into the net from below is turned back down, so it can never drop through the hoop afterwards.
+      if (ball.vy < 0 && ball.x > rim.a && ball.x < rim.b && ball.y > RIM_Y && ball.y - BALL_R < RIM_Y + NET_H) {
+        ball.y = RIM_Y + NET_H + BALL_R
+        ball.vy = Math.abs(ball.vy) * 0.35
+        if (speed > 2) emit('rim', speed / 20)
+      }
     }
   }
 }
 
-function hitBall(ball: Ball, p: Player, sport: Sport, emit: Emit, seat: 0 | 1) {
+/** Returns true when the player touched the ball this step. */
+function hitBall(ball: Ball, p: Player, sport: Sport, emit: Emit, seat: 0 | 1): boolean {
   const footX = p.x + p.face * 26
   const footY = p.y + FOOT - 10
   if (p.kick > 5 && Math.hypot(ball.x - footX, ball.y - footY) < BALL_R + 34) {
@@ -302,7 +322,7 @@ function hitBall(ball: Ball, p: Player, sport: Sport, emit: Emit, seat: 0 | 1) {
     emit('kick', 0.55 + (p.power - 1) * 1.3)
     emit(seat === 0 ? 'h0' : 'h1', p.power > 1.2 ? 35 : 18)
     p.power = 1
-    return
+    return true
   }
   const rel = Math.hypot(ball.vx - p.vx, ball.vy - p.vy)
   const head = collideCircle(ball, p.x, p.y, HEAD_R, p.vx, p.vy, 0.9)
@@ -310,22 +330,23 @@ function hitBall(ball: Ball, p: Player, sport: Sport, emit: Emit, seat: 0 | 1) {
     if (head.ny < -0.85 && Math.abs(ball.vx) < 1.2) ball.vx += p.face * 2.2
     if (!onGround(p) && head.ny < 0) ball.vy -= 1.5
     if (rel > 3) emit('header', rel / 16)
-    return
+    return true
   }
-  collideCircle(ball, p.x, p.y + HEAD_R + 14, 16, p.vx, p.vy, 0.5)
-  collideCircle(ball, p.x, p.y + FOOT - 8, 12, p.vx, p.vy, 0.4)
+  const body = collideCircle(ball, p.x, p.y + HEAD_R + 14, 16, p.vx, p.vy, 0.5)
+  const foot = collideCircle(ball, p.x, p.y + FOOT - 8, 12, p.vx, p.vy, 0.4)
+  return !!(body || foot)
 }
 
-function botKeys(bot: Player, ball: Ball, sport: Sport): Keys {
+function botKeys(bot: Player, ball: Ball, sport: Sport, level: BotLevel): Keys {
   const k = noKeys()
   const home = sport === 'futbol' ? W - 160 : W - 200
-  const threat = ball.vx > 3 && ball.x > W * 0.45
+  const threat = level !== 'easy' && ball.vx > 3 && ball.x > W * 0.45
   const targetX = threat ? Math.min(home, Math.max(ball.x + 40, home - 120)) : ball.x + 34
   if (bot.x < targetX - 12) k.right = true
   else if (bot.x > targetX + 12) k.left = true
   const dx = ball.x - bot.x
-  if (Math.abs(dx) < 110 && ball.y < bot.y - 20 && ball.vy > -3 && ball.y > bot.y - 220) k.jump = true
-  if (dx < 0 && dx > -80 && ball.y > bot.y + 10) k.kick = Math.random() < 0.35
+  if (Math.abs(dx) < 110 && ball.y < bot.y - 20 && ball.vy > -3 && ball.y > bot.y - 220) k.jump = level !== 'easy' || Math.random() < 0.55
+  if (dx < 0 && dx > -80 && ball.y > bot.y + 10) k.kick = Math.random() < (level === 'easy' ? 0.15 : 0.35)
   if (dx > 0 && Math.abs(dx) < 50) k.right = true
   return k
 }
@@ -397,6 +418,11 @@ function paintBackground(sport: Sport): HTMLCanvasElement {
       ctx.fill()
     }
   }
+  // The orange ball got lost in the warm crowd, so the stands are dimmed to push them into the background.
+  if (sport === 'basket') {
+    ctx.fillStyle = 'rgba(10,6,4,0.5)'
+    ctx.fillRect(0, standTop, W, standBottom - standTop)
+  }
 
   const boardY = GROUND - 92
   ctx.fillStyle = '#0b0d12'
@@ -458,6 +484,27 @@ function paintBackground(sport: Sport): HTMLCanvasElement {
     ctx.beginPath()
     ctx.ellipse(W / 2, GROUND + 22, 70, 16, 0, 0, Math.PI * 2)
     ctx.stroke()
+    // Each team's three-point line, in its jersey colour: shoot from behind it for 3.
+    const hoopL = BOARD_X + 8 + RIM_W / 2
+    const lines = [
+      [W - hoopL - THREE_DIST, TEAM.home.jersey],
+      [hoopL + THREE_DIST, TEAM.away.jersey],
+    ] as const
+    ctx.font = '900 16px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const [x, color] of lines) {
+      ctx.strokeStyle = color
+      ctx.lineWidth = 3
+      ctx.setLineDash([10, 8])
+      ctx.beginPath()
+      ctx.moveTo(x, fieldTop)
+      ctx.lineTo(x + (x - W / 2) * 0.25, H)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.fillStyle = color
+      ctx.fillText('3', x + (x < W / 2 ? -14 : 14), fieldTop + 22)
+    }
   }
   ctx.fillStyle = 'rgba(255,255,255,0.1)'
   ctx.font = '900 46px sans-serif'
@@ -467,7 +514,7 @@ function paintBackground(sport: Sport): HTMLCanvasElement {
   return c
 }
 
-function drawGoalOrHoop(ctx: CanvasRenderingContext2D, sport: Sport, front: boolean) {
+function drawGoalOrHoop(ctx: CanvasRenderingContext2D, sport: Sport, front: boolean, shake: readonly [number, number] = [0, 0]) {
   if (sport === 'futbol') {
     for (const side of [0, 1] as const) {
       const x0 = side === 0 ? 0 : W - GOAL_DEPTH
@@ -520,28 +567,42 @@ function drawGoalOrHoop(ctx: CanvasRenderingContext2D, sport: Sport, front: bool
       ctx.roundRect(bx - 5, RIM_Y - 112, 10, 130, 3)
       ctx.fill()
       ctx.stroke()
+      ctx.strokeStyle = '#e8501f'
+      ctx.lineWidth = 3
+      ctx.strokeRect(side === 0 ? bx + 5 : bx - 5 - 26, RIM_Y - 44, 26, 30)
     } else {
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)'
-      ctx.lineWidth = 1.5
-      for (let i = 0; i <= 6; i++) {
-        const x = rim.a + (i * RIM_W) / 6
-        const xb = rim.a + RIM_W / 2 + (x - rim.a - RIM_W / 2) * 0.55
+      // After a basket the net swings and stretches for a moment.
+      const s = shake[side]
+      const sway = Math.sin(s * 0.55) * (s / 40) * 7
+      const len = NET_H + s * 0.25
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+      ctx.lineWidth = 1.8
+      for (let i = 0; i <= 7; i++) {
+        const x = rim.a + (i * RIM_W) / 7
+        const xb = rim.a + RIM_W / 2 + (x - rim.a - RIM_W / 2) * 0.55 + sway
         ctx.beginPath()
         ctx.moveTo(x, RIM_Y)
-        ctx.lineTo(xb, RIM_Y + 46)
+        ctx.lineTo(xb, RIM_Y + len)
         ctx.stroke()
       }
       for (let j = 1; j <= 3; j++) {
-        const y = RIM_Y + j * 14
-        const shrink = 1 - (j * 14 * 0.45) / 46
+        const f = j / 4
+        const y = RIM_Y + len * f
+        const inset = (RIM_W * 0.45 * f) / 2
         ctx.beginPath()
-        ctx.moveTo(rim.a + (RIM_W * (1 - shrink)) / 2, y)
-        ctx.lineTo(rim.b - (RIM_W * (1 - shrink)) / 2, y)
+        ctx.moveTo(rim.a + inset + sway * f, y)
+        ctx.lineTo(rim.b - inset + sway * f, y)
         ctx.stroke()
       }
-      ctx.strokeStyle = '#e8501f'
-      ctx.lineWidth = 6
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+      ctx.lineWidth = 10
       ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.moveTo(rim.a, RIM_Y)
+      ctx.lineTo(rim.b, RIM_Y)
+      ctx.stroke()
+      ctx.strokeStyle = '#ff5a1f'
+      ctx.lineWidth = 7
       ctx.beginPath()
       ctx.moveTo(rim.a, RIM_Y)
       ctx.lineTo(rim.b, RIM_Y)
@@ -557,6 +618,7 @@ function drawPlayer(
   kit: (typeof TEAM)['home'],
   img: HTMLImageElement | null,
   label: string,
+  sport: Sport,
 ) {
   const shadowW = 44 * Math.max(0.45, 1 - (GROUND - FOOT - p.y) / 260)
   ctx.fillStyle = 'rgba(0,0,0,0.35)'
@@ -651,7 +713,7 @@ function drawPlayer(
     ctx.font = '900 14px sans-serif'
     ctx.lineWidth = 4
     ctx.strokeStyle = '#111'
-    const warn = `KALEDEN ÇIK ${Math.ceil((CAMP_LIMIT - p.camp) / 60)}`
+    const warn = `${sport === 'futbol' ? 'KALEDEN' : 'POTADAN'} ÇIK ${Math.ceil((CAMP_LIMIT - p.camp) / 60)}`
     ctx.strokeText(warn, p.x, p.y - HEAD_R - 44)
     ctx.fillStyle = '#ff6b5a'
     ctx.fillText(warn, p.x, p.y - HEAD_R - 44)
@@ -659,6 +721,16 @@ function drawPlayer(
 }
 
 function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport) {
+  const speed = Math.hypot(b.vx, b.vy)
+  if (speed > 7) {
+    for (let i = 3; i >= 1; i--) {
+      const a = (0.2 * (4 - i)) / 3
+      ctx.fillStyle = sport === 'futbol' ? `rgba(255,255,255,${a})` : `rgba(255,170,90,${a})`
+      ctx.beginPath()
+      ctx.arc(b.x - b.vx * i * 1.3, b.y - b.vy * i * 1.3, BALL_R * (1 - i * 0.12), 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
   ctx.fillStyle = 'rgba(0,0,0,0.3)'
   const sw = BALL_R * Math.max(0.4, 1 - (GROUND - b.y) / 300)
   ctx.beginPath()
@@ -718,9 +790,23 @@ function drawBall(ctx: CanvasRenderingContext2D, b: Ball, sport: Sport) {
   ctx.beginPath()
   ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2)
   ctx.stroke()
+  if (sport === 'basket') {
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, BALL_R + 2, 0, Math.PI * 2)
+    ctx.stroke()
+  }
 }
 
-function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], sc: [number, number], left: number, overtime: boolean) {
+function drawScoreboard(
+  ctx: CanvasRenderingContext2D,
+  names: [string, string],
+  sc: [number, number],
+  left: number,
+  overtime: boolean,
+  sport: Sport,
+) {
   const w = 300
   const x = W / 2 - w / 2
   ctx.fillStyle = 'rgba(8,10,14,0.88)'
@@ -747,7 +833,8 @@ function drawScoreboard(ctx: CanvasRenderingContext2D, names: [string, string], 
   ctx.fillText(`${sc[0]} - ${sc[1]}`, W / 2, 29)
   ctx.font = '700 11px monospace'
   ctx.fillStyle = overtime || left <= 10 ? '#ff6b5a' : '#e5b93e'
-  ctx.fillText(`${overtime ? 'ALTIN GOL ' : ''}0:${String(left).padStart(2, '0')}`, W / 2, 49)
+  const ot = sport === 'futbol' ? 'ALTIN GOL ' : 'ALTIN BASKET '
+  ctx.fillText(`${overtime ? ot : ''}0:${String(left).padStart(2, '0')}`, W / 2, 49)
 }
 
 function drawFlash(ctx: CanvasRenderingContext2D, text: string, t: number) {
@@ -941,6 +1028,7 @@ function ToggleRow({ label, on, onChange }: { label: string; on: boolean; onChan
 
 const SIZE_OPTIONS = [['s', 'Küçük'], ['m', 'Orta'], ['l', 'Büyük']] as const
 const OPACITY_OPTIONS = [['low', 'Silik'], ['mid', 'Orta'], ['high', 'Net']] as const
+const BOT_OPTIONS = [['easy', 'Kolay'], ['mid', 'Orta'], ['hard', 'Zor']] as const
 
 function ControlSettings({ pauses, onClose }: { pauses: boolean; onClose: () => void }) {
   const p = usePrefs()
@@ -959,6 +1047,7 @@ function ControlSettings({ pauses, onClose }: { pauses: boolean; onClose: () => 
       </div>
       <Segmented label="Tuş boyutu" value={p.size} options={SIZE_OPTIONS} onChange={(size) => setPrefs({ size })} />
       <Segmented label="Tuş görünürlüğü" value={p.opacity} options={OPACITY_OPTIONS} onChange={(opacity) => setPrefs({ opacity })} />
+      {pauses && <Segmented label="Bot seviyesi" value={p.bot} options={BOT_OPTIONS} onChange={(bot) => setPrefs({ bot })} />}
       <ToggleRow label="Titreşim" on={p.haptics} onChange={(haptics) => setPrefs({ haptics })} />
       <ToggleRow label="Ses ve tribün" on={!muted} onChange={(on) => setSoundMuted(!on)} />
       {pauses && <p className="text-xs leading-relaxed text-muted-foreground">Ayarlar açıkken maç durur.</p>}
@@ -1162,6 +1251,10 @@ export function HeadGame({
     let sentKeys = ''
     let frameNo = 0
     let events: NetEvent[] = []
+    let shot: { seat: 0 | 1; x: number } | null = null
+    const netShake: [number, number] = [0, 0]
+    let botK = noKeys()
+    let botWait = 0
     const emit: Emit = (name, v = 1) => {
       events.push([name, v])
     }
@@ -1202,6 +1295,8 @@ export function HeadGame({
           snapAt = now
           const next = msg.sc as [number, number]
           if (next[0] !== sc[0] || next[1] !== sc[1]) setAnnounce(`${next[0]} - ${next[1]}`)
+          if (next[0] > sc[0]) netShake[1] = 40
+          if (next[1] > sc[1]) netShake[0] = 40
           sc[0] = next[0]
           sc[1] = next[1]
           left = msg.l as number
@@ -1221,17 +1316,32 @@ export function HeadGame({
       }
     }
 
-    function goal(scorer: 0 | 1, pts: number) {
+    function goal(scorer: 0 | 1, pts: number, label = 'GOL!') {
       sc[scorer] += pts
       emit(sport === 'futbol' ? 'net' : 'swish')
       emit('whistle')
       emit('cheer')
       emit('hb', 80)
       setAnnounce(`${sc[0]} - ${sc[1]}`)
-      flash = overtime ? 'ALTIN GOL!' : sport === 'futbol' ? 'GOL!' : 'BASKET!'
+      flash = overtime ? (sport === 'futbol' ? 'ALTIN GOL!' : 'ALTIN BASKET!') : label
       flashT = 0
       pause = 80
+      shot = null
+      // The conceding side gets the ball, like possession changing after a score.
       resetPositions(p1, p2, ball, scorer === 0 ? 1 : 0)
+    }
+
+    function basket(scorer: 0 | 1, hoop: 0 | 1, rim: { a: number; b: number }) {
+      const cx = (rim.a + rim.b) / 2
+      const shooter = scorer === 0 ? p1 : p2
+      const three = shot?.seat === scorer && Math.abs(shot.x - cx) > THREE_DIST
+      const dunk = !three && Math.hypot(shooter.x - cx, shooter.y - RIM_Y) < 120
+      netShake[hoop] = 40
+      if (dunk) {
+        emit('board', 0.9)
+        emit('rim', 0.8)
+      }
+      goal(scorer, three ? 3 : 2, three ? 'ÜÇLÜK!' : dunk ? 'SMAÇ!' : 'BASKET!')
     }
 
     function step() {
@@ -1239,7 +1349,16 @@ export function HeadGame({
         flashT++
         if (flashT > 70) flash = ''
       }
-      const k2now = mode === 'host' && linkRef.current?.status === 'open' ? remoteKeys : botKeys(p2, ball, sport)
+      let k2now: Keys
+      if (mode === 'host' && linkRef.current?.status === 'open') k2now = remoteKeys
+      else {
+        if (botWait-- <= 0) {
+          const level = readPrefs().bot
+          botK = botKeys(p2, ball, sport, level)
+          botWait = BOT_REACT[level]
+        }
+        k2now = botK
+      }
       if (pause > 0) {
         pause--
         stepPlayer(p1, noKeys(), sport)
@@ -1254,8 +1373,8 @@ export function HeadGame({
       separatePlayers(p1, p2)
       prevBallY = ball.y
       stepBall(ball, sport, emit)
-      hitBall(ball, p1, sport, emit, 0)
-      hitBall(ball, p2, sport, emit, 1)
+      if (hitBall(ball, p1, sport, emit, 0)) shot = { seat: 0, x: p1.x }
+      if (hitBall(ball, p2, sport, emit, 1)) shot = { seat: 1, x: p2.x }
 
       // Unjam: a ball that barely moves while airborne (head-rest, crossbar, wedged against a wall) gets dropped back in.
       if (Math.hypot(ball.x - anchor.x, ball.y - anchor.y) > 8) {
@@ -1267,6 +1386,7 @@ export function HeadGame({
           Object.assign(ball, { x: W / 2, y: 120, vx: (Math.random() - 0.5) * 3, vy: 0 })
           anchor = { x: ball.x, y: ball.y }
           stuckFrames = 0
+          shot = null
         }
       }
 
@@ -1276,8 +1396,8 @@ export function HeadGame({
       } else if (prevBallY < RIM_Y && ball.y >= RIM_Y && ball.vy > 0) {
         const L = rimLeft()
         const R = rimRight()
-        if (ball.x > L.a + 3 && ball.x < L.b - 3) goal(1, 2)
-        else if (ball.x > R.a + 3 && ball.x < R.b - 3) goal(0, 2)
+        if (ball.x > L.a + 3 && ball.x < L.b - 3) basket(1, 0, L)
+        else if (ball.x > R.a + 3 && ball.x < R.b - 3) basket(0, 1, R)
       }
     }
 
@@ -1335,14 +1455,16 @@ export function HeadGame({
         if (mode === 'host')
           net?.send({ t: 's', p1, p2, b: ball, sc, l: left, f: flash, ft: flashT, ot: overtime, ev: out, pz: pausedRef.current })
       }
+      if (netShake[0] > 0) netShake[0]--
+      if (netShake[1] > 0) netShake[1]--
       const c = ctx!
       c.drawImage(bg, 0, 0)
       drawGoalOrHoop(c, sport, false)
-      drawPlayer(c, p1, TEAM.home, homeImg, namesRef.current[0])
-      drawPlayer(c, p2, TEAM.away, awayImg, namesRef.current[1])
+      drawPlayer(c, p1, TEAM.home, homeImg, namesRef.current[0], sport)
+      drawPlayer(c, p2, TEAM.away, awayImg, namesRef.current[1], sport)
       drawBall(c, ball, sport)
-      drawGoalOrHoop(c, sport, true)
-      drawScoreboard(c, namesRef.current, sc, left, overtime)
+      drawGoalOrHoop(c, sport, true, netShake)
+      drawScoreboard(c, namesRef.current, sc, left, overtime, sport)
       if (flash) drawFlash(c, flash, flashT)
       // Golden goal ends the match once its celebration has played out.
       if (mode !== 'guest' && !ended && (left <= 0 || (overtime && sc[0] !== sc[1] && !flash))) {
@@ -1382,6 +1504,8 @@ export function HeadGame({
           fullLandscape &&
             'fixed inset-0 z-[70] flex items-center justify-center bg-background pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
         )}
+        // On phones wider than 16:9 the side bars continue the arena (stands above, floor below) instead of showing black.
+        style={fullLandscape ? { background: ARENA_FILL[sport] } : undefined}
       >
         <div
           className={cn(
