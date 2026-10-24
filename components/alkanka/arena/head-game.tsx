@@ -1545,7 +1545,12 @@ export function HeadGame({
           {!fullLandscape && <OverlayControls k1={k1} />}
           <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
           {mode !== 'bot' && !over && (!started || linkLost) && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 text-center backdrop-blur-sm">
+            <div
+              className={cn(
+                'flex flex-col items-center justify-center gap-2 text-center',
+                touch && !portrait && !started ? 'fixed inset-0 z-[80] bg-background' : 'absolute inset-0 bg-background/80 backdrop-blur-sm',
+              )}
+            >
               <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
               <p className="font-semibold text-foreground">{linkLost ? 'Bağlantı koptu, yeniden bağlanılıyor…' : 'Rakibine bağlanılıyor…'}</p>
               <p className="max-w-xs text-xs text-muted-foreground">

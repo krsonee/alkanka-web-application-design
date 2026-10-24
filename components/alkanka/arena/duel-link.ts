@@ -38,6 +38,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
   const onMessage = useRef<((msg: unknown) => void) | null>(null)
 
   useEffect(() => {
+    if (!roomId) return
     let alive = true
     let pc: RTCPeerConnection | null = null
     let timer: ReturnType<typeof setTimeout> | null = null

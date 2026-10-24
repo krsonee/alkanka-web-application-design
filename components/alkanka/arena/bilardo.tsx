@@ -8,6 +8,7 @@ import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
 import { TableBrand } from './table-brand'
+import { useDuelLink } from './duel-link'
 import {
   BOT_LEVELS,
   FALLBACK_SEED,
@@ -44,6 +45,10 @@ const CW = W + RAIL * 2
 const CH = H + RAIL * 2
 const BALL_COLORS = ['#f5f1e6', '#f2c230', '#2559c9', '#d4382c', '#6b3fa0', '#ef7d22', '#1f8a4c', '#8a2432', '#141414']
 const STRIKE_MS = 110
+const PREVIEW_AIM_MS = 700
+const PREVIEW_PULL_MS = 450
+const PREVIEW_HOLD_MS = 150
+const TABLE_PULL_RANGE = 260
 const DROP_MS = 560
 const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
 const LANDSCAPE_QUERY = '(max-height: 540px) and (orientation: landscape)'
@@ -343,6 +348,16 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   remoteRef.current = remote
   const seat = remote?.seat ?? 0
   const oppSeat = other(seat)
+  // Live aim mirror: the active player streams cue angle/pull over WebRTC so the rival watches the shot being lined up.
+  const link = useDuelLink(remote && !remote.spectator && remote.id ? remote.id : '', seat === 0)
+  const linkRef = useRef(link)
+  linkRef.current = link
+  const oppAim = useRef<{ a: number; back: number; x: number; y: number; t: number } | null>(null)
+  link.onMessage.current = (msg) => {
+    const m = msg as { type?: string; a?: number; back?: number; x?: number; y?: number }
+    if (m?.type !== 'aim' || typeof m.a !== 'number' || typeof m.x !== 'number' || typeof m.y !== 'number') return
+    oppAim.current = { a: m.a, back: Math.max(0, Math.min(1, Number(m.back) || 0)), x: m.x, y: m.y, t: performance.now() }
+  }
   const oppName = remote ? remote.names[oppSeat] || 'Rakip' : 'Baykuş'
 
   const startBalls = () =>
@@ -370,6 +385,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     spin: { side: 0, follow: 0, applied: true } as Spin,
     ev: newEvents() as ShotEvents,
     strike: null as { t0: number; input: ShotInput; back: number } | null,
+    preview: null as { t0: number; from: number; to: number; input: ShotInput } | null,
     pottedOrder: balls.current.filter((b) => b.in && b.id !== 0).map((b) => b.id),
   })
 
@@ -424,7 +440,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const g = game.current
     return {
       turn: g.turn,
-      busy: g.moving || !!g.strike || g.pending,
+      busy: g.moving || !!g.strike || !!g.preview || g.pending,
       over: g.over,
       message,
       groups: [g.groups[0], g.groups[1]] as Groups,
@@ -474,12 +490,24 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     sync(g.turn === seat ? 'Toplar yuvarlanıyor...' : `${oppName} vurdu...`)
   }
 
+  /** Rival shots (bot or replayed online): swing the cue onto the line, pull back, then strike — so the player sees the move. */
+  function previewShot(input: ShotInput) {
+    const g = game.current
+    if (g.moving || g.strike || g.over || balls.current[0].in) return
+    const to = Math.atan2(input.dy, input.dx)
+    let from = g.angle
+    while (from - to > Math.PI) from -= Math.PI * 2
+    while (to - from > Math.PI) from += Math.PI * 2
+    g.preview = { t0: performance.now(), from, to, input }
+    sync(`${oppName} nişan alıyor...`)
+  }
+
   // Remote updates: replay the rival's shot from the current (previous) positions, otherwise snap to the server state.
   useEffect(() => {
     if (!remote) return
     const g = game.current
     const st = remote.state
-    if (g.moving || g.strike || st.seq <= g.lastSeq) return
+    if (g.moving || g.strike || g.preview || st.seq <= g.lastSeq) return
     const shot = st.shot
     if (shot && shot.by !== seat && shot.seq === st.seq && st.seq === g.lastSeq + 1) {
       g.replay = true
@@ -490,7 +518,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       }
       const dx = shot.dx ?? Math.cos(shot.angle ?? 0)
       const dy = shot.dy ?? Math.sin(shot.angle ?? 0)
-      shoot({ dx, dy, pow: shot.pow, spinX: shot.spinX ?? 0, spinY: shot.spinY ?? 0 })
+      previewShot({ dx, dy, pow: shot.pow, spinX: shot.spinX ?? 0, spinY: shot.spinY ?? 0 })
       return
     }
     applyRemote(st)
@@ -554,7 +582,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       g.call = plan.call
       sync(`${oppName} siyah için delik seçti.`)
     }
-    shoot(plan.input)
+    previewShot(plan.input)
   }
 
   /** After an illegal break: re-rack so the chooser breaks, or accept the table as it lies. */
@@ -626,6 +654,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const { canvas: bg, gold } = paintTable(dpr)
     let raf = 0
     let lastHitSound = 0
+    let lastAimSent = { t: 0, a: 0, back: 0, x: 0, y: 0 }
     const rollOf = (id: number) => {
       let r = rolls.current.get(id)
       if (!r) rolls.current.set(id, (r = initialRoll(id)))
@@ -649,6 +678,21 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const draw = (now: number) => {
       const g = game.current
       const list = balls.current
+      let previewBack = 0
+      if (g.preview) {
+        const p = g.preview
+        const t = now - p.t0
+        const swing = Math.min(1, t / PREVIEW_AIM_MS)
+        const ease = swing < 0.5 ? 2 * swing * swing : 1 - (-2 * swing + 2) ** 2 / 2
+        g.angle = p.from + (p.to - p.from) * ease
+        const pull = Math.max(0, Math.min(1, (t - PREVIEW_AIM_MS) / PREVIEW_PULL_MS))
+        previewBack = 14 + pull * p.input.pow * 80
+        if (t >= PREVIEW_AIM_MS + PREVIEW_PULL_MS + PREVIEW_HOLD_MS) {
+          g.angle = p.to
+          g.preview = null
+          shoot(p.input)
+        }
+      }
       if (g.strike && now - g.strike.t0 >= STRIKE_MS) {
         g.spin = startShot(list, g.strike.input)
         g.ev = newEvents()
@@ -705,7 +749,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ctx.restore()
       }
 
-      if (aiming) {
+      if (aiming || g.preview) {
+        if (g.preview) ctx.globalAlpha = 0.6
         const hit = castGuide(list, cue, g.angle)
         const len = hit ? hit.t : 1400
         ctx.lineCap = 'round'
@@ -749,6 +794,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           ctx.stroke()
         }
         ctx.restore()
+        ctx.globalAlpha = 1
       }
 
       for (const b of list) if (!b.in) drawBall(ctx, b, rollOf(b.id))
@@ -778,8 +824,40 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         const t = Math.min(1, (now - g.strike.t0) / STRIKE_MS)
         const ang = Math.atan2(g.strike.input.dy, g.strike.input.dx)
         drawCue(ctx, cue.x, cue.y, ang, g.strike.back * (1 - t * t))
+      } else if (g.preview && !cue.in) {
+        drawCue(ctx, cue.x, cue.y, g.angle, previewBack)
       } else if (aiming && !cue.in) {
         drawCue(ctx, cue.x, cue.y, g.angle, 14 + pullRef.current * 80)
+        const sent = lastAimSent
+        if (
+          remoteRef.current &&
+          now - sent.t > 60 &&
+          (Math.abs(sent.a - g.angle) > 0.002 || Math.abs(sent.back - pullRef.current) > 0.01 || sent.x !== cue.x || sent.y !== cue.y)
+        ) {
+          lastAimSent = { t: now, a: g.angle, back: pullRef.current, x: cue.x, y: cue.y }
+          linkRef.current.send({ type: 'aim', a: g.angle, back: pullRef.current, x: cue.x, y: cue.y })
+        }
+      } else if (!g.moving && remoteRef.current && !remoteRef.current.myTurn && oppAim.current && now - oppAim.current.t < 2500) {
+        const o = oppAim.current
+        const ghost = { ...cue, x: o.x, y: o.y }
+        const hit = castGuide(list, ghost, o.a)
+        const len = hit ? hit.t : 1400
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(0, 0, W, H)
+        ctx.clip()
+        ctx.globalAlpha = 0.45
+        ctx.setLineDash([6, 8])
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(o.x, o.y)
+        ctx.lineTo(o.x + Math.cos(o.a) * len, o.y + Math.sin(o.a) * len)
+        ctx.stroke()
+        ctx.restore()
+        ctx.globalAlpha = 0.85
+        drawCue(ctx, o.x, o.y, o.a, 14 + o.back * 80)
+        ctx.globalAlpha = 1
       }
 
       raf = requestAnimationFrame(draw)
@@ -806,7 +884,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     game.current.angle = Math.atan2(y - cue.y, x - cue.x)
   }
   const placing = useRef<number | null>(null)
-  const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
+  const drag = useRef<{ id: number; x: number; y: number; moved: boolean; pull?: { x: number; y: number } } | null>(null)
 
   function onPointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
     e.currentTarget.focus({ preventScroll: true })
@@ -828,6 +906,11 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       placing.current = e.pointerId
       return
     }
+    // With the aim locked, dragging on the table pulls the cue back like a real stroke; release to shoot.
+    if (lockedRef.current) {
+      drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pull: pt }
+      return
+    }
     drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }
     aimAt(e)
   }
@@ -845,6 +928,13 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const d = drag.current
     if (d && d.id === e.pointerId) {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) d.moved = true
+      if (d.pull) {
+        const pt = tablePoint(e)
+        const a = game.current.angle
+        const back = -((pt.x - d.pull.x) * Math.cos(a) + (pt.y - d.pull.y) * Math.sin(a))
+        pullRef.current = clamp01(back / TABLE_PULL_RANGE)
+        return
+      }
       aimAt(e)
     } else if (!lockedRef.current && e.pointerType === 'mouse') {
       aimAt(e)
@@ -859,6 +949,13 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
     drag.current = null
+    if (d.pull) {
+      const pow = pullRef.current
+      pullRef.current = 0
+      if (!d.moved) lock(false)
+      else if (pow >= 0.03) fire(pow)
+      return
+    }
     // A drag always leaves the aim locked; a plain click toggles the lock.
     lock(d.moved ? true : !lockedRef.current)
   }
@@ -932,7 +1029,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       : ui.ballInHand
         ? ['Beyazı sürükle · Gücü çekip bırak', 'Beyazı koy']
         : aimLocked
-          ? ['Nişan kilitli · Gücü çekip bırak', 'Kilitli']
+          ? ['Nişan kilitli · Masada geri çekip bırak ya da güç çubuğu · Dokun: kilidi aç', 'Geri çek, bırak']
           : landscape
             ? ['', 'Nişan al · Soldaki gücü aşağı çek']
             : ['Nişan al · Alttaki gücü sağa çek, bırak', 'Nişan al']
@@ -945,7 +1042,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={() => ((drag.current = null), (placing.current = null))}
+        onPointerCancel={() => ((drag.current = null), (placing.current = null), (pullRef.current = 0))}
         aria-label="Bilardo masası. Sürükleyerek nişan al, güç çubuğunu çekip bırakarak vur. Ok tuşlarıyla döndür, boşluk ile vur."
         className={cn(
           'block touch-none rounded-3xl shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary',
@@ -1225,7 +1322,7 @@ function AimStrip({
     <div
       role="slider"
       tabIndex={-1}
-      aria-label={vertical ? 'İnce nişan: yukarı aşağı sürükle' : 'İnce nişan: sağa sola sürükle'}
+      aria-label={vertical ? 'İnce nişan: yukarı aşağı sürükle' : 'İnce nişan: sağa sola s��rükle'}
       aria-orientation={vertical ? 'vertical' : 'horizontal'}
       aria-valuenow={0}
       aria-disabled={disabled}

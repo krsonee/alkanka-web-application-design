@@ -272,8 +272,11 @@ export function PapazPvp({ remote }: { remote: Remote<PapazView> }) {
           {v.rules.kiz ? 'Kız Kimde' : 'Papaz Kimde'}
           {v.rules.klasik ? ' · Klasik' : ''}
         </span>
-        <span className="flex items-center gap-1 rounded-full bg-background/80 px-2.5 py-1 text-[11px] font-semibold text-foreground">
-          Kaybettiren:
+        <span className="flex shrink-0 items-center gap-2 rounded-xl bg-background/85 py-1 pl-2.5 pr-1 text-[11px] font-semibold leading-tight text-foreground shadow-sm">
+          <span className="flex flex-col">
+            <span className="text-[10px] text-muted-foreground">Kaybettiren</span>
+            <span className="font-bold">{odd}</span>
+          </span>
           <BatakCard card={v.odd} size="xs" />
         </span>
       </div>
@@ -293,11 +296,11 @@ export function PapazPvp({ remote }: { remote: Remote<PapazView> }) {
 
           {!ended && target >= 0 && target !== me && (
             <div className="flex flex-col items-center gap-1">
-              <div className="flex items-end justify-center pt-3" role="group" aria-label={`${name(target)} oyuncusunun kapalı kartları`}>
+              <div className="flex max-w-full items-end justify-center rounded-2xl bg-background/25 px-3 pb-2 pt-4" role="group" aria-label={`${name(target)} oyuncusunun kapalı kartları`}>
                 {Array.from({ length: targetCount }, (_, i) => (
                   <CardBack
                     key={`${v.seq}-${i}`}
-                    className={cn('h-[5.2rem] w-[3.7rem] sm:h-24 sm:w-[4.3rem]', !myTurn && 'opacity-80')}
+                    className={cn('h-[5.2rem] w-[58px]', !myTurn && 'opacity-80')}
                     style={i > 0 ? { marginLeft: targetStep - 58 } : undefined}
                     onClick={myTurn ? () => remote.send({ type: 'draw', index: i }) : undefined}
                     disabled={remote.busy}
