@@ -26,6 +26,7 @@ const STEP_MS = 1000 / 60
 const OVERTIME_SECONDS = 15
 /** Steps (3 s) a player may stand inside their own goal before being pushed out. */
 const CAMP_LIMIT = 180
+const SHOT_CLOCK_STEPS = 720
 /** Steps (0.5 s) of holding kick for a full-power shot. */
 const CHARGE_MAX = 30
 /** Steps (15 s) the host waits for a rival who turned their phone upright. */
@@ -1252,6 +1253,8 @@ export function HeadGame({
     let frameNo = 0
     let events: NetEvent[] = []
     let shot: { seat: 0 | 1; x: number } | null = null
+    let clockSeat = -1
+    let clockSteps = 0
     const netShake: [number, number] = [0, 0]
     let botK = noKeys()
     let botWait = 0
@@ -1375,6 +1378,25 @@ export function HeadGame({
       stepBall(ball, sport, emit)
       if (hitBall(ball, p1, sport, emit, 0)) shot = { seat: 0, x: p1.x }
       if (hitBall(ball, p2, sport, emit, 1)) shot = { seat: 1, x: p2.x }
+
+      // Shot clock: whoever last touched the ball has 12 s to score, otherwise the ball goes to the rival.
+      if (sport === 'basket') {
+        const holder = shot?.seat ?? -1
+        if (holder !== clockSeat) {
+          clockSeat = holder
+          clockSteps = 0
+        } else if (holder !== -1 && ++clockSteps >= SHOT_CLOCK_STEPS) {
+          emit('whistle', 0.9)
+          flash = 'ATIŞ SÜRESİ!'
+          flashT = 0
+          pause = 60
+          shot = null
+          clockSeat = -1
+          clockSteps = 0
+          resetPositions(p1, p2, ball, holder === 0 ? 1 : 0)
+          return
+        }
+      }
 
       // Unjam: a ball that barely moves while airborne (head-rest, crossbar, wedged against a wall) gets dropped back in.
       if (Math.hypot(ball.x - anchor.x, ball.y - anchor.y) > 8) {
