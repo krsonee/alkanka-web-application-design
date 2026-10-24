@@ -1294,7 +1294,7 @@ export function HeadGame({
           const snap: Snap = { p1: msg.p1 as Player, p2: msg.p2 as Player, b: msg.b as Ball }
           snapPrev = snapNext ?? snap
           snapNext = snap
-          if (snapAt) snapGap = snapGap * 0.8 + Math.min(100, Math.max(8, now - snapAt)) * 0.2
+          if (snapAt) snapGap = snapGap * 0.8 + Math.min(320, Math.max(8, now - snapAt)) * 0.2
           snapAt = now
           const next = msg.sc as [number, number]
           if (next[0] !== sc[0] || next[1] !== sc[1]) setAnnounce(`${next[0]} - ${next[1]}`)
@@ -1448,7 +1448,7 @@ export function HeadGame({
           net?.send({ t: 'k', k: k1.current, pz: pausedRef.current })
         }
         if (snapPrev && snapNext) {
-          const t = Math.min(1, (now - snapAt) / snapGap)
+          const t = Math.min(1.15, (now - snapAt) / snapGap)
           blendPlayer(p1, snapPrev.p1, snapNext.p1, t)
           blendPlayer(p2, snapPrev.p2, snapNext.p2, t)
           blendBall(ball, snapPrev.b, snapNext.b, t)
