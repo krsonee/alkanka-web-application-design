@@ -57,7 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       who.windowAt = now
       who.hits = 0
     }
-    if (++who.hits > 600) return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 })
+    if (++who.hits > 1200) return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 })
     const msgs = Array.isArray(body.payload) ? body.payload.slice(0, 20) : []
     const payload = msgs.length ? JSON.stringify(msgs) : null
     if (payload && payload.length > MAX_SDP) return NextResponse.json({ error: 'Sinyal çok büyük.' }, { status: 400 })
