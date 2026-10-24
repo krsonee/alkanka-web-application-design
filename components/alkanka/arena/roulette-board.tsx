@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import { RACETRACK, RED, WHEEL, betLabel, betNumbers, betReturn, racetrackUnits, type RacetrackKey, type RouletteBet } from '@/lib/casino'
 import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
@@ -73,7 +73,34 @@ function bet(c: Ctx, kind: BetKind, value?: number) {
   c.onBet(kind, value)
 }
 
-function Cell({ kind, value, style, className, children, c }: { kind: BetKind; value?: number; style?: CSSProperties; className?: string; children: ReactNode; c: Ctx }) {
+/** Touch has no hover, so a press briefly lights the numbers the bet covers, like a dealer pointing at the felt. */
+function previewHandlers(c: Ctx, kind: BetKind, value?: number) {
+  return {
+    onPointerEnter: (e: PointerEvent) => e.pointerType === 'mouse' && c.setHover(covered(kind, value)),
+    onPointerLeave: () => c.setHover([]),
+    onPointerDown: (e: PointerEvent) => e.pointerType !== 'mouse' && !c.disabled && c.setHover(covered(kind, value)),
+    onPointerUp: (e: PointerEvent) => e.pointerType !== 'mouse' && window.setTimeout(() => c.setHover([]), 260),
+    onPointerCancel: () => c.setHover([]),
+  }
+}
+
+function Cell({
+  kind,
+  value,
+  style,
+  className,
+  children,
+  c,
+  chip = 'corner',
+}: {
+  kind: BetKind
+  value?: number
+  style?: CSSProperties
+  className?: string
+  children: ReactNode
+  c: Ctx
+  chip?: 'corner' | 'center'
+}) {
   const k = betKey(kind, value)
   const amount = c.mine.get(k) ?? 0
   const other = c.others.get(k) ?? 0
@@ -83,15 +110,14 @@ function Cell({ kind, value, style, className, children, c }: { kind: BetKind; v
     <button
       type="button"
       onClick={() => bet(c, kind, value)}
-      onPointerEnter={(e) => e.pointerType === 'mouse' && c.setHover(covered(kind, value))}
-      onPointerLeave={() => c.setHover([])}
+      {...previewHandlers(c, kind, value)}
       disabled={c.disabled}
       aria-label={`${betLabel({ kind, value })}${amount ? `, bahsin ${amount}` : ''}`}
       style={style}
       className={cn(
         'relative flex min-h-0 min-w-0 items-center justify-center p-0 font-display font-bold text-foreground transition-[filter,box-shadow,color]',
         'enabled:hover:brightness-125 disabled:cursor-not-allowed',
-        lit && 'brightness-150',
+        lit && 'z-10 brightness-150 ring-2 ring-inset ring-foreground/80',
         className,
         won && 'z-10 text-primary ring-2 ring-inset ring-primary shadow-[0_0_14px_var(--primary)]',
         won && kind === 'number' && 'text-foreground',
@@ -103,17 +129,22 @@ function Cell({ kind, value, style, className, children, c }: { kind: BetKind; v
           {short(other)}
         </span>
       )}
-      {amount > 0 && (
-        <span className="pointer-events-none absolute bottom-0.5 right-0.5">
-          <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size="xs" />
-        </span>
-      )}
+      {amount > 0 &&
+        (chip === 'center' ? (
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size="md" />
+          </span>
+        ) : (
+          <span className="pointer-events-none absolute bottom-0.5 right-0.5">
+            <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size="xs" />
+          </span>
+        ))}
     </button>
   )
 }
 
 /** Target sitting on a line or corner between numbers, for split / corner / street / six-line / trio / first-four bets. */
-function Spot({ kind, value, x, y, c }: { kind: BetKind; value: number; x: number; y: number; c: Ctx }) {
+function Spot({ kind, value, x, y, c, touch }: { kind: BetKind; value: number; x: number; y: number; c: Ctx; touch?: boolean }) {
   const k = betKey(kind, value)
   const amount = c.mine.get(k) ?? 0
   const other = c.others.get(k) ?? 0
@@ -123,23 +154,26 @@ function Spot({ kind, value, x, y, c }: { kind: BetKind; value: number; x: numbe
     <button
       type="button"
       onClick={() => bet(c, kind, value)}
-      onPointerEnter={(e) => e.pointerType === 'mouse' && c.setHover(covered(kind, value))}
-      onPointerLeave={() => c.setHover([])}
+      {...previewHandlers(c, kind, value)}
       onFocus={() => c.setHover(covered(kind, value))}
       onBlur={() => c.setHover([])}
       disabled={c.disabled}
       aria-label={`${label}${amount ? `, bahsin ${amount}` : ''}`}
       title={label}
       style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
-      className="group absolute z-20 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full disabled:cursor-not-allowed"
+      className={cn(
+        'group absolute z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full disabled:cursor-not-allowed',
+        touch ? 'size-6' : 'size-5',
+      )}
     >
       {amount > 0 ? (
-        <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size="xs" active={won} />
+        <Chip amount={amount} tone={chipTone(amount, c.chipValues)} size={touch ? 'sm' : 'xs'} active={won} />
       ) : (
         <span
           className={cn(
             'size-1.5 rounded-full transition-all',
-            other > 0 ? 'bg-muted-foreground' : 'bg-transparent',
+            other > 0 ? 'bg-muted-foreground' : touch && kind === 'corner' ? 'size-1 bg-foreground/35' : 'bg-transparent',
+            touch && 'group-active:size-full group-active:bg-primary/70',
             'group-enabled:group-hover:size-full group-enabled:group-hover:bg-primary/70 group-focus-visible:size-full group-focus-visible:bg-primary/70',
           )}
           aria-hidden="true"
@@ -194,11 +228,11 @@ function verticalSpots(): SpotDef[] {
 const H_SPOTS = horizontalSpots()
 const V_SPOTS = verticalSpots()
 
-function Spots({ c, defs }: { c: Ctx; defs: SpotDef[] }) {
+function Spots({ c, defs, touch }: { c: Ctx; defs: SpotDef[]; touch?: boolean }) {
   return (
     <>
       {defs.map((s) => (
-        <Spot key={betKey(s.kind, s.value)} {...s} c={c} />
+        <Spot key={betKey(s.kind, s.value)} {...s} c={c} touch={touch} />
       ))}
     </>
   )
@@ -268,53 +302,63 @@ function HorizontalLayout({ c }: { c: Ctx }) {
 }
 
 const FELT_CELL = 'bg-felt'
-const SIDEWAYS = 'whitespace-nowrap text-[11px] tracking-[0.18em] [writing-mode:vertical-rl] rotate-180'
+const SIDEWAYS = 'whitespace-nowrap text-xs font-bold tracking-[0.2em] [writing-mode:vertical-rl] rotate-180'
+const ZERO_SHAPE = '[clip-path:polygon(0_100%,0_42%,50%_0,100%_42%,100%_100%)]'
 
-/** Portrait felt like live-casino phone tables: outside bets run down the left so the whole layout fits one screen. */
+/**
+ * Portrait felt modelled on live-casino phone tables: the zero is the classic pointed cap, numbers run in
+ * three tall columns with 48px rows so every number, line and corner is a comfortable thumb target, and
+ * the outside bets read sideways down the left rail like a real layout seen from the dealer's end.
+ */
 function VerticalLayout({ c }: { c: Ctx }) {
   return (
-    <div className="overflow-hidden rounded-xl bg-foreground/35 p-px shadow-xl ring-1 ring-primary/50 md:hidden">
-      <div className="grid grid-cols-[2.25rem_2.25rem_minmax(0,1fr)] gap-px">
-        <div className={cn(FELT_CELL, 'col-span-2 rounded-tl-[11px]')} aria-hidden="true" />
-        <Cell c={c} kind="number" value={0} style={numBg(0)} className="h-10 rounded-tr-[11px] text-lg">
-          0
-        </Cell>
+    <div className="mx-auto w-full max-w-md rounded-2xl bg-felt p-1.5 shadow-[inset_0_0_30px_rgb(0_0_0/0.45),0_12px_28px_-12px_rgb(0_0_0/0.6)] ring-1 ring-primary/60 md:hidden">
+      <div className="grid grid-cols-[2.75rem_2.75rem_minmax(0,1fr)]">
+        <div className="col-start-3 bg-felt pb-px">
+          <div className="bg-foreground/55 p-px pb-0 [clip-path:polygon(0_100%,0_42%,50%_0,100%_42%,100%_100%)]">
+            <Cell c={c} kind="number" value={0} style={numBg(0)} className={cn(ZERO_SHAPE, 'h-14 w-full pt-3 text-2xl')}>
+              0
+            </Cell>
+          </div>
+        </div>
 
-        <div className="grid grid-rows-6 gap-px">
-          {OUTSIDE.map((o) => (
-            <Cell key={o.kind} c={c} kind={o.kind} className={FELT_CELL}>
-              {typeof o.text === 'string' ? <span className={SIDEWAYS}>{o.text}</span> : o.text}
-            </Cell>
-          ))}
-        </div>
-        <div className="grid grid-rows-3 gap-px">
-          {[1, 2, 3].map((d) => (
-            <Cell key={d} c={c} kind="dozen" value={d} className={FELT_CELL}>
-              <span className={SIDEWAYS}>{`${12 * d - 11}-${12 * d}`}</span>
-            </Cell>
-          ))}
-        </div>
-        <div className="relative grid grid-cols-3 gap-px">
-          {Array.from({ length: 12 }, (_, i) =>
-            [0, 1, 2].map((j) => {
-              const n = vNum(i, j)
-              return (
-                <Cell key={n} c={c} kind="number" value={n} style={numBg(n)} className="h-9 text-base">
-                  {n}
+        <div className="col-span-3 grid grid-cols-subgrid overflow-hidden rounded-b-lg bg-foreground/55 p-px pt-0">
+          <div className="grid grid-rows-6 gap-px pr-px">
+            {OUTSIDE.map((o) => (
+              <Cell key={o.kind} c={c} kind={o.kind} chip="center" className={cn(FELT_CELL, 'text-foreground/90')}>
+                {typeof o.text === 'string' ? <span className={SIDEWAYS}>{o.text}</span> : o.text}
+              </Cell>
+            ))}
+          </div>
+          <div className="grid grid-rows-3 gap-px pr-px">
+            {[1, 2, 3].map((d) => (
+              <Cell key={d} c={c} kind="dozen" value={d} chip="center" className={cn(FELT_CELL, 'text-foreground/90')}>
+                <span className={SIDEWAYS}>{`${12 * d - 11}-${12 * d}`}</span>
+              </Cell>
+            ))}
+          </div>
+          <div className="flex flex-col gap-px">
+            <div className="relative grid grid-cols-3 gap-px">
+              {Array.from({ length: 12 }, (_, i) =>
+                [0, 1, 2].map((j) => {
+                  const n = vNum(i, j)
+                  return (
+                    <Cell key={n} c={c} kind="number" value={n} chip="center" style={numBg(n)} className="h-12 text-xl tabular-nums">
+                      {n}
+                    </Cell>
+                  )
+                }),
+              )}
+              <Spots c={c} defs={V_SPOTS} touch />
+            </div>
+            <div className="grid grid-cols-3 gap-px">
+              {[1, 2, 3].map((col) => (
+                <Cell key={col} c={c} kind="column" value={col} chip="center" className={cn(FELT_CELL, 'h-11 text-sm text-foreground/90')}>
+                  2:1
                 </Cell>
-              )
-            }),
-          )}
-          <Spots c={c} defs={V_SPOTS} />
-        </div>
-
-        <div className={cn(FELT_CELL, 'col-span-2 rounded-bl-[11px]')} aria-hidden="true" />
-        <div className="grid grid-cols-3 gap-px">
-          {[1, 2, 3].map((col) => (
-            <Cell key={col} c={c} kind="column" value={col} className={cn(FELT_CELL, 'h-9 text-xs', col === 3 && 'rounded-br-[11px]')}>
-              2:1
-            </Cell>
-          ))}
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
