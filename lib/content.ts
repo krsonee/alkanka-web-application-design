@@ -27,6 +27,8 @@ export type SlideOverride = {
   description?: string
   cta?: string
   image?: string
+  startAt?: string
+  endAt?: string
 }
 
 export type LogoKind = 'sponsors' | 'teams'

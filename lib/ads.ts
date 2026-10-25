@@ -1,4 +1,5 @@
 import { getContent } from './content'
+import { isScheduledLive } from './schedule'
 
 export const AD_PAGES = [
   { id: 'sponsorlar', label: 'Sponsorlar sayfası' },
@@ -14,7 +15,7 @@ export const AD_POSITIONS = [
 
 export type AdPage = (typeof AD_PAGES)[number]['id']
 export type AdPosition = (typeof AD_POSITIONS)[number]['id']
-export type AdSlot = { image: string; href: string; alt: string }
+export type AdSlot = { image: string; href: string; alt: string; startAt?: string; endAt?: string }
 export type AdMap = Partial<Record<`${AdPage}:${AdPosition}`, AdSlot>>
 
 export const ADS_KEY = 'ads:slots'
@@ -29,9 +30,10 @@ export async function getAds(): Promise<AdMap> {
 
 export async function getPageAds(page: AdPage) {
   const all = await getAds()
+  const live = (slot?: AdSlot) => (slot && isScheduledLive(slot) ? slot : undefined)
   return {
-    top: all[`${page}:top`],
-    left: all[`${page}:left`],
-    right: all[`${page}:right`],
+    top: live(all[`${page}:top`]),
+    left: live(all[`${page}:left`]),
+    right: live(all[`${page}:right`]),
   }
 }

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SLIDES, type Slide } from './data'
+import { trackPromo } from '@/lib/promo-client'
 
 const INTERVAL = 6000
 const SWIPE_RATIO = 0.15
@@ -44,6 +45,11 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [go, count])
+
+  const activeId = slides[index]?.id
+  useEffect(() => {
+    if (activeId) trackPromo('slide', activeId, 'view')
+  }, [activeId])
 
   if (count === 0) return null
 
@@ -162,6 +168,7 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
                     href={slide.href}
                     tabIndex={active ? 0 : -1}
                     draggable={false}
+                    onClick={() => trackPromo('slide', slide.id, 'click')}
                     {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                     className="mt-1 w-fit rounded-lg bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"
                   >

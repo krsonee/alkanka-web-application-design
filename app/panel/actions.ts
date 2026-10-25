@@ -5,7 +5,8 @@ import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { panelLogout } from '@/app/panel/auth-actions'
 import { deleteContent, getContent, setContent, type HeroOverride, type SlideOverride } from '@/lib/content'
-import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides, isSafeHref } from '@/lib/custom-slides'
+import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides, isSafeHref, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
+import { cleanLocal, parseLocal } from '@/lib/schedule'
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
 import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
@@ -144,6 +145,11 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       cta: field(form, 'cta'),
       image: imageField(form),
     }
+    const startAt = cleanLocal(form.get('startAt'))
+    const endAt = cleanLocal(form.get('endAt'))
+    if (startAt && endAt && parseLocal(endAt) <= parseLocal(startAt)) return { message: 'Bitiş tarihi başlangıçtan sonra olmalı.' }
+    if (startAt) value.startAt = startAt
+    if (endAt) value.endAt = endAt
     if (id.startsWith('c-')) {
       const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
       const current = list.find((s) => s.id === id)
@@ -153,7 +159,17 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       if (!value.title) return { message: 'Başlık boş olamaz.' }
       const next = list.map((s) =>
         s.id === id
-          ? { ...s, eyebrow: value.eyebrow || '', title: value.title || '', description: value.description || '', cta: value.cta || 'İncele', image: value.image || s.image, href }
+          ? {
+              ...s,
+              eyebrow: value.eyebrow || '',
+              title: value.title || '',
+              description: value.description || '',
+              cta: value.cta || 'İncele',
+              image: value.image || s.image,
+              href,
+              startAt: startAt || undefined,
+              endAt: endAt || undefined,
+            }
           : s,
       )
       await setContent(CUSTOM_SLIDES_KEY, next)
@@ -206,6 +222,68 @@ export async function saveLogos(_: ActionState, form: FormData): Promise<ActionS
     return { ok: true, message: `Kaydedildi (${Object.keys(value).length} logo).` }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
+  }
+}
+
+async function currentSlideIds() {
+  const custom = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
+  const all = [...SLIDES.map((s) => ({ id: s.id })), ...custom.map((s) => ({ id: s.id }))]
+  return sortByOrder(all, readSlideOrder(await getContent(SLIDE_ORDER_KEY))).map((s) => s.id)
+}
+
+export async function moveSlide(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin('slide')
+    const id = String(form.get('id'))
+    const dir = form.get('dir') === 'up' ? -1 : 1
+    const ids = await currentSlideIds()
+    const i = ids.indexOf(id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= ids.length) return { message: 'Taşınamadı.' }
+    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+    await setContent(SLIDE_ORDER_KEY, ids)
+    revalidatePath('/')
+    revalidatePath('/panel')
+    return { ok: true, message: 'Sıra güncellendi.' }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Taşınamadı.' }
+  }
+}
+
+export async function duplicateSlide(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin('slide')
+    const id = String(form.get('id'))
+    const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
+    if (list.length >= MAX_CUSTOM_SLIDES) return { message: `En fazla ${MAX_CUSTOM_SLIDES} yeni slayt eklenebilir.` }
+    const builtIn = SLIDES.find((s) => s.id === id)
+    const source = builtIn
+      ? { ...builtIn, ...Object.fromEntries(Object.entries((await getContent(`slide:${id}`)) ?? {}).filter(([, v]) => v)) }
+      : list.find((s) => s.id === id)
+    if (!source) return { message: 'Slayt bulunamadı.' }
+    const copy = {
+      id: `c-${Date.now().toString(36)}`,
+      eyebrow: String(source.eyebrow ?? ''),
+      title: `${String(source.title ?? '')} (kopya)`.slice(0, 120),
+      description: String(source.description ?? ''),
+      cta: String(source.cta ?? 'İncele'),
+      href: String(source.href ?? '/'),
+      image: String(source.image ?? '/images/banner-wheel.png'),
+    }
+    await setContent(CUSTOM_SLIDES_KEY, [...list, copy])
+    const ids = await currentSlideIds()
+    const from = ids.indexOf(copy.id)
+    const at = ids.indexOf(id)
+    if (from >= 0 && at >= 0) {
+      ids.splice(from, 1)
+      ids.splice(at + 1, 0, copy.id)
+      await setContent(SLIDE_ORDER_KEY, ids)
+    }
+    revalidatePath('/')
+    revalidatePath('/panel')
+    return { ok: true, message: 'Kopyası eklendi.' }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Kopyalanamadı.' }
   }
 }
 
