@@ -38,9 +38,11 @@ export async function linkReferralAction(): Promise<ActionResult> {
   if (originDone !== member.id) {
     const h = await headers()
     const ip = h.get('x-forwarded-for') ?? h.get('x-real-ip')
-    await recordOrigin(member.id, store.get('alk_src')?.value ?? 'direkt', hashNetwork(ip)).catch((error) =>
-      console.error('[growth] kaynak kaydedilemedi', error),
-    )
+    const isNew = await recordOrigin(member.id, store.get('alk_src')?.value ?? 'direkt', hashNetwork(ip)).catch((error) => {
+      console.error('[growth] kaynak kaydedilemedi', error)
+      return false
+    })
+    if (isNew) store.set('alk_new', '1', { maxAge: 60 * 10, path: '/', sameSite: 'lax', secure: true })
     store.set('alk_org', member.id, { maxAge: 60 * 60 * 24 * 365, path: '/', sameSite: 'lax', secure: true, httpOnly: true })
   }
   if (!code) return { ok: true }

@@ -98,10 +98,11 @@ export async function logClick(siteId: string, src: string, userId: string | nul
 }
 
 /** Records where a new member came from and flags multi-account abuse from one network. */
+/** Returns true when this is a brand-new signup (used to fire the ad "sign up" conversion once). */
 export async function recordOrigin(userId: string, src: string, ipHash: string | null) {
   await ensureGrowth()
   const known = await rows(sql`SELECT 1 FROM member_origin WHERE user_id = ${userId}`)
-  if (known.length) return
+  if (known.length) return false
   const fresh = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${userId} AND "createdAt" > now() - interval '48 hours'`)
   let flagged = false
   if (ipHash && fresh.length) {
@@ -111,6 +112,7 @@ export async function recordOrigin(userId: string, src: string, ipHash: string |
   }
   await rows(sql`INSERT INTO member_origin (user_id, src, ip_hash, flagged)
     VALUES (${userId}, ${fresh.length ? cleanSrc(src) : 'eski-uye'}, ${ipHash}, ${flagged}) ON CONFLICT DO NOTHING`)
+  return fresh.length > 0
 }
 
 export async function isFlagged(userId: string) {

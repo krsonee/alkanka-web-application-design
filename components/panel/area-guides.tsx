@@ -385,6 +385,128 @@ export function KpGuide() {
   return <FeatureGuide title="Kanka Puan rehberi" subtitle="Seviyeler, rozetler, online kalma ödülleri ve kazananlar şeridi nasıl çalışır" steps={KP_STEPS} />
 }
 
+const MARKETING_STEPS: GuideStep[] = [
+  {
+    title: 'Bu bölüm ne işe yarar? (önce bunu oku)',
+    body: (
+      <>
+        <p className="mb-2">Bu alanda üç iş yapıyoruz, üçü birbirine bağlı:</p>
+        <ol className={ol}>
+          <li><b>Kampanya linkleri</b>: Her paylaşım yeri için ayrı link açarsın. Hangisinin ziyaret, üye ve sponsor tıklaması getirdiğini görürsün.</li>
+          <li><b>Affiliate linkleri</b> (Büyüme bölümünde): Sponsorun verdiği linki kendi adresimizin arkasına saklarız. Sponsora giden her tıklama bizde sayılır.</li>
+          <li><b>Hakediş</b>: Her ay sponsorun panelindeki kazancı buraya girersin. Bizim tıklama sayımızla karşılaştırırsın ve tek tuşla talep mesajı hazırlarsın.</li>
+        </ol>
+        <p className={note}>Akış: Kampanya linki → sitemiz → sponsor butonu (/git) → sponsorun affiliate linki → hakediş. Her adım sayılıyor.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Sponsor linkini aynalamak: engellenmeyi önleme',
+    body: (
+      <>
+        <ul className={ul}>
+          <li>Sponsor sana affiliate panelinden bir link verir. Bunu <b>Büyüme → Trafik & hesaplar → Affiliate linkleri</b> bölümüne yapıştır.</li>
+          <li>Paylaşırken <b>asla sponsorun linkini doğrudan verme</b>. Her zaman <span className={code}>alkanka.com/r/kod</span> ya da <span className={code}>alkanka.com/git/sponsor</span> adresini kullan.</li>
+          <li>Sponsorun adresi BTK tarafından kapatılırsa sadece paneldeki linki yenisiyle değiştirirsin. Telegram'daki, videolardaki ve eski postlardaki bütün linkler kendiliğinden yeni adrese gider.</li>
+          <li>Ana domain'in güvende kalsın diye: Sponsor içeriğini sitemizde <b>kopyalayıp gösterme</b>, sadece yönlendir. Yönlendirme sayfaları Google'a kapalı.</li>
+        </ul>
+        <p className={note}>Daha da güvenli yöntem: Reklam ve influencer paylaşımları için ayrı, ucuz bir yedek domain al ve o domaini de bu siteye bağla. Kapatılırsa yenisini bağlarsın, ana domain hiç zarar görmez.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Kampanya linki oluşturma (adım adım)',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><b>Kampanya linkleri</b> sekmesinde bir ad yaz, örneğin “Ekim Telegram duyurusu”. Kod otomatik oluşur.</li>
+          <li><b>Kanal</b> seç: Telegram, X, influencer vb. Google Analytics'te kaynak olarak bu görünür.</li>
+          <li><b>Hedef</b> seç: Sitemizin bir sayfası ya da doğrudan bir sponsor. Yeni üye kazanmak istiyorsan sitemizi seç. Sadece sponsor tıklaması istiyorsan sponsoru seç.</li>
+          <li>Reklama para verdiysen <b>bütçe</b> gir. Üye başı maliyet otomatik hesaplanır.</li>
+          <li>Linki kopyala ve sadece o yerde paylaş. Her yer için ayrı link aç, örneğin her yayıncıya ayrı bir link.</li>
+        </ol>
+        <p className={note}>Telegram, WhatsApp ve Facebook önizleme robotları sayılmaz. Gördüğün ziyaret sayısı gerçek insan tıklamasıdır.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Rakamları okumak: hangi kampanya iyi?',
+    body: (
+      <ul className={ul}>
+        <li><b>Ziyaret / Tekil kişi</b>: Linke kaç kez ve kaç farklı kişi tıkladı.</li>
+        <li><b>Yeni üye</b>: Bu linkle gelip ilk kez üye olanlar. Eski üyeler sayılmaz.</li>
+        <li><b>Dönüşüm %</b>: Tekil kişilerin yüzde kaçı üye oldu. %5 ve üstü iyi, %1'in altı zayıf. Ya hedef sayfa yanlış ya da kitle uygun değil.</li>
+        <li><b>Sponsor tık.</b>: Bu kampanyadan gelenlerin sponsor butonlarına tıklaması. Paranın kazanıldığı yer burası.</li>
+        <li><b>Üye başı maliyet</b>: Bütçe ÷ yeni üye. Bunu sponsorun FTD başına ödediği tutarla karşılaştır. Maliyet düşükse kampanyayı büyüt, yüksekse durdur.</li>
+      </ul>
+    ),
+  },
+  {
+    title: 'Google Analytics, Google Ads ve Meta Pixel bağlama',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><b>Google Analytics 4</b>: analytics.google.com → Yönetici → Veri akışları → Web → <span className={code}>G-</span> ile başlayan kimliği kopyala.</li>
+          <li><b>Google Ads</b>: ads.google.com → Hedefler → Dönüşümler → Yeni dönüşüm → Web sitesi → “Kodu manuel ekle”. <span className={code}>AW-</span> kimliğini ve dönüşüm etiketini al. Biri “Üyelik”, biri “Sponsor tıklaması” olmak üzere iki dönüşüm aç.</li>
+          <li><b>Meta Pixel</b>: business.facebook.com → Etkinlik Yöneticisi → Veri kaynağı bağla → Web → Pixel. 15 haneli numarayı kopyala.</li>
+          <li>Hepsini <b>Ölçüm etiketleri</b> sekmesine yapıştır ve kaydet. Gerisi otomatik: üyelik ve sponsor tıklaması olayları gönderilir.</li>
+        </ol>
+        <p className={note}>Kontrol: Kendi telefonundan siteyi aç ve GA4'te Raporlar → Gerçek zamanlı ekranına bak, ziyaretini görmelisin. Meta için Chrome'a “Meta Pixel Helper” eklentisini kur.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Reklamlar hakkında önemli uyarı (mutlaka oku)',
+    body: (
+      <>
+        <ul className={ul}>
+          <li>Google ve Meta, Türkiye'de <b>lisanssız bahis ve kumar reklamına izin vermez</b>. Sponsor adı, bonus ya da bahis geçen reklam reddedilir. Tekrar edersen hesabın kalıcı olarak kapanır.</li>
+          <li>Reklamda sadece izin verilen konuyu tanıt: Ücretsiz oyunlar, turnuvalar, topluluk, KankaTV gibi. Hedef sayfa olarak bahis içermeyen sayfaları seç (Oyunlar, Turnuvalar).</li>
+          <li>Ölçüm etiketleri reklam vermesen de işe yarar. GA4 tüm trafiğini ücretsiz ölçer.</li>
+          <li>Ücretli trafik için en güvenli yol: Telegram kanal reklamları, yayıncı ve influencer iş birlikleri. Bunları kampanya linkleriyle ölç.</li>
+          <li>KVKK gereği sitende çerez bildirimi ve gizlilik metni bulunmalı.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: 'Hakediş takibi ve para talebi',
+    body: (
+      <>
+        <ol className={ol}>
+          <li>Her ayın 1–5'i arasında sponsorun affiliate paneline gir ve önceki ayın FTD sayısını ve kazancını not al.</li>
+          <li><b>Hakediş</b> sekmesinde sponsoru, ayı, modeli (CPA, RevShare) ve tutarı gir.</li>
+          <li><b>Bizden giden tıklama</b> rakamına bak. Biz 1.000 tıklama göndermişken sponsor 2 FTD gösteriyorsa sorgula, bu durum eksik sayıma işaret edebilir.</li>
+          <li><b>Talep mesajını kopyala</b> butonuna bas ve mesajı sponsorun affiliate yöneticisine gönder. Durumu “Talep edildi” yap.</li>
+          <li>Para geldiğinde durumu “Ödendi” yap. Üstteki özet, bekleyen ve tahsil edilen parayı ayrı ayrı gösterir.</li>
+        </ol>
+        <p className={note}>Tık başı kazanç (EPC) en önemli rakamdır. Hangi sponsor tıklama başına daha çok kazandırıyorsa sitede onu öne çıkar.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Haftalık rutin',
+    body: (
+      <ul className={ul}>
+        <li><b>Pazartesi</b>: Kampanya listesine bak. Üye başı maliyeti yüksek olanları durdur, iyi gidenlerin bütçesini artır.</li>
+        <li><b>Çarşamba</b>: Affiliate linklerinde “Kontrol et” butonuna bas. Kapanan sponsor adresi varsa yenisini gir.</li>
+        <li><b>Her gün</b>: Yeni paylaşım için yeni kampanya linki aç. Aynı linki her yerde kullanma.</li>
+        <li><b>Ay başı</b>: Hakedişleri gir ve talep mesajlarını gönder.</li>
+      </ul>
+    ),
+  },
+]
+
+export function MarketingGuide() {
+  return (
+    <FeatureGuide
+      title="Pazarlama eğitimi: kampanya, reklam ölçümü ve hakediş"
+      subtitle="Link aynalama, kampanya takibi, Google/Meta etiketleri ve affiliate parası talep etme"
+      steps={MARKETING_STEPS}
+    />
+  )
+}
+
 export function SeoGuide() {
   return (
     <FeatureGuide

@@ -83,6 +83,7 @@ export function ContentEditor({
   market,
   pending = {},
   growth,
+  marketing,
   social,
   sponsors,
   allowed,
@@ -113,6 +114,7 @@ export function ContentEditor({
   staff: React.ReactNode
   account: React.ReactNode
   growth: React.ReactNode
+  marketing: React.ReactNode
   social: React.ReactNode
   slides: EditorItem[]
   heroes: EditorItem[]
@@ -321,6 +323,8 @@ export function ContentEditor({
         limits
       ) : tab === 'growth' ? (
         growth
+      ) : tab === 'marketing' ? (
+        marketing
       ) : tab === 'social' ? (
         social
       ) : tab === 'games' ? (

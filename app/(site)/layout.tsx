@@ -36,6 +36,9 @@ import { BoostStrip } from '@/components/alkanka/boost-strip'
 import { currentBoosts } from '@/lib/boosts'
 import { after } from 'next/server'
 import { runAutoTick } from '@/lib/auto-tick'
+import { MarketingTags } from '@/components/alkanka/marketing-tags'
+import { getTracking } from '@/lib/marketing'
+import { EMPTY_TRACKING } from '@/lib/marketing-shared'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   after(() => runAutoTick())
@@ -49,7 +52,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     getAppSettings(),
     getTourSettings(),
   ])
-  const boosts = await currentBoosts().catch(() => [])
+  const [boosts, tracking] = await Promise.all([currentBoosts().catch(() => []), getTracking().catch(() => EMPTY_TRACKING)])
   const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
   const channels = await getChannelUsernames().catch(() => null)
@@ -96,6 +99,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <JakoAlerts />
         <CemberOverlay />
         <SessionGuard />
+        <MarketingTags settings={tracking} />
       </TvDockProvider>
       </PwaProvider>
       </PointsProvider>

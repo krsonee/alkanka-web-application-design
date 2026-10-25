@@ -76,6 +76,9 @@ import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
 import { MarketManager } from '@/components/panel/market-manager'
 import { GrowthManager } from '@/components/panel/growth-manager'
+import { CampaignsManager, EarningsManager, TrackingEditor } from '@/components/panel/marketing-manager'
+import { MarketingGuide } from '@/components/panel/area-guides'
+import { getTracking, listCampaigns, listEarnings } from '@/lib/marketing'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { affLinkViews } from '@/lib/aff-links'
@@ -316,6 +319,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     tour,
     sponsors,
     growth,
+    marketing,
     community,
     badges,
     tasks,
@@ -446,6 +450,28 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         />
       )
     }),
+    section(ctx, 'marketing', 'Pazarlama', async () => {
+      const [tracking, campaigns, earnings, mSites] = await Promise.all([
+        getTracking(),
+        listCampaigns().catch(() => []),
+        listEarnings().catch(() => []),
+        listSites().catch(() => []),
+      ])
+      const opts = mSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))
+      return (
+        <div className="flex flex-col gap-5">
+          <MarketingGuide />
+          <TelegramTabs
+            label="Pazarlama bölümleri"
+            tabs={[
+              { id: 'campaigns', label: 'Kampanya linkleri', content: <CampaignsManager campaigns={campaigns} sites={opts} siteUrl={SITE_URL} /> },
+              { id: 'earnings', label: 'Affiliate hakediş', content: <EarningsManager earnings={earnings} sites={opts} /> },
+              { id: 'tracking', label: 'Ölçüm etiketleri', content: <TrackingEditor settings={tracking} /> },
+            ]}
+          />
+        </div>
+      )
+    }),
     section(ctx, 'community', 'Topluluk', async () => (
       <CommunityManager
         reviews={await pendingReviews().catch(() => [])}
@@ -553,7 +579,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           userName={session.displayName}
           siteUrl={SITE_URL}
           logout={<LogoutButton />}
-          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'tour', 'sponsors', 'growth', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
+          allowed={allowed ?? Array.from(new Set(['slide', 'hero', 'texts', 'branding', 'logo', 'seo', 'faqs', 'tour', 'sponsors', 'growth', 'marketing', 'community', 'badges', 'tasks', 'market', 'social', 'limits', 'games', 'tournaments', 'cember', 'telegram', 'push', 'messages', 'rewards', 'catalog', 'studio', 'users']))}
           users={users}
           audit={audit}
           dashboard={dashboard}
@@ -571,6 +597,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           tour={tour}
           sponsors={sponsors}
           growth={growth}
+          marketing={marketing}
           community={community}
           badges={badges}
           tasks={tasks}
