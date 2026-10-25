@@ -13,6 +13,36 @@ function str(form: FormData, key: string, max: number) {
   return String(form.get(key) ?? '').trim().slice(0, max)
 }
 
+type Result = { ok: boolean; message: string }
+
+export async function saveRedirectAction(from: string, to: string): Promise<Result> {
+  if (!(await canPanel('seo'))) return { ok: false, ...EXPIRED }
+  try {
+    const { saveRedirect } = await import('@/lib/seo-health')
+    await saveRedirect(from, to)
+    revalidatePath('/panel')
+    return { ok: true, message: 'Yönlendirme kaydedildi. 1 dakika içinde çalışır.' }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'Kaydedilemedi.' }
+  }
+}
+
+export async function deleteRedirectAction(from: string): Promise<Result> {
+  if (!(await canPanel('seo'))) return { ok: false, ...EXPIRED }
+  const { deleteRedirect } = await import('@/lib/seo-health')
+  await deleteRedirect(from)
+  revalidatePath('/panel')
+  return { ok: true, message: 'Yönlendirme silindi.' }
+}
+
+export async function clear404Action(path: string): Promise<Result> {
+  if (!(await canPanel('seo'))) return { ok: false, ...EXPIRED }
+  const { clear404 } = await import('@/lib/seo-health')
+  await clear404(path)
+  revalidatePath('/panel')
+  return { ok: true, message: 'Kayıt silindi.' }
+}
+
 export async function savePostAction(_: ActionState, form: FormData): Promise<ActionState> {
   if (!(await canPanel('seo'))) return EXPIRED
   const title = str(form, 'title', 120)
@@ -73,6 +103,7 @@ export async function saveVerificationAction(_: ActionState, form: FormData): Pr
       google: extractVerificationCode(str(form, 'google', 400)),
       bing: extractVerificationCode(str(form, 'bing', 400)),
       yandex: extractVerificationCode(str(form, 'yandex', 400)),
+      meta: extractVerificationCode(str(form, 'meta', 400)),
     })
     revalidatePath('/', 'layout')
     return { ok: true, message: 'Doğrulama kodları kaydedildi.' }

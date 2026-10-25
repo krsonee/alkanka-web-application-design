@@ -115,6 +115,30 @@ export async function listDeals(limit = 60, kind?: DealKind) {
   }
 }
 
+export const DEAL_FRESH_DAYS = 7
+
+export async function listDealsByBrand(brand: string, limit = 30) {
+  try {
+    await ensureTable()
+    const r = await rows(sql`SELECT * FROM deals WHERE lower(brand) = lower(${brand.trim()})
+      ORDER BY created_at DESC LIMIT ${limit}`)
+    return r.map(map)
+  } catch (error) {
+    console.error('[deals] marka fırsatları okunamadı', error)
+    return []
+  }
+}
+
+export async function latestDealByBrand() {
+  try {
+    await ensureTable()
+    const r = await rows(sql`SELECT lower(brand) AS brand, max(created_at) AS at FROM deals GROUP BY 1`)
+    return new Map(r.map((x) => [String(x.brand), new Date(String(x.at))]))
+  } catch {
+    return new Map<string, Date>()
+  }
+}
+
 export async function getDeal(slug: string) {
   const id = Number.parseInt(slug, 10)
   if (!Number.isFinite(id)) return null
@@ -136,11 +160,11 @@ export async function deleteDeal(id: number) {
 export async function getVerification(): Promise<Verification> {
   try {
     await ensureTable()
-    const r = await rows(sql`SELECT key, value FROM seo_settings WHERE key IN ('verify_google', 'verify_bing', 'verify_yandex')`)
+    const r = await rows(sql`SELECT key, value FROM seo_settings WHERE key IN ('verify_google', 'verify_bing', 'verify_yandex', 'verify_meta')`)
     const get = (k: string) => String(r.find((x) => x.key === k)?.value ?? '')
-    return { google: get('verify_google'), bing: get('verify_bing'), yandex: get('verify_yandex') }
+    return { google: get('verify_google'), bing: get('verify_bing'), yandex: get('verify_yandex'), meta: get('verify_meta') }
   } catch {
-    return { google: '', bing: '', yandex: '' }
+    return { google: '', bing: '', yandex: '', meta: '' }
   }
 }
 
@@ -157,6 +181,6 @@ export function extractVerificationCode(input: string) {
   const fromMeta = trimmed.match(/content=["']([^"']+)["']/i)
   const raw = fromMeta ? fromMeta[1] : trimmed
   // DNS TXT formatı da yapıştırılabiliyor: "google-site-verification=KOD", "yandex-verification: KOD"
-  const withoutPrefix = raw.replace(/^\s*(google-site-verification|yandex-verification|msvalidate\.01)\s*[=:]\s*/i, '')
+  const withoutPrefix = raw.replace(/^\s*(google-site-verification|yandex-verification|msvalidate\.01|facebook-domain-verification)\s*[=:]\s*/i, '')
   return withoutPrefix.replace(/[^A-Za-z0-9_\-]/g, '').slice(0, 120)
 }

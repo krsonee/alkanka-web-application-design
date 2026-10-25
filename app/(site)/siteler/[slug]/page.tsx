@@ -7,6 +7,8 @@ import { getMember } from '@/lib/member'
 import { myFollows } from '@/lib/growth'
 import { SITE_URL } from '@/lib/seo'
 import { listPublicSponsors, resolvePublicSite } from '@/lib/sites'
+import { DEAL_FRESH_DAYS, listDealsByBrand } from '@/lib/deals'
+import { SponsorDeals } from '@/components/alkanka/sponsor-deals'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +23,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params
   const s = await findSponsor(slug)
   if (!s) notFound()
-  const title = `${s.name} güncel giriş, bonus ve inceleme`
+  const title = `${s.name} güncel giriş, bonuslar ve inceleme ${new Date().getFullYear()}`
   const description = `${s.name}: ${s.welcome}. Çekim süresi ${s.payout}, puan ${s.rating.toFixed(1)}. Adres değişince haber almak için takip et.`
   return { title, description, alternates: { canonical: `${SITE_URL}/siteler/${s.id}` }, openGraph: { title, description } }
 }
@@ -50,6 +52,21 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
   const following = member ? (await myFollows(member.id).catch(() => [] as string[])).includes(s.recordId) : false
   const others = (await listPublicSponsors().catch(() => [])).filter((item) => item.id !== s.id).slice(0, 4)
   const tierLabel = TIER_LABEL[s.tier] ?? 'Sponsor'
+  const deals = await listDealsByBrand(s.name)
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: `${s.name} güncel bonuslar ve inceleme`,
+    url: `${SITE_URL}/siteler/${s.id}`,
+    dateModified: deals[0]?.createdAt,
+    breadcrumb: {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Sponsorlar', item: `${SITE_URL}/sponsorlar` },
+        { '@type': 'ListItem', position: 2, name: s.name, item: `${SITE_URL}/siteler/${s.id}` },
+      ],
+    },
+  }
 
   const stats = [
     { icon: Star, label: 'Kanka puanı', value: `${s.rating.toFixed(1)} / 5` },
@@ -59,6 +76,7 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
 
   return (
     <div className="flex flex-col gap-4 md:gap-8">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       <nav aria-label="Konum" className="sd-rise flex items-center gap-1 text-xs text-muted-foreground">
         <Link href="/sponsorlar" className="transition-colors hover:text-foreground">Sponsorlar</Link>
         <ChevronRight className="size-3" aria-hidden />
@@ -138,6 +156,8 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
           </div>
         ))}
       </dl>
+
+      <SponsorDeals name={s.name} sponsorId={s.id} deals={deals} freshDays={DEAL_FRESH_DAYS} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <section aria-labelledby="avantajlar" className="sd-panel sd-rise flex min-w-0 flex-col gap-3 rounded-2xl p-4 md:gap-4 md:p-5" style={{ animationDelay: '360ms' }}>

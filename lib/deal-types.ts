@@ -31,4 +31,4 @@ export type ParsedOdd = {
   limit: string
 }
 
-export type Verification = { google: string; bing: string; yandex: string }
+export type Verification = { google: string; bing: string; yandex: string; meta: string }

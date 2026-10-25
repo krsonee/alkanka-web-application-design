@@ -12,19 +12,31 @@ import type { ActionState } from '@/app/panel/actions'
 import type { BlogPost } from '@/lib/blog'
 import { DEAL_LABELS, type Deal, type Verification } from '@/lib/deal-types'
 import { BlogEditor } from '@/components/panel/blog-editor'
+import { SeoHealthCard } from '@/components/panel/seo-health-card'
+import type { HealthIssue, NotFoundHit, Redirect } from '@/lib/seo-health'
 
-type Props = { posts: BlogPost[]; deals: Deal[]; publishing: boolean; verification: Verification; siteUrl: string }
+type Props = {
+  posts: BlogPost[]
+  deals: Deal[]
+  publishing: boolean
+  verification: Verification
+  siteUrl: string
+  issues: HealthIssue[]
+  notFound: NotFoundHit[]
+  redirects: Redirect[]
+}
 
 const input =
   'rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
 const card = 'flex flex-col gap-4 rounded-2xl border border-border bg-card p-5'
 const label = 'flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground'
 
-export function SeoManager({ posts, deals, publishing, verification, siteUrl }: Props) {
+export function SeoManager({ posts, deals, publishing, verification, siteUrl, issues, notFound, redirects }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <SeoGuide />
       <SearchConsoleCard verification={verification} siteUrl={siteUrl} />
+      <SeoHealthCard issues={issues} notFound={notFound} redirects={redirects} siteUrl={siteUrl} />
       <BlogEditor posts={posts} siteUrl={siteUrl} />
       <DealsCard deals={deals} publishing={publishing} />
     </div>
@@ -67,10 +79,10 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
           {' yaz ve gönder. Bing ve Yandex için de aynı adımlar.'}
         </li>
       </ol>
-      <div className="grid gap-3 md:grid-cols-3">
-        {(['google', 'bing', 'yandex'] as const).map((k) => (
+      <div className="grid gap-3 md:grid-cols-2">
+        {(['google', 'bing', 'yandex', 'meta'] as const).map((k) => (
           <label key={k} className={label}>
-            {k === 'google' ? 'Google' : k === 'bing' ? 'Bing' : 'Yandex'} doğrulama kodu
+            {k === 'google' ? 'Google' : k === 'bing' ? 'Bing' : k === 'yandex' ? 'Yandex' : 'Meta (Facebook) alan adı'} doğrulama kodu
             <input name={k} defaultValue={verification[k]} placeholder="<meta name=... content=...> ya da sadece kod" className={input} />
             {verification[k] ? (
               <span className="flex items-center gap-1.5 font-medium text-primary">

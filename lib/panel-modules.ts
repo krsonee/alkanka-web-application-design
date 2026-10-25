@@ -19,6 +19,7 @@ export const PANEL_GROUPS = [
     modules: [
       { id: 'sponsors', label: 'Sponsor siteler', hint: 'Sponsor listesi, bonuslar ve yönlendirme linkleri' },
       { id: 'growth', label: 'Büyüme & trafik', hint: 'Davet sistemi, trafik raporu ve sponsor hesap eşleştirme' },
+      { id: 'marketing', label: 'Pazarlama & hakediş', hint: 'Reklam etiketleri, kampanya linkleri ve affiliate hakediş takibi' },
     ],
   },
   {
