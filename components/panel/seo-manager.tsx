@@ -12,19 +12,31 @@ import type { ActionState } from '@/app/panel/actions'
 import type { BlogPost } from '@/lib/blog'
 import { DEAL_LABELS, type Deal, type Verification } from '@/lib/deal-types'
 import { BlogEditor } from '@/components/panel/blog-editor'
+import { SeoHealthCard } from '@/components/panel/seo-health-card'
+import type { HealthIssue, NotFoundHit, Redirect } from '@/lib/seo-health'
 
-type Props = { posts: BlogPost[]; deals: Deal[]; publishing: boolean; verification: Verification; siteUrl: string }
+type Props = {
+  posts: BlogPost[]
+  deals: Deal[]
+  publishing: boolean
+  verification: Verification
+  siteUrl: string
+  issues: HealthIssue[]
+  notFound: NotFoundHit[]
+  redirects: Redirect[]
+}
 
 const input =
   'rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
 const card = 'flex flex-col gap-4 rounded-2xl border border-border bg-card p-5'
 const label = 'flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground'
 
-export function SeoManager({ posts, deals, publishing, verification, siteUrl }: Props) {
+export function SeoManager({ posts, deals, publishing, verification, siteUrl, issues, notFound, redirects }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <SeoGuide />
       <SearchConsoleCard verification={verification} siteUrl={siteUrl} />
+      <SeoHealthCard issues={issues} notFound={notFound} redirects={redirects} siteUrl={siteUrl} />
       <BlogEditor posts={posts} siteUrl={siteUrl} />
       <DealsCard deals={deals} publishing={publishing} />
     </div>

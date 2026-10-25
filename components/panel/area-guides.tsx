@@ -470,6 +470,64 @@ const MARKETING_STEPS: GuideStep[] = [
     ),
   },
   {
+    title: 'Hazır reklam sayfaları (/oyna)',
+    body: (
+      <>
+        <p className="mb-2">Reklamları ana sayfaya değil, sadece oyun ve topluluk anlatan, bahis içermeyen bu sayfalara yönlendir:</p>
+        <ul className={ul}>
+          <li><span className={code}>/oyna/tavla</span>, <span className={code}>/oyna/okey</span>, <span className={code}>/oyna/bilardo</span>, <span className={code}>/oyna/turnuva</span>, <span className={code}>/oyna/kankatv</span></li>
+          <li>Her sayfada tek bir hedef var: <b>“Ücretsiz üye ol”</b>. Butona basınca kayıt penceresi açılır, üyelik olayı Meta ve Google'a otomatik gider.</li>
+          <li>Reklam linkini doğrudan vermek yerine Kampanya linkleri sekmesinde hedef olarak bu sayfayı seçip <span className={code}>/k/kod</span> linkini kullan. Böylece hem reklam paneli hem bizim panel sayar.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: 'Meta (Facebook / Instagram) reklamı adım adım',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><b>Hesap kurulumu:</b> business.facebook.com üzerinden İşletme hesabı aç, bir Facebook sayfası ve Instagram hesabı bağla, ödeme yöntemi ekle.</li>
+          <li><b>Pixel:</b> Ölçüm etiketleri sekmesine Pixel numarasını gir. Etkinlik Yöneticisi'nde 24 saat içinde “PageView” ve “CompleteRegistration” olaylarını görmelisin.</li>
+          <li><b>Kampanya hedefi:</b> Reklam Yöneticisi → Oluştur → <b>Potansiyel Müşteriler</b> ya da <b>Satışlar</b> değil, başlangıçta <b>Trafik</b> seç. 50 üyelik olayı biriktikten sonra hedefi <b>Dönüşüm (CompleteRegistration)</b> olarak değiştir.</li>
+          <li><b>Hedef kitle:</b> Türkiye, 18–45 yaş. İlgi alanı: tavla, okey, mobil oyunlar, bilardo. Başlangıçta “Advantage+ kitle” açık kalabilir.</li>
+          <li><b>Yerleşim:</b> Otomatik bırak. Reels ve Story genelde en ucuz tıklamayı getirir.</li>
+          <li><b>Reklam görseli:</b> Kısa oyun videosu (5–15 sn) ya da oyun ekran görüntüsü. Metin: “Gerçek rakiplerle ücretsiz tavla. Haftalık turnuvalar.” Sponsor, bonus, bahis, para kelimesi <b>kullanma</b>.</li>
+          <li><b>Bütçe:</b> Günlük 150–300 TL ile 3 farklı görsel dene. 3 gün sonra en ucuz üyelik getireni bırak, diğerlerini kapat.</li>
+        </ol>
+        <p className={note}>Reklam reddedilirse itiraz etme, metni ve görseli değiştir. Arka arkaya ret hesabın kapanmasına yol açar.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Google Ads reklamı adım adım',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><b>Hesap:</b> ads.google.com → “Uzman moduna geç” (akıllı kampanya sihirbazını atla) → ödeme bilgisi gir.</li>
+          <li><b>Dönüşüm:</b> AW- kimliğini ve “Üyelik” dönüşüm etiketini Ölçüm etiketleri sekmesine gir. Hedefler → Dönüşümler ekranında durum birkaç saat sonra “Etkin” olmalı.</li>
+          <li><b>Kampanya türü:</b> <b>Arama</b> kampanyası seç. Görüntülü Reklam Ağı ve arama iş ortaklarının tikini kaldır, sadece Google aramada çıksın.</li>
+          <li><b>Anahtar kelimeler:</b> Tırnak içinde yaz, örneğin <span className={code}>&quot;online tavla oyna&quot;</span>, <span className={code}>&quot;101 okey oyna&quot;</span>, <span className={code}>[ücretsiz bilardo]</span>. Her oyun için ayrı reklam grubu aç ve kendi /oyna sayfasına yönlendir.</li>
+          <li><b>Negatif kelimeler:</b> bahis, casino, para, indir, apk, hile. Bunlar boşa para harcatır ve politikaya takılır.</li>
+          <li><b>Teklif:</b> İlk 2 hafta “Tıklamaları en üst düzeye çıkar” (TBM üst sınırı 3–5 TL). 30 dönüşüm sonrası “Dönüşümleri en üst düzeye çıkar”.</li>
+          <li><b>Reklam metni:</b> Başlıkta oyun adı geçsin: “Online Tavla Oyna”, “Gerçek Rakipler, Ücretsiz”, “Haftalık Turnuvalar”.</li>
+        </ol>
+        <p className={note}>Her hafta Anahtar kelimeler → Arama terimleri ekranına bak. Alakasız aramaları negatif listeye ekle, bu tek iş bütçenin %20–30'unu kurtarır.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Reklam bütçesini doğru yönetmek',
+    body: (
+      <ul className={ul}>
+        <li>Her reklam kampanyası için Kampanya linkleri sekmesinde bir kayıt aç ve <b>harcanan bütçeyi</b> güncel tut. Üye başı maliyeti panel hesaplar.</li>
+        <li>Kural: Üye başı maliyet, bir üyenin sana ortalama getirdiğinden (sponsor hakedişi ÷ toplam üye) düşük olmalı.</li>
+        <li>Yeni reklamı en az 3 gün çalıştırmadan yargılama. Reklam platformları ilk günlerde “öğrenme” aşamasındadır.</li>
+        <li>Kazanan reklamın bütçesini birden ikiye katlama. Her 2–3 günde %20 artır.</li>
+      </ul>
+    ),
+  },
+  {
     title: 'Hakediş takibi ve para talebi',
     body: (
       <>

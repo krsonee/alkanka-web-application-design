@@ -115,6 +115,30 @@ export async function listDeals(limit = 60, kind?: DealKind) {
   }
 }
 
+export const DEAL_FRESH_DAYS = 7
+
+export async function listDealsByBrand(brand: string, limit = 30) {
+  try {
+    await ensureTable()
+    const r = await rows(sql`SELECT * FROM deals WHERE lower(brand) = lower(${brand.trim()})
+      ORDER BY created_at DESC LIMIT ${limit}`)
+    return r.map(map)
+  } catch (error) {
+    console.error('[deals] marka fırsatları okunamadı', error)
+    return []
+  }
+}
+
+export async function latestDealByBrand() {
+  try {
+    await ensureTable()
+    const r = await rows(sql`SELECT lower(brand) AS brand, max(created_at) AS at FROM deals GROUP BY 1`)
+    return new Map(r.map((x) => [String(x.brand), new Date(String(x.at))]))
+  } catch {
+    return new Map<string, Date>()
+  }
+}
+
 export async function getDeal(slug: string) {
   const id = Number.parseInt(slug, 10)
   if (!Number.isFinite(id)) return null

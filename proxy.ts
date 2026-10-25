@@ -54,20 +54,51 @@ async function siteExists(key: string): Promise<boolean> {
   }
 }
 
+const REDIRECT_TTL = 60_000
+let redirectCache: { map: Map<string, string>; at: number } | null = null
+
+/** Panel-managed 301s for renamed/removed URLs. One small table, cached per instance; fails open. */
+async function findRedirect(pathname: string): Promise<string | null> {
+  if (!process.env.DATABASE_URL) return null
+  if (!redirectCache || Date.now() - redirectCache.at > REDIRECT_TTL) {
+    try {
+      const query = neon(process.env.DATABASE_URL)
+      const list = (await query`SELECT from_path, to_path FROM seo_redirects`) as { from_path: string; to_path: string }[]
+      redirectCache = { map: new Map(list.map((r) => [r.from_path, r.to_path])), at: Date.now() }
+    } catch {
+      redirectCache = { map: new Map(), at: Date.now() }
+    }
+  }
+  let path = pathname
+  try {
+    path = decodeURIComponent(pathname)
+  } catch {}
+  return redirectCache.map.get(path.replace(/\/+$/, '') || '/') ?? null
+}
+
 /** First-touch attribution: ?src=sms or ?utm_source=mail on any landing is kept for 30 days. */
 export async function proxy(request: NextRequest) {
   const routed = routeByHost(request)
   if (routed) return routed
 
+  const target = await findRedirect(request.nextUrl.pathname)
+  if (target) return NextResponse.redirect(new URL(target, request.url), 301)
+
   const siteMatch = request.nextUrl.pathname.match(/^\/siteler\/([^/]+)\/?$/)
   if (siteMatch && process.env.DATABASE_URL) {
     const key = decodeURIComponent(siteMatch[1]).slice(0, 120)
-    if (!(await siteExists(key))) return NextResponse.rewrite(new URL('/__site-not-found', request.url))
+    if (!(await siteExists(key))) {
+      const headers = new Headers(request.headers)
+      headers.set('x-alk-path', request.nextUrl.pathname)
+      return NextResponse.rewrite(new URL('/__site-not-found', request.url), { request: { headers } })
+    }
   }
 
   const params = request.nextUrl.searchParams
   const raw = params.get('src') ?? params.get('utm_source')
-  const res = NextResponse.next()
+  const forwarded = new Headers(request.headers)
+  forwarded.set('x-alk-path', request.nextUrl.pathname)
+  const res = NextResponse.next({ request: { headers: forwarded } })
   if (raw && !request.cookies.get('alk_src')) {
     const src = raw.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32)
     if (src) res.cookies.set('alk_src', src, { maxAge: 60 * 60 * 24 * 30, path: '/', sameSite: 'lax', secure: true, httpOnly: true })

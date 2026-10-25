@@ -388,15 +388,21 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         />
       )
     }),
-    section(ctx, 'seo', 'SEO', async () => (
-      <SeoManager
-        posts={await listPosts({ includeDrafts: true })}
-        deals={await listDeals(30)}
-        publishing={await dealsPublishing()}
-        verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
-        siteUrl={SITE_URL}
-      />
-    )),
+    section(ctx, 'seo', 'SEO', async () => {
+      const { seoHealth, list404, listRedirects } = await import('@/lib/seo-health')
+      return (
+        <SeoManager
+          posts={await listPosts({ includeDrafts: true })}
+          deals={await listDeals(30)}
+          publishing={await dealsPublishing()}
+          verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
+          siteUrl={SITE_URL}
+          issues={await seoHealth().catch(() => [])}
+          notFound={await list404().catch(() => [])}
+          redirects={await listRedirects().catch(() => [])}
+        />
+      )
+    }),
     section(ctx, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
     section(ctx, 'tour', 'Site turu', async () => {
       const { getTourSettings, tourStats } = await import('@/lib/tour')

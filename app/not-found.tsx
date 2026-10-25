@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { JakoAvatar } from '@/components/alkanka/jako'
+import { NotFoundLogger } from '@/components/alkanka/not-found-logger'
 
 export const metadata: Metadata = {
   title: 'Sayfa bulunamadı',
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 export default function NotFound() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-background px-6 text-center text-foreground">
+      <NotFoundLogger />
       <JakoAvatar pose="uzgun" size="lg" className="size-40 rounded-3xl" alt="Üzgün Jako" />
       <h1 className="font-display text-3xl font-bold text-balance">Bu sayfa uçup gitmiş kanka</h1>
       <p className="max-w-sm text-sm leading-relaxed text-muted-foreground text-pretty">
