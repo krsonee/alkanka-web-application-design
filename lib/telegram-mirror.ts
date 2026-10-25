@@ -2,6 +2,7 @@ import 'server-only'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { filterWords } from '@/lib/telegram-filters'
+import { decodeEntities } from '@/lib/html-entities'
 import { recordDeal } from '@/lib/deals'
 import { applyReplacements, parseReplacements, pickLink, type ReplaceRule } from '@/lib/text-replace'
 
@@ -118,16 +119,7 @@ export function normalizeChat(input: string) {
 }
 
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-export const stripTags = (s: string) =>
-  s
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0*39;/g, "'")
-    .replace(/&amp;/g, '&')
+export const stripTags = (s: string) => decodeEntities(s.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''))
 
 const ALLOWED_TAGS: Record<string, string> = { b: 'b', strong: 'b', i: 'i', em: 'i', u: 'u', s: 's', del: 's', code: 'code', pre: 'pre', blockquote: 'blockquote' }
 

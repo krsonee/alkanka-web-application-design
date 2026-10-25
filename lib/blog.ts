@@ -87,19 +87,3 @@ export async function deletePost(id: number) {
   await ensureTable()
   await rows(sql`DELETE FROM blog_posts WHERE id = ${id}`)
 }
-
-export type BodyBlock = { type: 'h2' | 'p'; text: string } | { type: 'ul'; items: string[] }
-
-export function parseBody(body: string): BodyBlock[] {
-  return body
-    .replace(/\r/g, '')
-    .split(/\n{2,}/)
-    .map((chunk) => chunk.trim())
-    .filter(Boolean)
-    .map((chunk): BodyBlock => {
-      if (chunk.startsWith('## ')) return { type: 'h2', text: chunk.slice(3).trim() }
-      const lines = chunk.split('\n')
-      if (lines.every((l) => l.trim().startsWith('- '))) return { type: 'ul', items: lines.map((l) => l.trim().slice(2)) }
-      return { type: 'p', text: lines.join(' ') }
-    })
-}

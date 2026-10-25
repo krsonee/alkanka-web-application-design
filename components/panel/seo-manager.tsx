@@ -1,19 +1,17 @@
 'use client'
 
 import { SeoGuide } from '@/components/panel/area-guides'
-import { useActionState, useState, useTransition } from 'react'
-import { CheckCircle2, ExternalLink, FileText, Loader2, Search, Trash2, Zap } from 'lucide-react'
+import { useActionState, useTransition } from 'react'
+import { CheckCircle2, ExternalLink, Loader2, Search, Trash2, Zap } from 'lucide-react'
 import {
   deleteDealAction,
-  deletePostAction,
-  savePostAction,
   saveVerificationAction,
   setDealsPublishingAction,
 } from '@/app/panel/seo-actions'
 import type { ActionState } from '@/app/panel/actions'
 import type { BlogPost } from '@/lib/blog'
 import { DEAL_LABELS, type Deal, type Verification } from '@/lib/deal-types'
-import { ImageField } from '@/components/panel/image-field'
+import { BlogEditor } from '@/components/panel/blog-editor'
 
 type Props = { posts: BlogPost[]; deals: Deal[]; publishing: boolean; verification: Verification; siteUrl: string }
 
@@ -27,7 +25,7 @@ export function SeoManager({ posts, deals, publishing, verification, siteUrl }: 
     <div className="flex flex-col gap-6">
       <SeoGuide />
       <SearchConsoleCard verification={verification} siteUrl={siteUrl} />
-      <BlogEditor posts={posts} />
+      <BlogEditor posts={posts} siteUrl={siteUrl} />
       <DealsCard deals={deals} publishing={publishing} />
     </div>
   )
@@ -96,104 +94,6 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
         <Status state={state} />
       </div>
     </form>
-  )
-}
-
-function BlogEditor({ posts }: { posts: BlogPost[] }) {
-  const [editing, setEditing] = useState<BlogPost | null>(null)
-  const [formKey, setFormKey] = useState(0)
-  const [state, action, pending] = useActionState<ActionState, FormData>(savePostAction, {})
-  const [deleting, startDelete] = useTransition()
-
-  const open = (post: BlogPost | null) => {
-    setEditing(post)
-    setFormKey((k) => k + 1)
-  }
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-      <form key={formKey} action={action} className={card}>
-        <div className="flex items-center gap-2">
-          <FileText className="size-5 text-primary" aria-hidden />
-          <h2 className="font-display text-xl font-bold uppercase text-foreground">
-            {editing ? 'Rehberi düzenle' : 'Yeni rehber yazısı'}
-          </h2>
-        </div>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {'Her yazı Google\'da ayrı bir sayfa olarak çıkar. Başlığa aranan kelimeyi koy (ör. "Deneme bonusu veren siteler 2026"). İçerikte "## " ile ara başlık, "- " ile madde açabilirsin.'}
-        </p>
-        <input type="hidden" name="id" value={editing?.id ?? ''} />
-        <label className={label}>
-          Başlık
-          <input name="title" required maxLength={120} defaultValue={editing?.title} className={input} />
-        </label>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className={label}>
-            Adres (boş bırakırsan başlıktan oluşur)
-            <input name="slug" maxLength={90} defaultValue={editing?.slug} placeholder="deneme-bonusu-veren-siteler" className={input} />
-          </label>
-          <label className={label}>
-            Anahtar kelimeler (virgülle)
-            <input name="keywords" maxLength={300} defaultValue={editing?.keywords} placeholder="deneme bonusu, promo kod" className={input} />
-          </label>
-        </div>
-        <label className={label}>
-          Özet (Google sonucunda görünür, en fazla 200)
-          <textarea name="excerpt" required maxLength={200} rows={2} defaultValue={editing?.excerpt} className={input} />
-        </label>
-        <label className={label}>
-          İçerik
-          <textarea name="body" required rows={12} defaultValue={editing?.body} className={`${input} font-mono`} />
-        </label>
-        <label className={label}>
-          Kapak görseli linki (isteğe bağlı)
-          <ImageField key={editing?.slug ?? 'new'} name="cover" defaultValue={editing?.cover ?? ''} uploadId="guide-cover" />
-        </label>
-        <label className="flex items-center gap-2 text-sm text-foreground">
-          <input type="checkbox" name="published" defaultChecked={editing?.published ?? true} className="size-4 accent-primary" />
-          Yayında
-        </label>
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" disabled={pending} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50">
-            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            Kaydet
-          </button>
-          {editing ? (
-            <button type="button" onClick={() => open(null)} className="rounded-xl border border-border px-4 py-2.5 text-sm text-foreground hover:bg-secondary">
-              Yeni yazı
-            </button>
-          ) : null}
-          <Status state={state} />
-        </div>
-      </form>
-
-      <section className={card} aria-label="Yazılar">
-        <h3 className="font-semibold text-foreground">Yazılar ({posts.length})</h3>
-        {posts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Henüz yazı yok.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {posts.map((p) => (
-              <li key={p.id} className="flex items-center gap-2 rounded-xl border border-border p-2">
-                <button type="button" onClick={() => open(p)} className="flex min-w-0 flex-1 flex-col text-left">
-                  <span className="truncate text-sm font-semibold text-foreground">{p.title}</span>
-                  <span className="text-xs text-muted-foreground">{p.published ? `/rehber/${p.slug}` : 'Taslak'}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={deleting}
-                  onClick={() => confirm('Yazı silinsin mi?') && startDelete(() => deletePostAction(p.id))}
-                  className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-destructive"
-                  aria-label={`${p.title} yazısını sil`}
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
   )
 }
 
