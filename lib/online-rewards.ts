@@ -69,7 +69,15 @@ export async function guestOnlineStatus(): Promise<OnlineStatus> {
 /** Extends (or restarts after a long break) the member's uninterrupted session and pays any hour reward reached. */
 export async function tickOnline(userId: string): Promise<OnlineStatus> {
   const cfg = await getOnlineConfig()
-  if (!cfg.enabled) return statusFor(cfg, 0, { member: true, active: false })
+  // Presence is recorded even with rewards off, because the panel's "online now" count reads this table.
+  if (!cfg.enabled) {
+    await rows(sql`
+      INSERT INTO online_sessions (user_id, started_at, last_seen) VALUES (${userId}, now(), now())
+      ON CONFLICT (user_id) DO UPDATE SET
+        started_at = CASE WHEN online_sessions.last_seen < now() - make_interval(mins => ${cfg.graceMinutes}) THEN now() ELSE online_sessions.started_at END,
+        last_seen = now()`)
+    return statusFor(cfg, 0, { member: true, active: false })
+  }
   const [s] = await rows<{ started_at: string; last_seen: string }>(sql`
     INSERT INTO online_sessions (user_id, started_at, last_seen) VALUES (${userId}, now(), now())
     ON CONFLICT (user_id) DO UPDATE SET

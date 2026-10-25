@@ -12,42 +12,42 @@ type Props = {
 }
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
-const RANGE_NOUN: Record<number, string> = { 1: 'dün', 7: 'önceki 7 gün', 30: 'önceki 30 gün' }
+const RANGE_NOUN: Record<number, string> = { 1: 'dün bu saate kadar', 7: 'önceki 7 gün', 30: 'önceki 30 gün' }
 
 export function PanelDashboard({ counts, pending, recent, stats }: Props) {
   return (
     <section aria-label="Genel bakış" className="flex flex-col gap-5">
       {stats && <TopBar stats={stats} />}
       {stats && <KpiRow stats={stats} />}
+      {counts && <MemberStrip counts={counts} />}
 
-      <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-8">{stats ? <TrendCard stats={stats} /> : <MemberRow counts={counts} />}</div>
-        <div className="col-span-4">
+      <div className="grid grid-cols-12 items-start gap-5">
+        {stats && (
+          <div className="col-span-8">
+            <TrendCard stats={stats} />
+          </div>
+        )}
+        <div className={stats ? 'col-span-4' : 'col-span-12'}>
           <JobsCard counts={counts} pending={pending} />
         </div>
       </div>
 
       {stats && (
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-3 items-start gap-5">
           <TopSponsorsCard stats={stats} />
           <EconomyCard stats={stats} />
           <GamesCard stats={stats} />
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-5">{counts && stats && <MemberRow counts={counts} vertical />}</div>
-        <div className="col-span-7">
-          <AuditCard recent={recent} />
-        </div>
-      </div>
+      <AuditCard recent={recent} />
     </section>
   )
 }
 
 function Card({ title, aside, children, className }: { title: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('flex h-full flex-col rounded-lg border border-border bg-card', className)}>
+    <div className={cn('flex flex-col rounded-lg border border-border bg-card', className)}>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {aside}
@@ -60,7 +60,7 @@ function Card({ title, aside, children, className }: { title: string; aside?: Re
 function TopBar({ stats }: { stats: DashStats }) {
   return (
     <div className="flex items-center justify-between gap-6">
-      <nav aria-label="Zaman aralığı" className="flex items-center gap-1 rounded-md border border-border bg-card p-1">
+      <nav aria-label="Zaman aralığı" className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card p-1">
         {DASH_RANGES.map((r) => (
           <a
             key={r.value}
@@ -80,24 +80,44 @@ function TopBar({ stats }: { stats: DashStats }) {
   )
 }
 
-const DOT: Record<HealthItem['state'], string> = { ok: 'bg-primary', warn: 'bg-destructive', off: 'bg-muted-foreground/50' }
+const DOT: Record<HealthItem['state'], string> = { ok: 'bg-live', off: 'bg-primary', warn: 'bg-destructive' }
+const LEGEND: { state: HealthItem['state']; label: string }[] = [
+  { state: 'ok', label: 'Çalışıyor' },
+  { state: 'off', label: 'Ayarlı değil' },
+  { state: 'warn', label: 'Hata' },
+]
 
 function HealthStrip({ items }: { items: HealthItem[] }) {
-  const warn = items.filter((i) => i.state === 'warn').length
+  const errors = items.filter((i) => i.state === 'warn').length
+  const unset = items.filter((i) => i.state === 'off').length
+  const headline = errors
+    ? `${errors} sistemde hata var`
+    : unset
+      ? `${unset} sistem ayarlı değil`
+      : 'Tüm sistemler çalışıyor'
   return (
     <div className="flex min-w-0 items-center gap-4 rounded-md border border-border bg-card px-4 py-2">
-      <span className={cn('shrink-0 text-xs font-semibold', warn ? 'text-destructive' : 'text-foreground')}>
-        {warn ? `${warn} sistemde sorun var` : 'Sistemler çalışıyor'}
-      </span>
-      <ul className="flex min-w-0 items-center gap-4 overflow-x-auto">
+      <span className={cn('shrink-0 text-xs font-semibold', errors ? 'text-destructive' : unset ? 'text-primary' : 'text-live')}>{headline}</span>
+      <ul className="flex min-w-0 items-center gap-4 overflow-x-auto" aria-label="Sistem durumu">
         {items.map((i) => (
-          <li key={i.label} title={i.note} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <li key={i.label} title={`${i.label}: ${i.note}`} className="flex shrink-0 cursor-help items-center gap-1.5 text-xs">
             <span className={cn('size-2 rounded-full', DOT[i.state])} aria-hidden="true" />
             <span className="text-foreground">{i.label}</span>
-            <span className="sr-only">: {i.note}</span>
+            <span className="sr-only">
+              {' '}
+              ({LEGEND.find((l) => l.state === i.state)?.label}): {i.note}
+            </span>
           </li>
         ))}
       </ul>
+      <span className="flex shrink-0 items-center gap-3 border-l border-border pl-4 text-[11px] text-muted-foreground" aria-hidden="true">
+        {LEGEND.map((l) => (
+          <span key={l.state} className="flex items-center gap-1">
+            <span className={cn('size-1.5 rounded-full', DOT[l.state])} />
+            {l.label}
+          </span>
+        ))}
+      </span>
     </div>
   )
 }
@@ -116,7 +136,7 @@ function Delta({ cur, prev, range }: { cur: number; prev: number; range: number 
   const pct = prev === 0 ? null : Math.round(((cur - prev) / prev) * 100)
   const Icon = up ? ArrowUpRight : ArrowDownRight
   return (
-    <span className={cn('flex items-center gap-1 text-xs', up ? 'text-primary' : 'text-destructive')}>
+    <span className={cn('flex items-center gap-1 text-xs', up ? 'text-live' : 'text-destructive')}>
       <Icon className="size-3" aria-hidden="true" />
       {pct === null ? 'yeni' : `%${Math.abs(pct)}`}
       <span className="text-muted-foreground">· {label}</span>
@@ -125,12 +145,13 @@ function Delta({ cur, prev, range }: { cur: number; prev: number; range: number 
 }
 
 function KpiRow({ stats }: { stats: DashStats }) {
+  const today = stats.range === 1
   const items = [
-    { label: 'Şu an çevrimiçi', value: stats.online, note: 'Son 5 dakikada aktif' as React.ReactNode, href: '?b=users' },
-    { label: 'Yeni üye', value: stats.newUsers.cur, note: <Delta {...stats.newUsers} range={stats.range} />, href: '?b=users' },
-    { label: 'Aktif üye', value: stats.activeMembers.cur, note: <Delta {...stats.activeMembers} range={stats.range} />, href: '?b=users' },
+    { label: 'Şu an çevrimiçi', value: stats.online, note: 'Sitede son 5 dakikada açık olan üye' as React.ReactNode, href: '?b=users' },
+    { label: today ? 'Bugün kayıt olan' : 'Yeni üye', value: stats.newUsers.cur, note: <Delta {...stats.newUsers} range={stats.range} />, href: '?b=users' },
+    { label: today ? 'Bugün aktif' : 'İşlem yapan üye', value: stats.activeMembers.cur, note: <Delta {...stats.activeMembers} range={stats.range} />, href: '?b=users' },
     { label: 'Sponsor tıklaması', value: stats.sponsorClicks.cur, note: <Delta {...stats.sponsorClicks} range={stats.range} />, href: '?b=growth' },
-    { label: 'Dağıtılan KC', value: stats.kcOut.cur, note: <Delta {...stats.kcOut} range={stats.range} />, href: '?b=rewards' },
+    { label: 'Ödül olarak dağıtılan KC', value: stats.kcOut.cur, note: <Delta {...stats.kcOut} range={stats.range} />, href: '?b=rewards' },
     { label: 'Oynanan maç', value: stats.games.cur, note: <Delta {...stats.games} range={stats.range} />, href: '?b=games' },
   ]
   return (
@@ -146,19 +167,62 @@ function KpiRow({ stats }: { stats: DashStats }) {
   )
 }
 
-function Bars({ title, data, total }: { title: string; data: { day: string; v: number }[]; total: number }) {
+const MEMBER_LABELS: { key: MemberStatus | 'tumu'; label: string }[] = [
+  { key: 'tumu', label: 'Toplam üye' },
+  { key: 'aktif', label: 'Aktif hesap' },
+  { key: 'donduruldu', label: 'Dondurulan' },
+  { key: 'banli', label: 'Banlı' },
+  { key: 'supheli', label: 'Şüpheli' },
+]
+
+function MemberStrip({ counts }: { counts: NonNullable<Props['counts']> }) {
+  return (
+    <a
+      href="?b=users"
+      className="flex items-center gap-6 rounded-lg border border-border bg-card px-4 py-2.5 text-[13px] hover:bg-secondary"
+      aria-label="Üye durumu, tüm üyelere git"
+    >
+      <span className="text-xs font-semibold text-muted-foreground">Üye durumu</span>
+      <dl className="flex flex-1 items-center gap-6">
+        {MEMBER_LABELS.map((s) => (
+          <div key={s.key} className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">{s.label}</dt>
+            <dd className={cn('font-semibold tabular-nums', s.key === 'supheli' && counts[s.key] > 0 ? 'text-destructive' : 'text-foreground')}>
+              {fmt(counts[s.key])}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        Tüm üyeler
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      </span>
+    </a>
+  )
+}
+
+type Point = { key: string; label: string; v: number }
+
+function Bars({ title, data, total, every }: { title: string; data: Point[]; total: number; every: number }) {
   const max = Math.max(1, ...data.map((d) => d.v))
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
         <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
         <span className="text-xs tabular-nums text-foreground">Toplam {fmt(total)}</span>
       </div>
-      <div className="flex h-16 items-end gap-1" role="img" aria-label={`${title}: günlük ${data.map((d) => d.v).join(', ')}`}>
+      <div className="flex h-16 items-end gap-1" role="img" aria-label={`${title}: ${data.map((d) => `${d.label} ${d.v}`).join(', ')}`}>
         {data.map((d) => (
-          <div key={d.day} className="group relative flex h-full flex-1 items-end" title={`${d.day.slice(8, 10)}.${d.day.slice(5, 7)}: ${fmt(d.v)}`}>
+          <div key={d.key} className="group flex h-full flex-1 items-end" title={`${d.label}: ${fmt(d.v)}`}>
             <div className={cn('w-full rounded-sm', d.v ? 'bg-primary group-hover:bg-foreground' : 'bg-border')} style={{ height: `${Math.max(4, (d.v / max) * 100)}%` }} />
           </div>
+        ))}
+      </div>
+      <div className="flex gap-1" aria-hidden="true">
+        {data.map((d, i) => (
+          <span key={d.key} className="flex-1 text-center text-[10px] tabular-nums text-muted-foreground">
+            {i % every === 0 || i === data.length - 1 ? d.label : ''}
+          </span>
         ))}
       </div>
     </div>
@@ -167,17 +231,17 @@ function Bars({ title, data, total }: { title: string; data: { day: string; v: n
 
 function TrendCard({ stats }: { stats: DashStats }) {
   const s = stats.series
-  const pick = (k: 'users' | 'clicks' | 'games') => s.map((x) => ({ day: x.day, v: x[k] }))
+  const pick = (k: 'users' | 'clicks' | 'games') => s.map((x) => ({ key: x.key, label: x.label, v: x[k] }))
   const sum = (k: 'users' | 'clicks' | 'games') => s.reduce((n, x) => n + x[k], 0)
-  const first = s[0]?.day
-  const last = s[s.length - 1]?.day
-  const d = (v?: string) => (v ? `${v.slice(8, 10)}.${v.slice(5, 7)}` : '')
+  const hourly = stats.seriesUnit === 'hour'
+  const every = hourly ? 3 : s.length > 14 ? 5 : 1
+  const title = hourly ? 'Bugün saat saat' : `Son ${s.length} gün`
   return (
-    <Card title={`Son ${s.length} gün`} aside={<span className="text-xs text-muted-foreground">{`${d(first)} – ${d(last)} · çubuğun üstüne gel`}</span>}>
+    <Card title={title} aside={<span className="text-xs text-muted-foreground">Ayrıntı için çubuğun üstüne gel</span>}>
       <div className="flex flex-col gap-5 px-4 py-4">
-        <Bars title="Yeni kayıt" data={pick('users')} total={sum('users')} />
-        <Bars title="Sponsor tıklaması" data={pick('clicks')} total={sum('clicks')} />
-        <Bars title="Oynanan maç" data={pick('games')} total={sum('games')} />
+        <Bars title="Yeni kayıt" data={pick('users')} total={sum('users')} every={every} />
+        <Bars title="Sponsor tıklaması" data={pick('clicks')} total={sum('clicks')} every={every} />
+        <Bars title="Oynanan maç" data={pick('games')} total={sum('games')} every={every} />
       </div>
     </Card>
   )
@@ -197,10 +261,10 @@ function JobsCard({ counts, pending }: { counts: Props['counts']; pending: Pendi
   return (
     <Card title="Bugün yapılacaklar" aside={<span className="text-xs text-muted-foreground">{total ? `${total} iş bekliyor` : 'Hepsi temiz'}</span>}>
       {open.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-5 text-sm text-muted-foreground">
-          <CheckCircle2 className="size-4 text-primary" aria-hidden="true" />
-          Onay bekleyen iş yok.
-        </div>
+        <p className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
+          <CheckCircle2 className="size-4 text-live" aria-hidden="true" />
+          Her şey temiz, onay bekleyen iş yok.
+        </p>
       ) : (
         <ul className="flex flex-col divide-y divide-border">
           {open.map((j) => (
@@ -218,7 +282,7 @@ function JobsCard({ counts, pending }: { counts: Props['counts']; pending: Pendi
         </ul>
       )}
       {suspects > 0 && (
-        <a href="?b=users" className="group mt-auto flex items-center gap-3 border-t border-border px-4 py-2.5 hover:bg-secondary">
+        <a href="?b=users" className="group flex items-center gap-3 border-t border-border px-4 py-2.5 hover:bg-secondary">
           <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="text-sm font-medium text-foreground">{`${suspects} şüpheli hesap`}</span>
@@ -232,7 +296,7 @@ function JobsCard({ counts, pending }: { counts: Props['counts']; pending: Pendi
 }
 
 function RankList({ items, empty, unit }: { items: { name: string; value: number; sub?: string }[]; empty: string; unit?: string }) {
-  if (items.length === 0) return <p className="px-4 py-4 text-sm text-muted-foreground">{empty}</p>
+  if (items.length === 0) return <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>
   const max = Math.max(1, ...items.map((i) => i.value))
   return (
     <ol className="flex flex-col gap-2.5 px-4 py-3">
@@ -258,9 +322,10 @@ function RankList({ items, empty, unit }: { items: { name: string; value: number
 }
 
 function TopSponsorsCard({ stats }: { stats: DashStats }) {
+  const total = stats.topSponsors.reduce((n, s) => n + s.clicks, 0)
   return (
     <Card title="En çok tıklanan sponsorlar" aside={<a href="?b=growth" className="text-xs text-muted-foreground hover:text-foreground">Trafik raporu</a>}>
-      <RankList items={stats.topSponsors.map((s) => ({ name: s.name, value: s.clicks }))} empty="Bu aralıkta sponsor tıklaması yok." unit="tık" />
+      <RankList items={stats.topSponsors.map((s) => ({ name: s.name, value: s.clicks, sub: total ? `%${Math.round((s.clicks / total) * 100)}` : undefined }))} empty="Bu aralıkta sponsor tıklaması yok." unit="tık" />
     </Card>
   )
 }
@@ -270,7 +335,7 @@ function EconomyCard({ stats }: { stats: DashStats }) {
     <Card title="KC ekonomisi" aside={<a href="?b=rewards" className="text-xs text-muted-foreground hover:text-foreground">Ödül ayarları</a>}>
       <dl className="grid grid-cols-3 divide-x divide-border border-b border-border">
         {[
-          { k: 'Dağıtılan', v: stats.kcOut.cur },
+          { k: 'Ödül dağıtılan', v: stats.kcOut.cur },
           { k: 'Markette harcanan', v: stats.kcSpent },
           { k: 'Kasa kazancı', v: stats.houseNet },
         ].map((x) => (
@@ -290,7 +355,7 @@ function EconomyCard({ stats }: { stats: DashStats }) {
             {stats.anomalies.map((a) => (
               <li key={`${a.name}-${a.at}`} className="flex justify-between gap-3 text-xs text-foreground">
                 <span className="truncate">
-                  {a.name} <span className="text-muted-foreground">· {new Date(a.at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                  {a.name} <span className="text-muted-foreground">· {new Date(a.at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}</span>
                 </span>
                 <span className="shrink-0 font-semibold tabular-nums">{fmt(a.amount)} KC</span>
               </li>
@@ -298,11 +363,13 @@ function EconomyCard({ stats }: { stats: DashStats }) {
           </ul>
         </div>
       )}
-      <h3 className="px-4 pt-3 text-xs font-medium text-muted-foreground">En çok kazananlar</h3>
-      <RankList items={stats.topEarners.map((e) => ({ name: e.name, value: e.amount }))} empty="Bu aralıkta KC kazanan yok." unit="KC" />
+      <h3 className="px-4 pt-3 text-xs font-medium text-muted-foreground">Ödülle en çok kazananlar</h3>
+      <RankList items={stats.rewardEarners.map((e) => ({ name: e.name, value: e.amount }))} empty="Bu aralıkta ödül alan yok." unit="KC" />
+      <h3 className="border-t border-border px-4 pt-3 text-xs font-medium text-muted-foreground">Oyunda net en çok kazananlar</h3>
+      <RankList items={stats.gameWinners.map((e) => ({ name: e.name, value: e.amount }))} empty="Bu aralıkta oyundan kârla çıkan yok." unit="KC" />
       {stats.kcSources.length > 0 && (
-        <p className="mt-auto border-t border-border px-4 py-2.5 text-xs leading-relaxed text-muted-foreground">
-          {'Kaynak: '}
+        <p className="border-t border-border px-4 py-2.5 text-xs leading-relaxed text-muted-foreground">
+          {'Ödül kaynağı: '}
           {stats.kcSources.map((s) => `${s.label} ${fmt(s.amount)}`).join(' · ')}
         </p>
       )}
@@ -338,67 +405,27 @@ function GamesCard({ stats }: { stats: DashStats }) {
   )
 }
 
-const STAT_LABELS: { key: MemberStatus | 'tumu'; label: string }[] = [
-  { key: 'tumu', label: 'Toplam üye' },
-  { key: 'aktif', label: 'Aktif' },
-  { key: 'donduruldu', label: 'Dondurulan' },
-  { key: 'banli', label: 'Banlı' },
-  { key: 'supheli', label: 'Şüpheli' },
-]
-
-function MemberRow({ counts, vertical }: { counts: Props['counts']; vertical?: boolean }) {
-  if (!counts) return null
-  if (vertical) {
-    return (
-      <Card title="Üye durumu" aside={<a href="?b=users" className="text-xs text-muted-foreground hover:text-foreground">Tüm üyeler</a>}>
-        <dl className="grid grid-cols-5 divide-x divide-border">
-          {STAT_LABELS.map((s) => (
-            <div key={s.key} className="flex flex-col gap-0.5 px-4 py-3">
-              <dt className="text-xs text-muted-foreground">{s.label}</dt>
-              <dd className={cn('text-xl font-semibold tabular-nums', s.key === 'supheli' && counts[s.key] > 0 ? 'text-destructive' : 'text-foreground')}>{fmt(counts[s.key])}</dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
-    )
-  }
-  return (
-    <div className="grid grid-cols-5 divide-x divide-border rounded-lg border border-border bg-card">
-      {STAT_LABELS.map((s) => (
-        <a key={s.key} href="?b=users" className="flex flex-col gap-0.5 px-4 py-3 hover:bg-secondary">
-          <span className="text-xs text-muted-foreground">{s.label}</span>
-          <span className="text-xl font-semibold tabular-nums text-foreground">{fmt(counts[s.key])}</span>
-        </a>
-      ))}
-    </div>
-  )
-}
-
 function AuditCard({ recent }: { recent: AuditRow[] }) {
   return (
     <Card title="Son yönetici işlemleri" aside={<a href="?b=audit" className="text-xs text-muted-foreground hover:text-foreground">Tümünü gör</a>}>
       {recent.length === 0 ? (
-        <p className="px-4 py-5 text-sm text-muted-foreground">Henüz kayıt yok.</p>
+        <p className="px-4 py-3 text-sm text-muted-foreground">Henüz kayıt yok.</p>
       ) : (
         <ul className="flex flex-col divide-y divide-border">
           {recent.map((r) => (
             <li key={r.id} className="grid grid-cols-12 items-baseline gap-3 px-4 py-2 text-[13px]">
-              <span className="col-span-3 truncate font-semibold text-foreground" title={r.actor}>
+              <span className="col-span-2 truncate font-semibold text-foreground" title={r.actor}>
                 {r.actor.replace(/\s*\(@.*\)$/, '')}
               </span>
-              <span className="col-span-6 flex min-w-0 flex-col">
-                <span className="text-foreground">
-                  {r.action}
-                  {r.detail && <span className="font-semibold"> · {r.detail.split(' · ')[0]}</span>}
-                </span>
-                {r.target && (
-                  <span className="truncate text-xs text-muted-foreground" title={r.target}>
-                    {r.target}
-                  </span>
-                )}
+              <span className="col-span-4 text-foreground">
+                {r.action}
+                {r.detail && <span className="font-semibold"> · {r.detail.split(' · ')[0]}</span>}
               </span>
-              <time dateTime={r.createdAt} className="col-span-3 text-right text-xs tabular-nums text-muted-foreground">
-                {new Date(r.createdAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              <span className="col-span-4 truncate text-muted-foreground" title={r.target ?? undefined}>
+                {r.target}
+              </span>
+              <time dateTime={r.createdAt} className="col-span-2 text-right text-xs tabular-nums text-muted-foreground">
+                {new Date(r.createdAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}
               </time>
             </li>
           ))}
