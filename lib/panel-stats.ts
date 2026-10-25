@@ -23,7 +23,7 @@ export type DashStats = {
   sponsorClicks: Pair
   kcOut: Pair
   games: Pair
-  series: { key: string; label: string; users: number; clicks: number; games: number }[]
+  series: { key: string; label: string; users: number; clicks: number; games: number; future: boolean }[]
   seriesUnit: 'hour' | 'day'
   topSponsors: { name: string; clicks: number }[]
   kcSources: { label: string; amount: number }[]
@@ -109,12 +109,13 @@ export async function dashStats(range: DashRange): Promise<DashStats> {
     safe(async () => {
       const buckets =
         d === 1
-          ? sql`SELECT generate_series(date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul'), date_trunc('hour', now() AT TIME ZONE 'Europe/Istanbul'), interval '1 hour') AS t`
+          ? sql`SELECT generate_series(date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul'), date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + interval '23 hours', interval '1 hour') AS t`
           : sql`SELECT generate_series(date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') - make_interval(days => ${d - 1}::int), date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul'), interval '1 day') AS t`
       const unit = d === 1 ? 'hour' : 'day'
-      const r = await rows<{ key: string; users: string; clicks: string; games: string }>(sql`
+      const r = await rows<{ key: string; users: string; clicks: string; games: string; future: boolean }>(sql`
         WITH b AS (${buckets})
         SELECT to_char(b.t, 'YYYY-MM-DD"T"HH24') AS key,
+          b.t > (now() AT TIME ZONE 'Europe/Istanbul') AS future,
           (SELECT count(*) FROM "user" u WHERE date_trunc(${unit}, u."createdAt" AT TIME ZONE 'Europe/Istanbul') = b.t) AS users,
           (SELECT count(*) FROM link_clicks l WHERE date_trunc(${unit}, l.created_at AT TIME ZONE 'Europe/Istanbul') = b.t)
             + (SELECT count(*) FROM aff_clicks a WHERE date_trunc(${unit}, a.created_at AT TIME ZONE 'Europe/Istanbul') = b.t) AS clicks,
@@ -126,6 +127,7 @@ export async function dashStats(range: DashRange): Promise<DashStats> {
         users: num(x.users),
         clicks: num(x.clicks),
         games: num(x.games),
+        future: Boolean(x.future),
       }))
     }, []),
     safe(async () => {
