@@ -1614,3 +1614,10 @@
   margin-bottom: 0;
 }
 .ls-split .ls-board { max-width: 100% !important; }
+
+@keyframes dash-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.dash-rise { animation: dash-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+@media (prefers-reduced-motion: reduce) { .dash-rise { animation: none; } }
