@@ -189,8 +189,8 @@ export function ContentEditor({
   const current = currentGroup?.items.find((i) => i.id === tab)
   const totalPending = groups.reduce((n, g) => n + g.items.reduce((m, i) => m + i.pending, 0), 0)
   return (
-    <div className="flex min-h-dvh min-w-[1024px] bg-background">
-      <aside className="sticky top-0 flex h-dvh w-72 shrink-0 flex-col border-r border-border bg-card">
+    <div className="flex min-h-dvh min-w-[1024px] bg-background pl-72">
+      <aside className="fixed inset-y-0 left-0 z-30 flex w-72 flex-col border-r border-border bg-card">
         <div className="flex flex-col gap-0.5 border-b border-border px-4 py-4">
           <span className="font-display text-base font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
           <span className="truncate text-xs text-muted-foreground">
@@ -255,7 +255,7 @@ export function ContentEditor({
               <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
               <h1 className="truncate font-semibold text-foreground">{current?.label ?? 'Genel bakış'}</h1>
             </div>
-            <p className="truncate text-xs text-muted-foreground">{current?.hint ?? 'Sitenin bugünkü durumu, bekleyen işler ve son hareketler'}</p>
+            {current?.hint && <p className="truncate text-xs text-muted-foreground">{current.hint}</p>}
           </div>
           {totalPending > 0 && tab !== 'dashboard' && (
             <button

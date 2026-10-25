@@ -95,6 +95,8 @@ export type SeriesPoint = {
   users: number
   clicks: number
   games: number
+  active: number
+  kc: number
   pUsers: number
   pClicks: number
   pGames: number
@@ -132,7 +134,7 @@ export type DashStats = {
   circulation: { total: number; holders: number }
   rewardEarners: { name: string; amount: number }[]
   gameWinners: { name: string; amount: number }[]
-  anomalies: { name: string; amount: number; at: string }[]
+  anomalies: { name: string; amount: number; hours: number; at: string }[]
   gameModes: { mode: string; count: number; stake: number }[]
   topGames: { game: string; count: number }[]
   health: HealthItem[]
@@ -271,6 +273,9 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
           (SELECT count(*) FROM link_clicks l WHERE l.created_at >= b.s AND l.created_at < b.e)
             + (SELECT count(*) FROM aff_clicks a WHERE a.created_at >= b.s AND a.created_at < b.e) AS clicks,
           (SELECT count(*) FROM game_history x WHERE x.mode IN ('bot','pvp','masa') AND x.created_at >= b.s AND x.created_at < b.e) AS games,
+          (SELECT count(DISTINCT k.user_id) FROM kp_events k WHERE k.created_at >= b.s AND k.created_at < b.e) AS active,
+          (SELECT coalesce(sum(k.coins), 0) FROM kp_events k WHERE k.coins > 0 AND k.created_at >= b.s AND k.created_at < b.e)
+            + (SELECT coalesce(sum(x.delta), 0) FROM game_history x WHERE x.mode = 'odul' AND x.delta > 0 AND x.created_at >= b.s AND x.created_at < b.e) AS kc,
           (SELECT count(*) FROM "user" u WHERE u."createdAt" >= b.s - ${shift} AND u."createdAt" < b.e - ${shift}) AS p_users,
           (SELECT count(*) FROM link_clicks l WHERE l.created_at >= b.s - ${shift} AND l.created_at < b.e - ${shift})
             + (SELECT count(*) FROM aff_clicks a WHERE a.created_at >= b.s - ${shift} AND a.created_at < b.e - ${shift}) AS p_clicks,
@@ -286,6 +291,8 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
           users: num(x.users),
           clicks: num(x.clicks),
           games: num(x.games),
+          active: num(x.active),
+          kc: num(x.kc),
           pUsers: num(x.p_users),
           pClicks: num(x.p_clicks),
           pGames: num(x.p_games),
@@ -296,7 +303,7 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
     safe(async () => {
       const res = await rows<{ name: string; clicks: string }>(sql`
         SELECT name, sum(n) AS clicks FROM (
-          SELECT coalesce(s.name, 'Silinmiş sponsor #' || l.site_id) AS name, count(*) AS n
+          SELECT coalesce(s.name, 'Silinmiş sponsorlar') AS name, count(*) AS n
           FROM link_clicks l LEFT JOIN sites s ON s.id::text = l.site_id OR s.slug = l.site_id
           WHERE ${inRange(sql`l.created_at`)} GROUP BY 1
           UNION ALL
@@ -390,14 +397,16 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
       return res.map((x) => ({ name: x.name, amount: num(x.amount) }))
     }, []),
     safe(async () => {
-      const res = await rows<{ name: string; amount: string; at: string }>(sql`
-        SELECT coalesce(u.name, u.email, t.user_id) AS name, sum(t.amount) AS amount, date_trunc('hour', t.created_at) AS at FROM (
-          SELECT user_id, coins AS amount, created_at FROM kp_events WHERE coins > 0 AND ${inRange(sql`created_at`)}
-          UNION ALL
-          SELECT user_id, delta AS amount, created_at FROM game_history WHERE delta > 0 AND ${inRange(sql`created_at`)}
-        ) t LEFT JOIN "user" u ON u.id = t.user_id
-        GROUP BY 1, 3 HAVING sum(t.amount) >= 2000 ORDER BY amount DESC LIMIT 5`)
-      return res.map((x) => ({ name: x.name, amount: num(x.amount), at: new Date(x.at).toISOString() }))
+      const res = await rows<{ name: string; amount: string; hours: string; at: string }>(sql`
+        SELECT name, max(amount) AS amount, count(*) AS hours, max(at) AS at FROM (
+          SELECT coalesce(u.name, u.email, t.user_id) AS name, sum(t.amount) AS amount, date_trunc('hour', t.created_at) AS at FROM (
+            SELECT user_id, coins AS amount, created_at FROM kp_events WHERE coins > 0 AND ${inRange(sql`created_at`)}
+            UNION ALL
+            SELECT user_id, delta AS amount, created_at FROM game_history WHERE delta > 0 AND ${inRange(sql`created_at`)}
+          ) t LEFT JOIN "user" u ON u.id = t.user_id
+          GROUP BY 1, 3 HAVING sum(t.amount) >= 2000
+        ) h GROUP BY name ORDER BY amount DESC LIMIT 5`)
+      return res.map((x) => ({ name: x.name, amount: num(x.amount), hours: num(x.hours), at: new Date(x.at).toISOString() }))
     }, []),
     safe(async () => {
       const res = await rows<{ mode: string; count: string; stake: string }>(sql`
