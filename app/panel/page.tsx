@@ -347,13 +347,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
     }),
     section(ctx, 'logo', 'Logolar', async () => {
-      const logoSponsors = await listLogoSponsors()
+      const [logoSponsors, adStats] = await Promise.all([listLogoSponsors(), readPromoTotals('ad')])
       return (
         <TelegramTabs
           label="Paylaşım, reklam ve logolar"
           tabs={[
             { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
-            { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} /> },
+            { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} stats={adStats} /> },
             {
               id: 'sponsor-logos',
               label: `Sponsor logoları (${logoSponsors.length})`,

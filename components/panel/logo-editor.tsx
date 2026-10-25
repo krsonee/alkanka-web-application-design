@@ -85,7 +85,27 @@ export function LogoEditor({
   const [urls, setUrls] = useState<Record<string, string>>(saved)
   const [query, setQuery] = useState('')
   const [uploadError, setUploadError] = useState('')
+  const [filter, setFilter] = useState<'all' | 'filled' | 'empty'>('all')
+  const [dragOver, setDragOver] = useState('')
   const q = query.trim().toLocaleLowerCase('tr')
+  const filled = items.filter((i) => urls[i.id]).length
+
+  async function dropUpload(item: LogoItem, file: File) {
+    setDragOver('')
+    if (!file.type.startsWith('image/')) return setUploadError(`${item.label}: sadece görsel dosyası bırakabilirsin.`)
+    setUploadError('')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('id', item.id)
+      const res = await fetch('/api/logo-upload', { method: 'POST', body })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (!res.ok || !data.url) throw new Error(data.error ?? 'Yükleme başarısız oldu.')
+      setUrls((u) => ({ ...u, [item.id]: data.url! }))
+    } catch (e) {
+      setUploadError(`${item.label}: ${e instanceof Error ? e.message : 'Yükleme başarısız oldu.'}`)
+    }
+  }
 
   return (
     <form action={action} className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4">
@@ -95,6 +115,28 @@ export function LogoEditor({
           <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
           <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 rounded-lg bg-secondary p-1" role="tablist" aria-label="Filtre">
+            {([
+              ['all', `Tümü ${items.length}`],
+              ['filled', `Logolu ${filled}`],
+              ['empty', `Eksik ${items.length - filled}`],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={filter === id}
+                onClick={() => setFilter(id)}
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-xs tabular-nums',
+                  filter === id ? 'bg-card font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         <input
           type="search"
           aria-label={`${title} içinde ara`}
@@ -103,14 +145,39 @@ export function LogoEditor({
           placeholder="Ara…"
           className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary sm:w-56"
         />
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${items.length ? (filled / items.length) * 100 : 0}%` }} />
+        </div>
+        <span className="text-xs tabular-nums text-muted-foreground">{`${filled}/${items.length} logo hazır · dosyayı satırın üstüne sürükleyip bırakabilirsin`}</span>
       </div>
 
       <ul className="grid gap-2 md:grid-cols-2">
         {items.map((item) => {
           const url = urls[item.id] ?? ''
-          const hidden = q && !item.label.toLocaleLowerCase('tr').includes(q)
+          const hidden =
+            (q && !item.label.toLocaleLowerCase('tr').includes(q)) || (filter === 'filled' && !url) || (filter === 'empty' && !!url)
           return (
-            <li key={item.id} className={cn('flex items-center gap-3 rounded-xl border border-border bg-background p-2', hidden && 'hidden')}>
+            <li
+              key={item.id}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOver(item.id)
+              }}
+              onDragLeave={() => setDragOver((d) => (d === item.id ? '' : d))}
+              onDrop={(e) => {
+                e.preventDefault()
+                const file = e.dataTransfer.files?.[0]
+                if (file) dropUpload(item, file)
+              }}
+              className={cn(
+                'flex items-center gap-3 rounded-xl border bg-background p-2 transition-colors',
+                dragOver === item.id ? 'border-primary bg-primary/10' : url ? 'border-border' : 'border-dashed border-border',
+                hidden && 'hidden',
+              )}
+            >
               <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/30 bg-card font-display text-sm font-bold text-primary">
                 {url ? (
                   // eslint-disable-next-line @next/next/no-img-element -- preview of any https logo URL
