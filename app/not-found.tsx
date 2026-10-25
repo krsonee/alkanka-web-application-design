@@ -1,5 +1,11 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { JakoAvatar } from '@/components/alkanka/jako'
+
+export const metadata: Metadata = {
+  title: 'Sayfa bulunamadı',
+  robots: { index: false, follow: true },
+}
 
 export default function NotFound() {
   return (
