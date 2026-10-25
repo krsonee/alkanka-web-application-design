@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { getPost, parseBody } from '@/lib/blog'
+import { getPost } from '@/lib/blog'
+import { BlogBody, bodyWordCount, extractFaq } from '@/lib/blog-format'
 import { jsonLd, SITE_NAME, SITE_URL } from '@/lib/seo'
 
 export const revalidate = 600
@@ -16,7 +17,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     description: post.excerpt,
     keywords: post.keywords ? post.keywords.split(',').map((k) => k.trim()).filter(Boolean) : undefined,
     alternates: { canonical: url },
-    openGraph: { type: 'article', title: post.title, description: post.excerpt, url, images: post.cover ? [post.cover] : undefined },
+    openGraph: {
+      type: 'article',
+      title: post.title,
+      description: post.excerpt,
+      url,
+      publishedTime: post.createdAt,
+      modifiedTime: post.updatedAt,
+      images: post.cover ? [post.cover] : undefined,
+    },
   }
 }
 
@@ -24,49 +33,75 @@ export default async function GuideArticle({ params }: { params: Promise<{ slug:
   const post = await getPost((await params).slug)
   if (!post) notFound()
 
-  const ld = {
-    '@context': 'https://schema.org',
-    '@type': 'Article',
-    headline: post.title,
-    description: post.excerpt,
-    datePublished: post.createdAt,
-    dateModified: post.updatedAt,
-    image: post.cover || `${SITE_URL}/images/og.png`,
-    author: { '@type': 'Organization', name: SITE_NAME },
-    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+  const url = `${SITE_URL}/rehber/${post.slug}`
+  const faq = extractFaq(post.body)
+  const words = bodyWordCount(post.body)
+  const minutes = Math.max(1, Math.round(words / 200))
+
+  const graph: Record<string, unknown>[] = [
+    {
+      '@type': 'Article',
+      headline: post.title,
+      description: post.excerpt,
+      datePublished: post.createdAt,
+      dateModified: post.updatedAt,
+      wordCount: words,
+      mainEntityOfPage: url,
+      image: post.cover || `${SITE_URL}/images/og.png`,
+      author: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+      publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+    },
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Ana sayfa', item: SITE_URL },
+        { '@type': 'ListItem', position: 2, name: 'Rehber', item: `${SITE_URL}/rehber` },
+        { '@type': 'ListItem', position: 3, name: post.title, item: url },
+      ],
+    },
+  ]
+  if (faq.length) {
+    graph.push({
+      '@type': 'FAQPage',
+      mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+    })
   }
 
   return (
     <article className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(ld)} />
-      <Link href="/rehber" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd({ '@context': 'https://schema.org', '@graph': graph })} />
+      <nav aria-label="Konum" className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Tüm rehberler
-      </Link>
+        <Link href="/rehber" className="hover:text-foreground">
+          Tüm rehberler
+        </Link>
+      </nav>
       <header className="flex flex-col gap-2">
         <h1 className="text-balance text-2xl font-bold leading-tight text-foreground md:text-4xl">{post.title}</h1>
         <p className="text-pretty leading-relaxed text-muted-foreground">{post.excerpt}</p>
-        <time dateTime={post.updatedAt} className="text-sm text-muted-foreground">
-          Güncellendi: {new Date(post.updatedAt).toLocaleDateString('tr-TR', { dateStyle: 'long' })}
-        </time>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span>{SITE_NAME} ekibi</span>
+          <time dateTime={post.updatedAt}>
+            Son kontrol: {new Date(post.updatedAt).toLocaleDateString('tr-TR', { dateStyle: 'long' })}
+          </time>
+          <span>{minutes} dk okuma</span>
+        </p>
       </header>
       {post.cover && (
-        // eslint-disable-next-line @next/next/no-img-element -- admin-provided cover URL
-        <img src={post.cover} alt={post.title} className="aspect-video w-full rounded-2xl border border-border object-cover" />
+        // eslint-disable-next-line @next/next/no-img-element -- admin-provided cover URL from arbitrary hosts
+        <img
+          src={post.cover}
+          alt={post.title}
+          width={1280}
+          height={720}
+          fetchPriority="high"
+          className="aspect-video w-full rounded-2xl border border-border object-cover"
+        />
       )}
-      <div className="flex flex-col gap-4 leading-relaxed text-foreground">
-        {parseBody(post.body).map((block, i) =>
-          block.type === 'h2' ? (
-            <h2 key={i} className="mt-2 text-balance text-xl font-bold">{block.text}</h2>
-          ) : block.type === 'ul' ? (
-            <ul key={i} className="flex list-disc flex-col gap-1.5 pl-5">
-              {block.items.map((item, j) => <li key={j}>{item}</li>)}
-            </ul>
-          ) : (
-            <p key={i} className="text-pretty">{block.text}</p>
-          ),
-        )}
-      </div>
+      <BlogBody body={post.body} />
+      <aside className="rounded-xl border border-border bg-secondary px-4 py-3 text-sm leading-relaxed text-secondary-foreground">
+        {'+18 — Bu içerik bilgilendirme amaçlıdır. Bonus şartları siteye göre değişebilir, katılmadan önce güncel kuralları kontrol et. Sorumlu oyna, bütçeni aşma.'}
+      </aside>
     </article>
   )
 }

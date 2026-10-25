@@ -1,6 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { slugify } from '@/lib/seo'
+import { decodeEntities } from '@/lib/html-entities'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 
 import { parseOddsPost } from '@/lib/odds-parse'
@@ -31,7 +32,7 @@ function detectKind(text: string): DealKind {
 }
 
 function map(r: Record<string, unknown>): Deal {
-  const title = String(r.title)
+  const title = decodeEntities(String(r.title))
   return {
     id: Number(r.id),
     slug: `${r.id}-${slugify(`${r.brand} ${title}`)}`,
