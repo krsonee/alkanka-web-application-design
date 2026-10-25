@@ -190,7 +190,7 @@ export function ContentEditor({
   const totalPending = groups.reduce((n, g) => n + g.items.reduce((m, i) => m + i.pending, 0), 0)
   return (
     <div className="flex min-h-dvh min-w-[1024px] bg-background">
-      <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col border-r border-border bg-card">
+      <aside className="sticky top-0 flex h-dvh w-72 shrink-0 flex-col border-r border-border bg-card">
         <div className="flex flex-col gap-0.5 border-b border-border px-4 py-4">
           <span className="font-display text-base font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
           <span className="truncate text-xs text-muted-foreground">
@@ -269,7 +269,8 @@ export function ContentEditor({
         </header>
         <div
           className={cn(
-            'mx-auto w-full max-w-6xl px-8 py-6',
+            'mx-auto w-full px-8 py-6',
+            tab === 'dashboard' ? 'max-w-[1680px]' : 'max-w-6xl',
             '[&_h2.font-display]:text-lg [&_h3.font-display]:text-base [&_.text-2xl]:text-xl',
           )}
         >
@@ -377,7 +378,9 @@ function NavButton({ active, onClick, label, pending, icon: Icon }: { active: bo
       )}
     >
       {Icon && <Icon className="size-4 shrink-0" aria-hidden="true" />}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate" title={label}>
+        {label}
+      </span>
       {pending > 0 && (
         <span
           className={cn(
@@ -395,14 +398,15 @@ function NavButton({ active, onClick, label, pending, icon: Icon }: { active: bo
 
 function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: PanelTab) => void }) {
   return (
-    <section aria-labelledby="map-title" className="flex flex-col gap-3">
-      <div className="flex flex-col gap-0.5">
-        <h2 id="map-title" className="text-sm font-semibold text-foreground">
-          Ne yapmak istiyorsun?
-        </h2>
-        <p className="text-xs text-muted-foreground">Her bölümün altında ne işe yaradığı yazıyor. Tıkla, direkt oraya git.</p>
-      </div>
-      <div className="grid grid-cols-3 gap-4">
+    <details className="group flex flex-col rounded-lg border border-border bg-card">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-secondary [&::-webkit-details-marker]:hidden">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-semibold text-foreground">Bölüm rehberi</span>
+          <span className="text-xs text-muted-foreground">Hangi bölüm ne işe yarar? Yeni personel için açıklamalı liste.</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
+      </summary>
+      <div className="grid grid-cols-4 gap-4 border-t border-border p-4">
         {groups.map((g) => {
           const Icon = GROUP_ICONS[g.id] ?? Wrench
           return (
@@ -430,7 +434,7 @@ function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: Panel
           )
         })}
       </div>
-    </section>
+    </details>
   )
 }
 
