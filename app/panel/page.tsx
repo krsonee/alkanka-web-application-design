@@ -395,7 +395,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           posts={await listPosts({ includeDrafts: true })}
           deals={await listDeals(30)}
           publishing={await dealsPublishing()}
-          verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '' }))}
+          verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '', meta: '' }))}
           siteUrl={SITE_URL}
           issues={await seoHealth().catch(() => [])}
           notFound={await list404().catch(() => [])}

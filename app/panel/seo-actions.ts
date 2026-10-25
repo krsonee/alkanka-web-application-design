@@ -103,6 +103,7 @@ export async function saveVerificationAction(_: ActionState, form: FormData): Pr
       google: extractVerificationCode(str(form, 'google', 400)),
       bing: extractVerificationCode(str(form, 'bing', 400)),
       yandex: extractVerificationCode(str(form, 'yandex', 400)),
+      meta: extractVerificationCode(str(form, 'meta', 400)),
     })
     revalidatePath('/', 'layout')
     return { ok: true, message: 'Doğrulama kodları kaydedildi.' }

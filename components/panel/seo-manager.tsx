@@ -79,10 +79,10 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
           {' yaz ve gönder. Bing ve Yandex için de aynı adımlar.'}
         </li>
       </ol>
-      <div className="grid gap-3 md:grid-cols-3">
-        {(['google', 'bing', 'yandex'] as const).map((k) => (
+      <div className="grid gap-3 md:grid-cols-2">
+        {(['google', 'bing', 'yandex', 'meta'] as const).map((k) => (
           <label key={k} className={label}>
-            {k === 'google' ? 'Google' : k === 'bing' ? 'Bing' : 'Yandex'} doğrulama kodu
+            {k === 'google' ? 'Google' : k === 'bing' ? 'Bing' : k === 'yandex' ? 'Yandex' : 'Meta (Facebook) alan adı'} doğrulama kodu
             <input name={k} defaultValue={verification[k]} placeholder="<meta name=... content=...> ya da sadece kod" className={input} />
             {verification[k] ? (
               <span className="flex items-center gap-1.5 font-medium text-primary">

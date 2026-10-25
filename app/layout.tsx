@@ -40,7 +40,10 @@ export async function generateMetadata(): Promise<Metadata> {
     verification: {
       google: verify.google || undefined,
       yandex: verify.yandex || undefined,
-      other: verify.bing ? { 'msvalidate.01': verify.bing } : undefined,
+      other: {
+        ...(verify.bing ? { 'msvalidate.01': verify.bing } : {}),
+        ...(verify.meta ? { 'facebook-domain-verification': verify.meta } : {}),
+      },
     },
     ...BASE_META,
   }

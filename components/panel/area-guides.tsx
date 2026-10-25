@@ -363,6 +363,26 @@ const SEO_STEPS: GuideStep[] = [
       </ol>
     ),
   },
+  {
+    title: 'Sözlük: SEO terimleri',
+    body: (
+      <ul className={ul}>
+        <li><b>Dizine ekleme (indeks)</b>: Google’ın sayfanı kaydetmesi. Dizinde olmayan sayfa aramada hiç çıkmaz.</li>
+        <li><b>SERP</b>: Google’ın arama sonuç sayfası.</li>
+        <li><b>Odak kelime</b>: Bir yazının sıralanmasını istediğin ana arama ifadesi. Her yazının bir tane olur.</li>
+        <li><b>Uzun kuyruk</b>: 3 ve daha fazla kelimeli, az aranan ama kolay sıralanan aramalar.</li>
+        <li><b>Meta başlık / Meta açıklama</b>: Google’da görünen mavi başlık ve altındaki gri yazı. Paneldeki “Başlık” ve “Özet” alanları.</li>
+        <li><b>Slug / Adres</b>: Yazının linkindeki son kısım, örneğin <span className={code}>/rehber/cevrim-sarti-nedir</span>.</li>
+        <li><b>Backlink</b>: Başka bir sitenin sana verdiği link. Otoritenin ana kaynağı.</li>
+        <li><b>İç link</b>: Kendi sitenin bir sayfasından diğerine verdiğin link.</li>
+        <li><b>Canonical</b>: “Bu sayfanın asıl adresi bu” etiketi. Sitede otomatik.</li>
+        <li><b>301 yönlendirme</b>: Kalıcı taşıma. Eski adresin sırasını yeni adrese aktarır. Panelde Yönlendirmeler kartından yapılır.</li>
+        <li><b>404</b>: Bulunamayan sayfa. Panelde kaydı tutulur, bunları ilgili sayfaya 301 ile yönlendir.</li>
+        <li><b>Yapılandırılmış veri (Schema)</b>: Google’a “bu bir makale / SSS / inceleme” diyen gizli kod. Sitede otomatik, SSS bloğu da buna dahil.</li>
+        <li><b>E-E-A-T</b>: Deneyim, uzmanlık, otorite, güven. Google’ın içerik kalitesini değerlendirme ölçütleri.</li>
+      </ul>
+    ),
+  },
 ]
 
 export function TasksGuide() {
@@ -397,6 +417,140 @@ const MARKETING_STEPS: GuideStep[] = [
           <li><b>Hakediş</b>: Her ay sponsorun panelindeki kazancı buraya girersin. Bizim tıklama sayımızla karşılaştırırsın ve tek tuşla talep mesajı hazırlarsın.</li>
         </ol>
         <p className={note}>Akış: Kampanya linki → sitemiz → sponsor butonu (/git) → sponsorun affiliate linki → hakediş. Her adım sayılıyor.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Başlamadan önce: hesap kontrol listesi ve doğru sıra',
+    body: (
+      <>
+        <p className="mb-2">Hesapları bu sırayla aç. Her adım bir sonrakinin şartı:</p>
+        <ol className={ol}>
+          <li><b>İş için ayrı bir Gmail aç</b> (ör. alkanka.reklam@gmail.com). Kişisel hesabınla karıştırma. <b>İki adımlı doğrulamayı</b> hemen aç: myaccount.google.com → Güvenlik → 2 Adımlı Doğrulama.</li>
+          <li><b>Google Search Console</b>: SEO rehberindeki kurulum adımı, zaten yaptın.</li>
+          <li><b>Google Analytics 4</b>: Aşağıdaki “GA4 sıfırdan kurulum” adımı.</li>
+          <li><b>Meta İşletme hesabı</b> + alan adı doğrulama + Pixel.</li>
+          <li><b>Google Ads hesabı</b> + dönüşüm etiketleri.</li>
+          <li>Ancak bunlar bittikten sonra ilk reklamı aç.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">Hazırda tutman gerekenler:</p>
+        <ul className={ul}>
+          <li>Kimlik kartının ön ve arka fotoğrafı (reklamveren doğrulaması için).</li>
+          <li>Şirket varsa vergi levhası ve faaliyet belgesi. Yoksa bireysel hesapla başlanır.</li>
+          <li>Banka ya da kredi kartı (sanal kart da olur, limitini düşük tut).</li>
+          <li>Telefon numarası (SMS onayları için).</li>
+        </ul>
+        <p className={note}>Bütün şifreleri ve kodları bir şifre yöneticisine kaydet. Hesabı kaybetmek, reklam hesabının kapanmasından daha zor düzelir.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Google Analytics 4: sıfırdan kurulum',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><span className={code}>analytics.google.com</span> adresine iş Gmail’inle gir ve <b>Ölçüme başla</b>’ya bas.</li>
+          <li><b>Hesap adı</b>: “Alkanka”. Veri paylaşım kutularını olduğu gibi bırak, <b>İleri</b>.</li>
+          <li><b>Mülk oluştur</b>: Ad “alkanka.com”, saat dilimi <b>Türkiye</b>, para birimi <b>Türk Lirası</b>. <b>İleri</b>.</li>
+          <li>İşletme bilgisi ve hedefler sorulur: sektör “Oyun”, boyut “Küçük”, hedef olarak “Potansiyel müşteri oluşturma” ve “Kullanıcı davranışını anlama”yı seç. Şartları kabul et.</li>
+          <li>Platform olarak <b>Web</b>’i seç. Site adresini yaz (https:// olmadan), akış adı “Site”. <b>Geliştirilmiş ölçüm</b> açık kalsın. <b>Akış oluştur</b>.</li>
+          <li>Ekranda <span className={code}>G-XXXXXXX</span> ile başlayan <b>Ölçüm kimliği</b> çıkar. Kopyala, bu paneldeki <b>Ölçüm etiketleri</b> sekmesine yapıştır ve kaydet. Kod eklemene gerek yok, site kendisi ekler.</li>
+          <li><b>Veri saklama süresini uzat</b>: Yönetici → Veri toplama ve değiştirme → Veri saklama → <b>14 ay</b> → Kaydet. Varsayılan 2 ay, sonra geçmişi göremezsin.</li>
+          <li><b>Search Console’u bağla</b>: Yönetici → Ürün bağlantıları → Search Console bağlantıları → Bağla. Böylece Google arama verisi de Analytics’te görünür.</li>
+          <li><b>Üyeliği önemli olay yap</b>: Bir gün sonra Yönetici → Etkinlikler ekranında <span className={code}>sign_up</span> görünür. Yanındaki yıldıza bas (önemli olay olarak işaretle). Sponsor tıklaması için <span className={code}>sponsor_click</span> olayına da aynısını yap.</li>
+        </ol>
+        <p className={note}>Kontrol: Siteyi telefonundan aç, Analytics’te Raporlar → Gerçek zamanlı ekranında 1 kullanıcı görmelisin. Görmüyorsan reklam engelleyicini kapatıp tekrar dene.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Meta: İşletme hesabı, alan adı doğrulama ve reklam hesabı onayı',
+    body: (
+      <>
+        <p className="mb-1 font-semibold">1. Önce kişisel Facebook profilin hazır olsun</p>
+        <ul className={ul}>
+          <li>Meta, reklam hesabını senin kişisel profiline bağlar. Profil <b>gerçek isimli</b>, fotoğraflı ve mümkünse eski olmalı. Yeni açılmış boş profiller genelde hemen kısıtlanır.</li>
+          <li>Profilde iki adımlı doğrulamayı aç: Ayarlar → Hesaplar Merkezi → Şifre ve güvenlik → İki faktörlü kimlik doğrulama. İşletme yöneticileri için bu zorunludur.</li>
+        </ul>
+        <p className="mt-3 mb-1 font-semibold">2. İşletme portföyü aç</p>
+        <ol className={ol}>
+          <li><span className={code}>business.facebook.com</span> → <b>Hesap oluştur</b>. İşletme adı “Alkanka”, adın ve iş e-postan. E-postana gelen onay linkine tıkla.</li>
+          <li>Bir <b>Facebook sayfası</b> aç (ya da var olanı ekle): İşletme ayarları → Hesaplar → Sayfalar → Ekle.</li>
+          <li><b>Instagram hesabını</b> bağla: İşletme ayarları → Hesaplar → Instagram hesapları → Ekle. Instagram hesabının “Profesyonel hesap” olması gerekir (Instagram → Ayarlar → Hesap türü).</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">3. Alan adını doğrula (önemli)</p>
+        <ol className={ol}>
+          <li>İşletme ayarları → <b>Marka güvenliği</b> → <b>Alan adları</b> → Ekle → <span className={code}>alkanka.com</span> yaz.</li>
+          <li>Yöntem olarak <b>Meta etiketi</b>ni seç. <span className={code}>{'<meta name="facebook-domain-verification" content="…">'}</span> satırını kopyala.</li>
+          <li>SEO bölümündeki <b>Google kaydı</b> kartında <b>Meta (Facebook) alan adı doğrulama kodu</b> kutusuna yapıştır ve kaydet.</li>
+          <li>Meta’ya dönüp <b>Alan adını doğrula</b>’ya bas. Yeşil tik görünmeli. Görünmüyorsa 10 dakika bekleyip tekrar dene.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">4. Reklam hesabı ve Pixel</p>
+        <ol className={ol}>
+          <li>İşletme ayarları → Hesaplar → <b>Reklam hesapları</b> → Ekle → Yeni reklam hesabı oluştur. Saat dilimi <b>İstanbul</b>, para birimi <b>TRY</b>. Bunlar sonradan <b>değiştirilemez</b>, dikkat et.</li>
+          <li>Kendini reklam hesabına “Tam kontrol” ile ata.</li>
+          <li><b>Ödeme yöntemi</b>: Faturalandırma ve ödemeler → Ödeme yöntemi ekle. Kartın adı profil adınla aynı olsun, farklı isim kısıtlamaya sebep olabilir.</li>
+          <li><b>Pixel</b>: Etkinlik Yöneticisi → Veri kaynağı bağla → Web → ad ver → site adresini yaz. 15 haneli numarayı Ölçüm etiketleri sekmesine yapıştır. Sonra Pixel’i İşletme ayarları → Veri kaynakları → Pixel’ler bölümünden reklam hesabına bağla.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">5. İşletme doğrulaması (isteğe bağlı ama faydalı)</p>
+        <ul className={ul}>
+          <li>İşletme ayarları → <b>Güvenlik merkezi</b> → Doğrulamayı başlat. Şirket adı, adres, telefon ve vergi levhası istenir. Onay birkaç gün sürer.</li>
+          <li>Doğrulanmış işletmenin harcama limitleri daha hızlı açılır ve hesabı daha zor kapanır. Şirketin yoksa bu adımı atla, reklam yine verilebilir.</li>
+        </ul>
+        <p className={note}>Yeni reklam hesaplarının ilk günlerde günlük harcama limiti düşük olur, bu normal. İlk hafta düşük bütçeyle başla, ödemeler sorunsuz geçtikçe limit kendiliğinden yükselir.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Google Ads: hesap açma, fatura ve reklamveren doğrulaması',
+    body: (
+      <>
+        <p className="mb-1 font-semibold">1. Hesabı aç</p>
+        <ol className={ol}>
+          <li><span className={code}>ads.google.com</span> → <b>Hemen başlayın</b>, iş Gmail’inle gir.</li>
+          <li>Sihirbaz seni hemen kampanya kurmaya yönlendirir. En alttaki <b>“Uzman moduna geç”</b> linkine bas, sonra <b>“Kampanya olmadan hesap oluştur”</b>u seç. Yoksa bilmeden para harcayan bir reklam açılabilir.</li>
+          <li>Ülke <b>Türkiye</b>, saat dilimi <b>İstanbul</b>, para birimi <b>TRY</b>. Bunlar da sonradan değişmez.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">2. Faturalandırma</p>
+        <ol className={ol}>
+          <li>Faturalandırma → Ayarlar. Ödeme profili türü: şirketin varsa <b>Kurumsal</b> (vergi no gerekir), yoksa <b>Bireysel</b>.</li>
+          <li>Ödeme yöntemi olarak kart ekle ve <b>otomatik ödeme</b>yi seç.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">3. Reklamveren doğrulaması</p>
+        <ul className={ul}>
+          <li>Google, hesap açıldıktan sonra bir noktada <b>“Reklamveren doğrulamasını tamamlayın”</b> uyarısı gösterir. Bu uyarı hesabın üst kısmında ve e-postada çıkar.</li>
+          <li>Ödeme profili adınla aynı isimli kimlik belgesini (kimlik kartı ya da pasaport) yüklersin. Kurumsal hesapta şirket belgeleri istenir.</li>
+          <li>Verilen süre içinde (genelde 30 gün) tamamlamazsan reklamların durur. Uyarıyı görünce hemen yap.</li>
+        </ul>
+        <p className="mt-3 mb-1 font-semibold">4. Bağlantılar ve dönüşümler</p>
+        <ol className={ol}>
+          <li><b>GA4’ü bağla</b>: Araçlar → Veri yöneticisi → Bağlı ürünler → Google Analytics (GA4) → Bağla.</li>
+          <li><b>Dönüşüm aç</b>: Hedefler → Dönüşümler → Özet → Yeni dönüşüm işlemi → Web sitesi → site adresini gir → “Dönüşüm işlemini manuel olarak kodla oluştur”. Kategori “Kaydolma”, ad “Üyelik”. Kaydet.</li>
+          <li>Etiket ayarlarında <b>“Google etiketini kendim kuracağım”</b>ı seç. <span className={code}>AW-</span> ile başlayan kimliği ve <span className={code}>/</span>’den sonraki dönüşüm etiketini Ölçüm etiketleri sekmesine yapıştır.</li>
+          <li>Birkaç saat ve ilk üyelikten sonra dönüşümün durumu <b>“Etkin”</b> olur.</li>
+        </ol>
+        <p className={note}>Google Ads bazen ilk kartla yaklaşık 100–500 TL’lik bir ön çekim yapıp geri iade eder. Bu bir doğrulama işlemidir, korkma.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Reklam reddedildi ya da hesap kısıtlandı: ne yapmalı?',
+    body: (
+      <>
+        <p className="mb-1 font-semibold">Tek bir reklam reddedildiyse (normal, sık olur)</p>
+        <ol className={ol}>
+          <li>Reklamın yanındaki <b>“Reddedildi”</b> yazısına tıkla, sebebi oku.</li>
+          <li>Metinden ve görselden sebebi kaldır: para, kazanç, bonus, bahis, casino kelimeleri ve sponsor logoları. Hedef sayfanın <span className={code}>/oyna/…</span> olduğundan emin ol.</li>
+          <li>Düzeltip kaydet, reklam yeniden incelenir. Aynı reklamı değiştirmeden tekrar tekrar gönderme.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">Hesap kısıtlandıysa ya da askıya alındıysa (ciddi durum)</p>
+        <ul className={ul}>
+          <li><b>Meta</b>: <span className={code}>facebook.com/accountquality</span> (Hesap kalitesi) sayfasına gir, kısıtlamanın sebebini gör ve <b>İnceleme iste</b>’ye bas. Kısa ve kibar bir açıklama yaz: “Sitemiz ücretsiz tavla, okey ve bilardo oyun topluluğudur; reklamlarımızda bahis veya kumar yoktur.”</li>
+          <li><b>Google</b>: Hesabın üstündeki askıya alma uyarısından <b>İtiraz et</b>’e bas ve aynı açıklamayı yaz. Önce Politika yöneticisindeki bütün reddedilmiş reklamları düzelt ya da sil.</li>
+          <li>İtirazı <b>bir kez ve dikkatli</b> yap. Sonuç genelde 1–7 gün sürer.</li>
+          <li><b>Asla</b> aynı kişi, kart ya da cihazla yeni hesap açarak kısıtlamayı aşmaya çalışma. Bu “sistemi atlatma” sayılır ve bütün hesaplarına ömür boyu yasak gelir.</li>
+        </ul>
+        <p className={note}>En iyi koruma: Reklam hesabında sadece oyun ve topluluk tanıt, sponsor işlerini Telegram, influencer ve SEO tarafında yürüt. Ölçüm etiketleri reklam hesabı kapansa bile çalışmaya devam eder.</p>
       </>
     ),
   },
@@ -550,6 +704,26 @@ const MARKETING_STEPS: GuideStep[] = [
         <li><b>Çarşamba</b>: Affiliate linklerinde “Kontrol et” butonuna bas. Kapanan sponsor adresi varsa yenisini gir.</li>
         <li><b>Her gün</b>: Yeni paylaşım için yeni kampanya linki aç. Aynı linki her yerde kullanma.</li>
         <li><b>Ay başı</b>: Hakedişleri gir ve talep mesajlarını gönder.</li>
+      </ul>
+    ),
+  },
+  {
+    title: 'Sözlük: reklam ve affiliate terimleri',
+    body: (
+      <ul className={ul}>
+        <li><b>Gösterim</b>: Reklamın ekranda kaç kez göründüğü.</li>
+        <li><b>TO / CTR</b>: Tıklama oranı. Reklamı görenlerin yüzde kaçı tıkladı. Meta’da %1, Google aramada %5 ve üstü iyidir.</li>
+        <li><b>TBM / CPC</b>: Tıklama başı maliyet. Bir tıklamaya ödediğin para.</li>
+        <li><b>BGBM / CPM</b>: Bin gösterim başı maliyet.</li>
+        <li><b>Dönüşüm</b>: İstediğin hareketi yapan kişi. Bizde “üye oldu” ya da “sponsora tıkladı”.</li>
+        <li><b>EBM / CPA</b>: Edinme başı maliyet. Bir üye için harcadığın toplam para.</li>
+        <li><b>ROAS</b>: Harcadığın her 1 TL’nin kaç TL geri getirdiği. 1’in üstü kardasın demek.</li>
+        <li><b>Pixel / Etiket</b>: Sitede çalışan küçük kod. Reklam platformuna kimin geldiğini ve üye olduğunu bildirir. Bizde panelden otomatik ekleniyor.</li>
+        <li><b>UTM</b>: Linkin sonundaki <span className={code}>?utm_source=…</span> eki. Analytics trafiğin nereden geldiğini bununla anlar. Kampanya linkleri bunu kendisi ekler.</li>
+        <li><b>FTD</b>: İlk para yatırma (first time deposit). Sponsorlar genelde bunun başına öder.</li>
+        <li><b>CPA (affiliate)</b>: Her FTD için sabit ödeme. <b>RevShare</b>: Getirdiğin oyuncuların kaybından yüzde pay. <b>Hibrit</b>: İkisi birden.</li>
+        <li><b>EPC</b>: Tık başı kazanç. Sponsorun bir tıklamamıza ortalama ne ödediği.</li>
+        <li><b>Öğrenme aşaması</b>: Yeni reklamın ilk 3–7 günü. Bu sürede sonuçlar dengesizdir, reklama dokunma.</li>
       </ul>
     ),
   },
