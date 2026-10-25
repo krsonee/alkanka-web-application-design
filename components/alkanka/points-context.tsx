@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 import useSWR from 'swr'
-import { claimReward, spendKC } from '@/app/actions/wallet'
+import { claimPrediction, spendKC } from '@/app/actions/wallet'
 
 type MeResponse = { member: { id: string; name: string } | null; balance: number }
 
@@ -11,8 +11,8 @@ type PointsContextValue = {
   member: MeResponse['member']
   loading: boolean
   lastGain: { id: number; value: number } | null
-  /** Server-capped reward (wheel, chest, tasks, predictions). */
-  add: (value: number, source?: string) => Promise<boolean>
+  /** Prediction reward; the amount is decided on the server. */
+  predict: (matchId: string, optionId: string) => Promise<boolean>
   /** Server-side debit (market, events). */
   spend: (value: number, source?: string) => Promise<boolean>
   /** Apply a balance returned by a server action. */
@@ -49,10 +49,10 @@ export function PointsProvider({ children }: { children: ReactNode }) {
     return false
   }, [member])
 
-  const add = useCallback(
-    async (value: number, source = 'gorev') => {
-      if (!requireLogin() || value <= 0) return false
-      const res = await claimReward(source, value)
+  const predict = useCallback(
+    async (matchId: string, optionId: string) => {
+      if (!requireLogin()) return false
+      const res = await claimPrediction(matchId, optionId)
       if (typeof res.balance === 'number') setBalance(res.balance)
       return res.ok
     },
@@ -73,8 +73,8 @@ export function PointsProvider({ children }: { children: ReactNode }) {
   if (member && prev.current === null && data) prev.current = data.balance
 
   const value = useMemo(
-    () => ({ points, member, loading: isLoading, lastGain, add, spend, setBalance, refresh: () => mutate(), requireLogin }),
-    [points, member, isLoading, lastGain, add, spend, setBalance, mutate, requireLogin],
+    () => ({ points, member, loading: isLoading, lastGain, predict, spend, setBalance, refresh: () => mutate(), requireLogin }),
+    [points, member, isLoading, lastGain, predict, spend, setBalance, mutate, requireLogin],
   )
   return <PointsContext.Provider value={value}>{children}</PointsContext.Provider>
 }

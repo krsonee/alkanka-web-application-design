@@ -149,13 +149,13 @@ function EventCards() {
 
 function Predictions() {
   const { predictions: PREDICTIONS } = useCatalog()
-  const { add } = usePoints()
+  const { predict, requireLogin } = usePoints()
   const [picks, setPicks] = useState<Record<string, string>>({})
 
-  function pick(matchId: string, optionId: string, reward: number) {
-    if (picks[matchId]) return
+  async function pick(matchId: string, optionId: string, _reward: number) {
+    if (picks[matchId] || !requireLogin()) return
     setPicks((p) => ({ ...p, [matchId]: optionId }))
-    add(Math.round(reward / 5))
+    await predict(matchId, optionId)
   }
 
   return (

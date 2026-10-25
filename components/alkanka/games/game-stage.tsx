@@ -12,12 +12,12 @@ const GAMES = { cark: LuckyWheel, sandik: MysteryChests, zar: DiceRoll }
 const LABELS = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık', zar: 'Zar At' }
 
 export function GameStage({ game }: { game: keyof typeof GAMES }) {
-  const { add, member, requireLogin } = usePoints()
+  const { member, requireLogin, refresh: refreshBalance } = usePoints()
   const { remaining, locked, refresh } = useMiniLock(game)
   const Game = GAMES[game]
 
-  async function onWin(points: number) {
-    await add(points, game)
+  function onWin() {
+    refreshBalance()
     refresh()
   }
 

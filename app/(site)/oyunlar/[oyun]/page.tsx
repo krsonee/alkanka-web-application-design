@@ -18,13 +18,16 @@ const TITLES: Record<string, string> = {
   ...MINI,
 }
 
+export const dynamicParams = false
+
 export function generateStaticParams() {
   return Object.keys(TITLES).map((oyun) => ({ oyun }))
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ oyun: string }> }): Promise<Metadata> {
   const { oyun } = await params
-  return { title: `${TITLES[oyun] ?? 'Oyun'} | AL KANKA` }
+  if (!(oyun in TITLES)) notFound()
+  return { title: TITLES[oyun] }
 }
 
 export default async function GamePage({ params }: { params: Promise<{ oyun: string }> }) {
