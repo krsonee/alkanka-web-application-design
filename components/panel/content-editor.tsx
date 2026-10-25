@@ -213,7 +213,7 @@ export function ContentEditor({
             />
           </div>
         </div>
-        <nav aria-label="Panel bölümleri" className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-3">
+        <nav aria-label="Panel bölümleri" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-8 pt-3">
           {!q && (
             <NavButton active={tab === 'dashboard'} onClick={() => pick('dashboard')} label="Genel bakış" pending={totalPending} icon={LayoutDashboard} />
           )}
@@ -255,7 +255,7 @@ export function ContentEditor({
               <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
               <h1 className="truncate font-semibold text-foreground">{current?.label ?? 'Genel bakış'}</h1>
             </div>
-            <p className="truncate text-xs text-muted-foreground">{current?.hint ?? 'Bekleyen işler ve bölümlerin haritası'}</p>
+            <p className="truncate text-xs text-muted-foreground">{current?.hint ?? 'Sitenin bugünkü durumu, bekleyen işler ve son hareketler'}</p>
           </div>
           {totalPending > 0 && tab !== 'dashboard' && (
             <button
@@ -270,7 +270,7 @@ export function ContentEditor({
         <div
           className={cn(
             'mx-auto w-full px-8 py-6',
-            tab === 'dashboard' ? 'max-w-[1680px]' : 'max-w-6xl',
+            tab === 'dashboard' ? 'max-w-none' : 'max-w-6xl',
             '[&_h2.font-display]:text-lg [&_h3.font-display]:text-base [&_.text-2xl]:text-xl',
           )}
         >
@@ -378,7 +378,7 @@ function NavButton({ active, onClick, label, pending, icon: Icon }: { active: bo
       )}
     >
       {Icon && <Icon className="size-4 shrink-0" aria-hidden="true" />}
-      <span className="min-w-0 flex-1 truncate" title={label}>
+      <span className="min-w-0 flex-1 text-pretty leading-snug">
         {label}
       </span>
       {pending > 0 && (
