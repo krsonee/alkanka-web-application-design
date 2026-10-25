@@ -428,8 +428,13 @@ const STEPS = [
 
 export function GuestHero({ bonus }: { bonus: number }) {
   return (
-    <section aria-labelledby="guest-title" className="panel-gold flex flex-col gap-5 rounded-2xl p-5 md:p-7">
-      <div className="flex flex-col gap-3 md:max-w-2xl">
+    <section aria-labelledby="guest-title" className="panel-gold flex flex-col gap-5 overflow-hidden rounded-2xl p-5 md:p-7">
+      <div className="flex items-end gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-bold text-primary">
+          <Gift className="size-3.5" aria-hidden="true" />
+          {fmt(bonus)} KC hoş geldin hediyesi
+        </span>
         <h2 id="guest-title" className="font-display text-2xl font-bold leading-tight text-foreground text-balance md:text-4xl">
           Ücretsiz oyna, Kanka Coin topla, <span className="text-primary">sponsor ödüllerini kap</span>
         </h2>
@@ -448,6 +453,17 @@ export function GuestHero({ bonus }: { bonus: number }) {
             Zaten üyeyim
           </a>
         </div>
+      </div>
+      <div className="relative -mb-5 hidden aspect-square w-44 shrink-0 sm:block md:-mb-7 lg:w-56" aria-hidden="true">
+        <Image
+          src="/images/mascots/jako-merhaba-cut.png"
+          alt=""
+          fill
+          priority
+          sizes="224px"
+          className="object-contain object-bottom drop-shadow-2xl"
+        />
+      </div>
       </div>
       <ol className="grid gap-3 sm:grid-cols-3" aria-label="Nasıl çalışır">
         {STEPS.map((step) => (
