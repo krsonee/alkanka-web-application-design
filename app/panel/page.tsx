@@ -16,7 +16,8 @@ import { getAmbientSettings } from '@/lib/ambient-tables'
 import { LEGAL_KEY, mergeLegal, type LegalOverrides } from '@/lib/legal-shared'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
-import { CUSTOM_SLIDES_KEY, readCustomSlides } from '@/lib/custom-slides'
+import { CUSTOM_SLIDES_KEY, readCustomSlides, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
+import { readPromoTotals } from '@/lib/promo-stats'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
 import { LogoEditor } from '@/components/panel/logo-editor'
@@ -273,8 +274,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const active = params.b || 'dashboard'
   const ctx: SectionCtx = { session, active }
 
+  const slideStats = can('slide') && active === 'slide' ? await readPromoTotals('slide') : {}
   const slides = can('slide')
-    ? SLIDES.map((s) => ({
+    ? sortByOrder(SLIDES.map((s) => ({
         kind: 'slide' as const,
         id: s.id,
         label: s.eyebrow,
@@ -289,9 +291,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           path: '/',
           custom: true,
           defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
-          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
+          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href, startAt: s.startAt, endAt: s.endAt },
         })),
-      )
+      ), readSlideOrder(content[SLIDE_ORDER_KEY])).map((s) => ({ ...s, stats: slideStats[s.id] ?? { views: 0, clicks: 0 } }))
     : []
 
   const heroes = can('hero')
@@ -345,13 +347,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
     }),
     section(ctx, 'logo', 'Logolar', async () => {
-      const logoSponsors = await listLogoSponsors()
+      const [logoSponsors, adStats] = await Promise.all([listLogoSponsors(), readPromoTotals('ad')])
       return (
         <TelegramTabs
           label="Paylaşım, reklam ve logolar"
           tabs={[
             { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
-            { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} /> },
+            { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} stats={adStats} /> },
             {
               id: 'sponsor-logos',
               label: `Sponsor logoları (${logoSponsors.length})`,

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Upload } from 'lucide-react'
 import { resetAppIcon, saveHeaderLogo } from '@/app/panel/branding-actions'
 import { cn } from '@/lib/utils'
+import { AlkankaLogo } from '@/components/alkanka/logos'
 
 type Msg = { ok: boolean; text: string } | null
 
@@ -72,14 +73,28 @@ export function BrandingEditor({
         <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
           Sitenin üst kısmında, yan menüde ve alt bilgide görünen logo. Yatay, şeffaf arka planlı PNG veya SVG en iyi sonucu verir. Boş bırakırsan hazır AL KANKA logosu kullanılır.
         </p>
-        <div className="flex min-h-20 items-center justify-center rounded-lg border border-dashed border-border bg-background p-4">
-          {url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={url || '/placeholder.svg'} alt="Header logosu önizleme" style={{ height }} className="w-auto max-w-full object-contain" />
-          ) : (
-            <span className="text-sm text-muted-foreground">Varsayılan logo kullanılıyor</span>
-          )}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(['dark', 'light'] as const).map((tone) => (
+            <div
+              key={tone}
+              className={cn(
+                'flex h-16 items-center justify-between gap-3 rounded-lg border border-border px-4',
+                tone === 'dark' ? 'bg-background' : 'bg-foreground',
+              )}
+            >
+              {url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={url || '/placeholder.svg'} alt={`Header logosu, ${tone === 'dark' ? 'koyu' : 'açık'} zemin`} style={{ height }} className="w-auto max-w-44 object-contain" />
+              ) : (
+                <AlkankaLogo concept="fist" size="md" />
+              )}
+              <span className={cn('text-[11px]', tone === 'dark' ? 'text-muted-foreground' : 'text-background/70')}>
+                {tone === 'dark' ? 'Koyu zemin' : 'Açık zemin'}
+              </span>
+            </div>
+          ))}
         </div>
+        <p className="text-xs text-muted-foreground">{url ? 'Özel logo kullanılıyor.' : 'Hazır AL KANKA logosu kullanılıyor.'}</p>
         <label className="flex flex-col gap-1 text-sm text-foreground">
           Yükseklik: {height}px
           <input type="range" min={20} max={64} value={height} onChange={(e) => setHeight(Number(e.target.value))} className="accent-primary" />
