@@ -100,7 +100,7 @@ import { cleanPermissions } from '@/lib/panel-modules'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
-import { dashStats, parseRange } from '@/lib/panel-stats'
+import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
 import { loadTgHub } from '@/lib/tg-hub-panel'
@@ -257,7 +257,7 @@ async function staffPanel() {
 
 export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
-export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; r?: string }> }) {
+export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; r?: string; from?: string; to?: string }> }) {
   const [session, params] = await Promise.all([getPanelSession(), searchParams])
   if (!session) {
     return (
@@ -537,7 +537,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     pendingDetail(can).catch(() => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0 })),
     onDash && can('users') ? listMembers({ limit: 1 }).then((r) => r.counts).catch(() => null) : null,
     onDash && session.isOwner ? listAudit(8).catch(() => []) : [],
-    onDash && session.isOwner ? dashStats(parseRange(params.r)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
+    onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
   ])
   const pending: Record<string, number> = { community: detail.reviews + detail.complaints + detail.withdrawals, tasks: detail.claims, market: detail.market }
   const dashboard = onDash ? <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} /> : null

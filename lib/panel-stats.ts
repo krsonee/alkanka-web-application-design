@@ -1,34 +1,135 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 
-export type DashRange = 1 | 7 | 30
-export const DASH_RANGES: { value: DashRange; label: string }[] = [
-  { value: 1, label: 'Bugün' },
-  { value: 7, label: '7 gün' },
-  { value: 30, label: '30 gün' },
-]
+export type DashPreset = 'today' | 'yesterday' | '7' | '30' | 'month' | 'lastmonth' | 'custom'
+export type DashQuery = { preset: DashPreset; from?: string; to?: string }
 
-export function parseRange(v: string | undefined): DashRange {
-  const n = Number(v)
-  return n === 7 || n === 30 ? n : 1
+const PRESETS: DashPreset[] = ['today', 'yesterday', '7', '30', 'month', 'lastmonth', 'custom']
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const DAY = 86_400_000
+const IST_OFFSET = 3 * 3_600_000
+
+const istDate = (ms: number) => new Date(ms + IST_OFFSET).toISOString().slice(0, 10)
+const dayStart = (d: string) => new Date(`${d}T00:00:00+03:00`).getTime()
+const addDays = (d: string, n: number) => istDate(dayStart(d) + n * DAY)
+const trDate = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
+
+export function parseQuery(p: { r?: string; from?: string; to?: string }): DashQuery {
+  const legacy: Record<string, DashPreset> = { '1': 'today', '7': '7', '30': '30' }
+  const preset = (PRESETS as string[]).includes(p.r ?? '') ? (p.r as DashPreset) : (legacy[p.r ?? ''] ?? 'today')
+  if (preset === 'custom') {
+    if (p.from && DATE_RE.test(p.from) && (!p.to || DATE_RE.test(p.to))) return { preset, from: p.from, to: p.to ?? p.from }
+    return { preset: 'today' }
+  }
+  return { preset }
+}
+
+function resolve(q: DashQuery, now: number) {
+  const today = istDate(now)
+  const monthStart = `${today.slice(0, 8)}01`
+  let from = today
+  let to = today
+  switch (q.preset) {
+    case 'yesterday':
+      from = to = addDays(today, -1)
+      break
+    case '7':
+      from = addDays(today, -6)
+      break
+    case '30':
+      from = addDays(today, -29)
+      break
+    case 'month':
+      from = monthStart
+      break
+    case 'lastmonth': {
+      to = addDays(monthStart, -1)
+      from = `${to.slice(0, 8)}01`
+      break
+    }
+    case 'custom': {
+      from = q.from ?? today
+      to = q.to ?? from
+      if (from > to) [from, to] = [to, from]
+      if (to > today) to = today
+      if (from > to) from = to
+      if (dayStart(to) - dayStart(from) > 365 * DAY) from = addDays(to, -365)
+      break
+    }
+  }
+  const days = Math.round((dayStart(to) - dayStart(from)) / DAY) + 1
+  const fromMs = dayStart(from)
+  const toMs = Math.min(dayStart(to) + DAY, now)
+  const span = toMs - fromMs
+
+  const titles: Record<DashPreset, string> = {
+    today: 'Bugünün özeti',
+    yesterday: 'Dünün özeti',
+    '7': 'Son 7 günün özeti',
+    '30': 'Son 30 günün özeti',
+    month: 'Bu ayın özeti',
+    lastmonth: 'Geçen ayın özeti',
+    custom: from === to ? `${trDate(from)} özeti` : `${trDate(from)} – ${trDate(to)}`,
+  }
+  return {
+    today,
+    from,
+    to,
+    days,
+    fromMs,
+    toMs,
+    prevFromMs: fromMs - span,
+    prevToMs: fromMs,
+    live: to === today,
+    title: titles[q.preset],
+    compare: q.preset === 'today' ? 'dün bu saate kadar' : days === 1 ? 'bir önceki gün' : `önceki ${days} gün`,
+  }
 }
 
 type Pair = { cur: number; prev: number }
 export type HealthItem = { label: string; state: 'ok' | 'warn' | 'off'; note: string }
+export type SeriesPoint = {
+  key: string
+  date: string
+  label: string
+  users: number
+  clicks: number
+  games: number
+  pUsers: number
+  pClicks: number
+  pGames: number
+  future: boolean
+}
 export type DashStats = {
-  range: DashRange
+  query: DashQuery
+  from: string
+  to: string
+  today: string
+  dataStart: string
+  days: number
+  title: string
+  compare: string
+  hasPrev: boolean
+  live: boolean
+  generatedAt: string
   online: number
+  onlineHour: number
   newUsers: Pair
   activeMembers: Pair
   sponsorClicks: Pair
   kcOut: Pair
   games: Pair
-  series: { key: string; label: string; users: number; clicks: number; games: number; future: boolean }[]
-  seriesUnit: 'hour' | 'day'
+  series: SeriesPoint[]
+  seriesUnit: 'hour' | 'day' | 'week'
   topSponsors: { name: string; clicks: number }[]
+  origins: { label: string; count: number }[]
+  heatmap: { grid: number[][]; label: string }
+  retention: { cohort: number; d1Eligible: number; d1: number; d7Eligible: number; d7: number }
+  signups: { name: string; src: string; at: string; earned: number }[]
   kcSources: { label: string; amount: number }[]
   kcSpent: number
   houseNet: number
+  circulation: { total: number; holders: number }
   rewardEarners: { name: string; amount: number }[]
   gameWinners: { name: string; amount: number }[]
   anomalies: { name: string; amount: number; at: string }[]
@@ -48,6 +149,23 @@ const SOURCE_LABELS: Record<string, string> = {
   rozet: 'Rozetler',
 }
 const MODE_LABELS: Record<string, string> = { bot: 'Bota karşı', pvp: 'Rakibe karşı', masa: 'Canlı masa' }
+export const ORIGIN_LABELS: Record<string, string> = {
+  direkt: 'Direkt giriş',
+  'eski-uye': 'Eski üye',
+  davet: 'Davet linki',
+  ref: 'Davet linki',
+  telegram: 'Telegram',
+  tg: 'Telegram',
+  sponsor: 'Sponsor',
+  instagram: 'Instagram',
+  twitter: 'X / Twitter',
+  x: 'X / Twitter',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  google: 'Google',
+  bilinmiyor: 'Bilinmiyor',
+}
+export const originLabel = (src: string) => ORIGIN_LABELS[src] ?? src.charAt(0).toLocaleUpperCase('tr-TR') + src.slice(1)
 
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
@@ -67,140 +185,275 @@ async function pair(cur: ReturnType<typeof sql>, prev: ReturnType<typeof sql>): 
   }, { cur: 0, prev: 0 })
 }
 
-export async function dashStats(range: DashRange): Promise<DashStats> {
-  const d = range
-  // "Bugün" starts at Istanbul midnight and is compared with yesterday up to the same clock time, so a half-finished day never looks like a drop.
-  const from =
-    d === 1
-      ? sql`(date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`
-      : sql`now() - make_interval(days => ${d}::int)`
-  const prevFrom =
-    d === 1
-      ? sql`(date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul') - interval '1 day'`
-      : sql`now() - make_interval(days => ${d * 2}::int)`
-  const prevTo = d === 1 ? sql`now() - interval '1 day'` : from
+export async function dashStats(query: DashQuery): Promise<DashStats> {
+  const now = Date.now()
+  const r = resolve(query, now)
+  const ts = (ms: number) => sql`${new Date(ms).toISOString()}::timestamptz`
+  const from = ts(r.fromMs)
+  const to = ts(r.toMs)
+  const pFrom = ts(r.prevFromMs)
+  const pTo = ts(r.prevToMs)
+  const inRange = (col: ReturnType<typeof sql>) => sql`${col} >= ${from} AND ${col} < ${to}`
+  const inPrev = (col: ReturnType<typeof sql>) => sql`${col} >= ${pFrom} AND ${col} < ${pTo}`
 
-  const [online, newUsers, activeMembers, sponsorClicks, kcOut, games] = await Promise.all([
+  const dataStartMs = await safe(async () => {
+    const x = (await rows<{ m: string | null }>(sql`SELECT min("createdAt") AS m FROM "user"`))[0]?.m
+    return x ? new Date(x).getTime() : now
+  }, now)
+  const dataStart = istDate(dataStartMs)
+  const hasPrev = r.prevToMs > dataStartMs
+
+  const [online, onlineHour, newUsers, activeMembers, sponsorClicks, kcOut, games] = await Promise.all([
     safe(async () => num((await rows<{ c: string }>(sql`SELECT count(*) AS c FROM online_sessions WHERE last_seen > now() - interval '5 minutes'`))[0]?.c), 0),
+    safe(async () => num((await rows<{ c: string }>(sql`SELECT count(*) AS c FROM online_sessions WHERE last_seen > now() - interval '1 hour'`))[0]?.c), 0),
+    pair(sql`SELECT count(*) AS c FROM "user" WHERE ${inRange(sql`"createdAt"`)}`, sql`SELECT count(*) AS c FROM "user" WHERE ${inPrev(sql`"createdAt"`)}`),
     pair(
-      sql`SELECT count(*) AS c FROM "user" WHERE "createdAt" > ${from}`,
-      sql`SELECT count(*) AS c FROM "user" WHERE "createdAt" > ${prevFrom} AND "createdAt" <= ${prevTo}`,
+      sql`SELECT count(DISTINCT user_id) AS c FROM kp_events WHERE ${inRange(sql`created_at`)}`,
+      sql`SELECT count(DISTINCT user_id) AS c FROM kp_events WHERE ${inPrev(sql`created_at`)}`,
     ),
     pair(
-      sql`SELECT count(DISTINCT user_id) AS c FROM kp_events WHERE created_at > ${from}`,
-      sql`SELECT count(DISTINCT user_id) AS c FROM kp_events WHERE created_at > ${prevFrom} AND created_at <= ${prevTo}`,
+      sql`SELECT (SELECT count(*) FROM link_clicks WHERE ${inRange(sql`created_at`)}) + (SELECT count(*) FROM aff_clicks WHERE ${inRange(sql`created_at`)}) AS c`,
+      sql`SELECT (SELECT count(*) FROM link_clicks WHERE ${inPrev(sql`created_at`)}) + (SELECT count(*) FROM aff_clicks WHERE ${inPrev(sql`created_at`)}) AS c`,
     ),
     pair(
-      sql`SELECT (SELECT count(*) FROM link_clicks WHERE created_at > ${from}) + (SELECT count(*) FROM aff_clicks WHERE created_at > ${from}) AS c`,
-      sql`SELECT (SELECT count(*) FROM link_clicks WHERE created_at > ${prevFrom} AND created_at <= ${prevTo}) + (SELECT count(*) FROM aff_clicks WHERE created_at > ${prevFrom} AND created_at <= ${prevTo}) AS c`,
+      sql`SELECT coalesce((SELECT sum(coins) FROM kp_events WHERE coins > 0 AND ${inRange(sql`created_at`)}), 0) + coalesce((SELECT sum(delta) FROM game_history WHERE mode = 'odul' AND delta > 0 AND ${inRange(sql`created_at`)}), 0) AS c`,
+      sql`SELECT coalesce((SELECT sum(coins) FROM kp_events WHERE coins > 0 AND ${inPrev(sql`created_at`)}), 0) + coalesce((SELECT sum(delta) FROM game_history WHERE mode = 'odul' AND delta > 0 AND ${inPrev(sql`created_at`)}), 0) AS c`,
     ),
     pair(
-      sql`SELECT coalesce((SELECT sum(coins) FROM kp_events WHERE coins > 0 AND created_at > ${from}), 0) + coalesce((SELECT sum(delta) FROM game_history WHERE mode = 'odul' AND delta > 0 AND created_at > ${from}), 0) AS c`,
-      sql`SELECT coalesce((SELECT sum(coins) FROM kp_events WHERE coins > 0 AND created_at > ${prevFrom} AND created_at <= ${prevTo}), 0) + coalesce((SELECT sum(delta) FROM game_history WHERE mode = 'odul' AND delta > 0 AND created_at > ${prevFrom} AND created_at <= ${prevTo}), 0) AS c`,
-    ),
-    pair(
-      sql`SELECT count(*) AS c FROM game_history WHERE mode IN ('bot','pvp','masa') AND created_at > ${from}`,
-      sql`SELECT count(*) AS c FROM game_history WHERE mode IN ('bot','pvp','masa') AND created_at > ${prevFrom} AND created_at <= ${prevTo}`,
+      sql`SELECT count(*) AS c FROM game_history WHERE mode IN ('bot','pvp','masa') AND ${inRange(sql`created_at`)}`,
+      sql`SELECT count(*) AS c FROM game_history WHERE mode IN ('bot','pvp','masa') AND ${inPrev(sql`created_at`)}`,
     ),
   ])
 
-  const seriesUnit = d === 1 ? 'hour' : 'day'
-  const [series, topSponsors, kcSources, kcSpent, houseNet, rewardEarners, gameWinners, anomalies, gameModes, topGames, health] = await Promise.all([
+  const seriesUnit: DashStats['seriesUnit'] = r.days === 1 ? 'hour' : r.days <= 62 ? 'day' : 'week'
+  // The chart starts on the first day the site has data, so a fresh site doesn't show a long flat zero line.
+  const seriesFrom = r.days > 1 && dataStart > r.from && dataStart <= r.to ? dataStart : r.from
+  const heatFromMs = r.days < 7 ? r.toMs - 28 * DAY : r.fromMs
+
+  const [
+    series,
+    topSponsors,
+    origins,
+    heatmap,
+    retention,
+    signups,
+    kcSources,
+    kcSpent,
+    houseNet,
+    circulation,
+    rewardEarners,
+    gameWinners,
+    anomalies,
+    gameModes,
+    topGames,
+    health,
+  ] = await Promise.all([
     safe(async () => {
-      const buckets =
-        d === 1
-          ? sql`SELECT generate_series(date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul'), date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + interval '23 hours', interval '1 hour') AS t`
-          : sql`SELECT generate_series(date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') - make_interval(days => ${d - 1}::int), date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul'), interval '1 day') AS t`
-      const unit = d === 1 ? 'hour' : 'day'
-      const r = await rows<{ key: string; users: string; clicks: string; games: string; future: boolean }>(sql`
-        WITH b AS (${buckets})
+      const unit = seriesUnit
+      const step = `1 ${unit}`
+      const startLocal = `${seriesFrom} 00:00:00`
+      const endLocal = unit === 'hour' ? `${r.to} 23:00:00` : `${r.to} 00:00:00`
+      const endExclusive = `${addDays(r.to, 1)} 00:00:00`
+      const shift = sql`make_interval(days => ${r.days}::int)`
+      const tz = sql`'Europe/Istanbul'`
+      const res = await rows<Record<string, string> & { future: boolean }>(sql`
+        WITH g AS (
+          SELECT t FROM generate_series(date_trunc(${unit}, ${startLocal}::timestamp), date_trunc(${unit}, ${endLocal}::timestamp), ${step}::interval) t
+        ), b AS (
+          SELECT g.t,
+            (greatest(g.t, ${startLocal}::timestamp) AT TIME ZONE ${tz}) AS s,
+            (least(g.t + ${step}::interval, ${endExclusive}::timestamp) AT TIME ZONE ${tz}) AS e
+          FROM g
+        )
         SELECT to_char(b.t, 'YYYY-MM-DD"T"HH24') AS key,
-          b.t > (now() AT TIME ZONE 'Europe/Istanbul') AS future,
-          (SELECT count(*) FROM "user" u WHERE date_trunc(${unit}, u."createdAt" AT TIME ZONE 'Europe/Istanbul') = b.t) AS users,
-          (SELECT count(*) FROM link_clicks l WHERE date_trunc(${unit}, l.created_at AT TIME ZONE 'Europe/Istanbul') = b.t)
-            + (SELECT count(*) FROM aff_clicks a WHERE date_trunc(${unit}, a.created_at AT TIME ZONE 'Europe/Istanbul') = b.t) AS clicks,
-          (SELECT count(*) FROM game_history g WHERE g.mode IN ('bot','pvp','masa') AND date_trunc(${unit}, g.created_at AT TIME ZONE 'Europe/Istanbul') = b.t) AS games
+          b.s > now() AS future,
+          (SELECT count(*) FROM "user" u WHERE u."createdAt" >= b.s AND u."createdAt" < b.e) AS users,
+          (SELECT count(*) FROM link_clicks l WHERE l.created_at >= b.s AND l.created_at < b.e)
+            + (SELECT count(*) FROM aff_clicks a WHERE a.created_at >= b.s AND a.created_at < b.e) AS clicks,
+          (SELECT count(*) FROM game_history x WHERE x.mode IN ('bot','pvp','masa') AND x.created_at >= b.s AND x.created_at < b.e) AS games,
+          (SELECT count(*) FROM "user" u WHERE u."createdAt" >= b.s - ${shift} AND u."createdAt" < b.e - ${shift}) AS p_users,
+          (SELECT count(*) FROM link_clicks l WHERE l.created_at >= b.s - ${shift} AND l.created_at < b.e - ${shift})
+            + (SELECT count(*) FROM aff_clicks a WHERE a.created_at >= b.s - ${shift} AND a.created_at < b.e - ${shift}) AS p_clicks,
+          (SELECT count(*) FROM game_history x WHERE x.mode IN ('bot','pvp','masa') AND x.created_at >= b.s - ${shift} AND x.created_at < b.e - ${shift}) AS p_games
         FROM b ORDER BY b.t`)
-      return r.map((x) => ({
-        key: x.key,
-        label: d === 1 ? `${x.key.slice(11, 13)}:00` : `${x.key.slice(8, 10)}.${x.key.slice(5, 7)}`,
-        users: num(x.users),
-        clicks: num(x.clicks),
-        games: num(x.games),
-        future: Boolean(x.future),
-      }))
-    }, []),
+      return res.map((x) => {
+        const date = x.key.slice(0, 10)
+        const label = unit === 'hour' ? `${x.key.slice(11, 13)}:00` : `${date.slice(8, 10)}.${date.slice(5, 7)}`
+        return {
+          key: x.key,
+          date,
+          label,
+          users: num(x.users),
+          clicks: num(x.clicks),
+          games: num(x.games),
+          pUsers: num(x.p_users),
+          pClicks: num(x.p_clicks),
+          pGames: num(x.p_games),
+          future: Boolean(x.future),
+        }
+      })
+    }, [] as SeriesPoint[]),
     safe(async () => {
-      const r = await rows<{ name: string; clicks: string }>(sql`
+      const res = await rows<{ name: string; clicks: string }>(sql`
         SELECT name, sum(n) AS clicks FROM (
-          SELECT coalesce(s.name, l.site_id) AS name, count(*) AS n
+          SELECT coalesce(s.name, 'Silinmiş sponsor #' || l.site_id) AS name, count(*) AS n
           FROM link_clicks l LEFT JOIN sites s ON s.id::text = l.site_id OR s.slug = l.site_id
-          WHERE l.created_at > ${from} GROUP BY 1
+          WHERE ${inRange(sql`l.created_at`)} GROUP BY 1
           UNION ALL
           SELECT coalesce(s.name, al.label, al.code) AS name, count(*) AS n
           FROM aff_clicks c JOIN aff_links al ON al.id = c.link_id LEFT JOIN sites s ON s.id = al.site_id
-          WHERE c.created_at > ${from} GROUP BY 1
-        ) t GROUP BY name ORDER BY clicks DESC LIMIT 5`)
-      return r.map((x) => ({ name: x.name, clicks: num(x.clicks) }))
+          WHERE ${inRange(sql`c.created_at`)} GROUP BY 1
+        ) t GROUP BY name ORDER BY clicks DESC LIMIT 6`)
+      return res.map((x) => ({ name: x.name, clicks: num(x.clicks) }))
     }, []),
     safe(async () => {
-      const r = await rows<{ src: string; amount: string }>(sql`
+      const res = await rows<{ src: string; c: string }>(sql`
+        SELECT coalesce(mo.src, 'bilinmiyor') AS src, count(*) AS c
+        FROM "user" u LEFT JOIN member_origin mo ON mo.user_id = u.id
+        WHERE ${inRange(sql`u."createdAt"`)} GROUP BY 1 ORDER BY c DESC`)
+      const merged = new Map<string, number>()
+      for (const x of res) merged.set(originLabel(x.src), (merged.get(originLabel(x.src)) ?? 0) + num(x.c))
+      return [...merged].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+    }, []),
+    safe(async () => {
+      const a = ts(heatFromMs)
+      const res = await rows<{ d: number; h: number; c: string }>(sql`
+        SELECT extract(isodow FROM t AT TIME ZONE 'Europe/Istanbul')::int AS d,
+               extract(hour FROM t AT TIME ZONE 'Europe/Istanbul')::int AS h, count(*) AS c
+        FROM (
+          SELECT created_at AS t FROM kp_events WHERE created_at >= ${a} AND created_at < ${to}
+          UNION ALL SELECT created_at FROM game_history WHERE created_at >= ${a} AND created_at < ${to}
+          UNION ALL SELECT created_at FROM link_clicks WHERE created_at >= ${a} AND created_at < ${to}
+          UNION ALL SELECT created_at FROM aff_clicks WHERE created_at >= ${a} AND created_at < ${to}
+        ) x GROUP BY 1, 2`)
+      const grid = Array.from({ length: 7 }, () => Array<number>(24).fill(0))
+      for (const x of res) grid[num(x.d) - 1][num(x.h)] = num(x.c)
+      return { grid, label: r.days < 7 ? 'Son 28 gün' : 'Seçili aralık' }
+    }, { grid: Array.from({ length: 7 }, () => Array<number>(24).fill(0)), label: '' }),
+    safe(async () => {
+      const x = (
+        await rows<Record<string, string>>(sql`
+          WITH c AS (SELECT id, "createdAt" AS ca FROM "user" WHERE ${inRange(sql`"createdAt"`)})
+          SELECT count(*) AS cohort,
+            count(*) FILTER (WHERE ca <= now() - interval '1 day') AS e1,
+            count(*) FILTER (WHERE ca <= now() - interval '1 day' AND (
+              EXISTS (SELECT 1 FROM kp_events k WHERE k.user_id = c.id AND k.created_at >= c.ca + interval '1 day')
+              OR EXISTS (SELECT 1 FROM game_history g WHERE g.user_id = c.id AND g.created_at >= c.ca + interval '1 day'))) AS r1,
+            count(*) FILTER (WHERE ca <= now() - interval '7 days') AS e7,
+            count(*) FILTER (WHERE ca <= now() - interval '7 days' AND (
+              EXISTS (SELECT 1 FROM kp_events k WHERE k.user_id = c.id AND k.created_at >= c.ca + interval '7 days')
+              OR EXISTS (SELECT 1 FROM game_history g WHERE g.user_id = c.id AND g.created_at >= c.ca + interval '7 days'))) AS r7
+          FROM c`)
+      )[0]
+      return { cohort: num(x?.cohort), d1Eligible: num(x?.e1), d1: num(x?.r1), d7Eligible: num(x?.e7), d7: num(x?.r7) }
+    }, { cohort: 0, d1Eligible: 0, d1: 0, d7Eligible: 0, d7: 0 }),
+    safe(async () => {
+      const res = await rows<{ name: string; src: string | null; at: string; earned: string }>(sql`
+        SELECT coalesce(u.name, u.email) AS name, mo.src, u."createdAt" AS at,
+          coalesce((SELECT sum(coins) FROM kp_events k WHERE k.user_id = u.id AND k.coins > 0), 0)
+            + coalesce((SELECT sum(delta) FROM game_history g WHERE g.user_id = u.id AND g.mode = 'odul' AND g.delta > 0), 0) AS earned
+        FROM "user" u LEFT JOIN member_origin mo ON mo.user_id = u.id
+        WHERE ${inRange(sql`u."createdAt"`)} ORDER BY u."createdAt" DESC LIMIT 8`)
+      return res.map((x) => ({ name: x.name, src: originLabel(x.src ?? 'bilinmiyor'), at: new Date(x.at).toISOString(), earned: num(x.earned) }))
+    }, []),
+    safe(async () => {
+      const res = await rows<{ src: string; amount: string }>(sql`
         SELECT src, sum(amount) AS amount FROM (
-          SELECT source AS src, coins AS amount FROM kp_events WHERE coins > 0 AND created_at > ${from}
+          SELECT source AS src, coins AS amount FROM kp_events WHERE coins > 0 AND ${inRange(sql`created_at`)}
           UNION ALL
-          SELECT 'odul' AS src, delta AS amount FROM game_history WHERE mode = 'odul' AND delta > 0 AND created_at > ${from}
+          SELECT 'odul' AS src, delta AS amount FROM game_history WHERE mode = 'odul' AND delta > 0 AND ${inRange(sql`created_at`)}
         ) t GROUP BY src ORDER BY amount DESC LIMIT 6`)
-      return r.map((x) => ({ label: SOURCE_LABELS[x.src] ?? x.src, amount: num(x.amount) }))
+      return res.map((x) => ({ label: SOURCE_LABELS[x.src] ?? x.src, amount: num(x.amount) }))
     }, []),
-    safe(async () => num((await rows<{ c: string }>(sql`SELECT coalesce(-sum(delta), 0) AS c FROM game_history WHERE mode = 'harcama' AND created_at > ${from}`))[0]?.c), 0),
-    safe(async () => num((await rows<{ c: string }>(sql`SELECT coalesce(-sum(delta), 0) AS c FROM game_history WHERE mode IN ('bot','pvp','masa') AND created_at > ${from}`))[0]?.c), 0),
+    safe(async () => num((await rows<{ c: string }>(sql`SELECT coalesce(-sum(delta), 0) AS c FROM game_history WHERE mode = 'harcama' AND ${inRange(sql`created_at`)}`))[0]?.c), 0),
+    safe(async () => num((await rows<{ c: string }>(sql`SELECT coalesce(-sum(delta), 0) AS c FROM game_history WHERE mode IN ('bot','pvp','masa') AND ${inRange(sql`created_at`)}`))[0]?.c), 0),
     safe(async () => {
-      const r = await rows<{ name: string; amount: string }>(sql`
+      const x = (await rows<{ t: string; h: string }>(sql`SELECT coalesce(sum(balance), 0) AS t, count(*) FILTER (WHERE balance > 0) AS h FROM wallets`))[0]
+      return { total: num(x?.t), holders: num(x?.h) }
+    }, { total: 0, holders: 0 }),
+    safe(async () => {
+      const res = await rows<{ name: string; amount: string }>(sql`
         SELECT coalesce(u.name, u.email, t.user_id) AS name, sum(t.amount) AS amount FROM (
-          SELECT user_id, coins AS amount FROM kp_events WHERE coins > 0 AND created_at > ${from}
+          SELECT user_id, coins AS amount FROM kp_events WHERE coins > 0 AND ${inRange(sql`created_at`)}
           UNION ALL
-          SELECT user_id, delta AS amount FROM game_history WHERE mode = 'odul' AND delta > 0 AND created_at > ${from}
+          SELECT user_id, delta AS amount FROM game_history WHERE mode = 'odul' AND delta > 0 AND ${inRange(sql`created_at`)}
         ) t LEFT JOIN "user" u ON u.id = t.user_id
         GROUP BY 1 ORDER BY amount DESC LIMIT 5`)
-      return r.map((x) => ({ name: x.name, amount: num(x.amount) }))
+      return res.map((x) => ({ name: x.name, amount: num(x.amount) }))
     }, []),
     safe(async () => {
-      const r = await rows<{ name: string; amount: string }>(sql`
+      const res = await rows<{ name: string; amount: string }>(sql`
         SELECT coalesce(u.name, u.email, g.user_id) AS name, sum(g.delta) AS amount
         FROM game_history g LEFT JOIN "user" u ON u.id = g.user_id
-        WHERE g.mode IN ('bot','pvp','masa') AND g.created_at > ${from}
+        WHERE g.mode IN ('bot','pvp','masa') AND ${inRange(sql`g.created_at`)}
         GROUP BY 1 HAVING sum(g.delta) > 0 ORDER BY amount DESC LIMIT 5`)
-      return r.map((x) => ({ name: x.name, amount: num(x.amount) }))
+      return res.map((x) => ({ name: x.name, amount: num(x.amount) }))
     }, []),
     safe(async () => {
-      const r = await rows<{ name: string; amount: string; at: string }>(sql`
+      const res = await rows<{ name: string; amount: string; at: string }>(sql`
         SELECT coalesce(u.name, u.email, t.user_id) AS name, sum(t.amount) AS amount, date_trunc('hour', t.created_at) AS at FROM (
-          SELECT user_id, coins AS amount, created_at FROM kp_events WHERE coins > 0 AND created_at > ${from}
+          SELECT user_id, coins AS amount, created_at FROM kp_events WHERE coins > 0 AND ${inRange(sql`created_at`)}
           UNION ALL
-          SELECT user_id, delta AS amount, created_at FROM game_history WHERE delta > 0 AND created_at > ${from}
+          SELECT user_id, delta AS amount, created_at FROM game_history WHERE delta > 0 AND ${inRange(sql`created_at`)}
         ) t LEFT JOIN "user" u ON u.id = t.user_id
         GROUP BY 1, 3 HAVING sum(t.amount) >= 2000 ORDER BY amount DESC LIMIT 5`)
-      return r.map((x) => ({ name: x.name, amount: num(x.amount), at: new Date(x.at).toISOString() }))
+      return res.map((x) => ({ name: x.name, amount: num(x.amount), at: new Date(x.at).toISOString() }))
     }, []),
     safe(async () => {
-      const r = await rows<{ mode: string; count: string; stake: string }>(sql`
+      const res = await rows<{ mode: string; count: string; stake: string }>(sql`
         SELECT mode, count(*) AS count, coalesce(sum(stake), 0) AS stake FROM game_history
-        WHERE mode IN ('bot','pvp','masa') AND created_at > ${from} GROUP BY mode`)
+        WHERE mode IN ('bot','pvp','masa') AND ${inRange(sql`created_at`)} GROUP BY mode`)
       return GAME_MODES.map((m) => {
-        const x = r.find((y) => y.mode === m)
+        const x = res.find((y) => y.mode === m)
         return { mode: MODE_LABELS[m], count: num(x?.count), stake: num(x?.stake) }
       })
     }, GAME_MODES.map((m) => ({ mode: MODE_LABELS[m], count: 0, stake: 0 }))),
     safe(async () => {
-      const r = await rows<{ game: string; count: string }>(sql`
-        SELECT game, count(*) AS count FROM game_history WHERE mode IN ('bot','pvp','masa') AND created_at > ${from}
+      const res = await rows<{ game: string; count: string }>(sql`
+        SELECT game, count(*) AS count FROM game_history WHERE mode IN ('bot','pvp','masa') AND ${inRange(sql`created_at`)}
         GROUP BY game ORDER BY count DESC LIMIT 4`)
-      return r.map((x) => ({ game: x.game, count: num(x.count) }))
+      return res.map((x) => ({ game: x.game, count: num(x.count) }))
     }, []),
     systemHealth(),
   ])
 
-  return { range, online, newUsers, activeMembers, sponsorClicks, kcOut, games, series, seriesUnit, topSponsors, kcSources, kcSpent, houseNet, rewardEarners, gameWinners, anomalies, gameModes, topGames, health }
+  return {
+    query,
+    from: r.from,
+    to: r.to,
+    today: r.today,
+    dataStart,
+    days: r.days,
+    title: r.title,
+    compare: r.compare,
+    hasPrev,
+    live: r.live,
+    generatedAt: new Date(now).toISOString(),
+    online,
+    onlineHour,
+    newUsers,
+    activeMembers,
+    sponsorClicks,
+    kcOut,
+    games,
+    series,
+    seriesUnit,
+    topSponsors,
+    origins,
+    heatmap,
+    retention,
+    signups,
+    kcSources,
+    kcSpent,
+    houseNet,
+    circulation,
+    rewardEarners,
+    gameWinners,
+    anomalies,
+    gameModes,
+    topGames,
+    health,
+  }
 }
 
 async function systemHealth(): Promise<HealthItem[]> {
