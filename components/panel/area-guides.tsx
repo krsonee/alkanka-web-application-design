@@ -165,24 +165,201 @@ const KP_STEPS: GuideStep[] = [
   },
 ]
 
+const ul = 'flex list-disc flex-col gap-1.5 pl-5'
+const note = 'mt-3 rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground'
+
 const SEO_STEPS: GuideStep[] = [
   {
-    title: 'Arama motoru doğrulama',
+    title: 'SEO nedir, Google nasıl çalışır? (önce bunu oku)',
+    body: (
+      <>
+        <p className="mb-2">SEO, Google’da biri bir şey aradığında senin sayfanın üst sıralarda çıkması için yapılan işlerin hepsidir. Google üç adımda çalışır:</p>
+        <ol className={ol}>
+          <li><b>Tarama</b>: Google’ın robotu sitendeki linkleri takip ederek sayfaları bulur. <span className={code}>/sitemap.xml</span> ona sayfaların listesini verir, bu kısım hazır.</li>
+          <li><b>Dizine ekleme</b>: Robot sayfayı okur ve “bu sayfa ne anlatıyor” diye kaydeder. Sayfa kısa, kopya ya da boşsa kaydetmeyebilir.</li>
+          <li><b>Sıralama</b>: Biri arama yaptığında Google, kayıtlı sayfalar arasından en iyi cevabı vereni üste koyar.</li>
+        </ol>
+        <p className="mt-2">Sıralamayı üç şey belirler:</p>
+        <ul className={ul}>
+          <li><b>İçerik</b>: Arayanın sorusuna en net ve detaylı cevabı veriyor musun?</li>
+          <li><b>Otorite</b>: Başka siteler sana link veriyor mu, marka adın aranıyor mu?</li>
+          <li><b>Teknik</b>: Site hızlı mı, mobilde düzgün mü, hatasız mı? Bu kısım sende zaten iyi durumda.</li>
+        </ul>
+        <p className={note}>Özet: Teknik altyapı hazır. Senin işin düzenli ve kaliteli yazı yazmak ve markayı büyütmek.</p>
+      </>
+    ),
+  },
+  {
+    title: 'İlk kurulum: Google Search Console (bir kere yapılır)',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><span className={code}>search.google.com/search-console</span> adresine Gmail hesabınla gir. <b>Mülk ekle</b> deyip <b>URL ön eki</b>ni seç ve site adresini yaz.</li>
+          <li>Doğrulama yöntemi olarak <b>HTML etiketi</b>ni seç. Çıkan <span className={code}>{'<meta …>'}</span> satırını kopyala ve aşağıdaki <b>Search Console</b> kartındaki Google kutusuna yapıştırıp kaydet. Sonra Google’da <b>Doğrula</b>’ya bas.</li>
+          <li>Sol menüden <b>Site haritaları</b>na gir, <span className={code}>sitemap.xml</span> yaz ve <b>Gönder</b>’e bas.</li>
+          <li>Aynısını isteğe bağlı olarak <b>Bing Webmaster Tools</b> ve <b>Yandex Webmaster</b> için de yap. Bing, Search Console hesabını içe aktarabilir.</li>
+        </ol>
+        <p className={note}>Yeni bir yazı yayınlayınca Search Console’un en üstündeki arama kutusuna yazının adresini yapıştır ve <b>Dizine eklenmesini iste</b>’ye bas. Google sayfayı birkaç gün yerine birkaç saatte görür.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Kelime araştırması: insanlar ne arıyor? (ücretsiz)',
+    body: (
+      <>
+        <p className="mb-2">Kimsenin aramadığı bir konuyu yazarsan trafik gelmez. Önce insanların gerçekten neyi aradığını bul:</p>
+        <ol className={ol}>
+          <li><b>Google otomatik tamamlama</b>: Gizli sekmede Google’a “deneme bonusu” yaz ama Enter’a basma. Altta çıkan önerilerin hepsi gerçek aramalardır, not al. Sonra “deneme bonusu a”, “deneme bonusu b” diye harf ekleyerek devam et.</li>
+          <li><b>Kullanıcılar bunları da sordu</b>: Arama sonucunda çıkan soru kutusundaki soruların her biri bir ara başlık ya da SSS sorusu olabilir.</li>
+          <li><b>Sayfa sonundaki ilgili aramalar</b>: Sonuç sayfasının en altındaki öneriler de yeni yazı fikirleridir.</li>
+          <li><b>Google Trends</b> (<span className={code}>trends.google.com</span>): İki kelimeden hangisinin daha çok arandığını ve hangi aylarda arttığını gösterir.</li>
+          <li><b>Search Console</b> (2–3 hafta veri toplandıktan sonra): <b>Performans</b> bölümünde sitene hangi kelimelerden gelindiğini görürsün. En değerli kaynak budur.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">Kelimeleri üç gruba ayır:</p>
+        <ul className={ul}>
+          <li><b>Genel (zor)</b>: “deneme bonusu”. Çok aranır ama ilk sayfa doludur. Şimdilik hedefleme.</li>
+          <li><b>Orta</b>: “çevrimsiz deneme bonusu veren siteler”.</li>
+          <li><b>Uzun kuyruk (kolay, buradan başla)</b>: “[site adı] bonus çevrim şartı”, “freespin nasıl çevrilir”. Az aranır ama rakip azdır, hızlı sıralanırsın. Çok sayıda küçük kelime toplanınca büyük trafik eder.</li>
+        </ul>
+        <p className={note}>Bulduğun kelimeleri bir tabloya yaz: kelime, tahmini zorluk, yazıldı mı, yazının adresi. Bu tablo senin içerik takvimin olur.</p>
+      </>
+    ),
+  },
+  {
+    title: 'İçerik planı: hangi yazıları, hangi sırayla yazmalıyım?',
+    body: (
+      <>
+        <p className="mb-2">Google, bir konuyu her yönüyle anlatan siteyi “uzman” kabul eder. Bu yüzden rastgele yazmak yerine <b>konu kümeleri</b> kur:</p>
+        <ol className={ol}>
+          <li><b>Ana rehber</b>: Geniş bir konuyu baştan sona anlatan uzun bir yazı (2000+ kelime). Örnek: “Deneme Bonusu Rehberi 2026”.</li>
+          <li><b>Destek yazıları</b>: Ana rehberdeki her alt başlığı ayrıntılı anlatan 8–15 kısa yazı. Örnek: “Çevrim şartı nedir?”, “Freespin nasıl kullanılır?”, “Bonus neden iptal edilir?”.</li>
+          <li>Her destek yazısı ana rehbere, ana rehber de her destek yazısına link verir. Böylece Google bütün kümeyi birbirine bağlı görür.</li>
+        </ol>
+        <p className="mt-3 mb-1 font-semibold">Önerilen başlangıç kümeleri:</p>
+        <ul className={ul}>
+          <li>Bonuslar: deneme bonusu, kayıt bonusu, kayıp bonusu, freespin, çevrim şartları.</li>
+          <li>Sponsor incelemeleri: her sponsor için “[Site] inceleme ve bonusları” sayfası (artı/eksi, bonus tablosu, ödeme yöntemleri).</li>
+          <li>Oyun rehberleri: tavla, okey ve bilardo kuralları ve taktikleri. Sitende bu oyunlar var, bu alan hem kolay hem güvenli trafik getirir.</li>
+          <li>Nasıl yapılır yazıları: “Telegram’dan bonus nasıl takip edilir”, “Kanka Puan nasıl kazanılır”.</li>
+        </ul>
+        <p className={note}>Hedef: ilk 3 ay haftada 3 yazı. Düzenli yazmak, ayda bir 10 yazı yazmaktan daha iyidir.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Panelde yazı yazma, adım adım',
     body: (
       <ol className={ol}>
-        <li>Google Search Console, Bing ve Yandex sana bir <span className={code}>{'<meta name=… content=…>'}</span> etiketi verir. Etiketin tamamını ya da sadece content değerini ilgili kutuya yapıştır ve kaydet.</li>
-        <li>Sonra o servisin panelinde <b>Doğrula</b>’ya bas. Site haritası adresi: <span className={code}>/sitemap.xml</span>.</li>
+        <li>Aşağıdaki <b>Rehber yazıları</b> kartında <b>Yeni yazı</b>’ya bas.</li>
+        <li><b>Anahtar kelimeler</b> kutusuna ilk olarak <b>odak kelimeyi</b> yaz (ör. <span className={code}>çevrim şartı nedir</span>), virgülle yan kelimeleri ekle. Sağdaki <b>SEO puanı</b> bu kelimeye göre çalışır.</li>
+        <li><b>Başlık</b>: Odak kelime başta olsun, 30–60 karakter arası kalsın. Örnek: “Çevrim Şartı Nedir? Bonus Çevirme Rehberi 2026”.</li>
+        <li><b>Adres</b>: Boş bırakırsan başlıktan üretilir. Kısa olsun ve odak kelimeyi içersin. Yayından sonra değiştirme, değişirse Google’daki sıranı kaybedersin.</li>
+        <li><b>Özet</b>: Google’da başlığın altında çıkan 110–160 karakterlik yazı. Odak kelimeyi geçir ve tıklamaya teşvik et.</li>
+        <li><b>İçerik</b>: <b>Şablonu ekle</b> ile hazır iskeleti çağır, sonra araç çubuğunu kullan: ara başlık (H2/H3), kalın, link, madde, alıntı ve <b>SSS</b>. SSS bloğu <span className={code}>S: soru</span> ve <span className={code}>C: cevap</span> satırlarından oluşur.</li>
+        <li><b>Kapak görseli</b> ekle. Paylaşımda ve Google Görseller’de kullanılır.</li>
+        <li><b>Önizleme</b> sekmesinden sitede nasıl görüneceğine bak. Sağdaki kontrol listesinin çoğu yeşil olunca kaydet.</li>
+        <li>Yayınladıktan sonra adresi Search Console’da <b>Dizine eklenmesini iste</b> ile gönder.</li>
       </ol>
     ),
   },
   {
-    title: 'Rehber yazıları ve fırsat sayfaları',
+    title: 'İyi yazı nasıl yazılır? (Google’ın en çok önem verdiği kısım)',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><b>Cevabı en başta ver</b>: İlk 2–3 cümlede sorunun kısa cevabını yaz, sonra detaya gir. Okuyucu aradığını hemen bulursa sayfada kalır.</li>
+          <li><b>Kendi tecrübeni kat</b>: “Biz test ettik, 3 sitede denedik, Telegram grubumuzda en çok sorulan şu” gibi bilgiler başka sitelerde yoktur. Google buna <b>deneyim</b> der ve çok önemser.</li>
+          <li><b>Somut ol</b>: Tablolar, rakamlar, örnek hesaplar ver. “Çevrim şartı yüksektir” yerine “100 TL bonusa 10x çevrim = 1000 TL oyun” yaz.</li>
+          <li><b>Kısa paragraflar</b>: 2–4 cümle. Her 200–300 kelimede bir ara başlık koy. Telefonda okunduğunu düşün.</li>
+          <li><b>Güncel tut</b>: Yazıları 2–3 ayda bir kontrol et, eskiyen bilgiyi düzelt ve kaydet. Güncelleme tarihi Google’a yansır.</li>
+          <li><b>Güven sinyalleri</b>: +18 ve sorumlu oyun uyarısı ekle, abartılı vaatlerden kaçın (“kesin kazanç” gibi).</li>
+        </ol>
+        <p className={note}>Yapay zekaya yazdırmak serbest, ama olduğu gibi kopyalayıp yapıştırma. Taslak olarak kullan, üstüne kendi bilgini, örneklerini ve tecrübeni ekle. Google, değer katmayan toplu içeriği cezalandırır.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Linkler: iç link ve dış link (otorite)',
+    body: (
+      <>
+        <p className="mb-1 font-semibold">İç link (tamamen senin elinde)</p>
+        <ul className={ul}>
+          <li>Her yazıda sitenin başka sayfalarına en az 2–3 link ver: ilgili rehber yazısı, sponsor sayfası <span className={code}>/siteler/…</span>, oyun sayfası <span className={code}>/oyunlar/…</span>.</li>
+          <li>Link yazısı anlamlı olsun: “buraya tıkla” yerine “çevrim şartı rehberimiz”.</li>
+          <li>Yeni bir yazı yayınlayınca eski ve ilgili yazılara dönüp ona link ekle.</li>
+        </ul>
+        <p className="mt-3 mb-1 font-semibold">Dış link (başka sitelerin sana link vermesi)</p>
+        <ul className={ul}>
+          <li><b>Sponsorlar</b>: Her sponsordan kendi sitesinde “partnerimiz Alkanka” linki iste.</li>
+          <li><b>Özgün veri</b>: “Bu ayın en çok kazandıran bonusları” ya da “1000 üyeyle bonus anketi” gibi kimsede olmayan raporlar yayınla. İnsanlar bunlara kendiliğinden link verir.</li>
+          <li><b>Sosyal profiller</b>: Telegram, YouTube, X, Instagram ve KankaTV açıklamalarına site linkini koy. Doğrudan sıra kazandırmaz ama Google markayı tanır.</li>
+          <li><b>Forumlar</b>: Gerçekten yardımcı cevaplar yaz, uygun olduğunda yazına link ver. Spam yapma.</li>
+        </ul>
+        <p className={note}>Link satın alma, paravan site ağı (PBN) kurma ve toplu link servisleri Google kurallarına aykırıdır. Yakalanırsa ceza sadece o sitelere değil, alkanka.com’a da gelir. Yavaş ama güvenli yol her zaman daha karlıdır.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Sonuçları okuma: Search Console’da neye bakacağım?',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><b>Performans</b> bölümünde dört sayı görürsün: <b>Tıklama</b> (sitene gelen kişi), <b>Gösterim</b> (Google’da kaç kez göründün), <b>TO</b> (görenlerin yüzde kaçı tıkladı) ve <b>Ortalama konum</b>.</li>
+          <li><b>Sorgular</b> sekmesi hangi kelimelerden göründüğünü listeler. Bunu ortalama konuma göre sırala.</li>
+          <li><b>Altın fırsat</b>: Konumu 8 ile 20 arasında olan kelimeler. İkinci sayfadasın ve az bir çabayla ilk sayfaya çıkarsın. O yazıyı aç; kelimeyi başlığa ve ara başlığa ekle, içeriği genişlet, SSS ekle, başka yazılardan link ver.</li>
+          <li><b>Gösterimi çok ama TO düşük</b> olan sayfa: Google seni gösteriyor ama kimse tıklamıyor. Başlığı ve özeti daha çekici yaz (yıl, rakam, soru ekle).</li>
+          <li><b>Sayfalar → Dizine ekleme</b> raporu: “Tarandı ama dizine eklenmedi” uyarısı alan sayfalar genelde fazla kısa ya da birbirine çok benziyor demektir. Bu sayfaları genişlet ya da birleştir.</li>
+        </ol>
+        <p className={note}>İlk 2–3 hafta veri az olur, bu normal. Günlük değil haftalık bak; günlük oynamalar yanıltıcıdır.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Haftalık rutin (bunu uygulaman yeterli)',
+    body: (
+      <ul className={ul}>
+        <li><b>Pazartesi (30 dk)</b>: Search Console’a bak. Konumu 8–20 arasındaki 2–3 kelimeyi seç ve bu hafta hangi yazıları güncelleyeceğini not al.</li>
+        <li><b>Salı, Perşembe, Cumartesi</b>: Kelime tablondan birer yeni yazı yayınla ve her birini Search Console’da dizine eklenmesi için gönder.</li>
+        <li><b>Çarşamba</b>: Bir eski yazıyı güncelle; bilgileri tazele, SSS ekle, yeni yazılara link ver.</li>
+        <li><b>Cuma</b>: Yeni yazıları Telegram, X ve Instagram’da paylaş. İlk ziyaretçiler Google’a “bu sayfa ilgi görüyor” sinyali verir.</li>
+        <li><b>Ayda bir</b>: Bir özgün veri raporu yayınla, sponsorlardan link iste ve Dizine ekleme raporundaki hataları temizle.</li>
+      </ul>
+    ),
+  },
+  {
+    title: 'Kesinlikle yapma listesi',
+    body: (
+      <ul className={ul}>
+        <li>Başka sitelerden metin kopyalama. Google kopyayı anlar ve sayfayı dizine eklemez.</li>
+        <li>Kelimeyi doldurma (“deneme bonusu deneme bonusu veren deneme bonusu siteleri”). Sağdaki yoğunluk kontrolü bu yüzden var, %0,5–2,5 arasında kal.</li>
+        <li>Yayınlanmış bir yazının adresini değiştirme.</li>
+        <li>Aynı konuyu iki ayrı yazıda anlatma. Yazılar birbirinin sırasını yer; tek ve güçlü bir yazıda birleştir.</li>
+        <li>Link satın alma, PBN kurma, sahte yorum ve “7 günde ilk sıra” vaat eden servisler.</li>
+        <li>Gizli yazı ve beyaz zeminde beyaz kelime gibi eski hileler. Anında ceza sebebidir.</li>
+      </ul>
+    ),
+  },
+  {
+    title: 'Ne zaman sonuç alırım? (gerçekçi beklenti)',
+    body: (
+      <>
+        <ul className={ul}>
+          <li><b>1. ay</b>: Google yazıları keşfeder, gösterimler başlar, tıklama azdır. Moral bozma, bu dönem herkes için böyledir.</li>
+          <li><b>2.–3. ay</b>: Uzun kuyruk kelimelerde ilk sayfaya çıkmaya başlarsın, günlük ziyaretçi düzenli gelir.</li>
+          <li><b>4.–6. ay</b>: 40–60 yazı ve birkaç kaliteli link olunca orta kelimelerde yükselirsin. Trafik katlanarak artmaya başlar.</li>
+          <li><b>6. ay ve sonrası</b>: Genel kelimeler için yarışabilecek otoriteye ulaşırsın.</li>
+        </ul>
+        <p className={note}>SEO kar topu gibidir: başta yavaştır, sonra her yazı bir öncekini güçlendirir. Bırakmayanlar kazanır. En sık yapılan hata, 2. ayda sonuç görmeyip yazmayı bırakmaktır.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Telegram fırsat sayfaları ve Telegram aktarımı',
     body: (
       <ol className={ol}>
-        <li>Her rehber yazısı Google’da ayrı bir sayfa olarak çıkar. <b>Başlık</b>a aranan kelimeyi koy (ör. “Deneme bonusu veren siteler 2026”).</li>
-        <li><b>Adres</b> boşsa başlıktan üretilir. <b>Özet</b> Google sonucunda başlığın altında görünür, 200 karakteri geçmesin.</li>
-        <li>İçerikte <span className={code}>## </span> ile ara başlık, <span className={code}>- </span> ile madde açarsın.</li>
-        <li><b>Telegram postları</b>: Kutu açıksa botun paylaştığı özel oran postları <span className={code}>/ozel-oranlar</span> sayfasına düşer.</li>
+        <li>Aşağıdaki kartta Telegram aktarımı açıksa botun paylaştığı özel oran ve fırsat postları <span className={code}>/ozel-oranlar</span> sayfasına düşer ve site haritasına eklenir.</li>
+        <li>Bu postlar kısa olduğu için Google’dan tek başına çok trafik getirmez. Asıl görevleri siteyi canlı ve güncel göstermektir.</li>
+        <li>Önemli bir fırsatı Google’da öne çıkarmak istiyorsan onu kısa post olarak bırakma; uzun bir rehber yazısına çevir (nasıl alınır, şartları, adım adım).</li>
       </ol>
     ),
   },
@@ -209,5 +386,11 @@ export function KpGuide() {
 }
 
 export function SeoGuide() {
-  return <FeatureGuide title="SEO rehberi" subtitle="Arama motoru doğrulama, rehber yazıları ve fırsat sayfaları nasıl çalışır" steps={SEO_STEPS} />
+  return (
+    <FeatureGuide
+      title="SEO eğitimi: sıfırdan Google’da yükselmek"
+      subtitle="Hiç bilmeyen biri için adım adım: kurulum, kelime bulma, yazı yazma, link, ölçüm ve haftalık rutin"
+      steps={SEO_STEPS}
+    />
+  )
 }
