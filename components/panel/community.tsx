@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, type ComponentProps } from 'react'
 import { WithdrawManager } from './withdraw-manager'
 import { Check, Star, Trash2, X } from 'lucide-react'
@@ -96,7 +98,7 @@ function Reviews({ reviews, published, siteNames }: { reviews: Review[]; publish
                 <button disabled={pending} onClick={() => run(() => moderateReview(r.id, 'rejected'))} className="h-8 rounded-lg bg-secondary px-2.5 text-xs font-bold text-secondary-foreground disabled:opacity-50">Gizle</button>
                 <button
                   disabled={pending}
-                  onClick={() => confirm('Bu yorum kalıcı olarak silinsin mi?') && run(() => removeReview(r.id))}
+                  onClick={() => void askConfirm('Bu yorum kalıcı olarak silinsin mi?').then((ok) => ok && run(() => removeReview(r.id)))}
                   aria-label="Yorumu sil"
                   className="flex size-8 items-center justify-center rounded-lg bg-destructive/15 text-destructive disabled:opacity-50"
                 >
@@ -124,7 +126,7 @@ function ComplaintRow({ c, site }: { c: Complaint; site: string }) {
           <span className="text-sm font-semibold text-foreground">{c.title}</span>
           <span className="text-xs text-muted-foreground">{site} · {c.userName} · {new Date(c.createdAt).toLocaleDateString('tr-TR')}</span>
         </div>
-        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
+        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
       </div>
       <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{c.body}</p>
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -141,7 +143,7 @@ function ComplaintRow({ c, site }: { c: Complaint; site: string }) {
         </button>
         <button
           disabled={pending}
-          onClick={() => confirm('Şikâyet tamamen kaldırılsın mı? Bu işlem geri alınamaz.') && run(() => removeComplaint(c.id))}
+          onClick={() => void askConfirm('Şikâyet tamamen kaldırılsın mı? Bu işlem geri alınamaz.').then((ok) => ok && run(() => removeComplaint(c.id)))}
           className="ml-auto flex h-9 items-center gap-1.5 rounded-lg bg-destructive/15 px-3 text-xs font-bold text-destructive disabled:opacity-50"
         >
           <Trash2 className="size-4" aria-hidden /> Kaldır
@@ -210,7 +212,7 @@ function FinishRow({ m }: { m: LeagueMatch }) {
           <button disabled={pending || h === '' || a === ''} onClick={() => run(() => finishLeagueMatch(m.id, Number(h), Number(a)))} className="h-9 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-40">
             Sonucu gir ve puanla
           </button>
-          <button disabled={pending} onClick={() => confirm('Maç ve tahminleri silinsin mi?') && run(() => removeLeagueMatch(m.id))} aria-label="Maçı sil" className="flex size-9 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+          <button disabled={pending} onClick={() => void askConfirm('Maç ve tahminleri silinsin mi?').then((ok) => ok && run(() => removeLeagueMatch(m.id)))} aria-label="Maçı sil" className="flex size-9 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
             <Trash2 className="size-4" aria-hidden />
           </button>
         </div>

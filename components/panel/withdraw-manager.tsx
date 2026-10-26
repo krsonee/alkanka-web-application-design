@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState } from 'react'
 import { Ban, Check, ShieldOff, Trash2, X } from 'lucide-react'
 import {
@@ -119,7 +121,7 @@ function ShareRow({
         <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate font-bold text-foreground">{s.siteName}</span>
-            <span className={cn('shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold', st.tone)}>{st.label}</span>
+            <span className={cn('shrink-0 rounded-md px-2 py-0.5 text-xs font-bold', st.tone)}>{st.label}</span>
           </div>
           <span className="text-foreground">
             <b>{s.amount.toLocaleString('tr-TR')} TL</b> · {time(s.paidAt)}
@@ -155,7 +157,7 @@ function ShareRow({
             <button disabled={pending} onClick={() => run(() => rejectShare(s.id, note))} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 text-xs font-bold text-secondary-foreground disabled:opacity-50">
               <X className="size-4" aria-hidden /> Reddet
             </button>
-            <button disabled={pending} onClick={() => confirm('Sahte olarak işaretlenecek ve üye çekim paylaşımından engellenecek. Emin misin?') && run(() => fakeShare(s.id))} className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-destructive/15 px-3 text-xs font-bold text-destructive disabled:opacity-50">
+            <button disabled={pending} onClick={() => void askConfirm('Sahte olarak işaretlenecek ve üye çekim paylaşımından engellenecek. Emin misin?').then((ok) => ok && run(() => fakeShare(s.id)))} className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-destructive/15 px-3 text-xs font-bold text-destructive disabled:opacity-50">
               <Ban className="size-4" aria-hidden /> Sahte
             </button>
           </div>
@@ -165,7 +167,7 @@ function ShareRow({
           <span>
             Ödül: {[s.rewardCoin && `${s.rewardCoin} KC`, s.rewardKp && `${s.rewardKp} KP`, s.rewardItem].filter(Boolean).join(' + ') || 'yok'}
           </span>
-          <button disabled={pending} onClick={() => confirm('Paylaşım ve görüntü silinecek. Emin misin?') && run(() => removeShare(s.id))} className="flex h-8 items-center gap-1 rounded-lg px-2 font-bold text-destructive hover:bg-destructive/10 disabled:opacity-50">
+          <button disabled={pending} onClick={() => void askConfirm('Paylaşım ve görüntü silinecek. Emin misin?').then((ok) => ok && run(() => removeShare(s.id)))} className="flex h-8 items-center gap-1 rounded-lg px-2 font-bold text-destructive hover:bg-destructive/10 disabled:opacity-50">
             <Trash2 className="size-4" aria-hidden /> Sil
           </button>
         </div>

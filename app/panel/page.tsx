@@ -23,6 +23,7 @@ import { ContentEditor } from '@/components/panel/content-editor'
 import { LogoEditor } from '@/components/panel/logo-editor'
 import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
+import { GameStats } from '@/components/panel/game-stats'
 import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
@@ -91,6 +92,47 @@ import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
 import { pendingDetail } from '@/lib/panel-pending'
+import { ModerationQueue, type ModerationItem } from '@/components/panel/moderation-queue'
+
+async function moderationItems(can: (id: 'community' | 'tasks' | 'market') => boolean): Promise<ModerationItem[]> {
+  const { pendingProofs } = await import('@/lib/trust-extra')
+  const [proofs, reviews, complaints, claims, requests, sites] = await Promise.all([
+    can('community') ? pendingProofs().catch(() => []) : [],
+    can('community') ? pendingReviews().catch(() => []) : [],
+    can('community') ? adminComplaints().catch(() => []) : [],
+    can('tasks') ? listPendingClaims().catch(() => []) : [],
+    can('market') ? listRequests().catch(() => []) : [],
+    can('community') ? siteOptions().catch(() => []) : [],
+  ])
+  const siteName = (id: string) => sites.find((s) => String(s.id) === id)?.name ?? id
+  return [
+    ...proofs.map((p): ModerationItem => ({
+      key: `proof-${p.reviewId}`,
+      kind: 'proof',
+      id: p.reviewId,
+      title: siteName(p.siteId),
+      who: p.userName,
+      detail: p.body,
+      image: `/api/guven/kanit/${encodeURIComponent(p.proofPath.split('/').pop() ?? '')}`,
+    })),
+    ...reviews.map((r): ModerationItem => ({ key: `review-${r.id}`, kind: 'review', id: r.id, title: `${siteName(r.siteId)} · ${r.rating}/5`, who: r.userName, detail: r.body, createdAt: r.createdAt })),
+    ...claims.map((c): ModerationItem => ({ key: `claim-${c.id}`, kind: 'claim', id: c.id, title: c.taskTitle, who: c.userName, detail: c.email, createdAt: c.createdAt })),
+    ...requests
+      .filter((r) => r.status === 'beklemede')
+      .map((r): ModerationItem => ({
+        key: `market-${r.id}`,
+        kind: 'market',
+        id: r.id,
+        title: `${r.itemName}${r.sponsorName ? ` · ${r.sponsorName}` : ''}`,
+        who: `${r.userName}${r.siteUsername ? ` (${r.siteUsername})` : ''}`,
+        detail: `${r.price} coin`,
+        createdAt: r.createdAt,
+      })),
+    ...complaints
+      .filter((c) => c.status === 'open')
+      .map((c): ModerationItem => ({ key: `complaint-${c.id}`, kind: 'complaint', id: c.id, title: `${siteName(c.siteId)} · ${c.title}`, who: c.userName, detail: c.body, createdAt: c.createdAt })),
+  ]
+}
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 import { getOnlineConfig, getTickerConfig } from '@/lib/online-rewards'
@@ -104,6 +146,8 @@ import { cleanPermissions } from '@/lib/panel-modules'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
+import { SystemStatus } from '@/components/panel/system-status'
+import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
@@ -177,26 +221,28 @@ async function telegramPanel() {
   return (
     <TelegramTabs
       tabs={[
-        { id: 'hub', label: 'Telegram Merkezi', status: light(hubData.hub.guard.enabled || hubData.hub.support.enabled), content: <TgHubManager data={hubData} /> },
-        { id: 'mirror', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
-        { id: 'chat', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
-        { id: 'odds', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
+        { id: 'hub', group: 'Botlar', label: 'Telegram Merkezi', status: light(hubData.hub.guard.enabled || hubData.hub.support.enabled), content: <TgHubManager data={hubData} /> },
+        { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
+        { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
+        { id: 'odds', group: 'Botlar', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
         {
           id: 'kankatv',
+          group: 'Otomasyonlar',
           label: 'KankaTV Gol Botu',
           status: light((tvConfig.goalBot.enabled || tvConfig.goalBot.push) && !tvStatus.lastError),
           content: <KankaTvManager config={tvConfig} status={tvStatus} stats={tvToday} targets={targets} cronUrl={tvCronUrl} />,
         },
         {
           id: 'tvbets',
+          group: 'Otomasyonlar',
           label: 'KankaTV Canlı Etkinlik',
           status: light(betsConfig.enabled && !betsStatus.lastError),
           content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
         },
-        { id: 'approvals', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
-        { id: 'share', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
-        { id: 'invite', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
-        { id: 'channels', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
+        { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
+        { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
+        { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
+        { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
       ]}
     />
   )
@@ -519,10 +565,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )),
     section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
     section(ctx, 'games', 'Oyun ayarları', () => (
-      <ArenaSettingsEditor
-        settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
-        winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
-      />
+      <div className="flex flex-col gap-6">
+        <GameStats />
+        <ArenaSettingsEditor
+          settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
+          winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
+        />
+      </div>
     )),
     section(ctx, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
@@ -564,17 +613,29 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'users', 'Tüm üyeler', usersPanel),
   ])
-  const audit = session.isOwner && active === 'audit' ? await listAudit().then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
+  const audit = session.isOwner && active === 'audit' ? await listAudit(2000).then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
 
   const onDash = active === 'dashboard'
-  const [detail, dashCounts, dashRecent, dashStatsData] = await Promise.all([
+  const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
     pendingDetail(can).catch(() => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0 })),
-    onDash && can('users') ? listMembers({ limit: 1 }).then((r) => r.counts).catch(() => null) : null,
+    onDash && can('users') ? listMembers().then((r) => r.counts).catch(() => null) : null,
     onDash && session.isOwner ? listAudit(8).catch(() => []) : [],
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
+    onDash && session.isOwner ? loadSystemStatus().catch((error) => (console.error('[panel:system-status]', error), null)) : null,
   ])
   const pending: Record<string, number> = { community: detail.reviews + detail.complaints + detail.withdrawals, tasks: detail.claims, market: detail.market }
-  const dashboard = onDash ? <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} /> : null
+  const dashboard = onDash ? (
+    <div className="flex flex-col gap-6">
+      {sysStatus ? <SystemStatus items={sysStatus} /> : null}
+      <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} />
+    </div>
+  ) : null
+  const canModerate = can('community') || can('tasks') || can('market')
+  const moderation = !canModerate
+    ? null
+    : active !== 'moderation'
+      ? undefined
+      : await moderationItems(can).then((items) => <ModerationQueue items={items} />).catch((error) => (console.error('[panel:moderation]', error), failed('Moderasyon kuyruğu')))
   const staff = session.isOwner && active === 'staff' ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
 
   return (
@@ -589,6 +650,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           users={users}
           audit={audit}
           dashboard={dashboard}
+          moderation={moderation === undefined ? <></> : moderation}
           isOwner={session.isOwner}
           slides={slides}
           heroes={heroes}

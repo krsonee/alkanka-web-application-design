@@ -88,7 +88,7 @@ export function BrandingEditor({
               ) : (
                 <AlkankaLogo concept="fist" size="md" />
               )}
-              <span className={cn('text-[11px]', tone === 'dark' ? 'text-muted-foreground' : 'text-background/70')}>
+              <span className={cn('text-xs', tone === 'dark' ? 'text-muted-foreground' : 'text-background/70')}>
                 {tone === 'dark' ? 'Koyu zemin' : 'Açık zemin'}
               </span>
             </div>

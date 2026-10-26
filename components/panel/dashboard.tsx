@@ -188,8 +188,8 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
               title="R: yenile · 1–6: hazır tarih aralıkları"
             >
               <Keyboard className="size-3.5" aria-hidden="true" />
-              <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-foreground">R</kbd>
-              <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-foreground">1–6</kbd>
+              <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs text-foreground">R</kbd>
+              <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs text-foreground">1–6</kbd>
             </span>
             <button
               type="button"
@@ -421,7 +421,7 @@ function RangePicker({ stats, onApply }: { stats: DashStats; onApply: (from: str
 
             <div className="grid grid-cols-7 gap-y-1 text-center" onMouseLeave={() => setHover(null)}>
               {WEEKDAY_SHORT.map((d) => (
-                <span key={d} className="pb-1 text-[11px] font-medium text-muted-foreground">
+                <span key={d} className="pb-1 text-xs font-medium text-muted-foreground">
                   {d}
                 </span>
               ))}
@@ -464,7 +464,7 @@ function RangePicker({ stats, onApply }: { stats: DashStats; onApply: (from: str
             <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
               <span className="flex flex-col">
                 <span className="text-sm font-medium tabular-nums text-popover-foreground">{label}</span>
-                <span className="text-[11px] text-muted-foreground">{start && !end ? 'Bitiş gününü seç ya da tek gün uygula' : `Veriler ${trDate(stats.dataStart)} itibarıyla`}</span>
+                <span className="text-xs text-muted-foreground">{start && !end ? 'Bitiş gününü seç ya da tek gün uygula' : `Veriler ${trDate(stats.dataStart)} itibarıyla`}</span>
               </span>
               <button
                 type="button"
@@ -687,7 +687,7 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
       </div>
 
       <div className="flex min-h-72 flex-1 gap-3 px-5 pb-5 pt-5">
-        <div className="flex w-8 shrink-0 flex-col justify-between pb-6 text-right text-[11px] tabular-nums text-muted-foreground" aria-hidden="true">
+        <div className="flex w-8 shrink-0 flex-col justify-between pb-6 text-right text-xs tabular-nums text-muted-foreground" aria-hidden="true">
           {ticks.map((t) => (
             <span key={t} className="leading-none">
               {fmt(t)}
@@ -742,19 +742,19 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
                 )}
                 style={{ left: `${((hover + 0.5) / n) * 100}%` }}
               >
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {unit === 'hour' ? `Saat ${active.label}` : unit === 'week' ? `${active.label} haftası` : active.label}
                 </span>
                 <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-popover-foreground">
                   {fmt(active[metric.key])} <span className="font-normal text-muted-foreground">{METRIC_NAMES[metric.key]}</span>
                 </span>
                 {showPrev && <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{`Önceki dönem: ${fmt(active[metric.prev])}`}</span>}
-                {clickable && !active.future && <span className="text-[11px] text-primary">Tıkla, detayına geç</span>}
+                {clickable && !active.future && <span className="text-xs text-primary">Tıkla, detayına geç</span>}
               </div>
             )}
           </div>
 
-          <div className="relative h-4 text-[11px] tabular-nums text-muted-foreground" aria-hidden="true">
+          <div className="relative h-4 text-xs tabular-nums text-muted-foreground" aria-hidden="true">
             {series.map((x, i) =>
               i % every === 0 ? (
                 <span key={x.key} className={cn('absolute -translate-x-1/2 whitespace-nowrap', x.future && 'opacity-50')} style={{ left: `${((i + 0.5) / n) * 100}%` }}>
@@ -880,9 +880,9 @@ function RankList({ items, empty, unit }: { items: RankItem[]; empty: string; un
 function MiniStat({ label, value, tone, hint, note }: { label: string; value: React.ReactNode; tone?: 'bad' | 'good'; hint?: string; note?: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-secondary/60 px-3 py-2.5" title={hint}>
-      <span className="truncate text-[11px] text-muted-foreground">{label}</span>
+      <span className="truncate text-xs text-muted-foreground">{label}</span>
       <span className={cn('font-display text-lg font-semibold tabular-nums', tone === 'bad' ? 'text-destructive' : tone === 'good' ? 'text-live' : 'text-foreground')}>{value}</span>
-      {note && <span className="truncate text-[11px] text-muted-foreground">{note}</span>}
+      {note && <span className="truncate text-xs text-muted-foreground">{note}</span>}
     </div>
   )
 }
@@ -1029,7 +1029,7 @@ function HeatmapCard({ stats }: { stats: DashStats }) {
           { label: 'En yoğun saat', value: max ? `${hh(busiestHour)} – ${hh((busiestHour + 1) % 24)}` : '–' },
         ].map((x) => (
           <div key={x.label} className="flex flex-col gap-0.5">
-            <span className="text-[11px] text-muted-foreground">{x.label}</span>
+            <span className="text-xs text-muted-foreground">{x.label}</span>
             <span className="text-sm font-semibold text-foreground">{x.value}</span>
           </div>
         ))}
@@ -1056,13 +1056,13 @@ function HeatmapCard({ stats }: { stats: DashStats }) {
           ))}
           <div className="flex items-center gap-3 pt-1" aria-hidden="true">
             <span className="w-20 shrink-0" />
-            <div className="grid flex-1 grid-cols-24 gap-1 text-center text-[10px] tabular-nums text-muted-foreground">
+            <div className="grid flex-1 grid-cols-24 gap-1 text-center text-xs tabular-nums text-muted-foreground">
               {Array.from({ length: 24 }, (_, h) => (
                 <span key={h}>{String(h).padStart(2, '0')}</span>
               ))}
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 pt-2 text-[11px] text-muted-foreground" aria-hidden="true">
+          <div className="flex items-center justify-end gap-2 pt-2 text-xs text-muted-foreground" aria-hidden="true">
             Sakin
             {[0.12, 0.34, 0.56, 0.78, 1].map((o) => (
               <span key={o} className="size-3 rounded-sm bg-primary" style={{ opacity: o }} />
@@ -1155,7 +1155,7 @@ function MembersCard({ counts }: { counts: NonNullable<Props['counts']> }) {
       <dl className="grid grid-cols-2 gap-2 px-5 pb-5 @6xl:grid-cols-4 @5xl:grid-cols-2">
         {MEMBER_ROWS.map((r) => (
           <div key={r.key} className="flex flex-col gap-1 rounded-xl bg-secondary/60 px-3 py-2.5">
-            <dt className="text-[11px] text-muted-foreground">{r.label}</dt>
+            <dt className="text-xs text-muted-foreground">{r.label}</dt>
             <dd className={cn('font-display text-lg font-semibold tabular-nums', r.key === 'supheli' && counts[r.key] > 0 ? 'text-destructive' : 'text-foreground')}>
               {fmt(counts[r.key])}
             </dd>

@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useActionState, useTransition, useState } from 'react'
 import { BellRing, Loader2, Pencil, Plus, Send, Share2, Trash2, Trophy } from 'lucide-react'
 import {
@@ -178,8 +180,10 @@ function ShareRuleCard({ rule, targets }: { rule: ShareRule; targets: MirrorTarg
           <form
             action={delAction}
             onSubmit={(e) => {
-              if (!confirm(`"${rule.name}" sponsoru silinsin mi?`)) e.preventDefault()
-            }}
+              void askConfirm(`"${rule.name}" sponsoru silinsin mi?`).then((ok) => {
+      if (!ok) e.preventDefault()
+    })
+  }}
           >
             <input type="hidden" name="id" value={rule.id} />
             <button

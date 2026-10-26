@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useEffect, useState, useTransition, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR, { useSWRConfig } from 'swr'
@@ -741,13 +743,15 @@ function BroadcastSection({ d }: { d: TgHubData }) {
             className={btn}
             disabled={a.pending || text.trim().length < 5}
             onClick={() => {
-              if (!confirm(`Bu mesaj ${d.linkedMembers} kişiye gidecek. Emin misin?`)) return
+              void askConfirm(`Bu mesaj ${d.linkedMembers} kişiye gidecek. Emin misin?`).then((ok) => {
+      if (!ok) return
               a.run(async () => {
                 const r = await sendBroadcast(text, bText, bUrl)
                 if (r.ok) setText('')
                 return r
               })
-            }}
+    })
+  }}
           >
             {a.pending ? 'Gönderiliyor…' : 'Duyuruyu gönder'}
           </button>

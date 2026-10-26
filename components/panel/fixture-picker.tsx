@@ -99,7 +99,7 @@ export function FixturePicker() {
         <div className="flex max-h-[28rem] flex-col gap-3 overflow-y-auto pr-1">
           {groups.map(([league, list]) => (
             <fieldset key={league} className="flex flex-col gap-1">
-              <legend className="mb-1 text-[11px] font-bold uppercase tracking-wider text-primary">{league}</legend>
+              <legend className="mb-1 text-xs font-bold uppercase tracking-wider text-primary">{league}</legend>
               {list.map((f) => {
                 const live = published.has(f.extId)
                 const can = selectable(f)
@@ -117,9 +117,9 @@ export function FixturePicker() {
                       <span className="truncate font-semibold text-foreground">{f.away}</span>
                     </span>
                     {live ? (
-                      <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-primary"><Check className="size-3.5" aria-hidden />Yayında</span>
+                      <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-primary"><Check className="size-3.5" aria-hidden />Yayında</span>
                     ) : f.started ? (
-                      <span className="shrink-0 text-[11px] text-muted-foreground">Başladı</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">Başladı</span>
                     ) : null}
                   </label>
                 )

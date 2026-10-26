@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { SeoGuide } from '@/components/panel/area-guides'
 import { useActionState, useTransition } from 'react'
 import { CheckCircle2, ExternalLink, Loader2, Search, Trash2, Zap } from 'lucide-react'
@@ -219,7 +221,7 @@ function DealsCard({ deals, publishing }: { deals: Deal[]; publishing: boolean }
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => confirm('Fırsat sayfası silinsin mi?') && start(() => deleteDealAction(d.id))}
+                onClick={() => void askConfirm('Fırsat sayfası silinsin mi?').then((ok) => ok && start(() => deleteDealAction(d.id)))}
                 className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-destructive"
                 aria-label={`${d.title} sayfasını sil`}
               >

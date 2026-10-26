@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Dices, Gift, Loader2, RotateCcw, Save, Target } from 'lucide-react'
 import { resetCatalog, saveRewards } from '@/app/panel/catalog-actions'
@@ -21,7 +23,7 @@ function Card({ icon: Icon, title, hint, game, hidden, children }: { icon: typeo
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h3 className="text-sm font-semibold text-foreground">
             {title}
-            {hidden && <span className="ml-2 text-[10px] font-bold uppercase text-muted-foreground">Siteden gizli</span>}
+            {hidden && <span className="ml-2 text-xs font-bold uppercase text-muted-foreground">Siteden gizli</span>}
           </h3>
           <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
         </div>
@@ -56,10 +58,12 @@ export function RewardsEditor({ initial, hidden = [], winRate = 40 }: { initial:
     })
 
   const reset = () => {
-    if (!confirm('Tüm ödüller varsayılana dönsün mü?')) return
+    void askConfirm('Tüm ödüller varsayılana dönsün mü?').then((ok) => {
+      if (!ok) return
     start(async () => {
       const r = await resetCatalog('rewards')
       setStatus(r.ok ? { ok: true, text: `${r.message} Sayfayı yenile.` } : { ok: false, text: r.error })
+    })
     })
   }
 

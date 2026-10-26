@@ -1,6 +1,7 @@
 'use client'
 
 import { HideButton } from '@/components/panel/hide-button'
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useActionState, type ReactNode } from 'react'
 import { Loader2, Play, Plus, Shuffle, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -51,7 +52,17 @@ function ActionButton({
     <form
       action={action}
       onSubmit={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault()
+        const form = e.currentTarget
+        if (!confirm || form.dataset.confirmed === '1') {
+          delete form.dataset.confirmed
+          return
+        }
+        e.preventDefault()
+        void askConfirm(confirm).then((ok) => {
+          if (!ok) return
+          form.dataset.confirmed = '1'
+          form.requestSubmit()
+        })
       }}
       className="flex flex-col gap-1"
     >

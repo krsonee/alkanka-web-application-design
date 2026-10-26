@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
@@ -239,9 +241,11 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
     setOpen(0)
   }
   const remove = (i: number) => {
-    if (!confirm('Bu kayıt silinsin mi?')) return
+    void askConfirm('Bu kayıt silinsin mi?').then((ok) => {
+      if (!ok) return
     setItems((list) => list.filter((_, j) => j !== i))
     setOpen(null)
+    })
   }
   const save = () =>
     start(async () => {
@@ -249,10 +253,12 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
       setStatus(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error })
     })
   const reset = () => {
-    if (!confirm('Bu liste varsayılana dönsün mü? Yaptığın değişiklikler silinir.')) return
+    void askConfirm('Bu liste varsayılana dönsün mü? Yaptığın değişiklikler silinir.').then((ok) => {
+      if (!ok) return
     start(async () => {
       const r = await resetCatalog(kind)
       setStatus(r.ok ? { ok: true, text: `${r.message} Sayfayı yenile.` } : { ok: false, text: r.error })
+    })
     })
   }
 
@@ -321,7 +327,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
               <div className="flex items-center gap-2 pr-2 hover:bg-secondary/60">
                 <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : i)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left">
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', isHidden ? 'text-muted-foreground line-through' : 'text-foreground')}>{name}</span>
-                  {isHidden && <span className="shrink-0 text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+                  {isHidden && <span className="shrink-0 text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {kind === 'events' ? `${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : String(item.sponsorId || '')}
                   </span>

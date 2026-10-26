@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
@@ -195,10 +197,10 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
               </div>
               <div className="flex flex-col items-center gap-0.5 text-center">
                 <p className="line-clamp-1 text-sm font-bold text-foreground">{a.name}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {a.unlock === 'free' ? 'Ücretsiz' : a.unlock === 'level' ? `Seviye ${a.level}` : `${a.price.toLocaleString('tr-TR')} KC`}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {s.users} kullanıyor{a.unlock === 'coin' ? ` · ${s.sold} satış` : ''}
                 </p>
               </div>
@@ -218,7 +220,7 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => confirm(`${a.name} silinsin mi?`) && run(deleteAvatarAction(a.id))}
+                  onClick={() => void askConfirm(`${a.name} silinsin mi?`).then((ok) => ok && run(deleteAvatarAction(a.id)))}
                   className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   aria-label={`${a.name} sil`}
                 >
@@ -239,7 +241,7 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
               <img src={c.src} alt={c.name} loading="lazy" className="aspect-[3/1] w-full object-cover" />
               <div className="flex flex-col gap-0.5 p-2.5">
                 <p className="text-sm font-bold text-foreground">{c.name}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Seviye {c.level} · {coverUsage[c.id] ?? 0} üye
                 </p>
               </div>

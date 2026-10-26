@@ -6,6 +6,7 @@ import { adjustPoints, awardBadge, listSpecialBadges } from '@/lib/kanka-puan'
 import {
   adjustWallet,
   banMember,
+  exportMembersCsv,
   giftMember,
   listMembers,
   logAudit,
@@ -35,9 +36,20 @@ async function guard(fn: () => Promise<string>): Promise<Result> {
   }
 }
 
-export async function searchMembersAction(q: string, status: MemberStatus | 'tumu'): Promise<{ members: MemberRow[]; counts: Record<MemberStatus | 'tumu', number> } | null> {
+export async function searchMembersAction(
+  q: string,
+  status: MemberStatus | 'tumu',
+  page = 0,
+): Promise<{ members: MemberRow[]; counts: Record<MemberStatus | 'tumu', number>; total: number; page: number; pageSize: number } | null> {
   if (!(await canPanel('users'))) return null
-  return listMembers({ q: q.slice(0, 80), status })
+  return listMembers({ q: q.slice(0, 80), status, page })
+}
+
+export async function exportMembersAction(q: string, status: MemberStatus | 'tumu'): Promise<{ ok: true; csv: string; count: number } | { ok: false; error: string }> {
+  if (!(await canPanel('users'))) return { ok: false, error: 'Bu işlem için yetkin yok.' }
+  const r = await exportMembersCsv({ q: q.slice(0, 80), status })
+  await logAudit('members.export', null, `${r.count} üye dışa aktarıldı`)
+  return { ok: true, ...r }
 }
 
 export async function memberDetailAction(userId: string): Promise<MemberDetail | null> {

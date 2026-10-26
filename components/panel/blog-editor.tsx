@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useActionState, useMemo, useRef, useState, useTransition } from 'react'
 import {
   Bold,
@@ -318,7 +320,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
                   <button
                     type="button"
                     disabled={deleting}
-                    onClick={() => confirm('Yazı silinsin mi?') && startDelete(() => deletePostAction(p.id))}
+                    onClick={() => void askConfirm('Yazı silinsin mi?').then((ok) => ok && startDelete(() => deletePostAction(p.id)))}
                     className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-destructive"
                     aria-label={`${p.title} yazısını sil`}
                   >

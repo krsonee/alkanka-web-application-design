@@ -35,8 +35,8 @@ function PlatformRow({ platform, fields, state }: { platform: SocialPlatform; fi
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-semibold text-foreground">{PLATFORM_LABEL[platform]}</span>
         <span className="flex items-center gap-2">
-          <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">{checkText(platform)}</span>
-          <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-bold', state.connected ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground')}>
+          <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">{checkText(platform)}</span>
+          <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', state.connected ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground')}>
             {state.connected ? 'Bağlı' : 'Bağlı değil'}
           </span>
         </span>

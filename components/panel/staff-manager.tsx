@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { deleteStaffAccount, resetAccountTotp, saveStaffAccount, type StaffInput } from '@/app/panel/auth-actions'
@@ -97,8 +99,10 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
                     type="button"
                     disabled={pending}
                     onClick={() => {
-                      if (confirm(`${a.username} için 2FA sıfırlansın mı? Hesap bir sonraki girişte yeniden kurar.`)) act(() => resetAccountTotp(a.id))
-                    }}
+                      void askConfirm(`${a.username} için 2FA sıfırlansın mı? Hesap bir sonraki girişte yeniden kurar.`).then((ok) => {
+      if (ok) act(() => resetAccountTotp(a.id))
+    })
+  }}
                     className="rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
                   >
                     2FA sıfırla
@@ -127,8 +131,10 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
                   aria-label={`${a.username} sil`}
                   disabled={pending}
                   onClick={() => {
-                    if (confirm(`${a.username} hesabı silinsin mi?`)) act(() => deleteStaffAccount(a.id))
-                  }}
+                    void askConfirm(`${a.username} hesabı silinsin mi?`).then((ok) => {
+      if (ok) act(() => deleteStaffAccount(a.id))
+    })
+  }}
                   className="rounded-md p-1.5 text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="size-4" aria-hidden="true" />
@@ -141,6 +147,14 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
     </div>
   )
 }
+
+const STAFF_TEMPLATES: { label: string; permissions: string[] }[] = [
+  { label: 'Moderatör', permissions: ['community', 'users', 'tasks', 'market', 'limits'] },
+  { label: 'İçerik editörü', permissions: ['slide', 'hero', 'texts', 'seo', 'faqs', 'catalog', 'studio', 'logo'] },
+  { label: 'Sponsor destek', permissions: ['sponsors', 'growth', 'marketing', 'community'] },
+  { label: 'Oyun sorumlusu', permissions: ['games', 'rewards', 'tournaments', 'cember'] },
+  { label: 'Topluluk & bot', permissions: ['push', 'messages', 'telegram', 'social'] },
+]
 
 function StaffForm({
   value,
@@ -201,6 +215,26 @@ function StaffForm({
       </div>
       <fieldset className="flex flex-col gap-3">
         <legend className="mb-2 text-sm font-semibold text-foreground">Görebileceği bölümler</legend>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Hazır şablon:</span>
+          {STAFF_TEMPLATES.map((t) => (
+            <button
+              key={t.label}
+              type="button"
+              onClick={() => setV((prev) => ({ ...prev, permissions: [...t.permissions], totpRequired: true }))}
+              className="h-8 rounded-lg border border-border px-3 text-sm text-foreground hover:bg-secondary"
+            >
+              {t.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setV((prev) => ({ ...prev, permissions: [] }))}
+            className="h-8 rounded-lg px-3 text-sm text-muted-foreground hover:bg-secondary"
+          >
+            Temizle
+          </button>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {PANEL_GROUPS.map((g) => {
             const ids = g.modules.map((m) => m.id as string)

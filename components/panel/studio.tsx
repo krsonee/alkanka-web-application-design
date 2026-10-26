@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import {
@@ -934,11 +936,10 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
               type="button"
               aria-label={`${b.name} kitini sil`}
               onClick={() =>
-                confirm(`${b.name} silinsin mi?`) &&
-                start(async () => {
+                void askConfirm(`${b.name} silinsin mi?`).then((ok) => ok && start(async () => {
                   await deleteBrandAction(b.id)
                   router.refresh()
-                })
+                }))
               }
               className={cn(ghostBtn, 'text-destructive')}
             >

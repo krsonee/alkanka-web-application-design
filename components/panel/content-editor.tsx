@@ -22,8 +22,14 @@ import {
   Send,
   Wrench,
   Settings,
+  Menu,
+  X,
+  Inbox,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
+import { askConfirm, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
+import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
 import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
@@ -45,7 +51,7 @@ type Fields = {
   endAt?: string
 }
 
-type PanelTab = PanelModule | 'staff' | 'account' | 'audit' | 'dashboard'
+type PanelTab = PanelModule | 'staff' | 'account' | 'audit' | 'dashboard' | 'moderation'
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
@@ -95,12 +101,14 @@ export function ContentEditor({
   users,
   audit,
   dashboard,
+  moderation = null,
   userName,
   siteUrl,
   logout,
   initialTab,
 }: {
   initialTab: string
+  moderation?: React.ReactNode | null
   userName: string
   siteUrl: string
   logout: React.ReactNode
@@ -172,7 +180,9 @@ export function ContentEditor({
       ],
     },
   ].filter((g) => g.items.length > 0)
-  const tabs: PanelTab[] = ['dashboard', ...groups.flatMap((g) => g.items.map((i) => i.id))]
+  const hasModeration = moderation !== null
+  const tabs: PanelTab[] = ['dashboard', ...(hasModeration ? (['moderation'] as PanelTab[]) : []), ...groups.flatMap((g) => g.items.map((i) => i.id))]
+  const [navOpen, setNavOpen] = useState(false)
   const router = useRouter()
   const [loading, startLoading] = useTransition()
   const [tab, setTab] = useState<PanelTab>(initialTab as PanelTab)
@@ -196,22 +206,71 @@ export function ContentEditor({
         : g.items,
     }))
     .filter((g) => g.items.length > 0)
+  const [hits, setHits] = useState<SearchHit[]>([])
+  const [searching, setSearching] = useState(false)
+  useEffect(() => {
+    const term = filter.trim()
+    if (term.length < 2) {
+      setHits([])
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const r = await panelSearchAction(term).catch(() => [])
+      if (!cancelled) {
+        setHits(r)
+        setSearching(false)
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [filter])
   const contentRef = useRef<HTMLDivElement>(null)
+  const filterRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setNavOpen(true)
+        requestAnimationFrame(() => filterRef.current?.focus())
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const guard = useUnsavedGuard(contentRef)
-  const pick = (id: PanelTab) => {
+  const pick = async (id: PanelTab) => {
+    setNavOpen(false)
     if (id === tab) return
-    if (guard.count && !confirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?')) return
+    if (guard.count && !(await askConfirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?'))) return
     guard.clear()
     setTab(id)
     window.scrollTo({ top: 0 })
     startLoading(() => router.push(id === 'dashboard' ? '/panel' : `/panel?b=${id}`, { scroll: false }))
   }
+  const moderationItem = { id: 'moderation' as PanelTab, label: 'Moderasyon kuyruğu', hint: 'Onay bekleyen kanıt, yorum, şikayet, görev ve market talepleri tek yerde', pending: 0 }
   const currentGroup = groups.find((g) => g.items.some((i) => i.id === tab))
-  const current = currentGroup?.items.find((i) => i.id === tab)
+  const current = tab === 'moderation' ? moderationItem : currentGroup?.items.find((i) => i.id === tab)
   const totalPending = groups.reduce((n, g) => n + g.items.reduce((m, i) => m + i.pending, 0), 0)
   return (
-    <div className="flex min-h-dvh min-w-[1024px] bg-background pl-72">
-      <aside className="fixed inset-y-0 left-0 z-30 flex w-72 flex-col border-r border-border bg-card">
+    <div className="flex min-h-dvh bg-background lg:pl-72">
+      <PanelFeedbackHost />
+      {navOpen && (
+        <button type="button" aria-label="Menüyü kapat" onClick={() => setNavOpen(false)} className="fixed inset-0 z-30 bg-foreground/40 lg:hidden" />
+      )}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col border-r border-border bg-card transition-transform lg:translate-x-0',
+          navOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
+        <button type="button" aria-label="Menüyü kapat" onClick={() => setNavOpen(false)} className="absolute right-2 top-3 flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary lg:hidden">
+          <X className="size-4" aria-hidden="true" />
+        </button>
         <div className="flex flex-col gap-0.5 border-b border-border px-4 py-4">
           <span className="font-display text-base font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
           <span className="truncate text-xs text-muted-foreground">
@@ -227,22 +286,40 @@ export function ContentEditor({
             <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
               id="panel-nav-filter"
+              ref={filterRef}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Bölüm ara (ör. ban, logo, bot)"
-              className="h-8 w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setFilter('')
+                  e.currentTarget.blur()
+                }
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                  const first = shown[0]?.items[0]
+                  if (first) {
+                    setFilter('')
+                    pick(first.id as PanelTab)
+                  }
+                }
+              }}
+              placeholder="Bölüm, üye, sponsor, yazı ara"
+              className="h-8 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
+            <kbd className="hidden shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground lg:inline">Ctrl K</kbd>
           </div>
         </div>
         <nav aria-label="Panel bölümleri" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-20 pt-3">
           {!q && (
-            <NavButton active={tab === 'dashboard'} onClick={() => pick('dashboard')} label="Genel bakış" pending={totalPending} icon={LayoutDashboard} />
+            <div className="flex flex-col gap-0.5">
+              <NavButton active={tab === 'dashboard'} onClick={() => pick('dashboard')} label="Genel bakış" pending={0} icon={LayoutDashboard} />
+              {hasModeration && <NavButton active={tab === 'moderation'} onClick={() => pick('moderation')} label="Moderasyon kuyruğu" pending={totalPending} icon={Inbox} />}
+            </div>
           )}
           {shown.map((g) => {
             const Icon = GROUP_ICONS[g.id] ?? Wrench
             return (
               <div key={g.id} className="flex flex-col gap-0.5">
-                <span className="flex items-center gap-2 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <span className="flex items-center gap-2 px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   <Icon className="size-3.5" aria-hidden="true" />
                   {g.label}
                 </span>
@@ -252,7 +329,44 @@ export function ContentEditor({
               </div>
             )
           })}
-          {shown.length === 0 && <p className="px-2 text-sm text-muted-foreground">Bölüm bulunamadı.</p>}
+          {q && shown.length === 0 && hits.length === 0 && !searching && <p className="px-2 text-sm text-muted-foreground">Sonuç bulunamadı.</p>}
+          {q.length >= 2 && (hits.length > 0 || searching) && (
+            <div className="flex flex-col gap-0.5" aria-live="polite">
+              <span className="flex items-center gap-2 px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Search className="size-3.5" aria-hidden="true" />
+                Kayıtlar
+              </span>
+              {searching && hits.length === 0 && <p className="px-2 text-sm text-muted-foreground">Aranıyor...</p>}
+              {hits.map((h) => (
+                <button
+                  key={`${h.kind}-${h.id}`}
+                  type="button"
+                  onClick={async () => {
+                    setFilter('')
+                    setNavOpen(false)
+                    if (guard.count && !(await askConfirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?'))) return
+                    guard.clear()
+                    setTab(h.tab)
+                    const url = h.kind === 'member' ? `/panel?b=users&q=${encodeURIComponent(h.query)}` : `/panel?b=${h.tab}`
+                    if (h.kind === 'member' && tab === 'users') {
+                      window.location.assign(url)
+                      return
+                    }
+                    startLoading(() => router.push(url, { scroll: false }))
+                  }}
+                  className="flex flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-secondary"
+                >
+                  <span className="flex w-full items-center gap-2 text-sm text-foreground">
+                    <span className="truncate">{h.title}</span>
+                    <span className="ml-auto shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground">
+                      {h.kind === 'member' ? 'Üye' : h.kind === 'sponsor' ? 'Sponsor' : 'Yazı'}
+                    </span>
+                  </span>
+                  {h.detail && <span className="w-full truncate text-xs text-muted-foreground">{h.detail}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </nav>
         <div className="flex items-center gap-2 border-t border-border p-3">
           <a
@@ -269,21 +383,26 @@ export function ContentEditor({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-6 border-b border-border bg-background/95 px-8 backdrop-blur">
-          <div className="flex min-w-0 flex-col">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur lg:gap-6 lg:px-8">
+          <button type="button" aria-label="Menüyü aç" aria-expanded={navOpen} onClick={() => setNavOpen(true)} className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden">
+            <Menu className="size-4" aria-hidden="true" />
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex items-center gap-1.5 text-[13px]">
-              <span className="text-muted-foreground">{currentGroup?.label ?? 'Panel'}</span>
-              <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              <span className="hidden text-muted-foreground sm:inline">{currentGroup?.label ?? 'Panel'}</span>
+              <ChevronRight className="hidden size-3.5 text-muted-foreground sm:block" aria-hidden="true" />
               <h1 className="truncate font-semibold text-foreground">{current?.label ?? 'Genel bakış'}</h1>
             </div>
             {current?.hint && <p className="truncate text-xs text-muted-foreground">{current.hint}</p>}
           </div>
-          {totalPending > 0 && tab !== 'dashboard' && (
+          {totalPending > 0 && tab !== 'moderation' && (
             <button
-              onClick={() => pick('dashboard')}
-              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-[13px] text-foreground hover:bg-secondary"
+              type="button"
+              onClick={() => pick(hasModeration ? 'moderation' : 'dashboard')}
+              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-secondary"
             >
-              Bekleyen iş
+              <MessageSquare className="size-3.5 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Bekleyen iş</span>
               <span className="rounded-full bg-destructive px-1.5 text-xs font-bold tabular-nums text-destructive-foreground">{totalPending}</span>
             </button>
           )}
@@ -292,7 +411,7 @@ export function ContentEditor({
         <div
           ref={contentRef}
           className={cn(
-            'mx-auto w-full px-8 pb-24 pt-6',
+            'mx-auto w-full overflow-x-auto px-4 pb-24 pt-6 lg:px-8',
             tab === 'dashboard' ? 'max-w-none' : 'max-w-[1600px]',
             '[&_h2.font-display]:text-lg [&_h3.font-display]:text-base [&_.text-2xl]:text-xl',
           )}
@@ -304,6 +423,8 @@ export function ContentEditor({
         </div>
       ) : !tabs.includes(tab) ? (
         <p className="text-sm text-muted-foreground">Bu bölüme erişim yetkin yok.</p>
+      ) : tab === 'moderation' ? (
+        moderation
       ) : tab === 'staff' ? (
         staff
       ) : tab === 'dashboard' ? (
@@ -393,7 +514,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   members: Users,
   games: Gamepad2,
   telegram: Send,
-  tools: Wrench,
+  comms: MessageSquare,
   settings: Settings,
 }
 
@@ -414,7 +535,7 @@ function NavButton({ active, onClick, label, pending, icon: Icon }: { active: bo
       {pending > 0 && (
         <span
           className={cn(
-            'shrink-0 rounded-full px-1.5 text-[11px] font-bold tabular-nums',
+            'shrink-0 rounded-full px-1.5 text-xs font-bold tabular-nums',
             active ? 'bg-primary-foreground text-primary' : 'bg-destructive text-destructive-foreground',
           )}
         >
@@ -454,7 +575,7 @@ function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: Panel
                         <span className="text-xs leading-relaxed text-muted-foreground">{i.hint}</span>
                       </span>
                       {i.pending > 0 && (
-                        <span className="mt-0.5 shrink-0 rounded-full bg-destructive px-1.5 text-[11px] font-bold tabular-nums text-destructive-foreground">{i.pending}</span>
+                        <span className="mt-0.5 shrink-0 rounded-full bg-destructive px-1.5 text-xs font-bold tabular-nums text-destructive-foreground">{i.pending}</span>
                       )}
                     </button>
                   </li>
@@ -671,7 +792,7 @@ function ItemCard({
           </div>
         </div>
         <div className="absolute inset-y-0 left-0 flex w-3/4 flex-col justify-end gap-1 p-4">
-          {live.eyebrow && <span className="truncate text-[11px] font-bold uppercase tracking-wider text-primary">{live.eyebrow}</span>}
+          {live.eyebrow && <span className="truncate text-xs font-bold uppercase tracking-wider text-primary">{live.eyebrow}</span>}
           <h2 className="line-clamp-2 text-balance font-display text-lg font-bold leading-tight text-foreground">
             {live.title || item.label}
           </h2>
@@ -707,7 +828,7 @@ function ItemCard({
           )}
           <span
             className={cn(
-              'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+              'rounded-full px-2 py-0.5 text-xs font-semibold',
               item.custom ? 'bg-secondary text-foreground' : changed ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground',
             )}
           >
@@ -837,7 +958,7 @@ function ItemCard({
                 {['', ...JAKO_POSES].map((p) => (
                   <label
                     key={p || 'default'}
-                    className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-border bg-background p-1.5 text-center text-[11px] text-foreground has-[:checked]:border-primary has-[:checked]:bg-primary/10"
+                    className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-border bg-background p-1.5 text-center text-xs text-foreground has-[:checked]:border-primary has-[:checked]:bg-primary/10"
                   >
                     <input type="radio" name="pose" value={p} defaultChecked={value('pose') === p} className="sr-only" />
                     {p ? (

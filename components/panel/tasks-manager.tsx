@@ -120,10 +120,10 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
                     {KIND_META[task.kind].label}{task.param ? ` · ${paramLabel(task.kind, task.param, sites)}` : ''}{task.target > 1 ? ` · ${task.target} kez` : ''}
                   </span>
                 ) : task.needsApproval ? <span className="ml-2 text-xs font-normal text-muted-foreground">Onay gerekir</span> : null}
-                {task.period !== 'once' ? <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">{PERIOD_LABEL[task.period]}</span> : null}
+                {task.period !== 'once' ? <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold uppercase text-primary">{PERIOD_LABEL[task.period]}</span> : null}
                 {task.endsAt && Date.parse(task.endsAt) < Date.now() ? <span className="ml-2 text-xs font-normal text-destructive">Süresi doldu</span> : null}
               </span>
-              {!task.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+              {!task.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
               <HideButton key={`${task.id}-${task.active}`} kind="task" id={task.id} hidden={!task.active} label={task.title} />
               <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', param: task.param ?? '', chain: task.chain ?? '', badge: task.badge ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                 <Pencil className="size-4" aria-hidden="true" />
@@ -136,15 +136,15 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
     <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4 lg:col-span-4">
       <section aria-label="Görev özeti" className="grid grid-cols-3 gap-2 rounded-xl border border-border bg-card p-3">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[11px] font-semibold text-muted-foreground">Yayında</span>
+          <span className="text-xs font-semibold text-muted-foreground">Yayında</span>
           <span className="font-display text-xl font-bold tabular-nums text-foreground">{activeCount}</span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[11px] font-semibold text-muted-foreground">Otomatik</span>
+          <span className="text-xs font-semibold text-muted-foreground">Otomatik</span>
           <span className="font-display text-xl font-bold tabular-nums text-foreground">{autoCount}</span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[11px] font-semibold text-muted-foreground">Toplam puan</span>
+          <span className="text-xs font-semibold text-muted-foreground">Toplam puan</span>
           <span className="font-display text-xl font-bold tabular-nums text-primary">{totalPoints}</span>
         </div>
       </section>
