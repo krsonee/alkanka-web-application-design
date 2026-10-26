@@ -732,6 +732,7 @@ const MARKETING_STEPS: GuideStep[] = [
 export function MarketingGuide() {
   return (
     <FeatureGuide
+      id="pazarlama-rehber"
       title="Pazarlama eğitimi: kampanya, reklam ölçümü ve hakediş"
       subtitle="Link aynalama, kampanya takibi, Google/Meta etiketleri ve affiliate parası talep etme"
       steps={MARKETING_STEPS}
@@ -742,6 +743,7 @@ export function MarketingGuide() {
 export function SeoGuide() {
   return (
     <FeatureGuide
+      id="seo-rehber"
       title="SEO eğitimi: sıfırdan Google’da yükselmek"
       subtitle="Hiç bilmeyen biri için adım adım: kurulum, kelime bulma, yazı yazma, link, ölçüm ve haftalık rutin"
       steps={SEO_STEPS}
