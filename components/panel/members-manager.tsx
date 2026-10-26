@@ -51,6 +51,10 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 
 export function MembersManager({ initial, counts: initialCounts, levels }: { initial: MemberRow[]; counts: Record<Filter, number>; levels: Record<string, string> }) {
   const [q, setQ] = useState('')
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('q')
+    if (fromUrl) setQ(fromUrl)
+  }, [])
   const [filter, setFilter] = useState<Filter>('tumu')
   const [list, setList] = useState(initial)
   const [counts, setCounts] = useState(initialCounts)

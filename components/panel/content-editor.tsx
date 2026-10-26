@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { askConfirm, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
+import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
 import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
@@ -205,6 +206,28 @@ export function ContentEditor({
         : g.items,
     }))
     .filter((g) => g.items.length > 0)
+  const [hits, setHits] = useState<SearchHit[]>([])
+  const [searching, setSearching] = useState(false)
+  useEffect(() => {
+    const term = filter.trim()
+    if (term.length < 2) {
+      setHits([])
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const r = await panelSearchAction(term).catch(() => [])
+      if (!cancelled) {
+        setHits(r)
+        setSearching(false)
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [filter])
   const contentRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -279,7 +302,7 @@ export function ContentEditor({
                   }
                 }
               }}
-              placeholder="Bölüm ara (ör. ban, logo, bot)"
+              placeholder="Bölüm, üye, sponsor, yazı ara"
               className="h-8 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <kbd className="hidden shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground lg:inline">Ctrl K</kbd>
@@ -306,7 +329,44 @@ export function ContentEditor({
               </div>
             )
           })}
-          {shown.length === 0 && <p className="px-2 text-sm text-muted-foreground">Bölüm bulunamadı.</p>}
+          {q && shown.length === 0 && hits.length === 0 && !searching && <p className="px-2 text-sm text-muted-foreground">Sonuç bulunamadı.</p>}
+          {q.length >= 2 && (hits.length > 0 || searching) && (
+            <div className="flex flex-col gap-0.5" aria-live="polite">
+              <span className="flex items-center gap-2 px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Search className="size-3.5" aria-hidden="true" />
+                Kayıtlar
+              </span>
+              {searching && hits.length === 0 && <p className="px-2 text-sm text-muted-foreground">Aranıyor...</p>}
+              {hits.map((h) => (
+                <button
+                  key={`${h.kind}-${h.id}`}
+                  type="button"
+                  onClick={async () => {
+                    setFilter('')
+                    setNavOpen(false)
+                    if (guard.count && !(await askConfirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?'))) return
+                    guard.clear()
+                    setTab(h.tab)
+                    const url = h.kind === 'member' ? `/panel?b=users&q=${encodeURIComponent(h.query)}` : `/panel?b=${h.tab}`
+                    if (h.kind === 'member' && tab === 'users') {
+                      window.location.assign(url)
+                      return
+                    }
+                    startLoading(() => router.push(url, { scroll: false }))
+                  }}
+                  className="flex flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-secondary"
+                >
+                  <span className="flex w-full items-center gap-2 text-sm text-foreground">
+                    <span className="truncate">{h.title}</span>
+                    <span className="ml-auto shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground">
+                      {h.kind === 'member' ? 'Üye' : h.kind === 'sponsor' ? 'Sponsor' : 'Yazı'}
+                    </span>
+                  </span>
+                  {h.detail && <span className="w-full truncate text-xs text-muted-foreground">{h.detail}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </nav>
         <div className="flex items-center gap-2 border-t border-border p-3">
           <a
