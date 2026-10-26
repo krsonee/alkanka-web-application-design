@@ -148,6 +148,14 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
   )
 }
 
+const STAFF_TEMPLATES: { label: string; permissions: string[] }[] = [
+  { label: 'Moderatör', permissions: ['community', 'users', 'tasks', 'market', 'limits'] },
+  { label: 'İçerik editörü', permissions: ['slide', 'hero', 'texts', 'seo', 'faqs', 'catalog', 'studio', 'logo'] },
+  { label: 'Sponsor destek', permissions: ['sponsors', 'growth', 'marketing', 'community'] },
+  { label: 'Oyun sorumlusu', permissions: ['games', 'rewards', 'tournaments', 'cember'] },
+  { label: 'Topluluk & bot', permissions: ['push', 'messages', 'telegram', 'social'] },
+]
+
 function StaffForm({
   value,
   pending,
@@ -207,6 +215,26 @@ function StaffForm({
       </div>
       <fieldset className="flex flex-col gap-3">
         <legend className="mb-2 text-sm font-semibold text-foreground">Görebileceği bölümler</legend>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Hazır şablon:</span>
+          {STAFF_TEMPLATES.map((t) => (
+            <button
+              key={t.label}
+              type="button"
+              onClick={() => setV((prev) => ({ ...prev, permissions: [...t.permissions], totpRequired: true }))}
+              className="h-8 rounded-lg border border-border px-3 text-sm text-foreground hover:bg-secondary"
+            >
+              {t.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setV((prev) => ({ ...prev, permissions: [] }))}
+            className="h-8 rounded-lg px-3 text-sm text-muted-foreground hover:bg-secondary"
+          >
+            Temizle
+          </button>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {PANEL_GROUPS.map((g) => {
             const ids = g.modules.map((m) => m.id as string)
