@@ -33,6 +33,8 @@ export function normalizePath(value: string) {
 const IGNORED_404 = /\.(php|env|asp|aspx|jsp|cgi|sql|bak|zip|xml\.gz)$|^\/(wp-|\.well-known|cgi-bin|vendor)/i
 
 export async function log404(rawPath: string, referrer: string) {
+  // Preview/dev servers share the production database; their compile-time 404s would pollute the report.
+  if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV === 'preview') return
   const path = normalizePath(rawPath)
   if (!path || path === '/' || IGNORED_404.test(path)) return
   await ensureSeoTables()
