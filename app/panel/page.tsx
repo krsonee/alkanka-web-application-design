@@ -145,6 +145,8 @@ import { cleanPermissions } from '@/lib/panel-modules'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
+import { SystemStatus } from '@/components/panel/system-status'
+import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
@@ -218,26 +220,28 @@ async function telegramPanel() {
   return (
     <TelegramTabs
       tabs={[
-        { id: 'hub', label: 'Telegram Merkezi', status: light(hubData.hub.guard.enabled || hubData.hub.support.enabled), content: <TgHubManager data={hubData} /> },
-        { id: 'mirror', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
-        { id: 'chat', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
-        { id: 'odds', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
+        { id: 'hub', group: 'Botlar', label: 'Telegram Merkezi', status: light(hubData.hub.guard.enabled || hubData.hub.support.enabled), content: <TgHubManager data={hubData} /> },
+        { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
+        { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), content: <TelegramChatSetup bots={bots} status={chat} /> },
+        { id: 'odds', group: 'Botlar', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
         {
           id: 'kankatv',
+          group: 'Otomasyonlar',
           label: 'KankaTV Gol Botu',
           status: light((tvConfig.goalBot.enabled || tvConfig.goalBot.push) && !tvStatus.lastError),
           content: <KankaTvManager config={tvConfig} status={tvStatus} stats={tvToday} targets={targets} cronUrl={tvCronUrl} />,
         },
         {
           id: 'tvbets',
+          group: 'Otomasyonlar',
           label: 'KankaTV Canlı Etkinlik',
           status: light(betsConfig.enabled && !betsStatus.lastError),
           content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
         },
-        { id: 'approvals', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
-        { id: 'share', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
-        { id: 'invite', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
-        { id: 'channels', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
+        { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), content: <ApprovalSection suite={suite} bots={bots} /> },
+        { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
+        { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
+        { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
       ]}
     />
   )
@@ -608,14 +612,20 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const audit = session.isOwner && active === 'audit' ? await listAudit(2000).then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
 
   const onDash = active === 'dashboard'
-  const [detail, dashCounts, dashRecent, dashStatsData] = await Promise.all([
+  const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
     pendingDetail(can).catch(() => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0 })),
-    onDash && can('users') ? listMembers({ limit: 1 }).then((r) => r.counts).catch(() => null) : null,
+    onDash && can('users') ? listMembers().then((r) => r.counts).catch(() => null) : null,
     onDash && session.isOwner ? listAudit(8).catch(() => []) : [],
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
+    onDash && session.isOwner ? loadSystemStatus().catch((error) => (console.error('[panel:system-status]', error), null)) : null,
   ])
   const pending: Record<string, number> = { community: detail.reviews + detail.complaints + detail.withdrawals, tasks: detail.claims, market: detail.market }
-  const dashboard = onDash ? <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} /> : null
+  const dashboard = onDash ? (
+    <div className="flex flex-col gap-6">
+      {sysStatus ? <SystemStatus items={sysStatus} /> : null}
+      <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} />
+    </div>
+  ) : null
   const canModerate = can('community') || can('tasks') || can('market')
   const moderation = !canModerate
     ? null

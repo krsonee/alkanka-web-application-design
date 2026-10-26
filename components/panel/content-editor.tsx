@@ -206,6 +206,19 @@ export function ContentEditor({
     }))
     .filter((g) => g.items.length > 0)
   const contentRef = useRef<HTMLDivElement>(null)
+  const filterRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setNavOpen(true)
+        requestAnimationFrame(() => filterRef.current?.focus())
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const guard = useUnsavedGuard(contentRef)
   const pick = async (id: PanelTab) => {
     setNavOpen(false)
@@ -250,11 +263,26 @@ export function ContentEditor({
             <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
               id="panel-nav-filter"
+              ref={filterRef}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setFilter('')
+                  e.currentTarget.blur()
+                }
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                  const first = shown[0]?.items[0]
+                  if (first) {
+                    setFilter('')
+                    pick(first.id as PanelTab)
+                  }
+                }
+              }}
               placeholder="Bölüm ara (ör. ban, logo, bot)"
-              className="h-8 w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+              className="h-8 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
+            <kbd className="hidden shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground lg:inline">Ctrl K</kbd>
           </div>
         </div>
         <nav aria-label="Panel bölümleri" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-20 pt-3">

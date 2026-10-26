@@ -154,20 +154,46 @@ const baseSelect = sql`
   LEFT JOIN tg_links l ON l.user_id = u.id
   LEFT JOIN member_bans b ON b.user_id = u.id AND (b.until IS NULL OR b.until > now())`
 
-export async function listMembers(opts: { q?: string; status?: MemberStatus | 'tumu'; limit?: number } = {}): Promise<{ members: MemberRow[]; counts: Record<MemberStatus | 'tumu', number> }> {
-  await ensureMemberAdmin()
-  const q = (opts.q ?? '').trim()
+export const MEMBERS_PAGE_SIZE = 100
+
+async function matchingMembers(q: string, status: MemberStatus | 'tumu') {
   const like = `%${q}%`
   const filter = q
     ? sql`WHERE (u.name ILIKE ${like} OR u.email ILIKE ${like} OR coalesce(u.phone, '') ILIKE ${like} OR coalesce(l.tg_id::text, '') ILIKE ${like} OR coalesce(l.tg_username, '') ILIKE ${like})`
     : sql``
-  const raw = await rows<RawMember>(sql`${baseSelect} ${filter} ORDER BY u."createdAt" DESC LIMIT 1000`)
+  const raw = await rows<RawMember>(sql`${baseSelect} ${filter} ORDER BY u."createdAt" DESC LIMIT 20000`)
   const all = raw.map(toRow)
   const counts = { tumu: all.length, aktif: 0, donduruldu: 0, banli: 0, supheli: 0 }
   for (const m of all) counts[m.status]++
-  const status = opts.status ?? 'tumu'
-  const members = (status === 'tumu' ? all : all.filter((m) => m.status === status)).slice(0, opts.limit ?? 300)
-  return { members, counts }
+  const filtered = status === 'tumu' ? all : all.filter((m) => m.status === status)
+  return { filtered, counts }
+}
+
+export async function listMembers(
+  opts: { q?: string; status?: MemberStatus | 'tumu'; page?: number } = {},
+): Promise<{ members: MemberRow[]; counts: Record<MemberStatus | 'tumu', number>; total: number; page: number; pageSize: number }> {
+  await ensureMemberAdmin()
+  const { filtered, counts } = await matchingMembers((opts.q ?? '').trim(), opts.status ?? 'tumu')
+  const lastPage = Math.max(0, Math.ceil(filtered.length / MEMBERS_PAGE_SIZE) - 1)
+  const page = Math.min(Math.max(0, Math.floor(opts.page ?? 0)), lastPage)
+  const members = filtered.slice(page * MEMBERS_PAGE_SIZE, (page + 1) * MEMBERS_PAGE_SIZE)
+  return { members, counts, total: filtered.length, page, pageSize: MEMBERS_PAGE_SIZE }
+}
+
+function csvCell(v: unknown) {
+  const s = v == null ? '' : String(v)
+  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s
+  return /[",\n;]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
+}
+
+export async function exportMembersCsv(opts: { q?: string; status?: MemberStatus | 'tumu' } = {}) {
+  await ensureMemberAdmin()
+  const { filtered } = await matchingMembers((opts.q ?? '').trim(), opts.status ?? 'tumu')
+  const head = ['id', 'ad', 'e-posta', 'telefon', 'kayit', 'kaynak', 'bakiye', 'puan', 'telegram_id', 'telegram', 'durum', 'ortak_ip']
+  const lines = filtered.map((m) =>
+    [m.id, m.name, m.email, m.phone, m.createdAt, m.source, m.balance, m.points, m.telegramId, m.telegramName, m.status, m.sharedIp].map(csvCell).join(','),
+  )
+  return { csv: '\uFEFF' + [head.join(','), ...lines].join('\n'), count: filtered.length }
 }
 
 export async function memberDetail(userId: string): Promise<MemberDetail | null> {

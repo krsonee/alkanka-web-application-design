@@ -3,10 +3,11 @@
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useEffect, useState, useTransition } from 'react'
-import { AlertTriangle, Ban, Coins, Link2Off, Lock, LogOut, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
+import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Coins, Download, Link2Off, Lock, LogOut, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   banAction,
+  exportMembersAction,
   memberActivityAction,
   memberDetailAction,
   restoreAction,
@@ -54,35 +55,68 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
   const [list, setList] = useState(initial)
   const [counts, setCounts] = useState(initialCounts)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
+  const [total, setTotal] = useState(initialCounts.tumu ?? initial.length)
+  const [pageSize, setPageSize] = useState(100)
+  const [exporting, setExporting] = useState(false)
   const [loading, start] = useTransition()
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      start(async () => {
-        const r = await searchMembersAction(q, filter)
-        if (r) {
-          setList(r.members)
-          setCounts(r.counts)
-        }
-      })
-    }, 250)
-    return () => clearTimeout(t)
-  }, [q, filter])
-
-  const refresh = () =>
+  const load = (targetPage: number) =>
     start(async () => {
-      const r = await searchMembersAction(q, filter)
+      const r = await searchMembersAction(q, filter, targetPage)
       if (r) {
         setList(r.members)
         setCounts(r.counts)
+        setTotal(r.total)
+        setPage(r.page)
+        setPageSize(r.pageSize)
       }
     })
 
+  useEffect(() => {
+    const t = setTimeout(() => load(0), 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, filter])
+
+  const refresh = () => load(page)
+
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const from = total === 0 ? 0 : page * pageSize + 1
+  const to = Math.min(total, (page + 1) * pageSize)
+
+  const exportCsv = async () => {
+    setExporting(true)
+    try {
+      const r = await exportMembersAction(q, filter)
+      if (!r.ok) return
+      const url = URL.createObjectURL(new Blob([r.csv], { type: 'text/csv;charset=utf-8' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `alkanka-uyeler-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="font-display text-xl font-bold text-foreground">Tüm üyeler</h2>
-        <p className="text-sm leading-relaxed text-muted-foreground">Üye ara, hesabı dondur, banla ya da bakiyesini düzelt. Her işlem İşlem Loglarına yazılır.</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-display text-xl font-bold text-foreground">Tüm üyeler</h2>
+          <p className="text-sm leading-relaxed text-muted-foreground">Üye ara, hesabı dondur, banla ya da bakiyesini düzelt. Her işlem İşlem Loglarına yazılır.</p>
+        </div>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={exporting || total === 0}
+          className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
+        >
+          <Download className="size-4" aria-hidden="true" />
+          {exporting ? 'Hazırlanıyor…' : `CSV indir (${total})`}
+        </button>
       </header>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3">
@@ -174,6 +208,31 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
           </tbody>
         </table>
       </div>
+
+      <nav aria-label="Üye sayfaları" className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span className="tabular-nums">{`${from}–${to} / ${total} üye`}</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => load(page - 1)}
+            disabled={page === 0 || loading}
+            className="flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 font-semibold text-foreground hover:bg-secondary disabled:opacity-40"
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" />
+            Önceki
+          </button>
+          <span className="tabular-nums">{`Sayfa ${page + 1} / ${pageCount}`}</span>
+          <button
+            type="button"
+            onClick={() => load(page + 1)}
+            disabled={page + 1 >= pageCount || loading}
+            className="flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 font-semibold text-foreground hover:bg-secondary disabled:opacity-40"
+          >
+            Sonraki
+            <ChevronRight className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      </nav>
 
       {openId && <MemberDrawer key={openId} id={openId} level={levels[openId] ?? 'Çaylak'} onClose={() => setOpenId(null)} onChanged={refresh} />}
     </section>
