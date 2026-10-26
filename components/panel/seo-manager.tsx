@@ -34,6 +34,7 @@ const label = 'flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground
 export function SeoManager({ posts, deals, publishing, verification, siteUrl, issues, notFound, redirects }: Props) {
   return (
     <div className="flex flex-col gap-6">
+      <SetupHub verification={verification} />
       <SeoGuide />
       <SearchConsoleCard verification={verification} siteUrl={siteUrl} />
       <SeoHealthCard issues={issues} notFound={notFound} redirects={redirects} siteUrl={siteUrl} />
@@ -52,13 +53,77 @@ function Status({ state }: { state: ActionState }) {
   )
 }
 
+function openSection(id: string) {
+  const el = document.getElementById(id)
+  if (!el) return
+  if (el instanceof HTMLDetailsElement) el.open = true
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function SetupHub({ verification }: { verification: Verification }) {
+  const items = [
+    {
+      title: 'SEO eğitim rehberi',
+      body: '13 adım: Search Console kurulumu, kelime bulma, yazı yazma, link, ölçüm ve haftalık rutin.',
+      done: false,
+      action: () => openSection('seo-rehber'),
+    },
+    {
+      title: 'Google, Bing, Yandex ve Meta doğrulama',
+      body: 'Meta (Facebook) alan adı doğrulama kutusu bu sekmede, hemen aşağıdaki kartta.',
+      done: Boolean(verification.google && verification.meta),
+      action: () => openSection('site-dogrulama'),
+    },
+  ]
+  return (
+    <section className={card} aria-labelledby="setup-hub-title">
+      <div className="flex flex-col gap-1">
+        <h2 id="setup-hub-title" className="font-display text-xl font-bold uppercase text-foreground">
+          Kurulum ve eğitim merkezi
+        </h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Nereden başlayacağını bilmiyorsan sırayla bunları yap. Her biri seni ilgili kutuya ya da rehbere götürür.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {items.map((it) => (
+          <button
+            key={it.title}
+            type="button"
+            onClick={it.action}
+            className="flex flex-col gap-1.5 rounded-xl border border-border bg-secondary p-4 text-left transition-colors hover:border-primary"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              {it.done ? <CheckCircle2 className="size-4 text-primary" aria-hidden /> : null}
+              {it.title}
+            </span>
+            <span className="text-xs leading-relaxed text-muted-foreground">{it.body}</span>
+          </button>
+        ))}
+        <a
+          href="/panel?b=marketing"
+          className="flex flex-col gap-1.5 rounded-xl border border-border bg-secondary p-4 text-left transition-colors hover:border-primary"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            Meta Pixel, Google Ads ve reklam rehberi
+            <ExternalLink className="size-3.5 text-muted-foreground" aria-hidden />
+          </span>
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            Pazarlama sekmesinde: Meta İşletme hesabı, reklam hesabı onayı, Pixel kodu, Google Ads doğrulaması ve kampanyalar.
+          </span>
+        </a>
+      </div>
+    </section>
+  )
+}
+
 function SearchConsoleCard({ verification, siteUrl }: { verification: Verification; siteUrl: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveVerificationAction, {})
   return (
-    <form action={action} className={card}>
+    <form id="site-dogrulama" action={action} className={`${card} scroll-mt-24`}>
       <div className="flex items-center gap-2">
         <Search className="size-5 text-primary" aria-hidden />
-        <h2 className="font-display text-xl font-bold uppercase text-foreground">Google kaydı</h2>
+        <h2 className="font-display text-xl font-bold uppercase text-foreground">Site doğrulama: Google, Bing, Yandex ve Meta</h2>
       </div>
       <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
         <li>
@@ -77,6 +142,10 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
           {'Soldan "Site haritaları" bölümüne '}
           <code className="rounded bg-secondary px-1 text-foreground">sitemap.xml</code>
           {' yaz ve gönder. Bing ve Yandex için de aynı adımlar.'}
+        </li>
+        <li>
+          <strong className="text-foreground">Meta için:</strong>
+          {' business.facebook.com → İşletme ayarları → Marka güvenliği → Alan adları → Ekle. "Meta etiketi" yöntemini seç, verilen satırı aşağıdaki Meta kutusuna yapıştır, kaydet ve Meta\'da "Doğrula" de. Detaylı anlatım Pazarlama sekmesindeki rehberde.'}
         </li>
       </ol>
       <div className="grid gap-3 md:grid-cols-2">
