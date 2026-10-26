@@ -88,9 +88,9 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
                 {site.name}
                 {site.slug ? <span className="ml-2 font-normal text-muted-foreground">/{site.slug}</span> : null}
               </span>
-              <span className="rounded bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
-              {site.featured && <span className="text-[10px] font-bold uppercase text-primary">Öne çıkan</span>}
-              {!site.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+              <span className="rounded bg-secondary px-2 py-0.5 text-xs font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
+              {site.featured && <span className="text-xs font-bold uppercase text-primary">Öne çıkan</span>}
+              {!site.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
               <HideButton key={`${site.id}-${site.active}`} kind="sponsor" id={site.id} hidden={!site.active} label={site.name} />
               <button type="button" aria-label={`${site.name} düzenle`} onClick={() => setEditing(site)} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                 <Pencil className="size-4" aria-hidden="true" />
@@ -243,8 +243,8 @@ function Field({
     <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
       {label}
       <input required={required} value={value} inputMode={inputMode} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className={field} aria-invalid={error ? true : undefined} />
-      {hint ? <span className="text-[11px] font-normal leading-relaxed text-muted-foreground">{hint}</span> : null}
-      {error ? <span role="alert" className="text-[11px] font-normal text-destructive">{error}</span> : null}
+      {hint ? <span className="text-xs font-normal leading-relaxed text-muted-foreground">{hint}</span> : null}
+      {error ? <span role="alert" className="text-xs font-normal text-destructive">{error}</span> : null}
     </label>
   )
 }

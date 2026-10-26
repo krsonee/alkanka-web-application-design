@@ -327,7 +327,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
               <div className="flex items-center gap-2 pr-2 hover:bg-secondary/60">
                 <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : i)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left">
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', isHidden ? 'text-muted-foreground line-through' : 'text-foreground')}>{name}</span>
-                  {isHidden && <span className="shrink-0 text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+                  {isHidden && <span className="shrink-0 text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {kind === 'events' ? `${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : String(item.sponsorId || '')}
                   </span>

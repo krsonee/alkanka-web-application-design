@@ -280,7 +280,7 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                   <img src={m.imageUrl} alt="" className="h-20 w-full rounded-lg bg-secondary object-cover" />
                 )}
                 <p className="line-clamp-2 text-xs text-muted-foreground">{m.body}</p>
-                <p className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
+                <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
                   <span>{m.target}</span>·<span>{m.reads} okundu</span>·<span>{dateFmt.format(new Date(m.createdAt))}</span>
                 </p>
               </li>

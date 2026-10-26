@@ -23,6 +23,7 @@ import { ContentEditor } from '@/components/panel/content-editor'
 import { LogoEditor } from '@/components/panel/logo-editor'
 import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
+import { GameStats } from '@/components/panel/game-stats'
 import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
@@ -564,10 +565,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )),
     section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
     section(ctx, 'games', 'Oyun ayarları', () => (
-      <ArenaSettingsEditor
-        settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
-        winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
-      />
+      <div className="flex flex-col gap-6">
+        <GameStats />
+        <ArenaSettingsEditor
+          settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
+          winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
+        />
+      </div>
     )),
     section(ctx, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),

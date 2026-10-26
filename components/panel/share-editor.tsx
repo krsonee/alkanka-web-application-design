@@ -42,7 +42,7 @@ function SharePreview({ platform, view }: { platform: Platform; view: View }) {
           <div className="flex flex-col gap-0.5 px-2 py-1.5">
             <span className="line-clamp-1 text-sm font-semibold text-foreground">{view.title}</span>
             <span className="line-clamp-2 text-xs text-muted-foreground">{view.description}</span>
-            <span className="text-[11px] text-muted-foreground">alkanka.com</span>
+            <span className="text-xs text-muted-foreground">alkanka.com</span>
           </div>
           <span className="px-2 pb-1 text-sm text-primary">https://alkanka.com</span>
         </div>

@@ -319,7 +319,7 @@ export function ContentEditor({
             const Icon = GROUP_ICONS[g.id] ?? Wrench
             return (
               <div key={g.id} className="flex flex-col gap-0.5">
-                <span className="flex items-center gap-2 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <span className="flex items-center gap-2 px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   <Icon className="size-3.5" aria-hidden="true" />
                   {g.label}
                 </span>
@@ -535,7 +535,7 @@ function NavButton({ active, onClick, label, pending, icon: Icon }: { active: bo
       {pending > 0 && (
         <span
           className={cn(
-            'shrink-0 rounded-full px-1.5 text-[11px] font-bold tabular-nums',
+            'shrink-0 rounded-full px-1.5 text-xs font-bold tabular-nums',
             active ? 'bg-primary-foreground text-primary' : 'bg-destructive text-destructive-foreground',
           )}
         >
@@ -575,7 +575,7 @@ function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: Panel
                         <span className="text-xs leading-relaxed text-muted-foreground">{i.hint}</span>
                       </span>
                       {i.pending > 0 && (
-                        <span className="mt-0.5 shrink-0 rounded-full bg-destructive px-1.5 text-[11px] font-bold tabular-nums text-destructive-foreground">{i.pending}</span>
+                        <span className="mt-0.5 shrink-0 rounded-full bg-destructive px-1.5 text-xs font-bold tabular-nums text-destructive-foreground">{i.pending}</span>
                       )}
                     </button>
                   </li>
@@ -792,7 +792,7 @@ function ItemCard({
           </div>
         </div>
         <div className="absolute inset-y-0 left-0 flex w-3/4 flex-col justify-end gap-1 p-4">
-          {live.eyebrow && <span className="truncate text-[11px] font-bold uppercase tracking-wider text-primary">{live.eyebrow}</span>}
+          {live.eyebrow && <span className="truncate text-xs font-bold uppercase tracking-wider text-primary">{live.eyebrow}</span>}
           <h2 className="line-clamp-2 text-balance font-display text-lg font-bold leading-tight text-foreground">
             {live.title || item.label}
           </h2>
@@ -828,7 +828,7 @@ function ItemCard({
           )}
           <span
             className={cn(
-              'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+              'rounded-full px-2 py-0.5 text-xs font-semibold',
               item.custom ? 'bg-secondary text-foreground' : changed ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground',
             )}
           >
@@ -958,7 +958,7 @@ function ItemCard({
                 {['', ...JAKO_POSES].map((p) => (
                   <label
                     key={p || 'default'}
-                    className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-border bg-background p-1.5 text-center text-[11px] text-foreground has-[:checked]:border-primary has-[:checked]:bg-primary/10"
+                    className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-border bg-background p-1.5 text-center text-xs text-foreground has-[:checked]:border-primary has-[:checked]:bg-primary/10"
                   >
                     <input type="radio" name="pose" value={p} defaultChecked={value('pose') === p} className="sr-only" />
                     {p ? (

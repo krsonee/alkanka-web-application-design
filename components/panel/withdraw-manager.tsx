@@ -121,7 +121,7 @@ function ShareRow({
         <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate font-bold text-foreground">{s.siteName}</span>
-            <span className={cn('shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold', st.tone)}>{st.label}</span>
+            <span className={cn('shrink-0 rounded-md px-2 py-0.5 text-xs font-bold', st.tone)}>{st.label}</span>
           </div>
           <span className="text-foreground">
             <b>{s.amount.toLocaleString('tr-TR')} TL</b> · {time(s.paidAt)}

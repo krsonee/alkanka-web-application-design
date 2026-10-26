@@ -162,11 +162,11 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
 }
 
 export function TagBadge({ tag, text }: { tag: OddsTag; text: string }) {
-  if (tag === 'none' || !text) return <span className="shrink-0 rounded-md border border-dashed border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">Etiket yok</span>
+  if (tag === 'none' || !text) return <span className="shrink-0 rounded-md border border-dashed border-border px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">Etiket yok</span>
   return (
     <span
       className={cn(
-        'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+        'shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide',
         tag === 'sponsor' ? 'bg-primary/15 text-primary' : 'bg-accent/15 text-accent',
       )}
     >

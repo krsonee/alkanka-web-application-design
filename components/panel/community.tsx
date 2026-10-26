@@ -126,7 +126,7 @@ function ComplaintRow({ c, site }: { c: Complaint; site: string }) {
           <span className="text-sm font-semibold text-foreground">{c.title}</span>
           <span className="text-xs text-muted-foreground">{site} · {c.userName} · {new Date(c.createdAt).toLocaleDateString('tr-TR')}</span>
         </div>
-        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
+        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
       </div>
       <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{c.body}</p>
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">

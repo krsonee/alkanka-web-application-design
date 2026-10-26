@@ -297,7 +297,7 @@ function OnlineEditor({ initial }: { initial: OnlineConfig }) {
         </div>
       </div>
       <ol className="flex flex-col gap-2">
-        <li className="hidden grid-cols-[5rem_1fr_7rem_7rem_auto] gap-2 px-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground sm:grid">
+        <li className="hidden grid-cols-[5rem_1fr_7rem_7rem_auto] gap-2 px-2 text-xs font-bold uppercase tracking-wide text-muted-foreground sm:grid">
           <span>Saat</span>
           <span>Ödül adı</span>
           <span>Kanka Coin</span>
@@ -396,7 +396,7 @@ function RulesEditor({ initial }: { initial: PointRules }) {
             </div>
             <div className="flex w-36 shrink-0 items-center gap-2">
               <input id={`rule-${f.key}`} type="number" min={0} value={rules[f.key]} onChange={(e) => setRules((r) => ({ ...r, [f.key]: Number(e.target.value) }))} className={cn(field, 'w-20 tabular-nums')} />
-              <span className="text-[11px] leading-tight text-muted-foreground">{f.unit}</span>
+              <span className="text-xs leading-tight text-muted-foreground">{f.unit}</span>
             </div>
           </li>
         ))}
@@ -499,8 +499,8 @@ function BadgesEditor({ badges, autoLabels }: { badges: SpecialBadge[]; autoLabe
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-display text-sm font-bold text-foreground">{b.name}</span>
-                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase text-secondary-foreground">{BADGE_TIERS.find((t) => t.id === b.tier)?.label}</span>
-                {!b.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-bold uppercase text-secondary-foreground">{BADGE_TIERS.find((t) => t.id === b.tier)?.label}</span>
+                {!b.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
               </div>
               <span className="text-xs leading-relaxed text-muted-foreground">{b.description}</span>
               <span className="text-xs text-muted-foreground">

@@ -266,7 +266,7 @@ function SchemaBox({
       )}
       <span className="relative rounded bg-background/80 px-1.5 py-0.5 text-center leading-tight">
         {label}
-        {off && <span className="block text-[10px] text-destructive">{slot!.endAt && scheduleState(slot!) === 'ended' ? `${formatLocal(slot!.endAt)} bitti` : 'Henüz başlamadı'}</span>}
+        {off && <span className="block text-xs text-destructive">{slot!.endAt && scheduleState(slot!) === 'ended' ? `${formatLocal(slot!.endAt)} bitti` : 'Henüz başlamadı'}</span>}
       </span>
     </button>
   )

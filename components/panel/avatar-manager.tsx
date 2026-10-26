@@ -197,10 +197,10 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
               </div>
               <div className="flex flex-col items-center gap-0.5 text-center">
                 <p className="line-clamp-1 text-sm font-bold text-foreground">{a.name}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {a.unlock === 'free' ? 'Ücretsiz' : a.unlock === 'level' ? `Seviye ${a.level}` : `${a.price.toLocaleString('tr-TR')} KC`}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {s.users} kullanıyor{a.unlock === 'coin' ? ` · ${s.sold} satış` : ''}
                 </p>
               </div>
@@ -241,7 +241,7 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
               <img src={c.src} alt={c.name} loading="lazy" className="aspect-[3/1] w-full object-cover" />
               <div className="flex flex-col gap-0.5 p-2.5">
                 <p className="text-sm font-bold text-foreground">{c.name}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Seviye {c.level} · {coverUsage[c.id] ?? 0} üye
                 </p>
               </div>

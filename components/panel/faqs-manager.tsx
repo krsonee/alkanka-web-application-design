@@ -51,7 +51,7 @@ export function FaqsManager({ faqs }: { faqs: FaqRecord[] }) {
                 {faq.question}
                 <span className="ml-2 font-normal text-muted-foreground">{faq.category}</span>
               </span>
-              {!faq.active && <span className="text-[10px] font-bold uppercase text-muted-foreground">Gizli</span>}
+              {!faq.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
               <HideButton key={`${faq.id}-${faq.active}`} kind="faq" id={faq.id} hidden={!faq.active} label={faq.question} />
               <button
                 type="button"

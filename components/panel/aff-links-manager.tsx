@@ -257,7 +257,7 @@ function LinkRow({ link, sites, siteUrl }: { link: AffLinkView; sites: AffSiteOp
         </div>
         <div className="flex flex-col items-end gap-1">
           <Spark data={link.stats.daily} />
-          <span className="text-[11px] text-muted-foreground">Son 14 gün</span>
+          <span className="text-xs text-muted-foreground">Son 14 gün</span>
         </div>
       </div>
 
@@ -270,7 +270,7 @@ function LinkRow({ link, sites, siteUrl }: { link: AffLinkView; sites: AffSiteOp
           ['Üye tıklaması', link.stats.members],
         ].map(([label, n]) => (
           <div key={label as string} className="flex flex-col rounded-lg bg-secondary px-3 py-2">
-            <dt className="text-[11px] text-muted-foreground">{label}</dt>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd className="font-semibold tabular-nums text-foreground">{Number(n).toLocaleString('tr-TR')}</dd>
           </div>
         ))}
