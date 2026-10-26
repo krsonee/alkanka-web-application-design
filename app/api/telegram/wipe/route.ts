@@ -16,7 +16,8 @@ function matches(key: string, secret: string) {
  * so a full chat wipe finishes without anyone keeping the panel or site open.
  */
 export async function GET(req: Request) {
-  const key = new URL(req.url).searchParams.get('key') ?? ''
+  const header = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+  const key = header ?? new URL(req.url).searchParams.get('key') ?? ''
   const cronKey = await getCronKey()
   if (!key || !matches(key, cronKey)) return Response.json({ error: 'Yetkisiz' }, { status: 401 })
 

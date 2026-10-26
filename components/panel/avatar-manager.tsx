@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
@@ -218,7 +220,7 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => confirm(`${a.name} silinsin mi?`) && run(deleteAvatarAction(a.id))}
+                  onClick={() => void askConfirm(`${a.name} silinsin mi?`).then((ok) => ok && run(deleteAvatarAction(a.id)))}
                   className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   aria-label={`${a.name} sil`}
                 >

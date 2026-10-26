@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Copy, Play, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
@@ -76,16 +78,20 @@ export function CemberEditor({
   }
 
   const loadRecommended = () => {
-    if (!confirm('Mevcut etkinliklerin yerine önerilen 5 günlük seans + hafta sonu Mega Çember yüklensin mi? Kaydet\'e basınca kalıcı olur.')) return
+    void askConfirm('Mevcut etkinliklerin yerine önerilen 5 günlük seans + hafta sonu Mega Çember yüklensin mi? Kaydet\'e basınca kalıcı olur.').then((ok) => {
+      if (!ok) return
     setEvents(recommendedCemberEvents({ badgeId: badges[0]?.id ?? null, itemId: items[0]?.id ?? null }))
     setSel(0)
     setMsg({ ok: true, text: 'Şablon yüklendi. Ödülleri kontrol edip Kaydet\'e bas.' })
+    })
   }
 
   const removeEvent = () => {
-    if (!confirm(`"${cfg.title}" silinsin mi? Kaydet'e basınca kalıcı olur.`)) return
+    void askConfirm(`"${cfg.title}" silinsin mi? Kaydet'e basınca kalıcı olur.`).then((ok) => {
+      if (!ok) return
     setEvents((list) => list.filter((e) => e.id !== cfg.id))
     setSel((s) => Math.max(0, s - 1))
+    })
   }
 
   const names: Record<string, string> = {}

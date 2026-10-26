@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Check, Copy, ExternalLink, Link2, Loader2, Pause, Pencil, Play, Plus, Radar, Star, Trash2, X } from 'lucide-react'
 import { checkAffLinkAction, deleteAffLinkAction, saveAffLinkAction, toggleAffLinkAction } from '@/app/panel/growth-actions'
@@ -312,8 +314,10 @@ function LinkRow({ link, sites, siteUrl }: { link: AffLinkView; sites: AffSiteOp
           className={cn(ghost, 'text-destructive')}
           disabled={pending}
           onClick={() => {
-            if (window.confirm(`${short} silinsin mi? Tıklama geçmişi de silinir ve link çalışmaz.`)) run(() => deleteAffLinkAction(link.id))
-          }}
+            void askConfirm(`${short} silinsin mi? Tıklama geçmişi de silinir ve link çalışmaz.`).then((ok) => {
+      if (ok) run(() => deleteAffLinkAction(link.id))
+    })
+  }}
         >
           <Trash2 className="size-3.5" aria-hidden="true" /> Sil
         </button>

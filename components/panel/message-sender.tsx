@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useRef, useState, useTransition } from 'react'
 import { ImagePlus, Loader2, Mail, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react'
 import { EmojiPicker } from './emoji-picker'
@@ -264,8 +266,10 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                     type="button"
                     aria-label={`${m.title} mesajını sil`}
                     onClick={() => {
-                      if (confirm('Bu mesaj tüm üyelerin kutusundan silinsin mi?')) startDelete(async () => void (await deleteInboxMessage(m.id)))
-                    }}
+                      void askConfirm('Bu mesaj tüm üyelerin kutusundan silinsin mi?').then((ok) => {
+      if (ok) startDelete(async () => void (await deleteInboxMessage(m.id)))
+    })
+  }}
                     className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-destructive"
                   >
                     <Trash2 className="size-4" aria-hidden />

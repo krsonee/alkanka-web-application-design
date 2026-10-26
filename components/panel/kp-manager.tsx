@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { HideButton } from '@/components/panel/hide-button'
 import { KpGuide } from '@/components/panel/area-guides'
 import { useState, useTransition } from 'react'
@@ -514,7 +516,7 @@ function BadgesEditor({ badges, autoLabels }: { badges: SpecialBadge[]; autoLabe
               <HideButton key={`${b.id}-${b.active}`} kind="badge" id={b.id} hidden={!b.active} label={b.name} />
               <button
                 disabled={pending}
-                onClick={() => confirm(`${b.name} rozeti ve tüm verilişleri silinsin mi?`) && run(() => removeBadge(b.id))}
+                onClick={() => void askConfirm(`${b.name} rozeti ve tüm verilişleri silinsin mi?`).then((ok) => ok && run(() => removeBadge(b.id)))}
                 className="rounded-md px-2 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10"
               >
                 Sil
@@ -695,7 +697,7 @@ function AwardList({ awards }: { awards: AwardRow[] }) {
                 {new Date(a.awardedAt).toLocaleDateString('tr-TR')}{a.note ? ` · ${a.note}` : ''}
               </span>
             </div>
-            <button disabled={pending} onClick={() => confirm('Rozet ve bonus KP geri alınsın mı?') && run(() => takeBackAward(a.id))} aria-label="Geri al" className="rounded-md p-2 text-muted-foreground hover:text-destructive">
+            <button disabled={pending} onClick={() => void askConfirm('Rozet ve bonus KP geri alınsın mı?').then((ok) => ok && run(() => takeBackAward(a.id)))} aria-label="Geri al" className="rounded-md p-2 text-muted-foreground hover:text-destructive">
               <Undo2 className="size-4" />
             </button>
           </li>

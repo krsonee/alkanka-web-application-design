@@ -91,6 +91,47 @@ import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
 import { pendingDetail } from '@/lib/panel-pending'
+import { ModerationQueue, type ModerationItem } from '@/components/panel/moderation-queue'
+
+async function moderationItems(can: (id: 'community' | 'tasks' | 'market') => boolean): Promise<ModerationItem[]> {
+  const { pendingProofs } = await import('@/lib/trust-extra')
+  const [proofs, reviews, complaints, claims, requests, sites] = await Promise.all([
+    can('community') ? pendingProofs().catch(() => []) : [],
+    can('community') ? pendingReviews().catch(() => []) : [],
+    can('community') ? adminComplaints().catch(() => []) : [],
+    can('tasks') ? listPendingClaims().catch(() => []) : [],
+    can('market') ? listRequests().catch(() => []) : [],
+    can('community') ? siteOptions().catch(() => []) : [],
+  ])
+  const siteName = (id: string) => sites.find((s) => String(s.id) === id)?.name ?? id
+  return [
+    ...proofs.map((p): ModerationItem => ({
+      key: `proof-${p.reviewId}`,
+      kind: 'proof',
+      id: p.reviewId,
+      title: siteName(p.siteId),
+      who: p.userName,
+      detail: p.body,
+      image: `/api/guven/kanit/${encodeURIComponent(p.proofPath.split('/').pop() ?? '')}`,
+    })),
+    ...reviews.map((r): ModerationItem => ({ key: `review-${r.id}`, kind: 'review', id: r.id, title: `${siteName(r.siteId)} · ${r.rating}/5`, who: r.userName, detail: r.body, createdAt: r.createdAt })),
+    ...claims.map((c): ModerationItem => ({ key: `claim-${c.id}`, kind: 'claim', id: c.id, title: c.taskTitle, who: c.userName, detail: c.email, createdAt: c.createdAt })),
+    ...requests
+      .filter((r) => r.status === 'beklemede')
+      .map((r): ModerationItem => ({
+        key: `market-${r.id}`,
+        kind: 'market',
+        id: r.id,
+        title: `${r.itemName}${r.sponsorName ? ` · ${r.sponsorName}` : ''}`,
+        who: `${r.userName}${r.siteUsername ? ` (${r.siteUsername})` : ''}`,
+        detail: `${r.price} coin`,
+        createdAt: r.createdAt,
+      })),
+    ...complaints
+      .filter((c) => c.status === 'open')
+      .map((c): ModerationItem => ({ key: `complaint-${c.id}`, kind: 'complaint', id: c.id, title: `${siteName(c.siteId)} · ${c.title}`, who: c.userName, detail: c.body, createdAt: c.createdAt })),
+  ]
+}
 import { SHARE_KEY, type ShareSettings } from '@/lib/share'
 import { AUTO_LABELS, getKpConfig, leaderboard, listSpecialBadges, recentAwards } from '@/lib/kanka-puan'
 import { getOnlineConfig, getTickerConfig } from '@/lib/online-rewards'
@@ -564,7 +605,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'users', 'Tüm üyeler', usersPanel),
   ])
-  const audit = session.isOwner && active === 'audit' ? await listAudit().then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
+  const audit = session.isOwner && active === 'audit' ? await listAudit(2000).then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
 
   const onDash = active === 'dashboard'
   const [detail, dashCounts, dashRecent, dashStatsData] = await Promise.all([
@@ -575,6 +616,12 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   ])
   const pending: Record<string, number> = { community: detail.reviews + detail.complaints + detail.withdrawals, tasks: detail.claims, market: detail.market }
   const dashboard = onDash ? <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} /> : null
+  const canModerate = can('community') || can('tasks') || can('market')
+  const moderation = !canModerate
+    ? null
+    : active !== 'moderation'
+      ? undefined
+      : await moderationItems(can).then((items) => <ModerationQueue items={items} />).catch((error) => (console.error('[panel:moderation]', error), failed('Moderasyon kuyruğu')))
   const staff = session.isOwner && active === 'staff' ? await staffPanel().catch((error) => (console.error('[panel:staff]', error), failed('Personel listesi'))) : null
 
   return (
@@ -589,6 +636,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           users={users}
           audit={audit}
           dashboard={dashboard}
+          moderation={moderation === undefined ? <></> : moderation}
           isOwner={session.isOwner}
           slides={slides}
           heroes={heroes}

@@ -234,8 +234,12 @@ async function kickWipeRunner() {
     if (!host) return
     const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
     const { getCronKey } = await import('@/lib/telegram-mirror')
-    const url = `${proto}://${host}/api/telegram/wipe?key=${encodeURIComponent(await getCronKey())}`
-    await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(1500) }).catch(() => null)
+    const url = `${proto}://${host}/api/telegram/wipe`
+    await fetch(url, {
+      cache: 'no-store',
+      headers: { authorization: `Bearer ${await getCronKey()}` },
+      signal: AbortSignal.timeout(1500),
+    }).catch(() => null)
   } catch (error) {
     console.error('[tg-hub] wipe kick', error)
   }

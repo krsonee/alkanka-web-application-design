@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useMemo, useState, useTransition } from 'react'
 import { Check, Copy, Loader2, Pause, Pencil, Play, Plus, Send, Trash2, X } from 'lucide-react'
 import {
@@ -361,8 +363,10 @@ function CampaignCard({ c, sites, siteUrl }: { c: CampaignView; sites: Marketing
           className={cn(ghost, 'text-destructive')}
           disabled={pending}
           onClick={() => {
-            if (confirm(`"${c.name}" kampanyası ve ziyaret kayıtları silinsin mi?`)) start(async () => setMsg(await deleteCampaignAction(c.id)))
-          }}
+            void askConfirm(`"${c.name}" kampanyası ve ziyaret kayıtları silinsin mi?`).then((ok) => {
+      if (ok) start(async () => setMsg(await deleteCampaignAction(c.id)))
+    })
+  }}
         >
           <Trash2 className="size-3.5" aria-hidden="true" /> Sil
         </button>
@@ -600,8 +604,10 @@ function EarningRow({ e, sites }: { e: EarningView; sites: MarketingSite[] }) {
           className={cn(ghost, 'text-destructive')}
           disabled={pending}
           onClick={() => {
-            if (confirm('Bu hakediş kaydı silinsin mi?')) start(async () => setMsg(await deleteEarningAction(e.id)))
-          }}
+            void askConfirm('Bu hakediş kaydı silinsin mi?').then((ok) => {
+      if (ok) start(async () => setMsg(await deleteEarningAction(e.id)))
+    })
+  }}
         >
           <Trash2 className="size-3.5" aria-hidden="true" /> Sil
         </button>

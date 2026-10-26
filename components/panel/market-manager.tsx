@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { MarketGuide } from '@/components/panel/area-guides'
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
@@ -97,7 +99,7 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
                 <button
                   type="button"
                   aria-label={`${p.name} sil`}
-                  onClick={() => confirm(`${p.name} silinsin mi?`) && run(deleteMarketProductAction(p.id))}
+                  onClick={() => void askConfirm(`${p.name} silinsin mi?`).then((ok) => ok && run(deleteMarketProductAction(p.id)))}
                   className="rounded-md p-1.5 text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="size-4" aria-hidden="true" />

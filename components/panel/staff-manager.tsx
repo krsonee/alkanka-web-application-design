@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { deleteStaffAccount, resetAccountTotp, saveStaffAccount, type StaffInput } from '@/app/panel/auth-actions'
@@ -97,8 +99,10 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
                     type="button"
                     disabled={pending}
                     onClick={() => {
-                      if (confirm(`${a.username} için 2FA sıfırlansın mı? Hesap bir sonraki girişte yeniden kurar.`)) act(() => resetAccountTotp(a.id))
-                    }}
+                      void askConfirm(`${a.username} için 2FA sıfırlansın mı? Hesap bir sonraki girişte yeniden kurar.`).then((ok) => {
+      if (ok) act(() => resetAccountTotp(a.id))
+    })
+  }}
                     className="rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
                   >
                     2FA sıfırla
@@ -127,8 +131,10 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
                   aria-label={`${a.username} sil`}
                   disabled={pending}
                   onClick={() => {
-                    if (confirm(`${a.username} hesabı silinsin mi?`)) act(() => deleteStaffAccount(a.id))
-                  }}
+                    void askConfirm(`${a.username} hesabı silinsin mi?`).then((ok) => {
+      if (ok) act(() => deleteStaffAccount(a.id))
+    })
+  }}
                   className="rounded-md p-1.5 text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="size-4" aria-hidden="true" />

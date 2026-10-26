@@ -22,8 +22,13 @@ import {
   Send,
   Wrench,
   Settings,
+  Menu,
+  X,
+  Inbox,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
+import { askConfirm, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
@@ -45,7 +50,7 @@ type Fields = {
   endAt?: string
 }
 
-type PanelTab = PanelModule | 'staff' | 'account' | 'audit' | 'dashboard'
+type PanelTab = PanelModule | 'staff' | 'account' | 'audit' | 'dashboard' | 'moderation'
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
@@ -95,12 +100,14 @@ export function ContentEditor({
   users,
   audit,
   dashboard,
+  moderation = null,
   userName,
   siteUrl,
   logout,
   initialTab,
 }: {
   initialTab: string
+  moderation?: React.ReactNode | null
   userName: string
   siteUrl: string
   logout: React.ReactNode
@@ -172,7 +179,9 @@ export function ContentEditor({
       ],
     },
   ].filter((g) => g.items.length > 0)
-  const tabs: PanelTab[] = ['dashboard', ...groups.flatMap((g) => g.items.map((i) => i.id))]
+  const hasModeration = moderation !== null
+  const tabs: PanelTab[] = ['dashboard', ...(hasModeration ? (['moderation'] as PanelTab[]) : []), ...groups.flatMap((g) => g.items.map((i) => i.id))]
+  const [navOpen, setNavOpen] = useState(false)
   const router = useRouter()
   const [loading, startLoading] = useTransition()
   const [tab, setTab] = useState<PanelTab>(initialTab as PanelTab)
@@ -198,20 +207,34 @@ export function ContentEditor({
     .filter((g) => g.items.length > 0)
   const contentRef = useRef<HTMLDivElement>(null)
   const guard = useUnsavedGuard(contentRef)
-  const pick = (id: PanelTab) => {
+  const pick = async (id: PanelTab) => {
+    setNavOpen(false)
     if (id === tab) return
-    if (guard.count && !confirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?')) return
+    if (guard.count && !(await askConfirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?'))) return
     guard.clear()
     setTab(id)
     window.scrollTo({ top: 0 })
     startLoading(() => router.push(id === 'dashboard' ? '/panel' : `/panel?b=${id}`, { scroll: false }))
   }
+  const moderationItem = { id: 'moderation' as PanelTab, label: 'Moderasyon kuyruğu', hint: 'Onay bekleyen kanıt, yorum, şikayet, görev ve market talepleri tek yerde', pending: 0 }
   const currentGroup = groups.find((g) => g.items.some((i) => i.id === tab))
-  const current = currentGroup?.items.find((i) => i.id === tab)
+  const current = tab === 'moderation' ? moderationItem : currentGroup?.items.find((i) => i.id === tab)
   const totalPending = groups.reduce((n, g) => n + g.items.reduce((m, i) => m + i.pending, 0), 0)
   return (
-    <div className="flex min-h-dvh min-w-[1024px] bg-background pl-72">
-      <aside className="fixed inset-y-0 left-0 z-30 flex w-72 flex-col border-r border-border bg-card">
+    <div className="flex min-h-dvh bg-background lg:pl-72">
+      <PanelFeedbackHost />
+      {navOpen && (
+        <button type="button" aria-label="Menüyü kapat" onClick={() => setNavOpen(false)} className="fixed inset-0 z-30 bg-foreground/40 lg:hidden" />
+      )}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col border-r border-border bg-card transition-transform lg:translate-x-0',
+          navOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
+        <button type="button" aria-label="Menüyü kapat" onClick={() => setNavOpen(false)} className="absolute right-2 top-3 flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary lg:hidden">
+          <X className="size-4" aria-hidden="true" />
+        </button>
         <div className="flex flex-col gap-0.5 border-b border-border px-4 py-4">
           <span className="font-display text-base font-bold uppercase tracking-tight text-foreground">AL KANKA panel</span>
           <span className="truncate text-xs text-muted-foreground">
@@ -236,7 +259,10 @@ export function ContentEditor({
         </div>
         <nav aria-label="Panel bölümleri" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-20 pt-3">
           {!q && (
-            <NavButton active={tab === 'dashboard'} onClick={() => pick('dashboard')} label="Genel bakış" pending={totalPending} icon={LayoutDashboard} />
+            <div className="flex flex-col gap-0.5">
+              <NavButton active={tab === 'dashboard'} onClick={() => pick('dashboard')} label="Genel bakış" pending={0} icon={LayoutDashboard} />
+              {hasModeration && <NavButton active={tab === 'moderation'} onClick={() => pick('moderation')} label="Moderasyon kuyruğu" pending={totalPending} icon={Inbox} />}
+            </div>
           )}
           {shown.map((g) => {
             const Icon = GROUP_ICONS[g.id] ?? Wrench
@@ -269,21 +295,26 @@ export function ContentEditor({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-6 border-b border-border bg-background/95 px-8 backdrop-blur">
-          <div className="flex min-w-0 flex-col">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur lg:gap-6 lg:px-8">
+          <button type="button" aria-label="Menüyü aç" aria-expanded={navOpen} onClick={() => setNavOpen(true)} className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border text-foreground lg:hidden">
+            <Menu className="size-4" aria-hidden="true" />
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex items-center gap-1.5 text-[13px]">
-              <span className="text-muted-foreground">{currentGroup?.label ?? 'Panel'}</span>
-              <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              <span className="hidden text-muted-foreground sm:inline">{currentGroup?.label ?? 'Panel'}</span>
+              <ChevronRight className="hidden size-3.5 text-muted-foreground sm:block" aria-hidden="true" />
               <h1 className="truncate font-semibold text-foreground">{current?.label ?? 'Genel bakış'}</h1>
             </div>
             {current?.hint && <p className="truncate text-xs text-muted-foreground">{current.hint}</p>}
           </div>
-          {totalPending > 0 && tab !== 'dashboard' && (
+          {totalPending > 0 && tab !== 'moderation' && (
             <button
-              onClick={() => pick('dashboard')}
-              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-[13px] text-foreground hover:bg-secondary"
+              type="button"
+              onClick={() => pick(hasModeration ? 'moderation' : 'dashboard')}
+              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-secondary"
             >
-              Bekleyen iş
+              <MessageSquare className="size-3.5 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Bekleyen iş</span>
               <span className="rounded-full bg-destructive px-1.5 text-xs font-bold tabular-nums text-destructive-foreground">{totalPending}</span>
             </button>
           )}
@@ -292,7 +323,7 @@ export function ContentEditor({
         <div
           ref={contentRef}
           className={cn(
-            'mx-auto w-full px-8 pb-24 pt-6',
+            'mx-auto w-full overflow-x-auto px-4 pb-24 pt-6 lg:px-8',
             tab === 'dashboard' ? 'max-w-none' : 'max-w-[1600px]',
             '[&_h2.font-display]:text-lg [&_h3.font-display]:text-base [&_.text-2xl]:text-xl',
           )}
@@ -304,6 +335,8 @@ export function ContentEditor({
         </div>
       ) : !tabs.includes(tab) ? (
         <p className="text-sm text-muted-foreground">Bu bölüme erişim yetkin yok.</p>
+      ) : tab === 'moderation' ? (
+        moderation
       ) : tab === 'staff' ? (
         staff
       ) : tab === 'dashboard' ? (
@@ -393,7 +426,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   members: Users,
   games: Gamepad2,
   telegram: Send,
-  tools: Wrench,
+  comms: MessageSquare,
   settings: Settings,
 }
 

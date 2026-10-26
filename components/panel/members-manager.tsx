@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useEffect, useState, useTransition } from 'react'
 import { AlertTriangle, Ban, Coins, Link2Off, Lock, LogOut, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -353,8 +355,10 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
               <button
                 disabled={busy || banReason.trim().length < 3}
                 onClick={() => {
-                  if (confirm(`${m.name} kalıcı olarak banlansın mı?`)) run(() => banAction(m.id, banReason, ipBlock), () => setBanReason(''))
-                }}
+                  void askConfirm(`${m.name} kalıcı olarak banlansın mı?`).then((ok) => {
+      if (ok) run(() => banAction(m.id, banReason, ipBlock), () => setBanReason(''))
+    })
+  }}
                 className="rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-40"
               >
                 Kalıcı banla

@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useActionState, useState } from 'react'
 import { AlertTriangle, CalendarClock, Copy, Eye, MousePointerClick, Trash2 } from 'lucide-react'
 import { saveAds, type ActionState } from '@/app/panel/actions'
@@ -55,11 +57,13 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
   }
 
   const applyToAll = () => {
-    if (!confirm(`Bu reklam bütün sayfaların "${posMeta.label}" alanına kopyalansın mı?`)) return
+    void askConfirm(`Bu reklam bütün sayfaların "${posMeta.label}" alanına kopyalansın mı?`).then((ok) => {
+      if (!ok) return
     setSlots((s) => {
       const next = { ...s }
       for (const p of AD_PAGES) next[`${p.id}:${pos}`] = { ...current }
       return next
+    })
     })
   }
 

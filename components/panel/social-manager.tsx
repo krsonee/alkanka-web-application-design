@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition, type ComponentProps } from 'react'
 import { SocialApiForm } from '@/components/panel/social-api-form'
@@ -284,7 +286,7 @@ function EventsAdmin({ events, entries }: { events: SocialEvent[]; entries: Admi
                 <div className="flex items-center gap-2">
                   <a href={ev.postUrl} target="_blank" rel="noopener noreferrer" className={ghost}>Gönderi</a>
                   <HideButton key={`${ev.id}-${ev.active}`} kind="social" id={ev.id} hidden={!ev.active} label={ev.title} />
-                  <button disabled={pending} aria-label={`${ev.title} sil`} onClick={() => confirm('Etkinlik ve katılımları silinsin mi?') && run(() => deleteSocialEventAction(ev.id))} className={ghost}>
+                  <button disabled={pending} aria-label={`${ev.title} sil`} onClick={() => void askConfirm('Etkinlik ve katılımları silinsin mi?').then((ok) => ok && run(() => deleteSocialEventAction(ev.id)))} className={ghost}>
                     <Trash2 className="size-3.5" aria-hidden />
                   </button>
                 </div>

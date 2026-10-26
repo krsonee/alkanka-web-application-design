@@ -1,5 +1,7 @@
 'use client'
 
+
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Pencil, Search, Trash2 } from 'lucide-react'
 import { deleteMemberLimit, saveMemberLimit, searchMembersForLimit } from '@/app/panel/limits-actions'
@@ -70,10 +72,12 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
   }
 
   function remove(userId: string) {
-    if (!confirm('Bu üyenin kısıtlaması kaldırılsın mı?')) return
+    void askConfirm('Bu üyenin kısıtlaması kaldırılsın mı?').then((ok) => {
+      if (!ok) return
     start(async () => {
       const res = await deleteMemberLimit(userId)
       setMsg(res.ok ? { ok: true, text: res.message ?? 'Kaldırıldı.' } : { ok: false, text: res.error })
+    })
     })
   }
 
