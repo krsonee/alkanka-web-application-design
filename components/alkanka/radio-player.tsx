@@ -8,9 +8,11 @@ import type { RadioStation } from '@/app/api/radyo/route'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<{ stations: RadioStation[] }>)
 
-type Status = 'idle' | 'loading' | 'playing' | 'error'
+type Status = 'idle' | 'loading' | 'playing' | 'error' | 'blocked'
 
 const STREAM_TIMEOUT_MS = 10_000
+const VOLUME_KEY = 'alkanka-radio-volume'
+const DEFAULT_VOLUME = 0.5
 
 function Equalizer({ active }: { active: boolean }) {
   return (
@@ -59,7 +61,24 @@ export function RadioPlayer() {
   const attemptRef = useRef<{ id: string; index: number } | null>(null)
   const [broken, setBroken] = useState<Set<string>>(() => new Set())
 
+  const [volume, setVolume] = useState(DEFAULT_VOLUME)
+
   useEffect(() => () => clearTimeout(timeoutRef.current ?? undefined), [])
+
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(VOLUME_KEY))
+    if (saved >= 0 && saved <= 1 && localStorage.getItem(VOLUME_KEY) !== null) setVolume(saved)
+  }, [])
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume
+  }, [volume])
+
+  const changeVolume = (value: number) => {
+    setVolume(value)
+    if (value > 0 && muted) setMuted(false)
+    localStorage.setItem(VOLUME_KEY, String(value))
+  }
 
   const { data, isLoading } = useSWR(open || current ? '/api/radyo' : null, fetcher, {
     revalidateOnFocus: false,
@@ -108,6 +127,11 @@ export function RadioPlayer() {
     audio.src = urls[index]
     audio.play().catch((e: unknown) => {
       if (e instanceof DOMException && e.name === 'AbortError') return
+      if (e instanceof DOMException && e.name === 'NotAllowedError') {
+        clearTimer()
+        setStatus('blocked')
+        return
+      }
       if (attemptRef.current?.id === station.id && attemptRef.current.index === index) tryUrl(station, index + 1)
     })
   }
@@ -209,17 +233,34 @@ export function RadioPlayer() {
                     </>
                   )}
                   {status === 'error' && <span className="text-destructive">Yayın kapalı, listeden kaldırıldı</span>}
+                  {status === 'blocked' && 'Tarayıcı engelledi, tekrar dokun'}
                   {status === 'idle' && 'Durduruldu'}
                 </span>
+                <span className="mt-1.5 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMuted((m) => !m)}
+                    aria-label={muted ? 'Sesi aç' : 'Sesi kapat'}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  >
+                    {muted || volume === 0 ? (
+                      <VolumeX className="size-4" aria-hidden="true" />
+                    ) : (
+                      <Volume2 className="size-4" aria-hidden="true" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={muted ? 0 : volume}
+                    onChange={(e) => changeVolume(Number(e.target.value))}
+                    aria-label="Ses seviyesi"
+                    className="h-1.5 w-full cursor-pointer accent-primary"
+                  />
+                </span>
               </span>
-              <button
-                type="button"
-                onClick={() => setMuted((m) => !m)}
-                aria-label={muted ? 'Sesi aç' : 'Sesi kapat'}
-                className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                {muted ? <VolumeX className="size-4" aria-hidden="true" /> : <Volume2 className="size-4" aria-hidden="true" />}
-              </button>
               <button
                 type="button"
                 onClick={stop}
