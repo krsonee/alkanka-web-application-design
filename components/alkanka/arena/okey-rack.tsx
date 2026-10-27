@@ -8,13 +8,19 @@ import { TileFace } from './okey'
 import { isJoker, sortHand, type Okey as OkeyValue, type Tile } from './okey-engine'
 
 export const RACK_COLS = 14
-const RACK_SLOTS = RACK_COLS * 2
 
 type Slots = (number | null)[]
 
-function reconcile(raw: Slots, hand: Tile[]): Slots {
+/** Start slot for a group of `len` tiles at `pos`: wraps to the next row instead of splitting a group, -1 when it no longer fits. */
+function groupStart(pos: number, len: number, total: number) {
+  const rowEnd = (Math.floor(pos / RACK_COLS) + 1) * RACK_COLS
+  const start = pos + len > rowEnd && len <= RACK_COLS ? rowEnd : pos
+  return start + len > total ? -1 : start
+}
+
+function reconcile(raw: Slots, hand: Tile[], total: number): Slots {
   const ids = new Set(hand.map((t) => t.id))
-  const slots: Slots = Array.from({ length: RACK_SLOTS }, (_, i) => {
+  const slots: Slots = Array.from({ length: total }, (_, i) => {
     const id = raw[i]
     return id != null && ids.has(id) ? id : null
   })
@@ -30,7 +36,7 @@ function reconcile(raw: Slots, hand: Tile[]): Slots {
 }
 
 /** Lays sorted tiles out with a gap between groups so sets are visible, falling back to no gaps when space runs out. */
-function layoutSorted(tiles: Tile[], okey: OkeyValue, mode: 'seri' | 'cift'): Slots {
+function layoutSorted(tiles: Tile[], okey: OkeyValue, mode: 'seri' | 'cift', total: number): Slots {
   const joins = (a: Tile, b: Tile) => {
     if (isJoker(a, okey) || isJoker(b, okey)) return true
     return mode === 'seri' ? a.color === b.color && b.num === a.num + 1 : a.color === b.color && a.num === b.num
@@ -41,14 +47,11 @@ function layoutSorted(tiles: Tile[], okey: OkeyValue, mode: 'seri' | 'cift'): Sl
     if (g && joins(g[g.length - 1], t) && !(mode === 'cift' && g.length >= 2)) g.push(t)
     else groups.push([t])
   }
-  const slots: Slots = Array(RACK_SLOTS).fill(null)
+  const slots: Slots = Array(total).fill(null)
   let pos = 0
   for (const g of groups) {
-    const rowEnd = pos < RACK_COLS ? RACK_COLS : RACK_SLOTS
-    if (pos + g.length > rowEnd && pos < RACK_COLS) pos = RACK_COLS
-    if (pos + g.length > RACK_SLOTS) {
-      return [...tiles.map((t) => t.id), ...Array(RACK_SLOTS - tiles.length).fill(null)]
-    }
+    pos = groupStart(pos, g.length, total)
+    if (pos < 0) return [...tiles.map((t) => t.id), ...Array(Math.max(0, total - tiles.length)).fill(null)]
     for (const t of g) slots[pos++] = t.id
     pos++
   }
@@ -56,14 +59,15 @@ function layoutSorted(tiles: Tile[], okey: OkeyValue, mode: 'seri' | 'cift'): Sl
 }
 
 /** Places each group with an empty slot after it so groups read as separate sets; leftovers fill the rest. */
-export function layoutGroups(groups: Tile[][], rest: Tile[]): Slots {
+export function layoutGroups(groups: Tile[][], rest: Tile[], rows = 2): Slots {
+  const total = RACK_COLS * rows
   const all = [...groups.flat(), ...rest]
-  const compact: Slots = [...all.map((t) => t.id), ...Array(Math.max(0, RACK_SLOTS - all.length)).fill(null)]
-  const slots: Slots = Array(RACK_SLOTS).fill(null)
+  const compact: Slots = [...all.map((t) => t.id), ...Array(Math.max(0, total - all.length)).fill(null)]
+  const slots: Slots = Array(total).fill(null)
   let pos = 0
   for (const g of groups) {
-    if (pos < RACK_COLS && pos + g.length > RACK_COLS) pos = RACK_COLS
-    if (pos + g.length > RACK_SLOTS) return compact
+    pos = groupStart(pos, g.length, total)
+    if (pos < 0) return compact
     for (const t of g) slots[pos++] = t.id
     pos++
   }
@@ -78,10 +82,11 @@ export function layoutGroups(groups: Tile[][], rest: Tile[]): Slots {
 
 export type SlotMark = { label?: string } | null
 
-export function useRack(hand: Tile[], okey: OkeyValue) {
-  const [raw, setRaw] = useState<Slots>(() => layoutSorted(sortHand(hand, okey, 'seri'), okey, 'seri'))
+export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
+  const total = RACK_COLS * rows
+  const [raw, setRaw] = useState<Slots>(() => layoutSorted(sortHand(hand, okey, 'seri'), okey, 'seri', total))
   const [selected, setSelected] = useState<number | null>(null)
-  const slots = reconcile(raw, hand)
+  const slots = reconcile(raw, hand, total)
   const selectedId = selected != null && hand.some((t) => t.id === selected) ? selected : null
 
   function moveTo(id: number, target: number) {
@@ -94,7 +99,7 @@ export function useRack(hand: Tile[], okey: OkeyValue) {
   }
 
   function arrange(mode: 'seri' | 'cift') {
-    setRaw(layoutSorted(sortHand(hand, okey, mode), okey, mode))
+    setRaw(layoutSorted(sortHand(hand, okey, mode), okey, mode, total))
   }
 
   const [flippedRaw, setFlipped] = useState<number[]>([])
@@ -103,7 +108,7 @@ export function useRack(hand: Tile[], okey: OkeyValue) {
     setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
   }
 
-  return { slots, selected: selectedId, setSelected, moveTo, arrange, setLayout: setRaw, flipped, toggleFlip }
+  return { rows, slots, selected: selectedId, setSelected, moveTo, arrange, setLayout: setRaw, flipped, toggleFlip }
 }
 
 export type DropKind = 'discard' | 'finish' | `meld:${number}`
@@ -258,9 +263,9 @@ export function OkeyRack({
     <div
       className="mx-auto flex w-full max-w-[44rem] flex-col gap-1 rounded-xl bg-wood p-1.5 shadow-inner sm:gap-1.5 sm:p-2"
       role="group"
-      aria-label="Istakan, iki sıra"
+      aria-label={`Istakan, ${rack.rows === 3 ? 'üç' : 'iki'} sıra`}
     >
-      {[0, 1].map((row) => (
+      {Array.from({ length: rack.rows }, (_, row) => row).map((row) => (
         <div key={row} className="grid grid-cols-14 gap-0.5 border-b-4 border-background/30 pb-1 sm:gap-1">
           {rack.slots.slice(row * RACK_COLS, row * RACK_COLS + RACK_COLS).map((id, c) => {
             const i = row * RACK_COLS + c
