@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { formatRemaining } from './mini-status'
 import type { MiniGameProps } from './lucky-wheel'
 import { ParticleBurst } from './particle-burst'
+import { WinFlash } from './win-flash'
 import { playMini } from '@/app/actions/wallet'
 import { usePoints } from '../points-context'
 import { DetailButton, DetailModal } from '../detail-modal'
@@ -103,7 +104,8 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         )}
       </header>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="relative grid grid-cols-3 gap-3">
+        {phase === 'opened' && picked !== null && won > 0 && <WinFlash label={`+${won} KC`} big={won === jackpot} />}
         {CHESTS.map((chest, i) => {
           const isPicked = picked === i
           const revealed = phase === 'opened'
@@ -147,6 +149,30 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
           )
         })}
       </div>
+
+      <section aria-label="Sandıklardan çıkabilecek ödüller" className="flex flex-col gap-2 rounded-xl border border-border bg-card/50 p-3">
+        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">İçinden neler çıkabilir?</span>
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {CHESTS.map((chest) => (
+            <li key={chest.id} className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-foreground">{chest.name}</span>
+              <span className="flex flex-wrap gap-1">
+                {[...new Set(chest.rewards)].sort((a, b) => a - b).map((r) => (
+                  <span
+                    key={r}
+                    className={cn(
+                      'rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums',
+                      r === jackpot ? 'bg-gold/20 text-gold' : 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {r} KC
+                  </span>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <div aria-live="polite" className="flex min-h-12 items-center gap-3">
         {phase === 'opened' && picked !== null ? (
