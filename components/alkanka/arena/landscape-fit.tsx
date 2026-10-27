@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { Maximize2, Minimize2, Smartphone, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PHONE_LANDSCAPE = '(pointer: coarse) and (orientation: landscape) and (max-height: 600px)'
@@ -10,18 +10,22 @@ const PHONE_LANDSCAPE = '(pointer: coarse) and (orientation: landscape) and (max
 const DESIGN_WIDTH = 640
 const TOOLBAR_H = 36
 
-function subscribe(cb: () => void) {
-  const mq = window.matchMedia(PHONE_LANDSCAPE)
-  mq.addEventListener('change', cb)
-  return () => mq.removeEventListener('change', cb)
+const PHONE_PORTRAIT = '(pointer: coarse) and (orientation: portrait) and (max-width: 600px)'
+
+function useMedia(query: string) {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(query)
+      mq.addEventListener('change', cb)
+      return () => mq.removeEventListener('change', cb)
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  )
 }
 
 export function usePhoneLandscape() {
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(PHONE_LANDSCAPE).matches,
-    () => false,
-  )
+  return useMedia(PHONE_LANDSCAPE)
 }
 
 /**
@@ -31,6 +35,8 @@ export function usePhoneLandscape() {
  */
 export function LandscapeFit({ children, label = 'Oyun masası' }: { children: ReactNode; label?: string }) {
   const landscape = usePhoneLandscape()
+  const portraitPhone = useMedia(PHONE_PORTRAIT)
+  const [hintClosed, setHintClosed] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const fullscreen = landscape && !minimized
   const inner = useRef<HTMLDivElement>(null)
@@ -138,6 +144,21 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
           <Maximize2 className="size-4" aria-hidden="true" />
           Tam ekran
         </button>
+      ) : portraitPhone && !hintClosed ? (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-foreground">
+          <Smartphone className="size-5 shrink-0 rotate-90 text-primary" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-xs font-semibold leading-snug text-pretty">
+            Telefonu yan çevir, masa tam ekran ve daha rahat açılır.
+          </p>
+          <button
+            type="button"
+            onClick={() => setHintClosed(true)}
+            aria-label="Öneriyi kapat"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
       ) : null}
       <div
         className={cn(fullscreen && 'flex min-h-0 flex-1 items-center justify-center')}
