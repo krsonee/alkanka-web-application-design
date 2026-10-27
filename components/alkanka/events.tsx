@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import useSWR from 'swr'
 import { Coins, Users } from 'lucide-react'
+import { joinEventAction, myEventEntries } from '@/app/actions/events'
 import { cn } from '@/lib/utils'
 import { TELEGRAM_URL, type EventItem } from './data'
 import { useCatalog } from './catalog-context'
@@ -47,16 +49,28 @@ function Countdown({ hoursLeft, start }: { hoursLeft: number; start: number | nu
 
 function EventCards() {
   const { events: EVENTS } = useCatalog()
-  const { spend } = usePoints()
+  const { member, requireLogin, setBalance } = usePoints()
   const t = useTexts()
   const [start] = useState(() => (typeof window === 'undefined' ? null : Date.now()))
-  const [joined, setJoined] = useState<Record<string, boolean>>({})
+  const { data: entries, mutate } = useSWR(member ? ['event-entries', member.id] : null, () => myEventEntries())
+  const joined: Record<string, boolean> = Object.fromEntries((entries ?? []).map((id) => [id, true]))
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<EventItem | null>(null)
 
-  function join(id: string, entry: number) {
-    if (joined[id]) return
-    if (entry > 0 && !spend(entry)) return
-    setJoined((j) => ({ ...j, [id]: true }))
+  async function join(id: string, _entry: number) {
+    if (joined[id] || busy || !requireLogin()) return
+    setBusy(id)
+    setError(null)
+    const r = await joinEventAction(id)
+    setBusy(null)
+    if (r.ok) {
+      setBalance(r.balance)
+      await mutate((list) => [...(list ?? []), id], { revalidate: false })
+    } else {
+      setError(r.error)
+      if (r.error.includes('zaten')) await mutate()
+    }
   }
 
   const card = (e: EventItem) => (
@@ -86,7 +100,7 @@ function EventCards() {
             <button
               type="button"
               onClick={() => join(e.id, e.entry)}
-              disabled={joined[e.id]}
+              disabled={joined[e.id] || busy === e.id}
               className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-primary/15 disabled:text-primary"
             >
               {joined[e.id] ? 'Katıldın' : e.entry === 0 ? 'Ücretsiz katıl' : (
@@ -103,6 +117,7 @@ function EventCards() {
 
   return (
     <>
+      {error && <p role="alert" className="text-sm font-semibold text-destructive">{error}</p>}
       <div className="-mx-4 md:hidden">
         <Marquee label="Etkinlikler" itemClassName="w-[64vw] max-w-[17.5rem]" duration={EVENTS.length * 16}>
           {EVENTS.map(card)}
@@ -135,7 +150,7 @@ function EventCards() {
             <button
               type="button"
               onClick={() => join(detail.id, detail.entry)}
-              disabled={joined[detail.id]}
+              disabled={joined[detail.id] || busy === detail.id}
               className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
             >
               {joined[detail.id] ? 'Katıldın' : detail.entry === 0 ? 'Ücretsiz katıl' : `${detail.entry} KC ile katıl`}

@@ -347,7 +347,7 @@ export type Campaign = {
 }
 
 export const CAMPAIGNS: Campaign[] = [
-  { id: 'c1', sponsorId: 'novareach', title: 'Derbi haftası ��ılgınlığı', description: 'Derbi haftası boyunca tüm kuponlara %20 kazanç artırımı ve kayıp iadesi.', ends: '3 gün kaldı', image: '/images/banner-events.png', tag: 'Spor', hoursLeft: 72 },
+  { id: 'c1', sponsorId: 'novareach', title: 'Derbi haftası çılgınlığı', description: 'Derbi haftası boyunca tüm kuponlara %20 kazanç artırımı ve kayıp iadesi.', ends: '3 gün kaldı', image: '/images/banner-events.png', tag: 'Spor', hoursLeft: 72 },
   { id: 'c2', sponsorId: 'apex-club', title: 'VIP Kulübü yaz turnuvası', description: '1.000.000 ₺ ödül havuzlu slot turnuvası. İlk 500 kişiye ödül.', ends: '9 gün kaldı', image: '/images/banner-wheel.png', tag: 'Turnuva', hoursLeft: 216 },
   { id: 'c3', sponsorId: 'luxe-rewards', title: 'Hafta sonu cashback', description: 'Cuma-pazar arası tüm kayıplara %30 nakit iade, çevrimsiz.', ends: 'Hafta sonu', image: '/images/hero-chest.png', tag: 'İade', hoursLeft: 48 },
   { id: 'c4', sponsorId: 'pulse', title: 'Telegram’a özel drop', description: 'Kod önce @AlkankaOfficial kanalına düşer. İlk 200 kişiye 50 freespin.', ends: 'Bugün', image: '/images/banner-telegram.png', tag: 'Telegram', hoursLeft: 8 },
