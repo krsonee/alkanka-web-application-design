@@ -288,7 +288,7 @@ export function PapazPvp({ remote }: { remote: Remote<PapazView> }) {
 
         <div className="absolute inset-x-0 top-[44%] flex -translate-y-1/2 flex-col items-center gap-3 px-2">
           <p
-            className={cn('max-w-full rounded-full px-3 py-1 text-center text-xs font-bold shadow-sm sm:text-sm', myTurn ? 'bg-gold text-gold-foreground' : 'bg-background/85 text-foreground')}
+            className={cn('max-w-[min(100%,16rem)] truncate rounded-full px-3 py-1 text-center text-xs font-bold shadow-sm sm:max-w-full sm:text-sm', myTurn ? 'bg-gold text-gold-foreground' : 'bg-background/85 text-foreground')}
             aria-live="polite"
           >
             {status}

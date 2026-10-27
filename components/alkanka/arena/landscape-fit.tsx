@@ -63,7 +63,14 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     const measure = () => {
       const availW = window.innerWidth - 16
       const availH = window.innerHeight - TOOLBAR_H - 12
-      const split = !!i.querySelector(':scope > [data-ls-main], :scope > * > [data-ls-main], [data-ls-wide]')
+      // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
+      const main = i.querySelector<HTMLElement>('[data-ls-main]')
+      const grid = main?.parentElement ?? null
+      i.querySelectorAll('[data-ls-grid]').forEach((el) => {
+        if (el !== grid) el.removeAttribute('data-ls-grid')
+      })
+      if (grid && !grid.hasAttribute('data-ls-grid')) grid.setAttribute('data-ls-grid', '')
+      const split = !!main || !!i.querySelector('[data-ls-wide]')
       // Split layouts (table left, controls right) want the full width; stacked ones read best narrower.
       const candidates = split
         ? [availW, availW * 1.15, availW * 1.3, availW * 1.5]
@@ -96,6 +103,7 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       cancelAnimationFrame(frame)
       ro.disconnect()
       window.removeEventListener('resize', schedule)
+      i.querySelectorAll('[data-ls-grid]').forEach((el) => el.removeAttribute('data-ls-grid'))
     }
   }, [fullscreen])
 

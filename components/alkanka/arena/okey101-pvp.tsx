@@ -380,7 +380,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         </button>
       </div>
 
-      <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
+      <div data-ls-main="half" className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
         {turnFlash > 0 && (
           <div key={turnFlash} className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" aria-hidden="true">

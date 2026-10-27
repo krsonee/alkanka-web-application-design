@@ -462,7 +462,7 @@ export function Okey({ finish, saveKey }: GameApi) {
         {discardSlot(1, 'right-2 top-2 sm:right-6 sm:top-6')}
         {discardSlot(2, 'left-2 top-2 sm:left-6 sm:top-6')}
 
-        <div className="absolute inset-0 m-auto flex h-fit w-fit items-center gap-5">
+        <div className="absolute inset-0 m-auto flex h-fit w-fit items-center gap-5 phone-ls:gap-2">
           <button
             type="button"
             onClick={drawDeck}
@@ -492,7 +492,7 @@ export function Okey({ finish, saveKey }: GameApi) {
             <TileFace tile={indicator} okey={{ color: -2, num: -2 }} size="sm" label={`Gösterge: ${COLOR_NAMES[indicator.color]} ${indicator.num}`} />
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
           </div>
-          <div className="hidden flex-col items-start gap-0.5 rounded-lg bg-background/60 px-3 py-2 sm:flex">
+          <div className="hidden flex-col items-start gap-0.5 rounded-lg bg-background/60 px-3 py-2 sm:flex phone-ls:hidden">
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Okey taşı</span>
             <span className={cn('font-display text-lg font-bold', TEXT[okey.color])}>
               {COLOR_NAMES[okey.color]} {okey.num}

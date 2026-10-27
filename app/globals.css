@@ -3,6 +3,7 @@
 @import 'shadcn/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant phone-ls (@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px));
 
 @theme inline {
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
@@ -1606,8 +1607,8 @@
 }
 
 /* Phone-landscape fullscreen: table on the left, controls stacked on the right (see LandscapeFit). */
-.ls-split:has(> [data-ls-main]),
-.ls-split > :has(> [data-ls-main]) {
+.ls-split[data-ls-grid],
+.ls-split [data-ls-grid] {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) var(--ls-side, 17rem);
   grid-template-rows: repeat(12, auto) 1fr;
@@ -1616,18 +1617,18 @@
   align-items: start;
   align-content: start;
 }
-.ls-split:has(> [data-ls-main="half"]),
-.ls-split > :has(> [data-ls-main="half"]) {
+.ls-split[data-ls-grid]:has(> [data-ls-main="half"]),
+.ls-split [data-ls-grid]:has(> [data-ls-main="half"]) {
   --ls-side: minmax(0, 1.1fr);
 }
-.ls-split:has(> [data-ls-main]) > *,
-.ls-split > :has(> [data-ls-main]) > * {
+.ls-split[data-ls-grid] > *,
+.ls-split [data-ls-grid] > * {
   grid-column: 2;
   min-width: 0;
   margin-bottom: 0.5rem;
 }
-.ls-split:has(> [data-ls-main]) > [data-ls-main],
-.ls-split > :has(> [data-ls-main]) > [data-ls-main] {
+.ls-split[data-ls-grid] > [data-ls-main],
+.ls-split [data-ls-grid] > [data-ls-main] {
   grid-column: 1;
   grid-row: 1 / -1;
   margin-bottom: 0;

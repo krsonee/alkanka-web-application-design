@@ -35,7 +35,7 @@ function InstallBanner() {
     }
   }, [ready, standalone])
 
-  if (!visible || standalone || pathname === '/uygulama') return null
+  if (!visible || standalone || pathname === '/uygulama' || pathname?.startsWith('/oyunlar/')) return null
 
   const dismiss = () => {
     localStorage.setItem(BANNER_KEY, String(Date.now() + HIDE_FOR_MS))

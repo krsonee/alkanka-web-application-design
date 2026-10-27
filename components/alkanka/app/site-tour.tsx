@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Coins, Compass, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { JakoAvatar, type JakoPose } from '../jako'
@@ -54,6 +55,7 @@ type Box = { top: number; left: number; width: number; height: number }
 
 export function SiteTour({ settings }: { settings: TourSettings }) {
   const { member, loading, setBalance, requireLogin } = usePoints()
+  const onGamePage = (usePathname() ?? '').startsWith('/oyunlar/')
   const [open, setOpen] = useState(false)
   const [index, setIndex] = useState(0)
   const [box, setBox] = useState<Box | null>(null)
@@ -115,7 +117,7 @@ export function SiteTour({ settings }: { settings: TourSettings }) {
   }, [start, settings.enabled])
 
   useEffect(() => {
-    if (!settings.enabled || !settings.autoStart || loading) return
+    if (!settings.enabled || !settings.autoStart || loading || onGamePage) return
     if (localStorage.getItem(TOUR_KEY)) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -134,7 +136,7 @@ export function SiteTour({ settings }: { settings: TourSettings }) {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [settings.enabled, settings.autoStart, settings.autoStartDelay, loading, member, start])
+  }, [settings.enabled, settings.autoStart, settings.autoStartDelay, loading, member, start, onGamePage])
 
   const step = steps[index]
 
