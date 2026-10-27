@@ -411,7 +411,7 @@ export function TableLobby({
               </div>
               {seats === 4 && (
                 <OptionGroup
-                  label="Bot koltuğu"
+                label={seatSeats > 5 ? 'Bot koltuğu (boş yerleri bot doldurur)' : 'Bot koltuğu'}
                   value={String(bots)}
                   options={[
                     { value: '0', label: 'Bot yok' },
@@ -1052,7 +1052,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
               <FitToScreen>
                 <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
               </FitToScreen>
-            ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' ? (
+            ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo' ? (
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
               <LandscapeFit>

@@ -152,7 +152,7 @@ export function StakeGate({
             game === 'tavla' ? 'max-w-[min(100%,76rem,calc((100dvh-9rem)*1.3))]' : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
           )}
         >
-          {game === 'kafa-topu' || game === 'kafa-basketbolu' ? children(api) : <LandscapeFit label={meta.title}>{children(api)}</LandscapeFit>}
+          {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? children(api) : <LandscapeFit label={meta.title}>{children(api)}</LandscapeFit>}
         </div>
       </div>
     )
