@@ -359,7 +359,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         )}
         <p
           className={cn(
-            'min-w-0 flex-1 truncate rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm',
+            'line-clamp-2 min-w-0 flex-1 rounded-2xl px-3 py-1.5 text-xs font-semibold leading-snug text-pretty transition-colors sm:line-clamp-none sm:truncate sm:rounded-full sm:text-sm',
             myTurn ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground',
           )}
           aria-live="polite"
