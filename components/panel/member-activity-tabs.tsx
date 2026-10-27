@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Award, Gift, Sparkles } from 'lucide-react'
+import { Award, Gift, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { giftAction, memberBadgeAction, memberPointsAction } from '@/app/panel/members-actions'
+import { askConfirm } from '@/components/panel/confirm-dialog'
+import { giftAction, memberBadgeAction, memberPointsAction, memberRevokeBadgeAction } from '@/app/panel/members-actions'
 import type { MemberActivity } from '@/lib/members-admin'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
@@ -236,9 +237,23 @@ function RewardsTab({
         {activity.badges.length > 0 && (
           <ul className="flex flex-wrap gap-2">
             {activity.badges.map((b) => (
-              <li key={b.id} className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
+              <li key={b.id} className="flex items-center gap-1 rounded-full bg-primary/15 py-1 pl-3 pr-1 text-xs font-semibold text-primary">
                 {b.name}
                 {b.count > 1 ? ` x${b.count}` : ''}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void askConfirm(`${b.name} rozeti${b.count > 1 ? ' (son verilen)' : ''} ve bonus puanı geri alınsın mı?`).then(
+                      (ok) => ok && run(() => memberRevokeBadgeAction(userId, b.lastAwardId), () => {}),
+                    )
+                  }
+                  aria-label={`${b.name} rozetini geri al`}
+                  title="Geri al"
+                  className="flex size-5 items-center justify-center rounded-full text-primary hover:bg-destructive/15 hover:text-destructive disabled:opacity-40"
+                >
+                  <X className="size-3" aria-hidden="true" />
+                </button>
               </li>
             ))}
           </ul>
