@@ -411,7 +411,7 @@ export function TableLobby({
               </div>
               {seats === 4 && (
                 <OptionGroup
-                  label="Bot koltuğu"
+                label={seatSeats > 5 ? 'Bot koltuğu (boş yerleri bot doldurur)' : 'Bot koltuğu'}
                   value={String(bots)}
                   options={[
                     { value: '0', label: 'Bot yok' },
@@ -724,8 +724,13 @@ export function TableLobby({
           </button>
           {isOkey && teamMode == null && <p className="text-xs text-muted-foreground">Masa açmak için tekli ya da takımlı modu seç.</p>}
           {error && (
-            <p role="alert" className="text-sm text-destructive">
+            <p
+              role="alert"
+              ref={(el) => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}
+              className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive"
+            >
               {error}
+              {mine.length > 0 && <span className="mt-1 block text-xs font-normal">Açık masaların sayfanın en üstünde, oradan dönebilir veya kalkabilirsin.</span>}
             </p>
           )}
         </div>
@@ -1047,7 +1052,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
               <FitToScreen>
                 <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
               </FitToScreen>
-            ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' ? (
+            ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo' ? (
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
               <LandscapeFit>

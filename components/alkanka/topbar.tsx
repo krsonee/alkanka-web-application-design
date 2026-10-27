@@ -286,7 +286,7 @@ export function Topbar({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:gap-3 sm:px-4 lg:px-6">
+      <header className="sticky top-0 z-[45] flex h-16 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:gap-3 sm:px-4 lg:px-6">
         <button
           type="button"
           onClick={() => setOpen(true)}

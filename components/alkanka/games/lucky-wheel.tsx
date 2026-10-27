@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { Clock, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatRemaining } from './mini-status'
-import { ParticleBurst } from './particle-burst'
+import { WinFlash } from './win-flash'
 import { playMini } from '@/app/actions/wallet'
 import { usePoints } from '../points-context'
 
@@ -253,7 +253,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
           )}
         </button>
 
-        {burstKey > 0 && <ParticleBurst key={burstKey} count={24} distance={170} />}
+        {burstKey > 0 && result && result.points > 0 && <WinFlash key={burstKey} label={result.short || result.label} big />}
         </div>
         </div>
       </div>

@@ -880,10 +880,10 @@ function bindKey(keys: React.RefObject<Keys>, k: keyof Keys, onPress?: () => voi
 }
 
 const OVERLAY_BTN =
-  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground active:opacity-100'
+  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/35 bg-background/15 text-foreground shadow-md backdrop-blur-[2px] transition-transform active:scale-90 active:border-primary active:bg-primary/70 active:text-primary-foreground active:opacity-100'
 
 const OVERLAY_PAD =
-  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/45 bg-background/25 text-foreground shadow-md backdrop-blur-[2px] transition-transform'
+  'pointer-events-auto flex touch-none select-none items-center justify-center rounded-full border-2 border-foreground/35 bg-background/15 text-foreground shadow-md backdrop-blur-[2px] transition-transform'
 const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground opacity-100'
 
 const BTN_SIZE: Record<ControlPrefs['size'], string> = {

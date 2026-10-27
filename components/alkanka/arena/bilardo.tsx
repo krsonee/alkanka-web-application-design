@@ -1322,7 +1322,7 @@ function AimStrip({
     <div
       role="slider"
       tabIndex={-1}
-      aria-label={vertical ? 'İnce nişan: yukarı aşağı sürükle' : 'İnce nişan: sağa sola s��rükle'}
+      aria-label={vertical ? 'İnce nişan: yukarı aşağı sürükle' : 'İnce nişan: sağa sola sürükle'}
       aria-orientation={vertical ? 'vertical' : 'horizontal'}
       aria-valuenow={0}
       aria-disabled={disabled}

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
-import { adjustPoints, awardBadge, listSpecialBadges } from '@/lib/kanka-puan'
+import { adjustPoints, awardBadge, awardBadgeId, listSpecialBadges, revokeAward, ROLE_BADGE_IDS } from '@/lib/kanka-puan'
 import {
   adjustWallet,
   banMember,
@@ -104,6 +104,17 @@ export async function memberBadgeAction(userId: string, badgeId: string, note: s
     if (!ok) throw new Error('Rozet verilemedi.')
     await logAudit('Rozet verildi', await memberLabel(String(userId)), `${badgeId}${note ? ` · ${note}` : ''}`)
     return 'Rozet verildi, bonus puanı hesabına eklendi.'
+  })
+}
+
+export async function memberRevokeBadgeAction(userId: string, awardId: number) {
+  return guard(async () => {
+    const badgeId = await awardBadgeId(Number(awardId))
+    if (!badgeId) throw new Error('Rozet kaydı bulunamadı.')
+    if (ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error('Rol rozetlerini geri almak için rol yetkin olmalı.')
+    await revokeAward(Number(awardId))
+    await logAudit('Rozet geri alındı', await memberLabel(String(userId)), badgeId)
+    return 'Rozet ve bonus puanı geri alındı.'
   })
 }
 

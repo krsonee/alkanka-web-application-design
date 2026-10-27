@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Cake, Shield } from 'lucide-react'
 import { buyShieldAction, setBirthdayAction } from '@/app/actions/boosts'
+import { usePoints } from '../points-context'
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
 const THIS_YEAR = new Date().getFullYear()
@@ -12,6 +13,7 @@ const selectCls = 'h-10 min-w-0 flex-1 rounded-lg border border-border bg-backgr
 type Props = { shields: number; shieldPrice: number; birthday: string | null; birthdayCoin: number }
 
 export function MemberPerks({ shields: initialShields, shieldPrice, birthday: initialBirthday, birthdayCoin }: Props) {
+  const { setBalance } = usePoints()
   const [shields, setShields] = useState(initialShields)
   const [birthday, setBirthday] = useState(initialBirthday)
   const [day, setDay] = useState('')
@@ -28,7 +30,8 @@ export function MemberPerks({ shields: initialShields, shieldPrice, birthday: in
       const r = await buyShieldAction()
       if (r.ok) {
         setShields(r.count)
-        setMsg('Seri kalkanı alındı. Bir günü kaçırırsan serin bozulmaz.')
+        setBalance(r.balance)
+        setMsg(`Seri kalkanı alındı, ${shieldPrice} KC düştü. Bir günü kaçırırsan serin bozulmaz.`)
       } else setMsg(r.error)
     })
 
@@ -61,7 +64,7 @@ export function MemberPerks({ shields: initialShields, shieldPrice, birthday: in
               onClick={buy}
               className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50"
             >
-              {shieldPrice} KC ile al
+              {shields >= 3 ? 'Dolu' : `${shieldPrice} KC ile al`}
             </button>
           </div>
         </div>

@@ -634,8 +634,8 @@ const PACK: PackSeed[] = [
   { title: 'Telegram gönderisine yorum yap', detail: 'Kanalda günün gönderisinin altına bağlı hesabınla yorum bırak.', kind: 'tg_comment', period: 'daily', points: 20, category: 'sosyal', pool: true },
   { title: 'Günün bonusuna göz at', detail: 'Bir sponsorun günün bonusuna “Git” butonuyla bak.', kind: 'sponsor_visit', period: 'daily', points: 15, category: 'sponsor', pool: true },
   { title: 'Jako Çemberi’ne katıl', detail: 'Bugünkü Çember seanslarından birine katıl.', kind: 'cember_join', period: 'daily', points: 20, pool: true },
-  { title: 'Arkadaşına masa daveti gönder', detail: 'Bir oyun masasından arkadaşına davet at.', kind: 'table_invite', period: 'daily', points: 15, pool: true },
-  { title: 'Faydalı yorumu işaretle', detail: 'Güven Merkezi’nde bir yorumu “faydalı” olarak işaretle.', kind: 'trust_helpful', period: 'daily', points: 10, pool: true },
+  { title: 'Arkadaşına masa daveti gönder', detail: 'Bir masaya otur, "Oyuncu davet et" butonuyla Telegram kanalına davet gönder.', kind: 'table_invite', period: 'daily', points: 15, pool: true },
+  { title: 'Başka bir yorumu faydalı bul', detail: 'Güven Merkezi’nde başka bir üyenin yorumundaki “Faydalı” butonuna bas. Kendi yorumun sayılmaz.', kind: 'trust_helpful', period: 'daily', points: 10, pool: true },
   { title: 'Günün Kankası sandığı', detail: 'Günün 5 görevini bitir, rastgele Coin sandığını aç.', kind: 'bundle', period: 'daily', points: 60 },
 
   { title: '7 gün seri giriş', detail: 'Bu hafta 7 gün giriş ödülünü al.', kind: 'login_days', period: 'weekly', points: 120, target: 7, pool: true },

@@ -284,7 +284,7 @@ export type MemberActivity = {
   gameSummary: { played: number; wins: number; net: number; byGame: { game: string; played: number; net: number }[] }
   points: { id: number; source: string; points: number; note: string | null; createdAt: string }[]
   market: { id: number; itemName: string; price: number; status: string; createdAt: string }[]
-  badges: { id: string; name: string; tier: string; count: number; lastAt: string }[]
+  badges: { id: string; name: string; tier: string; count: number; lastAt: string; lastAwardId: number }[]
   audit: { id: number; actor: string; action: string; detail: string | null; createdAt: string }[]
 }
 
@@ -310,7 +310,7 @@ export async function memberActivity(userId: string): Promise<MemberActivity> {
     safe(() => rows<{ game: string; played: string; net: string | null }>(sql`SELECT game, count(*) AS played, sum(delta) AS net FROM game_history WHERE user_id = ${userId} GROUP BY game ORDER BY count(*) DESC`), []),
     safe(() => rows(sql`SELECT id, source, points, note, created_at FROM kp_events WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 60`), []),
     safe(() => rows(sql`SELECT id, item_name, price, status, created_at FROM market_requests WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 30`), []),
-    safe(() => rows(sql`SELECT b.id, b.name, b.tier, count(*) AS n, max(a.awarded_at) AS last_at FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id WHERE a.user_id = ${userId} GROUP BY b.id ORDER BY max(a.awarded_at) DESC`), []),
+    safe(() => rows(sql`SELECT b.id, b.name, b.tier, count(*) AS n, max(a.awarded_at) AS last_at, max(a.id) AS last_award_id FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id WHERE a.user_id = ${userId} GROUP BY b.id ORDER BY max(a.awarded_at) DESC`), []),
     rows(sql`SELECT id, actor, action, detail, created_at FROM panel_audit WHERE target LIKE ${`%<${u.email}>%`} ORDER BY created_at DESC LIMIT 60`),
   ])
 
@@ -324,7 +324,7 @@ export async function memberActivity(userId: string): Promise<MemberActivity> {
     },
     points: points.map((p) => ({ id: Number(p.id), source: String(p.source), points: Number(p.points), note: p.note ? String(p.note) : null, createdAt: iso(p.created_at) })),
     market: market.map((m) => ({ id: Number(m.id), itemName: String(m.item_name), price: Number(m.price), status: String(m.status), createdAt: iso(m.created_at) })),
-    badges: badges.map((b) => ({ id: String(b.id), name: String(b.name), tier: String(b.tier), count: Number(b.n), lastAt: iso(b.last_at) })),
+    badges: badges.map((b) => ({ id: String(b.id), name: String(b.name), tier: String(b.tier), count: Number(b.n), lastAt: iso(b.last_at), lastAwardId: Number(b.last_award_id) })),
     audit: audit.map((a) => ({ id: Number(a.id), actor: String(a.actor), action: String(a.action), detail: a.detail ? String(a.detail) : null, createdAt: iso(a.created_at) })),
   }
 }

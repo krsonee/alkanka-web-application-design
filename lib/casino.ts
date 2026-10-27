@@ -384,10 +384,15 @@ export function validBet(b: RouletteBet) {
 }
 
 /** Shared live roulette table timing. Client and server derive the same phase from the clock. */
-export const RL_BET_MS = 22_000
+export const RL_BET_MS = 27_000
 export const RL_SPIN_MS = 9_000
 export const RL_RESULT_MS = 6_000
 export const RL_CYCLE_MS = RL_BET_MS + RL_SPIN_MS + RL_RESULT_MS
+/**
+ * Round ids are stored with bets and seed the result. When the cycle grew from 37s to 42s,
+ * floor(now / cycle) dropped below ids already played; this offset keeps new ids above every old one.
+ */
+const RL_ROUND_OFFSET = 10_000_000
 export type RoulettePhase = 'bet' | 'spin' | 'result'
 
 export const BJ_SEATS = 6
@@ -445,8 +450,9 @@ export function threeCardHit(cards: (Card | undefined)[]) {
 }
 
 export function rouletteClock(now = Date.now()) {
-  const roundId = Math.floor(now / RL_CYCLE_MS)
-  const start = roundId * RL_CYCLE_MS
+  const slot = Math.floor(now / RL_CYCLE_MS)
+  const roundId = slot + RL_ROUND_OFFSET
+  const start = slot * RL_CYCLE_MS
   const offset = now - start
   const phase: RoulettePhase = offset < RL_BET_MS ? 'bet' : offset < RL_BET_MS + RL_SPIN_MS ? 'spin' : 'result'
   const phaseEndsAt = phase === 'bet' ? start + RL_BET_MS : phase === 'spin' ? start + RL_BET_MS + RL_SPIN_MS : start + RL_CYCLE_MS

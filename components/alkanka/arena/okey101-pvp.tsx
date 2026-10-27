@@ -13,13 +13,15 @@ import {
   OPEN_MIN,
   PAIR_MIN,
   partnerOf101,
+  PENALTY,
   rankTotals101,
+  tilePoints,
   type HandResult,
   type Okey101View,
 } from '@/lib/games/okey101'
 import type { Remote } from './remote'
 import { FeltBranding, TileBack, TileFace } from './okey'
-import { okeyFrom, sortHand, type Tile } from './okey-engine'
+import { isJoker, okeyFrom, sortHand, type Tile } from './okey-engine'
 import { layoutGroups, OkeyRack, RACK_COLS, useRack, type SlotMark } from './okey-rack'
 
 type OkeyValue = ReturnType<typeof okeyFrom>
@@ -29,7 +31,7 @@ type MainAction = { label: ReactNode; onClick?: () => void; disabled?: boolean; 
 /** Tiles touching each other on the same rack row form one group; empty slots split groups. */
 function readSegments(slots: (number | null)[], byId: Map<number, Tile>, okey: OkeyValue): Segment[] {
   const out: Segment[] = []
-  for (let row = 0; row < 2; row++) {
+  for (let row = 0; row < slots.length / RACK_COLS; row++) {
     let cur: number[] = []
     const flush = () => {
       if (cur.length >= 2) {
@@ -97,20 +99,34 @@ function OpenMeter({ runValue, pairs }: { runValue: number; pairs: number }) {
   )
 }
 
+/** Sum of the tiles still in hand; once opened it is exactly what gets written if someone else finishes now. */
+function HandTotal({ total, opened }: { total: number; opened: 'seri' | 'cift' | null }) {
+  const penalty = opened === 'cift' ? total * 2 : total
+  return (
+    <div className="flex shrink-0 flex-col items-center justify-center rounded-xl border border-border bg-card/70 px-3 py-1.5">
+      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{opened ? 'Elde kalan' : 'El toplamı'}</span>
+      <span className="text-sm font-black tabular-nums text-foreground">
+        {opened ? penalty : total}
+        {opened && <span className="text-xs font-bold text-muted-foreground"> ceza</span>}
+      </span>
+    </div>
+  )
+}
+
 export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const s = remote.state
   const n = s.seats
   const mySeat = remote.spectator ? -1 : remote.seat
   const okey = useMemo(() => okeyFrom(s.indicator), [s.indicator])
   const hand = useMemo(() => (mySeat >= 0 ? s.hands[mySeat] ?? [] : []), [s.hands, mySeat])
-  const rack = useRack(hand, okey)
+  const rack = useRack(hand, okey, 3)
   const [localError, setLocalError] = useState<string | null>(null)
   const [scoresOpen, setScoresOpen] = useState(false)
 
   const autoLayout = (mode: 'seri' | 'cift') => {
     const groups = mode === 'seri' ? bestPartition(hand, okey).groups : findPairs(hand, okey)
     const used = new Set(groups.flat().map((t) => t.id))
-    rack.setLayout(layoutGroups(groups, sortHand(hand.filter((t) => !used.has(t.id)), okey, 'seri')))
+    rack.setLayout(layoutGroups(groups, sortHand(hand.filter((t) => !used.has(t.id)), okey, 'seri'), 3))
   }
 
   // Each new hand starts with the best possible layout; after that the player's own arrangement is kept turn to turn.
@@ -125,6 +141,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const runs = segments.filter((g) => g.kind !== 'pair')
   const pairs = segments.filter((g) => g.kind === 'pair')
   const runValue = runs.reduce((a, g) => a + g.value, 0)
+  // Mirrors endHand: an okey left in an opened hand is written as 101.
+  const handTotal = hand.reduce((sum, t) => sum + (isJoker(t, okey) ? PENALTY : tilePoints(t, okey)), 0)
 
   const myTurn = remote.myTurn
   const drawPhase = myTurn && s.phase === 'draw'
@@ -136,7 +154,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const pairsAllowed = opened === 'seri' && s.opened.some((o) => o === 'cift')
   const pairMode = opened === 'cift' || (!opened && pairs.length >= PAIR_MIN && runValue < OPEN_MIN)
   const layable = pairMode ? pairs : pairsAllowed ? [...runs, ...pairs] : runs
-  const marks: SlotMark[] = Array(RACK_COLS * 2).fill(null)
+  const marks: SlotMark[] = Array(rack.slots.length).fill(null)
   for (const g of layable) {
     g.slots.forEach((i, k) => (marks[i] = k === 0 ? { label: g.kind === 'pair' ? 'Ç' : String(g.value) } : {}))
   }
@@ -341,7 +359,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         )}
         <p
           className={cn(
-            'min-w-0 flex-1 truncate rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm',
+            'line-clamp-2 min-w-0 flex-1 rounded-2xl px-3 py-1.5 text-xs font-semibold leading-snug text-pretty transition-colors sm:line-clamp-none sm:truncate sm:rounded-full sm:text-sm',
             myTurn ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground',
           )}
           aria-live="polite"
@@ -362,7 +380,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         </button>
       </div>
 
-      <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
+      <div data-ls-main="half" className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
         {turnFlash > 0 && (
           <div key={turnFlash} className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" aria-hidden="true">
@@ -555,7 +573,12 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           </div>
 
           <div className="flex min-h-6 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            {!opened && <OpenMeter runValue={runValue} pairs={pairs.length} />}
+            {mySeat >= 0 && hand.length > 0 && (
+              <div className="flex w-full max-w-md items-stretch justify-center gap-2">
+                {!opened && <OpenMeter runValue={runValue} pairs={pairs.length} />}
+                <HandTotal total={handTotal} opened={opened} />
+              </div>
+            )}
             {layOffable.length > 0 && (
               <button
                 type="button"

@@ -191,7 +191,7 @@ function ChatChip({ kind, id, label }: { kind: 'group' | 'log' | 'staff' | 'spon
 function RepairCard() {
   const a = useAction()
   return (
-    <Card title="Sistem kontrolü" hint="Bir botu silip yeniden eklediysen ya da bir bölüm çalışm��yorsa önce buna bas. Silinmiş botlara bakan ayarları temizler, yanlış yere bakan webhook'ları düzeltir.">
+    <Card title="Sistem kontrolü" hint="Bir botu silip yeniden eklediysen ya da bir bölüm çalışmıyorsa önce buna bas. Silinmiş botlara bakan ayarları temizler, yanlış yere bakan webhook'ları düzeltir.">
       <div className="flex flex-wrap gap-2">
         <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => repairTelegramAction())}>
           {a.pending ? 'Kontrol ediliyor…' : 'Kontrol et ve onar'}

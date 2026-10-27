@@ -274,7 +274,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
           ))}
 
           {/* Deck + cut card */}
-          <div className={cn('absolute z-10 flex flex-col items-center gap-1', n === 4 ? 'bottom-[40%] left-[20%] sm:left-[24%]' : 'left-[10%] top-[46%] -translate-y-1/2 sm:left-[20%]')}>
+          <div className={cn('absolute z-10 flex flex-col items-center gap-1', n === 4 ? 'bottom-[40%] left-[20%] sm:left-[24%]' : 'left-[10%] top-[46%] -translate-y-1/2 sm:left-[20%] phone-ls:left-[26%]')}>
             {s.deckCount > 0 ? (
               <div className="relative h-[4.4rem] w-[3.15rem] sm:h-[6rem] sm:w-[4.3rem]">
                 {[2, 1, 0].map((i) => (
@@ -378,7 +378,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
           )}
 
           {/* Event line + prompt */}
-          <div className="absolute inset-x-2 bottom-[8.6rem] z-20 flex flex-col items-center gap-1.5 sm:bottom-[10.4rem]">
+          <div className="absolute inset-x-2 bottom-[8.6rem] z-20 flex flex-col items-center gap-1.5 sm:bottom-[10.4rem] phone-ls:inset-x-auto phone-ls:bottom-[7rem] phone-ls:right-3 phone-ls:max-w-[28%] phone-ls:items-end">
             <p
               key={lastEvent?.seq ?? 0}
               className={cn('animate-rise max-w-full truncate rounded-full px-3 py-1 text-center text-xs font-bold shadow-sm sm:text-sm', eventTone(lastEvent))}

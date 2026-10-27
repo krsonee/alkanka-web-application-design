@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { JakoAvatar, type JakoPose } from '../jako'
-import { ParticleBurst } from './particle-burst'
+import { WinFlash } from './win-flash'
 import { DetailButton, DetailModal } from '../detail-modal'
 import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
@@ -105,7 +105,7 @@ export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
       <div className="relative flex items-center justify-center gap-5 py-4" key={rollKey}>
         <Die value={dice[0]} rolling={rolling} tone="cyan" />
         <Die value={dice[1]} rolling={rolling} tone="purple" />
-        {isDouble && <ParticleBurst count={16} distance={110} />}
+        {result && result.points > 0 && <WinFlash label={`+${result.points} KC`} big={!!isDouble} />}
       </div>
 
       <div className="flex items-center justify-between gap-3">
