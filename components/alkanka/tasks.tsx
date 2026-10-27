@@ -86,6 +86,7 @@ export function Tasks({
   const [claims, setClaims] = useState<Record<number, PublicTask['claim']>>(() => Object.fromEntries(tasks.filter((task) => task.claim).map((task) => [task.id, task.claim])))
   const [note, setNote] = useState<string | null>(null)
   const [visited, setVisited] = useState<Record<number, boolean>>({})
+  const [bundleOpen, setBundleOpen] = useState<number | null>(null)
   const [pending, start] = useTransition()
   const [tab, setTab] = useState<TaskPeriod>('daily')
   const waiting = tasks.some((task) => statusOf(task, claims[task.id], Boolean(done[task.id])) === 'waiting')
@@ -383,6 +384,31 @@ export function Tasks({
                       <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{task.progress}/{task.target}</span>
                     </span>
                   ) : null}
+                  {task.kind === 'bundle' && bundleOpen === task.id ? (
+                    <ul id={`bundle-${task.id}`} className="flex flex-col gap-1 rounded-lg bg-secondary/60 p-2">
+                      {visibleTasks
+                        .filter((t) => t.kind !== 'bundle')
+                        .map((t) => {
+                          const finished = statusOf(t, claims[t.id], Boolean(done[t.id])) === 'done'
+                          return (
+                            <li key={t.id} className="flex items-center gap-2 text-xs">
+                              <span
+                                className={cn(
+                                  'flex size-4 shrink-0 items-center justify-center rounded-full border',
+                                  finished ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+                                )}
+                                aria-hidden="true"
+                              >
+                                {finished ? <Check className="size-3" /> : null}
+                              </span>
+                              <span className={cn('min-w-0 flex-1 truncate', finished ? 'text-muted-foreground line-through' : 'text-foreground')}>{t.title}</span>
+                              <span className="sr-only">{finished ? 'tamamlandı' : 'bekliyor'}</span>
+                              <span className="shrink-0 font-bold tabular-nums text-primary">+{formatAC(t.points)}</span>
+                            </li>
+                          )
+                        })}
+                    </ul>
+                  ) : null}
                   <div className="mt-auto flex items-center justify-between gap-2 pt-1">
                     <button
                       type="button"
@@ -392,6 +418,17 @@ export function Tasks({
                       <Info className="size-3.5" aria-hidden="true" />
                       Nasıl yapılır?
                     </button>
+                    {task.kind === 'bundle' && state === 'open' ? (
+                      <button
+                        type="button"
+                        onClick={() => setBundleOpen((id) => (id === task.id ? null : task.id))}
+                        aria-expanded={bundleOpen === task.id}
+                        aria-controls={`bundle-${task.id}`}
+                        className="flex h-9 items-center rounded-lg border border-primary/40 px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
+                      >
+                        {bundleOpen === task.id ? 'Gizle' : 'Görevleri göster'}
+                      </button>
+                    ) : null}
                     {chainLocked ? (
                       <span className="flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-4 text-xs font-bold text-muted-foreground">
                         <Lock className="size-3.5" aria-hidden="true" />
