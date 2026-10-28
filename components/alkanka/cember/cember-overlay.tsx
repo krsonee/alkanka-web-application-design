@@ -405,8 +405,8 @@ export function CemberStage({
           <p className="text-center text-xs text-muted-foreground text-pretty">
             {isSv
               ? svOpts.teams === 2
-                ? 'Kaleye düşen elenir · Altın ve Mavi takım kapışır · Kazanan takımın tamamı ödül alır'
-                : `Kaleye düşen elenir · ${svOpts.rule === 'most' ? 'Süre bitince en çok gol atanlar' : 'Ayakta kalan son'} ${Math.max(1, round?.winners.length || 1)} kişi ödül alır`
+                ? `Kayan kaleye düşen elenir · ${svOpts.rule === 'most' ? 'Süre bitince sahada çoğunlukta olan takım kazanır' : 'Rakibin son oyuncusu düşünce takım kazanır'} · Kazanan takımın tamamı ödül alır`
+                : `Kayan kaleye düşen elenir · Sahada kalan son ${Math.max(1, round?.winners.length || 1)} kişi ödül alır`
               : isKd
               ? `Kara deliğe düşen elenir · Süre bitince Final · Son ${Math.max(1, round?.winners.length || 1)} kişi ödül alır`
               : 'Kaleye düşen elenir · Çemberde kalan son kanka kazanır'}

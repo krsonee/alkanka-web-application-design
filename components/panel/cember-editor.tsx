@@ -577,10 +577,10 @@ export function CemberEditor({
 }
 
 const SURVIVAL_PRESETS: { id: string; label: string; desc: string; opts: CemberConfig['survival'] }[] = [
-  { id: 'klasik', label: 'Klasik Hayatta Kalma', desc: 'Tekli, kalesine gol yemeyen son kişiler kazanır.', opts: { teams: 0, rule: 'last', shield: true } },
-  { id: 'golcu', label: 'Gol Avcısı', desc: 'Tekli, süre bitince en çok gol atanlar kazanır.', opts: { teams: 0, rule: 'most', shield: true } },
-  { id: 'takim', label: 'Takım Savaşı', desc: 'Altın vs Mavi, kendi kalene atılan top saymaz.', opts: { teams: 2, rule: 'last', shield: true } },
-  { id: 'kaos', label: 'Kaos Takım', desc: 'Altın vs Mavi, kalkan yok, kendi kaleni de koru.', opts: { teams: 2, rule: 'last', shield: false } },
+  { id: 'klasik', label: 'Herkes Kendi İçin', desc: 'Tekli. Kayan kalelere düşen elenir, belirlenen sayıda son kalan kazanır.', opts: { teams: 0, rule: 'last', shield: true } },
+  { id: 'takim', label: 'Takım Savaşı', desc: 'Altın vs Mavi. Rakip takımın son oyuncusu kaleye düşünce biter. Takım kalkanı açık.', opts: { teams: 2, rule: 'last', shield: true } },
+  { id: 'cogunluk', label: 'Süre Sonu Çoğunluk', desc: 'Altın vs Mavi. Süre bitince sahada daha çok oyuncusu kalan takım kazanır.', opts: { teams: 2, rule: 'most', shield: true } },
+  { id: 'kaos', label: 'Kalkansız Takım', desc: 'Altın vs Mavi, kalkan yok. Takım arkadaşına çarpmak da kaleye savurabilir.', opts: { teams: 2, rule: 'last', shield: false } },
 ]
 
 function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<CemberConfig>) => void }) {
@@ -622,7 +622,7 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
                   ? 'Kaleye düşen elenir, son kalan tek kişi kazanır.'
                   : g === 'karadelik'
                     ? 'Kara deliğe düşen elenir. Süre bitince Final, son 1–10 kişi kazanır.'
-                    : 'Kayan kalelerle sahada hayatta kal. Tekli ya da Altın–Mavi takımlı.'}
+                    : 'Dikey sahada iki yanda kayan kaleler. Kaleye düşen elenir. Tekli ya da Altın–Mavi takımlı.'}
               </span>
             </button>
           ))}
@@ -636,7 +636,7 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
             <span className="text-xs font-semibold text-muted-foreground">Hazır şablonlar</span>
             <div className="grid gap-2 sm:grid-cols-2">
               {SURVIVAL_PRESETS.map((p) => {
-                const active = p.opts.teams === sv.teams && p.opts.shield === sv.shield && (p.opts.teams === 2 || p.opts.rule === sv.rule)
+                const active = p.opts.teams === sv.teams && (sv.teams === 0 || (p.opts.shield === sv.shield && p.opts.rule === sv.rule))
                 return (
                   <button
                     key={p.id}
@@ -675,11 +675,11 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
             </div>
             <span className="text-xs text-muted-foreground">
               {sv.teams === 2
-                ? 'Kazanan takımdaki tüm gerçek üyeler ödül alır. En az bir gerçek üye her zaman kazanan takımda olur.'
-                : 'Aşağıdaki kurala göre kazananlar belirlenir.'}
+                ? 'Kazanan takımdaki tüm gerçek üyeler ödül alır, turda elenmiş olsalar bile. En az bir gerçek üye her zaman kazanan takımda olur.'
+                : 'Kaleye düşen elenir. Sahada kazanan sayısı kadar oyuncu kalınca tur biter.'}
             </span>
           </div>
-          {sv.teams === 0 && (
+          {sv.teams === 2 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-semibold text-muted-foreground">Kazanma kuralı</span>
               <div className="flex flex-wrap gap-2">
@@ -694,16 +694,23 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
                       sv.rule === r ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
                     )}
                   >
-                    {r === 'last' ? 'Son ayakta kalanlar' : 'Süre bitince en çok gol atanlar'}
+                    {r === 'last' ? 'Son kalan takım' : 'Süre sonu çoğunluk'}
                   </button>
                 ))}
               </div>
+              <span className="text-xs text-muted-foreground">
+                {sv.rule === 'last'
+                  ? 'Bir takımın sahadaki ve sıradaki tüm oyuncuları kaleye düşünce diğer takım kazanır.'
+                  : 'Süre bitince sahada daha çok oyuncusu kalan takım kazanır. Eşitlikte ani ölüm: ilk oyuncusunu kaybeden takım kaybeder.'}
+              </span>
             </div>
           )}
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={sv.shield} onChange={(e) => setSv({ shield: e.target.checked })} className="size-4 accent-primary" />
-            <span>Takım arkadaşı kalkanı (takımlıda kendi kalesine atılan top saymaz)</span>
-          </label>
+          {sv.teams === 2 && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={sv.shield} onChange={(e) => setSv({ shield: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
+              <span>Takım kalkanı: aynı takımdan iki oyuncu çarpışınca ikisi de 1 saniye kaleye düşmez, kale ağzından geri seker.</span>
+            </label>
+          )}
         </div>
       )}
 

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { BadgePercent, Gamepad2, PartyPopper } from 'lucide-react'
+import { BadgePercent, PartyPopper } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BonusBoard, CampaignBoard } from './partner-sites'
 import { Events } from './events'
@@ -10,7 +10,6 @@ import { useCatalog } from './catalog-context'
 
 const TABS = [
   { id: 'etkinlikler', label: 'AL KANKA etkinlikleri', icon: PartyPopper },
-  { id: 'arena', label: 'Arena oyunları', icon: Gamepad2 },
   { id: 'bonuslar', label: 'Sponsor site bonusları', icon: BadgePercent },
 ] as const
 
@@ -19,16 +18,19 @@ type TabId = (typeof TABS)[number]['id']
 export function CampaignHub({ arena }: { arena?: ReactNode }) {
   const catalog = useCatalog()
   const counts: Record<TabId, number | null> = {
-    etkinlikler: catalog.events.length,
-    arena: 3,
+    etkinlikler: catalog.events.length + 3,
     bonuslar: catalog.bonuses.length + catalog.campaigns.length,
   }
   const params = useSearchParams()
   const router = useRouter()
   const sekme = params.get('sekme')
-  const initial: TabId = sekme === 'bonuslar' || sekme === 'arena' ? sekme : 'etkinlikler'
-  const [tab, setTab] = useState<TabId>(initial)
+  const wantsArena = sekme === 'arena'
+  const [tab, setTab] = useState<TabId>(sekme === 'bonuslar' ? 'bonuslar' : 'etkinlikler')
   const tabIndex = TABS.findIndex((t) => t.id === tab)
+
+  useEffect(() => {
+    if (wantsArena) document.getElementById('arena-oyunlari')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [wantsArena])
 
   const select = (id: TabId) => {
     setTab(id)
@@ -40,11 +42,11 @@ export function CampaignHub({ arena }: { arena?: ReactNode }) {
       <div
         role="tablist"
         aria-label="Kampanya türü"
-        className="seg-switch grid grid-cols-3 rounded-full border border-border/70 bg-card p-1"
+        className="seg-switch grid grid-cols-2 rounded-full border border-border/70 bg-card p-1"
       >
         <span
           aria-hidden="true"
-          className="seg-thumb pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-full bg-primary"
+          className="seg-thumb pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-full bg-primary"
           style={{ transform: `translateX(${tabIndex * 100}%)` }}
         />
         {TABS.map((t) => {
@@ -79,12 +81,9 @@ export function CampaignHub({ arena }: { arena?: ReactNode }) {
       </div>
 
       {tab === 'etkinlikler' ? (
-        <div id="kampanya-etkinlikler" role="tabpanel">
-          <Events view="biletler" />
-        </div>
-      ) : tab === 'arena' ? (
-        <div id="kampanya-arena" role="tabpanel">
+        <div id="kampanya-etkinlikler" role="tabpanel" className="flex flex-col gap-12">
           {arena}
+          <Events view="biletler" />
         </div>
       ) : (
         <div id="kampanya-bonuslar" role="tabpanel" className="flex flex-col gap-10">
