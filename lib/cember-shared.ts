@@ -147,6 +147,7 @@ export function recommendedCemberEvents(opts: { badgeId?: string | null; itemId?
     powers: DEFAULT_POWERS,
     bots: DEFAULT_BOTS,
     predictKp: 25,
+    leftover: 'pool' as const,
   }
   const cond = (id: string, kind: ConditionKind, target = 1, param: string | null = null): CemberCondition => ({ id, kind, target, window: 'gun', param, label: '' })
   const coin = (id: string, amount: number): CemberPrize => ({ id, type: 'coin', amount, ref: null, label: '' })
