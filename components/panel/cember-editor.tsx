@@ -6,6 +6,8 @@ import { useState, useTransition } from 'react'
 import { Copy, Play, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
 import { CemberDemo } from './cember-demo'
+import { InstantEvent } from './instant-event'
+import type { UpcomingSlot } from '@/lib/cember'
 import {
   CONDITION_KINDS,
   DEFAULT_CEMBER,
@@ -49,6 +51,7 @@ export function CemberEditor({
   badges,
   items,
   recent,
+  upcoming: initialUpcoming,
 }: {
   initial: CemberConfig[]
   tasks: Option[]
@@ -56,8 +59,10 @@ export function CemberEditor({
   badges: Option[]
   items: Option[]
   recent: RecentRound[]
+  upcoming: UpcomingSlot[]
 }) {
   const [events, setEvents] = useState<CemberConfig[]>(initial.length ? initial : [{ ...DEFAULT_CEMBER, id: uid() }])
+  const [upcoming, setUpcoming] = useState(initialUpcoming)
   const [sel, setSel] = useState(0)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
@@ -114,6 +119,7 @@ export function CemberEditor({
     start(async () => {
       const r = await saveCember(events)
       if (r.events) setEvents(r.events)
+      if (r.upcoming) setUpcoming(r.upcoming)
       setMsg({ ok: r.ok, text: r.message })
     })
 
@@ -146,6 +152,18 @@ export function CemberEditor({
   return (
     <div className="flex flex-col gap-6">
       <CemberDemo title={cfg.title} prize={prizeText(cfg.prizes, names)} />
+
+      <InstantEvent
+        key={cfg.id}
+        events={events}
+        selectedId={cfg.id}
+        upcoming={upcoming}
+        onSaved={(r) => {
+          if (r.events) setEvents(r.events)
+          if (r.upcoming) setUpcoming(r.upcoming)
+          if (!r.clash) setMsg({ ok: r.ok, text: r.message })
+        }}
+      />
 
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" aria-label="Etkinlikler">
         <div className="flex flex-wrap items-center justify-between gap-2">

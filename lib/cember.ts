@@ -215,6 +215,69 @@ export async function scheduleTestRound(eventId: string, delaySeconds: number) {
   return at
 }
 
+// --- Instant events --------------------------------------------------------
+
+const GAP_MS = MIN_SLOT_GAP_MIN * 60_000
+const ceilSecond = (t: number) => Math.ceil(t / 1000) * 1000
+
+function slotNear(events: CemberConfig[], at: number) {
+  return slotsAround(events, at).find((s) => Math.abs(s.at - at) < GAP_MS) ?? null
+}
+
+/** Earliest instant at or after `at` that keeps MIN_SLOT_GAP_MIN from every other round. */
+function firstFreeSlot(events: CemberConfig[], at: number) {
+  let t = at
+  for (let i = 0; i < 48; i++) {
+    const hit = slotNear(events, t)
+    if (!hit) return t
+    t = ceilSecond(hit.at + GAP_MS)
+  }
+  throw new Error('Yakında boş bir saat bulunamadı, takvimi kontrol et.')
+}
+
+export type InstantOutcome =
+  | { kind: 'scheduled'; at: string; events: CemberConfig[] }
+  | { kind: 'clash'; clashTitle: string; clashAt: string; suggestAt: string }
+
+export async function scheduleInstantRound(eventId: string, delaySeconds: number, placeAfterClash: boolean): Promise<InstantOutcome> {
+  const events = await getCemberEvents()
+  if (!events.some((e) => e.id === eventId)) throw new Error('Etkinlik bulunamadı, önce kaydet.')
+  const wanted = ceilSecond(Date.now() + delaySeconds * 1000)
+  const hit = slotNear(events, wanted)
+  if (hit && !placeAfterClash) {
+    return { kind: 'clash', clashTitle: hit.ev.title, clashAt: new Date(hit.at).toISOString(), suggestAt: new Date(firstFreeSlot(events, wanted)).toISOString() }
+  }
+  const at = new Date(hit ? firstFreeSlot(events, wanted) : wanted).toISOString()
+  const saved = await saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, enabled: true, extraSlots: [...e.extraSlots, at] } : e)))
+  return { kind: 'scheduled', at, events: saved }
+}
+
+export async function cancelInstantRound(eventId: string, slotIso: string) {
+  const events = await getCemberEvents()
+  const ev = events.find((e) => e.id === eventId)
+  const at = Date.parse(slotIso)
+  if (!ev || !ev.extraSlots.some((s) => Date.parse(s) === at)) throw new Error('Bu anlık tur bulunamadı.')
+  if (at <= Date.now() + 15_000) throw new Error('Tur başlamak üzere ya da başladı, artık iptal edilemez.')
+  const started = await rows(sql`SELECT 1 FROM cember_rounds WHERE slot = ${new Date(at).toISOString()} LIMIT 1`)
+  if (started.length) throw new Error('Bu tur kurulmuş, artık iptal edilemez.')
+  return saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, extraSlots: e.extraSlots.filter((s) => Date.parse(s) !== at) } : e)))
+}
+
+export type UpcomingSlot = { at: string; eventId: string; title: string; game: CemberConfig['game']; instant: boolean }
+
+/** Every round in the next `hours`, soonest first, with instant (off-schedule) rounds flagged. */
+export function upcomingSlots(events: CemberConfig[], hours = 24, now = Date.now()): UpcomingSlot[] {
+  return slotsAround(events, now)
+    .filter((s) => s.at > now - liveWindowMs(s.ev) && s.at <= now + hours * 3600_000)
+    .map((s) => ({
+      at: new Date(s.at).toISOString(),
+      eventId: s.ev.id,
+      title: s.ev.title,
+      game: s.ev.game,
+      instant: s.ev.extraSlots.some((x) => Date.parse(x) === s.at),
+    }))
+}
+
 // --- Slots ---------------------------------------------------------------
 
 function trDayStart(at: number) {
