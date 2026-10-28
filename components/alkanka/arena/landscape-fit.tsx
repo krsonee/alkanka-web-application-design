@@ -8,7 +8,10 @@ const PHONE_LANDSCAPE = '(pointer: coarse) and (orientation: landscape) and (max
 
 /** Width the table is laid out at in fullscreen before being scaled to the screen; keeps text readable. */
 const DESIGN_WIDTH = 640
-const TOOLBAR_H = 36
+/** The fullscreen controls sit in a slim rail on the left: on a sideways phone height is the scarce axis. */
+const RAIL_W = 44
+/** Small tables may grow past their natural size so cards and text stay legible. */
+const MAX_SCALE = 1.4
 
 const PHONE_PORTRAIT = '(pointer: coarse) and (orientation: portrait) and (max-width: 600px)'
 
@@ -67,29 +70,35 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     if (!i) return
     let frame = 0
     const measure = () => {
-      const availW = window.innerWidth - 16
-      const availH = window.innerHeight - TOOLBAR_H - 12
+      const availW = window.innerWidth - RAIL_W - 20
+      const availH = window.innerHeight - 10
       // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
+      // Wrappers marked data-ls-flat are dissolved so their siblings (e.g. a control bar) join the side column.
       const main = i.querySelector<HTMLElement>('[data-ls-main]')
-      const grid = main?.parentElement ?? null
+      let grid = main?.parentElement ?? null
+      while (grid && grid !== i && grid.hasAttribute('data-ls-flat')) grid = grid.parentElement
       i.querySelectorAll('[data-ls-grid]').forEach((el) => {
         if (el !== grid) el.removeAttribute('data-ls-grid')
       })
       if (grid && !grid.hasAttribute('data-ls-grid')) grid.setAttribute('data-ls-grid', '')
       const split = !!main || !!i.querySelector('[data-ls-wide]')
-      // Split layouts (table left, controls right) want the full width; stacked ones read best narrower.
       const candidates = split
-        ? [availW, availW * 1.15, availW * 1.3, availW * 1.5]
-        : [Math.min(availW, DESIGN_WIDTH), availW * 0.85, availW, availW * 1.2]
+        ? [availW * 0.75, availW * 0.85, availW, availW * 1.15, availW * 1.3]
+        : [availW * 0.5, availW * 0.65, Math.min(availW, DESIGN_WIDTH), availW * 0.85, availW]
       const prevWidth = i.style.width
-      let best = { w: candidates[0], h: 0, s: 0 }
+      const prevTransform = i.style.transform
+      i.style.transform = 'none'
+      // Pick the layout width that covers the most screen once fitted, not merely the largest scale.
+      let best = { w: candidates[0], h: 0, s: 0, area: 0 }
       for (const w of candidates) {
         i.style.width = `${w}px`
         const h = i.scrollHeight
         if (!h) continue
-        const s = Math.min(1, availH / h, availW / w)
-        if (s > best.s + 0.01) best = { w, h, s }
+        const s = Math.min(MAX_SCALE, availH / h, availW / w)
+        const area = w * h * s * s
+        if (area > best.area * 1.03) best = { w, h, s, area }
       }
+      i.style.transform = prevTransform
       i.style.width = prevWidth
       if (!best.h) return
       setScale(best.s)
@@ -120,20 +129,23 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       aria-label={fullscreen ? `${label} tam ekran` : undefined}
       className={cn(
         fullscreen &&
-          'fixed inset-0 z-[100] flex h-dvh flex-col items-center gap-1 overflow-hidden bg-background pb-[max(0.25rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-1',
+          'fixed inset-0 z-[100] flex h-dvh flex-row items-stretch gap-2 overflow-hidden bg-background py-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]',
       )}
     >
       {fullscreen ? (
-        <div className="flex w-full shrink-0 items-center justify-between" style={{ height: TOOLBAR_H - 4 }}>
+        <div className="flex shrink-0 flex-col items-center justify-between gap-2 py-1" style={{ width: RAIL_W }}>
           <button
             type="button"
             onClick={() => setMinimized(true)}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground"
+            title="Küçült"
+            className="flex size-10 items-center justify-center rounded-xl border border-border bg-card text-foreground"
           >
-            <Minimize2 className="size-4" aria-hidden="true" />
-            Küçült
+            <Minimize2 className="size-5" aria-hidden="true" />
+            <span className="sr-only">Küçült</span>
           </button>
-          <span className="truncate font-display text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</span>
+          <span className="min-h-0 truncate font-display text-xs font-bold uppercase tracking-widest text-muted-foreground [writing-mode:vertical-rl] rotate-180">
+            {label}
+          </span>
         </div>
       ) : landscape ? (
         <button
@@ -161,8 +173,7 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
         </div>
       ) : null}
       <div
-        className={cn(fullscreen && 'flex min-h-0 flex-1 items-center justify-center')}
-        style={fullscreen && box ? { width: box.w } : undefined}
+        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center')}
       >
         <div style={fullscreen && box ? { width: box.w, height: box.h } : undefined}>
           <div

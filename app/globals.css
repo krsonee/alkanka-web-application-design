@@ -1637,6 +1637,25 @@
   grid-row: 1 / -1;
   margin-bottom: 0;
 }
+.ls-split [data-ls-flat] { display: contents !important; }
+.ls-split [data-ls-grid] > [data-ls-flat] > * {
+  grid-column: 2;
+  min-width: 0;
+  margin-bottom: 0.5rem;
+}
+.ls-split [data-ls-grid] > [data-ls-flat] > [data-ls-main] {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  margin-bottom: 0;
+}
+/* Positioned decorations (brand plaques, glows) must keep the whole grid as their containing block. */
+.ls-split[data-ls-grid] > :is(.absolute, .fixed),
+.ls-split [data-ls-grid] > :is(.absolute, .fixed) {
+  grid-column: auto;
+  grid-row: auto;
+  margin-bottom: 0;
+}
+.ls-split [data-ls-grid] > [data-ls-main="bleed"] { margin-right: 0; }
 .ls-split .ls-board { max-width: 100% !important; }
 
 @keyframes dash-rise {

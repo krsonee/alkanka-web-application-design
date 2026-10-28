@@ -104,7 +104,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         )}
       </header>
 
-      <div className="relative grid grid-cols-3 gap-3">
+      <div data-ls-main className="relative grid grid-cols-3 gap-3">
         {phase === 'opened' && picked !== null && won > 0 && <WinFlash label={`+${won} KC`} big={won === jackpot} />}
         {CHESTS.map((chest, i) => {
           const isPicked = picked === i
