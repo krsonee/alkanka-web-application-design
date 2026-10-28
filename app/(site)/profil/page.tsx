@@ -10,6 +10,8 @@ import { myStreams } from '@/lib/member-streams'
 import { StreamChannelsCard } from '@/components/alkanka/profile/stream-channels'
 import { RANKS } from '@/lib/ranks-shared'
 import { getMember, historySummary } from '@/lib/member'
+import { cemberCareer } from '@/lib/cember'
+import { ArenaCareer } from '@/components/alkanka/profile/arena-career'
 import { SITE_URL } from '@/lib/seo'
 import { getKpConfig, getKpStatus, levelTier, type KpBreakdown } from '@/lib/kanka-puan'
 import { LevelEmblem, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
@@ -303,7 +305,13 @@ async function OverviewTab({
   referrals: Referral[]
   telegram: boolean
 }) {
-  const [code, alerts, hits, refSettings] = await Promise.all([getRefCode(memberId), listAlerts(memberId), alertHits(memberId), getReferralSettings()])
+  const [code, alerts, hits, refSettings, career] = await Promise.all([
+    getRefCode(memberId),
+    listAlerts(memberId),
+    alertHits(memberId),
+    getReferralSettings(),
+    cemberCareer(memberId).catch(() => null),
+  ])
   const { breakdown, level } = kpStatus
   const ready = referrals.filter((r) => !r.rewarded && r.games >= refSettings.minGames).length
   const pending = referrals.filter((r) => !r.rewarded && r.games < refSettings.minGames).length
@@ -333,6 +341,8 @@ async function OverviewTab({
         </section>
         <StatusCard levelIndex={level.index} />
       </div>
+
+      {career && <ArenaCareer career={career} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ReferralCard

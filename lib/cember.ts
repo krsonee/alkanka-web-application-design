@@ -1114,3 +1114,61 @@ export async function recentRounds(limit = 12) {
     instant: !!x.instant,
   }))
 }
+
+export type CemberCareer = {
+  played: number
+  wins: number
+  podiums: number
+  bestStreak: number
+  byGame: Record<CemberGame, { played: number; wins: number }>
+  recent: { slot: string; title: string; game: CemberGame; place: 1 | 2 | 3 | null; won: boolean; players: number }[]
+  predictions: { made: number; hits: number; perfect: number }
+}
+
+/** Lifetime arena stats; only rounds whose result is already public are counted. */
+export async function cemberCareer(userId: string): Promise<CemberCareer> {
+  await ensure()
+  const empty = (): CemberCareer['byGame'] => ({ cember: { played: 0, wins: 0 }, karadelik: { played: 0, wins: 0 }, survival: { played: 0, wins: 0 } })
+  const career: CemberCareer = { played: 0, wins: 0, podiums: 0, bestStreak: 0, byGame: empty(), recent: [], predictions: { made: 0, hits: 0, perfect: 0 } }
+  const me = JSON.stringify([{ id: userId }])
+  const [list, preds] = await Promise.all([
+    rows<RoundRow>(sql`SELECT * FROM cember_rounds WHERE participants @> ${me}::jsonb AND steps > 0 ORDER BY slot ASC LIMIT 2000`).catch(() => [] as RoundRow[]),
+    rows<{ picks: string[]; podium: string[] | null; slot: string; game: CemberGame | null; duration: number | null }>(
+      sql`SELECT p.picks, r.podium, r.slot, r.game, r.duration FROM cember_predictions p JOIN cember_rounds r ON r.slot = p.slot WHERE p.user_id = ${userId} AND r.steps > 0`,
+    ).catch(() => []),
+  ])
+  const now = Date.now()
+  const finished = (slot: string, game: CemberGame | null, duration: number | null, players: number) =>
+    new Date(slot).getTime() + liveWindowMs({ game: asGame(game), duration: Number(duration ?? 0), maxPlayers: players }) < now
+
+  let streak = 0
+  for (const r of list) {
+    if (!finished(r.slot, r.game, r.duration, r.participants.length)) continue
+    const game = asGame(r.game)
+    const idx = r.participants.findIndex((p) => p.id === userId)
+    const won = winnerIndexes(r).includes(idx)
+    const pos = (Array.isArray(r.podium) ? r.podium.map(String) : []).indexOf(userId)
+    const place = pos >= 0 && pos < 3 ? ((pos + 1) as 1 | 2 | 3) : null
+    career.played++
+    career.byGame[game].played++
+    if (won) {
+      career.wins++
+      career.byGame[game].wins++
+      streak++
+      career.bestStreak = Math.max(career.bestStreak, streak)
+    } else streak = 0
+    if (place) career.podiums++
+    career.recent.unshift({ slot: new Date(r.slot).toISOString(), title: r.title, game, place, won, players: r.participants.length })
+  }
+  career.recent = career.recent.slice(0, 8)
+
+  for (const p of preds) {
+    if (!finished(p.slot, p.game, p.duration, 0)) continue
+    const podium = new Set(Array.isArray(p.podium) ? p.podium.map(String) : [])
+    const hits = (Array.isArray(p.picks) ? p.picks : []).filter((id) => podium.has(String(id))).length
+    career.predictions.made++
+    career.predictions.hits += hits
+    if (hits >= PREDICT_PICKS) career.predictions.perfect++
+  }
+  return career
+}
