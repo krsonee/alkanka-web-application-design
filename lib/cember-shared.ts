@@ -24,11 +24,18 @@ export type CemberCondition = { id: string; kind: ConditionKind; target: number;
 export type PrizeType = 'coin' | 'kp' | 'badge' | 'market'
 export type CemberPrize = { id: string; type: PrizeType; amount: number; ref: string | null; label: string }
 
-export type CemberGame = 'cember' | 'karadelik'
+export type CemberGame = 'cember' | 'karadelik' | 'survival'
 export const GAME_META: Record<CemberGame, { label: string; short: string }> = {
   cember: { label: 'Jako Çemberi', short: 'Çember' },
   karadelik: { label: 'Kara Delik Arenası', short: 'Kara Delik' },
+  survival: { label: 'Survival Arena', short: 'Survival' },
 }
+export const asGame = (g: unknown): CemberGame => (typeof g === 'string' && g in GAME_META ? (g as CemberGame) : 'cember')
+
+/** Survival Arena rules: solo or gold-vs-blue, last-standing or majority, teammate goal shield. */
+export type SurvivalRule = 'last' | 'most'
+export type SurvivalOpts = { teams: 0 | 2; rule: SurvivalRule; shield: boolean }
+export const DEFAULT_SURVIVAL: SurvivalOpts = { teams: 0, rule: 'last', shield: true }
 
 /** Fills thin rounds with bots so the arena never looks empty; bots never win or get paid. */
 export type BotConfig = { enabled: boolean; target: number; max: number }
@@ -58,6 +65,8 @@ export type CemberConfig = {
   tiers: WinnerTier[]
   /** each = every winner gets the full prize list; split = KC/KP amounts are shared between winners. */
   prizeSplit: 'each' | 'split'
+  /** Survival Arena only. */
+  survival: SurvivalOpts
   bots: BotConfig
   hours: number[]
   /** Weekdays the event runs (0 = Pazartesi … 6 = Pazar); empty = every day. */
@@ -82,6 +91,7 @@ export const DEFAULT_CEMBER: CemberConfig = {
   winners: 1,
   tiers: DEFAULT_TIERS,
   prizeSplit: 'each',
+  survival: DEFAULT_SURVIVAL,
   bots: DEFAULT_BOTS,
   hours: Array.from({ length: 24 }, (_, h) => h),
   days: [],
@@ -112,6 +122,7 @@ export function recommendedCemberEvents(opts: { badgeId?: string | null; itemId?
     winners: 1,
     tiers: DEFAULT_TIERS,
     prizeSplit: 'each' as const,
+    survival: DEFAULT_SURVIVAL,
     bots: DEFAULT_BOTS,
   }
   const cond = (id: string, kind: ConditionKind, target = 1, param: string | null = null): CemberCondition => ({ id, kind, target, window: 'gun', param, label: '' })
@@ -180,7 +191,8 @@ export function resolveWinners(cfg: Pick<CemberConfig, 'game' | 'winnerMode' | '
 
 /** How long a round stays on screen (intro + play + a little slack); also the "late joiners" window. */
 export function liveSeconds(cfg: Pick<CemberConfig, 'game' | 'duration'>) {
-  return INTRO_SECONDS + (cfg.game === 'karadelik' ? cfg.duration + 75 : 75)
+  // Survival also drains its waiting queue before the clock runs, so crowded rounds need extra room.
+  return INTRO_SECONDS + (cfg.game === 'karadelik' ? cfg.duration + 75 : cfg.game === 'survival' ? cfg.duration + 150 : 75)
 }
 
 export type Participant = { id: string; name: string; image: string | null }
@@ -197,6 +209,10 @@ export type CemberRound = {
   winners: number[]
   steps: number
   prizeText: string
+  /** Survival Arena rules the round was simulated with. */
+  survival: SurvivalOpts | null
+  /** Survival team mode: 0 = Altın, 1 = Mavi. */
+  winningTeam: number
 }
 
 export type CemberStatus = {

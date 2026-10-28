@@ -7,6 +7,7 @@ import { Gift, Trophy, Users, X } from 'lucide-react'
 import { NOTICE_MINUTES, RESULT_SECONDS, INTRO_SECONDS, liveSeconds, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
 import { CemberArena, JAKO_PP, type ArenaEvent } from './cember-arena'
 import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
+import { SurvivalCanvas, type SVEvent } from '../survival/survival-canvas'
 import { CemberConfetti } from './cember-confetti'
 import { cemberFetch as fetchJson, serverNow } from './cember-clock'
 import { cn } from '@/lib/utils'
@@ -108,6 +109,7 @@ export function CemberStage({
   const [winner, setWinner] = useState<number | null>(null)
   const [kdWinners, setKdWinners] = useState<number[]>([])
   const [kdFinal, setKdFinal] = useState(false)
+  const [winningTeam, setWinningTeam] = useState(-1)
   const [now, setNow] = useState(serverNow())
   const doneRef = useRef(onDone)
   doneRef.current = onDone
@@ -197,7 +199,27 @@ export function CemberStage({
     [participants],
   )
 
-  const isKd = round?.game === 'karadelik'
+  const onSvEvent = useCallback(
+    (e: SVEvent) => {
+      if (!participants) return
+      if (e.type === 'out') {
+        setAlive(e.alive)
+        setFeed((f) => [{ key: e.index, name: participants[e.index].name }, ...f].slice(0, 5))
+      } else if (e.type === 'final') {
+        setKdFinal(true)
+      } else if (e.type === 'done') {
+        setKdWinners(e.winners)
+        setWinningTeam(e.winningTeam)
+        setAlive(e.winners.length)
+        setPhase('result')
+      }
+    },
+    [participants],
+  )
+
+  const isSv = round?.game === 'survival'
+  const isKd = round?.game === 'karadelik' || isSv
+  const svOpts = round?.survival ?? { teams: 0 as const, rule: 'last' as const, shield: true }
   const kdPlayers = useMemo(
     () =>
       round?.participants.map((p, i) => ({
@@ -221,7 +243,20 @@ export function CemberStage({
   const arena = useMemo(
     () =>
       round && phase !== 'intro' && phase !== 'empty' ? (
-        round.game === 'karadelik' ? (
+        round.game === 'survival' ? (
+          <SurvivalCanvas
+            players={kdPlayers}
+            duration={round.duration || 90}
+            winners={Math.max(1, round.winners.length)}
+            teams={svOpts.teams}
+            rule={svOpts.rule}
+            shield={svOpts.shield}
+            seed={round.seed}
+            startAt={startAt}
+            now={serverNow}
+            onEvent={onSvEvent}
+          />
+        ) : round.game === 'karadelik' ? (
           <KaraDelikCanvas
             players={kdPlayers}
             duration={round.duration || 90}
@@ -235,7 +270,7 @@ export function CemberStage({
           <CemberArena participants={round.participants} seed={round.seed} startAt={startAt} now={serverNow} meId={meId} onEvent={onEvent} />
         )
       ) : null,
-    [round, phase === 'intro' || phase === 'empty', startAt, meId, onEvent, onKdEvent, kdPlayers], // eslint-disable-line react-hooks/exhaustive-deps
+    [round, phase === 'intro' || phase === 'empty', startAt, meId, onEvent, onKdEvent, onSvEvent, kdPlayers], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   return (
@@ -318,7 +353,17 @@ export function CemberStage({
                 <div className="flex items-center gap-2 rounded-full bg-gold px-4 py-2 font-display font-bold text-gold-foreground shadow-xl">
                   <Trophy className="size-5" aria-hidden />
                   <span className={compact ? 'text-sm' : 'text-lg'}>
-                    {iSurvived ? 'Sağ çıktın kanka!' : `${kdWinnerPs.length} kişi sağ çıktı`}
+                    {isSv && winningTeam >= 0
+                      ? iSurvived
+                        ? 'Takımın kazandı kanka!'
+                        : `${winningTeam === 1 ? 'Mavi' : 'Altın'} Takım kazandı`
+                      : isSv
+                        ? iSurvived
+                          ? 'Ayakta kaldın kanka!'
+                          : `${kdWinnerPs.length} kişi ayakta kaldı`
+                        : iSurvived
+                          ? 'Sağ çıktın kanka!'
+                          : `${kdWinnerPs.length} kişi sağ çıktı`}
                   </span>
                 </div>
                 <button
@@ -358,7 +403,11 @@ export function CemberStage({
 
         {!compact && phase !== 'empty' && (
           <p className="text-center text-xs text-muted-foreground text-pretty">
-            {isKd
+            {isSv
+              ? svOpts.teams === 2
+                ? 'Kaleye düşen elenir · Altın ve Mavi takım kapışır · Kazanan takımın tamamı ödül alır'
+                : `Kaleye düşen elenir · ${svOpts.rule === 'most' ? 'Süre bitince en çok gol atanlar' : 'Ayakta kalan son'} ${Math.max(1, round?.winners.length || 1)} kişi ödül alır`
+              : isKd
               ? `Kara deliğe düşen elenir · Süre bitince Final · Son ${Math.max(1, round?.winners.length || 1)} kişi ödül alır`
               : 'Kaleye düşen elenir · Çemberde kalan son kanka kazanır'}
           </p>

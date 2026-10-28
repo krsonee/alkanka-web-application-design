@@ -559,7 +559,10 @@ export function CemberEditor({
 }
 
 function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<CemberConfig>) => void }) {
-  const isKd = cfg.game === 'karadelik'
+  const isSv = cfg.game === 'survival'
+  const isKd = cfg.game === 'karadelik' || isSv
+  const sv = cfg.survival
+  const setSv = (patch: Partial<CemberConfig['survival']>) => set({ survival: { ...sv, ...patch } })
   const bots = cfg.bots
   const setBots = (patch: Partial<CemberConfig['bots']>) => set({ bots: { ...bots, ...patch } })
   const tiers = [...cfg.tiers].sort((a, b) => a.min - b.min)
@@ -576,7 +579,7 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-semibold">Oyun</span>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           {(Object.keys(GAME_META) as CemberGame[]).map((g) => (
             <button
               key={g}
@@ -590,12 +593,71 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
             >
               <span className="text-sm font-bold">{GAME_META[g].label}</span>
               <span className="text-xs text-muted-foreground">
-                {g === 'cember' ? 'Kaleye düşen elenir, son kalan tek kişi kazanır.' : 'Kara deliğe düşen elenir. Süre bitince Final, son 1–10 kişi kazanır.'}
+                {g === 'cember'
+                  ? 'Kaleye düşen elenir, son kalan tek kişi kazanır.'
+                  : g === 'karadelik'
+                    ? 'Kara deliğe düşen elenir. Süre bitince Final, son 1–10 kişi kazanır.'
+                    : 'Kayan kalelerle sahada hayatta kal. Tekli ya da Altın–Mavi takımlı.'}
               </span>
             </button>
           ))}
         </div>
       </div>
+
+      {isSv && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-3">
+          <span className="text-sm font-semibold">Survival kuralları</span>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-muted-foreground">Mod</span>
+            <div className="flex flex-wrap gap-2">
+              {([0, 2] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={sv.teams === t}
+                  onClick={() => setSv({ teams: t })}
+                  className={cn(
+                    'h-9 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                    sv.teams === t ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
+                  )}
+                >
+                  {t === 0 ? 'Tekli (herkes kendi için)' : 'Takımlı (Altın vs Mavi)'}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {sv.teams === 2
+                ? 'Kazanan takımdaki tüm gerçek üyeler ödül alır. En az bir gerçek üye her zaman kazanan takımda olur.'
+                : 'Aşağıdaki kurala göre kazananlar belirlenir.'}
+            </span>
+          </div>
+          {sv.teams === 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground">Kazanma kuralı</span>
+              <div className="flex flex-wrap gap-2">
+                {(['last', 'most'] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    aria-pressed={sv.rule === r}
+                    onClick={() => setSv({ rule: r })}
+                    className={cn(
+                      'h-9 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                      sv.rule === r ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
+                    )}
+                  >
+                    {r === 'last' ? 'Son ayakta kalanlar' : 'Süre bitince en çok gol atanlar'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={sv.shield} onChange={(e) => setSv({ shield: e.target.checked })} className="size-4 accent-primary" />
+            <span>Takım arkadaşı kalkanı (takımlıda kendi kalesine atılan top saymaz)</span>
+          </label>
+        </div>
+      )}
 
       {isKd && (
         <>

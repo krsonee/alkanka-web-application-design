@@ -4,7 +4,11 @@ import { rows, sql } from '@/lib/db'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
 import { runSim, mulberry, STEP } from '@/lib/cember-sim'
 import { runKD, KD_STEP } from '@/lib/karadelik-sim'
+import { runSV, SV_STEP } from '@/lib/survival-sim'
 import {
+  asGame,
+  DEFAULT_SURVIVAL,
+  type SurvivalOpts,
   CONDITION_KINDS,
   DEFAULT_CEMBER,
   DEFAULT_BOTS,
@@ -54,6 +58,8 @@ function ensure() {
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS duration int NOT NULL DEFAULT 0`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS winner_indexes jsonb NOT NULL DEFAULT '[]'::jsonb`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS prize_split text NOT NULL DEFAULT 'each'`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS survival jsonb`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS winning_team int NOT NULL DEFAULT -1`)
     await rows(sql`CREATE TABLE IF NOT EXISTS cember_notices (slot timestamptz PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
@@ -113,6 +119,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
     winners: clampInt(c.winners, 1, MAX_WINNERS, 1),
     tiers,
     prizeSplit: c.prizeSplit === 'split' ? 'split' : 'each',
+    survival: normalizeSurvival(c.survival),
     bots: {
       enabled: rawBots.enabled !== false,
       target: clampInt(rawBots.target, 2, MAX_BOTS + MAX_PLAYERS, DEFAULT_BOTS.target),
@@ -398,6 +405,17 @@ type RoundRow = {
   duration: number | null
   winner_indexes: number[] | null
   prize_split: 'each' | 'split' | null
+  survival: SurvivalOpts | null
+  winning_team: number | null
+}
+
+function normalizeSurvival(raw: unknown): SurvivalOpts {
+  const s = (raw ?? {}) as Partial<SurvivalOpts>
+  return {
+    teams: Number(s.teams) === 2 ? 2 : 0,
+    rule: s.rule === 'most' ? 'most' : DEFAULT_SURVIVAL.rule,
+    shield: s.shield === undefined ? DEFAULT_SURVIVAL.shield : s.shield !== false,
+  }
 }
 
 const winnerIndexes = (r: RoundRow) =>
@@ -406,7 +424,7 @@ const winnerIndexes = (r: RoundRow) =>
 const toRound = (r: RoundRow): CemberRound => ({
   slot: new Date(r.slot).toISOString(),
   title: r.title,
-  game: r.game === 'karadelik' ? 'karadelik' : 'cember',
+  game: asGame(r.game),
   duration: Number(r.duration ?? 0),
   seed: Number(r.seed),
   participants: r.participants,
@@ -414,6 +432,8 @@ const toRound = (r: RoundRow): CemberRound => ({
   winners: winnerIndexes(r),
   steps: Number(r.steps),
   prizeText: r.prize_text,
+  survival: r.game === 'survival' ? normalizeSurvival(r.survival) : null,
+  winningTeam: Number(r.winning_team ?? -1),
 })
 
 async function loadRound(slot: number) {
@@ -480,10 +500,18 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   const prizePlaces = resolveWinners(cfg, realCount)
   let winnerSlots: number[] = []
   let steps = 0
+  let winningTeam = -1
+  const sv = cfg.survival
+  const teamRound = cfg.game === 'survival' && sv.teams === 2
   if (participants.length && cfg.game === 'karadelik') {
     const kd = runKD(participants.length, seed, cfg.duration, prizePlaces)
     winnerSlots = kd.survivors
     steps = kd.steps
+  } else if (participants.length && cfg.game === 'survival') {
+    const res = runSV({ n: participants.length, seed, duration: cfg.duration, winners: prizePlaces, teams: sv.teams, rule: sv.rule, shield: sv.shield })
+    winnerSlots = res.winners
+    steps = res.steps
+    winningTeam = res.winningTeam
   } else if (participants.length) {
     const sim = runSim(participants.length, seed)
     winnerSlots = sim.winner !== null ? [sim.winner] : []
@@ -492,31 +520,33 @@ async function finalize(slot: number): Promise<RoundRow | null> {
 
   // The physics outcome depends only on the ball count and seed, so the winning slots are fixed before identities are assigned.
   // Seat random real players there and shuffle everyone else across the remaining slots: bots can never win.
+  // Survival team rounds pay the whole winning team, so only one seat is reserved for a real player and teammates stay random.
   if (winnerSlots.length && participants.length > realCount) {
     const real = participants.slice(0, realCount)
     const bots = participants.slice(realCount)
-    const champs = winnerSlots.map(() => real.splice(Math.floor(pick() * real.length), 1)[0]).filter(Boolean)
+    const seatSlots = teamRound ? [winnerSlots[Math.floor(pick() * winnerSlots.length)]] : winnerSlots
+    const champs = seatSlots.map(() => real.splice(Math.floor(pick() * real.length), 1)[0]).filter(Boolean)
     const rest = [...real, ...bots]
     for (let i = rest.length - 1; i > 0; i--) {
       const j = Math.floor(pick() * (i + 1))
       ;[rest[i], rest[j]] = [rest[j], rest[i]]
     }
     const out: Participant[] = []
-    const bySlot = new Map(winnerSlots.map((s, i) => [s, champs[i]]))
+    const bySlot = new Map(seatSlots.map((s, i) => [s, champs[i]]))
     for (let i = 0; i < participants.length; i++) out.push(bySlot.get(i) ?? rest.shift()!)
     participants.splice(0, participants.length, ...out)
   }
-  const winners = winnerSlots.map((i) => participants[i]).filter(Boolean)
+  const winners = winnerSlots.map((i) => participants[i]).filter((p) => p && !isBot(p.id))
   const first = winners[0] ?? null
   const { names } = await labelMaps(cfg)
   const text = prizeText(cfg.prizes, names)
   const winnerName = winners.length ? winners.map((w) => w.name).join(', ').slice(0, 200) : null
 
   const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds
-      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split)
+      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team)
     VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${seed}, ${JSON.stringify(participants)}::jsonb, ${winnerSlots[0] ?? null}, ${first?.id ?? null},
-      ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'karadelik' ? cfg.duration : 0},
-      ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit})
+      ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'cember' ? 0 : cfg.duration},
+      ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit}, ${cfg.game === 'survival' ? JSON.stringify(sv) : null}::jsonb, ${winningTeam})
     ON CONFLICT (slot) DO NOTHING RETURNING *`)
   const row = inserted[0] ?? (await loadRound(slot))
   if (inserted[0] && first) await payRound(inserted[0]).catch((e) => console.error('[cember] pay failed', e))
@@ -543,6 +573,13 @@ async function payRound(row: RoundRow) {
   const kp = c.prizes.filter((p) => p.type === 'kp').reduce((s, p) => s + shareOf(p, split, winners.length), 0)
   const players = Array.isArray(row.participants) ? row.participants.length : 0
   const isKd = row.game === 'karadelik'
+  const isSv = row.game === 'survival'
+  const svTeam = isSv && Number(row.winning_team) >= 0 && row.survival && Number(row.survival.teams) === 2
+  const teamName = Number(row.winning_team) === 1 ? 'Mavi' : 'Altın'
+  const shareText = (fallback: string) =>
+    split && winners.length > 1
+      ? `${coins ? `${coins.toLocaleString('tr-TR')} KC` : ''}${coins && kp ? ' + ' : ''}${kp ? `${kp.toLocaleString('tr-TR')} KP` : ''}` || fallback
+      : fallback
   const { credit, recordHistory } = await import('@/lib/member')
 
   for (const w of winners) {
@@ -570,9 +607,13 @@ async function payRound(row: RoundRow) {
       }
     }
     const headline = `${row.title}: ${name} kazandı!`
-    const body = isKd
-      ? `${players} kanka arasından kara delikten sağ çıkan ${winners.length} kişiden biri sensin. Ödülün: ${split && winners.length > 1 ? `${coins ? `${coins.toLocaleString('tr-TR')} KC` : ''}${coins && kp ? ' + ' : ''}${kp ? `${kp.toLocaleString('tr-TR')} KP` : ''}` || row.prize_text : row.prize_text}.`
-      : `${players} kanka arasından son kalan sen oldun. Ödülün: ${row.prize_text}.`
+    const body = svTeam
+      ? `${players} kankalık Survival Arena'yı ${teamName} Takım kazandı, sen de o takımdaydın. Ödülün: ${shareText(row.prize_text)}.`
+      : isSv
+        ? `${players} kanka arasından sahada ayakta kalan ${winners.length} kişiden biri sensin. Ödülün: ${shareText(row.prize_text)}.`
+        : isKd
+          ? `${players} kanka arasından kara delikten sağ çıkan ${winners.length} kişiden biri sensin. Ödülün: ${shareText(row.prize_text)}.`
+          : `${players} kanka arasından son kalan sen oldun. Ödülün: ${row.prize_text}.`
     await Promise.allSettled([
       import('@/lib/inbox').then(({ sendMessage }) => sendMessage({ userId, targetLabel: name, title: headline, body, url: '/market', sentBy: row.title })),
       import('@/lib/push').then(({ sendToUsers }) => sendToUsers([userId], { title: headline, body, url: '/' })),
@@ -583,9 +624,11 @@ async function payRound(row: RoundRow) {
   await import('@/lib/telegram-chat')
     .then(({ announceToChat }) =>
       announceToChat(
-        isKd
-          ? `${row.title} bitti! ${players} kanka arenaya girdi, kara delikten sağ çıkanlar: ${list}. Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (kazananlar arasında bölüşüldü)' : ' (kişi başı)'}`
-          : `${row.title} bitti! ${players} kanka çembere girdi, son kalan ${list} oldu. Ödül: ${row.prize_text}`,
+        svTeam
+          ? `${row.title} bitti! ${players} kanka sahaya çıktı, ${teamName} Takım kazandı: ${list}. Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (takım arasında bölüşüldü)' : ' (kişi başı)'}`
+          : isKd || isSv
+            ? `${row.title} bitti! ${players} kanka arenaya girdi, ${isSv ? 'ayakta kalanlar' : 'kara delikten sağ çıkanlar'}: ${list}. Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (kazananlar arasında bölüşüldü)' : ' (kişi başı)'}`
+            : `${row.title} bitti! ${players} kanka çembere girdi, son kalan ${list} oldu. Ödül: ${row.prize_text}`,
       ),
     )
     .catch(() => {})
@@ -713,8 +756,8 @@ export async function cemberPauseWindows(): Promise<PauseWindow[]> {
     for (const x of r) {
       if (Number(x.n) <= 0) continue
       const s = new Date(x.slot).getTime()
-      const step = x.game === 'karadelik' ? KD_STEP : STEP
-      windows.push([s, s + (INTRO_SECONDS + Number(x.steps) * step + RESULT_SECONDS + (x.game === 'karadelik' ? 6 : 0)) * 1000 + 3000])
+    const step = x.game === 'karadelik' ? KD_STEP : x.game === 'survival' ? SV_STEP : STEP
+    windows.push([s, s + (INTRO_SECONDS + Number(x.steps) * step + RESULT_SECONDS + (x.game === 'cember' || !x.game ? 0 : 6)) * 1000 + 3000])
     }
     // A slot that started but has not been settled yet (first viewer still loading) is paused until it is.
     for (const s of slotsAround(await getCemberEvents(), now)) {
@@ -744,7 +787,7 @@ export async function recentRounds(limit = 12) {
   return r.map((x) => ({
     slot: new Date(x.slot).toISOString(),
     title: x.title,
-    game: (x.game === 'karadelik' ? 'karadelik' : 'cember') as CemberGame,
+      game: asGame(x.game),
     players: x.participants.length,
     bots: x.participants.filter((p) => isBot(p.id)).length,
     winner: x.winner_name,

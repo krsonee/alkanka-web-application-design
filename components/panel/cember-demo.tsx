@@ -25,6 +25,8 @@ function makeDemoRound(count: number, title: string, prize: string): CemberRound
     winners: [],
     steps: 0,
     prizeText: prize,
+    survival: null,
+    winningTeam: -1,
   }
 }
 
