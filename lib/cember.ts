@@ -24,6 +24,10 @@ import {
   resolveWinners,
   type CemberGame,
   INTRO_SECONDS,
+  PREDICT_GRACE_SECONDS,
+  PREDICT_PERFECT_MULT,
+  PREDICT_PICKS,
+  type CemberPreview,
   RESULT_SECONDS,
   MAX_PLAYERS,
   conditionText,
@@ -65,6 +69,11 @@ function ensure() {
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS winning_team int NOT NULL DEFAULT -1`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS instant boolean NOT NULL DEFAULT false`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS powers jsonb NOT NULL DEFAULT '[]'::jsonb`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS podium jsonb NOT NULL DEFAULT '[]'::jsonb`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS predict_kp int NOT NULL DEFAULT 0`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS cember_predictions (
+      slot timestamptz NOT NULL, user_id text NOT NULL, picks jsonb NOT NULL, paid boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (slot, user_id))`)
     await rows(sql`CREATE TABLE IF NOT EXISTS cember_notices (slot timestamptz PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
@@ -134,6 +143,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
       target: clampInt(rawBots.target, 2, MAX_BOTS + MAX_PLAYERS, DEFAULT_BOTS.target),
       max: clampInt(rawBots.max, 0, MAX_BOTS, DEFAULT_BOTS.max),
     },
+    predictKp: clampInt(c.predictKp, 0, 10_000, DEFAULT_CEMBER.predictKp),
     hours,
     days: [...new Set((Array.isArray(c.days) ? c.days : []).map((d) => clampInt(d, 0, 6, 0)))].sort((a, b) => a - b),
     minute: clampInt(c.minute, 0, 59, 0),
@@ -532,6 +542,8 @@ type RoundRow = {
   winning_team: number | null
   instant: boolean | null
   powers: number[] | null
+  podium: string[] | null
+  predict_kp: number | null
 }
 
 function normalizeSurvival(raw: unknown): SurvivalOpts {
@@ -561,7 +573,20 @@ const toRound = (r: RoundRow): CemberRound => ({
   survival: r.game === 'survival' ? normalizeSurvival(r.survival) : null,
   winningTeam: Number(r.winning_team ?? -1),
   powers: Array.isArray(r.powers) ? r.powers.map((p) => (p === POWER_SHIELD || p === POWER_REVIVE ? p : 0)) : [],
+  podium: Array.isArray(r.podium) ? r.podium.map(String) : [],
+  predictKp: Number(r.predict_kp ?? 0),
 })
+
+/** Seed and results stay server-side until the intro (prediction window) is over. */
+const revealAt = (slot: number) => slot + INTRO_SECONDS * 1000
+const predictClosesAt = (slot: number) => revealAt(slot) - PREDICT_GRACE_SECONDS * 1000
+
+/** Top 3 by slot: winners first, then whoever went out last. Revived players can appear in `order` twice. */
+function podiumSlots(winners: number[], order: number[]) {
+  const out = [...winners]
+  for (let k = order.length - 1; k >= 0 && out.length < PREDICT_PICKS; k--) if (!out.includes(order[k])) out.push(order[k])
+  return out
+}
 
 /**
  * Who enters the round holding a power. Revive wins when someone qualifies for both, since a single power fires per round.
@@ -608,10 +633,7 @@ const isBot = (id: string | null | undefined) => !!id && id.startsWith(BOT_PREFI
 /** Settles a due slot exactly once: snapshot the qualifiers, pick a seed, simulate, store, pay. */
 async function finalize(slot: number): Promise<RoundRow | null> {
   const existing = await loadRound(slot)
-  if (existing) {
-    if (!existing.paid) await payRound(existing).catch(() => {})
-    return existing
-  }
+  if (existing) return existing
   const cfg = eventForSlot(await getCemberEvents(), slot)
   if (!cfg) return null
 
@@ -659,15 +681,16 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   const simulate = (s: number, powers: number[]) => {
     if (cfg.game === 'karadelik') {
       const kd = runKD(n, s, cfg.duration, prizePlaces, powers)
-      return { winners: kd.survivors, steps: kd.steps, team: -1 }
+      return { winners: kd.survivors, steps: kd.steps, team: -1, order: kd.order }
     }
     if (cfg.game === 'survival') {
       const res = runSV({ n, seed: s, duration: cfg.duration, winners: prizePlaces, teams: sv.teams, rule: sv.rule, shield: sv.shield, captain: sv.captain, powers })
-      return { winners: res.winners, steps: res.steps, team: res.winningTeam }
+      return { winners: res.winners, steps: res.steps, team: res.winningTeam, order: res.order as number[] }
     }
     const sim = runSim(n, s)
-    return { winners: sim.winner !== null ? [sim.winner] : [], steps: sim.steps, team: -1 }
+    return { winners: sim.winner !== null ? [sim.winner] : [], steps: sim.steps, team: -1, order: sim.order }
   }
+  let order: number[] = []
 
   // Powers change the physics, so they are pinned to slots before simulating: each power holder gets a random slot up front.
   // The remaining slots are filled after the run, as before: plain real players on the winning slots, everyone else shuffled,
@@ -715,6 +738,7 @@ async function finalize(slot: number): Promise<RoundRow | null> {
       found = attempt(seed, [], held, free) ?? { res: simulate(seed, []), need: [] }
     }
     winnerSlots = found.res.winners
+    order = found.res.order
     steps = found.res.steps
     winningTeam = found.res.team
 
@@ -737,17 +761,89 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   const { names } = await labelMaps(cfg)
   const text = prizeText(cfg.prizes, names)
   const winnerName = winners.length ? winners.map((w) => w.name).join(', ').slice(0, 200) : null
+  // Team rounds have no individual top 3, so predictions stay off there.
+  const predictKp = teamRound ? 0 : cfg.predictKp
+  const podium = podiumSlots(winnerSlots, order)
+    .map((i) => participants[i]?.id)
+    .filter((id): id is string => !!id)
 
   const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds
-      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team, instant, powers)
+      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team, instant, powers, podium, predict_kp)
     VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${roundSeed}, ${JSON.stringify(participants)}::jsonb, ${winnerSlots[0] ?? null}, ${first?.id ?? null},
       ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'cember' ? 0 : cfg.duration},
       ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit}, ${cfg.game === 'survival' ? JSON.stringify(sv) : null}::jsonb, ${winningTeam},
-      ${cfg.extraSlots.some((x) => Date.parse(x) === slot)}, ${JSON.stringify(slotPowers)}::jsonb)
+      ${cfg.extraSlots.some((x) => Date.parse(x) === slot)}, ${JSON.stringify(slotPowers)}::jsonb, ${JSON.stringify(podium)}::jsonb, ${predictKp})
     ON CONFLICT (slot) DO NOTHING RETURNING *`)
-  const row = inserted[0] ?? (await loadRound(slot))
-  if (inserted[0] && first) await payRound(inserted[0]).catch((e) => console.error('[cember] pay failed', e))
-  return row
+  // Payouts and announcements wait for the reveal (see getRound) so nobody learns the result during predictions.
+  return inserted[0] ?? (await loadRound(slot))
+}
+
+const settled = new Set<string>()
+
+/** Pays prizes and predictions once the reveal has passed; both steps are idempotent. */
+async function settleRound(row: RoundRow) {
+  const key = new Date(row.slot).toISOString()
+  if (settled.has(key)) return
+  if (!row.paid) await payRound(row).catch((e) => console.error('[cember] pay failed', e))
+  await settlePredictions(row).catch((e) => console.error('[cember] predictions failed', e))
+  settled.add(key)
+}
+
+async function settlePredictions(row: RoundRow) {
+  const kp = Number(row.predict_kp ?? 0)
+  const claimed = await rows<{ user_id: string; picks: string[] }>(sql`UPDATE cember_predictions SET paid = true
+    WHERE slot = ${row.slot} AND paid = false RETURNING user_id, picks`)
+  if (!claimed.length || kp <= 0) return
+  const podium = new Set(Array.isArray(row.podium) ? row.podium : [])
+  const slotKey = new Date(row.slot).toISOString().slice(0, 16)
+  for (const p of claimed) {
+    const picks = Array.isArray(p.picks) ? p.picks : []
+    const hits = picks.filter((id) => podium.has(id)).length
+    if (!hits) continue
+    const points = hits * kp * (hits === PREDICT_PICKS ? PREDICT_PERFECT_MULT : 1)
+    const marker = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
+      VALUES (${p.user_id}, 'cember_tahmin', ${points}, 0, ${slotKey}, ${`${row.title} tahmini`}) ON CONFLICT DO NOTHING RETURNING id`)
+    if (!marker.length) continue
+    await import('@/lib/inbox')
+      .then(({ sendMessage }) =>
+        sendMessage({
+          userId: p.user_id,
+          targetLabel: 'Kanka',
+          title: `${row.title}: tahminin tuttu!`,
+          body: `İlk 3 tahmininden ${hits}/${PREDICT_PICKS} doğru çıktı. Hesabına ${points.toLocaleString('tr-TR')} KP eklendi.`,
+          url: '/profil',
+          sentBy: row.title,
+        }),
+      )
+      .catch(() => {})
+  }
+}
+
+export type PredictResult = { ok: true; picks: string[] } | { ok: false; error: string }
+
+export async function submitPrediction(userId: string, slotIso: string, rawPicks: unknown): Promise<PredictResult> {
+  const slot = Date.parse(slotIso)
+  const now = Date.now()
+  if (!Number.isFinite(slot) || now < slot || now >= predictClosesAt(slot)) return { ok: false, error: 'Tahmin süresi doldu.' }
+  await ensure()
+  const row = await loadRound(slot)
+  if (!row || Number(row.predict_kp ?? 0) <= 0) return { ok: false, error: 'Bu turda tahmin kapalı.' }
+  const ids = new Set(row.participants.map((p) => p.id))
+  const picks = [...new Set((Array.isArray(rawPicks) ? rawPicks : []).map(String))]
+  if (!picks.length || picks.length > PREDICT_PICKS || picks.some((id) => !ids.has(id) || id === userId)) {
+    return { ok: false, error: `Turdaki oyunculardan en fazla ${PREDICT_PICKS} kişi seç, kendini seçemezsin.` }
+  }
+  const saved = await rows(sql`INSERT INTO cember_predictions (slot, user_id, picks) VALUES (${row.slot}, ${userId}, ${JSON.stringify(picks)}::jsonb)
+    ON CONFLICT (slot, user_id) DO UPDATE SET picks = EXCLUDED.picks, created_at = now() WHERE cember_predictions.paid = false RETURNING user_id`)
+  return saved.length ? { ok: true, picks } : { ok: false, error: 'Tahmin süresi doldu.' }
+}
+
+export async function myPrediction(userId: string, slotIso: string): Promise<string[]> {
+  const slot = Date.parse(slotIso)
+  if (!Number.isFinite(slot)) return []
+  await ensure()
+  const r = await rows<{ picks: string[] }>(sql`SELECT picks FROM cember_predictions WHERE slot = ${new Date(slot).toISOString()} AND user_id = ${userId}`)
+  return Array.isArray(r[0]?.picks) ? r[0].picks : []
 }
 
 /** Per-winner share of a prize: badges and market items go to everyone; KC/KP are divided when the event splits its pool. */
@@ -831,7 +927,9 @@ async function payRound(row: RoundRow) {
     .catch(() => {})
 }
 
-export async function getRound(slotIso: string): Promise<{ state: 'wait' | 'none' | 'ready'; round?: CemberRound }> {
+export async function getRound(
+  slotIso: string,
+): Promise<{ state: 'wait' | 'none' | 'ready' | 'predict'; round?: CemberRound; preview?: CemberPreview }> {
   const slot = Date.parse(slotIso)
   if (!Number.isFinite(slot)) return { state: 'none' }
   if (slot > Date.now() + 1500) return { state: 'wait' }
@@ -843,6 +941,20 @@ export async function getRound(slotIso: string): Promise<{ state: 'wait' | 'none
   }
   const row = await job
   if (!row || !row.participants.length) return { state: 'none' }
+  if (Date.now() < revealAt(slot)) {
+    return {
+      state: 'predict',
+      preview: {
+        slot: new Date(row.slot).toISOString(),
+        title: row.title,
+        game: asGame(row.game),
+        participants: row.participants,
+        predictKp: Number(row.predict_kp ?? 0),
+        closesAt: new Date(predictClosesAt(slot)).toISOString(),
+      },
+    }
+  }
+  await settleRound(row)
   return { state: 'ready', round: toRound(row) }
 }
 
@@ -870,7 +982,8 @@ export async function getCemberStatus(): Promise<CemberStatus> {
         )
       : []
 
-  const last = await rows<RoundRow>(sql`SELECT * FROM cember_rounds WHERE winner_name IS NOT NULL ORDER BY slot DESC LIMIT 1`).catch(() => [])
+  const last = await rows<RoundRow>(sql`SELECT * FROM cember_rounds WHERE winner_name IS NOT NULL
+    AND slot <= ${new Date(now - INTRO_SECONDS * 1000).toISOString()} ORDER BY slot DESC LIMIT 1`).catch(() => [])
   return {
     enabled: !!next,
     now: new Date(now).toISOString(),

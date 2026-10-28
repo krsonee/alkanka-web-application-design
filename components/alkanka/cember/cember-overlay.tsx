@@ -4,7 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { Gift, Trophy, Users, X } from 'lucide-react'
-import { NOTICE_MINUTES, RESULT_SECONDS, INTRO_SECONDS, liveSeconds, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
+import {
+  NOTICE_MINUTES,
+  RESULT_SECONDS,
+  INTRO_SECONDS,
+  liveSeconds,
+  type CemberMe,
+  type CemberPreview,
+  type CemberRound,
+  type CemberStatus,
+} from '@/lib/cember-shared'
+import { PredictOutcome, PredictPanel } from './predict-panel'
 import { CemberArena, JAKO_PP, type ArenaEvent } from './cember-arena'
 import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
 import { type SVEvent } from '../survival/survival-canvas'
@@ -103,8 +113,11 @@ export function CemberStage({
   demo?: CemberRound
 }) {
   const slotMs = Date.parse(slot)
-  const startAt = slotMs + INTRO_SECONDS * 1000
+  // Demo has no prediction step, so it keeps the short intro.
+  const startAt = slotMs + (demo ? 5 : INTRO_SECONDS) * 1000
   const [round, setRound] = useState<CemberRound | null>(demo ?? null)
+  const [preview, setPreview] = useState<CemberPreview | null>(null)
+  const [picks, setPicks] = useState<string[]>([])
   const [phase, setPhase] = useState<Phase>(serverNow() >= startAt ? 'play' : 'intro')
   const [alive, setAlive] = useState(demo?.participants.length ?? 0)
   const [feed, setFeed] = useState<{ key: number; name: string }[]>([])
@@ -135,6 +148,14 @@ export function CemberStage({
           setPhase('empty')
           return
         }
+        if (res?.state === 'predict' && res.preview) {
+          setPreview((p) => p ?? res.preview)
+          setAlive(res.preview.participants.length)
+          // The seed is released at the reveal; waiting for it doesn't count as a failed try.
+          tries--
+          await new Promise((r) => setTimeout(r, Math.min(5000, Math.max(400, startAt - serverNow() + 300))))
+          continue
+        }
         await new Promise((r) => setTimeout(r, 1500))
       }
       if (!stop) setPhase('empty')
@@ -143,7 +164,16 @@ export function CemberStage({
     return () => {
       stop = true
     }
-  }, [slot, isDemo])
+  }, [slot, isDemo, startAt])
+
+  const hasPreview = !!preview
+  useEffect(() => {
+    if (!hasPreview || !meId) return
+    fetch(`/api/cember/tahmin?slot=${encodeURIComponent(slot)}`)
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d?.picks) && setPicks((p) => (p.length ? p : d.picks)))
+      .catch(() => {})
+  }, [hasPreview, meId, slot])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -240,7 +270,8 @@ export function CemberStage({
 
   const title = round?.title ?? status?.title ?? 'Jako Çemberi'
   const prize = round?.prizeText ?? status?.prizeText ?? ''
-  const total = participants?.length ?? 0
+  const total = participants?.length ?? preview?.participants.length ?? 0
+  const canPredict = !isDemo && !!preview && preview.predictKp > 0
   const countdown = Math.max(0, Math.ceil((startAt - now) / 1000))
   const winnerP = winner !== null && participants ? participants[winner] : null
   const iWon = winnerP && meId && winnerP.id === meId
@@ -340,7 +371,22 @@ export function CemberStage({
           )}
         </header>
 
-        {phase === 'intro' && <Intro compact={compact} countdown={countdown} total={total} prize={prize} />}
+        {phase === 'intro' && (
+          <Intro compact={compact} countdown={countdown} total={total} prize={prize} small={canPredict}>
+            {canPredict && preview && (
+              <PredictPanel
+                slot={slot}
+                participants={preview.participants}
+                meId={meId}
+                kp={preview.predictKp}
+                closesAt={Date.parse(preview.closesAt)}
+                saved={picks}
+                onSaved={setPicks}
+                compact={compact}
+              />
+            )}
+          </Intro>
+        )}
 
         {phase === 'empty' && (
           <div className="flex flex-col items-center gap-4 py-10 text-center">
@@ -422,6 +468,8 @@ export function CemberStage({
           </p>
         )}
 
+        {phase === 'result' && round && <PredictOutcome picks={picks} podium={round.podium ?? []} kp={round.predictKp ?? 0} />}
+
         {phase === 'play' && !round && <p className="py-16 text-sm text-muted-foreground">��ember hazırlanıyor...</p>}
 
         {!compact && phase !== 'empty' && (
@@ -493,13 +541,31 @@ function MascotBadge({ src, alt = '', className }: { src: string; alt?: string; 
   )
 }
 
-function Intro({ compact, countdown, total, prize }: { compact: boolean; countdown: number; total: number; prize: string }) {
+function Intro({
+  compact,
+  countdown,
+  total,
+  prize,
+  small,
+  children,
+}: {
+  compact: boolean
+  countdown: number
+  total: number
+  prize: string
+  /** Shrinks the mascot to make room for the prediction box. */
+  small?: boolean
+  children?: React.ReactNode
+}) {
   return (
-    <div className={cn('flex flex-col items-center gap-4 text-center', compact ? 'py-3' : 'py-8')}>
+    <div className={cn('flex w-full flex-col items-center gap-4 text-center', compact || small ? 'py-2' : 'py-8')}>
       <MascotBadge
         src="/images/mascots/jako-duyuru.png"
         alt="Jako maskotu çemberi duyuruyor"
-        className={cn('animate-[cember-jako_1.4s_ease-in-out_infinite]', compact ? 'size-24' : 'size-40 sm:size-48')}
+        className={cn(
+          'animate-[cember-jako_1.4s_ease-in-out_infinite]',
+          small ? (compact ? 'size-14' : 'size-20') : compact ? 'size-24' : 'size-40 sm:size-48',
+        )}
       />
       <div className="flex flex-col gap-1">
         <p className={cn('font-display font-bold text-balance', compact ? 'text-base' : 'text-2xl sm:text-3xl')}>Çember birazdan dönüyor!</p>
@@ -518,6 +584,7 @@ function Intro({ compact, countdown, total, prize }: { compact: boolean; countdo
       >
         {countdown > 0 ? countdown : 'Başla'}
       </div>
+      {children}
     </div>
   )
 }

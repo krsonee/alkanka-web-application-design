@@ -30,6 +30,8 @@ import {
   KD_DURATIONS,
   MAX_BOTS,
   MAX_WINNERS,
+  PREDICT_PERFECT_MULT,
+  PREDICT_PICKS,
   type CemberGame,
   recommendedCemberEvents,
   slotMinutes,
@@ -762,6 +764,21 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
           </label>
         </div>
       )}
+
+      <label className="flex flex-col gap-1 rounded-lg border border-border bg-background p-3 text-sm">
+        <span className="font-semibold">Tahmin oyunu (doğru tahmin başına KP)</span>
+        <input
+          type="number"
+          min={0}
+          max={10000}
+          value={cfg.predictKp}
+          onChange={(e) => set({ predictKp: Math.max(0, Math.min(10000, Number(e.target.value) || 0)) })}
+          className="h-9 rounded-md border border-input bg-background px-2"
+        />
+        <span className="text-xs leading-relaxed text-muted-foreground">
+          {`Tur başlamadan önceki sayaçta izleyiciler ilk ${PREDICT_PICKS}'ü tahmin eder. Her doğru isim bu kadar KP, hepsi tutarsa ${PREDICT_PERFECT_MULT} kat. 0 yazınca kapanır. Takım turlarında çalışmaz.`}
+        </span>
+      </label>
 
       {isKd && (
         <>

@@ -81,6 +81,8 @@ export type CemberConfig = {
   /** Survival Arena + Kara Delik only. */
   powers: PowerOpts
   bots: BotConfig
+  /** KP per correct "who makes the top 3" pick made during the intro; 0 turns predictions off. */
+  predictKp: number
   hours: number[]
   /** Weekdays the event runs (0 = Pazartesi … 6 = Pazar); empty = every day. */
   days: number[]
@@ -107,6 +109,7 @@ export const DEFAULT_CEMBER: CemberConfig = {
   survival: DEFAULT_SURVIVAL,
   powers: DEFAULT_POWERS,
   bots: DEFAULT_BOTS,
+  predictKp: 25,
   hours: Array.from({ length: 24 }, (_, h) => h),
   days: [],
   minute: 0,
@@ -139,6 +142,7 @@ export function recommendedCemberEvents(opts: { badgeId?: string | null; itemId?
     survival: DEFAULT_SURVIVAL,
     powers: DEFAULT_POWERS,
     bots: DEFAULT_BOTS,
+    predictKp: 25,
   }
   const cond = (id: string, kind: ConditionKind, target = 1, param: string | null = null): CemberCondition => ({ id, kind, target, window: 'gun', param, label: '' })
   const coin = (id: string, amount: number): CemberPrize => ({ id, type: 'coin', amount, ref: null, label: '' })
@@ -188,8 +192,16 @@ export function slotMinutes(cfg: Pick<CemberConfig, 'minute' | 'every'>): number
   for (let m = cfg.minute % cfg.every; m < 60; m += cfg.every) out.push(m)
   return out
 }
-/** Mascot intro + countdown before the ring starts spinning. */
-export const INTRO_SECONDS = 5
+/**
+ * Intro + countdown before the round plays. Doubles as the prediction window: the server withholds the seed and
+ * results until it ends, so nobody can replay the round locally and "predict" a known outcome.
+ */
+export const INTRO_SECONDS = 20
+/** Predictions close this long before the reveal so a late request can't race the seed going out. */
+export const PREDICT_GRACE_SECONDS = 2
+export const PREDICT_PICKS = 3
+/** All three picks landing in the top 3 doubles the payout. */
+export const PREDICT_PERFECT_MULT = 2
 /** Winner celebration before the window closes itself (viewers can close it sooner). */
 export const RESULT_SECONDS = 6
 
@@ -231,6 +243,20 @@ export type CemberRound = {
   winningTeam: number
   /** Power per participant slot (POWER_*), fed to the engine so every viewer replays the same round. */
   powers: number[]
+  /** Participant ids that finished in the top 3 (winners first, then the last ones out). */
+  podium: string[]
+  /** KP per correct prediction this round (0 = predictions were off). */
+  predictKp: number
+}
+
+/** What viewers get during the intro: who is playing, but no seed or result yet. */
+export type CemberPreview = {
+  slot: string
+  title: string
+  game: CemberGame
+  participants: Participant[]
+  predictKp: number
+  closesAt: string
 }
 
 export type CemberStatus = {
