@@ -583,6 +583,7 @@ type RoundRow = {
   steps: number
   prize_text: string
   paid: boolean
+  event_id?: string | null
   game: CemberGame | null
   duration: number | null
   winner_indexes: number[] | null
