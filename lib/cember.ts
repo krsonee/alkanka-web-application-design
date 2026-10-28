@@ -75,6 +75,7 @@ function ensure() {
       slot timestamptz NOT NULL, user_id text NOT NULL, picks jsonb NOT NULL, paid boolean NOT NULL DEFAULT false,
       created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (slot, user_id))`)
     await rows(sql`CREATE TABLE IF NOT EXISTS cember_notices (slot timestamptz PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS cember_carry (event_id text PRIMARY KEY, coins int NOT NULL DEFAULT 0, kp int NOT NULL DEFAULT 0)`)
   })().catch((error) => {
     ready = null
     throw error
@@ -133,6 +134,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
     winners: clampInt(c.winners, 1, MAX_WINNERS, 1),
     tiers,
     prizeSplit: c.prizeSplit === 'split' ? 'split' : 'each',
+    leftover: c.leftover === 'carry' ? 'carry' : 'pool',
     survival: normalizeSurvival(c.survival),
     powers: {
       shield: (c.powers ?? DEFAULT_POWERS).shield !== false,
@@ -142,6 +144,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
       enabled: rawBots.enabled !== false,
       target: clampInt(rawBots.target, 2, MAX_BOTS + MAX_PLAYERS, DEFAULT_BOTS.target),
       max: clampInt(rawBots.max, 0, MAX_BOTS, DEFAULT_BOTS.max),
+      tag: rawBots.tag === true,
     },
     predictKp: clampInt(c.predictKp, 0, 10_000, DEFAULT_CEMBER.predictKp),
     hours,
@@ -297,7 +300,26 @@ export async function cancelInstantRound(eventId: string, slotIso: string) {
 
 const INSTANT_KEY = 'cember_instant'
 
-export type InstantBudget = { dailyKc: number; usedKc: number }
+/** chatAlert = messages per hour in the Telegram groups that make the panel suggest an instant round (0 = off). */
+export type InstantBudget = { dailyKc: number; usedKc: number; chatAlert: number; chatLastHour: number }
+
+type InstantSettings = { dailyKc?: number; chatAlert?: number }
+
+async function readInstantSettings(): Promise<InstantSettings> {
+  const r = await rows<{ value: InstantSettings }>(sql`SELECT value FROM kp_settings WHERE key = ${INSTANT_KEY}`).catch(() => [])
+  return r[0]?.value ?? {}
+}
+
+async function writeInstantSettings(patch: InstantSettings) {
+  const value = { ...(await readInstantSettings()), ...patch }
+  await rows(sql`INSERT INTO kp_settings (key, value) VALUES (${INSTANT_KEY}, ${JSON.stringify(value)}::jsonb)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+}
+
+async function chatMessagesLastHour() {
+  const r = await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tg_guard_msgs WHERE created_at > now() - interval '1 hour'`).catch(() => [])
+  return Number(r[0]?.n ?? 0)
+}
 
 /** Upper bound on winners: team Survival pays the whole winning side, so it is capped at MAX_WINNERS. */
 function maxWinnersOf(ev: CemberConfig) {
@@ -321,15 +343,22 @@ function instantKcOnDay(events: CemberConfig[], at: number) {
 }
 
 export async function getInstantBudget(events?: CemberConfig[]): Promise<InstantBudget> {
-  const r = await rows<{ value: { dailyKc?: number } }>(sql`SELECT value FROM kp_settings WHERE key = ${INSTANT_KEY}`).catch(() => [])
-  const dailyKc = clampInt(r[0]?.value?.dailyKc, 0, 100_000_000, 0)
-  return { dailyKc, usedKc: instantKcOnDay(events ?? (await getCemberEvents()), Date.now()) }
+  const [s, chatLastHour] = await Promise.all([readInstantSettings(), chatMessagesLastHour()])
+  return {
+    dailyKc: clampInt(s.dailyKc, 0, 100_000_000, 0),
+    usedKc: instantKcOnDay(events ?? (await getCemberEvents()), Date.now()),
+    chatAlert: clampInt(s.chatAlert, 0, 1_000_000, 0),
+    chatLastHour,
+  }
 }
 
 export async function saveInstantBudget(dailyKc: number) {
-  const value = clampInt(dailyKc, 0, 100_000_000, 0)
-  await rows(sql`INSERT INTO kp_settings (key, value) VALUES (${INSTANT_KEY}, ${JSON.stringify({ dailyKc: value })}::jsonb)
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+  await writeInstantSettings({ dailyKc: clampInt(dailyKc, 0, 100_000_000, 0) })
+  return getInstantBudget()
+}
+
+export async function saveChatAlert(perHour: number) {
+  await writeInstantSettings({ chatAlert: clampInt(perHour, 0, 1_000_000, 0) })
   return getInstantBudget()
 }
 
@@ -667,7 +696,8 @@ async function finalize(slot: number): Promise<RoundRow | null> {
     }
     for (let i = 0; i < wantBots; i++) {
       const base = names[i % names.length]
-      participants.push({ id: `${BOT_PREFIX}${i}`, name: i < names.length ? base : `${base}${i}`, image: null })
+      const name = i < names.length ? base : `${base}${i}`
+      participants.push({ id: `${BOT_PREFIX}${i}`, name: cfg.bots.tag ? `${name}${BOT_TAG}` : name, image: null })
     }
   }
 
@@ -770,12 +800,45 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds
       (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team, instant, powers, podium, predict_kp)
     VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${roundSeed}, ${JSON.stringify(participants)}::jsonb, ${winnerSlots[0] ?? null}, ${first?.id ?? null},
-      ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'cember' ? 0 : cfg.duration},
+      ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first && cfg.leftover !== 'carry'}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'cember' ? 0 : cfg.duration},
       ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit}, ${cfg.game === 'survival' ? JSON.stringify(sv) : null}::jsonb, ${winningTeam},
       ${cfg.extraSlots.some((x) => Date.parse(x) === slot)}, ${JSON.stringify(slotPowers)}::jsonb, ${JSON.stringify(podium)}::jsonb, ${predictKp})
     ON CONFLICT (slot) DO NOTHING RETURNING *`)
   // Payouts and announcements wait for the reveal (see getRound) so nobody learns the result during predictions.
+  if (inserted[0] && first && cfg.leftover === 'carry') return applyCarry(inserted[0], names)
   return inserted[0] ?? (await loadRound(slot))
+}
+
+const CARRY_PREFIX = 'carry-'
+
+/** Moves this event's carried-over KC/KP onto a freshly stored round that has a real winner. */
+async function applyCarry(row: RoundRow, names: Record<string, string>): Promise<RoundRow> {
+  if (!row.event_id) return row
+  const c = await rows<{ coins: number; kp: number }>(sql`DELETE FROM cember_carry WHERE event_id = ${row.event_id} RETURNING coins, kp`)
+  const coins = Number(c[0]?.coins ?? 0)
+  const kp = Number(c[0]?.kp ?? 0)
+  if (!coins && !kp) return row
+  const prizes: CemberPrize[] = [...(Array.isArray(row.prizes) ? row.prizes : [])]
+  if (coins > 0) prizes.push({ id: `${CARRY_PREFIX}kc`, type: 'coin', amount: coins, ref: null, label: 'Devreden KC' })
+  if (kp > 0) prizes.push({ id: `${CARRY_PREFIX}kp`, type: 'kp', amount: kp, ref: null, label: 'Devreden KP' })
+  const updated = await rows<RoundRow>(sql`UPDATE cember_rounds SET prizes = ${JSON.stringify(prizes)}::jsonb, prize_text = ${prizeText(prizes, names)}
+    WHERE slot = ${row.slot} RETURNING *`)
+  return updated[0] ?? row
+}
+
+/** A round nobody real won: park its KC/KP for the event's next round, capped at 5 rounds' worth. */
+async function carryOver(row: RoundRow, prizes: CemberPrize[]) {
+  if (!row.event_id) return
+  const ev = (await getCemberEvents()).find((e) => e.id === row.event_id)
+  if (ev?.leftover !== 'carry') return
+  const sum = (type: PrizeType, list: CemberPrize[]) => list.filter((p) => p.type === type).reduce((s, p) => s + p.amount, 0)
+  const coins = sum('coin', prizes)
+  const kp = sum('kp', prizes)
+  if (!coins && !kp) return
+  const capKc = sum('coin', ev.prizes) * 5
+  const capKp = sum('kp', ev.prizes) * 5
+  await rows(sql`INSERT INTO cember_carry (event_id, coins, kp) VALUES (${row.event_id}, ${Math.min(coins, capKc)}, ${Math.min(kp, capKp)})
+    ON CONFLICT (event_id) DO UPDATE SET coins = LEAST(${capKc}, cember_carry.coins + EXCLUDED.coins), kp = LEAST(${capKp}, cember_carry.kp + EXCLUDED.kp)`)
 }
 
 const settled = new Set<string>()
@@ -859,11 +922,13 @@ async function payRound(row: RoundRow) {
   const winners = winnerIndexes(row)
     .map((i) => row.participants[i])
     .filter((p): p is Participant => !!p && !isBot(p.id))
-  if (!winners.length) return
+  if (!winners.length) return carryOver(row, c.prizes)
   const split = row.prize_split === 'split'
   const slotKey = new Date(row.slot).toISOString().slice(0, 16)
-  const coins = c.prizes.filter((p) => p.type === 'coin').reduce((s, p) => s + shareOf(p, split, winners.length), 0)
-  const kp = c.prizes.filter((p) => p.type === 'kp').reduce((s, p) => s + shareOf(p, split, winners.length), 0)
+  // Carried-over amounts are one shared pot, so they are always split between winners.
+  const share = (p: CemberPrize) => shareOf(p, split || p.id.startsWith(CARRY_PREFIX), winners.length)
+  const coins = c.prizes.filter((p) => p.type === 'coin').reduce((s, p) => s + share(p), 0)
+  const kp = c.prizes.filter((p) => p.type === 'kp').reduce((s, p) => s + share(p), 0)
   const players = Array.isArray(row.participants) ? row.participants.length : 0
   const isKd = row.game === 'karadelik'
   const isSv = row.game === 'survival'

@@ -49,8 +49,9 @@ export const POWER_REVIVE = 2
 export const POWER_LABEL: Record<1 | 2, string> = { 1: 'Görev kalkanı', 2: 'Telegram dönüşü' }
 
 /** Fills thin rounds with bots so the arena never looks empty; bots never win or get paid. */
-export type BotConfig = { enabled: boolean; target: number; max: number }
-export const DEFAULT_BOTS: BotConfig = { enabled: true, target: 50, max: 50 }
+export type BotConfig = { enabled: boolean; target: number; max: number; /** Show a small "bot" mark next to bot names. */ tag: boolean }
+export const DEFAULT_BOTS: BotConfig = { enabled: true, target: 50, max: 50, tag: false }
+export const BOT_TAG = ' · bot'
 export const MAX_BOTS = 120
 
 /** "From `min` real players up, `winners` people win." Highest matching row applies. */
@@ -76,6 +77,8 @@ export type CemberConfig = {
   tiers: WinnerTier[]
   /** each = every winner gets the full prize list; split = KC/KP amounts are shared between winners. */
   prizeSplit: 'each' | 'split'
+  /** pool = an unpaid prize stays in the pool; carry = its KC/KP is added to this event's next round. */
+  leftover: 'pool' | 'carry'
   /** Survival Arena only. */
   survival: SurvivalOpts
   /** Survival Arena + Kara Delik only. */
@@ -106,6 +109,7 @@ export const DEFAULT_CEMBER: CemberConfig = {
   winners: 1,
   tiers: DEFAULT_TIERS,
   prizeSplit: 'each',
+  leftover: 'pool',
   survival: DEFAULT_SURVIVAL,
   powers: DEFAULT_POWERS,
   bots: DEFAULT_BOTS,

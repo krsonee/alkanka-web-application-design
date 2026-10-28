@@ -5,6 +5,7 @@ import {
   cancelInstantRound,
   getInstantBudget,
   saveCemberEvents,
+  saveChatAlert,
   saveInstantBudget,
   scheduleInstantRound,
   scheduleTestRound,
@@ -34,6 +35,20 @@ export async function setInstantBudget(dailyKc: number): Promise<CemberActionRes
     }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Bütçe kaydedilemedi.' }
+  }
+}
+
+export async function setChatAlert(perHour: number): Promise<CemberActionResult> {
+  if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
+  try {
+    const budget = await saveChatAlert(perHour)
+    return {
+      ok: true,
+      message: budget.chatAlert ? `Sohbet saatte ${budget.chatAlert.toLocaleString('tr-TR')} mesajı geçince anlık etkinlik önerilecek.` : 'Sohbet aktivite bildirimi kapatıldı.',
+      budget,
+    }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Eşik kaydedilemedi.' }
   }
 }
 

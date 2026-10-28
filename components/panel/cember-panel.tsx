@@ -11,7 +11,7 @@ export async function CemberPanel() {
     rows<{ id: string; name: string }>(sql`SELECT id, name FROM kp_badges WHERE active ORDER BY sort, name`).catch(() => []),
     rows<{ id: string; name: string }>(sql`SELECT id, name FROM market_items ORDER BY sort, created_at`).catch(() => []),
   ])
-  const budget = await getInstantBudget(config).catch(() => ({ dailyKc: 0, usedKc: 0 }))
+  const budget = await getInstantBudget(config).catch(() => ({ dailyKc: 0, usedKc: 0, chatAlert: 0, chatLastHour: 0 }))
   return (
     <CemberEditor
       initial={config}

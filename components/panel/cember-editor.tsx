@@ -802,6 +802,14 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
               </select>
               <span className="text-xs text-muted-foreground">Rozet ve market ödülü her kazanana ayrı verilir</span>
             </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-semibold">Kazanılmayan ödül</span>
+              <select className={input} value={cfg.leftover} onChange={(e) => set({ leftover: e.target.value as CemberConfig['leftover'] })}>
+                <option value="pool">Havuzda kalır</option>
+                <option value="carry">KC/KP bir sonraki tura devreder</option>
+              </select>
+              <span className="text-xs text-muted-foreground">Bot kazanırsa geçerli. Devreden en fazla 5 turluk ödüle kadar birikir, kazananlar arasında bölünür.</span>
+            </label>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -929,6 +937,10 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
                 onChange={(e) => setBots({ max: Math.min(MAX_BOTS, Math.max(0, Number(e.target.value) || 0)) })}
               />
               <span className="text-xs text-muted-foreground">Örnek: 8 gerçek kişi, hedef 64 → {Math.max(0, Math.min(bots.max, bots.target - 8))} bot eklenir</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={bots.tag} onChange={(e) => setBots({ tag: e.target.checked })} className="size-4 accent-primary" />
+              <span>Bot adlarının yanında küçük &quot;bot&quot; işareti göster (ör. Mert · bot)</span>
             </label>
           </div>
         )}

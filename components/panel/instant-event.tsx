@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { AlertTriangle, CalendarClock, Coins, X, Zap } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Coins, MessagesSquare, X, Zap } from 'lucide-react'
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { cancelInstantEvent, saveCember, setInstantBudget, startInstantEvent, type CemberActionResult } from '@/app/panel/cember-actions'
+import { cancelInstantEvent, saveCember, setChatAlert, setInstantBudget, startInstantEvent, type CemberActionResult } from '@/app/panel/cember-actions'
 import { GAME_META, type CemberConfig } from '@/lib/cember-shared'
 import type { InstantBudget, UpcomingSlot } from '@/lib/cember'
 import { cn } from '@/lib/utils'
@@ -38,6 +38,8 @@ export function InstantEvent({
 }) {
   const [eventId, setEventId] = useState(selectedId)
   const [limit, setLimit] = useState(String(budget.dailyKc || ''))
+  const [alertAt, setAlertAt] = useState(String(budget.chatAlert || ''))
+  const chatBusy = budget.chatAlert > 0 && budget.chatLastHour >= budget.chatAlert
   const [delay, setDelay] = useState(START_OPTIONS[0].seconds)
   const [clash, setClash] = useState<Clash | null>(null)
   const [pending, start] = useTransition()
@@ -70,6 +72,15 @@ export function InstantEvent({
           Sohbet hareketliyken takvime dokunmadan tur aç. Seçtiğin etkinliğin oyunu, modu, bot ayarı, şartları ve ödülü kullanılır; takvimdeki saatler değişmez.
         </p>
       </div>
+
+      {chatBusy && (
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/10 p-3 text-sm leading-relaxed text-foreground">
+          <MessagesSquare className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <span>
+            Sohbet hareketli: Telegram gruplarında son 1 saatte <strong>{budget.chatLastHour.toLocaleString('tr-TR')}</strong> mesaj yazıldı. Anlık etkinlik açalım mı?
+          </span>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
@@ -179,6 +190,37 @@ export function InstantEvent({
               {budget.dailyKc
                 ? `Bugün ${budget.usedKc.toLocaleString('tr-TR')} / ${budget.dailyKc.toLocaleString('tr-TR')} KC ayrıldı. Her anlık tur, kazanan sayısına göre dağıtabileceği en yüksek KC kadar yer tutar; bütçeyi aşan tur açılmaz.`
                 : `Limit yok. Bugün anlık turlar için ${budget.usedKc.toLocaleString('tr-TR')} KC ayrıldı. 0 ya da boş bırakırsan sınırsız olur.`}
+            </p>
+          </form>
+          <form
+            className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              start(async () => onSaved(await setChatAlert(Number(alertAt) || 0)))
+            }}
+          >
+            <label htmlFor="chat-alert" className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <MessagesSquare className="size-4 text-primary" aria-hidden /> Sohbet aktivite bildirimi
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="chat-alert"
+                type="number"
+                min={0}
+                step={10}
+                inputMode="numeric"
+                placeholder="Kapalı"
+                value={alertAt}
+                onChange={(e) => setAlertAt(e.target.value)}
+                className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-card px-2.5 text-sm text-foreground"
+              />
+              <span className="inline-flex items-center text-sm text-muted-foreground">mesaj / saat</span>
+              <button type="submit" disabled={pending} className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-semibold disabled:opacity-60">
+                Kaydet
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Şu an son 1 saatte {budget.chatLastHour.toLocaleString('tr-TR')} mesaj var. Eşik geçilince bu bölümün üstünde &quot;etkinlik açalım mı?&quot; uyarısı çıkar. 0 ya da boş bırakırsan kapalı olur.
             </p>
           </form>
           <p className="text-xs leading-relaxed text-muted-foreground">
