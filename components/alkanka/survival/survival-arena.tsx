@@ -145,6 +145,12 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
     [plan],
   )
 
+  // Server polling hands us a fresh players array each time; restarting the canvases on identity alone blanks the pitch.
+  const playerKey = players.map((p) => `${p.id}:${p.me ? 1 : 0}:${p.image ?? ''}`).join('|')
+  const stagePlayers = useMemo(() => plan.stages.map((s) => s.entrants.map((i) => players[i])), [plan, playerKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const finalPlayers = useMemo(() => plan.final?.entrants.map((i) => players[i]) ?? [], [plan, playerKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const handlers = useMemo(() => plan.stages.map((s, k) => stageHandler(k, s)), [plan, stageHandler])
+
   const pitches = plan.stages.length
   const label = plan.kind === 'heats' ? 'Saha' : 'Maç'
 
@@ -153,7 +159,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
     return (
       <div className="relative h-full w-full">
         <SurvivalCanvas
-          players={f.entrants.map((i) => players[i])}
+          players={finalPlayers}
           duration={f.opts.duration}
           winners={f.opts.winners}
           teams={0}
@@ -181,7 +187,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
             className={cn('absolute inset-0 transition-opacity duration-300', k === focus ? 'opacity-100' : 'pointer-events-none opacity-0')}
           >
             <SurvivalCanvas
-              players={s.entrants.map((i) => players[i])}
+              players={stagePlayers[k]}
               duration={s.opts.duration}
               winners={s.opts.winners}
               teams={s.opts.teams as 0 | 2 | 5}
@@ -194,7 +200,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
               now={now}
               sound={k === homeStage}
               stage={plan.kind === 'heats' ? 'heat' : 'match'}
-              onEvent={stageHandler(k, s)}
+              onEvent={handlers[k]}
             />
           </div>
         ))}
