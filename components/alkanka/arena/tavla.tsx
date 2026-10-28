@@ -475,7 +475,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
   )
 
   return (
-    <div ref={rootRef} className="flex select-none flex-col gap-2">
+    <div ref={rootRef} data-ls-flat className="flex select-none flex-col gap-2">
       {ghost &&
         createPortal(
           <span

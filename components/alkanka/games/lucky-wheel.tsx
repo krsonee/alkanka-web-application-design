@@ -102,6 +102,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
       </header>
 
       <div
+        data-ls-main="bleed"
         className="relative -mx-6 overflow-hidden border-y border-gold/15"
         style={{
           background:
