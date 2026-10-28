@@ -231,14 +231,14 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
           fallers.push({ i, x: b.x, y: b.y, at: performance.now() })
           burst(b.x, b.y, 14, [C.hole, C.gold, '#ffffff'], 0.9, 0.012)
           if (!reduced) shake = Math.min(1, shake + 0.55)
-          kdSound.out()
+          kdSound.fallIn()
         }
         eventRef.current({ type: 'out', index: i, alive: sim.alive + (sim.out.length - 1 - sim.out.indexOf(i)) })
       }
       if (!quiet) {
         for (const hit of sim.hits.slice(0, 3)) {
           burst(hit.x, hit.y, 3, [C.gold, '#ffffff'], 0.6, 0.007)
-          kdSound.hit(hit.s)
+          kdSound.bump(hit.s)
         }
       }
 
@@ -249,7 +249,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
         if (!quiet && left > 0 && left <= 10) kdSound.beat()
       }
       const hole = holeState(sim.time, sim.final, sim.finalAt)
-      if (!quiet && hole.mode === 'warn' && hole.count !== lastWarnCount) kdSound.warn()
+      if (!quiet && hole.mode === 'warn' && hole.count !== lastWarnCount) kdSound.pull(hole.count)
       lastWarnCount = hole.mode === 'warn' ? hole.count : 0
 
       if (sim.finished && !finished) finish()
@@ -785,7 +785,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
-    kdSound.music.start()
+    kdSound.music.start('karadelik')
     const groove = setTimeout(() => kdSound.music.setIntensity(1), 5000)
 
     return () => {

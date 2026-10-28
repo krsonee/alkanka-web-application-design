@@ -133,71 +133,80 @@ function hiss(
 
 /* ------------------------------------------------------------------ music */
 
-const BPM = 108
-const STEP = 60 / BPM / 4
-// A minor: Am – F – C – G, one bar each. Roots in Hz (octave 2) and pad voicings (octave 3-4).
-const BARS = [
-  { root: 55, pad: [220, 261.63, 329.63, 493.88] },
-  { root: 43.65, pad: [174.61, 220, 261.63, 392] },
-  { root: 65.41, pad: [196, 261.63, 329.63, 392] },
-  { root: 49, pad: [196, 246.94, 293.66, 440] },
-]
+export type TrackId = 'karadelik' | 'survival' | 'cember'
+
+type Bar = { root: number; pad: number[]; arp: number[] }
+type Track = {
+  bpm: number
+  padWave: OscillatorType
+  padVol: number
+  /** Pad lowpass cutoff per intensity level: calm, in play, final. */
+  padCut: [number, number, number]
+  bars: Bar[]
+  play: (t: number, s: number, step: number, bar: Bar) => void
+}
 
 let musicOn = false
 let intensity = 0
 let step = 0
 let nextAt = 0
+let stepLen = 60 / 108 / 4
+let track: Track | null = null
 let timer: ReturnType<typeof setInterval> | null = null
 let duck: GainNode | null = null
 let padFilter: BiquadFilterNode | null = null
 
-function kick(t: number) {
+/* Instruments. Every voice is sine/triangle/filtered-noise based so nothing reads as chiptune. */
+
+function kick(t: number, vol = 0.5, f0 = 150, f1 = 42, dur = 0.32) {
   if (!ctx || !musicBus || !duck) return
-  sine(musicBus, t, 150, 42, 0.32, 0.5, 0.002)
-  hiss(musicBus, t, 0.02, 0.08, 'lowpass', 1800)
+  sine(musicBus, t, f0, f1, dur, vol, 0.002)
+  hiss(musicBus, t, 0.02, vol * 0.16, 'lowpass', 1800)
   // Pumps the pad and bass down under every kick, which is what gives modern tracks their drive.
   duck.gain.cancelScheduledValues(t)
   duck.gain.setValueAtTime(0.35, t)
-  duck.gain.linearRampToValueAtTime(1, t + STEP * 3)
+  duck.gain.linearRampToValueAtTime(1, t + stepLen * 3)
 }
 
-function bass(t: number, f: number) {
+function bass(t: number, f: number, steps = 1.8, vol = 0.22, wave: OscillatorType = 'sawtooth', cut = 260) {
   if (!ctx || !duck) return
+  const len = stepLen * steps
   const o = ctx.createOscillator()
-  o.type = 'sawtooth'
+  o.type = wave
   o.frequency.value = f
   const sub = ctx.createOscillator()
   sub.frequency.value = f
   const lp = ctx.createBiquadFilter()
   lp.type = 'lowpass'
-  lp.frequency.setValueAtTime(260 + intensity * 160, t)
-  lp.frequency.exponentialRampToValueAtTime(110, t + STEP * 1.6)
+  lp.frequency.setValueAtTime(cut + intensity * 160, t)
+  lp.frequency.exponentialRampToValueAtTime(110, t + len * 0.9)
   lp.Q.value = 3
   const g = ctx.createGain()
-  env(g, t, 0.22, 0.006, STEP * 1.8)
+  env(g, t, vol, 0.006, len)
   const sg = ctx.createGain()
-  env(sg, t, 0.28, 0.006, STEP * 1.8)
+  env(sg, t, vol * 1.25, 0.006, len)
   o.connect(lp).connect(g).connect(duck)
   sub.connect(sg).connect(duck)
   for (const n of [o, sub]) {
     n.start(t)
-    n.stop(t + STEP * 2)
+    n.stop(t + len + 0.05)
   }
 }
 
 function pad(t: number, notes: number[]) {
-  if (!ctx || !padFilter) return
-  const len = STEP * 16
+  if (!ctx || !padFilter || !track) return
+  const len = stepLen * 16
+  const vol = track.padVol
   for (const f of notes) {
     for (const det of [-7, 6]) {
       const o = ctx.createOscillator()
-      o.type = 'sawtooth'
+      o.type = track.padWave
       o.frequency.value = f
       o.detune.value = det
       const g = ctx.createGain()
       g.gain.setValueAtTime(0.0001, t)
-      g.gain.linearRampToValueAtTime(0.022, t + 0.5)
-      g.gain.setValueAtTime(0.022, t + len - 0.3)
+      g.gain.linearRampToValueAtTime(vol, t + 0.5)
+      g.gain.setValueAtTime(vol, t + len - 0.3)
       g.gain.linearRampToValueAtTime(0.0001, t + len + 0.4)
       o.connect(g).connect(padFilter)
       o.start(t)
@@ -206,41 +215,165 @@ function pad(t: number, notes: number[]) {
   }
 }
 
+function hat(t: number, vol: number, len = 0.04) {
+  if (musicBus) hiss(musicBus, t, len, vol, 'highpass', 8500)
+}
+
+function clap(t: number, vol: number) {
+  if (!musicBus || !verb) return
+  for (let k = 0; k < 3; k++) hiss(musicBus, t + k * 0.011, 0.05 + k * 0.03, vol, 'bandpass', 1500, 1500, 1.1)
+  hiss(verb, t, 0.2, vol * 0.5, 'bandpass', 2000, 2000, 0.8)
+}
+
+/** Big cinematic snare that blooms into the reverb. */
+function boomSnare(t: number, vol: number) {
+  if (!musicBus || !verb) return
+  hiss(musicBus, t, 0.22, vol, 'bandpass', 1800, 900, 0.7)
+  sine(musicBus, t, 200, 150, 0.12, vol * 0.8, 0.002)
+  hiss(verb, t, 0.9, vol * 0.7, 'lowpass', 4000, 600, 0.7, 0.01)
+}
+
+/** Glassy bell: a sine plus an inharmonic partial, mostly sent to the reverb. */
+function bell(t: number, f: number, vol: number) {
+  if (!musicBus || !verb) return
+  sine(musicBus, t, f, f, 1.1, vol, 0.004)
+  sine(musicBus, t, f * 2.76, f * 2.76, 0.4, vol * 0.25, 0.002)
+  sine(verb, t, f, f, 1.6, vol * 0.8, 0.004)
+}
+
+/** Wooden marimba bar. */
+function marimba(t: number, f: number, vol: number) {
+  if (!musicBus || !verb) return
+  sine(musicBus, t, f, f, 0.32, vol, 0.002)
+  sine(musicBus, t, f * 4, f * 4, 0.06, vol * 0.3, 0.001)
+  sine(verb, t, f, f, 0.4, vol * 0.25, 0.002)
+}
+
+function pluck(t: number, f: number, vol: number) {
+  if (!musicBus || !verb) return
+  sine(musicBus, t, f, f, 0.22, vol, 0.002, 'triangle')
+  sine(verb, t, f * 2, f * 2, 0.3, vol * 0.3, 0.002)
+}
+
+function conga(t: number, f: number, vol: number) {
+  if (!musicBus) return
+  sine(musicBus, t, f * 1.15, f, 0.16, vol, 0.002)
+  hiss(musicBus, t, 0.015, vol * 0.3, 'bandpass', 2500, 2500, 1)
+}
+
+function shaker(t: number, vol: number) {
+  if (musicBus) hiss(musicBus, t, 0.045, vol, 'bandpass', 6500, 7500, 2.5, 0.012)
+}
+
+/* Tracks. Each game has its own key, tempo and groove so the three never blur together. */
+
+const TRACKS: Record<TrackId, Track> = {
+  // "Olay Ufku": slow, heavy half-time in D minor with glassy bells drifting over a sub drone.
+  karadelik: {
+    bpm: 88,
+    padWave: 'sawtooth',
+    padVol: 0.018,
+    padCut: [480, 900, 1700],
+    bars: [
+      { root: 73.42, pad: [146.83, 174.61, 220, 293.66], arp: [293.66, 349.23, 440, 587.33] },
+      { root: 58.27, pad: [146.83, 174.61, 233.08, 293.66], arp: [293.66, 349.23, 466.16, 587.33] },
+      { root: 49, pad: [146.83, 196, 233.08, 293.66], arp: [293.66, 392, 466.16, 587.33] },
+      { root: 55, pad: [138.59, 164.81, 220, 329.63], arp: [277.18, 329.63, 440, 554.37] },
+    ],
+    play(t, s, step, bar) {
+      if (s === 0) bass(t, bar.root / 2, 15, 0.16, 'sine', 140)
+      if (s === 0 || s === 10) kick(t, 0.55, 120, 34, 0.45)
+      if (intensity >= 2 && s === 6) kick(t, 0.4, 120, 34, 0.35)
+      if (intensity >= 1 && s === 8) boomSnare(t, 0.14)
+      if (intensity >= 1 && s % 4 === 2) hat(t, 0.02, 0.03)
+      if (intensity >= 2 && s % 2 === 1) hat(t, 0.015, 0.02)
+      const arpEvery = intensity >= 2 ? 1 : 2
+      if (intensity >= 1 && s % arpEvery === 0) bell(t, bar.arp[(step / arpEvery) % 4 | 0], intensity >= 2 ? 0.035 : 0.045)
+      if (intensity === 0 && s === 0) bell(t, bar.arp[0], 0.04)
+      // Reverse-air riser into every fourth bar.
+      if (step % 64 === 56 && musicBus) hiss(musicBus, t, stepLen * 8, 0.05, 'lowpass', 200, 4000, 1, stepLen * 7.5)
+    },
+  },
+  // "Arena": driving 124 BPM four-on-the-floor in E minor with a rolling offbeat bass.
+  survival: {
+    bpm: 124,
+    padWave: 'sawtooth',
+    padVol: 0.02,
+    padCut: [650, 1400, 2800],
+    bars: [
+      { root: 82.41, pad: [164.81, 196, 246.94, 329.63], arp: [329.63, 392, 493.88] },
+      { root: 65.41, pad: [164.81, 196, 261.63, 329.63], arp: [329.63, 392, 523.25] },
+      { root: 98, pad: [196, 246.94, 293.66, 392], arp: [392, 493.88, 587.33] },
+      { root: 73.42, pad: [185, 220, 293.66, 369.99], arp: [369.99, 440, 587.33] },
+    ],
+    play(t, s, step, bar) {
+      if (intensity >= 1 ? s % 4 === 0 : s === 0 || s === 8) kick(t)
+      if (s % 4 === 2) bass(t, bar.root)
+      if (intensity >= 1 && s % 4 === 3) bass(t, bar.root, 0.9, 0.16)
+      if (intensity >= 1 && s % 4 === 2) hat(t, 0.05, 0.09)
+      if (intensity >= 2 && s % 2 === 1) hat(t, 0.025)
+      if (intensity >= 1 && (s === 4 || s === 12)) clap(t, intensity >= 2 ? 0.15 : 0.1)
+      if (intensity >= 1 && (s === 3 || s === 10)) for (const f of bar.arp) pluck(t, f, 0.03)
+      if (intensity >= 1 && step % 64 >= 61) sine(musicBus!, t, 130 - (step % 64 - 61) * 20, 60, 0.18, 0.18)
+    },
+  },
+  // "Saha": sunny 100 BPM dembow groove in G with congas, shaker and a marimba hook.
+  cember: {
+    bpm: 100,
+    padWave: 'triangle',
+    padVol: 0.03,
+    padCut: [900, 1800, 3200],
+    bars: [
+      { root: 98, pad: [196, 246.94, 293.66, 392], arp: [392, 493.88, 587.33] },
+      { root: 82.41, pad: [164.81, 196, 246.94, 329.63], arp: [329.63, 392, 493.88] },
+      { root: 65.41, pad: [196, 261.63, 329.63, 392], arp: [392, 523.25, 659.25] },
+      { root: 73.42, pad: [185, 220, 293.66, 369.99], arp: [369.99, 440, 587.33] },
+    ],
+    play(t, s, step, bar) {
+      shaker(t, s % 2 === 0 ? 0.05 : 0.025)
+      if (intensity >= 1 ? s % 4 === 0 : s === 0 || s === 8) kick(t, 0.48, 140, 45, 0.28)
+      if (intensity >= 1 && (s === 3 || s === 6 || s === 11 || s === 14)) clap(t, 0.08)
+      if (s === 0 || s === 6 || s === 10) bass(t, bar.root, 2.5, 0.2, 'triangle', 400)
+      if (s === 5 || s === 13) conga(t, 330, 0.12)
+      if (s === 2 || s === 10) conga(t, 220, 0.14)
+      if (intensity >= 1) {
+        const riff = [0, -1, 1, -1, 2, -1, 1, 0, -1, 2, -1, 1, 0, -1, 1, -1]
+        const n = riff[s]
+        if (n >= 0) marimba(t, bar.arp[n], 0.07)
+      }
+      // Stadium-style double clap on the downbeat once the final starts.
+      if (intensity >= 2 && s === 0) {
+        clap(t, 0.16)
+        clap(t + stepLen * 2, 0.16)
+      }
+      if (intensity >= 2 && s % 2 === 1) hat(t, 0.02)
+    },
+  },
+}
+
 function schedule() {
-  if (!ctx || !musicBus || !verb) return
+  if (!ctx || !musicBus || !verb || !track) return
   while (nextAt < ctx.currentTime + 0.15) {
     const t = nextAt
     const s = step % 16
-    const bar = BARS[Math.floor(step / 16) % BARS.length]
+    const bar = track.bars[Math.floor(step / 16) % track.bars.length]
 
     if (s === 0) pad(t, bar.pad)
-    if (padFilter) padFilter.frequency.setTargetAtTime(intensity >= 2 ? 2600 : intensity >= 1 ? 1300 : 650, t, 1.2)
+    if (padFilter) padFilter.frequency.setTargetAtTime(track.padCut[intensity], t, 1.2)
+    track.play(t, s, step, bar)
 
-    if (intensity >= 1 ? s % 4 === 0 : s === 0 || s === 8) kick(t)
-    if (s % 4 === 2) bass(t, bar.root)
-    if (intensity >= 1 && (s === 7 || s === 15)) bass(t, bar.root * 2)
-
-    if (intensity >= 1) {
-      if (s % 4 === 2) hiss(musicBus, t, 0.05, 0.05, 'highpass', 8000)
-      if (intensity >= 2 && s % 2 === 1) hiss(musicBus, t, 0.025, 0.025, 'highpass', 9500)
-      if (s === 4 || s === 12) {
-        hiss(musicBus, t, 0.14, intensity >= 2 ? 0.16 : 0.1, 'bandpass', 1700, 1700, 0.9)
-        hiss(verb, t, 0.18, 0.07, 'bandpass', 2200, 2200, 0.7)
-      }
-    }
-    // Low tom fill into every fourth bar keeps long rounds from feeling like a loop.
-    if (intensity >= 1 && step % 64 >= 61) sine(musicBus, t, 120 - (step % 64 - 61) * 18, 60, 0.18, 0.18)
-
-    nextAt += STEP
+    nextAt += stepLen
     step++
   }
 }
 
 const music = {
-  start() {
+  start(id: TrackId) {
     const ac = ensure()
     if (!ac || !musicBus || !verb || musicOn) return
     musicOn = true
+    track = TRACKS[id]
+    stepLen = 60 / track.bpm / 4
     intensity = 0
     step = 0
     nextAt = ac.currentTime + 0.1
@@ -248,7 +381,7 @@ const music = {
     duck.connect(musicBus)
     padFilter = ac.createBiquadFilter()
     padFilter.type = 'lowpass'
-    padFilter.frequency.value = 650
+    padFilter.frequency.value = track.padCut[0]
     padFilter.Q.value = 0.7
     const padOut = ac.createGain()
     padOut.gain.value = 1
@@ -315,6 +448,77 @@ export const kdSound = {
     hiss(verb, t, 0.4, 0.08, 'lowpass', 2600, 300, 1, 0.04)
     sine(sfx, t + 0.12, 95, 38, 0.5, 0.34, 0.004)
     sine(verb, t + 0.12, 95, 40, 0.4, 0.08, 0.004)
+  },
+  /** Kara Delik bump: a muffled body thump, no click on top. */
+  bump(strength: number) {
+    const ac = ensure()
+    if (!ac || !sfx) return
+    const now = performance.now()
+    if (now - lastHit < 220) return
+    lastHit = now
+    const s = Math.max(0.2, Math.min(1, strength))
+    const t = ac.currentTime
+    sine(sfx, t, jit(130, 0.1), 70, 0.12, 0.06 * s, 0.008)
+    hiss(sfx, t, 0.06, 0.025 * s, 'lowpass', 500, 250, 0.7, 0.008)
+  },
+  /** Swallowed by the black hole: a swirling suction that spirals down into a deep gulp. */
+  fallIn() {
+    const ac = ensure()
+    if (!ac || !sfx || !verb || !noiseBuf) return
+    const t = ac.currentTime
+    const dur = 1.1
+
+    const src = ac.createBufferSource()
+    src.buffer = noiseBuf
+    const bp = ac.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.Q.value = 3
+    bp.frequency.setValueAtTime(2400, t)
+    bp.frequency.exponentialRampToValueAtTime(120, t + dur)
+    const swirl = ac.createGain()
+    const lfo = ac.createOscillator()
+    lfo.frequency.setValueAtTime(14, t)
+    lfo.frequency.exponentialRampToValueAtTime(3, t + dur)
+    const depth = ac.createGain()
+    depth.gain.value = 0.5
+    swirl.gain.value = 0.5
+    lfo.connect(depth).connect(swirl.gain)
+    const g = ac.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.3, t + 0.15)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    src.connect(bp).connect(swirl).connect(g)
+    g.connect(sfx)
+    g.connect(verb)
+    src.start(t, Math.random())
+    src.stop(t + dur + 0.05)
+    lfo.start(t)
+    lfo.stop(t + dur + 0.05)
+
+    sine(sfx, t, 520, 45, dur, 0.09, 0.05)
+    sine(sfx, t + dur * 0.75, 70, 28, 0.6, 0.32, 0.03)
+    sine(verb, t + dur * 0.75, 70, 30, 0.5, 0.08, 0.03)
+  },
+  /** Black hole charging: a growing gravitational rumble that rises as the count runs down. */
+  pull(count: number) {
+    const ac = ensure()
+    if (!ac || !sfx || !verb) return
+    const t = ac.currentTime
+    const k = Math.max(0, 4 - Math.min(3, Math.max(1, count)))
+    sine(sfx, t, 38 + k * 6, 44 + k * 8, 0.95, 0.18 + k * 0.05, 0.25)
+    hiss(sfx, t, 0.95, 0.04 + k * 0.02, 'lowpass', 150, 500 + k * 250, 1.5, 0.4)
+    hiss(verb, t, 0.9, 0.03, 'bandpass', 300, 900 + k * 300, 1.2, 0.5)
+  },
+  /** Jako Çemberi drop: a soft muffled "puf", rate-limited because hundreds can fall at once. */
+  drop() {
+    const ac = ensure()
+    if (!ac || !sfx) return
+    const now = performance.now()
+    if (now - lastHit < 110) return
+    lastHit = now
+    const t = ac.currentTime
+    sine(sfx, t, jit(320, 0.15), 110, 0.16, 0.07, 0.004)
+    hiss(sfx, t, 0.1, 0.04, 'lowpass', 1400, 300, 0.8, 0.004)
   },
   /** Heartbeat for the last ten seconds. */
   beat() {

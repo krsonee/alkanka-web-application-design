@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { ARENA, STEP, createSim, mulberry, stepSim, type SimState } from '@/lib/cember-sim'
 import type { Participant } from '@/lib/cember-shared'
+import { kdSound } from '../karadelik/kd-sound'
 
 // Canvas can't read Tailwind tokens; these mirror the pitch + site palette (grass, chalk, gold, ruby, live green).
 const C = {
@@ -233,10 +234,14 @@ export function CemberArena({ participants, seed, startAt, now, meId, onEvent }:
           popups.push({ name: index === meIndex ? 'Sen' : participants[index].name, x, y, at: t, me: index === meIndex })
           if (popups.length > 4) popups.shift()
         }
-        eventRef.current({ type: 'out', index, alive: total - reported })
+        kdSound.drop()
+        const left = total - reported
+        if (left <= Math.max(3, Math.ceil(total * 0.1))) kdSound.music.setIntensity(2)
+        eventRef.current({ type: 'out', index, alive: left })
       }
       if (sim.winner !== null && !winnerSent) {
         winnerSent = true
+        if (!silent) kdSound.win()
         const b = sim.balls[sim.winner]
         winnerFrom = { x: cx + b.x * (R / ARENA), y: cy + b.y * (R / ARENA), r: sim.radius * (R / ARENA) }
         winnerAt = silent ? performance.now() - 5000 : performance.now()
@@ -249,6 +254,12 @@ export function CemberArena({ participants, seed, startAt, now, meId, onEvent }:
     const behind = Math.floor((nowRef.current() - startAt) / 1000 / STEP)
     while (sim.step < behind && sim.winner === null) stepSim(sim)
     flushEvents(true)
+
+    let groove: ReturnType<typeof setTimeout> | null = null
+    if (sim.winner === null) {
+      kdSound.music.start('cember')
+      groove = setTimeout(() => kdSound.music.setIntensity(1), 5000)
+    }
 
     const ro = new ResizeObserver(layout)
     ro.observe(canvas)
@@ -502,6 +513,8 @@ export function CemberArena({ participants, seed, startAt, now, meId, onEvent }:
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      if (groove) clearTimeout(groove)
+      kdSound.music.stop(0.6)
     }
   }, [participants, seed, startAt, meId])
 

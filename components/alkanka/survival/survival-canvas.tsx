@@ -678,7 +678,7 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
       }
     }
     raf = requestAnimationFrame(frame)
-    kdSound.music.start()
+    kdSound.music.start('survival')
     const groove = setTimeout(() => kdSound.music.setIntensity(1), 5000)
     return () => {
       cancelAnimationFrame(raf)
