@@ -139,6 +139,13 @@ async function commentsFor(channelId: string, postIds: number[]) {
   return { threads: new Set(threads.map((t) => Number(t.post_id))), byPost }
 }
 
+/** True when the member's linked Telegram account is in the announcement channel. */
+export async function hasJoinedAnnouncements(userId: string): Promise<boolean> {
+  const config = (await getChannelConfigs()).find((c) => c.slug === 'duyuru')
+  if (!config) return false
+  return isChannelMember(userId, config).catch(() => false)
+}
+
 export async function getChannelFeed(slug: BroadcastSlug, userId: string | null): Promise<ChannelFeed> {
   const meta = BROADCAST_CHANNELS.find((c) => c.slug === slug)!
   const config = (await getChannelConfigs()).find((c) => c.slug === slug)

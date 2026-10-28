@@ -22,14 +22,15 @@ export function TelegramPromoEditor({ settings, fallbackUrl }: { settings: Teleg
         <h2 className="font-display text-lg font-bold text-foreground">Site şeridi (Telegram çağrısı)</h2>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Sitenin en üstünde çıkan ince şerit. Ziyaretçi kapatırsa belirlediğin gün sonra tekrar görür. Yazıyı değiştirirsen herkese hemen yeniden
-        çıkar. Oyun masalarında gösterilmez.
+        Sitenin en üstüne yapışık duran şerit, kapatma tuşu yok. Telegram hesabını bağlayıp duyuru kanalına katılan üyede kendiliğinden kaybolur.
+        Doğrulanamayan ziyaretçi şeride dokunursa belirlediğin gün kadar gizlenir. Yazıyı ya da linki değiştirirsen herkese hemen yeniden çıkar.
+        Oyun masalarında gösterilmez.
       </p>
 
       <div className="flex flex-col gap-2">
         <span className="text-xs font-semibold text-muted-foreground">Önizleme</span>
         <div className="overflow-hidden rounded-xl border border-border">
-          <TelegramStripView text={text} cta={cta} reward={reward} href="#" onClose={() => {}} />
+          <TelegramStripView text={text} cta={cta} reward={reward} href="#" />
         </div>
       </div>
 
@@ -52,11 +53,11 @@ export function TelegramPromoEditor({ settings, fallbackUrl }: { settings: Teleg
           <input name="reward" type="number" min={0} value={reward} onChange={(e) => setReward(Number(e.target.value) || 0)} className={input} />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-foreground">Link (boş = ana kanal)</span>
+          <span className="text-sm font-medium text-foreground">Yönlendirme linki (t.me/... ya da @kanal, boş = ana kanal)</span>
           <input name="url" defaultValue={settings.url} placeholder={fallbackUrl} className={input} />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-foreground">Kapatınca tekrar gösterme (gün, 0 = gösterme)</span>
+          <span className="text-sm font-medium text-foreground">Dokununca gizleme süresi (gün, 0 = bir daha gösterme)</span>
           <input name="reshowDays" type="number" min={0} max={60} defaultValue={settings.reshowDays} className={input} />
         </label>
       </div>

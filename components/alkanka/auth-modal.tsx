@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { Send } from 'lucide-react'
 import { useSWRConfig } from 'swr'
 import { cn } from '@/lib/utils'
@@ -37,7 +38,11 @@ export function AuthModal() {
   const [error, setError] = useState<string | null>(null)
   const { mutate } = useSWRConfig()
   const t = useTexts()
-  const refresh = () => mutate('/api/me')
+  const router = useRouter()
+  const refresh = async () => {
+    await mutate('/api/me')
+    router.refresh()
+  }
 
   useEffect(() => {
     const sync = () => {
