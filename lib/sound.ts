@@ -542,6 +542,18 @@ export function startCrowdAmbience(level = 0.05) {
   }
 }
 
+export function isSoundMuted() {
+  return muted
+}
+
+/** Lets other sound kits (e.g. the arena games) follow the site-wide mute switch. */
+export function onSoundMuteChange(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
 export function setSoundMuted(value: boolean) {
   muted = value
   window.localStorage?.setItem(MUTE_KEY, value ? '1' : '0')

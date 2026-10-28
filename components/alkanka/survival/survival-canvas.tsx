@@ -678,9 +678,13 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
       }
     }
     raf = requestAnimationFrame(frame)
+    kdSound.music.start()
+    const groove = setTimeout(() => kdSound.music.setIntensity(1), 5000)
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      clearTimeout(groove)
+      kdSound.music.stop(0.6)
     }
     // A new round (seed/players/settings) restarts the whole scene.
   }, [players, duration, winners, teams, rule, shield, prizePool, seed, startAt])

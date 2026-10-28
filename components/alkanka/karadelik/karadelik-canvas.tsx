@@ -785,10 +785,14 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
+    kdSound.music.start()
+    const groove = setTimeout(() => kdSound.music.setIntensity(1), 5000)
 
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      clearTimeout(groove)
+      kdSound.music.stop(0.6)
     }
   }, [players, duration, winners, prizePool])
 
