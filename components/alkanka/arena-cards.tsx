@@ -75,6 +75,33 @@ function Countdown({ at, now }: { at: number; now: number | null }) {
   )
 }
 
+const shortDay = (t: number) => new Intl.DateTimeFormat('tr-TR', { timeZone: TZ, weekday: 'short' }).format(t)
+
+function dailyRows(events: ArenaEvent[], nextAt: number | null) {
+  const allDays = new Set(events.flatMap((e) => e.slots.map(dayKey))).size
+  const groups = new Map<string, { time: string; e: ArenaEvent; days: Map<string, number>; isNext: boolean }>()
+  for (const e of events) {
+    for (const at of e.slots) {
+      const time = clock(at)
+      const key = `${time}|${e.title}`
+      const g = groups.get(key) ?? { time, e, days: new Map(), isNext: false }
+      g.days.set(dayKey(at), at)
+      if (at === nextAt) g.isNext = true
+      groups.set(key, g)
+    }
+  }
+  return [...groups.values()]
+    .sort((a, b) => a.time.localeCompare(b.time))
+    .map((g) => ({
+      label:
+        g.days.size >= allDays
+          ? `Her gün ${g.time}`
+          : `${[...g.days.values()].sort((a, b) => a - b).map(shortDay).join(', ')} ${g.time}`,
+      sub: `${g.e.title}${g.isNext ? ' · Sıradaki tur' : ''}`,
+      value: [g.e.prize, g.e.winners].filter(Boolean).join(' · '),
+    }))
+}
+
 function soonest(events: ArenaEvent[]) {
   return events.reduce<ArenaEvent | null>((best, e) => (e.next !== null && (!best || e.next < (best.next ?? Infinity)) ? e : best), null)
 }
@@ -166,15 +193,8 @@ export function ArenaCards({ cards, notice }: { cards: ArenaGameCard[]; notice: 
             steps: detail.flow,
             table: detail.events.length
               ? {
-                  title: '7 günlük tur programı',
-                  rows: detail.events
-                    .flatMap((e) => e.slots.map((at) => ({ at, e })))
-                    .sort((a, b) => a.at - b.at)
-                    .map(({ at, e }) => ({
-                      label: now ? whenLabel(at, now) : clock(at),
-                      sub: `${e.title}${at === detailNext?.next ? ' · Sıradaki tur' : ''}`,
-                      value: [e.prize, e.winners].filter(Boolean).join(' · '),
-                    })),
+                  title: 'Tur programı',
+                  rows: dailyRows(detail.events, detailNext?.next ?? null),
                 }
               : undefined,
             rules: detail.rules,
