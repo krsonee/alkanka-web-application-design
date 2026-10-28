@@ -17,6 +17,7 @@ import {
 import { PredictOutcome, PredictPanel } from './predict-panel'
 import { CemberArena, JAKO_PP, type ArenaEvent } from './cember-arena'
 import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
+import { TableBrand } from '../arena/table-brand'
 import { type SVEvent } from '../survival/survival-canvas'
 import { SurvivalArena } from '../survival/survival-arena'
 import { CemberConfetti } from './cember-confetti'
@@ -397,7 +398,13 @@ export function CemberStage({
         )}
 
         {arena && (
-          <div className="relative w-full">
+          <div
+            className={cn(
+              'relative w-full',
+              isKd && 'aspect-square overflow-hidden rounded-2xl border border-primary/25 bg-background',
+            )}
+          >
+            {isKd && <TableBrand className="z-10" center={false} plaque="top" corners jako />}
             {arena}
             {isKd && kdFinal && phase === 'play' && (
               <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-destructive px-3 py-1 text-xs font-black uppercase tracking-widest text-destructive-foreground animate-pulse">
@@ -412,7 +419,7 @@ export function CemberStage({
                     {isSv && winningTeam >= 0
                       ? iSurvived
                         ? 'Takımın kazandı kanka!'
-                        : `${['Altın', 'Mavi', 'Yakut', 'Zümrüt', 'Gümüş'][winningTeam] ?? 'Altın'} Takım kazandı`
+                        : `${['Altın', 'Mavi', 'Yakut', 'Zümrüt', 'Gümüş'][winningTeam] ?? 'Altın'} Takım kazand��`
                       : isSv
                         ? iSurvived
                           ? 'Ayakta kaldın kanka!'
