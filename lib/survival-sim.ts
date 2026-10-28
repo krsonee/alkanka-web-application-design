@@ -423,9 +423,136 @@ export function svWinners(s: SVState) {
   return s.balls.flatMap((b, i) => (b.state !== 2 ? [i] : []))
 }
 
-/** Plays the whole round headless. */
-export function runSV(opts: SVOptions) {
+/** Plays a single pitch headless. */
+function runPitch(opts: SVOptions) {
   const s = createSV(opts)
   while (!s.finished) stepSV(s)
-  return { winners: svWinners(s), steps: s.step, order: s.order, winningTeam: s.winningTeam }
+  return s
+}
+
+/** Team rounds above this many entrants split into parallel matches. */
+export const SV_TEAM_SPLIT = 20
+export const SV_MATCH_SIZE = 10
+/** Solo rounds above this many entrants run qualifying heats, then a final. */
+export const SV_HEAT_SPLIT = 60
+export const SV_HEAT_SIZE = 30
+const FINAL_FIELD = 30
+/** Browsers render every pitch at once, so bigger crowds get bigger pitches (with queues) instead of more of them. */
+export const SV_MAX_PITCHES = 6
+/** Seconds between the last heat finishing and the final kicking off. */
+export const SV_STAGE_GAP = 6
+
+export type SVPlanKind = 'single' | 'matches' | 'heats'
+
+export type SVStage = {
+  /** Global entrant indexes, in the stage's local order. */
+  entrants: number[]
+  opts: SVOptions
+  /** Global step at which the stage kicks off. */
+  startStep: number
+  steps: number
+  /** Global indexes of the stage's survivors (heats) or whole winning team (matches). */
+  winners: number[]
+  winningTeam: number
+  /** Players left standing per team colour when the match ended. */
+  teamAlive: number[]
+}
+
+export type SVPlan = {
+  kind: SVPlanKind
+  /** Parallel heats or matches; for 'single' just one stage. */
+  stages: SVStage[]
+  final: SVStage | null
+  /** Matches won per team colour ('matches' only). */
+  wins: number[]
+  winners: number[]
+  winningTeam: number
+  steps: number
+}
+
+export function svPlanKind(n: number, teams: number): SVPlanKind {
+  if (teams && n > SV_TEAM_SPLIT) return 'matches'
+  if (!teams && n > SV_HEAT_SPLIT) return 'heats'
+  return 'single'
+}
+
+/** Engine-independent sub-seed so every stage replays identically everywhere. */
+function subSeed(seed: number, k: number) {
+  return ((seed + (k + 1) * 1000003) % 2147483646) + 1
+}
+
+/** Splits 0..n-1 into `parts` contiguous groups whose sizes differ by at most one. */
+function split(n: number, parts: number) {
+  const out: number[][] = []
+  let at = 0
+  for (let p = 0; p < parts; p++) {
+    const size = Math.floor(n / parts) + (p < n % parts ? 1 : 0)
+    out.push(Array.from({ length: size }, (_, k) => at + k))
+    at += size
+  }
+  return out
+}
+
+function playStage(entrants: number[], opts: SVOptions, startStep: number): SVStage {
+  const s = runPitch(opts)
+  const local = svWinners(s)
+  const teamAlive = Array.from({ length: s.teamCount }, (_, t) => svAlive(s, t))
+  return { entrants, opts, startStep, steps: s.step, winners: local.map((i) => entrants[i]), winningTeam: s.winningTeam, teamAlive }
+}
+
+/**
+ * Lays out the whole round. Small lobbies play one pitch; team crowds play several 10-player matches at once and the
+ * colour that wins the most matches takes the round; solo crowds play 30-player heats whose survivors meet in a final.
+ */
+export function planSV(opts: SVOptions): SVPlan {
+  const kind = svPlanKind(opts.n, opts.teams)
+
+  if (kind === 'single') {
+    const stage = playStage(Array.from({ length: opts.n }, (_, i) => i), opts, 0)
+    return { kind, stages: [stage], final: null, wins: [], winners: stage.winners, winningTeam: stage.winningTeam, steps: stage.steps }
+  }
+
+  if (kind === 'matches') {
+    const groups = split(opts.n, Math.min(SV_MAX_PITCHES, Math.floor(opts.n / SV_MATCH_SIZE)))
+    const stages = groups.map((g, k) => playStage(g, { ...opts, n: g.length, seed: subSeed(opts.seed, k) }, 0))
+    const teams = opts.teams
+    const wins = Array.from({ length: teams }, () => 0)
+    const standing = Array.from({ length: teams }, () => 0)
+    for (const st of stages) {
+      if (st.winningTeam >= 0) wins[st.winningTeam]++
+      st.teamAlive.forEach((a, t) => (standing[t] += a))
+    }
+    // Most matches won, then most players left standing, then a seed-rotated order so a dead heat still has one winner.
+    let best = -1
+    for (let k = 0; k < teams; k++) {
+      const t = (k + (opts.seed % teams)) % teams
+      if (best < 0 || wins[t] > wins[best] || (wins[t] === wins[best] && standing[t] > standing[best])) best = t
+    }
+    const winners: number[] = []
+    for (const st of stages) st.entrants.forEach((g, local) => local % teams === best && winners.push(g))
+    winners.sort((a, b) => a - b)
+    return { kind, stages, final: null, wins, winners, winningTeam: best, steps: Math.max(...stages.map((s) => s.steps)) }
+  }
+
+  const heats = Math.min(SV_MAX_PITCHES, Math.ceil(opts.n / SV_HEAT_SIZE))
+  const advance = Math.max(2, Math.floor(FINAL_FIELD / heats), Math.ceil((opts.winners + 1) / heats))
+  const heatClock = Math.max(30, Math.round(opts.duration * 0.5))
+  const finalClock = Math.max(30, opts.duration - heatClock)
+  const stages = split(opts.n, heats).map((g, k) =>
+    playStage(g, { ...opts, n: g.length, seed: subSeed(opts.seed, k), duration: heatClock, winners: Math.min(advance, g.length - 1) }, 0),
+  )
+  const finalists = stages.flatMap((s) => s.winners)
+  const startStep = Math.max(...stages.map((s) => s.steps)) + Math.round(SV_STAGE_GAP / SV_STEP)
+  const final = playStage(
+    finalists,
+    { ...opts, n: finalists.length, seed: subSeed(opts.seed, 99), duration: finalClock, winners: Math.min(opts.winners, finalists.length - 1) },
+    startStep,
+  )
+  return { kind, stages, final, wins: [], winners: final.winners, winningTeam: -1, steps: startStep + final.steps }
+}
+
+/** Plays the whole round headless (heats, parallel matches and final included). */
+export function runSV(opts: SVOptions) {
+  const plan = planSV(opts)
+  return { winners: plan.winners, steps: plan.steps, winningTeam: plan.winningTeam, plan }
 }

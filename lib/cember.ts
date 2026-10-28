@@ -42,7 +42,7 @@ import {
 const TR_OFFSET_MS = 3 * 3600_000
 const SETTINGS_KEY = 'cember'
 /** Matches the client's live window: once a round's window passes, the countdown moves on to the next slot. */
-const liveWindowMs = (ev: Pick<CemberConfig, 'game' | 'duration'>) => liveSeconds(ev) * 1000
+const liveWindowMs = (ev: Pick<CemberConfig, 'game' | 'duration'> & { maxPlayers?: number }) => liveSeconds(ev) * 1000
 
 let ready: Promise<void> | null = null
 function ensure() {

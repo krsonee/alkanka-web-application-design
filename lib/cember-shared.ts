@@ -190,9 +190,10 @@ export function resolveWinners(cfg: Pick<CemberConfig, 'game' | 'winnerMode' | '
 }
 
 /** How long a round stays on screen (intro + play + a little slack); also the "late joiners" window. */
-export function liveSeconds(cfg: Pick<CemberConfig, 'game' | 'duration'>) {
-  // Survival also drains its waiting queue before the clock runs, so crowded rounds need extra room.
-  return INTRO_SECONDS + (cfg.game === 'karadelik' ? cfg.duration + 75 : cfg.game === 'survival' ? cfg.duration + 150 : 75)
+export function liveSeconds(cfg: Pick<CemberConfig, 'game' | 'duration'> & { maxPlayers?: number }) {
+  // Survival also drains its waiting queue before the clock runs; above 60 solo entrants it adds heats plus a final.
+  const heats = (cfg.maxPlayers ?? 0) > 60 ? 240 : 0
+  return INTRO_SECONDS + (cfg.game === 'karadelik' ? cfg.duration + 75 : cfg.game === 'survival' ? cfg.duration + 150 + heats : 75)
 }
 
 export type Participant = { id: string; name: string; image: string | null }

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { Play, RotateCcw, Shield, Timer, Trophy, Users, Volume2, VolumeX } from 'lucide-react'
 import { TableBrand } from '@/components/alkanka/arena/table-brand'
-import { SurvivalCanvas, type SVEvent, type SVPlayer } from './survival-canvas'
+import { type SVEvent, type SVPlayer } from './survival-canvas'
+import { SurvivalArena } from './survival-arena'
 import { kdSound } from '../karadelik/kd-sound'
 import type { SVRule } from '@/lib/survival-sim'
 import { cn } from '@/lib/utils'
@@ -30,7 +31,7 @@ const JAKO_PP = [
 ].map((n) => `/images/cember-pp/${n}.webp`)
 
 const NAMES = ['alexbey', 'bozkurt', 'pasa', 'reis', 'efe', 'aslan', 'sultan', 'tilki', 'kartal', 'ayaz', 'dolunay', 'yildiz', 'zeybek', 'kanka', 'jakofan', 'serdar']
-const PLAYER_OPTIONS = [10, 20, 40]
+const PLAYER_OPTIONS = [10, 20, 40, 80]
 const WINNER_OPTIONS = [1, 2, 3]
 const DURATION_OPTIONS = [30, 60, 90]
 const PRIZE_POOL = 1000
@@ -266,7 +267,7 @@ export function SurvivalPreview() {
         <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl border border-primary/25 bg-background">
           <TableBrand className="z-10" center={false} plaque="top" corners jako />
           {run ? (
-            <SurvivalCanvas
+            <SurvivalArena
               key={run.key}
               players={run.players}
               duration={run.duration}

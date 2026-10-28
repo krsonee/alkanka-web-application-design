@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createSV, runSV, stepSV, svFieldSize, svWinners, type SVOptions, type SVRule } from '../lib/survival-sim'
+import { createSV, planSV, runSV, stepSV, svFieldSize, svPlanKind, svWinners, type SVOptions, type SVRule } from '../lib/survival-sim'
 
 const SEEDS = [1, 77, 999, 4242, 31337]
 const STEPS_PER_SEC = 120
@@ -166,9 +166,69 @@ scenario('ayni tohum her modda ayni sonucu verir', () => {
 })
 
 scenario('farkli tohumlar farkli turlar uretir', () => {
-  const results = new Set(SEEDS.map((seed) => JSON.stringify(runSV(opts({ n: 20, winners: 3, seed })).order)))
+  const results = new Set(SEEDS.map((seed) => JSON.stringify(play(opts({ n: 20, winners: 3, seed })).order)))
   assert.ok(results.size > 1, 'tum tohumlar ayni elenme sirasini verdi')
 })
+
+console.log('\nKalabalik turlar')
+scenario('20 kisiye kadar takimli tur tek sahada oynanir', () => {
+  assert.equal(svPlanKind(20, 2), 'single')
+  assert.equal(svPlanKind(60, 0), 'single')
+})
+
+for (const teams of [2, 5] as const) {
+  for (const n of [21, 40, 57, 120]) {
+    scenario(`${teams} takim n=${n}: paralel maclar, tek renk kazanir`, () => {
+      for (const seed of SEEDS) {
+        const p = planSV(opts({ n, seed, teams, rule: 'most', shield: true }))
+        assert.equal(p.kind, 'matches')
+        assert.equal(p.stages.length, Math.min(6, Math.floor(n / 10)), `seed ${seed}: mac sayisi`)
+        const seen = p.stages.flatMap((s) => s.entrants).sort((a, b) => a - b)
+        assert.deepEqual(seen, Array.from({ length: n }, (_, i) => i), `seed ${seed}: herkes tam bir maca girmeli`)
+        for (const s of p.stages) assert.ok(s.entrants.length >= 10, `seed ${seed}: mac ${s.entrants.length} kisi`)
+        assert.ok(p.winningTeam >= 0 && p.winningTeam < teams, `seed ${seed}: kazanan ${p.winningTeam}`)
+        const top = Math.max(...p.wins)
+        assert.equal(p.wins[p.winningTeam], top, `seed ${seed}: en cok mac kazanan renk kazanmadi`)
+        const expect = p.stages.flatMap((s) => s.entrants.filter((_, local) => local % teams === p.winningTeam)).sort((a, b) => a - b)
+        assert.deepEqual(p.winners, expect, `seed ${seed}: kazananlar o rengin tum oyunculari degil`)
+        assert.ok(p.steps / STEPS_PER_SEC <= 60 + 150, `seed ${seed}: ${Math.round(p.steps / STEPS_PER_SEC)}s surdu`)
+      }
+    })
+  }
+}
+
+for (const [n, winners] of [[61, 1], [90, 3], [150, 5], [300, 10]] as const) {
+  scenario(`tekli n=${n} kazanan=${winners}: on eleme + final`, () => {
+    for (const seed of SEEDS) {
+      const p = planSV(opts({ n, seed, winners, duration: 90 }))
+      assert.equal(p.kind, 'heats')
+      const heats = Math.min(6, Math.ceil(n / 30))
+      assert.equal(p.stages.length, heats, `seed ${seed}: saha sayisi`)
+      for (const s of p.stages) assert.ok(s.entrants.length <= Math.max(30, Math.ceil(n / heats)), `seed ${seed}: saha ${s.entrants.length} kisi`)
+      const finalists = p.final!.entrants
+      assert.ok(finalists.length > winners && finalists.length <= 30, `seed ${seed}: finalde ${finalists.length} kisi`)
+      assert.equal(new Set(finalists).size, finalists.length, `seed ${seed}: finalde tekrar var`)
+      assert.equal(p.winners.length, winners, `seed ${seed}: ${p.winners.length} kazanan`)
+      for (const w of p.winners) assert.ok(finalists.includes(w), `seed ${seed}: finale cikmayan kazanmis`)
+      assert.ok(p.final!.startStep >= Math.max(...p.stages.map((s) => s.steps)), `seed ${seed}: final elemeler bitmeden basladi`)
+      assert.ok(p.steps / STEPS_PER_SEC <= 90 + 360, `seed ${seed}: ${Math.round(p.steps / STEPS_PER_SEC)}s surdu`)
+    }
+  })
+}
+
+scenario('kalabalik turda ayni tohum ayni plani verir', () => {
+  for (const v of [{ n: 120, teams: 2 as const }, { n: 150, winners: 5 }]) {
+    for (const seed of SEEDS) {
+      const a = runSV(opts({ ...v, seed }))
+      const b = runSV(opts({ ...v, seed }))
+      assert.deepEqual([a.winners, a.steps, a.winningTeam], [b.winners, b.steps, b.winningTeam], `seed ${seed} ${JSON.stringify(v)}`)
+    }
+  }
+})
+
+let longest = 0
+for (const seed of SEEDS) for (const n of [61, 150, 300]) longest = Math.max(longest, planSV(opts({ n, seed, winners: 5, duration: 90 })).steps / STEPS_PER_SEC)
+console.log(`  bilgi: en uzun on eleme + final turu ${Math.round(longest)} sn (sure 90 sn)`)
 
 console.log(`\n${passed} gecti, ${failures.length} kaldi\n`)
 if (failures.length) process.exit(1)

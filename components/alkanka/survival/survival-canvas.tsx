@@ -40,6 +40,10 @@ type Props = {
   /** Live rounds lock the simulation to this wall-clock start; previews run freely. */
   startAt?: number
   now?: () => number
+  /** Only one pitch plays audio when several run side by side. */
+  sound?: boolean
+  /** Part of a crowded round: a heat sends players to the final, a match is one of several team games. */
+  stage?: 'heat' | 'match'
   onEvent: (e: SVEvent) => void
 }
 
@@ -64,6 +68,7 @@ const TEAM = [
   { ring: '#3fd0a0', deep: '#16805e', rgb: '63,208,160', name: 'ZÜMRÜT' },
   { ring: '#c9d1dc', deep: '#6b7585', rgb: '201,209,220', name: 'GÜMÜŞ' },
 ]
+export const SV_TEAMS = TEAM.map((t) => ({ color: t.ring, name: t.name }))
 const LIGHTS = [
   { color: 'rgba(242,193,78,0.38)', speed: 0.23, phase: 0, side: -1 },
   { color: 'rgba(79,143,247,0.36)', speed: 0.19, phase: 2.4, side: 1 },
@@ -115,7 +120,7 @@ function makeSprite(name: string, img: HTMLImageElement | null) {
   return c
 }
 
-export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, rule, shield, captain = false, prizePool = 0, seed, startAt, now: clock, onEvent }: Props) {
+export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, rule, shield, captain = false, prizePool = 0, seed, startAt, now: clock, sound = true, stage, onEvent }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eventRef = useRef(onEvent)
   eventRef.current = onEvent
@@ -131,6 +136,7 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const low = (navigator.hardwareConcurrency ?? 8) <= 4
     const maxParticles = low ? 60 : 200
+    const snd = sound ? kdSound : null
 
     const sim = createSV({ n: players.length, seed, duration, winners, teams: teamsOpt, rule, shield, captain })
     const teams = sim.teamCount
@@ -174,12 +180,19 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
     const finish = () => {
       finished = true
       finishedAt = performance.now()
-      kdSound.win()
+      snd?.win()
       const list = svWinners(sim)
       const real = list.length
       if (teams) title = `${TEAM[sim.winningTeam]?.name ?? ''} TAKIM KAZANDI`
       else title = real === 1 ? 'SAHANIN SON HAKİMİ' : 'SAHADA AYAKTA KALANLAR'
       prizeLabel = prizePool > 0 && real > 0 ? `Kişi başı +${Math.floor(prizePool / real).toLocaleString('tr-TR')} KC` : ''
+      if (stage === 'heat') {
+        title = 'FİNALE ÇIKANLAR'
+        prizeLabel = ''
+      } else if (stage === 'match') {
+        title = `${TEAM[sim.winningTeam]?.name ?? ''} MAÇI ALDI`
+        prizeLabel = ''
+      }
       const k = list.length
       const rows = k > 5 ? 2 : 1
       const perRow = Math.ceil(k / rows)
@@ -215,7 +228,7 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
       stepSV(sim)
       if (sim.finalNow) {
         if (!quiet) {
-          kdSound.final()
+          snd?.final()
           finalFlash = 1
         }
         eventRef.current({ type: 'final', suddenDeath: sim.suddenDeath })
@@ -227,7 +240,7 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
           ripples.push({ side, y: b.y, at: performance.now() })
           burst(side * HW, b.y, 16, ['#ffffff', teams ? TEAM[b.team].ring : C.gold, '#3fd0a0'], 0.9, 0.012)
           if (!reduced) shake = Math.min(1, shake + 0.5)
-          kdSound.out()
+          snd?.out()
         }
         eventRef.current({ type: 'out', index: i, alive: svAlive(sim), teamAlive: Array.from({ length: teams }, (_, t) => svAlive(sim, t)) })
       }
@@ -246,7 +259,7 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
         for (const i of sim.shielded) burst(balls[i].x, balls[i].y, 4, ['#bfe8ff', '#ffffff'], 0.4, 0.007)
         for (const hit of sim.hits.slice(0, 3)) {
           burst(hit.x, hit.y, 3, ['#ffffff', C.gold], 0.5, 0.006)
-          kdSound.hit(hit.s)
+          snd?.hit(hit.s)
         }
       }
       let waiting = 0
@@ -254,7 +267,7 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
       const left = sim.final ? 0 : Math.max(0, Math.ceil(duration - sim.clock))
       const tickKey = left * 1000 + waiting
       if (tickKey !== lastTick) {
-        if (!quiet && left !== Math.floor(lastTick / 1000) && left > 0 && left <= 10) kdSound.beat()
+        if (!quiet && left !== Math.floor(lastTick / 1000) && left > 0 && left <= 10) snd?.beat()
         lastTick = tickKey
         eventRef.current({ type: 'tick', left, waiting })
       }
@@ -709,16 +722,16 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
       }
     }
     raf = requestAnimationFrame(frame)
-    kdSound.music.start('survival')
-    const groove = setTimeout(() => kdSound.music.setIntensity(1), 5000)
+    snd?.music.start('survival')
+    const groove = setTimeout(() => snd?.music.setIntensity(1), 5000)
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
       clearTimeout(groove)
-      kdSound.music.stop(0.6)
+      snd?.music.stop(0.6)
     }
     // A new round (seed/players/settings) restarts the whole scene.
-  }, [players, duration, winners, teamsOpt, rule, shield, captain, prizePool, seed, startAt])
+  }, [players, duration, winners, teamsOpt, rule, shield, captain, prizePool, seed, startAt, sound, stage])
 
   return <canvas ref={canvasRef} className="block h-full w-full" aria-hidden="true" />
 }

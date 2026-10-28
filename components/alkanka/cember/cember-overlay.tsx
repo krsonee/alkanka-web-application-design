@@ -7,7 +7,8 @@ import { Gift, Trophy, Users, X } from 'lucide-react'
 import { NOTICE_MINUTES, RESULT_SECONDS, INTRO_SECONDS, liveSeconds, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
 import { CemberArena, JAKO_PP, type ArenaEvent } from './cember-arena'
 import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
-import { SurvivalCanvas, type SVEvent } from '../survival/survival-canvas'
+import { type SVEvent } from '../survival/survival-canvas'
+import { SurvivalArena } from '../survival/survival-arena'
 import { CemberConfetti } from './cember-confetti'
 import { cemberFetch as fetchJson, serverNow } from './cember-clock'
 import { cn } from '@/lib/utils'
@@ -244,7 +245,7 @@ export function CemberStage({
     () =>
       round && phase !== 'intro' && phase !== 'empty' ? (
         round.game === 'survival' ? (
-          <SurvivalCanvas
+          <SurvivalArena
             players={kdPlayers}
             duration={round.duration || 90}
             winners={Math.max(1, round.winners.length)}
