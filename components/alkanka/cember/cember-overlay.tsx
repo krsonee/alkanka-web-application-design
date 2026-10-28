@@ -185,11 +185,13 @@ export function CemberStage({
     return () => clearInterval(id)
   }, [startAt])
 
+  const [sharing, setSharing] = useState(false)
   useEffect(() => {
-    if (phase !== 'result' && phase !== 'empty') return
+    // The share dialog lives inside this overlay, so auto-closing would yank it away mid-share.
+    if (sharing || (phase !== 'result' && phase !== 'empty')) return
     const id = setTimeout(() => doneRef.current(), (phase === 'empty' ? 5 : RESULT_SECONDS) * 1000)
     return () => clearTimeout(id)
-  }, [phase])
+  }, [phase, sharing])
 
   useEffect(() => {
     if (compact) return
@@ -436,7 +438,7 @@ export function CemberStage({
                   const mineIdx = participants?.findIndex((p) => p.id === meId) ?? -1
                   const idx = iSurvived && kdWinners.includes(mineIdx) ? mineIdx : kdWinners[0]
                   const p = participants?.[idx]
-                  return p ? <ShareWinnerCard slot={slot} index={idx} mine={iSurvived} name={p.name} /> : null
+                  return p ? <ShareWinnerCard slot={slot} index={idx} mine={iSurvived} name={p.name} onOpenChange={setSharing} /> : null
                 })()}
                 <button
                   type="button"
@@ -454,7 +456,7 @@ export function CemberStage({
                   <span className={compact ? 'text-sm' : 'text-lg'}>{iWon ? 'Kazandın kanka!' : `${winnerP.name} kazandı`}</span>
                 </div>
                 {prize && <span className="rounded-full bg-background/85 px-3 py-1 text-sm font-semibold text-gold">{prize}</span>}
-                {!isDemo && winner !== null && <ShareWinnerCard slot={slot} index={winner} mine={!!iWon} name={winnerP.name} />}
+                {!isDemo && winner !== null && <ShareWinnerCard slot={slot} index={winner} mine={!!iWon} name={winnerP.name} onOpenChange={setSharing} />}
                 <button
                   type="button"
                   onClick={() => doneRef.current()}

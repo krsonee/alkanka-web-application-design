@@ -6,8 +6,24 @@ import { Check, Copy, Download, Loader2, Share2, X } from 'lucide-react'
 
 type CardState = { status: 'loading' } | { status: 'ready'; file: File; preview: string } | { status: 'error' }
 
-export function ShareWinnerCard({ slot, index, mine, name }: { slot: string; index: number; mine: boolean; name: string }) {
-  const [open, setOpen] = useState(false)
+export function ShareWinnerCard({
+  slot,
+  index,
+  mine,
+  name,
+  onOpenChange,
+}: {
+  slot: string
+  index: number
+  mine: boolean
+  name: string
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [open, setOpenState] = useState(false)
+  const setOpen = (v: boolean) => {
+    setOpenState(v)
+    onOpenChange?.(v)
+  }
   const [card, setCard] = useState<CardState>({ status: 'loading' })
   const [copied, setCopied] = useState(false)
   const url = `/api/cember/kart?slot=${encodeURIComponent(slot)}&i=${index}`

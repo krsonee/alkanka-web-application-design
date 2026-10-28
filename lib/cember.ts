@@ -865,6 +865,13 @@ async function carryOver(row: RoundRow, prizes: CemberPrize[]) {
     ON CONFLICT (event_id) DO UPDATE SET coins = LEAST(${capKc}, cember_carry.coins + EXCLUDED.coins), kp = LEAST(${capKp}, cember_carry.kp + EXCLUDED.kp)`)
 }
 
+/** When the round's animation reaches its result screen for viewers who watched from the start. */
+function playEndsAt(row: { slot: string | Date; steps: number; game: string | null }) {
+  const step = row.game === 'karadelik' ? KD_STEP : row.game === 'survival' ? SV_STEP : STEP
+  const tail = row.game === 'cember' || !row.game ? 0 : 6
+  return new Date(row.slot).getTime() + (INTRO_SECONDS + Number(row.steps) * step + tail) * 1000
+}
+
 const settled = new Set<string>()
 
 /** Pays prizes and predictions once the reveal has passed; both steps are idempotent. */
@@ -1043,7 +1050,9 @@ export async function getRound(
       },
     }
   }
-  await settleRound(row)
+  // Payouts, inbox alerts and the Telegram post wait until the round has finished playing on screen,
+  // otherwise the group learns the winner while viewers are still watching the match.
+  if (Date.now() >= playEndsAt(row)) await settleRound(row)
   return { state: 'ready', round: toRound(row) }
 }
 
@@ -1163,8 +1172,7 @@ export async function cemberPauseWindows(): Promise<PauseWindow[]> {
     for (const x of r) {
       if (Number(x.n) <= 0) continue
       const s = new Date(x.slot).getTime()
-    const step = x.game === 'karadelik' ? KD_STEP : x.game === 'survival' ? SV_STEP : STEP
-    windows.push([s, s + (INTRO_SECONDS + Number(x.steps) * step + RESULT_SECONDS + (x.game === 'cember' || !x.game ? 0 : 6)) * 1000 + 3000])
+    windows.push([s, playEndsAt(x) + RESULT_SECONDS * 1000 + 3000])
     }
     // A slot that started but has not been settled yet (first viewer still loading) is paused until it is.
     for (const s of slotsAround(await getCemberEvents(), now)) {
