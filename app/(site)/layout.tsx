@@ -39,6 +39,9 @@ import { runAutoTick } from '@/lib/auto-tick'
 import { MarketingTags } from '@/components/alkanka/marketing-tags'
 import { getTracking } from '@/lib/marketing'
 import { EMPTY_TRACKING } from '@/lib/marketing-shared'
+import { TelegramStrip } from '@/components/alkanka/telegram-strip'
+import { getTelegramPromo } from '@/lib/telegram-promo'
+import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   after(() => runAutoTick())
@@ -52,7 +55,11 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     getAppSettings(),
     getTourSettings(),
   ])
-  const [boosts, tracking] = await Promise.all([currentBoosts().catch(() => []), getTracking().catch(() => EMPTY_TRACKING)])
+  const [boosts, tracking, tgPromo] = await Promise.all([
+    currentBoosts().catch(() => []),
+    getTracking().catch(() => EMPTY_TRACKING),
+    getTelegramPromo().catch(() => TELEGRAM_PROMO_DEFAULTS),
+  ])
   const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
   const channels = await getChannelUsernames().catch(() => null)
@@ -80,6 +87,15 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
               : 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)]'
           }
         >
+          {tgPromo.enabled && (
+            <TelegramStrip
+              text={tgPromo.text}
+              cta={tgPromo.cta}
+              reward={tgPromo.reward}
+              href={tgPromo.url || telegram.duyuru}
+              reshowDays={tgPromo.reshowDays}
+            />
+          )}
           <Topbar social={social} sponsors={searchSponsors} telegram={telegram} />
           <WinnersTicker />
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
