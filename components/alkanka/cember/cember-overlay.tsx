@@ -327,7 +327,7 @@ export function CemberStage({
           : 'inset-0 items-center justify-center bg-background/90 p-3 backdrop-blur-md',
       )}
     >
-      <div className={cn('relative flex w-full flex-col items-center', compact ? 'gap-2 p-3' : 'max-w-md gap-4')}>
+      <div className={cn('relative flex w-full flex-col items-center', compact ? 'gap-2 p-3' : cn('gap-4', isSv && arena ? 'max-w-2xl' : 'max-w-md'))}>
         <header className="flex w-full flex-col items-center gap-2 text-center">
           <div className="flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
             <span className="flex items-center gap-1.5 tabular-nums">
@@ -401,7 +401,10 @@ export function CemberStage({
           <div
             className={cn(
               'relative w-full',
-              isKd && 'aspect-square overflow-hidden rounded-2xl border border-primary/25 bg-background',
+              isKd && 'overflow-hidden rounded-2xl border border-primary/25 bg-background',
+              isKd && !isSv && 'aspect-square',
+              // Survival's pitch is portrait (~3:4); a square box letterboxed it to a small strip.
+              isSv && (compact ? 'aspect-[3/4]' : 'aspect-[3/4] w-[min(100%,calc((100dvh-13rem)*0.75))]'),
             )}
           >
             {isKd && <TableBrand className="z-10" center={false} plaque="top" corners jako />}
