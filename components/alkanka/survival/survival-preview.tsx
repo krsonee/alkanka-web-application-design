@@ -313,7 +313,7 @@ export function SurvivalPreview() {
           )}
 
           {feed.length > 0 && !result && (
-            <ol className="pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex flex-col items-start gap-1" aria-live="polite">
+            <ol className="pointer-events-none absolute bottom-20 left-3 right-3 z-20 flex flex-col items-start gap-1" aria-live="polite">
               {feed.map((f, k) => (
                 <li
                   key={f.id}

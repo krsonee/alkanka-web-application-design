@@ -990,7 +990,7 @@ async function payRound(row: RoundRow) {
     }
     const headline = `${row.title}: ${name} kazandı!`
     const body = svTeam
-      ? `${players} kankalık Survival Arena'yı ${teamName} Tak��m kazandı, sen de o takımdaydın. Ödülün: ${shareText(row.prize_text)}.`
+      ? `${players} kankalık Survival Arena'yı ${teamName} Takım kazandı, sen de o takımdaydın. Ödülün: ${shareText(row.prize_text)}.`
       : isSv
         ? `${players} kanka arasından sahada ayakta kalan ${winners.length} kişiden biri sensin. Ödülün: ${shareText(row.prize_text)}.`
         : isKd

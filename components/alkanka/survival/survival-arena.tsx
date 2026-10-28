@@ -46,6 +46,28 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
   const teamAliveRef = useRef<number[][]>([])
   const tickRef = useRef<{ left: number; waiting: number }[]>([])
   const sentFinalRef = useRef(false)
+  const meIndex = players.findIndex((p) => p.me)
+  const homeStage = useMemo(() => Math.max(0, plan.stages.findIndex((s) => s.entrants.includes(meIndex))), [plan, meIndex])
+  const [focus, setFocus] = useState(homeStage)
+  const pinnedRef = useRef(false)
+  const [info, setInfo] = useState<{ alive: number; done: boolean; winTeam: number }[]>([])
+
+  useEffect(() => {
+    setFocus(homeStage)
+    pinnedRef.current = false
+    setInfo(plan.stages.map((s) => ({ alive: s.entrants.length, done: false, winTeam: -1 })))
+  }, [plan, homeStage])
+
+  useEffect(() => {
+    if (!info[focus]?.done) return
+    const next = info.findIndex((s, k) => k !== focus && !s.done)
+    if (next < 0) return
+    const id = setTimeout(() => setFocus(next), pinnedRef.current ? 6000 : 3000)
+    return () => clearTimeout(id)
+  }, [info, focus])
+
+  const patchInfo = (k: number, patch: Partial<{ alive: number; done: boolean; winTeam: number }>) =>
+    setInfo((list) => list.map((s, i) => (i === k ? { ...s, ...patch } : s)))
 
   useEffect(() => {
     setPhase('stages')
@@ -79,6 +101,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
       if (e.type === 'out') {
         aliveRef.current[k] = e.alive
         teamAliveRef.current[k] = e.teamAlive
+        patchInfo(k, { alive: e.alive })
         emit({ type: 'out', index: stage.entrants[e.index], alive: aliveRef.current.reduce((a, b) => a + b, 0), teamAlive: sumTeams() })
       } else if (e.type === 'enter') {
         emit({ type: 'enter', index: stage.entrants[e.index] })
@@ -96,6 +119,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
       } else if (e.type === 'done') {
         if (doneRef.current.has(k)) return
         doneRef.current.add(k)
+        patchInfo(k, { done: true, winTeam: plan.kind === 'matches' ? e.winningTeam : -1 })
         if (plan.kind === 'matches') {
           setWins((w) => w.map((v, t) => (t === e.winningTeam ? v + 1 : v)))
           if (doneRef.current.size === plan.stages.length) {
@@ -122,7 +146,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
   )
 
   const pitches = plan.stages.length
-  const cols = pitches <= 2 ? pitches : pitches <= 4 ? 2 : 3
+  const label = plan.kind === 'heats' ? 'Saha' : 'Maç'
 
   if (phase === 'final' && plan.final) {
     const f = plan.final
@@ -148,10 +172,14 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
   }
 
   return (
-    <div className="relative h-full w-full">
-      <div className="grid h-full w-full gap-1 p-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+    <div className="flex h-full w-full flex-col">
+      <div className="relative min-h-0 flex-1">
         {plan.stages.map((s, k) => (
-          <div key={`${seed}-${k}`} className="relative min-h-0 overflow-hidden rounded-md">
+          <div
+            key={`${seed}-${k}`}
+            aria-hidden={k !== focus}
+            className={cn('absolute inset-0 transition-opacity duration-300', k === focus ? 'opacity-100' : 'pointer-events-none opacity-0')}
+          >
             <SurvivalCanvas
               players={s.entrants.map((i) => players[i])}
               duration={s.opts.duration}
@@ -164,32 +192,74 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
               powers={s.opts.powers}
               startAt={startAt}
               now={now}
-              sound={k === 0}
+              sound={k === homeStage}
               stage={plan.kind === 'heats' ? 'heat' : 'match'}
               onEvent={stageHandler(k, s)}
             />
-            <span className="pointer-events-none absolute left-1.5 top-1.5 rounded bg-background/80 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-foreground">
-              {plan.kind === 'heats' ? `Saha ${k + 1}` : `Maç ${k + 1}`}
-            </span>
           </div>
         ))}
       </div>
-      {plan.kind === 'heats' ? (
-        <Banner>{`ÖN ELEME · ${pitches} saha · ${plan.final?.entrants.length ?? 0} kişi finale çıkar`}</Banner>
-      ) : (
-        <Banner>
-          <span>{`${pitches} MAÇ AYNI ANDA`}</span>
-          <span className="flex items-center gap-2">
-            {wins.slice(0, Math.max(2, teams)).map((w, t) => (
-              <span key={t} className="flex items-center gap-1 tabular-nums">
-                <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: SV_TEAMS[t].color }} />
-                <span className="sr-only">{SV_TEAMS[t].name}</span>
-                {w}
-              </span>
-            ))}
+
+      <div className="relative z-20 flex shrink-0 flex-col gap-1.5 border-t border-primary/20 bg-card/95 px-2 pb-2 pt-1.5">
+        <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span className="truncate">
+            {plan.kind === 'heats'
+              ? `Ön eleme · ${pitches} saha · ${plan.final?.entrants.length ?? 0} kişi finale`
+              : `${pitches} maç aynı anda`}
           </span>
-        </Banner>
-      )}
+          {plan.kind === 'matches' && (
+            <span className="flex shrink-0 items-center gap-2 text-foreground">
+              {wins.slice(0, Math.max(2, teams)).map((w, t) => (
+                <span key={t} className="flex items-center gap-1 tabular-nums">
+                  <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: SV_TEAMS[t].color }} />
+                  <span className="sr-only">{SV_TEAMS[t].name}</span>
+                  {w}
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
+        <div role="tablist" aria-label={`${label} seç`} className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
+          {plan.stages.map((s, k) => {
+            const st = info[k]
+            const active = k === focus
+            return (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => {
+                  pinnedRef.current = true
+                  setFocus(k)
+                }}
+                className={cn(
+                  'flex min-w-0 flex-1 shrink-0 basis-12 flex-col items-center rounded-md border px-1.5 py-1 leading-none transition-colors',
+                  active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-foreground hover:border-primary/50',
+                )}
+              >
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide">
+                  {label} {k + 1}
+                  {k === homeStage && meIndex >= 0 && <span className="sr-only">(senin sahan)</span>}
+                  {k === homeStage && meIndex >= 0 && <span aria-hidden className={cn('size-1.5 rounded-full', active ? 'bg-primary-foreground' : 'bg-primary')} />}
+                </span>
+                <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold tabular-nums">
+                  {st?.done && st.winTeam >= 0 ? (
+                    <>
+                      <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: SV_TEAMS[st.winTeam]?.color }} />
+                      Bitti
+                    </>
+                  ) : st?.done ? (
+                    'Bitti'
+                  ) : (
+                    `${st?.alive ?? s.entrants.length} kişi`
+                  )}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
