@@ -60,6 +60,7 @@ function ensure() {
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS prize_split text NOT NULL DEFAULT 'each'`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS survival jsonb`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS winning_team int NOT NULL DEFAULT -1`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS instant boolean NOT NULL DEFAULT false`)
     await rows(sql`CREATE TABLE IF NOT EXISTS cember_notices (slot timestamptz PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
@@ -248,6 +249,17 @@ export async function scheduleInstantRound(eventId: string, delaySeconds: number
     return { kind: 'clash', clashTitle: hit.ev.title, clashAt: new Date(hit.at).toISOString(), suggestAt: new Date(firstFreeSlot(events, wanted)).toISOString() }
   }
   const at = new Date(hit ? firstFreeSlot(events, wanted) : wanted).toISOString()
+  const ev = events.find((e) => e.id === eventId)!
+  const { dailyKc } = await getInstantBudget(events)
+  if (dailyKc > 0) {
+    const used = instantKcOnDay(events, Date.parse(at))
+    const cost = roundKcCost(ev)
+    if (used + cost > dailyKc) {
+      throw new Error(
+        `Günlük anlık etkinlik bütçesi yetmiyor: bugün ${used.toLocaleString('tr-TR')} KC ayrıldı, bu tur en fazla ${cost.toLocaleString('tr-TR')} KC dağıtabilir, limit ${dailyKc.toLocaleString('tr-TR')} KC.`,
+      )
+    }
+  }
   const saved = await saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, enabled: true, extraSlots: [...e.extraSlots, at] } : e)))
   return { kind: 'scheduled', at, events: saved }
 }
@@ -261,6 +273,46 @@ export async function cancelInstantRound(eventId: string, slotIso: string) {
   const started = await rows(sql`SELECT 1 FROM cember_rounds WHERE slot = ${new Date(at).toISOString()} LIMIT 1`)
   if (started.length) throw new Error('Bu tur kurulmuş, artık iptal edilemez.')
   return saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, extraSlots: e.extraSlots.filter((s) => Date.parse(s) !== at) } : e)))
+}
+
+// --- Instant budget ------------------------------------------------------
+
+const INSTANT_KEY = 'cember_instant'
+
+export type InstantBudget = { dailyKc: number; usedKc: number }
+
+/** Upper bound on winners: team Survival pays the whole winning side, so it is capped at MAX_WINNERS. */
+function maxWinnersOf(ev: CemberConfig) {
+  if (ev.game === 'survival' && ev.survival.teams > 0) return MAX_WINNERS
+  return ev.winnerMode === 'tiers' ? Math.max(1, ...ev.tiers.map((t) => t.winners)) : ev.winners
+}
+
+/** Most KC a single round of this event can pay out. */
+export function roundKcCost(ev: CemberConfig) {
+  const coins = ev.prizes.filter((p) => p.type === 'coin').reduce((s, p) => s + p.amount, 0)
+  return ev.prizeSplit === 'split' ? coins : coins * maxWinnersOf(ev)
+}
+
+/** KC reserved by instant (off-schedule) rounds on the Turkish calendar day containing `at`. */
+function instantKcOnDay(events: CemberConfig[], at: number) {
+  const day = trDayStart(at)
+  return events.reduce(
+    (sum, ev) => sum + ev.extraSlots.filter((s) => Date.parse(s) >= day && Date.parse(s) < day + 86400_000).length * roundKcCost(ev),
+    0,
+  )
+}
+
+export async function getInstantBudget(events?: CemberConfig[]): Promise<InstantBudget> {
+  const r = await rows<{ value: { dailyKc?: number } }>(sql`SELECT value FROM kp_settings WHERE key = ${INSTANT_KEY}`).catch(() => [])
+  const dailyKc = clampInt(r[0]?.value?.dailyKc, 0, 100_000_000, 0)
+  return { dailyKc, usedKc: instantKcOnDay(events ?? (await getCemberEvents()), Date.now()) }
+}
+
+export async function saveInstantBudget(dailyKc: number) {
+  const value = clampInt(dailyKc, 0, 100_000_000, 0)
+  await rows(sql`INSERT INTO kp_settings (key, value) VALUES (${INSTANT_KEY}, ${JSON.stringify({ dailyKc: value })}::jsonb)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+  return getInstantBudget()
 }
 
 export type UpcomingSlot = { at: string; eventId: string; title: string; game: CemberConfig['game']; instant: boolean }
@@ -470,6 +522,7 @@ type RoundRow = {
   prize_split: 'each' | 'split' | null
   survival: SurvivalOpts | null
   winning_team: number | null
+  instant: boolean | null
 }
 
 function normalizeSurvival(raw: unknown): SurvivalOpts {
@@ -607,10 +660,11 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   const winnerName = winners.length ? winners.map((w) => w.name).join(', ').slice(0, 200) : null
 
   const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds
-      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team)
+      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team, instant)
     VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${seed}, ${JSON.stringify(participants)}::jsonb, ${winnerSlots[0] ?? null}, ${first?.id ?? null},
       ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'cember' ? 0 : cfg.duration},
-      ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit}, ${cfg.game === 'survival' ? JSON.stringify(sv) : null}::jsonb, ${winningTeam})
+      ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit}, ${cfg.game === 'survival' ? JSON.stringify(sv) : null}::jsonb, ${winningTeam},
+      ${cfg.extraSlots.some((x) => Date.parse(x) === slot)})
     ON CONFLICT (slot) DO NOTHING RETURNING *`)
   const row = inserted[0] ?? (await loadRound(slot))
   if (inserted[0] && first) await payRound(inserted[0]).catch((e) => console.error('[cember] pay failed', e))
@@ -786,16 +840,24 @@ export async function sendUpcomingNotices() {
     const mins = Math.max(1, Math.round((s.at - now) / 60_000))
     const conditions = s.ev.conditions.map(describe).join(', ')
     const ids = (await eligibleIds(s.ev, now).catch(() => [] as string[])).slice(0, 2000)
+    const instant = s.ev.extraSlots.some((x) => Date.parse(x) === s.at)
+    const lead = instant ? 'Anlık etkinlik! ' : ''
+    const where = s.ev.game === 'cember' ? 'çemberde' : 'arenada'
+    const conditionPart = conditions ? ` Şartlar: ${conditions}.` : ''
     await Promise.allSettled([
       import('@/lib/telegram-chat').then(({ announceToChat }) =>
         announceToChat(
-          `${s.ev.title} ${mins} dakika sonra (${trClock(s.at)}) başlıyor! Ödül: ${prize}. Şartlar: ${conditions}. ` +
-            `Şu an ${ids.length} kanka çemberde, siteye gir canlı izle.`,
+          `${lead}${s.ev.title} (${GAME_META[s.ev.game].label}) ${mins} dakika sonra (${trClock(s.at)}) başlıyor! Ödül: ${prize}.${conditionPart} ` +
+            `Şu an ${ids.length} kanka ${where}, siteye gir canlı izle.`,
         ),
       ),
       ids.length
         ? import('@/lib/push').then(({ sendToUsers }) =>
-            sendToUsers(ids, { title: `${s.ev.title} ${mins} dk sonra!`, body: `Çemberdesin kanka, ${trClock(s.at)} itibarıyla izlemeye gel. Ödül: ${prize}`, url: '/' }, 'cember'),
+            sendToUsers(
+              ids,
+              { title: `${lead}${s.ev.title} ${mins} dk sonra!`, body: `Kanka ${where}sın, ${trClock(s.at)} itibarıyla izlemeye gel. Ödül: ${prize}`, url: '/' },
+              'cember',
+            ),
           )
         : null,
     ])
@@ -857,5 +919,6 @@ export async function recentRounds(limit = 12) {
     winner: x.winner_name,
     prize: x.prize_text,
     paid: x.paid,
+    instant: !!x.instant,
   }))
 }

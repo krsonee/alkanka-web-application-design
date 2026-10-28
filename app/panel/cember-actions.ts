@@ -1,7 +1,17 @@
 'use server'
 
 import { canPanel } from '@/lib/admin-auth'
-import { cancelInstantRound, saveCemberEvents, scheduleInstantRound, scheduleTestRound, upcomingSlots, type UpcomingSlot } from '@/lib/cember'
+import {
+  cancelInstantRound,
+  getInstantBudget,
+  saveCemberEvents,
+  saveInstantBudget,
+  scheduleInstantRound,
+  scheduleTestRound,
+  upcomingSlots,
+  type InstantBudget,
+  type UpcomingSlot,
+} from '@/lib/cember'
 import type { CemberConfig } from '@/lib/cember-shared'
 
 export type CemberActionResult = {
@@ -9,7 +19,22 @@ export type CemberActionResult = {
   message: string
   events?: CemberConfig[]
   upcoming?: UpcomingSlot[]
+  budget?: InstantBudget
   clash?: { title: string; at: string; suggestAt: string }
+}
+
+export async function setInstantBudget(dailyKc: number): Promise<CemberActionResult> {
+  if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
+  try {
+    const budget = await saveInstantBudget(dailyKc)
+    return {
+      ok: true,
+      message: budget.dailyKc ? `Anlık etkinlik bütçesi günde ${budget.dailyKc.toLocaleString('tr-TR')} KC olarak kaydedildi.` : 'Anlık etkinlik bütçesi kaldırıldı, limit yok.',
+      budget,
+    }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Bütçe kaydedilemedi.' }
+  }
 }
 
 const trTime = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' })
@@ -25,7 +50,13 @@ export async function startInstantEvent(eventId: string, delaySeconds: number, p
         clash: { title: r.clashTitle, at: r.clashAt, suggestAt: r.suggestAt },
       }
     }
-    return { ok: true, message: `Anlık etkinlik ${trTime(r.at)} için kuruldu. O saatte sitedeki herkese açılır.`, events: r.events, upcoming: upcomingSlots(r.events) }
+    return {
+      ok: true,
+      message: `Anlık etkinlik ${trTime(r.at)} için kuruldu. O saatte sitedeki herkese açılır.`,
+      events: r.events,
+      upcoming: upcomingSlots(r.events),
+      budget: await getInstantBudget(r.events),
+    }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Anlık etkinlik kurulamadı.' }
   }
@@ -35,7 +66,7 @@ export async function cancelInstantEvent(eventId: string, slotIso: string): Prom
   if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const events = await cancelInstantRound(eventId, slotIso)
-    return { ok: true, message: `${trTime(slotIso)} anlık turu iptal edildi, ödül dağıtılmayacak.`, events, upcoming: upcomingSlots(events) }
+    return { ok: true, message: `${trTime(slotIso)} anlık turu iptal edildi, ödül dağıtılmayacak.`, events, upcoming: upcomingSlots(events), budget: await getInstantBudget(events) }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'İptal edilemedi.' }
   }

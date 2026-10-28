@@ -7,7 +7,7 @@ import { Copy, Play, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
 import { CemberDemo } from './cember-demo'
 import { InstantEvent } from './instant-event'
-import type { UpcomingSlot } from '@/lib/cember'
+import type { InstantBudget, UpcomingSlot } from '@/lib/cember'
 import {
   CONDITION_KINDS,
   DEFAULT_CEMBER,
@@ -37,7 +37,7 @@ import {
 import { cn } from '@/lib/utils'
 
 type Option = { id: string; name: string }
-type RecentRound = { slot: string; title: string; players: number; winner: string | null; prize: string; paid: boolean }
+type RecentRound = { slot: string; title: string; players: number; winner: string | null; prize: string; paid: boolean; instant?: boolean }
 
 const PRIZE_TYPES: Record<PrizeType, string> = { coin: 'Kanka Coin (KC)', kp: 'Kanka Puan (KP)', badge: 'Rozet', market: 'Market ödülü' }
 
@@ -52,8 +52,10 @@ export function CemberEditor({
   items,
   recent,
   upcoming: initialUpcoming,
+  budget: initialBudget,
 }: {
   initial: CemberConfig[]
+  budget: InstantBudget
   tasks: Option[]
   games: Option[]
   badges: Option[]
@@ -63,6 +65,7 @@ export function CemberEditor({
 }) {
   const [events, setEvents] = useState<CemberConfig[]>(initial.length ? initial : [{ ...DEFAULT_CEMBER, id: uid() }])
   const [upcoming, setUpcoming] = useState(initialUpcoming)
+  const [budget, setBudget] = useState(initialBudget)
   const [sel, setSel] = useState(0)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
@@ -158,9 +161,11 @@ export function CemberEditor({
         events={events}
         selectedId={cfg.id}
         upcoming={upcoming}
+        budget={budget}
         onSaved={(r) => {
           if (r.events) setEvents(r.events)
           if (r.upcoming) setUpcoming(r.upcoming)
+          if (r.budget) setBudget(r.budget)
           if (!r.clash) setMsg({ ok: r.ok, text: r.message })
         }}
       />
@@ -560,7 +565,12 @@ export function CemberEditor({
                     <td className="py-2 pr-3 tabular-nums">
                       {new Date(r.slot).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="py-2 pr-3">{r.title}</td>
+                    <td className="py-2 pr-3">
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        {r.title}
+                        {r.instant && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">Anlık</span>}
+                      </span>
+                    </td>
                     <td className="py-2 pr-3 tabular-nums">{r.players}</td>
                     <td className="py-2 pr-3 font-semibold">{r.winner ?? '—'}</td>
                     <td className="py-2 pr-3">{r.prize}</td>

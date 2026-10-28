@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { AlertTriangle, CalendarClock, X, Zap } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Coins, X, Zap } from 'lucide-react'
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { cancelInstantEvent, saveCember, startInstantEvent, type CemberActionResult } from '@/app/panel/cember-actions'
+import { cancelInstantEvent, saveCember, setInstantBudget, startInstantEvent, type CemberActionResult } from '@/app/panel/cember-actions'
 import { GAME_META, type CemberConfig } from '@/lib/cember-shared'
-import type { UpcomingSlot } from '@/lib/cember'
+import type { InstantBudget, UpcomingSlot } from '@/lib/cember'
 import { cn } from '@/lib/utils'
 
 const START_OPTIONS = [
@@ -27,14 +27,17 @@ export function InstantEvent({
   events,
   selectedId,
   upcoming,
+  budget,
   onSaved,
 }: {
   events: CemberConfig[]
   selectedId: string
   upcoming: UpcomingSlot[]
+  budget: InstantBudget
   onSaved: (r: CemberActionResult) => void
 }) {
   const [eventId, setEventId] = useState(selectedId)
+  const [limit, setLimit] = useState(String(budget.dailyKc || ''))
   const [delay, setDelay] = useState(START_OPTIONS[0].seconds)
   const [clash, setClash] = useState<Clash | null>(null)
   const [pending, start] = useTransition()
@@ -145,6 +148,39 @@ export function InstantEvent({
               <Zap className="size-4" aria-hidden /> {pending ? 'Kuruluyor...' : 'Anlık etkinliği başlat'}
             </button>
           )}
+          <form
+            className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              start(async () => onSaved(await setInstantBudget(Number(limit) || 0)))
+            }}
+          >
+            <label htmlFor="instant-budget" className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Coins className="size-4 text-primary" aria-hidden /> Günlük anlık etkinlik bütçesi
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="instant-budget"
+                type="number"
+                min={0}
+                step={100}
+                inputMode="numeric"
+                placeholder="Limit yok"
+                value={limit}
+                onChange={(e) => setLimit(e.target.value)}
+                className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-card px-2.5 text-sm text-foreground"
+              />
+              <span className="inline-flex items-center text-sm text-muted-foreground">KC</span>
+              <button type="submit" disabled={pending} className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-semibold disabled:opacity-60">
+                Kaydet
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {budget.dailyKc
+                ? `Bugün ${budget.usedKc.toLocaleString('tr-TR')} / ${budget.dailyKc.toLocaleString('tr-TR')} KC ayrıldı. Her anlık tur, kazanan sayısına göre dağıtabileceği en yüksek KC kadar yer tutar; bütçeyi aşan tur açılmaz.`
+                : `Limit yok. Bugün anlık turlar için ${budget.usedKc.toLocaleString('tr-TR')} KC ayrıldı. 0 ya da boş bırakırsan sınırsız olur.`}
+            </p>
+          </form>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Değişiklikler önce kaydedilir. Başlamadan iptal edilen turda ödül dağıtılmaz; duyuru çıkmışsa site şeridi kendiliğinden kalkar.
           </p>
