@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { Gift, Trophy, Users, X } from 'lucide-react'
-import { INTRO_SECONDS, NOTICE_MINUTES, RESULT_SECONDS, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
-import { CemberArena, type ArenaEvent } from './cember-arena'
+import { NOTICE_MINUTES, RESULT_SECONDS, INTRO_SECONDS, liveSeconds, type CemberMe, type CemberRound, type CemberStatus } from '@/lib/cember-shared'
+import { CemberArena, JAKO_PP, type ArenaEvent } from './cember-arena'
+import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
 import { CemberConfetti } from './cember-confetti'
 import { cemberFetch as fetchJson, serverNow } from './cember-clock'
 import { cn } from '@/lib/utils'
@@ -34,7 +35,8 @@ export function CemberOverlay() {
     if (!status?.enabled || !status.nextSlot || slotMs === null || activeSlot) return
     const now = serverNow()
     // Only open while the round is still running; latecomers get the result card instead.
-    if (now < slotMs || now > slotMs + (INTRO_SECONDS + 75) * 1000) return
+    const windowSec = status.liveSeconds ?? liveSeconds({ game: status.game ?? 'cember', duration: 90 })
+    if (now < slotMs || now > slotMs + windowSec * 1000) return
     if (localStorage.getItem(SEEN_KEY) === status.nextSlot) return
     setCompact(!!document.querySelector('[data-game-table]'))
     setActiveSlot(status.nextSlot)
@@ -104,6 +106,8 @@ export function CemberStage({
   const [alive, setAlive] = useState(demo?.participants.length ?? 0)
   const [feed, setFeed] = useState<{ key: number; name: string }[]>([])
   const [winner, setWinner] = useState<number | null>(null)
+  const [kdWinners, setKdWinners] = useState<number[]>([])
+  const [kdFinal, setKdFinal] = useState(false)
   const [now, setNow] = useState(serverNow())
   const doneRef = useRef(onDone)
   doneRef.current = onDone
@@ -176,19 +180,62 @@ export function CemberStage({
     [participants],
   )
 
+  const onKdEvent = useCallback(
+    (e: KDEvent) => {
+      if (!participants) return
+      if (e.type === 'out') {
+        setAlive(e.alive)
+        setFeed((f) => [{ key: e.index, name: participants[e.index].name }, ...f].slice(0, 5))
+      } else if (e.type === 'final') {
+        setKdFinal(true)
+      } else if (e.type === 'done') {
+        setKdWinners(e.winners)
+        setAlive(e.winners.length)
+        setPhase('result')
+      }
+    },
+    [participants],
+  )
+
+  const isKd = round?.game === 'karadelik'
+  const kdPlayers = useMemo(
+    () =>
+      round?.participants.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        image: p.image ?? JAKO_PP[i % JAKO_PP.length],
+        me: !!meId && p.id === meId,
+      })) ?? [],
+    [round, meId],
+  )
+
   const title = round?.title ?? status?.title ?? 'Jako Çemberi'
   const prize = round?.prizeText ?? status?.prizeText ?? ''
   const total = participants?.length ?? 0
   const countdown = Math.max(0, Math.ceil((startAt - now) / 1000))
   const winnerP = winner !== null && participants ? participants[winner] : null
   const iWon = winnerP && meId && winnerP.id === meId
+  const kdWinnerPs = participants ? kdWinners.map((i) => participants[i]).filter(Boolean) : []
+  const iSurvived = !!meId && kdWinnerPs.some((p) => p.id === meId)
 
   const arena = useMemo(
     () =>
       round && phase !== 'intro' && phase !== 'empty' ? (
-        <CemberArena participants={round.participants} seed={round.seed} startAt={startAt} now={serverNow} meId={meId} onEvent={onEvent} />
+        round.game === 'karadelik' ? (
+          <KaraDelikCanvas
+            players={kdPlayers}
+            duration={round.duration || 90}
+            winners={Math.max(1, round.winners.length)}
+            seed={round.seed}
+            startAt={startAt}
+            now={serverNow}
+            onEvent={onKdEvent}
+          />
+        ) : (
+          <CemberArena participants={round.participants} seed={round.seed} startAt={startAt} now={serverNow} meId={meId} onEvent={onEvent} />
+        )
       ) : null,
-    [round, phase === 'intro' || phase === 'empty', startAt, meId, onEvent], // eslint-disable-line react-hooks/exhaustive-deps
+    [round, phase === 'intro' || phase === 'empty', startAt, meId, onEvent, onKdEvent, kdPlayers], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   return (
@@ -261,7 +308,29 @@ export function CemberStage({
         {arena && (
           <div className="relative w-full">
             {arena}
-            {phase === 'result' && winnerP && (
+            {isKd && kdFinal && phase === 'play' && (
+              <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-destructive px-3 py-1 text-xs font-black uppercase tracking-widest text-destructive-foreground animate-pulse">
+                Final
+              </span>
+            )}
+            {phase === 'result' && isKd && kdWinnerPs.length > 0 && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 pb-[6%] text-center animate-in fade-in slide-in-from-bottom-4 delay-1000 duration-700 fill-mode-both">
+                <div className="flex items-center gap-2 rounded-full bg-gold px-4 py-2 font-display font-bold text-gold-foreground shadow-xl">
+                  <Trophy className="size-5" aria-hidden />
+                  <span className={compact ? 'text-sm' : 'text-lg'}>
+                    {iSurvived ? 'Sağ çıktın kanka!' : `${kdWinnerPs.length} kişi sağ çıktı`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => doneRef.current()}
+                  className="pointer-events-auto rounded-full border border-border bg-background/90 px-4 py-1.5 text-sm font-semibold text-foreground hover:border-gold/60"
+                >
+                  Kapat
+                </button>
+              </div>
+            )}
+            {phase === 'result' && !isKd && winnerP && (
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end gap-2 pb-[8%] text-center animate-in fade-in zoom-in-90 duration-700">
                 <div className="flex items-center gap-2 rounded-full bg-gold px-4 py-2 font-display font-bold text-gold-foreground shadow-xl">
                   <Trophy className="size-5" aria-hidden />
@@ -289,7 +358,9 @@ export function CemberStage({
 
         {!compact && phase !== 'empty' && (
           <p className="text-center text-xs text-muted-foreground text-pretty">
-            Kaleye düşen elenir · Çemberde kalan son kanka kazanır
+            {isKd
+              ? `Kara deliğe düşen elenir · Süre bitince Final · Son ${Math.max(1, round?.winners.length || 1)} kişi ödül alır`
+              : 'Kaleye düşen elenir · Çemberde kalan son kanka kazanır'}
           </p>
         )}
       </div>

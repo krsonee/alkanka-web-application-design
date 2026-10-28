@@ -3,9 +3,19 @@ import { randomInt } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
 import { runSim, mulberry, STEP } from '@/lib/cember-sim'
+import { runKD, KD_STEP } from '@/lib/karadelik-sim'
 import {
   CONDITION_KINDS,
   DEFAULT_CEMBER,
+  DEFAULT_BOTS,
+  DEFAULT_TIERS,
+  GAME_META,
+  KD_DURATIONS,
+  MAX_BOTS,
+  MAX_WINNERS,
+  liveSeconds,
+  resolveWinners,
+  type CemberGame,
   INTRO_SECONDS,
   RESULT_SECONDS,
   MAX_PLAYERS,
@@ -27,9 +37,8 @@ import {
 
 const TR_OFFSET_MS = 3 * 3600_000
 const SETTINGS_KEY = 'cember'
-/** A slot stays "current" this long so late visitors can still join the live round. */
 /** Matches the client's live window: once a round's window passes, the countdown moves on to the next slot. */
-const LIVE_WINDOW_MS = (INTRO_SECONDS + 75) * 1000
+const liveWindowMs = (ev: Pick<CemberConfig, 'game' | 'duration'>) => liveSeconds(ev) * 1000
 
 let ready: Promise<void> | null = null
 function ensure() {
@@ -41,6 +50,10 @@ function ensure() {
       winner_index int, winner_id text, winner_name text, steps int NOT NULL DEFAULT 0, prizes jsonb NOT NULL DEFAULT '[]'::jsonb,
       prize_text text NOT NULL DEFAULT '', paid boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS event_id text`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS game text NOT NULL DEFAULT 'cember'`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS duration int NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS winner_indexes jsonb NOT NULL DEFAULT '[]'::jsonb`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS prize_split text NOT NULL DEFAULT 'each'`)
     await rows(sql`CREATE TABLE IF NOT EXISTS cember_notices (slot timestamptz PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
@@ -82,10 +95,29 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
     }))
     .filter((p) => (p.type === 'badge' || p.type === 'market' ? !!p.ref : true))
   const now = Date.now()
+  const game: CemberGame = c.game && c.game in GAME_META ? c.game : 'cember'
+  const rawBots = (c.bots ?? DEFAULT_BOTS) as Partial<typeof DEFAULT_BOTS>
+  const rawTiers = Array.isArray(c.tiers) && c.tiers.length ? c.tiers : DEFAULT_TIERS
+  const tiers = rawTiers
+    .slice(0, 8)
+    .map((t) => ({ min: clampInt(t?.min, 1, 100_000, 1), winners: clampInt(t?.winners, 1, MAX_WINNERS, 1) }))
+    .sort((a, b) => a.min - b.min)
+    .filter((t, i, all) => i === 0 || t.min !== all[i - 1].min)
   return {
     id: String(raw?.id || fallbackId).replace(/[^\w-]/g, '').slice(0, 20) || fallbackId,
     enabled: c.enabled !== false,
-    title: String(c.title || DEFAULT_CEMBER.title).slice(0, 40),
+    title: String(c.title || GAME_META[game].label).slice(0, 40),
+    game,
+    duration: (KD_DURATIONS as readonly number[]).includes(Number(c.duration)) ? Number(c.duration) : 90,
+    winnerMode: c.winnerMode === 'tiers' ? 'tiers' : 'fixed',
+    winners: clampInt(c.winners, 1, MAX_WINNERS, 1),
+    tiers,
+    prizeSplit: c.prizeSplit === 'split' ? 'split' : 'each',
+    bots: {
+      enabled: rawBots.enabled !== false,
+      target: clampInt(rawBots.target, 2, MAX_BOTS + MAX_PLAYERS, DEFAULT_BOTS.target),
+      max: clampInt(rawBots.max, 0, MAX_BOTS, DEFAULT_BOTS.max),
+    },
     hours,
     days: [...new Set((Array.isArray(c.days) ? c.days : []).map((d) => clampInt(d, 0, 6, 0)))].sort((a, b) => a - b),
     minute: clampInt(c.minute, 0, 59, 0),
@@ -212,7 +244,7 @@ function eventForSlot(events: CemberConfig[], slot: number) {
 }
 
 function nextEntry(events: CemberConfig[], now: number) {
-  return slotsAround(events, now).find((s) => s.at > now - LIVE_WINDOW_MS) ?? null
+  return slotsAround(events, now).find((s) => s.at > now - liveWindowMs(s.ev)) ?? null
 }
 
 // --- Conditions ----------------------------------------------------------
@@ -362,14 +394,24 @@ type RoundRow = {
   steps: number
   prize_text: string
   paid: boolean
+  game: CemberGame | null
+  duration: number | null
+  winner_indexes: number[] | null
+  prize_split: 'each' | 'split' | null
 }
+
+const winnerIndexes = (r: RoundRow) =>
+  Array.isArray(r.winner_indexes) && r.winner_indexes.length ? r.winner_indexes : r.winner_index !== null ? [r.winner_index] : []
 
 const toRound = (r: RoundRow): CemberRound => ({
   slot: new Date(r.slot).toISOString(),
   title: r.title,
+  game: r.game === 'karadelik' ? 'karadelik' : 'cember',
+  duration: Number(r.duration ?? 0),
   seed: Number(r.seed),
   participants: r.participants,
   winner: r.winner_index,
+  winners: winnerIndexes(r),
   steps: Number(r.steps),
   prizeText: r.prize_text,
 })
@@ -381,8 +423,6 @@ async function loadRound(slot: number) {
 
 const pending = new Map<number, Promise<RoundRow | null>>()
 
-const CROWD_THRESHOLD = 10
-const CROWD_BOTS = 50
 const BOT_PREFIX = 'bot:'
 const BOT_NAMES = [
   'kartal34', 'sessizjako', 'gececi', 'mavisimsek', 'efe_07', 'kanka_burak', 'zeyno', 'denizkizi', 'baronn', 'tilki55',
@@ -424,91 +464,131 @@ async function finalize(slot: number): Promise<RoundRow | null> {
     })
 
   const realCount = participants.length
-  if (realCount > 0 && realCount < CROWD_THRESHOLD) {
+  const wantBots = cfg.bots.enabled && realCount > 0 ? Math.min(cfg.bots.max, Math.max(0, cfg.bots.target - realCount)) : 0
+  if (wantBots > 0) {
     const names = [...BOT_NAMES]
     for (let i = names.length - 1; i > 0; i--) {
       const j = Math.floor(pick() * (i + 1))
       ;[names[i], names[j]] = [names[j], names[i]]
     }
-    for (let i = 0; i < CROWD_BOTS; i++) {
+    for (let i = 0; i < wantBots; i++) {
       const base = names[i % names.length]
       participants.push({ id: `${BOT_PREFIX}${i}`, name: i < names.length ? base : `${base}${i}`, image: null })
     }
   }
 
-  const sim = participants.length ? runSim(participants.length, seed) : { winner: null, steps: 0 }
+  const prizePlaces = resolveWinners(cfg, realCount)
+  let winnerSlots: number[] = []
+  let steps = 0
+  if (participants.length && cfg.game === 'karadelik') {
+    const kd = runKD(participants.length, seed, cfg.duration, prizePlaces)
+    winnerSlots = kd.survivors
+    steps = kd.steps
+  } else if (participants.length) {
+    const sim = runSim(participants.length, seed)
+    winnerSlots = sim.winner !== null ? [sim.winner] : []
+    steps = sim.steps
+  }
 
-  // The physics outcome depends only on the ball count and seed, so the winning slot is fixed before identities are assigned.
-  // Seat a random real player there and shuffle everyone else across the remaining slots: bots can never win.
-  if (sim.winner !== null && participants.length > realCount) {
+  // The physics outcome depends only on the ball count and seed, so the winning slots are fixed before identities are assigned.
+  // Seat random real players there and shuffle everyone else across the remaining slots: bots can never win.
+  if (winnerSlots.length && participants.length > realCount) {
     const real = participants.slice(0, realCount)
     const bots = participants.slice(realCount)
-    const champ = real.splice(Math.floor(pick() * real.length), 1)[0]
+    const champs = winnerSlots.map(() => real.splice(Math.floor(pick() * real.length), 1)[0]).filter(Boolean)
     const rest = [...real, ...bots]
     for (let i = rest.length - 1; i > 0; i--) {
       const j = Math.floor(pick() * (i + 1))
       ;[rest[i], rest[j]] = [rest[j], rest[i]]
     }
-    rest.splice(sim.winner, 0, champ)
-    participants.splice(0, participants.length, ...rest)
+    const out: Participant[] = []
+    const bySlot = new Map(winnerSlots.map((s, i) => [s, champs[i]]))
+    for (let i = 0; i < participants.length; i++) out.push(bySlot.get(i) ?? rest.shift()!)
+    participants.splice(0, participants.length, ...out)
   }
-  const winner = sim.winner !== null ? participants[sim.winner] : null
+  const winners = winnerSlots.map((i) => participants[i]).filter(Boolean)
+  const first = winners[0] ?? null
   const { names } = await labelMaps(cfg)
   const text = prizeText(cfg.prizes, names)
+  const winnerName = winners.length ? winners.map((w) => w.name).join(', ').slice(0, 200) : null
 
-  const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id)
-    VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${seed}, ${JSON.stringify(participants)}::jsonb, ${sim.winner}, ${winner?.id ?? null},
-      ${winner?.name ?? null}, ${sim.steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!winner}, ${cfg.id})
+  const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds
+      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split)
+    VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${seed}, ${JSON.stringify(participants)}::jsonb, ${winnerSlots[0] ?? null}, ${first?.id ?? null},
+      ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'karadelik' ? cfg.duration : 0},
+      ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit})
     ON CONFLICT (slot) DO NOTHING RETURNING *`)
   const row = inserted[0] ?? (await loadRound(slot))
-  if (inserted[0] && winner) await payRound(inserted[0]).catch((e) => console.error('[cember] pay failed', e))
+  if (inserted[0] && first) await payRound(inserted[0]).catch((e) => console.error('[cember] pay failed', e))
   return row
 }
 
+/** Per-winner share of a prize: badges and market items go to everyone; KC/KP are divided when the event splits its pool. */
+function shareOf(p: CemberPrize, split: boolean, count: number) {
+  return split && count > 1 ? Math.max(1, Math.floor(p.amount / count)) : p.amount
+}
+
 async function payRound(row: RoundRow) {
-  const claimed = await rows<{ winner_id: string | null; prizes: CemberPrize[] }>(sql`UPDATE cember_rounds SET paid = true
-    WHERE slot = ${row.slot} AND paid = false RETURNING winner_id, prizes`)
+  const claimed = await rows<{ prizes: CemberPrize[] }>(sql`UPDATE cember_rounds SET paid = true
+    WHERE slot = ${row.slot} AND paid = false RETURNING prizes`)
   const c = claimed[0]
-  if (!c?.winner_id || isBot(c.winner_id)) return
-  const userId = c.winner_id
-  const name = row.winner_name ?? 'Kanka'
+  if (!c) return
+  const winners = winnerIndexes(row)
+    .map((i) => row.participants[i])
+    .filter((p): p is Participant => !!p && !isBot(p.id))
+  if (!winners.length) return
+  const split = row.prize_split === 'split'
   const slotKey = new Date(row.slot).toISOString().slice(0, 16)
-  const coins = c.prizes.filter((p) => p.type === 'coin').reduce((s, p) => s + p.amount, 0)
-  const kp = c.prizes.filter((p) => p.type === 'kp').reduce((s, p) => s + p.amount, 0)
-
-  const marker = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
-    VALUES (${userId}, 'cember', ${kp}, ${coins}, ${slotKey}, ${row.title}) ON CONFLICT DO NOTHING RETURNING id`)
-  if (!marker.length) return
-
+  const coins = c.prizes.filter((p) => p.type === 'coin').reduce((s, p) => s + shareOf(p, split, winners.length), 0)
+  const kp = c.prizes.filter((p) => p.type === 'kp').reduce((s, p) => s + shareOf(p, split, winners.length), 0)
+  const players = Array.isArray(row.participants) ? row.participants.length : 0
+  const isKd = row.game === 'karadelik'
   const { credit, recordHistory } = await import('@/lib/member')
-  if (coins > 0) {
-    await credit(userId, coins)
-    await recordHistory({ userId, userName: name, game: 'cember', mode: 'odul', opponent: row.title, stake: 0, result: 'win', delta: coins })
-  }
-  for (const p of c.prizes) {
-    if (p.type === 'badge' && p.ref) {
-      const { awardBadge } = await import('@/lib/kanka-puan')
-      await awardBadge(p.ref, userId, `cember-${slotKey}`, `${row.title} kazananı`).catch(() => {})
+
+  for (const w of winners) {
+    const userId = w.id
+    const name = w.name || 'Kanka'
+    // One kp_events row per winner per slot is the idempotency guard against a double payout.
+    const marker = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
+      VALUES (${userId}, 'cember', ${kp}, ${coins}, ${slotKey}, ${row.title}) ON CONFLICT DO NOTHING RETURNING id`)
+    if (!marker.length) continue
+    if (coins > 0) {
+      await credit(userId, coins)
+      await recordHistory({ userId, userName: name, game: 'cember', mode: 'odul', opponent: row.title, stake: 0, result: 'win', delta: coins })
     }
-    if (p.type === 'market' && p.ref) {
-      const item = await rows<{ id: string; name: string; sponsor_name: string | null }>(sql`SELECT id, name, sponsor_name FROM market_items WHERE id = ${p.ref}`).catch(() => [])
-      if (item[0]) {
-        await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, price, note)
-          VALUES (${item[0].id}, ${item[0].name}, ${item[0].sponsor_name}, ${userId}, ${name}, 0, ${`${row.title} ödülü`})`).catch(() => {})
+    for (const p of c.prizes) {
+      if (p.type === 'badge' && p.ref) {
+        const { awardBadge } = await import('@/lib/kanka-puan')
+        await awardBadge(p.ref, userId, `cember-${slotKey}`, `${row.title} kazananı`).catch(() => {})
+      }
+      if (p.type === 'market' && p.ref) {
+        const item = await rows<{ id: string; name: string; sponsor_name: string | null }>(sql`SELECT id, name, sponsor_name FROM market_items WHERE id = ${p.ref}`).catch(() => [])
+        if (item[0]) {
+          await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, price, note)
+            VALUES (${item[0].id}, ${item[0].name}, ${item[0].sponsor_name}, ${userId}, ${name}, 0, ${`${row.title} ödülü`})`).catch(() => {})
+        }
       }
     }
+    const headline = `${row.title}: ${name} kazandı!`
+    const body = isKd
+      ? `${players} kanka arasından kara delikten sağ çıkan ${winners.length} kişiden biri sensin. Ödülün: ${split && winners.length > 1 ? `${coins ? `${coins.toLocaleString('tr-TR')} KC` : ''}${coins && kp ? ' + ' : ''}${kp ? `${kp.toLocaleString('tr-TR')} KP` : ''}` || row.prize_text : row.prize_text}.`
+      : `${players} kanka arasından son kalan sen oldun. Ödülün: ${row.prize_text}.`
+    await Promise.allSettled([
+      import('@/lib/inbox').then(({ sendMessage }) => sendMessage({ userId, targetLabel: name, title: headline, body, url: '/market', sentBy: row.title })),
+      import('@/lib/push').then(({ sendToUsers }) => sendToUsers([userId], { title: headline, body, url: '/' })),
+    ])
   }
 
-  const players = Array.isArray(row.participants) ? row.participants.length : 0
-  const headline = `${row.title}: ${name} kazandı!`
-  const body = `${players} kanka arasından son kalan sen oldun. Ödülün: ${row.prize_text}.`
-  await Promise.allSettled([
-    import('@/lib/inbox').then(({ sendMessage }) => sendMessage({ userId, targetLabel: name, title: headline, body, url: '/market', sentBy: row.title })),
-    import('@/lib/push').then(({ sendToUsers }) => sendToUsers([userId], { title: headline, body, url: '/' })),
-    import('@/lib/telegram-chat').then(({ announceToChat }) =>
-      announceToChat(`${row.title} bitti! ${players} kanka çembere girdi, son kalan ${name} oldu. Ödül: ${row.prize_text}`),
-    ),
-  ])
+  const list = winners.map((w) => w.name).join(', ')
+  await import('@/lib/telegram-chat')
+    .then(({ announceToChat }) =>
+      announceToChat(
+        isKd
+          ? `${row.title} bitti! ${players} kanka arenaya girdi, kara delikten sağ çıkanlar: ${list}. Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (kazananlar arasında bölüşüldü)' : ' (kişi başı)'}`
+          : `${row.title} bitti! ${players} kanka çembere girdi, son kalan ${list} oldu. Ödül: ${row.prize_text}`,
+      ),
+    )
+    .catch(() => {})
 }
 
 export async function getRound(slotIso: string): Promise<{ state: 'wait' | 'none' | 'ready'; round?: CemberRound }> {
@@ -530,7 +610,7 @@ export async function getCemberStatus(): Promise<CemberStatus> {
   const events = await getCemberEvents()
   const now = Date.now()
   const slots = slotsAround(events, now)
-  const nextIdx = slots.findIndex((s) => s.at > now - LIVE_WINDOW_MS)
+  const nextIdx = slots.findIndex((s) => s.at > now - liveWindowMs(s.ev))
   const next = nextIdx >= 0 ? slots[nextIdx] : null
   const cfg = next?.ev ?? events[0] ?? DEFAULT_CEMBER
   const { names, describe } = await labelMaps(cfg)
@@ -555,6 +635,8 @@ export async function getCemberStatus(): Promise<CemberStatus> {
     enabled: !!next,
     now: new Date(now).toISOString(),
     title: cfg.title,
+    game: cfg.game,
+    liveSeconds: liveSeconds(cfg),
     nextSlot: next ? new Date(next.at).toISOString() : null,
     eventId: next?.ev.id ?? null,
     prizeText: prizeText(cfg.prizes, names),
@@ -625,13 +707,14 @@ export async function cemberPauseWindows(): Promise<PauseWindow[]> {
   const windows: PauseWindow[] = []
   try {
     await ensure()
-    const r = await rows<{ slot: string | Date; steps: number; n: number }>(
-      sql`SELECT slot, steps, jsonb_array_length(participants) AS n FROM cember_rounds WHERE slot > now() - interval '6 hours'`,
+    const r = await rows<{ slot: string | Date; steps: number; n: number; game: string | null }>(
+      sql`SELECT slot, steps, game, jsonb_array_length(participants) AS n FROM cember_rounds WHERE slot > now() - interval '6 hours'`,
     )
     for (const x of r) {
       if (Number(x.n) <= 0) continue
       const s = new Date(x.slot).getTime()
-      windows.push([s, s + (INTRO_SECONDS + Number(x.steps) * STEP + RESULT_SECONDS) * 1000 + 3000])
+      const step = x.game === 'karadelik' ? KD_STEP : STEP
+      windows.push([s, s + (INTRO_SECONDS + Number(x.steps) * step + RESULT_SECONDS + (x.game === 'karadelik' ? 6 : 0)) * 1000 + 3000])
     }
     // A slot that started but has not been settled yet (first viewer still loading) is paused until it is.
     for (const s of slotsAround(await getCemberEvents(), now)) {
@@ -658,5 +741,14 @@ export function isPausedAt(t: number, windows: PauseWindow[]) {
 export async function recentRounds(limit = 12) {
   await ensure()
   const r = await rows<RoundRow>(sql`SELECT * FROM cember_rounds ORDER BY slot DESC LIMIT ${limit}`)
-  return r.map((x) => ({ slot: new Date(x.slot).toISOString(), title: x.title, players: x.participants.length, winner: x.winner_name, prize: x.prize_text, paid: x.paid }))
+  return r.map((x) => ({
+    slot: new Date(x.slot).toISOString(),
+    title: x.title,
+    game: (x.game === 'karadelik' ? 'karadelik' : 'cember') as CemberGame,
+    players: x.participants.length,
+    bots: x.participants.filter((p) => isBot(p.id)).length,
+    winner: x.winner_name,
+    prize: x.prize_text,
+    paid: x.paid,
+  }))
 }

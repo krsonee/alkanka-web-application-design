@@ -19,7 +19,7 @@ const C = {
   grave: 'rgba(255,255,255,0.04)',
 }
 
-const JAKO_PP = [
+export const JAKO_PP = [
   '02-jako-goz-kirpan',
   '03-jako-coin-isiriyor',
   '04-jako-gunes-gozluklu',

@@ -198,7 +198,15 @@ export function KaraDelikPreview() {
         <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-primary/25 bg-background">
           <TableBrand className="z-10" center={false} plaque="top" corners jako />
           {run ? (
-            <KaraDelikCanvas key={run.key} players={run.players} duration={run.duration} winners={run.winners} prizePool={PRIZE_POOL} onEvent={onEvent} />
+            <KaraDelikCanvas
+              key={run.key}
+              players={run.players}
+              duration={run.duration}
+              winners={run.winners}
+              prizePool={PRIZE_POOL}
+              seed={run.key % 2147483647}
+              onEvent={onEvent}
+            />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
               <div className="flex size-28 items-center justify-center rounded-full border-4 border-primary/60 bg-card shadow-[0_0_60px_-10px] shadow-primary/50">

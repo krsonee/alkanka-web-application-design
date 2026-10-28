@@ -2,6 +2,19 @@
 
 import { useEffect, useRef } from 'react'
 import { kdSound } from './kd-sound'
+import {
+  KD_BAR_IN as BAR_IN,
+  KD_BAR_OUT as BAR_OUT,
+  KD_BAR_T as BAR_T,
+  KD_PULL_REACH as PULL_REACH,
+  KD_STEP as STEP,
+  KD_WALL as WALL,
+  KD_WARN as WARN,
+  createKD,
+  kdHole as holeState,
+  stepKD,
+  type KDHole as HoleState,
+} from '@/lib/karadelik-sim'
 
 export type KDPlayer = { id: string; name: string; image: string; me: boolean }
 
@@ -19,6 +32,11 @@ type Props = {
   winners: number
   /** Total prize shared between the survivors, shown on the victory formation. */
   prizePool?: number
+  /** Same seed + player count + settings gives the same match on every device. */
+  seed: number
+  /** Live rounds lock the simulation to this wall-clock start; previews run freely with slow motion. */
+  startAt?: number
+  now?: () => number
   onEvent: (e: KDEvent) => void
 }
 
@@ -53,22 +71,12 @@ function easeOutBack(p: number) {
   return 1 + c3 * (p - 1) ** 3 + c1 * (p - 1) ** 2
 }
 
-const WALL = 0.95
-const BAR_IN = 0.34
-const BAR_OUT = 0.84
-const BAR_T = 0.024
-const HOLE_R = 0.16
-const PULL_REACH = 0.7
-const STEP = 1 / 120
-const CYCLE = 11
-const CLOSED = 5.5
-const WARN = 3
 const SPRITE = 128
+/** Live viewers this far behind the clock (page reload, slow device) jump ahead silently instead of replaying every effect. */
+const CATCHUP_STEPS = 30
 
-type Ball = { x: number; y: number; vx: number; vy: number; alive: boolean }
 type Faller = { i: number; x: number; y: number; at: number }
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }
-type HoleState = { mode: 'closed' | 'warn' | 'open'; count: number; radius: number }
 
 function initials(name: string) {
   return name.trim().slice(0, 2).toUpperCase() || 'AK'
@@ -108,18 +116,12 @@ function makeSprite(name: string, img: HTMLImageElement | null) {
   return c
 }
 
-function holeState(time: number, final: boolean, finalAt: number): HoleState {
-  if (final) return { mode: 'open', count: 0, radius: HOLE_R + Math.min(0.13, (time - finalAt) * 0.016) }
-  const c = (time + 2) % CYCLE
-  if (c < CLOSED) return { mode: 'closed', count: 0, radius: HOLE_R }
-  if (c < CLOSED + WARN) return { mode: 'warn', count: Math.ceil(CLOSED + WARN - c), radius: HOLE_R }
-  return { mode: 'open', count: 0, radius: HOLE_R }
-}
-
-export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onEvent }: Props) {
+export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, seed, startAt, now: clock, onEvent }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eventRef = useRef(onEvent)
   eventRef.current = onEvent
+  const clockRef = useRef(clock)
+  clockRef.current = clock
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -132,24 +134,12 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
     const maxParticles = low ? 60 : 220
 
     const n = players.length
-    const r = Math.min(0.1, Math.sqrt(0.28 / n))
-    const balls: Ball[] = []
-    for (let i = 0; i < n; i++) {
-      let x = 0
-      let y = 0
-      for (let tries = 0; tries < 300; tries++) {
-        const a = Math.random() * Math.PI * 2
-        const d = 0.32 + Math.random() * (WALL - r - 0.34)
-        x = Math.cos(a) * d
-        y = Math.sin(a) * d
-        if (balls.every((b) => (b.x - x) ** 2 + (b.y - y) ** 2 > (2.05 * r) ** 2)) break
-      }
-      const va = Math.random() * Math.PI * 2
-      balls.push({ x, y, vx: Math.cos(va) * 0.5, vy: Math.sin(va) * 0.5, alive: true })
-    }
+    const sim = createKD(n, seed, duration, winners)
+    const { balls, r } = sim
 
     const sprites = players.map((p) => makeSprite(p.name, null))
     players.forEach((p, i) => {
+      if (!p.image) return
       const img = new Image()
       img.crossOrigin = 'anonymous'
       img.onload = () => {
@@ -159,11 +149,6 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
     })
     const meIndex = players.findIndex((p) => p.me)
 
-    let time = 0
-    let alive = n
-    let barAngle = 0
-    let final = false
-    let finalAt = 0
     let finished = false
     let finishedAt = 0
     let doneSent = false
@@ -233,161 +218,41 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
       }
     }
 
-    const eliminate = (i: number) => {
-      const b = balls[i]
-      b.alive = false
-      alive--
-      fallers.push({ i, x: b.x, y: b.y, at: performance.now() })
-      burst(b.x, b.y, 14, [C.hole, C.gold, '#ffffff'], 0.9, 0.012)
-      if (!reduced) shake = Math.min(1, shake + 0.55)
-      kdSound.out()
-      eventRef.current({ type: 'out', index: i, alive })
-      if (alive <= winners) finish()
-    }
-
-    const step = () => {
-      time += STEP
-      if (!final && time >= duration) {
-        if (alive > winners) {
-          final = true
-          finalAt = time
-          kdSound.final()
-          eventRef.current({ type: 'final' })
-        } else {
-          finish()
-          return
+    /** Feeds one simulation step into the visuals; `quiet` skips effects while catching up to the live clock. */
+    const advance = (quiet: boolean) => {
+      stepKD(sim)
+      if (sim.finalNow) {
+        if (!quiet) kdSound.final()
+        eventRef.current({ type: 'final' })
+      }
+      for (const i of sim.out) {
+        const b = balls[i]
+        if (!quiet) {
+          fallers.push({ i, x: b.x, y: b.y, at: performance.now() })
+          burst(b.x, b.y, 14, [C.hole, C.gold, '#ffffff'], 0.9, 0.012)
+          if (!reduced) shake = Math.min(1, shake + 0.55)
+          kdSound.out()
+        }
+        eventRef.current({ type: 'out', index: i, alive: sim.alive + (sim.out.length - 1 - sim.out.indexOf(i)) })
+      }
+      if (!quiet) {
+        for (const hit of sim.hits.slice(0, 3)) {
+          burst(hit.x, hit.y, 3, [C.gold, '#ffffff'], 0.6, 0.007)
+          kdSound.hit(hit.s)
         }
       }
 
-      const left = final ? 0 : Math.max(0, Math.ceil(duration - time))
+      const left = sim.final ? 0 : Math.max(0, Math.ceil(duration - sim.time))
       if (left !== lastTick) {
         lastTick = left
         eventRef.current({ type: 'tick', left })
-        if (left > 0 && left <= 10) kdSound.beat()
+        if (!quiet && left > 0 && left <= 10) kdSound.beat()
       }
-
-      const hole = holeState(time, final, finalAt)
-      if (hole.mode === 'warn' && hole.count !== lastWarnCount) kdSound.warn()
+      const hole = holeState(sim.time, sim.final, sim.finalAt)
+      if (!quiet && hole.mode === 'warn' && hole.count !== lastWarnCount) kdSound.warn()
       lastWarnCount = hole.mode === 'warn' ? hole.count : 0
-      const omega = final ? 1.7 : 1
-      barAngle += omega * STEP
-      // In the Final Battle the pull reaches the rim and keeps growing, so the round always ends.
-      const sinceFinal = final ? time - finalAt : 0
-      const reach = final ? 1.3 : PULL_REACH
-      const pull = final ? 1.2 + sinceFinal * 0.3 : 1.4
-      const maxSpeed = final ? 1.3 + Math.min(0.8, sinceFinal * 0.04) : 1.3
 
-      for (let i = 0; i < n; i++) {
-        const b = balls[i]
-        if (!b.alive) continue
-        let d = Math.sqrt(b.x * b.x + b.y * b.y) || 1e-6
-
-        if (hole.mode === 'open' && d < reach) {
-          const s = pull * (1 - d / reach) + 0.3
-          b.vx += (-b.x / d) * s * STEP + (-b.y / d) * 0.4 * STEP
-          b.vy += (-b.y / d) * s * STEP + (b.x / d) * 0.4 * STEP
-        }
-
-        const sp = Math.sqrt(b.vx * b.vx + b.vy * b.vy) || 1e-6
-        const target = sp < 0.35 ? 0.35 : sp > maxSpeed ? maxSpeed : sp
-        b.vx *= target / sp
-        b.vy *= target / sp
-        b.x += b.vx * STEP
-        b.y += b.vy * STEP
-        d = Math.sqrt(b.x * b.x + b.y * b.y) || 1e-6
-
-        if (d + r > WALL) {
-          const nx = b.x / d
-          const ny = b.y / d
-          b.x = nx * (WALL - r)
-          b.y = ny * (WALL - r)
-          const vn = b.vx * nx + b.vy * ny
-          if (vn > 0) {
-            b.vx -= 2 * vn * nx
-            b.vy -= 2 * vn * ny
-          }
-        }
-
-        if (hole.mode === 'open') {
-          if (d < hole.radius - r * 0.2) {
-            eliminate(i)
-            if (finished) return
-            continue
-          }
-        } else if (d < HOLE_R + r) {
-          const nx = b.x / d
-          const ny = b.y / d
-          b.x = nx * (HOLE_R + r)
-          b.y = ny * (HOLE_R + r)
-          const vn = b.vx * nx + b.vy * ny
-          if (vn < 0) {
-            b.vx -= 2 * vn * nx
-            b.vy -= 2 * vn * ny
-          }
-        }
-
-        for (let k = 0; k < 2; k++) {
-          const a = barAngle + k * Math.PI
-          const ux = Math.cos(a)
-          const uy = Math.sin(a)
-          const proj = Math.min(BAR_OUT, Math.max(BAR_IN, b.x * ux + b.y * uy))
-          const px = ux * proj
-          const py = uy * proj
-          const dx = b.x - px
-          const dy = b.y - py
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1e-6
-          if (dist < r + BAR_T) {
-            const nx = dx / dist
-            const ny = dy / dist
-            b.x = px + nx * (r + BAR_T)
-            b.y = py + ny * (r + BAR_T)
-            const bvx = -omega * py
-            const bvy = omega * px
-            const rn = (b.vx - bvx) * nx + (b.vy - bvy) * ny
-            if (rn < 0) {
-              b.vx -= 1.9 * rn * nx
-              b.vy -= 1.9 * rn * ny
-              if (-rn > 0.7) {
-                burst(px + nx * BAR_T, py + ny * BAR_T, 3, [C.gold, '#ffffff'], 0.6, 0.007)
-                kdSound.hit(-rn)
-              }
-            }
-          }
-        }
-      }
-
-      const min = 2 * r
-      for (let i = 0; i < n; i++) {
-        const a = balls[i]
-        if (!a.alive) continue
-        for (let j = i + 1; j < n; j++) {
-          const b = balls[j]
-          if (!b.alive) continue
-          const dx = b.x - a.x
-          const dy = b.y - a.y
-          const d2 = dx * dx + dy * dy
-          if (d2 >= min * min || d2 < 1e-12) continue
-          const d = Math.sqrt(d2)
-          const nx = dx / d
-          const ny = dy / d
-          const overlap = (min - d) / 2
-          a.x -= nx * overlap
-          a.y -= ny * overlap
-          b.x += nx * overlap
-          b.y += ny * overlap
-          const rel = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny
-          if (rel > 0) {
-            a.vx -= rel * nx
-            a.vy -= rel * ny
-            b.vx += rel * nx
-            b.vy += rel * ny
-            if (rel > 0.95) {
-              burst(a.x + nx * r, a.y + ny * r, 2, ['#ffffff', C.gold], 0.4, 0.006)
-              kdSound.hit(rel * 0.6)
-            }
-          }
-        }
-      }
+      if (sim.finished && !finished) finish()
     }
 
     let w = 0
@@ -512,7 +377,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
 
     const drawBars = (omegaSign: number) => {
       for (let k = 0; k < 2; k++) {
-        const a = barAngle + k * Math.PI
+        const a = sim.barAngle + k * Math.PI
         ctx.fillStyle = 'rgba(242,193,78,0.07)'
         ctx.beginPath()
         ctx.arc(0, 0, BAR_OUT * R, a - 0.38 * omegaSign, a, false)
@@ -651,7 +516,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
         ctx.fillStyle = g
         ctx.fillRect(0, 0, w, h)
       }
-      if (final && !finished) {
+      if (sim.final && !finished) {
         const pulse = 0.18 + 0.12 * Math.sin(now / 260)
         const g = ctx.createRadialGradient(w / 2, h / 2, R * 0.6, w / 2, h / 2, big * 0.75)
         g.addColorStop(0, 'rgba(239,79,90,0)')
@@ -678,7 +543,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
       ctx.arc(0, 0, R * WALL, 0, Math.PI * 2)
       ctx.clip()
       ctx.globalCompositeOperation = 'lighter'
-      const cg = ctx.createConicGradient(t * (final ? 0.9 : 0.35), 0, 0)
+      const cg = ctx.createConicGradient(t * (sim.final ? 0.9 : 0.35), 0, 0)
       cg.addColorStop(0, 'rgba(123,63,228,0.26)')
       cg.addColorStop(0.25, 'rgba(31,181,201,0.04)')
       cg.addColorStop(0.5, 'rgba(224,69,139,0.2)')
@@ -697,10 +562,10 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
       const a = t * 1.3
       ctx.save()
       if (!low) {
-        ctx.shadowColor = final ? 'rgba(239,79,90,0.9)' : 'rgba(255,226,150,0.9)'
+        ctx.shadowColor = sim.final ? 'rgba(239,79,90,0.9)' : 'rgba(255,226,150,0.9)'
         ctx.shadowBlur = 20
       }
-      ctx.strokeStyle = final ? 'rgba(255,140,150,0.95)' : 'rgba(255,240,200,0.9)'
+      ctx.strokeStyle = sim.final ? 'rgba(255,140,150,0.95)' : 'rgba(255,240,200,0.9)'
       ctx.lineWidth = R * 0.018
       ctx.lineCap = 'round'
       for (let k = 0; k < 2; k++) {
@@ -812,12 +677,20 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
     const frame = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      const slow = final && alive === winners + 1 && !finished
+      const slow = sim.final && sim.alive === sim.winners + 1 && !finished
       if (!finished) {
-        acc += dt * (slow ? 0.45 : 1)
-        while (acc >= STEP && !finished) {
-          step()
-          acc -= STEP
+        const liveClock = clockRef.current
+        if (startAt !== undefined && liveClock) {
+          // Live rounds follow the shared wall clock so every viewer sees the same moment; no slow motion here.
+          const target = Math.floor((liveClock() - startAt) / 1000 / STEP)
+          const behind = target - sim.step
+          while (sim.step < target && !finished) advance(behind > CATCHUP_STEPS && target - sim.step > 2)
+        } else {
+          acc += dt * (slow ? 0.45 : 1)
+          while (acc >= STEP && !finished) {
+            advance(false)
+            acc -= STEP
+          }
         }
       }
 
@@ -829,7 +702,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
           eventRef.current({
             type: 'done',
             winners: balls.flatMap((b, i) => (b.alive ? [i] : [])),
-            seconds: Math.round(time),
+            seconds: Math.round(sim.time),
           })
         }
       }
@@ -870,7 +743,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
       if (floor) ctx.drawImage(floor, -floorSize / 2, -floorSize / 2, floorSize, floorSize)
       drawSwirl(now)
 
-      const hole = holeState(time, final, finalAt)
+      const hole = holeState(sim.time, sim.final, sim.finalAt)
       drawHole(hole, now)
       drawBars(1)
 
@@ -889,7 +762,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, onE
       }
 
       if (!finished) {
-        const showNames = alive <= 12
+        const showNames = sim.alive <= 12
         for (let i = 0; i < n; i++) {
           const b = balls[i]
           if (!b.alive || i === meIndex) continue
