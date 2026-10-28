@@ -704,12 +704,12 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   if (n) {
     const holders = real.filter((p) => powerOf.has(p.id))
     const plain = real.filter((p) => !powerOf.has(p.id))
-    const order = Array.from({ length: n }, (_, i) => i)
-    for (let i = order.length - 1; i > 0; i--) {
+    const shuffled = Array.from({ length: n }, (_, i) => i)
+    for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(pick() * (i + 1))
-      ;[order[i], order[j]] = [order[j], order[i]]
+      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
     }
-    const pinned = new Map(holders.map((p, k) => [order[k], p]))
+    const pinned = new Map(holders.map((p, k) => [shuffled[k], p]))
     const powered = Array.from({ length: n }, (_, i) => (pinned.has(i) ? powerOf.get(pinned.get(i)!.id)! : 0))
 
     const attempt = (s: number, powers: number[], held: Map<number, Participant>, free: Participant[]) => {
