@@ -412,6 +412,26 @@ function eventForSlot(events: CemberConfig[], slot: number) {
   return slotsAround(events, slot).find((s) => s.at === slot)?.ev ?? null
 }
 
+/** Start time of the event's next round within the coming week, or null when it has no upcoming slot. */
+export function nextRoundAt(ev: CemberConfig, now: number = Date.now()): number | null {
+  const minutes = slotMinutes(ev)
+  const today = trDayStart(now)
+  let best: number | null = null
+  for (let d = 0; d < 8 && best === null; d++) {
+    const day = today + d * 86400_000
+    if (ev.days.length && !ev.days.includes((new Date(day + TR_OFFSET_MS).getUTCDay() + 6) % 7)) continue
+    for (const h of ev.hours) for (const m of minutes) {
+      const at = day + h * 3600_000 + m * 60_000
+      if (at > now && (best === null || at < best)) best = at
+    }
+  }
+  for (const s of ev.extraSlots) {
+    const at = Date.parse(s)
+    if (at > now && (best === null || at < best)) best = at
+  }
+  return best
+}
+
 function nextEntry(events: CemberConfig[], now: number) {
   return slotsAround(events, now).find((s) => s.at > now - liveWindowMs(s.ev)) ?? null
 }
