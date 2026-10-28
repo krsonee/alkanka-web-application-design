@@ -18,6 +18,7 @@ export type ArenaEvent = {
   maxPlayers: number
   conds: string[]
   next: number | null
+  slots: number[]
 }
 
 export type ArenaGameCard = {
@@ -165,12 +166,15 @@ export function ArenaCards({ cards, notice }: { cards: ArenaGameCard[]; notice: 
             steps: detail.flow,
             table: detail.events.length
               ? {
-                  title: 'Tur programı',
-                  rows: detail.events.map((e) => ({
-                    label: e.title,
-                    sub: `${e.days} · ${e.hours}`,
-                    value: [e.prize, e.winners].filter(Boolean).join(' · '),
-                  })),
+                  title: '7 günlük tur programı',
+                  rows: detail.events
+                    .flatMap((e) => e.slots.map((at) => ({ at, e })))
+                    .sort((a, b) => a.at - b.at)
+                    .map(({ at, e }) => ({
+                      label: now ? whenLabel(at, now) : clock(at),
+                      sub: `${e.title}${at === detailNext?.next ? ' · Sıradaki tur' : ''}`,
+                      value: [e.prize, e.winners].filter(Boolean).join(' · '),
+                    })),
                 }
               : undefined,
             rules: detail.rules,

@@ -1,4 +1,15 @@
 import { getCemberEvents, nextRoundAt } from '@/lib/cember'
+
+function weekSlots(e: Parameters<typeof nextRoundAt>[0], now: number) {
+  const end = now + 7 * 86400_000
+  const out: number[] = []
+  let at = nextRoundAt(e, now)
+  while (at !== null && at <= end && out.length < 60) {
+    out.push(at)
+    at = nextRoundAt(e, at)
+  }
+  return out
+}
 import {
   GAME_META,
   NOTICE_MINUTES,
@@ -144,6 +155,7 @@ export async function ArenaGuide() {
           maxPlayers: e.maxPlayers,
           conds: e.conditions.map((c) => conditionText(c)).filter(Boolean),
           next: nextRoundAt(e, now),
+          slots: weekSlots(e, now),
         })),
     }
   })
