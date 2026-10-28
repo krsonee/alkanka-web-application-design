@@ -290,6 +290,13 @@ export async function handleUpdate(update: TgUpdate) {
   const media = chatMedia(m)
   const text = media ? cleanBody(m) : messageText(m)
   if (!text && !media) return
+  const { screenMirror, dropBridgeSpam } = await import('@/lib/tg-guard')
+  const chatToken = await botToken(config.botId)
+  const spam = await screenMirror(chatToken, m).catch(() => null)
+  if (spam) {
+    await dropBridgeSpam(chatToken, m, spam).catch(() => null)
+    return
+  }
   const link = await rows<{ user_id: string }>(sql`SELECT user_id FROM tg_links WHERE tg_id = ${m.from.id}`)
   // The guard bot gets the same update in parallel; skip anything it already removed from the group.
   await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin, media_type, media_file_id)
@@ -412,11 +419,14 @@ export async function sendFromSite(userId: string, rawText: string) {
     WHERE user_id = ${userId} AND origin = 'site' AND lower(text) = lower(${text}) AND created_at > now() - interval '10 minutes'`)
   if (Number(repeat?.n ?? 0) >= 2) throw new Error('Aynı mesajı tekrar tekrar gönderemezsin.')
 
-  const { checkSiteText } = await import('@/lib/tg-guard')
-  const blocked = await checkSiteText(text)
-  if (blocked) throw new Error(blocked)
-
+  const { checkSiteText, siteStrike } = await import('@/lib/tg-guard')
   const token = await botToken(config.botId)
+  const blocked = await checkSiteText(text)
+  if (blocked) {
+    await siteStrike(Number(link[0].tg_id), config.chatId, token, link[0].tg_name, blocked).catch(() => null)
+    throw new Error(blocked)
+  }
+
   const member = await callBot<{ status: string; can_send_messages?: boolean }>(token, 'getChatMember', {
     chat_id: config.chatId,
     user_id: Number(link[0].tg_id),

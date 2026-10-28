@@ -206,6 +206,67 @@ function foreignLinks(m: GuardMsg, allow: string[]) {
 
 const isForwardedFromChannel = (m: GuardMsg) => m.forward_origin?.type === 'channel' || Boolean(m.forward_from_chat)
 
+// Spammers dodge URL matching with "t . me/x", "site nokta com", "hxxp" etc.
+const SPACED_LINK_RE = /(?:\bt\s*[.,·]\s*me\s*\/|\btelegram\s*[.,·]\s*(?:me|dog)\b|\bh(?:tt|xx)ps?\s*:\s*\/|\bwww\s*[.,·])|\b[a-z0-9-]{3,}\s*(?:[.,·]|\(dot\)|\[dot\]|\snokta\s|\sdot\s)\s*(?:com|net|org|bet|xyz|site|online|club|top|info|io|vip|win|live|link|tv|app|pro|cc)\b/gi
+const PHONE_RE = /(?:\+?\d[\s().-]{0,2}){10,}/
+const CONTACT_RE = /\b(?:whats?app|watsap|vatsap|wp|dm|özelden|ozelden|özelime|özele|inbox|pm\s*at|bana\s*yaz)\b/i
+const MENTION_RE = /@([a-z0-9_]{4,32})/gi
+const AD_MENTION_RE = /(bot|channel|kanal|vip|bonus|bet|kupon|tips|signal|sinyal|destek|support|admin|resmi|official)$/i
+
+/** Strict check for anything crossing the site ⇄ Telegram bridge, regardless of the sender's trust score. */
+function bridgeReason(m: GuardMsg, allow: string[], words: string[]): { kind: 'ad' | 'word'; reason: string } | null {
+  const text = (m.text ?? m.caption ?? '').trim()
+  const links = foreignLinks(m, allow)
+  if (links.length) return { kind: 'ad', reason: `Link: ${links[0].slice(0, 60)}` }
+  const allowed = allow.map((a) => a.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split('.')[0]).filter(Boolean)
+  const spaced = [...text.matchAll(SPACED_LINK_RE)].map((x) => x[0]).find((hit) => !allowed.some((a) => hit.toLowerCase().replace(/\s/g, '').startsWith(a)))
+  if (spaced) return { kind: 'ad', reason: `Gizlenmiş link: ${spaced.slice(0, 60)}` }
+  const mentions = [...text.matchAll(MENTION_RE)].map((x) => x[1])
+  const adMention = mentions.find((u) => AD_MENTION_RE.test(u) && !allowed.some((a) => u.toLowerCase().startsWith(a)))
+  if (adMention) return { kind: 'ad', reason: `Reklam hesabı: @${adMention}` }
+  if (PHONE_RE.test(text)) return { kind: 'ad', reason: 'Telefon numarası' }
+  if (CONTACT_RE.test(text) && mentions.length) return { kind: 'ad', reason: 'Özelden iletişim çağrısı' }
+  const bad = text ? findBadWord(text, words) : null
+  if (bad) return { kind: 'word', reason: 'Küfür / hakaret' }
+  return null
+}
+
+/** Telegram → site: decides whether a group message may be mirrored into the site chat. Admins are exempt. */
+export async function screenMirror(token: string, raw: TgMessage): Promise<string | null> {
+  const m = raw as GuardMsg
+  if (!m.from || m.is_automatic_forward) return null
+  if (m.sender_chat && (m.sender_chat.id === m.chat.id || m.from.username === 'GroupAnonymousBot')) return null
+  if (await isChatAdmin(token, m.chat.id, m.from.id)) return null
+  if (m.sender_chat?.type === 'channel') return 'Başka bir kanal adına mesaj'
+  if (isForwardedFromChannel(m)) return 'Başka kanaldan iletilen mesaj'
+  const hub = await getHub()
+  return bridgeReason(m, hub.guard.allowDomains, hub.guard.words)?.reason ?? null
+}
+
+/** Removes a spam message from Telegram and keeps it out of the site chat for good. */
+export async function dropBridgeSpam(token: string, raw: TgMessage, reason: string) {
+  await ensureGuardTables()
+  await del(token, raw.chat.id, raw.message_id)
+  await modLog({ chatId: raw.chat.id, chatTitle: raw.chat.title, user: raw.from, action: 'Mesaj silindi', reason: `Köprü filtresi: ${reason}` })
+}
+
+/** Site → Telegram: a blocked site message counts as a warning on the linked Telegram account, ending in a group mute. */
+export async function siteStrike(tgId: number, chatId: string, token: string, author: string, reason: string) {
+  await ensureGuardTables()
+  const hub = await getHub()
+  const g = hub.guard
+  const user = { id: tgId, is_bot: false, first_name: author } as TgUser
+  const count = await addWarn(tgId)
+  await adjustTrust(tgId, -10)
+  if (count < g.warnLimit) {
+    await modLog({ chatId, user, action: 'Site mesajı engellendi', reason: `${reason} (uyarı ${count}/${g.warnLimit})` })
+    return
+  }
+  const minutes = g.muteMinutes[Math.min(count - g.warnLimit, g.muteMinutes.length - 1)] ?? 60
+  await mute(token, chatId, tgId, minutes).catch(() => null)
+  await modLog({ chatId, user, action: `Susturuldu (${minutes} dk)`, reason: `Siteden: ${reason}` })
+}
+
 async function aiVerdict(text: string): Promise<{ bad: boolean; reason: string }> {
   try {
     const { text: answer } = await generateText({
@@ -773,8 +834,9 @@ async function isProtectedChat(hub: HubConfig, chatId: number | string) {
 export async function checkSiteText(text: string): Promise<string | null> {
   const hub = await getHub()
   const g = hub.guard
-  if (foreignLinks({ text } as GuardMsg, g.allowDomains).length) return 'Sohbette link / reklam paylaşamazsın.'
-  if (findBadWord(text, g.words)) return 'Mesajında küfür / hakaret var, gönderilmedi.'
+  const spam = bridgeReason({ text } as GuardMsg, g.allowDomains, g.words)
+  if (spam?.kind === 'ad') return 'Sohbette link, numara ya da reklam paylaşamazsın.'
+  if (spam?.kind === 'word') return 'Mesajında küfür / hakaret var, gönderilmedi.'
   if (g.aiModeration && text.length >= 12) {
     const verdict = await aiVerdict(text)
     if (verdict.bad) return 'Mesajın topluluk kurallarına uymuyor, gönderilmedi.'
