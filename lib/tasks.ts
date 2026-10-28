@@ -499,9 +499,16 @@ export async function taskProgress(userId: string, task: TaskRecord): Promise<nu
     case 'game_play':
     case 'game_win': {
       const win = task.kind === 'game_win'
-      return count(sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND created_at >= ${since}
+      const arena = await count(sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND created_at >= ${since}
         AND mode NOT IN ('odul', 'harcama', 'admin') AND result <> 'refund'
         AND (${win}::boolean IS FALSE OR result = 'win') AND (${p}::text IS NULL OR game = ${p})`)
+      // Çember / Kara Delik / Survival rounds only reach game_history as prize rows, so count joined rounds directly.
+      const events = await count(sql`SELECT count(*) AS n FROM cember_rounds WHERE slot >= ${since} AND slot <= now()
+        AND (${p}::text IS NULL OR game = ${p})
+        AND participants @> jsonb_build_array(jsonb_build_object('id', ${userId}::text))
+        AND (${win}::boolean IS FALSE OR winner_id = ${userId}
+          OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(winner_indexes) w WHERE participants -> (w::int) ->> 'id' = ${userId}))`)
+      return arena + events
     }
     case 'sponsor_visit': {
       let siteKey: string | null = null
