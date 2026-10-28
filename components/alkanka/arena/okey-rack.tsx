@@ -261,7 +261,7 @@ export function OkeyRack({
 
   return (
     <div
-      className="mx-auto flex w-full max-w-[44rem] flex-col gap-1 rounded-xl bg-wood p-1.5 shadow-inner sm:gap-1.5 sm:p-2"
+      className="mx-auto flex w-full max-w-[50rem] flex-col gap-1 rounded-xl bg-wood p-1.5 shadow-inner sm:gap-1.5 sm:p-2"
       role="group"
       aria-label={`Istakan, ${rack.rows === 3 ? 'üç' : 'iki'} sıra`}
     >
