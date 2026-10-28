@@ -14,6 +14,7 @@ export type DetailContent = {
   facts?: { label: string; value: string }[]
   steps?: string[]
   prizes?: { place: string; prize: string }[]
+  table?: { title: string; rows: { label: string; sub?: string; value: string }[] }
   rules: string[]
   note?: string
 }
@@ -68,6 +69,23 @@ export function DetailModal({
                     </li>
                   ))}
                 </ol>
+              </section>
+            )}
+
+            {content.table && content.table.rows.length > 0 && (
+              <section className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold">{content.table.title}</h3>
+                <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+                  {content.table.rows.map((r) => (
+                    <li key={r.label + (r.sub ?? '')} className="flex flex-col gap-0.5 px-3 py-2.5 text-sm">
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="font-semibold">{r.label}</span>
+                        <span className="text-right font-display font-bold text-primary">{r.value}</span>
+                      </span>
+                      {r.sub && <span className="text-xs text-muted-foreground">{r.sub}</span>}
+                    </li>
+                  ))}
+                </ul>
               </section>
             )}
 

@@ -23,6 +23,8 @@
   --color-gold: var(--gold);
   --color-bronze: var(--bronze);
   --color-ruby: var(--ruby);
+  --color-team-blue: var(--team-blue);
+  --color-team-blue-foreground: var(--team-blue-foreground);
   --color-amethyst: var(--amethyst);
   --color-silver: var(--silver);
   --color-emerald: var(--emerald);
@@ -106,6 +108,8 @@
   --gold: oklch(0.8 0.135 86);
   --bronze: oklch(0.66 0.11 52);
   --ruby: oklch(0.6 0.2 18);
+  --team-blue: oklch(0.65 0.17 258);
+  --team-blue-foreground: oklch(0.98 0.01 258);
   --amethyst: oklch(0.66 0.19 305);
   --silver: oklch(0.84 0.025 250);
   --emerald: oklch(0.74 0.16 162);

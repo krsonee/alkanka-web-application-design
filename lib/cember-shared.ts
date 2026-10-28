@@ -24,10 +24,68 @@ export type CemberCondition = { id: string; kind: ConditionKind; target: number;
 export type PrizeType = 'coin' | 'kp' | 'badge' | 'market'
 export type CemberPrize = { id: string; type: PrizeType; amount: number; ref: string | null; label: string }
 
+export type CemberGame = 'cember' | 'karadelik' | 'survival'
+export const GAME_META: Record<CemberGame, { label: string; short: string }> = {
+  cember: { label: 'Jako Çemberi', short: 'Çember' },
+  karadelik: { label: 'Kara Delik Arenası', short: 'Kara Delik' },
+  survival: { label: 'Survival Arena', short: 'Survival' },
+}
+export const asGame = (g: unknown): CemberGame => (typeof g === 'string' && g in GAME_META ? (g as CemberGame) : 'cember')
+
+/** Survival Arena rules: solo or gold-vs-blue, last-standing or majority, teammate goal shield. */
+export type SurvivalRule = 'last' | 'most'
+export type SurvivalOpts = { teams: 0 | 2 | 5; rule: SurvivalRule; shield: boolean; captain: boolean }
+export const DEFAULT_SURVIVAL: SurvivalOpts = { teams: 0, rule: 'last', shield: true, captain: false }
+
+/**
+ * Pre-round powers (Survival + Kara Delik). Earned, never bought:
+ * shield = did more tasks today than the event asks; revive = wrote in the Telegram group today/yesterday.
+ */
+export type PowerOpts = { shield: boolean; revive: boolean }
+export const DEFAULT_POWERS: PowerOpts = { shield: true, revive: true }
+export const POWER_NONE = 0
+export const POWER_SHIELD = 1
+export const POWER_REVIVE = 2
+export const POWER_LABEL: Record<1 | 2, string> = { 1: 'Görev kalkanı', 2: 'Telegram dönüşü' }
+
+/** Fills thin rounds with bots so the arena never looks empty; bots never win or get paid. */
+export type BotConfig = { enabled: boolean; target: number; max: number; /** Show a small "bot" mark next to bot names. */ tag: boolean }
+export const DEFAULT_BOTS: BotConfig = { enabled: true, target: 50, max: 50, tag: false }
+export const BOT_TAG = ' · bot'
+export const MAX_BOTS = 120
+
+/** "From `min` real players up, `winners` people win." Highest matching row applies. */
+export type WinnerTier = { min: number; winners: number }
+export const DEFAULT_TIERS: WinnerTier[] = [
+  { min: 1, winners: 1 },
+  { min: 16, winners: 3 },
+  { min: 41, winners: 5 },
+  { min: 81, winners: 10 },
+]
+export const MAX_WINNERS = 10
+export const KD_DURATIONS = [30, 45, 60, 90, 120, 180, 240] as const
+
 export type CemberConfig = {
   id: string
   enabled: boolean
   title: string
+  game: CemberGame
+  /** Kara Delik: seconds before the Final Battle starts. */
+  duration: number
+  winnerMode: 'fixed' | 'tiers'
+  winners: number
+  tiers: WinnerTier[]
+  /** each = every winner gets the full prize list; split = KC/KP amounts are shared between winners. */
+  prizeSplit: 'each' | 'split'
+  /** pool = an unpaid prize stays in the pool; carry = its KC/KP is added to this event's next round. */
+  leftover: 'pool' | 'carry'
+  /** Survival Arena only. */
+  survival: SurvivalOpts
+  /** Survival Arena + Kara Delik only. */
+  powers: PowerOpts
+  bots: BotConfig
+  /** KP per correct "who makes the top 3" pick made during the intro; 0 turns predictions off. */
+  predictKp: number
   hours: number[]
   /** Weekdays the event runs (0 = Pazartesi … 6 = Pazar); empty = every day. */
   days: number[]
@@ -45,6 +103,17 @@ export const DEFAULT_CEMBER: CemberConfig = {
   id: 'e1',
   enabled: true,
   title: 'Jako Çemberi',
+  game: 'cember',
+  duration: 90,
+  winnerMode: 'fixed',
+  winners: 1,
+  tiers: DEFAULT_TIERS,
+  prizeSplit: 'each',
+  leftover: 'pool',
+  survival: DEFAULT_SURVIVAL,
+  powers: DEFAULT_POWERS,
+  bots: DEFAULT_BOTS,
+  predictKp: 25,
   hours: Array.from({ length: 24 }, (_, h) => h),
   days: [],
   minute: 0,
@@ -62,7 +131,23 @@ export const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'] 
  * site içi tahmin, Telegram, sponsor, KankaTV, arena. Ödüller panelden değiştirilebilir.
  */
 export function recommendedCemberEvents(opts: { badgeId?: string | null; itemId?: string | null } = {}): CemberConfig[] {
-  const base = { enabled: true, every: 0, maxPlayers: MAX_PLAYERS_DEFAULT, extraSlots: [] as string[], days: [] as number[] }
+  const base = {
+    enabled: true,
+    every: 0,
+    maxPlayers: MAX_PLAYERS_DEFAULT,
+    extraSlots: [] as string[],
+    days: [] as number[],
+    game: 'cember' as CemberGame,
+    duration: 90,
+    winnerMode: 'fixed' as const,
+    winners: 1,
+    tiers: DEFAULT_TIERS,
+    prizeSplit: 'each' as const,
+    survival: DEFAULT_SURVIVAL,
+    powers: DEFAULT_POWERS,
+    bots: DEFAULT_BOTS,
+    predictKp: 25,
+  }
   const cond = (id: string, kind: ConditionKind, target = 1, param: string | null = null): CemberCondition => ({ id, kind, target, window: 'gun', param, label: '' })
   const coin = (id: string, amount: number): CemberPrize => ({ id, type: 'coin', amount, ref: null, label: '' })
   const market = (id: string, fallbackCoin: number): CemberPrize =>
@@ -111,27 +196,80 @@ export function slotMinutes(cfg: Pick<CemberConfig, 'minute' | 'every'>): number
   for (let m = cfg.minute % cfg.every; m < 60; m += cfg.every) out.push(m)
   return out
 }
-/** Mascot intro + countdown before the ring starts spinning. */
-export const INTRO_SECONDS = 5
+/**
+ * Intro + countdown before the round plays. Doubles as the prediction window: the server withholds the seed and
+ * results until it ends, so nobody can replay the round locally and "predict" a known outcome.
+ */
+export const INTRO_SECONDS = 20
+/** Predictions close this long before the reveal so a late request can't race the seed going out. */
+export const PREDICT_GRACE_SECONDS = 2
+export const PREDICT_PICKS = 3
+/** All three picks landing in the top 3 doubles the payout. */
+export const PREDICT_PERFECT_MULT = 2
 /** Winner celebration before the window closes itself (viewers can close it sooner). */
 export const RESULT_SECONDS = 6
+
+/** How many people win with `real` real players in the round (bots never count, and never more than the real players). */
+export function resolveWinners(cfg: Pick<CemberConfig, 'game' | 'winnerMode' | 'winners' | 'tiers'>, real: number) {
+  if (cfg.game === 'cember' || real <= 0) return Math.min(1, real)
+  let k = cfg.winners
+  if (cfg.winnerMode === 'tiers') {
+    k = 1
+    for (const t of [...cfg.tiers].sort((a, b) => a.min - b.min)) if (real >= t.min) k = t.winners
+  }
+  return Math.max(1, Math.min(MAX_WINNERS, k, real))
+}
+
+/** How long a round stays on screen (intro + play + a little slack); also the "late joiners" window. */
+export function liveSeconds(cfg: Pick<CemberConfig, 'game' | 'duration'> & { maxPlayers?: number }) {
+  // Survival also drains its waiting queue before the clock runs; above 60 solo entrants it adds heats plus a final.
+  const heats = (cfg.maxPlayers ?? 0) > 60 ? 240 : 0
+  return INTRO_SECONDS + (cfg.game === 'karadelik' ? cfg.duration + 75 : cfg.game === 'survival' ? cfg.duration + 150 + heats : 75)
+}
 
 export type Participant = { id: string; name: string; image: string | null }
 
 export type CemberRound = {
   slot: string
   title: string
+  game: CemberGame
+  duration: number
   seed: number
   participants: Participant[]
   winner: number | null
+  /** Every winning ball index (Kara Delik can have up to 10). */
+  winners: number[]
   steps: number
   prizeText: string
+  /** Survival Arena rules the round was simulated with. */
+  survival: SurvivalOpts | null
+  /** Survival team mode: 0 = Altın, 1 = Mavi. */
+  winningTeam: number
+  /** Power per participant slot (POWER_*), fed to the engine so every viewer replays the same round. */
+  powers: number[]
+  /** Participant ids that finished in the top 3 (winners first, then the last ones out). */
+  podium: string[]
+  /** KP per correct prediction this round (0 = predictions were off). */
+  predictKp: number
+}
+
+/** What viewers get during the intro: who is playing, but no seed or result yet. */
+export type CemberPreview = {
+  slot: string
+  title: string
+  game: CemberGame
+  participants: Participant[]
+  predictKp: number
+  closesAt: string
 }
 
 export type CemberStatus = {
   enabled: boolean
   now: string
   title: string
+  game: CemberGame
+  /** Seconds the next round stays live; the overlay keeps late visitors in for this long. */
+  liveSeconds: number
   nextSlot: string | null
   eventId: string | null
   prizeText: string

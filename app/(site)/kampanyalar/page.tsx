@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { CampaignHub } from '@/components/alkanka/campaign-hub'
+import { ArenaGuide } from '@/components/alkanka/arena-guide'
 import { AdFrame } from '@/components/alkanka/ad-frame'
 import { getCatalog } from '@/lib/catalog'
 import { MainSponsorRotator } from '@/components/alkanka/partner-sites'
@@ -34,7 +35,7 @@ export default async function CampaignsPage() {
       <AdFrame page="kampanyalar">
         {mains.length > 0 && <MainSponsorRotator sponsors={mains} compact />}
         <Suspense>
-          <CampaignHub />
+          <CampaignHub arena={<ArenaGuide />} />
         </Suspense>
       </AdFrame>
     </>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { BadgePercent, PartyPopper } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -15,16 +15,22 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id']
 
-export function CampaignHub() {
+export function CampaignHub({ arena }: { arena?: ReactNode }) {
   const catalog = useCatalog()
-  const counts = {
-    etkinlikler: catalog.events.length,
+  const counts: Record<TabId, number | null> = {
+    etkinlikler: catalog.events.length + 3,
     bonuslar: catalog.bonuses.length + catalog.campaigns.length,
   }
   const params = useSearchParams()
   const router = useRouter()
-  const initial: TabId = params.get('sekme') === 'bonuslar' ? 'bonuslar' : 'etkinlikler'
-  const [tab, setTab] = useState<TabId>(initial)
+  const sekme = params.get('sekme')
+  const wantsArena = sekme === 'arena'
+  const [tab, setTab] = useState<TabId>(sekme === 'bonuslar' ? 'bonuslar' : 'etkinlikler')
+  const tabIndex = TABS.findIndex((t) => t.id === tab)
+
+  useEffect(() => {
+    if (wantsArena) document.getElementById('arena-oyunlari')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [wantsArena])
 
   const select = (id: TabId) => {
     setTab(id)
@@ -40,8 +46,8 @@ export function CampaignHub() {
       >
         <span
           aria-hidden="true"
-          className="seg-thumb pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-primary"
-          style={{ transform: `translateX(${tab === 'bonuslar' ? '100%' : '0%'})` }}
+          className="seg-thumb pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-full bg-primary"
+          style={{ transform: `translateX(${tabIndex * 100}%)` }}
         />
         {TABS.map((t) => {
           const Icon = t.icon
@@ -75,7 +81,8 @@ export function CampaignHub() {
       </div>
 
       {tab === 'etkinlikler' ? (
-        <div id="kampanya-etkinlikler" role="tabpanel">
+        <div id="kampanya-etkinlikler" role="tabpanel" className="flex flex-col gap-12">
+          {arena}
           <Events view="biletler" />
         </div>
       ) : (

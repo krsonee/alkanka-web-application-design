@@ -17,11 +17,17 @@ function makeDemoRound(count: number, title: string, prize: string): CemberRound
   return {
     slot: new Date(serverNow()).toISOString(),
     title,
+    game: 'cember' as const,
+    duration: 0,
     seed: Math.floor(Math.random() * 2 ** 31),
     participants,
     winner: null,
+    winners: [],
     steps: 0,
     prizeText: prize,
+    survival: null,
+    powers: [],
+  winningTeam: -1,
   }
 }
 

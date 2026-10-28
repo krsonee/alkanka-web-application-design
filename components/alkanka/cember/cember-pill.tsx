@@ -58,7 +58,7 @@ export function CemberButton() {
 
   if (!status?.enabled || !status.nextSlot) return null
   const left = Date.parse(status.nextSlot) - now
-  const live = left <= 0 && left > -LIVE_MS
+  const live = left <= 0 && left > -(status.liveSeconds ? status.liveSeconds * 1000 : LIVE_MS)
   const soon = left > 0 && left <= COUNTDOWN_MS
   const eligible = !!me?.eligible
   const label = live ? 'Canlı' : !soon ? clock(status.nextSlot) : left > 5 * 60_000 ? `${Math.ceil(left / 60_000)} dk` : fmt(left)

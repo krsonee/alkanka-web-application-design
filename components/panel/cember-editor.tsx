@@ -6,6 +6,8 @@ import { useState, useTransition } from 'react'
 import { Copy, Play, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
 import { CemberDemo } from './cember-demo'
+import { InstantEvent } from './instant-event'
+import type { InstantBudget, UpcomingSlot } from '@/lib/cember'
 import {
   CONDITION_KINDS,
   DEFAULT_CEMBER,
@@ -24,13 +26,20 @@ import {
   type PrizeType,
   EVERY_OPTIONS,
   WEEKDAY_SHORT,
+  GAME_META,
+  KD_DURATIONS,
+  MAX_BOTS,
+  MAX_WINNERS,
+  PREDICT_PERFECT_MULT,
+  PREDICT_PICKS,
+  type CemberGame,
   recommendedCemberEvents,
   slotMinutes,
 } from '@/lib/cember-shared'
 import { cn } from '@/lib/utils'
 
 type Option = { id: string; name: string }
-type RecentRound = { slot: string; title: string; players: number; winner: string | null; prize: string; paid: boolean }
+type RecentRound = { slot: string; title: string; players: number; winner: string | null; prize: string; paid: boolean; instant?: boolean }
 
 const PRIZE_TYPES: Record<PrizeType, string> = { coin: 'Kanka Coin (KC)', kp: 'Kanka Puan (KP)', badge: 'Rozet', market: 'Market ödülü' }
 
@@ -44,15 +53,21 @@ export function CemberEditor({
   badges,
   items,
   recent,
+  upcoming: initialUpcoming,
+  budget: initialBudget,
 }: {
   initial: CemberConfig[]
+  budget: InstantBudget
   tasks: Option[]
   games: Option[]
   badges: Option[]
   items: Option[]
   recent: RecentRound[]
+  upcoming: UpcomingSlot[]
 }) {
   const [events, setEvents] = useState<CemberConfig[]>(initial.length ? initial : [{ ...DEFAULT_CEMBER, id: uid() }])
+  const [upcoming, setUpcoming] = useState(initialUpcoming)
+  const [budget, setBudget] = useState(initialBudget)
   const [sel, setSel] = useState(0)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
@@ -109,6 +124,7 @@ export function CemberEditor({
     start(async () => {
       const r = await saveCember(events)
       if (r.events) setEvents(r.events)
+      if (r.upcoming) setUpcoming(r.upcoming)
       setMsg({ ok: r.ok, text: r.message })
     })
 
@@ -141,6 +157,20 @@ export function CemberEditor({
   return (
     <div className="flex flex-col gap-6">
       <CemberDemo title={cfg.title} prize={prizeText(cfg.prizes, names)} />
+
+      <InstantEvent
+        key={cfg.id}
+        events={events}
+        selectedId={cfg.id}
+        upcoming={upcoming}
+        budget={budget}
+        onSaved={(r) => {
+          if (r.events) setEvents(r.events)
+          if (r.upcoming) setUpcoming(r.upcoming)
+          if (r.budget) setBudget(r.budget)
+          if (!r.clash) setMsg({ ok: r.ok, text: r.message })
+        }}
+      />
 
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" aria-label="Etkinlikler">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -303,6 +333,8 @@ export function CemberEditor({
           </div>
         </div>
       </section>
+
+      <ArenaSettings cfg={cfg} set={set} />
 
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
@@ -535,7 +567,12 @@ export function CemberEditor({
                     <td className="py-2 pr-3 tabular-nums">
                       {new Date(r.slot).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="py-2 pr-3">{r.title}</td>
+                    <td className="py-2 pr-3">
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        {r.title}
+                        {r.instant && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">Anlık</span>}
+                      </span>
+                    </td>
                     <td className="py-2 pr-3 tabular-nums">{r.players}</td>
                     <td className="py-2 pr-3 font-semibold">{r.winner ?? '—'}</td>
                     <td className="py-2 pr-3">{r.prize}</td>
@@ -548,5 +585,367 @@ export function CemberEditor({
         )}
       </section>
     </div>
+  )
+}
+
+const SURVIVAL_PRESETS: { id: string; label: string; desc: string; opts: CemberConfig['survival'] }[] = [
+  { id: 'klasik', label: 'Herkes Kendi İçin', desc: 'Tekli. Kayan kalelere düşen elenir, belirlenen sayıda son kalan kazanır.', opts: { teams: 0, rule: 'last', shield: true, captain: false } },
+  { id: 'takim', label: 'Takım Savaşı', desc: 'Altın vs Mavi. Rakip takımın son oyuncusu kaleye düşünce biter. Takım kalkanı açık.', opts: { teams: 2, rule: 'last', shield: true, captain: false } },
+  { id: 'cogunluk', label: 'Süre Sonu Çoğunluk', desc: 'Altın vs Mavi. Süre bitince sahada daha çok oyuncusu kalan takım kazanır.', opts: { teams: 2, rule: 'most', shield: true, captain: false } },
+  { id: 'kaos', label: 'Kalkansız Takım', desc: 'Altın vs Mavi, kalkan yok. Takım arkadaşına çarpmak da kaleye savurabilir.', opts: { teams: 2, rule: 'last', shield: false, captain: false } },
+  { id: 'kaptan', label: 'Kaptanı Koru', desc: 'Altın vs Mavi. Her takımın bir kaptanı var; kaptanı kaleye düşen takım anında kaybeder.', opts: { teams: 2, rule: 'last', shield: true, captain: true } },
+  { id: 'besli', label: '5 Takım Savaşı', desc: 'Altın, Mavi, Yakut, Zümrüt, Gümüş. Kadrosu biten takım çıkar, sahada kalan son takım kazanır.', opts: { teams: 5, rule: 'last', shield: true, captain: false } },
+]
+
+function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<CemberConfig>) => void }) {
+  const isSv = cfg.game === 'survival'
+  const isKd = cfg.game === 'karadelik' || isSv
+  const sv = cfg.survival
+  const setSv = (patch: Partial<CemberConfig['survival']>) => set({ survival: { ...sv, ...patch } })
+  const bots = cfg.bots
+  const setBots = (patch: Partial<CemberConfig['bots']>) => set({ bots: { ...bots, ...patch } })
+  const tiers = [...cfg.tiers].sort((a, b) => a.min - b.min)
+  const setTier = (i: number, patch: Partial<{ min: number; winners: number }>) =>
+    set({ tiers: tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)) })
+  const clampW = (n: number) => Math.min(MAX_WINNERS, Math.max(1, Math.round(n) || 1))
+
+  return (
+    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4" aria-label="Oyun ve kazananlar">
+      <div>
+        <h3 className="font-display text-base font-bold">Oyun, kazananlar ve botlar</h3>
+        <p className="text-xs text-muted-foreground">Bu etkinlikte hangi oyun oynansın, kaç kişi ödül alsın, arena kaç kişiyle dolsun.</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-semibold">Oyun</span>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(Object.keys(GAME_META) as CemberGame[]).map((g) => (
+            <button
+              key={g}
+              type="button"
+              aria-pressed={cfg.game === g}
+              onClick={() => set(g === 'cember' ? { game: g, winnerMode: 'fixed', winners: 1 } : { game: g })}
+              className={cn(
+                'flex flex-col items-start gap-0.5 rounded-lg border p-3 text-left transition-colors',
+                cfg.game === g ? 'border-primary bg-primary/10' : 'border-border bg-background hover:border-primary/50',
+              )}
+            >
+              <span className="text-sm font-bold">{GAME_META[g].label}</span>
+              <span className="text-xs text-muted-foreground">
+                {g === 'cember'
+                  ? 'Kaleye düşen elenir, son kalan tek kişi kazanır.'
+                  : g === 'karadelik'
+                    ? 'Kara deliğe düşen elenir. Süre bitince Final, son 1–10 kişi kazanır.'
+                    : 'Dikey sahada iki yanda kayan kaleler. Kaleye düşen elenir. Tekli ya da Altın–Mavi takımlı.'}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isSv && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-3">
+          <span className="text-sm font-semibold">Survival kuralları</span>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-muted-foreground">Hazır şablonlar</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {SURVIVAL_PRESETS.map((p) => {
+                const active =
+                  p.opts.teams === sv.teams &&
+                  (sv.teams === 0 || (p.opts.shield === sv.shield && p.opts.rule === sv.rule && p.opts.captain === sv.captain))
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSv(p.opts)}
+                    className={cn(
+                      'flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left transition-colors',
+                      active ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/50',
+                    )}
+                  >
+                    <span className="text-xs font-bold">{p.label}</span>
+                    <span className="text-xs leading-relaxed text-muted-foreground">{p.desc}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-muted-foreground">Mod</span>
+            <div className="flex flex-wrap gap-2">
+              {([0, 2, 5] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={sv.teams === t}
+                  onClick={() => setSv(t === 0 ? { teams: t, captain: false } : { teams: t })}
+                  className={cn(
+                    'h-9 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                    sv.teams === t ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
+                  )}
+                >
+                  {t === 0 ? 'Tekli (herkes kendi için)' : t === 2 ? 'Takımlı (Altın vs Mavi)' : '5 takım'}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {sv.teams === 5
+                ? 'Oyuncular Altın, Mavi, Yakut, Zümrüt ve Gümüş takımlarına eşit dağılır. 10 kişilik turda takımlar 2 kişilik olur. Kazanan takımdaki tüm gerçek üyeler ödül alır.'
+                : sv.teams === 2
+                  ? 'Kazanan takımdaki tüm gerçek üyeler ödül alır, turda elenmiş olsalar bile. En az bir gerçek üye her zaman kazanan takımda olur.'
+                  : 'Kaleye düşen elenir. Sahada kazanan sayısı kadar oyuncu kalınca tur biter.'}
+            </span>
+          </div>
+          {sv.teams > 0 && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={sv.captain} onChange={(e) => setSv({ captain: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
+              <span>Kaptan modu: her takımdan bir oyuncu kaptan olur (topunda K rozeti). Kaptanı kaleye düşen takım, sahada kimi kalmış olursa olsun anında elenir.</span>
+            </label>
+          )}
+          {sv.teams > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground">Kazanma kuralı</span>
+              <div className="flex flex-wrap gap-2">
+                {(['last', 'most'] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    aria-pressed={sv.rule === r}
+                    onClick={() => setSv({ rule: r })}
+                    className={cn(
+                      'h-9 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                      sv.rule === r ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
+                    )}
+                  >
+                    {r === 'last' ? 'Son kalan takım' : 'Süre sonu çoğunluk'}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {sv.rule === 'last'
+                  ? 'Sahadaki ve sıradaki tüm oyuncuları kaleye düşen takım çıkar; sahada kalan son takım kazanır.'
+                  : 'Süre bitince sahada en çok oyuncusu kalan takım kazanır. Eşitlikte ani ölüm: berabere takımlardan ilk oyuncusunu kaybeden çıkar.'}
+              </span>
+            </div>
+          )}
+          {sv.teams > 0 && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={sv.shield} onChange={(e) => setSv({ shield: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
+              <span>Takım kalkanı: aynı takımdan iki oyuncu çarpışınca ikisi de 1 saniye kaleye düşmez, kale ağzından geri seker.</span>
+            </label>
+          )}
+        </div>
+      )}
+
+      {isKd && (
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+          <span className="text-sm font-semibold">Tur öncesi güçler</span>
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            Satın alınmaz, kazanılır. Her güç turda bir kez çalışır; elenecekken oyuncuyu kurtarır.
+          </span>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.powers.shield}
+              onChange={(e) => set({ powers: { ...cfg.powers, shield: e.target.checked } })}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <span>Görev kalkanı: bugün etkinliğin istediğinden fazla görev yapan oyuncu ilk düşüşünde kurtulur.</span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.powers.revive}
+              onChange={(e) => set({ powers: { ...cfg.powers, revive: e.target.checked } })}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <span>Telegram dönüşü: bugün ya da dün Telegram grubunda yazan oyuncu elenince bir kez sahaya geri döner.</span>
+          </label>
+        </div>
+      )}
+
+      <label className="flex flex-col gap-1 rounded-lg border border-border bg-background p-3 text-sm">
+        <span className="font-semibold">Tahmin oyunu (doğru tahmin başına KP)</span>
+        <input
+          type="number"
+          min={0}
+          max={10000}
+          value={cfg.predictKp}
+          onChange={(e) => set({ predictKp: Math.max(0, Math.min(10000, Number(e.target.value) || 0)) })}
+          className="h-9 rounded-md border border-input bg-background px-2"
+        />
+        <span className="text-xs leading-relaxed text-muted-foreground">
+          {`Tur başlamadan önceki sayaçta izleyiciler ilk ${PREDICT_PICKS}'ü tahmin eder. Her doğru isim bu kadar KP, hepsi tutarsa ${PREDICT_PERFECT_MULT} kat. 0 yazınca kapanır. Takım turlarında çalışmaz.`}
+        </span>
+      </label>
+
+      {isKd && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-semibold">Final&apos;e kadar süre</span>
+              <select className={input} value={cfg.duration} onChange={(e) => set({ duration: Number(e.target.value) })}>
+                {KD_DURATIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s < 60 ? `${s} saniye` : `${s / 60} dakika`}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-muted-foreground">Süre bitince Final Savaşı başlar, kazanan sayısına inene kadar devam eder</span>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-semibold">Ödül paylaşımı</span>
+              <select className={input} value={cfg.prizeSplit} onChange={(e) => set({ prizeSplit: e.target.value as CemberConfig['prizeSplit'] })}>
+                <option value="each">Her kazanan ödülün tamamını alır</option>
+                <option value="split">KC/KP kazananlar arasında bölünür</option>
+              </select>
+              <span className="text-xs text-muted-foreground">Rozet ve market ödülü her kazanana ayrı verilir</span>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-semibold">Kazanılmayan ödül</span>
+              <select className={input} value={cfg.leftover} onChange={(e) => set({ leftover: e.target.value as CemberConfig['leftover'] })}>
+                <option value="pool">Havuzda kalır</option>
+                <option value="carry">KC/KP bir sonraki tura devreder</option>
+              </select>
+              <span className="text-xs text-muted-foreground">Bot kazanırsa geçerli. Devreden en fazla 5 turluk ödüle kadar birikir, kazananlar arasında bölünür.</span>
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-semibold">Kaç kişi kazansın</span>
+            <div className="flex flex-wrap gap-2">
+              {(['fixed', 'tiers'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={cfg.winnerMode === m}
+                  onClick={() => set({ winnerMode: m })}
+                  className={cn(
+                    'h-9 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                    cfg.winnerMode === m ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
+                  )}
+                >
+                  {m === 'fixed' ? 'Sabit sayı' : 'Katılıma göre kademeli'}
+                </button>
+              ))}
+            </div>
+            {cfg.winnerMode === 'fixed' ? (
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 2, 3, 5, 10].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    aria-pressed={cfg.winners === n}
+                    onClick={() => set({ winners: n })}
+                    className={cn(
+                      'h-9 min-w-12 rounded-lg border px-2 text-xs font-semibold tabular-nums transition-colors',
+                      cfg.winners === n ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground',
+                    )}
+                  >
+                    {n} kişi
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  aria-label="Kazanan sayısı"
+                  className={cn(input, 'w-20')}
+                  min={1}
+                  max={MAX_WINNERS}
+                  value={cfg.winners}
+                  onChange={(e) => set({ winners: clampW(Number(e.target.value)) })}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {tiers.map((t, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+                    <input
+                      type="number"
+                      aria-label="En az gerçek katılımcı"
+                      className={cn(input, 'w-20')}
+                      min={1}
+                      max={MAX_PLAYERS}
+                      value={t.min}
+                      onChange={(e) => setTier(i, { min: Math.min(MAX_PLAYERS, Math.max(1, Number(e.target.value) || 1)) })}
+                    />
+                    <span className="text-muted-foreground">ve üstü gerçek katılımcıda</span>
+                    <input
+                      type="number"
+                      aria-label="Kazanan sayısı"
+                      className={cn(input, 'w-16')}
+                      min={1}
+                      max={MAX_WINNERS}
+                      value={t.winners}
+                      onChange={(e) => setTier(i, { winners: clampW(Number(e.target.value)) })}
+                    />
+                    <span className="text-muted-foreground">kişi kazanır</span>
+                    {tiers.length > 1 && (
+                      <button
+                        type="button"
+                        aria-label="Kademeyi sil"
+                        onClick={() => set({ tiers: tiers.filter((_, j) => j !== i) })}
+                        className="rounded-lg p-2 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {tiers.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={() => set({ tiers: [...tiers, { min: (tiers.at(-1)?.min ?? 0) + 20, winners: clampW((tiers.at(-1)?.winners ?? 1) + 2) }] })}
+                    className="flex w-fit items-center gap-1 text-xs font-semibold text-primary"
+                  >
+                    <Plus className="size-3.5" aria-hidden /> Kademe ekle
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+        <label className="flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={bots.enabled} onChange={(e) => setBots({ enabled: e.target.checked })} className="size-4 accent-primary" />
+          Az katılımda arenayı botlarla doldur
+        </label>
+        {bots.enabled && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-semibold">Arena doluluğu (hedef kişi)</span>
+              <input
+                type="number"
+                className={input}
+                min={2}
+                max={MAX_PLAYERS}
+                value={bots.target}
+                onChange={(e) => setBots({ target: Math.min(MAX_PLAYERS, Math.max(2, Number(e.target.value) || 2)) })}
+              />
+              <span className="text-xs text-muted-foreground">Gerçek katılımcı bu sayıdan azsa aradaki fark botla dolar</span>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-semibold">En fazla bot</span>
+              <input
+                type="number"
+                className={input}
+                min={0}
+                max={MAX_BOTS}
+                value={bots.max}
+                onChange={(e) => setBots({ max: Math.min(MAX_BOTS, Math.max(0, Number(e.target.value) || 0)) })}
+              />
+              <span className="text-xs text-muted-foreground">Örnek: 8 gerçek kişi, hedef 64 → {Math.max(0, Math.min(bots.max, bots.target - 8))} bot eklenir</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={bots.tag} onChange={(e) => setBots({ tag: e.target.checked })} className="size-4 accent-primary" />
+              <span>Bot adlarının yanında küçük &quot;bot&quot; işareti göster (ör. Mert · bot)</span>
+            </label>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">Botlar ödül almaz. Hiç gerçek katılımcı yoksa tur açılmaz.</p>
+      </div>
+    </section>
   )
 }
