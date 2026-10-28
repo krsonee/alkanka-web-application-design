@@ -198,7 +198,7 @@ export function KaraDelikPreview() {
         <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-primary/25 bg-background">
           <TableBrand className="z-10" center={false} plaque="top" corners jako />
           {run ? (
-            <KaraDelikCanvas key={run.key} players={run.players} duration={run.duration} winners={run.winners} onEvent={onEvent} />
+            <KaraDelikCanvas key={run.key} players={run.players} duration={run.duration} winners={run.winners} prizePool={PRIZE_POOL} onEvent={onEvent} />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
               <div className="flex size-28 items-center justify-center rounded-full border-4 border-primary/60 bg-card shadow-[0_0_60px_-10px] shadow-primary/50">
@@ -235,51 +235,29 @@ export function KaraDelikPreview() {
           )}
 
           {result && players && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-              <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-primary/50 bg-card p-5 text-center shadow-[0_0_80px_-20px] shadow-primary/60">
-                <span className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">Kara delikten sağ çıkanlar</span>
-                <ul className="flex flex-wrap justify-center gap-3">
-                  {result.winners.map((i) => {
-                    const p = players[i]
-                    const big = result.winners.length <= 3
-                    return (
-                      <li key={p.id} className="flex flex-col items-center gap-1">
-                        <Image
-                          src={p.image}
-                          alt=""
-                          width={72}
-                          height={72}
-                          className={cn('rounded-full border-2 object-cover', p.me ? 'border-primary' : 'border-foreground/60', big ? 'size-16' : 'size-11')}
-                        />
-                        <span className={cn('max-w-20 truncate text-xs font-semibold', p.me ? 'text-primary' : 'text-foreground')}>{p.me ? 'Sen' : p.name}</span>
-                      </li>
-                    )
-                  })}
-                </ul>
-                {meWon && <p className="font-display text-lg font-bold text-primary">Sen de kazandın!</p>}
-                <dl className="grid w-full grid-cols-3 gap-2 rounded-xl bg-background/60 p-3 text-xs">
-                  <div className="flex flex-col gap-0.5">
-                    <dt className="text-muted-foreground">Süre</dt>
-                    <dd className="font-display text-base font-bold tabular-nums text-foreground">{mmss(result.seconds)}</dd>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <dt className="text-muted-foreground">Katılım</dt>
-                    <dd className="font-display text-base font-bold tabular-nums text-foreground">{players.length}</dd>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <dt className="text-muted-foreground">Kişi başı</dt>
-                    <dd className="font-display text-base font-bold tabular-nums text-primary">{share} KC</dd>
-                  </div>
-                </dl>
-                <button
-                  type="button"
-                  onClick={start}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-bold uppercase tracking-wide text-primary-foreground"
-                >
-                  <RotateCcw className="size-4" aria-hidden />
-                  Tekrar oynat
-                </button>
-              </div>
+            <div
+              className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 bg-linear-to-t from-background via-background/90 to-transparent px-4 pb-5 pt-20 text-center animate-in fade-in slide-in-from-bottom-6 duration-700"
+              aria-live="polite"
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-primary">
+                Kara delikten sağ çıkanlar · {mmss(result.seconds)}
+              </span>
+              <h2 className="font-display text-3xl font-bold uppercase leading-none tracking-tight text-foreground text-balance sm:text-5xl">
+                {meWon ? 'Sağ çıktın!' : result.winners.length === 1 ? 'Tek kurtulan' : `${result.winners.length} kişi kurtuldu`}
+              </h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                <span className="font-semibold tabular-nums text-foreground">{players.length}</span> kişi girdi ·{' '}
+                <span className="font-semibold tabular-nums text-foreground">{eliminated}</span> kişi yutuldu · kişi başı{' '}
+                <span className="font-display font-bold tabular-nums text-primary">{share.toLocaleString('tr-TR')} KC</span>
+              </p>
+              <button
+                type="button"
+                onClick={start}
+                className="mt-1 flex h-11 w-full max-w-xs items-center justify-center gap-2 rounded-lg bg-primary text-sm font-bold uppercase tracking-wide text-primary-foreground transition-transform hover:scale-[1.02]"
+              >
+                <RotateCcw className="size-4" aria-hidden />
+                Yeni tur
+              </button>
             </div>
           )}
         </div>
