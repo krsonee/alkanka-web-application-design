@@ -3,6 +3,7 @@ import { EditableHero } from '@/components/alkanka/editable-hero'
 import { GamesHub } from '@/components/alkanka/games/games-hub'
 import { getArenaSettings } from '@/lib/arena-server'
 import { getHidden } from '@/lib/catalog'
+import { KaraDelikEntry } from '@/components/alkanka/karadelik/karadelik-entry'
 
 export const metadata = pageMeta('oyunlar')
 
@@ -20,6 +21,7 @@ export default async function GamesPage() {
         pose="zar"
         speech="Hangisinden başlıyoruz kanka?"
       />
+      <KaraDelikEntry />
       <GamesHub arena={arena} hiddenMini={hidden.mini ?? []} />
     </>
   )
