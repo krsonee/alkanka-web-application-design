@@ -12,6 +12,7 @@ import {
   stepSV,
   svAlive,
   svGoals,
+  svTeamsLeft,
   svWinners,
   type SVRule,
 } from '@/lib/survival-sim'
@@ -20,7 +21,8 @@ export type SVPlayer = { id: string; name: string; image: string; me: boolean }
 
 export type SVEvent =
   | { type: 'tick'; left: number; waiting: number }
-  | { type: 'out'; index: number; alive: number; teamAlive: [number, number] }
+  | { type: 'out'; index: number; alive: number; teamAlive: number[] }
+  | { type: 'teamOut'; team: number; captain: boolean }
   | { type: 'enter'; index: number }
   | { type: 'final'; suddenDeath: boolean }
   | { type: 'done'; winners: number[]; winningTeam: number; seconds: number }
@@ -29,9 +31,10 @@ type Props = {
   players: SVPlayer[]
   duration: number
   winners: number
-  teams: 0 | 2
+  teams: 0 | 2 | 5
   rule: SVRule
   shield: boolean
+  captain?: boolean
   prizePool?: number
   seed: number
   /** Live rounds lock the simulation to this wall-clock start; previews run freely. */
@@ -55,8 +58,11 @@ const C = {
   lid: '#2a3142',
 }
 const TEAM = [
-  { ring: C.gold, deep: C.goldDeep, name: 'ALTIN' },
-  { ring: C.blue, deep: C.blueDeep, name: 'MAVİ' },
+  { ring: C.gold, deep: C.goldDeep, rgb: '242,193,78', name: 'ALTIN' },
+  { ring: C.blue, deep: C.blueDeep, rgb: '79,143,247', name: 'MAVİ' },
+  { ring: '#ef4f5a', deep: '#9e2430', rgb: '239,79,90', name: 'YAKUT' },
+  { ring: '#3fd0a0', deep: '#16805e', rgb: '63,208,160', name: 'ZÜMRÜT' },
+  { ring: '#c9d1dc', deep: '#6b7585', rgb: '201,209,220', name: 'GÜMÜŞ' },
 ]
 const LIGHTS = [
   { color: 'rgba(242,193,78,0.38)', speed: 0.23, phase: 0, side: -1 },
@@ -109,7 +115,7 @@ function makeSprite(name: string, img: HTMLImageElement | null) {
   return c
 }
 
-export function SurvivalCanvas({ players, duration, winners, teams, rule, shield, prizePool = 0, seed, startAt, now: clock, onEvent }: Props) {
+export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, rule, shield, captain = false, prizePool = 0, seed, startAt, now: clock, onEvent }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eventRef = useRef(onEvent)
   eventRef.current = onEvent
@@ -126,7 +132,8 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
     const low = (navigator.hardwareConcurrency ?? 8) <= 4
     const maxParticles = low ? 60 : 200
 
-    const sim = createSV({ n: players.length, seed, duration, winners, teams, rule, shield })
+    const sim = createSV({ n: players.length, seed, duration, winners, teams: teamsOpt, rule, shield, captain })
+    const teams = sim.teamCount
     const { balls, r } = sim
     const sprites = players.map((p) => makeSprite(p.name, null))
     players.forEach((p, i) => {
@@ -222,7 +229,11 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
           if (!reduced) shake = Math.min(1, shake + 0.5)
           kdSound.out()
         }
-        eventRef.current({ type: 'out', index: i, alive: svAlive(sim), teamAlive: [svAlive(sim, 0), svAlive(sim, 1)] })
+        eventRef.current({ type: 'out', index: i, alive: svAlive(sim), teamAlive: Array.from({ length: teams }, (_, t) => svAlive(sim, t)) })
+      }
+      for (const t of sim.teamOut) {
+        const cap = sim.captains[t]
+        eventRef.current({ type: 'teamOut', team: t, captain: cap >= 0 && balls[cap].state === 2 })
       }
       for (const i of sim.entered) {
         if (!quiet) {
@@ -448,6 +459,24 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
       ctx.beginPath()
       ctx.arc(x, y, rr, 0, Math.PI * 2)
       ctx.stroke()
+      if (teams && sim.captains[b.team] === i) {
+        // Captain badge: a small team-coloured disc with a "K" at the top-right of the ball.
+        const cr = Math.max(6, rr * 0.42)
+        const cx = x + rr * 0.72
+        const cy = y - rr * 0.72
+        ctx.fillStyle = TEAM[b.team].ring
+        ctx.beginPath()
+        ctx.arc(cx, cy, cr, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = C.ink
+        ctx.lineWidth = Math.max(1.5, cr * 0.22)
+        ctx.stroke()
+        ctx.fillStyle = C.ink
+        ctx.font = `800 ${Math.round(cr * 1.2)}px "Space Grotesk", system-ui, sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('K', cx, cy + cr * 0.06)
+      }
       if (b.shieldUntil > sim.time && b.state === 1) {
         ctx.strokeStyle = `rgba(191,232,255,${0.5 + 0.4 * Math.sin(now / 80)})`
         ctx.lineWidth = Math.max(2, rr * 0.12)
@@ -498,7 +527,9 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
           // Previews slow down for the deciding knock-out.
           let slow = 1
           if (sim.final) {
-            const left = teams ? Math.min(svAlive(sim, 0), svAlive(sim, 1)) : svAlive(sim) - sim.opts.winners
+            const left = teams
+              ? Math.min(...(sim.suddenDeath ? sim.contenders : svTeamsLeft(sim)).map((t) => svAlive(sim, t)))
+              : svAlive(sim) - sim.opts.winners
             if (left <= 1 && !reduced) slow = 0.5
           }
           simClock += dt * slow
@@ -602,7 +633,7 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
         ctx.fillStyle = `rgba(5,7,12,${0.72 * victory})`
         ctx.fillRect(-w, -h, w * 2, h * 2)
         const spot = ctx.createRadialGradient(0, -0.1 * S, 0, 0, -0.1 * S, S * 0.9)
-        const tint = teams ? (sim.winningTeam === 1 ? '79,143,247' : '242,193,78') : '242,193,78'
+        const tint = teams ? (TEAM[sim.winningTeam]?.rgb ?? TEAM[0].rgb) : TEAM[0].rgb
         spot.addColorStop(0, `rgba(${tint},${0.32 * victory})`)
         spot.addColorStop(1, 'rgba(0,0,0,0)')
         ctx.fillStyle = spot
@@ -654,7 +685,7 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
         ctx.textBaseline = 'middle'
         const fs = Math.max(18, Math.min(34, S * 0.085))
         ctx.font = `800 ${fs}px "Space Grotesk", system-ui, sans-serif`
-        ctx.fillStyle = teams && sim.winningTeam === 1 ? C.blue : C.gold
+        ctx.fillStyle = teams ? (TEAM[sim.winningTeam]?.ring ?? C.gold) : C.gold
         ctx.fillText(title, 0, -0.62 * S + (1 - ta) * 14)
         if (prizeLabel) {
           ctx.font = `700 ${Math.max(13, fs * 0.55)}px Inter, system-ui, sans-serif`
@@ -687,7 +718,7 @@ export function SurvivalCanvas({ players, duration, winners, teams, rule, shield
       kdSound.music.stop(0.6)
     }
     // A new round (seed/players/settings) restarts the whole scene.
-  }, [players, duration, winners, teams, rule, shield, prizePool, seed, startAt])
+  }, [players, duration, winners, teamsOpt, rule, shield, captain, prizePool, seed, startAt])
 
   return <canvas ref={canvasRef} className="block h-full w-full" aria-hidden="true" />
 }

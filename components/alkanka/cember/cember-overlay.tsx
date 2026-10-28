@@ -219,7 +219,7 @@ export function CemberStage({
 
   const isSv = round?.game === 'survival'
   const isKd = round?.game === 'karadelik' || isSv
-  const svOpts = round?.survival ?? { teams: 0 as const, rule: 'last' as const, shield: true }
+  const svOpts = round?.survival ?? { teams: 0 as const, rule: 'last' as const, shield: true, captain: false }
   const kdPlayers = useMemo(
     () =>
       round?.participants.map((p, i) => ({
@@ -251,6 +251,7 @@ export function CemberStage({
             teams={svOpts.teams}
             rule={svOpts.rule}
             shield={svOpts.shield}
+            captain={!!svOpts.captain}
             seed={round.seed}
             startAt={startAt}
             now={serverNow}
@@ -356,7 +357,7 @@ export function CemberStage({
                     {isSv && winningTeam >= 0
                       ? iSurvived
                         ? 'Takımın kazandı kanka!'
-                        : `${winningTeam === 1 ? 'Mavi' : 'Altın'} Takım kazandı`
+                        : `${['Altın', 'Mavi', 'Yakut', 'Zümrüt', 'Gümüş'][winningTeam] ?? 'Altın'} Takım kazandı`
                       : isSv
                         ? iSurvived
                           ? 'Ayakta kaldın kanka!'
@@ -399,7 +400,7 @@ export function CemberStage({
           {feed[0] ? `${feed[0].name} elendi` : ''}
         </p>
 
-        {phase === 'play' && !round && <p className="py-16 text-sm text-muted-foreground">Çember hazırlanıyor...</p>}
+        {phase === 'play' && !round && <p className="py-16 text-sm text-muted-foreground">��ember hazırlanıyor...</p>}
 
         {!compact && phase !== 'empty' && (
           <p className="text-center text-xs text-muted-foreground text-pretty">

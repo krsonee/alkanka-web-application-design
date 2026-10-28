@@ -106,7 +106,7 @@ export function SurvivalPreview() {
   const [left, setLeft] = useState(0)
   const [waiting, setWaiting] = useState(0)
   const [alive, setAlive] = useState(0)
-  const [teamAlive, setTeamAlive] = useState<[number, number]>([0, 0])
+  const [teamAlive, setTeamAlive] = useState<number[]>([0, 0])
   const [outRank, setOutRank] = useState<Record<number, number>>({})
   const [feed, setFeed] = useState<Feed[]>([])
   const [final, setFinal] = useState(false)

@@ -28,12 +28,16 @@ export type SVOptions = {
   duration: number
   /** Solo: survivors that take a prize. Ignored in team mode. */
   winners: number
-  /** 0 = solo, 2 = two teams (gold vs blue). */
-  teams: 0 | 2
+  /** 0 = solo, 2 = two teams (gold vs blue), 5 = five teams of two (2v2v2v2v2). */
+  teams: 0 | 2 | 5
   rule: SVRule
   /** Teammates bumping into each other get a short goal shield. */
   shield: boolean
+  /** Each team's first player is its captain: if the captain falls, the whole team is out. */
+  captain?: boolean
 }
+
+export const SV_TEAM_NAMES = ['Altın', 'Mavi', 'Yakut', 'Zümrüt', 'Gümüş'] as const
 
 /** 0 waiting in the queue, 1 on the pitch, 2 knocked out. */
 export type SVBall = { x: number; y: number; vx: number; vy: number; state: 0 | 1 | 2; team: number; enterAt: number; shieldUntil: number }
@@ -55,8 +59,17 @@ export type SVState = {
   phase: number
   final: boolean
   finalAt: number
-  /** Team "most" rule ended level: the first team to lose a player loses. */
+  /** Team "most" rule ended level: among the tied `contenders`, the first team to lose a player drops out. */
   suddenDeath: boolean
+  contenders: number[]
+  /** Team count actually played (5 teams falls back to 2 when there are fewer than 10 entrants). */
+  teamCount: number
+  /** Captain entrant index per team, or -1 when captain mode is off. */
+  captains: number[]
+  /** Teams already knocked out of the round. */
+  teamDead: boolean[]
+  /** Teams eliminated during the last step (captain fell or last player gone). */
+  teamOut: number[]
   finished: boolean
   winningTeam: number
   order: number[]
@@ -68,10 +81,21 @@ export type SVState = {
 }
 
 /** How many players stand on the pitch for `n` entrants (crowds play in a bigger, faster arena). */
-export function svFieldSize(n: number, teams: 0 | 2) {
-  const f = n <= 20 ? 10 : Math.min(20, 10 + Math.ceil((n - 20) / 4))
-  const even = teams ? f - (f % 2) : f
-  return Math.min(n, even)
+export function svFieldSize(n: number, teams: number) {
+  const f = Math.min(n, n <= 20 ? 10 : Math.min(20, 10 + Math.ceil((n - 20) / 4)))
+  return teams ? f - (f % teams) : f
+}
+
+/** Five teams need at least two players each; smaller lobbies play gold vs blue instead. */
+export function svTeamCount(n: number, teams: number) {
+  return teams === 5 && n < 10 ? 2 : teams
+}
+
+/** Teams still in the round. */
+export function svTeamsLeft(s: SVState) {
+  const left: number[] = []
+  for (let t = 0; t < s.teamCount; t++) if (!s.teamDead[t] && svAlive(s, t) > 0) left.push(t)
+  return left
 }
 
 export function svAlive(s: SVState, team = -1) {
@@ -115,15 +139,21 @@ function place(s: SVState, rand: () => number, b: SVBall, centre: boolean) {
 export function createSV(opts: SVOptions): SVState {
   const rand = mulberry(opts.seed)
   const n = opts.n
-  const teams = opts.teams
+  const teams = svTeamCount(n, opts.teams)
   const field = svFieldSize(n, teams)
   const r = Math.min(0.085, Math.sqrt(0.13 / Math.max(1, field)))
   const balls: SVBall[] = []
-  // Alternating teams keeps the split fair whatever the entry order is.
-  for (let i = 0; i < n; i++) balls.push({ x: 0, y: 0, vx: 0, vy: 0, state: 0, team: teams ? i % 2 : 0, enterAt: 0, shieldUntil: 0 })
-  const queue: number[][] = teams ? [[], []] : [[]]
+  // Round-robin teams keeps the split fair whatever the entry order is.
+  for (let i = 0; i < n; i++) balls.push({ x: 0, y: 0, vx: 0, vy: 0, state: 0, team: teams ? i % teams : 0, enterAt: 0, shieldUntil: 0 })
+  const queue: number[][] = Array.from({ length: teams || 1 }, () => [])
   const s: SVState = {
-    opts: { ...opts, winners: Math.max(1, opts.winners) },
+    opts: { ...opts, teams: teams as 0 | 2 | 5, captain: !!teams && !!opts.captain, winners: Math.max(1, opts.winners) },
+    contenders: [],
+    teamCount: teams,
+    // Entrant t is the first member of team t, so every captain starts on the pitch.
+    captains: Array.from({ length: teams }, (_, t) => (opts.captain && t < n ? t : -1)),
+    teamDead: Array.from({ length: teams }, () => false),
+    teamOut: [],
     n,
     r,
     field,
@@ -145,8 +175,8 @@ export function createSV(opts: SVOptions): SVState {
     hits: [],
     finalNow: false,
   }
-  const perTeam = teams ? field / 2 : field
-  const placed = teams ? [0, 0] : [0]
+  const perTeam = teams ? field / teams : field
+  const placed = Array.from({ length: teams || 1 }, () => 0)
   for (let i = 0; i < n; i++) {
     const t = balls[i].team
     if (placed[t] < perTeam) {
@@ -157,11 +187,44 @@ export function createSV(opts: SVOptions): SVState {
   }
   ;(s as SVState & { rand: () => number }).rand = rand
   if (!teams && n <= s.opts.winners) s.finished = true
-  if (teams && (svAlive(s, 0) === 0 || svAlive(s, 1) === 0)) {
-    s.finished = true
-    s.winningTeam = svAlive(s, 0) ? 0 : 1
+  if (teams) {
+    const left = svTeamsLeft(s)
+    if (left.length <= 1) {
+      s.finished = true
+      s.winningTeam = left[0] ?? 0
+    }
   }
   return s
+}
+
+function eliminateTeam(s: SVState, team: number) {
+  if (s.teamDead[team]) return
+  s.teamDead[team] = true
+  s.teamOut.push(team)
+  s.queue[team] = []
+  for (let i = 0; i < s.n; i++) {
+    const b = s.balls[i]
+    if (b.team !== team || b.state === 2) continue
+    if (b.state === 1) s.out.push({ i, side: b.x < 0 ? -1 : 1 })
+    b.state = 2
+    s.order.push(i)
+  }
+}
+
+function settleTeams(s: SVState, lost: number) {
+  if (s.suddenDeath) {
+    s.contenders = s.contenders.filter((t) => t !== lost && !s.teamDead[t])
+    if (s.contenders.length === 1) {
+      s.finished = true
+      s.winningTeam = s.contenders[0]
+      return
+    }
+  }
+  const left = svTeamsLeft(s)
+  if (left.length <= 1) {
+    s.finished = true
+    s.winningTeam = left[0] ?? s.contenders[0] ?? lost
+  }
 }
 
 function rng(s: SVState) {
@@ -174,7 +237,12 @@ function knockOut(s: SVState, i: number, side: -1 | 1) {
   s.order.push(i)
   s.out.push({ i, side })
   const team = b.team
-  const q = s.queue[s.opts.teams ? team : 0]
+  if (s.teamCount && s.captains[team] === i) {
+    eliminateTeam(s, team)
+    settleTeams(s, team)
+    return
+  }
+  const q = s.queue[s.teamCount ? team : 0]
   const next = q.shift()
   if (next !== undefined) {
     const nb = s.balls[next]
@@ -184,19 +252,15 @@ function knockOut(s: SVState, i: number, side: -1 | 1) {
     s.entered.push(next)
   }
 
-  if (!s.opts.teams) {
+  if (!s.teamCount) {
     if (svAlive(s) <= s.opts.winners) s.finished = true
     return
   }
-  if (s.suddenDeath) {
-    s.finished = true
-    s.winningTeam = 1 - team
-    return
+  if (svAlive(s, team) === 0 && !s.teamDead[team]) {
+    s.teamDead[team] = true
+    s.teamOut.push(team)
   }
-  if (svAlive(s, team) === 0) {
-    s.finished = true
-    s.winningTeam = 1 - team
-  }
+  settleTeams(s, team)
 }
 
 export function stepSV(s: SVState) {
@@ -205,6 +269,7 @@ export function stepSV(s: SVState) {
   s.shielded = []
   s.hits = []
   s.finalNow = false
+  s.teamOut = []
   if (s.finished) return
   s.step++
   s.time = s.step * SV_STEP
@@ -216,16 +281,19 @@ export function stepSV(s: SVState) {
     s.final = true
     s.finalAt = s.time
     s.finalNow = true
-    if (s.opts.teams) {
-      const a = svAlive(s, 0)
-      const b = svAlive(s, 1)
+    if (s.teamCount) {
       if (s.opts.rule === 'most') {
-        if (a !== b) {
+        const left = svTeamsLeft(s)
+        let top = 0
+        for (const t of left) top = Math.max(top, svAlive(s, t))
+        const leaders = left.filter((t) => svAlive(s, t) === top)
+        if (leaders.length <= 1) {
           s.finished = true
-          s.winningTeam = a > b ? 0 : 1
+          s.winningTeam = leaders[0] ?? 0
           return
         }
         s.suddenDeath = true
+        s.contenders = leaders
       }
     } else if (svAlive(s) <= s.opts.winners) {
       s.finished = true

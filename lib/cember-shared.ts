@@ -34,8 +34,8 @@ export const asGame = (g: unknown): CemberGame => (typeof g === 'string' && g in
 
 /** Survival Arena rules: solo or gold-vs-blue, last-standing or majority, teammate goal shield. */
 export type SurvivalRule = 'last' | 'most'
-export type SurvivalOpts = { teams: 0 | 2; rule: SurvivalRule; shield: boolean }
-export const DEFAULT_SURVIVAL: SurvivalOpts = { teams: 0, rule: 'last', shield: true }
+export type SurvivalOpts = { teams: 0 | 2 | 5; rule: SurvivalRule; shield: boolean; captain: boolean }
+export const DEFAULT_SURVIVAL: SurvivalOpts = { teams: 0, rule: 'last', shield: true, captain: false }
 
 /** Fills thin rounds with bots so the arena never looks empty; bots never win or get paid. */
 export type BotConfig = { enabled: boolean; target: number; max: number }

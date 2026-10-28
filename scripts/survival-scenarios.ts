@@ -93,12 +93,68 @@ scenario('takimli sahada kisi sayisi cift', () => {
   for (const n of [10, 25, 50, 200]) assert.equal(svFieldSize(n, 2) % 2, 0, `n=${n}`)
 })
 
+console.log('\n5 takim x 2 ve kaptan modu')
+for (const rule of ['last', 'most'] as SVRule[]) {
+  for (const captain of [false, true]) {
+    for (const n of [10, 25]) {
+      scenario(`5 takim kural=${rule} kaptan=${captain ? 'acik' : 'kapali'} n=${n}: tek takim kazanir`, () => {
+        for (const seed of SEEDS) {
+          const s = play(opts({ n, seed, teams: 5, rule, captain, shield: true }))
+          assert.ok(s.winningTeam >= 0 && s.winningTeam < 5, `seed ${seed}: kazanan takim ${s.winningTeam}`)
+          assert.ok(!s.teamDead[s.winningTeam], `seed ${seed}: elenen takim kazanmis`)
+          const members = s.balls.flatMap((b, i) => (b.team === s.winningTeam ? [i] : []))
+          assert.deepEqual(svWinners(s), members, `seed ${seed}: kazananlar takim uyeleriyle ayni degil`)
+        }
+      })
+    }
+  }
+}
+
+scenario('5 takimda sahada her takimdan esit kisi', () => {
+  for (const n of [10, 25, 60]) {
+    const s = createSV(opts({ n, teams: 5 }))
+    const f = svFieldSize(n, 5)
+    assert.equal(f % 5, 0, `n=${n}: saha ${f}`)
+    for (let t = 0; t < 5; t++) assert.equal(s.balls.filter((b) => b.team === t && b.state === 1).length, f / 5, `n=${n} takim ${t}`)
+  }
+})
+
+scenario('10 kisiden az ise 5 takim yerine Altin-Mavi oynanir', () => {
+  const s = createSV(opts({ n: 8, teams: 5 }))
+  assert.equal(s.teamCount, 2)
+  assert.ok(s.balls.every((b) => b.team < 2))
+})
+
+scenario('kaptan duserse takimi aninda elenir', () => {
+  let seen = 0
+  for (const seed of [...SEEDS, 5, 6, 7, 8, 9, 10]) {
+    const s = createSV(opts({ n: 30, seed, teams: 2, captain: true }))
+    while (!s.finished) {
+      stepSV(s)
+      for (const t of s.teamOut) {
+        const cap = s.captains[t]
+        if (s.balls[cap].state !== 2) continue
+        seen++
+        assert.ok(s.balls.every((b) => b.team !== t || b.state === 2), `seed ${seed}: takim ${t} kaptani dustu ama oyuncusu kaldi`)
+      }
+    }
+    assert.notEqual(s.balls[s.captains[s.winningTeam]].state, 2, `seed ${seed}: kaptani dusen takim kazanmis`)
+  }
+  assert.ok(seen > 0, 'hicbir turda kaptan dusmedi')
+})
+
+scenario('kaptan kapaliyken kaptan atanmaz', () => {
+  const s = createSV(opts({ n: 20, teams: 2 }))
+  assert.ok(s.captains.every((c) => c === -1))
+})
+
 console.log('\nTutarlilik')
 scenario('ayni tohum her modda ayni sonucu verir', () => {
   const variants: Partial<SVOptions>[] = [
     { n: 20, winners: 3 },
     { n: 30, teams: 2, rule: 'last' },
     { n: 30, teams: 2, rule: 'most', shield: true },
+    { n: 30, teams: 5, rule: 'most', captain: true },
   ]
   for (const v of variants) {
     for (const seed of SEEDS) {

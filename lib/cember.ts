@@ -4,7 +4,7 @@ import { rows, sql } from '@/lib/db'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
 import { runSim, mulberry, STEP } from '@/lib/cember-sim'
 import { runKD, KD_STEP } from '@/lib/karadelik-sim'
-import { runSV, SV_STEP } from '@/lib/survival-sim'
+import { runSV, SV_STEP, SV_TEAM_NAMES } from '@/lib/survival-sim'
 import {
   asGame,
   DEFAULT_SURVIVAL,
@@ -475,9 +475,10 @@ type RoundRow = {
 function normalizeSurvival(raw: unknown): SurvivalOpts {
   const s = (raw ?? {}) as Partial<SurvivalOpts>
   return {
-    teams: Number(s.teams) === 2 ? 2 : 0,
+    teams: Number(s.teams) === 5 ? 5 : Number(s.teams) === 2 ? 2 : 0,
     rule: s.rule === 'most' ? 'most' : DEFAULT_SURVIVAL.rule,
     shield: s.shield === undefined ? DEFAULT_SURVIVAL.shield : s.shield !== false,
+    captain: Number(s.teams) > 0 && s.captain === true,
   }
 }
 
@@ -565,13 +566,13 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   let steps = 0
   let winningTeam = -1
   const sv = cfg.survival
-  const teamRound = cfg.game === 'survival' && sv.teams === 2
+  const teamRound = cfg.game === 'survival' && sv.teams > 0
   if (participants.length && cfg.game === 'karadelik') {
     const kd = runKD(participants.length, seed, cfg.duration, prizePlaces)
     winnerSlots = kd.survivors
     steps = kd.steps
   } else if (participants.length && cfg.game === 'survival') {
-    const res = runSV({ n: participants.length, seed, duration: cfg.duration, winners: prizePlaces, teams: sv.teams, rule: sv.rule, shield: sv.shield })
+    const res = runSV({ n: participants.length, seed, duration: cfg.duration, winners: prizePlaces, teams: sv.teams, rule: sv.rule, shield: sv.shield, captain: sv.captain })
     winnerSlots = res.winners
     steps = res.steps
     winningTeam = res.winningTeam
@@ -637,8 +638,8 @@ async function payRound(row: RoundRow) {
   const players = Array.isArray(row.participants) ? row.participants.length : 0
   const isKd = row.game === 'karadelik'
   const isSv = row.game === 'survival'
-  const svTeam = isSv && Number(row.winning_team) >= 0 && row.survival && Number(row.survival.teams) === 2
-  const teamName = Number(row.winning_team) === 1 ? 'Mavi' : 'Altın'
+  const svTeam = isSv && Number(row.winning_team) >= 0 && row.survival && Number(row.survival.teams) > 0
+  const teamName = SV_TEAM_NAMES[Number(row.winning_team)] ?? 'Altın'
   const shareText = (fallback: string) =>
     split && winners.length > 1
       ? `${coins ? `${coins.toLocaleString('tr-TR')} KC` : ''}${coins && kp ? ' + ' : ''}${kp ? `${kp.toLocaleString('tr-TR')} KP` : ''}` || fallback
@@ -671,7 +672,7 @@ async function payRound(row: RoundRow) {
     }
     const headline = `${row.title}: ${name} kazandı!`
     const body = svTeam
-      ? `${players} kankalık Survival Arena'yı ${teamName} Takım kazandı, sen de o takımdaydın. Ödülün: ${shareText(row.prize_text)}.`
+      ? `${players} kankalık Survival Arena'yı ${teamName} Tak��m kazandı, sen de o takımdaydın. Ödülün: ${shareText(row.prize_text)}.`
       : isSv
         ? `${players} kanka arasından sahada ayakta kalan ${winners.length} kişiden biri sensin. Ödülün: ${shareText(row.prize_text)}.`
         : isKd
