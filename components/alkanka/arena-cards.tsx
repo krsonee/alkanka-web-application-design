@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { Bell, Clock, Gift, ListChecks, Trophy, Users } from 'lucide-react'
+import { Bell, Gift } from 'lucide-react'
 import type { CemberGame } from '@/lib/cember-shared'
 import { TELEGRAM_URL } from './data'
 import { DetailButton, DetailModal } from './detail-modal'
@@ -78,45 +78,6 @@ function soonest(events: ArenaEvent[]) {
   return events.reduce<ArenaEvent | null>((best, e) => (e.next !== null && (!best || e.next < (best.next ?? Infinity)) ? e : best), null)
 }
 
-function EventLine({ e }: { e: ArenaEvent }) {
-  return (
-    <li className="flex flex-col gap-1.5 border-t border-border/70 pt-3 first:border-t-0 first:pt-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <h4 className="truncate text-sm font-bold text-foreground">{e.title}</h4>
-        <span className="shrink-0 text-[11px] font-semibold text-primary">{e.mode}</span>
-      </div>
-      <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
-        <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-        <span>
-          <span className="font-semibold text-foreground">{e.days}</span> · {e.hours}
-        </span>
-      </p>
-      {e.prize && (
-        <p className="flex items-start gap-1.5 text-xs leading-relaxed">
-          <Gift className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
-          <span className="font-semibold text-primary">{e.prize}</span>
-        </p>
-      )}
-      <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <Trophy className="size-3.5" aria-hidden="true" />
-          {e.winners}
-        </span>
-        <span className="flex items-center gap-1">
-          <Users className="size-3.5" aria-hidden="true" />
-          En fazla {e.maxPlayers}
-        </span>
-      </p>
-      {e.conds.length > 0 && (
-        <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
-          <ListChecks className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span>Şart: {e.conds.join(' · ')}</span>
-        </p>
-      )}
-    </li>
-  )
-}
-
 export function ArenaCards({ cards, notice }: { cards: ArenaGameCard[]; notice: number }) {
   const now = useNow()
   const [detail, setDetail] = useState<ArenaGameCard | null>(null)
@@ -150,36 +111,22 @@ export function ArenaCards({ cards, notice }: { cards: ArenaGameCard[]; notice: 
 
                   {next?.next ? (
                     <div className="flex flex-col gap-1.5">
-                      <p className="flex items-center justify-between text-xs">
-                        <span className="font-semibold uppercase tracking-wider text-muted-foreground">Sıradaki tur</span>
-                        <span className="font-bold capitalize text-primary">{now ? whenLabel(next.next, now) : clock(next.next)}</span>
+                      <p className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate font-semibold text-foreground">{next.title}</span>
+                        <span className="shrink-0 font-bold capitalize text-primary">{now ? whenLabel(next.next, now) : clock(next.next)}</span>
                       </p>
                       <Countdown at={next.next} now={now} />
+                      {next.prize && (
+                        <p className="flex items-center gap-1.5 truncate text-xs font-semibold text-primary">
+                          <Gift className="size-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{next.prize}</span>
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <p className="rounded-md bg-background px-3 py-2.5 text-xs text-muted-foreground">
                       Planlı tur yok. Yeni saatler Telegram kanalında duyurulur.
                     </p>
-                  )}
-
-                  {c.events.length > 0 && (
-                    <div className="flex flex-col gap-2">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Saatler ve ödüller</h4>
-                      <ul className="flex flex-col gap-3 rounded-lg bg-background p-3">
-                        {c.events.slice(0, 3).map((e) => (
-                          <EventLine key={e.id} e={e} />
-                        ))}
-                      </ul>
-                      {c.events.length > 3 && (
-                        <button
-                          type="button"
-                          onClick={() => setDetail(c)}
-                          className="self-start text-xs font-bold text-primary underline-offset-2 hover:underline"
-                        >
-                          +{c.events.length - 3} tur daha, tüm programı gör
-                        </button>
-                      )}
-                    </div>
                   )}
 
                   <div className="mt-auto flex items-stretch gap-2">
