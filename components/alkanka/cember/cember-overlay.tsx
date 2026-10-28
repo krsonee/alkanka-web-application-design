@@ -10,6 +10,7 @@ import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
 import { type SVEvent } from '../survival/survival-canvas'
 import { SurvivalArena } from '../survival/survival-arena'
 import { CemberConfetti } from './cember-confetti'
+import { ShareWinnerCard } from './share-winner-card'
 import { cemberFetch as fetchJson, serverNow } from './cember-clock'
 import { cn } from '@/lib/utils'
 
@@ -368,6 +369,12 @@ export function CemberStage({
                           : `${kdWinnerPs.length} kişi sağ çıktı`}
                   </span>
                 </div>
+                {!isDemo && (() => {
+                  const mineIdx = participants?.findIndex((p) => p.id === meId) ?? -1
+                  const idx = iSurvived && kdWinners.includes(mineIdx) ? mineIdx : kdWinners[0]
+                  const p = participants?.[idx]
+                  return p ? <ShareWinnerCard slot={slot} index={idx} mine={iSurvived} name={p.name} /> : null
+                })()}
                 <button
                   type="button"
                   onClick={() => doneRef.current()}
@@ -384,6 +391,7 @@ export function CemberStage({
                   <span className={compact ? 'text-sm' : 'text-lg'}>{iWon ? 'Kazandın kanka!' : `${winnerP.name} kazandı`}</span>
                 </div>
                 {prize && <span className="rounded-full bg-background/85 px-3 py-1 text-sm font-semibold text-gold">{prize}</span>}
+                {!isDemo && winner !== null && <ShareWinnerCard slot={slot} index={winner} mine={!!iWon} name={winnerP.name} />}
                 <button
                   type="button"
                   onClick={() => doneRef.current()}
