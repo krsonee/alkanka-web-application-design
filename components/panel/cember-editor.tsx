@@ -558,6 +558,13 @@ export function CemberEditor({
   )
 }
 
+const SURVIVAL_PRESETS: { id: string; label: string; desc: string; opts: CemberConfig['survival'] }[] = [
+  { id: 'klasik', label: 'Klasik Hayatta Kalma', desc: 'Tekli, kalesine gol yemeyen son kişiler kazanır.', opts: { teams: 0, rule: 'last', shield: true } },
+  { id: 'golcu', label: 'Gol Avcısı', desc: 'Tekli, süre bitince en çok gol atanlar kazanır.', opts: { teams: 0, rule: 'most', shield: true } },
+  { id: 'takim', label: 'Takım Savaşı', desc: 'Altın vs Mavi, kendi kalene atılan top saymaz.', opts: { teams: 2, rule: 'last', shield: true } },
+  { id: 'kaos', label: 'Kaos Takım', desc: 'Altın vs Mavi, kalkan yok, kendi kaleni de koru.', opts: { teams: 2, rule: 'last', shield: false } },
+]
+
 function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<CemberConfig>) => void }) {
   const isSv = cfg.game === 'survival'
   const isKd = cfg.game === 'karadelik' || isSv
@@ -607,6 +614,29 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
       {isSv && (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-3">
           <span className="text-sm font-semibold">Survival kuralları</span>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-muted-foreground">Hazır şablonlar</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {SURVIVAL_PRESETS.map((p) => {
+                const active = p.opts.teams === sv.teams && p.opts.shield === sv.shield && (p.opts.teams === 2 || p.opts.rule === sv.rule)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSv(p.opts)}
+                    className={cn(
+                      'flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left transition-colors',
+                      active ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/50',
+                    )}
+                  >
+                    <span className="text-xs font-bold">{p.label}</span>
+                    <span className="text-xs leading-relaxed text-muted-foreground">{p.desc}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-semibold text-muted-foreground">Mod</span>
             <div className="flex flex-wrap gap-2">
