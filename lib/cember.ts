@@ -39,6 +39,7 @@ import {
   type CemberRound,
   type CemberStatus,
   type Participant,
+  type PrizeType,
   EVERY_OPTIONS,
   MAX_EVENTS,
   MIN_SLOT_GAP_MIN,
