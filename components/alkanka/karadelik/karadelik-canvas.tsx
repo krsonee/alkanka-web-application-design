@@ -21,6 +21,7 @@ export type KDPlayer = { id: string; name: string; image: string; me: boolean }
 export type KDEvent =
   | { type: 'tick'; left: number }
   | { type: 'out'; index: number; alive: number }
+  | { type: 'power'; index: number; kind: 1 | 2 }
   | { type: 'final' }
   | { type: 'done'; winners: number[]; seconds: number }
 
@@ -37,6 +38,8 @@ type Props = {
   /** Live rounds lock the simulation to this wall-clock start; previews run freely with slow motion. */
   startAt?: number
   now?: () => number
+  /** Pre-round power per slot (1 kalkan, 2 geri dönüş), exactly as the server simulated it. */
+  powers?: number[]
   onEvent: (e: KDEvent) => void
 }
 
@@ -116,7 +119,7 @@ function makeSprite(name: string, img: HTMLImageElement | null) {
   return c
 }
 
-export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, seed, startAt, now: clock, onEvent }: Props) {
+export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, seed, startAt, now: clock, powers, onEvent }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eventRef = useRef(onEvent)
   eventRef.current = onEvent
@@ -134,7 +137,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
     const maxParticles = low ? 60 : 220
 
     const n = players.length
-    const sim = createKD(n, seed, duration, winners)
+    const sim = createKD(n, seed, duration, winners, powers)
     const { balls, r } = sim
 
     const sprites = players.map((p) => makeSprite(p.name, null))
@@ -234,6 +237,10 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
           kdSound.fallIn()
         }
         eventRef.current({ type: 'out', index: i, alive: sim.alive + (sim.out.length - 1 - sim.out.indexOf(i)) })
+      }
+      for (const { i, kind } of sim.powered) {
+        if (!quiet) burst(balls[i].x, balls[i].y, 18, kind === 1 ? ['#bfe8ff', '#ffffff'] : ['#3fd0a0', C.gold, '#ffffff'], 0.9, 0.011)
+        eventRef.current({ type: 'power', index: i, kind })
       }
       if (!quiet) {
         for (const hit of sim.hits.slice(0, 3)) {

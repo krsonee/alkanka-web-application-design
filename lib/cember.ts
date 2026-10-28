@@ -8,6 +8,9 @@ import { runSV, SV_STEP, SV_TEAM_NAMES } from '@/lib/survival-sim'
 import {
   asGame,
   DEFAULT_SURVIVAL,
+  DEFAULT_POWERS,
+  POWER_REVIVE,
+  POWER_SHIELD,
   type SurvivalOpts,
   CONDITION_KINDS,
   DEFAULT_CEMBER,
@@ -61,6 +64,7 @@ function ensure() {
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS survival jsonb`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS winning_team int NOT NULL DEFAULT -1`)
     await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS instant boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE cember_rounds ADD COLUMN IF NOT EXISTS powers jsonb NOT NULL DEFAULT '[]'::jsonb`)
     await rows(sql`CREATE TABLE IF NOT EXISTS cember_notices (slot timestamptz PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
@@ -121,6 +125,10 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
     tiers,
     prizeSplit: c.prizeSplit === 'split' ? 'split' : 'each',
     survival: normalizeSurvival(c.survival),
+    powers: {
+      shield: (c.powers ?? DEFAULT_POWERS).shield !== false,
+      revive: (c.powers ?? DEFAULT_POWERS).revive !== false,
+    },
     bots: {
       enabled: rawBots.enabled !== false,
       target: clampInt(rawBots.target, 2, MAX_BOTS + MAX_PLAYERS, DEFAULT_BOTS.target),
@@ -523,6 +531,7 @@ type RoundRow = {
   survival: SurvivalOpts | null
   winning_team: number | null
   instant: boolean | null
+  powers: number[] | null
 }
 
 function normalizeSurvival(raw: unknown): SurvivalOpts {
@@ -551,7 +560,33 @@ const toRound = (r: RoundRow): CemberRound => ({
   prizeText: r.prize_text,
   survival: r.game === 'survival' ? normalizeSurvival(r.survival) : null,
   winningTeam: Number(r.winning_team ?? -1),
+  powers: Array.isArray(r.powers) ? r.powers.map((p) => (p === POWER_SHIELD || p === POWER_REVIVE ? p : 0)) : [],
 })
+
+/**
+ * Who enters the round holding a power. Revive wins when someone qualifies for both, since a single power fires per round.
+ * Shield: more `gorev` completions today than the event's own task condition asks for.
+ * Revive: linked Telegram account that wrote in the group today or yesterday.
+ */
+async function roundPowers(cfg: CemberConfig, ids: string[], at: number): Promise<Map<string, 1 | 2>> {
+  const out = new Map<string, 1 | 2>()
+  if (!ids.length || (cfg.game !== 'survival' && cfg.game !== 'karadelik')) return out
+  const day = trDayStart(at)
+  if (cfg.powers.shield) {
+    const base = Math.max(0, ...cfg.conditions.filter((c) => c.kind === 'gorev').map((c) => c.target))
+    const r = await rows<{ user_id: string; n: string }>(sql`SELECT user_id, count(*) AS n FROM kp_events
+      WHERE source = 'gorev' AND created_at >= ${new Date(day).toISOString()} AND created_at < ${new Date(at).toISOString()}
+      AND user_id IN ${ids} GROUP BY user_id`).catch(() => [])
+    for (const x of r) if (Number(x.n) > base) out.set(String(x.user_id), POWER_SHIELD)
+  }
+  if (cfg.powers.revive) {
+    const since = new Date(day + TR_OFFSET_MS - 86400_000).toISOString().slice(0, 10)
+    const r = await rows<{ user_id: string }>(sql`SELECT l.user_id FROM tg_links l JOIN tg_trust t ON t.tg_id = l.tg_id
+      WHERE t.last_day >= ${since}::date AND l.user_id IN ${ids}`).catch(() => [])
+    for (const x of r) out.set(String(x.user_id), POWER_REVIVE)
+  }
+  return out
+}
 
 async function loadRound(slot: number) {
   const r = await rows<RoundRow>(sql`SELECT * FROM cember_rounds WHERE slot = ${new Date(slot).toISOString()}`)
@@ -620,38 +655,82 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   let winningTeam = -1
   const sv = cfg.survival
   const teamRound = cfg.game === 'survival' && sv.teams > 0
-  if (participants.length && cfg.game === 'karadelik') {
-    const kd = runKD(participants.length, seed, cfg.duration, prizePlaces)
-    winnerSlots = kd.survivors
-    steps = kd.steps
-  } else if (participants.length && cfg.game === 'survival') {
-    const res = runSV({ n: participants.length, seed, duration: cfg.duration, winners: prizePlaces, teams: sv.teams, rule: sv.rule, shield: sv.shield, captain: sv.captain })
-    winnerSlots = res.winners
-    steps = res.steps
-    winningTeam = res.winningTeam
-  } else if (participants.length) {
-    const sim = runSim(participants.length, seed)
-    winnerSlots = sim.winner !== null ? [sim.winner] : []
-    steps = sim.steps
+  const n = participants.length
+  const simulate = (s: number, powers: number[]) => {
+    if (cfg.game === 'karadelik') {
+      const kd = runKD(n, s, cfg.duration, prizePlaces, powers)
+      return { winners: kd.survivors, steps: kd.steps, team: -1 }
+    }
+    if (cfg.game === 'survival') {
+      const res = runSV({ n, seed: s, duration: cfg.duration, winners: prizePlaces, teams: sv.teams, rule: sv.rule, shield: sv.shield, captain: sv.captain, powers })
+      return { winners: res.winners, steps: res.steps, team: res.winningTeam }
+    }
+    const sim = runSim(n, s)
+    return { winners: sim.winner !== null ? [sim.winner] : [], steps: sim.steps, team: -1 }
   }
 
-  // The physics outcome depends only on the ball count and seed, so the winning slots are fixed before identities are assigned.
-  // Seat random real players there and shuffle everyone else across the remaining slots: bots can never win.
-  // Survival team rounds pay the whole winning team, so only one seat is reserved for a real player and teammates stay random.
-  if (winnerSlots.length && participants.length > realCount) {
-    const real = participants.slice(0, realCount)
-    const bots = participants.slice(realCount)
-    const seatSlots = teamRound ? [winnerSlots[Math.floor(pick() * winnerSlots.length)]] : winnerSlots
-    const champs = seatSlots.map(() => real.splice(Math.floor(pick() * real.length), 1)[0]).filter(Boolean)
-    const rest = [...real, ...bots]
-    for (let i = rest.length - 1; i > 0; i--) {
+  // Powers change the physics, so they are pinned to slots before simulating: each power holder gets a random slot up front.
+  // The remaining slots are filled after the run, as before: plain real players on the winning slots, everyone else shuffled,
+  // so bots still can never win. Team rounds only need one real winner. If a run would need more plain real players on
+  // winning slots than exist (almost everyone holds a power), reroll the seed a few times, then fall back to no powers.
+  const real = participants.slice(0, realCount)
+  const bots = participants.slice(realCount)
+  const powerOf = n ? await roundPowers(cfg, real.map((p) => p.id), slot) : new Map<string, 1 | 2>()
+  let roundSeed = seed
+  let slotPowers: number[] = []
+  if (n) {
+    const holders = real.filter((p) => powerOf.has(p.id))
+    const plain = real.filter((p) => !powerOf.has(p.id))
+    const order = Array.from({ length: n }, (_, i) => i)
+    for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(pick() * (i + 1))
-      ;[rest[i], rest[j]] = [rest[j], rest[i]]
+      ;[order[i], order[j]] = [order[j], order[i]]
     }
-    const out: Participant[] = []
-    const bySlot = new Map(seatSlots.map((s, i) => [s, champs[i]]))
-    for (let i = 0; i < participants.length; i++) out.push(bySlot.get(i) ?? rest.shift()!)
-    participants.splice(0, participants.length, ...out)
+    const pinned = new Map(holders.map((p, k) => [order[k], p]))
+    const powered = Array.from({ length: n }, (_, i) => (pinned.has(i) ? powerOf.get(pinned.get(i)!.id)! : 0))
+
+    const attempt = (s: number, powers: number[], held: Map<number, Participant>, free: Participant[]) => {
+      const res = simulate(s, powers)
+      const open = res.winners.filter((w) => !held.has(w))
+      let need: number[]
+      if (!res.winners.length) need = []
+      else if (teamRound) need = open.length < res.winners.length ? [] : [open[Math.floor(pick() * open.length)]]
+      else need = open
+      return need.length <= free.length ? { res, need } : null
+    }
+
+    let found = holders.length ? null : attempt(seed, powered, pinned, plain)
+    for (let k = 0; holders.length && !found && k < 6; k++) {
+      const s = k === 0 ? seed : randomInt(1, 2 ** 31 - 1)
+      found = attempt(s, powered, pinned, plain)
+      if (found) {
+        roundSeed = s
+        slotPowers = powered
+      }
+    }
+    const held = slotPowers.length ? pinned : new Map<number, Participant>()
+    const free = slotPowers.length ? plain : [...real]
+    if (!found) {
+      roundSeed = seed
+      found = attempt(seed, [], held, free) ?? { res: simulate(seed, []), need: [] }
+    }
+    winnerSlots = found.res.winners
+    steps = found.res.steps
+    winningTeam = found.res.team
+
+    if (bots.length || slotPowers.length) {
+      const champs = found.need.map(() => free.splice(Math.floor(pick() * free.length), 1)[0]).filter(Boolean)
+      const bySlot = new Map<number, Participant>(held)
+      found.need.forEach((s, i) => champs[i] && bySlot.set(s, champs[i]))
+      const rest = [...free, ...bots]
+      for (let i = rest.length - 1; i > 0; i--) {
+        const j = Math.floor(pick() * (i + 1))
+        ;[rest[i], rest[j]] = [rest[j], rest[i]]
+      }
+      const out: Participant[] = []
+      for (let i = 0; i < n; i++) out.push(bySlot.get(i) ?? rest.shift()!)
+      participants.splice(0, n, ...out)
+    }
   }
   const winners = winnerSlots.map((i) => participants[i]).filter((p) => p && !isBot(p.id))
   const first = winners[0] ?? null
@@ -660,11 +739,11 @@ async function finalize(slot: number): Promise<RoundRow | null> {
   const winnerName = winners.length ? winners.map((w) => w.name).join(', ').slice(0, 200) : null
 
   const inserted = await rows<RoundRow>(sql`INSERT INTO cember_rounds
-      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team, instant)
-    VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${seed}, ${JSON.stringify(participants)}::jsonb, ${winnerSlots[0] ?? null}, ${first?.id ?? null},
+      (slot, title, seed, participants, winner_index, winner_id, winner_name, steps, prizes, prize_text, paid, event_id, game, duration, winner_indexes, prize_split, survival, winning_team, instant, powers)
+    VALUES (${new Date(slot).toISOString()}, ${cfg.title}, ${roundSeed}, ${JSON.stringify(participants)}::jsonb, ${winnerSlots[0] ?? null}, ${first?.id ?? null},
       ${winnerName}, ${steps}, ${JSON.stringify(cfg.prizes)}::jsonb, ${text}, ${!first}, ${cfg.id}, ${cfg.game}, ${cfg.game === 'cember' ? 0 : cfg.duration},
       ${JSON.stringify(winnerSlots)}::jsonb, ${cfg.prizeSplit}, ${cfg.game === 'survival' ? JSON.stringify(sv) : null}::jsonb, ${winningTeam},
-      ${cfg.extraSlots.some((x) => Date.parse(x) === slot)})
+      ${cfg.extraSlots.some((x) => Date.parse(x) === slot)}, ${JSON.stringify(slotPowers)}::jsonb)
     ON CONFLICT (slot) DO NOTHING RETURNING *`)
   const row = inserted[0] ?? (await loadRound(slot))
   if (inserted[0] && first) await payRound(inserted[0]).catch((e) => console.error('[cember] pay failed', e))

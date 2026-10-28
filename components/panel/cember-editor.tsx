@@ -737,6 +737,33 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
       )}
 
       {isKd && (
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+          <span className="text-sm font-semibold">Tur öncesi güçler</span>
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            Satın alınmaz, kazanılır. Her güç turda bir kez çalışır; elenecekken oyuncuyu kurtarır.
+          </span>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.powers.shield}
+              onChange={(e) => set({ powers: { ...cfg.powers, shield: e.target.checked } })}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <span>Görev kalkanı: bugün etkinliğin istediğinden fazla görev yapan oyuncu ilk düşüşünde kurtulur.</span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.powers.revive}
+              onChange={(e) => set({ powers: { ...cfg.powers, revive: e.target.checked } })}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <span>Telegram dönüşü: bugün ya da dün Telegram grubunda yazan oyuncu elenince bir kez sahaya geri döner.</span>
+          </label>
+        </div>
+      )}
+
+      {isKd && (
         <>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">

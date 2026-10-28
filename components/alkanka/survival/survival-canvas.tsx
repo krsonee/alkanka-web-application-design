@@ -24,6 +24,7 @@ export type SVEvent =
   | { type: 'out'; index: number; alive: number; teamAlive: number[] }
   | { type: 'teamOut'; team: number; captain: boolean }
   | { type: 'enter'; index: number }
+  | { type: 'power'; index: number; kind: 1 | 2 }
   | { type: 'final'; suddenDeath: boolean }
   | { type: 'done'; winners: number[]; winningTeam: number; seconds: number }
 
@@ -44,6 +45,8 @@ type Props = {
   sound?: boolean
   /** Part of a crowded round: a heat sends players to the final, a match is one of several team games. */
   stage?: 'heat' | 'match'
+  /** Pre-round power per slot (1 kalkan, 2 geri dönüş), exactly as the server simulated it. */
+  powers?: number[]
   onEvent: (e: SVEvent) => void
 }
 
@@ -120,7 +123,7 @@ function makeSprite(name: string, img: HTMLImageElement | null) {
   return c
 }
 
-export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, rule, shield, captain = false, prizePool = 0, seed, startAt, now: clock, sound = true, stage, onEvent }: Props) {
+export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, rule, shield, captain = false, prizePool = 0, seed, startAt, now: clock, sound = true, stage, powers, onEvent }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eventRef = useRef(onEvent)
   eventRef.current = onEvent
@@ -138,7 +141,7 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
     const maxParticles = low ? 60 : 200
     const snd = sound ? kdSound : null
 
-    const sim = createSV({ n: players.length, seed, duration, winners, teams: teamsOpt, rule, shield, captain })
+    const sim = createSV({ n: players.length, seed, duration, winners, teams: teamsOpt, rule, shield, captain, powers })
     const teams = sim.teamCount
     const { balls, r } = sim
     const sprites = players.map((p) => makeSprite(p.name, null))
@@ -254,6 +257,13 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
           burst(balls[i].x, balls[i].y, 10, ['#ffffff', C.gold], 0.5, 0.008)
         }
         eventRef.current({ type: 'enter', index: i })
+      }
+      for (const { i, kind } of sim.powered) {
+        if (!quiet) {
+          flashes.push({ i, at: performance.now() })
+          burst(balls[i].x, balls[i].y, 18, kind === 1 ? ['#bfe8ff', '#ffffff', C.blue] : ['#3fd0a0', '#ffffff', C.gold], 0.8, 0.01)
+        }
+        eventRef.current({ type: 'power', index: i, kind })
       }
       if (!quiet) {
         for (const i of sim.shielded) burst(balls[i].x, balls[i].y, 4, ['#bfe8ff', '#ffffff'], 0.4, 0.007)

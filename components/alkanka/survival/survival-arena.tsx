@@ -17,6 +17,7 @@ type Props = {
   seed: number
   startAt?: number
   now?: () => number
+  powers?: number[]
   onEvent: (e: SVEvent) => void
 }
 
@@ -30,10 +31,11 @@ export function SurvivalArena(props: Props) {
   return <CrowdArena {...props} />
 }
 
-function CrowdArena({ players, duration, winners, teams, rule, shield, captain = false, prizePool = 0, seed, startAt, now, onEvent }: Props) {
+function CrowdArena({ players, duration, winners, teams, rule, shield, captain = false, prizePool = 0, seed, startAt, now, powers, onEvent }: Props) {
+  const powerKey = powers?.join('') ?? ''
   const plan = useMemo(
-    () => planSV({ n: players.length, seed, duration, winners, teams, rule, shield, captain }),
-    [players.length, seed, duration, winners, teams, rule, shield, captain],
+    () => planSV({ n: players.length, seed, duration, winners, teams, rule, shield, captain, powers }),
+    [players.length, seed, duration, winners, teams, rule, shield, captain, powerKey], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const eventRef = useRef(onEvent)
   eventRef.current = onEvent
@@ -80,6 +82,8 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
         emit({ type: 'out', index: stage.entrants[e.index], alive: aliveRef.current.reduce((a, b) => a + b, 0), teamAlive: sumTeams() })
       } else if (e.type === 'enter') {
         emit({ type: 'enter', index: stage.entrants[e.index] })
+      } else if (e.type === 'power') {
+        emit({ ...e, index: stage.entrants[e.index] })
       } else if (e.type === 'tick') {
         tickRef.current[k] = e
         const ticks = tickRef.current
@@ -109,7 +113,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
     (e: SVEvent) => {
       const stage = plan.final!
       const emit = eventRef.current
-      if (e.type === 'out') emit({ ...e, index: stage.entrants[e.index] })
+      if (e.type === 'out' || e.type === 'power') emit({ ...e, index: stage.entrants[e.index] })
       else if (e.type === 'enter') emit({ type: 'enter', index: stage.entrants[e.index] })
       else if (e.type === 'done') emit({ type: 'done', winners: plan.winners, winningTeam: -1, seconds: Math.round(plan.steps * SV_STEP) })
       else emit(e)
@@ -133,6 +137,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
           shield={f.opts.shield}
           prizePool={prizePool}
           seed={f.opts.seed}
+          powers={f.opts.powers}
           startAt={finalAt}
           now={now}
           onEvent={finalHandler}
@@ -156,6 +161,7 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
               shield={s.opts.shield}
               captain={s.opts.captain}
               seed={s.opts.seed}
+              powers={s.opts.powers}
               startAt={startAt}
               now={now}
               sound={k === 0}

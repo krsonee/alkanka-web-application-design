@@ -35,7 +35,16 @@ export type SVOptions = {
   shield: boolean
   /** Each team's first player is its captain: if the captain falls, the whole team is out. */
   captain?: boolean
+  /** Pre-round task powers per entrant (see SV_POWER_*); each one fires once. */
+  powers?: number[]
 }
+
+export const SV_POWER_NONE = 0
+/** Kalkan: the first goal is shrugged off and the player is put back in the centre. */
+export const SV_POWER_SHIELD = 1
+/** Geri dönüş: the first knock-out sends the player to the back of the queue instead of out. */
+export const SV_POWER_REVIVE = 2
+export type SVPowerHit = { i: number; kind: 1 | 2 }
 
 export const SV_TEAM_NAMES = ['Altın', 'Mavi', 'Yakut', 'Zümrüt', 'Gümüş'] as const
 
@@ -78,6 +87,10 @@ export type SVState = {
   shielded: number[]
   hits: SVHit[]
   finalNow: boolean
+  /** Unused power per entrant. */
+  power: number[]
+  /** Powers that fired during the last step. */
+  powered: SVPowerHit[]
 }
 
 /** How many players stand on the pitch for `n` entrants (crowds play in a bigger, faster arena). */
@@ -174,6 +187,11 @@ export function createSV(opts: SVOptions): SVState {
     shielded: [],
     hits: [],
     finalNow: false,
+    power: Array.from({ length: n }, (_, i) => {
+      const p = Number(opts.powers?.[i] ?? 0)
+      return p === SV_POWER_SHIELD || p === SV_POWER_REVIVE ? p : SV_POWER_NONE
+    }),
+    powered: [],
   }
   const perTeam = teams ? field / teams : field
   const placed = Array.from({ length: teams || 1 }, () => 0)
@@ -231,8 +249,35 @@ function rng(s: SVState) {
   return (s as SVState & { rand: () => number }).rand
 }
 
+function enterNext(s: SVState, q: number[]) {
+  const next = q.shift()
+  if (next === undefined) return
+  const nb = s.balls[next]
+  nb.state = 1
+  nb.enterAt = s.time
+  place(s, rng(s), nb, true)
+  s.entered.push(next)
+}
+
 function knockOut(s: SVState, i: number, side: -1 | 1) {
   const b = s.balls[i]
+  const power = s.power[i]
+  if (power !== SV_POWER_NONE) {
+    s.power[i] = SV_POWER_NONE
+    s.powered.push({ i, kind: power as 1 | 2 })
+    if (power === SV_POWER_SHIELD) {
+      b.enterAt = s.time
+      place(s, rng(s), b, true)
+      return
+    }
+    // Geri dönüş: visibly drops through the goal, then rejoins the back of its queue.
+    s.out.push({ i, side })
+    b.state = 0
+    const q = s.queue[s.teamCount ? b.team : 0]
+    q.push(i)
+    enterNext(s, q)
+    return
+  }
   b.state = 2
   s.order.push(i)
   s.out.push({ i, side })
@@ -242,15 +287,7 @@ function knockOut(s: SVState, i: number, side: -1 | 1) {
     settleTeams(s, team)
     return
   }
-  const q = s.queue[s.teamCount ? team : 0]
-  const next = q.shift()
-  if (next !== undefined) {
-    const nb = s.balls[next]
-    nb.state = 1
-    nb.enterAt = s.time
-    place(s, rng(s), nb, true)
-    s.entered.push(next)
-  }
+  enterNext(s, s.queue[s.teamCount ? team : 0])
 
   if (!s.teamCount) {
     if (svAlive(s) <= s.opts.winners) s.finished = true
@@ -269,6 +306,7 @@ export function stepSV(s: SVState) {
   s.shielded = []
   s.hits = []
   s.finalNow = false
+  s.powered = []
   s.teamOut = []
   if (s.finished) return
   s.step++
@@ -456,6 +494,8 @@ export type SVStage = {
   winningTeam: number
   /** Players left standing per team colour when the match ended. */
   teamAlive: number[]
+  /** Powers still unused at the end, by global entrant index (heat survivors carry them into the final). */
+  powersLeft: Map<number, number>
 }
 
 export type SVPlan = {
@@ -497,7 +537,15 @@ function playStage(entrants: number[], opts: SVOptions, startStep: number): SVSt
   const s = runPitch(opts)
   const local = svWinners(s)
   const teamAlive = Array.from({ length: s.teamCount }, (_, t) => svAlive(s, t))
-  return { entrants, opts, startStep, steps: s.step, winners: local.map((i) => entrants[i]), winningTeam: s.winningTeam, teamAlive }
+  const powersLeft = new Map<number, number>()
+  s.power.forEach((p, i) => p && powersLeft.set(entrants[i], p))
+  return { entrants, opts, startStep, steps: s.step, winners: local.map((i) => entrants[i]), winningTeam: s.winningTeam, teamAlive, powersLeft }
+}
+
+/** Powers for a group of global entrants, in the group's local order. */
+function powersFor(entrants: number[], source: (g: number) => number | undefined) {
+  const out = entrants.map((g) => source(g) ?? 0)
+  return out.some(Boolean) ? out : undefined
 }
 
 /**
@@ -514,7 +562,9 @@ export function planSV(opts: SVOptions): SVPlan {
 
   if (kind === 'matches') {
     const groups = split(opts.n, Math.min(SV_MAX_PITCHES, Math.floor(opts.n / SV_MATCH_SIZE)))
-    const stages = groups.map((g, k) => playStage(g, { ...opts, n: g.length, seed: subSeed(opts.seed, k) }, 0))
+    const stages = groups.map((g, k) =>
+      playStage(g, { ...opts, n: g.length, seed: subSeed(opts.seed, k), powers: powersFor(g, (i) => opts.powers?.[i]) }, 0),
+    )
     const teams = opts.teams
     const wins = Array.from({ length: teams }, () => 0)
     const standing = Array.from({ length: teams }, () => 0)
@@ -539,13 +589,26 @@ export function planSV(opts: SVOptions): SVPlan {
   const heatClock = Math.max(30, Math.round(opts.duration * 0.5))
   const finalClock = Math.max(30, opts.duration - heatClock)
   const stages = split(opts.n, heats).map((g, k) =>
-    playStage(g, { ...opts, n: g.length, seed: subSeed(opts.seed, k), duration: heatClock, winners: Math.min(advance, g.length - 1) }, 0),
+    playStage(
+      g,
+      { ...opts, n: g.length, seed: subSeed(opts.seed, k), duration: heatClock, winners: Math.min(advance, g.length - 1), powers: powersFor(g, (i) => opts.powers?.[i]) },
+      0,
+    ),
   )
   const finalists = stages.flatMap((s) => s.winners)
+  const carried = new Map<number, number>()
+  for (const st of stages) st.powersLeft.forEach((p, g) => carried.set(g, p))
   const startStep = Math.max(...stages.map((s) => s.steps)) + Math.round(SV_STAGE_GAP / SV_STEP)
   const final = playStage(
     finalists,
-    { ...opts, n: finalists.length, seed: subSeed(opts.seed, 99), duration: finalClock, winners: Math.min(opts.winners, finalists.length - 1) },
+    {
+      ...opts,
+      n: finalists.length,
+      seed: subSeed(opts.seed, 99),
+      duration: finalClock,
+      winners: Math.min(opts.winners, finalists.length - 1),
+      powers: powersFor(finalists, (g) => carried.get(g)),
+    },
     startStep,
   )
   return { kind, stages, final, wins: [], winners: final.winners, winningTeam: -1, steps: startStep + final.steps }

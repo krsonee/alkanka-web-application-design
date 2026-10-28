@@ -37,6 +37,17 @@ export type SurvivalRule = 'last' | 'most'
 export type SurvivalOpts = { teams: 0 | 2 | 5; rule: SurvivalRule; shield: boolean; captain: boolean }
 export const DEFAULT_SURVIVAL: SurvivalOpts = { teams: 0, rule: 'last', shield: true, captain: false }
 
+/**
+ * Pre-round powers (Survival + Kara Delik). Earned, never bought:
+ * shield = did more tasks today than the event asks; revive = wrote in the Telegram group today/yesterday.
+ */
+export type PowerOpts = { shield: boolean; revive: boolean }
+export const DEFAULT_POWERS: PowerOpts = { shield: true, revive: true }
+export const POWER_NONE = 0
+export const POWER_SHIELD = 1
+export const POWER_REVIVE = 2
+export const POWER_LABEL: Record<1 | 2, string> = { 1: 'Görev kalkanı', 2: 'Telegram dönüşü' }
+
 /** Fills thin rounds with bots so the arena never looks empty; bots never win or get paid. */
 export type BotConfig = { enabled: boolean; target: number; max: number }
 export const DEFAULT_BOTS: BotConfig = { enabled: true, target: 50, max: 50 }
@@ -67,6 +78,8 @@ export type CemberConfig = {
   prizeSplit: 'each' | 'split'
   /** Survival Arena only. */
   survival: SurvivalOpts
+  /** Survival Arena + Kara Delik only. */
+  powers: PowerOpts
   bots: BotConfig
   hours: number[]
   /** Weekdays the event runs (0 = Pazartesi … 6 = Pazar); empty = every day. */
@@ -92,6 +105,7 @@ export const DEFAULT_CEMBER: CemberConfig = {
   tiers: DEFAULT_TIERS,
   prizeSplit: 'each',
   survival: DEFAULT_SURVIVAL,
+  powers: DEFAULT_POWERS,
   bots: DEFAULT_BOTS,
   hours: Array.from({ length: 24 }, (_, h) => h),
   days: [],
@@ -123,6 +137,7 @@ export function recommendedCemberEvents(opts: { badgeId?: string | null; itemId?
     tiers: DEFAULT_TIERS,
     prizeSplit: 'each' as const,
     survival: DEFAULT_SURVIVAL,
+    powers: DEFAULT_POWERS,
     bots: DEFAULT_BOTS,
   }
   const cond = (id: string, kind: ConditionKind, target = 1, param: string | null = null): CemberCondition => ({ id, kind, target, window: 'gun', param, label: '' })
@@ -214,6 +229,8 @@ export type CemberRound = {
   survival: SurvivalOpts | null
   /** Survival team mode: 0 = Altın, 1 = Mavi. */
   winningTeam: number
+  /** Power per participant slot (POWER_*), fed to the engine so every viewer replays the same round. */
+  powers: number[]
 }
 
 export type CemberStatus = {

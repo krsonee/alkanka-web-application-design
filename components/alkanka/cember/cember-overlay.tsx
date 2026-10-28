@@ -108,6 +108,7 @@ export function CemberStage({
   const [phase, setPhase] = useState<Phase>(serverNow() >= startAt ? 'play' : 'intro')
   const [alive, setAlive] = useState(demo?.participants.length ?? 0)
   const [feed, setFeed] = useState<{ key: number; name: string }[]>([])
+  const [powerNote, setPowerNote] = useState('')
   const [winner, setWinner] = useState<number | null>(null)
   const [kdWinners, setKdWinners] = useState<number[]>([])
   const [kdFinal, setKdFinal] = useState(false)
@@ -190,6 +191,8 @@ export function CemberStage({
       if (e.type === 'out') {
         setAlive(e.alive)
         setFeed((f) => [{ key: e.index, name: participants[e.index].name }, ...f].slice(0, 5))
+      } else if (e.type === 'power') {
+        setPowerNote(`${participants[e.index].name} ${e.kind === 1 ? 'kalkanla kurtuldu' : 'geri döndü'}`)
       } else if (e.type === 'final') {
         setKdFinal(true)
       } else if (e.type === 'done') {
@@ -207,6 +210,8 @@ export function CemberStage({
       if (e.type === 'out') {
         setAlive(e.alive)
         setFeed((f) => [{ key: e.index, name: participants[e.index].name }, ...f].slice(0, 5))
+      } else if (e.type === 'power') {
+        setPowerNote(`${participants[e.index].name} ${e.kind === 1 ? 'kalkanla kurtuldu' : 'geri döndü'}`)
       } else if (e.type === 'final') {
         setKdFinal(true)
       } else if (e.type === 'done') {
@@ -255,6 +260,7 @@ export function CemberStage({
             shield={svOpts.shield}
             captain={!!svOpts.captain}
             seed={round.seed}
+            powers={round.powers}
             startAt={startAt}
             now={serverNow}
             onEvent={onSvEvent}
@@ -265,6 +271,7 @@ export function CemberStage({
             duration={round.duration || 90}
             winners={Math.max(1, round.winners.length)}
             seed={round.seed}
+            powers={round.powers}
             startAt={startAt}
             now={serverNow}
             onEvent={onKdEvent}
@@ -408,6 +415,12 @@ export function CemberStage({
         <p className="sr-only" aria-live="polite">
           {feed[0] ? `${feed[0].name} elendi` : ''}
         </p>
+
+        {phase === 'play' && powerNote && (
+          <p key={powerNote} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground animate-in fade-in" role="status">
+            {powerNote}
+          </p>
+        )}
 
         {phase === 'play' && !round && <p className="py-16 text-sm text-muted-foreground">��ember hazırlanıyor...</p>}
 

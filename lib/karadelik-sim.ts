@@ -43,6 +43,9 @@ export type KDState = {
   out: number[]
   hits: KDHit[]
   finalNow: boolean
+  /** Unused power per ball: 1 kalkan, 2 geri dönüş. Either one throws the ball back to the rim once. */
+  power: number[]
+  powered: { i: number; kind: 1 | 2 }[]
 }
 
 export function kdHole(time: number, final: boolean, finalAt: number): KDHole {
@@ -53,7 +56,7 @@ export function kdHole(time: number, final: boolean, finalAt: number): KDHole {
   return { mode: 'open', count: 0, radius: KD_HOLE_R }
 }
 
-export function createKD(n: number, seed: number, duration: number, winners: number): KDState {
+export function createKD(n: number, seed: number, duration: number, winners: number, powers?: number[]): KDState {
   const rand = mulberry(seed)
   const r = Math.min(0.1, Math.sqrt(0.28 / Math.max(1, n)))
   const balls: KDBall[] = []
@@ -89,7 +92,27 @@ export function createKD(n: number, seed: number, duration: number, winners: num
     out: [],
     hits: [],
     finalNow: false,
+    power: Array.from({ length: n }, (_, i) => {
+      const p = Number(powers?.[i] ?? 0)
+      return p === 1 || p === 2 ? p : 0
+    }),
+    powered: [],
   }
+}
+
+/** A powered ball is flung from the hole back to the rim, skimming the wall so it isn't sucked straight back in. */
+function rescue(s: KDState, i: number, d: number) {
+  const b = s.balls[i]
+  const kind = s.power[i] as 1 | 2
+  s.power[i] = 0
+  s.powered.push({ i, kind })
+  const nx = d > 1e-4 ? b.x / d : 1
+  const ny = d > 1e-4 ? b.y / d : 0
+  const at = KD_WALL - s.r - 0.03
+  b.x = nx * at
+  b.y = ny * at
+  b.vx = -ny * 0.9
+  b.vy = nx * 0.9
 }
 
 function eliminate(s: KDState, i: number) {
@@ -104,6 +127,7 @@ export function stepKD(s: KDState) {
   s.out = []
   s.hits = []
   s.finalNow = false
+  s.powered = []
   if (s.finished) return
   s.step++
   s.time = s.step * KD_STEP
@@ -179,6 +203,10 @@ export function stepKD(s: KDState) {
 
     if (hole.mode === 'open') {
       if (d < hole.radius - r * 0.2) {
+        if (s.power[i]) {
+          rescue(s, i, d)
+          continue
+        }
         eliminate(s, i)
         if (s.finished) return
         continue
@@ -251,8 +279,8 @@ export function stepKD(s: KDState) {
 }
 
 /** Plays the whole round headless: which ball indices survive and how many steps it takes. */
-export function runKD(n: number, seed: number, duration: number, winners: number) {
-  const s = createKD(n, seed, duration, winners)
+export function runKD(n: number, seed: number, duration: number, winners: number, powers?: number[]) {
+  const s = createKD(n, seed, duration, winners, powers)
   while (!s.finished) stepKD(s)
   return { survivors: s.balls.flatMap((b, i) => (b.alive ? [i] : [])), steps: s.step, order: s.order }
 }
