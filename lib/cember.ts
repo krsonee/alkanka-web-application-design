@@ -40,6 +40,7 @@ import {
   type CemberStatus,
   type Participant,
   type PrizeType,
+  BOT_TAG,
   EVERY_OPTIONS,
   MAX_EVENTS,
   MIN_SLOT_GAP_MIN,
@@ -583,6 +584,7 @@ type RoundRow = {
   winner_name: string | null
   steps: number
   prize_text: string
+  prizes?: CemberPrize[] | null
   paid: boolean
   event_id?: string | null
   game: CemberGame | null
@@ -737,7 +739,7 @@ async function finalize(slot: number): Promise<RoundRow | null> {
     }
     if (cfg.game === 'survival') {
       const res = runSV({ n, seed: s, duration: cfg.duration, winners: prizePlaces, teams: sv.teams, rule: sv.rule, shield: sv.shield, captain: sv.captain, powers })
-      return { winners: res.winners, steps: res.steps, team: res.winningTeam, order: res.order as number[] }
+      return { winners: res.winners, steps: res.steps, team: res.winningTeam, order: (res as { order?: number[] }).order ?? [] }
     }
     const sim = runSim(n, s)
     return { winners: sim.winner !== null ? [sim.winner] : [], steps: sim.steps, team: -1, order: sim.order }
