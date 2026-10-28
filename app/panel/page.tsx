@@ -15,7 +15,7 @@ import { CemberPanel } from '@/components/panel/cember-panel'
 import { getAmbientSettings } from '@/lib/ambient-tables'
 import { LEGAL_KEY, mergeLegal, type LegalOverrides } from '@/lib/legal-shared'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
-import { SLIDES } from '@/components/alkanka/data'
+import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
 import { CUSTOM_SLIDES_KEY, readCustomSlides, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
 import { readPromoTotals } from '@/lib/promo-stats'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
@@ -157,6 +157,9 @@ import { levelMap } from '@/lib/kanka-puan'
 import { AvatarManager } from '@/components/panel/avatar-manager'
 import { COVERS, avatarStats, listCatalog } from '@/lib/avatars'
 import { getHouseWinRate } from '@/app/actions/wallet'
+import { TelegramPromoEditor } from '@/components/panel/telegram-promo-editor'
+import { getTelegramPromo } from '@/lib/telegram-promo'
+import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 
 async function usersPanel() {
   const [{ members, counts }, levels, cfg] = await Promise.all([listMembers(), levelMap().catch(() => ({}) as Record<string, number>), getKpConfig()])
@@ -213,6 +216,7 @@ async function telegramPanel() {
     adminMarkets().catch(() => []),
     betsLog().catch(() => []),
   ])
+  const tgPromo = await getTelegramPromo().catch(() => TELEGRAM_PROMO_DEFAULTS)
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
   const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
@@ -243,6 +247,18 @@ async function telegramPanel() {
         { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
         { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', status: light(invite != null), content: <TelegramInviteSetup bots={bots} status={invite} /> },
         { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
+        {
+          id: 'strip',
+          group: 'Kanallar',
+          label: 'Site şeridi',
+          status: light(tgPromo.enabled),
+          content: (
+            <TelegramPromoEditor
+              settings={tgPromo}
+              fallbackUrl={channels?.duyuru ? `https://t.me/${channels.duyuru.replace(/^@/, '')}` : TELEGRAM_URL}
+            />
+          ),
+        },
       ]}
     />
   )
