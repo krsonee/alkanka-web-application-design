@@ -112,11 +112,32 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
 
   // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
   useEffect(() => {
+    if (!modes.includes('pvp')) return
     const id = new URLSearchParams(window.location.search).get('masa')
-    if (!id || !modes.includes('pvp')) return
-    setInvitedTable(id)
-    setMode('pvp')
-    setEntered({ mode: 'pvp', bet: settings.bets[0] })
+    if (id) {
+      setInvitedTable(id)
+      setMode('pvp')
+      setEntered({ mode: 'pvp', bet: settings.bets[0] })
+      return
+    }
+    // A refresh (or a PWA relaunch) can drop ?masa; fall back to the table the player is still seated at.
+    let cancelled = false
+    fetch(`/api/tables?game=${game}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { mine?: { id: string; game: string; status: string }[] } | null) => {
+        const mine = (d?.mine ?? []).filter((t) => t.game === game)
+        const live = mine.find((t) => t.status === 'oynaniyor') ?? mine.find((t) => t.status === 'bekliyor')
+        if (cancelled || !live) return
+        const url = new URL(window.location.href)
+        url.searchParams.set('masa', live.id)
+        window.history.replaceState(window.history.state, '', url)
+        setMode('pvp')
+        setEntered({ mode: 'pvp', bet: settings.bets[0] })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

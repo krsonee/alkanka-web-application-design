@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { Award, ChevronDown, Coins, History, Link2, LogOut, Mail, Menu, MessageSquareText, Palette, Search, Send, Settings, UserRound } from 'lucide-react'
 import { getInboxStatus, type InboxStatus } from '@/app/actions/inbox'
@@ -82,6 +83,7 @@ const MENU = [
 
 function AccountMenu() {
   const { member, points, refresh } = usePoints()
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -221,6 +223,7 @@ function AccountMenu() {
                 setOpen(false)
                 await authClient.signOut()
                 refresh()
+                router.refresh()
               }}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             >
@@ -286,7 +289,7 @@ export function Topbar({
 
   return (
     <>
-      <header className="sticky top-0 z-[45] flex h-16 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:gap-3 sm:px-4 lg:px-6">
+      <header className="sticky top-[var(--tg-strip-h,0px)] z-[45] flex h-16 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:gap-3 sm:px-4 lg:px-6">
         <button
           type="button"
           onClick={() => setOpen(true)}

@@ -90,7 +90,7 @@ export default async function BadgesPage() {
         image="/images/badges/hero-jako-rozet.png"
       />
 
-      <nav aria-label="Rozet bölümleri" className="sticky top-16 z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
+      <nav aria-label="Rozet bölümleri" className="sticky top-[calc(4rem+var(--tg-strip-h,0px))] z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
         {[
           { href: '#kazan', label: 'KP kazan' },
           ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),

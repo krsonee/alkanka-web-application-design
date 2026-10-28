@@ -16,7 +16,7 @@ export type ProfileTab = (typeof PROFILE_TABS)[number]['id']
 
 export function ProfileTabs({ active, unread = 0 }: { active: ProfileTab; unread?: number }) {
   return (
-    <nav aria-label="Profil bölümleri" className="sticky top-16 z-10 -mx-4 border-b border-border bg-background/90 px-4 backdrop-blur lg:-mx-6 lg:px-6">
+    <nav aria-label="Profil bölümleri" className="sticky top-[calc(4rem+var(--tg-strip-h,0px))] z-10 -mx-4 border-b border-border bg-background/90 px-4 backdrop-blur lg:-mx-6 lg:px-6">
       <ul role="tablist" className="flex flex-wrap gap-1.5 py-2.5 md:no-scrollbar md:flex-nowrap md:gap-1 md:overflow-x-auto md:py-0">
         {PROFILE_TABS.map((t) => {
           const selected = t.id === active
