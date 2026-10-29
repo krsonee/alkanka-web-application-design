@@ -187,6 +187,15 @@ export function ContentEditor({
   const [loading, startLoading] = useTransition()
   const [tab, setTab] = useState<PanelTab>(initialTab as PanelTab)
   const [filter, setFilter] = useState('')
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!loading) {
+      setSlow(false)
+      return
+    }
+    const t = setTimeout(() => setSlow(true), 8000)
+    return () => clearTimeout(t)
+  }, [loading])
   useEffect(() => {
     // Old bookmarks used #section; move them to ?b=section so the server loads only that section.
     const legacy = window.location.hash.replace('#', '') as PanelTab
@@ -417,9 +426,23 @@ export function ContentEditor({
           )}
         >
       {loading && tab !== 'slide' && tab !== 'hero' && tab !== 'account' ? (
-        <div role="status" className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          {current?.label ?? 'Bölüm'} açılıyor...
+        <div role="status" className="flex flex-col items-start gap-3 py-16 text-sm text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            {current?.label ?? 'Bölüm'} açılıyor...
+          </span>
+          {slow && (
+            <span className="flex flex-wrap items-center gap-2">
+              Beklenenden uzun sürüyor.
+              <button
+                type="button"
+                onClick={() => window.location.assign(tab === 'dashboard' ? '/panel' : `/panel?b=${tab}`)}
+                className="rounded-md border border-border px-3 py-1.5 text-foreground hover:bg-secondary"
+              >
+                Sayfayı yenile
+              </button>
+            </span>
+          )}
         </div>
       ) : !tabs.includes(tab) ? (
         <p className="text-sm text-muted-foreground">Bu bölüme erişim yetkin yok.</p>

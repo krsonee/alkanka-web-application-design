@@ -30,7 +30,7 @@ export function MobilePanel({ counts, segments, topicLabels }: { counts: Counts;
     <div className="flex flex-col gap-6">
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Uygulamayı yükleyen" value={counts.installed} icon={Smartphone} />
-        <Stat label="Bildirim açık" value={counts.push} icon={BellRing} />
+        <Stat label="Bildirimi açık üye" value={counts.push} icon={BellRing} />
         <Stat label="Bugün uygulamadan giren" value={counts.opensToday} icon={Smartphone} />
         <Stat label="Bildirimi kapatan" value={counts.turnedOff} icon={BellOff} />
       </dl>
