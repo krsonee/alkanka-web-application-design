@@ -12,6 +12,7 @@ import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
 import { TableLobby } from './table-lobby'
 import { LiveLobby } from './live-lobby'
+import { WaitingTables } from './waiting-tables'
 
 export const RULES: Record<ArenaGame, string[]> = {
   tavla: [
@@ -167,6 +168,16 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
 
   return (
     <div className="flex flex-col gap-4">
+      {entered == null && modes.includes('pvp') && (
+        <WaitingTables
+          game={game}
+          onJoin={(id, stake) => {
+            setInvitedTable(id)
+            setMode('pvp')
+            setEntered({ mode: 'pvp', bet: stake })
+          }}
+        />
+      )}
       {entered == null && (
         <StakeGate
           game={game}
