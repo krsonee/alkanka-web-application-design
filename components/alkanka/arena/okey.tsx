@@ -465,7 +465,7 @@ export function Okey({ finish, saveKey }: GameApi) {
 
   return (
     <div ref={boardRef} className="flex scroll-mt-20 flex-col gap-2 sm:gap-4">
-      <div data-ls-main="half" className="ls-tall relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
+      <div data-ls-main="okey" className="ls-tall relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
         <div className="absolute inset-x-0 top-2 flex justify-center sm:top-3">{seat(2, '')}</div>
         <div className="ls-seat-l absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
@@ -519,11 +519,11 @@ export function Okey({ finish, saveKey }: GameApi) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-2.5 sm:gap-3 sm:p-4">
-        <div className="hidden sm:block">
+      <div data-ls-flat className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-2.5 sm:gap-3 sm:p-4">
+        <div data-ls-hide className="hidden sm:block">
           <TurnSteps phase={phase === 'draw' ? 'draw' : phase === 'discard' ? 'discard' : 'wait'} />
         </div>
-        <div className="flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
+        <div data-ls-stack className="ls-okey-panel flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
           <p className="min-w-0 text-xs font-semibold leading-snug text-foreground sm:text-sm" aria-live="polite">
             {message}
           </p>
@@ -547,9 +547,11 @@ export function Okey({ finish, saveKey }: GameApi) {
           </div>
         </div>
 
-        <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} onDropOut={onDropOut} onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish' ? k : null)} />
+        <div className="ls-okey-rack">
+          <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} onDropOut={onDropOut} onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish' ? k : null)} />
+        </div>
 
-        <div className="flex gap-2">
+        <div className="ls-okey-panel ls-okey-actions flex gap-2">
           <button
             onClick={() => discard(selected)}
             disabled={phase !== 'discard' || selected === null}
