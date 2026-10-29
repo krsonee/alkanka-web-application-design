@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 export type TabStatus = 'on' | 'off' | null
 
-type Tab = { id: string; label: string; group?: string; status?: TabStatus; content: ReactNode }
+type Tab = { id: string; label: string; group?: string; status?: TabStatus; issue?: string | null; content: ReactNode }
 
 function StatusLight({ status }: { status: TabStatus }) {
   if (!status) return null
@@ -27,6 +27,7 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
   const grouped = groups.length > 1
   const activeGroup = tabs.find((t) => t.id === active)?.group ?? groups[0]
   const visibleTabs = grouped ? tabs.filter((t) => t.group === activeGroup) : tabs
+  const broken = tabs.filter((t) => t.status === 'off')
 
   return (
     <div className="flex flex-col gap-4">
@@ -69,6 +70,7 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
               aria-selected={active === t.id}
               aria-controls={`${uid}-panel-${t.id}`}
               onClick={() => setActive(t.id)}
+              title={t.status === 'off' && t.issue ? t.issue : undefined}
               className={cn(
                 'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
                 active === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
@@ -86,6 +88,27 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
           <span className="flex items-center gap-1.5"><StatusLight status="on" /> Bağlı ve çalışıyor</span>
           <span className="flex items-center gap-1.5"><StatusLight status="off" /> Kurulmadı veya hata var</span>
         </p>
+      ) : null}
+      {broken.length > 0 ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+          <p className="text-sm font-semibold text-foreground">{`${broken.length} bölüm çalışmıyor`}</p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {broken.map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => setActive(t.id)}
+                  className="flex w-full flex-wrap items-baseline gap-x-2 rounded-md px-2 py-1 text-left text-sm hover:bg-destructive/10"
+                >
+                  <span className="font-semibold text-foreground">
+                    {t.group ? `${t.group} · ${t.label}` : t.label}
+                  </span>
+                  <span className="break-all text-muted-foreground">{t.issue ?? 'Kurulum tamamlanmamış'}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       {tabs.map((t) => (
         <div key={t.id} role="tabpanel" id={`${uid}-panel-${t.id}`} aria-labelledby={`${uid}-tab-${t.id}`} hidden={active !== t.id}>
