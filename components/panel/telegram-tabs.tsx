@@ -31,7 +31,7 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="sticky top-14 z-10 flex flex-col gap-2 rounded-xl border border-border bg-card p-1 shadow-sm">
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-1 shadow-sm">
         {grouped ? (
           <div role="group" aria-label={`${label} grupları`} className="flex gap-1 overflow-x-auto border-b border-border pb-1">
             {groups.map((g) => {
