@@ -9,10 +9,11 @@ export type ChatResponse = ChatFeed & { locked?: boolean; me: { loggedIn: boolea
 
 const fetcher = <T,>(url: string) => fetch(url, { cache: 'no-store' }).then((r) => r.json() as Promise<T>)
 
-export function useChatFeed(active = true) {
+export function useChatFeed(active = true, { slow = false }: { slow?: boolean } = {}) {
   const idle = useIdle()
   return useSWR<ChatResponse>('/api/chat', fetcher<ChatResponse>, {
-    refreshInterval: (data) => (!active ? 0 : !data?.configured ? 60000 : idle ? 20000 : 4000),
+    refreshInterval: (data) =>
+      !active ? 0 : !data?.configured ? 60000 : slow ? 30000 : idle ? 20000 : 4000,
     revalidateOnFocus: true,
     dedupingInterval: 1500,
   })

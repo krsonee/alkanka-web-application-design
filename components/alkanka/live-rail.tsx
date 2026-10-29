@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition, type FormEvent, type KeyboardEvent } from 'react'
 import {
   ChevronDown,
   ExternalLink,
@@ -515,10 +515,20 @@ function ChannelPanel({ slug, data, onRefresh }: { slug: BroadcastSlug; data: Ch
   )
 }
 
+const XL_QUERY = '(min-width: 1280px)'
+function subscribeXl(onChange: () => void) {
+  const mq = window.matchMedia(XL_QUERY)
+  mq.addEventListener('change', onChange)
+  return () => mq.removeEventListener('change', onChange)
+}
+
 export function LiveRail() {
   const [tab, setTab] = useState<ChatTab>('sohbet')
-  const chat = useChatFeed(tab === 'sohbet')
-  const channel = useChannelFeed(tab === 'sohbet' ? null : tab)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const isDesktopRail = useSyncExternalStore(subscribeXl, () => window.matchMedia(XL_QUERY).matches, () => false)
+  const railVisible = isDesktopRail || mobileOpen
+  const chat = useChatFeed(railVisible && tab === 'sohbet')
+  const channel = useChannelFeed(railVisible && tab !== 'sohbet' ? tab : null)
 
   const subtitle =
     tab === 'sohbet'
@@ -531,7 +541,6 @@ export function LiveRail() {
         ? `@${channel.data.username}`
         : 'Yakında'
   const isLive = tab === 'sohbet' ? chat.data?.configured : channel.data?.configured
-  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     const open = () => setMobileOpen(true)
