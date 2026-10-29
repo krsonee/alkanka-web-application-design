@@ -50,8 +50,18 @@ export async function POST(req: Request) {
   let last: Response | null = null
   for (const email of emails) {
     const res = await signIn(req, email, password)
-    // Success, unverified e-mail and rate limit are final answers; only a wrong password tries the next account.
-    if (res.ok || res.status === 403 || res.status === 429) return res
+    if (res.status === 403) {
+      const err = (await res.clone().json().catch(() => null)) as { code?: string; message?: string } | null
+      if (err?.code !== 'EMAIL_NOT_VERIFIED') {
+        return Response.json(
+          { code: 'ACCOUNT_SUSPENDED', message: err?.message || 'Hesabın dondurulmuş.' },
+          { status: 423 },
+        )
+      }
+      return Response.json({ code: 'EMAIL_NOT_VERIFIED', message: err.message }, { status: 403 })
+    }
+    // Success and rate limit are final answers; only a wrong password tries the next account.
+    if (res.ok || res.status === 429) return res
     last = res
   }
   return last!
