@@ -18,7 +18,7 @@ import { PredictOutcome, PredictPanel } from './predict-panel'
 import { CemberArena, JAKO_PP, type ArenaEvent } from './cember-arena'
 import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
 import { TableBrand } from '../arena/table-brand'
-import { type SVEvent } from '../survival/survival-canvas'
+import { SV_TEAMS, type SVEvent } from '../survival/survival-canvas'
 import { SurvivalArena } from '../survival/survival-arena'
 import { CemberConfetti } from './cember-confetti'
 import { ShareWinnerCard } from './share-winner-card'
@@ -127,6 +127,8 @@ export function CemberStage({
   const [kdWinners, setKdWinners] = useState<number[]>([])
   const [kdFinal, setKdFinal] = useState(false)
   const [winningTeam, setWinningTeam] = useState(-1)
+  const [svWins, setSvWins] = useState<number[] | null>(null)
+  const [svMeTeam, setSvMeTeam] = useState(-1)
   const [now, setNow] = useState(serverNow())
   const doneRef = useRef(onDone)
   doneRef.current = onDone
@@ -250,6 +252,8 @@ export function CemberStage({
       } else if (e.type === 'done') {
         setKdWinners(e.winners)
         setWinningTeam(e.winningTeam)
+        setSvWins(e.wins ?? null)
+        setSvMeTeam(e.meTeam ?? -1)
         setAlive(e.winners.length)
         setPhase('result')
       }
@@ -434,6 +438,27 @@ export function CemberStage({
                           : `${kdWinnerPs.length} kişi sağ çıktı`}
                   </span>
                 </div>
+                {isSv && (
+                  <SvResultDetails
+                    compact={compact}
+                    winningTeam={winningTeam}
+                    wins={svWins}
+                    meTeam={
+                      svMeTeam >= 0
+                        ? svMeTeam
+                        : winningTeam >= 0 && meId
+                          ? (() => {
+                              const i = participants?.findIndex((p) => p.id === meId) ?? -1
+                              const n = participants?.length ?? 0
+                              const t = svOpts.teams === 5 && n < 10 ? 2 : svOpts.teams
+                              return i >= 0 && t ? i % t : -1
+                            })()
+                          : -1
+                    }
+                    names={kdWinnerPs.map((p) => ({ id: p.id, name: p.name }))}
+                    meId={meId}
+                  />
+                )}
                 {!isDemo && (() => {
                   const mineIdx = participants?.findIndex((p) => p.id === meId) ?? -1
                   const idx = iSurvived && kdWinners.includes(mineIdx) ? mineIdx : kdWinners[0]
@@ -597,6 +622,69 @@ function Intro({
         {countdown > 0 ? countdown : 'Başla'}
       </div>
       {children}
+    </div>
+  )
+}
+
+function SvResultDetails({
+  compact,
+  winningTeam,
+  wins,
+  meTeam,
+  names,
+  meId,
+}: {
+  compact?: boolean
+  winningTeam: number
+  wins: number[] | null
+  meTeam: number
+  names: { id: string; name: string }[]
+  meId?: string | null
+}) {
+  const shown = compact ? 4 : 10
+  const ordered = [...names].sort((a, b) => Number(b.id === meId) - Number(a.id === meId))
+  const extra = Math.max(0, ordered.length - shown)
+  const scored = wins ? wins.map((w, t) => ({ t, w })).sort((a, b) => b.w - a.w) : []
+  const lost = winningTeam >= 0 && meTeam >= 0 && meTeam !== winningTeam
+
+  return (
+    <div className="flex max-w-[92%] flex-col items-center gap-1.5 rounded-xl bg-background/90 px-3 py-2 text-xs shadow-lg">
+      {scored.length > 0 && (
+        <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-semibold text-foreground">
+          <span className="text-muted-foreground">Maç skoru:</span>
+          {scored.map(({ t, w }) => (
+            <span key={t} className={cn('flex items-center gap-1 tabular-nums', t === winningTeam && 'text-gold')}>
+              <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: SV_TEAMS[t]?.color }} />
+              {SV_TEAMS[t]?.name} {w}
+            </span>
+          ))}
+        </p>
+      )}
+      {scored.length > 0 && (
+        <p className="text-pretty text-muted-foreground">En çok maçı alan takım kazanır; tüm sahalardaki o renk ödülü paylaşır.</p>
+      )}
+      {lost && (
+        <p className="font-semibold text-foreground">
+          {'Senin takımın: '}
+          <span style={{ color: SV_TEAMS[meTeam]?.color }}>{SV_TEAMS[meTeam]?.name}</span>
+        </p>
+      )}
+      {ordered.length > 0 && (
+        <ul aria-label="Kazananlar" className="flex flex-wrap justify-center gap-1">
+          {ordered.slice(0, shown).map((p) => (
+            <li
+              key={p.id}
+              className={cn(
+                'rounded-full px-2 py-0.5 font-semibold',
+                p.id === meId ? 'bg-gold text-gold-foreground' : 'bg-card text-foreground',
+              )}
+            >
+              {p.id === meId ? `${p.name} (sen)` : p.name}
+            </li>
+          ))}
+          {extra > 0 && <li className="rounded-full bg-card px-2 py-0.5 font-semibold text-muted-foreground">{`+${extra} kişi`}</li>}
+        </ul>
+      )}
     </div>
   )
 }
