@@ -1670,6 +1670,11 @@
 .ls-split [data-ls-hide] { display: none !important; }
 /* Wide desktop ratios leave seats crowding the centre pile in the half-width column. */
 .ls-split .ls-tall { aspect-ratio: 5 / 4 !important; }
+.ls-split .ls-seat-l,
+.ls-split .ls-seat-r { left: 0.25rem; right: auto; transform: scale(0.72); transform-origin: left center; z-index: 30; }
+.ls-split .ls-seat-r { left: auto; right: 0.25rem; transform-origin: right center; }
+.ls-split .ls-seat-l > *,
+.ls-split .ls-seat-r > * { flex-direction: column; }
 
 @keyframes dash-rise {
   from { opacity: 0; transform: translateY(8px); }

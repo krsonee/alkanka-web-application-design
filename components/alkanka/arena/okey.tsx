@@ -454,8 +454,8 @@ export function Okey({ finish, saveKey }: GameApi) {
       <div data-ls-main="half" className="ls-tall relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
         <div className="absolute inset-x-0 top-2 flex justify-center sm:top-3">{seat(2, '')}</div>
-        <div className="absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
-        <div className="absolute inset-y-0 right-2 flex items-center sm:right-3">{seat(1, '')}</div>
+        <div className="ls-seat-l absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
+        <div className="ls-seat-r absolute inset-y-0 right-2 flex items-center sm:right-3">{seat(1, '')}</div>
 
         {discardSlot(3, 'bottom-2 left-2 sm:bottom-6 sm:left-6', true)}
         {discardZone}
