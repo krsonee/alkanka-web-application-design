@@ -1673,6 +1673,8 @@
 .ls-split .ls-seat-l,
 .ls-split .ls-seat-r { left: 0.25rem; right: auto; transform: scale(0.72); transform-origin: left center; z-index: 30; }
 .ls-split .ls-seat-r { left: auto; right: 0.25rem; transform-origin: right center; }
+.ls-split .ls-split-hide { display: none !important; }
+.ls-split .ls-center { gap: 0.25rem; transform: scale(0.85); }
 .ls-split .ls-seat-l > *,
 .ls-split .ls-seat-r > * { flex-direction: column; }
 
