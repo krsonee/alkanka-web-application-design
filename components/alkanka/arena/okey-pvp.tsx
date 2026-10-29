@@ -33,7 +33,9 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
     const added = hand.find((t) => !prev.has(t.id))
     setKnownIds(idsKey)
     setFresh(added && prev.size > 0 ? added.id : null)
-    if (added && prev.size > 0) rack.setSelected(added.id)
+    // A tile taken from the discard pile can't be thrown back this turn, so pre-selecting it only locked "Taşı at".
+    if (added && prev.size > 0 && added.id !== s.takenId) rack.setSelected(added.id)
+    else if (added && added.id === s.takenId) rack.setSelected(null)
   }
 
   const bots = s.bots ?? []
@@ -95,7 +97,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Oyuncuların elleri gizli, atılan taşlar canlı görünür.
         </p>
       )}
-      <div data-ls-main="half" className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl sm:p-3">
+      <div data-ls-main className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl sm:p-3">
         <div className="relative flex min-h-72 flex-col justify-between gap-3 rounded-xl bg-felt p-2 sm:min-h-96 sm:p-5">
           <TableBrand />
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-15">
@@ -188,8 +190,10 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
 
       {!spectator && (
         <>
-          <TurnSteps phase={myDraw ? 'draw' : myDiscard ? 'discard' : 'wait'} />
-          <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+          <div data-ls-hide>
+            <TurnSteps phase={myDraw ? 'draw' : myDiscard ? 'discard' : 'wait'} />
+          </div>
+          <div data-ls-stack className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
             <button onClick={arrange} className="rounded-xl border border-border px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-foreground hover:bg-secondary">
               {sortMode === 'seri' ? 'Seri diz' : 'Çift diz'}
             </button>

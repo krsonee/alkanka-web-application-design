@@ -2,10 +2,10 @@
 
 import { useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { MousePointerClick, Move, Pointer, Sparkles } from 'lucide-react'
+import { Hand, MousePointerClick, Move, Pointer, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TileFace } from './okey'
-import { isJoker, sortHand, type Okey as OkeyValue, type Tile } from './okey-engine'
+import { isJoker, sortHand, valueOf, type Okey as OkeyValue, type Tile } from './okey-engine'
 
 export const RACK_COLS = 14
 
@@ -35,27 +35,109 @@ function reconcile(raw: Slots, hand: Tile[], total: number): Slots {
   return slots
 }
 
-/** Lays sorted tiles out with a gap between groups so sets are visible, falling back to no gaps when space runs out. */
-function layoutSorted(tiles: Tile[], okey: OkeyValue, mode: 'seri' | 'cift', total: number): Slots {
-  const joins = (a: Tile, b: Tile) => {
-    if (isJoker(a, okey) || isJoker(b, okey)) return true
-    return mode === 'seri' ? a.color === b.color && b.num === a.num + 1 : a.color === b.color && a.num === b.num
+/** A candidate set or run as value keys ("color:num"); null marks a slot filled by an okey. */
+type Cand = (string | null)[]
+
+const keyOf = (c: number, n: number) => `${c}:${n}`
+
+/**
+ * Groups a hand the way a player would lay it on the rack: "seri" finds runs and sets (using okeys to fill gaps),
+ * "cift" finds identical pairs. Whatever is left over is returned sorted as `rest`.
+ */
+export function findGroups(hand: Tile[], okey: OkeyValue, mode: 'seri' | 'cift'): { groups: Tile[][]; rest: Tile[] } {
+  const jokers = hand.filter((t) => isJoker(t, okey))
+  const pool = new Map<string, Tile[]>()
+  for (const t of hand) {
+    if (isJoker(t, okey)) continue
+    const v = valueOf(t, okey)
+    const k = keyOf(v.color, v.num)
+    pool.set(k, [...(pool.get(k) ?? []), t])
   }
-  const groups: Tile[][] = []
-  for (const t of tiles) {
-    const g = groups.at(-1)
-    if (g && joins(g[g.length - 1], t) && !(mode === 'cift' && g.length >= 2)) g.push(t)
-    else groups.push([t])
+
+  if (mode === 'cift') {
+    const groups: Tile[][] = []
+    const singles: Tile[] = []
+    for (const tiles of pool.values()) {
+      const list = [...tiles]
+      while (list.length >= 2) groups.push(list.splice(0, 2))
+      singles.push(...list)
+    }
+    const sortedSingles = sortHand(singles, okey, 'cift')
+    const js = [...jokers]
+    while (js.length && sortedSingles.length) groups.push([sortedSingles.shift()!, js.shift()!])
+    if (js.length >= 2) groups.push(js.splice(0, 2))
+    const pairKey = (g: Tile[]) => {
+      const v = valueOf(g[0], okey)
+      return v.num * 10 + v.color
+    }
+    groups.sort((a, b) => pairKey(a) - pairKey(b))
+    return { groups, rest: [...sortedSingles, ...js] }
   }
-  const slots: Slots = Array(total).fill(null)
-  let pos = 0
-  for (const g of groups) {
-    pos = groupStart(pos, g.length, total)
-    if (pos < 0) return [...tiles.map((t) => t.id), ...Array(Math.max(0, total - tiles.length)).fill(null)]
-    for (const t of g) slots[pos++] = t.id
-    pos++
+
+  const has = (k: string) => (pool.get(k)?.length ?? 0) > 0
+  const cands: Cand[] = []
+  for (let c = 0; c < 4; c++) {
+    for (let start = 1; start <= 12; start++) {
+      for (let len = 3; start + len - 1 <= 14 && len <= 13; len++) {
+        const keys = Array.from({ length: len }, (_, i) => {
+          const n = start + i === 14 ? 1 : start + i
+          const k = keyOf(c, n)
+          return has(k) ? k : null
+        })
+        const missing = keys.filter((k) => k == null).length
+        if (missing <= jokers.length && len - missing >= 2) cands.push(keys)
+      }
+    }
   }
-  return slots
+  for (let n = 1; n <= 13; n++) {
+    const colors = [0, 1, 2, 3].filter((c) => has(keyOf(c, n)))
+    for (let mask = 1; mask < 1 << colors.length; mask++) {
+      const picked = colors.filter((_, i) => mask & (1 << i))
+      for (let j = 0; j <= jokers.length; j++) {
+        const size = picked.length + j
+        if (size < 3 || size > 4 || picked.length < 2) continue
+        cands.push([...picked.map((c) => keyOf(c, n)), ...Array(j).fill(null)])
+      }
+    }
+  }
+  cands.sort((a, b) => b.length - a.length)
+
+  const avail = new Map([...pool].map(([k, v]) => [k, v.length]))
+  let best: { picks: Cand[]; covered: number; jokers: number } = { picks: [], covered: 0, jokers: 0 }
+  let budget = 40000
+  const dfs = (from: number, picks: Cand[], covered: number, jLeft: number) => {
+    const usedJ = jokers.length - jLeft
+    if (covered > best.covered || (covered === best.covered && usedJ < best.jokers)) best = { picks: [...picks], covered, jokers: usedJ }
+    for (let i = from; i < cands.length && budget > 0; i++) {
+      budget--
+      const cand = cands[i]
+      const need = new Map<string, number>()
+      let js = 0
+      for (const k of cand) {
+        if (k == null) js++
+        else need.set(k, (need.get(k) ?? 0) + 1)
+      }
+      if (js > jLeft || [...need].some(([k, n]) => (avail.get(k) ?? 0) < n)) continue
+      need.forEach((n, k) => avail.set(k, avail.get(k)! - n))
+      picks.push(cand)
+      dfs(i, picks, covered + cand.length, jLeft - js)
+      picks.pop()
+      need.forEach((n, k) => avail.set(k, avail.get(k)! + n))
+    }
+  }
+  dfs(0, [], 0, jokers.length)
+
+  const left = new Map([...pool].map(([k, v]) => [k, [...v]]))
+  const js = [...jokers]
+  const groups = best.picks.map((cand) => cand.map((k) => (k == null ? js.shift()! : left.get(k)!.shift()!)))
+  const sortKey = (g: Tile[]) => {
+    const real = g.find((t) => !isJoker(t, okey)) ?? g[0]
+    const v = valueOf(real, okey)
+    return v.color * 100 + v.num
+  }
+  groups.sort((a, b) => sortKey(a) - sortKey(b))
+  const rest = sortHand([...[...left.values()].flat(), ...js], okey, 'seri')
+  return { groups, rest }
 }
 
 /** Places each group with an empty slot after it so groups read as separate sets; leftovers fill the rest. */
@@ -80,11 +162,16 @@ export function layoutGroups(groups: Tile[][], rest: Tile[], rows = 2): Slots {
   return slots
 }
 
+function arrangeLayout(hand: Tile[], okey: OkeyValue, mode: 'seri' | 'cift', rows: number) {
+  const { groups, rest } = findGroups(hand, okey, mode)
+  return layoutGroups(groups, rest, rows)
+}
+
 export type SlotMark = { label?: string } | null
 
 export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
   const total = RACK_COLS * rows
-  const [raw, setRaw] = useState<Slots>(() => layoutSorted(sortHand(hand, okey, 'seri'), okey, 'seri', total))
+  const [raw, setRaw] = useState<Slots>(() => arrangeLayout(hand, okey, 'seri', rows))
   const [selected, setSelected] = useState<number | null>(null)
   const slots = reconcile(raw, hand, total)
   const selectedId = selected != null && hand.some((t) => t.id === selected) ? selected : null
@@ -98,8 +185,26 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
     setRaw(next)
   }
 
+  /** Moves a contiguous group so the grabbed tile (index `grab`) lands on `target`, nudging it to the nearest free stretch in that row. */
+  function moveGroup(ids: number[], grab: number, target: number) {
+    const next = slots.map((id) => (id != null && ids.includes(id) ? null : id))
+    const rowStart = Math.floor(target / RACK_COLS) * RACK_COLS
+    const maxStart = rowStart + RACK_COLS - ids.length
+    if (maxStart < rowStart) return
+    const preferred = Math.min(maxStart, Math.max(rowStart, target - grab))
+    const fits = (s: number) => s >= rowStart && s <= maxStart && ids.every((_, k) => next[s + k] == null)
+    for (let d = 0; d <= RACK_COLS; d++) {
+      for (const s of d === 0 ? [preferred] : [preferred - d, preferred + d]) {
+        if (!fits(s)) continue
+        ids.forEach((id, k) => (next[s + k] = id))
+        setRaw(next)
+        return
+      }
+    }
+  }
+
   function arrange(mode: 'seri' | 'cift') {
-    setRaw(layoutSorted(sortHand(hand, okey, mode), okey, mode, total))
+    setRaw(arrangeLayout(hand, okey, mode, rows))
   }
 
   const [flippedRaw, setFlipped] = useState<number[]>([])
@@ -108,10 +213,12 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
     setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
   }
 
-  return { rows, slots, selected: selectedId, setSelected, moveTo, arrange, setLayout: setRaw, flipped, toggleFlip }
+  return { rows, slots, selected: selectedId, setSelected, moveTo, moveGroup, arrange, setLayout: setRaw, flipped, toggleFlip }
 }
 
 export type DropKind = 'discard' | 'finish' | `meld:${number}`
+
+const LONG_PRESS_MS = 380
 
 export function OkeyRack({
   hand,
@@ -137,23 +244,43 @@ export function OkeyRack({
 }) {
   const byId = new Map(hand.map((t) => [t.id, t]))
   const [over, setOver] = useState<number | null>(null)
-  const [ghost, setGhost] = useState<{ id: number; x: number; y: number } | null>(null)
+  const [ghost, setGhost] = useState<{ ids: number[]; x: number; y: number } | null>(null)
+  const [lifted, setLifted] = useState<number[] | null>(null)
   const ghostEl = useRef<HTMLDivElement | null>(null)
   const overRef = useRef<number | null>(null)
   const frame = useRef<number | null>(null)
-  const press = useRef<{ id: number; x: number; y: number; moved: boolean; threshold: number } | null>(null)
+  const press = useRef<{
+    id: number
+    x: number
+    y: number
+    moved: boolean
+    threshold: number
+    group: number[] | null
+    timer: ReturnType<typeof setTimeout> | null
+  } | null>(null)
   const suppressClick = useRef(false)
   const lastTap = useRef<{ id: number; t: number } | null>(null)
   const hoverKind = useRef<DropKind | null>(null)
 
+  /** Tiles touching the given one in its row, i.e. the set the player has built on the rack. */
+  const groupOf = (id: number) => {
+    const idx = rack.slots.indexOf(id)
+    if (idx < 0) return [id]
+    const rowStart = Math.floor(idx / RACK_COLS) * RACK_COLS
+    let a = idx
+    let b = idx
+    while (a - 1 >= rowStart && rack.slots[a - 1] != null) a--
+    while (b + 1 < rowStart + RACK_COLS && rack.slots[b + 1] != null) b++
+    return rack.slots.slice(a, b + 1) as number[]
+  }
+
   const onSlot = (i: number) => {
     const id = rack.slots[i]
-    if (rack.selected != null && rack.selected !== id) {
-      rack.moveTo(rack.selected, i)
-      if (id != null) rack.setSelected(null)
+    if (id != null) {
+      rack.setSelected(id === rack.selected ? null : id)
       return
     }
-    if (id != null) rack.setSelected(id === rack.selected ? null : id)
+    if (rack.selected != null) rack.moveTo(rack.selected, i)
   }
 
   const onTileTap = (tile: Tile, i: number) => {
@@ -187,8 +314,17 @@ export function OkeyRack({
   const onPointerDown = (e: PointerEvent<HTMLDivElement>, id: number) => {
     if (e.button !== 0) return
     suppressClick.current = false
+    const timer = setTimeout(() => {
+      const p = press.current
+      if (!p || p.moved || p.id !== id) return
+      const group = groupOf(id)
+      if (group.length < 2) return
+      p.group = group
+      setLifted(group)
+      navigator.vibrate?.(15)
+    }, LONG_PRESS_MS)
     // Physical clicks on a MacBook trackpad nudge the cursor a few pixels; a small threshold turned them into tiny drags.
-    press.current = { id, x: e.clientX, y: e.clientY, moved: false, threshold: e.pointerType === 'touch' ? 6 : 12 }
+    press.current = { id, x: e.clientX, y: e.clientY, moved: false, threshold: e.pointerType === 'touch' ? 6 : 12, group: null, timer }
     const move = (ev: globalThis.PointerEvent) => onPointerMove(ev)
     const up = (ev: globalThis.PointerEvent) => {
       cleanup()
@@ -208,7 +344,7 @@ export function OkeyRack({
     window.addEventListener('pointercancel', cancel)
   }
 
-  const onPointerMove = (e: { clientX: number; clientY: number; preventDefault?: () => void }) => {
+  const onPointerMove = (e: { clientX: number; clientY: number }) => {
     const p = press.current
     if (!p) return
     if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < p.threshold) return
@@ -216,7 +352,8 @@ export function OkeyRack({
     const y = e.clientY
     if (!p.moved) {
       p.moved = true
-      setGhost({ id: p.id, x, y })
+      if (p.timer) clearTimeout(p.timer)
+      setGhost({ ids: p.group ?? [p.id], x, y })
     }
     if (ghostEl.current) {
       ghostEl.current.style.left = `${x}px`
@@ -231,14 +368,24 @@ export function OkeyRack({
         overRef.current = t.slot
         setOver(t.slot)
       }
-      setHover(t.kind)
+      setHover(press.current.group ? null : t.kind)
     })
   }
 
   const endDrag = (e: { clientX: number; clientY: number }, cancelled = false) => {
     const p = press.current
     press.current = null
-    if (!p?.moved) return
+    if (p?.timer) clearTimeout(p.timer)
+    setLifted(null)
+    if (!p) return
+    if (!p.moved) {
+      // A long press that never moved lifted the group; don't let the trailing click select a tile.
+      if (p.group) {
+        suppressClick.current = true
+        setTimeout(() => (suppressClick.current = false), 400)
+      }
+      return
+    }
     if (frame.current != null) cancelAnimationFrame(frame.current)
     frame.current = null
     overRef.current = null
@@ -248,16 +395,20 @@ export function OkeyRack({
     if (cancelled) return
     const t = targetAt(e.clientX, e.clientY)
     // Released over its own slot: keep it a normal tap so the tile still gets selected.
-    if (t.slot != null && rack.slots[t.slot] === p.id) return
+    if (!p.group && t.slot != null && rack.slots[t.slot] === p.id) return
     // Safari can dispatch the click after a 0ms timer, so the guard is cleared on the next press instead.
     suppressClick.current = true
     setTimeout(() => (suppressClick.current = false), 400)
-    if (t.slot != null) rack.moveTo(p.id, t.slot)
+    if (p.group) {
+      if (t.slot != null) rack.moveGroup(p.group, p.group.indexOf(p.id), t.slot)
+    } else if (t.slot != null) rack.moveTo(p.id, t.slot)
     else if (t.kind) onDropOut?.(p.id, t.kind)
     rack.setSelected(null)
   }
 
-  const ghostTile = ghost ? byId.get(ghost.id) : undefined
+  const ghostTiles = ghost ? ghost.ids.map((id) => byId.get(id)).filter((t): t is Tile => !!t) : []
+  const dragging = new Set(ghost?.ids ?? [])
+  const liftedSet = new Set(lifted ?? [])
 
   return (
     <div
@@ -290,7 +441,12 @@ export function OkeyRack({
                   <div
                     onPointerDown={(e) => onPointerDown(e, tile.id)}
                     onDragStart={(e) => e.preventDefault()}
-                    className={cn('size-full cursor-grab touch-none select-none', ghost?.id === tile.id && 'cursor-grabbing opacity-30')}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className={cn(
+                      'size-full cursor-grab touch-none select-none transition-transform [-webkit-touch-callout:none]',
+                      dragging.has(tile.id) && 'cursor-grabbing opacity-30',
+                      liftedSet.has(tile.id) && '-translate-y-1.5 rounded-sm ring-2 ring-primary',
+                    )}
                   >
                     <RackTile
                       tile={tile}
@@ -314,11 +470,12 @@ export function OkeyRack({
           })}
         </div>
       ))}
-      <ul className="hidden flex-wrap items-center gap-1.5 pt-0.5 sm:flex" aria-label="Kontroller">
+      <ul data-ls-hide className="hidden flex-wrap items-center gap-1.5 pt-0.5 sm:flex" aria-label="Kontroller">
         {[
           { icon: Pointer, label: 'Dokun', text: 'seç' },
           { icon: MousePointerClick, label: 'Çift dokun', text: 'at' },
           { icon: Move, label: 'Sürükle', text: 'yer değiştir / at' },
+          { icon: Hand, label: 'Basılı tut', text: 'seriyi topluca taşı' },
         ].map(({ icon: Icon, label, text }) => (
           <li key={label} className="flex items-center gap-1 rounded-full bg-background/35 px-2 py-1 text-[10px] text-foreground/80 sm:text-[11px]">
             <Icon className="size-3 text-primary" aria-hidden="true" />
@@ -329,15 +486,20 @@ export function OkeyRack({
       </ul>
 
       {ghost &&
-        ghostTile &&
+        ghostTiles.length > 0 &&
         createPortal(
+          // Above the z-[100] landscape fullscreen layer, otherwise the dragged tile hides behind the table.
           <div
             ref={ghostEl}
             aria-hidden="true"
-            className="pointer-events-none fixed z-[80] h-12 w-9 -translate-x-1/2 -translate-y-[70%] rotate-3 drop-shadow-2xl will-change-[left,top] sm:h-14 sm:w-10"
+            className="pointer-events-none fixed z-[200] flex -translate-x-1/2 -translate-y-[70%] rotate-3 gap-0.5 drop-shadow-2xl will-change-[left,top]"
             style={{ left: ghost.x, top: ghost.y }}
           >
-            <TileFace tile={ghostTile} okey={okey} size="fluid" selected />
+            {ghostTiles.map((t) => (
+              <div key={t.id} className="h-12 w-9 sm:h-14 sm:w-10">
+                <TileFace tile={t} okey={okey} size="fluid" selected />
+              </div>
+            ))}
           </div>,
           document.body,
         )}
