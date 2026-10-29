@@ -579,7 +579,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           .catch(() => undefined)}
       />
     )),
-    section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits()} />),
+    section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch((e) => { console.error('[panel-limits]', e); return [] })} />),
     section(ctx, 'games', 'Oyun ayarları', () => (
       <div className="flex flex-col gap-6">
         <GameStats />

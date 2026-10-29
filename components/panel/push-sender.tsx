@@ -95,6 +95,9 @@ export function PushSender({ total, members, log, configured }: Props) {
             <span className="text-xs text-muted-foreground">Bu cihazlardan üye hesaba bağlı</span>
           </div>
         </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Burada sayılan şey cihaz. Bir üyenin telefonu ve bilgisayarı ayrı ayrı sayılır, misafirler de dahildir. Mobil sekmesindeki sayılar ise üye hesabı başına tutulur, o yüzden ikisi farklı olabilir.
+        </p>
         <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
           <h3 className="text-sm font-bold text-foreground">Son toplu gönderimler</h3>
           <p className="text-xs leading-relaxed text-muted-foreground">
