@@ -91,7 +91,7 @@ import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
-import { pendingDetail } from '@/lib/panel-pending'
+import { moderationTotal, pendingDetail } from '@/lib/panel-pending'
 import { ModerationQueue, type ModerationItem } from '@/components/panel/moderation-queue'
 
 async function moderationItems(can: (id: 'community' | 'tasks' | 'market') => boolean): Promise<ModerationItem[]> {
@@ -639,7 +639,12 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
     onDash && session.isOwner ? loadSystemStatus().catch((error) => (console.error('[panel:system-status]', error), null)) : null,
   ])
-  const pending: Record<string, number> = { community: detail.reviews + detail.complaints + detail.withdrawals, tasks: detail.claims, market: detail.market }
+  const pending: Record<string, number> = {
+    community: detail.reviews + detail.complaints + detail.withdrawals + (detail.proofs ?? 0),
+    tasks: detail.claims,
+    market: detail.market,
+    moderation: moderationTotal(detail),
+  }
   const dashboard = onDash ? (
     <div className="flex flex-col gap-6">
       {sysStatus ? <SystemStatus items={sysStatus} /> : null}

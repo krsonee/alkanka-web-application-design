@@ -158,7 +158,8 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
             {verification[k] ? (
               <span className="flex items-center gap-1.5 font-medium text-primary">
                 <CheckCircle2 className="size-3.5" aria-hidden />
-                Kod sitede yayında, doğrulama tamam
+                {k === 'bing' ? 'Kod ve BingSiteAuth.xml yayında' : 'Kod sitede yayında'}
+                <span className="font-normal text-muted-foreground">· {k === 'meta' ? "Meta'da" : 'Arama motorunda'} {'"Doğrula" de'}</span>
               </span>
             ) : (
               <span className="font-normal">Henüz bağlanmadı</span>

@@ -255,7 +255,7 @@ export function ContentEditor({
   const moderationItem = { id: 'moderation' as PanelTab, label: 'Moderasyon kuyruğu', hint: 'Onay bekleyen kanıt, yorum, şikayet, görev ve market talepleri tek yerde', pending: 0 }
   const currentGroup = groups.find((g) => g.items.some((i) => i.id === tab))
   const current = tab === 'moderation' ? moderationItem : currentGroup?.items.find((i) => i.id === tab)
-  const totalPending = groups.reduce((n, g) => n + g.items.reduce((m, i) => m + i.pending, 0), 0)
+  const totalPending = pending.moderation ?? groups.reduce((n, g) => n + g.items.reduce((m, i) => m + i.pending, 0), 0)
   return (
     <div className="flex min-h-dvh bg-background lg:pl-72">
       <PanelFeedbackHost />
