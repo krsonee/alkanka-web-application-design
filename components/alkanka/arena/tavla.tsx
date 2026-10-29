@@ -116,12 +116,29 @@ function useRollAnimation(rolled: number[], rollKey: number) {
   return { faces, landed }
 }
 
-function Checker({ side, label, glow, hint, pulse }: { side: Side; label?: string; glow?: boolean; hint?: boolean; pulse?: boolean }) {
+function Checker({
+  side,
+  label,
+  glow,
+  hint,
+  pulse,
+  fit,
+}: {
+  side: Side
+  label?: string
+  glow?: boolean
+  hint?: boolean
+  pulse?: boolean
+  /** Sized to its slot's shorter side so a full stack never spills into the dice band. */
+  fit?: boolean
+}) {
   return (
     <span
       data-checker
+      style={fit ? { width: 'min(100cqw, 100cqh)' } : undefined}
       className={cn(
-        'relative flex aspect-square w-full max-w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-transform duration-200 sm:max-w-14 sm:text-xs',
+        'relative flex aspect-square max-w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-transform duration-200 sm:max-w-14 sm:text-xs',
+        !fit && 'w-full',
         side === 'p' ? 'checker-light-3d text-checker-dark' : 'checker-dark-3d text-primary',
         glow && 'z-10 -translate-y-0.5 scale-110 ring-[3px] ring-primary ring-offset-2 ring-offset-felt',
         !glow && hint && 'z-10 ring-2 ring-primary/80 shadow-[0_0_14px_2px_var(--primary)]',
@@ -170,12 +187,19 @@ function Stack({
 }) {
   const visible = Math.min(count, 5)
   return (
-    <div className={cn('flex h-full w-full flex-col items-center gap-px sm:gap-0.5', !top && 'flex-col-reverse')}>
+    <div className={cn('flex h-full w-full flex-col items-center', !top && 'flex-col-reverse')}>
       {Array.from({ length: visible }).map((_, i) => {
         const isTopChecker = i === visible - 1
         return (
-          <span key={i} className={cn('flex w-full justify-center', lifted && isTopChecker && 'opacity-30')}>
+          <span
+            key={i}
+            className={cn(
+              'flex h-1/5 w-full shrink-0 items-center justify-center p-px [container-type:size]',
+              lifted && isTopChecker && 'opacity-30',
+            )}
+          >
             <Checker
+              fit
               side={side}
               glow={glow && isTopChecker && !lifted}
               hint={hint && isTopChecker && !lifted}
@@ -490,7 +514,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
       <div data-ls-main className="tavla-wood relative rounded-2xl p-1.5 sm:p-3">
       <TableBrand center={false} corners={false} jako={false} />
-      <div className="flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
+      <div className="ls-tavla flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
         <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-6">
           <div className="flex h-[42%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
           {diceLeft ? (
@@ -517,7 +541,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           data-bar
           aria-label={`Kırık pullar: sen ${board.bar[me]}, rakip ${board.bar[opp]}`}
           className={cn(
-            'flex w-6 flex-col items-center justify-between rounded-md bg-wood py-2 sm:w-14 sm:py-3',
+            'ls-tavla-bar flex w-6 flex-col items-center justify-between rounded-md bg-wood py-2 sm:w-14 sm:py-3',
             barSelectable && 'cursor-grab touch-none ring-2 ring-primary',
             selected === 'bar' && 'bg-primary/30',
           )}
@@ -545,7 +569,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           <div className="flex h-[42%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
         </div>
 
-        <div className="flex w-8 flex-col justify-between gap-1.5 sm:w-16 sm:gap-2">
+        <div className="ls-tavla-tray flex w-8 flex-col justify-between gap-1.5 sm:w-16 sm:gap-2">
           <div
             data-off="opp"
             className="flex flex-1 flex-col items-center gap-1 rounded-md bg-felt/70 p-0.5 text-center shadow-[inset_0_2px_6px_rgb(0_0_0/0.5)]"
