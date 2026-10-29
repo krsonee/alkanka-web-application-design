@@ -440,7 +440,7 @@ function directOptions(balls: Ball[], cx: number, cy: number, legal: (b: Ball) =
   return out
 }
 
-const legalFor = (balls: Ball[], groups: Groups, seat: number) => {
+export const legalFor = (balls: Ball[], groups: Groups, seat: number) => {
   const mine = groups[seat]
   const onBlack = needsCall(balls, groups, seat)
   return (b: Ball) => !b.in && b.id !== 0 && (onBlack ? b.id === 8 : mine === null ? b.id !== 8 : groupOf(b.id) === mine)

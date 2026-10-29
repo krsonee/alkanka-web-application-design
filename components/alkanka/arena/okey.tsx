@@ -330,7 +330,11 @@ export function Okey({ finish, saveKey }: GameApi) {
 
   function onDropOut(id: number, kind: DropKind) {
     if (kind === 'discard') return discard(id)
-    if (!winning) return
+    tryFinishWith(id)
+  }
+
+  function tryFinishWith(id: number) {
+    if (!winning) return setMessage('Henüz bitemezsin. Önce perlerini tamamla, sonra taşı ortaya sürükle.')
     if (winning.tile.id === id) finishHand()
     else setMessage('Bu taşla bitemezsin. Bitiren taş parlayan butonda yazıyor.')
   }
@@ -344,9 +348,7 @@ export function Okey({ finish, saveKey }: GameApi) {
 
   function onFinishDrop(e: DragEvent) {
     const id = dropTileId(e)
-    if (id == null || !winning) return
-    if (winning.tile.id === id) finishHand()
-    else setMessage('Bu taşla bitemezsin. Bitiren taş parlayan butonda yazıyor.')
+    if (id != null) tryFinishWith(id)
   }
 
   const selectedTile = hand.find((t) => t.id === selected)
@@ -430,20 +432,32 @@ export function Okey({ finish, saveKey }: GameApi) {
     const t = pileTop(i)
     const canTake = interactive && phase === 'draw' && t
     return (
-      <div className={cn('absolute flex flex-col items-center gap-1.5 rounded-xl bg-background/25 p-1.5 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)]', className)}>
+      <div
+        className={cn(
+          'absolute flex flex-col items-center gap-1.5 rounded-xl bg-background/25 p-1.5 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)]',
+          canTake && 'z-20 ring-2 ring-primary phone-ls:scale-125',
+          className,
+        )}
+      >
         {t ? (
           canTake ? (
-            <TileFace tile={t} okey={okey} size="sm" onClick={takeDiscard} label={`Yerdeki taşı al: ${t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`}`} selected={false} />
+            <button
+              type="button"
+              onClick={takeDiscard}
+              aria-label={`Yerdeki taşı al: ${t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`}`}
+              className="-m-1.5 flex flex-col items-center gap-1.5 rounded-xl p-1.5"
+            >
+              <TileFace tile={t} okey={okey} size="sm" />
+              <span className="animate-pulse text-[9px] font-bold uppercase tracking-wider text-primary">Yerden al</span>
+            </button>
           ) : (
             <TileFace tile={t} okey={okey} size="sm" />
           )
         ) : (
           <span className="h-11 w-8 rounded-md border border-foreground/10 bg-background/20" aria-hidden="true" />
         )}
-        {(canTake || interactive || i === 0) && (
-          <span className={cn('text-[9px] font-bold uppercase tracking-wider', canTake ? 'animate-pulse text-primary' : 'text-foreground/55')}>
-            {canTake ? 'Yerden al' : interactive ? 'Soldan gelen' : 'Senin attığın'}
-          </span>
+        {!canTake && (interactive || i === 0) && (
+          <span className="text-[9px] font-bold uppercase tracking-wider text-foreground/55">{interactive ? 'Soldan gelen' : 'Senin attığın'}</span>
         )}
       </div>
     )
@@ -462,7 +476,22 @@ export function Okey({ finish, saveKey }: GameApi) {
         {discardSlot(1, 'right-2 top-2 sm:right-6 sm:top-6')}
         {discardSlot(2, 'left-2 top-2 sm:left-6 sm:top-6')}
 
-        <div className="absolute inset-0 ls-center m-auto flex h-fit w-fit items-center gap-5 phone-ls:scale-[0.82] phone-ls:gap-1">
+        <div
+          onDragOver={(e) => {
+            if (!canDiscard) return
+            e.preventDefault()
+            setDropOver('finish')
+          }}
+          onDragLeave={() => setDropOver(null)}
+          onDrop={onFinishDrop}
+          data-drop={canDiscard ? 'finish' : undefined}
+          title={canDiscard ? 'Bitiren taşı masanın ortasına sürükle' : undefined}
+          className={cn(
+            'absolute inset-0 ls-center m-auto flex h-fit w-fit items-center gap-5 rounded-2xl p-2 transition-all phone-ls:scale-[0.82] phone-ls:gap-1',
+            winning && 'ring-2 ring-primary',
+            dropOver === 'finish' && 'scale-105 bg-primary/25',
+          )}
+        >
           <button
             type="button"
             onClick={drawDeck}
@@ -477,18 +506,7 @@ export function Okey({ finish, saveKey }: GameApi) {
             </span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">{phase === 'draw' ? 'Çek' : `${deck.length} taş`}</span>
           </button>
-          <div
-            onDragOver={(e) => {
-              if (!winning) return
-              e.preventDefault()
-              setDropOver('finish')
-            }}
-            onDragLeave={() => setDropOver(null)}
-            onDrop={onFinishDrop}
-            data-drop={winning ? 'finish' : undefined}
-            title={winning ? 'Bitiren taşı göstergenin üstüne sürükle' : undefined}
-            className={cn('flex flex-col items-center gap-2 rounded-xl p-1 transition-all', winning && 'ring-2 ring-primary', dropOver === 'finish' && 'scale-110 bg-primary/30')}
-          >
+          <div className="flex flex-col items-center gap-2 rounded-xl p-1">
             <TileFace tile={indicator} okey={{ color: -2, num: -2 }} size="sm" label={`Gösterge: ${COLOR_NAMES[indicator.color]} ${indicator.num}`} />
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
           </div>

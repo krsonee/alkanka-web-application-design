@@ -22,6 +22,7 @@ import {
   canPlaceCue,
   fromState,
   isStill,
+  legalFor,
   needsCall,
   newEvents,
   planShot,
@@ -155,11 +156,23 @@ function drawBall(ctx: CanvasRenderingContext2D, b: { id: number; x: number; y: 
   ctx.restore()
 }
 
+/** Distance from (x, y) along direction (dx, dy) until it leaves the visible canvas (table plus rails). */
+function distToCanvasEdge(x: number, y: number, dx: number, dy: number) {
+  const tx = dx > 0 ? (W + RAIL - x) / dx : dx < 0 ? (-RAIL - x) / dx : Infinity
+  const ty = dy > 0 ? (H + RAIL - y) / dy : dy < 0 ? (-RAIL - y) / dy : Infinity
+  return Math.min(tx, ty)
+}
+
 function drawCue(ctx: CanvasRenderingContext2D, cx: number, cy: number, angle: number, back: number) {
-  const sx = cx - Math.cos(angle) * (R + back)
-  const sy = cy - Math.sin(angle) * (R + back)
-  const ex = cx - Math.cos(angle) * (R + back + 360)
-  const ey = cy - Math.sin(angle) * (R + back + 360)
+  const ux = -Math.cos(angle)
+  const uy = -Math.sin(angle)
+  // Near a cushion the full stick would run off the canvas, so shorten it to stay visible.
+  const room = distToCanvasEdge(cx, cy, ux, uy) - (R + back) - 6
+  const len = Math.max(70, Math.min(360, room))
+  const sx = cx + ux * (R + back)
+  const sy = cy + uy * (R + back)
+  const ex = cx + ux * (R + back + len)
+  const ey = cy + uy * (R + back + len)
   ctx.save()
   ctx.strokeStyle = 'rgba(0,0,0,0.3)'
   ctx.lineWidth = 8
@@ -769,10 +782,17 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ctx.stroke()
         ctx.setLineDash([])
         if (hit) {
-          ctx.strokeStyle = 'rgba(255,255,255,0.75)'
+          const wrongBall = aiming && g.broken && !legalFor(list, g.groups, seat)(hit.ball)
+          ctx.strokeStyle = wrongBall ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.75)'
+          ctx.lineWidth = wrongBall ? 3 : 2
           ctx.beginPath()
           ctx.arc(gx, gy, R, 0, Math.PI * 2)
           ctx.stroke()
+          if (wrongBall) {
+            ctx.beginPath()
+            ctx.arc(hit.ball.x, hit.ball.y, R + 5, 0, Math.PI * 2)
+            ctx.stroke()
+          }
           const nx = (hit.ball.x - gx) / (2 * R)
           const ny = (hit.ball.y - gy) / (2 * R)
           ctx.strokeStyle = gold

@@ -46,7 +46,7 @@ export function MobileNav() {
       aria-label="Hızlı menü"
       className={cn(
         'fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] transition-transform duration-300 lg:hidden',
-        hidden && 'translate-y-full',
+        hidden && 'translate-y-[calc(100%+2.5rem)]',
       )}
     >
       <ul className="grid grid-cols-5">

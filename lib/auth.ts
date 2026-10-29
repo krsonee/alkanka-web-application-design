@@ -32,6 +32,27 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === '/sign-in/email') {
+        const email = String(ctx.body?.email ?? '').trim().toLowerCase()
+        if (!email) return
+        const { rows: bans } = await pool
+          .query(
+            `SELECT b.until, b.kind FROM member_bans b JOIN "user" u ON u.id = b.user_id
+             WHERE lower(u.email) = $1 AND (b.until IS NULL OR b.until > now())
+             ORDER BY b.until DESC NULLS FIRST LIMIT 1`,
+            [email],
+          )
+          .catch(() => ({ rows: [] as { until: string | null; kind: string | null }[] }))
+        const ban = bans[0]
+        if (ban) {
+          const label = ban.kind === 'ban' ? 'Hesabın kalıcı olarak kapatıldı.' : 'Hesabın dondurulmuş.'
+          const until = ban.until
+            ? ` Bitiş: ${new Date(ban.until).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' })}`
+            : ''
+          throw new APIError('FORBIDDEN', { message: `${label}${until}` })
+        }
+        return
+      }
       if (ctx.path !== '/sign-up/email') return
       const name = String(ctx.body?.name ?? '').normalize('NFC').trim()
       if (name.length < 3 || name.includes('@')) {

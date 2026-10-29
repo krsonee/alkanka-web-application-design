@@ -339,11 +339,35 @@ function hitBall(ball: Ball, p: Player, sport: Sport, emit: Emit, seat: 0 | 1): 
   return !!(body || foot)
 }
 
+/** Per-bot memory of how long it has hugged a corner and where it is escaping to. */
+const botCorner = new WeakMap<Player, { since: number; escapeTo: number | null; until: number }>()
+const CORNER_EDGE = 90
+const CORNER_MAX_MS = 1800
+const ESCAPE_MS = 1200
+
 function botKeys(bot: Player, ball: Ball, sport: Sport, level: BotLevel): Keys {
   const k = noKeys()
   const home = sport === 'futbol' ? W - 160 : W - 200
   const threat = level !== 'easy' && ball.vx > 3 && ball.x > W * 0.45
-  const targetX = threat ? Math.min(home, Math.max(ball.x + 40, home - 120)) : ball.x + 34
+  let targetX = threat ? Math.min(home, Math.max(ball.x + 40, home - 120)) : ball.x + 34
+
+  const now = performance.now()
+  const mem = botCorner.get(bot) ?? { since: 0, escapeTo: null, until: 0 }
+  const inCorner = bot.x < CORNER_EDGE || bot.x > W - CORNER_EDGE
+  if (mem.escapeTo != null && now < mem.until) {
+    targetX = mem.escapeTo
+  } else {
+    mem.escapeTo = null
+    if (!inCorner) mem.since = 0
+    else if (!mem.since) mem.since = now
+    else if (now - mem.since > CORNER_MAX_MS) {
+      mem.escapeTo = W * (0.35 + Math.random() * 0.3)
+      mem.until = now + ESCAPE_MS
+      mem.since = 0
+      targetX = mem.escapeTo
+    }
+  }
+  botCorner.set(bot, mem)
   if (bot.x < targetX - 12) k.right = true
   else if (bot.x > targetX + 12) k.left = true
   const dx = ball.x - bot.x

@@ -31,6 +31,10 @@ export function usePhoneLandscape() {
   return useMedia(PHONE_LANDSCAPE)
 }
 
+export function usePhonePortrait() {
+  return useMedia(PHONE_PORTRAIT)
+}
+
 /**
  * Landscape mode for game tables: when a phone is turned sideways the table opens as a fullscreen
  * layer above the site chrome, scaled to fit the screen. The element tree never changes between

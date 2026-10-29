@@ -8,6 +8,7 @@ import { SocialAccountsCard, SocialEventsCard } from '@/components/alkanka/profi
 import { getSocialLinks, listSocialEvents, myEntries, mySocialAccounts } from '@/lib/social'
 import { myStreams } from '@/lib/member-streams'
 import { StreamChannelsCard } from '@/components/alkanka/profile/stream-channels'
+import { TelegramAccountCard } from '@/components/alkanka/profile/telegram-account-card'
 import { RANKS } from '@/lib/ranks-shared'
 import { getMember, historySummary } from '@/lib/member'
 import { cemberCareer } from '@/lib/cember'
@@ -222,7 +223,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         {tab === 'genel' && <OverviewTab memberId={member.id} kpStatus={kpStatus} rules={kpConfig.rules} referrals={referrals} telegram={profile.stats.telegram} />}
         {tab === 'gorunum' && (look ? <LookStudio initial={look} /> : <p className="text-sm text-muted-foreground">Görünüm ayarları şu an yüklenemedi, biraz sonra tekrar dene.</p>)}
         {tab === 'rozetler' && <BadgesTab memberId={member.id} kpStatus={kpStatus} badges={profile.badges} />}
-        {tab === 'hesaplar' && <AccountsTab memberId={member.id} />}
+        {tab === 'hesaplar' && <AccountsTab memberId={member.id} telegram={profile.stats.telegram} />}
         {tab === 'ayarlar' && (
           <section aria-labelledby="hesap" className="flex max-w-xl flex-col gap-3">
             <SectionTitle id="hesap">Hesap ayarları</SectionTitle>
@@ -451,7 +452,7 @@ async function BadgesTab({ memberId, kpStatus, badges }: { memberId: string; kpS
   )
 }
 
-async function AccountsTab({ memberId }: { memberId: string }) {
+async function AccountsTab({ memberId, telegram }: { memberId: string; telegram: boolean }) {
   const [sites, sponsorAccounts, follows, social, links, events, entries, streams] = await Promise.all([
     siteOptions(),
     mySponsorAccounts(memberId).catch(() => []),
@@ -467,6 +468,7 @@ async function AccountsTab({ memberId }: { memberId: string }) {
       <div id="sponsor-hesaplari" className="grid scroll-mt-24 items-start gap-4 lg:grid-cols-2">
         <SocialAccountsCard accounts={social} links={links} />
         <div className="flex flex-col gap-4">
+          <TelegramAccountCard linked={telegram} />
           <StreamChannelsCard streams={streams} />
           <SponsorAccountsCard accounts={sponsorAccounts} sites={sites.map((s) => ({ id: s.id, name: s.name }))} />
           {follows.length > 0 && (

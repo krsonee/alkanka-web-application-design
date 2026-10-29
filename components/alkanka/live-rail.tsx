@@ -52,7 +52,7 @@ const primaryCta =
 const isSubmitKey = (e: KeyboardEvent<HTMLTextAreaElement>) =>
   e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229
 
-function LinkTelegramButton() {
+export function LinkTelegramButton() {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   return (
