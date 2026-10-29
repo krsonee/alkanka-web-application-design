@@ -64,7 +64,7 @@ export function Die({
       className={cn(
         'grid grid-cols-3 grid-rows-3 bg-checker-light transition-opacity',
         board
-          ? 'size-7 gap-px rounded-md p-1 shadow-[0_3px_6px_rgb(0_0_0/0.4)] sm:size-9 sm:p-1.5'
+          ? 'size-6 gap-px rounded-md p-[3px] shadow-[0_3px_6px_rgb(0_0_0/0.4)] sm:size-8 sm:p-1'
           : 'gap-0.5 rounded-lg p-1 shadow-[0_6px_14px_rgb(0_0_0/0.45)] sm:p-1.5',
         !board && (fill ? 'aspect-square h-full' : small ? 'size-8' : 'size-8 sm:size-12'),
         used && 'opacity-30 saturate-0',
@@ -74,7 +74,7 @@ export function Die({
       {Array.from({ length: 9 }).map((_, i) => (
         <span key={i} className="flex items-center justify-center">
           {PIPS[value]?.includes(i) && (
-            <span className={cn('rounded-full bg-checker-dark', board ? 'size-1 sm:size-1.5' : small ? 'size-1.5' : 'size-1.5 sm:size-2')} />
+            <span className={cn('rounded-full bg-checker-dark', board ? 'size-[3px] sm:size-[5px]' : small ? 'size-1.5' : 'size-1.5 sm:size-2')} />
           )}
         </span>
       ))}
@@ -137,7 +137,7 @@ function Checker({
       data-checker
       style={fit ? { width: 'min(100cqw, 100cqh)' } : undefined}
       className={cn(
-        'relative flex aspect-square max-w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-transform duration-200 sm:max-w-14 sm:text-xs',
+        'relative flex aspect-square max-w-12 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-transform duration-200 sm:max-w-16 sm:text-xs',
         !fit && 'w-full',
         side === 'p' ? 'checker-light-3d text-checker-dark' : 'checker-dark-3d text-primary',
         glow && 'z-10 -translate-y-0.5 scale-110 ring-[3px] ring-primary ring-offset-2 ring-offset-felt',
@@ -194,7 +194,7 @@ function Stack({
           <span
             key={i}
             className={cn(
-              'flex h-1/5 w-full shrink-0 items-center justify-center p-px [container-type:size]',
+              'flex h-1/5 w-full shrink-0 items-center justify-center [container-type:size]',
               lifted && isTopChecker && 'opacity-30',
             )}
           >
@@ -504,7 +504,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         createPortal(
           <span
             aria-hidden="true"
-            className="pointer-events-none fixed z-[100] flex w-10 -translate-x-1/2 -translate-y-1/2 scale-110 drop-shadow-[0_10px_14px_rgb(0_0_0/0.55)] sm:w-12"
+            className="pointer-events-none fixed z-[100] flex w-10 -translate-x-1/2 -translate-y-1/2 scale-110 drop-shadow-[0_10px_14px_rgb(0_0_0/0.55)] sm:w-14"
             style={{ left: ghost.x, top: ghost.y }}
           >
             <Checker side={me} />
@@ -515,8 +515,8 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       <div data-ls-main className="tavla-wood relative rounded-2xl p-1.5 sm:p-3">
       <TableBrand center={false} corners={false} jako={false} />
       <div className="ls-tavla flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
-        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-6">
-          <div className="flex h-[42%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
+        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-2.5 sm:px-2 sm:py-4">
+          <div className="flex h-[45%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
           {diceLeft ? (
             diceRow
           ) : (
@@ -526,7 +526,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
               </span>
             </div>
           )}
-          <div className="flex h-[42%]">{bottomRow.slice(0, 6).map((v) => renderPoint(v, false))}</div>
+          <div className="flex h-[45%]">{bottomRow.slice(0, 6).map((v) => renderPoint(v, false))}</div>
         </div>
 
         <button
@@ -563,10 +563,10 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </span>
         </button>
 
-        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-4 sm:px-2 sm:py-6">
-          <div className="flex h-[42%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
+        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-2.5 sm:px-2 sm:py-4">
+          <div className="flex h-[45%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
           {!diceLeft && diceRow}
-          <div className="flex h-[42%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
+          <div className="flex h-[45%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
         </div>
 
         <div className="ls-tavla-tray flex w-8 flex-col justify-between gap-1.5 sm:w-16 sm:gap-2">
