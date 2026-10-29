@@ -123,14 +123,16 @@ function CrowdArena({ players, duration, winners, teams, rule, shield, captain =
         if (plan.kind === 'matches') {
           setWins((w) => w.map((v, t) => (t === e.winningTeam ? v + 1 : v)))
           if (doneRef.current.size === plan.stages.length) {
-            emit({ type: 'done', winners: plan.winners, winningTeam: plan.winningTeam, seconds: Math.round(plan.steps * SV_STEP) })
+            const home = plan.stages.find((st) => st.entrants.includes(meIndex))
+            const meTeam = home ? home.entrants.indexOf(meIndex) % teams : -1
+            emit({ type: 'done', winners: plan.winners, winningTeam: plan.winningTeam, seconds: Math.round(plan.steps * SV_STEP), wins: plan.wins, meTeam })
           }
         } else if (doneRef.current.size === plan.stages.length && !startAt) {
           setTimeout(() => setPhase('final'), 2500)
         }
       }
     },
-    [plan, startAt],
+    [plan, startAt, meIndex, teams],
   )
 
   const finalHandler = useCallback(

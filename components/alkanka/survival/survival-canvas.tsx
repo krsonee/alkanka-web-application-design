@@ -26,7 +26,7 @@ export type SVEvent =
   | { type: 'enter'; index: number }
   | { type: 'power'; index: number; kind: 1 | 2 }
   | { type: 'final'; suddenDeath: boolean }
-  | { type: 'done'; winners: number[]; winningTeam: number; seconds: number }
+  | { type: 'done'; winners: number[]; winningTeam: number; seconds: number; wins?: number[]; meTeam?: number }
 
 type Props = {
   players: SVPlayer[]
