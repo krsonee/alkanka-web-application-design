@@ -91,7 +91,7 @@ import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
-import { moderationTotal, pendingDetail } from '@/lib/panel-pending'
+import { moderationTotal, pendingDetail, type PendingDetail } from '@/lib/panel-pending'
 import { ModerationQueue, type ModerationItem } from '@/components/panel/moderation-queue'
 
 async function moderationItems(can: (id: 'community' | 'tasks' | 'market') => boolean): Promise<ModerationItem[]> {
@@ -637,7 +637,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
 
   const onDash = active === 'dashboard'
   const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
-    pendingDetail(can).catch(() => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0 })),
+    pendingDetail(can).catch((): PendingDetail => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0, proofs: 0 })),
     onDash && can('users') ? listMembers().then((r) => r.counts).catch(() => null) : null,
     onDash && session.isOwner ? listAudit(8).catch(() => []) : [],
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
