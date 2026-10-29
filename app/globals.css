@@ -1677,7 +1677,13 @@
 .ls-split .ls-center { gap: 0.25rem; transform: scale(0.85); }
 .ls-split .ls-seat-l > *,
 .ls-split .ls-seat-r > * { flex-direction: column; }
-/* Tavla sideways: a wider board with a slim bar and tray so the halves get the width, not the woodwork. */
+  /* Okey vs bots sideways: felt + rack share the wide column, the narrow side keeps message and buttons. */
+  .ls-split [data-ls-grid] > [data-ls-main="okey"] { grid-row: 1 / 13; }
+  .ls-split [data-ls-main="okey"].ls-tall { aspect-ratio: 2 / 1 !important; }
+  .ls-split [data-ls-grid] > [data-ls-flat] > .ls-okey-rack { grid-column: 1; grid-row: 13; margin: 0.5rem 0 0; }
+  .ls-split .ls-okey-panel { border-radius: 1rem; border: 1px solid var(--border); background: var(--card); padding: 0.625rem; }
+  .ls-split .ls-okey-actions { flex-direction: column; }
+  /* Tavla sideways: a wider board with a slim bar and tray so the halves get the width, not the woodwork. */
 .ls-split .ls-tavla { aspect-ratio: 16 / 9.5 !important; gap: 0.375rem !important; }
 .ls-split .ls-tavla-bar { width: 1.75rem !important; padding-block: 0.375rem !important; }
 .ls-split .ls-tavla-tray { width: 2.5rem !important; }
