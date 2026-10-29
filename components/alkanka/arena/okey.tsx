@@ -451,18 +451,18 @@ export function Okey({ finish, saveKey }: GameApi) {
 
   return (
     <div ref={boardRef} className="flex scroll-mt-20 flex-col gap-2 sm:gap-4">
-      <div data-ls-main="half" className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
+      <div data-ls-main="half" className="ls-tall relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
         <div className="absolute inset-x-0 top-2 flex justify-center sm:top-3">{seat(2, '')}</div>
-        <div className="absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
-        <div className="absolute inset-y-0 right-2 flex items-center sm:right-3">{seat(1, '')}</div>
+        <div className="ls-seat-l absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
+        <div className="ls-seat-r absolute inset-y-0 right-2 flex items-center sm:right-3">{seat(1, '')}</div>
 
         {discardSlot(3, 'bottom-2 left-2 sm:bottom-6 sm:left-6', true)}
         {discardZone}
         {discardSlot(1, 'right-2 top-2 sm:right-6 sm:top-6')}
         {discardSlot(2, 'left-2 top-2 sm:left-6 sm:top-6')}
 
-        <div className="absolute inset-0 m-auto flex h-fit w-fit items-center gap-5 phone-ls:gap-2">
+        <div className="absolute inset-0 ls-center m-auto flex h-fit w-fit items-center gap-5 phone-ls:scale-[0.82] phone-ls:gap-1">
           <button
             type="button"
             onClick={drawDeck}
@@ -492,7 +492,7 @@ export function Okey({ finish, saveKey }: GameApi) {
             <TileFace tile={indicator} okey={{ color: -2, num: -2 }} size="sm" label={`Gösterge: ${COLOR_NAMES[indicator.color]} ${indicator.num}`} />
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
           </div>
-          <div className="hidden flex-col items-start gap-0.5 rounded-lg bg-background/60 px-3 py-2 sm:flex phone-ls:hidden">
+          <div className="ls-split-hide hidden flex-col items-start gap-0.5 rounded-lg bg-background/60 px-3 py-2 sm:flex phone-ls:hidden">
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Okey taşı</span>
             <span className={cn('font-display text-lg font-bold', TEXT[okey.color])}>
               {COLOR_NAMES[okey.color]} {okey.num}
