@@ -431,7 +431,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         )}
         <span
           className={cn(
-            'absolute z-20 text-[9px] font-bold tabular-nums text-foreground/70 sm:text-xs',
+            'pointer-events-none absolute inset-x-0 z-20 text-center text-[9px] font-bold leading-none tabular-nums tracking-tighter text-foreground/70 sm:text-xs',
             isTop ? '-top-3.5 sm:-top-5' : '-bottom-3.5 sm:-bottom-5',
           )}
         >
@@ -598,7 +598,7 @@ function TurnIndicator({ turn, me, opp }: { turn: 'me' | 'opp' | null; me: strin
         {active && (
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary p-1.5 text-[10px] font-bold uppercase text-primary-foreground sm:px-2 sm:py-0.5">
             <span className="size-1.5 animate-pulse rounded-full bg-primary-foreground" />
-            <span className="hidden sm:inline">Sırada</span>
+            <span data-ls-hide className="hidden sm:inline">Sırada</span>
           </span>
         )}
       </div>
@@ -646,7 +646,7 @@ function ControlBar({
   }, [arming])
 
   return (
-    <div className="flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+    <div data-ls-stack className="flex flex-col items-stretch gap-3 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
       <div className="flex min-w-0 flex-col">
         <p className="text-sm font-semibold text-foreground" aria-live="polite">
           {message}

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 import { Maximize2, Minimize2, Smartphone, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const PHONE_LANDSCAPE = '(pointer: coarse) and (orientation: landscape) and (max-height: 600px)'
+const PHONE_LANDSCAPE = '(orientation: landscape) and (max-height: 600px)' // V0TEST
 
 /** Width the table is laid out at in fullscreen before being scaled to the screen; keeps text readable. */
 const DESIGN_WIDTH = 640

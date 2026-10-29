@@ -176,7 +176,7 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
                 <td className="px-4 py-3 text-foreground">{levels[m.id] ?? 'Çaylak'}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col">
-                    <span className="font-semibold text-foreground">{m.balance.toLocaleString('tr-TR')} KC</span>
+                    <span className="whitespace-nowrap font-semibold text-foreground">{m.balance.toLocaleString('tr-TR')} KC</span>
                     <span className="text-xs text-muted-foreground">{m.points.toLocaleString('tr-TR')} puan</span>
                   </div>
                 </td>

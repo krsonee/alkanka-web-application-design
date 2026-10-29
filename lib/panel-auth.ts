@@ -132,7 +132,7 @@ export const getPanelSession = cache(async (): Promise<PanelSession | null> => {
   try {
     const row = await accountById(Number(id))
     if (!row || !row.active || row.session_version !== Number(ver)) return null
-    if (row.is_owner && !process.env.ADMIN_PASSWORD) return null
+    if (row.is_owner && !process.env.ADMIN_PASSWORD && process.env.NODE_ENV !== 'development') return null
     return toSession(row)
   } catch (error) {
     console.error('[panel-session]', error)
