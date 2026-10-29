@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Loader2, Maximize2, Minimize2, RotateCcw, ShieldCheck, Trash2, Trophy, Undo2, Users } from 'lucide-react'
+import { Loader2, Maximize2, Minimize2, RotateCcw, ShieldCheck, Smartphone, Trash2, Trophy, Undo2, Users } from 'lucide-react'
 import { RED, RL_BET_MS, rouletteClock, betLabel, betReturn, expandRacetrack, neighborNumbers, type RacetrackKey, type RouletteBet } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import type { RouletteLiveState } from '@/lib/roulette-live'
@@ -17,7 +17,7 @@ import { Chip, Racetrack, RouletteBoard, betKey, chipTone, parseKey, type BetKin
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
 import { TableBrand } from './table-brand'
-import { usePhoneLandscape } from './landscape-fit'
+import { usePhoneLandscape, usePhonePortrait } from './landscape-fit'
 
 type Stake = Pick<RouletteBet, 'kind' | 'value' | 'amount'>
 
@@ -470,6 +470,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const call = (k: RacetrackKey) => addBets(expandRacetrack(k, chip))
 
   const landscape = usePhoneLandscape()
+  const portraitPhone = usePhonePortrait()
   const [minimized, setMinimized] = useState(false)
   const fullscreen = landscape && !!member && !minimized
 
@@ -601,6 +602,23 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {portraitPhone && member && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rulet-yan-cevir"
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-background/95 p-6 text-center backdrop-blur"
+        >
+          <Smartphone className="size-14 rotate-90 text-primary motion-safe:animate-pulse" aria-hidden="true" />
+          <h2 id="rulet-yan-cevir" className="font-display text-xl font-extrabold text-foreground text-balance">
+            Telefonunu yan çevir
+          </h2>
+          <p className="max-w-xs text-sm leading-relaxed text-muted-foreground text-pretty">
+            Rulet masası yatay ekranda oynanır. Telefonu yan çevirdiğinde çark ve masa tam ekran açılır.
+          </p>
         </div>
       )}
 
