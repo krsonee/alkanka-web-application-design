@@ -201,7 +201,7 @@ export function slotMinutes(cfg: Pick<CemberConfig, 'minute' | 'every'>): number
  * Intro + countdown before the round plays. Doubles as the prediction window: the server withholds the seed and
  * results until it ends, so nobody can replay the round locally and "predict" a known outcome.
  */
-export const INTRO_SECONDS = 20
+export const INTRO_SECONDS = 10
 /** Predictions close this long before the reveal so a late request can't race the seed going out. */
 export const PREDICT_GRACE_SECONDS = 2
 export const PREDICT_PICKS = 3
