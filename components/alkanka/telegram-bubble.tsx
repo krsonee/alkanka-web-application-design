@@ -8,7 +8,9 @@ import { useChatFeed } from './use-chat-feed'
 
 /** Mobile-only floating Telegram button above the bottom nav; peeks new messages and opens the Telegram sheet. */
 export function TelegramBubble() {
-  const { data } = useChatFeed(true)
+  const pathname = usePathname()
+  const onGameTable = pathname.startsWith('/oyunlar/')
+  const { data } = useChatFeed(!onGameTable, { slow: true })
   const messages = data?.messages ?? []
   const lastId = messages.at(-1)?.id ?? null
   const [seenId, setSeenId] = useState<number | null>(null)
@@ -29,9 +31,6 @@ export function TelegramBubble() {
 
   const unread = seenId === null ? 0 : messages.filter((m) => m.id > seenId).length
   const peek = peekId !== null ? messages.find((m) => m.id === peekId) : undefined
-
-  const pathname = usePathname()
-  const onGameTable = pathname.startsWith('/oyunlar/')
 
   const open = () => {
     setSeenId(lastId)

@@ -38,10 +38,18 @@ export function CemberOverlay() {
   const [compact, setCompact] = useState(false)
   const [dismissed, setDismissed] = useState<string[]>([])
 
+  // Tick every second only near a round; otherwise a slow tick keeps the page idle on phones.
+  const nearRound =
+    !!activeSlot ||
+    [status?.nextSlot, ...(status?.upcoming ?? []).map((u) => u.slot)].some((s) => {
+      if (!s) return false
+      const diff = Date.parse(s) - serverNow()
+      return diff < (NOTICE_MINUTES + 1) * 60_000 && diff > -10 * 60_000
+    })
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    const id = setInterval(() => setTick((t) => t + 1), nearRound ? 1000 : 15_000)
     return () => clearInterval(id)
-  }, [])
+  }, [nearRound])
 
   const slotMs = status?.nextSlot ? Date.parse(status.nextSlot) : null
 
