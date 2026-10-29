@@ -626,8 +626,10 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   }
 
   const settings = (await getArenaSettings())[t.game as keyof Awaited<ReturnType<typeof getArenaSettings>>]
-  // In 101 / Batak / Monopoly the bots together put in one extra stake, so beating bots alone pays double.
-  const botBonus = isSeatGame(t.game) && t.players.some((p) => p.bot) ? t.stake : 0
+  // At a table with bots, the bots together put in exactly one extra stake: beating them pays 1x profit minus commission.
+  // Bots that replaced a player who left are already covered by that player's forfeited stake.
+  const hasBots = t.players.some((p) => p.bot)
+  const botBonus = hasBots && (isSeatGame(t.game) || !(t.options.forfeits ?? 0)) ? t.stake : 0
   // Players who left mid-game leave their stake in the pot.
   const pot = t.stake * (people.length + (t.options.forfeits ?? 0)) + botBonus
   const net = pot * (1 - (settings?.commission ?? 0) / 100)
