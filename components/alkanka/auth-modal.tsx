@@ -96,6 +96,7 @@ export function AuthModal() {
         if (!login.ok) {
           const body = (await login.json().catch(() => null)) as { code?: string; message?: string } | null
           if (login.status === 429) setError('Çok fazla deneme yaptın. 1 dakika bekleyip tekrar dene.')
+          else if (login.status === 423) setError(body?.message || 'Hesabın dondurulmuş.')
           else if (login.status === 403) setNotice('E-postan henüz onaylanmamış. Onay bağlantısını tekrar gönderdik, gelen kutunu kontrol et.')
           else if (login.status === 409 && body?.message) setError(body.message)
           else setError('Kullanıcı adı/e-posta veya şifre hatalı.')
