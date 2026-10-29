@@ -193,7 +193,15 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
             <li key={a.id} className={cn('flex flex-col gap-2 rounded-xl border border-border bg-background p-3', !a.active && 'opacity-55')}>
               <div className="relative mx-auto size-16 overflow-hidden rounded-full border border-border bg-secondary">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={a.src} alt={a.name} loading="lazy" className="size-full object-cover" />
+                <img
+                  src={a.src}
+                  alt={a.name}
+                  loading="lazy"
+                  className="size-full object-cover"
+                  onError={(e) => {
+                    if (!e.currentTarget.src.endsWith('/placeholder-user.jpg')) e.currentTarget.src = '/placeholder-user.jpg'
+                  }}
+                />
               </div>
               <div className="flex flex-col items-center gap-0.5 text-center">
                 <p className="line-clamp-1 text-sm font-bold text-foreground">{a.name}</p>
@@ -238,7 +246,15 @@ export function AvatarManager({ avatars, stats, covers, coverUsage }: { avatars:
           {covers.map((c) => (
             <li key={c.id} className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={c.src} alt={c.name} loading="lazy" className="aspect-[3/1] w-full object-cover" />
+              <img
+                src={c.src}
+                alt={c.name}
+                loading="lazy"
+                className="aspect-[3/1] w-full object-cover"
+                onError={(e) => {
+                  if (!e.currentTarget.src.endsWith('/placeholder.jpg')) e.currentTarget.src = '/placeholder.jpg'
+                }}
+              />
               <div className="flex flex-col gap-0.5 p-2.5">
                 <p className="text-sm font-bold text-foreground">{c.name}</p>
                 <p className="text-xs text-muted-foreground">

@@ -87,18 +87,24 @@ export function PushSender({ total, members, log, configured }: Props) {
           <div className="flex flex-col gap-1 rounded-2xl border border-border bg-card p-4">
             <Smartphone className="size-4 text-primary" aria-hidden />
             <span className="font-display text-2xl font-bold text-foreground">{total}</span>
-            <span className="text-xs text-muted-foreground">Bildirimi açık cihaz</span>
+            <span className="text-xs text-muted-foreground">Bildirimi açık cihaz (misafir dahil)</span>
           </div>
           <div className="flex flex-col gap-1 rounded-2xl border border-border bg-card p-4">
             <Users className="size-4 text-primary" aria-hidden />
             <span className="font-display text-2xl font-bold text-foreground">{members}</span>
-            <span className="text-xs text-muted-foreground">Üye hesaba bağlı</span>
+            <span className="text-xs text-muted-foreground">Bu cihazlardan üye hesaba bağlı</span>
           </div>
         </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Burada sayılan şey cihaz. Bir üyenin telefonu ve bilgisayarı ayrı ayrı sayılır, misafirler de dahildir. Mobil sekmesindeki sayılar ise üye hesabı başına tutulur, o yüzden ikisi farklı olabilir.
+        </p>
         <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
-          <h3 className="text-sm font-bold text-foreground">Son gönderimler</h3>
+          <h3 className="text-sm font-bold text-foreground">Son toplu gönderimler</h3>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Sadece bu ekrandan herkese gönderilenler listelenir. Oyun, ödül ve görev gibi kişiye özel otomatik bildirimler burada görünmez.
+          </p>
           {log.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Henüz bildirim gönderilmedi.</p>
+            <p className="text-sm text-muted-foreground">Henüz toplu bildirim gönderilmedi.</p>
           ) : (
             <ul className="flex flex-col divide-y divide-border">
               {log.map((l) => (

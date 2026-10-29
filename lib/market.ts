@@ -196,9 +196,13 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
     throw new Error('Kanka Coin bakiyen yetersiz.')
   }
 
-  await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, site_username, price)
-    VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${price})`)
+  // Free items carry no payout risk and need no username check, so they skip the manual queue.
+  const autoApprove = price === 0 && !item.needsUsername
+  await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, site_username, price, status, note, resolved_at)
+    VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${price},
+      ${autoApprove ? 'onaylandi' : 'beklemede'}, ${autoApprove ? 'Ücretsiz ürün, otomatik onaylandı.' : null}, ${autoApprove ? new Date().toISOString() : null})`)
   await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: price, result: 'loss', delta: -price })
+  if (autoApprove) return { ...item, price }
   const { notifyApproval } = await import('@/lib/telegram-bots')
   await notifyApproval('market', {
     uye: member.name,

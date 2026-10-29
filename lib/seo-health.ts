@@ -32,11 +32,19 @@ export function normalizePath(value: string) {
 
 const IGNORED_404 = /\.(php|env|asp|aspx|jsp|cgi|sql|bak|zip|xml\.gz)$|^\/(wp-|\.well-known|cgi-bin|vendor|panel(\/|$))/i
 
+// Static routes can never be a real 404; hits here come from deploy skew or aborted client navigations.
+const STATIC_PAGES = new Set([
+  '/arena-onizleme', '/biletler', '/bonuslar', '/gorevler', '/guven', '/kampanyalar', '/kankatv', '/kankatv/onizleme',
+  '/logolar', '/market', '/maskot', '/oyunlar', '/oyunlar/canli', '/ozel-oranlar', '/postlar', '/profil', '/rehber',
+  '/rozetler', '/sampiyonlar', '/sifre-sifirla', '/siralama', '/siteler', '/sponsorlar', '/sss', '/survival-onizleme',
+  '/tahminler', '/turnuvalar', '/uygulama', '/BingSiteAuth.xml', '/google9ab72f610c43f006.html', '/googleb995543f0ea4f3d5.html',
+])
+
 export async function log404(rawPath: string, referrer: string) {
   // Preview/dev servers share the production database; their compile-time 404s would pollute the report.
   if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV === 'preview') return
   const path = normalizePath(rawPath)
-  if (!path || path === '/' || IGNORED_404.test(path)) return
+  if (!path || path === '/' || IGNORED_404.test(path) || STATIC_PAGES.has(path)) return
   await ensureSeoTables()
   const ref = referrer.slice(0, 300)
   await rows(sql`INSERT INTO seo_404 (path, referrer) VALUES (${path}, ${ref})
@@ -51,7 +59,9 @@ export async function list404(limit = 50): Promise<NotFoundHit[]> {
       WHERE NOT EXISTS (SELECT 1 FROM seo_redirects r WHERE r.from_path = n.path)
       ORDER BY n.hits DESC, n.last_seen DESC LIMIT ${limit}`,
   )
-  return data.map((r) => ({ path: r.path, hits: Number(r.hits), referrer: r.referrer, lastSeen: new Date(r.last_seen).toISOString() }))
+  return data
+    .filter((r) => !STATIC_PAGES.has(r.path))
+    .map((r) => ({ path: r.path, hits: Number(r.hits), referrer: r.referrer, lastSeen: new Date(r.last_seen).toISOString() }))
 }
 
 export async function clear404(path: string) {

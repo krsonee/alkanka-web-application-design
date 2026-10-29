@@ -1093,7 +1093,11 @@ function RetentionCard({ stats }: { stats: DashStats }) {
                 <span className="text-xs tabular-nums text-muted-foreground">{`${fmt(x.got)}/${fmt(x.of)}`}</span>
               </span>
             ) : (
-              <span className="text-sm text-muted-foreground">Henüz ölçülemez</span>
+              <span className="text-sm leading-relaxed text-muted-foreground text-pretty">
+                {r.cohort === 0
+                  ? 'Bu aralıkta yeni kayıt yok'
+                  : `Kayıt olanlar henüz ${x.label.startsWith('7') ? '7 günlük' : '1 günlük'} olmadı, daha geniş aralık seç`}
+              </span>
             )}
             <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
               <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${pct(x.got, x.of)}%` }} />
