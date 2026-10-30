@@ -612,8 +612,14 @@ export function OkeyRack({
                       overClass(i, !!tile),
                       tile && (rack.selected === tile.id || liftedSet.has(tile.id)) && 'sel',
                       tile && dragging.has(tile.id) && 'drag',
+                      tile && marks && slotMarks[i] && 'ok',
                     )}
                   >
+                    {tile && marks && slotMarks[i]?.label && !dragging.has(tile.id) && (
+                      <span aria-hidden="true" className="o1-val">
+                        {slotMarks[i]!.label}
+                      </span>
+                    )}
                     {tile ? (
                       <div
                         className="okt-in"
