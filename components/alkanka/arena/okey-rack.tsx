@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { Hand, MousePointerClick, Move, Pointer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TileFace } from './okey'
-import { isJoker, sortHand, valueOf, type Okey as OkeyValue, type Tile } from './okey-engine'
+import { COLOR_NAMES, isJoker, sortHand, valueOf, type Okey as OkeyValue, type Tile } from './okey-engine'
 
 export const RACK_COLS = 14
 
@@ -295,7 +295,10 @@ export function OkeyRack({
   onDropHover,
   marks,
   looseDiscard,
+  variant = 'panel',
 }: {
+  /** "table" draws the walnut rack that sits on the okey table itself. */
+  variant?: 'panel' | 'table'
   hand: Tile[]
   okey: OkeyValue
   rack: ReturnType<typeof useRack>
@@ -313,7 +316,7 @@ export function OkeyRack({
   const byId = new Map(hand.map((t) => [t.id, t]))
   const slotMarks = marks ?? meldMarks(rack.slots, byId, okey)
   const [over, setOver] = useState<number | null>(null)
-  const [ghost, setGhost] = useState<{ ids: number[]; x: number; y: number } | null>(null)
+  const [ghost, setGhost] = useState<{ ids: number[]; x: number; y: number; w: number; h: number } | null>(null)
   const [lifted, setLifted] = useState<number[] | null>(null)
   const ghostEl = useRef<HTMLDivElement | null>(null)
   const overRef = useRef<number | null>(null)
@@ -453,7 +456,8 @@ export function OkeyRack({
     if (!p.moved) {
       p.moved = true
       if (p.timer) clearTimeout(p.timer)
-      setGhost({ ids: p.group ?? [p.id], x, y })
+      const r = rootRef.current?.querySelector('[data-rack-slot]')?.getBoundingClientRect()
+      setGhost({ ids: p.group ?? [p.id], x, y, w: r?.width ?? 40, h: r?.height ?? 56 })
     }
     if (ghostEl.current) ghostEl.current.style.transform = ghostTransform(x, y)
     if (frame.current != null) return
@@ -506,6 +510,77 @@ export function OkeyRack({
   const ghostTiles = ghost ? ghost.ids.map((id) => byId.get(id)).filter((t): t is Tile => !!t) : []
   const dragging = new Set(ghost?.ids ?? [])
   const liftedSet = new Set(lifted ?? [])
+
+  if (variant === 'table') {
+    return (
+      <div ref={rootRef} data-rack className="okt-rack" role="group" aria-label="Istakan, iki sıra">
+        <div className="okt-layer">
+          {Array.from({ length: rack.rows }, (_, row) => row).map((row) => (
+            <div key={row} className="okt-row">
+              <span aria-hidden="true" className="okt-ledge" />
+              {rack.slots.slice(row * RACK_COLS, row * RACK_COLS + RACK_COLS).map((id, c) => {
+                const i = row * RACK_COLS + c
+                const tile = id != null ? byId.get(id) : undefined
+                const canDropHere = rack.selected != null && id == null
+                return (
+                  <div
+                    key={i}
+                    data-rack-slot={i}
+                    className={cn(
+                      'okt-slot',
+                      over === i && 'over',
+                      tile && (rack.selected === tile.id || liftedSet.has(tile.id)) && 'sel',
+                      tile && dragging.has(tile.id) && 'drag',
+                    )}
+                  >
+                    {tile ? (
+                      <div
+                        className="okt-in"
+                        onPointerDown={(e) => onPointerDown(e, tile.id)}
+                        onDragStart={(e) => e.preventDefault()}
+                        onContextMenu={(e) => e.preventDefault()}
+                      >
+                        <MockTile
+                          tile={tile}
+                          okey={okey}
+                          hidden={rack.flipped.has(tile.id)}
+                          selected={rack.selected === tile.id}
+                          onClick={() => onTileTap(tile, i)}
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onSlot(i)}
+                        data-on={canDropHere || undefined}
+                        aria-label={canDropHere ? `Seçili taşı ${row + 1}. sıra ${c + 1}. yuvaya taşı` : `Boş yuva ${row + 1}-${c + 1}`}
+                        className="okt-empty"
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+        <span aria-hidden="true" className="okt-brand">
+          ALKANKA
+        </span>
+        {ghost &&
+          ghostTiles.length > 0 &&
+          createPortal(
+            <div ref={ghostEl} aria-hidden="true" className="okt-ghost" style={{ transform: ghostTransform(ghost.x, ghost.y) }}>
+              {ghostTiles.map((t) => (
+                <div key={t.id} style={{ width: ghost.w, height: ghost.h }}>
+                  <MockTile tile={t} okey={okey} hidden={rack.flipped.has(t.id)} />
+                </div>
+              ))}
+            </div>,
+            document.body,
+          )}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -617,6 +692,62 @@ export function OkeyRack({
           document.body,
         )}
     </div>
+  )
+}
+
+const TILE_COLOR = ['c0', 'c1', 'c2', 'c3']
+
+/** Porcelain tile drawn like the approved table mockup; sizes itself from a container-query wrapper. */
+export function MockTile({
+  tile,
+  okey,
+  hidden,
+  back,
+  selected,
+  onClick,
+  label,
+}: {
+  tile?: Tile
+  okey?: OkeyValue
+  hidden?: boolean
+  back?: boolean
+  selected?: boolean
+  onClick?: () => void
+  label?: string
+}) {
+  const joker = tile && okey ? isJoker(tile, okey) && !tile.fake : false
+  const name = !tile ? 'Kapalı taş' : hidden ? 'Kapalı okey, açmak için dokun' : tile.fake ? 'Sahte okey' : `${COLOR_NAMES[tile.color]} ${tile.num}${joker ? ' (okey)' : ''}`
+  const cls = cn(
+    'okt-tile',
+    back || !tile
+      ? 'back'
+      : hidden
+        ? 'hid'
+        : tile.fake
+          ? 'fake'
+          : [TILE_COLOR[tile.color], tile.num >= 10 && 'dd', joker && 'okey reveal'],
+  )
+  const body = back || !tile || hidden ? null : tile.fake ? (
+    <>
+      {'★'}
+      <i />
+    </>
+  ) : (
+    <>
+      {tile.num}
+      <i />
+    </>
+  )
+  if (!onClick)
+    return (
+      <div className={cls} aria-hidden={back || undefined} aria-label={back ? undefined : (label ?? name)} role={back ? undefined : 'img'}>
+        {body}
+      </div>
+    )
+  return (
+    <button type="button" className={cls} onClick={onClick} aria-label={label ?? name} aria-pressed={selected}>
+      {body}
+    </button>
   )
 }
 
