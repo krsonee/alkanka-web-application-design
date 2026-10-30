@@ -412,12 +412,13 @@ export function OkeyRack({
 
   return (
     <div
-      className="mx-auto flex w-full max-w-[50rem] flex-col gap-1 rounded-xl bg-wood p-1.5 shadow-inner sm:gap-1.5 sm:p-2"
+      className="okey-rack-wood mx-auto flex w-full max-w-[50rem] flex-col gap-1.5 rounded-xl px-1.5 pb-2 pt-2 sm:gap-2.5 sm:rounded-2xl sm:px-3 sm:pb-3 sm:pt-3"
       role="group"
       aria-label={`Istakan, ${rack.rows === 3 ? 'üç' : 'iki'} sıra`}
     >
       {Array.from({ length: rack.rows }, (_, row) => row).map((row) => (
-        <div key={row} className="grid grid-cols-14 gap-0.5 border-b-4 border-background/30 pb-1 sm:gap-1">
+        <div key={row} className="relative grid grid-cols-14 gap-0.5 pb-1.5 sm:gap-1 sm:pb-2">
+          <span aria-hidden="true" className="okey-rack-ledge pointer-events-none absolute -inset-x-0.5 bottom-0 h-1.5 rounded-sm sm:-inset-x-1 sm:h-2" />
           {rack.slots.slice(row * RACK_COLS, row * RACK_COLS + RACK_COLS).map((id, c) => {
             const i = row * RACK_COLS + c
             const tile = id != null ? byId.get(id) : undefined

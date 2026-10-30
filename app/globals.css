@@ -123,6 +123,7 @@
   --radius: 0.75rem;
   --wood: oklch(0.32 0.05 55);
   --felt: oklch(0.24 0.045 245);
+  --felt-okey: oklch(0.42 0.1 150);
   --baize: oklch(0.36 0.075 158);
   --rl-red: oklch(0.48 0.18 25);
   --rl-black: oklch(0.17 0.01 260);
@@ -472,6 +473,30 @@
     pointer-events: none;
   }
 }
+/* Mynet-style green baize for okey tables: a lit center fading into a darker rim. */
+@utility okey-felt {
+  background:
+    radial-gradient(ellipse 65% 55% at 50% 48%, color-mix(in oklch, var(--felt-okey) 88%, white) 0%, var(--felt-okey) 55%, color-mix(in oklch, var(--felt-okey) 62%, black) 100%);
+}
+
+/* Warm wooden ıstaka with faint grain and a lit top edge. */
+@utility okey-rack-wood {
+  background:
+    repeating-linear-gradient(91deg, transparent 0 22px, rgb(0 0 0 / 0.05) 22px 23px, transparent 23px 41px),
+    linear-gradient(180deg, color-mix(in oklch, var(--wood) 62%, var(--tile-yellow)) 0%, color-mix(in oklch, var(--wood) 80%, var(--tile-yellow)) 100%);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.18), inset 0 -4px 8px rgb(0 0 0 / 0.3), 0 12px 24px rgb(0 0 0 / 0.45);
+}
+
+/* The shelf lip each rack row rests on. */
+@utility okey-rack-ledge {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--wood) 55%, var(--tile-yellow)) 0%, color-mix(in oklch, var(--wood) 70%, black) 100%);
+  box-shadow: 0 3px 4px rgb(0 0 0 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.2);
+}
+
+@utility okey-tile-face {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--tile) 92%, white) 0%, var(--tile) 55%, color-mix(in oklch, var(--tile) 86%, var(--wood)) 100%);
+}
+
 @utility tavla-felt {
   background:
     radial-gradient(130% 90% at 50% 50%, rgb(255 255 255 / 0.06), transparent 60%),
