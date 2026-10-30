@@ -1648,11 +1648,11 @@
 /* 3D cube dice: the cube tumbles inside a wrapper that is tossed across the felt. */
 .die3d { position: relative; width: var(--ds); height: var(--ds); perspective: calc(var(--ds) * 14); flex: none; }
 .die3d-cube {
-  position: absolute; inset: 0; transform-style: preserve-3d;
+  position: absolute; inset: 0; -webkit-transform-style: preserve-3d; transform-style: preserve-3d;
   transform: rotateX(var(--rx)) rotateY(var(--ry));
 }
 .die3d-face {
-  position: absolute; inset: 0; border-radius: 20%; backface-visibility: hidden;
+  position: absolute; inset: 0; border-radius: 20%; -webkit-backface-visibility: hidden; backface-visibility: hidden;
   display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 15%;
   background: radial-gradient(circle at 30% 22%, #ffffff, #f3ecdb 55%, #d8caa8);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7), inset 0 -3px 5px rgb(120 95 50 / 0.35), inset 0 2px 3px rgb(255 255 255 / 0.9);
@@ -1698,7 +1698,9 @@
 @keyframes checker-land { 0% { transform: translateY(-35%) scale(1.22); } 100% { transform: none; } }
 .checker-land { animation: checker-land 0.45s cubic-bezier(0.2, 1.5, 0.4, 1); }
 @media (prefers-reduced-motion: reduce) {
-  .die3d-toss-right, .die3d-toss-left, .die3d-toss-right .die3d-cube, .die3d-toss-left .die3d-cube, .die3d-shadow, .checker-land { animation: none !important; }
+  /* The dice toss is the roll result itself, so it stays (shorter) instead of vanishing with reduced motion. */
+  .die3d-toss-right, .die3d-toss-left, .die3d-toss-right .die3d-cube, .die3d-toss-left .die3d-cube, .die3d-toss-right .die3d-shadow, .die3d-toss-left .die3d-shadow { animation-duration: 600ms !important; }
+  .checker-land { animation: none !important; }
   .die-throw-right, .die-throw-left, .die-land { animation: none; }
   .die-banner { animation-duration: 1ms; animation-iteration-count: 1; opacity: 1; }
 }
@@ -1777,7 +1779,11 @@
   .ls-split .ls-okey-panel { border-radius: 1rem; border: 1px solid var(--border); background: var(--card); padding: 0.625rem; }
   .ls-split .ls-okey-actions { flex-direction: column; }
   /* Tavla sideways: a wider board with a slim bar and tray so the halves get the width, not the woodwork. */
-.ls-split .ls-tavla { aspect-ratio: 16 / 9.5 !important; gap: 0.375rem !important; }
+.ls-split [data-ls-grid]:has(.ls-tavla) { --ls-side: clamp(9.5rem, 26%, 13rem); }
+.ls-split .ls-tavla { aspect-ratio: 16 / 8.6 !important; gap: 0.375rem !important; }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] { overflow: hidden; }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:last-child { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:last-child > button { min-width: 0; overflow: hidden; padding-inline: 0.375rem; font-size: 0.75rem; }
 .ls-split .ls-tavla-bar { width: 1.75rem !important; padding-block: 0.375rem !important; }
 .ls-split .ls-tavla-tray { width: 2.5rem !important; }
   .ls-split .ls-tavla [data-drop] > span:last-child { font-size: 10px; letter-spacing: 0; }

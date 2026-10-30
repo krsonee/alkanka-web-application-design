@@ -74,8 +74,12 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     if (!i) return
     let frame = 0
     const measure = () => {
-      const availW = window.innerWidth - RAIL_W - 20
-      const availH = window.innerHeight - 10
+      const vw = Math.round(window.visualViewport?.width ?? window.innerWidth)
+      const vh = Math.round(window.visualViewport?.height ?? window.innerHeight)
+      // Mid-rotation some browsers still report portrait dimensions; measuring then collapses the table.
+      if (vw <= vh) return
+      const availW = vw - RAIL_W - 20
+      const availH = vh - 10
       // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
       // Wrappers marked data-ls-flat are dissolved so their siblings (e.g. a control bar) join the side column.
       const main = i.querySelector<HTMLElement>('[data-ls-main]')
@@ -114,14 +118,28 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(measure)
     }
+    // Viewport size settles late after rotation on iOS/Samsung browsers, so re-measure a few times.
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const settle = () => {
+      schedule()
+      timers.forEach(clearTimeout)
+      timers.length = 0
+      for (const ms of [120, 350, 800]) timers.push(setTimeout(schedule, ms))
+    }
     measure()
+    settle()
     const ro = new ResizeObserver(schedule)
     ro.observe(i)
-    window.addEventListener('resize', schedule)
+    window.addEventListener('resize', settle)
+    window.addEventListener('orientationchange', settle)
+    window.visualViewport?.addEventListener('resize', settle)
     return () => {
       cancelAnimationFrame(frame)
+      timers.forEach(clearTimeout)
       ro.disconnect()
-      window.removeEventListener('resize', schedule)
+      window.removeEventListener('resize', settle)
+      window.removeEventListener('orientationchange', settle)
+      window.visualViewport?.removeEventListener('resize', settle)
       i.querySelectorAll('[data-ls-grid]').forEach((el) => el.removeAttribute('data-ls-grid'))
     }
   }, [fullscreen])
