@@ -9,6 +9,9 @@ import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
 import { TableBrand } from './table-brand'
+import { useBrand } from '../brand-context'
+import { useLogos } from '../logo-context'
+import { LOGO_CONCEPTS } from '../logos'
 import { useDuelLink } from './duel-link'
 import {
   BOT_LEVELS,
@@ -68,6 +71,35 @@ function usePhoneLayout(): Layout {
     },
     () => (window.matchMedia(PORTRAIT_QUERY).matches ? 'portrait' : window.matchMedia(LANDSCAPE_QUERY).matches ? 'landscape' : 'desktop'),
     () => 'desktop',
+  )
+}
+
+/** Width kept clear beside the camera cutout when the browser reports no safe-area inset (hidden toolbar, fullscreen). */
+const NOTCH_GUARD = '2.75rem'
+
+/**
+ * Which landscape edge holds the camera cutout on touch phones. Browsers drop the safe-area inset when the toolbar
+ * is hidden or the page is fullscreen, so the controls would slide under the notch without this fallback.
+ */
+function useNotchSide(): 'left' | 'right' | null {
+  return useSyncExternalStore(
+    (cb) => {
+      window.addEventListener('orientationchange', cb)
+      screen.orientation?.addEventListener?.('change', cb)
+      return () => {
+        window.removeEventListener('orientationchange', cb)
+        screen.orientation?.removeEventListener?.('change', cb)
+      }
+    },
+    () => {
+      if (!window.matchMedia('(pointer: coarse)').matches) return null
+      const legacy = (window as Window & { orientation?: number }).orientation
+      const angle = screen.orientation?.angle ?? legacy ?? 0
+      if (angle === 90) return 'left'
+      if (angle === 270 || angle === -90) return 'right'
+      return null
+    },
+    () => null,
   )
 }
 
@@ -205,8 +237,64 @@ function drawCue(ctx: CanvasRenderingContext2D, cx: number, cy: number, angle: n
   ctx.restore()
 }
 
+/** Brand print in the middle of the felt: the site's real logo in a gold ring plus the wordmark. */
+function paintFeltLogo(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | null, gold: string, font: string) {
+  const cx = W / 2
+  const cy = H / 2 - 18
+  const r = 54
+  ctx.save()
+  const glow = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 2.4)
+  glow.addColorStop(0, 'rgba(255,255,255,0.07)')
+  glow.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(cx - r * 2.4, cy - r * 2.4, r * 4.8, r * 4.8)
+  ctx.strokeStyle = gold
+  ctx.globalAlpha = 0.55
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(cx, cy, r + 7, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.globalAlpha = 0.3
+  ctx.lineWidth = 1
+  ctx.setLineDash([3, 5])
+  ctx.beginPath()
+  ctx.arc(cx, cy, r + 14, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.setLineDash([])
+  if (logo) {
+    ctx.globalAlpha = 0.72
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.clip()
+    const s = Math.max((r * 2) / logo.naturalWidth, (r * 2) / logo.naturalHeight)
+    const w = logo.naturalWidth * s
+    const h = logo.naturalHeight * s
+    ctx.drawImage(logo, cx - w / 2, cy - h / 2, w, h)
+    const shade = ctx.createRadialGradient(cx, cy - r * 0.3, r * 0.2, cx, cy, r)
+    shade.addColorStop(0, 'rgba(255,255,255,0)')
+    shade.addColorStop(1, 'rgba(0,0,0,0.35)')
+    ctx.globalAlpha = 1
+    ctx.fillStyle = shade
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2)
+  }
+  ctx.restore()
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = gold
+  ctx.globalAlpha = 0.62
+  ctx.font = `700 30px ${font}`
+  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '10px'
+  ctx.fillText('ALKANKA', cx + 5, cy + r + 40)
+  ctx.globalAlpha = 0.35
+  ctx.font = `600 11px ${font}`
+  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '6px'
+  ctx.fillText('ALKANKA.COM', cx + 3, cy + r + 66)
+  ctx.restore()
+}
+
 /** The static table (wood, felt, cushions, pockets, markings) is painted once and blitted every frame. */
-function paintTable(dpr: number) {
+function paintTable(dpr: number, logo: HTMLImageElement | null = null) {
   const c = document.createElement('canvas')
   c.width = CW * dpr
   c.height = CH * dpr
@@ -280,23 +368,7 @@ function paintTable(dpr: number) {
     ctx.fillStyle = cg
     ctx.fillRect(x, y, w, h)
   })
-  ctx.save()
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.globalAlpha = 0.05
-  ctx.strokeStyle = gold
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.ellipse(W / 2, H / 2, 150, 70, 0, 0, Math.PI * 2)
-  ctx.stroke()
-  ctx.globalAlpha = 0.06
-  ctx.fillStyle = gold
-  ctx.font = '900 64px system-ui, sans-serif'
-  ctx.fillText('AL KANKA', W / 2, H / 2 - 4)
-  ctx.globalAlpha = 0.05
-  ctx.font = '700 16px system-ui, sans-serif'
-  ctx.fillText('alkanka.com', W / 2, H / 2 + 40)
-  ctx.restore()
+  paintFeltLogo(ctx, logo, gold, css.getPropertyValue('--font-display').trim() || 'system-ui, sans-serif')
   ctx.strokeStyle = 'rgba(255,255,255,0.08)'
   ctx.beginPath()
   ctx.moveTo(W * 0.25, 0)
@@ -444,6 +516,12 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   }
   const layout = usePhoneLayout()
   const landscape = layout === 'landscape'
+  const notchSide = useNotchSide()
+  const { concept } = useBrand()
+  const customLogo = useLogos().brand?.logoUrl
+  const logoSrcRef = useRef('')
+  logoSrcRef.current =
+    customLogo || LOGO_CONCEPTS.find((l) => l.id === concept)?.image || '/images/logos/fist.png'
   const [spinOpen, setSpinOpen] = useState(false)
   const [aimLocked, setAimLocked] = useState(false)
   const lockedRef = useRef(false)
@@ -719,7 +797,15 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     canvas.width = CW * dpr
     canvas.height = CH * dpr
-    const { canvas: bg, gold } = paintTable(dpr)
+    const painted = paintTable(dpr)
+    let bg = painted.canvas
+    const { gold } = painted
+    const logoImg = new Image()
+    logoImg.crossOrigin = 'anonymous'
+    logoImg.onload = () => {
+      bg = paintTable(dpr, logoImg).canvas
+    }
+    logoImg.src = logoSrcRef.current
     let raf = 0
     let lastHitSound = 0
     let lastRailSound = 0
@@ -1244,7 +1330,13 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
 
   if (landscape) {
     return (
-      <div className="fixed inset-0 z-50 flex items-stretch gap-2 bg-background py-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
+      <div
+        className="fixed inset-0 z-50 flex items-stretch gap-2 bg-background py-2"
+        style={{
+          paddingLeft: `max(0.5rem, env(safe-area-inset-left), ${notchSide === 'left' ? NOTCH_GUARD : '0px'})`,
+          paddingRight: `max(0.5rem, env(safe-area-inset-right), ${notchSide === 'right' ? NOTCH_GUARD : '0px'})`,
+        }}
+      >
         <div className="relative flex min-w-0 flex-1 items-center justify-center gap-2">
           <div className="flex shrink-0 self-stretch">
             <PowerBar vertical disabled={!yourTurn || ui.placing} preset={keyPower} pullRef={pullRef} onRelease={fire} />
