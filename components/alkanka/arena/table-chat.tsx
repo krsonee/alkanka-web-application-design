@@ -18,12 +18,42 @@ const EMOJIS = [
 ]
 export const ONLY_EMOJI = /^(\p{Extended_Pictographic}|\uFE0F|\u200D|\s){1,12}$/u
 
-type ChatMessage = { id: number; userId: string; name: string; player: boolean; body: string; at: string }
+export type ChatMessage = { id: number; userId: string; name: string; player: boolean; body: string; at: string; partner?: boolean }
+/** team is the viewer's team letter at a team (eşli) table; only then can they write to their partner. */
+export type ChatData = { messages: ChatMessage[]; team?: string | null }
 
-const fetcher = async (url: string) => {
+export const chatFetcher = async (url: string) => {
   const r = await fetch(url, { cache: 'no-store' })
   if (!r.ok) throw new Error('Sohbet yüklenemedi')
-  return (await r.json()) as { messages: ChatMessage[] }
+  return (await r.json()) as ChatData
+}
+const fetcher = chatFetcher
+
+/** "Masaya / Eşime" switch shown only at team tables. */
+export function AudienceSwitch({ partner, onChange, compact }: { partner: boolean; onChange: (v: boolean) => void; compact?: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Mesaj kime gitsin" className="flex shrink-0 rounded-full border border-border bg-secondary p-0.5">
+      {[
+        { v: false, label: 'Masaya' },
+        { v: true, label: 'Eşime' },
+      ].map((o) => (
+        <button
+          key={o.label}
+          type="button"
+          role="radio"
+          aria-checked={partner === o.v}
+          onClick={() => onChange(o.v)}
+          className={cn(
+            'rounded-full font-bold transition-colors',
+            compact ? 'px-2.5 py-0.5 text-[11px]' : 'px-3 py-1 text-xs',
+            partner === o.v ? (o.v ? 'bg-accent text-accent-foreground' : 'bg-primary text-primary-foreground') : 'text-muted-foreground',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** Shared chat for everyone at a table: seated players and spectators. */
@@ -37,6 +67,9 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
   const listRef = useRef<HTMLOListElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [partnerOnly, setPartnerOnly] = useState(false)
+  const canPartner = !!data?.team
+  const toPartner = canPartner && partnerOnly
   const messages = data?.messages ?? []
   const lastId = messages.at(-1)?.id
 
@@ -62,7 +95,7 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
     const r = await fetch(`/api/tables/${tableId}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, partner: toPartner }),
     })
     setSending(false)
     if (!r.ok) {
@@ -92,7 +125,13 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         <MessageCircle className="size-4 text-primary" aria-hidden="true" />
         <h4 className="text-sm font-bold text-foreground">Masa sohbeti</h4>
-        <span className="ml-auto text-xs text-muted-foreground">Oyuncular ve izleyiciler</span>
+        {canPartner ? (
+          <span className="ml-auto">
+            <AudienceSwitch partner={partnerOnly} onChange={setPartnerOnly} compact />
+          </span>
+        ) : (
+          <span className="ml-auto text-xs text-muted-foreground">Oyuncular ve izleyiciler</span>
+        )}
       </header>
       <ol ref={listRef} aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 py-2 text-sm">
         {!data && (
@@ -102,9 +141,10 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
         )}
         {data && messages.length === 0 && <li className="text-muted-foreground">Henüz mesaj yok. İlk selamı sen ver.</li>}
         {messages.map((m) => (
-          <li key={m.id} className="leading-relaxed text-pretty">
+          <li key={m.id} className={cn('leading-relaxed text-pretty', m.partner && '-mx-1.5 rounded-md bg-accent/15 px-1.5')}>
             <MemberAvatar userId={m.userId} name={m.name} size="xs" className="mr-1.5 inline-flex align-middle" />
             <span className={cn('font-bold', m.userId === member?.id ? 'text-primary' : 'text-foreground')}>{m.name}</span>
+            {m.partner && <span className="ml-1 rounded bg-accent px-1 text-[10px] font-semibold uppercase text-accent-foreground">eşine</span>}
             {!m.player && <span className="ml-1 rounded bg-secondary px-1 text-[10px] font-semibold uppercase text-muted-foreground">izleyici</span>}
             <span className="text-muted-foreground">: </span>
             <span className={cn('break-words text-foreground', ONLY_EMOJI.test(m.body) && 'align-middle text-2xl leading-none')}>{m.body}</span>
@@ -169,7 +209,7 @@ export function TableChat({ tableId, className }: { tableId: string; className?:
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
           }}
-          placeholder={member ? 'Masaya yaz...' : 'Yazmak için giriş yap'}
+          placeholder={!member ? 'Yazmak için giriş yap' : toPartner ? 'Sadece eşin görür...' : 'Masaya yaz...'}
           className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
         />
         <button

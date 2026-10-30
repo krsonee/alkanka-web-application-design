@@ -7,20 +7,15 @@ import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
 import { MemberAvatar } from '../member-avatar'
-import { ONLY_EMOJI, QUICK } from './table-chat'
+import { AudienceSwitch, chatFetcher, ONLY_EMOJI, QUICK } from './table-chat'
 import { playSound } from '@/lib/sound'
 
-type ChatMessage = { id: number; userId: string; name: string; player: boolean; body: string; at: string }
 type Toast = { id: number; name: string; body: string; mine: boolean }
 type Floater = { id: number; emoji: string; drift: number; left: number }
 
 const PHRASES = ['İyi şanslar', 'Helal olsun', 'Kart ver kanka', 'Yazık oldu', 'GG']
 
-const fetcher = async (url: string) => {
-  const r = await fetch(url, { cache: 'no-store' })
-  if (!r.ok) throw new Error('Sohbet yüklenemedi')
-  return (await r.json()) as { messages: ChatMessage[] }
-}
+const fetcher = chatFetcher
 
 /**
  * Mobile in-game chat that lives on the table itself: a pill in the table header, live-stream style
@@ -41,6 +36,9 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [floaters, setFloaters] = useState<Floater[]>([])
   const [unread, setUnread] = useState(0)
+  const [partnerOnly, setPartnerOnly] = useState(false)
+  const canPartner = !!data?.team
+  const toPartner = canPartner && partnerOnly
   const seenRef = useRef<number | null>(null)
   const openRef = useRef(open)
   openRef.current = open
@@ -101,7 +99,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
     const r = await fetch(`/api/tables/${tableId}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, partner: toPartner }),
     })
     setSending(false)
     if (!r.ok) {
@@ -179,11 +177,16 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
             <div className="flex items-center gap-2 border-b border-border px-3 py-2">
               <span className="size-1.5 rounded-full bg-live animate-glow" aria-hidden="true" />
               <span className="text-xs font-bold uppercase tracking-wide text-foreground">Masa sohbeti</span>
+              {canPartner && (
+                <span className="ml-auto">
+                  <AudienceSwitch partner={partnerOnly} onChange={setPartnerOnly} compact />
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Sohbeti kapat"
-                className="ml-auto flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary"
+                className={cn('flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary', !canPartner && 'ml-auto')}
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -197,9 +200,10 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
               )}
               {data && recent.length === 0 && <li className="text-muted-foreground">Masa sessiz. İlk selamı sen ver.</li>}
               {recent.map((m) => (
-                <li key={m.id} className="leading-snug text-pretty">
+                <li key={m.id} className={cn('leading-snug text-pretty', m.partner && '-mx-1.5 rounded-md bg-accent/15 px-1.5')}>
                   <MemberAvatar userId={m.userId} name={m.name} size="xs" className="mr-1.5 inline-flex align-middle" />
                   <span className={cn('font-bold', m.userId === member?.id ? 'text-primary' : 'text-foreground')}>{m.name}</span>
+                  {m.partner && <span className="ml-1 text-[10px] font-semibold uppercase text-accent">eşine</span>}
                   {!m.player && <span className="ml-1 text-[10px] font-semibold uppercase text-muted-foreground">izleyici</span>}
                   <span className="text-muted-foreground">: </span>
                   <span className={cn('break-words text-foreground', ONLY_EMOJI.test(m.body) && 'align-middle text-xl leading-none')}>{m.body}</span>
@@ -253,7 +257,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
                 }}
-                placeholder={member ? 'Masaya yaz...' : 'Yazmak için giriş yap'}
+                placeholder={!member ? 'Yazmak için giriş yap' : toPartner ? 'Sadece eşin görür...' : 'Masaya yaz...'}
                 className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
               />
               <button

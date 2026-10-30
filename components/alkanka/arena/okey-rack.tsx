@@ -421,17 +421,22 @@ export function OkeyRack({
     if (suppressClick.current) return
     if (rack.flipped.has(tile.id)) {
       rack.toggleFlip(tile.id)
+      lastTap.current = null
+      return
+    }
+    // A revealed okey works like a real tile: the first tap selects it, tapping it again while selected
+    // turns it face down. It is never discarded by a double tap; drag it to the middle to throw it.
+    if (isJoker(tile, okey) && !tile.fake) {
+      lastTap.current = null
+      if (rack.selected === tile.id) {
+        rack.setSelected(null)
+        rack.hide(tile.id)
+      } else rack.setSelected(tile.id)
       return
     }
     const now = Date.now()
     if (lastTap.current?.id === tile.id && now - lastTap.current.t < 350) {
       lastTap.current = null
-      // Double-tapping a revealed okey turns it face down again instead of discarding it.
-      if (isJoker(tile, okey)) {
-        rack.setSelected(null)
-        rack.hide(tile.id)
-        return
-      }
       onDoubleTile?.(tile)
       return
     }

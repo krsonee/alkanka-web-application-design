@@ -10,6 +10,7 @@ import { TileBack, TileFace, TurnSteps } from './okey'
 import { OkeyRack, useRack } from './okey-rack'
 import { findWinningDiscard, isJoker, okeyFrom, type Okey as OkeyValue, type Tile } from './okey-engine'
 import { TableBrand } from './table-brand'
+import { OkeyWinOverlay } from './okey-win'
 
 type OkeyView = OkeyState & { deckCount: number; handCounts: number[]; oppSeat: number; seats: number; team: boolean; bots: number[]; last: OkeyLast[] }
 
@@ -27,6 +28,8 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   const [sortMode, setSortMode] = useState<'seri' | 'cift'>('seri')
   const [knownIds, setKnownIds] = useState<string>(() => hand.map((t) => t.id).join(','))
   const [fresh, setFresh] = useState<number | null>(null)
+  // Start with the hand already on screen at load as "seen", so a refresh doesn't replay an old finish.
+  const [seenHand, setSeenHand] = useState<number | undefined>(() => s.reveal?.hand)
   const idsKey = hand.map((t) => t.id).join(',')
   if (idsKey !== knownIds) {
     const prev = new Set(knownIds.split(',').filter(Boolean).map(Number))
@@ -68,7 +71,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
       : '1. adım: ortadaki desteden taş çek.'
   else if (myDiscard)
     message = winning
-      ? `Elin bitmeye hazır! Bitiren taşı seç ve "Eli bitir" de.${scored && isJoker(winning.tile, okey) ? ' Okeyi atarak bitirirsen puan 2 katı!' : ''}`
+      ? `Elin bitmeye hazır! Bitiren taşı ortaya at, el biter.${scored && isJoker(winning.tile, okey) ? ' Okeyi atarak bitirirsen puan 2 katı!' : ''}`
       : selectedIsTaken
         ? 'Yerden aldığın taşı bu elde geri atamazsın, başka taş seç.'
         : `2. adım: taşı "Taşı at" butonuna sürükle, çift tıkla ya da seçip butona bas.${fresh != null ? ' Yeni gelen taş "Yeni" etiketli.' : ''}`
@@ -88,10 +91,32 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
 
   const onlyIfAllowed = (tileId: number) => tileId !== takenId
 
+  const finished = s.reveal && s.reveal.kind !== 'deste' ? s.reveal : null
+  const showWin = finished != null && seenHand !== finished.hand
+
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
       {scored && <ScoreBoard s={s} n={n} nameOf={nameOf} seat={spectator ? -1 : seat} />}
-      {s.reveal && <HandReveal reveal={s.reveal} okey={okey} nameOf={nameOf} scored={scored} />}
+      {s.reveal && (
+        <HandReveal reveal={s.reveal} okey={s.reveal.indicator ? okeyFrom(s.reveal.indicator) : okey} nameOf={nameOf} scored={scored} />
+      )}
+      {showWin && (
+        <OkeyWinOverlay
+          winner={nameOf(finished.seat)}
+          mine={!spectator && finished.seat === seat}
+          detail={[
+            finished.kind === 'cift' ? 'Çiftten bitti' : 'Seriden bitti',
+            finished.okeyFinish ? 'okey atarak' : null,
+            scored ? `rakipler −${finished.penalty}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          tiles={finished.tiles}
+          okey={okeyFrom(finished.indicator ?? s.indicator)}
+          onClose={() => setSeenHand(finished.hand)}
+          autoCloseMs={12000}
+        />
+      )}
       {spectator && (
         <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Oyuncuların elleri gizli, atılan taşlar canlı görünür.

@@ -8,6 +8,7 @@ import type { GameApi } from './stake-gate'
 import { loadSaved, useSaveGame, writeSaved } from './saved-game'
 import { MockTile, OkeyRack, ghostTransform, useRack } from './okey-rack'
 import { TableBrand } from './table-brand'
+import { OkeyWinOverlay } from './okey-win'
 import { playSound } from '@/lib/sound'
 import {
   COLOR_NAMES,
@@ -295,10 +296,23 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
   const tileName = (t: Tile) => (t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`)
   const winning = useMemo(() => (phase === 'discard' ? findWinningDiscard(hand, okey) : null), [hand, okey, phase])
 
-  function end(result: 'win' | 'lose' | 'draw', note: string) {
+  const [win, setWin] = useState<{ winner: string; mine: boolean; detail: string; tiles: Tile[]; result: 'win' | 'lose'; note: string } | null>(null)
+
+  function end(result: 'win' | 'lose' | 'draw', note: string, reveal?: { winner: string; tiles: Tile[]; kind: 'seri' | 'cift' }) {
     playSound(result === 'win' ? 'win' : result === 'lose' ? 'lose' : 'tick')
     setPhase('over')
     setMessage(note)
+    if (reveal && result !== 'draw') {
+      setWin({
+        winner: reveal.winner,
+        mine: result === 'win',
+        detail: reveal.kind === 'cift' ? 'Çiftten bitti' : 'Seriden bitti',
+        tiles: reveal.tiles,
+        result,
+        note,
+      })
+      return
+    }
     setTimeout(() => finish(result, note), 1200)
   }
 
@@ -357,7 +371,11 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
     if (!winning) return
     const rest = hand.filter((t) => t.id !== winning.tile.id)
     setGame({ ...game, hands: [rest, ...hands.slice(1)], discards: discards.map((d, i) => (i === 0 ? [...d, winning.tile] : d)) })
-    end('win', winning.kind === 'cift' ? 'Çiftten bitirdin! Masanın kralı sensin.' : 'Elini açtın! Masayı sen aldın.')
+    end('win', winning.kind === 'cift' ? 'Çiftten bitirdin! Masanın kralı sensin.' : 'Elini açtın! Masayı sen aldın.', {
+      winner: 'Sen',
+      tiles: rest,
+      kind: winning.kind,
+    })
   }
 
   function sort(mode: 'seri' | 'cift') {
@@ -399,7 +417,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           setGame(state)
           playSound('tile')
           if (win) {
-            end('lose', `${BOT_NAMES[bot - 1]} elini açtı. Bu masa onun.`)
+            end('lose', `${BOT_NAMES[bot - 1]} elini açtı. Bu masa onun.`, { winner: BOT_NAMES[bot - 1], tiles: rest, kind: win.kind })
             return
           }
           if (bot < 3) {
@@ -596,6 +614,21 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish')}
         />
       </div>
+
+      {win && (
+        <OkeyWinOverlay
+          winner={win.winner}
+          mine={win.mine}
+          detail={win.detail}
+          tiles={win.tiles}
+          okey={okey}
+          actionLabel="Sonucu gör"
+          onClose={() => {
+            setWin(null)
+            finish(win.result, win.note)
+          }}
+        />
+      )}
 
       {drawDrag.ghost &&
         createPortal(
