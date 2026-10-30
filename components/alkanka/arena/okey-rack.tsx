@@ -2,7 +2,7 @@
 
 import { useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Hand, MousePointerClick, Move, Pointer, Sparkles } from 'lucide-react'
+import { Hand, MousePointerClick, Move, Pointer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TileFace } from './okey'
 import { isJoker, sortHand, valueOf, type Okey as OkeyValue, type Tile } from './okey-engine'
@@ -221,13 +221,60 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
     setRaw(arrangeLayout(hand, okey, mode, rows))
   }
 
-  const [flippedRaw, setFlipped] = useState<number[]>([])
+  // Okeys arrive face down, like at a real table; the player taps to reveal them.
+  const [flippedRaw, setFlipped] = useState<number[]>(() => hand.filter((t) => isJoker(t, okey)).map((t) => t.id))
   const flipped = new Set(flippedRaw.filter((id) => hand.some((t) => t.id === id)))
   function toggleFlip(id: number) {
     setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
   }
+  function hide(id: number) {
+    setFlipped((f) => (f.includes(id) ? f : [...f, id]))
+  }
 
-  return { rows, slots, selected: selectedId, setSelected, moveTo, moveGroup, placeAt, arrange, setLayout: setRaw, flipped, toggleFlip }
+  return { rows, slots, selected: selectedId, setSelected, moveTo, moveGroup, placeAt, arrange, setLayout: setRaw, flipped, toggleFlip, hide }
+}
+
+/** A run (same colour, consecutive, 12-13-1 allowed) or a set (same number, distinct colours), okeys filling gaps. */
+function isMeld(tiles: Tile[], ok: OkeyValue) {
+  if (tiles.length < 3) return false
+  const real = tiles.map((t) => (isJoker(t, ok) ? null : valueOf(t, ok)))
+  const known = real.filter((v): v is { color: number; num: number } => v != null)
+  if (!known.length) return true
+  if (tiles.length <= 4 && known.every((v) => v.num === known[0].num) && new Set(known.map((v) => v.color)).size === known.length) return true
+  if (!known.every((v) => v.color === known[0].color)) return false
+  const runFits = (seq: typeof real) => {
+    const first = seq.findIndex((v) => v != null)
+    const start = seq[first]!.num - first
+    if (start < 1 || start + seq.length - 1 > 14) return false
+    return seq.every((v, k) => v == null || v.num === (start + k === 14 ? 1 : start + k))
+  }
+  return runFits(real) || runFits([...real].reverse())
+}
+
+/** Underlines every contiguous stretch on the rack that already forms a valid per (or an identical pair). */
+function meldMarks(slots: Slots, byId: Map<number, Tile>, ok: OkeyValue): SlotMark[] {
+  const marks: SlotMark[] = Array(slots.length).fill(null)
+  for (let row = 0; row * RACK_COLS < slots.length; row++) {
+    let c = 0
+    while (c < RACK_COLS) {
+      const i = row * RACK_COLS + c
+      if (slots[i] == null) {
+        c++
+        continue
+      }
+      let end = c
+      while (end + 1 < RACK_COLS && slots[row * RACK_COLS + end + 1] != null) end++
+      const idx = Array.from({ length: end - c + 1 }, (_, k) => i + k)
+      const tiles = idx.map((s) => byId.get(slots[s]!)).filter((t): t is Tile => !!t)
+      const pair =
+        tiles.length === 2 &&
+        (tiles.some((t) => isJoker(t, ok)) ||
+          (valueOf(tiles[0], ok).color === valueOf(tiles[1], ok).color && valueOf(tiles[0], ok).num === valueOf(tiles[1], ok).num))
+      if (pair || isMeld(tiles, ok)) idx.forEach((s) => (marks[s] = {}))
+      c = end + 1
+    }
+  }
+  return marks
 }
 
 export type DropKind = 'discard' | 'finish' | `meld:${number}`
@@ -235,8 +282,8 @@ export type DropKind = 'discard' | 'finish' | `meld:${number}`
 /** Compositor-only positioning for drag ghosts: moving left/top forced a layout every pointer move. */
 export const ghostTransform = (x: number, y: number) => `translate3d(${x}px, ${y}px, 0) translate(-50%, -70%) rotate(3deg)`
 
-// Long enough that a player who pauses before dragging still moves one tile, not the whole set.
-const LONG_PRESS_MS = 550
+// Short enough to feel instant on phones, long enough that a quick flick still moves a single tile.
+const LONG_PRESS_MS = 320
 
 export function OkeyRack({
   hand,
@@ -264,6 +311,7 @@ export function OkeyRack({
   onDropHover?: (kind: DropKind | null) => void
 }) {
   const byId = new Map(hand.map((t) => [t.id, t]))
+  const slotMarks = marks ?? meldMarks(rack.slots, byId, okey)
   const [over, setOver] = useState<number | null>(null)
   const [ghost, setGhost] = useState<{ ids: number[]; x: number; y: number } | null>(null)
   const [lifted, setLifted] = useState<number[] | null>(null)
@@ -306,9 +354,19 @@ export function OkeyRack({
 
   const onTileTap = (tile: Tile, i: number) => {
     if (suppressClick.current) return
+    if (rack.flipped.has(tile.id)) {
+      rack.toggleFlip(tile.id)
+      return
+    }
     const now = Date.now()
     if (lastTap.current?.id === tile.id && now - lastTap.current.t < 350) {
       lastTap.current = null
+      // Double-tapping a revealed okey turns it face down again instead of discarding it.
+      if (isJoker(tile, okey)) {
+        rack.setSelected(null)
+        rack.hide(tile.id)
+        return
+      }
       onDoubleTile?.(tile)
       return
     }
@@ -350,8 +408,23 @@ export function OkeyRack({
       setLifted(group)
       navigator.vibrate?.(15)
     }, LONG_PRESS_MS)
+    // Shift+drag on desktop grabs the whole per right away, without waiting for the long press.
+    const shiftGroup = e.shiftKey ? groupOf(id) : null
+    if (shiftGroup && shiftGroup.length > 1) {
+      clearTimeout(timer)
+      setLifted(shiftGroup)
+    }
     // Physical clicks on a MacBook trackpad nudge the cursor a few pixels; a small threshold turned them into tiny drags.
-    press.current = { id, x: e.clientX, y: e.clientY, moved: false, threshold: e.pointerType === 'touch' ? 6 : 12, group: null, timer }
+    press.current = {
+      id,
+      x: e.clientX,
+      y: e.clientY,
+      moved: false,
+      // A touch drag needs a little more travel so a resting thumb can finish the long press without starting a single-tile drag.
+      threshold: e.pointerType === 'touch' ? 10 : 12,
+      group: shiftGroup && shiftGroup.length > 1 ? shiftGroup : null,
+      timer,
+    }
     const move = (ev: globalThis.PointerEvent) => onPointerMove(ev)
     const up = (ev: globalThis.PointerEvent) => {
       cleanup()
@@ -438,18 +511,18 @@ export function OkeyRack({
     <div
       ref={rootRef}
       data-rack
-      className="okey-rack-wood mx-auto flex w-full max-w-[50rem] flex-col gap-1.5 rounded-xl px-1.5 pb-2 pt-2 sm:gap-2.5 sm:rounded-2xl sm:px-3 sm:pb-3 sm:pt-3"
+      className="okey-rack-wood mx-auto flex w-full max-w-[50rem] flex-col gap-1.5 rounded-md px-1 pb-1 pt-1.5 sm:gap-2.5 sm:rounded-xl sm:px-3 sm:pb-1.5 sm:pt-3"
       role="group"
       aria-label={`Istakan, ${rack.rows === 3 ? 'üç' : 'iki'} sıra`}
     >
       {Array.from({ length: rack.rows }, (_, row) => row).map((row) => (
-        <div key={row} className="relative grid grid-cols-14 gap-0.5 pb-1.5 sm:gap-1 sm:pb-2">
+        <div key={row} className="relative grid grid-cols-14 gap-px pb-1.5 sm:gap-1 sm:pb-2">
           <span aria-hidden="true" className="okey-rack-ledge pointer-events-none absolute -inset-x-0.5 bottom-0 h-1.5 rounded-sm sm:-inset-x-1 sm:h-2" />
           {rack.slots.slice(row * RACK_COLS, row * RACK_COLS + RACK_COLS).map((id, c) => {
             const i = row * RACK_COLS + c
             const tile = id != null ? byId.get(id) : undefined
             const canDropHere = rack.selected != null && id == null
-            const mark = marks?.[i]
+            const mark = slotMarks[i]
             return (
               <div
                 key={i}
@@ -457,7 +530,14 @@ export function OkeyRack({
                 className={cn('relative flex aspect-[3/4] items-end justify-center rounded-sm', over === i && 'bg-primary/30')}
               >
                 {mark && (
-                  <span aria-hidden="true" className="pointer-events-none absolute -bottom-1 -left-px -right-px z-10 h-1 bg-primary" />
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'pointer-events-none absolute -bottom-1 z-10 h-[3px] bg-primary shadow-[0_0_6px_var(--primary)] sm:-bottom-1.5',
+                      slotMarks[i - 1] && c > 0 ? '-left-px sm:-left-0.5' : 'left-[8%] rounded-l-full',
+                      slotMarks[i + 1] && c < RACK_COLS - 1 ? '-right-px sm:-right-0.5' : 'right-[8%] rounded-r-full',
+                    )}
+                  />
                 )}
                 {mark?.label && (
                   <span className="pointer-events-none absolute -top-1.5 left-0 z-20 rounded-sm bg-primary px-0.5 text-[8px] font-bold leading-tight tabular-nums text-primary-foreground sm:text-[9px]">
@@ -497,6 +577,12 @@ export function OkeyRack({
           })}
         </div>
       ))}
+      <span
+        aria-hidden="true"
+        className="okey-rack-plaque pointer-events-none mx-auto -mt-1 rounded-sm px-2 pl-[calc(0.5rem+0.4em)] text-[7px] font-extrabold leading-[1.6] tracking-[0.4em] sm:-mt-1.5 sm:px-3 sm:text-[9px]"
+      >
+        ALKANKA
+      </span>
       <ul data-ls-hide className="hidden flex-wrap items-center gap-1.5 pt-0.5 sm:flex" aria-label="Kontroller">
         {[
           { icon: Pointer, label: 'Dokun', text: 'seç' },
@@ -559,15 +645,13 @@ function RackTile({
           <button
             type="button"
             onClick={onClick}
-            aria-label="Ters çevrilmiş okey"
+            aria-label="Kapalı okey, açmak için dokun"
             aria-pressed={selected}
             className={cn(
-              'absolute inset-0 rounded-[3px] border border-primary/40 bg-wood shadow-[inset_0_-3px_0_rgb(0_0_0/0.2),0_2px_3px_rgb(0_0_0/0.3)] [backface-visibility:hidden] [transform:rotateY(180deg)] sm:rounded-md',
+              'okey-tile-face okey-tile-body okey-tile-hidden absolute inset-0 rounded-[13%/10%] [backface-visibility:hidden] [transform:rotateY(180deg)]',
               selected && 'ring-2 ring-primary',
             )}
-          >
-            <Sparkles className="mx-auto size-1/2 text-primary/70" aria-hidden="true" />
-          </button>
+          />
         </div>
       </div>
       {fresh && (
