@@ -1780,7 +1780,10 @@
 .ls-split .ls-tavla { aspect-ratio: 16 / 9.5 !important; gap: 0.375rem !important; }
 .ls-split .ls-tavla-bar { width: 1.75rem !important; padding-block: 0.375rem !important; }
 .ls-split .ls-tavla-tray { width: 2.5rem !important; }
-.ls-split .ls-tavla [data-drop] > span:last-child { font-size: 10px; letter-spacing: 0; }
+  .ls-split .ls-tavla [data-drop] > span:last-child { font-size: 10px; letter-spacing: 0; }
+  /* Phones sideways are wide enough to hit desktop breakpoints, so keep the dice at the mobile size. */
+  .ls-split .ls-tavla .die3d { --ds: 1.625rem !important; }
+  .ls-split [data-ls-stack] button { white-space: nowrap; }
 
 @keyframes dash-rise {
   from { opacity: 0; transform: translateY(8px); }
