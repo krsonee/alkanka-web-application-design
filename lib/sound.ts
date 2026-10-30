@@ -93,12 +93,29 @@ const SAMPLE_URLS = {
 type SampleName = keyof typeof SAMPLE_URLS
 const samples = new Map<SampleName, AudioBuffer>()
 
+/** Recordings come at very different levels (the cue clip peaks ~3x lower than the ball clack); bring every clip to the same peak. */
+function normalize(buf: AudioBuffer) {
+  let peak = 0
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c)
+    for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]))
+  }
+  if (peak > 0.01) {
+    const k = 0.9 / peak
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c)
+      for (let i = 0; i < d.length; i++) d[i] *= k
+    }
+  }
+  return buf
+}
+
 function loadSamples(ac: AudioContext) {
   for (const [name, url] of Object.entries(SAMPLE_URLS) as [SampleName, string][]) {
     fetch(url)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((data) => ac.decodeAudioData(data))
-      .then((buf) => samples.set(name, buf))
+      .then((buf) => samples.set(name, normalize(buf)))
       .catch(() => {
         // Browser can't decode this format: the synthesized version keeps playing instead.
       })
@@ -383,22 +400,22 @@ const SOUNDS: Record<SoundName, (v: number) => void> = {
   // The synthesized versions below only play until the recordings have decoded.
   poolCue: (v) => {
     const f = lim(v)
-    if (sample('poolCue', { vol: 0.35 + f * 0.55, offset: 5.06, dur: 0.3, attack: 0, lowpass: 2500 + f * 9000, roomy: true, rate: jitter(1, 0.02) })) return
+    if (sample('poolCue', { vol: 0.3 + f * 0.6, offset: 5.058, dur: 0.16, attack: 0, lowpass: 4000 + f * 12000, rate: jitter(1, 0.02) })) return
     knock({ modes: [820, 1680, 2750], decay: 0.035 + f * 0.015, vol: 0.12 + f * 0.16, click: 1500, body: 170 })
     noise({ dur: 0.012, freq: 1100, q: 0.9, vol: 0.05 + f * 0.06 })
   },
   // Phenolic resin balls: a crisp, very short high clack. Soft touches are quiet, the break is sharp.
   poolBall: (v) => {
     const f = Math.max(0.08, Math.min(1, v)) ** 0.85
-    if (sample('poolBall', { vol: 0.08 + f * 0.62, dur: 0.22, attack: 0, lowpass: 3000 + f * 13000, roomy: true, rate: jitter(1, 0.05) })) return
+    if (sample('poolBall', { vol: 0.06 + f * 0.5, dur: 0.22, attack: 0, lowpass: 6000 + f * 12000, rate: jitter(1, 0.04) })) return
     knock({ modes: [2950, 4350, 6150], decay: 0.022 + f * 0.02, vol: 0.05 + f * 0.24, click: 4200 })
     knock({ modes: [1450], decay: 0.018, vol: 0.02 + f * 0.05 })
   },
   // Ball into rubber cushion: a dull muted thud, no ring.
   poolRail: (v) => {
     const f = lim(v)
-    // The real clack slowed down and muffled reads as a ball sinking into rubber.
-    if (sample('poolBall', { vol: 0.12 + f * 0.4, dur: 0.2, attack: 0, rate: jitter(0.42, 0.05), lowpass: 700 + f * 600, roomy: true })) return
+    // The real clack, slightly lowered and heavily muffled, reads as a ball sinking into rubber.
+    if (sample('poolBall', { vol: 0.05 + f * 0.3, dur: 0.12, attack: 0, rate: jitter(0.78, 0.04), lowpass: 900 + f * 900 })) return
     knock({ modes: [165, 380], decay: 0.05, vol: 0.06 + f * 0.14, click: 700, body: 95 })
     noise({ dur: 0.03, freq: 450, q: 0.7, vol: 0.03 + f * 0.05, type: 'lowpass' })
   },

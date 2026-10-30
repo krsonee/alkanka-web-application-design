@@ -3,6 +3,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { RotateCw, Smartphone } from 'lucide-react'
 import type { GameApi } from './stake-gate'
+import { useBrand } from '../brand-context'
+import { useLogos } from '../logo-context'
+import { LOGO_CONCEPTS } from '../logos'
 
 const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
 const LANDSCAPE_QUERY = '(max-height: 540px) and (orientation: landscape)'
@@ -52,8 +55,11 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
     return () => window.removeEventListener('message', onMessage)
   }, [])
 
+  const { concept } = useBrand()
+  const customLogo = useLogos().brand?.logoUrl
+  const logo = customLogo || LOGO_CONCEPTS.find((l) => l.id === concept)?.image || '/images/logos/fist.png'
   const landscape = layout === 'landscape'
-  const src = `/games/bilardo.html?v=${landscape ? 'lan' : 'web'}&bet=${bet}&win=${win}`
+  const src = `/games/bilardo.html?v=${landscape ? 'lan' : 'web'}&bet=${bet}&win=${win}&logo=${encodeURIComponent(logo)}`
 
   return (
     <div className="relative">
@@ -82,6 +88,8 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
               ? 'sr-only'
               : 'aspect-[1280/684] w-full overflow-hidden rounded-xl border border-border bg-[#0a101b]'
         }
+        // The iframe can't read the notch insets itself, so the fullscreen wrapper keeps the table clear of them.
+        style={landscape ? { paddingInline: 'max(env(safe-area-inset-left), env(safe-area-inset-right))', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}
       >
         <iframe
           key={landscape ? 'lan' : 'web'}

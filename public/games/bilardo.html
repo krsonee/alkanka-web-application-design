@@ -321,20 +321,66 @@
   const rgb = n => RGB[n > 8 ? n - 8 : n];
   const $ = id => document.getElementById(id);
   const fit = $('fit'), device = $('device'), game = $('game'), cv = $('cv'), ctx = cv.getContext('2d'), slotEl = $('slot');
-  const Q = new URLSearchParams(location.search), BET = Math.max(0, +Q.get('bet') || 0), WIN = Math.max(0, +Q.get('win') || BET*2), OPN = 'ajdn';
+  const Q = new URLSearchParams(location.search), BET = Math.max(0, +Q.get('bet') || 0), WIN = Math.max(0, +Q.get('win') || BET*2);
+  const OPP_POOL = ['Baykuş','Aslan','Goril','Kartal','Şahin','Tilki','Bozkurt','Kaplan','Panter','Atmaca','Doğan','Leopar','Jaguar','Efe','Reis','Kaptan','Usta','Paşa','Dayı','Hoca','Mert','Deniz','Arda','Emre','Kaan','Berk','Onur','Selin','Ece','Zeynep','Burak','Cem'];
+  const OPN = OPP_POOL[Math.floor(Math.random()*OPP_POOL.length)];
   const fmt = n => n.toLocaleString('tr-TR');
   let view = Q.get('v') === 'lan' ? 'lan' : 'web', scale = 1, dpr = Math.min(2, window.devicePixelRatio || 1), geo = { ox:0, oy:0, s:1 }, tableImg = null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  (() => {
+    $('avOp').querySelector('span').textContent = OPN.slice(0, 2).toLocaleUpperCase('tr-TR');
+    const nameEl = document.querySelector('.pl.op .meta b'), lv = document.createElement('i');
+    lv.className = 'lv'; lv.textContent = String(8 + Math.floor(Math.random()*40));
+    nameEl.replaceChildren(lv, document.createTextNode(' ' + OPN));
+    const first = document.querySelector('#msgs .op b'); if (first) first.textContent = OPN;
+  })();
 
-  /* ---------- sound (synthesized, no files) ---------- */
+  /* ---------- table logo (site's real brand mark, passed by the parent page) ---------- */
+  let logoImg = null;
+  (() => {
+    const src = Q.get('logo') || '/images/logos/fist.png';
+    if (!/^(\/(?!\/)|https:\/\/)/.test(src)) return;
+    const im = new Image(); im.crossOrigin = 'anonymous';
+    im.onload = () => { logoImg = im; if (tableImg) tableImg = buildTable(); };
+    im.src = src;
+  })();
+
+  /* ---------- sound: real CC0 recordings, synthesized fallback until they decode ---------- */
   const Snd = (() => {
-    let ac = null, on = true, noise = null, budget = 0;
+    let ac = null, on = true, noise = null, budget = 0, out = null, room = null;
+    const clips = {}, URLS = { ball:'/sounds/pool-ball.mp3', cue:'/sounds/pool-cue.mp3', pocket:'/sounds/pool-pocket.mp3' };
+    const jit = (b, a) => b*(1 + (Math.random()*2 - 1)*a);
+    function normalize(b) {
+      let peak = 0;
+      for (let c = 0; c < b.numberOfChannels; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i])); }
+      if (peak > 0.01) { const k = 0.9/peak; for (let c = 0; c < b.numberOfChannels; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] *= k; } }
+      return b;
+    }
+    function decode(data) { return new Promise((ok, no) => { const p = ac.decodeAudioData(data, ok, no); if (p && p.then) p.then(ok, no); }); }
     function init() {
       if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
       const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
       ac = new C();
+      out = ac.createDynamicsCompressor(); out.threshold.value = -12; out.ratio.value = 4; out.connect(ac.destination);
+      room = ac.createGain(); room.connect(out);
+      const dl = ac.createDelay(), fb = ac.createGain(), wet = ac.createBiquadFilter();
+      dl.delayTime.value = 0.045; fb.gain.value = 0.22; wet.type = 'lowpass'; wet.frequency.value = 2200;
+      room.connect(dl); dl.connect(wet).connect(fb).connect(dl); wet.connect(out);
       const len = ac.sampleRate*0.5; noise = ac.createBuffer(1, len, ac.sampleRate);
       const d = noise.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random()*2 - 1;
+      for (const [k, u] of Object.entries(URLS))
+        fetch(u).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(decode).then(b => { clips[k] = normalize(b); }).catch(() => {});
+    }
+    function clip(name, o) {
+      const b = clips[name]; if (!b) return false;
+      const t = ac.currentTime, off = o.offset || 0, dur = Math.min(o.dur || b.duration - off, b.duration - off);
+      const s = ac.createBufferSource(), g = ac.createGain();
+      s.buffer = b; s.playbackRate.value = o.rate || 1;
+      g.gain.setValueAtTime(o.vol, t); g.gain.setValueAtTime(o.vol, t + dur*0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      let n = s;
+      if (o.lowpass) { const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.lowpass; lp.Q.value = 0.5; n = n.connect(lp); }
+      n.connect(g).connect(o.roomy ? room : out); s.start(t, off, dur + 0.05);
+      return true;
     }
     function env(g, t, peak, dec) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.002 + dec); }
     function tone(f, peak, dec, type = 'sine', f2 = 0, delay = 0) {
@@ -350,10 +396,19 @@
     const ok = () => on && ac && ac.state === 'running' && budget < 6;
     return {
       init, frame() { budget = 0; }, get on() { return on; }, set(v) { on = v; },
-      strike(p) { if (!ok()) return; budget++; const v = 0.3 + p*0.7; hiss(2400, 1.1, 0.55*v, 0.045); tone(240, 0.4*v, 0.07, 'triangle', 90); tone(1200, 0.12*v, 0.03); },
-      click(v) { if (!ok() || v < 0.03) return; budget++; v = Math.min(1, v); tone(2800 + Math.random()*600, 0.32*v, 0.035); tone(1650, 0.16*v, 0.05, 'triangle'); hiss(5200, 2, 0.22*v, 0.02); },
-      cush(v) { if (!ok() || v < 0.06) return; budget++; v = Math.min(1, v); tone(150, 0.42*v, 0.12, 'sine', 60); hiss(450, 0.8, 0.22*v, 0.07, 0, 'lowpass'); },
-      pocket() { if (!ok()) return; budget++; tone(880, 0.22, 0.04, 'triangle', 0, 0); tone(660, 0.18, 0.05, 'triangle', 0, 0.07); tone(500, 0.14, 0.06, 'triangle', 0, 0.15); tone(95, 0.5, 0.28, 'sine', 55, 0.04); hiss(320, 0.7, 0.2, 0.22, 0.04, 'lowpass'); },
+      strike(p) { if (!ok()) return; budget++; const f = clamp(p, 0, 1);
+        if (clip('cue', { vol: 0.3 + f*0.6, offset: 5.058, dur: 0.16, lowpass: 4000 + f*12000, rate: jit(1, 0.02) })) return;
+        const v = 0.3 + p*0.7; hiss(2400, 1.1, 0.55*v, 0.045); tone(240, 0.4*v, 0.07, 'triangle', 90); tone(1200, 0.12*v, 0.03); },
+      click(v) { if (!ok() || v < 0.03) return; budget++; v = Math.min(1, v);
+        const f = Math.max(0.08, v) ** 0.85;
+        if (clip('ball', { vol: 0.06 + f*0.5, dur: 0.22, lowpass: 6000 + f*12000, rate: jit(1, 0.04) })) return;
+        tone(2800 + Math.random()*600, 0.32*v, 0.035); tone(1650, 0.16*v, 0.05, 'triangle'); hiss(5200, 2, 0.22*v, 0.02); },
+      cush(v) { if (!ok() || v < 0.06) return; budget++; v = Math.min(1, v);
+        if (clip('ball', { vol: 0.05 + v*0.3, dur: 0.12, rate: jit(0.78, 0.04), lowpass: 900 + v*900 })) return;
+        tone(150, 0.42*v, 0.12, 'sine', 60); hiss(450, 0.8, 0.22*v, 0.07, 0, 'lowpass'); },
+      pocket() { if (!ok()) return; budget++;
+        if (clip('pocket', { vol: 0.55, roomy: true, rate: jit(1, 0.04) })) return;
+        tone(880, 0.22, 0.04, 'triangle', 0, 0); tone(660, 0.18, 0.05, 'triangle', 0, 0.07); tone(500, 0.14, 0.06, 'triangle', 0, 0.15); tone(95, 0.5, 0.28, 'sine', 55, 0.04); hiss(320, 0.7, 0.2, 0.22, 0.04, 'lowpass'); },
       tick(v) { if (!ok()) return; tone(900 + v*900, 0.05, 0.018, 'square'); },
       pop() { if (!ok()) return; tone(620, 0.12, 0.08, 'sine', 980); },
     };
@@ -652,11 +707,31 @@
 
     // watermark + strings
     g.save(); g.translate(R+W/2, R+H/2);
-    g.strokeStyle = 'rgba(8,48,22,.32)'; g.lineWidth = 2.5; g.beginPath(); g.arc(0, 0, 86, 0, Math.PI*2); g.stroke();
-    g.lineWidth = 1; g.beginPath(); g.arc(0, 0, 78, 0, Math.PI*2); g.stroke();
-    g.fillStyle = 'rgba(8,48,22,.34)'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.font = '800 30px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText('ALKANKA', 4, -6);
-    g.font = '700 11px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '5px'; g.fillText('8 BALL CLUB', 3, 22);
+    {
+      const cy = -22, r = 58;
+      const glow = g.createRadialGradient(0, cy, r*0.5, 0, cy, r*2.3);
+      glow.addColorStop(0, 'rgba(255,255,255,.08)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = glow; g.fillRect(-r*2.3, cy - r*2.3, r*4.6, r*4.6);
+      g.fillStyle = 'rgba(4,30,14,.35)'; g.beginPath(); g.arc(0, cy, r + 4, 0, Math.PI*2); g.fill();
+      g.strokeStyle = 'rgba(242,193,78,.75)'; g.lineWidth = 3; g.beginPath(); g.arc(0, cy, r + 6, 0, Math.PI*2); g.stroke();
+      g.strokeStyle = 'rgba(242,193,78,.35)'; g.lineWidth = 1.2; g.setLineDash([3, 6]); g.beginPath(); g.arc(0, cy, r + 15, 0, Math.PI*2); g.stroke(); g.setLineDash([]);
+      if (logoImg) {
+        g.save(); g.beginPath(); g.arc(0, cy, r, 0, Math.PI*2); g.clip();
+        const k = Math.max(r*2/logoImg.naturalWidth, r*2/logoImg.naturalHeight), lw = logoImg.naturalWidth*k, lh = logoImg.naturalHeight*k;
+        g.globalAlpha = 0.9; g.drawImage(logoImg, -lw/2, cy - lh/2, lw, lh);
+        const sh = g.createRadialGradient(0, cy - r*0.35, r*0.2, 0, cy, r);
+        sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.3)');
+        g.globalAlpha = 1; g.fillStyle = sh; g.fillRect(-r, cy - r, r*2, r*2);
+        g.restore();
+      }
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 6; g.shadowOffsetY = 2;
+      g.fillStyle = 'rgba(242,193,78,.85)'; g.font = '800 32px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '12px';
+      g.fillText('ALKANKA', 6, cy + r + 44);
+      g.shadowBlur = 0; g.shadowOffsetY = 0;
+      g.fillStyle = 'rgba(242,193,78,.5)'; g.font = '700 10px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '7px';
+      g.fillText('ALKANKA.COM', 4, cy + r + 72);
+    }
     g.restore();
     g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1; g.beginPath(); g.moveTo(R+W*0.25, R); g.lineTo(R+W*0.25, R+H); g.stroke();
     g.fillStyle = 'rgba(255,255,255,.22)'; g.beginPath(); g.arc(R+W*0.72, R+H/2, 2.2, 0, Math.PI*2); g.fill();
