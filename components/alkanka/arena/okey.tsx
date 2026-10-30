@@ -172,7 +172,7 @@ export function FeltBranding() {
 }
 
 export function TileBack({ className }: { className?: string }) {
-  return <span aria-hidden="true" className={cn('h-8 w-6 rounded-sm border border-primary/30 bg-wood shadow', className)} />
+  return <span aria-hidden="true" className={cn('tile-back-porcelain h-8 w-6 rounded-sm', className)} />
 }
 
 function deal() {
