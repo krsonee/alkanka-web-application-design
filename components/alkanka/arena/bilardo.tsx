@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
-import { LogOut, RotateCw, Smartphone } from 'lucide-react'
+import { ChevronDown, ChevronUp, LogOut, RotateCw, Smartphone } from 'lucide-react'
+import { DEFAULT_BOT_NAMES, pickBotNames } from '@/lib/games/bot-names'
 import { cn } from '@/lib/utils'
 import type { BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
@@ -13,6 +14,7 @@ import {
   BOT_LEVELS,
   FALLBACK_SEED,
   H,
+  HEAD_X,
   MAX_FOULS,
   POCKETS,
   POCKET_HOLE,
@@ -139,9 +141,9 @@ function drawBall(ctx: CanvasRenderingContext2D, b: { id: number; x: number; y: 
     surfaceSpot(ctx, x, y, r, roll.n, 0.14, '#c0392b')
   } else {
     const p = stripe ? roll.m : roll.n
-    if (surfaceSpot(ctx, x, y, r, p, 0.46, BALL_COLORS[0]) && scale > 0.6) {
+    if (surfaceSpot(ctx, x, y, r, p, 0.54, BALL_COLORS[0]) && scale > 0.6) {
       ctx.fillStyle = '#141414'
-      ctx.font = `bold ${Math.round(8 * scale)}px system-ui, sans-serif`
+      ctx.font = `800 ${Math.round(10 * scale)}px system-ui, sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillText(String(id), x + p[0] * r * 0.9, y + p[1] * r * 0.9 + 0.5)
@@ -168,13 +170,17 @@ function drawCue(ctx: CanvasRenderingContext2D, cx: number, cy: number, angle: n
   const uy = -Math.sin(angle)
   // Near a cushion the full stick would run off the canvas, so shorten it to stay visible.
   const room = distToCanvasEdge(cx, cy, ux, uy) - (R + back) - 6
-  const len = Math.max(70, Math.min(360, room))
+  const len = Math.max(70, Math.min(300, room))
   const sx = cx + ux * (R + back)
   const sy = cy + uy * (R + back)
   const ex = cx + ux * (R + back + len)
   const ey = cy + uy * (R + back + len)
   ctx.save()
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)'
+  // Keep the stick (and its shadow) inside the wooden frame so it never spills over the side panels.
+  ctx.beginPath()
+  ctx.roundRect(-RAIL + 4, -RAIL + 4, CW - 8, CH - 8, 22)
+  ctx.clip()
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'
   ctx.lineWidth = 8
   ctx.lineCap = 'round'
   ctx.beginPath()
@@ -188,8 +194,8 @@ function drawCue(ctx: CanvasRenderingContext2D, cx: number, cy: number, angle: n
   stick.addColorStop(0.06, '#c9a46a')
   stick.addColorStop(0.7, '#7a4a25')
   stick.addColorStop(0.72, '#e2b33c')
-  stick.addColorStop(0.73, '#3a2214')
-  stick.addColorStop(1, '#1d120a')
+  stick.addColorStop(0.73, '#5a3520')
+  stick.addColorStop(1, '#4a2b18')
   ctx.strokeStyle = stick
   ctx.lineWidth = 7
   ctx.beginPath()
@@ -277,17 +283,17 @@ function paintTable(dpr: number) {
   ctx.save()
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.globalAlpha = 0.1
+  ctx.globalAlpha = 0.05
   ctx.strokeStyle = gold
   ctx.lineWidth = 3
   ctx.beginPath()
   ctx.ellipse(W / 2, H / 2, 150, 70, 0, 0, Math.PI * 2)
   ctx.stroke()
-  ctx.globalAlpha = 0.13
+  ctx.globalAlpha = 0.06
   ctx.fillStyle = gold
   ctx.font = '900 64px system-ui, sans-serif'
   ctx.fillText('AL KANKA', W / 2, H / 2 - 4)
-  ctx.globalAlpha = 0.1
+  ctx.globalAlpha = 0.05
   ctx.font = '700 16px system-ui, sans-serif'
   ctx.fillText('alkanka.com', W / 2, H / 2 + 40)
   ctx.restore()
@@ -371,7 +377,21 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     if (m?.type !== 'aim' || typeof m.a !== 'number' || typeof m.x !== 'number' || typeof m.y !== 'number') return
     oppAim.current = { a: m.a, back: Math.max(0, Math.min(1, Number(m.back) || 0)), x: m.x, y: m.y, t: performance.now() }
   }
-  const oppName = remote ? remote.names[oppSeat] || 'Rakip' : 'Baykuş'
+  const [botName, setBotName] = useState(DEFAULT_BOT_NAMES[0])
+  useEffect(() => {
+    if (!remote) setBotName(pickBotNames(1)[0])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const oppName = remote ? remote.names[oppSeat] || 'Rakip' : botName
+  const [flash, setFlash] = useState<{ id: number; text: string; tone: 'gold' | 'red' | 'plain' } | null>(null)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const showFlash = (text: string, tone: 'gold' | 'red' | 'plain' = 'plain') => {
+    clearTimeout(flashTimer.current)
+    setFlash({ id: performance.now(), text, tone })
+    flashTimer.current = setTimeout(() => setFlash(null), 1500)
+  }
+  const shakeUntil = useRef(0)
+  const breakFx = useRef(false)
 
   const startBalls = () =>
     remote ? (remote.state.balls.length ? remote.state.balls.map(fromState) : rack(seeded(FALLBACK_SEED))) : rack(Math.random)
@@ -392,6 +412,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     angle: Math.PI,
     lastSeq: remote?.state.seq ?? 0,
     ballInHand: remote ? !!remote.state.ballInHand : false,
+    /** Set once the player confirms where the in-hand cue ball goes; reset on every shot. */
+    placeDone: false,
     fouls: (remote?.state.fouls ? [remote.state.fouls[0], remote.state.fouls[1]] : [0, 0]) as Fouls,
     breakChoice: (remote?.state.breakChoice ?? null) as number | null,
     call: null as number | null,
@@ -430,6 +452,14 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     setAimLocked(v)
   }
 
+  /** The cue ball is movable before the break (behind the head string) and after a foul (anywhere). */
+  const inHand = () => game.current.ballInHand || !game.current.broken
+  const placingNow = () => {
+    const g = game.current
+    return inHand() && !g.placeDone && g.turn === seat && g.breakChoice === null && !g.over
+  }
+  const placeAllowed = (x: number, y: number) => canPlaceCue(balls.current, x, y, !game.current.broken)
+
   const mustCallNow = () => {
     const g = game.current
     return g.turn === seat && g.broken && needsCall(balls.current, g.groups, seat)
@@ -442,8 +472,11 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     if (g.breakChoice === oppSeat) tail = `${oppName} karar veriyor: yeniden dizmek mi, masayı kabul mü?`
     else if (g.turn !== seat) tail = `${oppName} oynuyor.`
     else if (g.breakChoice === seat) tail = 'Açılış kurala aykırı: toplar yeniden dizilip sen açabilir ya da masayı olduğu gibi kabul edebilirsin.'
+    else if (!g.broken)
+      tail = g.placeDone
+        ? 'Açılış vuruşu sende: nişan al ve vur.'
+        : 'Açılış sende: beyazı kesikli çizginin soluna istediğin yere koy, sonra "Yerleştirdim"e bas.'
     else if (g.ballInHand) tail = IN_HAND_MSG
-    else if (!g.broken) tail = 'Açılış vuruşu sende.'
     else if (mustCallNow()) tail = 'Siyah sırası: önce masada bir delik seç, sonra vur.'
     else tail = 'Sıra sende.'
     return note ? `${note} ${tail}` : tail
@@ -459,7 +492,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       groups: [g.groups[0], g.groups[1]] as Groups,
       potted: [...g.pottedOrder],
       inTable: balls.current.filter((b) => !b.in).map((b) => b.id),
-      ballInHand: g.ballInHand && g.turn === seat,
+      ballInHand: inHand() && g.turn === seat,
+      placing: placingNow(),
       call: g.call,
       mustCall: mustCallNow(),
       fouls: [g.fouls[0], g.fouls[1]] as Fouls,
@@ -477,10 +511,13 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
 
   function applyRemote(st: BilardoState) {
     const g = game.current
+    const prevTurn = g.turn
+    const wasBusy = g.moving || g.pending || g.replay
     g.lastSeq = st.seq
     balls.current = st.balls.length ? st.balls.map(fromState) : rack(seeded(FALLBACK_SEED))
     g.groups = [st.groups[0], st.groups[1]]
     g.turn = st.turn
+    if (wasBusy && prevTurn !== st.turn) showFlash(st.turn === seat ? 'Sıra sende' : `Sıra: ${oppName}`, st.turn === seat ? 'gold' : 'plain')
     g.broken = st.broken ?? st.seq > 0
     g.ballInHand = !!st.ballInHand
     g.fouls = [st.fouls?.[0] ?? 0, st.fouls?.[1] ?? 0]
@@ -499,6 +536,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     if (g.moving || g.strike || g.over || balls.current[0].in) return
     g.shooter = g.turn
     g.ballInHand = false
+    g.placeDone = false
+    breakFx.current = false
     g.strike = { t0: performance.now(), input, back: 14 + input.pow * 80 }
     sync(g.turn === seat ? 'Toplar yuvarlanıyor...' : `${oppName} vurdu...`)
   }
@@ -572,6 +611,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     }
     g.turn = r.keep ? g.shooter : other(g.shooter)
     g.ballInHand = r.ballInHand
+    if (r.foul) showFlash(g.turn === seat ? 'Rakip faul yaptı · Beyaz sende' : 'Faul! · Beyaz rakipte', 'red')
+    else if (r.keep) showFlash(g.turn === seat ? 'Top girdi · Devam' : `${oppName} devam ediyor`, 'gold')
+    else showFlash(g.turn === seat ? 'Sıra sende' : `Sıra: ${oppName}`, g.turn === seat ? 'gold' : 'plain')
     sync(turnMessage(r.note))
     if (g.turn !== seat) setTimeout(botShot, 900)
   }
@@ -579,11 +621,23 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   function botShot() {
     const g = game.current
     if (g.over || g.turn === seat) return
+    if (!g.broken) {
+      // The bot also uses its break placement: a random spot behind the head string.
+      for (let i = 0; i < 12; i++) {
+        const x = HEAD_X - Math.random() * R * 6
+        const y = H / 2 + (Math.random() - 0.5) * H * 0.5
+        if (placeAllowed(x, y)) {
+          balls.current[0].x = x
+          balls.current[0].y = y
+          break
+        }
+      }
+    }
     const plan = planShot(balls.current, {
       seat: g.turn,
       groups: g.groups,
       broken: g.broken,
-      ballInHand: g.ballInHand,
+      ballInHand: g.ballInHand && g.broken,
       fouls: g.fouls,
       level: levelRef.current,
     })
@@ -617,6 +671,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       rolls.current.clear()
       g.groups = [null, null]
       g.broken = false
+      g.placeDone = false
       g.pottedOrder = []
     }
     sync(turnMessage(choice === 'rerack' ? 'Toplar yeniden dizildi.' : 'Masa kabul edildi.'))
@@ -645,7 +700,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     if (r) {
       g.pending = true
       g.failed = false
-      const placed = g.ballInHand ? { cueX: cue.x, cueY: cue.y } : {}
+      const placed = inHand() ? { cueX: cue.x, cueY: cue.y } : {}
       void r.send({ type: 'shot', ...input, ...placed, call: mustCallNow() ? g.call : null }).then((ok) => {
         if (ok) return
         g.failed = true
@@ -661,7 +716,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   useEffect(() => {
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = Math.min(window.devicePixelRatio || 1, 3)
     canvas.width = CW * dpr
     canvas.height = CH * dpr
     const { canvas: bg, gold } = paintTable(dpr)
@@ -676,6 +731,11 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const hooks: StepHooks = {
       hit: (_a, _b, rel) => {
         const now = performance.now()
+        if (!game.current.broken && !breakFx.current && rel > 4) {
+          breakFx.current = true
+          shakeUntil.current = now + 280
+          showFlash('Açılış!', 'gold')
+        }
         if (rel > 1.2 && now - lastHitSound > 45) {
           lastHitSound = now
           playSound('tile')
@@ -729,13 +789,34 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         if (isStill(list)) settle()
       }
 
+      const shaking = now < shakeUntil.current ? (shakeUntil.current - now) / 280 : 0
+      const ox = shaking ? (Math.random() - 0.5) * 6 * shaking : 0
+      const oy = shaking ? (Math.random() - 0.5) * 6 * shaking : 0
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(bg, 0, 0)
-      ctx.setTransform(dpr, 0, 0, dpr, RAIL * dpr, RAIL * dpr)
+      ctx.drawImage(bg, ox * dpr, oy * dpr)
+      ctx.setTransform(dpr, 0, 0, dpr, (RAIL + ox) * dpr, (RAIL + oy) * dpr)
 
       const cue = list[0]
       const aiming = canAim()
+      const placingPhase = aiming && placingNow()
+      const aimingShot = aiming && !placingPhase
+
+      if (aiming && !g.broken && !cue.in) {
+        ctx.save()
+        ctx.fillStyle = gold
+        ctx.globalAlpha = placingPhase ? 0.09 : 0.04
+        ctx.fillRect(0, 0, HEAD_X, H)
+        ctx.globalAlpha = placingPhase ? 0.85 : 0.4
+        ctx.strokeStyle = gold
+        ctx.lineWidth = 2
+        ctx.setLineDash([8, 6])
+        ctx.beginPath()
+        ctx.moveTo(HEAD_X, 0)
+        ctx.lineTo(HEAD_X, H)
+        ctx.stroke()
+        ctx.restore()
+      }
       const mustCall = aiming && mustCallNow()
       if (mustCall || g.call !== null) {
         const pulse = 0.5 + 0.5 * Math.sin(now / 220)
@@ -751,19 +832,21 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ctx.globalAlpha = 1
       }
 
-      if (g.ballInHand && aiming && !cue.in) {
+      if (inHand() && aiming && !cue.in) {
+        const pulse = placingPhase ? 0.5 + 0.5 * Math.sin(now / 200) : 0
         ctx.save()
         ctx.setLineDash([4, 5])
         ctx.strokeStyle = gold
         ctx.lineWidth = 2.5
         ctx.beginPath()
-        ctx.arc(cue.x, cue.y, R * 2.2, 0, Math.PI * 2)
+        ctx.arc(cue.x, cue.y, R * (2.2 + pulse * 0.4), 0, Math.PI * 2)
         ctx.stroke()
         ctx.restore()
       }
 
-      if (aiming || g.preview) {
-        if (g.preview) ctx.globalAlpha = 0.6
+      // The guide stays visible through the strike itself so the line never blinks out at full power.
+      if (aimingShot || g.preview || g.strike) {
+        if (g.preview || g.strike) ctx.globalAlpha = 0.6
         const hit = castGuide(list, cue, g.angle)
         const len = hit ? hit.t : 1400
         ctx.lineCap = 'round'
@@ -846,7 +929,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         drawCue(ctx, cue.x, cue.y, ang, g.strike.back * (1 - t * t))
       } else if (g.preview && !cue.in) {
         drawCue(ctx, cue.x, cue.y, g.angle, previewBack)
-      } else if (aiming && !cue.in) {
+      } else if (aimingShot && !cue.in) {
         drawCue(ctx, cue.x, cue.y, g.angle, 14 + pullRef.current * 80)
         const sent = lastAimSent
         if (
@@ -903,6 +986,22 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     if (Math.hypot(x - cue.x, y - cue.y) < R * 1.5) return
     game.current.angle = Math.atan2(y - cue.y, x - cue.x)
   }
+  /** Moves the in-hand cue ball, sliding it along the head string instead of refusing when dragged past it. */
+  const moveCueTo = (x: number, y: number) => {
+    const kitchen = !game.current.broken
+    const px = kitchen ? Math.min(x, HEAD_X) : x
+    if (placeAllowed(px, y)) {
+      balls.current[0].x = px
+      balls.current[0].y = y
+    }
+  }
+  const confirmPlacement = () => {
+    const g = game.current
+    if (!placingNow()) return
+    g.placeDone = true
+    playSound('tile')
+    sync(turnMessage(''))
+  }
   const placing = useRef<number | null>(null)
   const drag = useRef<{ id: number; x: number; y: number; moved: boolean; pull?: { x: number; y: number } } | null>(null)
 
@@ -922,8 +1021,10 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     }
     e.currentTarget.setPointerCapture(e.pointerId)
     const cue = balls.current[0]
-    if (g.ballInHand && Math.hypot(pt.x - cue.x, pt.y - cue.y) < R * 3) {
+    // Placement step: any touch on the table moves the cue ball there; afterwards it can still be dragged from close by.
+    if (placingNow() || (inHand() && Math.hypot(pt.x - cue.x, pt.y - cue.y) < R * 3)) {
       placing.current = e.pointerId
+      moveCueTo(pt.x, pt.y)
       return
     }
     // With the aim locked, dragging on the table pulls the cue back like a real stroke; release to shoot.
@@ -939,10 +1040,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     if (!canAim()) return
     if (placing.current === e.pointerId) {
       const pt = tablePoint(e)
-      if (canPlaceCue(balls.current, pt.x, pt.y)) {
-        balls.current[0].x = pt.x
-        balls.current[0].y = pt.y
-      }
+      moveCueTo(pt.x, pt.y)
       return
     }
     const d = drag.current
@@ -1044,7 +1142,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   const choosing = ui.breakChoice === seat && !ui.over && !ui.busy
   const hint = !yourTurn || choosing
     ? null
-    : ui.mustCall && ui.call === null
+    : ui.placing
+      ? ['Beyazı yerleştir: masada istediğin yere dokun ya da sürükle', 'Beyazı yerleştir']
+      : ui.mustCall && ui.call === null
       ? ['Siyah için bir deliğe dokun', 'Delik seç']
       : ui.ballInHand
         ? ['Beyazı sürükle · Gücü çekip bırak', 'Beyazı koy']
@@ -1070,7 +1170,30 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           yourTurn ? 'cursor-crosshair' : 'cursor-wait',
         )}
       />
-      <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="bottom" />
+      <TableBrand className="rounded-3xl" center={false} corners={false} jako={false} plaque="left" />
+      {flash && (
+        <span
+          key={flash.id}
+          role="status"
+          className={cn(
+            'pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 animate-in fade-in zoom-in-90 whitespace-nowrap rounded-full px-4 py-1.5 font-display text-sm font-extrabold uppercase tracking-wider shadow-xl duration-300 sm:text-base',
+            flash.tone === 'gold' && 'bg-primary text-primary-foreground',
+            flash.tone === 'red' && 'bg-destructive text-destructive-foreground',
+            flash.tone === 'plain' && 'bg-card/90 text-foreground backdrop-blur-sm',
+          )}
+        >
+          {flash.text}
+        </span>
+      )}
+      {ui.placing && yourTurn && (
+        <button
+          type="button"
+          onClick={confirmPlacement}
+          className="absolute bottom-[12%] left-[13%] -translate-x-1/2 rounded-full bg-primary px-4 py-2 text-xs font-extrabold uppercase tracking-wider text-primary-foreground shadow-xl outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring active:scale-95 sm:text-sm"
+        >
+          Yerleştirdim
+        </button>
+      )}
       {hint && (
         <span
           className={cn(
@@ -1114,7 +1237,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   if (landscape) {
     return (
       <div className="fixed inset-0 z-50 flex items-stretch gap-2 bg-background py-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
-        <PowerBar vertical disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+        <PowerBar vertical disabled={!yourTurn || ui.placing} preset={keyPower} pullRef={pullRef} onRelease={fire} />
         <div className="relative flex min-w-0 flex-1 items-center justify-center">
           {canvasEl}
           {spinOpen && yourTurn && (
@@ -1182,8 +1305,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           <p className="line-clamp-3 text-[11px] font-semibold leading-snug text-foreground" aria-live="polite">
             {ui.message}
           </p>
-          <SpinButton value={spin} open={spinOpen && yourTurn} onToggle={() => setSpinOpen((o) => !o)} disabled={!yourTurn} />
-          <AimStrip vertical disabled={!yourTurn} onRotate={rotateAim} />
+          <SpinButton labeled value={spin} open={spinOpen && yourTurn} onToggle={() => setSpinOpen((o) => !o)} disabled={!yourTurn} />
+          <AimStrip vertical disabled={!yourTurn || ui.placing} onRotate={rotateAim} />
         </aside>
       </div>
     )
@@ -1283,11 +1406,11 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         >
           <div className="flex items-center gap-2 sm:gap-3">
             <SpinButton value={spin} open={spinOpen && yourTurn} onToggle={() => setSpinOpen((o) => !o)} disabled={!yourTurn} />
-            <PowerBar disabled={!yourTurn} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+            <PowerBar disabled={!yourTurn || ui.placing} preset={keyPower} pullRef={pullRef} onRelease={fire} />
             <AimStrip compact disabled={!yourTurn} onRotate={rotateAim} />
             <button
               type="button"
-              disabled={!yourTurn}
+              disabled={!yourTurn || ui.placing}
               onClick={() => fire(keyPowerRef.current)}
               className="hidden h-12 shrink-0 flex-col items-center justify-center rounded-xl bg-primary px-6 text-primary-foreground shadow-md outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-40 disabled:hover:brightness-100 md:flex"
             >
@@ -1377,7 +1500,19 @@ function AimStrip({
           transform: vertical ? `translateY(${offset}px)` : `translateX(${offset}px)`,
         }}
       />
-      <span className="relative rounded-md bg-secondary px-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">İnce nişan</span>
+      {vertical ? (
+        <span className="relative flex flex-col items-center gap-1 rounded-lg border border-border bg-card px-2 py-1.5 text-muted-foreground shadow-md">
+          <ChevronUp className="size-4" aria-hidden="true" />
+          <span className="text-[10px] font-bold uppercase leading-tight tracking-wider text-foreground">
+            İnce
+            <br />
+            nişan
+          </span>
+          <ChevronDown className="size-4" aria-hidden="true" />
+        </span>
+      ) : (
+        <span className="relative rounded-md bg-secondary px-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">İnce nişan</span>
+      )}
     </div>
   )
 }
@@ -1385,7 +1520,7 @@ function AimStrip({
 function BallChip({ n }: { n: number }) {
   return (
     <span
-      className="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-tile-black shadow-sm"
+      className="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-tile-black shadow-sm ring-1 ring-foreground/40"
       style={{ background: n > 8 ? `linear-gradient(${BALL_COLORS[0]} 25%, ${BALL_COLORS[n - 8]} 25% 75%, ${BALL_COLORS[0]} 75%)` : BALL_COLORS[n] }}
       aria-label={`${n} numaralı top`}
     >
@@ -1469,7 +1604,9 @@ function PowerBar({
           <span className="text-[10px] font-bold uppercase text-muted-foreground [writing-mode:vertical-rl]">
             {pulling ? (pull < 0.05 ? 'İptal' : 'Bırak') : 'Aşağı çek'}
           </span>
-          <span className="font-display text-sm font-extrabold tabular-nums text-foreground">{Math.round(shown * 100)}</span>
+          <span className="rounded-md bg-card px-1 py-0.5 font-display text-xs font-extrabold tabular-nums text-foreground shadow-md ring-1 ring-border">
+            %{Math.round(shown * 100)}
+          </span>
         </div>
       </div>
     )
@@ -1525,7 +1662,20 @@ function spinLabel({ x, y }: SpinInput) {
 }
 
 /** Cue-ball button in the shot dock; toggles the contact-point picker inline below the dock so it never covers the table. */
-function SpinButton({ value, open, onToggle, disabled }: { value: SpinInput; open: boolean; onToggle: () => void; disabled: boolean }) {
+function SpinButton({
+  value,
+  open,
+  onToggle,
+  disabled,
+  labeled,
+}: {
+  value: SpinInput
+  open: boolean
+  onToggle: () => void
+  disabled: boolean
+  /** Always show the "Falso" caption (narrow side panels), not only from the sm breakpoint. */
+  labeled?: boolean
+}) {
   return (
     <div className="relative shrink-0">
       <button
@@ -1536,6 +1686,7 @@ function SpinButton({ value, open, onToggle, disabled }: { value: SpinInput; ope
         onClick={onToggle}
         className={cn(
           'flex h-12 items-center gap-2.5 rounded-xl bg-secondary px-2 outline-none transition-colors hover:bg-secondary/70 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 sm:pr-3',
+          labeled && 'w-full pr-3',
           open && 'ring-2 ring-primary',
         )}
       >
@@ -1546,7 +1697,7 @@ function SpinButton({ value, open, onToggle, disabled }: { value: SpinInput; ope
             style={{ left: `${50 + value.x * 50}%`, top: `${50 - value.y * 50}%` }}
           />
         </span>
-        <span className="hidden flex-col items-start sm:flex">
+        <span className={cn('flex-col items-start', labeled ? 'flex' : 'hidden sm:flex')}>
           <span className="text-[10px] font-bold uppercase leading-none tracking-wider text-muted-foreground">Falso</span>
           <span className="mt-1 text-xs font-semibold leading-none text-foreground">{spinLabel(value)}</span>
         </span>

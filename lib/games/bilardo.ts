@@ -17,8 +17,10 @@ export const CORNER_MOUTH = 29
 export const SIDE_MOUTH = 22
 export const MAX_SPEED = 42
 const SUB = 8
-// 0.99 per frame, split across the substeps.
-const FRICTION = 0.9987444968227265
+// ~0.986 per frame, split across the substeps, so a hard break settles in a few seconds instead of gliding like ice.
+const FRICTION = Math.pow(0.986, 1 / SUB)
+/** Head string: on the break the cue ball may be placed anywhere behind (left of) this line. */
+export const HEAD_X = W * 0.25
 const FOLLOW_GAIN = 0.62
 const ENGLISH_GAIN = 0.42
 const RAIL_BOUNCE = 0.88
@@ -255,8 +257,9 @@ export function simulate(balls: Ball[], shot: ShotInput): ShotEvents {
   return ev
 }
 
-export function canPlaceCue(balls: Ball[], x: number, y: number) {
+export function canPlaceCue(balls: Ball[], x: number, y: number, kitchen = false) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false
+  if (kitchen && x > HEAD_X) return false
   if (x < R * 1.5 || x > W - R * 1.5 || y < R * 1.5 || y > H - R * 1.5) return false
   if (POCKETS.some(([px, py], i) => dist(px - x, py - y) < POCKET_HOLE[i] + R)) return false
   return balls.every((b) => b.id === 0 || b.in || dist(b.x - x, b.y - y) >= R * 2.1)
