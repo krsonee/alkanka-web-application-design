@@ -38,6 +38,10 @@ export type SoundName =
   | 'whistle'
   | 'whistleEnd'
   | 'cheer'
+  | 'poolCue'
+  | 'poolBall'
+  | 'poolRail'
+  | 'poolPocket'
 
 const MUTE_KEY = 'alkanka:sound-muted'
 const listeners = new Set<() => void>()
@@ -359,6 +363,31 @@ const SOUNDS: Record<SoundName, (v: number) => void> = {
     if (!a && !b) crowd(0, 2.4, 0.3 * vol)
   },
 
+  // Leather tip on a resin ball: a short, rounded "tok" with a hint of the ash shaft behind it.
+  poolCue: (v) => {
+    const f = lim(v)
+    knock({ modes: [820, 1680, 2750], decay: 0.035 + f * 0.015, vol: 0.12 + f * 0.16, click: 1500, body: 170 })
+    noise({ dur: 0.012, freq: 1100, q: 0.9, vol: 0.05 + f * 0.06 })
+  },
+  // Phenolic resin balls: a crisp, very short high clack. Soft touches are quiet, the break is sharp.
+  poolBall: (v) => {
+    const f = Math.max(0.08, Math.min(1, v)) ** 0.85
+    knock({ modes: [2950, 4350, 6150], decay: 0.022 + f * 0.02, vol: 0.05 + f * 0.24, click: 4200 })
+    knock({ modes: [1450], decay: 0.018, vol: 0.02 + f * 0.05 })
+  },
+  // Ball into rubber cushion: a dull muted thud, no ring.
+  poolRail: (v) => {
+    const f = lim(v)
+    knock({ modes: [165, 380], decay: 0.05, vol: 0.06 + f * 0.14, click: 700, body: 95 })
+    noise({ dur: 0.03, freq: 450, q: 0.7, vol: 0.03 + f * 0.05, type: 'lowpass' })
+  },
+  // Ball drops past the leather liner: a low hollow thunk, then a light knock as it settles.
+  poolPocket: (v) => {
+    const f = lim(v)
+    knock({ modes: [118, 270, 540], decay: 0.12, vol: 0.14 + f * 0.12, click: 900, body: 82 })
+    knock({ at: 0.09 + Math.random() * 0.04, modes: [2500, 3700], decay: 0.02, vol: 0.035, click: 3800 })
+  },
+
   chip: () => {
     noise({ dur: 0.035, freq: 3200, q: 5, vol: 0.5 })
     noise({ at: 0.04, dur: 0.03, freq: 2800, q: 5, vol: 0.3 })
@@ -463,7 +492,9 @@ export function playSound(name: SoundName, intensity = 1) {
   if (muted || typeof window === 'undefined') return
   // Collapse bursts (e.g. several state updates arriving in one poll) into one sound.
   const now = performance.now()
-  if (now - (lastPlayed.get(name) ?? 0) < 120) return
+  // Ball clacks come in quick real clusters (the break), so they only collapse true duplicates.
+  const gap = name === 'poolBall' || name === 'poolRail' ? 20 : 120
+  if (now - (lastPlayed.get(name) ?? 0) < gap) return
   lastPlayed.set(name, now)
   try {
     SOUNDS[name](intensity)

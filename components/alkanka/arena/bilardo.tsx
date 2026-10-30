@@ -722,6 +722,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const { canvas: bg, gold } = paintTable(dpr)
     let raf = 0
     let lastHitSound = 0
+    let lastRailSound = 0
     let lastAimSent = { t: 0, a: 0, back: 0, x: 0, y: 0 }
     const rollOf = (id: number) => {
       let r = rolls.current.get(id)
@@ -736,13 +737,20 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           shakeUntil.current = now + 280
           showFlash('Açılış!', 'gold')
         }
-        if (rel > 1.2 && now - lastHitSound > 45) {
+        if (rel > 0.6 && now - lastHitSound > 25) {
           lastHitSound = now
-          playSound('tile')
+          playSound('poolBall', Math.min(1, rel / 9))
+        }
+      },
+      rail: (_b, speed) => {
+        const t = performance.now()
+        if (speed > 1 && t - lastRailSound > 40) {
+          lastRailSound = t
+          playSound('poolRail', Math.min(1, speed / 10))
         }
       },
       pot: (b, p) => {
-        playSound('pocket')
+        playSound('poolPocket', Math.min(1, Math.hypot(b.vx, b.vy) / 8))
         drops.current.push({ id: b.id, x: b.x, y: b.y, p, t0: performance.now() })
         if (b.id !== 0 && !game.current.pottedOrder.includes(b.id)) game.current.pottedOrder.push(b.id)
       },
@@ -767,11 +775,11 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         }
       }
       if (g.strike && now - g.strike.t0 >= STRIKE_MS) {
+        playSound('poolCue', g.strike.input.pow)
         g.spin = startShot(list, g.strike.input)
         g.ev = newEvents()
         g.strike = null
         g.moving = true
-        playSound('tile')
       }
       if (g.moving) {
         const prev = list.map((b) => [b.x, b.y])
@@ -1237,8 +1245,10 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   if (landscape) {
     return (
       <div className="fixed inset-0 z-50 flex items-stretch gap-2 bg-background py-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
-        <PowerBar vertical disabled={!yourTurn || ui.placing} preset={keyPower} pullRef={pullRef} onRelease={fire} />
-        <div className="relative flex min-w-0 flex-1 items-center justify-center">
+        <div className="relative flex min-w-0 flex-1 items-center justify-center gap-2">
+          <div className="flex shrink-0 self-stretch">
+            <PowerBar vertical disabled={!yourTurn || ui.placing} preset={keyPower} pullRef={pullRef} onRelease={fire} />
+          </div>
           {canvasEl}
           {spinOpen && yourTurn && (
             <div className="absolute bottom-0 right-0 z-10 rounded-2xl border border-border bg-card p-2 shadow-2xl">
