@@ -996,7 +996,9 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
           )}
           {data.status !== 'bitti' && <VoiceChat key={`v-${id}`} roomId={id} />}
           <SoundToggle />
-          <MobileTableChat key={`m-${id}`} tableId={id} />
+          {!((data.game === 'okey' || data.game === 'okey101') && data.status === 'oynaniyor') && (
+            <MobileTableChat key={`m-${id}`} tableId={id} />
+          )}
         </div>
       </div>
 

@@ -2308,3 +2308,35 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .ls-split .o101 .o1-mz2 { top: 21.5%; width: 40%; } .ls-split .o101 .o1-mz0 { top: 42%; width: 52%; }
 .ls-split .o101 .o1-mz3 { left: 10.5%; top: 20%; width: 18.5%; } .ls-split .o101 .o1-mz1 { right: 10.5%; top: 20%; width: 18.5%; }
 .ls-split .o101 .okt-rack { left: 3%; right: 3%; bottom: 2%; height: 39.5%; }
+
+/* Okey deck: same porcelain as the tiles instead of a dark green block */
+.tile-back-porcelain {
+  position: relative;
+  display: inline-block;
+  background: linear-gradient(180deg, #ffffff 0%, var(--okt-porcelain) 55%, #ece6d9 100%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.9), 0 2px 0 #cbbfa8, 0 4px 8px rgb(0 0 0 / 0.35);
+}
+.tile-back-porcelain::after {
+  content: '';
+  position: absolute;
+  inset: 16%;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgb(184 134 46 / 0.35);
+}
+
+.o1-card { position: relative; }
+.o1-x {
+  position: absolute; top: calc(var(--u) * .7); right: calc(var(--u) * .7);
+  display: flex; align-items: center; justify-content: center;
+  width: calc(var(--u) * 2.6); height: calc(var(--u) * 2.6); min-width: 28px; min-height: 28px;
+  border-radius: 999px; color: rgb(255 255 255 / .7); background: rgb(255 255 255 / .06);
+}
+.o1-x:hover { color: #fff; background: rgb(255 255 255 / .14); }
+.o1-x svg { width: 55%; height: 55%; }
+
+/* 101 table chat button: free corner per layout */
+.o101 .table-chat-btn { left: 1.8%; top: 4.5%; }
+@media (min-width: 640px) {
+  .o101 .table-chat-btn { left: auto; right: 1.8%; top: 17%; }
+}
+.ls-split .o101 .table-chat-btn { left: auto; right: 1.6%; top: 19%; }

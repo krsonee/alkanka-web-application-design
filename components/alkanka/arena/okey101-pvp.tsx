@@ -22,6 +22,7 @@ import {
 import type { Remote } from './remote'
 import { TileFace } from './okey'
 import { TableBrand } from './table-brand'
+import { MobileTableChat } from './mobile-table-chat'
 import { isJoker, okeyFrom, sortHand, type Tile } from './okey-engine'
 import { layoutGroups, MockTile, OkeyRack, RACK_COLS, useRack, type SlotMark } from './okey-rack'
 
@@ -316,6 +317,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     <div data-game-table>
       <div className="okt o101 font-sans">
         <TableBrand center={false} plaque={false} corners={false} jako={false} />
+        {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
         <div className="okt-logo" aria-hidden="true">
           ALKANKA · 101
         </div>
@@ -465,6 +467,9 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         {handPopup && (
           <div className="o1-res" role="status">
             <div className="o1-card">
+              <button type="button" className="o1-x" onClick={() => setHandPopup(null)} aria-label="Kapat">
+                <X aria-hidden="true" />
+              </button>
               <div className="o1-k">{handPopup.hand}. el bitti</div>
               <div className="o1-h">
                 <div className="okt-av" aria-hidden="true">

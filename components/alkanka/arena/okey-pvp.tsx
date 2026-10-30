@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ArrowDownToLine, Bot, Eye, Layers, Trophy } from 'lucide-react'
+import { ArrowDownToLine, Bot, Eye, Layers, Trophy, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canShowIndicator, isOkeyScored, type OkeyLast, type OkeyReveal, type OkeyState } from '@/lib/pvp/rules'
 import type { Remote } from './remote'
@@ -11,6 +11,7 @@ import { OkeyRack, useRack } from './okey-rack'
 import { findWinningDiscard, isJoker, okeyFrom, type Okey as OkeyValue, type Tile } from './okey-engine'
 import { TableBrand } from './table-brand'
 import { OkeyWinOverlay } from './okey-win'
+import { MobileTableChat } from './mobile-table-chat'
 
 type OkeyView = OkeyState & { deckCount: number; handCounts: number[]; oppSeat: number; seats: number; team: boolean; bots: number[]; last: OkeyLast[] }
 
@@ -30,6 +31,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   const [fresh, setFresh] = useState<number | null>(null)
   // Start with the hand already on screen at load as "seen", so a refresh doesn't replay an old finish.
   const [seenHand, setSeenHand] = useState<number | undefined>(() => s.reveal?.hand)
+  const [closedReveal, setClosedReveal] = useState<number | null>(null)
   const idsKey = hand.map((t) => t.id).join(',')
   if (idsKey !== knownIds) {
     const prev = new Set(knownIds.split(',').filter(Boolean).map(Number))
@@ -97,8 +99,14 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
       {scored && <ScoreBoard s={s} n={n} nameOf={nameOf} seat={spectator ? -1 : seat} />}
-      {s.reveal && (
-        <HandReveal reveal={s.reveal} okey={s.reveal.indicator ? okeyFrom(s.reveal.indicator) : okey} nameOf={nameOf} scored={scored} />
+      {s.reveal && closedReveal !== s.reveal.hand && (
+        <HandReveal
+          reveal={s.reveal}
+          okey={s.reveal.indicator ? okeyFrom(s.reveal.indicator) : okey}
+          nameOf={nameOf}
+          scored={scored}
+          onClose={() => setClosedReveal(s.reveal?.hand ?? null)}
+        />
       )}
       {showWin && (
         <OkeyWinOverlay
@@ -122,9 +130,10 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Oyuncuların elleri gizli, atılan taşlar canlı görünür.
         </p>
       )}
-      <div data-ls-main className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl sm:p-3">
+      <div data-ls-main className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl max-sm:-mx-2 max-sm:p-1 sm:p-3">
         <div className="relative flex min-h-72 flex-col justify-between gap-3 rounded-xl bg-felt p-2 sm:min-h-96 sm:p-5">
           <TableBrand />
+          {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-15">
             <BrandLogo />
           </div>
@@ -282,21 +291,47 @@ function ScoreBoard({ s, n, nameOf, seat }: { s: OkeyView; n: number; nameOf: (i
   )
 }
 
-function HandReveal({ reveal, okey, nameOf, scored }: { reveal: OkeyReveal; okey: OkeyValue; nameOf: (i: number) => string; scored: boolean }) {
+function HandReveal({
+  reveal,
+  okey,
+  nameOf,
+  scored,
+  onClose,
+}: {
+  reveal: OkeyReveal
+  okey: OkeyValue
+  nameOf: (i: number) => string
+  scored: boolean
+  onClose: () => void
+}) {
+  const close = (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="Biten eli kapat"
+      className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+    >
+      <X className="size-4" aria-hidden="true" />
+    </button>
+  )
   if (reveal.kind === 'deste') {
     return (
-      <p className="rounded-2xl border border-border bg-card px-3 py-2 text-sm text-muted-foreground" aria-live="polite">
-        {reveal.hand}. el: deste bitti, kimse bitiremedi. El puansız geçti.
-      </p>
+      <div className="flex items-center gap-2 rounded-2xl border border-border bg-card py-1 pl-3 pr-1 text-sm text-muted-foreground" aria-live="polite">
+        <p className="flex-1">{reveal.hand}. el: deste bitti, kimse bitiremedi. El puansız geçti.</p>
+        {close}
+      </div>
     )
   }
   const tags = [reveal.kind === 'cift' ? 'Çiftten' : 'Seriden', reveal.okeyFinish ? 'okey atarak' : null].filter(Boolean).join(', ')
   return (
     <section aria-label="Biten el" className="flex flex-col gap-2 rounded-2xl border border-primary/40 bg-card p-3" aria-live="polite">
-      <p className="text-sm font-semibold text-foreground">
-        {reveal.hand}. eli {nameOf(reveal.seat)} bitirdi · {tags}
-        {scored && <span className="text-primary"> · rakipler −{reveal.penalty}</span>}
-      </p>
+      <div className="flex items-start gap-2">
+        <p className="flex-1 text-sm font-semibold text-foreground">
+          {reveal.hand}. eli {nameOf(reveal.seat)} bitirdi · {tags}
+          {scored && <span className="text-primary"> · rakipler −{reveal.penalty}</span>}
+        </p>
+        {close}
+      </div>
       <div className="flex flex-wrap gap-1">
         {reveal.tiles.map((t) => (
           <TileFace key={t.id} tile={t} okey={okey} size="sm" />

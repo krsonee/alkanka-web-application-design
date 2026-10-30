@@ -22,7 +22,8 @@ const fetcher = chatFetcher
  * message toasts and rising emoji reactions over the felt, and a compact quick-chat panel.
  * Must be rendered inside a `relative` container (the table section).
  */
-export function MobileTableChat({ tableId }: { tableId: string }) {
+export function MobileTableChat({ tableId, placement = 'header' }: { tableId: string; placement?: 'header' | 'table' }) {
+  const onTable = placement === 'table'
   const { member, requireLogin } = usePoints()
   const idle = useIdle()
   const { data, mutate } = useSWR(`/api/tables/${tableId}/chat`, fetcher, { refreshInterval: idle ? 20000 : 5000 })
@@ -114,7 +115,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
   const recent = messages.slice(-6)
 
   return (
-    <div className="lg:hidden">
+    <div className={onTable ? 'table-chat-anchor contents' : 'lg:hidden'}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -123,6 +124,7 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
         aria-label={unread > 0 ? `Masa sohbeti, ${unread} yeni mesaj` : 'Masa sohbeti'}
         className={cn(
           'relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-colors',
+          onTable && 'table-chat-btn pointer-events-auto absolute left-2 top-2 z-30 shadow-lg backdrop-blur-md',
           open ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/40 bg-background/70 text-foreground',
         )}
       >
@@ -135,7 +137,10 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
         )}
       </button>
 
-      <div className="pointer-events-none absolute inset-x-3 top-28 z-20 flex flex-col items-start gap-1.5" aria-hidden="true">
+      <div
+        className={cn('pointer-events-none absolute inset-x-3 z-20 flex flex-col items-start gap-1.5', onTable ? 'top-12' : 'top-28')}
+        aria-hidden="true"
+      >
         {toasts.map((t) => (
           <p
             key={t.id}
@@ -166,13 +171,16 @@ export function MobileTableChat({ tableId }: { tableId: string }) {
             tabIndex={-1}
             aria-label="Sohbeti kapat"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 z-30 cursor-default rounded-3xl bg-background/30"
+            className={cn('pointer-events-auto absolute inset-0 z-30 cursor-default bg-background/30', onTable ? 'rounded-[inherit]' : 'rounded-3xl')}
           />
           <div
             id={`quick-chat-${tableId}`}
             role="dialog"
             aria-label="Masa sohbeti"
-            className="animate-in fade-in slide-in-from-bottom-4 absolute inset-x-2 bottom-2 z-40 flex max-h-[50%] flex-col overflow-hidden rounded-2xl border border-primary/40 bg-card/95 shadow-2xl backdrop-blur-md duration-200"
+            className={cn(
+              'animate-in fade-in slide-in-from-bottom-4 pointer-events-auto absolute inset-x-2 bottom-2 z-40 flex flex-col rounded-2xl border border-primary/40 bg-card/95 shadow-2xl backdrop-blur-md duration-200',
+              onTable ? 'max-h-[calc(100%-1rem)] overflow-y-auto sm:left-auto sm:right-3 sm:w-80' : 'max-h-[50%] overflow-hidden',
+            )}
           >
             <div className="flex items-center gap-2 border-b border-border px-3 py-2">
               <span className="size-1.5 rounded-full bg-live animate-glow" aria-hidden="true" />
