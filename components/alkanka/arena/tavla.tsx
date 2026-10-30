@@ -82,6 +82,39 @@ export function Die({
   )
 }
 
+const FACE_ROTATION: Record<number, [number, number]> = {
+  1: [0, 0],
+  2: [-90, 0],
+  3: [0, -90],
+  4: [0, 90],
+  5: [90, 0],
+  6: [0, 180],
+}
+
+/** A real six-sided cube; `toss` throws it in from the roller's side while it tumbles onto `value`. */
+function Die3D({ value, used, toss, delay = 0 }: { value: number; used?: boolean; toss?: 'left' | 'right'; delay?: number }) {
+  const [rx, ry] = FACE_ROTATION[value] ?? [0, 0]
+  return (
+    <span
+      role="img"
+      aria-label={`Zar ${value}${used ? ', oynandı' : ''}`}
+      className={cn('die3d [--ds:1.375rem] sm:[--ds:1.875rem]', toss && `die3d-toss-${toss}`, used && 'die3d-used')}
+      style={{ '--rx': `${rx}deg`, '--ry': `${ry}deg`, animationDelay: `${delay}ms` } as CSSProperties}
+    >
+      <span aria-hidden="true" className="die3d-shadow" style={{ animationDelay: `${delay}ms` }} />
+      <span aria-hidden="true" className="die3d-cube" style={{ animationDelay: `${delay}ms` }}>
+        {[1, 2, 3, 4, 5, 6].map((f) => (
+          <span key={f} className="die3d-face" data-f={f}>
+            {Array.from({ length: 9 }).map((_, i) => (
+              <i key={i} data-on={PIPS[f].includes(i) ? '' : undefined} />
+            ))}
+          </span>
+        ))}
+      </span>
+    </span>
+  )
+}
+
 export const DOUBLE_NAMES: Record<number, string> = { 1: 'Hepyek', 2: 'Dubara', 3: 'Dü se', 4: 'Dört cihar', 5: 'Dübeş', 6: 'Düşeş' }
 
 /**
@@ -407,13 +440,13 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           className={cn(
             'absolute inset-x-px h-[90%] transition-colors sm:inset-x-0.5',
             isTop ? 'top-0' : 'bottom-0',
-            visual % 2 === 0 ? 'bg-point-a' : 'bg-point-b',
-            isTarget ? 'animate-pulse bg-primary' : 'opacity-90',
-            selected === i && 'brightness-125',
+            isTarget ? 'tavla-point-hot animate-pulse' : visual % 2 === 0 ? 'tavla-point-a' : 'tavla-point-b',
+            selected === i && 'brightness-125 saturate-125',
           )}
           style={{
-            clipPath: isTop ? 'polygon(0 0, 100% 0, 50% 100%)' : 'polygon(50% 0, 100% 100%, 0 100%)',
-            backgroundImage: isTarget ? undefined : 'linear-gradient(90deg, rgb(0 0 0 / 0.18), transparent 45%, rgb(255 255 255 / 0.08) 55%, rgb(0 0 0 / 0.18))',
+            // Bottom points mirror the top shape so the gradient darkens toward the tip on both rows.
+            clipPath: 'polygon(0 0, 100% 0, 52% 100%, 48% 100%)',
+            transform: isTop ? undefined : 'scaleY(-1)',
           }}
         />
         {isTarget && (
@@ -467,24 +500,20 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
 
   const barSelectable = sources.has('bar')
   const offTarget = routes.get('off')
-  const shown = faces ?? rolled.slice(0, rolled.length === 4 ? 4 : 2)
+  const shown = rolled.slice(0, rolled.length === 4 ? 4 : 2)
   // Dice sit in the empty middle band of the roller's own half so they never cover a stack.
   const diceLeft = turn === 'opp'
   const isDouble = rolled.length >= 2 && rolled[0] === rolled[1]
   const celebrate = !faces && isDouble && landed === rollKey && rollKey > 0
   const diceRow = shown.length > 0 && (
-    <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-center gap-1.5 sm:gap-2">
+    <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-center gap-2 sm:gap-3">
       {shown.map((d, i) => (
-        <Die
+        <Die3D
           key={`${rollKey}-${i}`}
-          board
           value={d}
           used={!faces && usedFlags[i]}
-          className={cn(
-            faces ? (diceLeft ? 'die-throw-left' : 'die-throw-right') : landed === rollKey && rollKey > 0 && 'die-land',
-            celebrate && 'ring-2 ring-gold shadow-[0_0_12px_var(--gold)]',
-          )}
-          style={faces ? { animationDelay: `${i * 70}ms` } : undefined}
+          toss={faces ? (diceLeft ? 'left' : 'right') : undefined}
+          delay={i * 70}
         />
       ))}
       {celebrate && (
@@ -541,7 +570,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           data-bar
           aria-label={`Kırık pullar: sen ${board.bar[me]}, rakip ${board.bar[opp]}`}
           className={cn(
-            'ls-tavla-bar flex w-6 flex-col items-center justify-between rounded-md bg-wood py-2 sm:w-14 sm:py-3',
+            'ls-tavla-bar relative flex w-6 flex-col items-center justify-between rounded-md tavla-bar-wood py-2 sm:w-14 sm:py-3',
             barSelectable && 'cursor-grab touch-none ring-2 ring-primary',
             selected === 'bar' && 'bg-primary/30',
           )}
@@ -572,7 +601,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         <div className="ls-tavla-tray flex w-8 flex-col justify-between gap-1.5 sm:w-16 sm:gap-2">
           <div
             data-off="opp"
-            className="flex flex-1 flex-col items-center gap-1 rounded-md bg-felt/70 p-0.5 text-center shadow-[inset_0_2px_6px_rgb(0_0_0/0.5)]"
+            className="flex flex-1 flex-col items-center gap-1 rounded-md tavla-tray p-0.5 text-center"
             aria-label={`${names.opp} toplanan pullar: ${board.off[opp]}`}
           >
             <span className="line-clamp-1 text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">
@@ -587,7 +616,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
             onClick={() => !suppressClick.current && offTarget && playClick(offTarget)}
             disabled={!offTarget}
             className={cn(
-              'flex flex-1 flex-col-reverse items-center gap-1 rounded-md bg-felt/70 p-0.5 text-center shadow-[inset_0_2px_6px_rgb(0_0_0/0.5)] transition-transform',
+              'flex flex-1 flex-col-reverse items-center gap-1 rounded-md tavla-tray p-0.5 text-center transition-transform',
               offTarget && 'bg-primary/30 ring-2 ring-primary',
               hover === 'off' && 'scale-105 bg-primary/60',
             )}
