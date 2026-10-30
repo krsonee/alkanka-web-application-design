@@ -203,6 +203,20 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
     }
   }
 
+  /** Puts a tile that is about to join the hand (drawn or taken) on `target`, or the nearest free slot in that row. */
+  function placeAt(id: number, target: number) {
+    const next = [...slots]
+    const rowStart = Math.floor(target / RACK_COLS) * RACK_COLS
+    for (let d = 0; d < RACK_COLS; d++) {
+      for (const s of d === 0 ? [target] : [target - d, target + d]) {
+        if (s < rowStart || s >= rowStart + RACK_COLS || next[s] != null) continue
+        next[s] = id
+        setRaw(next)
+        return
+      }
+    }
+  }
+
   function arrange(mode: 'seri' | 'cift') {
     setRaw(arrangeLayout(hand, okey, mode, rows))
   }
@@ -213,12 +227,16 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
     setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
   }
 
-  return { rows, slots, selected: selectedId, setSelected, moveTo, moveGroup, arrange, setLayout: setRaw, flipped, toggleFlip }
+  return { rows, slots, selected: selectedId, setSelected, moveTo, moveGroup, placeAt, arrange, setLayout: setRaw, flipped, toggleFlip }
 }
 
 export type DropKind = 'discard' | 'finish' | `meld:${number}`
 
-const LONG_PRESS_MS = 380
+/** Compositor-only positioning for drag ghosts: moving left/top forced a layout every pointer move. */
+export const ghostTransform = (x: number, y: number) => `translate3d(${x}px, ${y}px, 0) translate(-50%, -70%) rotate(3deg)`
+
+// Long enough that a player who pauses before dragging still moves one tile, not the whole set.
+const LONG_PRESS_MS = 550
 
 export function OkeyRack({
   hand,
@@ -229,10 +247,13 @@ export function OkeyRack({
   onDropOut,
   onDropHover,
   marks,
+  looseDiscard,
 }: {
   hand: Tile[]
   okey: OkeyValue
   rack: ReturnType<typeof useRack>
+  /** Releasing a single tile anywhere off the rack counts as a discard, not only over the discard slot. */
+  looseDiscard?: boolean
   /** Per-slot marker: a non-null value underlines the slot as part of a valid group; label shows above its first tile. */
   marks?: SlotMark[]
   /** Tile id that was just drawn, shown with a marker. */
@@ -295,12 +316,18 @@ export function OkeyRack({
     onSlot(i)
   }
 
-  const targetAt = (x: number, y: number) => {
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  const targetAt = (x: number, y: number): { slot: number | null; kind: DropKind | null } => {
     const el = document.elementFromPoint(x, y) as HTMLElement | null
     const slot = el?.closest<HTMLElement>('[data-rack-slot]')
     if (slot) return { slot: Number(slot.dataset.rackSlot), kind: null }
     const zone = el?.closest<HTMLElement>('[data-drop]')
-    return { slot: null, kind: (zone?.dataset.drop as DropKind | undefined) ?? null }
+    const kind = (zone?.dataset.drop as DropKind | undefined) ?? null
+    if (kind) return { slot: null, kind }
+    // The rack frame between slots is not a target; anywhere else on screen is a throw.
+    const onRack = el ? rootRef.current?.contains(el) : false
+    return { slot: null, kind: looseDiscard && !onRack ? 'discard' : null }
   }
 
   const setHover = (kind: DropKind | null) => {
@@ -355,10 +382,7 @@ export function OkeyRack({
       if (p.timer) clearTimeout(p.timer)
       setGhost({ ids: p.group ?? [p.id], x, y })
     }
-    if (ghostEl.current) {
-      ghostEl.current.style.left = `${x}px`
-      ghostEl.current.style.top = `${y}px`
-    }
+    if (ghostEl.current) ghostEl.current.style.transform = ghostTransform(x, y)
     if (frame.current != null) return
     frame.current = requestAnimationFrame(() => {
       frame.current = null
@@ -412,6 +436,8 @@ export function OkeyRack({
 
   return (
     <div
+      ref={rootRef}
+      data-rack
       className="okey-rack-wood mx-auto flex w-full max-w-[50rem] flex-col gap-1.5 rounded-xl px-1.5 pb-2 pt-2 sm:gap-2.5 sm:rounded-2xl sm:px-3 sm:pb-3 sm:pt-3"
       role="group"
       aria-label={`Istakan, ${rack.rows === 3 ? 'üç' : 'iki'} sıra`}
@@ -493,8 +519,8 @@ export function OkeyRack({
           <div
             ref={ghostEl}
             aria-hidden="true"
-            className="pointer-events-none fixed z-[200] flex -translate-x-1/2 -translate-y-[70%] rotate-3 gap-0.5 drop-shadow-2xl will-change-[left,top]"
-            style={{ left: ghost.x, top: ghost.y }}
+            className="pointer-events-none fixed left-0 top-0 z-[200] flex gap-0.5 drop-shadow-2xl will-change-transform"
+            style={{ transform: ghostTransform(ghost.x, ghost.y) }}
           >
             {ghostTiles.map((t) => (
               <div key={t.id} className="h-12 w-9 sm:h-14 sm:w-10">
