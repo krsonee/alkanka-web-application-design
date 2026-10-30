@@ -60,8 +60,14 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     const html = document.documentElement
     const prev = html.style.overflow
     html.style.overflow = 'hidden'
+    // iOS Safari ignores user-scalable=no; block its pinch gesture so the fitted table can't be zoomed apart.
+    const block = (e: Event) => e.preventDefault()
+    document.addEventListener('gesturestart', block)
+    document.addEventListener('gesturechange', block)
     return () => {
       html.style.overflow = prev
+      document.removeEventListener('gesturestart', block)
+      document.removeEventListener('gesturechange', block)
     }
   }, [fullscreen])
 
@@ -75,8 +81,10 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     if (!i) return
     let frame = 0
     const measure = () => {
-      const vw = Math.round(window.visualViewport?.width ?? window.innerWidth)
-      const vh = Math.round(window.visualViewport?.height ?? window.innerHeight)
+      // Layout-viewport sizes only: visualViewport shrinks while the page is pinch/double-tap zoomed,
+      // which used to lock the table at a tiny wrong size after tapping the minimize/maximize button.
+      const vw = document.documentElement.clientWidth || window.innerWidth
+      const vh = document.documentElement.clientHeight || window.innerHeight
       // Mid-rotation some browsers still report portrait dimensions; measuring then collapses the table.
       if (vw <= vh) return
       // Measure the real free area: it already excludes the rail, paddings and notch/safe-area insets,
@@ -84,7 +92,7 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       const a = area.current
       const availW = Math.min(vw - RAIL_W - 20, (a?.clientWidth || vw) - 4)
       const availH = Math.min(vh - 8, (a?.clientHeight || vh) - 4)
-      if (availW < 200 || availH < 150) return
+      if (availW < 200 || availH < 150 || availW <= availH) return
       // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
       // Wrappers marked data-ls-flat are dissolved so their siblings (e.g. a control bar) join the side column.
       const main = i.querySelector<HTMLElement>('[data-ls-main]')
@@ -157,7 +165,7 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       aria-label={fullscreen ? `${label} tam ekran` : undefined}
       className={cn(
         fullscreen &&
-          'fixed inset-0 z-[100] flex h-dvh flex-row items-stretch gap-2 overflow-hidden bg-background py-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]',
+          'fixed inset-0 z-[100] flex h-dvh touch-manipulation flex-row items-stretch gap-2 overflow-hidden bg-background py-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]',
       )}
     >
       {fullscreen ? (
@@ -179,7 +187,7 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
         <button
           type="button"
           onClick={() => setMinimized(false)}
-          className="mb-2 flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground"
+          className="mb-2 flex h-8 touch-manipulation items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground"
         >
           <Maximize2 className="size-4" aria-hidden="true" />
           Tam ekran
