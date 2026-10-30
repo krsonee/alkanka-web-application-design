@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Alkanka Okey – Yeni Masa Önizleme</title>
+<style>
+  :root{
+    --brass:#d9a441; --brass-d:#a87a26;
+    --porcelain:#fbf9f4; --ink:#14110e; --mist:#c9d8d5;
+    --t-red:#d8322b; --t-blue:#1d5fd1; --t-black:#17181a; --t-yel:#e58a0c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#0b1514;color:var(--porcelain);font-family:Geist,system-ui,sans-serif;overflow:hidden}
+  body{display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px}
+
+  /* view switcher */
+  .seg{display:flex;gap:4px;background:#13211f;border:1px solid #20332f;padding:4px;border-radius:999px}
+  .seg button{font:inherit;font-size:13px;font-weight:600;color:var(--mist);background:transparent;border:0;padding:7px 14px;border-radius:999px;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--brass);color:var(--ink)}
+  .stage{flex:1;width:100%;display:flex;align-items:center;justify-content:center;min-height:0}
+  .scaler{position:relative}
+  .device{position:absolute;left:0;top:0;transform-origin:0 0;background:#050908;overflow:hidden;
+    box-shadow:0 0 0 1px #233532,0 20px 50px rgba(0,0,0,.55)}
+  .v-web .device{border-radius:12px}
+  .v-ls .device,.v-pt .device{border-radius:38px;border:10px solid #050908;box-shadow:0 0 0 2px #2b3c39,0 20px 50px rgba(0,0,0,.55)}
+  .chrome{height:34px;display:flex;align-items:center;gap:7px;padding:0 14px;background:#16201e;border-bottom:1px solid #22302d}
+  .chrome i{width:11px;height:11px;border-radius:50%;background:#33433f}
+  .chrome span{margin-left:12px;flex:1;max-width:340px;height:20px;border-radius:6px;background:#0d1615;font-size:11px;line-height:20px;padding:0 10px;color:#7f948f}
+  .v-ls .chrome,.v-pt .chrome{display:none}
+  .screen{position:absolute;left:0;right:0;bottom:0;top:34px}
+  .v-ls .screen,.v-pt .screen{top:0}
+  .caption{font-size:13px;line-height:1.5;color:#9fb4af;text-align:center;max-width:760px}
+
+  /* ============ TABLE ============ */
+  .table{position:absolute;inset:0;container-type:size;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+    --u:1cqw;
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      radial-gradient(110% 85% at 50% 36%,#15665f 0%,#0e4c47 46%,#082f2c 100%)}
+  .v-ls .table{--u:.82cqw}
+  .v-pt .table{--u:2.45cqw}
+  .table::before{content:"";position:absolute;inset:calc(var(--u)*1.1);border-radius:calc(var(--u)*2.2);
+    border:1px solid rgba(217,164,65,.28);pointer-events:none}
+  .felt-logo{position:absolute;left:50%;top:calc(var(--u)*1.1);transform:translate(-50%,-50%);font-weight:800;letter-spacing:.42em;
+    padding:0 calc(var(--u)*.9) 0 calc(var(--u)*.9 + .42em);font-size:calc(var(--u)*.95);line-height:1.9;color:var(--brass);
+    background:#0d4d48;border-radius:999px;box-shadow:inset 0 0 0 1px rgba(217,164,65,.45);pointer-events:none;white-space:nowrap}
+
+  /* players */
+  .pl{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*.45)}
+  .av{position:relative;width:calc(var(--u)*5);height:calc(var(--u)*5);border-radius:50%;display:grid;place-items:center;
+    font-weight:700;font-size:calc(var(--u)*1.6);letter-spacing:.02em;color:var(--porcelain);
+    background:linear-gradient(160deg,#25403c,#14272a);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14),0 calc(var(--u)*.4) calc(var(--u)*1.2) rgba(0,0,0,.4)}
+  .pl.active .av::before{content:"";position:absolute;inset:calc(var(--u)*-.55);border-radius:50%;
+    background:conic-gradient(var(--brass) calc(var(--p,1)*360deg),rgba(255,255,255,.1) 0);
+    -webkit-mask:radial-gradient(circle,transparent 61%,#000 63%);mask:radial-gradient(circle,transparent 61%,#000 63%)}
+  .pl.active .nm{color:var(--ink);background:var(--brass)}
+  .nm{font-size:calc(var(--u)*1.12);font-weight:600;background:rgba(5,15,14,.55);backdrop-filter:blur(6px);
+    padding:calc(var(--u)*.2) calc(var(--u)*.9);border-radius:999px;white-space:nowrap;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+
+  /* tiles — sized by their wrapper (container units) */
+  .rt,.ghost,.gt,.pile,.stack,.ind{container-type:size}
+  .tile{width:100%;height:100%;border-radius:13cqw;position:relative;cursor:grab;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4cqh;
+    background:linear-gradient(180deg,#ffffff 0%,var(--porcelain) 52%,#ece6d9 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.9),inset 0 -5cqh 0 rgba(20,17,14,.05),0 3.5cqh 0 #cbbfa8,0 6cqh 9cqh rgba(0,0,0,.32);
+    font-weight:800;font-size:min(44cqh,56cqw);line-height:1;letter-spacing:-.06em;font-variant-numeric:tabular-nums}
+  .tile i{width:15cqw;height:15cqw;border-radius:50%;background:currentColor}
+  .tile.red{color:var(--t-red)} .tile.blue{color:var(--t-blue)} .tile.black{color:var(--t-black)} .tile.yellow{color:var(--t-yel)}
+  .tile.okey{overflow:hidden;background:linear-gradient(180deg,#fffdf5 0%,#fbf0d2 55%,#efdcab 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.9),0 3.5cqh 0 #c49a4c,0 0 0 1.5px var(--brass),0 0 14cqw rgba(217,164,65,.55),0 6cqh 9cqh rgba(0,0,0,.32);
+    animation:okeyGlow 2.4s ease-in-out infinite}
+  .tile.okey::after{content:"";position:absolute;inset:5cqw;border-radius:9cqw;box-shadow:inset 0 0 0 3.5cqw var(--brass)}
+  .tile.okey::before{content:"";position:absolute;inset:-20%;pointer-events:none;
+    background:linear-gradient(110deg,transparent 40%,rgba(255,226,150,.85) 50%,transparent 60%);
+    transform:translateX(-120%);animation:okeyShine 2.4s ease-in-out infinite}
+  .tile.okey em{font-style:normal;font-size:15cqw;font-weight:800;letter-spacing:.06em;color:var(--brass-d)}
+  @keyframes okeyShine{0%,55%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+  @keyframes okeyGlow{50%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.9),0 3.5cqh 0 #c49a4c,0 0 0 2.5px var(--brass),0 0 24cqw rgba(217,164,65,.8),0 6cqh 9cqh rgba(0,0,0,.32)}}
+  .tile.fake{color:#17805a;font-size:min(38cqh,60cqw)}
+  .tile.back{cursor:grab;background:linear-gradient(160deg,#16645d,#0b3d39);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),inset 0 0 0 7cqw #0b3d39,inset 0 0 0 9cqw rgba(217,164,65,.55),0 3.5cqh 0 #062624,0 6cqh 9cqh rgba(0,0,0,.35)}
+  .tile.back.hid{cursor:pointer;animation:hidPulse 1.4s ease-in-out infinite}
+  .tile.back.hid b{font-size:min(30cqh,40cqw);color:var(--brass)}
+  .tile.back.hid small{font-size:12cqw;font-weight:700;letter-spacing:.04em;color:rgba(251,249,244,.75)}
+  @keyframes hidPulse{50%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),inset 0 0 0 7cqw #0b3d39,inset 0 0 0 9cqw var(--brass),0 3.5cqh 0 #062624,0 0 14cqw rgba(217,164,65,.6)}}
+  .rt.flip .tile{animation:flipIn .5s cubic-bezier(.2,.8,.2,1)}
+  .rt.flip .tile.okey{animation:flipIn .5s cubic-bezier(.2,.8,.2,1),okeyGlow 2.4s ease-in-out .5s infinite}
+  @keyframes flipIn{0%{transform:perspective(300px) rotateY(90deg) scale(1.15)}60%{transform:perspective(300px) rotateY(-12deg) scale(1.08)}100%{transform:none}}
+  .rt.sel .tile{transform:translateY(-9%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.9),0 3.5cqh 0 #cbbfa8,0 0 0 2px var(--brass),0 10cqh 12cqh rgba(0,0,0,.4)}
+  .rt .tile{transition:transform .15s}
+
+  .pile{position:absolute;transform:translate(-50%,-50%);width:calc(var(--u)*4);height:calc(var(--u)*5.6);border-radius:calc(var(--u)*.6);
+    background:rgba(0,0,0,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  .pile .tile{position:absolute;inset:0}
+  .pile.can{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 0 0 calc(var(--u)*.25) var(--brass);animation:pulse 1.3s ease-in-out infinite}
+  @keyframes pulse{50%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 0 0 calc(var(--u)*.6) rgba(217,164,65,.35)}}
+  .deck{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*.7)}
+  .stack{position:relative;width:calc(var(--u)*4);height:calc(var(--u)*5.6)}
+  .stack .tile{position:absolute;inset:0}
+  .stack .tile:nth-child(1){transform:translate(calc(var(--u)*.3),calc(var(--u)*.3))}
+  .stack .tile:nth-child(2){transform:translate(calc(var(--u)*.15),calc(var(--u)*.15))}
+  .num{font-size:calc(var(--u)*1.05);font-weight:600;color:var(--mist);font-variant-numeric:tabular-nums}
+  .ind{position:absolute;transform:translate(-50%,-50%) rotate(7deg);width:calc(var(--u)*4);height:calc(var(--u)*5.6)}
+  .lbl{position:absolute;transform:translate(-50%,0);font-size:calc(var(--u)*.85);font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--mist);opacity:.7}
+
+  /* controls */
+  .side{position:absolute;display:flex;gap:calc(var(--u)*.6)}
+  .btn{font:inherit;font-size:calc(var(--u)*1.05);font-weight:600;color:var(--porcelain);cursor:pointer;white-space:nowrap;
+    background:rgba(5,15,14,.5);backdrop-filter:blur(6px);border:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+    padding:calc(var(--u)*.6) calc(var(--u)*1.25);border-radius:999px}
+  .btn:hover{box-shadow:inset 0 0 0 1px var(--brass)}
+  .btn.gold{background:var(--brass);color:var(--ink);box-shadow:none}
+  .info{position:absolute;display:grid;grid-template-columns:auto auto;gap:calc(var(--u)*.2) calc(var(--u)*1.2);
+    font-size:calc(var(--u)*1.02);background:rgba(5,15,14,.5);backdrop-filter:blur(6px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);
+    padding:calc(var(--u)*.7) calc(var(--u)*1.2);border-radius:calc(var(--u)*1)}
+  .info span{color:var(--mist)} .info b{color:var(--brass);text-align:right;font-variant-numeric:tabular-nums}
+  .toast{position:absolute;transform:translateX(-50%);font-size:calc(var(--u)*1.1);font-weight:600;white-space:nowrap;
+    background:rgba(5,15,14,.6);backdrop-filter:blur(6px);padding:calc(var(--u)*.45) calc(var(--u)*1.3);border-radius:999px}
+  .drop-hint{position:absolute;left:12%;right:12%;top:6%;border-radius:calc(var(--u)*2);pointer-events:none;transition:background .15s,box-shadow .15s}
+  .drop-hint.on{background:rgba(217,164,65,.06);box-shadow:inset 0 0 0 calc(var(--u)*.2) rgba(217,164,65,.5)}
+
+  /* rack */
+  .rack{position:absolute;border-radius:calc(var(--u)*1.4);--gap:calc(var(--u)*.75);
+    background:linear-gradient(180deg,#4b352a 0%,#33231a 45%,#22170f 100%);
+    box-shadow:inset 0 1px 0 rgba(217,164,65,.45),inset 0 0 0 1px rgba(255,255,255,.05),0 calc(var(--u)*.8) calc(var(--u)*2) rgba(0,0,0,.55)}
+  .layer{position:absolute;left:calc(var(--u)*1.1);right:calc(var(--u)*1.1);top:calc(var(--u)*.8);bottom:calc(var(--u)*2.4)}
+  .ledge{position:absolute;left:calc(var(--u)*-.6);right:calc(var(--u)*-.6);height:calc(var(--u)*.7);border-radius:calc(var(--u)*.35);
+    background:linear-gradient(180deg,#140c07,#3a281c);box-shadow:0 1px 0 rgba(217,164,65,.3)}
+  .rt{position:absolute;left:0;top:0;width:calc(100% / 15);height:calc(50% - var(--gap));padding:0 .5px;z-index:1;
+    transition:transform .17s cubic-bezier(.2,.8,.2,1);will-change:transform}
+  .rt.lift{opacity:0}
+  .rt.ph{pointer-events:none}
+  .brand{position:absolute;left:50%;bottom:calc(var(--u)*.45);transform:translateX(-50%);font-weight:800;letter-spacing:.42em;
+    padding:0 calc(var(--u)*1) 0 calc(var(--u)*1 + .42em);height:calc(var(--u)*1.5);line-height:calc(var(--u)*1.5);font-size:calc(var(--u)*.82);
+    color:#3a2614;background:linear-gradient(180deg,#f0c76b,#b8862e);border-radius:calc(var(--u)*.35);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.25),0 1px 2px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
+  .ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:50;will-change:transform;filter:drop-shadow(0 12px 16px rgba(0,0,0,.45))}
+  .ghost.grp{container-type:normal;display:flex}
+  .ghost .tile{cursor:grabbing}
+
+  /* ===== WEB 16:9 ===== */
+  .v-web #p2{left:50%;top:11%} .v-web #p3{left:8%;top:32%} .v-web #p1{left:92%;top:32%} .v-web #p0{left:50%;top:57%}
+  .v-web #pile2{left:27%;top:14%} .v-web #pile1{left:73%;top:14%} .v-web #pile3{left:27%;top:52%} .v-web #pile0{left:73%;top:52%}
+  .v-web .deck{left:45%;top:33%} .v-web .ind{left:55%;top:31%} .v-web .lbl{left:55%;top:38.5%}
+  .v-web .side{left:1.8%;top:44%;flex-direction:column}
+  .v-web .info{right:1.8%;top:46%}
+  .v-web .toast{left:50%;top:44%}
+  .v-web .drop-hint{bottom:34%}
+  .v-web .rack{left:7%;right:7%;bottom:1.8%;height:31.5%}
+
+  /* ===== MOBİL YATAY (≈2.17:1) ===== */
+  .v-ls #p2{left:50%;top:12.5%} .v-ls #p3{left:9%;top:35%} .v-ls #p1{left:91%;top:35%} .v-ls #p0{left:50%;top:50%}
+  .v-ls #pile2{left:31%;top:15%} .v-ls #pile1{left:69%;top:15%} .v-ls #pile3{left:31%;top:46%} .v-ls #pile0{left:69%;top:46%}
+  .v-ls .deck{left:46%;top:30%} .v-ls .ind{left:54%;top:28%} .v-ls .lbl{left:54%;top:36%}
+  .v-ls .side{left:1.6%;top:5%;flex-direction:column}
+  .v-ls .info{right:1.6%;top:5%}
+  .v-ls .toast{left:50%;top:40%}
+  .v-ls .drop-hint{bottom:42%}
+  .v-ls .rack{left:3%;right:3%;bottom:2%;height:39.5%}
+
+  /* ===== MOBİL DİKEY ===== */
+  .v-pt #p2{left:50%;top:8%} .v-pt #p3{left:13%;top:27%} .v-pt #p1{left:87%;top:27%} .v-pt #p0{left:50%;top:72%}
+  .v-pt #pile2{left:24%;top:11%} .v-pt #pile1{left:76%;top:11%} .v-pt #pile3{left:22%;top:65%} .v-pt #pile0{left:78%;top:65%}
+  .v-pt .deck{left:42%;top:42%} .v-pt .ind{left:58%;top:40.5%} .v-pt .lbl{left:58%;top:46%}
+  .v-pt .side{left:50%;bottom:16.5%;transform:translateX(-50%);flex-direction:row}
+  .v-pt .info{left:50%;top:16%;transform:translateX(-50%);grid-template-columns:auto auto auto auto}
+  .v-pt .toast{left:50%;top:54%}
+  .v-pt .drop-hint{left:6%;right:6%;bottom:21%}
+  /* height tied to width so 15 tiles keep a real tile ratio (~1:1.37) */
+  .v-pt .rack{left:1.5%;right:1.5%;bottom:3%;height:26cqw;--gap:calc(var(--u)*.5)}
+  .v-pt .layer{left:calc(var(--u)*.6);right:calc(var(--u)*.6);top:calc(var(--u)*.5);bottom:calc(var(--u)*2.1)}
+  .v-pt .brand{font-size:calc(var(--u)*.7);height:calc(var(--u)*1.3);line-height:calc(var(--u)*1.3);bottom:calc(var(--u)*.4)}
+</style>
+</head>
+<body class="v-web" id="body">
+<div class="seg" role="group" aria-label="Görünüm">
+  <button data-v="web" aria-pressed="true">Web</button>
+  <button data-v="ls" aria-pressed="false">Mobil Yatay</button>
+  <button data-v="pt" aria-pressed="false">Mobil Dikey</button>
+</div>
+
+<div class="stage" id="stage">
+  <div class="scaler" id="scaler">
+    <div class="device" id="device">
+      <div class="chrome"><i></i><i></i><i></i><span>alkanka.com/oyunlar/okey</span></div>
+      <div class="screen">
+        <div class="table" id="table">
+          <div class="felt-logo">ALKANKA</div>
+          <div class="drop-hint" id="dropHint"></div>
+          <div class="toast" id="toast">Sıra sende – bir taş at</div>
+
+          <div class="pl" id="p2"><div class="av">EM</div><div class="nm">Emre</div></div>
+          <div class="pl" id="p3"><div class="av">İR</div><div class="nm">İrfan</div></div>
+          <div class="pl" id="p1"><div class="av">UM</div><div class="nm">Umut</div></div>
+          <div class="pl" id="p0"><div class="av">SN</div><div class="nm">Sen</div></div>
+
+          <div class="pile" id="pile2"></div>
+          <div class="pile" id="pile1"></div>
+          <div class="pile" id="pile3"></div>
+          <div class="pile" id="pile0"></div>
+
+          <div class="deck"><div class="stack"><div class="tile back"></div><div class="tile back"></div><div class="tile back" id="deckTop"></div></div><div class="num" id="deckNum">48</div></div>
+          <div class="ind" id="ind"></div>
+          <div class="lbl">Gösterge</div>
+
+          <div class="side">
+            <button class="btn" id="bSeri">Seri Diz</button>
+            <button class="btn" id="bCift">Çift Diz</button>
+            <button class="btn gold">Çifte Git</button>
+          </div>
+          <div class="info"><span>Masa</span><b>2.000</b><span>Çanak</span><b>2.500</b></div>
+
+          <div class="rack" id="rack">
+            <div class="layer" id="layer">
+              <div class="ledge" style="top:calc(50% - var(--gap))"></div>
+              <div class="ledge" style="top:calc(100% - var(--gap))"></div>
+            </div>
+            <div class="brand">ALKANKA</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="caption" id="caption"></p>
+
+<script>
+const VIEWS={
+  web:{w:1280,h:754,cap:"Web · 1280×720 – ıstaka masanın altında, Seri/Çift Diz solda, masa bilgisi sağda"},
+  ls:{w:872,h:413,cap:"Mobil yatay · 852×393 – ıstaka tam genişlik ve daha uzun, kontroller köşelere alındı ki taşlar büyük kalsın"},
+  pt:{w:413,h:872,cap:"Mobil dikey · 393×852 – ıstaka yüksekliği genişliğe kilitli, taşlar artık gerçek taş oranında (uzamıyor)"}
+};
+let view="web";
+const $=s=>document.getElementById(s);
+function fit(){
+  const v=VIEWS[view],st=$("stage").getBoundingClientRect();
+  const s=Math.min(st.width/v.w,st.height/v.h,1);
+  const d=$("device");d.style.width=v.w+"px";d.style.height=v.h+"px";d.style.transform=`scale(${s})`;
+  $("scaler").style.width=v.w*s+"px";$("scaler").style.height=v.h*s+"px";
+  $("caption").textContent=v.cap+" · Per taşımak: taşa basılı tut (PC'de Shift+sürükle) · Okey kapalı gelir, açmak için dokun";
+}
+document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{
+  view=b.dataset.v;document.body.className="v-"+view;
+  document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  fit();
+});
+addEventListener("resize",fit);fit();
+
+const COLORS=["red","blue","black","yellow"];
+let pool=[];
+for(let d=0;d<2;d++)for(const c of COLORS)for(let n=1;n<=13;n++)pool.push({c,n,id:Math.random()});
+pool.push({fake:true,id:Math.random()},{fake:true,id:Math.random()});
+pool.sort(()=>Math.random()-.5);
+const indTile=pool.find(t=>!t.fake);pool.splice(pool.indexOf(indTile),1);
+const okey={c:indTile.c,n:indTile.n%13+1};
+const isOkey=t=>!t.fake&&t.c===okey.c&&t.n===okey.n;
+{const k=pool.findIndex(isOkey);pool.splice(70,0,pool.splice(k,1)[0])}
+const rack=Array(30).fill(null);
+pool.splice(0,15).forEach((t,i)=>rack[i<8?i:15+(i-8)]=t);
+pool.splice(0,42);
+const piles=[[],[],[],[]];
+let phase="discard",turn=0,timer=null,t0=0,forcedOkey=false;
+function takeDrawn(src){
+  const t=src==="deck"?pool.pop():piles[3].pop();
+  if(isOkey(t)){t.hidden=true;toast("Okey geldi! Açmak için taşa dokun")}else toast("Şimdi bir taş at");
+  phase="discard";return t;
+}
+const PH={id:"ph",ph:true};
+
+function tileHTML(t){
+  if(t.ph)return `<div class="tile" style="visibility:hidden"></div>`;
+  if(t.hidden)return `<div class="tile back hid"><b>?</b><small>DOKUN</small></div>`;
+  if(t.fake)return `<div class="tile fake">★<i></i></div>`;
+  if(isOkey(t))return `<div class="tile ${t.c} okey">${t.n}<em>OKEY</em></div>`;
+  return `<div class="tile ${t.c}">${t.n}<i></i></div>`;
+}
+
+const layer=$("layer"),els=new Map();
+function rtEl(t){
+  let el=els.get(t.id);
+  if(!el){el=document.createElement("div");el.className="rt"+(t.ph?" ph":"");el.innerHTML=tileHTML(t);el.dataset.k=t.hidden?"h":"v";
+    el.style.transition="none";layer.appendChild(el);els.set(t.id,el);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>el.style.transition=""));}
+  const k=t.hidden?"h":"v";
+  if(el.dataset.k!==k){
+    el.innerHTML=tileHTML(t);
+    if(el.dataset.k==="h"){el.classList.add("flip");setTimeout(()=>el.classList.remove("flip"),550)}
+    el.dataset.k=k;
+  }
+  return el;
+}
+function layout(arr,lift){
+  const seen=new Set(),liftSet=lift instanceof Set?lift:new Set(lift!=null?[lift]:[]);
+  arr.forEach((t,i)=>{
+    if(!t)return;const el=rtEl(t);seen.add(t.id);
+    const c=i%15,r=(i/15)|0;
+    el.style.transform=`translate(${c*100}%, calc(${r*100}% + ${r} * var(--gap)))`;
+    if(!t.ph)el.firstChild.dataset.src="rack:"+i;
+    el.classList.toggle("lift",liftSet.has(t.id));
+  });
+  for(const [id,el] of els)if(!seen.has(id)){el.remove();els.delete(id)}
+}
+function render(){
+  layout(rack);
+  for(let p=0;p<4;p++){const el=$("pile"+p),top=piles[p].at(-1);el.innerHTML=top?tileHTML(top):"";
+    if(top&&p===3)el.firstChild.dataset.src="pile";}
+  $("pile3").classList.toggle("can",phase==="draw"&&piles[3].length>0);
+  $("deckTop").dataset.src="deck";
+  $("deckNum").textContent=pool.length+" taş";
+  $("ind").innerHTML=tileHTML(indTile);
+  for(let p=0;p<4;p++)$("p"+p).classList.toggle("active",p===turn);
+}
+function startTimer(){
+  clearInterval(timer);t0=performance.now();
+  const el=$("p"+turn);
+  timer=setInterval(()=>{el.style.setProperty("--p",Math.max(0,1-(performance.now()-t0)/(turn?1400:20000)))},60);
+}
+function toast(s){$("toast").textContent=s}
+
+function placeAt(arr,i,t){
+  if(!arr[i]){arr[i]=t;return true}
+  const rs=Math.floor(i/15)*15,re=rs+14;
+  let e=-1;for(let j=i+1;j<=re;j++)if(!arr[j]){e=j;break}
+  let w=-1;for(let j=i-1;j>=rs;j--)if(!arr[j]){w=j;break}
+  if(e>=0&&(w<0||e-i<=i-w)){for(let j=e;j>i;j--)arr[j]=arr[j-1];arr[i]=t;return true}
+  if(w>=0){for(let k=w;k<i;k++)arr[k]=arr[k+1];arr[i]=t;return true}
+  const f=arr.indexOf(null);if(f>=0){arr[f]=t;return true}return false;
+}
+function discard(i){const t=rack[i];rack[i]=null;piles[0].push(t);phase="wait";render();nextTurn()}
+function nextTurn(){
+  turn=(turn+1)%4;render();startTimer();
+  if(turn===0){
+    if(!forcedOkey){forcedOkey=true;const k=pool.findIndex(isOkey);if(k>=0)pool.push(pool.splice(k,1)[0])}
+    phase="draw";toast("Sıra sende – desteden ya da İrfan’ın taşından çek");render();return}
+  toast(["","Umut","Emre","İrfan"][turn]+" oynuyor…");
+  setTimeout(()=>{const t=pool.pop();piles[turn].push(t);nextTurn()},1400);
+}
+
+function slotAt(x,y){
+  const r=layer.getBoundingClientRect(),cw=r.width/15;
+  if(x<r.left-cw*.5||x>r.right+cw*.5||y<r.top-r.height*.3||y>r.bottom+r.height*.25)return null;
+  const row=y<r.top+r.height/2?0:1;
+  const col=Math.max(0,Math.min(14,Math.floor((x-r.left)/cw)));
+  return row*15+col;
+}
+function groupAt(i){
+  const rs=Math.floor(i/15)*15,re=rs+14;let a=i,b=i;
+  while(a>rs&&rack[a-1])a--;while(b<re&&rack[b+1])b++;
+  const out=[];for(let k=a;k<=b;k++)out.push(k);return out;
+}
+function insertRight(arr,p,re,t){
+  if(p>re)return false;let e=-1;for(let j=p;j<=re;j++)if(!arr[j]){e=j;break}
+  if(e<0)return false;for(let j=e;j>p;j--)arr[j]=arr[j-1];arr[p]=t;return true;
+}
+function insertLeft(arr,p,rs,t){
+  if(p<rs)return false;let w=-1;for(let j=p;j>=rs;j--)if(!arr[j]){w=j;break}
+  if(w<0)return false;for(let j=w;j<p;j++)arr[j]=arr[j+1];arr[p]=t;return true;
+}
+function placeGroup(arr,rs,col,grp){
+  const len=grp.length,c=Math.max(0,Math.min(15-len,col)),s=rs+c,re=rs+14,mid=s+len/2;
+  const left=[],right=[];
+  for(let k=s;k<s+len;k++)if(arr[k]){(k<mid?left:right).push(arr[k]);arr[k]=null}
+  grp.forEach((t,j)=>arr[s+j]=t);
+  const fallback=t=>{const f=arr.indexOf(null);if(f>=0)arr[f]=t};
+  for(const t of left)if(!insertLeft(arr,s-1,rs,t)&&!insertRight(arr,s+len,re,t))fallback(t);
+  for(let j=right.length-1;j>=0;j--){const t=right[j];if(!insertRight(arr,s+len,re,t)&&!insertLeft(arr,s-1,rs,t))fallback(t)}
+}
+function preview(d,slot){
+  const arr=rack.slice(),t=d.item;
+  if(d.grp){
+    d.group.forEach(k=>arr[k]=null);
+    if(slot==null)return null;
+    placeGroup(arr,Math.floor(slot/15)*15,slot%15-d.gOff,d.grp);return arr;
+  }
+  if(d.from!=null)arr[d.from]=null;
+  if(slot==null)return null;
+  if(arr[slot]){
+    const r=layer.getBoundingClientRect(),cw=r.width/15,cx=r.left+(slot%15+.5)*cw;
+    if(d.x>cx&&slot%15<14&&!arr[slot+1]){placeAt(arr,slot+1,t);return arr}
+  }
+  placeAt(arr,slot,t);return arr;
+}
+
+let drag=null;
+const table=$("table");
+table.addEventListener("pointerdown",e=>{
+  const tile=e.target.closest(".tile[data-src]");if(!tile)return;
+  const src=tile.dataset.src;
+  if(!src.startsWith("rack")&&phase!=="draw")return;
+  e.preventDefault();
+  const r=tile.getBoundingClientRect();
+  const from=src.startsWith("rack")?+src.slice(5):null;
+  const item=from!=null?rack[from]:PH;
+  drag={src,from,item,tile,sx:e.clientX,sy:e.clientY,ox:e.clientX-r.left,oy:e.clientY-r.top,w:r.width,h:r.height,
+    moved:false,ghost:null,x:e.clientX,y:e.clientY,raf:0,arr:null,group:null,grp:null,lp:0};
+  const d=drag;
+  if(from!=null){
+    const sel=()=>{const g=groupAt(from);if(g.length<2)return;d.group=g;g.forEach(k=>els.get(rack[k].id).classList.add("sel"));navigator.vibrate?.(12)};
+    if(e.shiftKey)sel();else d.lp=setTimeout(()=>{if(drag===d&&!d.moved)sel()},280);
+  }
+  table.setPointerCapture(e.pointerId);
+});
+table.addEventListener("contextmenu",e=>e.preventDefault());
+function clearSel(){layer.querySelectorAll(".rt.sel").forEach(el=>el.classList.remove("sel"))}
+function frame(){
+  const d=drag;if(!d)return;d.raf=0;
+  d.ghost.style.transform=`translate3d(${d.x-d.ox}px,${d.y-d.oy}px,0) rotate(${d.grp?0:-2}deg) scale(${d.grp?1.03:1.06})`;
+  const slot=slotAt(d.x,d.y),arr=preview(d,slot);
+  const sig=arr?arr.map(t=>t?t.id:0).join():"out";
+  if(sig!==d.sig){d.sig=sig;d.arr=arr;layout(arr||rack.slice(),d.liftIds)}
+  $("dropHint").classList.toggle("on",!d.grp&&d.from!=null&&phase==="discard"&&!arr);
+}
+table.addEventListener("pointermove",e=>{
+  const d=drag;if(!d)return;d.x=e.clientX;d.y=e.clientY;
+  if(!d.moved&&Math.hypot(d.x-d.sx,d.y-d.sy)<4)return;
+  if(!d.moved){
+    d.moved=true;clearTimeout(d.lp);clearSel();
+    const g=document.createElement("div");g.className="ghost";
+    if(d.group){
+      d.grp=d.group.map(k=>rack[k]);d.gOff=d.from-d.group[0];
+      const r0=els.get(d.grp[0].id).firstChild.getBoundingClientRect();
+      d.ox=d.sx-r0.left;d.oy=d.sy-r0.top;
+      g.classList.add("grp");g.style.height=d.h+"px";
+      g.innerHTML=d.grp.map(t=>`<div class="gt" style="width:${d.w}px;height:${d.h}px">${tileHTML(t)}</div>`).join("");
+      d.liftIds=new Set(d.grp.map(t=>t.id));
+    }else{
+      if(d.from==null)d.item={...(d.src==="deck"?pool.at(-1):piles[3].at(-1)),id:"incoming",hidden:d.src==="deck"};
+      g.style.width=d.w+"px";g.style.height=d.h+"px";g.innerHTML=tileHTML(d.item);
+      d.liftIds=new Set([d.item.id]);
+      if(d.from==null)d.tile.style.opacity=".35";
+    }
+    document.body.appendChild(g);d.ghost=g;
+    layout(rack,d.liftIds);
+  }
+  if(!d.raf)d.raf=requestAnimationFrame(frame);
+});
+function endDrag(){
+  const d=drag;if(!d)return;drag=null;cancelAnimationFrame(d.raf);clearTimeout(d.lp);clearSel();
+  $("dropHint").classList.remove("on");d.tile.style.opacity="";
+  if(!d.moved){
+    if(d.from==null){const t=takeDrawn(d.src);placeAt(rack,rack.indexOf(null),t);render()}
+    else if(rack[d.from]?.hidden&&!d.group){rack[d.from].hidden=false;toast("Okey açıldı – şimdi bir taş at");render()}
+    return;
+  }
+  drag=d;frame();drag=null;
+  const arr=d.arr;let landId=null;
+  if(d.grp){
+    if(arr)rack.splice(0,30,...arr);
+    render();
+    const g=d.ghost,el=els.get(d.grp[0].id);
+    d.grp.forEach(t=>els.get(t.id).classList.add("lift"));
+    requestAnimationFrame(()=>{
+      const r=el.firstChild.getBoundingClientRect();
+      g.style.transition="transform .14s cubic-bezier(.2,.8,.2,1)";
+      g.style.transform=`translate3d(${r.left}px,${r.top}px,0)`;
+      setTimeout(()=>{g.remove();d.grp.forEach(t=>els.get(t.id)?.classList.remove("lift"))},140);
+    });
+    return;
+  }
+  if(d.from!=null){
+    if(arr){rack.splice(0,30,...arr);landId=d.item.id}
+    else if(phase==="discard"){d.ghost.remove();discard(d.from);return}
+  }else if(arr){
+    const real=takeDrawn(d.src);
+    const i=arr.findIndex(t=>t&&t.id==="incoming");arr[i]=real;rack.splice(0,30,...arr);landId=real.id;
+  }
+  render();
+  const g=d.ghost,el=landId!=null?els.get(landId):(d.from!=null?els.get(d.item.id):null);
+  if(!el){g.remove();return}
+  el.classList.add("lift");
+  requestAnimationFrame(()=>{
+    const r=el.getBoundingClientRect();
+    g.style.transition="transform .14s cubic-bezier(.2,.8,.2,1),width .14s,height .14s";
+    g.style.transform=`translate3d(${r.left}px,${r.top}px,0)`;
+    g.style.width=r.width+"px";g.style.height=r.height+"px";
+    setTimeout(()=>{g.remove();el.classList.remove("lift")},140);
+  });
+}
+table.addEventListener("pointerup",endDrag);
+table.addEventListener("pointercancel",endDrag);
+table.addEventListener("dblclick",e=>{
+  const t=e.target.closest(".tile[data-src^='rack']");if(t&&phase==="discard")discard(+t.dataset.src.slice(5));
+});
+
+function autoSort(byPairs){
+  const tiles=rack.filter(Boolean);rack.fill(null);
+  const ord=c=>COLORS.indexOf(c);
+  tiles.sort(byPairs?(a,b)=>(a.fake-b.fake)||(a.n-b.n)||ord(a.c)-ord(b.c):(a,b)=>(a.fake-b.fake)||ord(a.c)-ord(b.c)||(a.n-b.n));
+  let i=0,prev=null;
+  for(const t of tiles){
+    const brk=prev&&(byPairs?!(prev.n===t.n&&prev.c===t.c):(prev.c!==t.c||t.n-prev.n>1));
+    if(brk&&i%15!==0)i++;
+    if(i>=30)i=rack.indexOf(null);
+    rack[i++]=t;prev=t;
+  }
+  render();
+}
+$("bSeri").onclick=()=>autoSort(false);
+$("bCift").onclick=()=>autoSort(true);
+
+piles[3].push(pool.pop());piles[1].push(pool.pop());piles[2].push(pool.pop());
+render();startTimer();
+</script>
+</body>
+</html>
