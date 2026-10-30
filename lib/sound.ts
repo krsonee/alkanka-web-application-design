@@ -85,6 +85,10 @@ const SAMPLE_URLS = {
   whistle: '/sounds/whistle.wav',
   cheer: '/sounds/cheer.ogg',
   applause: '/sounds/applause.wav',
+  // Freesound CC0 recordings: Za-Games #539854, AmberdeMeillon #443067, Yarmonics #441857.
+  poolBall: '/sounds/pool-ball.mp3',
+  poolCue: '/sounds/pool-cue.mp3',
+  poolPocket: '/sounds/pool-pocket.mp3',
 } as const
 type SampleName = keyof typeof SAMPLE_URLS
 const samples = new Map<SampleName, AudioBuffer>()
@@ -102,22 +106,34 @@ function loadSamples(ac: AudioContext) {
 }
 
 /** Plays a recorded clip (or a slice of it). Returns false when it isn't available yet. */
-function sample(name: SampleName, opts: { vol: number; at?: number; offset?: number; dur?: number; rate?: number }) {
+function sample(
+  name: SampleName,
+  opts: { vol: number; at?: number; offset?: number; dur?: number; rate?: number; attack?: number; lowpass?: number; roomy?: boolean },
+) {
   const ac = audio()
   const buf = samples.get(name)
-  if (!ac || !master || !buf) return false
+  if (!ac || !master || !room || !buf) return false
   const start = ac.currentTime + (opts.at ?? 0)
   const offset = opts.offset ?? 0
   const dur = Math.min(opts.dur ?? buf.duration - offset, buf.duration - offset)
+  const attack = opts.attack ?? 0.02
   const src = ac.createBufferSource()
   src.buffer = buf
   src.playbackRate.value = opts.rate ?? jitter(1, 0.03)
   const g = ac.createGain()
-  g.gain.setValueAtTime(0.0001, start)
-  g.gain.exponentialRampToValueAtTime(opts.vol, start + 0.02)
-  g.gain.setValueAtTime(opts.vol, start + Math.max(0.03, dur - 0.12))
+  g.gain.setValueAtTime(attack < 0.002 ? opts.vol : 0.0001, start)
+  if (attack >= 0.002) g.gain.exponentialRampToValueAtTime(opts.vol, start + attack)
+  g.gain.setValueAtTime(opts.vol, start + Math.max(attack + 0.01, dur * 0.6))
   g.gain.exponentialRampToValueAtTime(0.0001, start + dur)
-  src.connect(g).connect(master)
+  let node: AudioNode = src
+  if (opts.lowpass) {
+    const lp = ac.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = opts.lowpass
+    lp.Q.value = 0.5
+    node = node.connect(lp)
+  }
+  node.connect(g).connect(opts.roomy ? room : master)
   src.start(start, offset, dur + 0.05)
   return true
 }
@@ -363,27 +379,33 @@ const SOUNDS: Record<SoundName, (v: number) => void> = {
     if (!a && !b) crowd(0, 2.4, 0.3 * vol)
   },
 
-  // Leather tip on a resin ball: a short, rounded "tok" with a hint of the ash shaft behind it.
+  // Recorded clips first; harder hits are louder AND brighter (soft touches lose their top end, like real balls).
+  // The synthesized versions below only play until the recordings have decoded.
   poolCue: (v) => {
     const f = lim(v)
+    if (sample('poolCue', { vol: 0.35 + f * 0.55, offset: 5.06, dur: 0.3, attack: 0, lowpass: 2500 + f * 9000, roomy: true, rate: jitter(1, 0.02) })) return
     knock({ modes: [820, 1680, 2750], decay: 0.035 + f * 0.015, vol: 0.12 + f * 0.16, click: 1500, body: 170 })
     noise({ dur: 0.012, freq: 1100, q: 0.9, vol: 0.05 + f * 0.06 })
   },
   // Phenolic resin balls: a crisp, very short high clack. Soft touches are quiet, the break is sharp.
   poolBall: (v) => {
     const f = Math.max(0.08, Math.min(1, v)) ** 0.85
+    if (sample('poolBall', { vol: 0.08 + f * 0.62, dur: 0.22, attack: 0, lowpass: 3000 + f * 13000, roomy: true, rate: jitter(1, 0.05) })) return
     knock({ modes: [2950, 4350, 6150], decay: 0.022 + f * 0.02, vol: 0.05 + f * 0.24, click: 4200 })
     knock({ modes: [1450], decay: 0.018, vol: 0.02 + f * 0.05 })
   },
   // Ball into rubber cushion: a dull muted thud, no ring.
   poolRail: (v) => {
     const f = lim(v)
+    // The real clack slowed down and muffled reads as a ball sinking into rubber.
+    if (sample('poolBall', { vol: 0.12 + f * 0.4, dur: 0.2, attack: 0, rate: jitter(0.42, 0.05), lowpass: 700 + f * 600, roomy: true })) return
     knock({ modes: [165, 380], decay: 0.05, vol: 0.06 + f * 0.14, click: 700, body: 95 })
     noise({ dur: 0.03, freq: 450, q: 0.7, vol: 0.03 + f * 0.05, type: 'lowpass' })
   },
   // Ball drops past the leather liner: a low hollow thunk, then a light knock as it settles.
   poolPocket: (v) => {
     const f = lim(v)
+    if (sample('poolPocket', { vol: 0.3 + f * 0.35, attack: 0, roomy: true, rate: jitter(1, 0.04) })) return
     knock({ modes: [118, 270, 540], decay: 0.12, vol: 0.14 + f * 0.12, click: 900, body: 82 })
     knock({ at: 0.09 + Math.random() * 0.04, modes: [2500, 3700], decay: 0.02, vol: 0.035, click: 3800 })
   },
