@@ -64,6 +64,10 @@ export const viewport: Viewport = {
   colorScheme: 'dark',
   themeColor: '#0b0e17',
   viewportFit: 'cover',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({
@@ -77,7 +81,10 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "document.addEventListener('visibilitychange',function(){document.documentElement.classList.toggle('is-hidden',document.hidden)})",
+              "document.addEventListener('visibilitychange',function(){document.documentElement.classList.toggle('is-hidden',document.hidden)});" +
+              // iOS Safari ignores user-scalable=no: block pinch gestures site-wide (double-tap is handled by touch-action in CSS).
+              "['gesturestart','gesturechange','gestureend'].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault()},{passive:false})});" +
+              "document.addEventListener('touchmove',function(e){if(e.touches.length>1)e.preventDefault()},{passive:false})",
           }}
         />
         {children}
