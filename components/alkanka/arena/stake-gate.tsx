@@ -149,7 +149,11 @@ export function StakeGate({
           key={phase.round}
           className={cn(
             'mx-auto w-full',
-            game === 'tavla' ? 'max-w-[min(100%,76rem,calc((100dvh-9rem)*1.3))]' : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
+            game === 'tavla'
+              ? 'max-w-[min(100%,76rem,calc((100dvh-9rem)*1.3))]'
+              : game === 'okey'
+                ? 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))] lg:max-w-[min(100%,80rem,calc((100dvh-7rem)*1.75))]'
+                : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
           )}
         >
           {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? children(api) : <LandscapeFit label={meta.title}>{children(api)}</LandscapeFit>}
