@@ -6,7 +6,7 @@ type TableBrandProps = {
   /** Engraved logo + wordmark in the middle of the felt. */
   center?: boolean
   /** Brass "ALKANKA" plaque on the rail. */
-  plaque?: 'top' | 'bottom' | false
+  plaque?: 'top' | 'bottom' | 'left' | false
   /** Small logo stamps in the corners. */
   corners?: boolean
   /** Jako peeking from the bottom-right corner. */
@@ -35,8 +35,11 @@ export function TableBrand({ className, center = true, plaque = 'top', corners =
       {plaque && (
         <span
           className={cn(
-            'absolute left-1/2 flex -translate-x-1/2 items-center gap-1 bg-gradient-to-b from-primary/75 to-primary/45 px-2.5 py-px font-display text-[8px] font-bold uppercase tracking-[0.35em] text-primary-foreground shadow-md sm:text-[9px]',
-            plaque === 'top' ? 'top-0 rounded-b-md' : 'bottom-0 rounded-t-md',
+            'absolute flex items-center gap-1 from-primary/75 to-primary/45 font-display text-[8px] font-bold uppercase tracking-[0.35em] text-primary-foreground shadow-md sm:text-[9px]',
+            plaque === 'left'
+              ? 'left-0 top-1/2 -translate-y-1/2 rounded-r-md bg-gradient-to-r px-px py-2.5 [writing-mode:vertical-rl]'
+              : 'left-1/2 -translate-x-1/2 bg-gradient-to-b px-2.5 py-px',
+            plaque === 'top' ? 'top-0 rounded-b-md' : plaque === 'bottom' && 'bottom-0 rounded-t-md',
           )}
         >
           <Image src="/icon-192.png" alt="" width={24} height={24} className="size-2.5 rounded-full sm:size-3" />

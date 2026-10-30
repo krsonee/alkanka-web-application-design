@@ -669,14 +669,15 @@ function bilardoAct(s: BilardoState, seat: number, a: Action): ActResult {
   const balls = start.map(Pool.fromState)
   let cueX: number | undefined
   let cueY: number | undefined
-  if (s.ballInHand && a.cueX !== undefined && a.cueX !== null) {
+  const broken = s.broken ?? s.seq > 0
+  // Breaker may place the cue ball anywhere behind the head string.
+  if ((s.ballInHand || !broken) && a.cueX !== undefined && a.cueX !== null) {
     const x = Number(a.cueX)
     const y = Number(a.cueY)
-    if (!Pool.canPlaceCue(balls, x, y)) throw new Error('Beyaz buraya konamaz')
+    if (!Pool.canPlaceCue(balls, x, y, !broken)) throw new Error('Beyaz buraya konamaz')
     balls[0].x = cueX = x
     balls[0].y = cueY = y
   }
-  const broken = s.broken ?? s.seq > 0
   const mustCall = broken && Pool.needsCall(balls, s.groups, seat)
   const rawCall = a.call === null || a.call === undefined ? NaN : Number(a.call)
   const call = mustCall && Number.isInteger(rawCall) && rawCall >= 0 && rawCall < Pool.POCKETS.length ? rawCall : null
