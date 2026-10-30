@@ -144,6 +144,19 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Kills double-tap zoom site-wide (taps on buttons were zooming the page on iOS/Android). */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  button,
+  a,
+  [role='button'],
+  input,
+  select,
+  textarea,
+  label {
+    touch-action: manipulation;
   }
   body {
     @apply bg-background text-foreground font-sans;
@@ -152,11 +165,11 @@
   padding-right: env(safe-area-inset-right);
   }
   /* iOS Safari zooms into any focused field under 16px */
-  @media (max-width: 767px) {
+  @media (pointer: coarse) {
     input:not([type='checkbox']):not([type='radio']):not([type='range']),
     textarea,
     select {
-      font-size: 16px;
+      font-size: max(16px, 1em);
     }
   }
 }

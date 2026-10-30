@@ -219,20 +219,23 @@ function Stack({
   lifted?: boolean
 }) {
   const visible = Math.min(count, 5)
+  // Checkers take the full point width like a real board; when five no longer fit the point's
+  // height they overlap instead of shrinking, so short sideways boards keep big checkers.
+  const step = visible > 1 ? `min(var(--cs), (100cqh - var(--cs)) / ${visible - 1})` : '0px'
   return (
-    <div className={cn('flex h-full w-full flex-col items-center', !top && 'flex-col-reverse')}>
+    <div
+      className="relative h-full w-full [container-type:size]"
+      style={{ ['--cs' as string]: 'min(100cqw, 34cqh, 4rem)' }}
+    >
       {Array.from({ length: visible }).map((_, i) => {
         const isTopChecker = i === visible - 1
         return (
           <span
             key={i}
-            className={cn(
-              'flex h-1/5 w-full shrink-0 items-center justify-center [container-type:size]',
-              lifted && isTopChecker && 'opacity-30',
-            )}
+            className={cn('absolute left-1/2 flex -translate-x-1/2', lifted && isTopChecker && 'opacity-30')}
+            style={{ width: 'var(--cs)', zIndex: i, [top ? 'top' : 'bottom']: `calc(${i} * ${step})` }}
           >
             <Checker
-              fit
               side={side}
               glow={glow && isTopChecker && !lifted}
               hint={hint && isTopChecker && !lifted}
