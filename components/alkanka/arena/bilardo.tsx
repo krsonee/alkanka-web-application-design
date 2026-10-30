@@ -75,31 +75,21 @@ function usePhoneLayout(): Layout {
 }
 
 /** Width kept clear beside the camera cutout when the browser reports no safe-area inset (hidden toolbar, fullscreen). */
-const NOTCH_GUARD = '2.75rem'
+const NOTCH_GUARD = '3.25rem'
 
 /**
- * Which landscape edge holds the camera cutout on touch phones. Browsers drop the safe-area inset when the toolbar
- * is hidden or the page is fullscreen, so the controls would slide under the notch without this fallback.
+ * Touch phones in landscape: browsers drop the safe-area inset when the toolbar is hidden or the page is fullscreen,
+ * and the reported rotation angle isn't reliable across iOS versions, so both edges keep clear of the camera cutout.
  */
-function useNotchSide(): 'left' | 'right' | null {
+function useTouchPhone(): boolean {
   return useSyncExternalStore(
     (cb) => {
-      window.addEventListener('orientationchange', cb)
-      screen.orientation?.addEventListener?.('change', cb)
-      return () => {
-        window.removeEventListener('orientationchange', cb)
-        screen.orientation?.removeEventListener?.('change', cb)
-      }
+      const m = window.matchMedia('(pointer: coarse)')
+      m.addEventListener('change', cb)
+      return () => m.removeEventListener('change', cb)
     },
-    () => {
-      if (!window.matchMedia('(pointer: coarse)').matches) return null
-      const legacy = (window as Window & { orientation?: number }).orientation
-      const angle = screen.orientation?.angle ?? legacy ?? 0
-      if (angle === 90) return 'left'
-      if (angle === 270 || angle === -90) return 'right'
-      return null
-    },
-    () => null,
+    () => window.matchMedia('(pointer: coarse)').matches,
+    () => false,
   )
 }
 
@@ -516,7 +506,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   }
   const layout = usePhoneLayout()
   const landscape = layout === 'landscape'
-  const notchSide = useNotchSide()
+  const touchPhone = useTouchPhone()
   const { concept } = useBrand()
   const customLogo = useLogos().brand?.logoUrl
   const logoSrcRef = useRef('')
@@ -830,7 +820,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       },
       rail: (_b, speed) => {
         const t = performance.now()
-        if (speed > 1 && t - lastRailSound > 40) {
+        if (speed > 1.5 && t - lastRailSound > 60) {
           lastRailSound = t
           playSound('poolRail', Math.min(1, speed / 10))
         }
@@ -1241,7 +1231,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       : ui.mustCall && ui.call === null
       ? ['Siyah için bir deliğe dokun', 'Delik seç']
       : ui.ballInHand
-        ? ['Beyazı sürükle · Gücü çekip bırak', 'Beyazı koy']
+        ? ['Beyazı sürükle · G��cü çekip bırak', 'Beyazı koy']
         : aimLocked
           ? ['Nişan kilitli · Masada geri çekip bırak ya da güç çubuğu · Dokun: kilidi aç', 'Geri çek, bırak']
           : landscape
@@ -1333,8 +1323,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       <div
         className="fixed inset-0 z-50 flex items-stretch gap-2 bg-background py-2"
         style={{
-          paddingLeft: `max(0.5rem, env(safe-area-inset-left), ${notchSide === 'left' ? NOTCH_GUARD : '0px'})`,
-          paddingRight: `max(0.5rem, env(safe-area-inset-right), ${notchSide === 'right' ? NOTCH_GUARD : '0px'})`,
+          paddingLeft: `max(0.5rem, env(safe-area-inset-left), ${touchPhone ? NOTCH_GUARD : '0px'})`,
+          paddingRight: `max(0.5rem, env(safe-area-inset-right), ${touchPhone ? NOTCH_GUARD : '0px'})`,
         }}
       >
         <div className="relative flex min-w-0 flex-1 items-center justify-center gap-2">
