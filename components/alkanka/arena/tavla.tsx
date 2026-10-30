@@ -98,7 +98,7 @@ function Die3D({ value, used, toss, delay = 0 }: { value: number; used?: boolean
     <span
       role="img"
       aria-label={`Zar ${value}${used ? ', oynandı' : ''}`}
-      className={cn('die3d [--ds:1.375rem] sm:[--ds:1.875rem]', toss && `die3d-toss-${toss}`, used && 'die3d-used')}
+      className={cn('die3d [--ds:1.375rem] sm:[--ds:2rem] lg:[--ds:2.75rem]', toss && `die3d-toss-${toss}`, used && 'die3d-used')}
       style={{ '--rx': `${rx}deg`, '--ry': `${ry}deg`, animationDelay: `${delay}ms` } as CSSProperties}
     >
       <span aria-hidden="true" className="die3d-shadow" style={{ animationDelay: `${delay}ms` }} />
@@ -489,7 +489,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         <span
           className={cn(
             'pointer-events-none absolute inset-x-0 z-20 text-center text-[9px] font-bold leading-none tabular-nums tracking-tighter text-foreground/70 sm:text-xs',
-            isTop ? '-top-3.5 sm:-top-5' : '-bottom-3.5 sm:-bottom-5',
+            isTop ? '-top-3 sm:-top-5' : '-bottom-3 sm:-bottom-5',
           )}
         >
           {label}
@@ -500,22 +500,38 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
 
   const barSelectable = sources.has('bar')
   const offTarget = routes.get('off')
-  const shown = rolled.slice(0, rolled.length === 4 ? 4 : 2)
+  // Only two physical dice are ever thrown; a double grants four moves, tracked by the pips below.
+  const shown = rolled.slice(0, 2)
   // Dice sit in the empty middle band of the roller's own half so they never cover a stack.
   const diceLeft = turn === 'opp'
   const isDouble = rolled.length >= 2 && rolled[0] === rolled[1]
   const celebrate = !faces && isDouble && landed === rollKey && rollKey > 0
+  const doubleLeft = isDouble ? dice.length : 0
+  const shownUsed = isDouble ? [doubleLeft === 0, doubleLeft <= 2] : usedFlags.slice(0, 2)
   const diceRow = shown.length > 0 && (
     <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-center gap-2 sm:gap-3">
       {shown.map((d, i) => (
         <Die3D
           key={`${rollKey}-${i}`}
           value={d}
-          used={!faces && usedFlags[i]}
+          used={!faces && shownUsed[i]}
           toss={faces ? (diceLeft ? 'left' : 'right') : undefined}
           delay={i * 70}
         />
       ))}
+      {isDouble && !faces && (
+        <span
+          aria-label={`Kalan hamle: ${doubleLeft}`}
+          className="absolute left-1/2 top-full mt-1.5 flex -translate-x-1/2 items-center gap-1 rounded-full bg-background/60 px-1.5 py-1 sm:mt-2"
+        >
+          {[0, 1, 2, 3].map((k) => (
+            <span
+              key={k}
+              className={cn('size-1.5 rounded-full transition-colors sm:size-2', k < doubleLeft ? 'bg-gold' : 'bg-foreground/20')}
+            />
+          ))}
+        </span>
+      )}
       {celebrate && (
         <span
           key={`dbl-${rollKey}`}
@@ -541,10 +557,10 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           document.body,
         )}
       <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
-      <div data-ls-main className="tavla-wood relative rounded-2xl p-1.5 sm:p-3">
+      <div data-ls-main className="ls-tavla-frame tavla-wood relative rounded-2xl px-1.5 pb-1.5 pt-4 sm:px-3 sm:pb-3 sm:pt-6">
       <TableBrand center={false} corners={false} jako={false} />
       <div className="ls-tavla flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
-        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-2.5 sm:px-2 sm:py-4">
+        <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
           <div className="flex h-[45%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
           {diceLeft ? (
             diceRow
@@ -592,7 +608,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </span>
         </button>
 
-        <div className="tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-2.5 sm:px-2 sm:py-4">
+        <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
           <div className="flex h-[45%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
           {!diceLeft && diceRow}
           <div className="flex h-[45%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
