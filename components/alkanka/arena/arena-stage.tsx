@@ -6,7 +6,7 @@ import { ARENA_META, type ArenaGame, type ArenaGameSettings, type GameMode } fro
 import { StakeGate, type GameApi } from './stake-gate'
 import { Tavla } from './tavla'
 import { Okey } from './okey'
-import { Bilardo } from './bilardo'
+import { BilardoPool } from './bilardo-pool'
 import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
@@ -78,10 +78,10 @@ export const RULES: Record<ArenaGame, string[]> = {
   ],
 }
 
-function BotGame({ game, api }: { game: ArenaGame; api: GameApi }) {
+function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; settings: ArenaGameSettings }) {
   if (game === 'tavla') return <Tavla {...api} />
   if (game === 'okey') return <Okey {...api} />
-  if (game === 'bilardo') return <Bilardo finish={api.finish} />
+  if (game === 'bilardo') return <BilardoPool bet={api.bet} win={Math.round(api.bet * settings.multiplier)} finish={api.finish} />
   const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
   return (
     <HeadGame
@@ -191,7 +191,7 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
             onEnter: (m, bet) => setEntered({ mode: m, bet }),
           }}
         >
-          {(api) => <BotGame game={game} api={api} />}
+          {(api) => <BotGame game={game} api={api} settings={settings} />}
         </StakeGate>
       )}
       {entered && back}

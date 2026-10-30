@@ -151,7 +151,9 @@ export function StakeGate({
             'mx-auto w-full',
             game === 'tavla'
               ? 'max-w-[min(100%,76rem,calc((100dvh-9rem)*1.3))]'
-              : game === 'okey'
+              : game === 'bilardo'
+                ? 'max-w-[min(100%,84rem,calc((100dvh-9rem)*1.87))]'
+                : game === 'okey'
                 ? 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))] lg:max-w-[min(100%,80rem,calc((100dvh-7rem)*1.75))]'
                 : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
           )}
