@@ -53,7 +53,7 @@ export function TileFace({
       aria-label={label ?? name}
       aria-pressed={onClick ? selected : undefined}
       className={cn(
-        'relative flex shrink-0 flex-col items-center justify-start rounded-md bg-tile shadow-[inset_0_-4px_0_rgb(0_0_0/0.12),0_2px_4px_rgb(0_0_0/0.3)] transition-transform',
+        'okey-tile-face relative flex shrink-0 flex-col items-center justify-start rounded-md shadow-[inset_0_-4px_0_rgb(0_0_0/0.12),0_2px_4px_rgb(0_0_0/0.3)] transition-transform',
         size === 'md'
           ? 'h-16 w-11 pt-1.5 sm:h-[4.5rem] sm:w-12'
           : size === 'xs'
@@ -137,7 +137,7 @@ function FluidTile({ tile, okey, selected, onClick, label }: { tile: Tile; okey:
       aria-label={label ?? name}
       aria-pressed={selected}
       className={cn(
-        'relative flex size-full flex-col items-center justify-start gap-[8%] rounded-[3px] bg-tile pt-[12%] shadow-[inset_0_-3px_0_rgb(0_0_0/0.12),0_2px_3px_rgb(0_0_0/0.3)] sm:rounded-md',
+        'okey-tile-face relative flex size-full flex-col items-center justify-start gap-[6%] rounded-[3px] pt-[10%] shadow-[inset_0_-3px_0_rgb(0_0_0/0.14),0_2px_3px_rgb(0_0_0/0.35)] sm:rounded-md',
         selected && 'ring-2 ring-primary',
         joker && !selected && 'ring-1 ring-primary/80',
       )}
@@ -146,7 +146,7 @@ function FluidTile({ tile, okey, selected, onClick, label }: { tile: Tile; okey:
         <Sparkles className="size-1/2 text-tile-black" aria-hidden="true" />
       ) : (
         <>
-          <span className={cn('font-display text-[clamp(0.7rem,3.2vw,1.5rem)] font-bold leading-none', TEXT[tile.color])}>{tile.num}</span>
+          <span className={cn('font-display text-[clamp(0.8rem,3.6vw,1.7rem)] font-extrabold leading-none tabular-nums', TEXT[tile.color])}>{tile.num}</span>
           <span className={cn('aspect-square w-[22%] rounded-full', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][tile.color])} />
         </>
       )}
@@ -176,7 +176,37 @@ function deal() {
 
 type OkeySave = { game: ReturnType<typeof deal>; phase: Phase; message: string }
 
-export function Okey({ finish, saveKey }: GameApi) {
+const TURN_SECONDS = 30
+
+function SeatAvatar({ initial, turn, progress, urgent, small }: { initial: string; turn: boolean; progress?: number; urgent?: boolean; small?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'relative flex shrink-0 items-center justify-center rounded-full bg-background/50 p-[3px] shadow-[0_4px_10px_rgb(0_0_0/0.4)]',
+        small ? 'size-10 sm:size-12' : 'size-11 sm:size-14',
+        turn && progress == null && 'glow-gold ring-2 ring-primary',
+      )}
+      style={
+        progress != null
+          ? { background: `conic-gradient(${urgent ? 'var(--destructive)' : 'var(--primary)'} ${progress}turn, color-mix(in oklch, var(--background) 55%, transparent) 0)` }
+          : undefined
+      }
+    >
+      <span
+        className={cn(
+          'flex size-full items-center justify-center rounded-full border-2 font-display font-bold',
+          small ? 'text-base sm:text-lg' : 'text-lg sm:text-xl',
+          turn ? 'border-primary/60 bg-primary text-primary-foreground' : 'border-tile/30 bg-secondary text-foreground',
+        )}
+      >
+        {initial}
+      </span>
+    </span>
+  )
+}
+
+export function Okey({ finish, saveKey, bet }: GameApi) {
   const [saved] = useState(() => loadSaved<OkeySave>(saveKey))
   const [game, setGame] = useState(() => saved?.game ?? deal())
   const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'discard')
@@ -185,6 +215,7 @@ export function Okey({ finish, saveKey }: GameApi) {
   useSaveGame(saveKey, phase === 'over' || phase === 'bots' ? null : { game, phase, message })
   const [fresh, setFresh] = useState<number | null>(null)
   const [dropOver, setDropOver] = useState<'discard' | 'finish' | null>(null)
+  const [left, setLeft] = useState(TURN_SECONDS)
 
   const { deck, indicator, okey, hands, discards } = game
   const hand = hands[0]
@@ -309,6 +340,7 @@ export function Okey({ finish, saveKey }: GameApi) {
             timers.push(
               setTimeout(() => {
                 setActive(0)
+                setLeft(TURN_SECONDS)
                 setPhase('draw')
                 setMessage('Sıra sende. 1. adım: ortadaki desteden çek ya da sol alttaki Goril’in attığı taşı al.')
               }, 500),
@@ -320,6 +352,29 @@ export function Okey({ finish, saveKey }: GameApi) {
     return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
+
+  const autoPlay = useRef<() => void>(() => {})
+  autoPlay.current = () => {
+    if (phase === 'draw') {
+      setMessage('Süren doldu, ortadan otomatik çekildi.')
+      drawDeck()
+    } else if (phase === 'discard') {
+      const id = fresh != null && hand.some((t) => t.id === fresh) ? fresh : chooseDiscard(hand, okey).id
+      discard(id)
+    }
+  }
+
+  useEffect(() => {
+    if (phase !== 'draw' && phase !== 'discard') return
+    const id = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(id)
+  }, [phase])
+
+  useEffect(() => {
+    if (phase !== 'draw' && phase !== 'discard') return
+    if (left === 0) autoPlay.current()
+    else if (left <= 5) playSound('tick')
+  }, [left, phase])
 
   const pileTop = (i: number) => discards[i][discards[i].length - 1]
 
@@ -394,39 +449,26 @@ export function Okey({ finish, saveKey }: GameApi) {
     const turn = active === bot && phase === 'bots'
     const name = BOT_NAMES[bot - 1]
     return (
-      <div className={cn('flex items-center', className)}>
-        <div
+      <div className={cn('flex flex-col items-center gap-1', className)}>
+        <SeatAvatar initial={name.charAt(0)} turn={turn} />
+        <span
           className={cn(
-            'flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-3.5 backdrop-blur-sm transition-colors',
-            turn ? 'border-primary bg-background/85 glow-gold' : 'border-foreground/10 bg-background/55',
+            'flex flex-col items-center rounded-md px-2 py-0.5 leading-tight shadow-sm',
+            turn ? 'bg-primary text-primary-foreground' : 'bg-background/70 text-foreground',
           )}
         >
-          <span
-            className={cn(
-              'relative flex size-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold sm:size-9',
-              turn ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground',
-            )}
-            aria-hidden="true"
-          >
-            {name.charAt(0)}
-            {turn && <span className="absolute -inset-1 animate-ping rounded-full border border-primary/60" />}
+          <span className="text-[11px] font-bold sm:text-xs">{name}</span>
+          <span className={cn('text-[9px] font-semibold uppercase tracking-wider', turn ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+            {turn ? 'Düşünüyor' : `${hands[bot].length} taş`}
           </span>
-          <span className="flex flex-col leading-tight">
-            <span className="text-xs font-bold text-foreground sm:text-sm">{name}</span>
-            <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <span className="hidden gap-px sm:flex" aria-hidden="true">
-                {Array.from({ length: Math.min(hands[bot].length, 7) }).map((_, i) => (
-                  <span key={i} className="h-2.5 w-1.5 rounded-[1px] bg-wood ring-1 ring-foreground/10" />
-                ))}
-              </span>
-              {turn ? <span className="text-primary">Düşünüyor</span> : `${hands[bot].length} taş`}
-            </span>
-          </span>
-          <span className="sr-only">{BOTS[bot - 1]} oyuncu</span>
-        </div>
+        </span>
+        <span className="sr-only">{BOTS[bot - 1]} oyuncu</span>
       </div>
     )
   }
+
+  const myTurn = phase === 'draw' || phase === 'discard'
+  const urgent = myTurn && left <= 5
 
   const discardSlot = (i: number, className: string, interactive?: boolean) => {
     const t = pileTop(i)
@@ -465,9 +507,28 @@ export function Okey({ finish, saveKey }: GameApi) {
 
   return (
     <div ref={boardRef} className="flex scroll-mt-20 flex-col gap-2 sm:gap-4">
-      <div data-ls-main="okey" className="ls-tall relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood bg-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.55),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
+      <div data-ls-main="okey" className="ls-tall relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood okey-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.5),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
         <FeltBranding />
         <div className="absolute inset-x-0 top-2 flex justify-center sm:top-3">{seat(2, '')}</div>
+        <div className="absolute inset-x-0 bottom-2 z-10 flex justify-center sm:bottom-4">
+          <div
+            className={cn(
+              'flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 shadow-lg',
+              myTurn ? 'border-primary/70 bg-background/80' : 'border-foreground/10 bg-background/55',
+            )}
+          >
+            <SeatAvatar initial="S" small turn={myTurn} progress={myTurn ? left / TURN_SECONDS : undefined} urgent={urgent} />
+            <span className="flex flex-col leading-tight">
+              <span className="text-xs font-bold text-foreground sm:text-sm">Sen</span>
+              <span
+                className={cn('text-[10px] font-bold uppercase tabular-nums tracking-wider', urgent ? 'text-destructive' : myTurn ? 'text-primary' : 'text-muted-foreground')}
+                aria-live={urgent ? 'assertive' : 'off'}
+              >
+                {myTurn ? `${left} sn` : 'Bekliyor'}
+              </span>
+            </span>
+          </div>
+        </div>
         <div className="ls-seat-l absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
         <div className="ls-seat-r absolute inset-y-0 right-2 flex items-center sm:right-3">{seat(1, '')}</div>
 
@@ -510,12 +571,25 @@ export function Okey({ finish, saveKey }: GameApi) {
             <TileFace tile={indicator} okey={{ color: -2, num: -2 }} size="sm" label={`Gösterge: ${COLOR_NAMES[indicator.color]} ${indicator.num}`} />
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
           </div>
-          <div className="ls-split-hide hidden flex-col items-start gap-0.5 rounded-lg bg-background/60 px-3 py-2 sm:flex phone-ls:hidden">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Okey taşı</span>
-            <span className={cn('font-display text-lg font-bold', TEXT[okey.color])}>
-              {COLOR_NAMES[okey.color]} {okey.num}
-            </span>
-          </div>
+          <dl className="ls-split-hide hidden min-w-32 flex-col gap-1 rounded-lg bg-background/65 px-3 py-2 text-[11px] shadow-lg sm:flex phone-ls:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <dt className="font-semibold uppercase tracking-wider text-muted-foreground">Okey</dt>
+              <dd className="flex items-center gap-1 font-display text-sm font-bold">
+                <span className={cn('size-2 rounded-full', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][okey.color])} aria-hidden="true" />
+                <span className="text-foreground">
+                  {COLOR_NAMES[okey.color]} {okey.num}
+                </span>
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="font-semibold uppercase tracking-wider text-muted-foreground">Masa</dt>
+              <dd className="font-bold tabular-nums text-primary">{bet.toLocaleString('tr-TR')} KP</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="font-semibold uppercase tracking-wider text-muted-foreground">Destede</dt>
+              <dd className="font-bold tabular-nums text-foreground">{deck.length}</dd>
+            </div>
+          </dl>
         </div>
       </div>
 
