@@ -677,7 +677,7 @@ function TurnIndicator({ turn, me, opp }: { turn: 'me' | 'opp' | null; me: strin
     )
   }
   return (
-    <div className="flex items-center gap-2" aria-live="polite" aria-label={turn === 'me' ? 'Sıra sende' : turn === 'opp' ? `Sıra ${opp} oyuncusunda` : 'Oyun bitti'}>
+    <div className="ls-turn flex items-center gap-2" aria-live="polite" aria-label={turn === 'me' ? 'Sıra sende' : turn === 'opp' ? `Sıra ${opp} oyuncusunda` : 'Oyun bitti'}>
       {seat('me', me, 'light')}
       <span className="shrink-0 text-xs font-bold text-muted-foreground">VS</span>
       {seat('opp', opp, 'dark')}

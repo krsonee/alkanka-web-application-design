@@ -9,7 +9,7 @@ const PHONE_LANDSCAPE = '(orientation: landscape) and (max-height: 600px)'
 /** Width the table is laid out at in fullscreen before being scaled to the screen; keeps text readable. */
 const DESIGN_WIDTH = 640
 /** The fullscreen controls sit in a slim rail on the left: on a sideways phone height is the scarce axis. */
-const RAIL_W = 44
+const RAIL_W = 38
 /** Small tables may grow past their natural size so cards and text stay legible. */
 const MAX_SCALE = 1.4
 
@@ -83,15 +83,15 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     const measure = () => {
       // Layout-viewport sizes only: visualViewport shrinks while the page is pinch/double-tap zoomed,
       // which used to lock the table at a tiny wrong size after tapping the minimize/maximize button.
-      const vw = document.documentElement.clientWidth || window.innerWidth
-      const vh = document.documentElement.clientHeight || window.innerHeight
       // Mid-rotation some browsers still report portrait dimensions; measuring then collapses the table.
-      if (vw <= vh) return
-      // Measure the real free area: it already excludes the rail, paddings and notch/safe-area insets,
-      // which differ per device and made the side panel overflow off-screen on iPhones.
+      if (window.innerWidth <= window.innerHeight) return
+      // Only the fixed layer's own free area is trusted: it already excludes the rail, paddings and notch
+      // insets, and follows Safari's toolbar collapsing. documentElement.clientHeight keeps the old
+      // toolbar-visible height on iOS, which shrank the table when the address bar was hidden.
       const a = area.current
-      const availW = Math.min(vw - RAIL_W - 20, (a?.clientWidth || vw) - 4)
-      const availH = Math.min(vh - 8, (a?.clientHeight || vh) - 4)
+      if (!a) return
+      const availW = a.clientWidth - 4
+      const availH = a.clientHeight - 4
       if (availW < 200 || availH < 150 || availW <= availH) return
       // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
       // Wrappers marked data-ls-flat are dissolved so their siblings (e.g. a control bar) join the side column.
@@ -103,8 +103,9 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       })
       if (grid && !grid.hasAttribute('data-ls-grid')) grid.setAttribute('data-ls-grid', '')
       const split = !!main || !!i.querySelector('[data-ls-wide]')
+      // A fine sweep of layout widths: coarse steps left big empty bands beside fixed-ratio boards.
       const candidates = split
-        ? [availW * 0.75, availW * 0.85, availW, availW * 1.15, availW * 1.3]
+        ? Array.from({ length: 21 }, (_, k) => availW * (0.6 + k * 0.05))
         : [availW * 0.5, availW * 0.65, Math.min(availW, DESIGN_WIDTH), availW * 0.85, availW]
       const prevWidth = i.style.width
       const prevTransform = i.style.transform
@@ -165,23 +166,20 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       aria-label={fullscreen ? `${label} tam ekran` : undefined}
       className={cn(
         fullscreen &&
-          'fixed inset-0 z-[100] flex h-dvh touch-manipulation flex-row items-stretch gap-2 overflow-hidden bg-background py-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]',
+          'fixed inset-0 z-[100] flex touch-manipulation flex-row items-stretch gap-1.5 overflow-hidden bg-background py-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]',
       )}
     >
       {fullscreen ? (
-        <div className="flex shrink-0 flex-col items-center justify-between gap-2 py-1" style={{ width: RAIL_W }}>
+        <div className="flex shrink-0 flex-col items-center py-1" style={{ width: RAIL_W }}>
           <button
             type="button"
             onClick={() => setMinimized(true)}
             title="Küçült"
-            className="flex size-10 items-center justify-center rounded-xl border border-border bg-card text-foreground"
+            className="flex size-9 items-center justify-center rounded-xl border border-border bg-card text-foreground"
           >
-            <Minimize2 className="size-5" aria-hidden="true" />
+            <Minimize2 className="size-4" aria-hidden="true" />
             <span className="sr-only">Küçült</span>
           </button>
-          <span className="min-h-0 truncate font-display text-xs font-bold uppercase tracking-widest text-muted-foreground [writing-mode:vertical-rl] rotate-180">
-            {label}
-          </span>
         </div>
       ) : landscape ? (
         <button

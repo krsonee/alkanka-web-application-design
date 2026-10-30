@@ -1806,6 +1806,11 @@
   /* Phones sideways are wide enough to hit desktop breakpoints, so keep the dice at the mobile size. */
   .ls-split .ls-tavla .die3d { --ds: 1.625rem !important; }
   .ls-split [data-ls-stack] button { white-space: nowrap; }
+  /* The narrow side column cannot fit two seats plus "VS": drop the label and tighten the seats. */
+  .ls-split .ls-turn { gap: 0.375rem; }
+  .ls-split .ls-turn > span { display: none; }
+  .ls-split .ls-turn > div { gap: 0.375rem; padding: 0.375rem 0.5rem; }
+  .ls-split .ls-turn > div > span:last-child:not(.truncate) { padding: 0.25rem; }
 
 @keyframes dash-rise {
   from { opacity: 0; transform: translateY(8px); }
