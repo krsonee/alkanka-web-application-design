@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { FlipHorizontal2, Sparkles, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
 import { loadSaved, useSaveGame, writeSaved } from './saved-game'
-import { OkeyRack, useRack, type DropKind } from './okey-rack'
+import { OkeyRack, ghostTransform, useRack, type DropKind } from './okey-rack'
 import { TableBrand } from './table-brand'
 import { playSound } from '@/lib/sound'
 import {
@@ -206,6 +207,56 @@ function SeatAvatar({ initial, turn, progress, urgent, small }: { initial: strin
   )
 }
 
+type DrawSource = 'deck' | 'pile'
+
+/**
+ * Drag a tile from the deck or the left player's pile onto the rack. Releasing over a rack slot places it there;
+ * releasing anywhere a clear distance away still draws, so the player never has to aim precisely.
+ */
+function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => void) {
+  const [ghost, setGhost] = useState<{ src: DrawSource; x: number; y: number } | null>(null)
+  const ghostEl = useRef<HTMLDivElement>(null)
+  const dragged = useRef(false)
+  const drawRef = useRef(onDraw)
+  drawRef.current = onDraw
+
+  const start = (e: ReactPointerEvent, src: DrawSource) => {
+    if (e.button !== 0) return
+    const sx = e.clientX
+    const sy = e.clientY
+    const threshold = e.pointerType === 'touch' ? 6 : 10
+    let moved = false
+    dragged.current = false
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < threshold) return
+      if (!moved) {
+        moved = true
+        dragged.current = true
+        setGhost({ src, x: ev.clientX, y: ev.clientY })
+      }
+      if (ghostEl.current) ghostEl.current.style.transform = ghostTransform(ev.clientX, ev.clientY)
+    }
+    const end = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      if (!moved) return
+      setGhost(null)
+      setTimeout(() => (dragged.current = false), 400)
+      if (ev.type === 'pointercancel') return
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
+      const slot = el?.closest<HTMLElement>('[data-rack-slot]')
+      const far = Math.hypot(ev.clientX - sx, ev.clientY - sy) > 48
+      if (slot || el?.closest('[data-rack]') || far) drawRef.current(src, slot ? Number(slot.dataset.rackSlot) : null)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+  }
+
+  return { ghost, ghostEl, start, dragged }
+}
+
 export function Okey({ finish, saveKey, bet }: GameApi) {
   const [saved] = useState(() => loadSaved<OkeySave>(saveKey))
   const [game, setGame] = useState(() => saved?.game ?? deal())
@@ -239,20 +290,21 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
     setTimeout(() => finish(result, note), 1200)
   }
 
-  function drawDeck() {
+  function drawDeck(slot: number | null = null) {
     if (phase !== 'draw') return
     if (!deck.length) return end('draw', 'Ortada taş kalmadı, el berabere bitti.')
     const nextDeck = [...deck]
     const tile = nextDeck.pop()!
     playSound('tile')
     setGame({ ...game, deck: nextDeck, hands: [[...hand, tile], ...hands.slice(1)] })
+    if (slot != null) rack.placeAt(tile.id, slot)
     setSelected(tile.id)
     setFresh(tile.id)
     setPhase('discard')
     setMessage(`Ortadan ${tileName(tile)} çektin (ıstakada "Yeni" yazıyor). Şimdi atacağın taşı seç.`)
   }
 
-  function takeDiscard() {
+  function takeDiscard(slot: number | null = null) {
     if (phase !== 'draw') return
     const pile = discards[3]
     if (!pile.length) return
@@ -260,6 +312,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
     const nextDiscards = discards.map((d, i) => (i === 3 ? d.slice(0, -1) : d))
     playSound('tile')
     setGame({ ...game, discards: nextDiscards, hands: [[...hand, tile], ...hands.slice(1)] })
+    if (slot != null) rack.placeAt(tile.id, slot)
     setSelected(tile.id)
     setFresh(tile.id)
     setPhase('discard')
@@ -384,9 +437,13 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
   }
 
   function onDropOut(id: number, kind: DropKind) {
-    if (kind === 'discard') return discard(id)
-    tryFinishWith(id)
+    // Dropping the winning tile in the middle finishes; any other throw onto the table is a plain discard.
+    if (kind === 'finish' && winning?.tile.id === id) return finishHand()
+    discard(id)
   }
+
+  const drawDrag = useDrawDrag((src, slot) => (src === 'deck' ? drawDeck(slot) : takeDiscard(slot)))
+  const drawGhostTile = drawDrag.ghost?.src === 'pile' ? pileTop(3) : null
 
   function tryFinishWith(id: number) {
     if (!winning) return setMessage('Henüz bitemezsin. Önce perlerini tamamla, sonra taşı ortaya sürükle.')
@@ -433,7 +490,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
         className={cn(
           'relative flex h-11 w-8 items-center justify-center rounded-md transition-all sm:h-14 sm:w-10',
           canDiscard ? 'border-2 border-dashed border-primary bg-primary/15' : 'border border-dashed border-foreground/20',
-          dropOver === 'discard' && 'scale-110 bg-primary/40',
+          dropOver === 'discard' && 'bg-primary/40 ring-2 ring-primary',
           canDiscard && selected !== null && 'animate-pulse',
         )}
       >
@@ -477,7 +534,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
       <div
         className={cn(
           'absolute flex flex-col items-center gap-1.5 rounded-xl bg-background/25 p-1.5 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)]',
-          canTake && 'z-20 ring-2 ring-primary phone-ls:scale-125',
+          canTake && 'z-20 ring-2 ring-primary',
           className,
         )}
       >
@@ -485,9 +542,13 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           canTake ? (
             <button
               type="button"
-              onClick={takeDiscard}
+              onPointerDown={(e) => drawDrag.start(e, 'pile')}
+              onClick={() => !drawDrag.dragged.current && takeDiscard()}
               aria-label={`Yerdeki taşı al: ${t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`}`}
-              className="-m-1.5 flex flex-col items-center gap-1.5 rounded-xl p-1.5"
+              className={cn(
+                '-m-1.5 flex cursor-grab touch-none select-none flex-col items-center gap-1.5 rounded-xl p-1.5 [-webkit-touch-callout:none]',
+                drawDrag.ghost?.src === 'pile' && 'opacity-40',
+              )}
             >
               <TileFace tile={t} okey={okey} size="sm" />
               <span className="animate-pulse text-[9px] font-bold uppercase tracking-wider text-primary">Yerden al</span>
@@ -548,17 +609,21 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           data-drop={canDiscard ? 'finish' : undefined}
           title={canDiscard ? 'Bitiren taşı masanın ortasına sürükle' : undefined}
           className={cn(
-            'absolute inset-0 ls-center m-auto flex h-fit w-fit items-center gap-5 rounded-2xl p-2 transition-all phone-ls:scale-[0.82] phone-ls:gap-1',
+            'absolute inset-0 ls-center m-auto flex h-fit w-fit items-center gap-5 rounded-2xl p-2 transition-colors phone-ls:scale-[0.82] phone-ls:gap-1',
             winning && 'ring-2 ring-primary',
-            dropOver === 'finish' && 'scale-105 bg-primary/25',
+            dropOver === 'finish' && 'bg-primary/25',
           )}
         >
           <button
             type="button"
-            onClick={drawDeck}
+            onPointerDown={(e) => phase === 'draw' && drawDrag.start(e, 'deck')}
+            onClick={() => !drawDrag.dragged.current && drawDeck()}
             disabled={phase !== 'draw'}
             aria-label={`Ortadan taş çek, ${deck.length} taş kaldı`}
-            className={cn('group relative flex flex-col items-center gap-2 rounded-xl p-2', phase === 'draw' && 'ring-2 ring-primary animate-pulse')}
+            className={cn(
+              'group relative flex touch-none select-none flex-col items-center gap-2 rounded-xl p-2 [-webkit-touch-callout:none]',
+              phase === 'draw' && 'cursor-grab ring-2 ring-primary',
+            )}
           >
             <span className="relative h-11 w-9">
               <TileBack className="absolute left-1 top-1 h-11 w-8" />
@@ -598,7 +663,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           <TurnSteps phase={phase === 'draw' ? 'draw' : phase === 'discard' ? 'discard' : 'wait'} />
         </div>
         <div data-ls-stack className="ls-okey-panel flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
-          <p className="min-w-0 text-xs font-semibold leading-snug text-foreground sm:text-sm" aria-live="polite">
+          <p className="ls-okey-msg min-w-0 text-xs font-semibold leading-snug text-foreground sm:text-sm" aria-live="polite">
             {message}
           </p>
           <div className="flex shrink-0 gap-1.5 sm:flex-wrap sm:gap-2">
@@ -608,22 +673,48 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
             <button onClick={() => sort('cift')} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary sm:px-3 sm:py-2">
               Çift diz
             </button>
-            {selectedIsJoker && selected !== null && (
-              <button
-                onClick={() => rack.toggleFlip(selected)}
-                aria-label={rack.flipped.has(selected) ? 'Okeyi aç' : 'Okeyi ters çevir'}
-                className="flex items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 sm:px-3 sm:py-2"
-              >
-                <FlipHorizontal2 className="size-3.5" aria-hidden="true" />
-                {rack.flipped.has(selected) ? 'Okeyi aç' : 'Okeyi ters çevir'}
-              </button>
-            )}
+            {/* Always mounted so the sideways layout keeps its height (and scale) when an okey is selected. */}
+            <button
+              onClick={() => selected !== null && rack.toggleFlip(selected)}
+              disabled={!selectedIsJoker}
+              data-on={selectedIsJoker || undefined}
+              aria-hidden={!selectedIsJoker || undefined}
+              tabIndex={selectedIsJoker ? undefined : -1}
+              className={cn(
+                'ls-okey-joker items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 sm:px-3 sm:py-2',
+                selectedIsJoker ? 'flex' : 'hidden',
+              )}
+            >
+              <FlipHorizontal2 className="size-3.5" aria-hidden="true" />
+              {selected !== null && rack.flipped.has(selected) ? 'Okeyi aç' : 'Okeyi ters çevir'}
+            </button>
           </div>
         </div>
 
         <div className="ls-okey-rack">
-          <OkeyRack hand={hand} okey={okey} rack={rack} highlight={fresh} onDoubleTile={onDoubleTile} onDropOut={onDropOut} onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish' ? k : null)} />
+          <OkeyRack
+            hand={hand}
+            okey={okey}
+            rack={rack}
+            highlight={fresh}
+            looseDiscard={canDiscard}
+            onDoubleTile={onDoubleTile}
+            onDropOut={onDropOut}
+            onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish' ? k : null)}
+          />
         </div>
+        {drawDrag.ghost &&
+          createPortal(
+            <div
+              ref={drawDrag.ghostEl}
+              aria-hidden="true"
+              className="pointer-events-none fixed left-0 top-0 z-[200] h-12 w-9 drop-shadow-2xl will-change-transform sm:h-14 sm:w-10"
+              style={{ transform: ghostTransform(drawDrag.ghost.x, drawDrag.ghost.y) }}
+            >
+              {drawGhostTile ? <TileFace tile={drawGhostTile} okey={okey} size="fluid" selected /> : <TileBack className="size-full" />}
+            </div>,
+            document.body,
+          )}
 
         <div className="ls-okey-panel ls-okey-actions flex gap-2">
           <button
