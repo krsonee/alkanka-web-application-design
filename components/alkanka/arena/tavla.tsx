@@ -732,35 +732,43 @@ function ControlBar({
           aria-checked={auto}
           onClick={() => onAuto(!auto)}
           title="Zarı kendiliğinden atar, tek seçenek varsa hamleyi oynar"
+          aria-label="Otomatik"
+          data-ls-icon
           className={cn(
             'flex items-center gap-1.5 rounded-xl border px-3 py-3 text-xs font-semibold transition-colors',
             auto ? 'border-primary bg-primary/15 text-foreground' : 'border-border text-muted-foreground hover:bg-secondary',
           )}
         >
           <Zap className="size-4" aria-hidden="true" />
-          Otomatik
+          <span data-ls-label>Otomatik</span>
         </button>
         {onResign && (
           <button
             type="button"
             onClick={() => (arming ? (setArming(false), onResign()) : setArming(true))}
+            aria-label={arming ? 'Pes etmek için tekrar dokun' : 'Pes et'}
+            title={arming ? 'Emin misin? Tekrar dokun' : 'Pes et'}
+            data-ls-icon
             className={cn(
               'flex items-center gap-1.5 rounded-xl border px-3 py-3 text-xs font-semibold transition-colors',
               arming ? 'border-destructive bg-destructive/15 text-destructive' : 'border-border text-muted-foreground hover:bg-secondary',
             )}
           >
             <Flag className="size-4" aria-hidden="true" />
-            {arming ? 'Emin misin?' : 'Pes et'}
+            <span data-ls-label>{arming ? 'Emin misin?' : 'Pes et'}</span>
           </button>
         )}
         {canUndo && (
           <button
             type="button"
             onClick={onUndo}
+            aria-label="Geri al"
+            title="Geri al"
+            data-ls-icon
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary sm:flex-none"
           >
             <Undo2 className="size-4" aria-hidden="true" />
-            Geri al
+            <span data-ls-label>Geri al</span>
           </button>
         )}
         {onConfirm ? (
@@ -770,7 +778,9 @@ function ControlBar({
             className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 sm:flex-none"
           >
             <Check className="size-4" aria-hidden="true" />
-            Hamleyi onayla
+            <span>
+              <span data-ls-label>Hamleyi </span>onayla
+            </span>
           </button>
         ) : (
           <button
