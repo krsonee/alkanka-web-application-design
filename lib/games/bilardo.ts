@@ -63,7 +63,11 @@ export type Spin = { side: number; follow: number; applied: boolean }
 /** Direction is sent as a vector (not an angle) so no client's Math.cos/sin can make replays diverge. */
 export type ShotInput = { dx: number; dy: number; pow: number; spinX: number; spinY: number }
 export type ShotEvents = { first: number | null; potted: number[]; pocketOf: Record<number, number>; rail: boolean; railBalls: number[] }
-export type StepHooks = { hit?: (a: Ball, b: Ball, rel: number) => void; pot?: (b: Ball, pocket: number) => void }
+export type StepHooks = {
+  hit?: (a: Ball, b: Ball, rel: number) => void
+  rail?: (b: Ball, speed: number) => void
+  pot?: (b: Ball, pocket: number) => void
+}
 
 export const groupOf = (id: number): Group | 'eight' | 'cue' => (id === 0 ? 'cue' : id === 8 ? 'eight' : id < 8 ? 'solid' : 'stripe')
 export const groupName = (g: Group) => (g === 'solid' ? 'Düz' : 'Çizgili')
@@ -195,6 +199,7 @@ export function stepShot(balls: Ball[], spin: Spin, ev: ShotEvents, hooks?: Step
         }
       }
       if (railed) {
+        hooks?.rail?.(b, Math.hypot(b.vx, b.vy))
         if (ev.first !== null) ev.rail = true
         if (b.id !== 0 && !ev.railBalls.includes(b.id)) ev.railBalls.push(b.id)
       }
