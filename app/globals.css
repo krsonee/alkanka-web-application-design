@@ -147,6 +147,9 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
+  /* viewport-fit=cover lets fullscreen game tables use the notch area on iPhones; regular pages stay clear of it. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   }
   /* iOS Safari zooms into any focused field under 16px */
   @media (max-width: 767px) {
