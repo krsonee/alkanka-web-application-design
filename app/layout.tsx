@@ -74,6 +74,12 @@ export default function RootLayout({
   return (
     <html lang="tr" className={`${inter.variable} ${spaceGrotesk.variable} bg-background`}>
       <body className="font-sans antialiased">
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "document.addEventListener('visibilitychange',function(){document.documentElement.classList.toggle('is-hidden',document.hidden)})",
+          }}
+        />
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

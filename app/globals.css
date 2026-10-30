@@ -1803,3 +1803,34 @@
 
 /* sr-only spans inside wide scroll tables escape overflow clipping and widen the page on mobile. */
 .sr-only { top: 0; left: 0; }
+
+/*
+  Thermal budget for phones (iOS Safari especially): backdrop-filter re-composites
+  every frame anything moves underneath it, and dozens of decorative infinite
+  animations keep the GPU awake permanently. On touch devices we drop the blur and
+  stop purely decorative loops; gameplay/state animations are untouched.
+*/
+@media (hover: none) and (pointer: coarse) {
+  *, *::before, *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .blur-3xl { display: none; }
+
+  .tier-shine::after, .kp-card::after, .kp-crown, .kp-glow, .kp-flame,
+  .podium-halo, .podium-crown, .podium-spark, .counter-sheen,
+  .animate-radio-idle, .badge-glint, .bonus-aura::before, .bonus-aura::after,
+  .bonus-aura .bonus-sheen, .sponsor-strip-art, .coupon-art, .tg-cta::after,
+  .tg-cta-avatar, .sd-hero::before, .sd-logo, .sd-logo-sheen, .sd-tier,
+  .sd-cta::before, .ending-card::before, .ending-art, .ending-sheen,
+  .ending-bar-fill::after, .mini-card[data-ready='true']::before, .mini-jako,
+  .mini-halo, .stage-rays, .stage-spot, .stage-bubble, .stage-coin,
+  .step-cycle, .app-trophy, .animate-glow {
+    animation: none !important;
+  }
+}
+
+html.is-hidden *, html.is-hidden *::before, html.is-hidden *::after {
+  animation-play-state: paused !important;
+}
