@@ -2202,3 +2202,109 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .ls-split .okt-toast { left: 50%; top: 40%; }
 .ls-split .okt-drop { left: 12%; right: 12%; top: 6%; bottom: 42%; }
 .ls-split .okt-rack { left: 3%; right: 3%; bottom: 2%; height: 39.5%; }
+
+/* ================= 101 Okey masası (onaylanan mockup ile birebir) ================= */
+.o101 { aspect-ratio: 393 / 852; }
+.okt-btn[disabled] { opacity: .42; cursor: default; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08); }
+.okt-btn.gold[disabled] { background: #7a5f2a; color: #2a1f10; }
+.o101 .okt-nm s { text-decoration: none; color: var(--okt-mist); margin-left: calc(var(--u) * .5); font-variant-numeric: tabular-nums; font-weight: 500; }
+.o101 .okt-pl.active .okt-nm s { color: #3a2614; }
+.o101 .okt-nm em { font-style: normal; margin-left: calc(var(--u) * .5); color: var(--okt-brass); font-weight: 700; font-size: .85em; }
+.o101 .okt-pl.active .okt-nm em { color: #3a2614; }
+.o101 .okt-info { grid-template-columns: repeat(6, auto); width: max-content; white-space: nowrap; cursor: pointer; border: 0; font: inherit; font-size: calc(var(--u) * 1.02); color: inherit; text-align: left; }
+.o101 .okt-info .k { color: var(--okt-mist); }
+.o101 .okt-info .v { color: var(--okt-brass); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.o101 .okt-info .v.ok { color: #8fe0b4; }
+.o101 .okt-info:hover { box-shadow: inset 0 0 0 1px var(--okt-brass); }
+.o101 .okt-info:focus-visible { outline: 2px solid var(--okt-brass); outline-offset: 2px; }
+.o101 .o1-bar { grid-column: 1 / -1; height: calc(var(--u) * .35); border-radius: 999px; background: rgb(255 255 255 / 0.1); overflow: hidden; margin-top: calc(var(--u) * .2); }
+.o101 .o1-bar i { display: block; height: 100%; background: var(--okt-brass); border-radius: inherit; transition: width .25s; }
+.o101 .okt-toast.warn { background: #6b1d17; color: #ffe2dc; }
+.o101 .okt-toast.me { background: var(--okt-brass); color: var(--okt-ink); }
+.o101 .okt-slot.ok::after { content: ""; position: absolute; left: 16%; right: 16%; bottom: calc(var(--gap) * -.62); height: max(2px, calc(var(--u) * .16)); border-radius: 2px; background: var(--okt-brass); box-shadow: 0 0 calc(var(--u) * .4) rgb(217 164 65 / 0.7); pointer-events: none; }
+.o101 .okt-slot.drag::after { display: none; }
+.o101 .okt-slot .o1-val { position: absolute; left: 4%; top: -1px; transform: translateY(-100%); font-size: calc(var(--u) * .7); font-weight: 800; color: var(--okt-brass); line-height: 1; pointer-events: none; z-index: 2; }
+.o101 .okt-deck { z-index: 1; }
+.o101 .okt-stack .okt-tile.back, .o101 .okt-pile .okt-tile.back {
+  background: linear-gradient(180deg, #ffffff 0%, var(--okt-porcelain) 52%, #ece6d9 100%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.9), inset 0 -5cqh 0 rgb(20 17 14 / 0.05), 0 3.5cqh 0 #cbbfa8, 0 6cqh 9cqh rgb(0 0 0 / 0.32);
+}
+.o101 .okt-stack .okt-tile.back::after { content: ""; position: absolute; inset: 16cqw; border-radius: 8cqw; box-shadow: inset 0 0 0 1px rgb(184 134 46 / 0.35); }
+.o101 .okt-pile .o1-cnt { position: absolute; right: calc(var(--u) * -.6); top: calc(var(--u) * -.6); z-index: 1; font-size: calc(var(--u) * .7); font-weight: 700; line-height: 1; padding: calc(var(--u) * .2) calc(var(--u) * .35); border-radius: 999px; background: rgb(5 15 14 / 0.85); color: var(--okt-mist); font-variant-numeric: tabular-nums; }
+
+.o1-mz { position: absolute; display: flex; flex-wrap: wrap; align-content: flex-start; gap: calc(var(--u) * .45) calc(var(--u) * .6); --mw: calc(var(--u) * 1.75); z-index: 1; }
+.o1-mz.c { left: 50%; transform: translateX(-50%); justify-content: center; }
+.o1-mz.r { justify-content: flex-end; }
+.o1-meld { all: unset; position: relative; display: flex; padding: calc(var(--u) * .18); border-radius: calc(var(--u) * .45); background: rgb(0 0 0 / 0.18);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06); transition: box-shadow .12s, background .12s, transform .12s, opacity .12s; animation: o1-land .35s cubic-bezier(.2, .8, .2, 1); }
+.o1-meld[data-fit] { cursor: pointer; background: rgb(217 164 65 / 0.12); box-shadow: inset 0 0 0 calc(var(--u) * .12) rgb(217 164 65 / 0.7); }
+.o1-meld.hot { background: rgb(217 164 65 / 0.24); box-shadow: inset 0 0 0 calc(var(--u) * .18) var(--okt-brass); transform: translateY(-6%); }
+.o1-meld.dim { opacity: .45; }
+.o1-meld:focus-visible { outline: 2px solid var(--okt-brass); outline-offset: 2px; }
+.o1-meld b { position: absolute; left: 50%; top: 0; transform: translate(-50%, -70%); z-index: 2; white-space: nowrap; font-size: calc(var(--u) * .62); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; line-height: 1.5;
+  padding: 0 calc(var(--u) * .4); border-radius: 999px; background: var(--okt-brass); color: var(--okt-ink); }
+@keyframes o1-land { 0% { transform: translateY(-30%); opacity: 0; } 100% { transform: none; opacity: 1; } }
+.o1-mt { width: var(--mw); height: calc(var(--mw) * 1.42); padding: 0 .5px; container-type: size; }
+.o1-mt .okt-tile { cursor: inherit; }
+
+.o101 .okt-pl.win .okt-av { box-shadow: 0 0 0 calc(var(--u) * .3) var(--okt-brass), 0 0 calc(var(--u) * 2) rgb(217 164 65 / 0.7); }
+.o101 .okt-pl.win::after { content: "BİTİRDİ"; position: absolute; left: 50%; top: calc(var(--u) * -1.6); transform: translateX(-50%); white-space: nowrap;
+  font-size: calc(var(--u) * .75); font-weight: 800; letter-spacing: .14em; color: var(--okt-ink); background: var(--okt-brass); padding: calc(var(--u) * .2) calc(var(--u) * .6); border-radius: 999px; }
+.o1-res { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgb(3 12 11 / 0.66); backdrop-filter: blur(2px); animation: o1-in .3s ease-out; }
+@keyframes o1-in { 0% { opacity: 0; } 100% { opacity: 1; } }
+.o1-card { width: min(88%, calc(var(--u) * 34)); background: #0d2826; border-radius: calc(var(--u) * 1.2);
+  box-shadow: inset 0 0 0 1px rgb(217 164 65 / 0.45), 0 calc(var(--u) * 1.5) calc(var(--u) * 4) rgb(0 0 0 / 0.5);
+  padding: calc(var(--u) * 1.6) calc(var(--u) * 1.8); display: flex; flex-direction: column; gap: calc(var(--u) * 1); }
+.o1-k { font-size: calc(var(--u) * .8); font-weight: 700; letter-spacing: .2em; color: var(--okt-brass); text-transform: uppercase; }
+.o1-h { display: flex; align-items: center; gap: calc(var(--u) * 1); }
+.o1-h .okt-av { flex: none; }
+.o1-h b { display: block; font-size: calc(var(--u) * 1.7); line-height: 1.15; color: var(--okt-porcelain); }
+.o1-h span { font-size: calc(var(--u) * .95); color: var(--okt-mist); }
+.o1-t { display: flex; flex-direction: column; font-size: calc(var(--u) * 1); font-variant-numeric: tabular-nums; margin: 0; padding: 0; list-style: none; }
+.o1-t li { display: flex; align-items: center; gap: calc(var(--u) * 1); padding: calc(var(--u) * .5) 0; box-shadow: 0 1px 0 rgb(255 255 255 / 0.07); }
+.o1-t li.me { color: var(--okt-brass); font-weight: 700; }
+.o1-t em { font-style: normal; color: var(--okt-mist); font-size: calc(var(--u) * .85); margin-left: auto; }
+.o1-t s { text-decoration: none; min-width: calc(var(--u) * 4); text-align: right; }
+.o1-a { display: flex; gap: calc(var(--u) * .6); justify-content: flex-end; }
+.o1-spec { position: absolute; left: 50%; bottom: 2%; transform: translateX(-50%); font-size: calc(var(--u) * 1); color: var(--okt-mist); background: rgb(5 15 14 / 0.62); padding: calc(var(--u) * .5) calc(var(--u) * 1.2); border-radius: 999px; white-space: nowrap; }
+
+/* ===== MOBİL DİKEY (varsayılan) ===== */
+.o101 .okt-p2 { left: 50%; top: 17%; } .o101 .okt-p3 { left: 11%; top: 35%; } .o101 .okt-p1 { left: 89%; top: 35%; } .o101 .okt-p0 { left: 50%; top: 69%; }
+.o101 .okt-pile2 { left: 20%; top: 19%; } .o101 .okt-pile1 { left: 80%; top: 19%; } .o101 .okt-pile3 { left: 16%; top: 64%; } .o101 .okt-pile0 { left: 84%; top: 64%; }
+.o101 .okt-deck { left: 42%; top: 36%; } .o101 .okt-ind { left: 58%; top: 34.5%; } .o101 .okt-lbl { left: 58%; top: 40.5%; }
+.o101 .okt-side { left: 50%; top: 76%; transform: translateX(-50%); flex-direction: row; }
+.o101 .okt-info { left: 50%; top: 4.5%; transform: translateX(-50%); }
+.o101 .okt-toast { left: 50%; top: 45%; }
+.o101 .okt-drop { left: 6%; right: 6%; top: 13%; bottom: 25%; }
+.o101 .okt-rot { top: 10.5%; }
+.o101 .o1-mz2 { top: 24%; width: 56%; } .o101 .o1-mz0 { top: 50%; width: 46%; }
+.o101 .o1-mz3 { left: 2.5%; top: 42%; width: 24%; } .o101 .o1-mz1 { right: 2.5%; top: 42%; width: 24%; }
+.o101 .okt-rack { bottom: calc(var(--u) * 1.6); height: 21.5cqw; }
+
+/* ===== WEB 16:9 ===== */
+@media (min-width: 640px) {
+  .o101 { aspect-ratio: 16 / 9; }
+  .o101 .okt-p2 { left: 50%; top: 10%; } .o101 .okt-p3 { left: 6.5%; top: 28%; } .o101 .okt-p1 { left: 93.5%; top: 28%; } .o101 .okt-p0 { left: 50%; top: 60.5%; }
+  .o101 .okt-pile2 { left: 31%; top: 12%; } .o101 .okt-pile1 { left: 69%; top: 12%; } .o101 .okt-pile3 { left: 26%; top: 50%; } .o101 .okt-pile0 { left: 74%; top: 50%; }
+  .o101 .okt-deck { left: 45%; top: 30%; } .o101 .okt-ind { left: 55%; top: 28.5%; } .o101 .okt-lbl { left: 55%; top: 35.5%; }
+  .o101 .okt-side { left: 1.8%; top: 3.5%; transform: none; flex-direction: row; }
+  .o101 .okt-info { left: auto; right: 1.8%; top: 3.5%; transform: none; grid-template-columns: auto auto; }
+  .o101 .okt-toast { left: 50%; top: 39%; }
+  .o101 .okt-drop { left: 12%; right: 12%; top: 6%; bottom: 32%; }
+  .o101 .o1-mz2 { top: 18%; width: 34%; } .o101 .o1-mz0 { top: 44.5%; width: 40%; }
+  .o101 .o1-mz3 { left: 1.5%; top: 37%; width: 18%; } .o101 .o1-mz1 { right: 1.5%; top: 37%; width: 18%; }
+  .o101 .okt-rack { left: 7%; right: 7%; bottom: 1.8%; height: 29.5%; }
+}
+
+/* ===== MOBİL YATAY (tam ekran) ===== */
+.ls-split .o101 { aspect-ratio: 852 / 393; }
+.ls-split .o101 .okt-p2 { left: 50%; top: 9%; } .ls-split .o101 .okt-p3 { left: 5%; top: 32%; } .ls-split .o101 .okt-p1 { left: 95%; top: 32%; } .ls-split .o101 .okt-p0 { left: 5%; top: 49%; }
+.ls-split .o101 .okt-pile2 { left: 27%; top: 11%; } .ls-split .o101 .okt-pile1 { left: 73%; top: 11%; } .ls-split .o101 .okt-pile3 { left: 16%; top: 47%; } .ls-split .o101 .okt-pile0 { left: 84%; top: 47%; }
+.ls-split .o101 .okt-deck { left: 40%; top: 12.5%; } .ls-split .o101 .okt-ind { left: 60%; top: 10%; } .ls-split .o101 .okt-lbl { left: 60%; top: 16.5%; }
+.ls-split .o101 .okt-side { left: 1.6%; top: 4%; transform: none; flex-direction: column; }
+.ls-split .o101 .okt-info { left: auto; right: 1.6%; top: 4%; transform: none; grid-template-columns: auto auto; }
+.ls-split .o101 .okt-toast { left: 50%; top: 36%; }
+.ls-split .o101 .okt-drop { left: 12%; right: 12%; top: 6%; bottom: 42%; }
+.ls-split .o101 .o1-mz2 { top: 21.5%; width: 40%; } .ls-split .o101 .o1-mz0 { top: 42%; width: 52%; }
+.ls-split .o101 .o1-mz3 { left: 10.5%; top: 20%; width: 18.5%; } .ls-split .o101 .o1-mz1 { right: 10.5%; top: 20%; width: 18.5%; }
+.ls-split .o101 .okt-rack { left: 3%; right: 3%; bottom: 2%; height: 39.5%; }
