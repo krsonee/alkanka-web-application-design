@@ -47,6 +47,7 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
   const [minimized, setMinimized] = useState(false)
   const fullscreen = landscape && !minimized
   const inner = useRef<HTMLDivElement>(null)
+  const area = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
 
@@ -78,8 +79,12 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       const vh = Math.round(window.visualViewport?.height ?? window.innerHeight)
       // Mid-rotation some browsers still report portrait dimensions; measuring then collapses the table.
       if (vw <= vh) return
-      const availW = vw - RAIL_W - 20
-      const availH = vh - 10
+      // Measure the real free area: it already excludes the rail, paddings and notch/safe-area insets,
+      // which differ per device and made the side panel overflow off-screen on iPhones.
+      const a = area.current
+      const availW = Math.min(vw - RAIL_W - 20, (a?.clientWidth || vw) - 4)
+      const availH = Math.min(vh - 8, (a?.clientHeight || vh) - 4)
+      if (availW < 200 || availH < 150) return
       // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
       // Wrappers marked data-ls-flat are dissolved so their siblings (e.g. a control bar) join the side column.
       const main = i.querySelector<HTMLElement>('[data-ls-main]')
@@ -130,6 +135,7 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
     settle()
     const ro = new ResizeObserver(schedule)
     ro.observe(i)
+    if (area.current) ro.observe(area.current)
     window.addEventListener('resize', settle)
     window.addEventListener('orientationchange', settle)
     window.visualViewport?.addEventListener('resize', settle)
@@ -195,7 +201,8 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
         </div>
       ) : null}
       <div
-        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center')}
+        ref={area}
+        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden')}
       >
         <div style={fullscreen && box ? { width: box.w, height: box.h } : undefined}>
           <div
