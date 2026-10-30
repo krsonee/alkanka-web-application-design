@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { FlipHorizontal2, Sparkles, Trophy } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
 import { loadSaved, useSaveGame, writeSaved } from './saved-game'
-import { OkeyRack, ghostTransform, useRack, type DropKind } from './okey-rack'
+import { MockTile, OkeyRack, ghostTransform, useRack } from './okey-rack'
 import { TableBrand } from './table-brand'
 import { playSound } from '@/lib/sound'
 import {
@@ -138,26 +138,28 @@ function FluidTile({ tile, okey, selected, onClick, label }: { tile: Tile; okey:
       aria-label={label ?? name}
       aria-pressed={selected}
       className={cn(
-        'relative flex size-full flex-col items-center justify-center gap-[4cqh] rounded-[13cqw] pb-[3cqh] [container-type:size]',
+        'relative block size-full rounded-[13%/9%] [container-type:size]',
         joker ? 'okey-tile-joker' : 'okey-tile-face okey-tile-body',
         selected && 'ring-2 ring-primary',
       )}
     >
       {tile.fake ? (
-        <Sparkles className="size-1/2 text-tile-black" aria-hidden="true" />
+        <span className="flex size-full items-center justify-center">
+          <Sparkles className="size-1/2 text-tile-black" aria-hidden="true" />
+        </span>
       ) : (
-        <>
+        <span className="flex size-full flex-col items-center justify-center gap-[4cqh] pb-[3cqh]">
           <span
             className={cn(
               'font-display font-extrabold leading-none tabular-nums',
-              tile.num >= 10 ? 'text-[min(40cqh,50cqw)] tracking-[-0.1em]' : 'text-[min(44cqh,62cqw)] tracking-tight',
+              tile.num >= 10 ? 'text-[min(38cqh,46cqw)] tracking-[-0.04em]' : 'text-[min(44cqh,62cqw)] tracking-tight',
               TEXT[tile.color],
             )}
           >
             {tile.num}
           </span>
           <span className={cn('aspect-square w-[15cqw] rounded-full', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][tile.color])} />
-        </>
+        </span>
       )}
     </button>
   )
@@ -221,7 +223,7 @@ type DrawSource = 'deck' | 'pile'
  * releasing anywhere a clear distance away still draws, so the player never has to aim precisely.
  */
 function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => void) {
-  const [ghost, setGhost] = useState<{ src: DrawSource; x: number; y: number } | null>(null)
+  const [ghost, setGhost] = useState<{ src: DrawSource; x: number; y: number; w: number; h: number } | null>(null)
   const ghostEl = useRef<HTMLDivElement>(null)
   const dragged = useRef(false)
   const drawRef = useRef(onDraw)
@@ -232,6 +234,8 @@ function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => void) {
     const sx = e.clientX
     const sy = e.clientY
     const threshold = e.pointerType === 'touch' ? 6 : 10
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const size = src === 'deck' ? { w: box.width * 0.9, h: box.width * 1.26 } : { w: box.width, h: box.height }
     let moved = false
     dragged.current = false
     const move = (ev: PointerEvent) => {
@@ -239,7 +243,7 @@ function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => void) {
       if (!moved) {
         moved = true
         dragged.current = true
-        setGhost({ src, x: ev.clientX, y: ev.clientY })
+        setGhost({ src, x: ev.clientX, y: ev.clientY, ...size })
       }
       if (ghostEl.current) ghostEl.current.style.transform = ghostTransform(ev.clientX, ev.clientY)
     }
@@ -269,10 +273,11 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
   const [game, setGame] = useState(() => saved?.game ?? deal())
   const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'discard')
   const [active, setActive] = useState(saved?.phase === 'bots' ? 1 : 0)
-  const [message, setMessage] = useState(saved?.message ?? 'Elinde 15 taş var. Bir taş seçip at, oyun başlasın.')
+  const [message, setMessage] = useState(saved?.message ?? 'Sıra sende – bir taş at')
   useSaveGame(saveKey, phase === 'over' || phase === 'bots' ? null : { game, phase, message })
   const [fresh, setFresh] = useState<number | null>(null)
-  const [dropOver, setDropOver] = useState<'discard' | 'finish' | null>(null)
+  const [dropOver, setDropOver] = useState(false)
+  const [cifte, setCifte] = useState(false)
   const [left, setLeft] = useState(TURN_SECONDS)
 
   const { deck, indicator, okey, hands, discards } = game
@@ -309,7 +314,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
     setSelected(tile.id)
     setFresh(tile.id)
     setPhase('discard')
-    setMessage(`Ortadan ${tileName(tile)} çektin (ıstakada "Yeni" yazıyor). Şimdi atacağın taşı seç.`)
+    setMessage(isJoker(tile, okey) ? 'Okey geldi! Açmak için taşa dokun' : 'Şimdi bir taş at')
   }
 
   function takeDiscard(slot: number | null = null) {
@@ -324,13 +329,15 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
     setSelected(tile.id)
     setFresh(tile.id)
     setPhase('discard')
-    setMessage(`Yerden ${tileName(tile)} aldın. Şimdi atacağın taşı seç.`)
+    setMessage('Şimdi bir taş at')
   }
 
   function discard(tileId: number | null) {
     if (phase !== 'discard' || tileId === null) return
     const tile = hand.find((t) => t.id === tileId)
     if (!tile) return
+    // Throwing the winning tile ends the hand, just like closing out at a real table.
+    if (winning?.tile.id === tileId) return finishHand()
     playSound('tile')
     const next = {
       ...game,
@@ -338,12 +345,12 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
       discards: discards.map((d, i) => (i === 0 ? [...d, tile] : d)),
     }
     setGame(next)
-    writeSaved(saveKey, { game: next, phase: 'bots', message: 'Rakipler oynuyor...' } satisfies OkeySave)
+    writeSaved(saveKey, { game: next, phase: 'bots', message: `${BOT_NAMES[0]} oynuyor…` } satisfies OkeySave)
     setSelected(null)
     setFresh(null)
     setActive(1)
     setPhase('bots')
-    setMessage('Rakipler oynuyor...')
+    setMessage(`${BOT_NAMES[0]} oynuyor…`)
   }
 
   function finishHand() {
@@ -390,20 +397,22 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
             discards: discardsNext.map((d, i) => (i === bot ? [...d, out] : d)),
           }
           setGame(state)
-          setActive(bot)
           playSound('tile')
           if (win) {
             end('lose', `${BOT_NAMES[bot - 1]} elini açtı. Bu masa onun.`)
             return
           }
-          if (bot < 3) step(bot + 1)
-          else
+          if (bot < 3) {
+            setActive(bot + 1)
+            setMessage(`${BOT_NAMES[bot]} oynuyor…`)
+            step(bot + 1)
+          } else
             timers.push(
               setTimeout(() => {
                 setActive(0)
                 setLeft(TURN_SECONDS)
                 setPhase('draw')
-                setMessage('Sıra sende. 1. adım: ortadaki desteden çek ya da sol alttaki Goril’in attığı taşı al.')
+                setMessage(`Sıra sende – desteden ya da ${BOT_NAMES[2]}’in taşından çek`)
               }, 500),
             )
         }, 850),
@@ -417,7 +426,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
   const autoPlay = useRef<() => void>(() => {})
   autoPlay.current = () => {
     if (phase === 'draw') {
-      setMessage('Süren doldu, ortadan otomatik çekildi.')
+      setMessage('Süren doldu, otomatik çekildi')
       drawDeck()
     } else if (phase === 'discard') {
       const id = fresh != null && hand.some((t) => t.id === fresh) ? fresh : chooseDiscard(hand, okey).id
@@ -444,314 +453,165 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
     else if (isJoker(tile, okey) && !tile.fake) rack.toggleFlip(tile.id)
   }
 
-  function onDropOut(id: number, kind: DropKind) {
-    // Dropping the winning tile in the middle finishes; any other throw onto the table is a plain discard.
-    if (kind === 'finish' && winning?.tile.id === id) return finishHand()
-    discard(id)
-  }
-
   const drawDrag = useDrawDrag((src, slot) => (src === 'deck' ? drawDeck(slot) : takeDiscard(slot)))
   const drawGhostTile = drawDrag.ghost?.src === 'pile' ? pileTop(3) : null
 
-  function tryFinishWith(id: number) {
-    if (!winning) return setMessage('Henüz bitemezsin. Önce perlerini tamamla, sonra taşı ortaya sürükle.')
-    if (winning.tile.id === id) finishHand()
-    else setMessage('Bu taşla bitemezsin. Bitiren taş parlayan butonda yazıyor.')
-  }
-
-  function dropTileId(e: DragEvent) {
-    e.preventDefault()
-    setDropOver(null)
-    const id = Number(e.dataTransfer.getData('text/plain'))
-    return Number.isFinite(id) ? id : null
-  }
-
-  function onFinishDrop(e: DragEvent) {
-    const id = dropTileId(e)
-    if (id != null) tryFinishWith(id)
-  }
-
-  const selectedTile = hand.find((t) => t.id === selected)
-  const selectedIsJoker = selectedTile ? isJoker(selectedTile, okey) && !selectedTile.fake : false
   const canDiscard = phase === 'discard'
+  const myTurn = phase === 'draw' || phase === 'discard'
+  const urgent = myTurn && left <= 5
+  const toast = winning && canDiscard ? `Bitirebilirsin – ${tileName(winning.tile)} taşını at` : message
 
-  const discardZone = (
-    <div
-      onDragOver={(e) => {
-        if (!canDiscard) return
-        e.preventDefault()
-        setDropOver('discard')
-      }}
-      data-drop={canDiscard ? 'discard' : undefined}
-      onDragLeave={() => setDropOver(null)}
-      onDrop={(e) => {
-        const id = dropTileId(e)
-        if (id != null) discard(id)
-      }}
-      className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 rounded-xl bg-background/25 p-1.5 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)] sm:bottom-6 sm:right-6"
-    >
-      <button
-        type="button"
-        onClick={() => discard(selected)}
-        disabled={!canDiscard || selected === null}
-        aria-label={selectedTile ? `Seçili taşı buraya at: ${tileName(selectedTile)}` : 'Atılacak taşı seç'}
-        className={cn(
-          'relative flex h-11 w-8 items-center justify-center rounded-md transition-all sm:h-14 sm:w-10',
-          canDiscard ? 'border-2 border-dashed border-primary bg-primary/15' : 'border border-dashed border-foreground/20',
-          dropOver === 'discard' && 'bg-primary/40 ring-2 ring-primary',
-          canDiscard && selected !== null && 'animate-pulse',
-        )}
-      >
-        {pileTop(0) && !canDiscard ? <TileFace tile={pileTop(0)} okey={okey} size="sm" /> : null}
-      </button>
-      <span className={cn('text-[9px] font-bold uppercase tracking-wider', canDiscard ? 'text-primary' : 'text-foreground/50')}>
-        {canDiscard ? 'Buraya at' : 'Senin attığın'}
-      </span>
-    </div>
-  )
-
-  const seat = (bot: 1 | 2 | 3, className: string) => {
-    const turn = active === bot && phase === 'bots'
-    const name = BOT_NAMES[bot - 1]
+  const seat = (p: 0 | 1 | 2 | 3) => {
+    const name = p === 0 ? 'Sen' : BOT_NAMES[p - 1]
+    const initials = p === 0 ? 'SN' : name.slice(0, 2).toLocaleUpperCase('tr-TR')
+    const isActive = p === 0 ? myTurn : phase === 'bots' && active === p
     return (
-      <div className={cn('flex flex-col items-center gap-1', className)}>
-        <SeatAvatar initial={name.charAt(0)} turn={turn} />
-        <span
-          className={cn(
-            'flex flex-col items-center rounded-md px-2 py-0.5 leading-tight shadow-sm',
-            turn ? 'bg-primary text-primary-foreground' : 'bg-background/70 text-foreground',
-          )}
-        >
-          <span className="text-[11px] font-bold sm:text-xs">{name}</span>
-          <span className={cn('text-[9px] font-semibold uppercase tracking-wider', turn ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
-            {turn ? 'Düşünüyor' : `${hands[bot].length} taş`}
-          </span>
+      <div
+        className={cn('okt-pl', `okt-p${p}`, isActive && 'active', p === 0 && urgent && 'urgent')}
+        style={{ '--p': p === 0 && myTurn ? left / TURN_SECONDS : 1 } as CSSProperties}
+      >
+        <div className="okt-av" aria-hidden="true">
+          {initials}
+        </div>
+        <div className="okt-nm">{name}</div>
+        <span className="sr-only">
+          {p === 0 ? (myTurn ? `Sıra sende, ${left} saniye` : 'Bekliyorsun') : `${BOTS[p - 1]} oyuncu, ${hands[p].length} taş${isActive ? ', oynuyor' : ''}`}
         </span>
-        <span className="sr-only">{BOTS[bot - 1]} oyuncu</span>
       </div>
     )
   }
 
-  const myTurn = phase === 'draw' || phase === 'discard'
-  const urgent = myTurn && left <= 5
-
-  const discardSlot = (i: number, className: string, interactive?: boolean) => {
+  const pile = (i: 0 | 1 | 2 | 3) => {
     const t = pileTop(i)
-    const canTake = interactive && phase === 'draw' && t
+    const canTake = i === 3 && phase === 'draw' && !!t
+    const canDrop = i === 0 && canDiscard && selected !== null
     return (
-      <div
-        className={cn(
-          'absolute flex flex-col items-center gap-1.5 rounded-xl bg-background/25 p-1.5 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)]',
-          canTake && 'z-20 ring-2 ring-primary',
-          className,
+      <div className={cn('okt-pile okt-box', `okt-pile${i}`, canTake && 'can')}>
+        {t && <MockTile tile={t} okey={okey} />}
+        {canTake && (
+          <button
+            type="button"
+            onPointerDown={(e) => drawDrag.start(e, 'pile')}
+            onClick={() => !drawDrag.dragged.current && takeDiscard()}
+            aria-label={`Yerdeki taşı al: ${tileName(t)}`}
+            className="okt-hit"
+          />
         )}
-      >
-        {t ? (
-          canTake ? (
-            <button
-              type="button"
-              onPointerDown={(e) => drawDrag.start(e, 'pile')}
-              onClick={() => !drawDrag.dragged.current && takeDiscard()}
-              aria-label={`Yerdeki taşı al: ${t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`}`}
-              className={cn(
-                '-m-1.5 flex cursor-grab touch-none select-none flex-col items-center gap-1.5 rounded-xl p-1.5 [-webkit-touch-callout:none]',
-                drawDrag.ghost?.src === 'pile' && 'opacity-40',
-              )}
-            >
-              <TileFace tile={t} okey={okey} size="sm" />
-              <span className="animate-pulse text-[9px] font-bold uppercase tracking-wider text-primary">Yerden al</span>
-            </button>
-          ) : (
-            <TileFace tile={t} okey={okey} size="sm" />
-          )
-        ) : (
-          <span className="h-11 w-8 rounded-md border border-foreground/10 bg-background/20" aria-hidden="true" />
-        )}
-        {!canTake && (interactive || i === 0) && (
-          <span className="text-[9px] font-bold uppercase tracking-wider text-foreground/55">{interactive ? 'Soldan gelen' : 'Senin attığın'}</span>
-        )}
+        {canDrop && <button type="button" onClick={() => discard(selected)} aria-label="Seçili taşı at" className="okt-hit" />}
       </div>
     )
   }
 
   return (
-    <div ref={boardRef} className="flex scroll-mt-20 flex-col gap-2 sm:gap-4">
-      <div data-ls-main="okey" className="ls-tall relative aspect-[3/2] w-full overflow-hidden rounded-2xl border-[6px] border-wood okey-felt shadow-[inset_0_0_80px_rgb(0_0_0/0.5),0_20px_40px_rgb(0_0_0/0.4)] sm:aspect-[16/9] sm:rounded-[2rem] sm:border-[10px]">
-        <FeltBranding />
-        <div className="absolute inset-x-0 top-2 flex justify-center sm:top-3">{seat(2, '')}</div>
-        <div className="absolute inset-x-0 bottom-2 z-10 flex justify-center sm:bottom-4">
-          <div
-            className={cn(
-              'flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 shadow-lg',
-              myTurn ? 'border-primary/70 bg-background/80' : 'border-foreground/10 bg-background/55',
-            )}
-          >
-            <SeatAvatar initial="S" small turn={myTurn} progress={myTurn ? left / TURN_SECONDS : undefined} urgent={urgent} />
-            <span className="flex flex-col leading-tight">
-              <span className="text-xs font-bold text-foreground sm:text-sm">Sen</span>
-              <span
-                className={cn('text-[10px] font-bold uppercase tabular-nums tracking-wider', urgent ? 'text-destructive' : myTurn ? 'text-primary' : 'text-muted-foreground')}
-                aria-live={urgent ? 'assertive' : 'off'}
-              >
-                {myTurn ? `${left} sn` : 'Bekliyor'}
-              </span>
-            </span>
-          </div>
+    <div ref={boardRef} className="scroll-mt-20">
+      <div className="okt font-sans">
+        <TableBrand center={false} plaque={false} corners={false} jako={false} />
+        <div className="okt-logo" aria-hidden="true">
+          ALKANKA
         </div>
-        <div className="ls-seat-l absolute inset-y-0 left-2 flex items-center sm:left-3">{seat(3, '')}</div>
-        <div className="ls-seat-r absolute inset-y-0 right-2 flex items-center sm:right-3">{seat(1, '')}</div>
+        <div className={cn('okt-drop', dropOver && 'on')} aria-hidden="true" />
+        <div className="okt-rot" aria-hidden="true">
+          Daha büyük taşlar için telefonu yan çevir
+        </div>
 
-        {discardSlot(3, 'bottom-2 left-2 sm:bottom-6 sm:left-6', true)}
-        {discardZone}
-        {discardSlot(1, 'right-2 top-2 sm:right-6 sm:top-6')}
-        {discardSlot(2, 'left-2 top-2 sm:left-6 sm:top-6')}
+        {seat(2)}
+        {seat(3)}
+        {seat(1)}
+        {seat(0)}
 
-        <div
-          onDragOver={(e) => {
-            if (!canDiscard) return
-            e.preventDefault()
-            setDropOver('finish')
-          }}
-          onDragLeave={() => setDropOver(null)}
-          onDrop={onFinishDrop}
-          data-drop={canDiscard ? 'finish' : undefined}
-          title={canDiscard ? 'Bitiren taşı masanın ortasına sürükle' : undefined}
-          className={cn(
-            'absolute inset-0 ls-center m-auto flex h-fit w-fit items-center gap-5 rounded-2xl p-2 transition-colors phone-ls:scale-[0.82] phone-ls:gap-1',
-            winning && 'ring-2 ring-primary',
-            dropOver === 'finish' && 'bg-primary/25',
-          )}
+        {pile(2)}
+        {pile(1)}
+        {pile(3)}
+        {pile(0)}
+
+        <button
+          type="button"
+          className="okt-deck"
+          data-on={phase === 'draw' || undefined}
+          onPointerDown={(e) => phase === 'draw' && drawDrag.start(e, 'deck')}
+          onClick={() => !drawDrag.dragged.current && drawDeck()}
+          disabled={phase !== 'draw'}
+          aria-label={`Ortadan taş çek, ${deck.length} taş kaldı`}
         >
+          <span className="okt-stack" aria-hidden="true">
+            <span className="okt-box absolute inset-0">
+              <MockTile back />
+            </span>
+            <span className="okt-box absolute inset-0">
+              <MockTile back />
+            </span>
+            <span className="okt-box absolute inset-0">
+              <MockTile back />
+            </span>
+          </span>
+          <span className="okt-num">{deck.length} taş</span>
+        </button>
+        <div className="okt-ind okt-box">
+          <MockTile tile={indicator} okey={{ color: -2, num: -2 }} label={`Gösterge: ${tileName(indicator)}`} />
+        </div>
+        <div className="okt-lbl" aria-hidden="true">
+          Gösterge
+        </div>
+
+        <div className="okt-side">
+          <button type="button" className="okt-btn" onClick={() => rack.arrange('seri')}>
+            Seri Diz
+          </button>
+          <button type="button" className="okt-btn" onClick={() => rack.arrange('cift')}>
+            Çift Diz
+          </button>
           <button
             type="button"
-            onPointerDown={(e) => phase === 'draw' && drawDrag.start(e, 'deck')}
-            onClick={() => !drawDrag.dragged.current && drawDeck()}
-            disabled={phase !== 'draw'}
-            aria-label={`Ortadan taş çek, ${deck.length} taş kaldı`}
-            className={cn(
-              'group relative flex touch-none select-none flex-col items-center gap-2 rounded-xl p-2 [-webkit-touch-callout:none]',
-              phase === 'draw' && 'cursor-grab ring-2 ring-primary',
-            )}
+            className="okt-btn gold"
+            aria-pressed={cifte}
+            onClick={() => {
+              const on = !cifte
+              setCifte(on)
+              if (on) rack.arrange('cift')
+              setMessage(on ? 'Çifte gidiyorsun – 7 çift topla' : 'Çifte gitmekten vazgeçtin')
+            }}
           >
-            <span className="relative h-11 w-9">
-              <TileBack className="absolute left-1 top-1 h-11 w-8" />
-              <TileBack className="absolute left-0.5 top-0.5 h-11 w-8" />
-              <TileBack className="absolute left-0 top-0 h-11 w-8" />
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">{phase === 'draw' ? 'Çek' : `${deck.length} taş`}</span>
+            Çifte Git
           </button>
-          <div className="flex flex-col items-center gap-2 rounded-xl p-1">
-            <TileFace tile={indicator} okey={{ color: -2, num: -2 }} size="sm" label={`Gösterge: ${COLOR_NAMES[indicator.color]} ${indicator.num}`} />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
-          </div>
-          <dl className="ls-split-hide hidden min-w-32 flex-col gap-1 rounded-lg bg-background/65 px-3 py-2 text-[11px] shadow-lg sm:flex phone-ls:hidden">
-            <div className="flex items-center justify-between gap-3">
-              <dt className="font-semibold uppercase tracking-wider text-muted-foreground">Okey</dt>
-              <dd className="flex items-center gap-1 font-display text-sm font-bold">
-                <span className={cn('size-2 rounded-full', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][okey.color])} aria-hidden="true" />
-                <span className="text-foreground">
-                  {COLOR_NAMES[okey.color]} {okey.num}
-                </span>
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="font-semibold uppercase tracking-wider text-muted-foreground">Masa</dt>
-              <dd className="font-bold tabular-nums text-primary">{bet.toLocaleString('tr-TR')} KP</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="font-semibold uppercase tracking-wider text-muted-foreground">Destede</dt>
-              <dd className="font-bold tabular-nums text-foreground">{deck.length}</dd>
-            </div>
-          </dl>
         </div>
+        <dl className="okt-info">
+          <dt>Masa</dt>
+          <dd>{bet.toLocaleString('tr-TR')}</dd>
+          <dt>Çanak</dt>
+          <dd>{(bet * 4).toLocaleString('tr-TR')}</dd>
+        </dl>
+        <div className="okt-toast" aria-live="polite">
+          {toast}
+        </div>
+
+        <OkeyRack
+          variant="table"
+          hand={hand}
+          okey={okey}
+          rack={rack}
+          highlight={fresh}
+          looseDiscard={canDiscard}
+          onDoubleTile={onDoubleTile}
+          onDropOut={(id) => discard(id)}
+          onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish')}
+        />
       </div>
 
-      <div data-ls-flat className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-2.5 sm:gap-3 sm:p-4">
-        <div data-ls-hide className="hidden sm:block">
-          <TurnSteps phase={phase === 'draw' ? 'draw' : phase === 'discard' ? 'discard' : 'wait'} />
-        </div>
-        <div data-ls-stack className="ls-okey-panel flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
-          <p className="ls-okey-msg min-w-0 text-xs font-semibold leading-snug text-foreground sm:text-sm" aria-live="polite">
-            {message}
-          </p>
-          <div className="flex shrink-0 gap-1.5 sm:flex-wrap sm:gap-2">
-            <button onClick={() => sort('seri')} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary sm:px-3 sm:py-2">
-              Seri diz
-            </button>
-            <button onClick={() => sort('cift')} className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary sm:px-3 sm:py-2">
-              Çift diz
-            </button>
-            {/* Always mounted so the sideways layout keeps its height (and scale) when an okey is selected. */}
-            <button
-              onClick={() => selected !== null && rack.toggleFlip(selected)}
-              disabled={!selectedIsJoker}
-              data-on={selectedIsJoker || undefined}
-              aria-hidden={!selectedIsJoker || undefined}
-              tabIndex={selectedIsJoker ? undefined : -1}
-              className={cn(
-                'ls-okey-joker items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 sm:px-3 sm:py-2',
-                selectedIsJoker ? 'flex' : 'hidden',
-              )}
-            >
-              <FlipHorizontal2 className="size-3.5" aria-hidden="true" />
-              {selected !== null && rack.flipped.has(selected) ? 'Okeyi aç' : 'Okeyi ters çevir'}
-            </button>
-          </div>
-        </div>
-
-        <div className="ls-okey-rack">
-          <OkeyRack
-            hand={hand}
-            okey={okey}
-            rack={rack}
-            highlight={fresh}
-            looseDiscard={canDiscard}
-            onDoubleTile={onDoubleTile}
-            onDropOut={onDropOut}
-            onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish' ? k : null)}
-          />
-        </div>
-        {drawDrag.ghost &&
-          createPortal(
-            <div
-              ref={drawDrag.ghostEl}
-              aria-hidden="true"
-              className="pointer-events-none fixed left-0 top-0 z-[200] h-12 w-9 drop-shadow-2xl will-change-transform sm:h-14 sm:w-10"
-              style={{ transform: ghostTransform(drawDrag.ghost.x, drawDrag.ghost.y) }}
-            >
-              {drawGhostTile ? <TileFace tile={drawGhostTile} okey={okey} size="fluid" selected /> : <TileBack className="size-full" />}
-            </div>,
-            document.body,
-          )}
-
-        <div className="ls-okey-panel ls-okey-actions flex gap-2">
-          <button
-            onClick={() => discard(selected)}
-            disabled={phase !== 'discard' || selected === null}
-            className="flex-1 rounded-xl border border-primary/50 px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-primary hover:bg-primary/10 disabled:opacity-40 sm:px-5 sm:py-3 sm:text-sm"
+      {drawDrag.ghost &&
+        createPortal(
+          <div
+            ref={drawDrag.ghostEl}
+            aria-hidden="true"
+            className="okt-ghost"
+            style={{ transform: ghostTransform(drawDrag.ghost.x, drawDrag.ghost.y) }}
           >
-            Seçili taşı at
-          </button>
-          <button
-            onClick={finishHand}
-            disabled={!winning}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-primary-foreground disabled:opacity-40 sm:gap-2 sm:px-5 sm:py-3 sm:text-sm',
-              winning && 'glow-gold animate-pulse',
-            )}
-          >
-            <Trophy className="size-4 shrink-0" aria-hidden="true" />
-            {winning ? (
-              'Elini aç ve bitir'
-            ) : (
-              <>
-                <span className="sm:hidden">Per tamamla</span>
-                <span className="hidden sm:inline">Bitirmek için per tamamla</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+            <div style={{ width: drawDrag.ghost.w, height: drawDrag.ghost.h }}>
+              {drawGhostTile ? <MockTile tile={drawGhostTile} okey={okey} /> : <MockTile back />}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
+
