@@ -361,6 +361,12 @@ export function OkeyRack({
     const now = Date.now()
     if (lastTap.current?.id === tile.id && now - lastTap.current.t < 350) {
       lastTap.current = null
+      // Double-tapping a revealed okey turns it face down again instead of discarding it.
+      if (isJoker(tile, okey)) {
+        rack.setSelected(null)
+        rack.hide(tile.id)
+        return
+      }
       onDoubleTile?.(tile)
       return
     }
