@@ -103,6 +103,8 @@ export type OkeyReveal = {
   okeyFinish: boolean
   penalty: number
   hand: number
+  /** Indicator of the finished hand; the next hand deals a new one, so the reveal keeps its own. */
+  indicator?: Tile
 }
 
 export const OKEY_TARGETS = [10, 20, 30] as const
@@ -483,13 +485,15 @@ function okeyStep(s: OkeyState, seat: number, a: Action): ActResult {
     const last = pushLast(s, { seat, type: 'throw', tile })
     const played = [...(s.played ?? Array(n).fill(false))]
     played[seat] = true
-    if (a.type === 'finish') {
-      const ok = okeyFrom(s.indicator)
-      const kind = isWinningHand(hands[seat], ok)
+    const ok = okeyFrom(s.indicator)
+    const winKind = isWinningHand(hands[seat], ok)
+    // Throwing the closing tile to the middle ends the hand, just like at a real table; no separate button needed.
+    if (a.type === 'finish' || winKind) {
+      const kind = winKind
       if (!kind) throw new Error('El henüz bitmedi')
       const okeyFinish = isJoker(tile, ok)
       const penalty = okeyPenalty(kind, okeyFinish)
-      const reveal: OkeyReveal = { seat, tiles: hands[seat], kind, okeyFinish, penalty, hand: s.hand ?? 1 }
+      const reveal: OkeyReveal = { seat, tiles: hands[seat], kind, okeyFinish, penalty, hand: s.hand ?? 1, indicator: s.indicator }
       const label = `${okeyFinish ? 'Okey atarak ' : ''}${kind === 'cift' ? 'çiftten ' : ''}bitti`
       const done: OkeyState = { ...s, hands, discards, last, played, takenId: null, reveal, note: `El ${label}` }
       if (!isOkeyScored(s)) return { state: done, outcome: okeyWinners(s, seat) }

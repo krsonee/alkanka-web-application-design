@@ -35,6 +35,42 @@ function reconcile(raw: Slots, hand: Tile[], total: number): Slots {
   return slots
 }
 
+const VACATED = -1
+
+/**
+ * Inserts `ids` at slot `at` of the row starting at `rowStart`, shifting tiles toward empty slots. Holes left by the
+ * moved tiles close first, then wide gaps, and the single gaps that separate two pers only as a last resort.
+ * Returns null when the row has no room.
+ */
+function insertInRow(slots: Slots, ids: number[], rowStart: number, at: number, vacated: Set<number>): Slots | null {
+  const cells = slots.slice(rowStart, rowStart + RACK_COLS).map((id, k) => (vacated.has(rowStart + k) ? VACATED : id))
+  let pos = Math.max(0, Math.min(RACK_COLS, at - rowStart))
+  const empty = (v: number | null | undefined) => v == null || v === VACATED
+  for (let n = 0; n < ids.length; n++) {
+    let best = -1
+    let bestScore = Infinity
+    cells.forEach((v, k) => {
+      if (!empty(v)) return
+      const separator = k > 0 && k < cells.length - 1 && !empty(cells[k - 1]) && !empty(cells[k + 1])
+      const tier = v === VACATED ? 0 : separator ? 2 : 1
+      // Pushing right reads more naturally, so a gap on the left only wins when it is clearly closer.
+      const dist = k >= pos ? k - pos : pos - k + 1.5
+      const score = tier * 100 + dist
+      if (score < bestScore) {
+        bestScore = score
+        best = k
+      }
+    })
+    if (best < 0) return null
+    cells.splice(best, 1)
+    if (best < pos) pos--
+  }
+  cells.splice(pos, 0, ...ids)
+  const next = [...slots]
+  cells.forEach((v, k) => (next[rowStart + k] = v === VACATED ? null : v))
+  return next
+}
+
 /** A candidate set or run as value keys ("color:num"); null marks a slot filled by an okey. */
 type Cand = (string | null)[]
 
@@ -176,31 +212,56 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
   const slots = reconcile(raw, hand, total)
   const selectedId = selected != null && hand.some((t) => t.id === selected) ? selected : null
 
-  function moveTo(id: number, target: number) {
-    const next = [...slots]
-    const from = next.indexOf(id)
-    if (from < 0 || from === target) return
-    next[from] = next[target]
-    next[target] = id
-    setRaw(next)
+  /** Lifts `ids` off the rack and returns the slots with the vacated positions. */
+  function lift(ids: number[]) {
+    const vacated = new Set<number>()
+    const next = slots.map((id, i) => {
+      if (id == null || !ids.includes(id)) return id
+      vacated.add(i)
+      return null
+    })
+    return { next, vacated }
   }
 
-  /** Moves a contiguous group so the grabbed tile (index `grab`) lands on `target`, nudging it to the nearest free stretch in that row. */
-  function moveGroup(ids: number[], grab: number, target: number) {
-    const next = slots.map((id) => (id != null && ids.includes(id) ? null : id))
-    const rowStart = Math.floor(target / RACK_COLS) * RACK_COLS
-    const maxStart = rowStart + RACK_COLS - ids.length
-    if (maxStart < rowStart) return
-    const preferred = Math.min(maxStart, Math.max(rowStart, target - grab))
-    const fits = (s: number) => s >= rowStart && s <= maxStart && ids.every((_, k) => next[s + k] == null)
-    for (let d = 0; d <= RACK_COLS; d++) {
-      for (const s of d === 0 ? [preferred] : [preferred - d, preferred + d]) {
-        if (!fits(s)) continue
-        ids.forEach((id, k) => (next[s + k] = id))
-        setRaw(next)
-        return
-      }
+  /**
+   * Drops `id` on `target`. An empty slot takes it as is; an occupied one opens a gap before it (or after it with
+   * `after`), sliding neighbours over like on a real rack.
+   */
+  function moveTo(id: number, target: number, after = false) {
+    const from = slots.indexOf(id)
+    if (from < 0 || from === target) return
+    const { next, vacated } = lift([id])
+    if (next[target] == null) {
+      next[target] = id
+      setRaw(next)
+      return
     }
+    const rowStart = Math.floor(target / RACK_COLS) * RACK_COLS
+    const res = insertInRow(next, [id], rowStart, target + (after ? 1 : 0), vacated)
+    if (res) setRaw(res)
+  }
+
+  /**
+   * Moves a whole per. Dropped on a tile it slides in between (before/after that tile); dropped on empty slots the
+   * grabbed tile (index `grab`) lands on `target`, squeezing in if the stretch is partly occupied.
+   */
+  function moveGroup(ids: number[], grab: number, target: number, after = false) {
+    if (ids.length > RACK_COLS) return
+    const { next, vacated } = lift(ids)
+    const rowStart = Math.floor(target / RACK_COLS) * RACK_COLS
+    if (next[target] != null) {
+      const res = insertInRow(next, ids, rowStart, target + (after ? 1 : 0), vacated)
+      if (res) setRaw(res)
+      return
+    }
+    const start = Math.min(rowStart + RACK_COLS - ids.length, Math.max(rowStart, target - grab))
+    if (ids.every((_, k) => next[start + k] == null)) {
+      ids.forEach((id, k) => (next[start + k] = id))
+      setRaw(next)
+      return
+    }
+    const res = insertInRow(next, ids, rowStart, start, vacated)
+    if (res) setRaw(res)
   }
 
   /** Puts a tile that is about to join the hand (drawn or taken) on `target`, or the nearest free slot in that row. */
@@ -315,11 +376,12 @@ export function OkeyRack({
 }) {
   const byId = new Map(hand.map((t) => [t.id, t]))
   const slotMarks = marks ?? meldMarks(rack.slots, byId, okey)
-  const [over, setOver] = useState<number | null>(null)
+  const [over, setOver] = useState<{ slot: number; after: boolean } | null>(null)
   const [ghost, setGhost] = useState<{ ids: number[]; x: number; y: number; w: number; h: number } | null>(null)
   const [lifted, setLifted] = useState<number[] | null>(null)
   const ghostEl = useRef<HTMLDivElement | null>(null)
-  const overRef = useRef<number | null>(null)
+  const overRef = useRef<string | null>(null)
+  const lastPos = useRef({ x: 0, y: 0 })
   const frame = useRef<number | null>(null)
   const press = useRef<{
     id: number
@@ -359,17 +421,22 @@ export function OkeyRack({
     if (suppressClick.current) return
     if (rack.flipped.has(tile.id)) {
       rack.toggleFlip(tile.id)
+      lastTap.current = null
+      return
+    }
+    // A revealed okey works like a real tile: the first tap selects it, tapping it again while selected
+    // turns it face down. It is never discarded by a double tap; drag it to the middle to throw it.
+    if (isJoker(tile, okey) && !tile.fake) {
+      lastTap.current = null
+      if (rack.selected === tile.id) {
+        rack.setSelected(null)
+        rack.hide(tile.id)
+      } else rack.setSelected(tile.id)
       return
     }
     const now = Date.now()
     if (lastTap.current?.id === tile.id && now - lastTap.current.t < 350) {
       lastTap.current = null
-      // Double-tapping a revealed okey turns it face down again instead of discarding it.
-      if (isJoker(tile, okey)) {
-        rack.setSelected(null)
-        rack.hide(tile.id)
-        return
-      }
       onDoubleTile?.(tile)
       return
     }
@@ -379,16 +446,26 @@ export function OkeyRack({
 
   const rootRef = useRef<HTMLDivElement>(null)
 
-  const targetAt = (x: number, y: number): { slot: number | null; kind: DropKind | null } => {
+  const targetAt = (x: number, y: number): { slot: number | null; after: boolean; kind: DropKind | null } => {
     const el = document.elementFromPoint(x, y) as HTMLElement | null
     const slot = el?.closest<HTMLElement>('[data-rack-slot]')
-    if (slot) return { slot: Number(slot.dataset.rackSlot), kind: null }
+    if (slot) {
+      const r = slot.getBoundingClientRect()
+      return { slot: Number(slot.dataset.rackSlot), after: x > r.left + r.width / 2, kind: null }
+    }
     const zone = el?.closest<HTMLElement>('[data-drop]')
     const kind = (zone?.dataset.drop as DropKind | undefined) ?? null
-    if (kind) return { slot: null, kind }
+    if (kind) return { slot: null, after: false, kind }
     // The rack frame between slots is not a target; anywhere else on screen is a throw.
     const onRack = el ? rootRef.current?.contains(el) : false
-    return { slot: null, kind: looseDiscard && !onRack ? 'discard' : null }
+    return { slot: null, after: false, kind: looseDiscard && !onRack ? 'discard' : null }
+  }
+
+  /** Where the dragged tiles would go: fill an empty slot, or a gold line before/after an occupied one. */
+  const overClass = (i: number, occupied: boolean) => {
+    if (over?.slot !== i) return null
+    if (!occupied || dragging.has(rack.slots[i] ?? -2)) return 'over'
+    return over.after ? 'ins-r' : 'ins-l'
   }
 
   const setHover = (kind: DropKind | null) => {
@@ -424,7 +501,7 @@ export function OkeyRack({
       y: e.clientY,
       moved: false,
       // A touch drag needs a little more travel so a resting thumb can finish the long press without starting a single-tile drag.
-      threshold: e.pointerType === 'touch' ? 10 : 12,
+      threshold: e.pointerType === 'touch' ? 7 : 10,
       group: shiftGroup && shiftGroup.length > 1 ? shiftGroup : null,
       timer,
     }
@@ -459,15 +536,19 @@ export function OkeyRack({
       const r = rootRef.current?.querySelector('[data-rack-slot]')?.getBoundingClientRect()
       setGhost({ ids: p.group ?? [p.id], x, y, w: r?.width ?? 40, h: r?.height ?? 56 })
     }
-    if (ghostEl.current) ghostEl.current.style.transform = ghostTransform(x, y)
+    lastPos.current = { x, y }
     if (frame.current != null) return
+    // Ghost and hit-testing share one frame, always using the latest pointer position.
     frame.current = requestAnimationFrame(() => {
       frame.current = null
       if (!press.current?.moved) return
-      const t = targetAt(x, y)
-      if (overRef.current !== t.slot) {
-        overRef.current = t.slot
-        setOver(t.slot)
+      const { x: lx, y: ly } = lastPos.current
+      if (ghostEl.current) ghostEl.current.style.transform = ghostTransform(lx, ly)
+      const t = targetAt(lx, ly)
+      const key = t.slot == null ? null : `${t.slot}:${t.after}`
+      if (overRef.current !== key) {
+        overRef.current = key
+        setOver(t.slot == null ? null : { slot: t.slot, after: t.after })
       }
       setHover(press.current.group ? null : t.kind)
     })
@@ -501,8 +582,8 @@ export function OkeyRack({
     suppressClick.current = true
     setTimeout(() => (suppressClick.current = false), 400)
     if (p.group) {
-      if (t.slot != null) rack.moveGroup(p.group, p.group.indexOf(p.id), t.slot)
-    } else if (t.slot != null) rack.moveTo(p.id, t.slot)
+      if (t.slot != null) rack.moveGroup(p.group, p.group.indexOf(p.id), t.slot, t.after)
+    } else if (t.slot != null) rack.moveTo(p.id, t.slot, t.after)
     else if (t.kind) onDropOut?.(p.id, t.kind)
     rack.setSelected(null)
   }
@@ -528,7 +609,7 @@ export function OkeyRack({
                     data-rack-slot={i}
                     className={cn(
                       'okt-slot',
-                      over === i && 'over',
+                      overClass(i, !!tile),
                       tile && (rack.selected === tile.id || liftedSet.has(tile.id)) && 'sel',
                       tile && dragging.has(tile.id) && 'drag',
                     )}
@@ -602,8 +683,17 @@ export function OkeyRack({
               <div
                 key={i}
                 data-rack-slot={i}
-                className={cn('relative flex aspect-[3/4] items-end justify-center rounded-sm', over === i && 'bg-primary/30')}
+                className={cn('relative flex aspect-[3/4] items-end justify-center rounded-sm', overClass(i, !!tile) === 'over' && 'bg-primary/30')}
               >
+                {(overClass(i, !!tile) === 'ins-l' || overClass(i, !!tile) === 'ins-r') && (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'pointer-events-none absolute inset-y-0 z-30 w-[3px] rounded-full bg-primary shadow-[0_0_6px_var(--primary)]',
+                      overClass(i, !!tile) === 'ins-r' ? '-right-0.5' : '-left-0.5',
+                    )}
+                  />
+                )}
                 {mark && (
                   <span
                     aria-hidden="true"
