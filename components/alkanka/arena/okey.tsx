@@ -138,26 +138,28 @@ function FluidTile({ tile, okey, selected, onClick, label }: { tile: Tile; okey:
       aria-label={label ?? name}
       aria-pressed={selected}
       className={cn(
-        'relative flex size-full flex-col items-center justify-center gap-[4cqh] rounded-[13cqw] pb-[3cqh] [container-type:size]',
+        'relative block size-full rounded-[13%/9%] [container-type:size]',
         joker ? 'okey-tile-joker' : 'okey-tile-face okey-tile-body',
         selected && 'ring-2 ring-primary',
       )}
     >
       {tile.fake ? (
-        <Sparkles className="size-1/2 text-tile-black" aria-hidden="true" />
+        <span className="flex size-full items-center justify-center">
+          <Sparkles className="size-1/2 text-tile-black" aria-hidden="true" />
+        </span>
       ) : (
-        <>
+        <span className="flex size-full flex-col items-center justify-center gap-[4cqh] pb-[3cqh]">
           <span
             className={cn(
               'font-display font-extrabold leading-none tabular-nums',
-              tile.num >= 10 ? 'text-[min(40cqh,50cqw)] tracking-[-0.1em]' : 'text-[min(44cqh,62cqw)] tracking-tight',
+              tile.num >= 10 ? 'text-[min(38cqh,46cqw)] tracking-[-0.04em]' : 'text-[min(44cqh,62cqw)] tracking-tight',
               TEXT[tile.color],
             )}
           >
             {tile.num}
           </span>
           <span className={cn('aspect-square w-[15cqw] rounded-full', ['bg-tile-red', 'bg-tile-black', 'bg-tile-blue', 'bg-tile-yellow'][tile.color])} />
-        </>
+        </span>
       )}
     </button>
   )
@@ -699,7 +701,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           </div>
         </div>
 
-        <div className="ls-okey-rack">
+        <div className="ls-okey-rack -mx-1.5 sm:mx-0">
           <OkeyRack
             hand={hand}
             okey={okey}
