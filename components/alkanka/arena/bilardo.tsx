@@ -1544,41 +1544,68 @@ function PowerBar({
   vertical?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const active = useRef<{ id: number; y: number } | null>(null)
-  const [pull, setPullState] = useState(0)
-  const setPull = (v: number) => {
-    pullRef.current = v
-    setPullState(v)
+  const active = useRef<{ id: number; start: number; range: number } | null>(null)
+  // `from`/`to` are fractions of the bar length so the fill spans exactly from the touch point to the finger.
+  const [drag, setDrag] = useState<{ pull: number; from: number; to: number } | null>(null)
+  const reset = () => {
+    active.current = null
+    pullRef.current = 0
+    setDrag(null)
   }
-  const pulling = pull > 0
+  const pulling = drag !== null
+  const pull = drag?.pull ?? 0
   const shown = pulling ? pull : preset
+  const cancelZone = pulling && pull < 0.04
+  const axis = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return vertical ? { pos: e.clientY - r.top, len: r.height } : { pos: e.clientX - r.left, len: r.width }
+  }
   const handlers = {
     onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
       if (disabled) return
       e.currentTarget.setPointerCapture(e.pointerId)
-      active.current = { id: e.pointerId, y: vertical ? e.clientY : e.clientX }
-      setPull(0)
+      const { pos, len } = axis(e)
+      // Pulling to the far end is always 100%; a touch near the end still gets a usable minimum travel.
+      const range = Math.max(len - pos - 6, len * 0.4)
+      active.current = { id: e.pointerId, start: pos, range }
+      pullRef.current = 0
+      setDrag({ pull: 0, from: pos / len, to: pos / len })
     },
     onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
       const a = active.current
       if (!a || a.id !== e.pointerId) return
-      const rect = ref.current?.getBoundingClientRect()
-      const span = ((vertical ? rect?.height : rect?.width) ?? 240) * (vertical ? 0.6 : 0.75)
-      setPull(clamp01(((vertical ? e.clientY : e.clientX) - a.y) / span))
+      const { pos, len } = axis(e)
+      const v = clamp01((pos - a.start) / a.range)
+      pullRef.current = v
+      const from = a.start / len
+      setDrag({ pull: v, from, to: Math.min(1, Math.max(from, pos / len)) })
     },
     onPointerUp: (e: ReactPointerEvent<HTMLDivElement>) => {
       const a = active.current
       if (!a || a.id !== e.pointerId) return
-      active.current = null
       const v = pullRef.current
-      setPull(0)
-      if (!disabled) onRelease(v)
+      reset()
+      if (!disabled && v >= 0.04) onRelease(v)
     },
-    onPointerCancel: () => {
-      active.current = null
-      setPull(0)
-    },
+    onPointerCancel: reset,
   }
+  const fillStyle = drag
+    ? vertical
+      ? { top: `${drag.from * 100}%`, height: `${(drag.to - drag.from) * 100}%` }
+      : { left: `${drag.from * 100}%`, width: `${(drag.to - drag.from) * 100}%` }
+    : vertical
+      ? { top: '0%', height: '0%' }
+      : { left: '0%', width: '0%' }
+  const chip = (
+    <span
+      className={cn(
+        'rounded-md px-1.5 py-0.5 font-display text-xs font-extrabold tabular-nums shadow-md ring-1',
+        cancelZone ? 'bg-card text-muted-foreground ring-border' : pulling ? 'bg-foreground text-background ring-foreground' : 'bg-card text-foreground ring-border',
+      )}
+    >
+      {cancelZone ? 'İptal' : `%${Math.round(shown * 100)}`}
+    </span>
+  )
   if (vertical) {
     return (
       <div
@@ -1597,16 +1624,20 @@ function PowerBar({
           disabled ? 'opacity-40' : 'cursor-grab active:cursor-grabbing',
         )}
       >
-        <div aria-hidden="true" className={cn('absolute inset-x-0 top-0 bg-primary', !pulling && 'transition-[height] duration-200')} style={{ height: `${pull * 100}%` }} />
-        <span aria-hidden="true" className="absolute inset-x-2 h-0.5 -translate-y-1/2 rounded-full bg-foreground/50" style={{ top: `${preset * 100}%` }} />
+        <div
+          aria-hidden="true"
+          className={cn('absolute inset-x-0 rounded-b-lg border-b-2 border-foreground bg-primary', !pulling && 'border-b-0')}
+          style={fillStyle}
+        />
+        {!pulling && (
+          <span aria-hidden="true" className="absolute inset-x-2 h-0.5 -translate-y-1/2 rounded-full bg-primary/70" style={{ top: `${preset * 100}%` }} />
+        )}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-between py-3">
-          <span className={cn('text-[10px] font-bold uppercase', pulling ? 'text-primary-foreground' : 'text-muted-foreground')}>Güç</span>
-          <span className="text-[10px] font-bold uppercase text-muted-foreground [writing-mode:vertical-rl]">
-            {pulling ? (pull < 0.05 ? 'İptal' : 'Bırak') : 'Aşağı çek'}
-          </span>
-          <span className="rounded-md bg-card px-1 py-0.5 font-display text-xs font-extrabold tabular-nums text-foreground shadow-md ring-1 ring-border">
-            %{Math.round(shown * 100)}
-          </span>
+          <span className="text-[10px] font-bold uppercase text-muted-foreground">Güç</span>
+          {!pulling && (
+            <span className="text-[10px] font-bold uppercase text-muted-foreground [writing-mode:vertical-rl]">Aşağı çek</span>
+          )}
+          {chip}
         </div>
       </div>
     )
@@ -1634,21 +1665,21 @@ function PowerBar({
       </div>
       <div
         aria-hidden="true"
-        className={cn('absolute inset-y-0 left-0 bg-primary', !pulling && 'transition-[width] duration-200')}
-        style={{ width: `${pull * 100}%` }}
+        className={cn('absolute inset-y-0 rounded-r-lg border-r-2 border-foreground bg-primary', !pulling && 'border-r-0')}
+        style={fillStyle}
       />
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-2 w-0.5 -translate-x-1/2 rounded-full bg-foreground/50"
-        style={{ left: `${preset * 100}%` }}
-      />
+      {!pulling && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-2 w-0.5 -translate-x-1/2 rounded-full bg-primary/70"
+          style={{ left: `${preset * 100}%` }}
+        />
+      )}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-between gap-2 px-3">
-        <span className={cn('truncate text-xs font-bold uppercase tracking-wider', pulling ? 'text-primary-foreground' : 'text-muted-foreground')}>
-          {pulling ? (pull < 0.05 ? 'Bırakırsan iptal' : 'Bırak, vursun') : 'Güç · sağa çek'}
+        <span className={cn('truncate text-xs font-bold uppercase tracking-wider text-muted-foreground', pulling && 'invisible')}>
+          Güç · sağa çek
         </span>
-        <span className={cn('font-display text-base font-extrabold tabular-nums', pulling && pull > 0.85 ? 'text-primary-foreground' : 'text-foreground')}>
-          {Math.round(shown * 100)}
-        </span>
+        {chip}
       </div>
     </div>
   )
