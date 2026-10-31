@@ -267,9 +267,11 @@ type BoardProps = {
   trail?: Set<number>
   /** Changing `key` animates the given moves sliding across the board. */
   fly?: Fly | null
+  /** Set only while it's the player's turn to roll; the resting dice become the roll button. */
+  onRoll?: () => void
 }
 
-function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn, trail, fly }: BoardProps) {
+function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn, trail, fly, onRoll }: BoardProps) {
   const opp: Side = me === 'p' ? 'b' : 'p'
   const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
   const rootRef = useRef<HTMLDivElement>(null)
@@ -545,6 +547,29 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       )}
     </div>
   )
+  const restFaces = shown.length >= 2 ? shown : [6, 5]
+  const rollButton = onRoll && (
+    <button
+      type="button"
+      onClick={onRoll}
+      aria-label="Zar at"
+      className="group absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 rounded-2xl p-1.5 outline-none focus-visible:ring-2 focus-visible:ring-primary sm:gap-2 sm:p-2"
+    >
+      <span
+        aria-hidden="true"
+        className="flex items-center gap-2 opacity-90 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:opacity-100 group-active:scale-95 sm:gap-3"
+      >
+        {restFaces.map((d, i) => (
+          <Die3D key={`rest-${i}`} value={d} />
+        ))}
+      </span>
+      <span className="relative flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-foreground shadow-[0_6px_18px_-4px_var(--primary)] transition-transform group-hover:scale-105 sm:px-4 sm:py-1.5 sm:text-xs">
+        <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-primary/40 [animation-duration:1.8s]" />
+        <Dices className="relative size-3.5 sm:size-4" aria-hidden="true" />
+        <span className="relative">Zar at</span>
+      </span>
+    </button>
+  )
 
   return (
     <div ref={rootRef} data-ls-flat className="flex select-none flex-col gap-2">
@@ -613,7 +638,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
 
         <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
           <div className="flex h-[45%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
-          {!diceLeft && diceRow}
+          {!diceLeft && (rollButton || diceRow)}
           <div className="flex h-[45%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
         </div>
 
@@ -690,9 +715,6 @@ function ControlBar({
   sub,
   canUndo,
   onUndo,
-  canRoll,
-  onRoll,
-  rollLabel,
   onConfirm,
   auto,
   onAuto,
@@ -702,9 +724,6 @@ function ControlBar({
   sub: string
   canUndo: boolean
   onUndo: () => void
-  canRoll: boolean
-  onRoll: () => void
-  rollLabel: string
   onConfirm?: () => void
   auto: boolean
   onAuto: (v: boolean) => void
@@ -771,7 +790,7 @@ function ControlBar({
             <span data-ls-label>Geri al</span>
           </button>
         )}
-        {onConfirm ? (
+        {onConfirm && (
           <button
             type="button"
             onClick={onConfirm}
@@ -781,16 +800,6 @@ function ControlBar({
             <span>
               <span data-ls-label>Hamleyi </span>onayla
             </span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onRoll}
-            disabled={!canRoll}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40 sm:flex-none"
-          >
-            <Dices className="size-4" aria-hidden="true" />
-            {rollLabel}
           </button>
         )}
       </div>
@@ -1042,15 +1051,13 @@ export function Tavla({ finish, saveKey }: GameApi) {
         fly={fly}
         names={{ me: 'Sen', opp: 'Rakip' }}
         turn={phase === 'over' ? null : phase === 'bot' ? 'opp' : 'me'}
+        onRoll={phase === 'roll' ? roll : undefined}
       />
       <ControlBar
         message={message}
         sub={`Kalan yol: sen ${pipCount(board, 'p')} · rakip ${pipCount(board, 'b')}`}
         canUndo={(phase === 'move' || phase === 'confirm') && !!snapshot}
         onUndo={undo}
-        canRoll={phase === 'roll'}
-        onRoll={roll}
-        rollLabel={phase === 'bot' ? 'Rakip oynuyor' : 'Zar at'}
         onConfirm={phase === 'confirm' ? confirm : undefined}
         auto={auto}
         onAuto={setAuto}
@@ -1177,15 +1184,13 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
         fly={fly}
         names={{ me: 'Sen', opp: oppName }}
         turn={remote.myTurn ? 'me' : 'opp'}
+        onRoll={remote.myTurn && s.phase === 'roll' && !remote.busy ? () => void remote.send({ type: 'roll' }) : undefined}
       />
       <ControlBar
         message={message}
         sub={`Kalan yol: sen ${pipCount(board, me)} · ${oppName} ${pipCount(board, opp)}${series}`}
         canUndo={myMove && pending.length > 0 && !remote.busy}
         onUndo={() => setPending([])}
-        canRoll={remote.myTurn && s.phase === 'roll' && !remote.busy}
-        onRoll={() => void remote.send({ type: 'roll' })}
-        rollLabel={remote.myTurn ? 'Zar at' : 'Rakip oynuyor'}
         onConfirm={turnDone && !remote.busy ? send : undefined}
         auto={auto}
         onAuto={setAuto}
