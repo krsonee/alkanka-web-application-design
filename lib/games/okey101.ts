@@ -15,6 +15,8 @@ export type HandResult = {
   /** Snapshot taken at hand end so the breakdown survives the next deal. */
   opened?: Open101[]
   penalties?: number[]
+  /** Table melds at hand end; kept only on the latest result to keep the state small. */
+  melds?: Meld101[]
 }
 
 export type Okey101State = {
@@ -356,7 +358,10 @@ function endHand(s: Okey101State, finisher: number | null, mult: number, how: Fi
     return rest * (s.opened[i] === 'cift' ? 2 : 1) * mult + s.penalties[i]
   })
   const totals = s.totals.map((t, i) => t + scores[i])
-  const results = [...s.results, { hand: s.handNo, scores, finisher, double, mult, how, opened: [...s.opened], penalties: [...s.penalties] }]
+  const results = [
+    ...s.results.map(({ melds: _melds, ...r }) => r),
+    { hand: s.handNo, scores, finisher, double, mult, how, opened: [...s.opened], penalties: [...s.penalties], melds: s.melds },
+  ]
   const note =
     finisher == null
       ? `${s.handNo}. el: ortada taş kalmadı, el kapandı.`
