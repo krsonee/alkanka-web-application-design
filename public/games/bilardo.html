@@ -436,10 +436,10 @@
     const order = [1, 9,2, 10,8,3, 11,4,12,5, 13,6,14,7,15];
     let k = 0; const ax = R + W*0.72, ay = R + H/2;
     for (let i = 0; i < 5; i++) for (let j = 0; j <= i; j++) balls.push(mkBall(order[k++], ax + i*(BR*2*0.87+0.6), ay + (j - i/2)*(BR*2+0.6)));
-    S = { balls, angle:0, aimTo:null, turn:'me', groups:{ me:null, op:null }, moving:false, shot:null, ballInHand:false,
+    S = { balls, angle:0, aimTo:null, turn:'me', groups:{ me:null, op:null }, moving:false, shot:null, ballInHand:true, kitchen:true,
           spin:{x:0,y:0}, pull:0, strike:0, firing:null, over:false, timer:30, bot:null, charging:false, firstShot:true };
     $('tube').innerHTML = ''; $('resModal').classList.remove('open'); $('hint').classList.remove('off');
-    hud(); toastPill('Sıra sende. Açılış senden.');
+    hud(); toastPill('Açılış senden. Beyaz topu çizginin gerisinde sürükleyip yerleştirebilirsin.');
   }
 
   /* ---------- layout ---------- */
@@ -534,7 +534,7 @@
     const c = cue(), d = dirOf(S.angle), speed = 3 + power*34;
     c.vx = d.x*speed; c.vy = d.y*speed; Snd.strike(power);
     S.shot = { by:S.turn, first:null, potted:[], angle:S.angle, speed, cleared:cleared(S.turn), cushSpin:false };
-    S.moving = true; S.ballInHand = false; S.strike = 1;
+    S.moving = true; S.ballInHand = false; S.kitchen = false; S.strike = 1;
     if (S.turn === 'me') $('hint').classList.add('off');
     hud();
   }
@@ -553,7 +553,7 @@
       if (f) {
         const g = f < 8 ? 'solid' : 'stripe';
         S.groups[p] = g; S.groups[o] = g === 'solid' ? 'stripe' : 'solid';
-        big(p === 'me' ? (g === 'solid' ? 'Düz toplar senin!' : 'Çizgili toplar senin!') : (g === 'solid' ? 'ajdn düz toplarla' : 'ajdn çizgili toplarla'));
+        big(p === 'me' ? (g === 'solid' ? 'Düz toplar senin!' : 'Çizgili toplar senin!') : (g === 'solid' ? OPN + ' düz toplarla' : OPN + ' çizgili toplarla'));
       }
     }
     const ownPot = S.groups[p] && sh.potted.some(n => n !== 0 && n !== 8 && (S.groups[p] === 'solid' ? n < 8 : n > 8));
@@ -579,7 +579,7 @@
     $('resTitle').style.color = me ? 'var(--gold)' : 'var(--red)';
     $('resGain').innerHTML = me ? '<i class="coin"></i>+' + fmt(WIN) + ' KC' : '<i class="coin"></i>-' + fmt(BET) + ' KC';
     report(me ? 'win' : 'lose', $('resSub').textContent || why, opt.now ? 0 : 4200);
-    $('resSub').textContent = me ? why : (opt.title ? why : 'ajdn kazandı. ' + why);
+    $('resSub').textContent = me ? why : (opt.title ? why : OPN + ' kazandı. ' + why);
     $('again').textContent = 'Devam';
     setTimeout(() => $('resModal').classList.add('open'), opt.now ? 0 : 700);
     if (!me && !opt.title) setTimeout(() => say('op', 'GG 🤝'), 900);
@@ -713,12 +713,12 @@
       glow.addColorStop(0, 'rgba(255,255,255,.08)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = glow; g.fillRect(-r*2.3, cy - r*2.3, r*4.6, r*4.6);
       g.fillStyle = 'rgba(4,30,14,.35)'; g.beginPath(); g.arc(0, cy, r + 4, 0, Math.PI*2); g.fill();
-      g.strokeStyle = 'rgba(242,193,78,.75)'; g.lineWidth = 3; g.beginPath(); g.arc(0, cy, r + 6, 0, Math.PI*2); g.stroke();
-      g.strokeStyle = 'rgba(242,193,78,.35)'; g.lineWidth = 1.2; g.setLineDash([3, 6]); g.beginPath(); g.arc(0, cy, r + 15, 0, Math.PI*2); g.stroke(); g.setLineDash([]);
+      g.strokeStyle = 'rgba(242,193,78,.55)'; g.lineWidth = 3; g.beginPath(); g.arc(0, cy, r + 6, 0, Math.PI*2); g.stroke();
+      g.strokeStyle = 'rgba(242,193,78,.25)'; g.lineWidth = 1.2; g.setLineDash([3, 6]); g.beginPath(); g.arc(0, cy, r + 15, 0, Math.PI*2); g.stroke(); g.setLineDash([]);
       if (logoImg) {
         g.save(); g.beginPath(); g.arc(0, cy, r, 0, Math.PI*2); g.clip();
         const k = Math.max(r*2/logoImg.naturalWidth, r*2/logoImg.naturalHeight), lw = logoImg.naturalWidth*k, lh = logoImg.naturalHeight*k;
-        g.globalAlpha = 0.9; g.drawImage(logoImg, -lw/2, cy - lh/2, lw, lh);
+        g.globalAlpha = 0.66; g.drawImage(logoImg, -lw/2, cy - lh/2, lw, lh);
         const sh = g.createRadialGradient(0, cy - r*0.35, r*0.2, 0, cy, r);
         sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.3)');
         g.globalAlpha = 1; g.fillStyle = sh; g.fillRect(-r, cy - r, r*2, r*2);
@@ -726,10 +726,10 @@
       }
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 6; g.shadowOffsetY = 2;
-      g.fillStyle = 'rgba(242,193,78,.85)'; g.font = '800 32px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '12px';
+      g.fillStyle = 'rgba(242,193,78,.62)'; g.font = '800 32px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '12px';
       g.fillText('ALKANKA', 6, cy + r + 44);
       g.shadowBlur = 0; g.shadowOffsetY = 0;
-      g.fillStyle = 'rgba(242,193,78,.5)'; g.font = '700 10px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '7px';
+      g.fillStyle = 'rgba(242,193,78,.36)'; g.font = '700 10px Geist, sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '7px';
       g.fillText('ALKANKA.COM', 4, cy + r + 72);
     }
     g.restore();
@@ -904,7 +904,9 @@
     for (const b of bs) drawBall(b);
     const idle = !S.moving && !S.over;
     if (idle && S.ballInHand && S.turn === 'me' && !S.firing) {
-      const c = cue(); ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5;
+      const c = cue(); ctx.save();
+      if (S.kitchen) { ctx.fillStyle = 'rgba(255,255,255,.045)'; ctx.fillRect(R, R, W*0.25, H); }
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(c.x, c.y, BR*2.1, 0, Math.PI*2); ctx.stroke(); ctx.restore();
     }
     if (idle && !(G && G.type === 'hand')) { if (!S.firing) drawAim(); drawCue(S.pull); }
@@ -919,7 +921,32 @@
     const body = n > 8 ? `linear-gradient(#f2efe6 0 26%, ${c} 26% 74%, #f2efe6 74%)` : c;
     return `${hl}, ${disc}, ${sh}, ${body}`;
   }
-  function mini(n) { const el = document.createElement('i'); el.className = 'mb'; el.style.background = ballCss(n); return el; }
+  const miniCache = {};
+  function miniSrc(n) {
+    if (miniCache[n]) return miniCache[n];
+    const S2 = 96, c = document.createElement('canvas'); c.width = c.height = S2;
+    const g = c.getContext('2d'), r = S2/2, col = `rgb(${rgb(n)})`;
+    g.save(); g.beginPath(); g.arc(r, r, r - 1, 0, Math.PI*2); g.clip();
+    g.fillStyle = n > 8 ? '#f4f1e8' : col; g.fillRect(0, 0, S2, S2);
+    if (n > 8) { g.fillStyle = col; g.fillRect(0, S2*0.24, S2, S2*0.52); }
+    g.fillStyle = '#fbfaf5'; g.beginPath(); g.arc(r, r, S2*0.27, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#111'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `800 ${n > 9 ? 30 : 36}px Geist, Arial, sans-serif`; g.fillText(String(n), r, r + 2);
+    const hl = g.createRadialGradient(r*0.68, r*0.55, 0, r*0.68, r*0.55, r*0.75);
+    hl.addColorStop(0, 'rgba(255,255,255,.55)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = hl; g.fillRect(0, 0, S2, S2);
+    const sh = g.createRadialGradient(r, r, r*0.55, r, r, r);
+    sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.45)');
+    g.fillStyle = sh; g.fillRect(0, 0, S2, S2);
+    g.restore();
+    return (miniCache[n] = c.toDataURL());
+  }
+  function mini(n) {
+    const el = document.createElement('i'); el.className = 'mb';
+    el.style.background = `url(${miniSrc(n)}) center/contain no-repeat`;
+    el.setAttribute('aria-label', 'Top ' + n);
+    return el;
+  }
   function fillSlots(el, p) {
     el.innerHTML = '';
     const g = S.groups[p];
@@ -953,7 +980,8 @@
     if (!canAct()) return;
     cv.setPointerCapture(e.pointerId);
     const p = toTable(e.clientX, e.clientY), c = cue();
-    if (S.ballInHand && Math.hypot(p.x - c.x, p.y - c.y) < BR*2.8) { G = { type:'hand' }; return; }
+    const grab = Math.max(BR*4, 34/geo.s);
+    if (S.ballInHand && Math.hypot(p.x - c.x, p.y - c.y) < grab) { G = { type:'hand', dx:c.x - p.x, dy:c.y - p.y }; return; }
     G = { type:'aim', last:p, sx:e.clientX, sy:e.clientY, t0:performance.now(), moved:0 };
     S.aimTo = null;
   });
@@ -961,8 +989,9 @@
     if (!G) return;
     const p = toTable(e.clientX, e.clientY), c = cue();
     if (G.type === 'hand') {
-      const x = clamp(p.x, R+BR, R+W-BR), y = clamp(p.y, R+BR, R+H-BR);
-      if (freeSpot(x, y)) { c.x = x; c.y = y; c.dirty = true; }
+      const maxX = S.kitchen ? R+W*0.25 : R+W-BR-0.01;
+      const x = clamp(p.x + G.dx, R+BR+0.01, maxX), y = clamp(p.y + G.dy, R+BR+0.01, R+H-BR-0.01);
+      if (freeSpot(x, y)) { c.x = x; c.y = y; c.vx = 0; c.vy = 0; c.dirty = true; }
       return;
     }
     G.moved = Math.max(G.moved, Math.hypot(e.clientX - G.sx, e.clientY - G.sy)/scale);
@@ -1051,7 +1080,7 @@
   const bubT = {};
   function say(who, t) {
     const d = document.createElement('div'); d.className = who;
-    d.innerHTML = `<b>${who === 'me' ? 'Sen' : 'ajdn'}</b>`; d.appendChild(document.createTextNode(t));
+    d.innerHTML = `<b>${who === 'me' ? 'Sen' : OPN}</b>`; d.appendChild(document.createTextNode(t));
     msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
     const bub = $(who === 'me' ? 'bubMe' : 'bubOp');
     bub.textContent = t; bub.classList.toggle('emo', isEmoji(t)); bub.classList.add('show');
@@ -1111,7 +1140,7 @@
   $('mResign').onclick = () => {
     if (S.over) { closePops(); return toastPill('Maç zaten bitti.'); }
     ask(FLAG, 'Pes etmek istiyor musun?', 'Maçı kaybedersin, masadaki ' + fmt(BET) + ' KC bahsin rakibe geçer.', 'Pes et',
-      () => { finish('op', 'Pes ettin, ajdn kazandı.', { title:'PES ETTİN', now:true }); setTimeout(() => say('op', 'GG 🤝'), 600); });
+      () => { finish('op', 'Pes ettin, ' + OPN + ' kazandı.', { title:'PES ETTİN', now:true }); setTimeout(() => say('op', 'GG 🤝'), 600); });
   };
   $('mLeave').onclick = () => {
     const leave = () => { finish('op', S.over ? 'Lobiye döndün.' : 'Maç sürerken ayrıldığın için pes etmiş sayıldın.', { title:'MASADAN AYRILDIN', again:'Yeni maça gir', now:true }); };
