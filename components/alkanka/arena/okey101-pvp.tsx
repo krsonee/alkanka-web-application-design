@@ -232,7 +232,11 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           ? 'Yandan aldığın taşla elini aç, yoksa geri ver (+101 ceza).'
           : opened
             ? 'Per aç, işle, sonra bir taş at.'
-            : `Açmak için ${OPEN_MIN} sayı ya da ${PAIR_MIN} çift. Hazır değilsen taş at.`
+            : runValue >= OPEN_MIN
+              ? `Dizili ${runValue} sayın var, El Aç'a bas.`
+              : pairs.length >= PAIR_MIN
+                ? `${pairs.length} çiftin var, Çifte Git'e bas.`
+                : `Açmak için ${OPEN_MIN} lazım: dizili ${runValue}, ${OPEN_MIN - runValue} eksik. Çift ${pairs.length}/${PAIR_MIN}.`
       : `${nameOf(s.turn)} oynuyor`)
 
   // One button that always does the next sensible thing; secondary actions sit beside it.
@@ -393,10 +397,12 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           .filter((seat) => s.melds.some((m) => m.owner === seat))
           .map((seat) => {
             const pos = posOf(seat)
+            const count = s.melds.reduce((a, m) => a + (m.owner === seat ? m.tiles.length : 0), 0)
+            const density = count > 16 ? 'd2' : count > 10 ? 'd1' : null
             return (
               <div
                 key={`mz-${seat}`}
-                className={cn('o1-mz', `o1-mz${pos}`, (pos === 0 || pos === 2) && 'c', pos === 1 && 'r')}
+                className={cn('o1-mz', `o1-mz${pos}`, (pos === 0 || pos === 2) && 'c', pos === 1 && 'r', density)}
                 role="group"
                 aria-label={seat === mySeat ? 'Senin perlerin' : `${nameOf(seat)} perleri`}
               >
@@ -441,10 +447,12 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           </span>
           {mySeat >= 0 && !opened && (
             <>
-              <span className="k">Elindeki</span>
+              <span className="k">Dizili</span>
               <span className={cn('v', runValue >= OPEN_MIN && 'ok')}>
                 {runValue}/{OPEN_MIN}
               </span>
+              <span className="k">{runValue >= OPEN_MIN ? 'Durum' : 'Eksik'}</span>
+              <span className={cn('v', runValue >= OPEN_MIN && 'ok')}>{runValue >= OPEN_MIN ? 'Hazır' : OPEN_MIN - runValue}</span>
               <span className="k">Çift</span>
               <span className={cn('v', pairs.length >= PAIR_MIN && 'ok')}>
                 {pairs.length}/{PAIR_MIN}
@@ -503,6 +511,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             mySeat={mySeat}
             totals={ranked}
             final={popupFinal}
+            handsTotal={s.handsTotal}
+            detail={s.handNo === handPopup.hand ? { opened: s.opened, penalties: s.penalties } : null}
             face={face}
             onClose={closePopup}
             onScores={() => {
