@@ -74,7 +74,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
       : '1. adım: ortadaki desteden taş çek.'
   else if (myDiscard)
     message = winning
-      ? `Elin bitmeye hazır! Bitiren taşı ortaya at, el biter.${scored && isJoker(winning.tile, okey) ? ' Okeyi atarak bitirirsen puan 2 katı!' : ''}`
+      ? `Elin bitmeye hazır! Bitiren taşı ortaya at, el biter.${scored && isJoker(winning.tile, okey) ? ' Okeyle bitirirsen 2 kat, çiftten ve okeyle 4 kat!' : ''}`
       : selectedIsTaken
         ? 'Yerden aldığın taşı bu elde geri atamazsın, başka taş seç.'
         : `2. adım: taşı "Taşı at" butonuna sürükle, çift tıkla ya da seçip butona bas.${fresh != null ? ' Yeni gelen taş "Yeni" etiketli.' : ''}`
