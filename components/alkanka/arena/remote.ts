@@ -12,4 +12,6 @@ export type Remote<S> = {
   userIds?: (string | null)[]
   spectator?: boolean
   send: (action: RemoteAction) => Promise<boolean>
+  /** Opens a fresh table with the same settings once this one has ended. */
+  replay?: () => Promise<void>
 }

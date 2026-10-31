@@ -2405,3 +2405,49 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   .o101 .table-chat-btn { left: auto; right: 1.8%; top: 17%; }
 }
 .ls-split .o101 .table-chat-btn { left: auto; right: 1.6%; top: 19%; }
+
+/* ===== 101 masa bölgeleri: perler kendi alanında kalır, deste/atık/gösterge hep üstte ve tıklanabilir ===== */
+.o101 .okt-deck, .o101 .okt-pile, .o101 .okt-ind, .o101 .okt-lbl { z-index: 3; }
+.o101 .okt-toast { z-index: 4; }
+.o101 .okt-side { z-index: 5; }
+.o1-mz {
+  pointer-events: none; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: rgb(217 164 65 / 0.5) transparent; padding-top: calc(var(--u) * .9); gap: calc(var(--u) * .9) calc(var(--u) * .55);
+}
+.o1-mz .o1-meld { pointer-events: auto; flex: none; }
+.o1-mz.d1 .o1-mt { width: calc(var(--mw) * .84); height: calc(var(--mw) * .84 * 1.42); }
+.o1-mz.d2 .o1-mt { width: calc(var(--mw) * .7); height: calc(var(--mw) * .7 * 1.42); }
+
+/* Dikey telefon */
+.o101 .o1-mz2 { max-height: 9%; }
+.o101 .o1-mz0 { max-height: 14%; }
+.o101 .o1-mz3, .o101 .o1-mz1 { max-height: 19%; }
+
+/* Web 16:9: üst per şeridi / orta sıra (atık-deste-gösterge-atık) / senin perlerin / ıstaka */
+@media (min-width: 640px) {
+  .o1-mz { --mw: calc(var(--u) * 2.45); }
+  .o101 .okt-p2 { left: 50%; top: 9%; } .o101 .okt-p3 { left: 6.5%; top: 25%; } .o101 .okt-p1 { left: 93.5%; top: 25%; } .o101 .okt-p0 { left: 6.5%; top: 59%; }
+  .o101 .okt-pile2 { left: 31%; top: 10%; } .o101 .okt-pile1 { left: 69%; top: 10%; }
+  .o101 .okt-pile3 { left: 27%; top: 43%; } .o101 .okt-pile0 { left: 73%; top: 43%; }
+  .o101 .okt-deck { left: 44%; top: 44.5%; } .o101 .okt-ind { left: 55%; top: 42.5%; } .o101 .okt-lbl { left: 55%; top: 49%; }
+  .o101 .okt-toast { left: 50%; top: 51.5%; }
+  .o101 .o1-mz2 { top: 17.5%; width: 44%; max-height: 18.5%; }
+  .o101 .o1-mz0 { top: 56%; width: 56%; max-height: 12.5%; }
+  .o101 .o1-mz3 { left: 1.2%; top: 33%; width: 16.5%; max-height: 18%; }
+  .o101 .o1-mz1 { right: 1.2%; top: 33%; width: 16.5%; max-height: 34.5%; }
+  .o101 .okt-drop { left: 20%; right: 20%; top: 36%; bottom: 44%; }
+  .o101 .table-chat-btn { top: 17%; }
+}
+
+/* Mobil yatay tam ekran: sol/sağ per sütunları dar, atıklar orta sırada */
+.ls-split .o1-mz { --mw: calc(var(--u) * 2.6); }
+.ls-split .o101 .okt-p3 { left: 5%; top: 33%; } .ls-split .o101 .okt-p1 { left: 95%; top: 33%; } .ls-split .o101 .okt-p0 { left: 5%; top: 50%; }
+.ls-split .o101 .okt-pile3 { left: 25%; top: 48%; } .ls-split .o101 .okt-pile0 { left: 75%; top: 48%; }
+.ls-split .o101 .okt-side { left: 8.5%; top: 4%; }
+.ls-split .o101 .okt-toast { left: 50%; top: 36.5%; }
+.ls-split .o101 .o1-mz2 { top: 22.5%; width: 40%; max-height: 13%; }
+.ls-split .o101 .o1-mz0 { top: 42%; width: 40%; max-height: 15.5%; }
+.ls-split .o101 .o1-mz3 { left: 10.5%; top: 24%; width: 12%; max-height: 33.5%; }
+.ls-split .o101 .o1-mz1 { right: 10.5%; top: 24%; width: 12%; max-height: 33.5%; }
+.ls-split .o101 .okt-drop { left: 25%; right: 25%; top: 38%; bottom: 42%; }
+.ls-split .o101 .table-chat-btn { left: auto; right: 1.6%; top: 43%; }
