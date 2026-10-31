@@ -12,6 +12,7 @@ import { findWinningDiscard, isJoker, okeyFrom, type Okey as OkeyValue, type Til
 import { TableBrand } from './table-brand'
 import { OkeyWinOverlay } from './okey-win'
 import { MobileTableChat } from './mobile-table-chat'
+import { SeatFace } from './seat-face'
 
 type OkeyView = OkeyState & { deckCount: number; handCounts: number[]; oppSeat: number; seats: number; team: boolean; bots: number[]; last: OkeyLast[] }
 
@@ -81,6 +82,8 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
 
   const seatProps = (i: number) => ({
     name: nameOf(i),
+    userId: remote.userIds?.[i] ?? null,
+    seed: `${remote.id ?? 'masa'}-${i}`,
     count: s.handCounts[i] ?? 0,
     active: s.turn === i,
     bot: bots.includes(i),
@@ -352,7 +355,11 @@ function SeatBadge({
   takeable,
   okey,
   vertical,
+  userId,
+  seed,
 }: {
+  userId: string | null
+  seed: string
   name: string
   count: number
   active: boolean
@@ -372,6 +379,9 @@ function SeatBadge({
           active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card/90 text-foreground',
         )}
       >
+        <span className="relative size-6 shrink-0 overflow-hidden rounded-full bg-secondary text-center text-[10px] font-bold leading-6 text-secondary-foreground" aria-hidden="true">
+          <SeatFace userId={userId} botSeed={userId ? null : seed} initials={name.slice(0, 2).toUpperCase()} />
+        </span>
         {bot && <Bot className="size-3.5 shrink-0" aria-label="Bot" />}
         <span className="truncate text-xs font-bold">{name}</span>
         {team && (

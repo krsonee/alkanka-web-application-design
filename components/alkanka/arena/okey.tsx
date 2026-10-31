@@ -11,6 +11,8 @@ import { loadSaved, useSaveGame, writeSaved } from './saved-game'
 import { MockTile, OkeyRack, ghostTransform, useRack } from './okey-rack'
 import { TableBrand } from './table-brand'
 import { OkeyWinOverlay } from './okey-win'
+import { SeatFace } from './seat-face'
+import { usePoints } from '../points-context'
 import { playSound } from '@/lib/sound'
 import {
   COLOR_NAMES,
@@ -284,6 +286,8 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
   const [dropOver, setDropOver] = useState(false)
   const [cifte, setCifte] = useState(false)
   const [left, setLeft] = useState(TURN_SECONDS)
+  const { member } = usePoints()
+  const [botSeed] = useState(() => saveKey ?? String(Math.random()))
 
   const { deck, indicator, okey, hands, discards } = game
   const hand = hands[0]
@@ -519,7 +523,7 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
         style={{ '--p': p === 0 && myTurn ? left / TURN_SECONDS : 1 } as CSSProperties}
       >
         <div className="okt-av" aria-hidden="true">
-          {initials}
+          <SeatFace userId={p === 0 ? member?.id : null} botSeed={p === 0 ? null : `${name}-${botSeed}`} initials={initials} />
         </div>
         <div className="okt-nm">{name}</div>
         <span className="sr-only">

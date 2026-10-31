@@ -930,6 +930,10 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
     busy,
     names,
+    userIds: Array.from({ length: seatCount }, (_, i) => {
+      const p = data.players.find((pl) => pl.seat === i)
+      return p && !p.bot ? p.id : null
+    }),
     spectator,
     send,
   }
