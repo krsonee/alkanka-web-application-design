@@ -1086,11 +1086,20 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
         )}
 
         {(data.status === 'oynaniyor' || ended) && data.state && !(spectator && DUEL.includes(data.game)) && (
-          <div className={cn(spectator && data.game !== 'okey' && 'pointer-events-none')}>
-            {spectator ? (
+          <div>
+            {spectator && (data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo') ? (
               <FitToScreen>
-                <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
+                <div className="pointer-events-none">
+                  <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
+                </div>
               </FitToScreen>
+            ) : spectator ? (
+              // Same stable landscape layer players get; FitToScreen re-measured the reflowing table in a loop on phones.
+              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101'} menu={<SoundToggle />}>
+                <div className={cn(data.game !== 'okey' && 'pointer-events-none')}>
+                  <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
+                </div>
+              </LandscapeFit>
             ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo' ? (
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (

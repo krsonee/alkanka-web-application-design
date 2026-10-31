@@ -18,9 +18,11 @@ export function FitToScreen({ children, offset = 160 }: { children: ReactNode; o
       const naturalW = i.scrollWidth
       const availH = Math.max(320, window.innerHeight - offset)
       const availW = o.clientWidth
+      if (!naturalH || !naturalW || !availW) return
       const next = Math.min(1, availH / naturalH, availW / naturalW)
-      setScale(next)
-      setHeight(naturalH * next)
+      // Rescaling widens the inner box, which can reflow and resize it again; ignore tiny swings so it settles.
+      setScale((cur) => (Math.abs(cur - next) < 0.02 ? cur : next))
+      setHeight((cur) => (cur != null && Math.abs(cur - naturalH * next) < 4 ? cur : naturalH * next))
     }
     measure()
     const ro = new ResizeObserver(measure)
