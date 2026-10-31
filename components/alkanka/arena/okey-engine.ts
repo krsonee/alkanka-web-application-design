@@ -111,17 +111,32 @@ export function isWinningHand(tiles: Tile[], ok: Okey): 'seri' | 'cift' | null {
   return solve(counts, jokers) ? 'seri' : null
 }
 
+/** Payout factor of a finish: çift doubles it and closing by throwing the okey doubles it again. */
+export function finishMultiplier(tile: Tile, kind: 'seri' | 'cift', ok: Okey) {
+  return (kind === 'cift' ? 2 : 1) * (isJoker(tile, ok) ? 2 : 1)
+}
+
+export function finishLabel(tile: Tile, kind: 'seri' | 'cift', ok: Okey) {
+  const joker = isJoker(tile, ok)
+  if (kind === 'cift') return joker ? 'Çiftten ve okeyle bitti' : 'Çiftten bitti'
+  return joker ? 'Okeyle bitti' : 'Normal bitti'
+}
+
+/** The finish (if any) reached by throwing this exact tile. */
+export function winningKindFor(hand: Tile[], tileId: number, ok: Okey) {
+  const rest = hand.filter((x) => x.id !== tileId)
+  return rest.length === hand.length ? null : isWinningHand(rest, ok)
+}
+
 /** `exclude` is the tile just picked from the floor, which may not be thrown back this turn. */
 export function findWinningDiscard(hand: Tile[], ok: Okey, exclude?: number | null) {
-  // Throwing the okey to finish pays double, so try it first.
-  const ordered = [...hand].sort((a, b) => Number(isJoker(b, ok)) - Number(isJoker(a, ok)))
-  for (const t of ordered) {
+  let best: { tile: Tile; kind: 'seri' | 'cift' } | null = null
+  for (const t of hand) {
     if (t.id === exclude) continue
-    const rest = hand.filter((x) => x.id !== t.id)
-    const kind = isWinningHand(rest, ok)
-    if (kind) return { tile: t, kind }
+    const kind = winningKindFor(hand, t.id, ok)
+    if (kind && (!best || finishMultiplier(t, kind, ok) > finishMultiplier(best.tile, best.kind, ok))) best = { tile: t, kind }
   }
-  return null
+  return best
 }
 
 function tileScore(t: Tile, hand: Tile[], ok: Okey) {

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles } from 'lucide-react'
+import { Flag, LogOut, Sparkles } from 'lucide-react'
+import { useTurnAlert } from './use-turn-alert'
+import { OkeyBotChat } from './okey-bot-chat'
 import { cn } from '@/lib/utils'
 import type { GameApi } from './stake-gate'
 import { loadSaved, useSaveGame, writeSaved } from './saved-game'
@@ -15,6 +17,8 @@ import {
   chooseDiscard,
   createDeck,
   findWinningDiscard,
+  finishLabel,
+  finishMultiplier,
   isJoker,
   okeyFrom,
   sortHand,
@@ -269,7 +273,7 @@ function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => void) {
   return { ghost, ghostEl, start, dragged }
 }
 
-export function Okey({ finish, saveKey, bet }: GameApi) {
+export function Okey({ finish, saveKey, bet, leave }: GameApi) {
   const [saved] = useState(() => loadSaved<OkeySave>(saveKey))
   const [game, setGame] = useState(() => saved?.game ?? deal())
   const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'discard')
@@ -296,17 +300,30 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
   const tileName = (t: Tile) => (t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`)
   const winning = useMemo(() => (phase === 'discard' ? findWinningDiscard(hand, okey) : null), [hand, okey, phase])
 
-  const [win, setWin] = useState<{ winner: string; mine: boolean; detail: string; tiles: Tile[]; result: 'win' | 'lose'; note: string } | null>(null)
+  const [win, setWin] = useState<{
+    winner: string
+    mine: boolean
+    detail: string
+    bonus?: string
+    mult: number
+    tiles: Tile[]
+    result: 'win' | 'lose'
+    note: string
+  } | null>(null)
+  const [confirm, setConfirm] = useState<'resign' | 'leave' | null>(null)
 
-  function end(result: 'win' | 'lose' | 'draw', note: string, reveal?: { winner: string; tiles: Tile[]; kind: 'seri' | 'cift' }) {
+  function end(result: 'win' | 'lose' | 'draw', note: string, reveal?: { winner: string; tiles: Tile[]; kind: 'seri' | 'cift'; tile: Tile }) {
     playSound(result === 'win' ? 'win' : result === 'lose' ? 'lose' : 'tick')
     setPhase('over')
     setMessage(note)
     if (reveal && result !== 'draw') {
+      const mult = finishMultiplier(reveal.tile, reveal.kind, okey)
       setWin({
         winner: reveal.winner,
         mine: result === 'win',
-        detail: reveal.kind === 'cift' ? 'Çiftten bitti' : 'Seriden bitti',
+        detail: finishLabel(reveal.tile, reveal.kind, okey),
+        bonus: mult > 1 ? `${mult} kat` : undefined,
+        mult,
         tiles: reveal.tiles,
         result,
         note,
@@ -314,6 +331,14 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
       return
     }
     setTimeout(() => finish(result, note), 1200)
+  }
+
+  function resign() {
+    setConfirm(null)
+    playSound('lose')
+    setPhase('over')
+    setMessage('Pes ettin.')
+    finish('lose', 'Pes ettin, el rakiplerin oldu.')
   }
 
   function drawDeck(slot: number | null = null) {
@@ -359,22 +384,25 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
       discards: discards.map((d, i) => (i === 0 ? [...d, tile] : d)),
     }
     setGame(next)
-    writeSaved(saveKey, { game: next, phase: 'bots', message: `${BOT_NAMES[0]} oynuyor…` } satisfies OkeySave)
+    writeSaved(saveKey, { game: next, phase: 'bots', message: `${BOT_NAMES[0]} düşünüyor…` } satisfies OkeySave)
     setSelected(null)
     setFresh(null)
     setActive(1)
     setPhase('bots')
-    setMessage(`${BOT_NAMES[0]} oynuyor…`)
+    setMessage(`${BOT_NAMES[0]} düşünüyor…`)
   }
 
   function finishHand() {
     if (!winning) return
     const rest = hand.filter((t) => t.id !== winning.tile.id)
     setGame({ ...game, hands: [rest, ...hands.slice(1)], discards: discards.map((d, i) => (i === 0 ? [...d, winning.tile] : d)) })
-    end('win', winning.kind === 'cift' ? 'Çiftten bitirdin! Masanın kralı sensin.' : 'Elini açtın! Masayı sen aldın.', {
+    const mult = finishMultiplier(winning.tile, winning.kind, okey)
+    const label = finishLabel(winning.tile, winning.kind, okey)
+    end('win', mult > 1 ? `${label}! ${mult} kat kazandın.` : 'Elini açtın! Masayı sen aldın.', {
       winner: 'Sen',
       tiles: rest,
       kind: winning.kind,
+      tile: winning.tile,
     })
   }
 
@@ -417,12 +445,12 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           setGame(state)
           playSound('tile')
           if (win) {
-            end('lose', `${BOT_NAMES[bot - 1]} elini açtı. Bu masa onun.`, { winner: BOT_NAMES[bot - 1], tiles: rest, kind: win.kind })
+            end('lose', `${BOT_NAMES[bot - 1]} elini açtı. Bu masa onun.`, { winner: BOT_NAMES[bot - 1], tiles: rest, kind: win.kind, tile: win.tile })
             return
           }
           if (bot < 3) {
             setActive(bot + 1)
-            setMessage(`${BOT_NAMES[bot]} oynuyor…`)
+            setMessage(`${BOT_NAMES[bot]} düşünüyor…`)
             step(bot + 1)
           } else
             timers.push(
@@ -433,7 +461,8 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
                 setMessage(`Sıra sende – desteden ya da ${BOT_NAMES[2]}’in taşından çek`)
               }, 500),
             )
-        }, 850),
+          // Bots take a human-like pause (about 1.5–2.8 s) so a full round never drags past ~9 s.
+        }, 1500 + Math.random() * 1300),
       )
     }
     step(1)
@@ -477,6 +506,7 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
   const canDiscard = phase === 'discard'
   const myTurn = phase === 'draw' || phase === 'discard'
   const urgent = myTurn && left <= 5
+  useTurnAlert(phase === 'draw')
   const toast = winning && canDiscard ? `Bitirebilirsin – ${tileName(winning.tile)} taşını at` : message
 
   const seat = (p: 0 | 1 | 2 | 3) => {
@@ -601,6 +631,19 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
         <div className="okt-toast" aria-live="polite">
           {toast}
         </div>
+        <div className="okt-exit">
+          <button type="button" className="okt-btn" disabled={phase === 'over'} onClick={() => setConfirm('resign')}>
+            <Flag aria-hidden="true" />
+            Pes et
+          </button>
+          {leave && (
+            <button type="button" className="okt-btn" disabled={phase === 'over'} onClick={() => setConfirm('leave')}>
+              <LogOut aria-hidden="true" />
+              Ayrıl
+            </button>
+          )}
+          <OkeyBotChat bots={BOT_NAMES} />
+        </div>
 
         <OkeyRack
           variant="table"
@@ -620,15 +663,56 @@ export function Okey({ finish, saveKey, bet }: GameApi) {
           winner={win.winner}
           mine={win.mine}
           detail={win.detail}
+          bonus={win.bonus}
           tiles={win.tiles}
           okey={okey}
           actionLabel="Sonucu gör"
           onClose={() => {
             setWin(null)
-            finish(win.result, win.note)
+            finish(win.result, win.note, { for: win.mult, against: 0 })
           }}
         />
       )}
+
+      {confirm &&
+        createPortal(
+          <div role="alertdialog" aria-modal="true" aria-labelledby="okey-confirm-title" className="fixed inset-0 z-[130] flex items-center justify-center bg-[rgb(8_8_10/0.7)] p-4 backdrop-blur-md">
+            <div className="okw-card flex w-full max-w-sm flex-col gap-4 rounded-2xl p-5 text-center">
+              <div className="flex flex-col gap-1">
+                <h2 id="okey-confirm-title" className="text-lg font-bold text-[var(--okt-porcelain)]">
+                  {confirm === 'resign' ? 'Pes etmek istiyor musun?' : 'Masadan ayrılmak istiyor musun?'}
+                </h2>
+                <p className="text-pretty text-sm leading-relaxed text-[var(--okt-mist)]">
+                  El kaybedilmiş sayılır, {bet.toLocaleString('tr-TR')} KC bahsin gider.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirm(null)}
+                  className="flex-1 rounded-full bg-[rgb(255_255_255/0.08)] px-4 py-2.5 text-sm font-semibold text-[var(--okt-porcelain)] hover:bg-[rgb(255_255_255/0.14)]"
+                >
+                  Devam et
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm === 'resign') resign()
+                    else {
+                      setConfirm(null)
+                      setPhase('over')
+                      leave?.()
+                    }
+                  }}
+                  className="flex-1 rounded-full bg-[var(--okt-red)] px-4 py-2.5 text-sm font-bold text-[var(--okt-porcelain)] hover:brightness-110"
+                >
+                  {confirm === 'resign' ? 'Pes et' : 'Ayrıl'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {drawDrag.ghost &&
         createPortal(

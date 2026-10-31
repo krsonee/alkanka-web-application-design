@@ -9,6 +9,7 @@ import { MobileTableChat } from './mobile-table-chat'
 import { VoiceChat } from './voice-chat'
 import { FitToScreen } from './fit-to-screen'
 import { LandscapeFit } from './landscape-fit'
+import { useTurnAlert } from './use-turn-alert'
 import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
@@ -918,6 +919,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
   const duelStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn == null && data.state?.scores?.[mySeat] && idleMs > 10 * 60 * 1000
   const won = member != null && (data.winners ?? []).includes(member.id)
   const turnName = data.turn != null ? names[data.turn] : null
+  useTurnAlert((data.game === 'okey' || data.game === 'okey101') && !spectator && data.status === 'oynaniyor' && data.turn === mySeat)
 
   const remote: Remote<unknown> = {
     id,
@@ -1057,7 +1059,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo' ? (
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
-              <LandscapeFit force={data.game === 'tavla'}>
+              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101'}>
                 <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
               </LandscapeFit>
             )}

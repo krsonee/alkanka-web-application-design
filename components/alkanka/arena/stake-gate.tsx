@@ -27,6 +27,8 @@ export type GameResult = 'win' | 'lose' | 'draw'
 export type GameApi = {
   bet: number
   finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
+  /** Gives up the hand (counts as a loss) and goes straight back to the lobby. */
+  leave?: () => void
   saveKey?: string
 }
 
@@ -124,7 +126,11 @@ export function StakeGate({
 
   if (phase.kind === 'playing') {
     const saveKey = session.current ? `${game}:${session.current}` : undefined
-    const api: GameApi = { bet: phase.bet, finish, saveKey }
+    const leave = async () => {
+      await finish('lose', 'Masadan ayrıldın.')
+      setPhase({ kind: 'lobby' })
+    }
+    const api: GameApi = { bet: phase.bet, finish, leave, saveKey }
     return (
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
@@ -158,7 +164,7 @@ export function StakeGate({
                 : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
           )}
         >
-          {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? children(api) : <LandscapeFit label={meta.title} force={game === 'tavla'}>{children(api)}</LandscapeFit>}
+          {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? children(api) : <LandscapeFit label={meta.title} force={game === 'tavla' || game === 'okey'}>{children(api)}</LandscapeFit>}
         </div>
       </div>
     )
