@@ -5,7 +5,17 @@ export type Meld101 = { id: number; owner: number; kind: MeldKind; tiles: Tile[]
 export type Open101 = 'seri' | 'cift' | null
 export type Log101 = { seat: number; text: string; tile?: Tile }
 export type FinishHow = 'normal' | 'okey' | 'elden' | 'cift' | 'cift-okey' | 'deste'
-export type HandResult = { hand: number; scores: number[]; finisher: number | null; double: boolean; mult?: number; how?: FinishHow }
+export type HandResult = {
+  hand: number
+  scores: number[]
+  finisher: number | null
+  double: boolean
+  mult?: number
+  how?: FinishHow
+  /** Snapshot taken at hand end so the breakdown survives the next deal. */
+  opened?: Open101[]
+  penalties?: number[]
+}
 
 export type Okey101State = {
   kind: 'okey101'
@@ -346,7 +356,7 @@ function endHand(s: Okey101State, finisher: number | null, mult: number, how: Fi
     return rest * (s.opened[i] === 'cift' ? 2 : 1) * mult + s.penalties[i]
   })
   const totals = s.totals.map((t, i) => t + scores[i])
-  const results = [...s.results, { hand: s.handNo, scores, finisher, double, mult, how }]
+  const results = [...s.results, { hand: s.handNo, scores, finisher, double, mult, how, opened: [...s.opened], penalties: [...s.penalties] }]
   const note =
     finisher == null
       ? `${s.handNo}. el: ortada taş kalmadı, el kapandı.`

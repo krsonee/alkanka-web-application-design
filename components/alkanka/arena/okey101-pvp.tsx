@@ -512,8 +512,15 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             totals={ranked}
             final={popupFinal}
             handsTotal={s.handsTotal}
-            detail={s.handNo === handPopup.hand ? { opened: s.opened, penalties: s.penalties } : null}
+            detail={
+              handPopup.opened && handPopup.penalties
+                ? { opened: handPopup.opened, penalties: handPopup.penalties }
+                : s.handNo === handPopup.hand
+                  ? { opened: s.opened, penalties: s.penalties }
+                  : null
+            }
             face={face}
+            onReplay={popupFinal && gameOver && remote.replay && !remote.spectator ? remote.replay : undefined}
             onClose={closePopup}
             onScores={() => {
               setHandPopup(null)

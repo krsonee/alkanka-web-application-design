@@ -176,7 +176,7 @@ export function TableLobby({
     return res
   }
 
-  if (activeId) return <TableRoom id={activeId} onLeave={() => { setActiveId(null); mutate() }} />
+  if (activeId) return <TableRoom key={activeId} id={activeId} onLeave={() => { setActiveId(null); mutate() }} onReplay={setActiveId} />
 
   const allOpen = (data?.open ?? []).filter((t) => t.status === 'bekliyor' && t.seat < 0)
   const openBets = Array.from(new Set(allOpen.map((t) => t.stake))).sort((a, b) => a - b)
@@ -843,7 +843,7 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
   )
 }
 
-export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) {
+export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () => void; onReplay?: (id: string) => void }) {
   const { refresh, member } = usePoints()
   const idle = useIdle()
   const { data, mutate, error } = useSWR<TableSummary>(`/api/tables/${id}`, fetcher, {
@@ -936,6 +936,25 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     }),
     spectator,
     send,
+    replay:
+      ended && !spectator && !data.tournamentId && onReplay
+        ? async () => {
+            const r = await openTable(data.game, data.stake, {
+              seats: data.seats,
+              team: data.team,
+              bots: data.bots,
+              rounds: data.rounds ?? data.state?.handsTotal ?? undefined,
+              ...(data.variant ? { variant: data.variant } : {}),
+              ...(data.extras?.length ? { extras: data.extras } : {}),
+            })
+            refresh()
+            if (r.ok && r.id) onReplay(r.id)
+            else {
+              playSound('error')
+              setMsg(r.ok ? 'Yeni masa açılamadı.' : r.error ?? 'Yeni masa açılamadı.')
+            }
+          }
+        : undefined,
   }
 
   const immersive = ['pisti', 'papaz', 'okey101', 'batak', 'monopoly', 'bilardo'].includes(data.game) && data.status === 'oynaniyor'
