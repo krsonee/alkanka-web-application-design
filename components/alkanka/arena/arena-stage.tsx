@@ -29,7 +29,7 @@ export const RULES: Record<ArenaGame, string[]> = {
   okey101: [
     'Herkese 21 taş, başlayana 22 taş dağıtılır. Gösterge taşının bir üstü okeydir.',
     'Elini açmak için seri ve perlerinin toplamı en az 101 olmalı ya da en az 5 çift ile çifte gidersin. Açtıktan sonra yerdeki perlere işleyebilirsin.',
-    'Eli ilk bitiren kazanır. Açamayan 202, açan elindeki taşlar kadar ceza yer; çifte gidenin cezası ikiye katlanır. Set sonunda en az cezası olan kazanır.',
+    'Eli ilk bitiren kazanır. Açamayan 202, açan elindeki taşlar kadar ceza yer; çifte gidenin cezası ikiye katlanır. Okeyle, elden ya da çiftten bitirince cezalar 2 kat, okeyle çiftten bitirince 4 kat yazılır. Yandan alınan taş o tur pere ya da işlemeye kullanılmalı, yoksa geri verilir (101 ceza). Set sonunda en az cezası olan kazanır.',
   ],
   papaz: [
     '51 kart: Sinek Papaz desteden çıkarılır, böylece Maça Papaz eşsiz kalır. Kartlar 2-6 oyuncuya dağıtılır.',

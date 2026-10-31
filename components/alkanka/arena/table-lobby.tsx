@@ -1067,7 +1067,31 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo' ? (
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
-              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101'}>
+              <LandscapeFit
+                force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101'}
+                menu={
+                  <>
+                    {mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (
+                      <LeaveTableButton
+                        id={id}
+                        running
+                        compact
+                        botsOnly={data.players.filter((p) => !p.bot).length === 1}
+                        stake={data.stake}
+                        onResigned={() => {
+                          refresh()
+                          void mutate()
+                        }}
+                        onDone={() => {
+                          refresh()
+                          onLeave()
+                        }}
+                      />
+                    )}
+                    <SoundToggle />
+                  </>
+                }
+              >
                 <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
               </LandscapeFit>
             )}
@@ -1101,7 +1125,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             role="dialog"
             aria-modal="true"
             aria-labelledby="game-result-title"
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-300"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-300"
           >
             <div
               className={cn(
@@ -1391,7 +1415,7 @@ function LeaveTableButton({
           role="alertdialog"
           aria-modal="true"
           aria-labelledby={`leave-${id}`}
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-200"
           onClick={() => !busy && setConfirming(false)}
         >
           <div

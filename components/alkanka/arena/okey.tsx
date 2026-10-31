@@ -229,7 +229,7 @@ type DrawSource = 'deck' | 'pile'
  * Drag a tile from the deck or the left player's pile onto the rack. Releasing over a rack slot places it there;
  * releasing anywhere a clear distance away still draws, so the player never has to aim precisely.
  */
-function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => void) {
+export function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => void) {
   const [ghost, setGhost] = useState<{ src: DrawSource; x: number; y: number; w: number; h: number } | null>(null)
   const ghostEl = useRef<HTMLDivElement>(null)
   const dragged = useRef(false)

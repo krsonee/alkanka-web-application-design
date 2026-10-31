@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Trophy, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -20,12 +20,14 @@ import {
   type Okey101View,
 } from '@/lib/games/okey101'
 import type { Remote } from './remote'
-import { TileFace } from './okey'
+import { createPortal } from 'react-dom'
+import { TileFace, useDrawDrag } from './okey'
+import { Okey101Result } from './okey101-result'
 import { TableBrand } from './table-brand'
 import { MobileTableChat } from './mobile-table-chat'
 import { SeatFace } from './seat-face'
 import { isJoker, okeyFrom, sortHand, type Tile } from './okey-engine'
-import { layoutGroups, MockTile, OkeyRack, RACK_COLS, useRack, type SlotMark } from './okey-rack'
+import { ghostTransform, layoutGroups, MockTile, OkeyRack, RACK_COLS, useRack, type SlotMark } from './okey-rack'
 
 type OkeyValue = ReturnType<typeof okeyFrom>
 type Segment = { tiles: Tile[]; slots: number[]; kind: 'run' | 'set' | 'pair'; value: number }
@@ -106,6 +108,27 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     if (ok) rack.setSelected(null)
     return ok
   }
+  // A tile dragged from the deck or the side pile lands on the slot it was dropped on once the server confirms the draw.
+  const [pendingSlot, setPendingSlot] = useState<number | null>(null)
+  const idsKey = hand.map((t) => t.id).join(',')
+  const [knownIds, setKnownIds] = useState(idsKey)
+  if (idsKey !== knownIds) {
+    const before = new Set(knownIds.split(',').filter(Boolean).map(Number))
+    setKnownIds(idsKey)
+    if (pendingSlot != null) {
+      const added = hand.find((t) => !before.has(t.id))
+      if (added) rack.moveTo(added.id, pendingSlot)
+      setPendingSlot(null)
+    }
+  }
+  const drawFrom = async (src: 'deck' | 'pile', slot: number | null = null) => {
+    if (!drawPhase || remote.busy) return
+    if (src === 'pile' && !canTakeSide) return
+    setPendingSlot(slot)
+    const ok = await act({ type: 'draw', from: src === 'deck' ? 'deck' : 'discard' })
+    if (!ok) setPendingSlot(null)
+  }
+  const drawDrag = useDrawDrag((src, slot) => drawFrom(src, slot))
   const discard = (tileId: number) => {
     if (!playPhase || s.taken != null || remote.busy) return
     act({ type: 'discard', tileId })
@@ -159,14 +182,11 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const [handPopup, setHandPopup] = useState<HandResult | null>(null)
   if (s.results.length !== seenResults) {
     setSeenResults(s.results.length)
-    const finalHand = s.results.length >= s.handsTotal
-    if (s.results.length > seenResults && !finalHand) setHandPopup(s.results[s.results.length - 1])
+    if (s.results.length > seenResults) setHandPopup(s.results[s.results.length - 1])
   }
-  useEffect(() => {
-    if (!handPopup) return
-    const t = setTimeout(() => setHandPopup(null), 8000)
-    return () => clearTimeout(t)
-  }, [handPopup])
+  const closePopup = useCallback(() => setHandPopup(null), [])
+  const popupFinal = handPopup != null && handPopup.hand >= s.handsTotal
+  const gameOver = s.results.length >= s.handsTotal
 
   // Turn hand-over cue: buzz the phone and flash a banner (the chime itself comes from useTableSounds).
   const [prevMyTurn, setPrevMyTurn] = useState(remote.myTurn)
@@ -285,12 +305,18 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
       <div
         key={`pile-${seat}`}
         data-drop={dropHere && canDiscard ? 'discard' : undefined}
-        className={cn('okt-pile okt-box', `okt-pile${pos}`, (takeHere || (dropHere && canDiscard)) && 'can')}
+        className={cn('okt-pile okt-box', `okt-pile${pos}`, (takeHere || (dropHere && canDiscard)) && 'can', takeHere && 'take')}
       >
         {t && <MockTile key={t.id} tile={t} okey={okey} />}
         {list.length > 1 && <span className="o1-cnt">{list.length}</span>}
         {takeHere && (
-          <button type="button" className="okt-hit" onClick={() => act({ type: 'draw', from: 'discard' })} aria-label={`Soldan gelen taşı al`} />
+          <button
+            type="button"
+            className="okt-hit touch-none"
+            onPointerDown={(e) => drawDrag.start(e, 'pile')}
+            onClick={() => !drawDrag.dragged.current && drawFrom('pile')}
+            aria-label="Soldan gelen taşı al ya da ıstakaya sürükle"
+          />
         )}
         {dropHere && canDiscard && (
           <button type="button" className="okt-hit" onClick={() => selected != null && discard(selected)} aria-label="Seçili taşı buraya at" />
@@ -336,11 +362,12 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 
         <button
           type="button"
-          className="okt-deck"
+          className={cn('okt-deck', drawPhase && 'touch-none')}
           data-on={drawPhase || undefined}
           disabled={!drawPhase || remote.busy}
-          onClick={() => act({ type: 'draw', from: 'deck' })}
-          aria-label={`Ortadan taş çek, ${s.deckCount} taş kaldı`}
+          onPointerDown={(e) => drawPhase && !remote.busy && drawDrag.start(e, 'deck')}
+          onClick={() => !drawDrag.dragged.current && drawFrom('deck')}
+          aria-label={`Ortadan taş çek ya da ıstakaya sürükle, ${s.deckCount} taş kaldı`}
         >
           <span className="okt-stack" aria-hidden="true">
             <span className="okt-box absolute inset-0">
@@ -386,7 +413,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             <button type="button" className="okt-btn" onClick={() => autoLayout('cift')}>
               Çift Diz
             </button>
-            <button type="button" className="okt-btn gold" onClick={main.onClick} disabled={main.disabled}>
+            <button type="button" className={cn('okt-btn gold', !main.disabled && myTurn && 'ready')} onClick={main.onClick} disabled={main.disabled || gameOver}>
               {main.label}
             </button>
             {playPhase && !mainIsDiscard && s.taken == null && (
@@ -470,48 +497,31 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
         )}
 
         {handPopup && (
-          <div className="o1-res" role="status">
-            <div className="o1-card">
-              <button type="button" className="o1-x" onClick={() => setHandPopup(null)} aria-label="Kapat">
-                <X aria-hidden="true" />
-              </button>
-              <div className="o1-k">{handPopup.hand}. el bitti</div>
-              <div className="o1-h">
-                <div className="okt-av" aria-hidden="true">
-                  {handPopup.finisher != null ? face(handPopup.finisher) : '–'}
-                </div>
-                <div>
-                  <b>
-                    {handPopup.finisher == null
-                      ? 'Deste bitti'
-                      : handPopup.finisher === mySeat
-                        ? 'Eli sen bitirdin!'
-                        : `${nameOf(handPopup.finisher)} eli bitirdi`}
-                  </b>
-                  <span>{handPopup.double ? 'Ceza ikiye katlandı' : 'Eldeki taşların puanı yazıldı'}</span>
-                </div>
-              </div>
-              <ul className="o1-t">
-                {handPopup.scores.map((sc, i) => (
-                  <li key={i} className={cn(i === mySeat && 'me')}>
-                    <span>{nameOf(i)}</span>
-                    <em>{i === handPopup.finisher ? 'bitirdi' : ''}</em>
-                    <s>{sc > 0 ? `+${sc}` : sc}</s>
-                  </li>
-                ))}
-              </ul>
-              <div className="o1-a">
-                <button type="button" className="okt-btn" onClick={() => setScoresOpen(true)}>
-                  Puan Tablosu
-                </button>
-                <button type="button" className="okt-btn gold" onClick={() => setHandPopup(null)}>
-                  Devam
-                </button>
-              </div>
-            </div>
-          </div>
+          <Okey101Result
+            result={handPopup}
+            nameOf={nameOf}
+            mySeat={mySeat}
+            totals={ranked}
+            final={popupFinal}
+            face={face}
+            onClose={closePopup}
+            onScores={() => {
+              setHandPopup(null)
+              setScoresOpen(true)
+            }}
+          />
         )}
       </div>
+
+      {drawDrag.ghost &&
+        createPortal(
+          <div ref={drawDrag.ghostEl} aria-hidden="true" className="okt-ghost" style={{ transform: ghostTransform(drawDrag.ghost.x, drawDrag.ghost.y) }}>
+            <div style={{ width: drawDrag.ghost.w, height: drawDrag.ghost.h }}>
+              {drawDrag.ghost.src === 'pile' && sideTop ? <MockTile tile={sideTop} okey={okey} /> : <MockTile back />}
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {scoresOpen && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-background/70 backdrop-blur-sm sm:items-center" onClick={() => setScoresOpen(false)}>
@@ -567,7 +577,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             </div>
             {lastResult && (
               <p className="text-xs text-muted-foreground">
-                Son el: {lastResult.finisher != null ? `${nameOf(lastResult.finisher)} bitirdi${lastResult.double ? ' (ceza ikiye katlandı)' : ''}` : 'deste bitti'}.
+                Son el: {lastResult.finisher != null ? `${nameOf(lastResult.finisher)} bitirdi${(lastResult.mult ?? (lastResult.double ? 2 : 1)) > 1 ? ` (cezalar ${lastResult.mult ?? 2} kat)` : ''}` : 'deste bitti'}.
               </p>
             )}
             <div>
