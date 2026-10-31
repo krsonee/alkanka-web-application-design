@@ -33,6 +33,24 @@ async function goLandscape() {
   } catch {}
 }
 
+/**
+ * Leaving the table: lock portrait while still fullscreen (Android honours it),
+ * then drop fullscreen and release the lock so the site returns upright.
+ */
+async function restorePortrait() {
+  const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void }
+  try {
+    if (document.fullscreenElement) await o.lock?.('portrait-primary')
+  } catch {}
+  await new Promise((r) => setTimeout(r, 250))
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen?.()
+  } catch {}
+  try {
+    o.unlock?.()
+  } catch {}
+}
+
 type FinishMessage = { source: 'alkanka-bilardo'; type: 'finish'; result: 'win' | 'lose'; note?: string }
 
 export function BilardoPool({ bet, win, finish }: { bet: number; win: number; finish: GameApi['finish'] }) {
@@ -48,11 +66,14 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
       const d = e.data
       if (d?.source !== 'alkanka-bilardo' || d.type !== 'finish' || done.current) return
       done.current = true
-      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+      void restorePortrait()
       finishRef.current(d.result === 'win' ? 'win' : 'lose', d.note)
     }
     window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      void restorePortrait()
+    }
   }, [])
 
   const { concept } = useBrand()
