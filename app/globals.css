@@ -2402,7 +2402,7 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 /* 101 table chat button: free corner per layout */
 .o101 .table-chat-btn { left: 1.8%; top: 4.5%; }
 @media (min-width: 640px) {
-  .o101 .table-chat-btn { left: auto; right: 1.8%; top: 17%; }
+  .o101 .table-chat-btn { left: auto; right: 11.5%; top: 2.5%; }
 }
 .ls-split .o101 .table-chat-btn { left: auto; right: 1.6%; top: 19%; }
 
@@ -2436,7 +2436,6 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   .o101 .o1-mz3 { left: 1.2%; top: 33%; width: 16.5%; max-height: 18%; }
   .o101 .o1-mz1 { right: 1.2%; top: 33%; width: 16.5%; max-height: 34.5%; }
   .o101 .okt-drop { left: 20%; right: 20%; top: 36%; bottom: 44%; }
-  .o101 .table-chat-btn { top: 17%; }
 }
 
 /* Mobil yatay tam ekran: sol/sağ per sütunları dar, atıklar orta sırada */

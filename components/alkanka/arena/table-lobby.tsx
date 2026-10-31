@@ -898,6 +898,14 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
       : null,
   )
 
+  useTurnAlert(
+    !!data &&
+      (data.game === 'okey' || data.game === 'okey101') &&
+      data.seat >= 0 &&
+      data.status === 'oynaniyor' &&
+      data.turn === data.seat,
+  )
+
   if (error) return <RoomShell onLeave={onLeave}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
   if (!data) {
     return (
@@ -920,7 +928,6 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
   const duelStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn == null && data.state?.scores?.[mySeat] && idleMs > 10 * 60 * 1000
   const won = member != null && (data.winners ?? []).includes(member.id)
   const turnName = data.turn != null ? names[data.turn] : null
-  useTurnAlert((data.game === 'okey' || data.game === 'okey101') && !spectator && data.status === 'oynaniyor' && data.turn === mySeat)
 
   const remote: Remote<unknown> = {
     id,
