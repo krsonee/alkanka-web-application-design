@@ -621,26 +621,93 @@
   }
 
   /* ---------- bot ---------- */
-  function botPlay() {
-    if (S.over || S.turn !== 'op') return;
-    const c = cue(); let best = null;
+  function pathClear(ax, ay, bx, by, skip) {
+    const dx = bx - ax, dy = by - ay, L2 = dx*dx + dy*dy || 1;
+    for (const o of live()) {
+      if (skip.includes(o)) continue;
+      const t = Math.max(0, Math.min(1, ((o.x - ax)*dx + (o.y - ay)*dy)/L2));
+      if (Math.hypot(ax + dx*t - o.x, ay + dy*t - o.y) < BR*1.96) return false;
+    }
+    return true;
+  }
+  const FR = 1 - 0.9855;
+  function powerFor(cl, bl, cut) {
+    const vObj = FR*bl*1.7 + 2.2, vCue = vObj/(0.97*Math.max(cut, 0.3)) + FR*cl*1.15;
+    return Math.max(0.24, Math.min(0.92, (vCue - 3)/34));
+  }
+  function shotsFrom(cx, cy, c) {
+    const out = [];
     for (const b of live()) {
       if (b.n === 0 || !isOwn(b.n, 'op')) continue;
-      for (const p of POCKETS) {
+      POCKETS.forEach((p, i) => {
         const bx = p[0] - b.x, by = p[1] - b.y, bl = Math.hypot(bx, by);
-        const gx = b.x - bx/bl*BR*2, gy = b.y - by/bl*BR*2;
-        const cx = gx - c.x, cy = gy - c.y, cl = Math.hypot(cx, cy);
-        const cut = (cx*bx + cy*by)/(cl*bl), score = cut*2 - bl/1400 - cl/1800;
-        if (cut > 0.15 && (!best || score > best.score)) best = { score, gx, gy, bl, cl, bx:bx/bl, by:by/bl };
+        const ux = bx/bl, uy = by/bl;
+        if ((i === 1 || i === 4) && Math.abs(uy) < 0.5) return;
+        const gx = b.x - ux*BR*2, gy = b.y - uy*BR*2;
+        if (gx < R+BR || gx > R+W-BR || gy < R+BR || gy > R+H-BR) return;
+        const vx = gx - cx, vy = gy - cy, cl = Math.hypot(vx, vy);
+        if (cl < 1) return;
+        const cut = (vx*ux + vy*uy)/cl;
+        if (cut < 0.3) return;
+        if (!pathClear(b.x, b.y, p[0], p[1], [b, c])) return;
+        if (!pathClear(cx, cy, gx, gy, [b, c])) return;
+        const score = cut*cut*2.2 - bl/900 - cl/1300;
+        out.push({ score, gx, gy, bl, cl, cut, ux, uy, ball:b });
+      });
+    }
+    return out.sort((a, b) => b.score - a.score);
+  }
+  function botPlay() {
+    if (S.over || S.turn !== 'op') return;
+    const c = cue();
+    const go = (angle, power) => { S.bot = { from:S.angle, to:angle, t0:performance.now(), power }; };
+
+    if (S.firstShot) {
+      const head = live().filter(b => b.n !== 0).sort((a, b) => a.x - b.x)[0];
+      if (S.ballInHand) { c.x = R + W*0.2; c.y = head.y + (Math.random() - 0.5)*30; c.dirty = true; }
+      return go(Math.atan2(head.y - c.y, head.x - c.x) + (Math.random() - 0.5)*0.01, 0.86 + Math.random()*0.06);
+    }
+
+    if (S.ballInHand) {
+      const maxX = S.kitchen ? R + W*0.25 : R + W - BR;
+      let place = null;
+      for (const b of live()) {
+        if (b.n === 0 || !isOwn(b.n, 'op')) continue;
+        POCKETS.forEach((p, i) => {
+          const bx = p[0] - b.x, by = p[1] - b.y, bl = Math.hypot(bx, by), ux = bx/bl, uy = by/bl;
+          if ((i === 1 || i === 4) && Math.abs(uy) < 0.5) return;
+          if (!pathClear(b.x, b.y, p[0], p[1], [b, c])) return;
+          for (const k of [110, 160, 80, 220]) {
+            const x = b.x - ux*(BR*2 + k), y = b.y - uy*(BR*2 + k);
+            if (x > maxX || !freeSpot(x, y) || !pathClear(x, y, b.x - ux*BR*2, b.y - uy*BR*2, [b, c])) continue;
+            const score = -bl/900 - k/1300;
+            if (!place || score > place.score) place = { score, x, y };
+            break;
+          }
+        });
       }
+      if (place) { c.x = place.x; c.y = place.y; c.dirty = true; }
     }
-    if (S.ballInHand && best) {
-      for (let k = 140; k > 40; k -= 20) { const x = best.gx - best.bx*k, y = best.gy - best.by*k; if (freeSpot(x, y)) { c.x = x; c.y = y; c.dirty = true; break; } }
-      best.cl = Math.hypot(best.gx - c.x, best.gy - c.y);
+
+    const shots = shotsFrom(c.x, c.y, c);
+    if (shots.length) {
+      const pick = shots.length > 1 && Math.random() < 0.18 ? shots[1] : shots[0];
+      const hard = (1 - pick.cut) + (pick.cl + pick.bl)/1400;
+      const slip = Math.random() < 0.22 ? 0.022 : 0.004 + hard*0.008;
+      const angle = Math.atan2(pick.gy - c.y, pick.gx - c.x) + (Math.random() - 0.5)*2*slip;
+      return go(angle, powerFor(pick.cl, pick.bl, pick.cut) * (0.92 + Math.random()*0.16));
     }
-    const target = (best ? Math.atan2(best.gy - c.y, best.gx - c.x) : Math.random()*Math.PI*2) + (Math.random() - 0.5)*0.035;
-    const power = best ? Math.min(0.9, 0.32 + (best.cl + best.bl)/1600) : 0.6;
-    S.bot = { from:S.angle, to:target, t0:performance.now(), power };
+
+    let safe = null;
+    for (const b of live()) {
+      if (b.n === 0 || !isOwn(b.n, 'op')) continue;
+      const d = Math.hypot(b.x - c.x, b.y - c.y);
+      if (pathClear(c.x, c.y, b.x, b.y, [b, c]) && (!safe || d < safe.d)) safe = { b, d };
+    }
+    if (safe) return go(Math.atan2(safe.b.y - c.y, safe.b.x - c.x) + (Math.random() - 0.5)*0.05, Math.min(0.6, 0.3 + safe.d/2200));
+    const any = live().filter(b => b.n !== 0 && isOwn(b.n, 'op')).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
+    const tgt = any || live().find(b => b.n !== 0);
+    go(Math.atan2(tgt.y - c.y, tgt.x - c.x) + (Math.random() - 0.5)*0.04, 0.5);
   }
   function botTick(now) {
     const b = S.bot; if (!b) return;
