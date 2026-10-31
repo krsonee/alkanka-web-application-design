@@ -8,6 +8,8 @@ export type Remote<S> = {
   myTurn: boolean
   busy: boolean
   names: string[]
+  /** Member id per seat; null for bots or empty seats. */
+  userIds?: (string | null)[]
   spectator?: boolean
   send: (action: RemoteAction) => Promise<boolean>
 }

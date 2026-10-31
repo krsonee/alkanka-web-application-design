@@ -2014,6 +2014,7 @@ html.is-hidden *, html.is-hidden *::before, html.is-hidden *::after {
   -webkit-mask: radial-gradient(circle, transparent 61%, #000 63%); mask: radial-gradient(circle, transparent 61%, #000 63%);
 }
 .okt-pl.urgent { --ring: var(--okt-red); }
+.okt-av .okt-av-img { border-radius: 50%; object-fit: cover; padding: calc(var(--u) * .18); }
 .okt-nm {
   font-size: calc(var(--u) * 1.12); font-weight: 600; background: rgb(5 15 14 / 0.62); padding: calc(var(--u) * .2) calc(var(--u) * .9);
   border-radius: 999px; white-space: nowrap; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);

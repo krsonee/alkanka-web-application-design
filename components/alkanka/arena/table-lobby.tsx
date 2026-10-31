@@ -407,7 +407,7 @@ export function TableLobby({
                 <p className="text-[11px] leading-snug text-muted-foreground text-pretty">
                   {okeyPoints === '0'
                     ? 'İlk bitiren masayı kazanır.'
-                    : `Herkes ${okeyPoints} puanla başlar. Bitirene karşı rakipler 2, çift ya da okey atarak bitirişte 4, ikisi birden olursa 8 puan kaybeder. Göstergeyi gösteren rakiplerine 1 puan sildirir. Puanı ilk sıfırlanan olunca en yüksek puanlı kazanır.`}
+                    : `Herkes ${okeyPoints} puanla başlar. Normal bitişte rakipler 2 puan kaybeder (1 kat). Okeyle ya da çiftten bitiş 2 kat (4 puan), çiftten ve okeyle bitiş 4 kat (8 puan) sildirir. Göstergeyi gösteren rakiplerine 1 puan sildirir. Puanı ilk sıfırlanan olunca en yüksek puanlı kazanır.`}
                 </p>
               </div>
               {seats === 4 && (
@@ -930,6 +930,10 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
     myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
     busy,
     names,
+    userIds: Array.from({ length: seatCount }, (_, i) => {
+      const p = data.players.find((pl) => pl.seat === i)
+      return p && !p.bot ? p.id : null
+    }),
     spectator,
     send,
   }

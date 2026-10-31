@@ -23,6 +23,7 @@ import type { Remote } from './remote'
 import { TileFace } from './okey'
 import { TableBrand } from './table-brand'
 import { MobileTableChat } from './mobile-table-chat'
+import { SeatFace } from './seat-face'
 import { isJoker, okeyFrom, sortHand, type Tile } from './okey-engine'
 import { layoutGroups, MockTile, OkeyRack, RACK_COLS, useRack, type SlotMark } from './okey-rack'
 
@@ -264,6 +265,10 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const pilePos = (seat: number) => (seat === viewer ? 0 : seat === sideSeat ? 3 : posOf(seat))
   const seatList = Array.from({ length: n }, (_, k) => at(k))
   const initials = (seat: number) => (seat === mySeat ? 'SN' : nameOf(seat).slice(0, 2).toLocaleUpperCase('tr-TR'))
+  const face = (seat: number) => {
+    const uid = remote.userIds?.[seat] ?? null
+    return <SeatFace userId={uid} botSeed={uid ? null : `${remote.id ?? 'masa'}-${seat}`} initials={initials(seat)} />
+  }
   const winSeat = handPopup?.finisher ?? null
   const toastText = localError ?? (turnFlash > 0 ? 'Sıra sende' : note)
   const toastTone = localError ? 'warn' : turnFlash > 0 ? 'me' : undefined
@@ -299,7 +304,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     return (
       <div key={`seat-${seat}`} className={cn('okt-pl', `okt-p${posOf(seat)}`, s.turn === seat && !handPopup && 'active', winSeat === seat && 'win')}>
         <div className="okt-av" aria-hidden="true">
-          {initials(seat)}
+          {face(seat)}
         </div>
         <div className="okt-nm">
           {nameOf(seat)}
@@ -473,7 +478,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
               <div className="o1-k">{handPopup.hand}. el bitti</div>
               <div className="o1-h">
                 <div className="okt-av" aria-hidden="true">
-                  {handPopup.finisher != null ? initials(handPopup.finisher) : '–'}
+                  {handPopup.finisher != null ? face(handPopup.finisher) : '–'}
                 </div>
                 <div>
                   <b>

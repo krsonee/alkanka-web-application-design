@@ -24,6 +24,7 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Bot masası 4 kişilik, kanka masası 1v1. Gösterge taşının bir üstü okeydir, istediğin taşın yerine geçer.',
     'Sıran gelince ortadan çek ya da rakibin attığı taşı al, sonra bir taş at.',
     'Taşları ıstakada istediğin yere sürükle; seri ve perleri dizip 14 taşla ya da 7 çiftle elini aç.',
+    'Bitiş katları: normal bitiş 1 kat, okeyle bitiş 2 kat, çiftten bitiş 2 kat, çiftten ve okeyle bitiş 4 kat.',
   ],
   okey101: [
     'Herkese 21 taş, başlayana 22 taş dağıtılır. Gösterge taşının bir üstü okeydir.',
