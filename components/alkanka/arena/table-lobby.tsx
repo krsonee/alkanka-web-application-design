@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import useSWR from 'swr'
-import { ArrowLeft, Check, Clock, Coins, Eye, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
@@ -994,6 +994,10 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
               compact={immersive}
               botsOnly={data.players.filter((p) => !p.bot).length === 1}
               stake={data.stake}
+              onResigned={() => {
+                refresh()
+                void mutate()
+              }}
               onDone={() => {
                 refresh()
                 onLeave()
@@ -1324,6 +1328,7 @@ function LeaveTableButton({
   onDone,
   compact,
   botsOnly,
+  onResigned,
 }: {
   id: string
   running: boolean
@@ -1331,31 +1336,56 @@ function LeaveTableButton({
   onDone: () => void
   compact?: boolean
   botsOnly?: boolean
+  onResigned?: () => void
 }) {
-  const [confirming, setConfirming] = useState(false)
+  const [mode, setMode] = useState<'resign' | 'leave' | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const label = running ? 'Oyunu bitir' : 'Masadan kalk'
+  const [resigned, setResigned] = useState(false)
+  const confirming = mode !== null
+  const setConfirming = (v: boolean) => {
+    if (!v) {
+      setMode(null)
+      setError(null)
+    }
+  }
 
-  const trigger = (
+  const btnClass = cn(
+    'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors',
+    compact && 'max-lg:px-2.5 max-lg:py-1.5 max-lg:text-xs',
+  )
+
+  const leaveTrigger = (
     <button
       type="button"
-      onClick={() => setConfirming(true)}
-      className={cn(
-        'flex shrink-0 items-center gap-1.5 rounded-lg border border-destructive/50 px-3 py-2 text-sm font-semibold text-destructive transition-colors hover:bg-destructive hover:text-foreground',
-        compact && 'max-lg:px-2.5 max-lg:py-1.5 max-lg:text-xs',
-      )}
+      onClick={() => setMode('leave')}
+      className={cn(btnClass, 'border-destructive/50 text-destructive hover:bg-destructive hover:text-foreground')}
     >
       <LogOut className="size-4" aria-hidden="true" />
-      {label}
+      {running ? 'Ayrıl' : 'Masadan kalk'}
     </button>
   )
 
-  if (!running && !confirming) return trigger
+  if (!running && !confirming) return leaveTrigger
+  if (running && resigned) return null
+
+  const isResign = mode === 'resign'
 
   return (
     <>
-      {running && trigger}
+      {running && (
+        <>
+          <button
+            type="button"
+            onClick={() => setMode('resign')}
+            className={cn(btnClass, 'border-border text-foreground hover:bg-secondary')}
+          >
+            <Flag className="size-4" aria-hidden="true" />
+            Pes et
+          </button>
+          {leaveTrigger}
+        </>
+      )}
       {confirming && (
         <div
           role="alertdialog"
@@ -1369,7 +1399,7 @@ function LeaveTableButton({
             onClick={(e) => e.stopPropagation()}
           >
             <p id={`leave-${id}`} className="text-lg font-bold text-foreground">
-              {running ? 'Oyunu bitirmek istiyor musun?' : 'Masadan kalkılsın mı?'}
+              {!running ? 'Masadan kalkılsın mı?' : isResign ? 'Pes etmek istiyor musun?' : 'Masadan ayrılmak istiyor musun?'}
             </p>
             <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
               {error ??
@@ -1377,7 +1407,9 @@ function LeaveTableButton({
                   ? 'Bahsin iade edilir.'
                   : botsOnly
                     ? `Bot masası kapanır, bahsin (${formatAC(stake)} KC) geri gelmez.`
-                    : `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer.`)}
+                    : isResign
+                      ? `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer. Masada izleyici olarak kalırsın.`
+                      : `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer ve lobiye dönersin.`)}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -1400,13 +1432,19 @@ function LeaveTableButton({
                     setError(r.error ?? 'Kalkamadın, tekrar dene.')
                     return
                   }
+                  const stay = running && isResign && !botsOnly
                   setConfirming(false)
+                  if (stay) {
+                    setResigned(true)
+                    onResigned?.()
+                    return
+                  }
                   onDone()
                 }}
                 className="flex items-center justify-center gap-1.5 rounded-xl bg-destructive py-2.5 text-sm font-bold text-foreground disabled:opacity-60"
               >
                 {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
-                {running ? 'Bitir' : 'Kalk'}
+                {!running ? 'Kalk' : isResign ? 'Pes et' : 'Ayrıl'}
               </button>
             </div>
           </div>
