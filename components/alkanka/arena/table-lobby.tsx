@@ -1057,7 +1057,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             ) : data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo' ? (
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
-              <LandscapeFit>
+              <LandscapeFit force={data.game === 'tavla'}>
                 <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
               </LandscapeFit>
             )}

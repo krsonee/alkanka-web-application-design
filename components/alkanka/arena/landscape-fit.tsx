@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Maximize2, Minimize2, Smartphone, X } from 'lucide-react'
+import { Maximize2, Minimize2, RotateCw, Smartphone, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { goLandscape, restorePortrait } from './orientation'
 
 const PHONE_LANDSCAPE = '(orientation: landscape) and (max-height: 600px)'
 
@@ -40,9 +41,19 @@ export function usePhonePortrait() {
  * layer above the site chrome, scaled to fit the screen. The element tree never changes between
  * modes, so rotating the phone does not remount (and reset) the game underneath.
  */
-export function LandscapeFit({ children, label = 'Oyun masası' }: { children: ReactNode; label?: string }) {
+export function LandscapeFit({
+  children,
+  label = 'Oyun masası',
+  force = false,
+}: {
+  children: ReactNode
+  label?: string
+  /** Sideways only: an upright phone gets a rotate prompt instead of the table, and the table drops the side rail. */
+  force?: boolean
+}) {
   const landscape = usePhoneLandscape()
   const portraitPhone = useMedia(PHONE_PORTRAIT)
+  const blocked = force && portraitPhone
   const [hintClosed, setHintClosed] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const fullscreen = landscape && !minimized
@@ -54,6 +65,21 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
   useEffect(() => {
     if (!landscape) setMinimized(false)
   }, [landscape])
+
+  useEffect(() => {
+    if (!force) return
+    return () => void restorePortrait()
+  }, [force])
+
+  // Fullscreen needs a user gesture, so the first tap on a sideways table hides the address bar (Android).
+  useEffect(() => {
+    if (!force || !fullscreen || !document.fullscreenEnabled) return
+    const onTap = () => {
+      if (!document.fullscreenElement) void goLandscape()
+    }
+    document.addEventListener('pointerdown', onTap, { once: true, capture: true })
+    return () => document.removeEventListener('pointerdown', onTap, { capture: true })
+  }, [force, fullscreen])
 
   useEffect(() => {
     if (!fullscreen) return
@@ -169,7 +195,33 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
           'fixed inset-0 z-[100] flex touch-manipulation flex-row items-stretch gap-1.5 overflow-hidden bg-background py-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]',
       )}
     >
-      {fullscreen ? (
+      {fullscreen && force ? (
+        <button
+          type="button"
+          onClick={() => setMinimized(true)}
+          title="Küçült"
+          className="absolute left-[max(0.25rem,env(safe-area-inset-left))] top-1 z-[110] flex size-7 items-center justify-center rounded-lg border border-border/60 bg-card/60 text-foreground/80 backdrop-blur-sm hover:bg-card hover:text-foreground"
+        >
+          <Minimize2 className="size-3.5" aria-hidden="true" />
+          <span className="sr-only">Küçült</span>
+        </button>
+      ) : blocked ? (
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-card px-6 py-14 text-center">
+          <Smartphone className="size-10 rotate-90 text-primary" aria-hidden="true" />
+          <div className="flex flex-col gap-1">
+            <p className="font-display text-lg font-bold text-foreground text-balance">Telefonu yan çevir kanka</p>
+            <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{label} yatay ekranda oynanıyor, masa tam ekran açılır.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void goLandscape()}
+            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
+          >
+            <RotateCw className="size-4" aria-hidden="true" />
+            Yatay moda geç
+          </button>
+        </div>
+      ) : fullscreen ? (
         <div className="flex shrink-0 flex-col items-center py-1" style={{ width: RAIL_W }}>
           <button
             type="button"
@@ -208,7 +260,8 @@ export function LandscapeFit({ children, label = 'Oyun masası' }: { children: R
       ) : null}
       <div
         ref={area}
-        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden')}
+        aria-hidden={blocked || undefined}
+        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden', blocked && 'sr-only')}
       >
         <div style={fullscreen && box ? { width: box.w, height: box.h } : undefined}>
           <div

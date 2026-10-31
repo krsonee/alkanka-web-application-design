@@ -6,6 +6,7 @@ import type { GameApi } from './stake-gate'
 import { useBrand } from '../brand-context'
 import { useLogos } from '../logo-context'
 import { LOGO_CONCEPTS } from '../logos'
+import { goLandscape, restorePortrait } from './orientation'
 
 const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
 const LANDSCAPE_QUERY = '(max-height: 540px) and (orientation: landscape)'
@@ -22,33 +23,6 @@ function usePhoneLayout(): Layout {
     () => (window.matchMedia(PORTRAIT_QUERY).matches ? 'portrait' : window.matchMedia(LANDSCAPE_QUERY).matches ? 'landscape' : 'desktop'),
     () => 'desktop',
   )
-}
-
-/** Android allows locking orientation once fullscreen; iOS ignores it and relies on the prompt. */
-async function goLandscape() {
-  try {
-    if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.()
-    const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }
-    await o.lock?.('landscape')
-  } catch {}
-}
-
-/**
- * Leaving the table: lock portrait while still fullscreen (Android honours it),
- * then drop fullscreen and release the lock so the site returns upright.
- */
-async function restorePortrait() {
-  const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void }
-  try {
-    if (document.fullscreenElement) await o.lock?.('portrait-primary')
-  } catch {}
-  await new Promise((r) => setTimeout(r, 250))
-  try {
-    if (document.fullscreenElement) await document.exitFullscreen?.()
-  } catch {}
-  try {
-    o.unlock?.()
-  } catch {}
 }
 
 type FinishMessage = { source: 'alkanka-bilardo'; type: 'finish'; result: 'win' | 'lose'; note?: string }
