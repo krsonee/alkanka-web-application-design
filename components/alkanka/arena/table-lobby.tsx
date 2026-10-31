@@ -1101,7 +1101,7 @@ export function TableRoom({ id, onLeave }: { id: string; onLeave: () => void }) 
             role="dialog"
             aria-modal="true"
             aria-labelledby="game-result-title"
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-300"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-300"
           >
             <div
               className={cn(

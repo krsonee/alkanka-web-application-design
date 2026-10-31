@@ -4,7 +4,8 @@ export type MeldKind = 'run' | 'set' | 'pair'
 export type Meld101 = { id: number; owner: number; kind: MeldKind; tiles: Tile[] }
 export type Open101 = 'seri' | 'cift' | null
 export type Log101 = { seat: number; text: string; tile?: Tile }
-export type HandResult = { hand: number; scores: number[]; finisher: number | null; double: boolean }
+export type FinishHow = 'normal' | 'okey' | 'elden' | 'cift' | 'cift-okey' | 'deste'
+export type HandResult = { hand: number; scores: number[]; finisher: number | null; double: boolean; mult?: number; how?: FinishHow }
 
 export type Okey101State = {
   kind: 'okey101'
@@ -142,6 +143,17 @@ export function canOpenWithTile(hand: Tile[], tile: Tile, ok: Okey) {
   if (value >= OPEN_MIN && groups.flat().some((t) => t.id === tile.id)) return true
   const pairs = leaveOne(findPairs(all, ok), all.length, ok)
   return pairs.length >= PAIR_MIN && pairs.flat().some((t) => t.id === tile.id)
+}
+
+/** An opened player may only take a side tile they can lay or add this turn. */
+export function canUseSideTile(s: Pick<Okey101State, 'hands' | 'melds' | 'opened' | 'indicator'>, seat: number, tile: Tile) {
+  const ok = okeyFrom(s.indicator)
+  if (canAddToTable(tile, s.melds, ok)) return true
+  if (s.melds.some((m) => jokerSwapIndex(tile, m, ok) >= 0)) return true
+  const all = [...s.hands[seat], tile]
+  if (s.opened[seat] === 'seri' && bestPartition(all, ok).groups.flat().some((t) => t.id === tile.id)) return true
+  const pairsAllowed = s.opened[seat] === 'cift' || s.opened.some((o) => o === 'cift')
+  return pairsAllowed && findPairs(all, ok).flat().some((t) => t.id === tile.id)
 }
 
 // ---------- Bot search ----------
@@ -323,9 +335,9 @@ export function initOkey101(opts: { seats?: number; botSeats?: number[]; rounds?
 
 const pushLog = (s: Okey101State, entry: Log101) => [...s.log, entry].slice(-10)
 
-function endHand(s: Okey101State, finisher: number | null, double: boolean): Step101 {
+function endHand(s: Okey101State, finisher: number | null, mult: number, how: FinishHow): Step101 {
   const ok = okeyFrom(s.indicator)
-  const mult = double ? 2 : 1
+  const double = mult > 1
   const scores = s.hands.map((h, i) => {
     if (i === finisher) return -PENALTY * mult + s.penalties[i]
     if (!s.opened[i]) return 202 * mult + s.penalties[i]
@@ -334,11 +346,11 @@ function endHand(s: Okey101State, finisher: number | null, double: boolean): Ste
     return rest * (s.opened[i] === 'cift' ? 2 : 1) * mult + s.penalties[i]
   })
   const totals = s.totals.map((t, i) => t + scores[i])
-  const results = [...s.results, { hand: s.handNo, scores, finisher, double }]
+  const results = [...s.results, { hand: s.handNo, scores, finisher, double, mult, how }]
   const note =
     finisher == null
       ? `${s.handNo}. el: ortada taş kalmadı, el kapandı.`
-      : `${s.handNo}. el bitti${double ? ' (cezalar 2 kat)' : ''}.`
+      : `${s.handNo}. el bitti${double ? ` (cezalar ${mult} kat)` : ''}.`
   if (s.handNo < s.handsTotal) {
     const dealer = (s.dealer + 1) % s.seats
     const d = deal(s.seats, dealer)
@@ -425,16 +437,19 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
       if (!s.opened[seat] && !canOpenWithTile(hands[seat], t, ok)) {
         throw new Error('Elin açmıyor: yandan taş alamazsın, ortadan çek.')
       }
+      if (s.opened[seat] && !canUseSideTile(s, seat, t)) {
+        throw new Error('Bu taşı işleyemez ya da per yapamazsın: ortadan çek.')
+      }
       discards[leftOf101(seat, n)].pop()
       hands[seat].push(t)
       return {
-        state: { ...s, hands, discards, phase: 'play', taken: s.opened[seat] ? null : t.id, log: pushLog(s, { seat, text: 'yandan aldı', tile: t }) },
+        state: { ...s, hands, discards, phase: 'play', taken: t.id, log: pushLog(s, { seat, text: 'yandan aldı', tile: t }) },
         winners: null,
       }
     }
     const deck = [...s.deck]
     const t = deck.shift()
-    if (!t) return endHand(s, null, false)
+    if (!t) return endHand(s, null, 1, 'deste')
     hands[seat].push(t)
     return { state: { ...s, deck, hands, phase: 'play', taken: null, log: pushLog(s, { seat, text: 'desteden çekti' }) }, winners: null }
   }
@@ -488,8 +503,9 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
     const anyPairOpener = s.opened.some((o) => o === 'cift')
     const placed = placeGroups(s, seat, groups, mode === 'seri' && anyPairOpener ? 'karma' : mode)
     hands[seat] = placed.rest
+    const taken = s.taken != null && groups.flat().includes(s.taken) ? null : s.taken
     return {
-      state: { ...s, hands, melds: [...s.melds, ...placed.melds], nextId: placed.nextId, log: pushLog(s, { seat, text: 'yeni per açtı' }) },
+      state: { ...s, hands, taken, melds: [...s.melds, ...placed.melds], nextId: placed.nextId, log: pushLog(s, { seat, text: 'yeni per açtı' }) },
       winners: null,
     }
   }
@@ -510,6 +526,7 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
       state: {
         ...s,
         hands,
+        taken: s.taken != null && ids.includes(s.taken) ? null : s.taken,
         melds: s.melds.map((m) => (m.id === meld.id ? { ...m, tiles: an.ordered } : m)),
         log: pushLog(s, { seat, text: 'taş işledi', tile: picked[0] }),
       },
@@ -519,7 +536,6 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
 
   if (a.type === 'swapJoker') {
     if (!s.opened[seat]) throw new Error('Okeyi almak için önce elini açmalısın')
-    if (s.taken != null) throw new Error('Önce yandan aldığın taşla elini aç')
     const meld = s.melds.find((m) => m.id === Number(a.meldId))
     if (!meld) throw new Error('Per bulunamadı')
     const idx = hands[seat].findIndex((t) => t.id === Number(a.tileId))
@@ -534,6 +550,7 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
       state: {
         ...s,
         hands,
+        taken: s.taken === tile.id ? null : s.taken,
         melds: s.melds.map((m) => (m.id === meld.id ? { ...m, tiles: swapped.ordered } : m)),
         log: pushLog(s, { seat, text: 'gerçek taşı koyup okeyi aldı', tile }),
       },
@@ -542,7 +559,13 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
   }
 
   if (a.type === 'discard') {
-    if (s.taken != null) throw new Error('Yandan aldığın taşla el açmalı ya da taşı geri vermelisin (101 ceza).')
+    if (s.taken != null) {
+      throw new Error(
+        s.opened[seat]
+          ? 'Yandan aldığın taşı bu tur işlemeli ya da per yapmalısın; yoksa geri ver (101 ceza).'
+          : 'Yandan aldığın taşla el açmalı ya da taşı geri vermelisin (101 ceza).',
+      )
+    }
     const idx = hands[seat].findIndex((t) => t.id === Number(a.tileId))
     if (idx < 0) throw new Error('Taş bulunamadı')
     const [tile] = hands[seat].splice(idx, 1)
@@ -550,9 +573,12 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
     const joker = isJoker(tile, ok)
     if (hands[seat].length === 0) {
       const fromHand = s.openedTurn[seat] === s.turnNo
-      const double = joker || fromHand
-      const text = fromHand ? 'elden bitirdi! (cezalar 2 kat)' : joker ? 'okeyle bitirdi! (cezalar 2 kat)' : 'elini bitirdi!'
-      return endHand({ ...s, hands, discards, log: pushLog(s, { seat, text, tile }) }, seat, double)
+      const pairOpener = s.opened[seat] === 'cift'
+      const mult = (joker || fromHand ? 2 : 1) * (pairOpener ? 2 : 1)
+      const how: FinishHow = pairOpener ? (joker ? 'cift-okey' : 'cift') : fromHand ? 'elden' : joker ? 'okey' : 'normal'
+      const label = { normal: 'elini bitirdi!', okey: 'okeyle bitirdi!', elden: 'elden bitirdi!', cift: 'çiftten bitirdi!', 'cift-okey': 'okeyle çiftten bitirdi!', deste: '' }[how]
+      const text = mult > 1 ? `${label} (cezalar ${mult} kat)` : label
+      return endHand({ ...s, hands, discards, log: pushLog(s, { seat, text, tile }) }, seat, mult, how)
     }
     let penalty = 0
     let text = 'taş attı'
@@ -577,7 +603,7 @@ export function okey101Step(s: Okey101State, seat: number, a: Act): Step101 {
       log: pushLog(s, { seat, text, tile }),
       note: '',
     }
-    if (next.deck.length === 0) return endHand(next, null, false)
+    if (next.deck.length === 0) return endHand(next, null, 1, 'deste')
     return { state: next, winners: null }
   }
   throw new Error('Bilinmeyen hamle')
@@ -597,7 +623,7 @@ export function okey101BotTurn(state: Okey101State, seat: number): Step101 {
     const top = s.discards[leftOf101(seat, s.seats)].at(-1)
     let from: 'pile' | 'discard' = 'pile'
     if (top && !s.noTake) {
-      if (s.opened[seat]) from = isJoker(top, ok) || canAddToTable(top, s.melds, ok) ? 'discard' : 'pile'
+      if (s.opened[seat]) from = canAddToTable(top, s.melds, ok) ? 'discard' : 'pile'
       else if (canOpenWithTile(s.hands[seat], top, ok)) from = 'discard'
     }
     const r = run({ type: 'draw', from })
@@ -623,7 +649,7 @@ export function okey101BotTurn(state: Okey101State, seat: number): Step101 {
     }
   }
 
-  if (s.opened[seat]) {
+  const playOpened = () => {
     if (s.opened[seat] === 'seri') {
       const extra = leaveOne(bestPartition(s.hands[seat], ok).groups, s.hands[seat].length, ok)
       if (extra.length) run({ type: 'lay', groups: extra.map((g) => g.map((t) => t.id)) })
@@ -632,10 +658,21 @@ export function okey101BotTurn(state: Okey101State, seat: number): Step101 {
       if (pairs.length) run({ type: 'lay', groups: pairs.map((g) => g.map((t) => t.id)) })
     }
     for (let guard = 0; guard < 20 && s.hands[seat].length > 1; guard++) {
-      const tile = s.hands[seat].find((t) => canAddToTable(t, s.melds, ok))
+      const addable = (t: Tile) => canAddToTable(t, s.melds, ok)
+      const tile = s.hands[seat].find((t) => t.id === s.taken && addable(t)) ?? s.hands[seat].find(addable)
       if (!tile) break
       const meld = s.melds.find((m) => m.kind !== 'pair' && analyzeMeld([...m.tiles, tile], ok)?.kind === m.kind)!
       run({ type: 'add', meldId: meld.id, tileIds: [tile.id] })
+    }
+  }
+
+  if (s.opened[seat]) {
+    playOpened()
+    if (s.taken != null) {
+      run({ type: 'giveBack' })
+      const r = run({ type: 'draw', from: 'pile' })
+      if (r.winners || s.handNo !== state.handNo) return r
+      playOpened()
     }
   }
 
