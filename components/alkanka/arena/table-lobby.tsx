@@ -19,6 +19,7 @@ import type { Remote, RemoteAction } from './remote'
 import { TavlaPvp } from './tavla'
 import { OkeyPvp } from './okey-pvp'
 import { Okey101Pvp } from './okey101-pvp'
+import { GameErrorBoundary } from './game-error-boundary'
 import { BatakPvp } from './batak-pvp'
 import { BATAK_RULE_OPTIONS, BATAK_VARIANTS, type BatakRules, type BatakVariant } from '@/lib/games/batak'
 import { MonopolyPvp } from './monopoly-pvp'
@@ -1289,7 +1290,15 @@ function TurnClock({
   )
 }
 
-function GameSurface({ game, remote, done, pvp = false }: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
+function GameSurface(props: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
+  return (
+    <GameErrorBoundary>
+      <GameSurfaceInner {...props} />
+    </GameErrorBoundary>
+  )
+}
+
+function GameSurfaceInner({ game, remote, done, pvp = false }: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = remote as Remote<any>
   if (game === 'tavla') return <TavlaPvp remote={r} />
