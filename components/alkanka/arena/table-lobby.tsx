@@ -19,6 +19,7 @@ import type { Remote, RemoteAction } from './remote'
 import { TavlaPvp } from './tavla'
 import { OkeyPvp } from './okey-pvp'
 import { Okey101Pvp } from './okey101-pvp'
+import { GameErrorBoundary } from './game-error-boundary'
 import { BatakPvp } from './batak-pvp'
 import { BATAK_RULE_OPTIONS, BATAK_VARIANTS, type BatakRules, type BatakVariant } from '@/lib/games/batak'
 import { MonopolyPvp } from './monopoly-pvp'
@@ -897,6 +898,14 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
       : null,
   )
 
+  useTurnAlert(
+    !!data &&
+      (data.game === 'okey' || data.game === 'okey101') &&
+      data.seat >= 0 &&
+      data.status === 'oynaniyor' &&
+      data.turn === data.seat,
+  )
+
   if (error) return <RoomShell onLeave={onLeave}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
   if (!data) {
     return (
@@ -919,7 +928,6 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
   const duelStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn == null && data.state?.scores?.[mySeat] && idleMs > 10 * 60 * 1000
   const won = member != null && (data.winners ?? []).includes(member.id)
   const turnName = data.turn != null ? names[data.turn] : null
-  useTurnAlert((data.game === 'okey' || data.game === 'okey101') && !spectator && data.status === 'oynaniyor' && data.turn === mySeat)
 
   const remote: Remote<unknown> = {
     id,
@@ -1289,7 +1297,15 @@ function TurnClock({
   )
 }
 
-function GameSurface({ game, remote, done, pvp = false }: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
+function GameSurface(props: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
+  return (
+    <GameErrorBoundary>
+      <GameSurfaceInner {...props} />
+    </GameErrorBoundary>
+  )
+}
+
+function GameSurfaceInner({ game, remote, done, pvp = false }: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = remote as Remote<any>
   if (game === 'tavla') return <TavlaPvp remote={r} />

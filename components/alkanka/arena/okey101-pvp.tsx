@@ -92,7 +92,9 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const playPhase = myTurn && s.phase === 'play'
   const opened = mySeat >= 0 ? s.opened[mySeat] : null
   const selected = rack.selected
-  const canDiscard = playPhase && selected != null && s.taken == null && !remote.busy
+  // Dragging a tile to the pile must work without selecting it first, like the regular okey table.
+  const canThrow = playPhase && s.taken == null && !remote.busy
+  const canDiscard = canThrow && selected != null
 
   const pairsAllowed = opened === 'seri' && s.opened.some((o) => o === 'cift')
   const pairMode = opened === 'cift' || (!opened && pairs.length >= PAIR_MIN && runValue < OPEN_MIN)
@@ -308,8 +310,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
     return (
       <div
         key={`pile-${seat}`}
-        data-drop={dropHere && canDiscard ? 'discard' : undefined}
-        className={cn('okt-pile okt-box', `okt-pile${pos}`, (takeHere || (dropHere && canDiscard)) && 'can', takeHere && 'take')}
+        data-drop={dropHere && canThrow ? 'discard' : undefined}
+        className={cn('okt-pile okt-box', `okt-pile${pos}`, (takeHere || (dropHere && canThrow)) && 'can', takeHere && 'take')}
       >
         {t && <MockTile key={t.id} tile={t} okey={okey} />}
         {list.length > 1 && <span className="o1-cnt">{list.length}</span>}
@@ -483,7 +485,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             okey={okey}
             rack={rack}
             marks={marks}
-            looseDiscard={canDiscard}
+            looseDiscard={canThrow}
             onDoubleTile={(t) => discard(t.id)}
             onDropHover={(kind) => {
               setDragHover(kind?.startsWith('meld:') ? Number(kind.slice(5)) : null)
@@ -520,6 +522,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
                   : null
             }
             face={face}
+            melds={handPopup.melds ?? (s.handNo === handPopup.hand ? s.melds : null)}
+            okey={okey}
             onReplay={popupFinal && gameOver && remote.replay && !remote.spectator ? remote.replay : undefined}
             onClose={closePopup}
             onScores={() => {

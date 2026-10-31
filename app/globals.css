@@ -2402,7 +2402,7 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 /* 101 table chat button: free corner per layout */
 .o101 .table-chat-btn { left: 1.8%; top: 4.5%; }
 @media (min-width: 640px) {
-  .o101 .table-chat-btn { left: auto; right: 1.8%; top: 17%; }
+  .o101 .table-chat-btn { left: auto; right: 11.5%; top: 2.5%; }
 }
 .ls-split .o101 .table-chat-btn { left: auto; right: 1.6%; top: 19%; }
 
@@ -2436,7 +2436,6 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   .o101 .o1-mz3 { left: 1.2%; top: 33%; width: 16.5%; max-height: 18%; }
   .o101 .o1-mz1 { right: 1.2%; top: 33%; width: 16.5%; max-height: 34.5%; }
   .o101 .okt-drop { left: 20%; right: 20%; top: 36%; bottom: 44%; }
-  .o101 .table-chat-btn { top: 17%; }
 }
 
 /* Mobil yatay tam ekran: sol/sağ per sütunları dar, atıklar orta sırada */
@@ -2450,4 +2449,6 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .ls-split .o101 .o1-mz3 { left: 10.5%; top: 24%; width: 12%; max-height: 33.5%; }
 .ls-split .o101 .o1-mz1 { right: 10.5%; top: 24%; width: 12%; max-height: 33.5%; }
 .ls-split .o101 .okt-drop { left: 25%; right: 25%; top: 38%; bottom: 42%; }
-.ls-split .o101 .table-chat-btn { left: auto; right: 1.6%; top: 43%; }
+/* Yan telefonda sohbet: üst sağda, son atık ile puan kutusu arasındaki boşlukta, yalnız simge */
+.ls-split .o101 .table-chat-btn { left: auto; right: 11%; top: 5%; padding: 0; width: 2.25rem; height: 2.25rem; justify-content: center; font-size: 0; gap: 0; }
+.ls-split .o101 .table-chat-btn svg { width: 1rem; height: 1rem; }

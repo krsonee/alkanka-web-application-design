@@ -9,6 +9,7 @@ import { ARENA_META, MODE_LABEL, type ArenaGame, type ArenaGameSettings, type Ga
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
+import { GameErrorBoundary } from './game-error-boundary'
 import { clearSaved, loadMode, saveMode } from './saved-game'
 
 const MODE_ICON: Record<GameMode, typeof Bot> = { bot: Bot, pvp: Swords }
@@ -164,7 +165,9 @@ export function StakeGate({
                 : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
           )}
         >
-          {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? children(api) : <LandscapeFit label={meta.title} force={game === 'tavla' || game === 'okey'}>{children(api)}</LandscapeFit>}
+          <GameErrorBoundary label={meta.title}>
+            {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? children(api) : <LandscapeFit label={meta.title} force={game === 'tavla' || game === 'okey'}>{children(api)}</LandscapeFit>}
+          </GameErrorBoundary>
         </div>
       </div>
     )

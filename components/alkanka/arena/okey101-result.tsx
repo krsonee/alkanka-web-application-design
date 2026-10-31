@@ -4,7 +4,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Crown, Layers, Loader2, RotateCcw, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { PENALTY, type HandResult, type Okey101View } from '@/lib/games/okey101'
+import { PENALTY, type HandResult, type Meld101, type Okey101View } from '@/lib/games/okey101'
+import { MockTile } from './okey-rack'
+import type { Okey as OkeyValue } from './okey-engine'
 
 const HOW_LABEL: Record<string, string> = {
   normal: 'Seriden bitirdi',
@@ -33,10 +35,14 @@ export function Okey101Result({
   handsTotal,
   detail,
   face,
+  melds,
+  okey,
   onClose,
   onScores,
   onReplay,
 }: {
+  melds: Meld101[] | null
+  okey: OkeyValue
   result: HandResult
   nameOf: (seat: number) => string
   mySeat: number
@@ -77,6 +83,7 @@ export function Okey101Result({
         ? 'Tebrikler, eli sen bitirdin!'
         : `${nameOf(f)} eli bitirdi`
 
+  const winnerMelds = f == null ? [] : (melds ?? []).filter((m) => m.owner === f)
   const multTxt = mult > 1 ? ` ×${mult}` : ''
   const breakdown = (seat: number) => {
     const score = result.scores[seat]
@@ -106,14 +113,14 @@ export function Okey101Result({
           type="button"
           onClick={onClose}
           aria-label="Kapat"
-          className="absolute right-2.5 top-2.5 z-10 grid size-9 place-items-center rounded-full bg-[rgb(255_255_255/0.06)] text-[var(--okt-porcelain)]/80 hover:bg-[rgb(255_255_255/0.12)] hover:text-[var(--okt-porcelain)] phone-ls:size-8"
+          className="absolute right-2.5 top-2.5 z-20 grid size-9 place-items-center rounded-full bg-[rgb(255_255_255/0.1)] text-[var(--okt-porcelain)] ring-1 ring-inset ring-[rgb(255_255_255/0.15)] hover:bg-[rgb(255_255_255/0.18)] phone-ls:size-8"
         >
           <X className="size-4" aria-hidden="true" />
         </button>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4 pt-6 phone-ls:gap-2 phone-ls:px-4 phone-ls:pb-2 phone-ls:pt-3">
           <div className="flex items-center gap-3 pr-10 phone-ls:flex-wrap phone-ls:gap-x-3 phone-ls:gap-y-1">
-            <span className={cn('okw-medal grid size-12 shrink-0 place-items-center overflow-hidden rounded-full phone-ls:size-9', !(final ? leader === mySeat : mine) && 'muted')}>
+            <span className={cn('okw-medal relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-full phone-ls:size-9', !(final ? leader === mySeat : mine) && 'muted')}>
               {f == null && !final ? <Layers className="size-6 phone-ls:size-4" aria-hidden="true" /> : final ? <Crown className="size-6 phone-ls:size-4" aria-hidden="true" /> : face(f!)}
             </span>
             <div className="flex min-w-0 flex-col gap-1 phone-ls:gap-0">
@@ -131,6 +138,25 @@ export function Okey101Result({
               {mult > 1 && <span className="rounded-full bg-[var(--okt-brass)] px-3 py-1 text-xs font-bold text-[var(--okt-ink)]">Cezalar {mult} kat</span>}
             </div>
           </div>
+
+          {winnerMelds.length > 0 && (
+            <section aria-label={`${nameOf(f!)} açtığı perler`} className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--okt-mist)]">
+                {mine ? 'Bitirdiğin el' : `${nameOf(f!)} bitirdiği el`}
+              </span>
+              <ul className="okw-rack flex flex-wrap justify-center gap-x-3 gap-y-2 rounded-xl p-2 sm:p-3">
+                {winnerMelds.map((m) => (
+                  <li key={m.id} className="flex gap-0.5">
+                    {m.tiles.map((t) => (
+                      <span key={t.id} className="okt-box h-10 w-7 phone-ls:h-8 phone-ls:w-6 sm:h-12 sm:w-8">
+                        <MockTile tile={t} okey={okey} />
+                      </span>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <ol className="flex flex-col text-sm tabular-nums text-[var(--okt-porcelain)]" aria-label="Sıralama">
             <li className="flex items-center gap-3 px-1 pb-1 text-xs font-semibold text-[var(--okt-mist)]">
@@ -153,7 +179,7 @@ export function Okey101Result({
                 >
                   <span className={cn('w-5 text-center text-xs font-bold', r === 1 ? 'text-[var(--okt-brass)]' : 'text-[var(--okt-mist)]')}>{r}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                    <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full phone-ls:size-7" aria-hidden="true">
+                    <span className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-[rgb(255_255_255/0.08)] text-[10px] font-bold phone-ls:size-7" aria-hidden="true">
                       {face(i)}
                     </span>
                     <span className="flex min-w-0 flex-col leading-tight">
