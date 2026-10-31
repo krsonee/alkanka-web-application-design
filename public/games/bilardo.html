@@ -484,10 +484,10 @@
         b.x += b.vx*k/sub; b.y += b.vy*k/sub;
         for (const p of POCKETS) if (Math.hypot(b.x - p[0], b.y - p[1]) < p[2] + 5) { pot(b); break; }
         if (b.in) continue;
-        if (b.x < R+BR) { b.x = R+BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); }
-        if (b.x > R+W-BR) { b.x = R+W-BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); }
-        if (b.y < R+BR) { b.y = R+BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); }
-        if (b.y > R+H-BR) { b.y = R+H-BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); }
+        if (b.x < R+BR) { b.x = R+BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); railHit(b); }
+        if (b.x > R+W-BR) { b.x = R+W-BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); railHit(b); }
+        if (b.y < R+BR) { b.y = R+BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); railHit(b); }
+        if (b.y > R+H-BR) { b.y = R+H-BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); railHit(b); }
       }
       for (let i = 0; i < bs.length; i++) for (let j = i+1; j < bs.length; j++) {
         const a = bs[i], b = bs[j]; if (a.in || b.in) continue;
@@ -525,15 +525,28 @@
     const sp = S.spin.x*2.2;
     if (axis === 'x') b.vy += sp*Math.sign(b.vx || 1); else b.vx -= sp*Math.sign(b.vy || 1);
   }
+  function railHit(b) {
+    const sh = S.shot; if (!sh) return;
+    if (b.n !== 0) sh.railBalls.add(b.n);
+    if (sh.first !== null) sh.railAfter = true;
+  }
   function pot(b) {
     b.in = true; b.vx = b.vy = 0; Snd.pocket();
     if (S.shot) S.shot.potted.push(b.n);
-    if (b.n !== 0) $('tube').appendChild(mini(b.n));
+    if (b.n !== 0) { const m = mini(b.n); m.dataset.n = b.n; $('tube').appendChild(m); }
+  }
+  function respotEight() {
+    const e = S.balls.find(b => b.n === 8); e.in = false; e.vx = e.vy = 0; e.dirty = true;
+    e.x = R + W*0.72; e.y = R + H/2;
+    let t = 0; while (!freeSpot(e.x, e.y) && t++ < 60) e.x += BR*0.5;
+    $('tube').querySelector('[data-n="8"]')?.remove();
   }
   function shoot(power) {
     const c = cue(), d = dirOf(S.angle), speed = 3 + power*34;
     c.vx = d.x*speed; c.vy = d.y*speed; Snd.strike(power);
-    S.shot = { by:S.turn, first:null, potted:[], angle:S.angle, speed, cleared:cleared(S.turn), cushSpin:false };
+    S.shot = { by:S.turn, first:null, potted:[], angle:S.angle, speed, cleared:cleared(S.turn), cushSpin:false,
+               brk:S.firstShot, railBalls:new Set(), railAfter:false };
+    S.firstShot = false;
     S.moving = true; S.ballInHand = false; S.kitchen = false; S.strike = 1;
     if (S.turn === 'me') $('hint').classList.add('off');
     hud();
@@ -545,10 +558,22 @@
   function resolve() {
     const sh = S.shot; S.shot = null; if (!sh || S.over) return;
     const p = sh.by, o = other(p);
-    const cuePot = sh.potted.includes(0), eight = sh.potted.includes(8);
-    const foul = cuePot || sh.first === null || !isOwnAt(sh.first, p, sh.cleared);
-    if (eight) return finish((sh.cleared && !foul) ? p : o, (sh.cleared && !foul) ? '8 numarayı temiz soktun kanka.' : '8 numara erken ya da faulle girdi.');
-    if (!S.groups[p] && !foul) {
+    const cuePot = sh.potted.includes(0);
+    let eight = sh.potted.includes(8);
+    const objPots = sh.potted.filter(n => n !== 0);
+    let foulMsg = null;
+    if (cuePot) foulMsg = 'Faul! Beyaz top deliğe girdi.';
+    else if (sh.first === null) foulMsg = 'Faul! Beyaz top hiçbir topa değmedi.';
+    else if (!sh.brk && !isOwnAt(sh.first, p, sh.cleared)) foulMsg = sh.first === 8 ? 'Faul! 8 numaraya önce vuramazsın.' : 'Faul! Önce kendi topuna vurmalısın.';
+    else if (sh.brk && !objPots.length && sh.railBalls.size < 4) foulMsg = 'Faul! Açılışta en az 4 top banda değmeli.';
+    else if (!sh.brk && !objPots.length && !sh.railAfter) foulMsg = 'Faul! Temastan sonra bir top banda değmeli.';
+    const foul = !!foulMsg;
+    if (eight && sh.brk) { respotEight(); eight = false; big('8 açılışta girdi, yerine kondu'); }
+    if (eight) {
+      const won = sh.cleared && !foul;
+      return finish(won ? p : o, won ? '8 numarayı temiz soktun kanka.' : !sh.cleared ? '8 numara erken girdi.' : '8 numara faulle girdi.');
+    }
+    if (!S.groups[p] && !foul && !sh.brk) {
       const f = sh.potted.find(n => n !== 0 && n !== 8);
       if (f) {
         const g = f < 8 ? 'solid' : 'stripe';
@@ -556,9 +581,11 @@
         big(p === 'me' ? (g === 'solid' ? 'Düz toplar senin!' : 'Çizgili toplar senin!') : (g === 'solid' ? OPN + ' düz toplarla' : OPN + ' çizgili toplarla'));
       }
     }
-    const ownPot = S.groups[p] && sh.potted.some(n => n !== 0 && n !== 8 && (S.groups[p] === 'solid' ? n < 8 : n > 8));
+    const ownPot = S.groups[p]
+      ? sh.potted.some(n => n !== 0 && n !== 8 && (S.groups[p] === 'solid' ? n < 8 : n > 8))
+      : sh.potted.some(n => n !== 0 && n !== 8);
     if (cuePot) { const c = cue(); c.in = false; c.x = R+W*0.25; c.y = R+H/2; c.dirty = true; let t = 0; while (!freeSpot(c.x, c.y) && t++ < 40) c.y = R+BR+Math.random()*(H-2*BR); }
-    if (foul) { S.ballInHand = true; toastPill(cuePot ? 'Faul! Beyaz top deliğe girdi.' : 'Faul! Önce kendi topuna vurmalısın.'); }
+    if (foul) { S.ballInHand = true; toastPill(foulMsg); }
     if (!(!foul && ownPot)) S.turn = o;
     const r = Math.random();
     if (p === 'me' && ownPot && !foul && r < 0.35) setTimeout(() => say('op', ['👏', 'İyi atış!', '🔥', 'Şanslıydın 😅'][Math.floor(Math.random()*4)]), 500);
