@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react'
 
 export type SoundName =
   | 'turn'
+  | 'yourTurn'
   | 'join'
   | 'leave'
   | 'start'
@@ -468,6 +469,14 @@ const SOUNDS: Record<SoundName, (v: number) => void> = {
     knock({ at: 0.07, modes: IVORY, decay: 0.05, vol: 0.12, click: 4500 })
   },
   turn: () => tones([{ f: 660, dur: 0.14, type: 'triangle' }, { f: 990, at: 0.12, dur: 0.22, type: 'triangle' }]),
+  // A soft two-note chime (G5 -> D6) with a quiet octave overtone: noticeable from another tab, never shrill.
+  yourTurn: () =>
+    tones([
+      { f: 784, dur: 0.5, vol: 0.13 },
+      { f: 1568, dur: 0.3, vol: 0.025 },
+      { f: 1175, at: 0.16, dur: 0.7, vol: 0.11 },
+      { f: 2350, at: 0.16, dur: 0.35, vol: 0.02 },
+    ]),
   join: () => tones([{ f: 523, dur: 0.12 }, { f: 659, at: 0.09, dur: 0.12 }, { f: 784, at: 0.18, dur: 0.2 }]),
   leave: () => tones([{ f: 659, dur: 0.14 }, { f: 440, at: 0.12, dur: 0.24 }]),
   start: () =>

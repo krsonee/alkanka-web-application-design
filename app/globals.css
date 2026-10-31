@@ -2037,11 +2037,19 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   box-shadow: inset 0 0 0 1px rgb(217 164 65 / 0.55), inset 0 -5cqh 0 rgb(20 17 14 / 0.05), 0 3.5cqh 0 #cbbfa8, 0 6cqh 9cqh rgb(0 0 0 / 0.32);
 }
 .okt-tile.fake { color: #17805a; font-size: min(38cqh, 60cqw); }
+/* kapalı taş: ıstakadakilerle aynı krem porselen, ters yüzü ince pirinç bir çerçeve ve Alkanka "A" damgası */
 .okt-tile.back {
-  background: linear-gradient(160deg, #16645d, #0b3d39);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), inset 0 0 0 7cqw #0b3d39, inset 0 0 0 9cqw rgb(217 164 65 / 0.55), 0 3.5cqh 0 #062624, 0 6cqh 9cqh rgb(0 0 0 / 0.35);
+  background: linear-gradient(180deg, #ffffff 0%, var(--okt-porcelain) 52%, #ece6d9 100%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.9), inset 0 0 0 9cqw var(--okt-porcelain), inset 0 0 0 10.5cqw rgb(217 164 65 / 0.55), inset 0 -5cqh 0 rgb(20 17 14 / 0.05), 0 3.5cqh 0 #cbbfa8, 0 6cqh 9cqh rgb(0 0 0 / 0.32);
+}
+.okt-tile.back::after {
+  content: "A"; font-weight: 800; font-size: min(30cqh, 44cqw); letter-spacing: 0; color: rgb(217 164 65 / 0.75);
 }
 .okt-tile.hid { cursor: pointer; overflow: hidden; }
+.okt-tile.hid::after {
+  content: "?"; font-weight: 800; font-size: min(34cqh, 50cqw); color: rgb(217 164 65 / 0.8);
+}
+.okt-tile.hid { box-shadow: inset 0 0 0 1px rgb(217 164 65 / 0.6), inset 0 -5cqh 0 rgb(20 17 14 / 0.05), 0 3.5cqh 0 #cbbfa8, 0 6cqh 9cqh rgb(0 0 0 / 0.32); }
 .okt-tile.hid::before {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(105deg, transparent 40%, rgb(255 244 214 / 0.55) 50%, transparent 60%);
@@ -2100,6 +2108,48 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .okt-drop { position: absolute; left: 12%; right: 12%; top: 6%; border-radius: calc(var(--u) * 2); pointer-events: none; transition: background .15s, box-shadow .15s; }
 .okt-drop.on { background: rgb(217 164 65 / 0.06); box-shadow: inset 0 0 0 calc(var(--u) * .2) rgb(217 164 65 / 0.5); }
 .okt-rot { position: absolute; left: 50%; top: 11%; transform: translateX(-50%); font-size: calc(var(--u) * .9); color: var(--okt-mist); opacity: .75; white-space: nowrap; pointer-events: none; }
+
+/* masa köşesi: pes et / ayrıl / sohbet */
+.okt-exit { position: absolute; right: 1.8%; top: 4%; z-index: 4; display: flex; align-items: center; gap: calc(var(--u) * .5); }
+.okt-exit .okt-btn { display: inline-flex; align-items: center; gap: calc(var(--u) * .45); padding: calc(var(--u) * .5) calc(var(--u) * 1); }
+.okt-exit svg { width: calc(var(--u) * 1.15); height: calc(var(--u) * 1.15); }
+.okt-chat-btn {
+  position: relative; display: grid; place-items: center; width: calc(var(--u) * 2.8); height: calc(var(--u) * 2.8); border: 0; border-radius: 999px; cursor: pointer;
+  color: var(--okt-porcelain); background: rgb(5 15 14 / 0.62); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.okt-chat-btn:hover { box-shadow: inset 0 0 0 1px var(--okt-brass); }
+.okt-chat-btn:focus-visible { outline: 2px solid var(--okt-brass); outline-offset: 2px; }
+.okt-chat-badge {
+  position: absolute; top: calc(var(--u) * -.3); right: calc(var(--u) * -.3); min-width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); padding: 0 calc(var(--u) * .3);
+  display: grid; place-items: center; border-radius: 999px; background: var(--okt-red); color: var(--okt-porcelain); font-size: calc(var(--u) * .85); font-weight: 700;
+}
+.okt-chat {
+  position: absolute; right: 0; top: calc(100% + var(--u) * .6); width: calc(var(--u) * 24); display: flex; flex-direction: column; overflow: hidden;
+  background: rgb(14 14 16 / 0.94); backdrop-filter: blur(8px); border-radius: calc(var(--u) * 1); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 calc(var(--u) * 1) calc(var(--u) * 3) rgb(0 0 0 / 0.45);
+  font-size: calc(var(--u) * 1); color: var(--okt-porcelain);
+}
+.okt-chat-head { display: flex; align-items: center; justify-content: space-between; padding: calc(var(--u) * .6) calc(var(--u) * .9); font-weight: 700; border-bottom: 1px solid rgb(255 255 255 / 0.08); }
+.okt-chat-head button { display: grid; place-items: center; border: 0; background: none; color: var(--okt-mist); cursor: pointer; padding: 0; }
+.okt-chat-list { list-style: none; margin: 0; padding: calc(var(--u) * .7) calc(var(--u) * .9); height: calc(var(--u) * 10); overflow-y: auto; display: flex; flex-direction: column; gap: calc(var(--u) * .45); }
+.okt-chat-empty { color: var(--okt-mist); opacity: .7; text-align: center; margin: auto 0; }
+.okt-chat-msg { align-self: flex-start; max-width: 85%; display: flex; flex-direction: column; padding: calc(var(--u) * .35) calc(var(--u) * .75); border-radius: calc(var(--u) * .8); background: rgb(255 255 255 / 0.07); line-height: 1.35; }
+.okt-chat-msg b { font-size: calc(var(--u) * .8); color: var(--okt-brass); }
+.okt-chat-msg.mine { align-self: flex-end; background: var(--okt-brass); color: var(--okt-ink); }
+.okt-chat-quick { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .35); padding: calc(var(--u) * .6) calc(var(--u) * .9); border-top: 1px solid rgb(255 255 255 / 0.08); }
+.okt-chat-quick button {
+  font: inherit; font-size: calc(var(--u) * .9); border: 0; cursor: pointer; border-radius: 999px; padding: calc(var(--u) * .3) calc(var(--u) * .8);
+  color: var(--okt-porcelain); background: rgb(255 255 255 / 0.08);
+}
+.okt-chat-quick button:hover { background: rgb(217 164 65 / 0.25); }
+
+/* el bitti penceresi: koyu kömür cam kart, pirinç vurgu, ceviz ıstaka şeridi */
+.okw-card {
+  background: linear-gradient(180deg, #1c1b1a, #121212);
+  box-shadow: inset 0 1px 0 rgb(217 164 65 / 0.35), inset 0 0 0 1px rgb(255 255 255 / 0.07), 0 24px 60px rgb(0 0 0 / 0.55);
+}
+.okw-medal { color: var(--okt-ink); background: radial-gradient(circle at 35% 30%, #f3cf7f, var(--okt-brass) 60%, #a97a26); box-shadow: 0 0 0 4px rgb(217 164 65 / 0.15); }
+.okw-medal.muted { color: var(--okt-porcelain); background: rgb(255 255 255 / 0.08); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12); }
+.okw-rack { background: linear-gradient(180deg, #5a3a22, #3b2414); box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.08), inset 0 -3px 0 rgb(0 0 0 / 0.3); }
 
 /* ıstaka: mat ceviz, iki raf, uç kapakları */
 .okt-rack {
@@ -2192,7 +2242,11 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 }
 
 /* ===== MOBİL YATAY (tam ekran, ≈2.17:1) ===== */
-.ls-split .okt { aspect-ratio: 852 / 393; --u: .82cqw; border-radius: 12px; }
+/* Yatay telefonda masa ekranın en-boy oranını alır (LandscapeFit --ls-ar verir), ölçü yüksekliğe bağlı kalır. */
+.ls-split .okt { aspect-ratio: var(--ls-ar, 852 / 393); --u: min(.82cqw, 1.78cqh); border-radius: 12px; }
+.ls-split .okt-pile, .ls-split .okt-stack, .ls-split .okt-ind { width: calc(var(--u) * 5); height: calc(var(--u) * 7); }
+.ls-split .okt-exit { right: 1.6%; top: 4%; }
+.ls-split .okt .okt-info { top: 15%; }
 .ls-split .okt-rot { display: none; }
 .ls-split .okt-p2 { left: 50%; top: 12.5%; } .ls-split .okt-p3 { left: 9%; top: 35%; } .ls-split .okt-p1 { left: 91%; top: 35%; } .ls-split .okt-p0 { left: 50%; top: 50%; }
 .ls-split .okt-pile2 { left: 31%; top: 15%; } .ls-split .okt-pile1 { left: 69%; top: 15%; } .ls-split .okt-pile3 { left: 31%; top: 46%; } .ls-split .okt-pile0 { left: 69%; top: 46%; }
@@ -2201,7 +2255,7 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .ls-split .okt-info { left: auto; right: 1.6%; top: 5%; transform: none; grid-template-columns: auto auto; }
 .ls-split .okt-toast { left: 50%; top: 40%; }
 .ls-split .okt-drop { left: 12%; right: 12%; top: 6%; bottom: 42%; }
-.ls-split .okt-rack { left: 3%; right: 3%; bottom: 2%; height: 39.5%; }
+.ls-split .okt-rack { left: max(3%, calc(50% - 104cqh)); right: max(3%, calc(50% - 104cqh)); bottom: 2%; height: 39.5%; }
 
 /* ================= 101 Okey masası (onaylanan mockup ile birebir) ================= */
 .o101 { aspect-ratio: 393 / 852; }
