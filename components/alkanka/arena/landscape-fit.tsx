@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Maximize2, Minimize2, RotateCw, Smartphone, X } from 'lucide-react'
+import { Maximize2, Menu, Minimize2, RotateCw, Smartphone, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { goLandscape, restorePortrait } from './orientation'
 
@@ -45,9 +45,12 @@ export function LandscapeFit({
   children,
   label = 'Oyun masası',
   force = false,
+  menu,
 }: {
   children: ReactNode
   label?: string
+  /** Table controls (resign, leave, sound) reachable while the fullscreen layer hides the page header. */
+  menu?: ReactNode
   /** Sideways only: an upright phone gets a rotate prompt instead of the table, and the table drops the side rail. */
   force?: boolean
 }) {
@@ -56,7 +59,12 @@ export function LandscapeFit({
   const blocked = force && portraitPhone
   const [hintClosed, setHintClosed] = useState(false)
   const [minimized, setMinimized] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const fullscreen = landscape && !minimized
+
+  useEffect(() => {
+    if (!fullscreen) setMenuOpen(false)
+  }, [fullscreen])
   const inner = useRef<HTMLDivElement>(null)
   const area = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
@@ -198,6 +206,37 @@ export function LandscapeFit({
           'fixed inset-0 z-[100] flex touch-manipulation flex-row items-stretch gap-1.5 overflow-hidden bg-background py-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]',
       )}
     >
+      {fullscreen && menu && (
+        <>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-controls="ls-table-menu"
+            title="Masa menüsü"
+            className={cn(
+              'absolute z-[110] flex size-7 items-center justify-center rounded-lg border border-border/60 bg-card/60 text-foreground/80 backdrop-blur-sm hover:bg-card hover:text-foreground',
+              force ? 'left-[max(0.25rem,env(safe-area-inset-left))] top-9' : 'left-[max(0.5rem,env(safe-area-inset-left))] top-12',
+              menuOpen && 'bg-card text-foreground',
+            )}
+          >
+            {menuOpen ? <X className="size-3.5" aria-hidden="true" /> : <Menu className="size-3.5" aria-hidden="true" />}
+            <span className="sr-only">{menuOpen ? 'Menüyü kapat' : 'Masa menüsü'}</span>
+          </button>
+          {menuOpen && (
+            <div
+              id="ls-table-menu"
+              role="menu"
+              className={cn(
+                'absolute z-[115] flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150',
+                force ? 'left-[calc(max(0.25rem,env(safe-area-inset-left))+2.25rem)] top-9' : 'left-14 top-12',
+              )}
+            >
+              {menu}
+            </div>
+          )}
+        </>
+      )}
       {fullscreen && force ? (
         <button
           type="button"
