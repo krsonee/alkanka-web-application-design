@@ -114,13 +114,13 @@ export function TableThemePicker({ game, className }: { game: ThemeGame; classNa
           setOpen(true)
         }}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs font-semibold text-foreground backdrop-blur transition-colors hover:bg-secondary',
+          'inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/30 ring-2 ring-primary/40 ring-offset-2 ring-offset-background transition hover:brightness-110',
           className,
         )}
       >
-        <Palette className="size-3.5 text-primary" aria-hidden="true" />
-        <span>Masa teması</span>
-        {theme && <span className="max-w-24 truncate text-muted-foreground">{theme.name}</span>}
+        <Palette className="size-4" aria-hidden="true" />
+        <span>Masa teması seç</span>
+        {theme && <span className="max-w-28 truncate rounded-full bg-primary-foreground/15 px-2 py-0.5 text-xs font-semibold">{theme.name}</span>}
       </button>
       {open && (
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-background/70 backdrop-blur-sm sm:items-center" onClick={() => setOpen(false)}>
