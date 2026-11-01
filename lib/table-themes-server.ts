@@ -156,7 +156,7 @@ export async function bestTheme(game: ThemeGame, userIds: string[]): Promise<str
   const ids = Array.from(new Set(userIds.filter(Boolean))).slice(0, 8)
   if (!ids.length) return null
   const r = await rows<{ user_id: string; theme_id: string }>(
-    sql`SELECT user_id, theme_id FROM table_theme_pick WHERE game = ${game} AND user_id = ANY(${ids})`,
+    sql`SELECT user_id, theme_id FROM table_theme_pick WHERE game = ${game} AND user_id IN ${ids}`,
   )
   let best: { id: string; rank: number; seat: number } | null = null
   for (const row of r) {

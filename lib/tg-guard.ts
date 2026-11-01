@@ -76,8 +76,8 @@ async function dropFromSite(chatId: number | string, ids: number[]) {
       throw error
     })
     await removedReady
-    await rows(sql`INSERT INTO tg_site_removed (chat_id, tg_message_id) SELECT ${chat}, unnest(${ids}::bigint[]) ON CONFLICT DO NOTHING`)
-    await rows(sql`DELETE FROM tg_chat_messages WHERE chat_id = ${chat} AND tg_message_id = ANY(${ids})`)
+    await rows(sql`INSERT INTO tg_site_removed (chat_id, tg_message_id) SELECT ${chat}, unnest(${`{${ids.join(',')}}`}::bigint[]) ON CONFLICT DO NOTHING`)
+    await rows(sql`DELETE FROM tg_chat_messages WHERE chat_id = ${chat} AND tg_message_id IN ${ids}`)
   } catch {
     // Site cleanup must never block the Telegram moderation action.
   }

@@ -2546,6 +2546,13 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08);
 }
 .tt-swatch-default { background: radial-gradient(110% 85% at 50% 36%, #15665f 0%, #0e4c47 46%, #082f2c 100%); }
+/* In the small picker/shop preview the artwork is the point: show it whole, bright and unmasked. */
+.tt-swatch > .tt-art, .tt-swatch > .tt-logo {
+  inset: 0; left: 0; top: 0; width: 100%; height: 100%; aspect-ratio: auto; transform: none; border-radius: 0;
+  background-position: center; background-size: cover; opacity: 1; filter: brightness(1.18) saturate(1.1);
+  -webkit-mask-image: none; mask-image: none;
+}
+.tt-swatch:has(> .tt-art) > .tt-pat, .tt-swatch:has(> .tt-logo) > .tt-pat { opacity: .18; }
 
 /* Tavla bar player names — the side to move glows and moves in a style matching the theme category. */
 .tavla-bar-letter {
