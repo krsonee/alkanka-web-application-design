@@ -9,7 +9,8 @@ import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
 import { TableBrand } from './table-brand'
-import { TableThemePicker, useTableTheme } from './table-theme'
+import { TableThemePicker, ThemeDecor, useTableTheme } from './table-theme'
+import { themeLogo, type TableTheme } from '@/lib/table-themes'
 import { useBrand } from '../brand-context'
 import { useLogos } from '../logo-context'
 import { LOGO_CONCEPTS } from '../logos'
@@ -285,13 +286,13 @@ function paintFeltLogo(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | n
 }
 
 /** The static table (wood, felt, cushions, pockets, markings) is painted once and blitted every frame. */
-function paintTable(dpr: number, logo: HTMLImageElement | null = null, feltOverride: string | null = null) {
+function paintTable(dpr: number, logo: HTMLImageElement | null = null, theme: TableTheme | null = null) {
   const c = document.createElement('canvas')
   c.width = CW * dpr
   c.height = CH * dpr
   const ctx = c.getContext('2d')!
   const css = getComputedStyle(document.documentElement)
-  const felt = feltOverride || css.getPropertyValue('--felt').trim() || '#1b2a44'
+  const felt = css.getPropertyValue('--felt').trim() || '#1b2a44'
   const wood = css.getPropertyValue('--wood').trim() || '#4a3020'
   const gold = css.getPropertyValue('--primary').trim() || '#e2b33c'
   ctx.scale(dpr, dpr)
@@ -323,8 +324,12 @@ function paintTable(dpr: number, logo: HTMLImageElement | null = null, feltOverr
   ctx.stroke()
   ctx.globalAlpha = 1
   ctx.translate(RAIL, RAIL)
-  ctx.fillStyle = felt
-  ctx.fillRect(0, 0, W, H)
+  // A themed felt is left transparent so the DOM theme layer under the canvas (print, art, ambient light) shows through.
+  if (theme) ctx.clearRect(0, 0, W, H)
+  else {
+    ctx.fillStyle = felt
+    ctx.fillRect(0, 0, W, H)
+  }
   const nc = document.createElement('canvas')
   nc.width = nc.height = 96
   const nx = nc.getContext('2d')
@@ -359,7 +364,7 @@ function paintTable(dpr: number, logo: HTMLImageElement | null = null, feltOverr
     ctx.fillStyle = cg
     ctx.fillRect(x, y, w, h)
   })
-  paintFeltLogo(ctx, logo, gold, css.getPropertyValue('--font-display').trim() || 'system-ui, sans-serif')
+  if (!theme || !themeLogo(theme)) paintFeltLogo(ctx, logo, gold, css.getPropertyValue('--font-display').trim() || 'system-ui, sans-serif')
   ctx.strokeStyle = 'rgba(255,255,255,0.08)'
   ctx.beginPath()
   ctx.moveTo(W * 0.25, 0)
@@ -427,12 +432,12 @@ const pocketAt = (x: number, y: number) => POCKETS.findIndex(([px, py], i) => Ma
 export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote?: Remote<BilardoState> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { theme: tableTheme } = useTableTheme('bilardo')
-  const feltRef = useRef<string | null>(tableTheme?.felt ?? null)
+  const themeRef = useRef<TableTheme | null>(tableTheme ?? null)
   const repaintRef = useRef<(() => void) | null>(null)
   useEffect(() => {
-    feltRef.current = tableTheme?.felt ?? null
+    themeRef.current = tableTheme ?? null
     repaintRef.current?.()
-  }, [tableTheme?.felt])
+  }, [tableTheme])
   const remoteRef = useRef(remote)
   remoteRef.current = remote
   const seat = remote?.seat ?? 0
@@ -795,7 +800,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     canvas.width = CW * dpr
     canvas.height = CH * dpr
-    const painted = paintTable(dpr, null, feltRef.current)
+    const painted = paintTable(dpr, null, themeRef.current)
     let bg = painted.canvas
     const { gold } = painted
     const logoImg = new Image()
@@ -803,10 +808,10 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     let logoReady = false
     logoImg.onload = () => {
       logoReady = true
-      bg = paintTable(dpr, logoImg, feltRef.current).canvas
+      bg = paintTable(dpr, logoImg, themeRef.current).canvas
     }
     repaintRef.current = () => {
-      bg = paintTable(dpr, logoReady ? logoImg : null, feltRef.current).canvas
+      bg = paintTable(dpr, logoReady ? logoImg : null, themeRef.current).canvas
     }
     logoImg.src = logoSrcRef.current
     let raf = 0
@@ -1263,7 +1268,22 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
             : ['Nişan al · Alttaki gücü sağa çek, bırak', 'Nişan al']
 
   const canvasEl = (
-    <div className="relative min-w-0" style={landscape ? { width: 'min(100%, calc((100svh - 1rem) * 1076 / 576))' } : undefined}>
+    <div className="relative isolate min-w-0" style={landscape ? { width: 'min(100%, calc((100svh - 1rem) * 1076 / 576))' } : undefined}>
+      {tableTheme && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -z-10 overflow-hidden"
+          style={{
+            left: `${(RAIL / CW) * 100}%`,
+            top: `${(RAIL / CH) * 100}%`,
+            width: `${(W / CW) * 100}%`,
+            height: `${(H / CH) * 100}%`,
+            backgroundColor: tableTheme.felt,
+          }}
+        >
+          <ThemeDecor theme={tableTheme} />
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         tabIndex={0}
