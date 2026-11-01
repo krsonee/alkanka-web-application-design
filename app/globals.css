@@ -2461,18 +2461,44 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 [data-tt] .tavla-felt {
   background: radial-gradient(120% 90% at 50% 50%, var(--tt-felt-hi) 0%, var(--tt-felt) 55%, var(--tt-felt-lo) 100%);
 }
+/* Tema seçilince masanın tamamı değişsin: çerçeve, orta bar, üçgenler ve kenar ışığı */
+.tavla-wood[data-tt] {
+  background:
+    repeating-linear-gradient(91deg, rgb(255 255 255 / 0.03) 0 1px, transparent 1px 5px),
+    linear-gradient(160deg, color-mix(in srgb, var(--tt-ac2) 55%, #000) 0%, color-mix(in srgb, var(--tt-felt) 45%, #000) 55%, color-mix(in srgb, var(--tt-felt) 25%, #000) 100%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--tt-ac) 45%, transparent),
+    inset 0 -2px 0 rgb(0 0 0 / 0.4),
+    0 0 0 1px color-mix(in srgb, var(--tt-ac) 55%, #000),
+    0 0 22px -4px color-mix(in srgb, var(--tt-ac) 45%, transparent),
+    0 18px 36px -10px rgb(0 0 0 / 0.65);
+}
+[data-tt] .tavla-bar-wood {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tt-felt) 30%, #000), color-mix(in srgb, var(--tt-ac2) 45%, #000) 50%, color-mix(in srgb, var(--tt-felt) 30%, #000));
+}
+[data-tt] .tavla-point-a {
+  background-image: linear-gradient(90deg, rgb(255 255 255 / 0.2), transparent 40%, transparent 60%, rgb(0 0 0 / 0.25)),
+    linear-gradient(color-mix(in srgb, var(--tt-ac) 85%, #fff), var(--tt-ac) 70%, color-mix(in srgb, var(--tt-ac) 70%, #000));
+}
+[data-tt] .tavla-point-b {
+  background-image: linear-gradient(90deg, rgb(255 255 255 / 0.2), transparent 40%, transparent 60%, rgb(0 0 0 / 0.25)),
+    linear-gradient(color-mix(in srgb, var(--tt-ac2) 85%, #fff), var(--tt-ac2) 70%, color-mix(in srgb, var(--tt-ac2) 70%, #000));
+}
+.okt[data-tt] {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tt-ac) 55%, transparent), 0 0 26px -6px color-mix(in srgb, var(--tt-ac) 50%, transparent);
+}
 .tt-decor {
   position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; container-type: size;
 }
 .tt-decor > i, .tt-swatch > i { position: absolute; inset: 0; pointer-events: none; display: block; }
 .tt-art {
-  background: center / cover no-repeat; opacity: 0.42; mix-blend-mode: luminosity;
-  -webkit-mask-image: radial-gradient(75% 70% at 50% 45%, #000 35%, transparent 100%);
-  mask-image: radial-gradient(75% 70% at 50% 45%, #000 35%, transparent 100%);
+  background: center / cover no-repeat; opacity: 0.72;
+  -webkit-mask-image: radial-gradient(90% 85% at 50% 45%, #000 50%, transparent 100%);
+  mask-image: radial-gradient(90% 85% at 50% 45%, #000 50%, transparent 100%);
 }
 .tt-decor > .tt-logo, .tt-swatch > .tt-logo {
   inset: auto; left: 50%; top: 44%; width: 32cqmin; aspect-ratio: 1; transform: translate(-50%, -50%);
-  background: center / cover no-repeat; border-radius: 50%; opacity: 0.6; mix-blend-mode: screen;
+  background: center / cover no-repeat; border-radius: 50%; opacity: 0.85;
   -webkit-mask-image: radial-gradient(closest-side, #000 48%, transparent 92%);
   mask-image: radial-gradient(closest-side, #000 48%, transparent 92%);
 }

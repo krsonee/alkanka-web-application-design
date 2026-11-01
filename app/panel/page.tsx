@@ -76,6 +76,9 @@ import { AdsEditor } from '@/components/panel/ads-editor'
 import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
 import { MarketManager } from '@/components/panel/market-manager'
+import { ThemeManager } from '@/components/panel/theme-manager'
+import { getThemeCatalog } from '@/lib/table-themes-server'
+import { DEFAULT_OFFERS } from '@/lib/table-themes'
 import { GrowthManager } from '@/components/panel/growth-manager'
 import { CampaignsManager, EarningsManager, TrackingEditor } from '@/components/panel/marketing-manager'
 import { MarketingGuide } from '@/components/panel/area-guides'
@@ -271,6 +274,7 @@ async function telegramPanel() {
 async function marketPanel() {
   const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
+  const themeCatalog = await getThemeCatalog().catch(() => DEFAULT_OFFERS)
   const [avatars, stats, coverRows] = await Promise.all([
     listCatalog({ includeInactive: true }),
     avatarStats(),
@@ -283,6 +287,7 @@ async function marketPanel() {
       tabs={[
         { id: 'products', label: `Ürünler & talepler${requests.length ? ` (${requests.length})` : ''}`, content: <MarketManager products={products} requests={requests} sponsors={sponsors} /> },
         { id: 'avatars', label: 'Avatarlar & kapaklar', content: <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} /> },
+{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> },
       ]}
     />
   )
