@@ -10,7 +10,12 @@ import { loadSaved, useSaveGame } from './saved-game'
 import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
+import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { playSound } from '@/lib/sound'
+
+// Date.now() collided when several bot moves were queued in the same millisecond.
+let flySeq = Date.now()
+const nextFlyKey = () => ++flySeq
 import {
   applyMove,
   botPlan,
@@ -272,6 +277,7 @@ type BoardProps = {
 }
 
 function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn, trail, fly, onRoll }: BoardProps) {
+  const { theme: tableTheme } = useTableTheme('tavla')
   const opp: Side = me === 'p' ? 'b' : 'p'
   const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
   const rootRef = useRef<HTMLDivElement>(null)
@@ -585,10 +591,11 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           document.body,
         )}
       <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
-      <div data-ls-main className="ls-tavla-frame tavla-wood relative rounded-2xl px-1.5 pb-1.5 pt-4 sm:px-3 sm:pb-3 sm:pt-6">
+      <div data-ls-main className="ls-tavla-frame tavla-wood relative rounded-2xl px-1.5 pb-1.5 pt-4 sm:px-3 sm:pb-3 sm:pt-6" {...themeSurfaceProps(tableTheme)}>
       <TableBrand center={false} corners={false} jako={false} />
       <div className="ls-tavla flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
         <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
+          <ThemeDecor theme={tableTheme} logo={false} />
           <div className="flex h-[45%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
           {diceLeft ? (
             diceRow
@@ -619,12 +626,14 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
             selected === 'bar' && 'bg-primary/30',
           )}
         >
-          <span className="flex w-full flex-col items-center gap-0.5 px-px">
+          <BarName name={names.opp} active={turn === 'opp'} top />
+          <BarName name={names.me} active={turn === 'me'} top={false} />
+          <span className="relative z-10 flex w-full flex-col items-center gap-0.5 px-px">
             {Array.from({ length: Math.min(board.bar[opp], 4) }).map((_, i) => (
               <Checker key={i} side={opp} label={i === 0 && board.bar[opp] > 4 ? String(board.bar[opp]) : undefined} />
             ))}
           </span>
-          <span className="flex w-full flex-col-reverse items-center gap-0.5 px-px">
+          <span className="relative z-10 flex w-full flex-col-reverse items-center gap-0.5 px-px">
             {Array.from({ length: Math.min(board.bar[me], 4) }).map((_, i) => (
               <Checker
                 key={i}
@@ -637,6 +646,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         </button>
 
         <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
+          <ThemeDecor theme={tableTheme} />
           <div className="flex h-[45%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
           {!diceLeft && (rollButton || diceRow)}
           <div className="flex h-[45%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
@@ -675,7 +685,31 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         </div>
       </div>
       </div>
+      <div className="tt-picker mt-2 flex justify-start">
+        <TableThemePicker game="tavla" />
+      </div>
     </div>
+  )
+}
+
+// Names run letter-by-letter toward the bar's centre so broken checkers at either end never cover them.
+function BarName({ name, active, top }: { name: string; active: boolean; top: boolean }) {
+  const letters = Array.from(name.toLocaleUpperCase('tr-TR').replace(/\s+/g, ' ').trim()).slice(0, 8)
+  return (
+    <span
+      aria-hidden="true"
+      data-active={active || undefined}
+      className={cn(
+        'tavla-bar-name pointer-events-none absolute inset-x-0 z-0 flex flex-col items-center',
+        top ? 'bottom-1/2 mb-2 justify-end sm:mb-3' : 'top-1/2 mt-2 sm:mt-3',
+      )}
+    >
+      {letters.map((ch, i) => (
+        <span key={i} className="tavla-bar-letter" style={{ '--i': i } as CSSProperties}>
+          {ch === ' ' ? '\u00A0' : ch}
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -979,7 +1013,7 @@ export function Tavla({ finish, saveKey }: GameApi) {
       const m = onlyMove(legal)
       if (!m) return
       const t = setTimeout(() => {
-        setFly({ key: Date.now(), moves: [m], side: 'p' })
+        setFly({ key: nextFlyKey(), moves: [m], side: 'p' })
         play([m])
       }, 550)
       return () => clearTimeout(t)
@@ -1009,7 +1043,7 @@ export function Tavla({ finish, saveKey }: GameApi) {
         plan.forEach((m, idx) => {
           timers.push(
             setTimeout(() => {
-              setFly({ key: Date.now() + idx, moves: [m], side: 'b' })
+              setFly({ key: nextFlyKey(), moves: [m], side: 'b' })
               current = applyMove(current, 'b', m)
               playSound(m.hit ? 'hit' : m.to === 'off' ? 'bearoff' : 'move')
               left = spendDie(left, m.die)
@@ -1141,7 +1175,7 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
     const m = onlyMove(legal)
     if (!m) return
     const t = setTimeout(() => {
-      setFly({ key: Date.now(), moves: [m], side: me })
+      setFly({ key: nextFlyKey(), moves: [m], side: me })
       setPending((p) => [...p, m])
     }, 550)
     return () => clearTimeout(t)

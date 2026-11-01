@@ -24,6 +24,7 @@ import { createPortal } from 'react-dom'
 import { TileFace, useDrawDrag } from './okey'
 import { Okey101Result } from './okey101-result'
 import { TableBrand } from './table-brand'
+import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { MobileTableChat } from './mobile-table-chat'
 import { SeatFace } from './seat-face'
 import { isJoker, okeyFrom, sortHand, type Tile } from './okey-engine'
@@ -57,6 +58,7 @@ function readSegments(slots: (number | null)[], byId: Map<number, Tile>, okey: O
 }
 
 export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
+  const { theme: tableTheme } = useTableTheme('101')
   const s = remote.state
   const n = s.seats
   const mySeat = remote.spectator ? -1 : remote.seat
@@ -352,8 +354,9 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
 
   return (
     <div data-game-table>
-      <div className="okt o101 font-sans">
+      <div className="okt o101 font-sans" {...themeSurfaceProps(tableTheme)}>
         <TableBrand center={false} plaque={false} corners={false} jako={false} />
+        <ThemeDecor theme={tableTheme} />
         {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
         <div className="okt-logo" aria-hidden="true">
           ALKANKA · 101
@@ -616,6 +619,9 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           </div>
         </div>
       )}
+      <div className="tt-picker mt-2 flex justify-start">
+        <TableThemePicker game="101" />
+      </div>
     </div>
   )
 }

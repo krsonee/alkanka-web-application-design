@@ -345,6 +345,25 @@
     im.src = src;
   })();
 
+  /* ---------- table theme (member's pick, pushed by the parent page; null keeps the classic felt) ---------- */
+  let TT = null, ttArt = null, ttLogo = null, ttSeq = 0;
+  const safeSrc = s => typeof s === 'string' && /^\/(?!\/)/.test(s);
+  const isHex = s => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s);
+  const shadeHex = (h, k) => { const n = parseInt(h.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(k > 0 ? v + (255 - v)*k : v*(1 + k))); return '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join(''); };
+  const loadImg = (src, seq, set) => { const im = new Image(); im.onload = () => { if (seq !== ttSeq) return; set(im); if (tableImg) tableImg = buildTable(); }; im.src = src; };
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin || e.source !== parent) return;
+    const d = e.data;
+    if (!d || d.source !== 'alkanka-parent' || d.type !== 'theme') return;
+    const t = d.theme;
+    const seq = ++ttSeq; ttArt = null; ttLogo = null;
+    TT = t && isHex(t.felt) && isHex(t.ac) && isHex(t.ac2) ? { felt: t.felt, ac: t.ac, ac2: t.ac2 } : null;
+    if (TT && safeSrc(t.art)) loadImg(t.art, seq, im => { ttArt = im; });
+    if (TT && safeSrc(t.logo)) loadImg(t.logo, seq, im => { ttLogo = im; });
+    if (tableImg) tableImg = buildTable();
+  });
+  if (parent !== window) parent.postMessage({ source:'alkanka-bilardo', type:'ready' }, location.origin);
+
   /* ---------- sound: real CC0 recordings, synthesized fallback until they decode ---------- */
   const Snd = (() => {
     let ac = null, on = true, noise = null, budget = 0, out = null, room = null;
@@ -789,8 +808,16 @@
 
     // felt base
     let fg = g.createRadialGradient(R+W/2, R+H/2, 20, R+W/2, R+H/2, W*0.62);
-    fg.addColorStop(0, '#2c9a57'); fg.addColorStop(.55, '#1f7e44'); fg.addColorStop(1, '#14582f');
+    if (TT) { fg.addColorStop(0, shadeHex(TT.felt, .22)); fg.addColorStop(.55, TT.felt); fg.addColorStop(1, shadeHex(TT.felt, -.35)); }
+    else { fg.addColorStop(0, '#2c9a57'); fg.addColorStop(.55, '#1f7e44'); fg.addColorStop(1, '#14582f'); }
     g.fillStyle = fg; g.fillRect(RW, RW, TW-RW*2, TH-RW*2);
+    if (TT && ttArt) {
+      g.save(); g.beginPath(); g.rect(R, R, W, H); g.clip();
+      const k = Math.max(W/ttArt.naturalWidth, H/ttArt.naturalHeight), aw = ttArt.naturalWidth*k, ah = ttArt.naturalHeight*k;
+      g.globalAlpha = .38; g.globalCompositeOperation = 'luminosity';
+      g.drawImage(ttArt, R + (W - aw)/2, R + (H - ah)/2, aw, ah);
+      g.restore();
+    }
     // felt texture
     const nz = document.createElement('canvas'); nz.width = nz.height = 128;
     const nzc = nz.getContext('2d'), id = nzc.createImageData(128, 128);
@@ -809,10 +836,11 @@
       g.fillStyle = 'rgba(4,30,14,.35)'; g.beginPath(); g.arc(0, cy, r + 4, 0, Math.PI*2); g.fill();
       g.strokeStyle = 'rgba(242,193,78,.55)'; g.lineWidth = 3; g.beginPath(); g.arc(0, cy, r + 6, 0, Math.PI*2); g.stroke();
       g.strokeStyle = 'rgba(242,193,78,.25)'; g.lineWidth = 1.2; g.setLineDash([3, 6]); g.beginPath(); g.arc(0, cy, r + 15, 0, Math.PI*2); g.stroke(); g.setLineDash([]);
-      if (logoImg) {
+      const mark = (TT && ttLogo) || logoImg;
+      if (mark) {
         g.save(); g.beginPath(); g.arc(0, cy, r, 0, Math.PI*2); g.clip();
-        const k = Math.max(r*2/logoImg.naturalWidth, r*2/logoImg.naturalHeight), lw = logoImg.naturalWidth*k, lh = logoImg.naturalHeight*k;
-        g.globalAlpha = 0.66; g.drawImage(logoImg, -lw/2, cy - lh/2, lw, lh);
+        const k = Math.max(r*2/mark.naturalWidth, r*2/mark.naturalHeight), lw = mark.naturalWidth*k, lh = mark.naturalHeight*k;
+        g.globalAlpha = mark === ttLogo ? 0.9 : 0.66; g.drawImage(mark, -lw/2, cy - lh/2, lw, lh);
         const sh = g.createRadialGradient(0, cy - r*0.35, r*0.2, 0, cy, r);
         sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.3)');
         g.globalAlpha = 1; g.fillStyle = sh; g.fillRect(-r, cy - r, r*2, r*2);
@@ -835,7 +863,8 @@
       g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath();
       const [a, b] = [pts[0], pts[3]];
       const cg = g.createLinearGradient(a[0] - nx*18, a[1] - ny*18, a[0], a[1]);
-      cg.addColorStop(0, '#0f4724'); cg.addColorStop(.7, '#1b7039'); cg.addColorStop(1, '#25864a');
+      if (TT) { cg.addColorStop(0, shadeHex(TT.felt, -.5)); cg.addColorStop(.7, shadeHex(TT.felt, -.15)); cg.addColorStop(1, shadeHex(TT.felt, .08)); }
+      else { cg.addColorStop(0, '#0f4724'); cg.addColorStop(.7, '#1b7039'); cg.addColorStop(1, '#25864a'); }
       g.fillStyle = cg; g.fill();
       g.strokeStyle = 'rgba(190,255,210,.16)'; g.lineWidth = 1; g.beginPath(); g.moveTo(pts[1][0], pts[1][1]); g.lineTo(pts[2][0], pts[2][1]); g.stroke();
     };

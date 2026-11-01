@@ -7,6 +7,14 @@ import { useBrand } from '../brand-context'
 import { useLogos } from '../logo-context'
 import { LOGO_CONCEPTS } from '../logos'
 import { goLandscape, restorePortrait } from './orientation'
+import { TableThemePicker, useTableTheme } from './table-theme'
+import { themeArt, themeLogo, type TableTheme } from '@/lib/table-themes'
+
+const themeMessage = (t: TableTheme | null) => ({
+  source: 'alkanka-parent' as const,
+  type: 'theme' as const,
+  theme: t ? { felt: t.felt, ac: t.ac, ac2: t.ac2, art: themeArt(t), logo: themeLogo(t) } : null,
+})
 
 const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
 const LANDSCAPE_QUERY = '(max-height: 540px) and (orientation: landscape)'
@@ -25,7 +33,9 @@ function usePhoneLayout(): Layout {
   )
 }
 
-type FinishMessage = { source: 'alkanka-bilardo'; type: 'finish'; result: 'win' | 'lose'; note?: string }
+type FrameMessage =
+  | { source: 'alkanka-bilardo'; type: 'finish'; result: 'win' | 'lose'; note?: string }
+  | { source: 'alkanka-bilardo'; type: 'ready' }
 
 export function BilardoPool({ bet, win, finish }: { bet: number; win: number; finish: GameApi['finish'] }) {
   const layout = usePhoneLayout()
@@ -33,12 +43,25 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
   const done = useRef(false)
   const finishRef = useRef(finish)
   finishRef.current = finish
+  const { theme } = useTableTheme('bilardo')
+  const themeRef = useRef(theme)
+  themeRef.current = theme
+
+  // Pushed over postMessage instead of the URL so switching themes never reloads (and resets) the running game.
+  useEffect(() => {
+    frame.current?.contentWindow?.postMessage(themeMessage(theme), window.location.origin)
+  }, [theme])
 
   useEffect(() => {
-    function onMessage(e: MessageEvent<FinishMessage>) {
+    function onMessage(e: MessageEvent<FrameMessage>) {
       if (e.origin !== window.location.origin || e.source !== frame.current?.contentWindow) return
       const d = e.data
-      if (d?.source !== 'alkanka-bilardo' || d.type !== 'finish' || done.current) return
+      if (d?.source !== 'alkanka-bilardo') return
+      if (d.type === 'ready') {
+        frame.current?.contentWindow?.postMessage(themeMessage(themeRef.current), window.location.origin)
+        return
+      }
+      if (d.type !== 'finish' || done.current) return
       done.current = true
       void restorePortrait()
       finishRef.current(d.result === 'win' ? 'win' : 'lose', d.note)
@@ -95,6 +118,7 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
           allow="autoplay; fullscreen"
         />
       </div>
+      {layout === 'desktop' && <TableThemePicker game="bilardo" className="mt-3 flex justify-end" />}
     </div>
   )
 }
