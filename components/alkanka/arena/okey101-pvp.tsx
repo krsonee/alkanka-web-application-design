@@ -619,7 +619,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           </div>
         </div>
       )}
-      <div className="tt-picker mt-2 flex justify-end">
+      <div className="tt-picker mt-2 flex justify-start">
         <TableThemePicker game="101" />
       </div>
     </div>

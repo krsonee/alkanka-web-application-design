@@ -735,7 +735,7 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
           </div>,
           document.body,
         )}
-      <div className="tt-picker mt-2 flex justify-end">
+      <div className="tt-picker mt-2 flex justify-start">
         <TableThemePicker game="okey" />
       </div>
     </div>

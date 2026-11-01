@@ -12,6 +12,10 @@ import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
 import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { playSound } from '@/lib/sound'
+
+// Date.now() collided when several bot moves were queued in the same millisecond.
+let flySeq = Date.now()
+const nextFlyKey = () => ++flySeq
 import {
   applyMove,
   botPlan,
@@ -681,7 +685,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         </div>
       </div>
       </div>
-      <div className="tt-picker mt-2 flex justify-end">
+      <div className="tt-picker mt-2 flex justify-start">
         <TableThemePicker game="tavla" />
       </div>
     </div>
@@ -1009,7 +1013,7 @@ export function Tavla({ finish, saveKey }: GameApi) {
       const m = onlyMove(legal)
       if (!m) return
       const t = setTimeout(() => {
-        setFly({ key: Date.now(), moves: [m], side: 'p' })
+        setFly({ key: nextFlyKey(), moves: [m], side: 'p' })
         play([m])
       }, 550)
       return () => clearTimeout(t)
@@ -1039,7 +1043,7 @@ export function Tavla({ finish, saveKey }: GameApi) {
         plan.forEach((m, idx) => {
           timers.push(
             setTimeout(() => {
-              setFly({ key: Date.now() + idx, moves: [m], side: 'b' })
+              setFly({ key: nextFlyKey(), moves: [m], side: 'b' })
               current = applyMove(current, 'b', m)
               playSound(m.hit ? 'hit' : m.to === 'off' ? 'bearoff' : 'move')
               left = spendDie(left, m.die)
@@ -1171,7 +1175,7 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
     const m = onlyMove(legal)
     if (!m) return
     const t = setTimeout(() => {
-      setFly({ key: Date.now(), moves: [m], side: me })
+      setFly({ key: nextFlyKey(), moves: [m], side: me })
       setPending((p) => [...p, m])
     }, 550)
     return () => clearTimeout(t)

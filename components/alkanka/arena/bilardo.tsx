@@ -1359,7 +1359,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           </div>
         </div>
       )}
-      <div className="tt-picker mt-2 flex justify-end">
+      <div className="tt-picker mt-2 flex justify-start">
         <TableThemePicker game="bilardo" />
       </div>
     </div>
