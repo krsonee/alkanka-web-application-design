@@ -11,6 +11,8 @@ import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
 import { GameErrorBoundary } from './game-error-boundary'
 import { clearSaved, loadMode, saveMode } from './saved-game'
+import { TableThemeField } from './table-theme'
+import { arenaThemeGame } from '@/lib/table-themes'
 
 const MODE_ICON: Record<GameMode, typeof Bot> = { bot: Bot, pvp: Swords }
 
@@ -225,6 +227,7 @@ export function StakeGate({
   const pvpWin = bet * 2 - Math.round((bet * 2 * settings.commission) / 100)
   const winAmount = pvpMode ? pvpWin : Math.round(bet * settings.multiplier)
   const blocked = !pvpMode && bet > points
+  const themeGame = arenaThemeGame(game)
 
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card lg:grid lg:grid-cols-[1.05fr_1fr]">
@@ -304,6 +307,8 @@ export function StakeGate({
             </div>
           </fieldset>
         )}
+
+        {themeGame && !pvpMode && <TableThemeField game={themeGame} />}
 
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
           <div className="flex min-w-0 flex-1 flex-col">

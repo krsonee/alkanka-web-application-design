@@ -10,7 +10,7 @@ import { loadSaved, useSaveGame } from './saved-game'
 import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
-import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
+import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { playSound } from '@/lib/sound'
 
 // Date.now() collided when several bot moves were queued in the same millisecond.
@@ -684,9 +684,6 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </button>
         </div>
       </div>
-      </div>
-      <div className="tt-picker mt-2 flex justify-start">
-        <TableThemePicker game="tavla" />
       </div>
     </div>
   )

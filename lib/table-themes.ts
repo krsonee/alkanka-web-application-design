@@ -86,6 +86,57 @@ const BY_ID = new Map(TABLE_THEMES.map((t) => [t.id, t]))
 export const getTableTheme = (id: string | null | undefined) => (id ? BY_ID.get(id) ?? null : null)
 export const isThemeId = (id: unknown): id is string => typeof id === 'string' && BY_ID.has(id)
 
+export const arenaThemeGame = (game: string): ThemeGame | null =>
+  game === 'okey101' ? '101' : game === 'okey' || game === 'tavla' || game === 'bilardo' ? game : null
+
+export type ThemeSource = 'free' | 'shop' | 'task'
+export const THEME_SOURCE: Record<ThemeSource, string> = { free: 'Ücretsiz', shop: 'Mağaza', task: 'Görev ödülü' }
+export const RARITY_PRICE: Record<ThemeRarity, number> = { S: 0, N: 500, R: 1000, E: 1750, L: 3000 }
+export const RARITY_RANK: Record<ThemeRarity, number> = { S: 0, N: 1, R: 2, E: 3, L: 4 }
+export const TASK_THEME_IDS = ['car7', 'nat3', 'hero4', 'hero2', 'nat4', 'hero8', 'nat6', 'car8']
+export const MAX_THEME_LEVEL = 21
+const BASE_LEVEL: Record<ThemeRarity, number> = { S: 1, N: 3, R: 5, E: 8, L: 11 }
+
+export type ThemeOffer = { id: string; source: ThemeSource; price: number; minLevel: number; active: boolean }
+
+/** Defaults the panel can override: Düz Masa is free, a few themes are task-only, the rest sell by rarity. */
+export const DEFAULT_OFFERS: Record<string, ThemeOffer> = (() => {
+  const seen = new Map<string, number>()
+  const out: Record<string, ThemeOffer> = {}
+  for (const t of TABLE_THEMES) {
+    const key = `${t.cat}:${t.rarity}`
+    const n = seen.get(key) ?? 0
+    seen.set(key, n + 1)
+    const source: ThemeSource = t.cat === 'std' ? 'free' : TASK_THEME_IDS.includes(t.id) ? 'task' : 'shop'
+    const level = t.cat === 'std' ? n + 1 : BASE_LEVEL[t.rarity] + n + (source === 'task' ? 1 : 0)
+    out[t.id] = { id: t.id, source, price: source === 'shop' ? RARITY_PRICE[t.rarity] : 0, minLevel: Math.min(MAX_THEME_LEVEL, level), active: true }
+  }
+  return out
+})()
+
+export type ThemeLock = { kind: 'shop'; price: number } | { kind: 'task' } | { kind: 'off' } | { kind: 'level'; level: number }
+
+/** Why a member can't use a theme yet (null = usable). Owned themes stay usable even if the shop pulls them. */
+export function themeLock(offer: ThemeOffer | undefined, owned: boolean, level: number): ThemeLock | null {
+  if (!offer) return { kind: 'off' }
+  if (!owned && offer.source !== 'free') {
+    if (offer.source === 'task') return { kind: 'task' }
+    return offer.active ? { kind: 'shop', price: offer.price } : { kind: 'off' }
+  }
+  if (!owned && !offer.active) return { kind: 'off' }
+  if (level < offer.minLevel) return { kind: 'level', level: offer.minLevel }
+  return null
+}
+
+export type ThemeState = {
+  picks: Partial<Record<ThemeGame, string>>
+  owned: string[]
+  level: number
+  levelNames: string[]
+  catalog: Record<string, ThemeOffer>
+  signedIn: boolean
+}
+
 export const themeArt = (t: TableTheme) => (t.cat === 'hero' || t.cat === 'car' || t.cat === 'nat' ? `/images/table-themes/art-${t.id}.webp` : null)
 export const themeLogo = (t: TableTheme) => (t.cat === 'fan' ? `/images/table-themes/logo-${t.id}.webp` : null)
 

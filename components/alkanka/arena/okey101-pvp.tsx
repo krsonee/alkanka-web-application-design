@@ -24,7 +24,7 @@ import { createPortal } from 'react-dom'
 import { TileFace, useDrawDrag } from './okey'
 import { Okey101Result } from './okey101-result'
 import { TableBrand } from './table-brand'
-import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
+import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { MobileTableChat } from './mobile-table-chat'
 import { SeatFace } from './seat-face'
 import { isJoker, okeyFrom, sortHand, type Tile } from './okey-engine'
@@ -619,9 +619,6 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
           </div>
         </div>
       )}
-      <div className="tt-picker mt-2 flex justify-start">
-        <TableThemePicker game="101" />
-      </div>
     </div>
   )
 }

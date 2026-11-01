@@ -7,7 +7,7 @@ import { useBrand } from '../brand-context'
 import { useLogos } from '../logo-context'
 import { LOGO_CONCEPTS } from '../logos'
 import { goLandscape, restorePortrait } from './orientation'
-import { TableThemePicker, useTableTheme } from './table-theme'
+import { useTableTheme } from './table-theme'
 import { themeArt, themeLogo, type TableTheme } from '@/lib/table-themes'
 
 const themeMessage = (t: TableTheme | null) => ({
@@ -118,7 +118,6 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
           allow="autoplay; fullscreen"
         />
       </div>
-      {layout === 'desktop' && <TableThemePicker game="bilardo" className="mt-3 flex justify-end" />}
     </div>
   )
 }
