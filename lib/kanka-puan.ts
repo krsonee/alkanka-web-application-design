@@ -240,6 +240,15 @@ export function levelFor(levels: LevelDef[], kp: number) {
   return { index, ...levels[index], next, progress }
 }
 
+/** 1-based badge level for gating perks; role holders sit outside the ladder, so they get the top level. */
+export async function memberLevel(userId: string): Promise<{ level: number; names: string[] }> {
+  const cfg = await getKpConfig()
+  const [row] = await totals(cfg.rules, userId)
+  const names = cfg.levels.map((l) => l.name)
+  if (!row && (await isRoleHolder(userId))) return { level: names.length, names }
+  return { level: levelFor(cfg.levels, row?.total ?? 0).index + 1, names }
+}
+
 export type UserBadge = { id: string; name: string; description: string; icon: string; tier: BadgeTier; count: number; lastAt: string }
 
 export type KpStatus = {

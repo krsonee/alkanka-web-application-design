@@ -2,6 +2,7 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { PointsMarket } from '@/components/alkanka/points-market'
 import { listProducts } from '@/lib/market'
+import { ThemeShop } from '@/components/alkanka/theme-shop'
 
 export const metadata = pageMeta('market')
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,7 @@ export default async function MarketPage() {
         pose="market"
         speech="Coinlerini burada harca kanka, stoklar sınırlı!"
       />
+      <ThemeShop />
       <PointsMarket items={items} />
     </>
   )

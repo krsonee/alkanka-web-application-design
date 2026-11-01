@@ -10,7 +10,7 @@ import type { GameApi } from './stake-gate'
 import { loadSaved, useSaveGame, writeSaved } from './saved-game'
 import { MockTile, OkeyRack, ghostTransform, useRack } from './okey-rack'
 import { TableBrand } from './table-brand'
-import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
+import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { OkeyWinOverlay } from './okey-win'
 import { SeatFace } from './seat-face'
 import { usePoints } from '../points-context'
@@ -735,9 +735,6 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
           </div>,
           document.body,
         )}
-      <div className="tt-picker mt-2 flex justify-start">
-        <TableThemePicker game="okey" />
-      </div>
     </div>
   )
 }

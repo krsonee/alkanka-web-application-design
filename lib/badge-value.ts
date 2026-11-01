@@ -56,7 +56,7 @@ export async function savePins(userId: string, ids: string[]) {
   await ensure()
   const wanted = [...new Set(ids.map(String))].slice(0, MAX_PINS)
   const owned = wanted.length
-    ? await rows<{ badge_id: string }>(sql`SELECT DISTINCT badge_id FROM kp_awards WHERE user_id = ${userId} AND badge_id = ANY(${wanted})`)
+    ? await rows<{ badge_id: string }>(sql`SELECT DISTINCT badge_id FROM kp_awards WHERE user_id = ${userId} AND badge_id IN ${wanted}`)
     : []
   const ok = wanted.filter((id) => owned.some((o) => o.badge_id === id))
   await rows(sql`INSERT INTO kp_pins (user_id, badge_ids) VALUES (${userId}, ${ok}) ON CONFLICT (user_id) DO UPDATE SET badge_ids = EXCLUDED.badge_ids, updated_at = now()`)
@@ -71,7 +71,7 @@ export async function pinnedFor(userIds: string[]): Promise<Record<string, Pinne
     SELECT p.user_id, b.id, b.name, b.icon, b.tier, x.pos
     FROM kp_pins p CROSS JOIN LATERAL unnest(p.badge_ids) WITH ORDINALITY AS x(badge_id, pos)
     JOIN kp_badges b ON b.id = x.badge_id
-    WHERE p.user_id = ANY(${userIds}) AND EXISTS (SELECT 1 FROM kp_awards a WHERE a.user_id = p.user_id AND a.badge_id = b.id)
+    WHERE p.user_id IN ${userIds} AND EXISTS (SELECT 1 FROM kp_awards a WHERE a.user_id = p.user_id AND a.badge_id = b.id)
     ORDER BY p.user_id, x.pos`)
   const out: Record<string, PinnedBadge[]> = {}
   for (const x of r) (out[x.user_id] ??= []).push({ id: x.id, name: x.name, icon: x.icon, tier: x.tier })
@@ -87,7 +87,7 @@ export async function frameTiers(userIds: string[]): Promise<Record<string, Badg
   if (!userIds.length) return {}
   await ensure()
   const r = await rows<{ user_id: string; tier: BadgeTier }>(sql`SELECT DISTINCT a.user_id, b.tier FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
-    WHERE a.user_id = ANY(${userIds}) AND a.badge_id NOT IN ('moderator', 'sponsor-destek')`)
+    WHERE a.user_id IN ${userIds} AND a.badge_id NOT IN ('moderator', 'sponsor-destek')`)
   const out: Record<string, BadgeTier> = {}
   for (const x of r) if (!out[x.user_id] || TIER_RANK[x.tier] > TIER_RANK[out[x.user_id]]) out[x.user_id] = x.tier
   return out

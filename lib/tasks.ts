@@ -113,6 +113,7 @@ export function ensureTasks() {
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS chain_step int NOT NULL DEFAULT 0`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS badge text`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS cap int NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS theme text`)
     await rows(sql`CREATE TABLE IF NOT EXISTS trust_helpful (
       user_id text NOT NULL, review_id int NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, review_id))`)
@@ -419,8 +420,8 @@ export async function saveTask(input: TaskInput): Promise<number> {
 export async function awardTask(userId: string, taskId: number, claimKey?: string): Promise<{ awarded: boolean; points: number; balance: number }> {
   await ensureTasks()
   await ensureKp()
-  const found = await rows<{ id: number; points: number; period: string; kind: string; badge: string | null; cap: number; title: string }>(
-    sql`SELECT id, points, period, kind, badge, cap, title FROM tasks WHERE id = ${taskId} AND active`)
+  const found = await rows<{ id: number; points: number; period: string; kind: string; badge: string | null; theme: string | null; cap: number; title: string }>(
+    sql`SELECT id, points, period, kind, badge, theme, cap, title FROM tasks WHERE id = ${taskId} AND active`)
   const task = found[0]
   if (!task) throw new Error('Görev bulunamadı.')
   const period = isPeriod(task.period) ? task.period : 'once'
@@ -444,6 +445,10 @@ export async function awardTask(userId: string, taskId: number, claimKey?: strin
     if (task.badge) {
       const { awardBadge } = await import('@/lib/kanka-puan')
       await awardBadge(task.badge, userId, key || 'tek', task.title).catch((error) => console.error('[tasks] badge', (error as Error).message))
+    }
+    if (task.theme) {
+      const { grantTheme } = await import('@/lib/table-themes-server')
+      await grantTheme(userId, task.theme, 'task').catch((error) => console.error('[tasks] theme', (error as Error).message))
     }
   }
   return { awarded, points, balance: await getBalance(userId) }
@@ -688,7 +693,38 @@ const PACK: PackSeed[] = [
 ]
 
 /** One-time pack: badges first, then tasks. Old daily/weekly game tasks become pool so rotation stays at 5 / 4. */
+const THEME_SEED_KEY = 'tasks:theme-v1'
+
+/** Permanent theme rewards, easiest first. Only kinds whose `once` progress is lifetime-counted are used. */
+const THEME_TASKS: { theme: string; kind: TaskKind; target: number; points: number; what: string }[] = [
+  { theme: 'car7', kind: 'game_play', target: 25, points: 150, what: 'Arenada 25 maç bitir.' },
+  { theme: 'nat3', kind: 'predict', target: 40, points: 150, what: '40 maç tahmini yap.' },
+  { theme: 'hero4', kind: 'tv_watch', target: 300, points: 200, what: 'KankaTV’de toplam 5 saat izle.' },
+  { theme: 'hero2', kind: 'game_play', target: 75, points: 250, what: 'Arenada 75 maç bitir.' },
+  { theme: 'nat4', kind: 'predict', target: 120, points: 250, what: '120 maç tahmini yap.' },
+  { theme: 'hero8', kind: 'invite_active', target: 2, points: 300, what: 'Davet ettiğin 2 kanka ilk oyununu oynasın.' },
+  { theme: 'nat6', kind: 'tv_watch', target: 900, points: 350, what: 'KankaTV’de toplam 15 saat izle.' },
+  { theme: 'car8', kind: 'game_play', target: 200, points: 400, what: 'Arenada 200 maç bitir.' },
+]
+
+async function seedThemeTasks() {
+  const { getContent, setContent } = await import('@/lib/content')
+  if (await getContent(THEME_SEED_KEY).catch(() => null)) return
+  await ensureTasks()
+  const { getTableTheme } = await import('@/lib/table-themes')
+  for (const [i, t] of THEME_TASKS.entries()) {
+    const name = getTableTheme(t.theme)?.name ?? 'Masa teması'
+    const title = `Tema ödülü: ${name}`
+    await rows(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, kind, target, param, category, pool, chain, chain_step, badge, cap, theme)
+      SELECT ${title}, ${`${t.what} Ödül: “${name}” masa teması (kalıcı).`}, ${t.points}, '/market#masa-temalari', false, true, ${400 + i}, 'once', ${t.kind}, ${t.target},
+        NULL, 'genel', false, NULL, 0, NULL, 0, ${t.theme}
+      WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE theme = ${t.theme})`)
+  }
+  await setContent(THEME_SEED_KEY, { at: new Date().toISOString() })
+}
+
 export async function seedTaskPack() {
+  await seedThemeTasks().catch((error) => console.error('[tasks] theme seed', (error as Error).message))
   const { getContent, setContent } = await import('@/lib/content')
   if (await getContent(PACK_SEED_KEY).catch(() => null)) return
   await ensureTasks()

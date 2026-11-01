@@ -9,7 +9,7 @@ import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
 import { TableBrand } from './table-brand'
-import { TableThemePicker, ThemeDecor, useTableTheme } from './table-theme'
+import { ThemeDecor, useTableTheme } from './table-theme'
 import { themeLogo, type TableTheme } from '@/lib/table-themes'
 import { useBrand } from '../brand-context'
 import { useLogos } from '../logo-context'
@@ -1359,9 +1359,6 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           </div>
         </div>
       )}
-      <div className="tt-picker mt-2 flex justify-start">
-        <TableThemePicker game="bilardo" />
-      </div>
     </div>
   )
 

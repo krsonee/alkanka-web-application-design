@@ -37,6 +37,8 @@ import { MemberRank } from '../kp/member-rank'
 import { playSound } from '@/lib/sound'
 import { SoundToggle, actionSound } from './sound-toggle'
 import { useTableSounds } from './use-table-sounds'
+import { TableThemeField, TableThemeScope } from './table-theme'
+import { arenaThemeGame } from '@/lib/table-themes'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -687,6 +689,7 @@ export function TableLobby({
               )}
             </div>
           )}
+          {arenaThemeGame(game) && <TableThemeField game={arenaThemeGame(game)!} />}
           <dl className="grid grid-cols-3 divide-x divide-border rounded-xl border border-border bg-secondary/40 py-2 text-center">
             <div className="flex flex-col gap-0.5 px-1">
               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Oyuncu</dt>
@@ -1317,10 +1320,19 @@ function GameSurface(props: { game: string; remote: Remote<unknown>; done: boole
 function GameSurfaceInner({ game, remote, done, pvp = false }: { game: string; remote: Remote<unknown>; done: boolean; pvp?: boolean }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = remote as Remote<any>
-  if (game === 'tavla') return <TavlaPvp remote={r} />
-  if (game === 'okey') return <OkeyPvp remote={r} />
-  if (game === 'bilardo') return <Bilardo remote={r} />
-  if (game === 'okey101') return <Okey101Pvp remote={r} />
+  const themeGame = arenaThemeGame(game)
+  if (themeGame) {
+    const ids = (r.userIds ?? []).filter((u: string | null): u is string => Boolean(u))
+    const table =
+      game === 'tavla' ? <TavlaPvp remote={r} /> : game === 'okey' ? <OkeyPvp remote={r} /> : game === 'bilardo' ? <Bilardo remote={r} /> : game === 'okey101' ? <Okey101Pvp remote={r} /> : null
+    if (table) {
+      return (
+        <TableThemeScope game={themeGame} userIds={ids}>
+          {table}
+        </TableThemeScope>
+      )
+    }
+  }
   if (game === 'batak') return <BatakPvp remote={r} />
   if (game === 'monopoly') return <MonopolyPvp remote={r} />
   if (game === 'pisti') return <PistiPvp remote={r} />
