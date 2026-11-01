@@ -2452,3 +2452,71 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 /* Yan telefonda sohbet: üst sağda, son atık ile puan kutusu arasındaki boşlukta, yalnız simge */
 .ls-split .o101 .table-chat-btn { left: auto; right: 11%; top: 5%; padding: 0; width: 2.25rem; height: 2.25rem; justify-content: center; font-size: 0; gap: 0; }
 .ls-split .o101 .table-chat-btn svg { width: 1rem; height: 1rem; }
+
+/* ===== Masa temaları: yalnız [data-tt] varsa devreye girer, oyun düzenine dokunmaz ===== */
+.okt[data-tt] {
+  background: radial-gradient(110% 85% at 50% 36%, var(--tt-felt-hi) 0%, var(--tt-felt) 46%, var(--tt-felt-lo) 100%);
+}
+.okt[data-tt]::before { border-color: color-mix(in srgb, var(--tt-ac) 40%, transparent); }
+[data-tt] .tavla-felt {
+  background: radial-gradient(120% 90% at 50% 50%, var(--tt-felt-hi) 0%, var(--tt-felt) 55%, var(--tt-felt-lo) 100%);
+}
+.tt-decor {
+  position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; container-type: size;
+}
+.tt-decor > i, .tt-swatch > i { position: absolute; inset: 0; pointer-events: none; display: block; }
+.tt-art {
+  background: center / cover no-repeat; opacity: 0.42; mix-blend-mode: luminosity;
+  -webkit-mask-image: radial-gradient(75% 70% at 50% 45%, #000 35%, transparent 100%);
+  mask-image: radial-gradient(75% 70% at 50% 45%, #000 35%, transparent 100%);
+}
+.tt-decor > .tt-logo, .tt-swatch > .tt-logo {
+  inset: auto; left: 50%; top: 44%; width: 32cqmin; aspect-ratio: 1; transform: translate(-50%, -50%);
+  background: center / cover no-repeat; border-radius: 50%; opacity: 0.6; mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(closest-side, #000 48%, transparent 92%);
+  mask-image: radial-gradient(closest-side, #000 48%, transparent 92%);
+}
+.tt-amb { overflow: hidden; }
+.tt-amb::before { content: ""; position: absolute; pointer-events: none; }
+.tt-amb-sweep::before { top: -20%; bottom: -20%; left: 0; width: 22%; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tt-ac) 24%, transparent), transparent); animation: ttSweep 7s ease-in-out infinite; }
+.tt-amb-pulse::before { inset: 0; background: radial-gradient(45% 45% at 50% 45%, color-mix(in srgb, var(--tt-ac) 24%, transparent), transparent 70%); animation: ttPulse 4s ease-in-out infinite; }
+.tt-amb-flare::before { inset: 0; background: radial-gradient(30% 45% at 0 0, color-mix(in srgb, var(--tt-ac) 34%, transparent), transparent), radial-gradient(30% 45% at 100% 0, color-mix(in srgb, var(--tt-ac2) 34%, transparent), transparent); animation: ttPulse 3.2s ease-in-out infinite; }
+.tt-amb-flash::before, .tt-amb-twinkle::before { inset: 0; background: radial-gradient(circle at 12% 18%, #fff 0 .15cqw, transparent .55cqw), radial-gradient(circle at 37% 8%, #fff 0 .12cqw, transparent .5cqw), radial-gradient(circle at 68% 14%, #fff 0 .15cqw, transparent .55cqw), radial-gradient(circle at 88% 9%, #fff 0 .12cqw, transparent .5cqw), radial-gradient(circle at 22% 60%, #fff 0 .1cqw, transparent .4cqw), radial-gradient(circle at 80% 52%, #fff 0 .1cqw, transparent .4cqw); animation: ttFlash 2.6s steps(1) infinite; }
+.tt-amb-twinkle::before { filter: drop-shadow(0 0 .4cqw var(--tt-ac)); animation: ttTw 3.5s ease-in-out infinite alternate; }
+.tt-amb-drift::before { inset: -10%; background: radial-gradient(35% 45% at 30% 40%, color-mix(in srgb, var(--tt-ac2) 20%, transparent), transparent 70%); animation: ttDrift 14s ease-in-out infinite alternate; }
+.tt-amb-wave::before { left: -10%; right: -10%; height: 30%; top: 0; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--tt-ac) 16%, transparent), transparent); animation: ttWave 6s ease-in-out infinite; }
+.tt-amb-search::before { left: -30%; bottom: -60%; width: 160%; height: 160%; background: conic-gradient(from -14deg at 50% 100%, transparent 0deg, color-mix(in srgb, var(--tt-ac) 22%, transparent) 6deg 20deg, transparent 28deg); transform-origin: 50% 100%; animation: ttSearch 9s ease-in-out infinite alternate; }
+.tt-amb-reactor::before { left: 50%; top: 42%; width: 18cqw; height: 18cqw; margin: -9cqw 0 0 -9cqw; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--tt-ac) 38%, transparent), transparent 65%); animation: ttPulse 2.4s ease-in-out infinite; }
+.tt-amb-spin::before { left: 50%; top: 42%; width: 34cqw; height: 34cqw; margin: -17cqw 0 0 -17cqw; border-radius: 50%; background: repeating-conic-gradient(color-mix(in srgb, var(--tt-ac) 11%, transparent) 0 10deg, transparent 10deg 30deg); animation: ttSpin 30s linear infinite; }
+.tt-amb-neon { box-shadow: inset 0 0 0 .2cqw var(--tt-ac), inset 0 0 2.4cqw color-mix(in srgb, var(--tt-ac) 50%, transparent); animation: ttNeon 4s steps(1) infinite; }
+.tt-amb-head::before { left: -5%; top: 20%; width: 60%; height: 60%; background: radial-gradient(60% 40% at 0 50%, color-mix(in srgb, var(--tt-ac2) 28%, transparent), transparent 70%); animation: ttHead 5s ease-in-out infinite; }
+.tt-amb-heat::before { left: 0; right: 0; top: 0; bottom: -2cqw; background: repeating-linear-gradient(0deg, transparent 0 1.4cqw, color-mix(in srgb, var(--tt-ac) 8%, transparent) 1.4cqw 2cqw); animation: ttHeat 3s linear infinite; }
+.tt-amb-moon::before { right: 8%; top: 8%; width: 13cqw; height: 13cqw; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--tt-ac) 42%, transparent), transparent 68%); animation: ttPulse 5s ease-in-out infinite; }
+.tt-amb-caustic::before { inset: -20%; background: repeating-radial-gradient(circle at 30% 30%, transparent 0 2cqw, color-mix(in srgb, var(--tt-ac) 10%, transparent) 2cqw 2.4cqw); animation: ttDrift 10s ease-in-out infinite alternate; }
+.tt-amb-aurora::before { left: -30%; width: 160%; top: -10%; height: 70%; background: linear-gradient(100deg, transparent 10%, color-mix(in srgb, var(--tt-ac) 28%, transparent) 30%, color-mix(in srgb, var(--tt-ac2) 26%, transparent) 50%, transparent 70%); filter: blur(1.4cqw); animation: ttAur 12s ease-in-out infinite alternate; }
+@keyframes ttSweep { 0%, 55% { transform: translateX(-120%) skewX(-16deg); } 100% { transform: translateX(560%) skewX(-16deg); } }
+@keyframes ttPulse { 0%, 100% { opacity: .25; transform: scale(.92); } 50% { opacity: 1; transform: scale(1.05); } }
+@keyframes ttFlash { 0% { opacity: 0; } 12% { opacity: .9; } 16% { opacity: 0; } 48% { opacity: .7; } 51% { opacity: 0; } }
+@keyframes ttTw { 0% { opacity: .1; } 100% { opacity: .9; } }
+@keyframes ttDrift { to { transform: translate(30%, 8%); } }
+@keyframes ttWave { 0% { transform: translateY(-100%); } 100% { transform: translateY(380%); } }
+@keyframes ttSearch { from { transform: rotate(-40deg); } to { transform: rotate(40deg); } }
+@keyframes ttSpin { to { transform: rotate(360deg); } }
+@keyframes ttNeon { 0%, 100% { opacity: .85; } 62% { opacity: .25; } 64% { opacity: .85; } 66% { opacity: .35; } 68% { opacity: .9; } }
+@keyframes ttHead { 0%, 100% { opacity: .2; transform: translateX(0); } 50% { opacity: 1; transform: translateX(18%); } }
+@keyframes ttHeat { to { transform: translateY(-2cqw); } }
+@keyframes ttAur { from { transform: translateX(-10%) skewY(-4deg); } to { transform: translateX(12%) skewY(4deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .tt-amb, .tt-amb::before { animation: none !important; }
+}
+.tt-card {
+  display: flex; flex-direction: column; gap: .375rem; padding: .375rem; border-radius: .75rem; text-align: left;
+  border: 1px solid var(--border); background: var(--secondary); transition: border-color .15s, transform .15s;
+}
+.tt-card:hover { transform: translateY(-1px); }
+.tt-card-on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.tt-swatch {
+  position: relative; display: block; aspect-ratio: 16 / 10; border-radius: .5rem; overflow: hidden; container-type: size;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08);
+}
+.tt-swatch-default { background: radial-gradient(110% 85% at 50% 36%, #15665f 0%, #0e4c47 46%, #082f2c 100%); }

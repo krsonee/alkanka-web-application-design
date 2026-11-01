@@ -10,6 +10,7 @@ import type { GameApi } from './stake-gate'
 import { loadSaved, useSaveGame, writeSaved } from './saved-game'
 import { MockTile, OkeyRack, ghostTransform, useRack } from './okey-rack'
 import { TableBrand } from './table-brand'
+import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { OkeyWinOverlay } from './okey-win'
 import { SeatFace } from './seat-face'
 import { usePoints } from '../points-context'
@@ -276,6 +277,7 @@ export function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => vo
 }
 
 export function Okey({ finish, saveKey, bet, leave }: GameApi) {
+  const { theme: tableTheme } = useTableTheme('okey')
   const [saved] = useState(() => loadSaved<OkeySave>(saveKey))
   const [game, setGame] = useState(() => saved?.game ?? deal())
   const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'discard')
@@ -556,8 +558,9 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
 
   return (
     <div ref={boardRef} className="scroll-mt-20">
-      <div className="okt font-sans">
+      <div className="okt font-sans" {...themeSurfaceProps(tableTheme)}>
         <TableBrand center={false} plaque={false} corners={false} jako={false} />
+        <ThemeDecor theme={tableTheme} />
         <div className="okt-logo" aria-hidden="true">
           ALKANKA
         </div>
@@ -732,6 +735,9 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
           </div>,
           document.body,
         )}
+      <div className="tt-picker mt-2 flex justify-end">
+        <TableThemePicker game="okey" />
+      </div>
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { loadSaved, useSaveGame } from './saved-game'
 import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
+import { TableThemePicker, ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { playSound } from '@/lib/sound'
 import {
   applyMove,
@@ -272,6 +273,7 @@ type BoardProps = {
 }
 
 function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn, trail, fly, onRoll }: BoardProps) {
+  const { theme: tableTheme } = useTableTheme('tavla')
   const opp: Side = me === 'p' ? 'b' : 'p'
   const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
   const rootRef = useRef<HTMLDivElement>(null)
@@ -585,10 +587,11 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           document.body,
         )}
       <TurnIndicator turn={turn} me={names.me} opp={names.opp} />
-      <div data-ls-main className="ls-tavla-frame tavla-wood relative rounded-2xl px-1.5 pb-1.5 pt-4 sm:px-3 sm:pb-3 sm:pt-6">
+      <div data-ls-main className="ls-tavla-frame tavla-wood relative rounded-2xl px-1.5 pb-1.5 pt-4 sm:px-3 sm:pb-3 sm:pt-6" {...themeSurfaceProps(tableTheme)}>
       <TableBrand center={false} corners={false} jako={false} />
       <div className="ls-tavla flex aspect-[16/12] w-full gap-1 sm:aspect-[16/11] sm:gap-2">
         <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
+          <ThemeDecor theme={tableTheme} logo={false} />
           <div className="flex h-[45%]">{topRow.slice(0, 6).map((v) => renderPoint(v, true))}</div>
           {diceLeft ? (
             diceRow
@@ -637,6 +640,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         </button>
 
         <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
+          <ThemeDecor theme={tableTheme} />
           <div className="flex h-[45%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
           {!diceLeft && (rollButton || diceRow)}
           <div className="flex h-[45%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
@@ -674,6 +678,9 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           </button>
         </div>
       </div>
+      </div>
+      <div className="tt-picker mt-2 flex justify-end">
+        <TableThemePicker game="tavla" />
       </div>
     </div>
   )

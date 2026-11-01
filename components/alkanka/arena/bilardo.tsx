@@ -9,6 +9,7 @@ import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
 import { TableBrand } from './table-brand'
+import { TableThemePicker, useTableTheme } from './table-theme'
 import { useBrand } from '../brand-context'
 import { useLogos } from '../logo-context'
 import { LOGO_CONCEPTS } from '../logos'
@@ -284,13 +285,13 @@ function paintFeltLogo(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | n
 }
 
 /** The static table (wood, felt, cushions, pockets, markings) is painted once and blitted every frame. */
-function paintTable(dpr: number, logo: HTMLImageElement | null = null) {
+function paintTable(dpr: number, logo: HTMLImageElement | null = null, feltOverride: string | null = null) {
   const c = document.createElement('canvas')
   c.width = CW * dpr
   c.height = CH * dpr
   const ctx = c.getContext('2d')!
   const css = getComputedStyle(document.documentElement)
-  const felt = css.getPropertyValue('--felt').trim() || '#1b2a44'
+  const felt = feltOverride || css.getPropertyValue('--felt').trim() || '#1b2a44'
   const wood = css.getPropertyValue('--wood').trim() || '#4a3020'
   const gold = css.getPropertyValue('--primary').trim() || '#e2b33c'
   ctx.scale(dpr, dpr)
@@ -425,6 +426,13 @@ const pocketAt = (x: number, y: number) => POCKETS.findIndex(([px, py], i) => Ma
 
 export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote?: Remote<BilardoState> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const { theme: tableTheme } = useTableTheme('bilardo')
+  const feltRef = useRef<string | null>(tableTheme?.felt ?? null)
+  const repaintRef = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    feltRef.current = tableTheme?.felt ?? null
+    repaintRef.current?.()
+  }, [tableTheme?.felt])
   const remoteRef = useRef(remote)
   remoteRef.current = remote
   const seat = remote?.seat ?? 0
@@ -787,13 +795,18 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     canvas.width = CW * dpr
     canvas.height = CH * dpr
-    const painted = paintTable(dpr)
+    const painted = paintTable(dpr, null, feltRef.current)
     let bg = painted.canvas
     const { gold } = painted
     const logoImg = new Image()
     logoImg.crossOrigin = 'anonymous'
+    let logoReady = false
     logoImg.onload = () => {
-      bg = paintTable(dpr, logoImg).canvas
+      logoReady = true
+      bg = paintTable(dpr, logoImg, feltRef.current).canvas
+    }
+    repaintRef.current = () => {
+      bg = paintTable(dpr, logoReady ? logoImg : null, feltRef.current).canvas
     }
     logoImg.src = logoSrcRef.current
     let raf = 0
@@ -1315,6 +1328,9 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           </div>
         </div>
       )}
+      <div className="tt-picker mt-2 flex justify-end">
+        <TableThemePicker game="bilardo" />
+      </div>
     </div>
   )
 
