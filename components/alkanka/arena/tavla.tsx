@@ -622,12 +622,14 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
             selected === 'bar' && 'bg-primary/30',
           )}
         >
-          <span className="flex w-full flex-col items-center gap-0.5 px-px">
+          <BarName name={names.opp} active={turn === 'opp'} top />
+          <BarName name={names.me} active={turn === 'me'} top={false} />
+          <span className="relative z-10 flex w-full flex-col items-center gap-0.5 px-px">
             {Array.from({ length: Math.min(board.bar[opp], 4) }).map((_, i) => (
               <Checker key={i} side={opp} label={i === 0 && board.bar[opp] > 4 ? String(board.bar[opp]) : undefined} />
             ))}
           </span>
-          <span className="flex w-full flex-col-reverse items-center gap-0.5 px-px">
+          <span className="relative z-10 flex w-full flex-col-reverse items-center gap-0.5 px-px">
             {Array.from({ length: Math.min(board.bar[me], 4) }).map((_, i) => (
               <Checker
                 key={i}
@@ -683,6 +685,27 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         <TableThemePicker game="tavla" />
       </div>
     </div>
+  )
+}
+
+// Names run letter-by-letter toward the bar's centre so broken checkers at either end never cover them.
+function BarName({ name, active, top }: { name: string; active: boolean; top: boolean }) {
+  const letters = Array.from(name.toLocaleUpperCase('tr-TR').replace(/\s+/g, ' ').trim()).slice(0, 8)
+  return (
+    <span
+      aria-hidden="true"
+      data-active={active || undefined}
+      className={cn(
+        'tavla-bar-name pointer-events-none absolute inset-x-0 z-0 flex flex-col items-center',
+        top ? 'bottom-1/2 mb-2 justify-end sm:mb-3' : 'top-1/2 mt-2 sm:mt-3',
+      )}
+    >
+      {letters.map((ch, i) => (
+        <span key={i} className="tavla-bar-letter" style={{ '--i': i } as CSSProperties}>
+          {ch === ' ' ? '\u00A0' : ch}
+        </span>
+      ))}
+    </span>
   )
 }
 

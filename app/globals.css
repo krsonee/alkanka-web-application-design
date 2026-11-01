@@ -2520,3 +2520,31 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08);
 }
 .tt-swatch-default { background: radial-gradient(110% 85% at 50% 36%, #15665f 0%, #0e4c47 46%, #082f2c 100%); }
+
+/* Tavla bar player names — the side to move glows and moves in a style matching the theme category. */
+.tavla-bar-letter {
+  display: block;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: color-mix(in oklab, var(--foreground) 42%, transparent);
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.45);
+  transition: color 0.3s, text-shadow 0.3s;
+}
+@media (min-width: 640px) { .tavla-bar-letter { font-size: 12px; } }
+.tavla-bar-name[data-active] .tavla-bar-letter {
+  color: var(--tt-ac, var(--gold));
+  text-shadow: 0 0 6px var(--tt-ac, var(--gold)), 0 1px 1px rgb(0 0 0 / 0.6);
+  animation: tbn-wave 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 90ms);
+}
+[data-tt-cat='fan'] .tavla-bar-name[data-active] .tavla-bar-letter { animation-name: tbn-chant; animation-duration: 0.9s; }
+[data-tt-cat='hero'] .tavla-bar-name[data-active] .tavla-bar-letter { animation-name: tbn-power; animation-duration: 1.2s; }
+[data-tt-cat='car'] .tavla-bar-name[data-active] .tavla-bar-letter { animation-name: tbn-rev; animation-duration: 0.7s; animation-delay: calc(var(--i) * 45ms); }
+[data-tt-cat='nat'] .tavla-bar-name[data-active] .tavla-bar-letter { animation-name: tbn-sway; animation-duration: 2.4s; }
+@keyframes tbn-wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes tbn-chant { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.3); } }
+@keyframes tbn-power { 0%, 100% { opacity: 1; filter: brightness(1); } 50% { opacity: 0.75; filter: brightness(1.6); } }
+@keyframes tbn-rev { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(1.5px); } 60% { transform: translateX(-1px); } }
+@keyframes tbn-sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { .tavla-bar-name[data-active] .tavla-bar-letter { animation: none; } }

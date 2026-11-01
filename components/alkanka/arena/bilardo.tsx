@@ -953,15 +953,26 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ctx.beginPath()
         ctx.rect(0, 0, W, H)
         ctx.clip()
-        ctx.setLineDash([6, 8])
-        ctx.strokeStyle = 'rgba(255,255,255,0.55)'
-        ctx.lineWidth = 2
+        // A dark halo under a bright core keeps the line readable on every felt, including patterned themes.
+        ctx.setLineDash([10, 7])
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+        ctx.lineWidth = 5
         ctx.beginPath()
         ctx.moveTo(cue.x, cue.y)
         ctx.lineTo(gx, gy)
         ctx.stroke()
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+        ctx.lineWidth = 2.5
+        ctx.stroke()
         ctx.setLineDash([])
         if (hit) {
+          ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+          ctx.lineWidth = 5
+          ctx.beginPath()
+          ctx.arc(gx, gy, R, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.fillStyle = 'rgba(255,255,255,0.18)'
+          ctx.fill()
           const wrongBall = aiming && g.broken && !legalFor(list, g.groups, seat)(hit.ball)
           ctx.strokeStyle = wrongBall ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.75)'
           ctx.lineWidth = wrongBall ? 3 : 2
