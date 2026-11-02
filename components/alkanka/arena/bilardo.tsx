@@ -17,7 +17,9 @@ import { LOGO_CONCEPTS } from '../logos'
 import { useDuelLink } from './duel-link'
 import {
   BOT_LEVELS,
+  CORNER_MOUTH,
   FALLBACK_SEED,
+  SIDE_MOUTH,
   H,
   HEAD_X,
   MAX_FOULS,
@@ -58,6 +60,78 @@ const PREVIEW_PULL_MS = 450
 const PREVIEW_HOLD_MS = 150
 const TABLE_PULL_RANGE = 260
 const DROP_MS = 560
+const CUSHION = 12
+
+/** Pockets are round holes: large ones sunk into the corners, smaller ones set into the middle of the long rails. */
+function clipPocket(ctx: CanvasRenderingContext2D, i: number) {
+  const [px, py] = POCKETS[i]
+  ctx.beginPath()
+  ctx.arc(px, py, POCKET_HOLE[i], 0, Math.PI * 2)
+  ctx.clip()
+}
+
+function paintPocket(ctx: CanvasRenderingContext2D, i: number, gold: string) {
+  const [px, py] = POCKETS[i]
+  const pr = POCKET_HOLE[i]
+  ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'
+  ctx.beginPath()
+  ctx.arc(px, py, pr + 5, 0, Math.PI * 2)
+  ctx.fill()
+  clipPocket(ctx, i)
+  const pg = ctx.createRadialGradient(px, py, pr * 0.15, px, py, pr)
+  pg.addColorStop(0, '#000000')
+  pg.addColorStop(0.75, '#04060a')
+  pg.addColorStop(1, '#1a1e27')
+  ctx.fillStyle = pg
+  ctx.fillRect(px - pr - 4, py - pr - 4, pr * 2 + 8, pr * 2 + 8)
+  ctx.restore()
+  ctx.save()
+  ctx.strokeStyle = gold
+  ctx.globalAlpha = 0.4
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.arc(px, py, pr + 1, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/** Cushion strips between the pockets; each end is cut at an angle toward its pocket like real jaws. */
+function paintCushions(ctx: CanvasRenderingContext2D) {
+  const c = CUSHION
+  const cj = c
+  const sj = c * 0.45
+  const strips: [number, number][][] = [
+    [[CORNER_MOUTH, 0], [W / 2 - SIDE_MOUTH, 0], [W / 2 - SIDE_MOUTH - sj, c], [CORNER_MOUTH + cj, c]],
+    [[W / 2 + SIDE_MOUTH, 0], [W - CORNER_MOUTH, 0], [W - CORNER_MOUTH - cj, c], [W / 2 + SIDE_MOUTH + sj, c]],
+    [[CORNER_MOUTH, H], [W / 2 - SIDE_MOUTH, H], [W / 2 - SIDE_MOUTH - sj, H - c], [CORNER_MOUTH + cj, H - c]],
+    [[W / 2 + SIDE_MOUTH, H], [W - CORNER_MOUTH, H], [W - CORNER_MOUTH - cj, H - c], [W / 2 + SIDE_MOUTH + sj, H - c]],
+    [[0, CORNER_MOUTH], [0, H - CORNER_MOUTH], [c, H - CORNER_MOUTH - cj], [c, CORNER_MOUTH + cj]],
+    [[W, CORNER_MOUTH], [W, H - CORNER_MOUTH], [W - c, H - CORNER_MOUTH - cj], [W - c, CORNER_MOUTH + cj]],
+  ]
+  ctx.save()
+  for (const s of strips) {
+    const [o0, , , i0] = s
+    const g = ctx.createLinearGradient(o0[0], o0[1], o0[0] + (i0[0] - o0[0] ? Math.sign(i0[0] - o0[0]) * c : 0), o0[1] + (i0[1] - o0[1] ? Math.sign(i0[1] - o0[1]) * c : 0))
+    g.addColorStop(0, 'rgba(0,0,0,0.35)')
+    g.addColorStop(0.35, 'rgba(255,255,255,0.06)')
+    g.addColorStop(1, 'rgba(255,255,255,0.14)')
+    ctx.fillStyle = g
+    ctx.beginPath()
+    s.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(s[1][0], s[1][1])
+    ctx.lineTo(s[2][0], s[2][1])
+    ctx.lineTo(s[3][0], s[3][1])
+    ctx.lineTo(s[0][0], s[0][1])
+    ctx.stroke()
+  }
+  ctx.restore()
+}
 const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
 const LANDSCAPE_QUERY = '(max-height: 540px) and (orientation: landscape)'
 
@@ -351,19 +425,7 @@ function paintTable(dpr: number, logo: HTMLImageElement | null = null, theme: Ta
   light.addColorStop(1, 'rgba(0,0,0,0.34)')
   ctx.fillStyle = light
   ctx.fillRect(0, 0, W, H)
-  const cushion = 10
-  ;[
-    [0, 0, W, cushion, 0, 0, 0, cushion],
-    [0, H - cushion, W, cushion, 0, H, 0, H - cushion],
-    [0, 0, cushion, H, 0, 0, cushion, 0],
-    [W - cushion, 0, cushion, H, W, 0, W - cushion, 0],
-  ].forEach(([x, y, w, h, x0, y0, x1, y1]) => {
-    const cg = ctx.createLinearGradient(x0, y0, x1, y1)
-    cg.addColorStop(0, 'rgba(0,0,0,0.45)')
-    cg.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = cg
-    ctx.fillRect(x, y, w, h)
-  })
+  paintCushions(ctx)
   if (!theme || !themeLogo(theme)) paintFeltLogo(ctx, logo, gold, css.getPropertyValue('--font-display').trim() || 'system-ui, sans-serif')
   ctx.strokeStyle = 'rgba(255,255,255,0.08)'
   ctx.beginPath()
@@ -374,24 +436,7 @@ function paintTable(dpr: number, logo: HTMLImageElement | null = null, theme: Ta
   ctx.beginPath()
   ctx.arc(W * 0.7, H / 2, 2.5, 0, Math.PI * 2)
   ctx.fill()
-  POCKETS.forEach(([px, py], i) => {
-    const pr = POCKET_HOLE[i]
-    const pg = ctx.createRadialGradient(px, py, pr * 0.2, px, py, pr)
-    pg.addColorStop(0, '#000000')
-    pg.addColorStop(0.85, '#05070c')
-    pg.addColorStop(1, '#10131a')
-    ctx.fillStyle = pg
-    ctx.beginPath()
-    ctx.arc(px, py, pr, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = gold
-    ctx.globalAlpha = 0.35
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.arc(px, py, pr, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.globalAlpha = 1
-  })
+  POCKETS.forEach((_, i) => paintPocket(ctx, i, gold))
   ;[0.125, 0.25, 0.375, 0.625, 0.75, 0.875].forEach((f) => {
     ctx.fillStyle = gold
     ctx.beginPath()
@@ -1024,9 +1069,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         const ease = 1 - (1 - slide) * (1 - slide)
         const sink = Math.max(0, (t - 0.35) / 0.65)
         ctx.save()
-        ctx.beginPath()
-        ctx.arc(px, py, POCKET_HOLE[d.p], 0, Math.PI * 2)
-        ctx.clip()
+        clipPocket(ctx, d.p)
         ctx.globalAlpha = 1 - sink * sink
         drawBall(ctx, { id: d.id, x: d.x + (px - d.x) * ease, y: d.y + (py - d.y) * ease }, rollOf(d.id), 1 - sink * 0.6)
         ctx.fillStyle = `rgba(0,0,0,${sink * 0.7})`
@@ -1250,6 +1293,14 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   }, [])
 
   const yourTurn = ui.turn === seat && !ui.busy && !ui.over
+
+  // Falso her atış sonunda ve sıra değişiminde sıfırlanır; bir sonraki atışa taşınmaz.
+  useEffect(() => {
+    if (ui.busy) return
+    if (spinRef.current.x !== 0 || spinRef.current.y !== 0) setSpin({ x: 0, y: 0 })
+    setSpinOpen(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.turn, ui.busy])
   const groupLabel = (g: Group | null) => (g === 'solid' ? 'Düz (1-7)' : g === 'stripe' ? 'Çizgili (9-15)' : 'Masa açık')
   const remaining = (g: Group | null) => (g ? [1, 2, 3, 4, 5, 6, 7].map((n) => (g === 'solid' ? n : n + 8)).filter((n) => ui.inTable.includes(n)) : [])
   const choosing = ui.breakChoice === seat && !ui.over && !ui.busy
@@ -1656,7 +1707,7 @@ function AimStrip({
 function BallChip({ n }: { n: number }) {
   return (
     <span
-      className="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-tile-black shadow-sm ring-1 ring-foreground/40"
+      className="pool-ball-drop flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-tile-black shadow-sm ring-1 ring-foreground/40"
       style={{ background: n > 8 ? `linear-gradient(${BALL_COLORS[0]} 25%, ${BALL_COLORS[n - 8]} 25% 75%, ${BALL_COLORS[0]} 75%)` : BALL_COLORS[n] }}
       aria-label={`${n} numaralı top`}
     >

@@ -158,6 +158,12 @@ export const DEFAULT_ARENA: ArenaSettings = {
   'kafa-basketbolu': { ...base, multiplier: 2 },
 }
 
+/** Okey's bot table seats three bots, so its 3x pays like a four-player pot and takes the same commission as player tables. */
+export function botWinMultiplier(game: ArenaGame, s: ArenaGameSettings): number {
+  if (game !== 'okey') return s.multiplier
+  return Math.round(s.multiplier * (1 - s.commission / 100) * 100) / 100
+}
+
 export function isArenaGame(value: string): value is ArenaGame {
   return (ARENA_GAMES as readonly string[]).includes(value)
 }

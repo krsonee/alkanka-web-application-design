@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
-import { ARENA_META, isArenaGame } from '@/lib/arena'
+import { ARENA_META, botWinMultiplier, isArenaGame } from '@/lib/arena'
 import {
   bjAct,
   bjActionCost,
@@ -130,7 +130,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
     const mars = game === 'tavla' && final === 'win' && score?.for === 15 && score.against === 0
     // Okey reports its finish factor in score.for: okeyle / çiftten 2x, both 4x.
     const okeyBonus = game === 'okey' && final === 'win' && [2, 4].includes(Number(score?.for)) ? Number(score?.for) : 1
-    const winMultiplier = mars ? Math.max(3, s.multiplier) : s.multiplier * okeyBonus
+    const winMultiplier = mars ? Math.max(3, s.multiplier) : botWinMultiplier(game, s) * okeyBonus
     let gross = final === 'win' ? Math.floor(stake * winMultiplier) : final === 'draw' ? stake : 0
     if (gross > stake) {
       const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(m.id)))

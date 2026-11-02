@@ -1781,6 +1781,15 @@
 .die3d-toss-right .die3d-cube, .die3d-toss-left .die3d-cube { animation: die3d-tumble 900ms cubic-bezier(0.12, 0.75, 0.22, 1) both; }
 .die3d-toss-right .die3d-shadow, .die3d-toss-left .die3d-shadow { animation: die3d-shadow 900ms ease-out both; }
 @keyframes checker-land { 0% { transform: translateY(-35%) scale(1.22); } 100% { transform: none; } }
+@keyframes pool-ball-drop {
+  0% { opacity: 0; transform: translate(60%, -170%) rotate(-200deg) scale(0.6); }
+  55% { opacity: 1; transform: translate(0, 10%) rotate(-20deg) scale(1.05); }
+  72% { transform: translate(0, -28%) rotate(-6deg); }
+  86% { transform: translate(0, 5%); }
+  100% { transform: none; }
+}
+.pool-ball-drop { animation: pool-ball-drop 620ms cubic-bezier(0.3, 0.7, 0.4, 1) both; }
+@media (prefers-reduced-motion: reduce) { .pool-ball-drop { animation: none; } }
 .checker-land { animation: checker-land 0.45s cubic-bezier(0.2, 1.5, 0.4, 1); }
 @media (prefers-reduced-motion: reduce) {
   /* The dice toss is the roll result itself, so it stays (shorter) instead of vanishing with reduced motion. */
@@ -1921,6 +1930,46 @@
   font-size: 0.75rem;
   border-radius: 0.75rem;
 }
+/* No side column: the board takes the whole screen shape, controls ride the frame's top edge. */
+.ls-split [data-ls-grid]:has(.ls-tavla) { grid-template-columns: minmax(0, 1fr) !important; position: relative; }
+.ls-split [data-ls-grid]:has(.ls-tavla) .ls-turn { display: none !important; }
+.ls-split .ls-tavla-frame { aspect-ratio: var(--ls-ar, 16 / 8); display: flex; flex-direction: column; padding-top: 1.875rem !important; }
+.ls-split .ls-tavla { aspect-ratio: auto !important; flex: 1 1 0; min-height: 0; }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] {
+  position: absolute !important;
+  top: 0.25rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  z-index: 40;
+  margin: 0 !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  pointer-events: none;
+}
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > * { pointer-events: auto; }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:first-child { max-width: calc(50% - 5.5rem); }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:first-child > p:first-child {
+  -webkit-line-clamp: 1 !important;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: block !important;
+}
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:last-child { flex-wrap: nowrap !important; }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:last-child > button,
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:last-child > button:last-child {
+  flex: 0 0 auto !important;
+  width: 1.75rem;
+  height: 1.5rem;
+  padding: 0 !important;
+  border-radius: 0.5rem;
+  background: color-mix(in oklab, var(--card) 75%, transparent);
+}
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] > div:last-child > button svg { width: 0.875rem; height: 0.875rem; }
+.ls-split [data-ls-grid]:has(.ls-tavla) [data-ls-stack] [data-ls-label] { display: none; }
 .ls-split .ls-tavla-bar { width: 1.75rem !important; padding-block: 0.375rem !important; }
 .ls-split .ls-tavla-tray { width: 2.5rem !important; }
   .ls-split .ls-tavla [data-drop] > span:last-child { font-size: 10px; letter-spacing: 0; }
