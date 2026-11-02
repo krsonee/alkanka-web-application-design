@@ -46,7 +46,7 @@ export function ThemeShop() {
             Masanı kendi tarzına çevir
           </h2>
           <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
-            Satın aldığın tema kalıcı olarak senin olur ve okey, 101, tavla ve bilardoda geçerlidir. Her temanın bir rozet seviyesi var; o seviyeye ulaşınca kullanabilirsin.
+            Satın aldığın tema kalıcı olarak senin olur ve okey, 101, tavla, bilardo ve batakta geçerlidir. Her temanın bir rozet seviyesi var; o seviyeye ulaşınca kullanabilirsin.
           </p>
         </div>
         {state.signedIn && (
