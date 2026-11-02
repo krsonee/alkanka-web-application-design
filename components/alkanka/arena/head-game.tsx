@@ -353,16 +353,19 @@ function botKeys(bot: Player, ball: Ball, sport: Sport, level: BotLevel): Keys {
 
   const now = performance.now()
   const mem = botCorner.get(bot) ?? { since: 0, escapeTo: null, until: 0 }
-  const inCorner = bot.x < CORNER_EDGE || bot.x > W - CORNER_EDGE
+  // Pinning the ball against a wall with the bot's body counts as cornering too, not just the bot standing there.
+  const ballLowInCorner = (ball.x < CORNER_EDGE + 40 || ball.x > W - CORNER_EDGE - 40) && ball.y > GROUND - 140
+  const inCorner = bot.x < CORNER_EDGE || bot.x > W - CORNER_EDGE || (ballLowInCorner && Math.abs(ball.x - bot.x) < 130)
+  const cornerLimit = sport === 'basket' ? 800 : CORNER_MAX_MS
   if (mem.escapeTo != null && now < mem.until) {
     targetX = mem.escapeTo
   } else {
     mem.escapeTo = null
     if (!inCorner) mem.since = 0
     else if (!mem.since) mem.since = now
-    else if (now - mem.since > CORNER_MAX_MS) {
+    else if (now - mem.since > cornerLimit) {
       mem.escapeTo = W * (0.35 + Math.random() * 0.3)
-      mem.until = now + ESCAPE_MS
+      mem.until = now + (sport === 'basket' ? 1800 : ESCAPE_MS)
       mem.since = 0
       targetX = mem.escapeTo
     }
@@ -1268,6 +1271,7 @@ export function HeadGame({
     let flash = ''
     let flashT = 0
     let stuckFrames = 0
+    let cornerFrames = 0
     let anchor = { x: ball.x, y: ball.y }
     let left = MATCH_SECONDS
     let remoteKeys: Keys = noKeys()
@@ -1485,6 +1489,17 @@ export function HeadGame({
           shot = null
         }
       }
+
+      // A basket ball jostled in a low corner keeps "moving", so it also gets a hard cap before being thrown back in.
+      if (sport === 'basket' && (ball.x < 110 || ball.x > W - 110) && ball.y > GROUND - 160) {
+        cornerFrames++
+        if (cornerFrames > 180) {
+          Object.assign(ball, { x: W / 2, y: 120, vx: (Math.random() - 0.5) * 3, vy: 0 })
+          anchor = { x: ball.x, y: ball.y }
+          cornerFrames = 0
+          shot = null
+        }
+      } else cornerFrames = 0
 
       if (sport === 'futbol') {
         if (ball.x < GOAL_DEPTH - BALL_R * 0.5 && ball.y > GOAL_TOP + 8) goal(1, 1)

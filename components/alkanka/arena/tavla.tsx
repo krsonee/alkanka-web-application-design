@@ -28,6 +28,7 @@ import {
   spendDie,
   winKind,
   WIN_LABEL,
+  allHome,
   type Board,
   type From,
   type Move,
@@ -434,18 +435,33 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
     window.addEventListener('pointercancel', onCancel)
   }
 
+  const quickHandledAt = useRef(0)
+
+  /** Double tap during bear-off: collect the checker, or if no die takes it off from here, play its longest step home. */
+  function quickPlay(i: number) {
+    if (!sources.has(i)) return false
+    const options = routesFrom(board, me, dice, i)
+    const off = options.get('off')
+    if (off) return playClick(off), true
+    if (!dice.length || board.bar[me] > 0) return false
+    let best: Move[] | null = null
+    for (const seq of options.values()) {
+      if (seq.length === 1 && (!best || seq[0].die > best[0].die)) best = seq
+    }
+    if (!best || !allHome(board, me)) return false
+    playClick(best)
+    return true
+  }
+
   function clickPoint(i: number) {
     if (suppressClick.current) return
-    // Double tap on an own checker during bear-off collects it straight away.
     const now = Date.now()
     const prev = lastTap.current
     lastTap.current = { i, t: now }
-    if (prev && prev.i === i && now - prev.t < 400 && sources.has(i)) {
-      const off = routesFrom(board, me, dice, i).get('off')
-      if (off) {
-        lastTap.current = null
-        return playClick(off)
-      }
+    if (prev && prev.i === i && now - prev.t < 450 && quickPlay(i)) {
+      lastTap.current = null
+      quickHandledAt.current = now
+      return
     }
     const seq = routes.get(i)
     if (seq) return playClick(seq)
@@ -469,6 +485,10 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         data-drop={i}
         data-top={isTop ? '1' : '0'}
         onClick={() => clickPoint(i)}
+        onDoubleClick={() => {
+          if (Date.now() - quickHandledAt.current < 600 || suppressClick.current) return
+          if (quickPlay(i)) lastTap.current = null
+        }}
         onPointerDown={(e) => startDrag(e, i)}
         aria-label={`Hane ${label}${v ? `, ${Math.abs(v)} ${mine ? 'senin' : 'rakip'} pulu` : ', boş'}${isTarget ? ', buraya oynanabilir' : ''}`}
         className={cn(

@@ -153,7 +153,28 @@ function sample(
   }
   node.connect(g).connect(opts.roomy ? room : master)
   src.start(start, offset, dur + 0.05)
-  return true
+  return { src, gain: g }
+}
+
+type Voice = { src: AudioBufferSourceNode; gain: GainNode }
+let cheerVoices: Voice[] = []
+
+/** A new goal cheer replaces the one still ringing out, so back-to-back goals never pile crowds on top of each other. */
+function silenceCheer() {
+  const ac = audio()
+  if (!ac) return
+  const now = ac.currentTime
+  for (const v of cheerVoices) {
+    try {
+      v.gain.gain.cancelScheduledValues(now)
+      v.gain.gain.setValueAtTime(Math.max(v.gain.gain.value, 0.0001), now)
+      v.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25)
+      v.src.stop(now + 0.3)
+    } catch {
+      // Already stopped.
+    }
+  }
+  cheerVoices = []
 }
 
 // Browsers only allow audio after a user gesture; unlock on the first interaction so later event sounds play.
@@ -392,8 +413,10 @@ const SOUNDS: Record<SoundName, (v: number) => void> = {
   },
   cheer: (v) => {
     const vol = lim(v)
+    silenceCheer()
     const a = sample('applause', { vol: 0.55 * vol, offset: 1.4, dur: 3.6 })
-    const b = sample('cheer', { vol: 0.6 * vol, at: 0.05 })
+    const b = sample('cheer', { vol: 0.6 * vol, at: 0.05, dur: 3.6 })
+    cheerVoices = [a, b].filter((v): v is Voice => !!v)
     if (!a && !b) crowd(0, 2.4, 0.3 * vol)
   },
 
@@ -542,7 +565,7 @@ export function playSound(name: SoundName, intensity = 1) {
   const now = performance.now()
   // Ball clacks come in quick real clusters (the break), so they only collapse true duplicates.
   // Applause runs ~3.6 s, so back-to-back goals let the current cheer finish instead of stacking another on top.
-  const gap = name === 'poolBall' || name === 'poolRail' ? 20 : name === 'cheer' ? 3500 : 120
+  const gap = name === 'poolBall' || name === 'poolRail' ? 20 : name === 'cheer' ? 1500 : 120
   if (now - (lastPlayed.get(name) ?? 0) < gap) return
   lastPlayed.set(name, now)
   try {

@@ -20,7 +20,7 @@ export function initialBoard(): Board {
 const own = (v: number, s: Side) => (s === 'p' ? v > 0 : v < 0)
 const opp = (v: number, s: Side) => (s === 'p' ? v < 0 : v > 0)
 
-function allHome(b: Board, s: Side) {
+export function allHome(b: Board, s: Side) {
   if (b.bar[s] > 0) return false
   for (let i = 0; i < 24; i++) {
     const inHome = s === 'p' ? i <= 5 : i >= 18
