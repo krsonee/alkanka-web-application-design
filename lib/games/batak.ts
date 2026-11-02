@@ -65,7 +65,6 @@ export const BATAK_VARIANTS: { value: BatakVariant; label: string; seats: number
   { value: 'gommeli', label: 'Gömmeli', seats: 3, hint: '3 kişi, 4 kart gömülür' },
 ]
 export const BATAK_TARGETS = [31, 51, 101] as const
-export const BATAK_ROUND_OPTIONS = [1, ...BATAK_TARGETS] as const
 
 export const BATAK_RULE_OPTIONS: { key: keyof BatakRules; label: string; hint: string; variants: BatakVariant[] }[] = [
   { key: 'batma', label: 'Batma cezası', hint: 'Hiç el alamayan −5 yer', variants: ['klasik', 'esli', 'gommeli'] },
@@ -107,8 +106,6 @@ export function buryable(hand: BCard[], s: Pick<BatakState, 'rules' | 'trump'>) 
   const ok = hand.filter((c) => c.r !== 14 && c.s !== s.trump)
   return ok.length >= BURY_COUNT ? ok : hand
 }
-// Backwards-compatible export used by older UI code.
-export const MIN_BID = 5
 
 type Act = { type: string; [k: string]: unknown }
 export type BatakStep = { state: BatakState; winners: number[] | null }

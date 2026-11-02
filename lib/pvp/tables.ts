@@ -413,6 +413,7 @@ async function touchPlayer(tableId: string, userId: string) {
   await pool.query(
     `UPDATE game_tables SET options = COALESCE(options, '{}'::jsonb)
        || jsonb_build_object('lastActs', COALESCE(options->'lastActs', '{}'::jsonb) || jsonb_build_object($2::text, now()))
+       || jsonb_build_object('timeouts', COALESCE(options->'timeouts', '{}'::jsonb) - $2::text)
      WHERE id = $1`,
     [tableId, userId],
   )
@@ -565,7 +566,8 @@ export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
   const turn = currentTurn(t.state)
   if (!limit || turn == null) return t
   if ((await activeIdleMs(new Date(t.updatedAt).getTime())) < limit * 1000) return t
-  if (t.players.find((p) => p.seat === turn)?.bot) return t
+  const idlePlayer = t.players.find((p) => p.seat === turn)
+  if (!idlePlayer || idlePlayer.bot) return t
   const result = autoMove(t.state)
   if (!result) return t
   try {
@@ -573,8 +575,28 @@ export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
   } catch {
     return (await getTableRow(t.id)) ?? t
   }
-  if (result.outcome) await finishTable({ ...t, state: result.state, version: t.version + 1 }, result.outcome)
+  if (result.outcome) {
+    await finishTable({ ...t, state: result.state, version: t.version + 1 }, result.outcome)
+    return (await getTableRow(t.id)) ?? t
+  }
+  const strikes = await addTimeoutStrike(t.id, idlePlayer.id)
+  const botCanTakeOver = isSeatGame(t.game) || (t.state.kind === 'okey' && okeySeats(t.state) > 2 && !t.state.team)
+  if (botCanTakeOver && strikes >= TIMEOUT_STRIKES_TO_BOT) await leaveTable(idlePlayer, t.id, 'idle').catch(() => {})
   return (await getTableRow(t.id)) ?? t
+}
+
+/** Consecutive turn timeouts after which the seat goes to a bot so the rest of the table is not held up. */
+const TIMEOUT_STRIKES_TO_BOT = 3
+
+async function addTimeoutStrike(tableId: string, userId: string): Promise<number> {
+  const r = await pool.query(
+    `UPDATE game_tables SET options = COALESCE(options, '{}'::jsonb)
+       || jsonb_build_object('timeouts', COALESCE(options->'timeouts', '{}'::jsonb)
+         || jsonb_build_object($2::text, COALESCE((options->'timeouts'->>$2)::int, 0) + 1))
+     WHERE id = $1 RETURNING (options->'timeouts'->>$2)::int AS strikes`,
+    [tableId, userId],
+  )
+  return Number(r.rows[0]?.strikes ?? 0)
 }
 
 /** A waiting player may claim the win (2 seats) or hand the idle seat to a bot (4 seats). */
