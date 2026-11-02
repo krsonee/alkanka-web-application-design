@@ -739,9 +739,26 @@ async function seedBatakThemeTask() {
   await setContent(BATAK_THEME_SEED_KEY, { at: new Date().toISOString() })
 }
 
+const PISTI_THEME_SEED_KEY = 'tasks:theme-pisti-v1'
+
+async function seedPistiThemeTask() {
+  const { getContent, setContent } = await import('@/lib/content')
+  if (await getContent(PISTI_THEME_SEED_KEY).catch(() => null)) return
+  await ensureTasks()
+  const { getTableTheme } = await import('@/lib/table-themes')
+  const theme = 'nat8'
+  const name = getTableTheme(theme)?.name ?? 'Masa teması'
+  await rows(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, kind, target, param, category, pool, chain, chain_step, badge, cap, theme)
+    SELECT ${`Tema ödülü: ${name}`}, ${`Pişti masasında 30 el bitir. Ödül: “${name}” masa teması (kalıcı).`}, 200, '/market#masa-temalari', false, true, 409, 'once', 'game_play', 30,
+      'pisti', 'genel', false, NULL, 0, NULL, 0, ${theme}
+    WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE theme = ${theme})`)
+  await setContent(PISTI_THEME_SEED_KEY, { at: new Date().toISOString() })
+}
+
 export async function seedTaskPack() {
   await seedThemeTasks().catch((error) => console.error('[tasks] theme seed', (error as Error).message))
   await seedBatakThemeTask().catch((error) => console.error('[tasks] batak theme seed', (error as Error).message))
+  await seedPistiThemeTask().catch((error) => console.error('[tasks] pisti theme seed', (error as Error).message))
   const { getContent, setContent } = await import('@/lib/content')
   if (await getContent(PACK_SEED_KEY).catch(() => null)) return
   await ensureTasks()
