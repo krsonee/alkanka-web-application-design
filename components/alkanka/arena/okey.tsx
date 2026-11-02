@@ -26,6 +26,7 @@ import {
   okeyFrom,
   sortHand,
   wantsDiscard,
+  winningKindFor,
   type Okey as OkeyValue,
   type Tile,
 } from './okey-engine'
@@ -381,8 +382,9 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
     if (phase !== 'discard' || tileId === null) return
     const tile = hand.find((t) => t.id === tileId)
     if (!tile) return
-    // Throwing the winning tile ends the hand, just like closing out at a real table.
-    if (winning?.tile.id === tileId) return finishHand()
+    // Any tile whose removal leaves a complete hand closes it; a drawn okey often makes several tiles valid finishes.
+    const closing = winningKindFor(hand, tileId, okey)
+    if (closing) return finishHand({ tile, kind: closing })
     playSound('tile')
     const next = {
       ...game,
@@ -398,17 +400,17 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
     setMessage(`${BOT_NAMES[0]} düşünüyor…`)
   }
 
-  function finishHand() {
-    if (!winning) return
-    const rest = hand.filter((t) => t.id !== winning.tile.id)
-    setGame({ ...game, hands: [rest, ...hands.slice(1)], discards: discards.map((d, i) => (i === 0 ? [...d, winning.tile] : d)) })
-    const mult = finishMultiplier(winning.tile, winning.kind, okey)
-    const label = finishLabel(winning.tile, winning.kind, okey)
+  function finishHand(closing: { tile: Tile; kind: 'seri' | 'cift' } | null = winning) {
+    if (!closing) return
+    const rest = hand.filter((t) => t.id !== closing.tile.id)
+    setGame({ ...game, hands: [rest, ...hands.slice(1)], discards: discards.map((d, i) => (i === 0 ? [...d, closing.tile] : d)) })
+    const mult = finishMultiplier(closing.tile, closing.kind, okey)
+    const label = finishLabel(closing.tile, closing.kind, okey)
     end('win', mult > 1 ? `${label}! ${mult} kat kazandın.` : 'Elini açtın! Masayı sen aldın.', {
       winner: 'Sen',
       tiles: rest,
-      kind: winning.kind,
-      tile: winning.tile,
+      kind: closing.kind,
+      tile: closing.tile,
     })
   }
 

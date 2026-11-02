@@ -17,7 +17,9 @@ import { LOGO_CONCEPTS } from '../logos'
 import { useDuelLink } from './duel-link'
 import {
   BOT_LEVELS,
+  CORNER_MOUTH,
   FALLBACK_SEED,
+  SIDE_MOUTH,
   H,
   HEAD_X,
   MAX_FOULS,
@@ -58,6 +60,68 @@ const PREVIEW_PULL_MS = 450
 const PREVIEW_HOLD_MS = 150
 const TABLE_PULL_RANGE = 260
 const DROP_MS = 560
+const SIDE_DEPTH = 13
+const isSidePocket = (i: number) => i === 1 || i === 4
+
+/**
+ * Clips to a pocket's real silhouette: corner pockets are round holes cut off by a straight diagonal mouth
+ * between the jaws, side pockets are shallow half-moons set into the rail. Leaves the outline as the current path.
+ */
+function clipPocket(ctx: CanvasRenderingContext2D, i: number) {
+  const [px, py] = POCKETS[i]
+  if (isSidePocket(i)) {
+    const top = i === 1
+    const ey = top ? 0 : H
+    const d = top ? 1 : -1
+    ctx.beginPath()
+    ctx.moveTo(px - SIDE_MOUTH, ey)
+    if (top) ctx.ellipse(px, ey, SIDE_MOUTH, SIDE_DEPTH, 0, Math.PI, 0, true)
+    else ctx.ellipse(px, ey, SIDE_MOUTH, SIDE_DEPTH, 0, Math.PI, Math.PI * 2)
+    ctx.lineTo(px + SIDE_MOUTH - 5, ey - d * RAIL * 0.62)
+    ctx.lineTo(px - SIDE_MOUTH + 5, ey - d * RAIL * 0.62)
+    ctx.closePath()
+    ctx.clip()
+    return
+  }
+  const cx = px < W / 2 ? 0 : W
+  const cy = py < H / 2 ? 0 : H
+  const sx = cx === 0 ? 1 : -1
+  const sy = cy === 0 ? 1 : -1
+  const far = 240
+  ctx.beginPath()
+  ctx.arc(px, py, POCKET_HOLE[i], 0, Math.PI * 2)
+  ctx.clip()
+  ctx.beginPath()
+  ctx.moveTo(cx + sx * (CORNER_MOUTH + far), cy - sy * far)
+  ctx.lineTo(cx - sx * far, cy + sy * (CORNER_MOUTH + far))
+  ctx.lineTo(cx - sx * far, cy - sy * far)
+  ctx.closePath()
+  ctx.clip()
+}
+
+function paintPocket(ctx: CanvasRenderingContext2D, i: number, gold: string) {
+  const [px, py] = POCKETS[i]
+  const pr = POCKET_HOLE[i]
+  ctx.save()
+  clipPocket(ctx, i)
+  const pg = ctx.createRadialGradient(px, py, pr * 0.15, px, py, pr)
+  pg.addColorStop(0, '#000000')
+  pg.addColorStop(0.8, '#05070c')
+  pg.addColorStop(1, '#141821')
+  ctx.fillStyle = pg
+  ctx.fillRect(px - pr - 4, py - pr - 4, pr * 2 + 8, pr * 2 + 8)
+  ctx.strokeStyle = gold
+  ctx.globalAlpha = 0.45
+  ctx.lineWidth = 3
+  ctx.stroke()
+  if (!isSidePocket(i)) {
+    ctx.globalAlpha = 0.3
+    ctx.beginPath()
+    ctx.arc(px, py, pr, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
 const PORTRAIT_QUERY = '(max-width: 767px) and (orientation: portrait)'
 const LANDSCAPE_QUERY = '(max-height: 540px) and (orientation: landscape)'
 
@@ -374,24 +438,7 @@ function paintTable(dpr: number, logo: HTMLImageElement | null = null, theme: Ta
   ctx.beginPath()
   ctx.arc(W * 0.7, H / 2, 2.5, 0, Math.PI * 2)
   ctx.fill()
-  POCKETS.forEach(([px, py], i) => {
-    const pr = POCKET_HOLE[i]
-    const pg = ctx.createRadialGradient(px, py, pr * 0.2, px, py, pr)
-    pg.addColorStop(0, '#000000')
-    pg.addColorStop(0.85, '#05070c')
-    pg.addColorStop(1, '#10131a')
-    ctx.fillStyle = pg
-    ctx.beginPath()
-    ctx.arc(px, py, pr, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = gold
-    ctx.globalAlpha = 0.35
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.arc(px, py, pr, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.globalAlpha = 1
-  })
+  POCKETS.forEach((_, i) => paintPocket(ctx, i, gold))
   ;[0.125, 0.25, 0.375, 0.625, 0.75, 0.875].forEach((f) => {
     ctx.fillStyle = gold
     ctx.beginPath()
@@ -1024,9 +1071,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         const ease = 1 - (1 - slide) * (1 - slide)
         const sink = Math.max(0, (t - 0.35) / 0.65)
         ctx.save()
-        ctx.beginPath()
-        ctx.arc(px, py, POCKET_HOLE[d.p], 0, Math.PI * 2)
-        ctx.clip()
+        clipPocket(ctx, d.p)
         ctx.globalAlpha = 1 - sink * sink
         drawBall(ctx, { id: d.id, x: d.x + (px - d.x) * ease, y: d.y + (py - d.y) * ease }, rollOf(d.id), 1 - sink * 0.6)
         ctx.fillStyle = `rgba(0,0,0,${sink * 0.7})`
@@ -1250,6 +1295,14 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   }, [])
 
   const yourTurn = ui.turn === seat && !ui.busy && !ui.over
+
+  // Falso her atış sonunda ve sıra değişiminde sıfırlanır; bir sonraki atışa taşınmaz.
+  useEffect(() => {
+    if (ui.busy) return
+    if (spinRef.current.x !== 0 || spinRef.current.y !== 0) setSpin({ x: 0, y: 0 })
+    setSpinOpen(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.turn, ui.busy])
   const groupLabel = (g: Group | null) => (g === 'solid' ? 'Düz (1-7)' : g === 'stripe' ? 'Çizgili (9-15)' : 'Masa açık')
   const remaining = (g: Group | null) => (g ? [1, 2, 3, 4, 5, 6, 7].map((n) => (g === 'solid' ? n : n + 8)).filter((n) => ui.inTable.includes(n)) : [])
   const choosing = ui.breakChoice === seat && !ui.over && !ui.busy
@@ -1656,7 +1709,7 @@ function AimStrip({
 function BallChip({ n }: { n: number }) {
   return (
     <span
-      className="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-tile-black shadow-sm ring-1 ring-foreground/40"
+      className="pool-ball-drop flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-tile-black shadow-sm ring-1 ring-foreground/40"
       style={{ background: n > 8 ? `linear-gradient(${BALL_COLORS[0]} 25%, ${BALL_COLORS[n - 8]} 25% 75%, ${BALL_COLORS[0]} 75%)` : BALL_COLORS[n] }}
       aria-label={`${n} numaralı top`}
     >

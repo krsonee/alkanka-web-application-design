@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { finishBotGame, getOpenBotGame, startBotGame } from '@/app/actions/arena'
 import { Bot, Coins, HelpCircle, Loader2, Play, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ARENA_META, MODE_LABEL, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
+import { ARENA_META, MODE_LABEL, botWinMultiplier, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
@@ -143,7 +143,7 @@ export function StakeGate({
               Bahis <strong className="text-foreground">{formatAC(phase.bet)} KC</strong>
             </span>
             <span>
-              Kazanç <strong className="text-primary">{formatAC(Math.round(phase.bet * settings.multiplier))} KC</strong>
+              Kazanç <strong className="text-primary">{formatAC(Math.floor(phase.bet * botWinMultiplier(game, settings)))} KC</strong>
             </span>
           </span>
         </div>
@@ -225,7 +225,8 @@ export function StakeGate({
   }
 
   const pvpWin = bet * 2 - Math.round((bet * 2 * settings.commission) / 100)
-  const winAmount = pvpMode ? pvpWin : Math.round(bet * settings.multiplier)
+  const botMultiplier = botWinMultiplier(game, settings)
+  const winAmount = pvpMode ? pvpWin : Math.floor(bet * botMultiplier)
   const blocked = !pvpMode && bet > points
   const themeGame = arenaThemeGame(game)
 
@@ -318,7 +319,11 @@ export function StakeGate({
             <span className="flex flex-wrap items-baseline gap-x-1 font-display text-xl font-bold tabular-nums text-primary">
               <span className="whitespace-nowrap">{formatAC(winAmount)} KC</span>
               <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
-                {pvpMode ? `%${settings.commission} kesinti` : `${settings.multiplier}x`}
+                {pvpMode
+                  ? `%${settings.commission} kesinti`
+                  : botMultiplier !== settings.multiplier
+                    ? `${settings.multiplier}x · %${settings.commission} kesinti`
+                    : `${settings.multiplier}x`}
               </span>
             </span>
           </div>

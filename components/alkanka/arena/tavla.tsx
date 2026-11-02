@@ -274,9 +274,11 @@ type BoardProps = {
   fly?: Fly | null
   /** Set only while it's the player's turn to roll; the resting dice become the roll button. */
   onRoll?: () => void
+  /** Shown in place of the dice once the turn's moves are made, like the roll button. */
+  onConfirm?: () => void
 }
 
-function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn, trail, fly, onRoll }: BoardProps) {
+function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice, rollKey, highlight, names, turn, trail, fly, onRoll, onConfirm }: BoardProps) {
   const { theme: tableTheme } = useTableTheme('tavla')
   const opp: Side = me === 'p' ? 'b' : 'p'
   const sources = useMemo(() => new Set(legal.map((m) => m.from)), [legal])
@@ -364,8 +366,12 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
 
   const drag = useRef<{ from: From; x: number; y: number; active: boolean } | null>(null)
   const suppressClick = useRef(false)
+  // Ghost position is written straight to the DOM so dragging never re-renders the board each frame.
   const [ghost, setGhost] = useState<{ x: number; y: number; from: From } | null>(null)
+  const ghostRef = useRef<HTMLSpanElement>(null)
   const [hover, setHover] = useState<To | null>(null)
+  const hoverRef = useRef<To | null>(null)
+  const lastTap = useRef<{ i: number; t: number } | null>(null)
 
   function dropAt(x: number, y: number): To | null {
     const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-drop]')
@@ -378,6 +384,18 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
     if (!sources.has(from) || e.button !== 0) return
     drag.current = { from, x: e.clientX, y: e.clientY, active: false }
     const dragRoutes = routesFrom(board, me, dice, from)
+    let frame = 0
+    let last = { x: e.clientX, y: e.clientY }
+    const paint = () => {
+      frame = 0
+      const g = ghostRef.current
+      if (g) g.style.transform = `translate3d(${last.x}px, ${last.y}px, 0) translate(-50%, -50%) scale(1.1)`
+      const to = dropAt(last.x, last.y)
+      if (to !== hoverRef.current) {
+        hoverRef.current = to
+        setHover(to)
+      }
+    }
     const onMove = (ev: PointerEvent) => {
       const d = drag.current
       if (!d) return
@@ -385,18 +403,21 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) < 6) return
         d.active = true
         onSelect(d.from)
+        setGhost({ x: ev.clientX, y: ev.clientY, from: d.from })
       }
       ev.preventDefault()
-      setGhost({ x: ev.clientX, y: ev.clientY, from: d.from })
-      setHover(dropAt(ev.clientX, ev.clientY))
+      last = { x: ev.clientX, y: ev.clientY }
+      if (!frame) frame = requestAnimationFrame(paint)
     }
     const finish = (ev: PointerEvent, cancelled: boolean) => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onCancel)
+      if (frame) cancelAnimationFrame(frame)
       const d = drag.current
       drag.current = null
       setGhost(null)
+      hoverRef.current = null
       setHover(null)
       if (!d?.active) return
       suppressClick.current = true
@@ -415,6 +436,17 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
 
   function clickPoint(i: number) {
     if (suppressClick.current) return
+    // Double tap on an own checker during bear-off collects it straight away.
+    const now = Date.now()
+    const prev = lastTap.current
+    lastTap.current = { i, t: now }
+    if (prev && prev.i === i && now - prev.t < 400 && sources.has(i)) {
+      const off = routesFrom(board, me, dice, i).get('off')
+      if (off) {
+        lastTap.current = null
+        return playClick(off)
+      }
+    }
     const seq = routes.get(i)
     if (seq) return playClick(seq)
     if (selected === i) return onSelect(null)
@@ -577,14 +609,35 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
     </button>
   )
 
+  const confirmButton = onConfirm && (
+    <button
+      type="button"
+      onClick={onConfirm}
+      aria-label="Hamleyi onayla"
+      className="group absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 rounded-2xl p-1.5 outline-none focus-visible:ring-2 focus-visible:ring-primary sm:gap-2 sm:p-2"
+    >
+      <span aria-hidden="true" className="flex items-center gap-2 transition-transform group-active:scale-95 sm:gap-3">
+        {shown.map((d, i) => (
+          <Die3D key={`ok-${rollKey}-${i}`} value={d} used />
+        ))}
+      </span>
+      <span className="relative flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-foreground shadow-[0_6px_18px_-4px_var(--primary)] transition-transform group-hover:scale-105 sm:px-4 sm:py-1.5 sm:text-xs">
+        <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-primary/40 [animation-duration:1.8s]" />
+        <Check className="relative size-3.5 sm:size-4" aria-hidden="true" />
+        <span className="relative">Onayla</span>
+      </span>
+    </button>
+  )
+
   return (
     <div ref={rootRef} data-ls-flat className="flex select-none flex-col gap-2">
       {ghost &&
         createPortal(
           <span
+            ref={ghostRef}
             aria-hidden="true"
-            className="pointer-events-none fixed z-[100] flex w-10 -translate-x-1/2 -translate-y-1/2 scale-110 drop-shadow-[0_10px_14px_rgb(0_0_0/0.55)] sm:w-14"
-            style={{ left: ghost.x, top: ghost.y }}
+            className="pointer-events-none fixed left-0 top-0 z-[100] flex w-10 drop-shadow-[0_10px_14px_rgb(0_0_0/0.55)] will-change-transform sm:w-14"
+            style={{ transform: `translate3d(${ghost.x}px, ${ghost.y}px, 0) translate(-50%, -50%) scale(1.1)` }}
           >
             <Checker side={me} />
           </span>,
@@ -648,7 +701,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
         <div className="ls-tavla-felt tavla-felt relative flex flex-1 flex-col justify-between rounded-lg px-0.5 py-3.5 sm:px-2 sm:py-6">
           <ThemeDecor theme={tableTheme} />
           <div className="flex h-[45%]">{topRow.slice(6).map((v) => renderPoint(v, true))}</div>
-          {!diceLeft && (rollButton || diceRow)}
+          {!diceLeft && (rollButton || confirmButton || diceRow)}
           <div className="flex h-[45%]">{bottomRow.slice(6).map((v) => renderPoint(v, false))}</div>
         </div>
 
@@ -746,7 +799,6 @@ function ControlBar({
   sub,
   canUndo,
   onUndo,
-  onConfirm,
   auto,
   onAuto,
   onResign,
@@ -755,7 +807,6 @@ function ControlBar({
   sub: string
   canUndo: boolean
   onUndo: () => void
-  onConfirm?: () => void
   auto: boolean
   onAuto: (v: boolean) => void
   onResign?: () => void
@@ -819,18 +870,6 @@ function ControlBar({
           >
             <Undo2 className="size-4" aria-hidden="true" />
             <span data-ls-label>Geri al</span>
-          </button>
-        )}
-        {onConfirm && (
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 sm:flex-none"
-          >
-            <Check className="size-4" aria-hidden="true" />
-            <span>
-              <span data-ls-label>Hamleyi </span>onayla
-            </span>
           </button>
         )}
       </div>
@@ -1083,13 +1122,13 @@ export function Tavla({ finish, saveKey }: GameApi) {
         names={{ me: 'Sen', opp: 'Rakip' }}
         turn={phase === 'over' ? null : phase === 'bot' ? 'opp' : 'me'}
         onRoll={phase === 'roll' ? roll : undefined}
+        onConfirm={phase === 'confirm' ? confirm : undefined}
       />
       <ControlBar
         message={message}
         sub={`Kalan yol: sen ${pipCount(board, 'p')} · rakip ${pipCount(board, 'b')}`}
         canUndo={(phase === 'move' || phase === 'confirm') && !!snapshot}
         onUndo={undo}
-        onConfirm={phase === 'confirm' ? confirm : undefined}
         auto={auto}
         onAuto={setAuto}
         onResign={
@@ -1216,13 +1255,13 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
         names={{ me: 'Sen', opp: oppName }}
         turn={remote.myTurn ? 'me' : 'opp'}
         onRoll={remote.myTurn && s.phase === 'roll' && !remote.busy ? () => void remote.send({ type: 'roll' }) : undefined}
+        onConfirm={turnDone && !remote.busy ? send : undefined}
       />
       <ControlBar
         message={message}
         sub={`Kalan yol: sen ${pipCount(board, me)} · ${oppName} ${pipCount(board, opp)}${series}`}
         canUndo={myMove && pending.length > 0 && !remote.busy}
         onUndo={() => setPending([])}
-        onConfirm={turnDone && !remote.busy ? send : undefined}
         auto={auto}
         onAuto={setAuto}
         onResign={remote.spectator ? undefined : () => void remote.send({ type: 'resign' })}

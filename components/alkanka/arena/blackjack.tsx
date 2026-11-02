@@ -10,6 +10,7 @@ import type { ArenaGameSettings } from '@/lib/arena'
 import { playSound } from '@/lib/sound'
 import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
+import { ChipPot } from './chip-pot'
 
 export function PlayingCard({ card, hidden, index = 0, small, medium }: { card?: Card; hidden?: boolean; index?: number; small?: boolean; medium?: boolean }) {
   const red = card && (card.s === 1 || card.s === 2)
@@ -359,19 +360,7 @@ export function BlackjackHouse({ settings }: { settings: ArenaGameSettings }) {
         onAct={act}
         footer={
           <div className="flex flex-col items-center gap-3">
-            <div className="flex flex-wrap justify-center gap-2" role="radiogroup" aria-label="Bahis">
-              {settings.bets.map((b) => (
-                <button
-                  key={b}
-                  role="radio"
-                  aria-checked={bet === b}
-                  onClick={() => setBet(b)}
-                  className={cn('chip', bet === b && 'chip-active')}
-                >
-                  {formatAC(b)}
-                </button>
-              ))}
-            </div>
+            <ChipPot bets={settings.bets} current={bet} disabled={busy} onPlace={setBet} />
             <button disabled={busy} onClick={deal} className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground disabled:opacity-50">
               <RotateCcw className="size-4" aria-hidden="true" />
               {hand ? 'Yeni el dağıt' : 'Kartları dağıt'}

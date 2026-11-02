@@ -462,6 +462,8 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
               <span className={cn('v', pairs.length >= PAIR_MIN && 'ok')}>
                 {pairs.length}/{PAIR_MIN}
               </span>
+              <span className="k">Puan</span>
+              <span className="v">{myTotal ?? 0}</span>
               <span className="o1-bar" aria-hidden="true">
                 <i style={{ width: `${meterPct}%` }} />
               </span>

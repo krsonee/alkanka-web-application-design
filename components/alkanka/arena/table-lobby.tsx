@@ -192,8 +192,8 @@ export function TableLobby({
   const invitedMine = invitedId != null && mine.some((t) => t.id === invitedId)
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <section aria-labelledby="lobby-title" className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section aria-labelledby="lobby-title" className="flex min-w-0 flex-col gap-4">
         {invitedId && data && !invitedMine && (
           <p
             role="status"
@@ -781,7 +781,7 @@ function OptionGroup({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'min-w-0 flex-1 whitespace-nowrap rounded-lg px-1 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 sm:text-sm',
+              'min-w-0 flex-1 truncate rounded-lg px-1 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 sm:text-sm',
               value === o.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
             )}
           >

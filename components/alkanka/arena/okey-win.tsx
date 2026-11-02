@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Crown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MockTile } from './okey-rack'
+import { MockTile, findGroups } from './okey-rack'
 import type { Okey as OkeyValue, Tile } from './okey-engine'
 
 /**
@@ -36,6 +36,12 @@ export function OkeyWinOverlay({
 }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
+  const melds = useMemo(() => {
+    const seri = findGroups(tiles, okey, 'seri')
+    const cift = findGroups(tiles, okey, 'cift')
+    const best = cift.rest.length < seri.rest.length ? cift : seri
+    return best.rest.length ? [...best.groups, best.rest] : best.groups
+  }, [tiles, okey])
   useEffect(() => {
     if (!autoCloseMs) return
     const id = setTimeout(onClose, autoCloseMs)
@@ -85,10 +91,16 @@ export function OkeyWinOverlay({
             )}
           </div>
 
-          <ul aria-label="Biten el" className="okw-rack flex flex-wrap justify-center gap-1 rounded-xl p-2 sm:gap-1.5 sm:p-3">
-            {tiles.map((t) => (
-              <li key={t.id} className="okt-box h-12 w-8 phone-ls:h-10 phone-ls:w-7 sm:h-14 sm:w-9">
-                <MockTile tile={t} okey={okey} />
+          <ul aria-label="Biten el" className="okw-rack flex flex-wrap justify-center gap-x-3 gap-y-2 rounded-xl p-2 sm:gap-x-4 sm:p-3">
+            {melds.map((group) => (
+              <li key={group[0].id}>
+                <ul className="flex gap-0.5">
+                  {group.map((t) => (
+                    <li key={t.id} className="okt-box h-12 w-8 phone-ls:h-10 phone-ls:w-7 sm:h-14 sm:w-9">
+                      <MockTile tile={t} okey={okey} />
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>

@@ -541,7 +541,8 @@ export function playSound(name: SoundName, intensity = 1) {
   // Collapse bursts (e.g. several state updates arriving in one poll) into one sound.
   const now = performance.now()
   // Ball clacks come in quick real clusters (the break), so they only collapse true duplicates.
-  const gap = name === 'poolBall' || name === 'poolRail' ? 20 : 120
+  // Applause runs ~3.6 s, so back-to-back goals let the current cheer finish instead of stacking another on top.
+  const gap = name === 'poolBall' || name === 'poolRail' ? 20 : name === 'cheer' ? 3500 : 120
   if (now - (lastPlayed.get(name) ?? 0) < gap) return
   lastPlayed.set(name, now)
   try {
