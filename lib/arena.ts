@@ -158,15 +158,18 @@ export const DEFAULT_ARENA: ArenaSettings = {
   'kafa-basketbolu': { ...base, multiplier: 2 },
 }
 
-/** Okey's bot table seats three bots, so its 3x pays like a four-player pot and takes the same commission as player tables. */
+/** Seats at the okey bot table: the player plus three bots. */
+export const OKEY_BOT_SEATS = 4
+
 /** Blackjack bets are built from stacked chips, so any whole amount between the smallest and largest chip is allowed. */
 export function isStackedBet(bet: number, bets: number[]): boolean {
   return bets.length > 0 && Number.isInteger(bet) && bet >= Math.min(...bets) && bet <= Math.max(...bets)
 }
 
-export function botWinMultiplier(game: ArenaGame, s: ArenaGameSettings): number {
+/** Okey pays like a pot: every seat's stake goes to the winner, minus the table commission. */
+export function botWinMultiplier(game: ArenaGame, s: ArenaGameSettings, seats = OKEY_BOT_SEATS): number {
   if (game !== 'okey') return s.multiplier
-  return Math.round(s.multiplier * (1 - s.commission / 100) * 100) / 100
+  return Math.round(seats * (1 - s.commission / 100) * 100) / 100
 }
 
 export function isArenaGame(value: string): value is ArenaGame {
