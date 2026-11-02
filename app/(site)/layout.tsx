@@ -99,7 +99,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
             </div>
           )}
           <Topbar social={social} sponsors={searchSponsors} telegram={telegram} />
-          <WinnersTicker />
+          <div className="[body:has([data-table-live])_&]:hidden">
+            <WinnersTicker />
+          </div>
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
             {boosts.length > 0 && <BoostStrip boosts={boosts} />}
             {children}
