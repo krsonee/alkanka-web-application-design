@@ -150,7 +150,7 @@ export function StakeGate({
           </span>
         </div>
         {phase.resumed && (
-          <FadingNotice key={phase.round}>
+          <FadingNotice key={`notice-${phase.round}`}>
             {SAVE_AWARE.includes(game)
               ? 'Kaldığın yerden devam ediyorsun kanka, bahsin masada duruyor.'
               : 'Yarım kalan masana geri döndün. Bahsin korunuyor, bu el baştan başlıyor.'}
