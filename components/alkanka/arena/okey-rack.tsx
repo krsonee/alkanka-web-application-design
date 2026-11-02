@@ -176,11 +176,22 @@ export function findGroups(hand: Tile[], okey: OkeyValue, mode: 'seri' | 'cift')
   return { groups, rest }
 }
 
+/** Splits tiles evenly across the rows (e.g. 8 + 7) so a 15th tile never sits alone on an otherwise empty row. */
+function balanced(tiles: Tile[], rows: number): Slots {
+  const slots: Slots = Array(RACK_COLS * rows).fill(null)
+  const per = Math.min(RACK_COLS, Math.ceil(tiles.length / rows))
+  tiles.forEach((t, k) => {
+    const row = Math.floor(k / per)
+    slots[row * RACK_COLS + (k % per)] = t.id
+  })
+  return slots
+}
+
 /** Places each group with an empty slot after it so groups read as separate sets; leftovers fill the rest. */
 export function layoutGroups(groups: Tile[][], rest: Tile[], rows = 2): Slots {
   const total = RACK_COLS * rows
   const all = [...groups.flat(), ...rest]
-  const compact: Slots = [...all.map((t) => t.id), ...Array(Math.max(0, total - all.length)).fill(null)]
+  const compact = balanced(all, rows)
   const slots: Slots = Array(total).fill(null)
   let pos = 0
   for (const g of groups) {

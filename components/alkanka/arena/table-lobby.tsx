@@ -81,7 +81,7 @@ const fetcher = async (url: string) => {
 
 const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
-  okey101: { seats: [2, 4], rounds: [1, 3, 5] },
+  okey101: { seats: [4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 31, 51, 101] },
   monopoly: { seats: [2, 3, 4, 5, 6, 7, 8], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
@@ -120,7 +120,7 @@ export function TableLobby({
   const [error, setError] = useState<string | null>(null)
   const [betFilter, setBetFilter] = useState<number | null>(null)
   const isOkey = game === 'okey'
-  const [seats, setSeats] = useState<2 | 4>(4)
+  const seats = 4
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
   const [bots, setBots] = useState(0)
   const seatRule = SEAT_GAME_RULES[game]
@@ -370,22 +370,9 @@ export function TableLobby({
           )}
           {isOkey && (
             <div className="flex flex-col gap-3">
-              <OptionGroup
-                label="Masa"
-                value={String(seats)}
-                options={[
-                  { value: '2', label: '2 kişilik' },
-                  { value: '4', label: '4 kişilik' },
-                ]}
-                onChange={(v) => {
-                  const next = v === '4' ? 4 : 2
-                  setSeats(next)
-                  if (next === 2) {
-                    setBots(0)
-                    if (teamMode) setTeamMode(null)
-                  }
-                }}
-              />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Masalar 4 kişilik. Gerçek oyuncu gelmeyen koltuklara bot oturtabilirsin.
+              </p>
               <OptionGroup
                 label="Oyun modu (zorunlu)"
                 value={teamMode == null ? '' : teamMode ? 'team' : 'solo'}

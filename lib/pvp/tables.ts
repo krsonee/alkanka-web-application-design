@@ -198,7 +198,7 @@ export async function listMyActiveTables(userId: string) {
 }
 
 const SEAT_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
-  okey101: { seats: [2, 4], rounds: [1, 3, 5] },
+  okey101: { seats: [4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 31, 51, 101] },
   monopoly: { seats: [2, 3, 4, 5, 6, 7, 8], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
@@ -242,10 +242,10 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
     return { seats: 2, team: false, bots: 0, rounds }
   }
   if (game !== 'okey') return { seats: 2, team: false, bots: 0 }
-  const seats = input?.seats === 4 ? 4 : 2
+  // Okey masaları her zaman 4 kişilik; boş koltukları botlar doldurur.
+  const seats = 4
   if (typeof input?.team !== 'boolean') throw new Error('Takımlı ya da tekli oyun modunu seçmelisin.')
-  if (input.team && seats !== 4) throw new Error('Takımlı okey sadece 4 kişilik masada oynanır.')
-  const bots = seats === 4 ? Math.max(0, Math.min(2, Math.floor(Number(input?.bots) || 0))) : 0
+  const bots = Math.max(0, Math.min(2, Math.floor(Number(input?.bots) || 0)))
   const rounds = [10, 20, 30].includes(Number(input?.rounds)) ? Number(input?.rounds) : 0
   return { seats, team: input.team, bots, ...(rounds ? { rounds } : {}) }
 }
