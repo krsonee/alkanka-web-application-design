@@ -377,10 +377,10 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
 
         <section aria-label="Batak masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border p-1.5 sm:p-2.5">
           {/* Short landscape phones get a flatter table so LandscapeFit doesn't shrink the text. */}
-          <div className="relative h-[25rem] sm:h-[29rem] lg:h-[min(33rem,calc(100dvh-24rem))] lg:min-h-[21rem] bt-short:!h-[14.25rem] bt-short:!min-h-0">
+          <div className="relative h-[25rem] sm:h-[29rem] lg:h-[min(33rem,calc(100dvh-24rem))] lg:min-h-[21rem] bt-short:!h-[17rem] bt-short:!min-h-0">
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
-            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5 bt-short:!inset-x-[19%] bt-short:!bottom-[14%] bt-short:!top-[24%] bt-short:!p-1.5" aria-hidden="true">
-              <div className="bt-felt relative size-full overflow-hidden rounded-full">
+            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5 bt-short:!inset-x-[23%] bt-short:!bottom-[5%] bt-short:!top-[17%] bt-short:!rounded-[50%] bt-short:!p-2" aria-hidden="true">
+              <div className="bt-felt relative size-full overflow-hidden rounded-full bt-short:!rounded-[50%]">
                 <TableBrand plaque={false} corners={false} jako={false} />
               </div>
             </div>
