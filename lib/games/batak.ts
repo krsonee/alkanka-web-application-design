@@ -113,11 +113,20 @@ const same = (a: BCard, b: BCard) => a.s === b.s && a.r === b.r
 const sortHand = (h: BCard[]) => [...h].sort((a, b) => (a.s - b.s) * 100 + (b.r - a.r))
 const range = (n: number) => Array.from({ length: n }, (_, i) => i)
 
+/** Unbiased, unpredictable integer in [0, max) — tables can carry real KC stakes. */
+function secureInt(max: number) {
+  const limit = Math.floor(0x100000000 / max) * max
+  const buf = new Uint32Array(1)
+  do globalThis.crypto.getRandomValues(buf)
+  while (buf[0] >= limit)
+  return buf[0] % max
+}
+
 function deal(seats: number) {
   const deck: BCard[] = []
   for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) deck.push({ s, r })
   for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = secureInt(i + 1)
     ;[deck[i], deck[j]] = [deck[j], deck[i]]
   }
   const per = seats === 3 ? 16 : 13
@@ -162,7 +171,7 @@ export function initBatak(opts: { botSeats?: number[]; rounds?: number; variant?
     variant,
     seats,
     bots: opts.botSeats ?? [],
-    dealer: Math.floor(Math.random() * seats),
+    dealer: secureInt(seats),
     totals: range(seats).map(() => 0),
     handNo: 1,
     // Older tables used 3 or 5 hands; keep supporting them.
@@ -367,7 +376,7 @@ export function batakStep(state: BatakState, seat: number, a: Act): BatakStep {
       if (s.variant === 'gommeli') {
         const hands = s.hands.map((h, i) => (i === b ? sortHand([...h, ...s.kitty]) : h))
         return {
-          state: { ...s, hands, kitty: [], bids, passed, highBid, bidder: b, phase: 'trump', turn: b, note: `��hale ${highBid} ile kapandı. Yerdeki 4 kart ihale sahibine geçti, önce kozu seçecek.` },
+          state: { ...s, hands, kitty: [], bids, passed, highBid, bidder: b, phase: 'trump', turn: b, note: `İhale ${highBid} ile kapandı. Yerdeki 4 kart ihale sahibine geçti, önce kozu seçecek.` },
           winners: null,
         }
       }
@@ -594,12 +603,12 @@ export function runBatakBots(state: BatakState): BatakStep {
 export function batakPaceMs(state: BatakState) {
   const s = migrateBatak(state)
   const freshDeal = s.played.length === 0 && s.handNo > 1 && s.bids.every((b) => b == null) && s.trick.length === 0
-  if (freshDeal) return 4500
-  if (s.phase === 'bid' || s.phase === 'predict') return 1800
-  if (s.phase === 'trump' || s.phase === 'bury') return 1500
-  if (s.trick.length === 0 && s.lastTrick) return 2600
-  // Deterministic jitter between 1.4 and 2.0 seconds.
-  return 1400 + ((s.played.length * 7 + s.turn * 13) % 7) * 100
+  if (freshDeal) return 3500
+  if (s.phase === 'bid' || s.phase === 'predict') return 1200
+  if (s.phase === 'trump' || s.phase === 'bury') return 1200
+  if (s.trick.length === 0 && s.lastTrick) return 1600
+  // Deterministic jitter between 0.9 and 1.2 seconds.
+  return 900 + ((s.played.length * 7 + s.turn * 13) % 4) * 100
 }
 
 export function viewBatak(state: BatakState, seat: number) {
