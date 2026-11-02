@@ -154,6 +154,18 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const [lastOpen, setLastOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [scoreOpen, setScoreOpen] = useState(false)
+  const anyPanelOpen = lastOpen || rulesOpen || scoreOpen
+  useEffect(() => {
+    if (!anyPanelOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setLastOpen(false)
+      setRulesOpen(false)
+      setScoreOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [anyPanelOpen])
 
   const hand = useMemo(() => (me >= 0 ? sortCards(s.hands[me] ?? []) : []), [s.hands, me])
   const playing = myTurn && s.phase === 'play'
@@ -191,6 +203,8 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   useEffect(() => {
     if (!trickKey || trickKey === seenKey.current || !s.lastTrick || s.lastWinner == null) return
     seenKey.current = trickKey
+    const mine = me >= 0 && (isTeam ? teamOf(s.lastWinner) === teamOf(me) : s.lastWinner === me)
+    playSound(mine ? 'coin' : 'tick', mine ? 1 : 0.6)
     const entry = { key: trickKey, trick: s.lastTrick, winner: s.lastWinner, slide: false }
     setHold(entry)
     const a = setTimeout(() => setHold((h) => (h?.key === trickKey ? { ...h, slide: true } : h)), 1500)
@@ -455,7 +469,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
             <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5" aria-hidden="true">
               <div className="bt-felt relative size-full overflow-hidden rounded-full">
-                <TableBrand plaque={false} />
+                <TableBrand plaque={false} corners={false} />
               </div>
             </div>
             <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
