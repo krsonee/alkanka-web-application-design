@@ -60,42 +60,13 @@ const PREVIEW_PULL_MS = 450
 const PREVIEW_HOLD_MS = 150
 const TABLE_PULL_RANGE = 260
 const DROP_MS = 560
-const SIDE_DEPTH = 13
-const isSidePocket = (i: number) => i === 1 || i === 4
+const CUSHION = 12
 
-/**
- * Clips to a pocket's real silhouette: corner pockets are round holes cut off by a straight diagonal mouth
- * between the jaws, side pockets are shallow half-moons set into the rail. Leaves the outline as the current path.
- */
+/** Pockets are round holes: large ones sunk into the corners, smaller ones set into the middle of the long rails. */
 function clipPocket(ctx: CanvasRenderingContext2D, i: number) {
   const [px, py] = POCKETS[i]
-  if (isSidePocket(i)) {
-    const top = i === 1
-    const ey = top ? 0 : H
-    const d = top ? 1 : -1
-    ctx.beginPath()
-    ctx.moveTo(px - SIDE_MOUTH, ey)
-    if (top) ctx.ellipse(px, ey, SIDE_MOUTH, SIDE_DEPTH, 0, Math.PI, 0, true)
-    else ctx.ellipse(px, ey, SIDE_MOUTH, SIDE_DEPTH, 0, Math.PI, Math.PI * 2)
-    ctx.lineTo(px + SIDE_MOUTH - 5, ey - d * RAIL * 0.62)
-    ctx.lineTo(px - SIDE_MOUTH + 5, ey - d * RAIL * 0.62)
-    ctx.closePath()
-    ctx.clip()
-    return
-  }
-  const cx = px < W / 2 ? 0 : W
-  const cy = py < H / 2 ? 0 : H
-  const sx = cx === 0 ? 1 : -1
-  const sy = cy === 0 ? 1 : -1
-  const far = 240
   ctx.beginPath()
   ctx.arc(px, py, POCKET_HOLE[i], 0, Math.PI * 2)
-  ctx.clip()
-  ctx.beginPath()
-  ctx.moveTo(cx + sx * (CORNER_MOUTH + far), cy - sy * far)
-  ctx.lineTo(cx - sx * far, cy + sy * (CORNER_MOUTH + far))
-  ctx.lineTo(cx - sx * far, cy - sy * far)
-  ctx.closePath()
   ctx.clip()
 }
 
@@ -103,21 +74,60 @@ function paintPocket(ctx: CanvasRenderingContext2D, i: number, gold: string) {
   const [px, py] = POCKETS[i]
   const pr = POCKET_HOLE[i]
   ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'
+  ctx.beginPath()
+  ctx.arc(px, py, pr + 5, 0, Math.PI * 2)
+  ctx.fill()
   clipPocket(ctx, i)
   const pg = ctx.createRadialGradient(px, py, pr * 0.15, px, py, pr)
   pg.addColorStop(0, '#000000')
-  pg.addColorStop(0.8, '#05070c')
-  pg.addColorStop(1, '#141821')
+  pg.addColorStop(0.75, '#04060a')
+  pg.addColorStop(1, '#1a1e27')
   ctx.fillStyle = pg
   ctx.fillRect(px - pr - 4, py - pr - 4, pr * 2 + 8, pr * 2 + 8)
+  ctx.restore()
+  ctx.save()
   ctx.strokeStyle = gold
-  ctx.globalAlpha = 0.45
-  ctx.lineWidth = 3
+  ctx.globalAlpha = 0.4
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.arc(px, py, pr + 1, 0, Math.PI * 2)
   ctx.stroke()
-  if (!isSidePocket(i)) {
-    ctx.globalAlpha = 0.3
+  ctx.restore()
+}
+
+/** Cushion strips between the pockets; each end is cut at an angle toward its pocket like real jaws. */
+function paintCushions(ctx: CanvasRenderingContext2D) {
+  const c = CUSHION
+  const cj = c
+  const sj = c * 0.45
+  const strips: [number, number][][] = [
+    [[CORNER_MOUTH, 0], [W / 2 - SIDE_MOUTH, 0], [W / 2 - SIDE_MOUTH - sj, c], [CORNER_MOUTH + cj, c]],
+    [[W / 2 + SIDE_MOUTH, 0], [W - CORNER_MOUTH, 0], [W - CORNER_MOUTH - cj, c], [W / 2 + SIDE_MOUTH + sj, c]],
+    [[CORNER_MOUTH, H], [W / 2 - SIDE_MOUTH, H], [W / 2 - SIDE_MOUTH - sj, H - c], [CORNER_MOUTH + cj, H - c]],
+    [[W / 2 + SIDE_MOUTH, H], [W - CORNER_MOUTH, H], [W - CORNER_MOUTH - cj, H - c], [W / 2 + SIDE_MOUTH + sj, H - c]],
+    [[0, CORNER_MOUTH], [0, H - CORNER_MOUTH], [c, H - CORNER_MOUTH - cj], [c, CORNER_MOUTH + cj]],
+    [[W, CORNER_MOUTH], [W, H - CORNER_MOUTH], [W - c, H - CORNER_MOUTH - cj], [W - c, CORNER_MOUTH + cj]],
+  ]
+  ctx.save()
+  for (const s of strips) {
+    const [o0, , , i0] = s
+    const g = ctx.createLinearGradient(o0[0], o0[1], o0[0] + (i0[0] - o0[0] ? Math.sign(i0[0] - o0[0]) * c : 0), o0[1] + (i0[1] - o0[1] ? Math.sign(i0[1] - o0[1]) * c : 0))
+    g.addColorStop(0, 'rgba(0,0,0,0.35)')
+    g.addColorStop(0.35, 'rgba(255,255,255,0.06)')
+    g.addColorStop(1, 'rgba(255,255,255,0.14)')
+    ctx.fillStyle = g
     ctx.beginPath()
-    ctx.arc(px, py, pr, 0, Math.PI * 2)
+    s.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(s[1][0], s[1][1])
+    ctx.lineTo(s[2][0], s[2][1])
+    ctx.lineTo(s[3][0], s[3][1])
+    ctx.lineTo(s[0][0], s[0][1])
     ctx.stroke()
   }
   ctx.restore()
@@ -415,19 +425,7 @@ function paintTable(dpr: number, logo: HTMLImageElement | null = null, theme: Ta
   light.addColorStop(1, 'rgba(0,0,0,0.34)')
   ctx.fillStyle = light
   ctx.fillRect(0, 0, W, H)
-  const cushion = 10
-  ;[
-    [0, 0, W, cushion, 0, 0, 0, cushion],
-    [0, H - cushion, W, cushion, 0, H, 0, H - cushion],
-    [0, 0, cushion, H, 0, 0, cushion, 0],
-    [W - cushion, 0, cushion, H, W, 0, W - cushion, 0],
-  ].forEach(([x, y, w, h, x0, y0, x1, y1]) => {
-    const cg = ctx.createLinearGradient(x0, y0, x1, y1)
-    cg.addColorStop(0, 'rgba(0,0,0,0.45)')
-    cg.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = cg
-    ctx.fillRect(x, y, w, h)
-  })
+  paintCushions(ctx)
   if (!theme || !themeLogo(theme)) paintFeltLogo(ctx, logo, gold, css.getPropertyValue('--font-display').trim() || 'system-ui, sans-serif')
   ctx.strokeStyle = 'rgba(255,255,255,0.08)'
   ctx.beginPath()
