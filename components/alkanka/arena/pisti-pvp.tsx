@@ -8,14 +8,37 @@ import { RANK_LABEL, SUIT_SYMBOLS, sideOf, type PCard, type PistiEvent, type Pis
 import { BatakCard } from './batak-card'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
+import { FixedStage } from './fixed-stage'
+import { MobileTableChat } from './mobile-table-chat'
+import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 
 type Place = 'bottom' | 'top' | 'left' | 'right'
 
+/**
+ * Like Batak, the table is composed once on a fixed 1100×550 canvas and scaled as a whole (see FixedStage),
+ * so phones, tablets and desktops all see the same picture. Positions below are design pixels.
+ */
+const STAGE_W = 1100
+const STAGE_H = 550
+const PILE_X = 550
+const PILE_Y = 226
+
+/** The stage shrinks on phones, so the hand and pile cards get bigger rank/suit glyphs to stay readable. */
+const BIG_CARD_TEXT =
+  '[&_.playing-card>span:nth-child(1)]:!text-[28px] [&_.playing-card>span:nth-child(1)>span]:!text-[22px] [&_.playing-card>span:nth-child(2)]:!text-[56px] [&_.playing-card>span:nth-child(3)]:!text-[20px] [&_.playing-card>span:nth-child(3)>span]:!text-[16px]'
+
+/** Where a card flies in from (and is swept back to), relative to the pile, in design pixels. */
 const FLY: Record<Place, [string, string]> = {
-  bottom: ['0px', '170px'],
-  top: ['0px', '-150px'],
-  left: ['-170px', '0px'],
-  right: ['170px', '0px'],
+  bottom: ['0px', '250px'],
+  top: ['0px', '-200px'],
+  left: ['-420px', '0px'],
+  right: ['420px', '0px'],
+}
+
+const SEAT_POS: Record<Exclude<Place, 'bottom'>, string> = {
+  top: 'left-1/2 top-3 -translate-x-1/2',
+  left: 'left-[88px] top-[226px] -translate-x-1/2 -translate-y-1/2',
+  right: 'left-[1012px] top-[226px] -translate-x-1/2 -translate-y-1/2',
 }
 
 const EVENT_MS: Record<PistiEvent['kind'], number> = { drop: 900, capture: 1500, pisti: 2500, jpisti: 2800, sweep: 1600, deal: 900, hand: 900, cut: 1400 }
@@ -31,13 +54,13 @@ function CapturedStack({ count, majority, label }: { count: number; majority: bo
   if (!count) return null
   const layers = Math.min(4, Math.ceil(count / 6))
   return (
-    <span className="flex items-center gap-1" aria-label={`${label}: ${count} kart topladı`}>
-      <span className="relative h-5 w-4" aria-hidden="true">
+    <span className="flex items-center gap-1.5" aria-label={`${label}: ${count} kart topladı`}>
+      <span className="relative h-9 w-6" aria-hidden="true">
         {Array.from({ length: layers }, (_, i) => (
-          <CardBack key={i} className="absolute inset-0 size-full rounded-[3px]" style={{ transform: `translate(${i * 1.5}px, ${-i * 1.5}px)` }} />
+          <CardBack key={i} className="absolute inset-0 size-full rounded-[4px]" style={{ transform: `translate(${i * 2}px, ${-i * 2}px)` }} />
         ))}
       </span>
-      <span className={cn('rounded-full px-1.5 text-[10px] font-bold tabular-nums', majority ? 'bg-gold text-gold-foreground' : 'bg-background/80 text-foreground')}>{count}</span>
+      <span className={cn('rounded-full px-2 text-[13px] font-bold tabular-nums leading-5', majority ? 'bg-gold text-gold-foreground' : 'bg-background/85 text-foreground')}>{count}</span>
     </span>
   )
 }
@@ -48,6 +71,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   const me = remote.spectator ? -1 : remote.seat
   const base = me >= 0 ? me : 0
   const mySide = sideOf(s, base)
+  const { theme: tableTheme } = useTableTheme('pisti')
 
   const nameOf = (seat: number) => (seat === me ? 'Sen' : (remote.names[seat] ?? `Oyuncu ${seat + 1}`))
   const sideLabel = (side: number) => {
@@ -56,7 +80,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   }
 
   // Play goes seat + 1, so the next player sits on my right.
-  const places: { seat: number; place: Place }[] =
+  const places: { seat: number; place: Exclude<Place, 'bottom'> }[] =
     n === 4
       ? [
           { seat: (base + 1) % 4, place: 'right' },
@@ -158,41 +182,38 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   const sides = s.team ? [0, 1] : Array.from({ length: n }, (_, i) => i)
   const majorityLive = s.majorityLive ?? sides.map(() => 0)
 
-  const Seat = ({ seat, place }: { seat: number; place: Place }) => {
+  const Seat = ({ seat, place }: { seat: number; place: Exclude<Place, 'bottom'> }) => {
     const active = !replaying && s.turn === seat && !finished
     const acting = current?.seat === seat && current.kind !== 'deal' && current.kind !== 'hand'
     const count = s.handCounts[seat] ?? 0
     const side = sideOf(s, seat)
     const partner = s.team && side === mySide && me >= 0
+    const top = place === 'top'
     // In teams both partners share one pile; it sits with the first seat of the side shown.
-    const showsPile = !s.team || places.find((p) => sideOf(s, p.seat) === side)?.seat === seat
+    const showsPile = !s.team || (side !== mySide && places.find((p) => sideOf(s, p.seat) === side)?.seat === seat)
     return (
-      <div
-        className={cn(
-          'absolute z-10 flex items-center gap-1.5 sm:gap-2',
-          place === 'top' && 'left-1/2 top-[4.6rem] -translate-x-1/2 flex-row sm:top-24',
-          place === 'left' && 'left-1.5 top-[44%] -translate-y-1/2 flex-col sm:left-[6%]',
-          place === 'right' && 'right-1.5 top-[44%] -translate-y-1/2 flex-col sm:right-[6%]',
-        )}
-      >
+      <div className={cn('absolute z-10 flex items-center', top ? 'flex-row gap-3' : 'flex-col gap-2', SEAT_POS[place])}>
         <div
+          data-turn={active || undefined}
           className={cn(
-            'flex size-10 items-center justify-center rounded-full bg-background/85 font-display text-base font-bold text-foreground ring-2 transition sm:size-14 sm:text-lg',
-            active || acting ? 'ring-gold' : 'ring-border',
-            active && 'animate-[pisti-ring_1.2s_ease-out_infinite]',
+            'bt-ava flex size-14 shrink-0 items-center justify-center rounded-full font-display text-xl font-bold text-foreground ring-2 transition',
+            active || acting ? 'ring-gold' : partner ? 'ring-gold/50' : 'ring-border',
           )}
         >
-          {s.bots.includes(seat) ? <Bot className="size-5 text-muted-foreground" aria-label="Bot" /> : nameOf(seat).charAt(0).toUpperCase()}
+          {s.bots.includes(seat) ? <Bot className="size-6 text-muted-foreground" aria-label="Bot" /> : nameOf(seat).charAt(0).toUpperCase()}
         </div>
-        <div className={cn('flex max-w-20 flex-col rounded-lg px-2 py-0.5 sm:max-w-32', active ? 'bg-gold text-gold-foreground' : 'bg-background/80 text-foreground', place !== 'top' && 'items-center text-center')}>
-          <span className="truncate text-[11px] font-bold leading-tight sm:text-xs">{nameOf(seat)}</span>
-          <span className={cn('text-[10px] leading-tight', active ? 'text-gold-foreground/80' : 'text-muted-foreground')}>
-            {partner ? 'Eşin' : active ? 'Düşünüyor' : 'Rakip'}
+        <div
+          data-turn={active || undefined}
+          className={cn('bt-plate flex flex-col rounded-2xl px-3 py-1.5 text-foreground', top ? 'max-w-44' : 'w-36 items-center text-center')}
+        >
+          <span className="w-full truncate text-[16px] font-bold leading-tight">{nameOf(seat)}</span>
+          <span className={cn('text-[13px] leading-tight', active ? 'font-semibold text-gold' : 'text-muted-foreground')}>
+            {active ? 'Düşünüyor' : partner ? 'Eşin' : 'Rakip'}
           </span>
         </div>
-        <div className={cn('flex gap-0.5', place !== 'top' && 'flex-col')} aria-label={`${nameOf(seat)} elinde ${count} kart`}>
+        <div className={cn('flex', top ? 'gap-1' : 'gap-1')} aria-label={`${nameOf(seat)} elinde ${count} kart`}>
           {Array.from({ length: count }, (_, i) => (
-            <CardBack key={i} className={place === 'top' ? 'h-7 w-5 sm:h-9 sm:w-6' : 'h-5 w-7 sm:h-6 sm:w-9'} />
+            <CardBack key={i} className={top ? 'h-11 w-8' : 'h-9 w-[26px]'} />
           ))}
         </div>
         {showsPile && <CapturedStack count={s.capturedCounts[side] ?? 0} majority={majorityLive[side] > 0} label={sideLabel(side)} />}
@@ -206,67 +227,22 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   const isBurst = current && (current.kind === 'pisti' || current.kind === 'jpisti')
 
   return (
-    <div className="flex flex-col gap-3">
+    <div data-ls-main="full" className="flex min-w-0 flex-col gap-3">
       {remote.spectator && (
         <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Eller gizli, yere atılan kartlar canlı görünür.
         </p>
       )}
 
-      <section aria-label="Pişti masası" className="tavla-wood mx-auto w-full max-w-5xl rounded-[1.75rem] p-1.5 sm:p-2.5">
-        <div className="baize-table relative h-[calc(100dvh-7.5rem)] min-h-[26rem] overflow-hidden rounded-[1.4rem] lg:h-[min(44rem,calc(100dvh-9rem))] lg:min-h-[32rem]">
-          <TableBrand />
-          {/* Scoreboard */}
-          <div className="absolute inset-x-2 top-2 z-20 flex items-stretch gap-1.5 sm:inset-x-4 sm:top-3 sm:gap-2">
-            {sides.map((side, idx) => {
-              const live = (s.capturedPoints[side] ?? 0) + (s.pistiPts[side] ?? 0) + (majorityLive[side] ?? 0)
-              const shown = s.totals[side] + live
-              const pct = Math.min(100, (shown / s.target) * 100)
-              const mine = side === mySide && me >= 0
-              const lead = finished && side === winnerSide
-              const box = (
-                <div
-                  key={side}
-                  className={cn(
-                    'flex min-w-0 flex-1 flex-col gap-1 rounded-xl px-2 py-1.5 backdrop-blur sm:px-3',
-                    lead ? 'bg-gold text-gold-foreground' : mine ? 'bg-background/90 ring-1 ring-gold/60' : 'bg-background/75',
-                  )}
-                >
-                  <div className="flex items-baseline justify-between gap-1">
-                    <span className={cn('flex min-w-0 items-center gap-1 truncate text-[11px] font-bold sm:text-xs', lead ? '' : 'text-foreground')}>
-                      <span className="truncate">{sideLabel(side)}</span>
-                      {majorityLive[side] > 0 && !lead && (
-                        <span className="shrink-0 rounded-full bg-gold px-1 text-[9px] font-black text-gold-foreground" title="En çok kart sende, el sonunda +3">
-                          +3
-                        </span>
-                      )}
-                    </span>
-                    <span key={shown} className={cn('animate-pop font-display text-lg font-black tabular-nums leading-none sm:text-xl', lead ? '' : 'text-foreground')} aria-label={`${sideLabel(side)} ${shown} puan`}>
-                      {shown}
-                    </span>
-                  </div>
-                  <div className="h-1 overflow-hidden rounded-full bg-secondary">
-                    <div className="h-full rounded-full bg-gold transition-[width] duration-700" style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className={cn('truncate text-[10px] tabular-nums leading-none', lead ? 'text-gold-foreground/80' : 'text-muted-foreground')}>
-                    Bu el: {s.capturedCounts[side]} kart
-                    {s.pistiCount[side] > 0 && <span className={cn('font-bold', !lead && 'text-gold')}> · {s.pistiCount[side]} pişti</span>}
-                  </span>
-                </div>
-              )
-              // Target sits in the middle of the strip.
-              if (idx === Math.ceil(sides.length / 2)) {
-                return [
-                  <div key="target" className="flex shrink-0 flex-col items-center justify-center rounded-xl bg-background/80 px-2 py-1 text-center backdrop-blur">
-                    <span className="text-[9px] font-semibold uppercase leading-tight tracking-wide text-muted-foreground">Hedef</span>
-                    <span className="font-display text-base font-black tabular-nums leading-tight text-foreground">{s.target}</span>
-                    <span className="text-[10px] tabular-nums leading-tight text-muted-foreground">{s.handNo}. el</span>
-                  </div>,
-                  box,
-                ]
-              }
-              return box
-            })}
+      <section aria-label="Pişti masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border" {...themeSurfaceProps(tableTheme)}>
+        {/* On desktop the stage is capped by the window height; inside the fullscreen layer LandscapeFit sizes it. */}
+        <FixedStage width={STAGE_W} height={STAGE_H} className="max-w-[calc((100dvh-15rem)*2)] [.ls-split_&]:max-w-none">
+          {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
+          <div className="bt-rim absolute left-[170px] top-[78px] h-[296px] w-[760px] rounded-[3rem] p-2.5" aria-hidden="true">
+            <div className="bt-felt pt-felt relative size-full overflow-hidden rounded-[2.5rem]">
+              <TableBrand plaque={false} corners={false} jako={false} className="[&_.tb-word]:hidden" />
+              <ThemeDecor theme={tableTheme} />
+            </div>
           </div>
 
           {places.map((p) => (
@@ -274,38 +250,38 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
           ))}
 
           {/* Deck + cut card */}
-          <div className={cn('absolute z-10 flex flex-col items-center gap-1', n === 4 ? 'bottom-[40%] left-[20%] sm:left-[24%]' : 'left-[10%] top-[46%] -translate-y-1/2 sm:left-[20%] phone-ls:left-[26%]')}>
+          <div className="absolute left-[275px] top-[226px] z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5">
             {s.deckCount > 0 ? (
-              <div className="relative h-[4.4rem] w-[3.15rem] sm:h-[6rem] sm:w-[4.3rem]">
+              <div className="relative h-[98px] w-[70px]">
                 {[2, 1, 0].map((i) => (
                   <CardBack key={i} className="absolute inset-0 size-full" style={{ transform: `translate(${i * 2}px, ${-i * 2}px)` }} />
                 ))}
               </div>
             ) : (
-              <span className="flex h-[4.4rem] w-[3.15rem] items-center justify-center rounded-md border border-dashed border-foreground/20 sm:h-[6rem] sm:w-[4.3rem]">
-                <Layers className="size-4 text-foreground/30" aria-hidden="true" />
+              <span className="flex h-[98px] w-[70px] items-center justify-center rounded-md border border-dashed border-foreground/20">
+                <Layers className="size-5 text-foreground/30" aria-hidden="true" />
               </span>
             )}
-            <span className="rounded-full bg-background/80 px-2 text-[10px] font-bold tabular-nums text-foreground">Deste {s.deckCount}</span>
+            <span className="rounded-full bg-background/85 px-2.5 text-[13px] font-bold tabular-nums leading-6 text-foreground">Deste {s.deckCount}</span>
             {s.cutCard && s.deckCount > 0 && (
-              <span className="flex items-center gap-1 rounded-full bg-background/80 px-2 text-[10px] font-bold text-foreground" title="Deste kesildi, alttaki kart son elde dağıtana gider">
-                <Scissors className="size-3 text-muted-foreground" aria-hidden="true" />
+              <span className="flex items-center gap-1 rounded-full bg-background/85 px-2.5 text-[13px] font-bold leading-6 text-foreground" title="Deste kesildi, alttaki kart son elde dağıtana gider">
+                <Scissors className="size-3.5 text-muted-foreground" aria-hidden="true" />
                 Alt <span className={cn(s.cutCard.s === 1 || s.cutCard.s === 2 ? 'text-destructive' : 'text-foreground')}>{shortCard(s.cutCard)}</span>
               </span>
             )}
           </div>
 
           {/* Pile */}
-          <div className="absolute left-1/2 top-[46%] z-0 size-0">
+          <div className={cn('absolute z-0 size-0 [--cw:96px]', BIG_CARD_TEXT)} style={{ left: PILE_X, top: PILE_Y }}>
             {pileCount === 0 && !flying && (
-              <span className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-display text-[11px] font-bold uppercase tracking-[0.3em] text-foreground/25">
+              <span className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-display text-[15px] font-bold uppercase tracking-[0.3em] text-foreground/30">
                 Yer boş
               </span>
             )}
             {Array.from({ length: Math.min(4, pileHidden) }, (_, i) => (
               <CardBack
                 key={`h${i}`}
-                className="absolute h-[4.4rem] w-[3.15rem] -translate-x-1/2 -translate-y-1/2 sm:h-[6rem] sm:w-[4.3rem]"
+                className="absolute aspect-[5/7] w-[var(--cw)] -translate-x-1/2 -translate-y-1/2"
                 style={{ rotate: `${(i - 1.5) * 7}deg`, translate: `${(i - 1.5) * 3}px 0` }}
               />
             ))}
@@ -313,13 +289,13 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
               const isTop = i === pileFan.length - 1
               if (isTop && flying?.kind === 'drop') return null
               return (
-                <div key={`${c.s}-${c.r}`} className="absolute -translate-x-1/2 -translate-y-1/2 sm:scale-110" style={{ zIndex: i + 5, rotate: `${(i - pileFan.length + 1) * 9}deg` }}>
-                  <BatakCard card={c} size="sm" className={cn(isTop && 'ring-2 ring-gold/70')} />
+                <div key={`${c.s}-${c.r}`} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ zIndex: i + 5, rotate: `${(i - pileFan.length + 1) * 9}deg` }}>
+                  <BatakCard card={c} className={cn(isTop && 'ring-2 ring-gold/70')} />
                 </div>
               )
             })}
             {showPileInfo && (
-              <span className="absolute left-1/2 top-12 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-background/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground shadow-sm sm:top-16 sm:text-xs">
+              <span className="absolute left-1/2 top-[90px] z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-background/85 px-3 text-[14px] font-bold tabular-nums leading-7 text-foreground shadow-sm">
                 Yerde {s.pileCount} kart
                 <span className={cn(s.pileVisiblePoints > 0 ? 'text-gold' : 'text-muted-foreground')}>
                   {' · '}
@@ -343,16 +319,16 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
                     } as CSSProperties
                   }
                 >
-                  <BatakCard card={flying.card!} size="sm" className="shadow-xl" />
+                  <BatakCard card={flying.card!} className="shadow-xl" />
                   {flying.taken > 1 && (
-                    <span className="absolute -right-3 -top-3 flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold tabular-nums text-primary-foreground ring-2 ring-background">
+                    <span className="absolute -right-3 -top-3 flex size-8 items-center justify-center rounded-full bg-primary text-sm font-bold tabular-nums text-primary-foreground ring-2 ring-background">
                       {flying.taken}
                     </span>
                   )}
                 </div>
                 {flying.points > 0 && !isBurst && (
                   <span
-                    className="absolute left-1/2 top-0 -translate-x-1/2 whitespace-nowrap rounded-full bg-gold px-2 py-0.5 text-xs font-bold tabular-nums text-gold-foreground"
+                    className="absolute left-1/2 top-0 -translate-x-1/2 whitespace-nowrap rounded-full bg-gold px-2.5 py-0.5 text-sm font-bold tabular-nums text-gold-foreground"
                     style={{ animation: 'pisti-float 1100ms ease-out 350ms both' }}
                   >
                     +{flying.points}
@@ -362,54 +338,90 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
             )}
           </div>
 
-          {/* Pişti burst */}
-          {isBurst && (
-            <div key={`b${current.seq}`} className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-background/20" aria-hidden="true">
-              <div className="flex flex-col items-center gap-2" style={{ animation: 'pisti-burst 600ms cubic-bezier(0.2,1.4,0.4,1) both' }}>
-                <span className="flex items-center gap-2 rounded-2xl bg-gold px-6 py-2 font-display text-5xl font-black uppercase tracking-wide text-gold-foreground shadow-2xl ring-4 ring-background/60 sm:text-7xl">
-                  <Sparkles className="size-8 sm:size-12" aria-hidden="true" />
-                  {current.kind === 'jpisti' ? 'Vale Pişti' : 'Pişti'}
-                </span>
-                <span className="rounded-full bg-background/95 px-4 py-1 font-display text-lg font-black tabular-nums text-foreground sm:text-2xl">
-                  {nameOf(current.seat)} · +{current.kind === 'jpisti' ? 20 : 10}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Event line + prompt */}
-          <div className="absolute inset-x-2 bottom-[8.6rem] z-20 flex flex-col items-center gap-1.5 sm:bottom-[10.4rem] phone-ls:inset-x-auto phone-ls:bottom-[7rem] phone-ls:right-3 phone-ls:max-w-[28%] phone-ls:items-end">
+          {/* Event line + prompt, on the right side of the felt */}
+          <div className="absolute left-[805px] top-[226px] z-20 flex w-[220px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 text-center">
             <p
               key={lastEvent?.seq ?? 0}
-              className={cn('animate-rise max-w-full truncate rounded-full px-3 py-1 text-center text-xs font-bold shadow-sm sm:text-sm', eventTone(lastEvent))}
+              className={cn('animate-rise line-clamp-3 max-w-full text-balance rounded-2xl px-3 py-1.5 text-[14px] font-bold leading-snug shadow-sm', eventTone(lastEvent))}
               aria-live="polite"
             >
               {eventText(lastEvent)}
             </p>
-            <p className={cn('max-w-full truncate rounded-full px-3 py-0.5 text-center text-[11px] font-semibold', myTurn ? 'bg-gold text-gold-foreground' : 'bg-background/60 text-muted-foreground')}>
+            <p className={cn('line-clamp-2 max-w-full text-balance rounded-2xl px-3 py-1 text-[13px] font-semibold leading-snug', myTurn ? 'bg-gold text-gold-foreground' : 'bg-background/70 text-muted-foreground')}>
               {prompt}
             </p>
           </div>
 
-          {/* My hand */}
-          <div className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-center gap-2 px-2 pb-3 [--cw:4.4rem] sm:gap-3 sm:pb-4 sm:[--cw:5.2rem] lg:[--cw:5.8rem]" aria-label="Elindeki kartlar">
-            {me < 0 && <span className="pb-8 text-xs text-muted-foreground">İzleyici modu</span>}
-            {me >= 0 && (
-              <span className="absolute bottom-4 left-3 sm:left-5">
-                <CapturedStack count={s.capturedCounts[mySide] ?? 0} majority={majorityLive[mySide] > 0} label={sideLabel(mySide)} />
+          {/* Scoreboard */}
+          <div className="absolute bottom-4 right-4 z-20 flex w-[260px] flex-col gap-1.5" aria-label="Skor">
+            <div className="bt-plate flex items-center justify-between rounded-xl px-3 py-1 text-[13px] font-semibold text-muted-foreground">
+              <span>
+                Hedef <span className="font-display text-base font-black tabular-nums text-foreground">{s.target}</span>
               </span>
-            )}
+              <span className="tabular-nums">{s.handNo}. el</span>
+            </div>
+            {sides.map((side) => {
+              const live = (s.capturedPoints[side] ?? 0) + (s.pistiPts[side] ?? 0) + (majorityLive[side] ?? 0)
+              const shown = s.totals[side] + live
+              const pct = Math.min(100, (shown / s.target) * 100)
+              const mine = side === mySide && me >= 0
+              const lead = finished && side === winnerSide
+              return (
+                <div
+                  key={side}
+                  className={cn('flex flex-col gap-1 rounded-xl px-3 py-1.5', lead ? 'border border-gold bg-gold text-gold-foreground' : 'bt-plate text-foreground', mine && !lead && 'ring-1 ring-gold/60')}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5 text-[14px] font-bold leading-tight">
+                      <span className="truncate">{sideLabel(side)}</span>
+                      {majorityLive[side] > 0 && !lead && (
+                        <span className="shrink-0 rounded-full bg-gold px-1.5 text-[11px] font-black text-gold-foreground" title="En çok kart sende, el sonunda +3">
+                          +3
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-baseline gap-2">
+                      <span className={cn('text-[12px] tabular-nums', lead ? 'text-gold-foreground/80' : 'text-muted-foreground')}>
+                        {s.capturedCounts[side] ?? 0} kart
+                        {(s.pistiCount[side] ?? 0) > 0 && <span className={cn('font-bold', !lead && 'text-gold')}> · {s.pistiCount[side]} pişti</span>}
+                      </span>
+                      <span key={shown} className="animate-pop font-display text-xl font-black tabular-nums leading-none" aria-label={`${sideLabel(side)} ${shown} puan`}>
+                        {shown}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full rounded-full bg-gold transition-[width] duration-700" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* My plate + my side's captured pile */}
+          <div className="absolute bottom-5 left-5 z-20 flex items-center gap-3">
+            <div data-turn={myTurn || undefined} className="bt-plate flex flex-col rounded-2xl px-3 py-1.5 text-foreground">
+              <span className="max-w-40 truncate text-[16px] font-bold leading-tight">{me >= 0 ? (s.team ? `Sen · ${sideLabel(mySide)}` : 'Sen') : nameOf(base)}</span>
+              <span className={cn('text-[13px] leading-tight', myTurn ? 'font-semibold text-gold' : 'text-muted-foreground')}>
+                {me < 0 ? 'İzleyici modu' : myTurn ? 'Sıra sende' : 'Bekliyor'}
+              </span>
+            </div>
+            <CapturedStack count={s.capturedCounts[mySide] ?? 0} majority={majorityLive[mySide] > 0} label={sideLabel(mySide)} />
+          </div>
+
+          {/* My hand */}
+          <div className={cn('absolute bottom-0 left-1/2 z-20 flex -translate-x-1/2 items-end justify-center gap-2.5 pb-4 [--cw:116px]', BIG_CARD_TEXT)} aria-label="Elindeki kartlar">
             {hand.map((c, i) => {
               const take = captures(c)
               const pisti = makesPisti(c)
               return (
                 <div
                   key={`${c.s}-${c.r}`}
-                  className={cn('relative flex flex-col items-center transition-transform duration-200', myTurn && 'hover:-translate-y-2', myTurn && (pisti || take) && '-translate-y-1.5')}
+                  className={cn('relative flex flex-col items-center transition-transform duration-200', myTurn && (pisti || take) && '-translate-y-2')}
                   style={{ animation: `card-deal 380ms ease-out ${i * 70}ms both` }}
                 >
                   {myTurn && (pisti || take) && (
-                    <span className={cn('absolute -top-5 z-10 whitespace-nowrap rounded-full px-1.5 text-[10px] font-bold', pisti ? 'bg-gold text-gold-foreground' : 'bg-primary text-primary-foreground')}>
+                    <span className={cn('absolute -top-7 z-10 whitespace-nowrap rounded-full px-2 text-[13px] font-bold leading-6', pisti ? 'bg-gold text-gold-foreground' : 'bg-primary text-primary-foreground')}>
                       {pisti ? 'Pişti!' : c.r === 11 ? 'Süpürür' : 'Alır'}
                     </span>
                   )}
@@ -426,11 +438,26 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
             })}
           </div>
 
+          {/* Pişti burst */}
+          {isBurst && (
+            <div key={`b${current.seq}`} className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-background/20" aria-hidden="true">
+              <div className="flex flex-col items-center gap-3" style={{ animation: 'pisti-burst 600ms cubic-bezier(0.2,1.4,0.4,1) both' }}>
+                <span className="flex items-center gap-3 rounded-3xl bg-gold px-8 py-3 font-display text-7xl font-black uppercase tracking-wide text-gold-foreground shadow-2xl ring-4 ring-background/60">
+                  <Sparkles className="size-12" aria-hidden="true" />
+                  {current.kind === 'jpisti' ? 'Vale Pişti' : 'Pişti'}
+                </span>
+                <span className="rounded-full bg-background/95 px-5 py-1.5 font-display text-2xl font-black tabular-nums text-foreground">
+                  {nameOf(current.seat)} · +{current.kind === 'jpisti' ? 20 : 10}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Hand summary */}
           {summary && !finished && (
             <HandSummary result={summary} sides={sides} label={sideLabel} mySide={me >= 0 ? mySide : -1} totals={s.totals} target={s.target} team={s.team} onClose={() => setSummary(null)} />
           )}
-        </div>
+        </FixedStage>
       </section>
     </div>
   )

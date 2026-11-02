@@ -2685,6 +2685,11 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   border: 1px solid color-mix(in oklch, var(--bt-accent) 14%, transparent);
   pointer-events: none;
 }
+/* Pişti reuses the Batak surface but on a rounded rectangle, so the inner line follows the corners. */
+.pt-felt::before {
+  inset: 18px;
+  border-radius: 1.75rem;
+}
 .bt-plate {
   background: var(--bt-plate);
   border: 1px solid var(--border);
