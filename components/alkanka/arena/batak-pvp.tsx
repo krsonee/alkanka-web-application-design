@@ -31,6 +31,7 @@ import { MobileTableChat } from './mobile-table-chat'
 import { BatakCard, sameCard, sortCards, suitColor, type Place } from './batak-card'
 import { HandSummary } from './batak-hand-summary'
 import { FixedStage } from './fixed-stage'
+import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 
 
 
@@ -67,6 +68,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const me = remote.spectator ? -1 : remote.seat
   const base = me >= 0 ? me : 0
   const myTurn = remote.myTurn
+  const { theme: tableTheme } = useTableTheme('batak')
   useEffect(() => {
     if (myTurn && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
   }, [myTurn])
@@ -402,13 +404,14 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           </p>
         )}
 
-        <section aria-label="Batak masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border">
+        <section aria-label="Batak masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border" {...themeSurfaceProps(tableTheme)}>
           {/* On desktop the stage is capped by the window height; inside the fullscreen layer LandscapeFit sizes it. */}
           <FixedStage width={STAGE_W} height={STAGE_H} className="max-w-[calc((100dvh-15rem)*2)] [.ls-split_&]:max-w-none">
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
             <div className="bt-rim absolute left-[255px] top-[86px] h-[292px] w-[590px] rounded-full p-2.5" aria-hidden="true">
               <div className="bt-felt relative size-full overflow-hidden rounded-full">
                 <TableBrand plaque={false} corners={false} jako={false} className="[&_.tb-word]:hidden" />
+                <ThemeDecor theme={tableTheme} />
               </div>
             </div>
             <div className={cn('absolute left-4 z-20 flex flex-col gap-1.5', remote.id ? 'top-14' : 'top-4')}>

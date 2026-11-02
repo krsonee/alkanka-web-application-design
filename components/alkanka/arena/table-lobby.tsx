@@ -1373,7 +1373,7 @@ function GameSurfaceInner({ game, remote, done, pvp = false }: { game: string; r
   if (themeGame) {
     const ids = (r.userIds ?? []).filter((u: string | null): u is string => Boolean(u))
     const table =
-      game === 'tavla' ? <TavlaPvp remote={r} /> : game === 'okey' ? <OkeyPvp remote={r} /> : game === 'bilardo' ? <Bilardo remote={r} /> : game === 'okey101' ? <Okey101Pvp remote={r} /> : null
+      game === 'tavla' ? <TavlaPvp remote={r} /> : game === 'okey' ? <OkeyPvp remote={r} /> : game === 'bilardo' ? <Bilardo remote={r} /> : game === 'okey101' ? <Okey101Pvp remote={r} /> : game === 'batak' ? <BatakPvp remote={r} /> : null
     if (table) {
       return (
         <TableThemeScope game={themeGame} userIds={ids}>

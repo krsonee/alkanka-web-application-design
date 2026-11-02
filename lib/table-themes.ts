@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 
-export type ThemeGame = 'okey' | '101' | 'tavla' | 'bilardo'
-export const THEME_GAMES: ThemeGame[] = ['okey', '101', 'tavla', 'bilardo']
+export type ThemeGame = 'okey' | '101' | 'tavla' | 'bilardo' | 'batak'
+export const THEME_GAMES: ThemeGame[] = ['okey', '101', 'tavla', 'bilardo', 'batak']
 
 export type ThemeCategory = 'std' | 'fan' | 'hero' | 'car' | 'nat'
 export const THEME_CATEGORIES: Record<ThemeCategory, string> = {
@@ -87,13 +87,13 @@ export const getTableTheme = (id: string | null | undefined) => (id ? BY_ID.get(
 export const isThemeId = (id: unknown): id is string => typeof id === 'string' && BY_ID.has(id)
 
 export const arenaThemeGame = (game: string): ThemeGame | null =>
-  game === 'okey101' ? '101' : game === 'okey' || game === 'tavla' || game === 'bilardo' ? game : null
+  game === 'okey101' ? '101' : game === 'okey' || game === 'tavla' || game === 'bilardo' || game === 'batak' ? game : null
 
 export type ThemeSource = 'free' | 'shop' | 'task'
 export const THEME_SOURCE: Record<ThemeSource, string> = { free: 'Ücretsiz', shop: 'Mağaza', task: 'Görev ödülü' }
 export const RARITY_PRICE: Record<ThemeRarity, number> = { S: 0, N: 500, R: 1000, E: 1750, L: 3000 }
 export const RARITY_RANK: Record<ThemeRarity, number> = { S: 0, N: 1, R: 2, E: 3, L: 4 }
-export const TASK_THEME_IDS = ['car7', 'nat3', 'hero4', 'hero2', 'nat4', 'hero8', 'nat6', 'car8']
+export const TASK_THEME_IDS = ['car7', 'nat3', 'hero4', 'hero2', 'nat4', 'hero8', 'nat6', 'car8', 'nat5']
 export const MAX_THEME_LEVEL = 21
 const BASE_LEVEL: Record<ThemeRarity, number> = { S: 1, N: 3, R: 5, E: 8, L: 11 }
 

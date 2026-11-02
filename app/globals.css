@@ -2658,6 +2658,17 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   --bt-plate: oklch(0.13 0.015 262 / 0.94);
   background: radial-gradient(120% 100% at 50% 35%, oklch(0.2 0.022 262), oklch(0.1 0.012 262));
 }
+.bt-stage[data-tt] {
+  --bt-felt: var(--tt-felt);
+  --bt-felt-hi: var(--tt-felt-hi);
+  --bt-wood: color-mix(in srgb, var(--tt-ac2) 45%, #120d0a);
+  --bt-wood-hi: color-mix(in srgb, var(--tt-ac2) 60%, var(--tt-ac) 15%);
+  --bt-accent: var(--tt-ac);
+  background: radial-gradient(120% 100% at 50% 35%, color-mix(in srgb, var(--tt-felt) 30%, #0d0f14), #08090c);
+}
+.bt-stage[data-tt] .bt-rim {
+  box-shadow: 0 22px 36px -14px rgb(0 0 0 / 0.8), 0 0 0 1px color-mix(in srgb, var(--tt-ac) 55%, #000), 0 0 26px -6px color-mix(in srgb, var(--tt-ac) 50%, transparent), inset 0 2px 0 color-mix(in srgb, var(--tt-ac) 40%, transparent);
+}
 .bt-rim {
   background: linear-gradient(180deg, var(--bt-wood-hi), var(--bt-wood) 45%, color-mix(in oklch, var(--bt-wood) 70%, black));
   box-shadow: 0 22px 36px -14px rgb(0 0 0 / 0.8), inset 0 2px 0 color-mix(in oklch, var(--bt-wood-hi) 70%, white 10%), inset 0 -3px 6px rgb(0 0 0 / 0.35);
