@@ -329,9 +329,10 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
       >
         <div className="relative">
           <div
+            data-turn={active || undefined}
             className={cn(
-              'flex size-11 items-center justify-center rounded-full bg-background/85 font-display text-base font-bold text-foreground ring-2 transition sm:size-14 sm:text-lg',
-              active ? 'ring-gold shadow-[0_0_18px_-2px_var(--gold)]' : 'ring-border',
+              'bt-ava flex size-11 items-center justify-center rounded-full font-display text-base font-bold text-foreground ring-2 transition sm:size-14 sm:text-lg',
+              active ? 'ring-gold' : isTeam ? (teamOf(seat) === teamOf(base) ? 'ring-gold/50' : 'ring-primary/60') : 'ring-border',
             )}
           >
             {s.bots.includes(seat) ? <Bot className="size-5 text-muted-foreground" aria-label="Bot" /> : nameOf(seat).charAt(0).toUpperCase()}
@@ -357,17 +358,18 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
             </span>
           )}
         </div>
-        <div
-          className={cn(
-            'flex w-24 flex-col items-center gap-1 rounded-lg px-1.5 py-1 text-center sm:w-28',
-            active ? 'bg-gold text-gold-foreground' : 'bg-background/80 text-foreground',
+        <div data-turn={active || undefined} className="bt-plate flex w-24 flex-col items-center gap-0.5 rounded-xl px-1.5 pb-1 pt-1.5 text-center text-foreground sm:w-28">
+          <span className="w-full truncate text-[11px] font-semibold leading-tight sm:text-xs">{nameOf(seat)}</span>
+          {(s.phase === 'play' || s.phase === 'bury' || s.phase === 'trump') && (
+            <span className={cn('font-display text-sm font-bold leading-none tabular-nums sm:text-base', s.bidder === seat && 'text-gold')}>
+              {s.taken[seat]}
+              {goalOf(seat) != null && <span className="text-muted-foreground">/{goalOf(seat)}</span>}
+              <span className="ml-1 text-[10px] font-medium text-muted-foreground">el</span>
+            </span>
           )}
-        >
-          <span className="w-full break-words text-[11px] font-bold leading-tight sm:text-xs">{nameOf(seat)}</span>
-          {(s.phase === 'play' || s.phase === 'bury' || s.phase === 'trump') && <TrickPips count={s.taken[seat]} goal={goalOf(seat)} light={active} />}
-          <span className={cn('text-[10px] font-semibold tabular-nums leading-none', active ? 'text-gold-foreground/80' : 'text-muted-foreground')}>
-            {isTeam ? `${teamLabel(seat)} · ` : ''}
-            {s.totals[seat]} puan
+          <span className="mt-0.5 flex w-full items-baseline justify-center gap-1 border-t border-border pt-0.5 text-[10px] font-semibold leading-none text-muted-foreground">
+            {isTeam ? `${teamLabel(seat)} · ` : ''}Puan
+            <b className={cn('font-display text-xs tabular-nums', s.totals[seat] < 0 ? 'text-destructive' : 'text-foreground')}>{s.totals[seat]}</b>
           </span>
         </div>
       </div>
@@ -413,9 +415,13 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           </p>
         )}
 
-        <section aria-label="Batak masası" className="tavla-wood mx-auto w-full max-w-4xl rounded-[1.75rem] p-1.5 sm:p-2.5">
-          <div className="baize-table relative h-[25rem] overflow-hidden rounded-[1.4rem] sm:h-[29rem] lg:h-[32rem]">
-            <TableBrand />
+        <section aria-label="Batak masası" className="bt-stage mx-auto w-full max-w-4xl overflow-hidden rounded-[1.75rem] border border-border p-1.5 sm:p-2.5">
+          <div className="relative h-[25rem] sm:h-[29rem] lg:h-[32rem]">
+            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5" aria-hidden="true">
+              <div className="bt-felt relative size-full overflow-hidden rounded-full">
+                <TableBrand />
+              </div>
+            </div>
             <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
               <div className="flex flex-col gap-1">
                 <span className="w-fit rounded-md bg-background/75 px-2 py-0.5 font-bold text-foreground">{variantLabel(variant)}</span>
@@ -574,15 +580,15 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                       const st = cardState(c)
                       return (
                         <BatakCard
-                          key={`${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
+                          key={`${s.handNo}-${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
                           card={c}
                           playable={st.ok || st.buryOk}
                           selected={st.selected}
                           dim={st.dim}
                           disabled={st.disabled}
                           onClick={tappable ? () => tapCard(c, true) : undefined}
-                          className={cn(st.nope && 'card-nope ring-2 ring-destructive')}
-                          style={{ marginLeft: i === 0 ? 0 : '-0.55rem', zIndex: st.selected ? 60 : i + ri * 20 }}
+                          className={cn(st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
+                          style={{ marginLeft: i === 0 ? 0 : '-0.55rem', zIndex: st.selected ? 60 : i + ri * 20, animationDelay: st.nope ? undefined : `${(i + ri * row.length) * 45}ms` }}
                         />
                       )
                     })}
@@ -595,15 +601,16 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                   const st = cardState(c)
                   return (
                     <BatakCard
-                      key={`${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
+                      key={`${s.handNo}-${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
                       card={c}
                       playable={st.ok || st.buryOk}
                       selected={st.selected}
                       dim={st.dim}
                       disabled={st.disabled}
                       onClick={tappable ? () => tapCard(c, false) : undefined}
-                      className={cn('origin-bottom', st.nope && 'card-nope ring-2 ring-destructive')}
+                      className={cn('origin-bottom', st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
                       style={{
+                        animationDelay: st.nope ? undefined : `${i * 45}ms`,
                         marginLeft: i === 0 ? 0 : `min(0.15rem, calc((100% - ${hand.length} * var(--cw)) / ${Math.max(1, hand.length - 1)}))`,
                         rotate: `${(i - mid) * (hand.length > 13 ? 1.6 : 2.2)}deg`,
                         // Fan curve via margin: an inline `translate` would override the hover/selected lift classes.

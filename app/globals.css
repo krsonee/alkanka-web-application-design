@@ -2632,3 +2632,59 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 @keyframes tbn-rev { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(1.5px); } 60% { transform: translateX(-1px); } }
 @keyframes tbn-sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
 @media (prefers-reduced-motion: reduce) { .tavla-bar-name[data-active] .tavla-bar-letter { animation: none; } }
+
+/* Batak table. Every surface color is read from these variables so a table theme only has to override them. */
+.bt-stage {
+  --bt-felt: oklch(0.25 0.05 245);
+  --bt-felt-hi: oklch(0.33 0.06 245);
+  --bt-wood: oklch(0.32 0.05 55);
+  --bt-wood-hi: oklch(0.44 0.065 58);
+  --bt-accent: var(--gold);
+  --bt-plate: oklch(0.13 0.015 262 / 0.94);
+  background: radial-gradient(120% 100% at 50% 35%, oklch(0.2 0.022 262), oklch(0.1 0.012 262));
+}
+.bt-rim {
+  background: linear-gradient(180deg, var(--bt-wood-hi), var(--bt-wood) 45%, color-mix(in oklch, var(--bt-wood) 70%, black));
+  box-shadow: 0 22px 36px -14px rgb(0 0 0 / 0.8), inset 0 2px 0 color-mix(in oklch, var(--bt-wood-hi) 70%, white 10%), inset 0 -3px 6px rgb(0 0 0 / 0.35);
+}
+.bt-felt {
+  background: radial-gradient(65% 75% at 50% 42%, var(--bt-felt-hi), var(--bt-felt) 68%, color-mix(in oklch, var(--bt-felt) 80%, black));
+  box-shadow: inset 0 0 32px rgb(0 0 0 / 0.6), inset 0 0 0 2px color-mix(in oklch, var(--bt-accent) 16%, transparent);
+}
+.bt-felt::before {
+  content: '';
+  position: absolute;
+  inset: 7%;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklch, var(--bt-accent) 14%, transparent);
+  pointer-events: none;
+}
+.bt-plate {
+  background: var(--bt-plate);
+  border: 1px solid var(--border);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.bt-plate[data-turn] {
+  border-color: var(--bt-accent);
+  box-shadow: 0 0 18px -4px var(--bt-accent);
+}
+.bt-ava {
+  background: linear-gradient(150deg, oklch(0.36 0.04 262), oklch(0.22 0.025 262));
+}
+.bt-ava[data-turn] {
+  animation: bt-turn 1.4s ease-in-out infinite;
+}
+@keyframes bt-turn {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--bt-accent) 60%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in oklch, var(--bt-accent) 0%, transparent); }
+}
+.bt-deal {
+  animation: bt-deal 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes bt-deal {
+  from { opacity: 0; transform: translateY(-14rem) scale(0.55); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bt-deal, .bt-ava[data-turn] { animation: none; }
+}
