@@ -82,7 +82,7 @@ const fetcher = async (url: string) => {
 const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [4], rounds: [1, 3, 5] },
-  batak: { seats: [4], rounds: [1, 31, 51, 101] },
+  batak: { seats: [4], rounds: [31, 1, 51, 101] },
   monopoly: { seats: [2, 3, 4, 5, 6, 7, 8], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
   papaz: { seats: [2, 3, 4, 5, 6], rounds: [] },
@@ -876,6 +876,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [resultClosed, setResultClosed] = useState(false)
+  const [replaying, setReplaying] = useState(false)
 
   const send = useCallback(
     async (action: RemoteAction) => {
@@ -1234,6 +1235,24 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                 <PistiFinalScore state={data.state} names={names} mySeat={mySeat} />
               )}
               <div className="mt-1 grid w-full grid-cols-2 gap-2">
+                {remote.replay && data.status === 'bitti' && (
+                  <button
+                    type="button"
+                    disabled={replaying}
+                    onClick={async () => {
+                      setReplaying(true)
+                      try {
+                        await remote.replay?.()
+                      } finally {
+                        setReplaying(false)
+                      }
+                    }}
+                    className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+                  >
+                    {replaying ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
+                    Rövanş · {formatAC(data.stake)} KC
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setResultClosed(true)}
@@ -1415,6 +1434,7 @@ function HeadDuel({
 function RoomShell({ children, onLeave, title, immersive }: { children: React.ReactNode; onLeave: () => void; title?: string; immersive?: boolean }) {
   return (
     <div
+      data-table-live={immersive ? '' : undefined}
       className={cn(
         'relative overflow-hidden rounded-2xl border border-border bg-card',
         immersive && 'max-lg:fixed max-lg:inset-0 max-lg:z-[60] max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:rounded-none max-lg:border-0 max-lg:pt-[env(safe-area-inset-top)]',

@@ -199,7 +199,7 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
       {entered?.mode === 'bot' && <BotMode game={game} settings={settings} />}
       {entered?.mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} initialStake={entered.bet} />}
       {modes.includes('pvp') && (
-        <div className="mt-4 border-t border-border pt-6">
+        <div className="mt-4 border-t border-border pt-6 [body:has([data-table-live])_&]:hidden">
           <LiveLobby game={game} watching={null} onWatch={watch} />
         </div>
       )}

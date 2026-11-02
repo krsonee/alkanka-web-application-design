@@ -88,13 +88,15 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           }
         >
           {tgPromo.enabled && (
-            <TelegramStrip
-              text={tgPromo.text}
-              cta={tgPromo.cta}
-              reward={tgPromo.reward}
-              href={tgPromo.url || telegram.duyuru}
-              reshowDays={tgPromo.reshowDays}
-            />
+            <div className="[body:has([data-table-live])_&]:hidden">
+              <TelegramStrip
+                text={tgPromo.text}
+                cta={tgPromo.cta}
+                reward={tgPromo.reward}
+                href={tgPromo.url || telegram.duyuru}
+                reshowDays={tgPromo.reshowDays}
+              />
+            </div>
           )}
           <Topbar social={social} sponsors={searchSponsors} telegram={telegram} />
           <WinnersTicker />
