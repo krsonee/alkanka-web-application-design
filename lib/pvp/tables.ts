@@ -245,7 +245,7 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
   // Okey masaları her zaman 4 kişilik; boş koltukları botlar doldurur.
   const seats = 4
   if (typeof input?.team !== 'boolean') throw new Error('Takımlı ya da tekli oyun modunu seçmelisin.')
-  const bots = Math.max(0, Math.min(2, Math.floor(Number(input?.bots) || 0)))
+  const bots = Math.max(0, Math.min(3, Math.floor(Number(input?.bots) || 0)))
   const rounds = [10, 20, 30].includes(Number(input?.rounds)) ? Number(input?.rounds) : 0
   return { seats, team: input.team, bots, ...(rounds ? { rounds } : {}) }
 }
@@ -320,6 +320,46 @@ export async function joinTable(m: Member, id: string, expectedStake?: number) {
     await credit(m.id, entry(t))
     throw new Error('Masa az önce güncellendi, tekrar dene.')
   }
+}
+
+/** Okey ve 101 masaları sabit 4 kişilik; bekleyen masada boş koltuklara bu süreden sonra bot oturur. */
+export const FOUR_SEAT_GAMES = new Set(['okey', 'okey101'])
+export const BOT_FILL_MS = 30 * 1000
+/** Botlu Okey/101 masalarında ek kesinti (yüzde puan), bota karşı KC kasılmasın diye. */
+const BOT_TABLE_EXTRA_COMMISSION = 5
+
+/** Fills every empty seat of a waiting table with bots and starts the game. Old 2-3 seat okey tables become 4 seats. */
+async function seatBots(t: TableRow): Promise<boolean> {
+  if (t.status !== 'bekliyor' || t.tournamentId) return false
+  const seats = FOUR_SEAT_GAMES.has(t.game) ? 4 : t.seats
+  const taken = new Set(t.players.map((p) => p.seat))
+  const free = Array.from({ length: seats }, (_, i) => i).filter((i) => !taken.has(i))
+  if (!free.length) return false
+  const names = pickBotNames(free.length)
+  const players: Player[] = [...t.players, ...free.map((s, i) => ({ id: `bot:${s}`, name: names[i], seat: s, bot: true }))].sort(
+    (a, b) => a.seat - b.seat,
+  )
+  const botSeats = players.filter((p) => p.bot).map((p) => p.seat)
+  const opts = { ...t.options, seats, bots: botSeats.length }
+  const state = initState(t.game as never, { ...opts, botSeats })
+  const now = new Date().toISOString()
+  const lastActs = Object.fromEntries(players.filter((p) => !p.bot).map((p) => [p.id, now]))
+  const r = await pool.query(
+    `UPDATE game_tables SET seats = $3, players = $4::jsonb, state = $5::jsonb, status = 'oynaniyor', version = version + 1, updated_at = now(),
+       options = COALESCE(options, '{}'::jsonb) || $6::jsonb
+     WHERE id = $1 AND status = 'bekliyor' AND version = $2 RETURNING id`,
+    [t.id, t.version, seats, JSON.stringify(players), JSON.stringify(state), JSON.stringify({ seats, bots: botSeats.length, lastActs })],
+  )
+  return Boolean(r.rowCount)
+}
+
+/** The table owner starts right away; empty seats go to bots. */
+export async function startWithBots(m: Pick<Member, 'id'>, id: string) {
+  const t = await getTableRow(id)
+  if (!t || t.status !== 'bekliyor') throw new Error('Masa artık bekleme durumunda değil.')
+  if (!FOUR_SEAT_GAMES.has(t.game)) throw new Error('Bu oyunda botla başlatma yok.')
+  if (t.createdBy !== m.id) throw new Error('Botla başlatmayı sadece masayı açan yapabilir.')
+  if (!(await seatBots(t))) throw new Error('Masa az önce güncellendi, tekrar dene.')
 }
 
 export async function cancelTable(id: string, opts: { byUser?: string; admin?: boolean }) {
@@ -453,6 +493,9 @@ export async function kickIdlePlayers(t: TableRow): Promise<boolean> {
   if (t.tournamentId) return false
   const now = Date.now()
   if (t.status === 'bekliyor') {
+    if (FOUR_SEAT_GAMES.has(t.game) && humans(t).length > 0 && now - new Date(t.updatedAt).getTime() >= BOT_FILL_MS) {
+      return seatBots(t).catch(() => false)
+    }
     if (now - new Date(t.updatedAt).getTime() < IDLE_KICK_MS) return false
     const r = await pool.query(`UPDATE game_tables SET status = 'iptal', updated_at = now() WHERE id = $1 AND status = 'bekliyor' RETURNING id`, [t.id])
     if (r.rowCount) for (const p of humans(t)) await credit(p.id, entry(t))
@@ -632,7 +675,8 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const botBonus = hasBots && (isSeatGame(t.game) || !(t.options.forfeits ?? 0)) ? t.stake : 0
   // Players who left mid-game leave their stake in the pot.
   const pot = t.stake * (people.length + (t.options.forfeits ?? 0)) + botBonus
-  const net = pot * (1 - (settings?.commission ?? 0) / 100)
+  const commission = (settings?.commission ?? 0) + (botBonus && FOUR_SEAT_GAMES.has(t.game) ? BOT_TABLE_EXTRA_COMMISSION : 0)
+  const net = pot * (1 - commission / 100)
   // Papaz Kimde pays by finishing place: winnerSeats is ordered first-out first, earlier places weigh more.
   const weightOf = (p: TableRow['players'][number]) => (t.game === 'papaz' ? winnerSeats.length - winnerSeats.indexOf(p.seat) : 1)
   const totalWeight = humanWinners.reduce((a, p) => a + weightOf(p), 0)

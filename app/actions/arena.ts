@@ -25,7 +25,7 @@ import {
 } from '@/lib/casino'
 
 const BJ_ACTIONS: BjAction[] = ['hit', 'stand', 'double', 'split', 'surrender', 'insure', 'noInsure']
-import { actOnTable, cancelTable, claimTimeout, createTable, getTableRow, joinTable, leaveTable, pausedClock, tableView } from '@/lib/pvp/tables'
+import { actOnTable, cancelTable, claimTimeout, createTable, getTableRow, joinTable, leaveTable, pausedClock, startWithBots, tableView } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets, withdrawLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
@@ -412,6 +412,15 @@ export async function playMove(id: string, version: number, action: { type: stri
 export async function leaveGameTable(id: string) {
   try {
     await leaveTable(await member(), id)
+    return { ok: true as const }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export async function startTableWithBots(id: string) {
+  try {
+    await startWithBots(await member(), id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)

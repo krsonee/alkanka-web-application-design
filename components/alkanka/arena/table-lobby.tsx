@@ -11,7 +11,7 @@ import { FitToScreen } from './fit-to-screen'
 import { LandscapeFit } from './landscape-fit'
 import { useTurnAlert } from './use-turn-alert'
 import { cn } from '@/lib/utils'
-import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
+import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable, startTableWithBots } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
@@ -408,6 +408,7 @@ export function TableLobby({
                     { value: '0', label: 'Bot yok' },
                     { value: '1', label: '1 bot' },
                     { value: '2', label: '2 bot' },
+                    { value: '3', label: 'Bota karşı (3 bot)' },
                   ]}
                   onChange={(v) => setBots(Number(v))}
                 />
@@ -1040,8 +1041,26 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
         {data.status === 'bekliyor' && (
           <div className="flex flex-col items-center gap-4 py-10 text-center">
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
-            <p className="text-pretty text-sm text-muted-foreground">Masan açık. Bir kanka oturduğunda oyun otomatik başlar.</p>
+            <p className="text-pretty text-sm text-muted-foreground">
+              {data.game === 'okey' || data.game === 'okey101'
+                ? '30 saniye içinde kimse oturmazsa boş koltuklara bot oturur ve oyun başlar.'
+                : 'Masan açık. Bir kanka oturduğunda oyun otomatik başlar.'}
+            </p>
             {mySeat >= 0 && !data.tournamentId && <InviteButton tableId={id} />}
+            {mySeat === 0 && !data.tournamentId && (data.game === 'okey' || data.game === 'okey101') && (
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  await startTableWithBots(id)
+                  setBusy(false)
+                  refresh()
+                }}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              >
+                <Swords className="size-4" aria-hidden="true" /> Hemen botla başlat
+              </button>
+            )}
             {mySeat > 0 && !data.tournamentId && (
               <LeaveTableButton
                 id={id}
