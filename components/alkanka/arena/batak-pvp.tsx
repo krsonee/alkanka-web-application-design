@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Bot, ChevronDown, Crown, Eye, HelpCircle, Trophy, X } from 'lucide-react'
+import { Bot, ChevronDown, Crown, Eye, HelpCircle, History, Trophy, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   BATAK_RULE_OPTIONS,
@@ -82,7 +82,7 @@ export function BatakCard({
     >
       <span className={cn('absolute left-1 top-0.5 flex flex-col items-center font-bold leading-none', color, size === 'xs' ? 'text-[10px]' : 'text-base sm:text-lg')}>
         {label}
-        <span className={size === 'xs' ? 'text-[9px]' : 'text-sm sm:text-base'} aria-hidden="true">
+        <span className={size === 'xs' ? 'text-[10px]' : 'text-sm sm:text-base'} aria-hidden="true">
           {SUIT_SYMBOLS[card.s]}
         </span>
       </span>
@@ -148,6 +148,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const [buryPick, setBuryPick] = useState<BCard[]>([])
   const [picked, setPicked] = useState<BCard | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [lastOpen, setLastOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [scoreOpen, setScoreOpen] = useState(false)
 
@@ -250,7 +251,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   }
   const illegalReason = (c: BCard) => {
     if (!s.trick.length) {
-      return s.trump != null && c.s === s.trump && !s.broken ? 'Koz kırılmadan kozla açamazsın' : 'Bu kart şu an atılamaz'
+      return s.trump != null && c.s === s.trump && !s.broken ? 'Koz kırılmadan kozla açamazsın' : 'Bu kart şu an at��lamaz'
     }
     const led = s.trick[0].card.s
     if (hand.some((x) => x.s === led)) {
@@ -448,6 +449,20 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
+                {s.lastTrick && s.phase === 'play' && (
+                  <button
+                    type="button"
+                    onClick={() => setLastOpen((v) => !v)}
+                    aria-expanded={lastOpen}
+                    aria-controls="batak-last-trick"
+                    className={cn(
+                      'flex items-center gap-1 rounded-md px-2 py-1 font-bold transition',
+                      lastOpen ? 'bg-primary text-primary-foreground' : 'bg-background/75 text-foreground hover:bg-background',
+                    )}
+                  >
+                    <History className="size-3.5" aria-hidden="true" /> Son el
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setScoreOpen((v) => !v)}
@@ -470,6 +485,34 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                 </button>
               </div>
             </div>
+
+            {lastOpen && s.lastTrick && s.phase === 'play' && (
+              <div
+                id="batak-last-trick"
+                role="region"
+                aria-label="Son el"
+                className="absolute right-2 top-11 z-40 flex flex-col gap-2 rounded-xl bg-background/95 p-2.5 shadow-xl ring-1 ring-border backdrop-blur sm:right-4 sm:top-12"
+              >
+                <div className="flex items-center justify-between gap-3 text-xs font-bold text-foreground">
+                  <span>Son el · {s.lastWinner != null ? `${nameOf(s.lastWinner)} aldı` : ''}</span>
+                  <button type="button" onClick={() => setLastOpen(false)} aria-label="Kapat" className="rounded p-0.5 text-muted-foreground hover:text-foreground">
+                    <X className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="flex gap-1.5">
+                  {s.lastTrick.map((p) => (
+                    <div key={p.seat} className="flex flex-col items-center gap-0.5">
+                      <BatakCard
+                        card={p.card}
+                        size="sm"
+                        className={cn(p.seat === s.lastWinner && 'ring-[3px] ring-gold')}
+                      />
+                      <span className="max-w-[4.5rem] truncate text-[11px] font-bold text-muted-foreground">{nameOf(p.seat)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {places.map((p) => (
               <Seat key={p.seat} seat={p.seat} place={p.place} />

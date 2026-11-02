@@ -46,6 +46,8 @@ export type BatakState = {
   played: BCard[]
   lastTrick: Play[] | null
   lastWinner: number | null
+  /** Suits each seat has shown out of this hand (seat x suit). Public info: everyone saw the discard. */
+  voids?: { hand: number; v: boolean[][] }
   totals: number[]
   handNo: number
   handsTotal: number
@@ -430,10 +432,13 @@ export function batakStep(state: BatakState, seat: number, a: Act): BatakStep {
     const trick = [...s.trick, { seat, card }]
     const broken = s.broken || card.s === s.trump
     const played = [...s.played, card]
-    if (trick.length < n) return { state: { ...s, hands, trick, broken, played, turn: (seat + 1) % n, note: '' }, winners: null }
+    const voids = voidsOf(s)
+    const led = s.trick[0]?.card.s
+    if (led != null && card.s !== led && !voids.v[seat][led]) voids.v = voids.v.map((row, i) => (i === seat ? row.map((x, k) => x || k === led) : row))
+    if (trick.length < n) return { state: { ...s, hands, trick, broken, played, voids, turn: (seat + 1) % n, note: '' }, winners: null }
     const winner = trickWinner(trick, s.trump)!.seat
     const taken = s.taken.map((t, i) => (i === winner ? t + 1 : t))
-    const next: BatakState = { ...s, hands, trick: [], broken, played, taken, lastTrick: trick, lastWinner: winner, turn: winner, note: '' }
+    const next: BatakState = { ...s, hands, trick: [], broken, played, voids, taken, lastTrick: trick, lastWinner: winner, turn: winner, note: '' }
     if (hands.every((h) => h.length === 0)) return endHand(next)
     return { state: next, winners: null }
   }
@@ -492,6 +497,19 @@ function estimate(hand: BCard[], fixedTrump?: number) {
 
 /** Each bot has its own appetite so the auction varies: 0 = careful, up to ~1 = brave. */
 const nerve = (s: BatakState, seat: number) => ((seat * 37 + s.handNo * 11 + (s.dealer ?? 0) * 5) % 10) / 10
+
+function voidsOf(s: BatakState): { hand: number; v: boolean[][] } {
+  if (s.voids && s.voids.hand === s.handNo && s.voids.v.length === s.seats) return { hand: s.handNo, v: s.voids.v.map((r) => [...r]) }
+  return { hand: s.handNo, v: Array.from({ length: s.seats }, () => [false, false, false, false]) }
+}
+
+/** True when some opponent has shown out of this suit and could still ruff it. */
+function opponentCanRuff(s: BatakState, seat: number, suit: number) {
+  if (s.trump == null || suit === s.trump) return false
+  const v = voidsOf(s).v
+  const partner = partnerOf(s, seat)
+  return v.some((row, i) => i !== seat && i !== partner && row[suit] && !row[s.trump!])
+}
 
 function isTopRemaining(card: BCard, s: BatakState, hand: BCard[]) {
   for (let r = card.r + 1; r <= 14; r++) {
@@ -558,7 +576,8 @@ export function batakBotTurn(state: BatakState, seat: number): BatakStep {
   let pick: BCard
   if (!s.trick.length) {
     const winners = legal.filter((c) => isTopRemaining(c, s, hand))
-    const nonTrumpWinners = winners.filter((c) => c.s !== s.trump)
+    // A top card is only a sure trick if no opponent has already shown out of that suit.
+    const nonTrumpWinners = winners.filter((c) => c.s !== s.trump && !opponentCanRuff(s, seat, c.s))
     if (nonTrumpWinners.length) pick = nonTrumpWinners[0]
     else if (winners.length && (seat === s.bidder || (partner != null && partner === s.bidder))) pick = winners[0]
     else {
@@ -566,7 +585,7 @@ export function batakBotTurn(state: BatakState, seat: number): BatakStep {
         .filter((x) => x !== s.trump)
         .map((x) => legal.filter((c) => c.s === x))
         .filter((g) => g.length)
-        .sort((a, b) => b.length - a.length)[0]
+        .sort((a, b) => Number(opponentCanRuff(s, seat, a[0].s)) - Number(opponentCanRuff(s, seat, b[0].s)) || b.length - a.length)[0]
       pick = bySuit ? low(bySuit) : low(legal)
     }
   } else {
