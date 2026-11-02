@@ -367,7 +367,7 @@ export function batakStep(state: BatakState, seat: number, a: Act): BatakStep {
       if (s.variant === 'gommeli') {
         const hands = s.hands.map((h, i) => (i === b ? sortHand([...h, ...s.kitty]) : h))
         return {
-          state: { ...s, hands, kitty: [], bids, passed, highBid, bidder: b, phase: 'trump', turn: b, note: `İhale ${highBid} ile kapandı. Yerdeki 4 kart ihale sahibine geçti, önce kozu seçecek.` },
+          state: { ...s, hands, kitty: [], bids, passed, highBid, bidder: b, phase: 'trump', turn: b, note: `��hale ${highBid} ile kapandı. Yerdeki 4 kart ihale sahibine geçti, önce kozu seçecek.` },
           winners: null,
         }
       }
@@ -433,26 +433,56 @@ export function batakStep(state: BatakState, seat: number, a: Act): BatakStep {
 
 // ---------- Bot ----------
 
-function estimate(hand: BCard[], fixedTrump?: number) {
-  let best = { suit: fixedTrump ?? 0, score: -1 }
-  let tricks = 0
-  for (let s = 0; s < 4; s++) {
-    const cards = hand.filter((c) => c.s === s)
-    const len = cards.length
-    const has = (r: number) => cards.some((c) => c.r === r)
-    let hi = 0
-    if (has(14)) hi += 1
-    if (has(13)) hi += len >= 2 ? 0.8 : 0.3
-    if (has(12)) hi += len >= 3 ? 0.5 : 0.1
-    if (has(11)) hi += len >= 4 ? 0.3 : 0
-    tricks += hi
-    const score = len * 1.3 + hi
-    if (fixedTrump == null && score > best.score) best = { suit: s, score }
-  }
-  const trumpLen = hand.filter((c) => c.s === best.suit).length
-  tricks += Math.max(0, trumpLen - 3) * 0.9
-  return { tricks: Math.floor(tricks), raw: tricks, suit: best.suit }
+function sideTricks(cards: BCard[]) {
+  const len = cards.length
+  const has = (r: number) => cards.some((c) => c.r === r)
+  let hi = 0
+  if (has(14)) hi += 1
+  if (has(13)) hi += has(14) ? (len >= 2 ? 0.9 : 0) : len >= 2 ? 0.6 : 0.2
+  if (has(12)) hi += has(14) && has(13) ? (len >= 3 ? 0.8 : 0) : len >= 3 ? 0.35 : 0
+  // Long side suits run once trumps are gone.
+  if (len >= 5) hi += (len - 4) * 0.5
+  return hi
 }
+
+function trumpTricks(cards: BCard[], sideLens: number[]) {
+  const len = cards.length
+  const has = (r: number) => cards.some((c) => c.r === r)
+  let t = 0
+  if (has(14)) t += 1
+  if (has(13)) t += len >= 2 ? 0.95 : 0.4
+  if (has(12)) t += len >= 3 ? 0.85 : 0.3
+  if (has(11)) t += len >= 4 ? 0.6 : 0.15
+  // Every trump beyond the top honours wins sooner or later, by length or by ruffing.
+  const honours = [14, 13, 12, 11].filter(has).length
+  t += Math.max(0, len - Math.max(honours, 2)) * 0.8
+  // Short side suits let small trumps ruff.
+  if (len >= 3) for (const l of sideLens) t += l === 0 ? 0.9 : l === 1 ? 0.5 : l === 2 ? 0.15 : 0
+  return t
+}
+
+function evaluate(hand: BCard[], trump: number | null) {
+  const bySuit = [0, 1, 2, 3].map((s) => hand.filter((c) => c.s === s))
+  if (trump == null) return bySuit.reduce((a, cards) => a + sideTricks(cards), 0)
+  const sideLens = bySuit.filter((_, s) => s !== trump).map((c) => c.length)
+  return trumpTricks(bySuit[trump], sideLens) + bySuit.reduce((a, cards, s) => (s === trump ? a : a + sideTricks(cards)), 0)
+}
+
+function estimate(hand: BCard[], fixedTrump?: number) {
+  if (fixedTrump != null) {
+    const raw = evaluate(hand, fixedTrump)
+    return { tricks: Math.floor(raw), raw, suit: fixedTrump }
+  }
+  let best = { suit: 0, raw: -1 }
+  for (let s = 0; s < 4; s++) {
+    const raw = evaluate(hand, s)
+    if (raw > best.raw) best = { suit: s, raw }
+  }
+  return { tricks: Math.floor(best.raw), raw: best.raw, suit: best.suit }
+}
+
+/** Each bot has its own appetite so the auction varies: 0 = careful, up to ~1 = brave. */
+const nerve = (s: BatakState, seat: number) => ((seat * 37 + s.handNo * 11 + (s.dealer ?? 0) * 5) % 10) / 10
 
 function isTopRemaining(card: BCard, s: BatakState, hand: BCard[]) {
   for (let r = card.r + 1; r <= 14; r++) {
@@ -466,22 +496,32 @@ function botBid(s: BatakState, seat: number, hand: BCard[]) {
   const maxTricks = tricksPerHand(s)
   const need = Math.max(minBidFor(s.variant), s.highBid + 1)
   const own = estimate(hand)
-  let est = own.tricks
+  // Bots are not all equally cautious; a braver one stretches its estimate by up to a trick.
+  let raw = own.raw + nerve(s, seat) * 1.1
   if (s.variant === 'gommeli') {
     // The 4 kitty cards are unseen; on average they add about one trick, more with a long trump suit.
     const trumpLen = hand.filter((c) => c.s === own.suit).length
-    est = Math.floor(own.raw + 0.9 + (trumpLen >= 6 ? 0.4 : 0))
+    raw += 0.9 + (trumpLen >= 6 ? 0.4 : 0)
   }
   if (s.variant === 'esli') {
     const partner = partnerOf(s, seat)!
     // Don't overbid a partner who already holds the bid unless the hand is clearly strong.
-    if (s.bidder === partner && own.tricks < 6 && !mustBid(s, seat)) return { type: 'bid', amount: 'pass' as const }
-    const partnerShare = Math.round((maxTricks - own.tricks) / 4)
-    est = own.tricks + partnerShare
+    if (s.bidder === partner && own.raw < 6 && !mustBid(s, seat)) return { type: 'bid', amount: 'pass' as const }
+    raw += Math.max(2.5, (maxTricks - own.raw) / 3.2)
   }
+  const est = Math.min(maxTricks, Math.floor(raw))
   if (mustBid(s, seat)) return { type: 'bid', amount: Math.min(maxTricks, Math.max(need, est)) }
-  if (est >= need && need <= maxTricks) return { type: 'bid', amount: need }
-  return { type: 'bid', amount: 'pass' as const }
+  if (est < need || need > maxTricks) return { type: 'bid', amount: 'pass' as const }
+  // A clearly strong hand jumps straight up instead of creeping one by one.
+  const jump = est - need >= 2 && s.bidder == null ? Math.min(est - 1, need + 1) : need
+  return { type: 'bid', amount: jump }
+}
+
+/** Throw away the cheapest card, preferring the shortest side suit so it can be ruffed later. Keeps aces and trumps. */
+function discard(legal: BCard[], hand: BCard[], trump: number | null) {
+  const suitLen = (x: number) => hand.filter((c) => c.s === x).length
+  const cost = (c: BCard) => (c.s === trump ? 1000 : 0) + (c.r === 14 ? 200 : 0) + c.r * 3 + suitLen(c.s)
+  return [...legal].sort((a, b) => cost(a) - cost(b))[0]
 }
 
 export function batakBotTurn(state: BatakState, seat: number): BatakStep {
@@ -529,7 +569,13 @@ export function batakBotTurn(state: BatakState, seat: number): BatakStep {
       current.seat === partner &&
       (lastToPlay || (isTopRemaining(current.card, s, hand) && (current.card.s === s.trump || s.trump == null || hand.some((c) => c.s === s.trick[0].card.s))))
     const winning = legal.filter((c) => trickWinner([...s.trick, { seat, card: c }], s.trump)!.seat === seat)
-    pick = partnerSafe || !winning.length ? low(legal) : low(winning)
+    if (partnerSafe || !winning.length) pick = discard(legal, hand, s.trump)
+    else if (lastToPlay) pick = low(winning)
+    else {
+      // Later players can still overtake, so prefer a card nobody can beat in the led suit.
+      const sure = winning.filter((c) => c.s !== s.trump && isTopRemaining(c, s, hand))
+      pick = sure.length ? low(sure) : low(winning)
+    }
   }
   return batakStep(s, seat, { type: 'play', s: pick.s, r: pick.r })
 }
