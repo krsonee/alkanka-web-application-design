@@ -4,6 +4,15 @@
 
 @custom-variant dark (&:is(.dark *));
 @custom-variant phone-ls (@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px));
+/* Flat table layout: short screens, plus every fullscreen LandscapeFit layer regardless of the phone's reported height. */
+@custom-variant bt-short {
+  @media (max-height: 500px) {
+    @slot;
+  }
+  &:where(.ls-split *) {
+    @slot;
+  }
+}
 
 @theme inline {
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
