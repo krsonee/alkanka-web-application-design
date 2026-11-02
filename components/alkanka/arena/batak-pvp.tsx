@@ -269,9 +269,11 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
         className={cn(
           'absolute z-10 flex items-center gap-1',
           place === 'top' ? 'flex-row gap-2' : 'flex-col',
-          place === 'top' && 'left-1/2 top-11 -translate-x-1/2 sm:top-3 bt-short:!top-1',
-          place === 'left' && 'left-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:left-5 lg:left-[7%] bt-short:!left-2 bt-short:!top-[53%]',
-          place === 'right' && 'right-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:right-5 lg:right-[7%] bt-short:!right-2 bt-short:!top-[53%]',
+          place === 'top' && 'left-1/2 top-11 -translate-x-1/2 sm:top-3 bt-short:!top-1.5',
+          place === 'left' &&
+            'left-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:left-5 lg:left-[7%] bt-short:!left-auto bt-short:!right-[calc(81%+0.75rem)] bt-short:!top-[56%]',
+          place === 'right' &&
+            'right-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:right-5 lg:right-[7%] bt-short:!right-auto bt-short:!left-[calc(81%+0.75rem)] bt-short:!top-[56%]',
         )}
       >
         <div className="relative">
@@ -279,6 +281,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
             data-turn={active || undefined}
             className={cn(
               'bt-ava flex size-11 items-center justify-center rounded-full font-display text-base font-bold text-foreground ring-2 transition sm:size-14 sm:text-lg bt-short:!size-9',
+              place === 'top' && 'bt-short:!size-8',
               active ? 'ring-gold' : isTeam ? (teamOf(seat) === teamOf(base) ? 'ring-gold/50' : 'ring-primary/60') : 'ring-border',
             )}
           >
@@ -305,8 +308,16 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
             </span>
           )}
         </div>
-        <div data-turn={active || undefined} className="bt-plate flex w-24 flex-col items-center gap-0.5 rounded-xl px-1.5 pb-1 pt-1.5 text-center text-foreground sm:w-28 bt-short:!w-[5.5rem] bt-short:!pt-1">
-          <span className="w-full truncate text-xs font-semibold leading-tight sm:text-sm">{nameOf(seat)}</span>
+        <div
+          data-turn={active || undefined}
+          className={cn(
+            'bt-plate flex w-24 flex-col items-center gap-0.5 rounded-xl px-1.5 pb-1 pt-1.5 text-center text-foreground sm:w-28 bt-short:!w-[5.5rem] bt-short:!pt-1',
+            place === 'top' && 'bt-short:!w-auto bt-short:!flex-row bt-short:!gap-2.5 bt-short:!rounded-full bt-short:!px-3 bt-short:!py-1.5',
+          )}
+        >
+          <span className={cn('w-full truncate text-xs font-semibold leading-tight sm:text-sm', place === 'top' && 'bt-short:!w-auto bt-short:max-w-[6.5rem]')}>
+            {nameOf(seat)}
+          </span>
           {(s.phase === 'play' || s.phase === 'bury' || s.phase === 'trump') && (
             <span className={cn('font-display text-sm font-bold leading-none tabular-nums sm:text-base', s.bidder === seat && 'text-gold')}>
               {s.taken[seat]}
@@ -319,7 +330,12 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               )}
             </span>
           )}
-          <span className="mt-0.5 flex w-full items-baseline justify-center gap-1 border-t border-border pt-0.5 text-[11px] font-semibold leading-none text-muted-foreground">
+          <span
+            className={cn(
+              'mt-0.5 flex w-full items-baseline justify-center gap-1 border-t border-border pt-0.5 text-[11px] font-semibold leading-none text-muted-foreground',
+              place === 'top' && 'bt-short:!mt-0 bt-short:!w-auto bt-short:!border-l bt-short:!border-t-0 bt-short:!pl-2.5 bt-short:!pt-0',
+            )}
+          >
             {isTeam ? `${teamLabel(seat)} · ` : ''}Puan
             <b className={cn('font-display text-sm tabular-nums', s.totals[seat] < 0 ? 'text-destructive' : 'text-foreground')}>{s.totals[seat]}</b>
           </span>
@@ -331,7 +347,9 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const contractChip =
     s.phase !== 'bid' && s.phase !== 'predict' ? (
       <div className="flex w-fit items-center gap-2 whitespace-nowrap rounded-full bg-background/90 py-1 pl-1 pr-3 text-xs font-bold text-foreground shadow-lg ring-1 ring-gold/50 backdrop-blur sm:text-sm">
-        <span className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pl-2.5 pr-1 text-xs text-muted-foreground">Koz {trumpBadge}</span>
+        <span className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pl-2.5 pr-1 text-xs text-muted-foreground bt-short:!pl-1">
+          <span className="bt-short:sr-only">Koz</span> {trumpBadge}
+        </span>
         <span className="tabular-nums">{bidLine}</span>
       </div>
     ) : null
@@ -379,9 +397,9 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           {/* Short landscape phones get a flatter table so LandscapeFit doesn't shrink the text. */}
           <div className="relative h-[25rem] sm:h-[29rem] lg:h-[min(33rem,calc(100dvh-24rem))] lg:min-h-[21rem] bt-short:!h-[17rem] bt-short:!min-h-0">
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
-            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5 bt-short:!inset-x-[23%] bt-short:!bottom-[5%] bt-short:!top-[17%] bt-short:!rounded-[50%] bt-short:!p-2" aria-hidden="true">
+            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5 bt-short:!inset-x-[19%] bt-short:!bottom-[4%] bt-short:!top-[17%] bt-short:!rounded-[50%] bt-short:!p-2" aria-hidden="true">
               <div className="bt-felt relative size-full overflow-hidden rounded-full bt-short:!rounded-[50%]">
-                <TableBrand plaque={false} corners={false} jako={false} />
+                <TableBrand plaque={false} corners={false} jako={false} className="bt-short:[&_.tb-word]:hidden" />
               </div>
             </div>
             <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
@@ -390,7 +408,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                 <span className="w-fit rounded-md bg-background/75 px-2 py-0.5 tabular-nums text-muted-foreground bt-short:hidden">
                   {target ? `${s.handNo}. el · Hedef ${target}` : s.handsTotal > 1 ? `El ${s.handNo}/${s.handsTotal}` : 'Tek el'}
                 </span>
-                {contractChip && <div className="mt-1 hidden sm:block bt-short:mt-0">{contractChip}</div>}
+                {contractChip && <div className="mt-1 hidden sm:block bt-short:!hidden">{contractChip}</div>}
               </div>
               <div className="flex items-center gap-1.5">
                 {s.lastTrick && s.phase === 'play' && (
@@ -462,7 +480,9 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               <Seat key={p.seat} seat={p.seat} place={p.place} />
             ))}
 
-            <div className="absolute left-1/2 top-[57%] z-0 size-0 sm:top-[56%] bt-short:!top-[53%] bt-short:z-30">
+            {contractChip && <div className="absolute bottom-2 left-2 z-20 hidden bt-short:block">{contractChip}</div>}
+
+            <div className="absolute left-1/2 top-[57%] z-0 size-0 sm:top-[56%] bt-short:!top-[56.5%] bt-short:z-30">
               {(holding ? holding.trick : s.trick).map((p, i) => {
                 const won = holding && p.seat === holding.winner
                 return (
@@ -481,7 +501,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                         size="sm"
                         className={cn(won && 'ring-[3px] ring-gold shadow-[0_0_24px_-2px_var(--gold)]', holding && !won && 'brightness-75')}
                       />
-                      <span className={cn('max-w-[5rem] truncate rounded-full px-1.5 text-[11px] font-bold leading-4', won ? 'bg-gold text-gold-foreground' : 'bg-background/80 text-foreground')}>
+                      <span className={cn('max-w-[5rem] truncate rounded-full px-1.5 text-[11px] font-bold leading-4 bt-short:hidden', won ? 'bg-gold text-gold-foreground' : 'bg-background/80 text-foreground')}>
                         {nameOf(p.seat)}
                       </span>
                     </div>
