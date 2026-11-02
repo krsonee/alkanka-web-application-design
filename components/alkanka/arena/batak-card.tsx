@@ -44,7 +44,7 @@ export function BatakCard({
       className={cn(
         'playing-card relative shrink-0 select-none rounded-md font-display transition-transform duration-150',
         size === 'xs' && 'h-10 w-7 rounded-sm',
-        size === 'sm' && 'h-[4.6rem] w-[3.3rem] sm:h-[5.8rem] sm:w-[4.15rem] lg:h-[6.4rem] lg:w-[4.6rem] [@media(max-height:500px)]:!h-[4.6rem] [@media(max-height:500px)]:!w-[3.3rem]',
+        size === 'sm' && 'h-[4.6rem] w-[3.3rem] sm:h-[5.8rem] sm:w-[4.15rem] lg:h-[6.4rem] lg:w-[4.6rem] bt-short:!h-[4.6rem] bt-short:!w-[3.3rem]',
         size === 'md' && 'aspect-[5/7] w-[var(--cw)]',
         playable && !selected && 'ring-2 ring-gold hover:-translate-y-4 hover:shadow-[0_10px_22px_-6px_var(--gold)] focus-visible:-translate-y-4',
         selected && '-translate-y-7 scale-110 ring-[3px] ring-gold shadow-[0_0_26px_-2px_var(--gold)]',
