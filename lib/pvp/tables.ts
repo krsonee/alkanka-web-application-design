@@ -327,6 +327,19 @@ export const FOUR_SEAT_GAMES = new Set(['okey', 'okey101'])
 export const BOT_FILL_MS = 30 * 1000
 /** Botlu Okey/101 masalarında ek kesinti (yüzde puan), bota karşı KC kasılmasın diye. */
 const BOT_TABLE_EXTRA_COMMISSION = 5
+/** Daily bot-table wins that pay profit; later wins only return the stake so bots cannot be farmed endlessly. */
+export const BOT_DAILY_PAID_WINS = 15
+
+async function botWinsToday(userId: string) {
+  const r = await pool.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM game_history h JOIN game_tables g ON g.id = h.table_id
+     WHERE h.user_id = $1 AND h.result = 'win' AND h.mode = 'pvp'
+       AND h.created_at >= date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul'
+       AND g.players @> '[{"bot": true}]'::jsonb`,
+    [userId],
+  )
+  return r.rows[0]?.n ?? 0
+}
 
 /** Fills every empty seat of a waiting table with bots and starts the game. Old 2-3 seat okey tables become 4 seats. */
 async function seatBots(t: TableRow): Promise<boolean> {
@@ -705,7 +718,9 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const paid = new Map<string, number>()
   const { boosted } = await import('@/lib/boosts')
   for (const p of humanWinners) {
-    const prizeEach = totalWeight ? Math.floor((net * weightOf(p)) / totalWeight) : 0
+    const share = totalWeight ? Math.floor((net * weightOf(p)) / totalWeight) : 0
+    const overBotCap = botBonus > 0 && (await botWinsToday(p.id)) >= BOT_DAILY_PAID_WINS
+    const prizeEach = overBotCap ? Math.min(share, t.stake) : share
     // The weekend festival multiplies only the profit, never the returned stake.
     const profit = Math.max(0, prizeEach - t.stake)
     const boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
