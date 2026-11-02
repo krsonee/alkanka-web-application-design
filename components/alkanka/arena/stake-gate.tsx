@@ -29,6 +29,8 @@ export type GameResult = 'win' | 'lose' | 'draw'
 /** `saveKey` is set per bot session; games that support it snapshot their state under it so a refresh resumes the same position. */
 export type GameApi = {
   bet: number
+  /** What a plain win pays back, commission already taken off. */
+  win?: number
   finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
   /** Gives up the hand (counts as a loss) and goes straight back to the lobby. */
   leave?: () => void
@@ -133,7 +135,7 @@ export function StakeGate({
       await finish('lose', 'Masadan ayrıldın.')
       setPhase({ kind: 'lobby' })
     }
-    const api: GameApi = { bet: phase.bet, finish, leave, saveKey }
+    const api: GameApi = { bet: phase.bet, win: Math.floor(phase.bet * botWinMultiplier(game, settings)), finish, leave, saveKey }
     return (
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
@@ -322,7 +324,7 @@ export function StakeGate({
                 {pvpMode
                   ? `%${settings.commission} kesinti`
                   : botMultiplier !== settings.multiplier
-                    ? `${settings.multiplier}x · %${settings.commission} kesinti`
+                    ? `${botMultiplier.toLocaleString('tr-TR')}x · %${settings.commission} kesinti düşüldü`
                     : `${settings.multiplier}x`}
               </span>
             </span>

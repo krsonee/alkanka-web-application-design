@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
-import { ARENA_META, botWinMultiplier, isArenaGame } from '@/lib/arena'
+import { ARENA_META, botWinMultiplier, isArenaGame, isStackedBet } from '@/lib/arena'
 import {
   bjAct,
   bjActionCost,
@@ -174,7 +174,7 @@ export async function blackjackDeal(stake: number) {
     const m = await member()
     const s = (await getArenaSettings()).blackjack
     if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
-    if (!s.bets.includes(stake)) throw new Error('Geçersiz bahis.')
+    if (!isStackedBet(stake, s.bets)) throw new Error('Geçersiz bahis.')
     await assertCanPlay(m.id)
     if (!(await debit(m.id, stake))) throw new Error('Yetersiz Kanka Coin.')
     const state = bjDeal(stake)
