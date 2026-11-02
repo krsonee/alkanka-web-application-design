@@ -23,6 +23,10 @@ const STAGE_H = 550
 const PILE_X = 550
 const PILE_Y = 226
 
+/** The stage shrinks on phones, so the hand and pile cards get bigger rank/suit glyphs to stay readable. */
+const BIG_CARD_TEXT =
+  '[&_.playing-card>span:nth-child(1)]:!text-[28px] [&_.playing-card>span:nth-child(1)>span]:!text-[22px] [&_.playing-card>span:nth-child(2)]:!text-[56px] [&_.playing-card>span:nth-child(3)]:!text-[20px] [&_.playing-card>span:nth-child(3)>span]:!text-[16px]'
+
 /** Where a card flies in from (and is swept back to), relative to the pile, in design pixels. */
 const FLY: Record<Place, [string, string]> = {
   bottom: ['0px', '250px'],
@@ -268,7 +272,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
           </div>
 
           {/* Pile */}
-          <div className="absolute z-0 size-0 [--cw:78px]" style={{ left: PILE_X, top: PILE_Y }}>
+          <div className={cn('absolute z-0 size-0 [--cw:96px]', BIG_CARD_TEXT)} style={{ left: PILE_X, top: PILE_Y }}>
             {pileCount === 0 && !flying && (
               <span className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-display text-[15px] font-bold uppercase tracking-[0.3em] text-foreground/30">
                 Yer boş
@@ -291,7 +295,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
               )
             })}
             {showPileInfo && (
-              <span className="absolute left-1/2 top-[66px] z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-background/85 px-3 text-[14px] font-bold tabular-nums leading-7 text-foreground shadow-sm">
+              <span className="absolute left-1/2 top-[90px] z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-background/85 px-3 text-[14px] font-bold tabular-nums leading-7 text-foreground shadow-sm">
                 Yerde {s.pileCount} kart
                 <span className={cn(s.pileVisiblePoints > 0 ? 'text-gold' : 'text-muted-foreground')}>
                   {' · '}
@@ -406,7 +410,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
           </div>
 
           {/* My hand */}
-          <div className="absolute bottom-0 left-1/2 z-20 flex -translate-x-1/2 items-end justify-center gap-3 pb-4 [--cw:92px]" aria-label="Elindeki kartlar">
+          <div className={cn('absolute bottom-0 left-1/2 z-20 flex -translate-x-1/2 items-end justify-center gap-2.5 pb-4 [--cw:116px]', BIG_CARD_TEXT)} aria-label="Elindeki kartlar">
             {hand.map((c, i) => {
               const take = captures(c)
               const pisti = makesPisti(c)
