@@ -406,8 +406,8 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           {/* On desktop the stage is capped by the window height; inside the fullscreen layer LandscapeFit sizes it. */}
           <FixedStage width={STAGE_W} height={STAGE_H} className="max-w-[calc((100dvh-15rem)*2)] [.ls-split_&]:max-w-none">
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
-            <div className="bt-rim absolute left-[255px] top-[86px] h-[292px] w-[590px] rounded-[50%] p-2.5" aria-hidden="true">
-              <div className="bt-felt relative size-full overflow-hidden rounded-[50%]">
+            <div className="bt-rim absolute left-[255px] top-[86px] h-[292px] w-[590px] rounded-full p-2.5" aria-hidden="true">
+              <div className="bt-felt relative size-full overflow-hidden rounded-full">
                 <TableBrand plaque={false} corners={false} jako={false} className="[&_.tb-word]:hidden" />
               </div>
             </div>
