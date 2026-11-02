@@ -1814,6 +1814,12 @@
 .ls-split [data-ls-grid]:has(> [data-ls-main="half"]) {
   --ls-side: minmax(0, 1.1fr);
 }
+/* Tables whose side panels became overlays take the whole width. */
+.ls-split[data-ls-grid]:has(> [data-ls-main="full"]),
+.ls-split [data-ls-grid]:has(> [data-ls-main="full"]) {
+  --ls-side: 0px;
+  column-gap: 0;
+}
 .ls-split[data-ls-grid] > *,
 .ls-split [data-ls-grid] > * {
   grid-column: 2;
