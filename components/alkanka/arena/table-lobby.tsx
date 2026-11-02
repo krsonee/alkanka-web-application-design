@@ -1046,7 +1046,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
           )}
           {data.status !== 'bitti' && <VoiceChat key={`v-${id}`} roomId={id} />}
           <SoundToggle />
-          {!((data.game === 'okey' || data.game === 'okey101') && data.status === 'oynaniyor') && (
+          {!((data.game === 'okey' || data.game === 'okey101' || data.game === 'batak') && data.status === 'oynaniyor') && (
             <MobileTableChat key={`m-${id}`} tableId={id} />
           )}
         </div>
@@ -1126,7 +1126,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
               </FitToScreen>
             ) : spectator ? (
               // Same stable landscape layer players get; FitToScreen re-measured the reflowing table in a loop on phones.
-              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101'} menu={<SoundToggle />}>
+              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak'} menu={<SoundToggle />}>
                 <div className={cn(data.game !== 'okey' && 'pointer-events-none')}>
                   <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
                 </div>
@@ -1135,7 +1135,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
               <LandscapeFit
-                force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101'}
+                force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak'}
                 menu={
                   <>
                     {mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (
@@ -1277,7 +1277,9 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
           </div>
         )}
       </div>
-      <TableChat tableId={id} className="hidden h-72 lg:flex xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0" />
+      {!(data.game === 'batak' && data.status === 'oynaniyor') && (
+        <TableChat tableId={id} className="hidden h-72 lg:flex xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0" />
+      )}
       </div>
     </RoomShell>
   )

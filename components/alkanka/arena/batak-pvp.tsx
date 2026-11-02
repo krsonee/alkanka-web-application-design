@@ -28,6 +28,7 @@ import {
 import { playSound } from '@/lib/sound'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
+import { MobileTableChat } from './mobile-table-chat'
 
 const isRed = (s: number) => s === 1 || s === 2
 const suitColor = (s: number) => (isRed(s) ? 'text-tile-red' : 'text-tile-black')
@@ -148,6 +149,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const [picked, setPicked] = useState<BCard | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [scoreOpen, setScoreOpen] = useState(false)
 
   const hand = useMemo(() => (me >= 0 ? sortCards(s.hands[me] ?? []) : []), [s.hands, me])
   const playing = myTurn && s.phase === 'play'
@@ -407,7 +409,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
       ]
 
   return (
-    <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
+    <div className="relative flex flex-col gap-3">
       <div data-ls-main className="flex min-w-0 flex-col gap-3">
         {remote.spectator && (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
@@ -415,28 +417,43 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           </p>
         )}
 
-        <section aria-label="Batak masası" className="bt-stage mx-auto w-full max-w-4xl overflow-hidden rounded-[1.75rem] border border-border p-1.5 sm:p-2.5">
-          <div className="relative h-[25rem] sm:h-[29rem] lg:h-[32rem]">
+        <section aria-label="Batak masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border p-1.5 sm:p-2.5">
+          <div className="relative h-[25rem] sm:h-[29rem] lg:h-[33rem]">
+            {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
             <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5" aria-hidden="true">
               <div className="bt-felt relative size-full overflow-hidden rounded-full">
                 <TableBrand plaque={false} />
               </div>
             </div>
             <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
-              <div className="flex flex-col gap-1">
+              <div className={cn('flex flex-col gap-1', remote.id && 'mt-8')}>
                 <span className="w-fit rounded-md bg-background/75 px-2 py-0.5 font-bold text-foreground">{variantLabel(variant)}</span>
                 <span className="w-fit rounded-md bg-background/75 px-2 py-0.5 tabular-nums text-muted-foreground">
                   {target ? `${s.handNo}. el · Hedef ${target}` : s.handsTotal > 1 ? `El ${s.handNo}/${s.handsTotal}` : 'Tek el'}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setRulesOpen(true)}
-                className="flex items-center gap-1 rounded-md bg-background/75 px-2 py-1 font-bold text-foreground transition hover:bg-background"
-                aria-haspopup="dialog"
-              >
-                <HelpCircle className="size-3.5" aria-hidden="true" /> Kurallar
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setScoreOpen((v) => !v)}
+                  aria-expanded={scoreOpen}
+                  aria-controls="batak-score"
+                  className={cn(
+                    'flex items-center gap-1 rounded-md px-2 py-1 font-bold transition',
+                    scoreOpen ? 'bg-primary text-primary-foreground' : 'bg-background/75 text-foreground hover:bg-background',
+                  )}
+                >
+                  <Trophy className="size-3.5" aria-hidden="true" /> Puan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRulesOpen(true)}
+                  className="flex items-center gap-1 rounded-md bg-background/75 px-2 py-1 font-bold text-foreground transition hover:bg-background"
+                  aria-haspopup="dialog"
+                >
+                  <HelpCircle className="size-3.5" aria-hidden="true" /> Kurallar
+                </button>
+              </div>
             </div>
 
             {places.map((p) => (
@@ -626,7 +643,12 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
         </section>
       </div>
 
-      <section aria-label="Puan tablosu" className="overflow-hidden rounded-2xl border border-border bg-card lg:sticky lg:top-20">
+      {scoreOpen && (
+      <section
+        id="batak-score"
+        aria-label="Puan tablosu"
+        className="animate-in fade-in slide-in-from-top-2 absolute right-3 top-12 z-40 max-h-[calc(100%-4rem)] w-72 max-w-[calc(100%-1.5rem)] overflow-y-auto rounded-2xl border border-border bg-card/95 shadow-2xl backdrop-blur-md duration-200 sm:right-4"
+      >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
           <Trophy className="size-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="flex min-w-0 flex-1 flex-col">
@@ -635,6 +657,14 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               {target ? `${target} puana ilk ulaşan kazanır` : s.handsTotal > 1 ? `${s.handsTotal} el sonunda en yüksek kazanır` : 'Tek el, en yüksek kazanır'}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setScoreOpen(false)}
+            aria-label="Puan tablosunu kapat"
+            className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
         </div>
 
         <ol className="flex flex-col gap-1.5 p-2">
@@ -729,6 +759,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           </div>
         )}
       </section>
+      )}
 
       {rulesOpen && (
         <div className="fixed inset-0 z-[85] flex items-end justify-center bg-background/70 p-3 backdrop-blur-sm sm:items-center" onClick={() => setRulesOpen(false)}>
