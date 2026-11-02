@@ -9,7 +9,7 @@
 export type BCard = { s: number; r: number }
 export type Play = { seat: number; card: BCard }
 export type BatakVariant = 'klasik' | 'koz-maca' | 'esli' | 'gommeli'
-export type BatakRules = { batma: boolean; gommeYasak: boolean; ikiKat: boolean; kozsuz: boolean }
+export type BatakRules = { batma: boolean; gommeYasak: boolean; ikiKat: boolean; kozsuz: boolean; hizli?: boolean; zorBot?: boolean }
 export type BatakResult = {
   hand: number
   scores: number[]
@@ -72,15 +72,17 @@ export const BATAK_RULE_OPTIONS: { key: keyof BatakRules; label: string; hint: s
   { key: 'gommeYasak', label: 'As ve koz gömülmez', hint: 'Gömerken as ve koz seçilemez', variants: ['gommeli'] },
   { key: 'ikiKat', label: 'Batana 2 kat ceza', hint: '8 dedi battı: −16', variants: ['klasik', 'esli', 'gommeli'] },
   { key: 'kozsuz', label: 'Kozsuz ihale', hint: 'En az +1 fazla verilir, tutarsa 2 kat', variants: ['klasik', 'esli', 'gommeli'] },
+  { key: 'hizli', label: 'Hızlı tempo', hint: 'Botlar ve el geçişleri daha hızlı', variants: ['klasik', 'koz-maca', 'esli', 'gommeli'] },
+  { key: 'zorBot', label: 'Zor botlar', hint: 'Koz çeker, eşine çaktırır', variants: ['klasik', 'koz-maca', 'esli', 'gommeli'] },
 ]
-export const NO_RULES: BatakRules = { batma: false, gommeYasak: false, ikiKat: false, kozsuz: false }
+export const NO_RULES: BatakRules = { batma: false, gommeYasak: false, ikiKat: false, kozsuz: false, hizli: false, zorBot: false }
 
 export const variantLabel = (v: BatakVariant) => BATAK_VARIANTS.find((x) => x.value === v)?.label ?? 'Batak'
 export const normalizeVariant = (v: unknown): BatakVariant => (BATAK_VARIANTS.some((x) => x.value === v) ? (v as BatakVariant) : 'klasik')
 export function normalizeRules(input: unknown, variant: BatakVariant): BatakRules {
   const list = Array.isArray(input) ? input.map(String) : []
   const on = (k: keyof BatakRules) => list.includes(k) && BATAK_RULE_OPTIONS.find((o) => o.key === k)!.variants.includes(variant)
-  return { batma: on('batma'), gommeYasak: on('gommeYasak'), ikiKat: on('ikiKat'), kozsuz: on('kozsuz') }
+  return { batma: on('batma'), gommeYasak: on('gommeYasak'), ikiKat: on('ikiKat'), kozsuz: on('kozsuz'), hizli: on('hizli'), zorBot: on('zorBot') }
 }
 export const rulesToList = (r: BatakRules) => (Object.keys(r) as (keyof BatakRules)[]).filter((k) => r[k])
 
@@ -519,6 +521,25 @@ function isTopRemaining(card: BCard, s: BatakState, hand: BCard[]) {
   return true
 }
 
+/** Stronger opening lead: the bidding side draws trumps, and partners are fed suits they can ruff. */
+function hardLead(s: BatakState, seat: number, hand: BCard[], legal: BCard[], partner: number | null): BCard | undefined {
+  const trump = s.trump
+  if (trump == null) return
+  const v = voidsOf(s).v
+  const onBidSide = seat === s.bidder || (partner != null && partner === s.bidder)
+  const myTrumps = legal.filter((c) => c.s === trump).sort((a, b) => b.r - a.r)
+  const outside = 13 - s.played.filter((c) => c.s === trump).length - hand.filter((c) => c.s === trump).length
+  const oppsMayHoldTrump = v.some((row, i) => i !== seat && i !== partner && !row[trump])
+  if (onBidSide && myTrumps.length && outside > 0 && oppsMayHoldTrump) {
+    if (isTopRemaining(myTrumps[0], s, hand)) return myTrumps[0]
+    if (myTrumps.length > outside / 2) return myTrumps[myTrumps.length - 1]
+  }
+  if (partner != null && !v[partner][trump]) {
+    const ruffable = legal.filter((c) => c.s !== trump && v[partner][c.s] && !opponentCanRuff(s, seat, c.s)).sort((a, b) => a.r - b.r)
+    if (ruffable.length) return ruffable[0]
+  }
+}
+
 function botBid(s: BatakState, seat: number, hand: BCard[]) {
   const maxTricks = tricksPerHand(s)
   const need = Math.max(minBidFor(s.variant), s.highBid + 1)
@@ -578,7 +599,9 @@ export function batakBotTurn(state: BatakState, seat: number): BatakStep {
     const winners = legal.filter((c) => isTopRemaining(c, s, hand))
     // A top card is only a sure trick if no opponent has already shown out of that suit.
     const nonTrumpWinners = winners.filter((c) => c.s !== s.trump && !opponentCanRuff(s, seat, c.s))
-    if (nonTrumpWinners.length) pick = nonTrumpWinners[0]
+    const smart = s.rules?.zorBot ? hardLead(s, seat, hand, legal, partner) : undefined
+    if (smart) pick = smart
+    else if (nonTrumpWinners.length) pick = nonTrumpWinners[0]
     else if (winners.length && (seat === s.bidder || (partner != null && partner === s.bidder))) pick = winners[0]
     else {
       const bySuit = [0, 1, 2, 3]
@@ -621,6 +644,11 @@ export function runBatakBots(state: BatakState): BatakStep {
 /** How long the server waits before a bot moves, so humans can follow every card. */
 export function batakPaceMs(state: BatakState) {
   const s = migrateBatak(state)
+  const base = basePaceMs(s)
+  return s.rules?.hizli ? Math.round(base * 0.55) : base
+}
+
+function basePaceMs(s: BatakState) {
   const freshDeal = s.played.length === 0 && s.handNo > 1 && s.bids.every((b) => b == null) && s.trick.length === 0
   if (freshDeal) return 3500
   if (s.phase === 'bid' || s.phase === 'predict') return 1200
