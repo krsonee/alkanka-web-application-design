@@ -28,7 +28,7 @@ export function TableBrand({ className, center = true, plaque = 'top', corners =
             <span className="absolute inset-2 rounded-full border border-dashed border-primary" />
             <Image src="/icon-192.png" alt="" width={192} height={192} className="size-16 rounded-full grayscale sm:size-24" />
           </div>
-          <span className="font-display text-2xl font-bold uppercase tracking-[0.45em] text-primary sm:text-4xl">Alkanka</span>
+          <span className="tb-word font-display text-2xl font-bold uppercase tracking-[0.45em] text-primary sm:text-4xl">Alkanka</span>
         </div>
       )}
 
