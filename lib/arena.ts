@@ -159,6 +159,11 @@ export const DEFAULT_ARENA: ArenaSettings = {
 }
 
 /** Okey's bot table seats three bots, so its 3x pays like a four-player pot and takes the same commission as player tables. */
+/** Blackjack bets are built from stacked chips, so any whole amount between the smallest and largest chip is allowed. */
+export function isStackedBet(bet: number, bets: number[]): boolean {
+  return bets.length > 0 && Number.isInteger(bet) && bet >= Math.min(...bets) && bet <= Math.max(...bets)
+}
+
 export function botWinMultiplier(game: ArenaGame, s: ArenaGameSettings): number {
   if (game !== 'okey') return s.multiplier
   return Math.round(s.multiplier * (1 - s.commission / 100) * 100) / 100

@@ -5,6 +5,7 @@ import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
 import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
+import { isStackedBet } from '@/lib/arena'
 
 const SHOE_DECKS = 6
 const SHOE_SIZE = 52 * SHOE_DECKS
@@ -375,7 +376,7 @@ export async function joinBlackjack(
   preferSeat: number | null = null,
   fresh = false,
 ): Promise<JoinResult> {
-  if (!allowedBets.includes(bet)) throw new Error('Geçersiz bahis.')
+  if (!isStackedBet(bet, allowedBets)) throw new Error('Geçersiz bahis.')
   if (!BJ_SIDE_STAKES.includes(side.pairs) || !BJ_SIDE_STAKES.includes(side.t213)) throw new Error('Geçersiz yan bahis.')
   const total = bet + side.pairs + side.t213
   if (!(await debit(member.id, total))) throw new Error('Yetersiz Kanka Coin.')
@@ -500,7 +501,7 @@ export async function leaveTable(member: Member) {
  * Side bets are optional: pass 0 to take one off. The difference is charged or refunded right away.
  */
 export async function changeTableBet(member: Member, bet: number, allowedBets: number[], side?: SideBets) {
-  if (!allowedBets.includes(bet)) throw new Error('Geçersiz bahis.')
+  if (!isStackedBet(bet, allowedBets)) throw new Error('Geçersiz bahis.')
   if (side && (!BJ_SIDE_STAKES.includes(side.pairs) || !BJ_SIDE_STAKES.includes(side.t213))) throw new Error('Geçersiz yan bahis.')
   await inTx(async (c) => {
     const no = await myTable(c, member)

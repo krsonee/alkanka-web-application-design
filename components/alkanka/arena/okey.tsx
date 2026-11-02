@@ -277,7 +277,7 @@ export function useDrawDrag(onDraw: (src: DrawSource, slot: number | null) => vo
   return { ghost, ghostEl, start, dragged }
 }
 
-export function Okey({ finish, saveKey, bet, leave }: GameApi) {
+export function Okey({ finish, saveKey, bet, win: winPayout, leave }: GameApi) {
   const { theme: tableTheme } = useTableTheme('okey')
   const [saved] = useState(() => loadSaved<OkeySave>(saveKey))
   const [game, setGame] = useState(() => saved?.game ?? deal())
@@ -634,8 +634,8 @@ export function Okey({ finish, saveKey, bet, leave }: GameApi) {
         <dl className="okt-info">
           <dt>Masa</dt>
           <dd>{bet.toLocaleString('tr-TR')}</dd>
-          <dt>Çanak</dt>
-          <dd>{(bet * 4).toLocaleString('tr-TR')}</dd>
+          <dt>Kazanç</dt>
+          <dd>{(winPayout ?? Math.floor(bet * 2.7)).toLocaleString('tr-TR')}</dd>
         </dl>
         <div className="okt-toast" aria-live="polite">
           {toast}

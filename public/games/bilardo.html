@@ -613,6 +613,10 @@
     startTurn(foul);
   }
   function startTurn(foul) {
+    // Falso her atış sonunda ve sıra değişiminde sıfırlanır; bir sonraki atışa taşınmaz.
+    S.spin = { x:0, y:0 };
+    for (const id of ['bigdot', 'spinDot']) { const d = document.getElementById(id); if (d) { d.style.left = '50%'; d.style.top = '50%'; } }
+    document.getElementById('spinModal')?.classList.remove('open');
     S.timer = 30; hud();
     if (S.turn === 'op') setTimeout(botPlay, 900);
     else toastPill(foul ? 'Topu sürükleyip yerleştir, sonra vur.' : 'Sıra sende.');
