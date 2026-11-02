@@ -516,16 +516,13 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           <span
             aria-hidden="true"
             className={cn(
-              'absolute inset-x-0 z-20 m-auto flex size-5 items-center justify-center rounded-full border-2 border-primary bg-primary/30 transition-transform sm:size-7',
-              isTop ? 'bottom-[12%]' : 'top-[12%]',
+              'pointer-events-none absolute inset-x-0 z-20 m-auto flex size-4 items-center justify-center rounded-full border-2 border-primary bg-primary/20 transition-transform sm:size-6',
+              // Kept at the tip, past where a five-checker stack reaches, so it never covers a checker.
+              isTop ? 'bottom-0' : 'top-0',
               hover === i && 'scale-150 bg-primary/60',
             )}
           >
-            {steps > 1 ? (
-              <span className="text-[9px] font-black text-primary-foreground sm:text-[11px]">{`×${steps}`}</span>
-            ) : (
-              <span className="size-2 animate-ping rounded-full bg-primary" />
-            )}
+            <span className="size-1.5 animate-ping rounded-full bg-primary sm:size-2" />
           </span>
         )}
         <span className="relative z-10 flex h-full w-full flex-col py-0.5 sm:py-1">
@@ -673,7 +670,7 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
           {diceLeft ? (
             diceRow
           ) : (
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-25">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-10">
               <span className="scale-75 sm:scale-100">
                 <BrandLogo size="sm" />
               </span>
@@ -731,8 +728,12 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
             className="flex flex-1 flex-col items-center gap-1 rounded-md tavla-tray p-0.5 text-center"
             aria-label={`${names.opp} toplanan pullar: ${board.off[opp]}`}
           >
-            <span className="line-clamp-1 text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">
-              {names.opp} <span className="text-primary">{board.off[opp]}</span>
+            <span className="flex max-w-full items-center gap-0.5 text-[8px] font-bold uppercase text-muted-foreground sm:text-[9px]">
+              <span className="min-w-0 truncate">
+                <span className="sm:hidden">{Array.from(names.opp)[0]}</span>
+                <span className="hidden sm:inline">{names.opp}</span>
+              </span>
+              <span className="shrink-0 text-primary">{board.off[opp]}</span>
             </span>
             <OffPile count={board.off[opp]} side={opp} fromTop />
           </div>
