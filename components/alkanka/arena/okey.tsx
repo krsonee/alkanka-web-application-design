@@ -306,6 +306,11 @@ export function Okey({ finish, saveKey, bet, win: winPayout, leave }: GameApi) {
   const setSelected = rack.setSelected
   const tileName = (t: Tile) => (t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`)
   const winning = useMemo(() => (phase === 'discard' ? findWinningDiscard(hand, okey) : null), [hand, okey, phase])
+  const winningId = winning?.tile.id ?? null
+  // A drawn okey is auto-selected, but throwing it can break a finished hand; point the selection at the closing tile instead.
+  useEffect(() => {
+    if (winningId !== null) setSelected(winningId)
+  }, [winningId, setSelected])
 
   const [win, setWin] = useState<{
     winner: string
@@ -611,6 +616,11 @@ export function Okey({ finish, saveKey, bet, win: winPayout, leave }: GameApi) {
         </div>
 
         <div className="okt-side">
+          {winning && canDiscard && (
+            <button type="button" className="okt-btn gold" onClick={() => finishHand()}>
+              Eli Bitir
+            </button>
+          )}
           <button type="button" className="okt-btn" onClick={() => rack.arrange('seri')}>
             Seri Diz
           </button>
@@ -662,7 +672,14 @@ export function Okey({ finish, saveKey, bet, win: winPayout, leave }: GameApi) {
           highlight={fresh}
           looseDiscard={canDiscard}
           onDoubleTile={onDoubleTile}
-          onDropOut={(id) => discard(id)}
+          onDropOut={(id, kind) => {
+            if (kind === 'finish' && !winningKindFor(hand, id, okey)) {
+              playSound('error')
+              setMessage(winning ? `Bu taşla bitmiyor – ${tileName(winning.tile)} taşını at` : 'Bu elle henüz bitemezsin')
+              return
+            }
+            discard(id)
+          }}
           onDropHover={(k) => setDropOver(k === 'discard' || k === 'finish')}
         />
       </div>
