@@ -269,16 +269,16 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
         className={cn(
           'absolute z-10 flex items-center gap-1',
           place === 'top' ? 'flex-row gap-2' : 'flex-col',
-          place === 'top' && 'left-1/2 top-11 -translate-x-1/2 sm:top-3 [@media(max-height:500px)]:!left-[68%] [@media(max-height:500px)]:!top-0',
-          place === 'left' && 'left-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:left-5 lg:left-[7%]',
-          place === 'right' && 'right-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:right-5 lg:right-[7%]',
+          place === 'top' && 'left-1/2 top-11 -translate-x-1/2 sm:top-3 [@media(max-height:500px)]:!top-1',
+          place === 'left' && 'left-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:left-5 lg:left-[7%] [@media(max-height:500px)]:!left-2 [@media(max-height:500px)]:!top-[53%]',
+          place === 'right' && 'right-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:right-5 lg:right-[7%] [@media(max-height:500px)]:!right-2 [@media(max-height:500px)]:!top-[53%]',
         )}
       >
         <div className="relative">
           <div
             data-turn={active || undefined}
             className={cn(
-              'bt-ava flex size-11 items-center justify-center rounded-full font-display text-base font-bold text-foreground ring-2 transition sm:size-14 sm:text-lg',
+              'bt-ava flex size-11 items-center justify-center rounded-full font-display text-base font-bold text-foreground ring-2 transition sm:size-14 sm:text-lg [@media(max-height:500px)]:!size-9',
               active ? 'ring-gold' : isTeam ? (teamOf(seat) === teamOf(base) ? 'ring-gold/50' : 'ring-primary/60') : 'ring-border',
             )}
           >
@@ -305,7 +305,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
             </span>
           )}
         </div>
-        <div data-turn={active || undefined} className="bt-plate flex w-24 flex-col items-center gap-0.5 rounded-xl px-1.5 pb-1 pt-1.5 text-center text-foreground sm:w-28">
+        <div data-turn={active || undefined} className="bt-plate flex w-24 flex-col items-center gap-0.5 rounded-xl px-1.5 pb-1 pt-1.5 text-center text-foreground sm:w-28 [@media(max-height:500px)]:!w-[5.5rem] [@media(max-height:500px)]:!pt-1">
           <span className="w-full truncate text-xs font-semibold leading-tight sm:text-sm">{nameOf(seat)}</span>
           {(s.phase === 'play' || s.phase === 'bury' || s.phase === 'trump') && (
             <span className={cn('font-display text-sm font-bold leading-none tabular-nums sm:text-base', s.bidder === seat && 'text-gold')}>
@@ -379,9 +379,9 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           {/* Short landscape phones get a flatter table so LandscapeFit doesn't shrink the text. */}
           <div className="relative h-[25rem] sm:h-[29rem] lg:h-[min(33rem,calc(100dvh-24rem))] lg:min-h-[21rem] [@media(max-height:500px)]:!h-[14.25rem] [@media(max-height:500px)]:!min-h-0">
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
-            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5" aria-hidden="true">
+            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5 [@media(max-height:500px)]:!inset-x-[19%] [@media(max-height:500px)]:!bottom-[14%] [@media(max-height:500px)]:!top-[24%] [@media(max-height:500px)]:!p-1.5" aria-hidden="true">
               <div className="bt-felt relative size-full overflow-hidden rounded-full">
-                <TableBrand plaque={false} corners={false} />
+                <TableBrand plaque={false} corners={false} jako={false} />
               </div>
             </div>
             <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
@@ -462,7 +462,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               <Seat key={p.seat} seat={p.seat} place={p.place} />
             ))}
 
-            <div className="absolute left-1/2 top-[57%] z-0 size-0 sm:top-[56%] [@media(max-height:500px)]:!top-[62%] [@media(max-height:500px)]:z-30">
+            <div className="absolute left-1/2 top-[57%] z-0 size-0 sm:top-[56%] [@media(max-height:500px)]:!top-[53%] [@media(max-height:500px)]:z-30">
               {(holding ? holding.trick : s.trick).map((p, i) => {
                 const won = holding && p.seat === holding.winner
                 return (
