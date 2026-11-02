@@ -1277,7 +1277,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
           </div>
         )}
       </div>
-      {!(data.game === 'batak' && data.status === 'oynaniyor') && (
+      {!(data.game === 'batak' && (data.status === 'oynaniyor' || ended)) && (
         <TableChat tableId={id} className="hidden h-72 lg:flex xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0" />
       )}
       </div>
