@@ -329,6 +329,28 @@ export function TableLobby({
             </span>
             <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
           </div>
+          {(isOkey || game === 'okey101') && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-primary/30 bg-primary/5 p-2.5">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  const quick = isOkey
+                    ? { seats: 4, team: false, bots: 3 }
+                    : { seats: 4, team: false, bots: 3, ...(seatRounds ? { rounds: seatRounds } : {}) }
+                  const r = await run(() => openTable(game, stake, quick))
+                  if (r?.ok && r.id) setActiveId(r.id)
+                }}
+                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
+                Bota karşı hemen oyna
+              </button>
+              <p className="text-center text-[11px] leading-snug text-muted-foreground text-pretty">
+                {`${formatAC(stake)} KC bahisle, 3 botla tekli masa. Beklemeden başlar.`}
+              </p>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-semibold leading-tight text-muted-foreground">Bahis (KC)</span>
             <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label="Bahis">

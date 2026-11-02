@@ -11,13 +11,6 @@ export const RACK_COLS = 14
 
 type Slots = (number | null)[]
 
-/** Start slot for a group of `len` tiles at `pos`: wraps to the next row instead of splitting a group, -1 when it no longer fits. */
-function groupStart(pos: number, len: number, total: number) {
-  const rowEnd = (Math.floor(pos / RACK_COLS) + 1) * RACK_COLS
-  const start = pos + len > rowEnd && len <= RACK_COLS ? rowEnd : pos
-  return start + len > total ? -1 : start
-}
-
 function reconcile(raw: Slots, hand: Tile[], total: number): Slots {
   const ids = new Set(hand.map((t) => t.id))
   const slots: Slots = Array.from({ length: total }, (_, i) => {
@@ -193,19 +186,31 @@ export function layoutGroups(groups: Tile[][], rest: Tile[], rows = 2): Slots {
   const all = [...groups.flat(), ...rest]
   const compact = balanced(all, rows)
   const slots: Slots = Array(total).fill(null)
-  let pos = 0
+  const per = Math.ceil(all.length / rows)
+  const counts: number[] = Array(rows).fill(0)
+  const cursor: number[] = Array(rows).fill(0)
+  let row = 0
   for (const g of groups) {
-    pos = groupStart(pos, g.length, total)
-    if (pos < 0) return compact
-    for (const t of g) slots[pos++] = t.id
-    pos++
+    const overflows = cursor[row] + g.length > RACK_COLS
+    if (row < rows - 1 && counts[row] > 0 && (overflows || counts[row] + g.length > per)) row++
+    if (cursor[row] + g.length > RACK_COLS) return compact
+    for (const t of g) slots[row * RACK_COLS + cursor[row]++] = t.id
+    counts[row] += g.length
+    cursor[row]++
   }
-  const free = [
-    ...slots.map((id, i) => (id == null && i >= pos ? i : -1)).filter((i) => i >= 0),
-    ...slots.map((id, i) => (id == null && i < pos ? i : -1)).filter((i) => i >= 0),
-  ]
-  if (free.length < rest.length) return compact
-  rest.forEach((t, k) => (slots[free[k]] = t.id))
+  const freeIn = (r: number) => {
+    const base = r * RACK_COLS
+    for (let c = Math.min(cursor[r], RACK_COLS); c < RACK_COLS; c++) if (slots[base + c] == null) return base + c
+    for (let c = 0; c < RACK_COLS; c++) if (slots[base + c] == null) return base + c
+    return -1
+  }
+  for (const t of rest) {
+    const order = counts.map((n, r) => ({ n, r })).sort((a, b) => a.n - b.n || a.r - b.r)
+    const target = order.map(({ r }) => ({ r, s: freeIn(r) })).find(({ s }) => s >= 0)
+    if (!target) return compact
+    slots[target.s] = t.id
+    counts[target.r]++
+  }
   return slots
 }
 
