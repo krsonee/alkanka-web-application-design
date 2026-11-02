@@ -5,7 +5,7 @@ import { Bot, Eye, Layers, Scissors, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { playSound } from '@/lib/sound'
 import { RANK_LABEL, SUIT_SYMBOLS, sideOf, type PCard, type PistiEvent, type PistiHandResult, type PistiView } from '@/lib/games/pisti'
-import { BatakCard } from './batak-pvp'
+import { BatakCard } from './batak-card'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
 

@@ -5,7 +5,7 @@ import { Bot, Crown, Eye, Shuffle, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { playSound } from '@/lib/sound'
 import { cardName, isOdd, oddName, pairsWith, type PapazEvent, type PapazView, type PzCard } from '@/lib/games/papaz'
-import { BatakCard } from './batak-pvp'
+import { BatakCard } from './batak-card'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
 

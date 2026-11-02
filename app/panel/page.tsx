@@ -24,6 +24,7 @@ import { LogoEditor } from '@/components/panel/logo-editor'
 import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
 import { GameStats } from '@/components/panel/game-stats'
+import { TableMetrics } from '@/components/panel/table-metrics'
 import { TournamentManager } from '@/components/panel/tournament-manager'
 import { mergeArena, type ArenaSettings } from '@/lib/arena'
 import { listTournaments } from '@/lib/tournaments'
@@ -245,7 +246,7 @@ async function telegramPanel() {
         {
           id: 'tvbets',
           group: 'Otomasyonlar',
-          label: 'KankaTV Canlı Etkinlik',
+          label: 'KankaTV Canl�� Etkinlik',
           status: light(betsConfig.enabled && !betsStatus.lastError),
           issue: firstIssue([Boolean(betsStatus.lastError), lastErr(betsStatus.lastError)], [!betsConfig.enabled, 'Kapalı']),
           content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
@@ -592,6 +593,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'games', 'Oyun ayarları', () => (
       <div className="flex flex-col gap-6">
         <GameStats />
+        <TableMetrics />
         <ArenaSettingsEditor
           settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
           winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
