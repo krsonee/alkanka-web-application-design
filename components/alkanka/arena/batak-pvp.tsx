@@ -419,7 +419,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           <div className="relative h-[25rem] sm:h-[29rem] lg:h-[32rem]">
             <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5" aria-hidden="true">
               <div className="bt-felt relative size-full overflow-hidden rounded-full">
-                <TableBrand />
+                <TableBrand plaque={false} />
               </div>
             </div>
             <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
@@ -443,7 +443,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               <Seat key={p.seat} seat={p.seat} place={p.place} />
             ))}
 
-            <div className="absolute left-1/2 top-[47%] z-0 size-0">
+            <div className="absolute left-1/2 top-[57%] z-0 size-0 sm:top-[53%]">
               {(holding ? holding.trick : s.trick).map((p, i) => {
                 const won = holding && p.seat === holding.winner
                 return (
