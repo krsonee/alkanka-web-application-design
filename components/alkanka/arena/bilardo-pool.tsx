@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { RotateCw, Smartphone } from 'lucide-react'
 import type { GameApi } from './stake-gate'
 import { useBrand } from '../brand-context'
@@ -59,6 +59,10 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
       if (d?.source !== 'alkanka-bilardo') return
       if (d.type === 'ready') {
         frame.current?.contentWindow?.postMessage(themeMessage(themeRef.current), window.location.origin)
+        frame.current?.contentWindow?.postMessage(
+          { source: 'alkanka-parent', type: 'view', view: window.matchMedia(LANDSCAPE_QUERY).matches ? 'lan' : 'web' },
+          window.location.origin,
+        )
         return
       }
       if (d.type !== 'finish' || done.current) return
@@ -77,7 +81,16 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
   const customLogo = useLogos().brand?.logoUrl
   const logo = customLogo || LOGO_CONCEPTS.find((l) => l.id === concept)?.image || '/images/logos/fist.png'
   const landscape = layout === 'landscape'
-  const src = `/games/bilardo.html?v=${landscape ? 'lan' : 'web'}&bet=${bet}&win=${win}&logo=${encodeURIComponent(logo)}`
+  // The first layout seeds the URL; later rotations are sent as messages so the frame (and the game) never reloads.
+  const [src] = useState(
+    () => `/games/bilardo.html?v=${landscape ? 'lan' : 'web'}&bet=${bet}&win=${win}&logo=${encodeURIComponent(logo)}`,
+  )
+  useEffect(() => {
+    frame.current?.contentWindow?.postMessage(
+      { source: 'alkanka-parent', type: 'view', view: landscape ? 'lan' : 'web' },
+      window.location.origin,
+    )
+  }, [landscape])
 
   return (
     <div className="relative">
@@ -110,7 +123,6 @@ export function BilardoPool({ bet, win, finish }: { bet: number; win: number; fi
         style={landscape ? { paddingInline: 'max(env(safe-area-inset-left), env(safe-area-inset-right))', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}
       >
         <iframe
-          key={landscape ? 'lan' : 'web'}
           ref={frame}
           src={src}
           title="Bilardo masası"

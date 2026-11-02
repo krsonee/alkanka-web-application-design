@@ -11,7 +11,7 @@ import { FitToScreen } from './fit-to-screen'
 import { LandscapeFit } from './landscape-fit'
 import { useTurnAlert } from './use-turn-alert'
 import { cn } from '@/lib/utils'
-import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable } from '@/app/actions/arena'
+import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable, startTableWithBots } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
@@ -81,7 +81,7 @@ const fetcher = async (url: string) => {
 
 const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
-  okey101: { seats: [2, 4], rounds: [1, 3, 5] },
+  okey101: { seats: [4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [1, 31, 51, 101] },
   monopoly: { seats: [2, 3, 4, 5, 6, 7, 8], rounds: [999, 50, 30] },
   pisti: { seats: [2, 4], rounds: [] },
@@ -120,7 +120,7 @@ export function TableLobby({
   const [error, setError] = useState<string | null>(null)
   const [betFilter, setBetFilter] = useState<number | null>(null)
   const isOkey = game === 'okey'
-  const [seats, setSeats] = useState<2 | 4>(4)
+  const seats = 4
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
   const [bots, setBots] = useState(0)
   const seatRule = SEAT_GAME_RULES[game]
@@ -329,6 +329,28 @@ export function TableLobby({
             </span>
             <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
           </div>
+          {(isOkey || game === 'okey101') && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-primary/30 bg-primary/5 p-2.5">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  const quick = isOkey
+                    ? { seats: 4, team: false, bots: 3 }
+                    : { seats: 4, team: false, bots: 3, ...(seatRounds ? { rounds: seatRounds } : {}) }
+                  const r = await run(() => openTable(game, stake, quick))
+                  if (r?.ok && r.id) setActiveId(r.id)
+                }}
+                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
+                Bota karşı hemen oyna
+              </button>
+              <p className="text-center text-[11px] leading-snug text-muted-foreground text-pretty">
+                {`${formatAC(stake)} KC bahisle, 3 botla tekli masa. Beklemeden başlar.`}
+              </p>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-semibold leading-tight text-muted-foreground">Bahis (KC)</span>
             <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary/60 p-1" role="radiogroup" aria-label="Bahis">
@@ -370,22 +392,9 @@ export function TableLobby({
           )}
           {isOkey && (
             <div className="flex flex-col gap-3">
-              <OptionGroup
-                label="Masa"
-                value={String(seats)}
-                options={[
-                  { value: '2', label: '2 kişilik' },
-                  { value: '4', label: '4 kişilik' },
-                ]}
-                onChange={(v) => {
-                  const next = v === '4' ? 4 : 2
-                  setSeats(next)
-                  if (next === 2) {
-                    setBots(0)
-                    if (teamMode) setTeamMode(null)
-                  }
-                }}
-              />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Masalar 4 kişilik. Gerçek oyuncu gelmeyen koltuklara bot oturtabilirsin.
+              </p>
               <OptionGroup
                 label="Oyun modu (zorunlu)"
                 value={teamMode == null ? '' : teamMode ? 'team' : 'solo'}
@@ -421,6 +430,7 @@ export function TableLobby({
                     { value: '0', label: 'Bot yok' },
                     { value: '1', label: '1 bot' },
                     { value: '2', label: '2 bot' },
+                    { value: '3', label: 'Bota karşı (3 bot)' },
                   ]}
                   onChange={(v) => setBots(Number(v))}
                 />
@@ -1053,8 +1063,26 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
         {data.status === 'bekliyor' && (
           <div className="flex flex-col items-center gap-4 py-10 text-center">
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
-            <p className="text-pretty text-sm text-muted-foreground">Masan açık. Bir kanka oturduğunda oyun otomatik başlar.</p>
+            <p className="text-pretty text-sm text-muted-foreground">
+              {data.game === 'okey' || data.game === 'okey101'
+                ? '30 saniye içinde kimse oturmazsa boş koltuklara bot oturur ve oyun başlar.'
+                : 'Masan açık. Bir kanka oturduğunda oyun otomatik başlar.'}
+            </p>
             {mySeat >= 0 && !data.tournamentId && <InviteButton tableId={id} />}
+            {mySeat === 0 && !data.tournamentId && (data.game === 'okey' || data.game === 'okey101') && (
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  await startTableWithBots(id)
+                  setBusy(false)
+                  refresh()
+                }}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              >
+                <Swords className="size-4" aria-hidden="true" /> Hemen botla başlat
+              </button>
+            )}
             {mySeat > 0 && !data.tournamentId && (
               <LeaveTableButton
                 id={id}

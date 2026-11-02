@@ -43,7 +43,7 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
     title: '101 Okey',
     short: '101 sayıyla el aç, çift git, işle. Eli bitir, en az cezayla masadan kalk.',
     image: '/images/games/okey101.png',
-    players: '2 ya da 4 kişi, boş koltuğa bot',
+    players: '4 kişi, boş koltuğa bot',
     group: 2,
     category: 'masa',
     modes: ['pvp'],

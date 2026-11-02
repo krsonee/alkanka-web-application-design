@@ -2302,7 +2302,9 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .ls-split .okt-pile2 { left: 31%; top: 15%; } .ls-split .okt-pile1 { left: 69%; top: 15%; } .ls-split .okt-pile3 { left: 31%; top: 46%; } .ls-split .okt-pile0 { left: 69%; top: 46%; }
 .ls-split .okt-deck { left: 46%; top: 30%; } .ls-split .okt-ind { left: 54%; top: 28%; } .ls-split .okt-lbl { left: 54%; top: 36%; }
 .ls-split .okt-side { left: 1.6%; top: 5%; transform: none; flex-direction: column; }
-.ls-split .okt-info { left: auto; right: 1.6%; top: 5%; transform: none; grid-template-columns: auto auto; }
+.ls-split .okt-info { left: auto; right: 1.6%; top: 5%; transform: none; grid-template-columns: auto auto; font-size: calc(var(--u) * 1.4); padding: calc(var(--u) * .7) calc(var(--u) * 1.1); }
+/* Boş atık yerleri taş gelene kadar silik kalır; alınabilir olduğunda tam görünür. */
+.okt-pile:not(:has(.okt-tile)):not(.can) { opacity: .35; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.05); }
 .ls-split .okt-toast { left: 50%; top: 40%; }
 .ls-split .okt-drop { left: 12%; right: 12%; top: 6%; bottom: 42%; }
 .ls-split .okt-rack { left: max(3%, calc(50% - 104cqh)); right: max(3%, calc(50% - 104cqh)); bottom: 2%; height: 39.5%; }

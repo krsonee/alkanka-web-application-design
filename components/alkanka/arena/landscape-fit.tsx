@@ -61,6 +61,9 @@ export function LandscapeFit({
   const [minimized, setMinimized] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const fullscreen = landscape && !minimized
+  // A sideways phone has too little height for a cramped in-page table, so a minimized table is parked
+  // (still mounted, still running) behind a "back to table" card instead.
+  const parked = force && landscape && minimized
 
   useEffect(() => {
     if (!fullscreen) setMenuOpen(false)
@@ -275,6 +278,20 @@ export function LandscapeFit({
             <span className="sr-only">Küçült</span>
           </button>
         </div>
+      ) : landscape && force ? (
+        <div className="flex items-center gap-3 rounded-2xl border border-primary/40 bg-card px-4 py-3 text-foreground">
+          <Maximize2 className="size-5 shrink-0 text-primary" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm font-semibold leading-snug text-pretty">
+            {label} küçültüldü, oyun kaldığı yerden devam ediyor.
+          </p>
+          <button
+            type="button"
+            onClick={() => setMinimized(false)}
+            className="flex h-10 shrink-0 touch-manipulation items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground hover:brightness-110"
+          >
+            Masaya dön
+          </button>
+        </div>
       ) : landscape ? (
         <button
           type="button"
@@ -302,8 +319,8 @@ export function LandscapeFit({
       ) : null}
       <div
         ref={area}
-        aria-hidden={blocked || undefined}
-        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden', blocked && 'sr-only')}
+        aria-hidden={blocked || parked || undefined}
+        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden', (blocked || parked) && 'sr-only')}
       >
         <div style={fullscreen && box ? { width: box.w, height: box.h } : undefined}>
           <div
