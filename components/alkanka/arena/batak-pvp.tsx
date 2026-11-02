@@ -143,6 +143,9 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const me = remote.spectator ? -1 : remote.seat
   const base = me >= 0 ? me : 0
   const myTurn = remote.myTurn
+  useEffect(() => {
+    if (myTurn && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
+  }, [myTurn])
   const isTeam = variant === 'esli'
   const kozMaca = variant === 'koz-maca'
   const [buryPick, setBuryPick] = useState<BCard[]>([])
@@ -382,6 +385,11 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               {s.taken[seat]}
               {goalOf(seat) != null && <span className="text-muted-foreground">/{goalOf(seat)}</span>}
               <span className="ml-1 text-[11px] font-medium text-muted-foreground">el</span>
+              {holding?.winner === seat && (
+                <span key={holding.key} className="ml-1 inline-block animate-pop text-gold">
+                  +1
+                </span>
+              )}
             </span>
           )}
           <span className="mt-0.5 flex w-full items-baseline justify-center gap-1 border-t border-border pt-0.5 text-[11px] font-semibold leading-none text-muted-foreground">
@@ -671,6 +679,11 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                         {s.taken[me]}
                         {goalOf(me) != null && <span className="text-muted-foreground">/{goalOf(me)}</span>}
                         <span className="ml-1 text-xs font-medium text-muted-foreground">el</span>
+                        {holding?.winner === me && (
+                          <span key={holding.key} className="ml-1 inline-block animate-pop text-gold">
+                            +1
+                          </span>
+                        )}
                       </span>
                       <TrickPips count={s.taken[me]} goal={goalOf(me)} />
                     </>
