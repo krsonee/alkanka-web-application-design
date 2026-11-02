@@ -28,8 +28,9 @@ import { playSound } from '@/lib/sound'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
 import { MobileTableChat } from './mobile-table-chat'
-import { BatakCard, sameCard, sortCards, suitColor, TrickPips, type Place } from './batak-card'
+import { BatakCard, sameCard, sortCards, suitColor, type Place } from './batak-card'
 import { HandSummary } from './batak-hand-summary'
+import { FixedStage } from './fixed-stage'
 
 
 
@@ -38,6 +39,17 @@ const TRICK_OFFSET: Record<Place, string> = {
   top: '-translate-y-[52%] -rotate-[4deg]',
   left: '-translate-x-[92%] -rotate-[8deg]',
   right: 'translate-x-[92%] rotate-[8deg]',
+}
+/**
+ * The table is composed once on a fixed 1100×550 canvas and scaled to fit (see FixedStage),
+ * so every device shows the same picture. All positions below are design pixels on that canvas.
+ */
+const STAGE_W = 1100
+const STAGE_H = 550
+const SEAT_POS: Record<Exclude<Place, 'bottom'>, string> = {
+  top: 'left-1/2 top-3.5 -translate-x-1/2',
+  left: 'left-[140px] top-[232px] -translate-x-1/2 -translate-y-1/2',
+  right: 'left-[960px] top-[232px] -translate-x-1/2 -translate-y-1/2',
 }
 const SLIDE_TO: Record<Place, string> = {
   bottom: 'translateY(11rem) scale(.5)',
@@ -264,43 +276,33 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
     const active = s.turn === seat && !holding
     const bid = s.bids[seat]
     const showBubble = (s.phase === 'bid' && (s.passed[seat] || (bid ?? 0) > 0)) || (s.phase === 'predict' && bid != null)
+    const top = place === 'top'
     return (
-      <div
-        className={cn(
-          'absolute z-10 flex items-center gap-1',
-          place === 'top' ? 'flex-row gap-2' : 'flex-col',
-          place === 'top' && 'left-1/2 top-11 -translate-x-1/2 sm:top-3 bt-short:!top-1.5',
-          place === 'left' &&
-            'left-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:left-5 lg:left-[7%] bt-short:!left-auto bt-short:!right-[calc(81%+0.75rem)] bt-short:!top-[56%]',
-          place === 'right' &&
-            'right-1.5 top-[44%] sm:top-[52%] -translate-y-1/2 sm:right-5 lg:right-[7%] bt-short:!right-auto bt-short:!left-[calc(81%+0.75rem)] bt-short:!top-[56%]',
-        )}
-      >
+      <div className={cn('absolute z-10 flex items-center', top ? 'flex-row gap-3' : 'flex-col gap-2', SEAT_POS[place])}>
         <div className="relative">
           <div
             data-turn={active || undefined}
             className={cn(
-              'bt-ava flex size-11 items-center justify-center rounded-full font-display text-base font-bold text-foreground ring-2 transition sm:size-14 sm:text-lg bt-short:!size-9',
-              place === 'top' && 'bt-short:!size-8',
+              'bt-ava flex size-14 items-center justify-center rounded-full font-display text-xl font-bold text-foreground ring-2 transition',
               active ? 'ring-gold' : isTeam ? (teamOf(seat) === teamOf(base) ? 'ring-gold/50' : 'ring-primary/60') : 'ring-border',
             )}
           >
-            {s.bots.includes(seat) ? <Bot className="size-5 text-muted-foreground" aria-label="Bot" /> : nameOf(seat).charAt(0).toUpperCase()}
+            {s.bots.includes(seat) ? <Bot className="size-6 text-muted-foreground" aria-label="Bot" /> : nameOf(seat).charAt(0).toUpperCase()}
           </div>
           {s.bidder === seat && (
-            <span className="absolute -left-1 -top-1 flex size-5 items-center justify-center rounded-full bg-gold text-gold-foreground">
-              <Crown className="size-3" aria-label="İhale sahibi" />
+            <span className="absolute -left-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-gold text-gold-foreground">
+              <Crown className="size-3.5" aria-label="İhale sahibi" />
             </span>
           )}
-          <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full bg-background px-1.5 text-[11px] font-bold tabular-nums text-foreground ring-1 ring-border">
+          <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background px-2 text-[13px] font-bold tabular-nums leading-5 text-foreground ring-1 ring-border">
             {s.handCounts[seat]}
           </span>
           {showBubble && (
             <span
               key={`${s.phase}-${bid}-${s.passed[seat]}`}
               className={cn(
-                'absolute top-1/2 z-20 -translate-y-1/2 animate-pop whitespace-nowrap rounded-xl px-2.5 py-1 text-sm font-black shadow-lg',
-                place === 'left' ? 'left-full ml-2' : 'right-full mr-2',
+                'absolute top-1/2 z-20 -translate-y-1/2 animate-pop whitespace-nowrap rounded-xl px-3 py-1.5 text-base font-black shadow-lg',
+                place === 'left' ? 'left-full ml-3' : 'right-full mr-3',
                 s.passed[seat] ? 'bg-secondary text-muted-foreground' : 'bg-gold text-gold-foreground',
               )}
             >
@@ -308,53 +310,60 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
             </span>
           )}
         </div>
-        <div
-          data-turn={active || undefined}
+        <SeatPlate seat={seat} active={active} row={top} />
+      </div>
+    )
+  }
+
+  /** Name, tricks and score; shared by every seat (including mine) so all four read the same way. */
+  const SeatPlate = ({ seat, active, row }: { seat: number; active: boolean; row: boolean }) => {
+    const tricks = s.phase === 'play' || s.phase === 'bury' || s.phase === 'trump'
+    return (
+      <div
+        data-turn={active || undefined}
+        className={cn(
+          'bt-plate flex items-center text-foreground',
+          row ? 'h-14 flex-row gap-3 rounded-2xl px-4' : 'w-36 flex-col gap-1 rounded-2xl px-2 py-2 text-center',
+        )}
+      >
+        <span className={cn('truncate text-[17px] font-bold leading-tight', row ? 'max-w-40' : 'w-full')}>
+          {seat === me ? `Sen${isTeam ? ` · ${teamLabel(me)}` : ''}` : nameOf(seat)}
+        </span>
+        {tricks && (
+          <span className={cn('font-display text-lg font-bold leading-none tabular-nums', s.bidder === seat && 'text-gold', row && 'border-l border-border pl-3')}>
+            {s.taken[seat]}
+            {goalOf(seat) != null && <span className="text-muted-foreground">/{goalOf(seat)}</span>}
+            <span className="ml-1 text-[13px] font-medium text-muted-foreground">el</span>
+            {holding?.winner === seat && (
+              <span key={holding.key} className="ml-1 inline-block animate-pop text-gold">
+                +1
+              </span>
+            )}
+          </span>
+        )}
+        <span
           className={cn(
-            'bt-plate flex w-24 flex-col items-center gap-0.5 rounded-xl px-1.5 pb-1 pt-1.5 text-center text-foreground sm:w-28 bt-short:!w-[5.5rem] bt-short:!pt-1',
-            place === 'top' && 'bt-short:!w-auto bt-short:!flex-row bt-short:!gap-2.5 bt-short:!rounded-full bt-short:!px-3 bt-short:!py-1.5',
+            'flex items-baseline justify-center gap-1.5 text-[13px] font-semibold leading-none text-muted-foreground',
+            row ? 'border-l border-border pl-3' : 'w-full border-t border-border pt-1.5',
           )}
         >
-          <span className={cn('w-full truncate text-xs font-semibold leading-tight sm:text-sm', place === 'top' && 'bt-short:!w-auto bt-short:max-w-[6.5rem]')}>
-            {nameOf(seat)}
-          </span>
-          {(s.phase === 'play' || s.phase === 'bury' || s.phase === 'trump') && (
-            <span className={cn('font-display text-sm font-bold leading-none tabular-nums sm:text-base', s.bidder === seat && 'text-gold')}>
-              {s.taken[seat]}
-              {goalOf(seat) != null && <span className="text-muted-foreground">/{goalOf(seat)}</span>}
-              <span className="ml-1 text-[11px] font-medium text-muted-foreground">el</span>
-              {holding?.winner === seat && (
-                <span key={holding.key} className="ml-1 inline-block animate-pop text-gold">
-                  +1
-                </span>
-              )}
-            </span>
-          )}
-          <span
-            className={cn(
-              'mt-0.5 flex w-full items-baseline justify-center gap-1 border-t border-border pt-0.5 text-[11px] font-semibold leading-none text-muted-foreground',
-              place === 'top' && 'bt-short:!mt-0 bt-short:!w-auto bt-short:!border-l bt-short:!border-t-0 bt-short:!pl-2.5 bt-short:!pt-0',
-            )}
-          >
-            {isTeam ? `${teamLabel(seat)} · ` : ''}Puan
-            <b className={cn('font-display text-sm tabular-nums', s.totals[seat] < 0 ? 'text-destructive' : 'text-foreground')}>{s.totals[seat]}</b>
-          </span>
-        </div>
+          {isTeam ? `${teamLabel(seat)} · ` : ''}Puan
+          <b className={cn('font-display text-base tabular-nums', s.totals[seat] < 0 ? 'text-destructive' : 'text-foreground')}>{s.totals[seat]}</b>
+        </span>
       </div>
     )
   }
 
   const contractChip =
     s.phase !== 'bid' && s.phase !== 'predict' ? (
-      <div className="flex w-fit items-center gap-2 whitespace-nowrap rounded-full bg-background/90 py-1 pl-1 pr-3 text-xs font-bold text-foreground shadow-lg ring-1 ring-gold/50 backdrop-blur sm:text-sm">
-        <span className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pl-2.5 pr-1 text-xs text-muted-foreground bt-short:!pl-1">
-          <span className="bt-short:sr-only">Koz</span> {trumpBadge}
+      <div className="flex w-fit items-center gap-2.5 whitespace-nowrap rounded-full bg-background/90 py-1 pl-1 pr-4 text-[15px] font-bold text-foreground shadow-lg ring-1 ring-gold/50">
+        <span className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pl-3 pr-1 text-[13px] text-muted-foreground">
+          Koz {trumpBadge}
         </span>
         <span className="tabular-nums">{bidLine}</span>
       </div>
     ) : null
 
-  const handRows = hand.length > 9 ? [hand.slice(0, Math.ceil(hand.length / 2)), hand.slice(Math.ceil(hand.length / 2))] : [hand]
   const mid = (hand.length - 1) / 2
 
   const cardState = (c: BCard) => {
@@ -393,24 +402,26 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           </p>
         )}
 
-        <section aria-label="Batak masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border p-1.5 sm:p-2.5">
-          {/* Short landscape phones get a flatter table so LandscapeFit doesn't shrink the text. */}
-          <div className="relative h-[25rem] sm:h-[29rem] lg:h-[min(33rem,calc(100dvh-24rem))] lg:min-h-[21rem] bt-short:!h-[17rem] bt-short:!min-h-0">
+        <section aria-label="Batak masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border">
+          {/* On desktop the stage is capped by the window height; inside the fullscreen layer LandscapeFit sizes it. */}
+          <FixedStage width={STAGE_W} height={STAGE_H} className="max-w-[calc((100dvh-15rem)*2)] [.ls-split_&]:max-w-none">
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
-            <div className="bt-rim absolute inset-x-[7%] bottom-[20%] top-[12%] rounded-full p-2 sm:inset-x-[11%] sm:p-2.5 bt-short:!inset-x-[19%] bt-short:!bottom-[4%] bt-short:!top-[17%] bt-short:!rounded-[50%] bt-short:!p-2" aria-hidden="true">
-              <div className="bt-felt relative size-full overflow-hidden rounded-full bt-short:!rounded-[50%]">
-                <TableBrand plaque={false} corners={false} jako={false} className="bt-short:[&_.tb-word]:hidden" />
+            <div className="bt-rim absolute left-[255px] top-[86px] h-[292px] w-[590px] rounded-full p-2.5" aria-hidden="true">
+              <div className="bt-felt relative size-full overflow-hidden rounded-full">
+                <TableBrand plaque={false} corners={false} jako={false} className="[&_.tb-word]:hidden" />
               </div>
             </div>
-            <div className="absolute inset-x-2 top-2 z-20 flex items-start justify-between gap-2 text-[11px] sm:inset-x-4 sm:top-3 sm:text-xs">
-              <div className={cn('flex flex-col gap-1', remote.id && 'mt-8 bt-short:mt-0')}>
-                <span className="w-fit rounded-md bg-background/75 px-2 py-0.5 font-bold text-foreground bt-short:hidden">{variantLabel(variant)}</span>
-                <span className="w-fit rounded-md bg-background/75 px-2 py-0.5 tabular-nums text-muted-foreground bt-short:hidden">
-                  {target ? `${s.handNo}. el · Hedef ${target}` : s.handsTotal > 1 ? `El ${s.handNo}/${s.handsTotal}` : 'Tek el'}
-                </span>
-                {contractChip && <div className="mt-1 hidden sm:block bt-short:!hidden">{contractChip}</div>}
-              </div>
-              <div className="flex items-center gap-1.5">
+            <div className={cn('absolute left-4 z-20 flex flex-col gap-1.5', remote.id ? 'top-14' : 'top-4')}>
+              {contractChip ?? (
+                <>
+                  <span className="w-fit rounded-lg bg-background/75 px-2.5 py-1 text-[14px] font-bold text-foreground">{variantLabel(variant)}</span>
+                  <span className="w-fit rounded-lg bg-background/75 px-2.5 py-1 text-[13px] tabular-nums text-muted-foreground">
+                    {target ? `${s.handNo}. el · Hedef ${target}` : s.handsTotal > 1 ? `El ${s.handNo}/${s.handsTotal}` : 'Tek el'}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="absolute right-4 top-4 z-20 flex items-center gap-2 text-[15px]">
                 {s.lastTrick && s.phase === 'play' && (
                   <button
                     type="button"
@@ -422,7 +433,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                       lastOpen ? 'bg-primary text-primary-foreground' : 'bg-background/75 text-foreground hover:bg-background',
                     )}
                   >
-                    <History className="size-3.5" aria-hidden="true" /> Son el
+                    <History className="size-4" aria-hidden="true" /> Son el
                   </button>
                 )}
                 <button
@@ -435,7 +446,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                     scoreOpen ? 'bg-primary text-primary-foreground' : 'bg-background/75 text-foreground hover:bg-background',
                   )}
                 >
-                  <Trophy className="size-3.5" aria-hidden="true" /> Puan
+                  <Trophy className="size-4" aria-hidden="true" /> Puan
                 </button>
                 <button
                   type="button"
@@ -443,9 +454,8 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                   className="flex items-center gap-1 rounded-md bg-background/75 px-2 py-1 font-bold text-foreground transition hover:bg-background"
                   aria-haspopup="dialog"
                 >
-                  <HelpCircle className="size-3.5" aria-hidden="true" /> Kurallar
+                  <HelpCircle className="size-4" aria-hidden="true" /> Kurallar
                 </button>
-              </div>
             </div>
 
             {lastOpen && s.lastTrick && s.phase === 'play' && (
@@ -480,9 +490,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               <Seat key={p.seat} seat={p.seat} place={p.place} />
             ))}
 
-            {contractChip && <div className="absolute bottom-2 left-2 z-20 hidden bt-short:block">{contractChip}</div>}
-
-            <div className="absolute left-1/2 top-[57%] z-0 size-0 sm:top-[56%] bt-short:!top-[56.5%] bt-short:z-30">
+            <div className="absolute left-[550px] top-[232px] z-30 size-0 [--cw:66px]">
               {(holding ? holding.trick : s.trick).map((p, i) => {
                 const won = holding && p.seat === holding.winner
                 return (
@@ -495,28 +503,26 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                       opacity: holding?.slide ? 0 : 1,
                     }}
                   >
-                    <div className={cn('flex flex-col items-center gap-0.5', !holding && 'animate-pop', TRICK_OFFSET[placeOf(p.seat)])}>
+                    <div className={cn(!holding && 'animate-pop', TRICK_OFFSET[placeOf(p.seat)])}>
                       <BatakCard
                         card={p.card}
-                        size="sm"
-                        className={cn(won && 'ring-[3px] ring-gold shadow-[0_0_24px_-2px_var(--gold)]', holding && !won && 'brightness-75')}
+                        size="md"
+                        aria-label={`${nameOf(p.seat)} attı`}
+                        className={cn('shadow-lg', won && 'ring-[3px] ring-gold shadow-[0_0_24px_-2px_var(--gold)]', holding && !won && 'brightness-75')}
                       />
-                      <span className={cn('max-w-[5rem] truncate rounded-full px-1.5 text-[11px] font-bold leading-4 bt-short:hidden', won ? 'bg-gold text-gold-foreground' : 'bg-background/80 text-foreground')}>
-                        {nameOf(p.seat)}
-                      </span>
                     </div>
                   </div>
                 )
               })}
             </div>
 
-            <div className="absolute inset-x-2 bottom-2 z-20 flex flex-col items-center gap-2">
-              {contractChip && <div className="sm:hidden">{contractChip}</div>}
+            {/* One action strip between the table and my hand: the prompt and whatever I have to choose right now. */}
+            <div className="absolute inset-x-4 top-[376px] z-20 flex h-14 items-center justify-center gap-3">
               <p
                 key={nope ? `nope-${nope.n}` : 'prompt'}
                 className={cn(
-                  'max-w-full truncate rounded-full px-3 py-1 text-center text-sm font-semibold',
-                  !nope && !prompt && 'invisible',
+                  'max-w-[22rem] shrink-0 truncate rounded-full px-4 py-1.5 text-center text-base font-bold',
+                  !nope && !prompt && 'hidden',
                   nope ? 'bg-destructive text-foreground shadow-lg animate-pop' : myTurn ? 'bg-gold text-gold-foreground' : 'bg-background/75 text-foreground',
                 )}
                 aria-live="polite"
@@ -525,15 +531,15 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               </p>
 
               {myTurn && (s.phase === 'bid' || s.phase === 'predict') && (
-                <div className="w-fit max-w-full rounded-2xl bg-background/90 p-1.5 ring-1 ring-gold/40 backdrop-blur">
-                  <div className="flex flex-wrap justify-center gap-1">
+                <div className="flex items-center gap-3 rounded-2xl bg-background/90 p-1.5 ring-1 ring-gold/40">
+                  <div className="flex gap-1.5">
                     {Array.from({ length: s.phase === 'predict' ? maxTricks + 1 : maxTricks - minBid + 1 }, (_, i) => (s.phase === 'predict' ? i : minBid + i)).map((b) => (
                       <button
                         key={b}
                         type="button"
                         disabled={remote.busy}
                         onClick={() => remote.send({ type: s.phase === 'predict' ? 'predict' : 'bid', amount: b })}
-                        className="h-9 min-w-9 rounded-lg bg-secondary px-2 text-sm font-bold tabular-nums text-foreground transition hover:bg-gold hover:text-gold-foreground disabled:opacity-40"
+                        className="h-11 min-w-11 rounded-xl bg-secondary px-2 text-lg font-bold tabular-nums text-foreground transition hover:bg-gold hover:text-gold-foreground disabled:opacity-40"
                       >
                         {b}
                       </button>
@@ -543,29 +549,29 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                         type="button"
                         disabled={remote.busy || forced}
                         onClick={() => remote.send({ type: 'bid', amount: 'pass' })}
-                        className="h-9 rounded-lg bg-muted px-4 text-sm font-bold text-foreground ring-1 ring-border disabled:opacity-40"
+                        className="h-11 rounded-xl bg-muted px-5 text-lg font-bold text-foreground ring-1 ring-border disabled:opacity-40"
                       >
                         Pas
                       </button>
                     )}
                   </div>
-                  {s.phase === 'predict' && <p className="mt-1.5 text-center text-[11px] text-muted-foreground">0 dersen ve hiç el almazsan +{ZERO_BONUS}</p>}
+                  {s.phase === 'predict' && <p className="max-w-36 pr-2 text-[13px] leading-snug text-muted-foreground">0 dersen ve hiç el almazsan +{ZERO_BONUS}</p>}
                 </div>
               )}
 
               {myTurn && s.phase === 'trump' && (
-                <div className="flex w-full max-w-md flex-col gap-2 rounded-2xl bg-background/90 p-2 ring-1 ring-gold/40 backdrop-blur">
-                  <div className="grid grid-cols-4 gap-2">
+                <div className="flex items-center gap-2 rounded-2xl bg-background/90 p-1.5 ring-1 ring-gold/40">
+                  <div className="flex gap-2">
                     {[0, 1, 2, 3].map((suit) => (
                       <button
                         key={suit}
                         type="button"
                         disabled={remote.busy}
                         onClick={() => remote.send({ type: 'trump', suit })}
-                        className="playing-card flex flex-col items-center rounded-xl py-1.5 transition hover:-translate-y-1 disabled:opacity-40"
+                        className="playing-card flex h-11 w-28 items-center justify-center gap-1.5 rounded-xl transition hover:-translate-y-1 disabled:opacity-40"
                       >
                         <span className={cn('text-2xl leading-none', suitColor(suit))}>{SUIT_SYMBOLS[suit]}</span>
-                        <span className={cn('text-[11px] font-bold', suitColor(suit))}>
+                        <span className={cn('text-[13px] font-bold', suitColor(suit))}>
                           {SUIT_NAMES[suit]} · {hand.filter((c) => c.s === suit).length}
                         </span>
                       </button>
@@ -576,7 +582,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                       type="button"
                       disabled={remote.busy || !canNoTrump(s)}
                       onClick={() => remote.send({ type: 'trump', suit: 'none' })}
-                      className="h-9 rounded-xl bg-secondary text-xs font-bold text-foreground ring-1 ring-border transition hover:bg-gold hover:text-gold-foreground disabled:opacity-40"
+                      className="h-11 max-w-52 rounded-xl bg-secondary px-3 text-[13px] font-bold leading-tight text-foreground ring-1 ring-border transition hover:bg-gold hover:text-gold-foreground disabled:opacity-40"
                     >
                       {canNoTrump(s) ? 'Kozsuz oyna · tutarsa 2 kat puan' : `Kozsuz için en az ${minBidFor(variant) + 1} ihale gerekir`}
                     </button>
@@ -585,110 +591,69 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               )}
 
               {burying && (
-                <div className="flex flex-col items-center gap-1">
-                  {rules.gommeYasak && <span className="rounded-full bg-background/80 px-2 py-0.5 text-[11px] text-muted-foreground">As ve koz gömülemez</span>}
+                <div className="flex items-center gap-2">
+                  {rules.gommeYasak && <span className="rounded-full bg-background/80 px-3 py-1 text-[13px] text-muted-foreground">As ve koz gömülemez</span>}
                   <button
                     type="button"
                     disabled={remote.busy || buryPick.length !== BURY_COUNT}
                     onClick={sendBury}
-                    className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-gold-foreground disabled:opacity-50"
+                    className="h-11 rounded-full bg-gold px-6 text-base font-bold text-gold-foreground disabled:opacity-50"
                   >
                     Seçilenleri göm ({buryPick.length}/{BURY_COUNT})
                   </button>
                 </div>
               )}
             </div>
-          </div>
-
-          {me >= 0 && (
-            <div className="flex flex-col gap-1 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-3 bt-short:!gap-0 bt-short:!pt-0">
-              <div className="flex justify-center px-1">
-                <div
-                  data-turn={(s.turn === me && !holding) || undefined}
-                  className={cn('bt-plate flex items-center gap-2.5 rounded-full py-1 pl-1 pr-3 text-foreground bt-short:!py-0.5', s.turn === me && !holding && 'ring-2 ring-gold')}
-                >
-                  <span className="relative flex size-8 items-center bt-short:!size-6 justify-center rounded-full bg-secondary font-display text-sm font-bold">
-                    S
+            {me >= 0 && (
+              <>
+                <div className="absolute bottom-4 left-3 z-20 flex items-center gap-2">
+                  <div className="relative">
+                    <div
+                      data-turn={(s.turn === me && !holding) || undefined}
+                      className={cn(
+                        'bt-ava flex size-14 items-center justify-center rounded-full font-display text-xl font-bold text-foreground ring-2 transition',
+                        s.turn === me && !holding ? 'ring-gold' : 'ring-border',
+                      )}
+                    >
+                      S
+                    </div>
                     {s.bidder === me && (
-                      <span className="absolute -left-1 -top-1 flex size-4 items-center justify-center rounded-full bg-gold text-gold-foreground">
-                        <Crown className="size-2.5" aria-label="İhale sahibi" />
+                      <span className="absolute -left-1 -top-1 flex size-5 items-center justify-center rounded-full bg-gold text-gold-foreground">
+                        <Crown className="size-3" aria-label="İhale sahibi" />
                       </span>
                     )}
-                  </span>
-                  <span className="flex flex-col leading-tight">
-                    <span className="text-sm font-bold">Sen{isTeam ? ` · ${teamLabel(me)}` : ''}</span>
-                    <span className="text-xs text-muted-foreground">
-                      Puan <b className={cn('tabular-nums', s.totals[me] < 0 ? 'text-destructive' : 'text-foreground')}>{s.totals[me]}</b>
-                    </span>
-                  </span>
-                  {(s.phase === 'play' || s.phase === 'bury' || s.phase === 'trump') && (
-                    <>
-                      <span className={cn('border-l border-border pl-2.5 font-display text-base font-bold tabular-nums', s.bidder === me && 'text-gold')}>
-                        {s.taken[me]}
-                        {goalOf(me) != null && <span className="text-muted-foreground">/{goalOf(me)}</span>}
-                        <span className="ml-1 text-xs font-medium text-muted-foreground">el</span>
-                        {holding?.winner === me && (
-                          <span key={holding.key} className="ml-1 inline-block animate-pop text-gold">
-                            +1
-                          </span>
-                        )}
-                      </span>
-                      <TrickPips count={s.taken[me]} goal={goalOf(me)} />
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center gap-1 pt-4 [--cw:2.85rem] sm:hidden" aria-label="Elindeki kartlar">
-                {handRows.map((row, ri) => (
-                  <div key={ri} className="flex justify-center" style={{ marginTop: ri ? '-1.1rem' : 0 }}>
-                    {row.map((c, i) => {
-                      const st = cardState(c)
-                      return (
-                        <BatakCard
-                          key={`${s.handNo}-${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
-                          card={c}
-                          playable={st.ok || st.buryOk}
-                          selected={st.selected}
-                          dim={st.dim}
-                          disabled={st.disabled}
-                          onClick={tappable ? () => tapCard(c, true) : undefined}
-                          className={cn(st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
-                          style={{ marginLeft: i === 0 ? 0 : '-0.55rem', zIndex: st.selected ? 60 : i + ri * 20, animationDelay: st.nope ? undefined : `${(i + ri * row.length) * 45}ms` }}
-                        />
-                      )
-                    })}
                   </div>
-                ))}
-              </div>
+                  <SeatPlate seat={me} active={s.turn === me && !holding} row={false} />
+                </div>
 
-              <div className="hidden min-w-0 justify-center pt-5 [--cw:4.2rem] sm:flex lg:[--cw:4.8rem] bt-short:!pt-2.5 bt-short:![--cw:3.2rem]" aria-label="Elindeki kartlar">
-                {hand.map((c, i) => {
-                  const st = cardState(c)
-                  return (
-                    <BatakCard
-                      key={`${s.handNo}-${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
-                      card={c}
-                      playable={st.ok || st.buryOk}
-                      selected={st.selected}
-                      dim={st.dim}
-                      disabled={st.disabled}
-                      onClick={tappable ? () => tapCard(c, false) : undefined}
-                      className={cn('origin-bottom', st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
-                      style={{
-                        animationDelay: st.nope ? undefined : `${i * 45}ms`,
-                        marginLeft: i === 0 ? 0 : `min(0.15rem, calc((100% - ${hand.length} * var(--cw)) / ${Math.max(1, hand.length - 1)}))`,
-                        rotate: `${(i - mid) * (hand.length > 13 ? 1.6 : 2.2)}deg`,
-                        // Fan curve via margin: an inline `translate` would override the hover/selected lift classes.
-                        marginTop: `${Math.abs(i - mid) ** 2 * 0.35}px`,
-                        zIndex: st.selected ? 60 : i,
-                      }}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-          )}
+                <div className="absolute left-[232px] right-[232px] top-[438px] z-10 flex items-start justify-center [--cw:64px]" aria-label="Elindeki kartlar">
+                  {hand.map((c, i) => {
+                    const st = cardState(c)
+                    return (
+                      <BatakCard
+                        key={`${s.handNo}-${c.s}-${c.r}${st.nope ? `-n${nope?.n}` : ''}`}
+                        card={c}
+                        playable={st.ok || st.buryOk}
+                        selected={st.selected}
+                        dim={st.dim}
+                        disabled={st.disabled}
+                        onClick={tappable ? () => tapCard(c, false) : undefined}
+                        className={cn('origin-bottom', st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
+                        style={{
+                          animationDelay: st.nope ? undefined : `${i * 45}ms`,
+                          marginLeft: i === 0 ? 0 : `min(0.15rem, calc((100% - ${hand.length} * var(--cw)) / ${Math.max(1, hand.length - 1)}))`,
+                          rotate: `${(i - mid) * (hand.length > 13 ? 1.6 : 2.2)}deg`,
+                          // Fan curve via margin: an inline `translate` would override the hover/selected lift classes.
+                          marginTop: `${Math.abs(i - mid) ** 2 * 0.18}px`,
+                          zIndex: st.selected ? 60 : i,
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </FixedStage>
         </section>
       </div>
 
