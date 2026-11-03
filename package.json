@@ -5,7 +5,7 @@
   "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/make-webp.mjs && next build",
     "start": "next start",
     "test:survival": "npx -y tsx scripts/survival-scenarios.ts",
     "test:batak": "npx -y tsx scripts/batak-engine.ts"
