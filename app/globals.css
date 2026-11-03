@@ -2712,9 +2712,14 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .bt-deal {
   animation: bt-deal 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
+/* No `to` frame: the card settles on its own opacity, so dimmed (unplayable) cards stay dimmed after the deal. */
 @keyframes bt-deal {
   from { opacity: 0; transform: translateY(-14rem) scale(0.55); }
-  to { opacity: 1; transform: none; }
+}
+/* A card I played flies from the exact spot it left my hand (see useCardThrow). */
+@keyframes card-throw {
+  from { transform: translate(var(--fx), var(--fy)) rotate(var(--fr, 0deg)); }
+  to { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .bt-deal, .bt-ava[data-turn] { animation: none; }

@@ -32,6 +32,7 @@ import { BatakCard, sameCard, sortCards, suitColor, type Place } from './batak-c
 import { HandSummary } from './batak-hand-summary'
 import { FixedStage } from './fixed-stage'
 import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
+import { useCardThrow } from './use-card-throw'
 
 
 
@@ -47,6 +48,7 @@ const TRICK_OFFSET: Record<Place, string> = {
  */
 const STAGE_W = 1100
 const STAGE_H = 550
+const THROW_OFFSET: [number, number] = [0, 48]
 const SEAT_POS: Record<Exclude<Place, 'bottom'>, string> = {
   top: 'left-1/2 top-3.5 -translate-x-1/2',
   left: 'left-[140px] top-[232px] -translate-x-1/2 -translate-y-1/2',
@@ -133,8 +135,8 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
     playSound(mine ? 'coin' : 'tick', mine ? 1 : 0.6)
     const entry = { key: trickKey, trick: s.lastTrick, winner: s.lastWinner, slide: false }
     setHold(entry)
-    const a = setTimeout(() => setHold((h) => (h?.key === trickKey ? { ...h, slide: true } : h)), 1500)
-    const b = setTimeout(() => setHold((h) => (h?.key === trickKey ? null : h)), 2100)
+    const a = setTimeout(() => setHold((h) => (h?.key === trickKey ? { ...h, slide: true } : h)), 900)
+    const b = setTimeout(() => setHold((h) => (h?.key === trickKey ? null : h)), 1400)
     return () => {
       clearTimeout(a)
       clearTimeout(b)
@@ -164,8 +166,12 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
     setBuryPick((p) => (p.some((x) => sameCard(x, c)) ? p.filter((x) => !sameCard(x, c)) : p.length < BURY_COUNT ? [...p, c] : p))
   const playCard = (c: BCard) => {
     setPicked(null)
-    void remote.send({ type: 'play', s: c.s, r: c.r })
+    return remote.send({ type: 'play', s: c.s, r: c.r })
   }
+  const trickRef = useRef<HTMLDivElement>(null)
+  // My trick card sits 52% of its height (~48 design px) below the centre; see TRICK_OFFSET.bottom.
+  const thrower = useCardThrow(trickRef, THROW_OFFSET)
+  const cardKey = (c: BCard) => `${c.s}-${c.r}`
 
   // A forced move is not a decision; play it after a short beat so the player sees it happen.
   const onlyCard = playing && legal.length === 1 ? legal[0] : null
@@ -408,8 +414,8 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
           {/* On desktop the stage is capped by the window height; inside the fullscreen layer LandscapeFit sizes it. */}
           <FixedStage width={STAGE_W} height={STAGE_H} className="max-w-[calc((100dvh-15rem)*2)] [.ls-split_&]:max-w-none">
             {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
-            <div className="bt-rim absolute left-[255px] top-[86px] h-[292px] w-[590px] rounded-full p-2.5" aria-hidden="true">
-              <div className="bt-felt relative size-full overflow-hidden rounded-full">
+            <div className="bt-rim absolute left-[255px] top-[86px] h-[292px] w-[590px] rounded-[3rem] p-2.5" aria-hidden="true">
+              <div className="bt-felt relative size-full overflow-hidden rounded-[2.5rem]">
                 <TableBrand plaque={false} corners={false} jako={false} className="[&_.tb-word]:hidden" />
                 <ThemeDecor theme={tableTheme} />
               </div>
@@ -493,9 +499,14 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
               <Seat key={p.seat} seat={p.seat} place={p.place} />
             ))}
 
-            <div className="absolute left-[550px] top-[232px] z-30 size-0 [--cw:66px]">
+            <div ref={trickRef} className="absolute left-[550px] top-[232px] z-30 size-0 [--cw:66px]">
+              {thrower.aiming && (
+                <span className="pointer-events-none absolute size-[220px] -translate-x-1/2 -translate-y-1/2 animate-pop rounded-full bg-gold/15 ring-4 ring-gold/70" aria-hidden="true" />
+              )}
               {(holding ? holding.trick : s.trick).map((p, i) => {
                 const won = holding && p.seat === holding.winner
+                // The animation must drop once the trick is held, or it would pin the transform and block the slide.
+                const thrown = !holding && p.seat === me ? thrower.throwStyle(cardKey(p.card)) : undefined
                 return (
                   <div
                     key={p.seat}
@@ -504,9 +515,10 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                       zIndex: won ? 10 : i + 1,
                       transform: holding?.slide ? `translate(-50%, -50%) ${SLIDE_TO[placeOf(holding.winner)]}` : undefined,
                       opacity: holding?.slide ? 0 : 1,
+                      ...thrown,
                     }}
                   >
-                    <div className={cn(!holding && 'animate-pop', TRICK_OFFSET[placeOf(p.seat)])}>
+                    <div className={cn(!holding && !thrown && 'animate-pop', TRICK_OFFSET[placeOf(p.seat)])}>
                       <BatakCard
                         card={p.card}
                         size="md"
@@ -640,8 +652,29 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                         selected={st.selected}
                         dim={st.dim}
                         disabled={st.disabled}
-                        onClick={tappable ? () => tapCard(c, false) : undefined}
-                        className={cn('origin-bottom', st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
+                        onClick={
+                          tappable
+                            ? (e) => {
+                                if (thrower.clickBlocked()) return
+                                if (st.ok && !remote.busy) thrower.measure(e.currentTarget, cardKey(c))
+                                tapCard(c, false)
+                              }
+                            : undefined
+                        }
+                        onPointerDown={
+                          playing
+                            ? (e) =>
+                                thrower.onPointerDown(e, cardKey(c), () => {
+                                  if (remote.busy) return false
+                                  if (!isLegal(c)) {
+                                    reject(c, illegalReason(c))
+                                    return false
+                                  }
+                                  return playCard(c)
+                                })
+                            : undefined
+                        }
+                        className={cn('origin-bottom', playing && st.ok && 'touch-none cursor-grab', st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
                         style={{
                           animationDelay: st.nope ? undefined : `${i * 45}ms`,
                           marginLeft: i === 0 ? 0 : `min(0.15rem, calc((100% - ${hand.length} * var(--cw)) / ${Math.max(1, hand.length - 1)}))`,

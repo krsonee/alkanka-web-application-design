@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { RANK_LABEL, SUIT_NAMES, SUIT_SYMBOLS, type BCard } from '@/lib/games/batak'
 
@@ -19,9 +19,11 @@ export function BatakCard({
   size = 'md',
   className,
   style,
+  onPointerDown,
 }: {
   card: BCard
-  onClick?: () => void
+  onClick?: (e: MouseEvent<HTMLElement>) => void
+  onPointerDown?: (e: PointerEvent<HTMLElement>) => void
   disabled?: boolean
   playable?: boolean
   dim?: boolean
@@ -37,6 +39,7 @@ export function BatakCard({
     <Comp
       type={onClick ? 'button' : undefined}
       onClick={onClick}
+      onPointerDown={onClick && !disabled ? onPointerDown : undefined}
       disabled={onClick ? disabled : undefined}
       aria-label={`${SUIT_NAMES[card.s]} ${label}`}
       aria-pressed={onClick ? selected : undefined}
