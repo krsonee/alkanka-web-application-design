@@ -456,7 +456,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
                       thrower.measure(e.currentTarget, cardKey(c))
                       void playCard(c)
                     }}
-                    onPointerDown={(e) => thrower.onPointerDown(e, cardKey(c), () => playCard(c))}
+                    onPointerDown={myTurn && !remote.busy ? (e) => thrower.onPointerDown(e, cardKey(c), () => playCard(c)) : undefined}
                     className={cn(myTurn && 'touch-none cursor-grab', pisti && myTurn && 'ring-4')}
                   />
                 </div>

@@ -51,6 +51,7 @@ export function useCardThrow(anchorRef: RefObject<HTMLElement | null>, offset: [
   const throwStyle = (key: string, extra = ''): CSSProperties | undefined => {
     const l = launch.current
     if (!l || l.key !== key || Date.now() - l.at > LAUNCH_TTL_MS) return undefined
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
     return {
       '--fx': `${l.fx}px`,
       '--fy': `${l.fy}px`,
