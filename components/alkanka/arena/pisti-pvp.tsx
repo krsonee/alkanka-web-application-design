@@ -11,6 +11,7 @@ import { TableBrand } from './table-brand'
 import { FixedStage } from './fixed-stage'
 import { MobileTableChat } from './mobile-table-chat'
 import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
+import { useCardThrow } from './use-card-throw'
 
 type Place = 'bottom' | 'top' | 'left' | 'right'
 
@@ -41,7 +42,7 @@ const SEAT_POS: Record<Exclude<Place, 'bottom'>, string> = {
   right: 'left-[1012px] top-[226px] -translate-x-1/2 -translate-y-1/2',
 }
 
-const EVENT_MS: Record<PistiEvent['kind'], number> = { drop: 900, capture: 1500, pisti: 2500, jpisti: 2800, sweep: 1600, deal: 900, hand: 900, cut: 1400 }
+const EVENT_MS: Record<PistiEvent['kind'], number> = { drop: 750, capture: 1500, pisti: 2500, jpisti: 2800, sweep: 1600, deal: 900, hand: 900, cut: 1400 }
 
 function CardBack({ className, style }: { className?: string; style?: CSSProperties }) {
   return <span className={cn('card-back block shrink-0 rounded-md', className)} style={style} aria-hidden="true" />
@@ -124,7 +125,8 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
 
   useEffect(() => {
     if (!current) return
-    const fast = queue.length > 3 ? 0.6 : 1
+    // Hurry the replay along when more moves are waiting, so the player is never left watching a backlog.
+    const fast = queue.length > 3 ? 0.5 : queue.length > 0 ? 0.7 : 1
     const t = setTimeout(() => setCurrent(null), EVENT_MS[current.kind] * fast)
     return () => clearTimeout(t)
   }, [current, queue.length])
@@ -153,8 +155,17 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   const pileHidden = current ? Math.max(0, pileCount - pileFan.length) : s.pileHidden + Math.max(0, s.pileCount - s.pileHidden - s.pileFan.length)
   const showPileInfo = !current && s.pileCount > 0
 
-  const myTurn = remote.myTurn && !replaying && !finished
+  // My cards unlock as soon as the last move starts animating; only deals and hand ends hold them.
+  const settling = queue.length > 0 || (current != null && (current.kind === 'deal' || current.kind === 'hand' || current.kind === 'cut'))
+  const myTurn = remote.myTurn && !settling && !finished
   const hand = me >= 0 ? s.hand : []
+  const pileRef = useRef<HTMLDivElement>(null)
+  const thrower = useCardThrow(pileRef)
+  const cardKey = (c: PCard) => `${c.s}-${c.r}`
+  const playCard = (c: PCard) => remote.send({ type: 'play', s: c.s, r: c.r })
+  useEffect(() => {
+    if (myTurn && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
+  }, [myTurn])
   const captures = (c: PCard) => s.pileTop != null && (c.r === s.pileTop.r || c.r === 11)
   const makesPisti = (c: PCard) => s.pileCount === 1 && s.pileTop != null && c.r === s.pileTop.r
 
@@ -162,12 +173,16 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
     ? iWon
       ? 'Kazandın!'
       : 'Oyun bitti'
-    : replaying
-      ? `${current && current.seat >= 0 && current.kind !== 'deal' && current.kind !== 'hand' && current.kind !== 'cut' ? nameOf(current.seat) + ' oynuyor' : 'Kartlar dağıtılıyor'}`
-      : remote.myTurn
-        ? s.pileTop
-          ? 'Sıra sende. Aynı kart ya da Vale yeri alır.'
-          : 'Sıra sende. Yer boş, bir kart at.'
+    : myTurn
+      ? s.pileTop
+        ? 'Sıra sende. Kartı yere sürükle ya da dokun.'
+        : 'Sıra sende. Yer boş, bir kart at.'
+      : replaying
+        ? current && current.seat >= 0 && current.kind !== 'deal' && current.kind !== 'hand' && current.kind !== 'cut'
+          ? current.seat === me
+            ? `Kartını attın · sıra ${nameOf(s.turn)}`
+            : `${nameOf(current.seat)} attı`
+          : 'Kartlar dağıtılıyor'
         : `${nameOf(s.turn)} düşünüyor`
 
   const eventTone = (e: PistiEvent | null) =>
@@ -225,6 +240,8 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   const flyFrom = flying ? FLY[placeOf(flying.seat)] : FLY.bottom
   const sweepTo = flying && flying.kind !== 'drop' ? FLY[placeOf(flying.seat)] : null
   const isBurst = current && (current.kind === 'pisti' || current.kind === 'jpisti')
+  const sweepAnim = `pisti-sweep 560ms ease-in ${isBurst ? 1600 : 900}ms forwards`
+  const thrown = flying && flying.seat === me ? thrower.throwStyle(cardKey(flying.card!), sweepTo ? sweepAnim : '') : undefined
 
   return (
     <div data-ls-main="full" className="flex min-w-0 flex-col gap-3">
@@ -272,7 +289,10 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
           </div>
 
           {/* Pile */}
-          <div className={cn('absolute z-0 size-0 [--cw:96px]', BIG_CARD_TEXT)} style={{ left: PILE_X, top: PILE_Y }}>
+          <div ref={pileRef} className={cn('absolute z-0 size-0 [--cw:96px]', BIG_CARD_TEXT)} style={{ left: PILE_X, top: PILE_Y }}>
+            {thrower.aiming && (
+              <span className="pointer-events-none absolute size-[190px] -translate-x-1/2 -translate-y-1/2 animate-pop rounded-full bg-gold/15 ring-4 ring-gold/70" aria-hidden="true" />
+            )}
             {pileCount === 0 && !flying && (
               <span className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-display text-[15px] font-bold uppercase tracking-[0.3em] text-foreground/30">
                 Yer boş
@@ -314,8 +334,9 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
                       '--tx': sweepTo?.[0] ?? '0px',
                       '--ty': sweepTo?.[1] ?? '0px',
                       animation: sweepTo
-                        ? `pisti-fly 420ms cubic-bezier(0.2,0.8,0.2,1) both, pisti-sweep 560ms ease-in ${isBurst ? 1600 : 900}ms forwards`
+                        ? `pisti-fly 420ms cubic-bezier(0.2,0.8,0.2,1) both, ${sweepAnim}`
                         : 'pisti-fly 420ms cubic-bezier(0.2,0.8,0.2,1) both',
+                      ...thrown,
                     } as CSSProperties
                   }
                 >
@@ -430,8 +451,13 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
                     playable={myTurn}
                     dim={!myTurn && remote.myTurn}
                     disabled={!myTurn || remote.busy}
-                    onClick={() => remote.send({ type: 'play', s: c.s, r: c.r })}
-                    className={cn(pisti && myTurn && 'ring-4')}
+                    onClick={(e) => {
+                      if (thrower.clickBlocked()) return
+                      thrower.measure(e.currentTarget, cardKey(c))
+                      void playCard(c)
+                    }}
+                    onPointerDown={myTurn && !remote.busy ? (e) => thrower.onPointerDown(e, cardKey(c), () => playCard(c)) : undefined}
+                    className={cn(myTurn && 'touch-none cursor-grab', pisti && myTurn && 'ring-4')}
                   />
                 </div>
               )
