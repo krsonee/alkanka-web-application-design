@@ -11,6 +11,19 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '/api/studio/animate': ['./node_modules/ffmpeg-static/ffmpeg'],
   },
+  // Production only: `pnpm build` runs scripts/make-webp.mjs first, which guarantees
+  // every rewrite target exists. In dev, freshly added images may not have a sibling yet.
+  async rewrites() {
+    if (process.env.NODE_ENV !== 'production') return []
+    const acceptsWebp = [{ type: 'header', key: 'accept', value: '.*image/webp.*' }]
+    return {
+      beforeFiles: ['images', 'postlar'].map((dir) => ({
+        source: `/${dir}/:file(.+\\.(?:png|jpe?g|PNG|JPE?G))`,
+        has: acceptsWebp,
+        destination: `/${dir}/:file.webp`,
+      })),
+    }
+  },
   async redirects() {
     return [
       { source: '/firsatlar', destination: '/ozel-oranlar', permanent: true },
@@ -26,8 +39,14 @@ const nextConfig = {
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
     ]
     const frameGuard = [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }]
+    const imageCache = [
+      { key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' },
+      { key: 'Vary', value: 'Accept' },
+    ]
     return [
       { source: '/:path*', headers: security },
+      { source: '/images/:path*', headers: imageCache },
+      { source: '/postlar/:path*', headers: imageCache },
       { source: '/panel', headers: frameGuard },
       { source: '/panel/:path*', headers: frameGuard },
       { source: '/:path*', has: [{ type: 'host', value: '(www\\.)?alkanka\\.shop' }], headers: noindex },
