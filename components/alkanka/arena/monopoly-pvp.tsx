@@ -66,7 +66,7 @@ const LIGHT_GROUPS: Group[] = ['lightblue', 'yellow']
 const INK = 'oklch(0.22 0.02 160)'
 const WHITE = 'oklch(0.985 0 0)'
 
-const STEP_MS = 230
+const STEP_MS = 300
 
 const TURN_GAP_MS = 650
 const DICE_SETTLE_MS = 1150
