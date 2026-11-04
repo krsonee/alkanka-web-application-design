@@ -34,6 +34,7 @@ import {
   canSell,
   isBuyable,
   JAIL_FINE,
+  monoActor,
   netWorth,
   unmortgageCost,
   type Bundle,
@@ -41,7 +42,7 @@ import {
   type MonopolyState,
 } from '@/lib/games/monopoly'
 import type { Remote } from './remote'
-import { EventFeed, EventSpotlight, MoneyFloat, useEventFeed, useMoneyDeltas, type GameEvent } from './monopoly-events'
+import { EVENT_META, EventFeed, EventSpotlight, useEventFeed, useMoneyDeltas, type GameEvent } from './monopoly-events'
 import { TableBrand } from './table-brand'
 import dynamic from 'next/dynamic'
 
@@ -80,7 +81,51 @@ function useSpotlight(batch: GameEvent[], walking: boolean) {
     const t = window.setTimeout(() => setHidden(key), 4200)
     return () => window.clearTimeout(t)
   }, [key, walking])
-  return !walking && key !== hidden && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info')
+  const show = !walking && key !== hidden && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info')
+  return [show, () => setHidden(key)] as const
+}
+
+/** Server move timer drawn as a shrinking ring around the acting player's avatar. */
+function TurnRing({ startedAt, seconds }: { startedAt: string; seconds: number }) {
+  const deadline = new Date(startedAt).getTime() + seconds * 1000
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 250)
+    return () => window.clearInterval(t)
+  }, [])
+  const left = Math.max(0, deadline - now)
+  const secs = Math.ceil(left / 1000)
+  const urgent = secs <= 10
+  const c = 2 * Math.PI * 22
+  return (
+    <>
+      <svg viewBox="0 0 48 48" className="pointer-events-none absolute -inset-1 -rotate-90" aria-hidden="true">
+        <circle cx="24" cy="24" r="22" fill="none" stroke="oklch(1 0 0 / 0.15)" strokeWidth="3" />
+        <circle
+          cx="24"
+          cy="24"
+          r="22"
+          fill="none"
+          stroke={urgent ? 'var(--destructive)' : 'var(--primary)'}
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - left / (seconds * 1000))}
+          className="transition-[stroke-dashoffset] duration-300 ease-linear"
+        />
+      </svg>
+      <span
+        role="timer"
+        aria-label={`Hamle süresi ${secs} saniye`}
+        className={cn(
+          'absolute -bottom-1.5 left-1/2 z-10 -translate-x-1/2 rounded-full px-1 text-[9px] font-black leading-3 tabular-nums',
+          urgent ? 'bg-destructive text-destructive-foreground motion-safe:animate-pulse' : 'bg-primary text-primary-foreground',
+        )}
+      >
+        {secs}
+      </span>
+    </>
+  )
 }
 
 export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
@@ -102,7 +147,18 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
     s.players.map((p) => p.money),
     walking,
   )
-  const showSpot = useSpotlight(batch, walking)
+  // Other players' small events (rolls, minor rent) stay in the feed; the card only pops for what matters to me.
+  const spotBatch = batch.filter((e) => me < 0 || e.actor === me || e.target === me || EVENT_META[e.kind].priority >= 5)
+  const [showSpot, dismissSpot] = useSpotlight(spotBatch, walking)
+  const [seenLog, setSeenLog] = useState(() => s.log.length - 1)
+  const toolOpenLog = open?.kind === 'tool' && open.tab === 'log'
+  if (toolOpenLog && feed[0] && feed[0].id > seenLog) setSeenLog(feed[0].id)
+  const unreadLog = toolOpenLog ? 0 : feed.filter((e) => e.id > seenLog && e.kind !== 'roll' && e.kind !== 'info').length
+  const actor = monoActor(s)
+  const clock =
+    remote.turnStartedAt && remote.turnSeconds && s.players[actor] && !s.players[actor].out && !s.bots.includes(actor)
+      ? { seat: actor, startedAt: remote.turnStartedAt, seconds: remote.turnSeconds }
+      : null
 
   const myPlayer = me >= 0 ? s.players[me] : null
   const myProps = me >= 0 ? deedsOf(s, me) : []
@@ -131,11 +187,11 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  const tools: { tab: PanelTab; label: string; icon: typeof Home; badge?: number; hidden?: boolean }[] = [
-    { tab: 'props', label: 'Mülklerim', icon: Home, badge: myProps.length, hidden: me < 0 },
-    { tab: 'all', label: 'Tüm tapular', icon: Landmark },
-    { tab: 'log', label: 'Olaylar', icon: ScrollText },
-    { tab: 'trade', label: 'Takas', icon: ArrowLeftRight, hidden: !canTrade && !composer },
+  const tools: { tab: PanelTab; label: string; short: string; icon: typeof Home; badge?: number; hidden?: boolean }[] = [
+    { tab: 'props', label: 'Mülklerim', short: 'Mülkler', icon: Home, badge: myProps.length, hidden: me < 0 },
+    { tab: 'all', label: 'Tüm tapular', short: 'Tapular', icon: Landmark },
+    { tab: 'log', label: 'Olaylar', short: 'Olaylar', icon: ScrollText, badge: Math.min(unreadLog, 99) },
+    { tab: 'trade', label: 'Takas', short: 'Takas', icon: ArrowLeftRight, hidden: me < 0 },
   ]
   const toolTitle: Record<PanelTab, string> = {
     props: 'Mülklerim',
@@ -216,6 +272,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
                 inJail={p.inJail}
                 out={p.out}
                 active={shownTurn === i && !p.out}
+                clock={clock?.seat === i && !gameOver ? clock : null}
                 open={openPlayer === i}
                 onOpen={() => setOpen(openPlayer === i ? null : { kind: 'player', seat: i })}
               />
@@ -230,6 +287,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               <ToolBubble
                 key={t.tab}
                 label={t.label}
+                short={t.short}
                 icon={t.icon}
                 badge={t.badge}
                 pressed={openTab === t.tab}
@@ -237,6 +295,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               />
             ))}
             <ToolBubble
+              short={follow ? 'Tümü' : 'Takip'}
               label={follow ? 'Tüm tahtayı göster' : 'Oynayanı takip et'}
               icon={follow ? ZoomOut : ZoomIn}
               pressed={!follow}
@@ -245,10 +304,15 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
           </nav>
 
           {showSpot && (
-            <div className="pointer-events-none absolute inset-x-0 z-30 flex justify-center portrait:top-28 portrait:px-4 landscape:top-12 landscape:px-16">
-              <div className="w-[min(24rem,100%)]">
-                <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
-              </div>
+            <div className="pointer-events-none absolute inset-x-0 z-30 flex justify-center portrait:top-28 portrait:px-4 landscape:top-11 landscape:px-20">
+              <button
+                type="button"
+                onClick={dismissSpot}
+                aria-label="Bildirimi kapat"
+                className="pointer-events-auto block w-[min(24rem,100%)] text-left landscape:w-[min(21rem,100%)]"
+              >
+                <EventSpotlight events={spotBatch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
+              </button>
             </div>
           )}
 
@@ -411,6 +475,7 @@ function PlayerBubble({
   inJail,
   out,
   active,
+  clock,
   open,
   onOpen,
 }: {
@@ -422,9 +487,11 @@ function PlayerBubble({
   inJail: boolean
   out: boolean
   active: boolean
+  clock: { startedAt: string; seconds: number } | null
   open: boolean
   onOpen: () => void
 }) {
+  const change = delta?.value ?? 0
   return (
     <li className="relative shrink-0">
       <button
@@ -438,38 +505,48 @@ function PlayerBubble({
           out && 'opacity-45 grayscale',
         )}
       >
-        <span
-          className={cn(
-            'relative block size-10 overflow-hidden rounded-full border-2 bg-[#0d1324] shadow-lg transition-shadow sm:size-11',
-            active && 'ring-2 ring-primary ring-offset-2 ring-offset-[#0b1020] motion-safe:animate-pulse',
-            open && 'ring-2 ring-foreground ring-offset-2 ring-offset-[#0b1020]',
-          )}
-          style={{ borderColor: TOKEN_COLOR[seat] }}
-        >
-          <img src={`/images/monopoly/pawn-${seat}.png`} alt="" className="size-full scale-[1.6] object-cover object-[50%_32%]" />
+        <span className="relative block">
+          <span
+            className={cn(
+              'relative block size-10 overflow-hidden rounded-full border-2 bg-[#0d1324] shadow-lg transition-shadow sm:size-11',
+              active && !clock && 'ring-2 ring-primary ring-offset-2 ring-offset-[#0b1020] motion-safe:animate-pulse',
+              open && 'ring-2 ring-foreground ring-offset-2 ring-offset-[#0b1020]',
+            )}
+            style={{ borderColor: TOKEN_COLOR[seat] }}
+          >
+            <img src={`/images/monopoly/pawn-${seat}.png`} alt="" className="size-full scale-[1.6] object-cover object-[50%_32%]" />
+          </span>
           {(isBot || inJail) && (
-            <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-[#0d1324] text-[#f4efe4]">
+            <span className="absolute -right-0.5 -top-0.5 z-10 flex size-4 items-center justify-center rounded-full bg-[#0d1324] text-[#f4efe4]">
               {inJail ? <Lock className="size-2.5 text-destructive" aria-hidden="true" /> : <Bot className="size-2.5" aria-hidden="true" />}
             </span>
           )}
+          {clock && <TurnRing key={clock.startedAt} startedAt={clock.startedAt} seconds={clock.seconds} />}
         </span>
-        <span className="max-w-16 truncate rounded-full bg-[#0d1324]/85 px-1.5 text-[10px] font-bold leading-4 tabular-nums text-[#f4efe4] backdrop-blur">
+        <span
+          key={delta?.id}
+          className={cn(
+            'max-w-16 truncate rounded-full px-1.5 text-[10px] font-bold leading-4 tabular-nums backdrop-blur transition-colors duration-500',
+            change > 0 ? 'bg-live text-live-foreground' : change < 0 ? 'bg-destructive text-destructive-foreground' : 'bg-[#0d1324]/85 text-[#f4efe4]',
+          )}
+        >
           {out ? 'İflas' : `${money.toLocaleString('tr-TR')} ₺`}
         </span>
       </button>
-      {delta && delta.value !== 0 && <MoneyFloat key={delta.id} id={delta.id} delta={delta.value} />}
     </li>
   )
 }
 
 function ToolBubble({
   label,
+  short,
   icon: Icon,
   badge,
   pressed,
   onClick,
 }: {
   label: string
+  short: string
   icon: typeof Home
   badge?: number
   pressed: boolean
@@ -482,17 +559,24 @@ function ToolBubble({
       aria-pressed={pressed}
       aria-label={label}
       title={label}
-      className={cn(
-        'relative flex size-10 items-center justify-center rounded-full border shadow-lg backdrop-blur transition-all active:scale-95 sm:size-11',
-        pressed ? 'border-primary bg-primary text-primary-foreground' : 'border-white/10 bg-[#0d1324]/85 text-[#f4efe4] hover:border-primary',
-      )}
+      className="group flex flex-col items-center gap-0.5 transition-transform active:scale-95"
     >
-      <Icon className="size-5" aria-hidden="true" />
-      {!!badge && (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-          {badge}
-        </span>
-      )}
+      <span
+        className={cn(
+          'relative flex size-10 items-center justify-center rounded-full border shadow-lg backdrop-blur transition-colors sm:size-11 [@media(max-height:420px)]:size-9',
+          pressed ? 'border-primary bg-primary text-primary-foreground' : 'border-white/10 bg-[#0d1324]/85 text-[#f4efe4] group-hover:border-primary',
+        )}
+      >
+        <Icon className="size-5" aria-hidden="true" />
+        {!!badge && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span aria-hidden="true" className="rounded-full bg-[#0d1324]/85 px-1.5 text-[9px] font-bold leading-3.5 text-[#f4efe4] [@media(max-height:420px)]:hidden">
+        {short}
+      </span>
     </button>
   )
 }
@@ -528,6 +612,7 @@ function PlayerDetail({
           <p className="font-display text-lg font-bold tabular-nums">{p.out ? 'İflas etti' : `${money.toLocaleString('tr-TR')} ₺`}</p>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Servet {netWorth(s, seat).toLocaleString('tr-TR')} ₺ · {housesOf(s, seat)} ev
+            {deeds.some((i) => s.mortgaged[i]) && ` · ${deeds.filter((i) => s.mortgaged[i]).length} ipotekli`}
           </p>
           <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {isBot && <span className="flex items-center gap-1"><Bot className="size-3.5" aria-hidden="true" /> Bot</span>}
@@ -548,10 +633,14 @@ function PlayerDetail({
                 <button
                   type="button"
                   onClick={() => onOpenDeed(i)}
-                  className={cn('flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-1.5 py-1 text-xs font-semibold hover:bg-secondary', s.mortgaged[i] && 'line-through opacity-60')}
+                  className={cn(
+                    'flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs font-semibold',
+                    s.mortgaged[i] ? 'border-dashed border-destructive/60 bg-destructive/10 text-muted-foreground' : 'border-border bg-secondary/50 hover:bg-secondary',
+                  )}
                 >
                   <span className="h-3 w-1.5 rounded-sm" style={{ background: deedColor(i) }} aria-hidden="true" />
-                  {BOARD[i].name}
+                  <span className={cn(s.mortgaged[i] && 'line-through')}>{BOARD[i].name}</span>
+                  {s.mortgaged[i] && <span className="rounded bg-destructive px-1 text-[9px] font-black uppercase text-destructive-foreground">İpotek</span>}
                 </button>
               </li>
             ))}
@@ -618,9 +707,11 @@ function BoardDock({
   const canAct = ownTurn && !!myPlayer && !walking
 
   if (!canAct) {
+    // Whose turn it is already shows in the header and on the timer ring; only the walk gets a caption.
+    if (!walking) return null
     return (
       <p className="pointer-events-none rounded-full bg-[#0d1324]/80 px-3 py-1.5 text-xs font-semibold text-[#f4efe4] shadow-lg backdrop-blur">
-        {walking ? `${activeName} ilerliyor…` : me < 0 ? `${activeName} oynuyor` : `${activeName} oynuyor, sıranı bekle`}
+        {`${activeName} ilerliyor…`}
       </p>
     )
   }
@@ -724,7 +815,7 @@ function DeedCard({ i, s, ownerName }: { i: number; s: MonopolyState; ownerName:
                   ? 'Hapis ya da sadece ziyaret.'
                   : sq.type === 'go'
                     ? s.rules?.goDouble ? "Başla'dan geçen 200 ₺, tam gelen 400 ₺ alır." : "Başla'dan her geçişte 200 ₺ maaş alınır."
-                    : sq.type === 'parking' && s.rules?.kumbara ? `Otopark kumbarası: ${s.pot ?? 0} ₺. Buraya gelen hepsini alır.` : 'Burada bir şey olmaz, dinlen.'}
+                    : sq.type === 'parking' && s.rules?.kumbara ? `Otopark kumbarası: ${s.pot ?? 0} ��. Buraya gelen hepsini alır.` : 'Burada bir şey olmaz, dinlen.'}
         </p>
       </div>
     )

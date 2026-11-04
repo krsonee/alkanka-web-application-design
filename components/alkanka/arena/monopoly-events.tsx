@@ -42,6 +42,7 @@ export type EventKind =
   | 'auction'
   | 'trade'
   | 'debt'
+  | 'collect'
   | 'info'
 
 export type GameEvent = {
@@ -65,6 +66,7 @@ export const EVENT_META: Record<EventKind, Meta> = {
   debt: { icon: HandCoins, tone: 'loss', priority: 8 },
   auction: { icon: Gavel, tone: 'neutral', priority: 6 },
   tax: { icon: Landmark, tone: 'loss', priority: 7 },
+  collect: { icon: HandCoins, tone: 'gain', priority: 7 },
   chance: { icon: HelpCircle, tone: 'chance', priority: 6 },
   chest: { icon: Package, tone: 'chest', priority: 6 },
   buy: { icon: Stamp, tone: 'neutral', priority: 5 },
@@ -83,6 +85,8 @@ export const EVENT_META: Record<EventKind, Meta> = {
 const num = (v: string | undefined) => (v ? Number(v) : null)
 
 function cardAmount(text: string) {
+  // Per-house and per-player cards depend on the board; the engine logs the real total on its own line.
+  if (/her (ev|oyuncu)/i.test(text)) return null
   const pay = text.match(/(\d+) ₺ öde\.$/)
   if (pay) return -Number(pay[1])
   const gain = text.match(/: (\d+) ₺ al\.$/) ?? text.match(/(\d+) ₺ (?:kazandın|temettü)/)
@@ -95,6 +99,11 @@ export function parseEvent(raw: string, id: number): GameEvent {
 
   if ((m = raw.match(/^@(\d), (.+) için @(\d) oyuncusuna (\d+) ₺ kira ödedi(?: \((.+)\))?/)))
     return { ...base, kind: 'rent', target: Number(m[3]), amount: -Number(m[4]), title: 'Kira ödendi', detail: m[5] ? `${m[2]} · ${m[5]}` : m[2] }
+  if ((m = raw.match(/^@\d tamir masrafı ödedi: (\d+) ₺ \((.+)\)/))) return { ...base, kind: 'tax', amount: -Number(m[1]), title: 'Tamir masrafı', detail: m[2] }
+  if (/^@\d tamir masrafı çıkmadı/.test(raw)) return { ...base, kind: 'pass', title: 'Tamir masrafı yok', detail: 'Evi ya da oteli yok' }
+  if ((m = raw.match(/^@\d her oyuncuya (\d+) ₺ ödedi: (\d+) ₺ \((\d+) oyuncu\)/)))
+    return { ...base, kind: 'tax', amount: -Number(m[2]), title: 'Oyunculara ödendi', detail: `${m[3]} oyuncu × ${m[1]} ₺` }
+  if ((m = raw.match(/^@\d oyunculardan (\d+) ₺ topladı \((.+)\)/))) return { ...base, kind: 'collect', amount: Number(m[1]), title: 'Oyunculardan toplandı', detail: m[2] }
   if ((m = raw.match(/^@\d (.+) ödedi: (\d+) ₺/))) return { ...base, kind: 'tax', amount: -Number(m[2]), title: 'Vergi ödendi', detail: m[1] }
   if (/Başla'dan geçti/.test(raw)) return { ...base, kind: 'go', amount: 200, title: 'Maaş alındı', detail: "Başla'dan geçti" }
   if (/Başla'ya tam geldi/.test(raw)) return { ...base, kind: 'go', amount: 400, title: 'Çift maaş', detail: "Başla'ya tam geldi" }
@@ -241,7 +250,8 @@ export function EventSpotlight({
   const meta = EVENT_META[main.kind]
   const color = toneColor(meta.tone)
   const Icon = meta.icon
-  const extra = rest.slice(0, 2)
+  // Only lines from the same player belong to this card; other players' events stay in the feed.
+  const extra = rest.filter((e) => e.actor === main.actor).slice(0, 2)
 
   return (
     <div
@@ -294,7 +304,7 @@ export function EventSpotlight({
         )}
       </div>
       {extra.length > 0 && (
-        <ul className="flex flex-col border-t" style={{ borderColor: 'oklch(0.22 0.02 160 / 0.1)' }}>
+        <ul className="flex flex-col border-t [@media(max-height:480px)]:hidden" style={{ borderColor: 'oklch(0.22 0.02 160 / 0.1)' }}>
           {extra.map((e) => {
             const m = EVENT_META[e.kind]
             const ExtraIcon = m.icon

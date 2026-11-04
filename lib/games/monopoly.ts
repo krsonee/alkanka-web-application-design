@@ -64,7 +64,7 @@ export const MAX_SEATS = 10
 export const MAX_PLAYERS = 8
 /** Lobby value for the classic long game: no turn limit, it ends when only one player is left standing. */
 export const UNTIL_BANKRUPT = 999
-export const STALEMATE_ROUND = 300
+export const STALEMATE_ROUND = 150
 /** The bank only has so many buildings; running out of houses is part of the classic long game. */
 export const BANK_HOUSES = 32
 export const BANK_HOTELS = 12
@@ -298,7 +298,7 @@ function rentReason(s: MonopolyState, pos: number, diceSum: number, special?: 'r
     return `${n} istasyon${special === 'rail2' ? ', kart ile 2 kat' : ''}`
   }
   const n = BOARD.filter((b, i) => b.type === 'utility' && s.owner[i] === owner).length
-  return `zar ${diceSum} × ${special === 'util10' || n === 2 ? 10 : 4}`
+  return `zar toplamı ${diceSum} × ${special === 'util10' || n === 2 ? 10 : 4}`
 }
 
 export function netWorth(s: MonopolyState, seat: number) {
@@ -520,6 +520,15 @@ function drawCard(s: MonopolyState, seat: number, deck: Deck, diceSum: number, d
         log(s, `${name(seat)} ${total} ₺ borç için para bulmalı.`)
         return
       }
+      if (others.length) {
+        const sum = Math.abs(card.amount) * others.length
+        log(
+          s,
+          card.amount < 0
+            ? `${name(seat)} her oyuncuya ${-card.amount} ₺ ödedi: ${sum} ₺ (${others.length} oyuncu).`
+            : `${name(seat)} oyunculardan ${sum} ₺ topladı (${others.length} oyuncu × ${card.amount} ₺).`,
+        )
+      }
       for (const o of others) {
         if (o === seat) continue
         if (card.amount < 0) pay(s, seat, -card.amount, o, { auto: true })
@@ -529,11 +538,16 @@ function drawCard(s: MonopolyState, seat: number, deck: Deck, diceSum: number, d
       return
     }
     case 'repair': {
-      let total = 0
+      let houses = 0
+      let hotels = 0
       BOARD.forEach((_, i) => {
         if (s.owner[i] !== seat) return
-        total += s.houses[i] === 5 ? card.hotel : s.houses[i] * card.house
+        if (s.houses[i] === 5) hotels++
+        else houses += s.houses[i]
       })
+      const total = houses * card.house + hotels * card.hotel
+      const parts = [houses ? `${houses} ev × ${card.house}` : '', hotels ? `${hotels} otel × ${card.hotel}` : ''].filter(Boolean).join(' + ')
+      log(s, total ? `${name(seat)} tamir masrafı ödedi: ${total} ₺ (${parts}).` : `${name(seat)} tamir masrafı çıkmadı, evi ve oteli yok.`)
       pay(s, seat, total, null, { pot: true })
       return
     }
@@ -1235,12 +1249,12 @@ export function runMonopolyBots(state: MonopolyState): MonopolyStep {
 
 /** Gives clients time to walk the pawn, show the card and the rent before the next bot moves. */
 export function monopolyPaceMs(s: MonopolyState) {
-  if (s.auction) return 1800
+  if (s.auction) return 1200
   const last = s.log.at(-1) ?? ''
   const sum = s.dice ? s.dice[0] + s.dice[1] : 0
-  // Dice settle (~1.6s) + walk (~0.3s per tile) + a beat to read the result before the next bot rolls.
-  let ms = 3200 + Math.min(12, sum) * 320
-  if (s.card) ms += 2600
-  if (/kira ödedi|iflas|mezat|takas|satın aldı|tapu/i.test(last)) ms += 1200
+  // Dice settle (~1.6s) + walk (~0.3s per tile) + a short beat to read the result before the next bot rolls.
+  let ms = 1900 + Math.min(12, sum) * 300
+  if (s.card) ms += 1500
+  if (/kira ödedi|iflas|mezat|takas|satın aldı|tapu/i.test(last)) ms += 500
   return ms
 }
