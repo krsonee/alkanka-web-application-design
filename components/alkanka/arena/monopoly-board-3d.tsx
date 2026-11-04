@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
@@ -957,23 +957,104 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
   }
 }
 
+function webglAvailable() {
+  try {
+    const c = document.createElement('canvas')
+    return !!(c.getContext('webgl2') || c.getContext('webgl'))
+  } catch {
+    return false
+  }
+}
+
+function gridCell(i: number) {
+  if (i <= 10) return { row: 11, col: 11 - i }
+  if (i <= 20) return { row: 11 - (i - 10), col: 1 }
+  if (i <= 30) return { row: 1, col: 1 + (i - 20) }
+  return { row: 1 + (i - 30), col: 11 }
+}
+
+function FlatBoard({ s, shownPos, tokenColors, onSelect }: Pick<Props, 's' | 'shownPos' | 'tokenColors' | 'onSelect'>) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-2">
+      <div
+        className="grid aspect-square w-full max-w-[min(100%,calc(100dvh-8rem))] gap-px rounded-lg border border-border bg-border"
+        style={{ gridTemplateColumns: 'repeat(11, minmax(0, 1fr))', gridTemplateRows: 'repeat(11, minmax(0, 1fr))' }}
+      >
+        {BOARD.map((sq, i) => {
+          const { row, col } = gridCell(i)
+          const owner = s.owner[i]
+          const here = shownPos.map((p, pi) => (p === i && !s.players[pi]?.out ? pi : -1)).filter((pi) => pi >= 0)
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(i)}
+              style={{ gridRow: row, gridColumn: col }}
+              className={`relative flex min-w-0 flex-col overflow-hidden bg-card text-left text-foreground ${s.mortgaged[i] ? 'opacity-50' : ''}`}
+              aria-label={sq.name}
+            >
+              {sq.type === 'property' && <span className="h-1.5 w-full shrink-0" style={{ background: GC[sq.group] }} />}
+              <span className="line-clamp-2 px-0.5 pt-0.5 text-[clamp(6px,1.1vw,11px)] font-medium leading-tight">{sq.name}</span>
+              <span className="mt-auto flex flex-wrap items-center gap-0.5 px-0.5 pb-0.5">
+                {owner != null && owner >= 0 && (
+                  <span className="size-2 shrink-0 rounded-sm ring-1 ring-foreground/30" style={{ background: tokenColors[owner] }} />
+                )}
+                {s.houses[i] > 0 && <span className="text-[9px] font-bold text-muted-foreground">{s.houses[i] >= 5 ? 'O' : `${s.houses[i]}E`}</span>}
+                {here.map((pi) => (
+                  <span key={pi} className="size-2.5 shrink-0 rounded-full ring-1 ring-background" style={{ background: tokenColors[pi] }} />
+                ))}
+              </span>
+            </button>
+          )
+        })}
+        <div
+          className="flex flex-col items-center justify-center gap-1 bg-background p-4 text-center"
+          style={{ gridRow: '2 / 11', gridColumn: '2 / 11' }}
+        >
+          <p className="font-display text-xl font-bold text-foreground">JAKOPOLY</p>
+          <p className="max-w-56 text-pretty text-xs leading-relaxed text-muted-foreground">
+            3D tahta bu cihazda açılamadı, basit tahta gösteriliyor. Oyun aynen devam ediyor.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function MonopolyBoard3D({ s, shownPos, shownTurn, tokenColors, follow, moneyDelta, onSelect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const fxRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<Engine | null>(null)
   const colorsRef = useRef<string[]>([])
   const readyRef = useRef(false)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     const host = hostRef.current
     const fx = fxRef.current
     if (!host || !fx) return
+    if (!webglAvailable()) {
+      setFailed(true)
+      return
+    }
     const cs = getComputedStyle(host)
     const display = cs.getPropertyValue('--font-display').trim() || cs.fontFamily || 'sans-serif'
     const body = cs.fontFamily || 'sans-serif'
-    const engine = createEngine(host, fx, { display, body })
+    let engine: Engine
+    try {
+      engine = createEngine(host, fx, { display, body })
+    } catch (err) {
+      console.error('Jakopoly 3D başlatılamadı', err)
+      host.querySelectorAll('canvas').forEach((c) => c.remove())
+      setFailed(true)
+      return
+    }
     engineRef.current = engine
+    const canvas = host.querySelector('canvas')
+    const onLost = () => setFailed(true)
+    canvas?.addEventListener('webglcontextlost', onLost)
     return () => {
+      canvas?.removeEventListener('webglcontextlost', onLost)
       engine.dispose()
       engineRef.current = null
       readyRef.current = false
@@ -1041,6 +1122,8 @@ export default function MonopolyBoard3D({ s, shownPos, shownTurn, tokenColors, f
     if (moneyDelta) engineRef.current?.money(moneyDelta.values)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deltaId])
+
+  if (failed) return <FlatBoard s={s} shownPos={shownPos} tokenColors={tokenColors} onSelect={onSelect} />
 
   return (
     <div ref={hostRef} className="absolute inset-0 overflow-hidden" role="img" aria-label="3D Jakopoly tahtası. Ayrıntı için bir kareye dokun.">
