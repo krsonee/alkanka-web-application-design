@@ -13,6 +13,7 @@ import { useTurnAlert } from './use-turn-alert'
 import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable, startTableWithBots } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
+import { GameResultCard } from './game-result-card'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
 import type { Remote, RemoteAction } from './remote'
@@ -1199,22 +1200,20 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
             aria-labelledby="game-result-title"
             className="fixed inset-0 z-[120] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-300"
           >
-            <div
-              className={cn(
-                'flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border-2 bg-card p-6 text-center shadow-2xl animate-in zoom-in-75 slide-in-from-bottom-6 duration-500',
-                won ? 'border-primary glow-gold' : 'border-border',
-              )}
-            >
-              <span
-                className={cn(
-                  'flex size-20 items-center justify-center rounded-full animate-in spin-in-12 zoom-in-50 duration-700',
-                  won ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground',
-                )}
-              >
-                {won || spectator || data.winnerId == null ? <Trophy className="size-10" aria-hidden="true" /> : <X className="size-10" aria-hidden="true" />}
-              </span>
-              <p id="game-result-title" className={cn('text-3xl font-black uppercase tracking-tight', won ? 'text-primary' : 'text-foreground')}>
-                {data.status === 'iptal'
+            <GameResultCard
+              outcome={
+                data.status === 'iptal'
+                  ? 'cancel'
+                  : data.winnerId == null
+                    ? 'draw'
+                    : spectator
+                      ? 'spectate'
+                      : won
+                        ? 'win'
+                        : 'lose'
+              }
+              title={
+                data.status === 'iptal'
                   ? 'İptal'
                   : data.winnerId == null
                     ? 'Berabere'
@@ -1224,21 +1223,31 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                         ? data.team
                           ? 'Takımın kazandı!'
                           : 'Kazandın!'
-                        : 'Kaybettin'}
-              </p>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {data.status === 'iptal' || data.winnerId == null
+                        : 'Kaybettin'
+              }
+              subtitle={
+                data.status === 'iptal' || data.winnerId == null
                   ? 'Bahis iade edildi.'
-                  : spectator
-                    ? `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`
-                    : won
-                      ? 'Pot hesabına eklendi.'
-                      : `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`}
-              </p>
-              {data.game === 'pisti' && data.status === 'bitti' && Array.isArray(data.state?.totals) && (
-                <PistiFinalScore state={data.state} names={names} mySeat={mySeat} />
-              )}
-              <div className="mt-1 grid w-full grid-cols-2 gap-2">
+                  : won && !spectator
+                    ? 'Pot hesabına eklendi. Helal olsun kanka!'
+                    : `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`
+              }
+              gameTitle={meta?.title ?? 'Oyun'}
+              gameImage={meta?.image}
+              stake={data.stake}
+              players={data.players.map((p) => ({
+                id: p.id,
+                name: p.name,
+                bot: p.bot,
+                me: member != null && p.id === member.id,
+                winner: (data.winners ?? []).includes(p.id),
+              }))}
+              extra={
+                data.game === 'pisti' && data.status === 'bitti' && Array.isArray(data.state?.totals) ? (
+                  <PistiFinalScore state={data.state} names={names} mySeat={mySeat} />
+                ) : undefined
+              }
+            >
                 {remote.replay && data.status === 'bitti' && (
                   <button
                     type="button"
@@ -1271,8 +1280,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                 >
                   Lobiye dön
                 </button>
-              </div>
-            </div>
+            </GameResultCard>
           </div>
         )}
 

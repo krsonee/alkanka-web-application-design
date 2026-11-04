@@ -26,6 +26,12 @@ type Props = {
 };
 
 const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+/**
+ * Board animations run on requestAnimationFrame, which stops in a background tab. A stalled or
+ * failed animation must never leave the table stuck in "walking", which locks the human's buttons.
+ */
+const capped = (p: Promise<void> | undefined, ms: number) =>
+  Promise.race([Promise.resolve(p).catch(() => {}), wait(ms)]);
 
 /** Two dice that add up to `sum` (2–12), used when the server only kept the latest roll. */
 function diceFor(sum: number): [number, number] {
@@ -33,6 +39,19 @@ function diceFor(sum: number): [number, number] {
   const hi = Math.min(6, sum - 1);
   const a = lo + Math.floor(Math.random() * (hi - lo + 1));
   return [a, sum - a];
+}
+
+/** Changes only when dice are actually thrown — buying, building or ending the turn never replays them. */
+/** Only a "go back" card (at most 3 squares) or a trip to jail that would otherwise pass Başla walks backwards. */
+function goesBack(from: number, to: number, toJail: boolean) {
+  const back = (from - to + 40) % 40;
+  if (back > 0 && back <= 3) return true;
+  return toJail && to === 10 && to < from;
+}
+
+function rollKeyOf(s: MonopolyState): string | null {
+  if (!s.dice) return null;
+  return s.rollNo != null ? `r${s.rollNo}` : `${s.turn}-${s.dice.join("")}`;
 }
 
 const GC: Record<Group, string> = {
@@ -892,8 +911,8 @@ function createEngine(
     if (p.queue.length || p.flight !== null) return void runPawn(seat);
     p.waiters.splice(0).forEach((fn) => fn());
   };
-  /** Moves a pawn along the board (or flies it, for jail and long card jumps) and resolves on arrival. */
-  const movePawn = (seat: number, to: number, fly: boolean) => {
+  /** Walks a pawn along the board and resolves on arrival; `goBack` marks card "go back" and jail moves. */
+  const movePawn = (seat: number, to: number, goBack: boolean) => {
     const p = ensurePawn(seat);
     const from = p.queue.length ? p.queue[p.queue.length - 1] : p.pos;
     p.pos = to;
@@ -903,9 +922,9 @@ function createEngine(
     }
     const fwd = (to - from + 40) % 40;
     const back = (from - to + 40) % 40;
-    // Jakos always walk the board — never fly. Jail and short "go back" cards walk backwards,
-    // everything else (including several turns batched into one update) walks forward.
-    const backwards = back <= 3 || (to === 10 && back < fwd) || (fly && back < fwd);
+    // Dice and "advance" cards always walk forward. Only a "go back" card or being sent to jail
+    // walks backwards — and jail only when walking forward would wrongly pass Başla.
+    const backwards = goBack && (back <= 3 || to < from);
     if (backwards) {
       for (let i = 1; i <= back; i++) p.queue.push((from - i + 40) % 40);
     } else {
@@ -1586,6 +1605,16 @@ function createEngine(
       });
     },
     move: movePawn,
+    /** Puts a pawn straight onto a square without walking (hidden tab / catching up). */
+    place(seat: number, to: number) {
+      const p = ensurePawn(seat);
+      p.queue.length = 0;
+      p.flight = null;
+      p.pos = to;
+      retarget();
+      if (to >= 0 && to <= 39) p.grp.position.copy(p.target);
+      p.waiters.splice(0).forEach((fn) => fn());
+    },
     /** Places pawns; any position the move sequencer did not animate is walked (or flown) here. */
     setPlayers(pos: number[], out: boolean[], active: number) {
       activeSeat = active;
@@ -1598,7 +1627,7 @@ function createEngine(
           p.pos = to;
           return;
         }
-        if (p.pos !== to) void movePawn(seat, to, false);
+        if (p.pos !== to) void movePawn(seat, to, goesBack(p.pos, to, to === 10));
       });
       retarget();
       if (first) pawns.forEach((p) => p && p.grp.position.copy(p.target));
@@ -1896,11 +1925,10 @@ export default function MonopolyBoard3D({
   const chainRef = useRef<Promise<void>>(Promise.resolve());
   const pendingRef = useRef(0);
   const turnRef = useRef(s.turn);
-  const rollRef = useRef<string | null>(
-    s.dice ? `${s.seq}-${s.turn}-${s.dice.join("")}` : null,
+  const rollRef = useRef<string | null>(rollKeyOf(s));
+  const seenWalkRef = useRef<number>(
+    s.walks?.length ? s.walks[s.walks.length - 1].n : (s.rollNo ?? 0),
   );
-  const lastRollRef = useRef(s.lastRoll ?? null);
-  lastRollRef.current = s.lastRoll ?? null;
   const reportRef = useRef(onPlayback);
   reportRef.current = onPlayback;
 
@@ -1983,7 +2011,7 @@ export default function MonopolyBoard3D({
   // One server update can carry several bot turns, so the diff between what is
   // already queued and the new positions is replayed seat by seat in turn order.
   const posKey = realPos.join(",");
-  const rollKey = s.dice ? `${s.seq}-${s.turn}-${s.dice.join("")}` : null;
+  const rollKey = rollKeyOf(s);
   useEffect(() => {
     const goal = posKey.split(",").map(Number);
     const n = goal.length;
@@ -1992,15 +2020,17 @@ export default function MonopolyBoard3D({
       shownRef.current = goal;
       setShown(goal);
       turnRef.current = s.turn;
+      reportRef.current({ walking: false, walker: null, shown: goal });
       return;
     }
     const start = turnRef.current;
     turnRef.current = s.turn;
     const order = Array.from({ length: n }, (_, k) => (start + k) % n);
-    const movers = order.filter((i) => queuedRef.current[i] !== goal[i]);
     const freshRoll = rollKey !== null && rollKey !== rollRef.current;
     if (rollKey) rollRef.current = rollKey;
-    if (!movers.length && !(freshRoll && s.dice)) return;
+    // Every throw since the last replay, oldest first, each with its own dice and exact path.
+    const fresh = (s.walks ?? []).filter((w) => w.n > seenWalkRef.current);
+    if (fresh.length) seenWalkRef.current = fresh[fresh.length - 1].n;
 
     const jobs: (() => Promise<void>)[] = [];
     const report = (walking: boolean, who: number | null) => {
@@ -2010,12 +2040,39 @@ export default function MonopolyBoard3D({
       reportRef.current({ walking, walker: who, shown: snap });
     };
 
-    if (!movers.length && s.dice) {
+    for (const w of fresh) {
+      const seat = w.seat;
+      if (seat >= n) continue;
+      const end = w.legs.length ? w.legs[w.legs.length - 1].to : null;
+      if (end !== null) queuedRef.current = queuedRef.current.map((p, i) => (i === seat ? end : p));
+      jobs.push(async () => {
+        report(true, seat);
+        const engine = failedRef.current || document.hidden ? null : engineRef.current;
+        if (engine) {
+          await capped(engine.roll(w.dice[0], w.dice[1]), 3500);
+          await wait(w.legs.length ? 180 : 500);
+        }
+        for (let k = 0; k < w.legs.length; k++) {
+          const l = w.legs[k];
+          if (engine) await capped(engine.move(seat, l.to, l.back), 9000);
+          else engineRef.current?.place(seat, l.to);
+          if (engine && k < w.legs.length - 1) await wait(650);
+        }
+        if (end !== null) shownRef.current = shownRef.current.map((p, i) => (i === seat ? end : p));
+        report(true, seat);
+        await wait(engine && w.legs.length ? 420 : 0);
+      });
+    }
+
+    const movers = order.filter((i) => queuedRef.current[i] !== goal[i]);
+    if (!jobs.length && !movers.length && !(freshRoll && s.dice)) return;
+
+    if (!jobs.length && !movers.length && s.dice) {
       const [a, b] = s.dice;
       const seat = s.turn;
       jobs.push(async () => {
         report(true, seat);
-        await engineRef.current?.roll(a, b);
+        await capped(engineRef.current?.roll(a, b), 3500);
         await wait(500);
       });
     }
@@ -2024,22 +2081,14 @@ export default function MonopolyBoard3D({
       const from = queuedRef.current[seat];
       const to = goal[seat];
       queuedRef.current = queuedRef.current.map((p, i) => (i === seat ? to : p));
-      const steps = (to - from + 40) % 40;
+      // No recorded path (older state or a move without a throw): never invent dice, and take the
+      // short way back for "go back" / jail instead of running a full lap forward.
+      const back = goesBack(from, to, !!s.players[seat]?.inJail);
       jobs.push(async () => {
         report(true, seat);
-        // A hidden tab gets no animation frames, so replaying there would only pile up a backlog.
-        const engine =
-          failedRef.current || document.hidden ? null : engineRef.current;
-        if (engine && steps >= 2 && steps <= 12) {
-          const last = lastRollRef.current;
-          const dice =
-            last && last.seat === seat && last.dice[0] + last.dice[1] === steps
-              ? last.dice
-              : diceFor(steps);
-          await engine.roll(dice[0], dice[1]);
-          await wait(180);
-        }
-        if (engine) await engine.move(seat, to, steps > 12);
+        const engine = failedRef.current || document.hidden ? null : engineRef.current;
+        if (engine) await capped(engine.move(seat, to, back), 9000);
+        else engineRef.current?.place(seat, to);
         shownRef.current = shownRef.current.map((p, i) => (i === seat ? to : p));
         report(true, seat);
         await wait(engine ? 420 : 0);
@@ -2048,9 +2097,16 @@ export default function MonopolyBoard3D({
 
     pendingRef.current += 1;
     chainRef.current = chainRef.current.then(async () => {
-      for (const job of jobs) await job();
-      pendingRef.current -= 1;
-      if (pendingRef.current === 0) report(false, null);
+      try {
+        for (const job of jobs) await job();
+      } catch (err) {
+        console.error("Jakopoly yürüyüş animasyonu atlandı", err);
+        shownRef.current = [...queuedRef.current];
+        queuedRef.current.forEach((to, seat) => engineRef.current?.place(seat, to));
+      } finally {
+        pendingRef.current -= 1;
+        if (pendingRef.current === 0) report(false, null);
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posKey, rollKey]);
