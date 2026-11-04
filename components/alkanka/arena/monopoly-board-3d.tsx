@@ -844,15 +844,29 @@ function createEngine(
         p.flying = false;
         continue;
       }
-      const tile = p.queue.shift()!;
-      const b = p.queue.length ? lane(tile) : slot(seat, tile);
-      const dist = Math.hypot(b.x - a.x, b.z - a.z);
-      if (dist < 0.01) continue;
+      // Take every queued tile as one polyline so the stroll is a single smooth tween:
+      // no per-tile stop, which on slow frames looked like hopping from square to square.
+      const tiles = p.queue.splice(0);
+      const pts = [a, ...tiles.map((tile, k) => (k < tiles.length - 1 ? lane(tile) : slot(seat, tile)))];
+      const lens: number[] = [];
+      let total = 0;
+      for (let k = 1; k < pts.length; k++) {
+        const l = Math.hypot(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z);
+        lens.push(l);
+        total += l;
+      }
+      if (total < 0.01) continue;
       p.moving = true;
-      p.heading = Math.atan2(b.x - a.x, b.z - a.z);
-      const speed = p.queue.length > 12 ? WALK_SPEED * 2 : WALK_SPEED;
-      await tween((dist / speed) * 1000, (t) => {
-        p.grp.position.set(a.x + (b.x - a.x) * t, TOP, a.z + (b.z - a.z) * t);
+      const speed = tiles.length > 12 ? WALK_SPEED * 2 : WALK_SPEED;
+      await tween((total / speed) * 1000, (t) => {
+        let d = t * total;
+        let k = 0;
+        while (k < lens.length - 1 && d > lens[k]) d -= lens[k++];
+        const u = lens[k] > 0 ? Math.min(1, d / lens[k]) : 1;
+        const s0 = pts[k];
+        const s1 = pts[k + 1];
+        p.heading = Math.atan2(s1.x - s0.x, s1.z - s0.z);
+        p.grp.position.set(s0.x + (s1.x - s0.x) * u, TOP, s0.z + (s1.z - s0.z) * u);
       });
     }
     p.moving = false;
@@ -1232,8 +1246,8 @@ function createEngine(
   let override: { until: number } | null = null;
   let diceUntil = 0;
   // Where the dice always land: the free strip below the logo plate in the middle of the board.
-  const DICE_SPOT = new THREE.Vector3(0, 0, 0.95);
-  const ANCHOR = new THREE.Vector3(0, 0, 1.75);
+  const DICE_SPOT = new THREE.Vector3(0, 0, 1.45);
+  const ANCHOR = new THREE.Vector3(0, 0, 2.25);
   const overview = { pos: new THREE.Vector3(0, 20, 14), look: new THREE.Vector3() };
   const portrait = () => camera.aspect < 0.85;
   /**
@@ -1937,7 +1951,9 @@ export default function MonopolyBoard3D({
       const steps = (to - from + 40) % 40;
       jobs.push(async () => {
         report(true, seat);
-        const engine = failedRef.current ? null : engineRef.current;
+        // A hidden tab gets no animation frames, so replaying there would only pile up a backlog.
+        const engine =
+          failedRef.current || document.hidden ? null : engineRef.current;
         if (engine && steps >= 2 && steps <= 12) {
           const last = lastRollRef.current;
           const dice =

@@ -247,7 +247,7 @@ export function EventSpotlight({
     <div
       key={main.id}
       role="status"
-      className="flex w-full max-w-[92%] flex-col overflow-hidden rounded-[1.6cqw] shadow-[0_1.2cqw_2.4cqw_-0.8cqw_oklch(0_0_0/0.45)] motion-safe:animate-[mono-event-in_480ms_cubic-bezier(.2,.9,.3,1.2)_both]"
+      className="flex w-full min-w-[min(92%,22rem)] max-w-[92%] flex-col overflow-hidden rounded-[1.6cqw] shadow-[0_1.2cqw_2.4cqw_-0.8cqw_oklch(0_0_0/0.45)] motion-safe:animate-[mono-event-in_480ms_cubic-bezier(.2,.9,.3,1.2)_both]"
       style={{ background: ON_PAPER.white, color: ON_PAPER.ink }}
     >
       <div className="flex items-center gap-[1.8cqw] p-[1.8cqw]">
@@ -270,7 +270,7 @@ export function EventSpotlight({
             {main.actor != null ? nameOf(main.actor) : 'Masa'}
             {main.target != null ? ` → ${nameOf(main.target)}` : ''}
           </p>
-          <p className="truncate font-display text-[clamp(12px,2.9cqw,24px)] font-black leading-tight">{main.title}</p>
+          <p className="line-clamp-2 text-balance font-display text-[clamp(14px,2.9cqw,24px)] font-black leading-tight">{main.title}</p>
           {main.detail && <p className="line-clamp-2 text-pretty text-[clamp(9px,1.7cqw,14px)] font-medium leading-snug opacity-80">{main.detail}</p>}
         </div>
         {main.amount != null && main.amount !== 0 && (
