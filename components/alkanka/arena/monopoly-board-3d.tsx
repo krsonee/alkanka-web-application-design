@@ -1109,7 +1109,7 @@ function createEngine(
     const tint = tintMeshes[i];
     const changed = ownerOf[i] !== undefined && ownerOf[i] !== o;
     ownerOf[i] = o;
-    m.visible = o != null;
+    m.visible = false;
     if (tint) tint.visible = o != null;
     if (o != null && color) {
       tint?.material.color.set(color);
