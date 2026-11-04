@@ -436,38 +436,68 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
   })
 
   /* ---------- pawns ---------- */
-  const pawnProfile = [
-    [0, 0],
-    [0.24, 0],
-    [0.25, 0.05],
-    [0.2, 0.09],
-    [0.13, 0.14],
-    [0.085, 0.34],
-    [0.12, 0.38],
-    [0.12, 0.41],
-    [0.07, 0.43],
-    [0, 0.43],
-  ].map(([x, y]) => new THREE.Vector2(x, y))
-  const pawnGeo = new THREE.LatheGeometry(pawnProfile, 40)
-  const headGeo = new THREE.SphereGeometry(0.14, 32, 20)
-  type Pawn = { grp: THREE.Group; body: THREE.Group; mat: THREE.MeshPhysicalMaterial; target: THREE.Vector3; busy: boolean; pos: number; out: boolean }
+  const JAKO_COUNT = 8
+  const JAKO_H = 1.5
+  const texLoader = new THREE.TextureLoader()
+  const baseGeo = new THREE.CylinderGeometry(0.25, 0.28, 0.07, 40)
+  const shadowTex = (() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 64
+    const g = c.getContext('2d')!
+    const grd = g.createRadialGradient(32, 32, 2, 32, 32, 32)
+    grd.addColorStop(0, 'rgba(0,0,0,0.55)')
+    grd.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = grd
+    g.fillRect(0, 0, 64, 64)
+    return new THREE.CanvasTexture(c)
+  })()
+  const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+  const shadowGeo = new THREE.PlaneGeometry(0.95, 0.95)
+  type Pawn = {
+    grp: THREE.Group
+    body: THREE.Group
+    fig: THREE.Group
+    mat: THREE.MeshPhysicalMaterial
+    target: THREE.Vector3
+    busy: boolean
+    pos: number
+    out: boolean
+  }
   const pawns: Pawn[] = []
   const ensurePawn = (seat: number) => {
     if (pawns[seat]) return pawns[seat]
     const grp = new THREE.Group()
     const body = new THREE.Group()
-    const mat = new THREE.MeshPhysicalMaterial({ color: '#e8b931', metalness: 0.35, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.1 })
-    const b = new THREE.Mesh(pawnGeo, mat)
-    const h = new THREE.Mesh(headGeo, mat)
-    h.position.y = 0.53
-    ;[b, h].forEach((m) => {
-      m.castShadow = true
-      body.add(m)
+    const fig = new THREE.Group()
+    const mat = new THREE.MeshPhysicalMaterial({ color: '#e8b931', metalness: 0.35, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.1, emissiveIntensity: 0.35 })
+    const base = new THREE.Mesh(baseGeo, mat)
+    base.position.y = 0.035
+    base.castShadow = true
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat)
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.y = 0.004
+    grp.add(shadow)
+    body.add(base)
+    const jakoMat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, toneMapped: false })
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), jakoMat)
+    plane.visible = false
+    texLoader.load(`/images/pawns/jako-${(seat % JAKO_COUNT) + 1}.webp`, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
+      jakoMat.map = tex
+      jakoMat.needsUpdate = true
+      const img = tex.image as { width: number; height: number }
+      const w = (JAKO_H * img.width) / img.height
+      plane.scale.set(w, JAKO_H, 1)
+      plane.position.y = 0.06 + JAKO_H / 2
+      plane.visible = true
+      disposers.push(() => tex.dispose())
     })
+    fig.add(plane)
+    body.add(fig)
     grp.add(body)
-    grp.scale.setScalar(1.25)
     scene.add(grp)
-    pawns[seat] = { grp, body, mat, target: new THREE.Vector3(), busy: false, pos: -1, out: false }
+    pawns[seat] = { grp, body, fig, mat, target: new THREE.Vector3(), busy: false, pos: -1, out: false }
     return pawns[seat]
   }
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 12, 48), new THREE.MeshBasicMaterial({ color: '#e8b931', transparent: true, opacity: 0.9 }))
@@ -481,7 +511,7 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
     const k = Math.max(0, same.indexOf(seat))
     const n = Math.max(1, same.length)
     const v = info.center.clone()
-    const off = (k - (n - 1) / 2) * 0.34
+    const off = (k - (n - 1) / 2) * (n > 3 ? 0.3 : 0.4)
     if (info.axis && info.inward) v.addScaledVector(info.axis, off).addScaledVector(info.inward, -0.12)
     else {
       // Corner labels sit in the south half, so pawns stand behind them instead of covering them.
@@ -777,7 +807,11 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
     camera.lookAt(cam.look)
     const pf = 1 - Math.exp(-dt * 10)
     pawns.forEach((p) => {
-      if (p && !p.busy && !p.out) p.grp.position.lerp(p.target, pf)
+      if (!p) return
+      if (!p.busy && !p.out) p.grp.position.lerp(p.target, pf)
+      // Jako cut-outs always turn to face the camera.
+      const gp = p.grp.position
+      p.fig.rotation.y = Math.atan2(camera.position.x - gp.x, camera.position.z - gp.z)
     })
     const ap = pawns[activeSeat]
     if (ap && !ap.out) {
@@ -860,19 +894,30 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
         const steps = (to - from + 40) % 40
         const a = p.grp.position.clone()
         p.busy = true
-        if (steps === 1) {
-          const b = slot(seat, to)
-          tween(220, (t) => {
-            p.grp.position.set(a.x + (b.x - a.x) * t, TOP + Math.sin(Math.PI * t) * 0.55, a.z + (b.z - a.z) * t)
-            p.body.rotation.y = t * Math.PI * 0.5
-          }).then(() => {
-            p.body.rotation.y = 0
+        if (steps <= 12) {
+          // Jako waddles tile by tile: small bob per step, rocking side to side.
+          const walk = async () => {
+            let cur = a
+            for (let i = 1; i <= steps; i++) {
+              const tile = (from + i) % 40
+              const next = slot(seat, tile)
+              const start = cur
+              const dir = i % 2 ? 1 : -1
+              await tween(steps > 7 ? 200 : 250, (t) => {
+                p.grp.position.set(start.x + (next.x - start.x) * t, TOP + Math.abs(Math.sin(Math.PI * t)) * 0.12, start.z + (next.z - start.z) * t)
+                p.fig.rotation.z = Math.sin(Math.PI * t) * 0.14 * dir
+              })
+              cur = next
+            }
+            p.fig.rotation.z = 0
             p.busy = false
-            tween(160, (t) => {
-              const s = t < 0.5 ? 1 - t * 0.3 : 0.85 + (t - 0.5) * 0.3
+            await tween(180, (t) => {
+              const s = 1 - Math.sin(Math.PI * t) * 0.1
               p.body.scale.set(1 / Math.sqrt(s), s, 1 / Math.sqrt(s))
-            }).then(() => p.body.scale.set(1, 1, 1))
-          })
+            })
+            p.body.scale.set(1, 1, 1)
+          }
+          void walk()
         } else {
           const b = slot(seat, to)
           const height = to === 10 ? 3.2 : 2.2
@@ -880,11 +925,11 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
             900,
             (t) => {
               p.grp.position.set(a.x + (b.x - a.x) * t, TOP + Math.sin(Math.PI * t) * height, a.z + (b.z - a.z) * t)
-              p.body.rotation.z = t * Math.PI * 2
+              p.fig.rotation.z = Math.sin(t * Math.PI * 8) * 0.12 * (1 - t)
             },
             cubicOut,
           ).then(() => {
-            p.body.rotation.z = 0
+            p.fig.rotation.z = 0
             p.busy = false
           })
         }
