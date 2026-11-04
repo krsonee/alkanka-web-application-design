@@ -943,30 +943,56 @@ function createEngine(
   });
   const makeHouse = (hotel: boolean) => {
     const grp = new THREE.Group();
-    const bw = hotel ? 0.62 : 0.2;
-    const bh = hotel ? 0.3 : 0.17;
-    const bd = hotel ? 0.26 : 0.2;
-    const body = new THREE.Mesh(
-      new RoundedBoxGeometry(bw, bh, bd, 2, 0.02),
-      hotel ? hotelMat : houseMat,
-    );
-    body.position.y = bh / 2;
-    const roof = new THREE.Mesh(
-      new THREE.ConeGeometry(hotel ? 0.4 : 0.17, hotel ? 0.16 : 0.13, 4),
-      hotel ? hotelRoof : roofMat,
-    );
-    roof.rotation.y = Math.PI / 4;
-    roof.scale.set(hotel ? 1.15 : 1, 1, hotel ? 0.5 : 1);
-    roof.position.y = bh + (hotel ? 0.08 : 0.065);
-    grp.add(body, roof);
-    if (hotel) {
-      for (let k = -2; k <= 2; k++) {
-        const w = new THREE.Mesh(
-          new THREE.BoxGeometry(0.06, 0.07, 0.01),
-          winMat,
-        );
-        w.position.set(k * 0.11, bh * 0.55, bd / 2 + 0.003);
-        grp.add(w);
+    if (!hotel) {
+      const body = new THREE.Mesh(
+        new RoundedBoxGeometry(0.2, 0.17, 0.2, 2, 0.02),
+        houseMat,
+      );
+      body.position.y = 0.085;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.13, 4), roofMat);
+      roof.rotation.y = Math.PI / 4;
+      roof.position.y = 0.17 + 0.065;
+      grp.add(body, roof);
+    } else {
+      // Flat-roofed two-storey block with a rooftop penthouse instead of a stretched pyramid roof.
+      const bw = 0.54;
+      const bh = 0.36;
+      const bd = 0.26;
+      const body = new THREE.Mesh(
+        new RoundedBoxGeometry(bw, bh, bd, 2, 0.02),
+        hotelMat,
+      );
+      body.position.y = bh / 2;
+      const slab = new THREE.Mesh(
+        new RoundedBoxGeometry(bw + 0.04, 0.035, bd + 0.04, 2, 0.01),
+        hotelRoof,
+      );
+      slab.position.y = bh + 0.0175;
+      const penthouse = new THREE.Mesh(
+        new RoundedBoxGeometry(0.22, 0.09, 0.15, 2, 0.015),
+        hotelMat,
+      );
+      penthouse.position.y = bh + 0.035 + 0.045;
+      const capTop = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25, 0.02, 0.18),
+        hotelRoof,
+      );
+      capTop.position.y = bh + 0.035 + 0.09 + 0.01;
+      const canopy = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.02, 0.06),
+        hotelRoof,
+      );
+      canopy.position.set(0, 0.1, bd / 2 + 0.03);
+      const door = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.01), winMat);
+      door.position.set(0, 0.045, bd / 2 + 0.003);
+      grp.add(body, slab, penthouse, capTop, canopy, door);
+      for (const row of [0.2, 0.3]) {
+        for (let k = -2; k <= 2; k++) {
+          if (row === 0.2 && k === 0) continue;
+          const w = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.055, 0.01), winMat);
+          w.position.set(k * 0.1, row, bd / 2 + 0.003);
+          grp.add(w);
+        }
       }
     }
     grp.traverse((o) => {
