@@ -918,6 +918,10 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
         const d = dice[k]
         d.visible = true
         const end = land.clone().addScaledVector(ax, k ? 0.45 : -0.45).addScaledVector(o, k ? -0.25 : 0.15).setY(TOP + DS / 2)
+        // Corner throws would otherwise come to rest on the tile ring.
+        const lim = HALF - 2.5
+        end.x = THREE.MathUtils.clamp(end.x, -lim, lim)
+        end.z = THREE.MathUtils.clamp(end.z, -lim, lim)
         const start = end.clone().addScaledVector(o, 4.2).addScaledVector(ax, (k ? 1 : -1) * 0.6).setY(2.8)
         const qEnd = new THREE.Quaternion().setFromUnitVectors(FACE_N[FACE_VAL.indexOf(v)], up)
         qEnd.premultiply(new THREE.Quaternion().setFromAxisAngle(up, Math.random() * Math.PI * 2))
