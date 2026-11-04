@@ -124,7 +124,7 @@ export function TableLobby({
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
   const [bots, setBots] = useState(0)
   const seatRule = SEAT_GAME_RULES[game]
-  const [seatSeats, setSeatSeats] = useState(seatRule?.seats[seatRule.seats.length - 1] ?? 4)
+  const [seatSeats, setSeatSeats] = useState(seatRule ? (seatRule.seats.includes(4) ? 4 : seatRule.seats[seatRule.seats.length - 1]) : 4)
   const [seatBots, setSeatBots] = useState(0)
   const [seatRounds, setSeatRounds] = useState(seatRule?.rounds[0] ?? 0)
   const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
