@@ -184,6 +184,8 @@ export type MonopolyState = {
   walk?: { n: number; seat: number; legs: { to: number; back: boolean }[] } | null
   /** Recent throws (one server update can hold several bot turns) so clients replay each path exactly. */
   walks?: WalkRecord[]
+  /** Buildings put up during the current turn; bots stop after BOT_BUILDS_PER_TURN. */
+  builtThisTurn?: number
   again: boolean
   chance: number[]
   chest: number[]
@@ -655,8 +657,11 @@ function nextTurn(s: MonopolyState) {
   s.trade = null
   s.debt = null
   s.tradesThisTurn = 0
+  s.builtThisTurn = 0
   s.players[next].doubles = 0
 }
+
+const BOT_BUILDS_PER_TURN = 2
 
 function roll(s: MonopolyState, seat: number) {
   const p = s.players[seat]
@@ -1057,6 +1062,7 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       const sq = BOARD[pos] as Extract<Square, { type: 'property' }>
       p.money -= sq.house
       s.houses[pos]++
+      s.builtThisTurn = (s.builtThisTurn ?? 0) + 1
       log(s, `${name(seat)} ${sq.name} üzerine ${s.houses[pos] === 5 ? 'otel' : 'ev'} dikti.`)
       break
     }
@@ -1294,8 +1300,9 @@ function botAct(s: MonopolyState, seat: number): Act {
   }
   if (!human) {
     const reserve = s.round < 10 ? 150 : 80
+    const mayBuild = s.phase === 'end' && (s.builtThisTurn ?? 0) < BOT_BUILDS_PER_TURN
     const spot = BOARD.map((_, i) => i)
-      .filter((i) => canBuild(s, seat, i) && p.money - (BOARD[i] as { house: number }).house >= reserve)
+      .filter((i) => mayBuild && canBuild(s, seat, i) && p.money - (BOARD[i] as { house: number }).house >= reserve)
       .sort((x, y) => s.houses[x] - s.houses[y] || sqPrice(y) - sqPrice(x))[0]
     if (spot != null) return { type: 'build', pos: spot }
     const m = BOARD.map((_, i) => i).find((i) => s.owner[i] === seat && s.mortgaged[i] && p.money - unmortgageCost(i) >= 400)

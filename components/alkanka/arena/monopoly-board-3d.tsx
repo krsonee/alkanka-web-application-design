@@ -26,6 +26,12 @@ type Props = {
 };
 
 const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+/**
+ * Board animations run on requestAnimationFrame, which stops in a background tab. A stalled or
+ * failed animation must never leave the table stuck in "walking", which locks the human's buttons.
+ */
+const capped = (p: Promise<void> | undefined, ms: number) =>
+  Promise.race([Promise.resolve(p).catch(() => {}), wait(ms)]);
 
 /** Two dice that add up to `sum` (2–12), used when the server only kept the latest roll. */
 function diceFor(sum: number): [number, number] {
@@ -2043,12 +2049,12 @@ export default function MonopolyBoard3D({
         report(true, seat);
         const engine = failedRef.current || document.hidden ? null : engineRef.current;
         if (engine) {
-          await engine.roll(w.dice[0], w.dice[1]);
+          await capped(engine.roll(w.dice[0], w.dice[1]), 3500);
           await wait(w.legs.length ? 180 : 500);
         }
         for (let k = 0; k < w.legs.length; k++) {
           const l = w.legs[k];
-          if (engine) await engine.move(seat, l.to, l.back);
+          if (engine) await capped(engine.move(seat, l.to, l.back), 9000);
           else engineRef.current?.place(seat, l.to);
           if (engine && k < w.legs.length - 1) await wait(650);
         }
@@ -2066,7 +2072,7 @@ export default function MonopolyBoard3D({
       const seat = s.turn;
       jobs.push(async () => {
         report(true, seat);
-        await engineRef.current?.roll(a, b);
+        await capped(engineRef.current?.roll(a, b), 3500);
         await wait(500);
       });
     }
@@ -2081,7 +2087,7 @@ export default function MonopolyBoard3D({
       jobs.push(async () => {
         report(true, seat);
         const engine = failedRef.current || document.hidden ? null : engineRef.current;
-        if (engine) await engine.move(seat, to, back);
+        if (engine) await capped(engine.move(seat, to, back), 9000);
         else engineRef.current?.place(seat, to);
         shownRef.current = shownRef.current.map((p, i) => (i === seat ? to : p));
         report(true, seat);
@@ -2091,9 +2097,16 @@ export default function MonopolyBoard3D({
 
     pendingRef.current += 1;
     chainRef.current = chainRef.current.then(async () => {
-      for (const job of jobs) await job();
-      pendingRef.current -= 1;
-      if (pendingRef.current === 0) report(false, null);
+      try {
+        for (const job of jobs) await job();
+      } catch (err) {
+        console.error("Jakopoly yürüyüş animasyonu atlandı", err);
+        shownRef.current = [...queuedRef.current];
+        queuedRef.current.forEach((to, seat) => engineRef.current?.place(seat, to));
+      } finally {
+        pendingRef.current -= 1;
+        if (pendingRef.current === 0) report(false, null);
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posKey, rollKey]);
