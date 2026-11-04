@@ -196,7 +196,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun.
             </p>
           )}
-          <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 @3xl/mono:mx-0 @3xl/mono:grid @3xl/mono:max-h-80 @3xl/mono:grid-cols-1 @3xl/mono:overflow-y-auto @3xl/mono:px-0">
+          <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pr-8 [mask-image:linear-gradient(to_right,black_88%,transparent)] @3xl/mono:mx-0 @3xl/mono:pr-0 @3xl/mono:[mask-image:none] @3xl/mono:grid @3xl/mono:max-h-80 @3xl/mono:grid-cols-1 @3xl/mono:overflow-y-auto @3xl/mono:px-0">
             {s.players.map((p, i) => (
               <PlayerChip
                 key={i}
@@ -247,6 +247,9 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
         </div>
 
         <section aria-label="Hamle" className="z-30 flex flex-col gap-3 max-lg:sticky max-lg:bottom-0 max-lg:pb-[env(safe-area-inset-bottom)] @3xl/mono:col-start-2 @3xl/mono:row-start-2">
+          {!walking && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info') && (
+            <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
+          )}
           <ActionPanel
             s={s}
             me={me}
@@ -491,46 +494,40 @@ function BoardHud({
 }) {
   const sq = BOARD[activeSquareIndex]
   const color = sq.type === 'property' ? GROUP_COLOR[sq.group] : INK
-  const hasSpotlight = !walking && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info')
   const roll = s.dice ?? s.lastRoll?.dice ?? null
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-between gap-2 p-2 sm:p-3">
-      <div className="flex items-start justify-between gap-2">
+    <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-between gap-2 p-1.5 sm:p-3">
+      <div className="flex items-start justify-between gap-1.5">
         <p
-          className="min-w-0 max-w-[70%] truncate rounded-xl border border-white/10 bg-[#0d1324]/80 px-3 py-2 text-xs font-semibold leading-snug text-[#f4efe4] backdrop-blur sm:text-sm"
+          className="line-clamp-2 min-w-0 flex-1 rounded-lg bg-[#0d1324]/75 px-2 py-1 text-[11px] font-semibold leading-snug text-[#f4efe4] backdrop-blur sm:max-w-md sm:flex-none sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm"
           aria-live="polite"
         >
           {walking ? `${activeName} ilerliyor…` : note}
         </p>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="rounded-full bg-[#0d1324]/75 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#9aa6c2] backdrop-blur sm:text-[11px]">
+            {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round}`}
+            {s.rules?.kumbara ? ` · ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
+          </span>
           <button
             type="button"
             onClick={onToggleFollow}
             aria-pressed={!follow}
-            className="pointer-events-auto rounded-xl border border-white/10 bg-[#0d1324]/80 px-3 py-2 text-xs font-semibold text-[#f4efe4] backdrop-blur transition-colors hover:border-[#e8b931]"
+            className="pointer-events-auto rounded-lg border border-white/10 bg-[#0d1324]/80 px-2 py-1 text-[11px] font-semibold text-[#f4efe4] backdrop-blur transition-colors hover:border-[#e8b931] sm:rounded-xl sm:px-3 sm:py-2 sm:text-xs"
           >
-            {follow ? 'Tüm tahta' : 'Piyonu takip et'}
+            {follow ? 'Tüm tahta' : 'Takip et'}
           </button>
-          <span className="rounded-full bg-[#0d1324]/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-[#9aa6c2] backdrop-blur">
-            {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round}`}
-            {s.rules?.kumbara ? ` · Kumbara ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
-          </span>
         </div>
       </div>
 
       <div className="flex flex-col items-center gap-2">
-        {!walking && hasSpotlight && (
-          <div className="w-full max-w-sm">
-            <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
-          </div>
-        )}
         {roll && (
-          <div className="flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#0d1324]/85 py-1.5 pl-1.5 pr-4 text-[#f4efe4] backdrop-blur">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
-              <MapPin className="size-4" aria-hidden="true" />
+          <div className="flex max-w-full items-center gap-2 rounded-full bg-[#0d1324]/80 py-1 pl-1 pr-3 text-[#f4efe4] backdrop-blur">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
+              <MapPin className="size-3.5" aria-hidden="true" />
             </span>
-            <span className="truncate font-display text-sm font-bold sm:text-base">
+            <span className="truncate font-display text-xs font-bold sm:text-sm">
               {s.dice
                 ? `${roll[0]} + ${roll[1]} = ${roll[0] + roll[1]}${roll[0] === roll[1] ? ' · Çift!' : ''}${walking ? '' : ` · ${sq.name}`}`
                 : `${nameOf(s.lastRoll!.seat)} attı · ${roll[0] + roll[1]}`}

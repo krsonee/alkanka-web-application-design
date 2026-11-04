@@ -1015,7 +1015,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                 : 'İptal'}
           {spectator && data.status === 'oynaniyor' ? ' · izleyici' : ''}
         </span>
-        {data.status === 'oynaniyor' && data.turn != null && TURN_SECONDS[data.game as ArenaGame] && (
+        {data.status === 'oynaniyor' && data.turn != null && TURN_SECONDS[data.game as ArenaGame] && data.players.filter((p) => !p.bot).length > 1 && (
           <div className={immersive ? 'min-w-0 flex-1 lg:flex-none' : 'contents'}>
             <TurnClock
               key={`${data.version}-${data.turn}`}

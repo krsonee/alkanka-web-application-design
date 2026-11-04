@@ -581,6 +581,8 @@ export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
   if ((await activeIdleMs(new Date(t.updatedAt).getTime())) < limit * 1000) return t
   const idlePlayer = t.players.find((p) => p.seat === turn)
   if (!idlePlayer || idlePlayer.bot) return t
+  // Against bots only nobody is kept waiting, so the human player gets unlimited time.
+  if (t.players.every((p) => p.bot || p.id === idlePlayer.id)) return t
   const result = autoMove(t.state)
   if (!result) return t
   try {
