@@ -1,22 +1,39 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { BOARD, type Group, type MonopolyState } from "@/lib/games/monopoly";
 
 export type MoneyDelta = { id: number; values: number[] } | null;
+export type Playback = {
+  walking: boolean;
+  walker: number | null;
+  shown: number[];
+};
 
 type Props = {
   s: MonopolyState;
-  shownPos: number[];
-  shownTurn: number;
   tokenColors: string[];
   follow: boolean;
   moneyDelta: MoneyDelta;
   onSelect: (i: number) => void;
+  /** Reports which positions are on screen while moves are still being played back. */
+  onPlayback: (p: Playback) => void;
+  /** Action controls rendered on the board, just below where the dice land. */
+  dock?: ReactNode;
 };
+
+const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+
+/** Two dice that add up to `sum` (2–12), used when the server only kept the latest roll. */
+function diceFor(sum: number): [number, number] {
+  const lo = Math.max(1, sum - 6);
+  const hi = Math.min(6, sum - 1);
+  const a = lo + Math.floor(Math.random() * (hi - lo + 1));
+  return [a, sum - a];
+}
 
 const GC: Record<Group, string> = {
   brown: "#7a4b2a",
@@ -118,6 +135,7 @@ function createEngine(
   host: HTMLDivElement,
   fxEl: HTMLDivElement,
   fonts: { display: string; body: string },
+  anchorEl: HTMLDivElement | null,
 ) {
   const disposers: (() => void)[] = [];
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -574,14 +592,102 @@ function createEngine(
     decks[k] = { grp, top, side };
   });
 
-  /* ---------- pawns ---------- */
-  const JAKO_COUNT = 8;
-  const JAKO_H = 1.5;
-  // Keep in step with STEP_MS in monopoly-pvp.tsx (hop + grace ≈ one game tick).
-  const HOP_MS = 270;
-  const STEP_GRACE_MS = 70;
-  const texLoader = new THREE.TextureLoader();
-  const baseGeo = new THREE.CylinderGeometry(0.25, 0.28, 0.07, 40);
+  /* ---------- pawns: 3D Jako parrots ---------- */
+  // Walking pace in world units per second (one regular tile ≈ 0.3 s).
+  const WALK_SPEED = 3.4;
+  const JM = {
+    grey: new THREE.MeshStandardMaterial({ color: "#9aa1ab", roughness: 0.85 }),
+    greyDark: new THREE.MeshStandardMaterial({
+      color: "#6c737d",
+      roughness: 0.8,
+    }),
+    belly: new THREE.MeshStandardMaterial({ color: "#b7bdc5", roughness: 0.9 }),
+    face: new THREE.MeshStandardMaterial({ color: "#e4e7eb", roughness: 0.7 }),
+    beak: new THREE.MeshStandardMaterial({ color: "#16181c", roughness: 0.3 }),
+    eye: new THREE.MeshStandardMaterial({ color: "#f7f5ee", roughness: 0.2 }),
+    pupil: new THREE.MeshStandardMaterial({ color: "#050505", roughness: 0.1 }),
+    leg: new THREE.MeshStandardMaterial({ color: "#575c66", roughness: 0.7 }),
+    tail: new THREE.MeshStandardMaterial({ color: "#d4352b", roughness: 0.55 }),
+    gold: new THREE.MeshStandardMaterial({
+      color: "#e2b13c",
+      metalness: 1,
+      roughness: 0.28,
+    }),
+  };
+  const sph = (r: number, w = 20, h = 14) => new THREE.SphereGeometry(r, w, h);
+  const buildJako = (jacketMat: THREE.Material) => {
+    const root = new THREE.Group();
+    const add = (
+      parent: THREE.Object3D,
+      geo: THREE.BufferGeometry,
+      mat: THREE.Material,
+      x: number,
+      y: number,
+      z: number,
+      sx = 1,
+      sy = 1,
+      sz = 1,
+    ) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.scale.set(sx, sy, sz);
+      m.castShadow = true;
+      parent.add(m);
+      return m;
+    };
+    const legs = [-1, 1].map((side) => {
+      const g = new THREE.Group();
+      g.position.set(side * 0.075, 0.27, 0);
+      add(g, new THREE.CylinderGeometry(0.024, 0.021, 0.24, 10), JM.leg, 0, -0.12, 0);
+      add(g, sph(0.05, 12, 8), JM.leg, 0, -0.245, 0.035, 1, 0.4, 1.5);
+      root.add(g);
+      return g;
+    });
+    add(root, sph(0.2), JM.grey, 0, 0.47, 0, 1, 1.22, 0.92);
+    add(root, sph(0.15), JM.belly, 0, 0.43, 0.07, 0.85, 1.25, 0.8);
+    // Open-front leather jacket in the player's colour.
+    add(
+      root,
+      new THREE.CylinderGeometry(0.207, 0.228, 0.3, 28, 1, true, 0.55, Math.PI * 2 - 1.1),
+      jacketMat,
+      0,
+      0.44,
+      -0.005,
+      1,
+      1,
+      0.95,
+    );
+    const chain = add(root, new THREE.TorusGeometry(0.12, 0.016, 8, 28), JM.gold, 0, 0.6, 0.035);
+    chain.rotation.x = Math.PI / 2 - 0.45;
+    const wings = [-1, 1].map((side) => {
+      const g = new THREE.Group();
+      g.position.set(side * 0.2, 0.6, -0.01);
+      add(g, sph(0.15, 16, 12), JM.greyDark, side * 0.02, -0.14, -0.01, 0.32, 1, 0.75);
+      root.add(g);
+      return g;
+    });
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.3, -0.16);
+    [-0.4, 0, 0.4].forEach((a) => {
+      const f = add(tail, sph(0.1, 12, 8), JM.tail, Math.sin(a) * 0.07, -0.02, -0.1, 0.35, 0.12, 1.15);
+      f.rotation.set(0.55, a, 0);
+    });
+    root.add(tail);
+    const head = new THREE.Group();
+    head.position.set(0, 0.7, 0.01);
+    root.add(head);
+    add(head, sph(0.155), JM.grey, 0, 0.09, 0);
+    add(head, sph(0.11), JM.face, 0, 0.1, 0.075, 1.15, 0.95, 0.7);
+    [-1, 1].forEach((side) => {
+      add(head, sph(0.036, 12, 10), JM.eye, side * 0.068, 0.135, 0.118);
+      add(head, sph(0.021, 10, 8), JM.pupil, side * 0.07, 0.137, 0.146);
+    });
+    const beak = add(head, new THREE.ConeGeometry(0.055, 0.15, 14), JM.beak, 0, 0.055, 0.165);
+    beak.rotation.x = Math.PI / 2 + 0.55;
+    add(head, sph(0.04, 10, 8), JM.beak, 0, 0.02, 0.13, 1, 0.6, 1);
+    return { root, legs, wings, tail, head };
+  };
+  const ringGeo = new THREE.RingGeometry(0.2, 0.28, 40);
   const shadowTex = (() => {
     const c = document.createElement("canvas");
     c.width = c.height = 64;
@@ -601,76 +707,71 @@ function createEngine(
   const shadowGeo = new THREE.PlaneGeometry(0.95, 0.95);
   type Pawn = {
     grp: THREE.Group;
-    body: THREE.Group;
     fig: THREE.Group;
+    rig: ReturnType<typeof buildJako>;
     mat: THREE.MeshPhysicalMaterial;
+    ringMat: THREE.MeshBasicMaterial;
     target: THREE.Vector3;
     busy: boolean;
+    moving: boolean;
+    flying: boolean;
+    gait: number;
+    phase: number;
+    heading: number;
     pos: number;
     out: boolean;
     queue: number[];
     flight: number | null;
+    waiters: (() => void)[];
   };
   const pawns: Pawn[] = [];
   const ensurePawn = (seat: number) => {
     if (pawns[seat]) return pawns[seat];
     const grp = new THREE.Group();
-    const body = new THREE.Group();
     const fig = new THREE.Group();
     const mat = new THREE.MeshPhysicalMaterial({
       color: "#e8b931",
-      metalness: 0.35,
-      roughness: 0.22,
-      clearcoat: 1,
-      clearcoatRoughness: 0.1,
-      emissiveIntensity: 0.35,
+      roughness: 0.42,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.25,
+      side: THREE.DoubleSide,
     });
-    const base = new THREE.Mesh(baseGeo, mat);
-    base.position.y = 0.035;
-    base.castShadow = true;
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: "#e8b931",
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    });
     const shadow = new THREE.Mesh(shadowGeo, shadowMat);
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = 0.004;
-    grp.add(shadow);
-    body.add(base);
-    const jakoMat = new THREE.MeshBasicMaterial({
-      transparent: true,
-      alphaTest: 0.35,
-      side: THREE.DoubleSide,
-      toneMapped: false,
-    });
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), jakoMat);
-    plane.visible = false;
-    texLoader.load(
-      `/images/pawns/jako-${(seat % JAKO_COUNT) + 1}.webp`,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        jakoMat.map = tex;
-        jakoMat.needsUpdate = true;
-        const img = tex.image as { width: number; height: number };
-        const w = (JAKO_H * img.width) / img.height;
-        plane.scale.set(w, JAKO_H, 1);
-        plane.position.y = 0.06 + JAKO_H / 2;
-        plane.visible = true;
-        disposers.push(() => tex.dispose());
-      },
-    );
-    fig.add(plane);
-    body.add(fig);
-    grp.add(body);
+    const ground = new THREE.Mesh(ringGeo, ringMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = 0.006;
+    grp.add(shadow, ground);
+    const rig = buildJako(mat);
+    fig.add(rig.root);
+    grp.add(fig);
+    grp.scale.setScalar(0.92);
     scene.add(grp);
     pawns[seat] = {
       grp,
-      body,
       fig,
+      rig,
       mat,
+      ringMat,
       target: new THREE.Vector3(),
       busy: false,
+      moving: false,
+      flying: false,
+      gait: 0,
+      phase: seat * 1.7,
+      heading: 0,
       pos: -1,
       out: false,
       queue: [],
       flight: null,
+      waiters: [],
     };
     return pawns[seat];
   };
@@ -705,69 +806,103 @@ function createEngine(
     v.y = TOP;
     return v;
   };
-  // Position updates arrive one tile at a time from the game screen; each pawn plays its own
-  // queue strictly in order so hops never overlap and fight over the pawn's position.
+  /** The walking lane through a tile the pawn only passes over. */
+  const lane = (tile: number) => {
+    const info = tileInfo[tile];
+    const v = info.center.clone();
+    if (info.inward) v.addScaledVector(info.inward, -0.12);
+    else v.z -= 0.42;
+    v.y = TOP;
+    return v;
+  };
+  let walkSeat: number | null = null;
+  // The whole path is known up front, so the Jako walks it as one continuous stroll at a
+  // constant pace — legs, sway and heading are animated per frame in the render loop.
   const runPawn = async (seat: number) => {
     const p = pawns[seat];
     if (!p || p.busy) return;
     p.busy = true;
-    let hopIdx = 0;
-    for (;;) {
-      while (p.queue.length || p.flight !== null) {
-        const a = p.grp.position.clone();
-        if (p.flight !== null) {
-          const b = slot(seat, p.flight);
-          const height = p.flight === 10 ? 3.2 : 2.2;
-          p.flight = null;
-          await tween(
-            900,
-            (t) => {
-              p.grp.position.set(
-                a.x + (b.x - a.x) * t,
-                TOP + Math.sin(Math.PI * t) * height,
-                a.z + (b.z - a.z) * t,
-              );
-              p.fig.rotation.z = Math.sin(t * Math.PI * 8) * 0.12 * (1 - t);
-            },
-            cubicOut,
-          );
-          continue;
-        }
-        const tile = p.queue.shift()!;
-        const b = slot(seat, tile);
-        const dir = hopIdx++ % 2 ? -1 : 1;
-        // Catch up quickly if updates piled up (e.g. the tab was in the background).
-        const dur = p.queue.length > 3 ? 180 : HOP_MS;
-        await tween(dur, (t) => {
-          const lift = Math.sin(Math.PI * t);
-          p.grp.position.set(
-            a.x + (b.x - a.x) * t,
-            TOP + lift * 0.8,
-            a.z + (b.z - a.z) * t,
-          );
-          p.fig.rotation.z = lift * 0.22 * dir;
-          const sq =
-            t < 0.12
-              ? 1 - (0.12 - t) * 1.6
-              : t > 0.88
-                ? 1 - (t - 0.88) * 1.6
-                : 1 + lift * 0.06;
-          p.body.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
-        });
+    walkSeat = seat;
+    while (p.queue.length || p.flight !== null) {
+      const a = p.grp.position.clone();
+      if (p.flight !== null) {
+        const b = slot(seat, p.flight);
+        const height = p.flight === 10 ? 3.0 : 2.2;
+        p.flight = null;
+        p.flying = true;
+        p.heading = Math.atan2(b.x - a.x, b.z - a.z);
+        await tween(
+          1000,
+          (t) =>
+            p.grp.position.set(
+              a.x + (b.x - a.x) * t,
+              TOP + Math.sin(Math.PI * t) * height,
+              a.z + (b.z - a.z) * t,
+            ),
+          (t) => t * t * (3 - 2 * t),
+        );
+        p.flying = false;
+        continue;
       }
-      // The game sends the next tile shortly after each hop lands; wait for it so a walk
-      // plays as one continuous run instead of hop–stop–hop.
-      await tween(STEP_GRACE_MS, () => {});
-      if (!p.queue.length && p.flight === null) break;
+      // Take every queued tile as one polyline so the stroll is a single smooth tween:
+      // no per-tile stop, which on slow frames looked like hopping from square to square.
+      const tiles = p.queue.splice(0);
+      const pts = [a, ...tiles.map((tile, k) => (k < tiles.length - 1 ? lane(tile) : slot(seat, tile)))];
+      const lens: number[] = [];
+      let total = 0;
+      for (let k = 1; k < pts.length; k++) {
+        const l = Math.hypot(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z);
+        lens.push(l);
+        total += l;
+      }
+      if (total < 0.01) continue;
+      p.moving = true;
+      const speed = tiles.length > 12 ? WALK_SPEED * 2 : WALK_SPEED;
+      await tween((total / speed) * 1000, (t) => {
+        let d = t * total;
+        let k = 0;
+        while (k < lens.length - 1 && d > lens[k]) d -= lens[k++];
+        const u = lens[k] > 0 ? Math.min(1, d / lens[k]) : 1;
+        const s0 = pts[k];
+        const s1 = pts[k + 1];
+        p.heading = Math.atan2(s1.x - s0.x, s1.z - s0.z);
+        p.grp.position.set(s0.x + (s1.x - s0.x) * u, TOP, s0.z + (s1.z - s0.z) * u);
+      });
     }
-    p.fig.rotation.z = 0;
-    await tween(170, (t) => {
-      const s = 1 - Math.sin(Math.PI * t) * 0.14;
-      p.body.scale.set(1 / Math.sqrt(s), s, 1 / Math.sqrt(s));
+    p.moving = false;
+    // A little landing hop once the Jako reaches its square.
+    await tween(280, (t) => {
+      p.grp.position.y = TOP + Math.sin(Math.PI * t) * 0.16;
     });
-    p.body.scale.set(1, 1, 1);
+    p.grp.position.y = TOP;
     p.busy = false;
-    if (p.queue.length || p.flight !== null) void runPawn(seat);
+    if (walkSeat === seat) walkSeat = null;
+    if (p.queue.length || p.flight !== null) return void runPawn(seat);
+    p.waiters.splice(0).forEach((fn) => fn());
+  };
+  /** Moves a pawn along the board (or flies it, for jail and long card jumps) and resolves on arrival. */
+  const movePawn = (seat: number, to: number, fly: boolean) => {
+    const p = ensurePawn(seat);
+    const from = p.queue.length ? p.queue[p.queue.length - 1] : p.pos;
+    p.pos = to;
+    if (from < 0 || from === to) {
+      retarget();
+      return Promise.resolve();
+    }
+    const fwd = (to - from + 40) % 40;
+    const back = (from - to + 40) % 40;
+    if (!fly && fwd <= 12) {
+      for (let i = 1; i <= fwd; i++) p.queue.push((from + i) % 40);
+    } else if (!fly && back <= 3) {
+      for (let i = 1; i <= back; i++) p.queue.push((from - i + 40) % 40);
+    } else {
+      p.queue = [];
+      p.flight = to;
+    }
+    retarget();
+    const done = new Promise<void>((res) => p.waiters.push(res));
+    if (!p.busy) void runPawn(seat);
+    return done;
   };
   const retarget = () =>
     pawns.forEach((p, k) => {
@@ -874,6 +1009,9 @@ function createEngine(
     THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | undefined
   )[] = [];
   const ownerOf: (number | null)[] = Array(40).fill(undefined);
+  const tintMeshes: (
+    THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | undefined
+  )[] = [];
   const renderOwner = (
     i: number,
     o: number | null,
@@ -903,11 +1041,38 @@ function createEngine(
       scene.add(m);
       ownerMeshes[i] = m;
     }
+    if (!tintMeshes[i] && info.inward) {
+      // Covers the tile body only, stopping short of the group colour band so the two never blend.
+      const depth = C - 0.37;
+      const t = new THREE.Mesh(
+        new THREE.PlaneGeometry(
+          info.axis.x ? SW - 0.08 : depth,
+          info.axis.x ? depth : SW - 0.08,
+        ),
+        new THREE.MeshBasicMaterial({
+          color: "#fff",
+          transparent: true,
+          opacity: 0.34,
+          depthWrite: false,
+        }),
+      );
+      t.rotation.x = -Math.PI / 2;
+      t.position
+        .copy(info.center)
+        .addScaledVector(info.inward, -0.165)
+        .setY(TOP + 0.012);
+      t.renderOrder = 2;
+      scene.add(t);
+      tintMeshes[i] = t;
+    }
     const m = ownerMeshes[i]!;
+    const tint = tintMeshes[i];
     const changed = ownerOf[i] !== undefined && ownerOf[i] !== o;
     ownerOf[i] = o;
     m.visible = o != null;
+    if (tint) tint.visible = o != null;
     if (o != null && color) {
+      tint?.material.color.set(color);
       m.material.color.set(color);
       m.material.emissive.set(color);
       m.material.emissiveIntensity = 0.35;
@@ -1018,7 +1183,7 @@ function createEngine(
         clearcoatRoughness: 0.08,
       }),
   );
-  const DS = 0.5;
+  const DS = 0.58;
   const dice = [0, 1].map(() => {
     const m = new THREE.Mesh(
       new RoundedBoxGeometry(DS, DS, DS, 4, 0.08),
@@ -1107,48 +1272,98 @@ function createEngine(
     dPos: new THREE.Vector3(0, 14, 12),
     dLook: new THREE.Vector3(0, 0, 0.6),
   };
-  let camTile = 0;
   let follow = true;
   let override: { until: number } | null = null;
-  const camTarget = () => {
+  let diceUntil = 0;
+  // Where the dice always land: the free strip below the logo plate in the middle of the board.
+  const DICE_SPOT = new THREE.Vector3(0, 0, 1.45);
+  const ANCHOR = new THREE.Vector3(0, 0, 2.25);
+  const overview = { pos: new THREE.Vector3(0, 20, 14), look: new THREE.Vector3() };
+  const portrait = () => camera.aspect < 0.85;
+  /**
+   * Fits the whole board into the free area between the HUD and the bubble rails: the distance
+   * is solved by bisection on the projected board corners, then a view offset centres it.
+   */
+  const fitOverview = () => {
+    const w = host.clientWidth;
+    const h = host.clientHeight;
+    if (!w || !h) return;
+    const ins = portrait()
+      ? { l: 4, r: 4, t: 106, b: 82 }
+      : { l: w < 700 ? 60 : 68, r: w < 700 ? 60 : 68, t: 40, b: 22 };
+    const dir = portrait()
+      ? new THREE.Vector3(0, 1, 0.24).normalize()
+      : new THREE.Vector3(0, 14, 6).normalize();
+    const corners = [
+      [-6.9, -6.9],
+      [6.9, -6.9],
+      [-6.9, 6.9],
+      [6.9, 6.9],
+    ].map(([x, z]) => new THREE.Vector3(x, 0, z));
+    const tmp = camera.clone();
+    tmp.clearViewOffset();
+    const bounds = (d: number) => {
+      tmp.position.copy(dir).multiplyScalar(d);
+      tmp.lookAt(0, 0, 0);
+      tmp.updateMatrixWorld();
+      const ps = corners.map((c) => c.clone().project(tmp));
+      const xs = ps.map((p) => p.x);
+      const ys = ps.map((p) => p.y);
+      return {
+        x0: Math.min(...xs),
+        x1: Math.max(...xs),
+        y0: Math.min(...ys),
+        y1: Math.max(...ys),
+      };
+    };
+    const availW = (w - ins.l - ins.r) / w;
+    const availH = (h - ins.t - ins.b) / h;
+    let lo = 4;
+    let hi = 90;
+    for (let k = 0; k < 28; k++) {
+      const d = (lo + hi) / 2;
+      const b = bounds(d);
+      if ((b.x1 - b.x0) / 2 <= availW && (b.y1 - b.y0) / 2 <= availH) hi = d;
+      else lo = d;
+    }
+    const b = bounds(hi);
+    overview.pos.copy(dir).multiplyScalar(hi);
+    overview.look.set(0, 0, 0);
+    // Shift the picture so the board's projected box sits in the middle of the free area.
+    const bx = (((b.x0 + b.x1) / 2 + 1) / 2) * w;
+    const by = ((1 - (b.y0 + b.y1) / 2) / 2) * h;
+    const cx = (ins.l + w - ins.r) / 2;
+    const cy = (ins.t + h - ins.b) / 2;
+    camera.setViewOffset(w, h, bx - cx, by - cy, w, h);
+  };
+  const camTarget = (now: number) => {
+    if (override && now < override.until) return;
     // The camera never orbits: it always looks from the south so the upright print stays readable.
-    const asp = camera.aspect;
-    const mobile = asp < 0.8;
-    const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * asp;
-    if (!follow) {
-      if (mobile) {
-        cam.dLook.set(0, 0, 0.35);
-        cam.dPos
-          .copy(
-            new THREE.Vector3(0, 1, 0.2)
-              .normalize()
-              .multiplyScalar(7.25 / tanH),
-          )
-          .add(cam.dLook);
+    if (follow && now < diceUntil) {
+      cam.dLook.copy(DICE_SPOT);
+      cam.dPos
+        .copy(DICE_SPOT)
+        .add(portrait() ? new THREE.Vector3(0, 10.5, 2.8) : new THREE.Vector3(0, 8.6, 6.2));
+      return;
+    }
+    const mover = follow && walkSeat !== null ? pawns[walkSeat] : null;
+    if (mover && !mover.out) {
+      const c = mover.grp.position;
+      if (portrait()) {
+        cam.dLook.set(
+          THREE.MathUtils.clamp(c.x, -3.1, 3.1),
+          0,
+          THREE.MathUtils.clamp(c.z, -4.4, 4.5),
+        );
+        cam.dPos.copy(cam.dLook).add(new THREE.Vector3(0, 10, 3.2));
         return;
       }
-      const dir = new THREE.Vector3(0, 13, 10).normalize();
-      const dist = Math.max(19, (7.6 / tanH) * 0.95);
-      cam.dLook.set(0, 0, 0.5);
-      cam.dPos.copy(dir.multiplyScalar(dist));
+      cam.dLook.set(c.x * 0.35, 0, c.z * 0.4 + 0.3);
+      cam.dPos.copy(cam.dLook).add(new THREE.Vector3(0, 11, 8.2));
       return;
     }
-    const c = tileInfo[camTile].center;
-    if (mobile) {
-      cam.dLook.set(
-        THREE.MathUtils.clamp(c.x, -3.1, 3.1),
-        0,
-        THREE.MathUtils.clamp(c.z, -4.4, 4.5),
-      );
-      cam.dPos.copy(cam.dLook).add(new THREE.Vector3(0, 9.6, 3.4));
-      return;
-    }
-    cam.dLook.set(c.x * 0.3, 0, c.z * 0.4 + 0.5);
-    cam.dPos.copy(cam.dLook).add(new THREE.Vector3(0, 11.5, 8.8));
-  };
-  const focus = (i: number) => {
-    camTile = i;
-    camTarget();
+    cam.dPos.copy(overview.pos);
+    cam.dLook.copy(overview.look);
   };
 
   const floats = new Set<{ update: () => void }>();
@@ -1205,25 +1420,44 @@ function createEngine(
         tw.res();
       }
     }
-    if (override && now > override.until) {
-      override = null;
-      camTarget();
-    }
+    if (override && now > override.until) override = null;
+    camTarget(now);
     const f = 1 - Math.exp(-dt * 3.2);
     cam.pos.lerp(cam.dPos, f);
     cam.look.lerp(cam.dLook, f);
     camera.position.copy(cam.pos);
     camera.lookAt(cam.look);
     const pf = 1 - Math.exp(-dt * 10);
-    pawns.forEach((p) => {
+    const yawF = 1 - Math.exp(-dt * 9);
+    pawns.forEach((p, seat) => {
       if (!p) return;
       if (!p.busy && !p.out) p.grp.position.lerp(p.target, pf);
-      // Jako cut-outs always turn to face the camera.
       const gp = p.grp.position;
-      p.fig.rotation.y = Math.atan2(
-        camera.position.x - gp.x,
-        camera.position.z - gp.z,
-      );
+      const r = p.rig;
+      // Walking: face the path; standing: turn towards the viewer.
+      const want =
+        p.moving || p.flying
+          ? p.heading
+          : Math.atan2(camera.position.x - gp.x, camera.position.z - gp.z);
+      let dy = want - p.fig.rotation.y;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      p.fig.rotation.y += dy * yawF;
+      p.gait += ((p.moving ? 1 : 0) - p.gait) * Math.min(1, dt * 10);
+      if (p.moving) p.phase += dt * 16;
+      const g = p.gait;
+      const s = Math.sin(p.phase);
+      r.legs[0].rotation.x = s * 0.8 * g;
+      r.legs[1].rotation.x = -s * 0.8 * g;
+      r.root.rotation.z = s * 0.1 * g;
+      r.root.position.y = Math.abs(s) * 0.05 * g;
+      const breathe = Math.sin(now / 650 + seat);
+      r.root.scale.set(1, 1 + breathe * 0.015, 1);
+      r.head.rotation.x = Math.sin(p.phase * 2) * 0.12 * g + breathe * 0.04;
+      r.head.rotation.y = g < 0.1 ? Math.sin(now / 1700 + seat * 2) * 0.25 : 0;
+      const flap = p.flying ? 0.7 + Math.sin(now / 45) * 0.6 : 0.1 * g + breathe * 0.03;
+      r.wings[0].rotation.z = -flap;
+      r.wings[1].rotation.z = flap;
+      r.tail.rotation.y = Math.sin(now / 520 + seat) * 0.12 + s * 0.22 * g;
     });
     const ap = pawns[activeSeat];
     if (ap && !ap.out) {
@@ -1235,6 +1469,14 @@ function createEngine(
       ring.material.opacity = 0.55 + Math.sin(now / 260) * 0.3;
     } else ring.visible = false;
     floats.forEach((fl) => fl.update());
+    if (anchorEl) {
+      // The action dock (ZAR AT etc.) rides just below the dice spot on screen.
+      const [ax, ay] = project(ANCHOR);
+      const w = host.clientWidth;
+      const h = host.clientHeight;
+      anchorEl.style.left = `${THREE.MathUtils.clamp(ax, 110, Math.max(110, w - 110))}px`;
+      anchorEl.style.top = `${THREE.MathUtils.clamp(ay, 60, Math.max(60, h - 70))}px`;
+    }
     renderer.render(scene, camera);
     raf = requestAnimationFrame(frame);
   };
@@ -1245,9 +1487,10 @@ function createEngine(
     if (!w || !h) return;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    camera.fov = camera.aspect < 0.8 ? 52 : 40;
+    camera.fov = camera.aspect < 0.85 ? 50 : 38;
     camera.updateProjectionMatrix();
-    camTarget();
+    fitOverview();
+    camera.updateProjectionMatrix();
   };
   const ro = new ResizeObserver(resize);
   ro.observe(host);
@@ -1277,7 +1520,8 @@ function createEngine(
   renderer.domElement.addEventListener("pointerup", onUp);
 
   resize();
-  focus(0);
+  cam.pos.copy(overview.pos);
+  cam.look.copy(overview.look);
   raf = requestAnimationFrame(frame);
 
   /* ---------- public API ---------- */
@@ -1287,14 +1531,19 @@ function createEngine(
     },
     setFollow(on: boolean) {
       follow = on;
-      camTarget();
     },
     setColors(colors: string[]) {
-      colors.forEach((c, k) => ensurePawn(k).mat.color.set(c));
+      colors.forEach((c, k) => {
+        const p = ensurePawn(k);
+        p.mat.color.set(c);
+        p.ringMat.color.set(c);
+      });
     },
+    move: movePawn,
+    /** Places pawns; any position the move sequencer did not animate is walked (or flown) here. */
     setPlayers(pos: number[], out: boolean[], active: number) {
       activeSeat = active;
-      let moved: number | null = null;
+      const first = !pawns.some((p) => p && p.pos >= 0);
       pos.forEach((to, seat) => {
         const p = ensurePawn(seat);
         p.out = out[seat];
@@ -1303,28 +1552,10 @@ function createEngine(
           p.pos = to;
           return;
         }
-        if (p.pos === to) return;
-        const from = p.queue.length ? p.queue[p.queue.length - 1] : p.pos;
-        p.pos = to;
-        moved = seat;
-        const steps = (to - from + 40) % 40;
-        if (steps <= 12) {
-          for (let i = 1; i <= steps; i++) p.queue.push((from + i) % 40);
-        } else {
-          p.queue = [];
-          p.flight = to;
-        }
-        if (!p.busy) void runPawn(seat);
+        if (p.pos !== to) void movePawn(seat, to, false);
       });
-      if (!pawns.some((p) => p && p.grp.position.lengthSq() > 0)) {
-        retarget();
-        pawns.forEach((p) => p && p.grp.position.copy(p.target));
-      } else retarget();
-      if (!override) {
-        const seat = moved ?? active;
-        const p = pawns[seat];
-        if (p && !p.out) focus(p.pos);
-      }
+      retarget();
+      if (first) pawns.forEach((p) => p && p.grp.position.copy(p.target));
     },
     setBoard(state: MonopolyState, colors: string[], animate: boolean) {
       for (let i = 0; i < 40; i++) {
@@ -1334,32 +1565,22 @@ function createEngine(
         renderMortgage(i, !!state.mortgaged[i]);
       }
     },
-    roll(a: number, b: number, fromTile: number) {
-      const s = camSide(fromTile);
-      const o = new THREE.Vector3(OUT[s][0], 0, OUT[s][1]);
-      const ax = new THREE.Vector3(AX[s][0], 0, AX[s][1]);
-      // Lands in the free strip just inside the tile ring, clear of the logo and the card decks.
-      const land = tileInfo[fromTile].center.clone().multiplyScalar(0.76);
-      // Clamp the shared landing spot (not each die) so corner throws stay off the tile ring
-      // without pushing both dice onto the same point.
-      const lim = HALF - 3.1;
-      land.x = THREE.MathUtils.clamp(land.x, -lim, lim);
-      land.z = THREE.MathUtils.clamp(land.z, -lim, lim);
+    /** Throws both dice into the middle of the board; resolves once they have settled. */
+    roll(a: number, b: number) {
+      diceUntil = performance.now() + 1650;
       const up = new THREE.Vector3(0, 1, 0);
-      [a, b].forEach((v, k) => {
+      const done = [a, b].map((v, k) => {
         const d = dice[k];
         d.visible = true;
         d.scale.set(1, 1, 1);
-        const end = land
-          .clone()
-          .addScaledVector(ax, k ? 0.42 : -0.42)
-          .addScaledVector(o, k ? -0.22 : 0.18)
+        const end = DICE_SPOT.clone()
+          .add(new THREE.Vector3(k ? 0.46 : -0.46, 0, (k ? -0.12 : 0.1) + (Math.random() - 0.5) * 0.15))
           .setY(TOP + DS / 2);
+        // Thrown from the viewer's side towards the centre, every time.
         const start = end
           .clone()
-          .addScaledVector(o, 4.2)
-          .addScaledVector(ax, (k ? 1 : -1) * 0.6)
-          .setY(2.8);
+          .add(new THREE.Vector3((k ? 1 : -1) * 0.7, 0, 4.6))
+          .setY(3);
         const qEnd = new THREE.Quaternion().setFromUnitVectors(
           FACE_N[FACE_VAL.indexOf(v)],
           up,
@@ -1376,7 +1597,7 @@ function createEngine(
           Math.random() - 0.5,
         ).normalize();
         const spins = Math.PI * 2 * (3 + Math.random() * 2);
-        tween(1150 + k * 90, (t) => {
+        return tween(1150 + k * 90, (t) => {
           const e = cubicOut(t);
           d.position.lerpVectors(start, end, e);
           const bounce =
@@ -1399,6 +1620,7 @@ function createEngine(
           ),
         );
       });
+      return Promise.all(done).then(() => undefined);
     },
     drawCard(deck: "chance" | "chest") {
       const dk = decks[deck];
@@ -1528,7 +1750,7 @@ function FlatBoard({
   shownPos,
   tokenColors,
   onSelect,
-}: Pick<Props, "s" | "shownPos" | "tokenColors" | "onSelect">) {
+}: Pick<Props, "s" | "tokenColors" | "onSelect"> & { shownPos: number[] }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center p-2">
       <div
@@ -1604,25 +1826,44 @@ function FlatBoard({
 
 export default function MonopolyBoard3D({
   s,
-  shownPos,
-  shownTurn,
   tokenColors,
   follow,
   moneyDelta,
   onSelect,
+  onPlayback,
+  dock,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fxRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const colorsRef = useRef<string[]>([]);
   const readyRef = useRef(false);
   const [failed, setFailed] = useState(false);
+  const failedRef = useRef(false);
+
+  const realPos = s.players.map((p) => p.pos);
+  const [shown, setShown] = useState<number[]>(realPos);
+  const [walker, setWalker] = useState<number | null>(null);
+  const shownRef = useRef<number[]>(realPos);
+  const queuedRef = useRef<number[]>(realPos);
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingRef = useRef(0);
+  const turnRef = useRef(s.turn);
+  const rollRef = useRef<string | null>(
+    s.dice ? `${s.seq}-${s.turn}-${s.dice.join("")}` : null,
+  );
+  const lastRollRef = useRef(s.lastRoll ?? null);
+  lastRollRef.current = s.lastRoll ?? null;
+  const reportRef = useRef(onPlayback);
+  reportRef.current = onPlayback;
 
   useEffect(() => {
     const host = hostRef.current;
     const fx = fxRef.current;
     if (!host || !fx) return;
     if (!webglAvailable()) {
+      failedRef.current = true;
       setFailed(true);
       return;
     }
@@ -1634,16 +1875,20 @@ export default function MonopolyBoard3D({
     const body = cs.fontFamily || "sans-serif";
     let engine: Engine;
     try {
-      engine = createEngine(host, fx, { display, body });
+      engine = createEngine(host, fx, { display, body }, anchorRef.current);
     } catch (err) {
       console.error("Jakopoly 3D başlatılamadı", err);
       host.querySelectorAll("canvas").forEach((c) => c.remove());
+      failedRef.current = true;
       setFailed(true);
       return;
     }
     engineRef.current = engine;
     const canvas = host.querySelector("canvas");
-    const onLost = () => setFailed(true);
+    const onLost = () => {
+      failedRef.current = true;
+      setFailed(true);
+    };
     canvas?.addEventListener("webglcontextlost", onLost);
     return () => {
       canvas?.removeEventListener("webglcontextlost", onLost);
@@ -1669,15 +1914,16 @@ export default function MonopolyBoard3D({
     engine.setColors(colorsRef.current);
   }, [colorKey]);
 
-  const posKey = shownPos.join(",");
   const outKey = s.players.map((p) => (p.out ? 1 : 0)).join("");
+  const shownKey = shown.join(",");
+  const activeSeat = walker ?? s.turn;
   useEffect(() => {
     engineRef.current?.setPlayers(
-      posKey.split(",").map(Number),
+      shownKey.split(",").map(Number),
       outKey.split("").map((c) => c === "1"),
-      shownTurn,
+      activeSeat,
     );
-  }, [posKey, outKey, shownTurn]);
+  }, [shownKey, outKey, activeSeat]);
 
   const boardKey = `${s.owner.join(",")}|${s.houses.join(",")}|${s.mortgaged.map(Number).join("")}`;
   useEffect(() => {
@@ -1688,29 +1934,92 @@ export default function MonopolyBoard3D({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardKey, colorKey]);
 
-  const rollKey = s.dice
-    ? `${s.turn}-${s.round}-${s.seq}-${s.dice.join("")}`
-    : null;
-  const lastRoll = useRef<string | null>(null);
+  // One server update can carry several bot turns, so the diff between what is
+  // already queued and the new positions is replayed seat by seat in turn order.
+  const posKey = realPos.join(",");
+  const rollKey = s.dice ? `${s.seq}-${s.turn}-${s.dice.join("")}` : null;
   useEffect(() => {
-    if (!rollKey || rollKey === lastRoll.current || !s.dice) return;
-    const first = lastRoll.current === null && readyRef.current === false;
-    lastRoll.current = rollKey;
-    if (first) return;
-    const from = s.players[s.turn]
-      ? (shownPos[s.turn] ?? s.players[s.turn].pos)
-      : 0;
-    engineRef.current?.roll(s.dice[0], s.dice[1], from);
+    const goal = posKey.split(",").map(Number);
+    const n = goal.length;
+    if (queuedRef.current.length !== n) {
+      queuedRef.current = goal;
+      shownRef.current = goal;
+      setShown(goal);
+      turnRef.current = s.turn;
+      return;
+    }
+    const start = turnRef.current;
+    turnRef.current = s.turn;
+    const order = Array.from({ length: n }, (_, k) => (start + k) % n);
+    const movers = order.filter((i) => queuedRef.current[i] !== goal[i]);
+    const freshRoll = rollKey !== null && rollKey !== rollRef.current;
+    if (rollKey) rollRef.current = rollKey;
+    if (!movers.length && !(freshRoll && s.dice)) return;
+
+    const jobs: (() => Promise<void>)[] = [];
+    const report = (walking: boolean, who: number | null) => {
+      const snap = [...shownRef.current];
+      setShown(snap);
+      setWalker(who);
+      reportRef.current({ walking, walker: who, shown: snap });
+    };
+
+    if (!movers.length && s.dice) {
+      const [a, b] = s.dice;
+      const seat = s.turn;
+      jobs.push(async () => {
+        report(true, seat);
+        await engineRef.current?.roll(a, b);
+        await wait(500);
+      });
+    }
+
+    for (const seat of movers) {
+      const from = queuedRef.current[seat];
+      const to = goal[seat];
+      queuedRef.current = queuedRef.current.map((p, i) => (i === seat ? to : p));
+      const steps = (to - from + 40) % 40;
+      jobs.push(async () => {
+        report(true, seat);
+        // A hidden tab gets no animation frames, so replaying there would only pile up a backlog.
+        const engine =
+          failedRef.current || document.hidden ? null : engineRef.current;
+        if (engine && steps >= 2 && steps <= 12) {
+          const last = lastRollRef.current;
+          const dice =
+            last && last.seat === seat && last.dice[0] + last.dice[1] === steps
+              ? last.dice
+              : diceFor(steps);
+          await engine.roll(dice[0], dice[1]);
+          await wait(180);
+        }
+        if (engine) await engine.move(seat, to, steps > 12);
+        shownRef.current = shownRef.current.map((p, i) => (i === seat ? to : p));
+        report(true, seat);
+        await wait(engine ? 420 : 0);
+      });
+    }
+
+    pendingRef.current += 1;
+    chainRef.current = chainRef.current.then(async () => {
+      for (const job of jobs) await job();
+      pendingRef.current -= 1;
+      if (pendingRef.current === 0) report(false, null);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rollKey]);
+  }, [posKey, rollKey]);
 
   const cardKey = s.card ? `${s.card.deck}-${s.card.text}-${s.seq}` : null;
   const lastCard = useRef<string | null>(null);
   useEffect(() => {
     if (!cardKey || cardKey === lastCard.current || !s.card) return;
     lastCard.current = cardKey;
-    if (s.card.deck === "chance" || s.card.deck === "chest")
-      engineRef.current?.drawCard(s.card.deck);
+    const deck = s.card.deck;
+    if (deck === "chance" || deck === "chest")
+      chainRef.current = chainRef.current.then(() => {
+        engineRef.current?.drawCard(deck);
+        return wait(400);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardKey]);
 
@@ -1722,12 +2031,19 @@ export default function MonopolyBoard3D({
 
   if (failed)
     return (
-      <FlatBoard
-        s={s}
-        shownPos={shownPos}
-        tokenColors={tokenColors}
-        onSelect={onSelect}
-      />
+      <>
+        <FlatBoard
+          s={s}
+          shownPos={shown}
+          tokenColors={tokenColors}
+          onSelect={onSelect}
+        />
+        {dock && (
+          <div className="absolute inset-x-0 bottom-3 z-20 flex justify-center px-3">
+            {dock}
+          </div>
+        )}
+      </>
     );
 
   return (
@@ -1742,6 +2058,12 @@ export default function MonopolyBoard3D({
         className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
         aria-hidden="true"
       />
+      <div
+        ref={anchorRef}
+        className="absolute left-1/2 top-[62%] z-20 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 justify-center"
+      >
+        {dock}
+      </div>
     </div>
   );
 }

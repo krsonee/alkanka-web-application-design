@@ -602,27 +602,20 @@ function TavlaBoard({ board, me, legal, selected, onSelect, onPlay, rolled, dice
       )}
     </div>
   )
-  const restFaces = shown.length >= 2 ? shown : [6, 5]
   const rollButton = onRoll && (
     <button
       type="button"
       onClick={onRoll}
       aria-label="Zar at"
-      className="group absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 rounded-2xl p-1.5 outline-none focus-visible:ring-2 focus-visible:ring-primary sm:gap-2 sm:p-2"
+      className="group absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full border border-primary-foreground/20 bg-primary/90 py-1 pl-1 pr-3 text-xs font-semibold text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/40 backdrop-blur-md transition-all duration-200 hover:-translate-y-[calc(50%+2px)] hover:bg-primary hover:shadow-xl hover:shadow-primary/40 active:scale-95 outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground sm:gap-2 sm:py-1.5 sm:pl-1.5 sm:pr-4 sm:text-sm"
     >
       <span
         aria-hidden="true"
-        className="flex items-center gap-2 opacity-90 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:opacity-100 group-active:scale-95 sm:gap-3"
+        className="flex size-6 items-center justify-center rounded-full bg-primary-foreground/15 transition-transform duration-300 group-hover:rotate-[20deg] sm:size-7"
       >
-        {restFaces.map((d, i) => (
-          <Die3D key={`rest-${i}`} value={d} />
-        ))}
+        <Dices className="size-3.5 sm:size-4" />
       </span>
-      <span className="relative flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-foreground shadow-[0_6px_18px_-4px_var(--primary)] transition-transform group-hover:scale-105 sm:px-4 sm:py-1.5 sm:text-xs">
-        <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-primary/40 [animation-duration:1.8s]" />
-        <Dices className="relative size-3.5 sm:size-4" aria-hidden="true" />
-        <span className="relative">Zar at</span>
-      </span>
+      <span>Zar at</span>
     </button>
   )
 
