@@ -309,7 +309,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
                 type="button"
                 onClick={dismissSpot}
                 aria-label="Bildirimi kapat"
-                className="pointer-events-auto block w-[min(24rem,100%)] text-left landscape:w-[min(21rem,100%)]"
+                className="pointer-events-auto block w-[min(28rem,100%)] text-left [@media(max-height:500px)]:w-[min(21rem,100%)]"
               >
                 <EventSpotlight events={spotBatch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
               </button>
@@ -731,14 +731,19 @@ function BoardDock({
   )
 
   if ((s.phase === 'roll' && !myPlayer.inJail) || s.phase === 'end') {
+    // Houses can go on any square of a completed colour (built evenly), not only the one you stand on.
+    const buildAt =
+      s.owner[activeSquareIndex] === me && canBuild(s, me, activeSquareIndex)
+        ? activeSquareIndex
+        : BOARD.findIndex((_, i) => s.owner[i] === me && canBuild(s, me, i))
+    const buildSq = buildAt >= 0 ? (BOARD[buildAt] as { name: string; house: number }) : null
     return (
       <div className="flex flex-col items-center gap-1 motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
-        {s.owner[activeSquareIndex] === me &&
-          canBuild(s, me, activeSquareIndex) &&
+        {buildSq &&
           pill(
-            `${s.houses[activeSquareIndex] === 4 ? 'Otel dik' : 'Ev dik'} · ${(sq as { house: number }).house} ₺`,
-            s.houses[activeSquareIndex] === 4 ? <Hotel className="size-3.5" aria-hidden="true" /> : <Home className="size-3.5" aria-hidden="true" />,
-            () => send({ type: 'build', pos: activeSquareIndex }),
+            `${s.houses[buildAt] === 4 ? 'Otel dik' : 'Ev dik'}${buildAt === activeSquareIndex ? '' : ` · ${buildSq.name}`} · ${buildSq.house} ₺`,
+            s.houses[buildAt] === 4 ? <Hotel className="size-3.5" aria-hidden="true" /> : <Home className="size-3.5" aria-hidden="true" />,
+            () => send({ type: 'build', pos: buildAt }),
           )}
         {s.phase === 'end'
           ? pill('Turu bitir', <Check className="size-3.5" aria-hidden="true" />, () => send({ type: 'end' }))

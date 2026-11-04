@@ -152,6 +152,8 @@ export type MPlayer = {
   cardFrom?: Deck[]
   /** Round of this bot's last trade offer; keeps bots from spamming offers. */
   tradeRound?: number
+  /** Deeds this bot already asked for and was turned down on, so it does not keep re-asking. */
+  snubs?: { pos: number; round: number }[]
 }
 
 export type Bundle = { props: number[]; money: number; cards: number }
@@ -173,6 +175,10 @@ export type MonopolyState = {
   dice: [number, number] | null
   /** Survives the turn change so everyone can see what the previous player rolled. */
   lastRoll?: { seat: number; dice: [number, number] } | null
+  /** Counts real dice throws, so clients play the dice animation exactly once per throw. */
+  rollNo?: number
+  /** Every stop of the last throw in order (dice, cards, jail) with its walking direction. */
+  walk?: { n: number; seat: number; legs: { to: number; back: boolean }[] } | null
   again: boolean
   chance: number[]
   chest: number[]
@@ -457,8 +463,13 @@ function bankrupt(s: MonopolyState, seat: number, to: number | null) {
   if (s.trade && (s.trade.from === seat || s.trade.to === seat)) s.trade = null
 }
 
+function leg(s: MonopolyState, seat: number, to: number, back: boolean) {
+  if (s.walk && s.walk.seat === seat) s.walk = { ...s.walk, legs: [...s.walk.legs, { to, back }] }
+}
+
 function sendToJail(s: MonopolyState, seat: number) {
   const p = s.players[seat]
+  leg(s, seat, 10, true)
   p.pos = 10
   p.inJail = true
   p.jail = 0
@@ -474,6 +485,7 @@ function moveTo(s: MonopolyState, seat: number, to: number, byDice = false) {
     p.money += exact ? GO_SALARY * 2 : GO_SALARY
     log(s, exact ? `${name(seat)} Başla'ya tam geldi, +400 ₺.` : `${name(seat)} Başla'dan geçti, +200 ₺.`)
   }
+  leg(s, seat, to, false)
   p.pos = to
 }
 
@@ -502,6 +514,7 @@ function drawCard(s: MonopolyState, seat: number, deck: Deck, diceSum: number, d
       return
     case 'back':
       p.pos = (p.pos - card.steps + 40) % 40
+      leg(s, seat, p.pos, true)
       land(s, seat, diceSum, depth + 1)
       return
     case 'nearest': {
@@ -646,6 +659,8 @@ function roll(s: MonopolyState, seat: number) {
   const dbl = a === b
   s.dice = [a, b]
   s.lastRoll = { seat, dice: [a, b] }
+  s.rollNo = (s.rollNo ?? 0) + 1
+  s.walk = { n: s.rollNo, seat, legs: [] }
   s.card = null
   if (p.inJail) {
     if (dbl) {
@@ -911,12 +926,26 @@ function proposeTrade(s: MonopolyState, t: Trade) {
   if (s.bots.includes(t.to)) {
     const v = judgeTrade(s, t)
     if (v.ok) executeTrade(s, t)
-    else log(s, `${name(t.to)} takası reddetti. En az ${v.need} ₺ daha isterdi.`)
+    else {
+      snub(s, t)
+      log(s, `${name(t.to)} takası reddetti. En az ${v.need} ₺ daha isterdi.`)
+    }
     return
   }
   s.trade = t
   log(s, `${name(t.from)}, ${name(t.to)} oyuncusuna takas teklif etti.`)
 }
+
+/** Remembers that a bot's request was refused, so it stops asking for the same deeds for a while. */
+function snub(s: MonopolyState, t: Trade) {
+  if (!s.bots.includes(t.from) || !t.take.props.length) return
+  const p = s.players[t.from]
+  p.snubs = [...(p.snubs ?? []).filter((x) => s.round - x.round < SNUB_ROUNDS), ...t.take.props.map((pos) => ({ pos, round: s.round }))]
+}
+
+const SNUB_ROUNDS = 10
+const snubbed = (s: MonopolyState, seat: number, pos: number) =>
+  (s.players[seat].snubs ?? []).some((x) => x.pos === pos && s.round - x.round < SNUB_ROUNDS)
 
 // ---------- Step ----------
 
@@ -1078,6 +1107,7 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       const t = s.trade
       if (!t) throw new Error('Bekleyen takas yok')
       s.trade = null
+      snub(s, t)
       log(s, `${name(seat)} takası reddetti.`)
       break
     }
@@ -1146,13 +1176,33 @@ function lastMissing(s: MonopolyState, seat: number) {
  * Breaks a locked board: when two players each hold the other's last missing deed, offer a straight
  * swap (plus cash to even out the value) so both can finally build.
  */
+const groupCost = (pos: number) => {
+  const g = groupOf(pos)
+  return g ? GROUP_SQUARES[g].reduce((sum, i) => sum + sqPrice(i), 0) : 0
+}
+
+/** Cash a bot must keep after buying a deed, so the completed colour can actually get houses. */
+const buildReserve = (pos: number) => {
+  const sq = BOARD[pos]
+  return sq.type === 'property' ? Math.max(200, sq.house * GROUP_SQUARES[sq.group].length) : 200
+}
+
+/** A deed worth asking for: someone else's, tradable, and not one this bot was already refused. */
+const askable = (s: MonopolyState, seat: number, pos: number) => {
+  const holder = s.owner[pos]
+  return holder != null && holder !== seat && !s.players[holder].out && canTradeDeed(s, holder, pos) && !snubbed(s, seat, pos)
+}
+
 function botSwapIdea(s: MonopolyState, seat: number): Act | null {
   for (const want of lastMissing(s, seat)) {
-    const holder = s.owner[want]
-    if (holder == null || holder === seat || s.players[holder].out || !canTradeDeed(s, holder, want)) continue
+    if (!askable(s, seat, want)) continue
+    const holder = s.owner[want]!
     const wantGroup = groupOf(want)
-    // Swapping two halves of the same colour completes nothing and would just ping-pong forever.
-    const theirNeeds = lastMissing(s, holder).filter((i) => s.owner[i] === seat && canTradeDeed(s, seat, i) && groupOf(i) !== wantGroup)
+    // Swapping two halves of the same colour completes nothing and would just ping-pong forever,
+    // and handing over a far stronger colour than the one gained is a losing deal.
+    const theirNeeds = lastMissing(s, holder).filter(
+      (i) => s.owner[i] === seat && canTradeDeed(s, seat, i) && groupOf(i) !== wantGroup && groupCost(i) <= groupCost(want) * 1.2,
+    )
     for (const give of theirNeeds) {
       const take = { props: [want], money: 0, cards: 0 }
       let money = Math.max(0, round10(sqPrice(want) - sqPrice(give)))
@@ -1160,7 +1210,7 @@ function botSwapIdea(s: MonopolyState, seat: number): Act | null {
         const v = judgeTrade(s, { from: seat, to: holder, give: { props: [give], money, cards: 0 }, take, counter: false })
         if (!v.ok) money += Math.max(0, v.need)
       }
-      if (s.players[seat].money - money < 100) continue
+      if (money > sqPrice(want) * 1.5 || s.players[seat].money - money < buildReserve(want)) continue
       return { type: 'propose', to: holder, give: { props: [give], money, cards: 0 }, take }
     }
   }
@@ -1169,23 +1219,21 @@ function botSwapIdea(s: MonopolyState, seat: number): Act | null {
 
 function botTradeIdea(s: MonopolyState, seat: number): Act | null {
   const p = s.players[seat]
-  if ((p.tradeRound ?? -10) > s.round - 3) return null
+  // No haggling while the board is still being bought up, and at most one idea every few rounds.
+  if (s.round < 3 || (p.tradeRound ?? -10) > s.round - 4) return null
   const swap = botSwapIdea(s, seat)
   if (swap) return swap
-  for (const g of Object.keys(GROUP_SQUARES) as Group[]) {
-    const cells = GROUP_SQUARES[g]
-    const missing = cells.filter((i) => s.owner[i] !== seat)
-    if (missing.length !== 1 || cells.length < 2) continue
-    const pos = missing[0]
-    const holder = s.owner[pos]
-    if (holder == null || s.players[holder].out || !canTradeDeed(s, holder, pos)) continue
-    let offer = round10(sqPrice(pos) * 2)
+  for (const pos of lastMissing(s, seat)) {
+    if (!askable(s, seat, pos)) continue
+    const holder = s.owner[pos]!
+    const price = sqPrice(pos)
+    let offer = round10(price * 1.6)
     const take = { props: [pos], money: 0, cards: 0 }
     if (s.bots.includes(holder)) {
       const v = judgeTrade(s, { from: seat, to: holder, give: { props: [], money: offer, cards: 0 }, take, counter: false })
       if (!v.ok) offer += v.need
     }
-    if (p.money - offer < 150) continue
+    if (offer > price * 3 || p.money - offer < buildReserve(pos)) continue
     return { type: 'propose', to: holder, give: { props: [], money: offer, cards: 0 }, take }
   }
   return null

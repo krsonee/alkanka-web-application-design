@@ -257,7 +257,7 @@ export function EventSpotlight({
     <div
       key={main.id}
       role="status"
-      className="flex w-full min-w-[min(92%,22rem)] max-w-[92%] flex-col overflow-hidden rounded-[1.6cqw] shadow-[0_1.2cqw_2.4cqw_-0.8cqw_oklch(0_0_0/0.45)] motion-safe:animate-[mono-event-in_480ms_cubic-bezier(.2,.9,.3,1.2)_both]"
+      className="flex w-full flex-col overflow-hidden rounded-[1.6cqw] shadow-[0_1.2cqw_2.4cqw_-0.8cqw_oklch(0_0_0/0.45)] motion-safe:animate-[mono-event-in_480ms_cubic-bezier(.2,.9,.3,1.2)_both]"
       style={{ background: ON_PAPER.white, color: ON_PAPER.ink }}
     >
       <div className="flex items-center gap-[1.8cqw] p-[1.8cqw]">
@@ -280,7 +280,7 @@ export function EventSpotlight({
             {main.actor != null ? nameOf(main.actor) : 'Masa'}
             {main.target != null ? ` → ${nameOf(main.target)}` : ''}
           </p>
-          <p className="line-clamp-2 text-balance font-display text-[clamp(14px,2.9cqw,24px)] font-black leading-tight">{main.title}</p>
+          <p className="line-clamp-2 text-balance font-display text-[clamp(14px,2.4cqw,20px)] font-black leading-tight">{main.title}</p>
           {main.detail && (
             <p
               className={cn(
@@ -296,7 +296,7 @@ export function EventSpotlight({
         </div>
         {main.amount != null && main.amount !== 0 && (
           <span
-            className="shrink-0 rounded-full px-[1.6cqw] py-[0.6cqw] font-display text-[clamp(11px,2.4cqw,20px)] font-black tabular-nums"
+            className="shrink-0 rounded-full px-[1.4cqw] py-[0.5cqw] font-display text-[clamp(11px,2cqw,17px)] font-black tabular-nums"
             style={{ background: main.amount > 0 ? ON_PAPER.gain : ON_PAPER.loss, color: ON_PAPER.white }}
           >
             {formatAmount(main.amount)}
