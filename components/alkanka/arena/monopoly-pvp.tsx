@@ -41,6 +41,12 @@ import {
 import type { Remote } from './remote'
 import { EventFeed, EventSpotlight, MoneyFloat, useEventFeed, useMoneyDeltas, type GameEvent } from './monopoly-events'
 import { TableBrand } from './table-brand'
+import dynamic from 'next/dynamic'
+
+const MonopolyBoard3D = dynamic(() => import('./monopoly-board-3d'), {
+  ssr: false,
+  loading: () => <div className="absolute inset-0 grid place-items-center font-display text-sm text-[#9aa6c2]">Tahta kuruluyor…</div>,
+})
 import {
   AllDeedsPanel,
   AuctionPanel,
@@ -57,41 +63,13 @@ import {
 } from './monopoly-panels'
 
 const LIGHT_GROUPS: Group[] = ['lightblue', 'yellow']
-const PAPER = 'oklch(0.93 0.035 150)'
-const PAPER_DEEP = 'oklch(0.89 0.05 152)'
 const INK = 'oklch(0.22 0.02 160)'
 const WHITE = 'oklch(0.985 0 0)'
 
-const UNITS = 12.2
 const STEP_MS = 230
 
-type Side = 'bottom' | 'left' | 'top' | 'right' | 'corner'
-
-function cellPos(i: number): { row: number; col: number; side: Side } {
-  if (i === 0) return { row: 11, col: 11, side: 'corner' }
-  if (i < 10) return { row: 11, col: 11 - i, side: 'bottom' }
-  if (i === 10) return { row: 11, col: 1, side: 'corner' }
-  if (i < 20) return { row: 11 - (i - 10), col: 1, side: 'left' }
-  if (i === 20) return { row: 1, col: 1, side: 'corner' }
-  if (i < 30) return { row: 1, col: 1 + (i - 20), side: 'top' }
-  if (i === 30) return { row: 1, col: 11, side: 'corner' }
-  return { row: 1 + (i - 30), col: 11, side: 'right' }
-}
-
-function track(k: number): [number, number] {
-  if (k === 1) return [0, 1.6]
-  if (k === 11) return [10.6, 1.6]
-  return [1.6 + (k - 2), 1]
-}
-
-function cellCenter(i: number) {
-  const { row, col } = cellPos(i)
-  const [x, w] = track(col)
-  const [y, h] = track(row)
-  return { x: ((x + w / 2) / UNITS) * 100, y: ((y + h / 2) / UNITS) * 100 }
-}
-
 const TURN_GAP_MS = 650
+const DICE_SETTLE_MS = 1150
 
 /**
  * Walks pawns one square at a time, one player at a time, in turn order starting
@@ -146,7 +124,8 @@ function useWalkingPawns(target: number[], turn: number) {
       timer = window.setTimeout(tick, next[seat] === t ? TURN_GAP_MS : STEP_MS)
     }
 
-    timer = window.setTimeout(tick, STEP_MS)
+    // Give the 3D dice time to land before the pawn starts hopping.
+    timer = window.setTimeout(tick, DICE_SETTLE_MS)
     return () => window.clearTimeout(timer)
   }, [key])
 
@@ -158,37 +137,6 @@ function useWalkingPawns(target: number[], turn: number) {
   return { shown, walker }
 }
 
-function SquareIcon({ i, className }: { i: number; className: string }) {
-  const sq = BOARD[i]
-  if (sq.type === 'rail') return <Train className={className} aria-hidden="true" />
-  if (sq.type === 'utility') return sq.name.includes('Su') ? <Droplets className={className} aria-hidden="true" /> : <Zap className={className} aria-hidden="true" />
-  if (sq.type === 'chance') return <HelpCircle className={className} aria-hidden="true" />
-  if (sq.type === 'chest') return <Package className={className} aria-hidden="true" />
-  if (sq.type === 'tax') return <Landmark className={className} aria-hidden="true" />
-  if (sq.type === 'parking') return <Car className={className} aria-hidden="true" />
-  if (sq.type === 'gotojail') return <Gavel className={className} aria-hidden="true" />
-  if (sq.type === 'jail') return <Lock className={className} aria-hidden="true" />
-  if (sq.type === 'go') return <ArrowLeft className={className} aria-hidden="true" />
-  return null
-}
-
-const DIE_DOTS: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] }
-
-function Die({ value, delay }: { value: number; delay: number }) {
-  return (
-    <div
-      className="grid aspect-square w-[8cqw] min-w-8 max-w-14 grid-cols-3 grid-rows-3 gap-[8%] rounded-[22%] p-[14%] shadow-[0_6px_10px_-2px_oklch(0_0_0/0.45),inset_0_-3px_0_oklch(0_0_0/0.12)] motion-safe:animate-[die-roll_650ms_cubic-bezier(.2,.8,.3,1)_both]"
-      style={{ background: WHITE, animationDelay: `${delay}ms` }}
-      role="img"
-      aria-label={`Zar ${value}`}
-    >
-      {Array.from({ length: 9 }, (_, k) => (
-        <span key={k} className={cn('rounded-full', DIE_DOTS[value]?.includes(k) ? 'opacity-100' : 'opacity-0')} style={{ background: INK }} />
-      ))}
-    </div>
-  )
-}
-
 export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   const s = remote.state
   const me = remote.spectator ? -1 : remote.seat
@@ -196,7 +144,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   const [focus, setFocus] = useState<number | null>(null)
   const [tab, setTab] = useState<PanelTab>('props')
   const [sheet, setSheet] = useState(false)
-  const [zoom, setZoom] = useState(false)
+  const [follow, setFollow] = useState(true)
   const [composer, setComposer] = useState<{ target: number | null; counter?: { give: Bundle; take: Bundle; to: number } } | null>(null)
   const nameOf = (seat: number) => (seat === me ? 'Sen' : remote.names[seat] ?? `Oyuncu ${seat + 1}`)
   const fill = (t: string) => t.replace(/@(\d)/g, (_, d) => nameOf(Number(d)))
@@ -271,74 +219,29 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
         </section>
 
         <div className="@3xl/mono:col-start-1 @3xl/mono:row-span-3 @3xl/mono:row-start-1">
-          <div className="relative rounded-2xl bg-wood p-1.5 shadow-[0_24px_50px_-20px_oklch(0_0_0/0.8)] sm:p-3">
-            <button
-              type="button"
-              onClick={() => setZoom((z) => !z)}
-              className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-card/90 px-2.5 py-1.5 text-xs font-bold text-foreground shadow-md backdrop-blur @3xl/mono:hidden"
-              aria-pressed={zoom}
-            >
-              {zoom ? <ZoomOut className="size-4" aria-hidden="true" /> : <ZoomIn className="size-4" aria-hidden="true" />}
-              {zoom ? 'Uzaklaş' : 'Yakınlaş'}
-            </button>
-            <div className={cn('overflow-auto overscroll-contain rounded-md', zoom && 'max-h-[75svh]')}>
-              <div className={cn('ls-board @container mx-auto', zoom ? 'w-[180%] max-w-none' : 'w-full max-w-[min(100%,calc(100svh-7rem))]')}>
-                <div
-                  className="relative grid aspect-square w-full grid-cols-[1.6fr_repeat(9,1fr)_1.6fr] grid-rows-[1.6fr_repeat(9,1fr)_1.6fr] gap-px overflow-hidden rounded-md shadow-[inset_0_0_0_2px_oklch(0.22_0.02_160)]"
-                  style={{ background: INK }}
-                >
-                  {BOARD.map((_, i) => (
-                    <BoardCell
-                      key={i}
-                      i={i}
-                      s={s}
-                      focused={focus === i}
-                      landedColor={!walking && active && !active.out && active.pos === i && s.dice ? TOKEN_COLOR[s.turn] : null}
-                      label={`${BOARD[i].name}${s.owner[i] != null ? `, sahibi ${nameOf(s.owner[i]!)}` : ''}${s.players
-                        .map((p, k) => (!p.out && p.pos === i ? `, ${nameOf(k)} burada` : ''))
-                        .join('')}`}
-                      onSelect={() => openDeed(i)}
-                    />
-                  ))}
-
-                  <BoardCenter
-                    s={s}
-                    walking={walking}
-                    activeName={active ? nameOf(shownTurn) : ''}
-                    activeSquareIndex={active?.pos ?? 0}
-                    note={s.note ? fill(s.note) : ownTurn ? 'Sıra sende.' : `${nameOf(s.turn)} oynuyor`}
-                    batch={batch}
-                    nameOf={nameOf}
-                  />
-
-                  <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-                    {s.players.map((p, i) => {
-                      if (p.out) return null
-                      const pos = shownPos[i] ?? p.pos
-                      const shared = s.players.map((q, k) => (!q.out && (shownPos[k] ?? q.pos) === pos ? k : -1)).filter((k) => k >= 0)
-                      const slot = shared.indexOf(i)
-                      const { x, y } = cellCenter(pos)
-                      // Pawns sharing a square sit on a small ring so all of them stay visible.
-                      const ring = shared.length > 1 ? (shared.length > 4 ? 2.4 : 1.7) : 0
-                      const angle = (slot / Math.max(1, shared.length)) * Math.PI * 2 - Math.PI / 4
-                      const dx = ring * Math.cos(angle)
-                      const dy = ring * Math.sin(angle)
-                      return (
-                        <Pawn
-                          key={i}
-                          seat={i}
-                          x={x + dx}
-                          y={y + dy}
-                          stepKey={pos}
-                          moving={pos !== p.pos}
-                          active={shownTurn === i}
-                          zIndex={Math.round((y + dy) * 10)}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
+          <div className="rounded-2xl bg-wood p-1.5 shadow-[0_24px_50px_-20px_oklch(0_0_0/0.8)] sm:p-2.5">
+            <div className="relative h-[min(64svh,560px)] overflow-hidden rounded-xl bg-[#0b1020] @3xl/mono:h-[min(calc(100svh-8rem),780px)]">
+              <TableBrand center={false} corners={false} jako={false} plaque="bottom" className="z-20" />
+              <MonopolyBoard3D
+                s={s}
+                shownPos={shownPos}
+                shownTurn={shownTurn}
+                tokenColors={TOKEN_COLOR}
+                follow={follow}
+                moneyDelta={deltas}
+                onSelect={openDeed}
+              />
+              <BoardHud
+                s={s}
+                walking={walking}
+                activeName={active ? nameOf(shownTurn) : ''}
+                activeSquareIndex={active?.pos ?? 0}
+                note={s.note ? fill(s.note) : ownTurn ? 'Sıra sende.' : `${nameOf(s.turn)} oynuyor`}
+                batch={batch}
+                nameOf={nameOf}
+                follow={follow}
+                onToggleFollow={() => setFollow((f) => !f)}
+              />
             </div>
           </div>
         </div>
@@ -565,142 +468,7 @@ function PlayerChip({
   )
 }
 
-function BoardCell({
-  i,
-  s,
-  focused,
-  landedColor,
-  label,
-  onSelect,
-}: {
-  i: number
-  s: MonopolyState
-  focused: boolean
-  landedColor: string | null
-  label: string
-  onSelect: () => void
-}) {
-  const sq = BOARD[i]
-  const { row, col, side } = cellPos(i)
-  const owner = s.owner[i]
-  const houses = s.houses[i]
-  const color = sq.type === 'property' ? GROUP_COLOR[sq.group] : null
-  const corner = side === 'corner'
-  const vertical = side === 'left' || side === 'right'
-
-  const bar = side === 'bottom' ? 'top' : side === 'top' ? 'bottom' : side === 'left' ? 'right' : 'left'
-  const outer = side === 'bottom' ? 'bottom' : side === 'top' ? 'top' : side === 'left' ? 'left' : 'right'
-  const BAR = '24%'
-
-  const contentInset: React.CSSProperties = { inset: 0 }
-  if (color) contentInset[bar] = BAR
-  if (owner != null) contentInset[outer] = '9%'
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-label={label}
-      style={
-        {
-          gridRow: row,
-          gridColumn: col,
-          background: corner ? PAPER_DEEP : PAPER,
-          color: INK,
-          '--pulse-color': landedColor ?? 'transparent',
-        } as React.CSSProperties
-      }
-      className={cn(
-        'relative overflow-hidden outline-none transition-[filter] hover:brightness-[1.04] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary',
-        focused && 'z-10 outline-2 outline-primary',
-        landedColor && 'z-[5] motion-safe:animate-[cell-pulse_1.4s_ease-in-out_infinite]',
-      )}
-    >
-      {color && (
-        <span
-          className={cn('absolute flex items-center justify-center gap-[6%]', vertical ? 'inset-y-0 flex-col' : 'inset-x-0')}
-          style={{ background: color, [bar]: 0, [vertical ? 'width' : 'height']: BAR, boxShadow: 'inset 0 0 0 0.5px oklch(0 0 0 / 0.35)' }}
-        >
-          {houses > 0 &&
-            (houses === 5 ? (
-              <Hotel className="size-[1.6cqw] min-h-2 min-w-2 drop-shadow" style={{ color: 'oklch(0.55 0.2 27)', fill: 'oklch(0.55 0.2 27)' }} aria-hidden="true" />
-            ) : (
-              Array.from({ length: houses }, (_, k) => (
-                <Home key={k} className="size-[1.3cqw] min-h-1.5 min-w-1.5 drop-shadow" style={{ color: 'oklch(0.5 0.15 150)', fill: 'oklch(0.6 0.16 150)' }} aria-hidden="true" />
-              ))
-            ))}
-        </span>
-      )}
-
-      {owner != null && (
-        <span
-          className="absolute"
-          style={{
-            [outer]: 0,
-            ...(vertical ? { top: 0, bottom: 0, width: '9%' } : { left: 0, right: 0, height: '9%' }),
-            background: s.mortgaged[i]
-              ? `repeating-linear-gradient(45deg, ${TOKEN_COLOR[owner]} 0 3px, transparent 3px 6px)`
-              : TOKEN_COLOR[owner],
-          }}
-          aria-hidden="true"
-        />
-      )}
-
-      <span
-        className={cn(
-          'absolute flex items-center justify-center gap-[0.35cqw] p-[0.35cqw] text-center font-bold uppercase leading-[1.05] tracking-tight',
-          corner ? 'flex-col text-[clamp(6px,1.5cqw,13px)]' : 'flex-col text-[clamp(5.5px,1.08cqw,10px)]',
-          vertical && '[writing-mode:vertical-rl]',
-          side === 'right' && 'rotate-180',
-        )}
-        style={contentInset}
-      >
-        <SquareIcon i={i} className={corner ? 'size-[4.4cqw] shrink-0' : 'size-[2.2cqw] min-h-2.5 min-w-2.5 shrink-0'} />
-        <span className="line-clamp-2 break-words [hyphens:auto]" lang="tr">
-          {sq.name}
-        </span>
-        {isBuyable(sq) && <span className="font-semibold normal-case opacity-75 tabular-nums">{sq.price}₺</span>}
-        {sq.type === 'tax' && <span className="font-semibold normal-case opacity-75 tabular-nums">{sq.amount}₺</span>}
-        {i === 0 && <span className="font-semibold normal-case opacity-80">+200₺</span>}
-      </span>
-    </button>
-  )
-}
-
-function Pawn({ seat, x, y, stepKey, moving, active, zIndex }: { seat: number; x: number; y: number; stepKey: number; moving: boolean; active: boolean; zIndex: number }) {
-  return (
-    <div
-      className="absolute w-[7%] transition-[left,top] ease-out"
-      style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -78%)', zIndex: 20 + zIndex, transitionDuration: `${STEP_MS - 20}ms` }}
-    >
-      <span className="absolute -bottom-[6%] left-1/2 h-[18%] w-[80%] -translate-x-1/2 rounded-[50%] bg-[oklch(0_0_0/0.4)] blur-[2px]" />
-      <div
-        key={stepKey}
-        className={cn(
-          'relative',
-          moving
-            ? 'motion-safe:animate-[pawn-hop_220ms_ease-out]'
-            : active
-              ? 'motion-safe:animate-[pawn-idle_1.6s_ease-in-out_infinite]'
-              : '',
-        )}
-      >
-        <div
-          className="aspect-square w-full overflow-hidden rounded-full border-[0.45cqw] shadow-[0_4px_8px_oklch(0_0_0/0.45),inset_0_2px_3px_oklch(1_0_0/0.5)]"
-          style={{ borderColor: TOKEN_COLOR[seat], background: TOKEN_COLOR[seat] }}
-        >
-          <img src={`/images/monopoly/pawn-${seat}.png`} alt="" className="size-full scale-[1.55] object-cover object-[50%_30%]" draggable={false} />
-        </div>
-        <div
-          className="mx-auto -mt-[8%] h-[22%] w-[78%] rounded-[50%] shadow-[0_2px_3px_oklch(0_0_0/0.45)]"
-          style={{ background: `linear-gradient(180deg, ${WHITE} -40%, ${TOKEN_COLOR[seat]} 45%, oklch(0.25 0.03 60) 140%)` }}
-        />
-      </div>
-    </div>
-  )
-}
-
-function BoardCenter({
+function BoardHud({
   s,
   walking,
   activeName,
@@ -708,6 +476,8 @@ function BoardCenter({
   note,
   batch,
   nameOf,
+  follow,
+  onToggleFollow,
 }: {
   s: MonopolyState
   walking: boolean
@@ -716,114 +486,56 @@ function BoardCenter({
   note: string
   batch: GameEvent[]
   nameOf: (seat: number) => string
+  follow: boolean
+  onToggleFollow: () => void
 }) {
   const sq = BOARD[activeSquareIndex]
   const color = sq.type === 'property' ? GROUP_COLOR[sq.group] : INK
-  const rollKey = `${s.turn}-${s.round}-${s.dice?.join('') ?? 'x'}`
   const hasSpotlight = !walking && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info')
+  const roll = s.dice ?? s.lastRoll?.dice ?? null
 
   return (
-    <div
-      className="relative flex flex-col items-center justify-center gap-[2.2cqw] overflow-hidden p-[3cqw]"
-      style={{
-        gridRow: '2 / 11',
-        gridColumn: '2 / 11',
-        color: INK,
-        background: `radial-gradient(ellipse at 50% 45%, ${PAPER} 0%, ${PAPER_DEEP} 100%)`,
-      }}
-    >
-      <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
-      <div
-        className="absolute left-[7%] top-[9%] flex aspect-[5/3] w-[24%] -rotate-[42deg] items-center justify-center rounded-[1cqw] border-[0.35cqw] border-dashed shadow-[0_3px_0_oklch(0_0_0/0.15)]"
-        style={{ background: GROUP_COLOR.orange, borderColor: WHITE }}
-        aria-hidden="true"
-      >
-        <span className="flex items-center gap-[0.6cqw] text-[clamp(7px,1.7cqw,14px)] font-black uppercase tracking-wider" style={{ color: WHITE }}>
-          <HelpCircle className="size-[2.2cqw]" /> Şans
-        </span>
-      </div>
-      <div
-        className="absolute bottom-[9%] right-[7%] flex aspect-[5/3] w-[24%] -rotate-[42deg] items-center justify-center rounded-[1cqw] border-[0.35cqw] border-dashed shadow-[0_3px_0_oklch(0_0_0/0.15)]"
-        style={{ background: GROUP_COLOR.lightblue, borderColor: WHITE }}
-        aria-hidden="true"
-      >
-        <span className="flex items-center gap-[0.6cqw] text-[clamp(6px,1.5cqw,13px)] font-black uppercase tracking-wider" style={{ color: INK }}>
-          <Package className="size-[2.2cqw]" /> Kamu fonu
-        </span>
-      </div>
-
-      <div
-        className={cn(
-          'pointer-events-none absolute inset-0 flex -rotate-[42deg] select-none items-center justify-center transition-opacity duration-500',
-          hasSpotlight ? 'opacity-15' : s.dice ? 'opacity-30' : 'opacity-100',
-        )}
-        aria-hidden="true"
-      >
-        <span
-          className="block rounded-[0.8cqw] border-[0.5cqw] px-[3cqw] py-[0.6cqw] font-display text-[6.4cqw] font-black uppercase leading-none tracking-wide shadow-[0_0.8cqw_0_oklch(0_0_0/0.18)]"
-          style={{ background: GROUP_COLOR.red, borderColor: WHITE, color: WHITE }}
-        >
-          Jakopoly
-        </span>
-      </div>
-
-      <div className="absolute inset-x-0 top-[3%] z-10 flex justify-center px-[30%]">
-        <span
-          className="truncate rounded-full px-[1.6cqw] py-[0.4cqw] text-[clamp(7px,1.3cqw,12px)] font-bold uppercase tracking-widest"
-          style={{ background: WHITE, boxShadow: '0 1px 3px oklch(0 0 0 / 0.15)' }}
-        >
-          {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round}`}
-          {s.rules?.kumbara ? ` · Kumbara ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
-        </span>
-      </div>
-
-      {note && !hasSpotlight && !s.dice && (
+    <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-between gap-2 p-2 sm:p-3">
+      <div className="flex items-start justify-between gap-2">
         <p
-          className="absolute inset-x-[28%] bottom-[11%] z-10 truncate rounded-full px-[1.6cqw] py-[0.5cqw] text-center text-[clamp(8px,1.5cqw,14px)] font-bold"
-          style={{ background: WHITE, boxShadow: '0 1px 3px oklch(0 0 0 / 0.15)' }}
+          className="min-w-0 max-w-[70%] truncate rounded-xl border border-white/10 bg-[#0d1324]/80 px-3 py-2 text-xs font-semibold leading-snug text-[#f4efe4] backdrop-blur sm:text-sm"
           aria-live="polite"
         >
-          {note}
+          {walking ? `${activeName} ilerliyor…` : note}
         </p>
-      )}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <button
+            type="button"
+            onClick={onToggleFollow}
+            aria-pressed={!follow}
+            className="pointer-events-auto rounded-xl border border-white/10 bg-[#0d1324]/80 px-3 py-2 text-xs font-semibold text-[#f4efe4] backdrop-blur transition-colors hover:border-[#e8b931]"
+          >
+            {follow ? 'Tüm tahta' : 'Piyonu takip et'}
+          </button>
+          <span className="rounded-full bg-[#0d1324]/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-[#9aa6c2] backdrop-blur">
+            {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round}`}
+            {s.rules?.kumbara ? ` · Kumbara ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
+          </span>
+        </div>
+      </div>
 
-      <div className="relative z-10 flex w-[78%] flex-col items-center gap-[1.6cqw]">
-        {s.dice ? (
-          <div key={rollKey} className="flex gap-[2cqw]">
-            <Die value={s.dice[0]} delay={0} />
-            <Die value={s.dice[1]} delay={80} />
-          </div>
-        ) : (
-          s.lastRoll && (
-            <div className="flex items-center gap-[1.2cqw] rounded-full py-[0.6cqw] pl-[0.6cqw] pr-[1.8cqw] shadow-md" style={{ background: WHITE }}>
-              <span className="flex scale-[0.55] gap-[1cqw] -mx-[2.4cqw] -my-[1.6cqw]">
-                <Die value={s.lastRoll.dice[0]} delay={0} />
-                <Die value={s.lastRoll.dice[1]} delay={0} />
-              </span>
-              <span className="truncate text-[clamp(9px,1.6cqw,14px)] font-bold">
-                {nameOf(s.lastRoll.seat)} attı · {s.lastRoll.dice[0] + s.lastRoll.dice[1]}
-              </span>
-            </div>
-          )
-        )}
-
-        {s.dice && (walking || !hasSpotlight) && (
-          <div className="flex max-w-full items-center gap-[1cqw] overflow-hidden rounded-full py-[0.6cqw] pl-[0.6cqw] pr-[2cqw] shadow-md" style={{ background: WHITE }}>
-            <span className="flex size-[3.6cqw] min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
-              <MapPin className="size-[60%]" aria-hidden="true" />
-            </span>
-            <span className="truncate text-[clamp(9px,1.7cqw,14px)] font-bold">
-              {walking ? `${activeName} ilerliyor…` : `${activeName} · ${sq.name}`}
-            </span>
+      <div className="flex flex-col items-center gap-2">
+        {!walking && hasSpotlight && (
+          <div className="w-full max-w-sm">
+            <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
           </div>
         )}
-
-        {!walking && <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />}
-
-        {note && !hasSpotlight && s.dice && (
-          <p className="text-pretty text-center text-[clamp(9px,1.7cqw,15px)] font-semibold leading-snug" aria-live="polite">
-            {note}
-          </p>
+        {roll && (
+          <div className="flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#0d1324]/85 py-1.5 pl-1.5 pr-4 text-[#f4efe4] backdrop-blur">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
+              <MapPin className="size-4" aria-hidden="true" />
+            </span>
+            <span className="truncate font-display text-sm font-bold sm:text-base">
+              {s.dice
+                ? `${roll[0]} + ${roll[1]} = ${roll[0] + roll[1]}${roll[0] === roll[1] ? ' · Çift!' : ''}${walking ? '' : ` · ${sq.name}`}`
+                : `${nameOf(s.lastRoll!.seat)} attı · ${roll[0] + roll[1]}`}
+            </span>
+          </div>
         )}
       </div>
     </div>
