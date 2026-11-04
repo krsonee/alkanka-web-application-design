@@ -624,12 +624,35 @@ function BoardDock({
     )
   }
 
+  if (s.phase === 'roll' && !myPlayer.inJail) {
+    return (
+      <div className="flex flex-col items-center gap-1 motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => send({ type: 'roll' })}
+          className="group flex items-center gap-2 rounded-full border border-primary/40 bg-[#0d1324]/75 py-1 pl-1 pr-4 text-sm font-semibold text-[#f4efe4] shadow-[0_8px_20px_-8px_oklch(0_0_0/0.7)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary active:scale-95 disabled:opacity-40"
+        >
+          <span className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform group-hover:rotate-12">
+            <Dice5 className="size-4" aria-hidden="true" />
+          </span>
+          Zar at
+        </button>
+        {canTrade && (
+          <button type="button" onClick={onTrade} className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary/10">
+            <ArrowLeftRight className="size-3" aria-hidden="true" /> Takas
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex w-[min(17rem,calc(100cqw-8rem))] min-w-52 flex-col gap-1.5 rounded-2xl border border-primary/60 bg-[#0d1324]/90 p-2 text-[#f4efe4] shadow-[0_12px_30px_-8px_oklch(0_0_0/0.7)] backdrop-blur motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
+    <div className="flex w-[min(15rem,calc(100cqw-8rem))] min-w-48 flex-col gap-1.5 rounded-2xl border border-primary/40 bg-[#0d1324]/85 p-2 text-[#f4efe4] shadow-[0_12px_30px_-8px_oklch(0_0_0/0.7)] backdrop-blur motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
       {s.phase === 'roll' && (
         <>
           <ActionButton primary disabled={busy} onClick={() => send({ type: 'roll' })}>
-            <Dice5 className="size-5" aria-hidden="true" /> {myPlayer.inJail ? 'Çift için zar at' : 'Zar at'}
+            <Dice5 className="size-4" aria-hidden="true" /> Çift için zar at
           </ActionButton>
           {myPlayer.inJail && (
             <div className="grid grid-cols-2 gap-1.5">
