@@ -374,8 +374,7 @@ function raise(s: MonopolyState, seat: number, need: number) {
       .filter((i) => canSell(s, seat, i))
       .sort((a, b) => s.houses[b] - s.houses[a])[0]
     if (built != null) {
-      s.houses[built]--
-      p.money += (BOARD[built] as { house: number }).house / 2
+      p.money += sellBuilding(s, built)
       continue
     }
     const free = BOARD.map((_, i) => i)
@@ -710,6 +709,22 @@ export function canSell(s: MonopolyState, seat: number, pos: number) {
   return s.houses[pos] === max
 }
 
+/**
+ * Sells one building level for half its cost. A hotel turns back into 4 houses, but when the bank
+ * is short on houses the owner keeps only what the bank can give and is paid for the rest too.
+ */
+function sellBuilding(s: MonopolyState, pos: number) {
+  const cost = (BOARD[pos] as { house: number }).house
+  if (s.houses[pos] !== 5) {
+    s.houses[pos]--
+    return cost / 2
+  }
+  const freeHouses = bankStock(s).houses
+  const keep = Math.max(0, Math.min(4, freeHouses))
+  s.houses[pos] = keep
+  return ((5 - keep) * cost) / 2
+}
+
 export function canMortgage(s: MonopolyState, seat: number, pos: number) {
   const sq = BOARD[pos]
   if (!isBuyable(sq) || s.owner[pos] !== seat || s.mortgaged[pos]) return false
@@ -954,9 +969,14 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
     case 'sell': {
       if (!canSell(s, seat, pos)) throw new Error('Bu evi satamazsın')
       const sq = BOARD[pos] as Extract<Square, { type: 'property' }>
-      s.houses[pos]--
-      p.money += sq.house / 2
-      log(s, `${name(seat)} ${sq.name} üzerindeki bir yapıyı sattı.`)
+      const wasHotel = s.houses[pos] === 5
+      p.money += sellBuilding(s, pos)
+      log(
+        s,
+        wasHotel && s.houses[pos] < 4
+          ? `${name(seat)} ${sq.name} otelini sattı. Bankada yeterli ev olmadığı için ${s.houses[pos]} ev kaldı.`
+          : `${name(seat)} ${sq.name} üzerindeki bir yapıyı sattı.`,
+      )
       break
     }
     case 'mortgage':
