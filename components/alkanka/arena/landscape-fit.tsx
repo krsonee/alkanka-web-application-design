@@ -131,7 +131,11 @@ export function LandscapeFit({
       const availH = a.clientHeight - 4
       if (availW < 200 || availH < 150 || availW <= availH) return
       // Tables that opt into var(--ls-ar) take the screen's own shape, so no dark bands are left beside them.
-      if (force) i.style.setProperty('--ls-ar', `${availW} / ${availH}`)
+      if (force) {
+        i.style.setProperty('--ls-ar', `${availW} / ${availH}`)
+        // Tables sized with var(--ls-h) fill the screen height at scale 1 instead of being zoomed to fit.
+        i.style.setProperty('--ls-h', `${availH}px`)
+      }
       // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
       // Wrappers marked data-ls-flat are dissolved so their siblings (e.g. a control bar) join the side column.
       const main = i.querySelector<HTMLElement>('[data-ls-main]')
@@ -196,6 +200,7 @@ export function LandscapeFit({
       window.visualViewport?.removeEventListener('resize', settle)
       i.querySelectorAll('[data-ls-grid]').forEach((el) => el.removeAttribute('data-ls-grid'))
       i.style.removeProperty('--ls-ar')
+      i.style.removeProperty('--ls-h')
     }
   }, [fullscreen, force])
 

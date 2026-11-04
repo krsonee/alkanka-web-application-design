@@ -1127,7 +1127,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
               </FitToScreen>
             ) : spectator ? (
               // Same stable landscape layer players get; FitToScreen re-measured the reflowing table in a loop on phones.
-              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti'} menu={<SoundToggle />}>
+              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'} menu={<SoundToggle />}>
                 <div className={cn(data.game !== 'okey' && 'pointer-events-none')}>
                   <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
                 </div>
@@ -1136,7 +1136,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
               <LandscapeFit
-                force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti'}
+                force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'}
                 menu={
                   <>
                     {mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (
