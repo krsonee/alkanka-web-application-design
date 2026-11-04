@@ -38,7 +38,6 @@ const sideOf = (i: number): Side => (i % 10 === 0 ? 'c' : i < 10 ? 'b' : i < 20 
 const camSide = (i: number) => (i % 10 === 0 ? sideOf((i + 1) % 40) : sideOf(i)) as Exclude<Side, 'c'>
 const OUT = { b: [0, 1], l: [-1, 0], t: [0, -1], r: [1, 0] } as const
 const AX = { b: [1, 0], l: [0, 1], t: [1, 0], r: [0, 1] } as const
-const ANG = { b: 0, l: Math.PI / 2, t: Math.PI, r: -Math.PI / 2 } as const
 
 function rect(i: number) {
   const s = sideOf(i)
@@ -173,11 +172,10 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
     g.stroke(new Path2D(PATHS[name]))
     g.restore()
   }
-  const wrapText = (text: string, x: number, y: number, maxW: number, lh: number) => {
-    const words = text.split(' ')
+  const wrapLines = (text: string, maxW: number) => {
     const lines: string[] = []
     let line = ''
-    for (const w of words) {
+    for (const w of text.split(' ')) {
       const t = line ? `${line} ${w}` : w
       if (g.measureText(t).width > maxW && line) {
         lines.push(line)
@@ -185,8 +183,32 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
       } else line = t
     }
     lines.push(line)
-    lines.forEach((l, k) => g.fillText(l, x, y + k * lh))
-    return lines.length
+    return lines
+  }
+  /** Shrinks the font until the text fits, then squeezes horizontally as a last resort. Returns the used height. */
+  const fitText = (text: string, cx: number, top: number, maxW: number, maxLines: number, big: number, small: number, weight: number, family = fonts.body) => {
+    let size = big
+    let lines: string[] = []
+    for (; size >= small; size -= 2) {
+      g.font = `${weight} ${size}px ${family}`
+      lines = wrapLines(text, maxW)
+      if (lines.length <= maxLines && lines.every((l) => g.measureText(l).width <= maxW)) break
+    }
+    size = Math.max(size, small)
+    g.font = `${weight} ${size}px ${family}`
+    lines = wrapLines(text, maxW)
+    if (lines.length > maxLines) lines = [...lines.slice(0, maxLines - 1), lines.slice(maxLines - 1).join(' ')]
+    const lh = size * 1.06
+    g.textBaseline = 'top'
+    lines.forEach((l, k) => {
+      const lw = g.measureText(l).width
+      g.save()
+      g.translate(cx, top + k * lh)
+      if (lw > maxW) g.scale(maxW / lw, 1)
+      g.fillText(l, 0, 0)
+      g.restore()
+    })
+    return lines.length * lh
   }
   const drawBoard = () => {
     g.fillStyle = IVORY
@@ -235,14 +257,14 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
       const s = sideOf(i)
       g.save()
       g.translate((r.x + HALF) * K, (r.z + HALF) * K)
-      const w = (s === 'c' ? C : SW) * K
-      const d = C * K
-      if (s !== 'c') g.rotate(ANG[s])
+      // Every tile is printed upright so it reads straight from the camera, which always sits on the south side.
+      const W = r.w * K
+      const H = r.d * K
       g.fillStyle = IVORY
-      g.fillRect(-w / 2, -d / 2, w, d)
+      g.fillRect(-W / 2, -H / 2, W, H)
       g.strokeStyle = '#1d2742'
       g.lineWidth = 3
-      g.strokeRect(-w / 2, -d / 2, w, d)
+      g.strokeRect(-W / 2, -H / 2, W, H)
       g.textAlign = 'center'
       g.textBaseline = 'top'
       g.fillStyle = INK
@@ -250,24 +272,41 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
       if (s === 'c') {
         const ic = { go: 'go', jail: 'jail', parking: 'park', gotojail: 'lock' }[sq.type as 'go'] ?? 'go'
         const tint = { go: '#2e9a5b', jail: '#d8322f', parking: '#2a45a8', gotojail: '#d8322f' }[sq.type as 'go'] ?? INK
-        icon(ic, 0, -40, 110, tint, 2.2)
-        g.font = `700 38px ${fonts.display}`
-        wrapText(upper, 0, 40, w - 30, 40)
+        icon(ic, 0, -H / 2 + 62, 86, tint, 2.4)
+        g.fillStyle = INK
+        const used = fitText(upper, 0, -6, W - 28, 2, 42, 26, 800, fonts.display)
         if (sq.type === 'go') {
-          g.font = `600 26px ${fonts.body}`
+          g.font = `800 32px ${fonts.body}`
           g.fillStyle = '#2e9a5b'
-          g.fillText('+200 ₺', 0, 90)
+          g.textBaseline = 'top'
+          g.fillText('+200 ₺', 0, -2 + used + 6)
         }
       } else {
-        let y = -d / 2 + 16
+        const [ox, oy] = OUT[s]
+        const BT = 0.28 * K
+        let x0 = -W / 2 + 4
+        let x1 = W / 2 - 4
+        let y0 = -H / 2 + 4
+        let y1 = H / 2 - 4
+        const cut = (dx: number, dy: number, amt: number) => {
+          if (dx > 0) x1 -= amt
+          if (dx < 0) x0 += amt
+          if (dy > 0) y1 -= amt
+          if (dy < 0) y0 += amt
+        }
         if (sq.type === 'property') {
           g.fillStyle = GC[sq.group]
-          g.fillRect(-w / 2 + 3, -d / 2 + 3, w - 6, 0.28 * K)
-          y = -d / 2 + 0.28 * K + 18
+          const bx = -ox > 0 ? W / 2 - BT - 3 : -W / 2 + 3
+          const by = -oy > 0 ? H / 2 - BT - 3 : -H / 2 + 3
+          g.fillRect(bx, by, ox ? BT : W - 6, oy ? BT : H - 6)
+          cut(-ox, -oy, BT + 2)
         }
+        // Leave room on the outer edge for the owner marker.
+        cut(ox, oy, 0.16 * K)
+        const cx = (x0 + x1) / 2
+        const bw = x1 - x0 - 10
         g.fillStyle = INK
-        g.font = `800 29px ${fonts.body}`
-        const lines = wrapText(upper, 0, y, w - 12, 31)
+        const nameH = fitText(upper, cx, y0 + 6, bw, 2, 34, 24, 800)
         const ic =
           sq.type === 'rail'
             ? 'rail'
@@ -282,16 +321,25 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
                   : sq.type === 'tax'
                     ? 'tax'
                     : null
-        if (ic) {
-          const col = sq.type === 'chance' ? '#a86f00' : sq.type === 'chest' ? '#1f6aa8' : '#1f2940'
-          icon(ic, 0, y + lines * 31 + 50, ic === 'chance' ? 84 : 68, col, 2.8)
-        }
         const price = 'price' in sq ? fmt(sq.price) : 'amount' in sq ? fmt(sq.amount) : ''
+        let priceH = 0
         if (price) {
-          g.font = `700 28px ${fonts.body}`
+          g.font = `800 30px ${fonts.body}`
+          const pw = g.measureText(price).width
           g.fillStyle = '#1f2940'
           g.textBaseline = 'bottom'
-          g.fillText(price, 0, d / 2 - 12)
+          g.save()
+          g.translate(cx, y1 - 4)
+          if (pw > bw) g.scale(bw / pw, 1)
+          g.fillText(price, 0, 0)
+          g.restore()
+          priceH = 34
+        }
+        const room = y1 - 4 - priceH - (y0 + 6 + nameH)
+        const size = Math.min(room - 8, bw * 0.55, ic === 'chance' ? 84 : 70)
+        if (ic && size >= 28) {
+          const col = sq.type === 'chance' ? '#a86f00' : sq.type === 'chest' ? '#1f6aa8' : '#1f2940'
+          icon(ic, cx, y0 + 6 + nameH + room / 2, size, col, 2.8)
         }
       }
       g.restore()
@@ -367,8 +415,8 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
   const decks: Record<string, { grp: THREE.Group; top: THREE.Material; side: THREE.Material }> = {}
   ;(
     [
-      ['chance', 'ŞANS', '#e8b931', '#2a1f05', -2.0, -0.9, 0.35],
-      ['chest', 'KAMU FONU', '#3fa7e0', '#06233a', 2.0, 0.9, -0.35],
+      ['chance', 'ŞANS', '#e8b931', '#2a1f05', -2.1, -2.75, 0.3],
+      ['chest', 'KAMU FONU', '#3fa7e0', '#06233a', 2.1, 2.7, -0.3],
     ] as const
   ).forEach(([k, txt, bg, fg, x, z, rot]) => {
     const grp = new THREE.Group()
@@ -388,38 +436,68 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
   })
 
   /* ---------- pawns ---------- */
-  const pawnProfile = [
-    [0, 0],
-    [0.24, 0],
-    [0.25, 0.05],
-    [0.2, 0.09],
-    [0.13, 0.14],
-    [0.085, 0.34],
-    [0.12, 0.38],
-    [0.12, 0.41],
-    [0.07, 0.43],
-    [0, 0.43],
-  ].map(([x, y]) => new THREE.Vector2(x, y))
-  const pawnGeo = new THREE.LatheGeometry(pawnProfile, 40)
-  const headGeo = new THREE.SphereGeometry(0.14, 32, 20)
-  type Pawn = { grp: THREE.Group; body: THREE.Group; mat: THREE.MeshPhysicalMaterial; target: THREE.Vector3; busy: boolean; pos: number; out: boolean }
+  const JAKO_COUNT = 8
+  const JAKO_H = 1.5
+  const texLoader = new THREE.TextureLoader()
+  const baseGeo = new THREE.CylinderGeometry(0.25, 0.28, 0.07, 40)
+  const shadowTex = (() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 64
+    const g = c.getContext('2d')!
+    const grd = g.createRadialGradient(32, 32, 2, 32, 32, 32)
+    grd.addColorStop(0, 'rgba(0,0,0,0.55)')
+    grd.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = grd
+    g.fillRect(0, 0, 64, 64)
+    return new THREE.CanvasTexture(c)
+  })()
+  const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+  const shadowGeo = new THREE.PlaneGeometry(0.95, 0.95)
+  type Pawn = {
+    grp: THREE.Group
+    body: THREE.Group
+    fig: THREE.Group
+    mat: THREE.MeshPhysicalMaterial
+    target: THREE.Vector3
+    busy: boolean
+    pos: number
+    out: boolean
+  }
   const pawns: Pawn[] = []
   const ensurePawn = (seat: number) => {
     if (pawns[seat]) return pawns[seat]
     const grp = new THREE.Group()
     const body = new THREE.Group()
-    const mat = new THREE.MeshPhysicalMaterial({ color: '#e8b931', metalness: 0.35, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.1 })
-    const b = new THREE.Mesh(pawnGeo, mat)
-    const h = new THREE.Mesh(headGeo, mat)
-    h.position.y = 0.53
-    ;[b, h].forEach((m) => {
-      m.castShadow = true
-      body.add(m)
+    const fig = new THREE.Group()
+    const mat = new THREE.MeshPhysicalMaterial({ color: '#e8b931', metalness: 0.35, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.1, emissiveIntensity: 0.35 })
+    const base = new THREE.Mesh(baseGeo, mat)
+    base.position.y = 0.035
+    base.castShadow = true
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat)
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.y = 0.004
+    grp.add(shadow)
+    body.add(base)
+    const jakoMat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, toneMapped: false })
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), jakoMat)
+    plane.visible = false
+    texLoader.load(`/images/pawns/jako-${(seat % JAKO_COUNT) + 1}.webp`, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
+      jakoMat.map = tex
+      jakoMat.needsUpdate = true
+      const img = tex.image as { width: number; height: number }
+      const w = (JAKO_H * img.width) / img.height
+      plane.scale.set(w, JAKO_H, 1)
+      plane.position.y = 0.06 + JAKO_H / 2
+      plane.visible = true
+      disposers.push(() => tex.dispose())
     })
+    fig.add(plane)
+    body.add(fig)
     grp.add(body)
-    grp.scale.setScalar(1.25)
     scene.add(grp)
-    pawns[seat] = { grp, body, mat, target: new THREE.Vector3(), busy: false, pos: -1, out: false }
+    pawns[seat] = { grp, body, fig, mat, target: new THREE.Vector3(), busy: false, pos: -1, out: false }
     return pawns[seat]
   }
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 12, 48), new THREE.MeshBasicMaterial({ color: '#e8b931', transparent: true, opacity: 0.9 }))
@@ -433,11 +511,12 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
     const k = Math.max(0, same.indexOf(seat))
     const n = Math.max(1, same.length)
     const v = info.center.clone()
-    const off = (k - (n - 1) / 2) * 0.34
+    const off = (k - (n - 1) / 2) * (n > 3 ? 0.3 : 0.4)
     if (info.axis && info.inward) v.addScaledVector(info.axis, off).addScaledVector(info.inward, -0.12)
     else {
-      v.x += off * 0.7
-      v.z += off * 0.7
+      // Corner labels sit in the south half, so pawns stand behind them instead of covering them.
+      v.x += off
+      v.z -= 0.42
     }
     v.y = TOP
     return v
@@ -641,28 +720,30 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
   let follow = true
   let override: { until: number } | null = null
   const camTarget = () => {
+    // The camera never orbits: it always looks from the south so the upright print stays readable.
     const asp = camera.aspect
     const mobile = asp < 0.8
+    const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * asp
     if (!follow) {
+      if (mobile) {
+        cam.dLook.set(0, 0, 0.35)
+        cam.dPos.copy(new THREE.Vector3(0, 1, 0.2).normalize().multiplyScalar(7.25 / tanH)).add(cam.dLook)
+        return
+      }
       const dir = new THREE.Vector3(0, 13, 10).normalize()
-      const dist = Math.max(19, (7.6 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * asp)) * 0.95)
+      const dist = Math.max(19, (7.6 / tanH) * 0.95)
       cam.dLook.set(0, 0, 0.5)
       cam.dPos.copy(dir.multiplyScalar(dist))
       return
     }
-    const info = tileInfo[camTile]
-    const s = camSide(camTile)
-    const o = new THREE.Vector3(OUT[s][0], 0, OUT[s][1])
+    const c = tileInfo[camTile].center
     if (mobile) {
-      const along = new THREE.Vector3(-o.z, 0, o.x)
-      const a = THREE.MathUtils.clamp(info.center.dot(along), -3.4, 3.4)
-      const rowDepth = info.center.dot(o)
-      cam.dLook.copy(along).multiplyScalar(a).addScaledVector(o, rowDepth - 3.6)
-      cam.dPos.copy(cam.dLook).addScaledVector(o, 4.0).setY(10.6)
+      cam.dLook.set(THREE.MathUtils.clamp(c.x, -3.1, 3.1), 0, THREE.MathUtils.clamp(c.z, -4.4, 4.5))
+      cam.dPos.copy(cam.dLook).add(new THREE.Vector3(0, 9.6, 3.4))
       return
     }
-    cam.dLook.copy(info.center).multiplyScalar(0.58)
-    cam.dPos.copy(cam.dLook).addScaledVector(o, 8.2).setY(5.6)
+    cam.dLook.set(c.x * 0.3, 0, c.z * 0.4 + 0.5)
+    cam.dPos.copy(cam.dLook).add(new THREE.Vector3(0, 11.5, 8.8))
   }
   const focus = (i: number) => {
     camTile = i
@@ -726,7 +807,11 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
     camera.lookAt(cam.look)
     const pf = 1 - Math.exp(-dt * 10)
     pawns.forEach((p) => {
-      if (p && !p.busy && !p.out) p.grp.position.lerp(p.target, pf)
+      if (!p) return
+      if (!p.busy && !p.out) p.grp.position.lerp(p.target, pf)
+      // Jako cut-outs always turn to face the camera.
+      const gp = p.grp.position
+      p.fig.rotation.y = Math.atan2(camera.position.x - gp.x, camera.position.z - gp.z)
     })
     const ap = pawns[activeSeat]
     if (ap && !ap.out) {
@@ -809,19 +894,30 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
         const steps = (to - from + 40) % 40
         const a = p.grp.position.clone()
         p.busy = true
-        if (steps === 1) {
-          const b = slot(seat, to)
-          tween(220, (t) => {
-            p.grp.position.set(a.x + (b.x - a.x) * t, TOP + Math.sin(Math.PI * t) * 0.55, a.z + (b.z - a.z) * t)
-            p.body.rotation.y = t * Math.PI * 0.5
-          }).then(() => {
-            p.body.rotation.y = 0
+        if (steps <= 12) {
+          // Jako waddles tile by tile: small bob per step, rocking side to side.
+          const walk = async () => {
+            let cur = a
+            for (let i = 1; i <= steps; i++) {
+              const tile = (from + i) % 40
+              const next = slot(seat, tile)
+              const start = cur
+              const dir = i % 2 ? 1 : -1
+              await tween(steps > 7 ? 200 : 250, (t) => {
+                p.grp.position.set(start.x + (next.x - start.x) * t, TOP + Math.abs(Math.sin(Math.PI * t)) * 0.12, start.z + (next.z - start.z) * t)
+                p.fig.rotation.z = Math.sin(Math.PI * t) * 0.14 * dir
+              })
+              cur = next
+            }
+            p.fig.rotation.z = 0
             p.busy = false
-            tween(160, (t) => {
-              const s = t < 0.5 ? 1 - t * 0.3 : 0.85 + (t - 0.5) * 0.3
+            await tween(180, (t) => {
+              const s = 1 - Math.sin(Math.PI * t) * 0.1
               p.body.scale.set(1 / Math.sqrt(s), s, 1 / Math.sqrt(s))
-            }).then(() => p.body.scale.set(1, 1, 1))
-          })
+            })
+            p.body.scale.set(1, 1, 1)
+          }
+          void walk()
         } else {
           const b = slot(seat, to)
           const height = to === 10 ? 3.2 : 2.2
@@ -829,11 +925,11 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
             900,
             (t) => {
               p.grp.position.set(a.x + (b.x - a.x) * t, TOP + Math.sin(Math.PI * t) * height, a.z + (b.z - a.z) * t)
-              p.body.rotation.z = t * Math.PI * 2
+              p.fig.rotation.z = Math.sin(t * Math.PI * 8) * 0.12 * (1 - t)
             },
             cubicOut,
           ).then(() => {
-            p.body.rotation.z = 0
+            p.fig.rotation.z = 0
             p.busy = false
           })
         }
@@ -860,12 +956,17 @@ function createEngine(host: HTMLDivElement, fxEl: HTMLDivElement, fonts: { displ
       const s = camSide(fromTile)
       const o = new THREE.Vector3(OUT[s][0], 0, OUT[s][1])
       const ax = new THREE.Vector3(AX[s][0], 0, AX[s][1])
-      const land = tileInfo[fromTile].center.clone().multiplyScalar(0.58).addScaledVector(o, -0.6)
+      // Lands in the free strip just inside the tile ring, clear of the logo and the card decks.
+      const land = tileInfo[fromTile].center.clone().multiplyScalar(0.76)
       const up = new THREE.Vector3(0, 1, 0)
       ;[a, b].forEach((v, k) => {
         const d = dice[k]
         d.visible = true
         const end = land.clone().addScaledVector(ax, k ? 0.45 : -0.45).addScaledVector(o, k ? -0.25 : 0.15).setY(TOP + DS / 2)
+        // Corner throws would otherwise come to rest on the tile ring.
+        const lim = HALF - 2.5
+        end.x = THREE.MathUtils.clamp(end.x, -lim, lim)
+        end.z = THREE.MathUtils.clamp(end.z, -lim, lim)
         const start = end.clone().addScaledVector(o, 4.2).addScaledVector(ax, (k ? 1 : -1) * 0.6).setY(2.8)
         const qEnd = new THREE.Quaternion().setFromUnitVectors(FACE_N[FACE_VAL.indexOf(v)], up)
         qEnd.premultiply(new THREE.Quaternion().setFromAxisAngle(up, Math.random() * Math.PI * 2))

@@ -189,14 +189,14 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
 
   return (
     <div data-ls-wide className="@container/mono">
-      <div className="flex flex-col gap-3 @3xl/mono:grid @3xl/mono:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] @3xl/mono:grid-rows-[auto_auto_1fr] @3xl/mono:items-start @3xl/mono:gap-4">
-        <section aria-label="Oyuncular" className="flex flex-col gap-2 @3xl/mono:col-start-2 @3xl/mono:row-start-1">
+      <div className="flex flex-col gap-3 @3xl/mono:grid @3xl/mono:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] @3xl/mono:grid-rows-[auto_auto_1fr] @3xl/mono:items-start @3xl/mono:gap-4 [.ls-split_&]:grid [.ls-split_&]:h-[var(--ls-h,100svh)] [.ls-split_&]:grid-cols-[minmax(0,1fr)_15rem] [.ls-split_&]:grid-rows-[auto_auto_minmax(0,1fr)] [.ls-split_&]:items-stretch [.ls-split_&]:gap-x-2 [.ls-split_&]:gap-y-1.5 [.ls-split_&]:overflow-hidden">
+        <section aria-label="Oyuncular" className="flex flex-col gap-2 @3xl/mono:col-start-2 @3xl/mono:row-start-1 [.ls-split_&]:col-start-2 [.ls-split_&]:row-start-1 [.ls-split_&]:min-h-0 [.ls-split_&]:gap-1">
           {remote.spectator && (
             <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
               <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun.
             </p>
           )}
-          <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 @3xl/mono:mx-0 @3xl/mono:grid @3xl/mono:max-h-80 @3xl/mono:grid-cols-1 @3xl/mono:overflow-y-auto @3xl/mono:px-0">
+          <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pr-8 [mask-image:linear-gradient(to_right,black_88%,transparent)] @3xl/mono:mx-0 @3xl/mono:pr-0 @3xl/mono:[mask-image:none] @3xl/mono:grid @3xl/mono:max-h-80 @3xl/mono:grid-cols-1 @3xl/mono:overflow-y-auto @3xl/mono:px-0 [.ls-split_&]:mx-0 [.ls-split_&]:grid [.ls-split_&]:max-h-[7.5rem] [.ls-split_&]:grid-cols-2 [.ls-split_&]:gap-1 [.ls-split_&]:overflow-y-auto [.ls-split_&]:px-0 [.ls-split_&]:pb-0 [.ls-split_&]:pr-0 [.ls-split_&]:[mask-image:none]">
             {s.players.map((p, i) => (
               <PlayerChip
                 key={i}
@@ -218,9 +218,9 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
           </ul>
         </section>
 
-        <div className="@3xl/mono:col-start-1 @3xl/mono:row-span-3 @3xl/mono:row-start-1">
-          <div className="rounded-2xl bg-wood p-1.5 shadow-[0_24px_50px_-20px_oklch(0_0_0/0.8)] sm:p-2.5">
-            <div className="relative h-[min(64svh,560px)] overflow-hidden rounded-xl bg-[#0b1020] @3xl/mono:h-[min(calc(100svh-8rem),780px)]">
+        <div className="@3xl/mono:col-start-1 @3xl/mono:row-span-3 @3xl/mono:row-start-1 [.ls-split_&]:col-start-1 [.ls-split_&]:row-span-3 [.ls-split_&]:row-start-1 [.ls-split_&]:h-full [.ls-split_&]:min-h-0">
+          <div className="rounded-2xl bg-wood p-1.5 shadow-[0_24px_50px_-20px_oklch(0_0_0/0.8)] sm:p-2.5 [.ls-split_&]:h-full [.ls-split_&]:p-1">
+            <div className="relative h-[min(64svh,560px)] overflow-hidden rounded-xl bg-[#0b1020] @3xl/mono:h-[min(calc(100svh-8rem),780px)] [.ls-split_&]:h-full">
               <TableBrand center={false} corners={false} jako={false} plaque="bottom" className="z-20" />
               <MonopolyBoard3D
                 s={s}
@@ -246,7 +246,10 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
           </div>
         </div>
 
-        <section aria-label="Hamle" className="z-30 flex flex-col gap-3 max-lg:sticky max-lg:bottom-0 max-lg:pb-[env(safe-area-inset-bottom)] @3xl/mono:col-start-2 @3xl/mono:row-start-2">
+        <section aria-label="Hamle" className="z-30 flex flex-col gap-3 max-lg:sticky max-lg:bottom-0 max-lg:pb-[env(safe-area-inset-bottom)] @3xl/mono:col-start-2 @3xl/mono:row-start-2 [.ls-split_&]:static [.ls-split_&]:col-start-2 [.ls-split_&]:row-start-2 [.ls-split_&]:max-h-[calc(var(--ls-h,100svh)-9rem)] [.ls-split_&]:gap-1.5 [.ls-split_&]:overflow-y-auto [.ls-split_&]:pb-0">
+          {!walking && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info') && (
+            <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
+          )}
           <ActionPanel
             s={s}
             me={me}
@@ -271,8 +274,8 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
           />
         </section>
 
-        <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card @3xl/mono:col-start-2 @3xl/mono:row-start-3">
-          <div role="tablist" aria-label="Panel" className="flex gap-1 overflow-x-auto border-b border-border p-1.5">
+        <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card @3xl/mono:col-start-2 @3xl/mono:row-start-3 [.ls-split_&]:col-start-2 [.ls-split_&]:row-start-3 [.ls-split_&]:flex [.ls-split_&]:min-h-0 [.ls-split_&]:flex-col">
+          <div role="tablist" aria-label="Panel" className="flex shrink-0 gap-1 overflow-x-auto border-b border-border p-1.5 [.ls-split_&]:flex-wrap [.ls-split_&]:overflow-visible [.ls-split_&]:p-1">
             {tabs.map(([id, label]) => (
               <button
                 key={id}
@@ -281,7 +284,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  'shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-colors',
+                  'shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-colors [.ls-split_&]:px-2 [.ls-split_&]:py-1.5',
                   tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                 )}
               >
@@ -290,7 +293,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
             ))}
           </div>
 
-          <div className="p-3">
+          <div className="p-3 [.ls-split_&]:min-h-0 [.ls-split_&]:flex-1 [.ls-split_&]:overflow-y-auto [.ls-split_&]:p-2">
             {tab === 'deed' &&
               (focus != null ? (
                 <DeedCard i={focus} s={s} ownerName={s.owner[focus] != null ? nameOf(s.owner[focus]!) : null} />
@@ -429,22 +432,22 @@ function PlayerChip({
   onOpen: () => void
 }) {
   return (
-    <li className="relative shrink-0 snap-start @3xl/mono:shrink">
+    <li className="relative shrink-0 snap-start @3xl/mono:shrink [.ls-split_&]:shrink">
       <button
         type="button"
         onClick={onOpen}
         className={cn(
-          'flex w-40 min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 text-left transition-colors @3xl/mono:w-full sm:gap-2.5 sm:p-2',
+          'flex w-40 min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 text-left transition-colors @3xl/mono:w-full sm:gap-2.5 sm:p-2 [.ls-split_&]:w-full [.ls-split_&]:gap-1.5 [.ls-split_&]:p-1 [.ls-split_&]:pr-1.5',
           delta && delta.value < 0 && 'motion-safe:animate-[bj-lose-shake_450ms_ease-in-out]',
           active ? 'border-primary bg-primary/10' : 'border-border',
           out && 'opacity-45 grayscale',
         )}
       >
-        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border-2 sm:size-10" style={{ borderColor: TOKEN_COLOR[seat] }}>
+        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border-2 sm:size-10 [.ls-split_&]:size-7" style={{ borderColor: TOKEN_COLOR[seat] }}>
           <img src={`/images/monopoly/pawn-${seat}.png`} alt="" className="size-full scale-[1.6] object-cover object-[50%_32%]" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1 text-sm font-bold text-foreground">
+          <span className="flex items-center gap-1 text-sm font-bold text-foreground [.ls-split_&]:text-xs">
             {isBot && <Bot className="size-3.5 shrink-0 text-muted-foreground" aria-label="Bot" />}
             <span className="truncate">{name}</span>
             {inJail && <Lock className="size-3.5 shrink-0 text-destructive" aria-label="Hapiste" />}
@@ -455,7 +458,7 @@ function PlayerChip({
           ) : (
             <>
               <span className="block truncate text-xs font-bold tabular-nums text-foreground">{money.toLocaleString('tr-TR')} ₺</span>
-              <span className="block truncate text-[10px] tabular-nums text-muted-foreground">
+              <span className="block truncate text-[10px] tabular-nums text-muted-foreground [.ls-split_&]:hidden">
                 {deeds} tapu · {houses} ev · servet {worth.toLocaleString('tr-TR')}
               </span>
             </>
@@ -491,46 +494,40 @@ function BoardHud({
 }) {
   const sq = BOARD[activeSquareIndex]
   const color = sq.type === 'property' ? GROUP_COLOR[sq.group] : INK
-  const hasSpotlight = !walking && batch.some((e) => e.kind !== 'roll' && e.kind !== 'info')
   const roll = s.dice ?? s.lastRoll?.dice ?? null
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-between gap-2 p-2 sm:p-3">
-      <div className="flex items-start justify-between gap-2">
+    <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-between gap-2 p-1.5 sm:p-3">
+      <div className="flex items-start justify-between gap-1.5">
         <p
-          className="min-w-0 max-w-[70%] truncate rounded-xl border border-white/10 bg-[#0d1324]/80 px-3 py-2 text-xs font-semibold leading-snug text-[#f4efe4] backdrop-blur sm:text-sm"
+          className="line-clamp-2 min-w-0 flex-1 rounded-lg bg-[#0d1324]/75 px-2 py-1 text-[11px] font-semibold leading-snug text-[#f4efe4] backdrop-blur sm:max-w-md sm:flex-none sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm"
           aria-live="polite"
         >
           {walking ? `${activeName} ilerliyor…` : note}
         </p>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="rounded-full bg-[#0d1324]/75 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#9aa6c2] backdrop-blur sm:text-[11px]">
+            {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round}`}
+            {s.rules?.kumbara ? ` · ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
+          </span>
           <button
             type="button"
             onClick={onToggleFollow}
             aria-pressed={!follow}
-            className="pointer-events-auto rounded-xl border border-white/10 bg-[#0d1324]/80 px-3 py-2 text-xs font-semibold text-[#f4efe4] backdrop-blur transition-colors hover:border-[#e8b931]"
+            className="pointer-events-auto rounded-lg border border-white/10 bg-[#0d1324]/80 px-2 py-1 text-[11px] font-semibold text-[#f4efe4] backdrop-blur transition-colors hover:border-[#e8b931] sm:rounded-xl sm:px-3 sm:py-2 sm:text-xs"
           >
-            {follow ? 'Tüm tahta' : 'Piyonu takip et'}
+            {follow ? 'Tüm tahta' : 'Takip et'}
           </button>
-          <span className="rounded-full bg-[#0d1324]/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-[#9aa6c2] backdrop-blur">
-            {s.maxRounds > 0 ? `Tur ${Math.min(s.round, s.maxRounds)}/${s.maxRounds}` : `Tur ${s.round}`}
-            {s.rules?.kumbara ? ` · Kumbara ${(s.pot ?? 0).toLocaleString('tr-TR')} ₺` : ''}
-          </span>
         </div>
       </div>
 
       <div className="flex flex-col items-center gap-2">
-        {!walking && hasSpotlight && (
-          <div className="w-full max-w-sm">
-            <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
-          </div>
-        )}
         {roll && (
-          <div className="flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#0d1324]/85 py-1.5 pl-1.5 pr-4 text-[#f4efe4] backdrop-blur">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
-              <MapPin className="size-4" aria-hidden="true" />
+          <div className="flex max-w-full items-center gap-2 rounded-full bg-[#0d1324]/80 py-1 pl-1 pr-3 text-[#f4efe4] backdrop-blur">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full" style={{ background: color, color: WHITE }}>
+              <MapPin className="size-3.5" aria-hidden="true" />
             </span>
-            <span className="truncate font-display text-sm font-bold sm:text-base">
+            <span className="truncate font-display text-xs font-bold sm:text-sm">
               {s.dice
                 ? `${roll[0]} + ${roll[1]} = ${roll[0] + roll[1]}${roll[0] === roll[1] ? ' · Çift!' : ''}${walking ? '' : ` · ${sq.name}`}`
                 : `${nameOf(s.lastRoll!.seat)} attı · ${roll[0] + roll[1]}`}
@@ -726,7 +723,7 @@ function ActionButton({ children, onClick, disabled, primary }: { children: Reac
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold uppercase tracking-wide transition-transform active:scale-[0.98] disabled:opacity-40',
+        'flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold uppercase tracking-wide transition-transform active:scale-[0.98] disabled:opacity-40 [.ls-split_&]:min-h-10 [.ls-split_&]:gap-1.5 [.ls-split_&]:whitespace-nowrap [.ls-split_&]:px-2.5 [.ls-split_&]:text-xs [.ls-split_&]:tracking-normal',
         primary ? 'bg-primary text-primary-foreground shadow-[0_4px_0_oklch(0_0_0/0.3)]' : 'border border-border bg-secondary text-foreground',
       )}
     >
