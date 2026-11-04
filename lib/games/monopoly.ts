@@ -937,6 +937,12 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       log(s, `${name(seat)} ${BOARD[p.pos].name} tapusunu almadı.`)
       startAuction(s, p.pos, resumePhase(s, seat))
       break
+    case 'skip':
+      if (s.phase !== 'buy') throw new Error('Pas geçilecek bir şey yok')
+      log(s, `${name(seat)} ${BOARD[p.pos].name} tapusunu almadı.`)
+      s.phase = 'end'
+      afterMove(s, seat)
+      break
     case 'bid': {
       const au = s.auction
       if (!au) throw new Error('Mezat yok')

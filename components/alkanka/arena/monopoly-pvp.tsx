@@ -642,6 +642,13 @@ function BoardDock({
   if ((s.phase === 'roll' && !myPlayer.inJail) || s.phase === 'end') {
     return (
       <div className="flex flex-col items-center gap-1 motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
+        {s.owner[activeSquareIndex] === me &&
+          canBuild(s, me, activeSquareIndex) &&
+          pill(
+            `${s.houses[activeSquareIndex] === 4 ? 'Otel dik' : 'Ev dik'} · ${(sq as { house: number }).house} ₺`,
+            s.houses[activeSquareIndex] === 4 ? <Hotel className="size-3.5" aria-hidden="true" /> : <Home className="size-3.5" aria-hidden="true" />,
+            () => send({ type: 'build', pos: activeSquareIndex }),
+          )}
         {s.phase === 'end'
           ? pill('Turu bitir', <Check className="size-3.5" aria-hidden="true" />, () => send({ type: 'end' }))
           : pill('Zar at', <Dice5 className="size-3.5" aria-hidden="true" />, () => send({ type: 'roll' }))}
@@ -686,6 +693,9 @@ function BoardDock({
               <Gavel className="size-4" aria-hidden="true" /> Mezat
             </ActionButton>
           </div>
+          <ActionButton disabled={busy} onClick={() => send({ type: 'skip' })}>
+            Pas geç
+          </ActionButton>
         </>
       )}
       {canTrade && s.phase !== 'debt' && (

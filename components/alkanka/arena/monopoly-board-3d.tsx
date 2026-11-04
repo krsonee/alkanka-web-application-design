@@ -717,6 +717,8 @@ function createEngine(
     flying: boolean;
     gait: number;
     phase: number;
+    lastX: number;
+    lastZ: number;
     heading: number;
     pos: number;
     out: boolean;
@@ -765,7 +767,9 @@ function createEngine(
       moving: false,
       flying: false,
       gait: 0,
-      phase: seat * 1.7,
+      phase: 0,
+      lastX: 0,
+      lastZ: 0,
       heading: 0,
       pos: -1,
       out: false,
@@ -857,9 +861,18 @@ function createEngine(
       }
       if (total < 0.01) continue;
       p.moving = true;
-      const speed =
-        tiles.length > 18 ? WALK_SPEED * 2.6 : tiles.length > 12 ? WALK_SPEED * 1.8 : WALK_SPEED;
-      await tween((total / speed) * 1000, (t) => {
+      const speed = tiles.length > 12 ? WALK_SPEED * 1.4 : WALK_SPEED;
+      const dur = (total / speed) * 1000;
+      // Trapezoid velocity: a short speed-up and slow-down instead of starting/stopping at full pace.
+      const acc = Math.min(0.2, 220 / dur);
+      const vmax = 1 / (1 - acc);
+      const glide = (t: number) =>
+        t < acc
+          ? (vmax * t * t) / (2 * acc)
+          : t > 1 - acc
+            ? 1 - (vmax * (1 - t) * (1 - t)) / (2 * acc)
+            : vmax * (t - acc / 2);
+      await tween(dur, (t) => {
         let d = t * total;
         let k = 0;
         while (k < lens.length - 1 && d > lens[k]) d -= lens[k++];
@@ -868,14 +881,12 @@ function createEngine(
         const s1 = pts[k + 1];
         p.heading = Math.atan2(s1.x - s0.x, s1.z - s0.z);
         p.grp.position.set(s0.x + (s1.x - s0.x) * u, TOP, s0.z + (s1.z - s0.z) * u);
-      });
+      }, glide);
     }
     p.moving = false;
-    // A little landing hop once the Jako reaches its square.
-    await tween(280, (t) => {
-      p.grp.position.y = TOP + Math.sin(Math.PI * t) * 0.16;
-    });
     p.grp.position.y = TOP;
+    // Let the legs settle back to standing before the turn continues.
+    await tween(200, () => {});
     p.busy = false;
     if (walkSeat === seat) walkSeat = null;
     if (p.queue.length || p.flight !== null) return void runPawn(seat);
@@ -1098,7 +1109,7 @@ function createEngine(
     const tint = tintMeshes[i];
     const changed = ownerOf[i] !== undefined && ownerOf[i] !== o;
     ownerOf[i] = o;
-    m.visible = o != null;
+    m.visible = false;
     if (tint) tint.visible = o != null;
     if (o != null && color) {
       tint?.material.color.set(color);
@@ -1471,14 +1482,19 @@ function createEngine(
       let dy = want - p.fig.rotation.y;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       p.fig.rotation.y += dy * yawF;
-      p.gait += ((p.moving ? 1 : 0) - p.gait) * Math.min(1, dt * 10);
-      if (p.moving) p.phase += dt * 16;
+      p.gait += ((p.moving ? 1 : 0) - p.gait) * Math.min(1, dt * 8);
+      // Steps follow the distance actually covered, so the feet never skate or race ahead.
+      const stepped = Math.hypot(gp.x - p.lastX, gp.z - p.lastZ);
+      p.lastX = gp.x;
+      p.lastZ = gp.z;
+      if (p.moving && stepped < 1) p.phase += stepped * 9;
+      else if (!p.moving) p.phase += (Math.round(p.phase / Math.PI) * Math.PI - p.phase) * Math.min(1, dt * 8);
       const g = p.gait;
       const s = Math.sin(p.phase);
-      r.legs[0].rotation.x = s * 0.8 * g;
-      r.legs[1].rotation.x = -s * 0.8 * g;
-      r.root.rotation.z = s * 0.1 * g;
-      r.root.position.y = Math.abs(s) * 0.05 * g;
+      r.legs[0].rotation.x = s * 0.55 * g;
+      r.legs[1].rotation.x = -s * 0.55 * g;
+      r.root.rotation.z = s * 0.05 * g;
+      r.root.position.y = s * s * 0.018 * g;
       const breathe = Math.sin(now / 650 + seat);
       r.root.scale.set(1, 1 + breathe * 0.015, 1);
       r.head.rotation.x = Math.sin(p.phase * 2) * 0.12 * g + breathe * 0.04;
