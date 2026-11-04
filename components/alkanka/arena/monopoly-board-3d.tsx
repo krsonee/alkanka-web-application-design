@@ -857,7 +857,8 @@ function createEngine(
       }
       if (total < 0.01) continue;
       p.moving = true;
-      const speed = tiles.length > 12 ? WALK_SPEED * 2 : WALK_SPEED;
+      const speed =
+        tiles.length > 18 ? WALK_SPEED * 2.6 : tiles.length > 12 ? WALK_SPEED * 1.8 : WALK_SPEED;
       await tween((total / speed) * 1000, (t) => {
         let d = t * total;
         let k = 0;
@@ -891,13 +892,13 @@ function createEngine(
     }
     const fwd = (to - from + 40) % 40;
     const back = (from - to + 40) % 40;
-    if (!fly && fwd <= 12) {
-      for (let i = 1; i <= fwd; i++) p.queue.push((from + i) % 40);
-    } else if (!fly && back <= 3) {
+    // Jakos always walk the board — never fly. Jail and short "go back" cards walk backwards,
+    // everything else (including several turns batched into one update) walks forward.
+    const backwards = back <= 3 || (to === 10 && back < fwd) || (fly && back < fwd);
+    if (backwards) {
       for (let i = 1; i <= back; i++) p.queue.push((from - i + 40) % 40);
     } else {
-      p.queue = [];
-      p.flight = to;
+      for (let i = 1; i <= fwd; i++) p.queue.push((from + i) % 40);
     }
     retarget();
     const done = new Promise<void>((res) => p.waiters.push(res));
@@ -1042,12 +1043,14 @@ function createEngine(
       ownerMeshes[i] = m;
     }
     if (!tintMeshes[i] && info.inward) {
-      // Covers the tile body only, stopping short of the group colour band so the two never blend.
-      const depth = C - 0.37;
+      // Fills the whole tile; on streets it stops exactly at the group colour band so the two never blend.
+      const hasBand = BOARD[i].type === "property";
+      const depth = hasBand ? C - 0.31 : C - 0.02;
+      const width = SW - 0.02;
       const t = new THREE.Mesh(
         new THREE.PlaneGeometry(
-          info.axis.x ? SW - 0.08 : depth,
-          info.axis.x ? depth : SW - 0.08,
+          info.axis.x ? width : depth,
+          info.axis.x ? depth : width,
         ),
         new THREE.MeshBasicMaterial({
           color: "#fff",
@@ -1059,7 +1062,7 @@ function createEngine(
       t.rotation.x = -Math.PI / 2;
       t.position
         .copy(info.center)
-        .addScaledVector(info.inward, -0.165)
+        .addScaledVector(info.inward, hasBand ? -0.15 : 0)
         .setY(TOP + 0.012);
       t.renderOrder = 2;
       scene.add(t);

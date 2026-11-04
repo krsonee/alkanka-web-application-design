@@ -1178,11 +1178,12 @@ export function runMonopolyBots(state: MonopolyState): MonopolyStep {
 
 /** Gives clients time to walk the pawn, show the card and the rent before the next bot moves. */
 export function monopolyPaceMs(s: MonopolyState) {
-  if (s.auction) return 1300
+  if (s.auction) return 1800
   const last = s.log.at(-1) ?? ''
   const sum = s.dice ? s.dice[0] + s.dice[1] : 0
-  let ms = 1500 + Math.min(12, sum) * 230
-  if (s.card) ms += 1400
-  if (/kira ödedi|iflas|mezat|takas/.test(last)) ms += 900
+  // Dice settle (~1.6s) + walk (~0.3s per tile) + a beat to read the result before the next bot rolls.
+  let ms = 3200 + Math.min(12, sum) * 320
+  if (s.card) ms += 2600
+  if (/kira ödedi|iflas|mezat|takas|satın aldı|tapu/i.test(last)) ms += 1200
   return ms
 }
