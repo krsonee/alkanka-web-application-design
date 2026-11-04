@@ -724,19 +724,37 @@ export function canSell(s: MonopolyState, seat: number, pos: number) {
 }
 
 /**
- * Sells one building level for half its cost. A hotel turns back into 4 houses, but when the bank
- * is short on houses the owner keeps only what the bank can give and is paid for the rest too.
+ * Sells one building level for half its cost. A hotel turns back into 4 houses. When the bank is
+ * short on houses (classic rule) the whole colour group is broken down together: every hotel goes
+ * back, the bank's houses are spread evenly over the group and the owner is paid for every level lost.
  */
 function sellBuilding(s: MonopolyState, pos: number) {
-  const cost = (BOARD[pos] as { house: number }).house
+  const sq = BOARD[pos] as Extract<Square, { type: 'property' }>
+  const cost = sq.house
   if (s.houses[pos] !== 5) {
     s.houses[pos]--
     return cost / 2
   }
   const freeHouses = bankStock(s).houses
-  const keep = Math.max(0, Math.min(4, freeHouses))
-  s.houses[pos] = keep
-  return ((5 - keep) * cost) / 2
+  if (freeHouses >= 4) {
+    s.houses[pos] = 4
+    return cost / 2
+  }
+  const group = GROUP_SQUARES[sq.group]
+  const before = group.map((i) => s.houses[i])
+  const pool = freeHouses + before.reduce((sum, h) => sum + (h < 5 ? h : 0), 0)
+  const total = Math.min(pool, 4 * group.length)
+  const base = Math.floor(total / group.length)
+  const extra = total % group.length
+  // The extra houses stay on the lots that had the most buildings, so nothing climbs past where it was.
+  const order = group.map((i, k) => ({ i, k })).sort((x, y) => before[y.k] - before[x.k])
+  let refund = 0
+  order.forEach(({ i, k }, rank) => {
+    const next = Math.min(before[k], base + (rank < extra ? 1 : 0))
+    refund += ((before[k] - next) * cost) / 2
+    s.houses[i] = next
+  })
+  return refund
 }
 
 export function canMortgage(s: MonopolyState, seat: number, pos: number) {
@@ -994,7 +1012,7 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       log(
         s,
         wasHotel && s.houses[pos] < 4
-          ? `${name(seat)} ${sq.name} otelini sattı. Bankada yeterli ev olmadığı için ${s.houses[pos]} ev kaldı.`
+          ? `${name(seat)} ${sq.name} otelini sattı. Bankada yeterli ev olmadığı için renk grubundaki oteller bozuldu, evler eşit dağıtıldı.`
           : `${name(seat)} ${sq.name} üzerindeki bir yapıyı sattı.`,
       )
       break
@@ -1109,7 +1127,11 @@ function botBid(s: MonopolyState, seat: number): Act {
   return { type: 'fold' }
 }
 
-/** A bot that holds all but one deed of a colour offers cash for the missing one. */
+const groupOf = (pos: number) => {
+  const sq = BOARD[pos]
+  return sq.type === 'property' ? sq.group : null
+}
+
 /** The single deed `seat` lacks per colour group (only groups where every other cell is theirs). */
 function lastMissing(s: MonopolyState, seat: number) {
   const out: number[] = []
@@ -1128,7 +1150,9 @@ function botSwapIdea(s: MonopolyState, seat: number): Act | null {
   for (const want of lastMissing(s, seat)) {
     const holder = s.owner[want]
     if (holder == null || holder === seat || s.players[holder].out || !canTradeDeed(s, holder, want)) continue
-    const theirNeeds = lastMissing(s, holder).filter((i) => s.owner[i] === seat && canTradeDeed(s, seat, i))
+    const wantGroup = groupOf(want)
+    // Swapping two halves of the same colour completes nothing and would just ping-pong forever.
+    const theirNeeds = lastMissing(s, holder).filter((i) => s.owner[i] === seat && canTradeDeed(s, seat, i) && groupOf(i) !== wantGroup)
     for (const give of theirNeeds) {
       const take = { props: [want], money: 0, cards: 0 }
       let money = Math.max(0, round10(sqPrice(want) - sqPrice(give)))
