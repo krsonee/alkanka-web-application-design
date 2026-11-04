@@ -457,7 +457,7 @@ export function DebtPanel({ s, me, busy, send, nameOf }: { s: MonopolyState; me:
     <div className="flex flex-col gap-2.5">
       <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3">
         <p className="text-sm font-bold text-foreground">
-          {d.to != null ? `${nameOf(d.to)} oyuncusuna` : 'Bankaya'} {fmt(d.amount)} borcun var
+          {d.split?.length ? `${d.split.length} oyuncuya toplam` : d.to != null ? `${nameOf(d.to)} oyuncusuna` : 'Bankaya'} {fmt(d.amount)} borcun var
         </p>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           Kasanda {fmt(p.money)} var{short > 0 ? `, ${fmt(short)} eksik` : ''}. Mülklerim sekmesinden ev sat, ipotek et ya da takas teklif et. Hepsini satsan en fazla {fmt(liquidity(s, me))} toplayabilirsin.

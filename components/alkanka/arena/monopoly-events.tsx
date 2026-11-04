@@ -266,12 +266,23 @@ export function EventSpotlight({
           )}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-[0.3cqw]">
-          <p className="truncate text-[clamp(8px,1.5cqw,12px)] font-bold uppercase tracking-widest opacity-60">
+          <p className="truncate text-[clamp(10px,1.5cqw,12px)] font-bold uppercase tracking-widest opacity-60">
             {main.actor != null ? nameOf(main.actor) : 'Masa'}
             {main.target != null ? ` → ${nameOf(main.target)}` : ''}
           </p>
           <p className="line-clamp-2 text-balance font-display text-[clamp(14px,2.9cqw,24px)] font-black leading-tight">{main.title}</p>
-          {main.detail && <p className="line-clamp-2 text-pretty text-[clamp(9px,1.7cqw,14px)] font-medium leading-snug opacity-80">{main.detail}</p>}
+          {main.detail && (
+            <p
+              className={cn(
+                'text-pretty font-semibold leading-snug',
+                main.kind === 'chance' || main.kind === 'chest'
+                  ? 'line-clamp-4 text-[clamp(13px,2.1cqw,17px)]'
+                  : 'line-clamp-2 text-[clamp(12px,1.8cqw,15px)] opacity-80',
+              )}
+            >
+              {main.detail}
+            </p>
+          )}
         </div>
         {main.amount != null && main.amount !== 0 && (
           <span

@@ -245,8 +245,8 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
           </nav>
 
           {showSpot && (
-            <div className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-16 portrait:top-28 landscape:top-12">
-              <div className="w-[min(22rem,100%)]">
+            <div className="pointer-events-none absolute inset-x-0 z-30 flex justify-center portrait:top-28 portrait:px-4 landscape:top-12 landscape:px-16">
+              <div className="w-[min(24rem,100%)]">
                 <EventSpotlight events={batch} nameOf={nameOf} tokenColor={TOKEN_COLOR} />
               </div>
             </div>

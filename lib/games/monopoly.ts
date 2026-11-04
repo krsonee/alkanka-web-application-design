@@ -157,7 +157,8 @@ export type MPlayer = {
 export type Bundle = { props: number[]; money: number; cards: number }
 export type Trade = { from: number; to: number; give: Bundle; take: Bundle; counter: boolean }
 export type Auction = { pos: number; bid: number; leader: number | null; active: number[]; idx: number; resume: 'roll' | 'end' }
-export type Debt = { amount: number; to: number | null; pot: boolean; resume: 'roll' | 'end' }
+/** `split`: the amount is shared equally between these creditors (the "pay every player" card). */
+export type Debt = { amount: number; to: number | null; pot: boolean; resume: 'roll' | 'end'; split?: number[] }
 
 export type MonopolyState = {
   kind: 'monopoly'
@@ -373,8 +374,7 @@ function raise(s: MonopolyState, seat: number, need: number) {
       .filter((i) => canSell(s, seat, i))
       .sort((a, b) => s.houses[b] - s.houses[a])[0]
     if (built != null) {
-      s.houses[built]--
-      p.money += (BOARD[built] as { house: number }).house / 2
+      p.money += sellBuilding(s, built)
       continue
     }
     const free = BOARD.map((_, i) => i)
@@ -393,17 +393,30 @@ function transfer(s: MonopolyState, seat: number, amount: number, to: number | n
   else if (pot && monoRulesOf(s).kumbara) s.pot = (s.pot ?? 0) + amount
 }
 
+function settleDebt(s: MonopolyState, seat: number, d: Debt) {
+  if (d.split?.length) {
+    const live = d.split.filter((o) => !s.players[o].out)
+    const each = live.length ? Math.floor(d.amount / d.split.length) : 0
+    s.players[seat].money -= each * live.length
+    live.forEach((o) => (s.players[o].money += each))
+    return
+  }
+  transfer(s, seat, d.amount, d.to, d.pot)
+}
+
+/** A human on their own turn always decides how to raise money (sell, mortgage, trade) or to go bankrupt. */
+const mustDecide = (s: MonopolyState, seat: number) => !s.bots.includes(seat) && seat === s.turn && !s.debt
+
 /**
- * Pays `amount` from seat to `to` (null = bank). A human on their own turn who can still raise the
- * money gets a debt screen to choose what to sell; everyone else liquidates automatically.
+ * Pays `amount` from seat to `to` (null = bank). A short human on their own turn gets the debt
+ * screen; bots and players paying outside their turn liquidate automatically.
  */
 function pay(s: MonopolyState, seat: number, amount: number, to: number | null, opts: { pot?: boolean; auto?: boolean } = {}) {
   const p = s.players[seat]
   if (amount <= 0 || p.out) return
   const pot = !!opts.pot && to == null
   if (p.money >= amount) return transfer(s, seat, amount, to, pot)
-  const human = !s.bots.includes(seat)
-  if (!opts.auto && human && seat === s.turn && !s.debt && p.money + liquidity(s, seat) >= amount) {
+  if (!opts.auto && mustDecide(s, seat)) {
     s.debt = { amount, to, pot, resume: 'end' }
     log(s, `${name(seat)} ${amount} ₺ borç için para bulmalı.`)
     return
@@ -454,10 +467,10 @@ function sendToJail(s: MonopolyState, seat: number) {
   log(s, `${name(seat)} hapse girdi.`)
 }
 
-function moveTo(s: MonopolyState, seat: number, to: number, collectGo = true) {
+function moveTo(s: MonopolyState, seat: number, to: number, byDice = false) {
   const p = s.players[seat]
-  if (collectGo && to < p.pos) {
-    const exact = to === 0 && monoRulesOf(s).goDouble
+  if (to < p.pos) {
+    const exact = byDice && to === 0 && monoRulesOf(s).goDouble
     p.money += exact ? GO_SALARY * 2 : GO_SALARY
     log(s, exact ? `${name(seat)} Başla'ya tam geldi, +400 ₺.` : `${name(seat)} Başla'dan geçti, +200 ₺.`)
   }
@@ -499,14 +512,22 @@ function drawCard(s: MonopolyState, seat: number, deck: Deck, diceSum: number, d
       land(s, seat, diceSum, depth + 1, card.target === 'rail' ? 'rail2' : 'util10')
       return
     }
-    case 'each':
-      for (const o of alive(s)) {
+    case 'each': {
+      const others = alive(s).filter((o) => o !== seat)
+      const total = -card.amount * others.length
+      if (card.amount < 0 && p.money < total && mustDecide(s, seat)) {
+        s.debt = { amount: total, to: null, pot: false, resume: 'end', split: others }
+        log(s, `${name(seat)} ${total} ₺ borç için para bulmalı.`)
+        return
+      }
+      for (const o of others) {
         if (o === seat) continue
         if (card.amount < 0) pay(s, seat, -card.amount, o, { auto: true })
         else pay(s, o, card.amount, seat, { auto: true })
         if (s.players[seat].out) return
       }
       return
+    }
     case 'repair': {
       let total = 0
       BOARD.forEach((_, i) => {
@@ -617,7 +638,7 @@ function roll(s: MonopolyState, seat: number) {
       p.inJail = false
       p.jail = 0
       log(s, `${name(seat)} çift attı (${a}-${b}), hapisten çıktı.`)
-      moveTo(s, seat, (p.pos + sum) % 40)
+      moveTo(s, seat, (p.pos + sum) % 40, true)
       s.again = false
       land(s, seat, sum)
       return afterMove(s, seat)
@@ -629,11 +650,11 @@ function roll(s: MonopolyState, seat: number) {
       return
     }
     log(s, `${name(seat)} üçüncü denemede çıkamadı, ${JAIL_FINE} ₺ ödeyip çıktı.`)
-    pay(s, seat, JAIL_FINE, null, { pot: true, auto: true })
+    pay(s, seat, JAIL_FINE, null, { pot: true })
     if (p.out) return
     p.inJail = false
     p.jail = 0
-    moveTo(s, seat, (p.pos + sum) % 40)
+    moveTo(s, seat, (p.pos + sum) % 40, true)
     s.again = false
     land(s, seat, sum)
     return afterMove(s, seat)
@@ -649,7 +670,7 @@ function roll(s: MonopolyState, seat: number) {
   }
   s.again = dbl
   log(s, `${name(seat)} ${a}-${b} attı.`)
-  moveTo(s, seat, (p.pos + sum) % 40)
+  moveTo(s, seat, (p.pos + sum) % 40, true)
   land(s, seat, sum)
   afterMove(s, seat)
 }
@@ -686,6 +707,22 @@ export function canSell(s: MonopolyState, seat: number, pos: number) {
   if (sq.type !== 'property' || s.owner[pos] !== seat || s.houses[pos] === 0) return false
   const max = Math.max(...GROUP_SQUARES[sq.group].map((i) => s.houses[i]))
   return s.houses[pos] === max
+}
+
+/**
+ * Sells one building level for half its cost. A hotel turns back into 4 houses, but when the bank
+ * is short on houses the owner keeps only what the bank can give and is paid for the rest too.
+ */
+function sellBuilding(s: MonopolyState, pos: number) {
+  const cost = (BOARD[pos] as { house: number }).house
+  if (s.houses[pos] !== 5) {
+    s.houses[pos]--
+    return cost / 2
+  }
+  const freeHouses = bankStock(s).houses
+  const keep = Math.max(0, Math.min(4, freeHouses))
+  s.houses[pos] = keep
+  return ((5 - keep) * cost) / 2
 }
 
 export function canMortgage(s: MonopolyState, seat: number, pos: number) {
@@ -771,15 +808,24 @@ function checkBundle(s: MonopolyState, seat: number, b: Bundle) {
 const bundleText = (b: Bundle) =>
   [...b.props.map((i) => BOARD[i].name), b.money ? `${b.money} ₺` : '', b.cards ? `${b.cards} çıkış kartı` : ''].filter(Boolean).join(', ') || 'hiçbir şey'
 
+/** Classic rule: whoever receives a mortgaged deed pays the bank 10% interest on its mortgage. */
+export const mortgageFee = (s: Pick<MonopolyState, 'mortgaged'>, props: number[]) =>
+  props.reduce((sum, i) => sum + (s.mortgaged[i] ? Math.ceil((sqPrice(i) / 2) * 0.1) : 0), 0)
+
 function executeTrade(s: MonopolyState, t: Trade) {
   checkBundle(s, t.from, t.give)
   checkBundle(s, t.to, t.take)
   const a = s.players[t.from]
   const b = s.players[t.to]
+  const feeA = mortgageFee(s, t.take.props)
+  const feeB = mortgageFee(s, t.give.props)
+  if (a.money + t.take.money - t.give.money < feeA || b.money + t.give.money - t.take.money < feeB)
+    throw new Error('İpotekli tapunun %10 faizini ödeyecek para kalmıyor.')
   t.give.props.forEach((i) => (s.owner[i] = t.to))
   t.take.props.forEach((i) => (s.owner[i] = t.from))
-  a.money += t.take.money - t.give.money
-  b.money += t.give.money - t.take.money
+  a.money += t.take.money - t.give.money - feeA
+  b.money += t.give.money - t.take.money - feeB
+  if (feeA + feeB) log(s, `İpotekli tapu faizi bankaya ödendi: ${feeA + feeB} ₺.`)
   addCards(b, takeCards(a, t.give.cards))
   addCards(a, takeCards(b, t.take.cards))
   log(s, `${name(t.from)} ile ${name(t.to)} takas yaptı. ${name(t.from)} verdi: ${bundleText(t.give)}. ${name(t.to)} verdi: ${bundleText(t.take)}.`)
@@ -811,7 +857,7 @@ export function judgeTrade(s: MonopolyState, t: Trade) {
   t.give.props.forEach((i) => (after[i] = t.to))
   t.take.props.forEach((i) => (after[i] = t.from))
   let gain = t.give.money + t.give.cards * 50
-  let loss = t.take.money + t.take.cards * 50
+  let loss = t.take.money + t.take.cards * 50 + mortgageFee(s, t.give.props)
   t.give.props.forEach((i) => (gain += deedValue(after, bot, i, s.mortgaged[i])))
   t.take.props.forEach((i) => (loss += deedValue(before, bot, i, s.mortgaged[i])))
   // Handing a rival a full colour group is the real cost of a trade.
@@ -923,9 +969,14 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
     case 'sell': {
       if (!canSell(s, seat, pos)) throw new Error('Bu evi satamazsın')
       const sq = BOARD[pos] as Extract<Square, { type: 'property' }>
-      s.houses[pos]--
-      p.money += sq.house / 2
-      log(s, `${name(seat)} ${sq.name} üzerindeki bir yapıyı sattı.`)
+      const wasHotel = s.houses[pos] === 5
+      p.money += sellBuilding(s, pos)
+      log(
+        s,
+        wasHotel && s.houses[pos] < 4
+          ? `${name(seat)} ${sq.name} otelini sattı. Bankada yeterli ev olmadığı için ${s.houses[pos]} ev kaldı.`
+          : `${name(seat)} ${sq.name} üzerindeki bir yapıyı sattı.`,
+      )
       break
     }
     case 'mortgage':
@@ -948,7 +999,7 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       const d = s.debt
       if (!d || s.phase !== 'debt') throw new Error('Borcun yok')
       if (p.money < d.amount) throw new Error(`Kasada ${d.amount} ₺ olmalı, ev sat ya da ipotek et`)
-      transfer(s, seat, d.amount, d.to, d.pot)
+      settleDebt(s, seat, d)
       log(s, `${name(seat)} ${d.amount} ₺ borcunu ödedi.`)
       s.debt = null
       s.phase = d.resume
@@ -959,7 +1010,7 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       if (!d || s.phase !== 'debt') throw new Error('Borcun yok')
       s.debt = null
       if (raise(s, seat, d.amount)) {
-        transfer(s, seat, d.amount, d.to, d.pot)
+        settleDebt(s, seat, d)
         log(s, `${name(seat)} ${d.amount} ₺ borcunu ödedi.`)
         s.phase = d.resume
       } else bankrupt(s, seat, d.to)
@@ -1178,11 +1229,12 @@ export function runMonopolyBots(state: MonopolyState): MonopolyStep {
 
 /** Gives clients time to walk the pawn, show the card and the rent before the next bot moves. */
 export function monopolyPaceMs(s: MonopolyState) {
-  if (s.auction) return 1300
+  if (s.auction) return 1800
   const last = s.log.at(-1) ?? ''
   const sum = s.dice ? s.dice[0] + s.dice[1] : 0
-  let ms = 1500 + Math.min(12, sum) * 230
-  if (s.card) ms += 1400
-  if (/kira ödedi|iflas|mezat|takas/.test(last)) ms += 900
+  // Dice settle (~1.6s) + walk (~0.3s per tile) + a beat to read the result before the next bot rolls.
+  let ms = 3200 + Math.min(12, sum) * 320
+  if (s.card) ms += 2600
+  if (/kira ödedi|iflas|mezat|takas|satın aldı|tapu/i.test(last)) ms += 1200
   return ms
 }
