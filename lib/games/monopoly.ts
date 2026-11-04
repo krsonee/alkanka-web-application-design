@@ -64,7 +64,7 @@ export const MAX_SEATS = 10
 export const MAX_PLAYERS = 8
 /** Lobby value for the classic long game: no turn limit, it ends when only one player is left standing. */
 export const UNTIL_BANKRUPT = 999
-export const STALEMATE_ROUND = 300
+export const STALEMATE_ROUND = 150
 /** The bank only has so many buildings; running out of houses is part of the classic long game. */
 export const BANK_HOUSES = 32
 export const BANK_HOTELS = 12
@@ -298,7 +298,7 @@ function rentReason(s: MonopolyState, pos: number, diceSum: number, special?: 'r
     return `${n} istasyon${special === 'rail2' ? ', kart ile 2 kat' : ''}`
   }
   const n = BOARD.filter((b, i) => b.type === 'utility' && s.owner[i] === owner).length
-  return `zar ${diceSum} × ${special === 'util10' || n === 2 ? 10 : 4}`
+  return `zar toplamı ${diceSum} × ${special === 'util10' || n === 2 ? 10 : 4}`
 }
 
 export function netWorth(s: MonopolyState, seat: number) {
@@ -520,6 +520,15 @@ function drawCard(s: MonopolyState, seat: number, deck: Deck, diceSum: number, d
         log(s, `${name(seat)} ${total} ₺ borç için para bulmalı.`)
         return
       }
+      if (others.length) {
+        const sum = Math.abs(card.amount) * others.length
+        log(
+          s,
+          card.amount < 0
+            ? `${name(seat)} her oyuncuya ${-card.amount} ₺ ödedi: ${sum} ₺ (${others.length} oyuncu).`
+            : `${name(seat)} oyunculardan ${sum} ₺ topladı (${others.length} oyuncu × ${card.amount} ₺).`,
+        )
+      }
       for (const o of others) {
         if (o === seat) continue
         if (card.amount < 0) pay(s, seat, -card.amount, o, { auto: true })
@@ -529,11 +538,16 @@ function drawCard(s: MonopolyState, seat: number, deck: Deck, diceSum: number, d
       return
     }
     case 'repair': {
-      let total = 0
+      let houses = 0
+      let hotels = 0
       BOARD.forEach((_, i) => {
         if (s.owner[i] !== seat) return
-        total += s.houses[i] === 5 ? card.hotel : s.houses[i] * card.house
+        if (s.houses[i] === 5) hotels++
+        else houses += s.houses[i]
       })
+      const total = houses * card.house + hotels * card.hotel
+      const parts = [houses ? `${houses} ev × ${card.house}` : '', hotels ? `${hotels} otel × ${card.hotel}` : ''].filter(Boolean).join(' + ')
+      log(s, total ? `${name(seat)} tamir masrafı ödedi: ${total} ₺ (${parts}).` : `${name(seat)} tamir masrafı çıkmadı, evi ve oteli yok.`)
       pay(s, seat, total, null, { pot: true })
       return
     }
@@ -710,19 +724,37 @@ export function canSell(s: MonopolyState, seat: number, pos: number) {
 }
 
 /**
- * Sells one building level for half its cost. A hotel turns back into 4 houses, but when the bank
- * is short on houses the owner keeps only what the bank can give and is paid for the rest too.
+ * Sells one building level for half its cost. A hotel turns back into 4 houses. When the bank is
+ * short on houses (classic rule) the whole colour group is broken down together: every hotel goes
+ * back, the bank's houses are spread evenly over the group and the owner is paid for every level lost.
  */
 function sellBuilding(s: MonopolyState, pos: number) {
-  const cost = (BOARD[pos] as { house: number }).house
+  const sq = BOARD[pos] as Extract<Square, { type: 'property' }>
+  const cost = sq.house
   if (s.houses[pos] !== 5) {
     s.houses[pos]--
     return cost / 2
   }
   const freeHouses = bankStock(s).houses
-  const keep = Math.max(0, Math.min(4, freeHouses))
-  s.houses[pos] = keep
-  return ((5 - keep) * cost) / 2
+  if (freeHouses >= 4) {
+    s.houses[pos] = 4
+    return cost / 2
+  }
+  const group = GROUP_SQUARES[sq.group]
+  const before = group.map((i) => s.houses[i])
+  const pool = freeHouses + before.reduce((sum, h) => sum + (h < 5 ? h : 0), 0)
+  const total = Math.min(pool, 4 * group.length)
+  const base = Math.floor(total / group.length)
+  const extra = total % group.length
+  // The extra houses stay on the lots that had the most buildings, so nothing climbs past where it was.
+  const order = group.map((i, k) => ({ i, k })).sort((x, y) => before[y.k] - before[x.k])
+  let refund = 0
+  order.forEach(({ i, k }, rank) => {
+    const next = Math.min(before[k], base + (rank < extra ? 1 : 0))
+    refund += ((before[k] - next) * cost) / 2
+    s.houses[i] = next
+  })
+  return refund
 }
 
 export function canMortgage(s: MonopolyState, seat: number, pos: number) {
@@ -980,7 +1012,7 @@ export function monopolyStep(state: MonopolyState, seat: number, a: Act): Monopo
       log(
         s,
         wasHotel && s.houses[pos] < 4
-          ? `${name(seat)} ${sq.name} otelini sattı. Bankada yeterli ev olmadığı için ${s.houses[pos]} ev kaldı.`
+          ? `${name(seat)} ${sq.name} otelini sattı. Bankada yeterli ev olmadığı için renk grubundaki oteller bozuldu, evler eşit dağıtıldı.`
           : `${name(seat)} ${sq.name} üzerindeki bir yapıyı sattı.`,
       )
       break
@@ -1095,7 +1127,11 @@ function botBid(s: MonopolyState, seat: number): Act {
   return { type: 'fold' }
 }
 
-/** A bot that holds all but one deed of a colour offers cash for the missing one. */
+const groupOf = (pos: number) => {
+  const sq = BOARD[pos]
+  return sq.type === 'property' ? sq.group : null
+}
+
 /** The single deed `seat` lacks per colour group (only groups where every other cell is theirs). */
 function lastMissing(s: MonopolyState, seat: number) {
   const out: number[] = []
@@ -1114,7 +1150,9 @@ function botSwapIdea(s: MonopolyState, seat: number): Act | null {
   for (const want of lastMissing(s, seat)) {
     const holder = s.owner[want]
     if (holder == null || holder === seat || s.players[holder].out || !canTradeDeed(s, holder, want)) continue
-    const theirNeeds = lastMissing(s, holder).filter((i) => s.owner[i] === seat && canTradeDeed(s, seat, i))
+    const wantGroup = groupOf(want)
+    // Swapping two halves of the same colour completes nothing and would just ping-pong forever.
+    const theirNeeds = lastMissing(s, holder).filter((i) => s.owner[i] === seat && canTradeDeed(s, seat, i) && groupOf(i) !== wantGroup)
     for (const give of theirNeeds) {
       const take = { props: [want], money: 0, cards: 0 }
       let money = Math.max(0, round10(sqPrice(want) - sqPrice(give)))
@@ -1235,12 +1273,12 @@ export function runMonopolyBots(state: MonopolyState): MonopolyStep {
 
 /** Gives clients time to walk the pawn, show the card and the rent before the next bot moves. */
 export function monopolyPaceMs(s: MonopolyState) {
-  if (s.auction) return 1800
+  if (s.auction) return 1200
   const last = s.log.at(-1) ?? ''
   const sum = s.dice ? s.dice[0] + s.dice[1] : 0
-  // Dice settle (~1.6s) + walk (~0.3s per tile) + a beat to read the result before the next bot rolls.
-  let ms = 3200 + Math.min(12, sum) * 320
-  if (s.card) ms += 2600
-  if (/kira ödedi|iflas|mezat|takas|satın aldı|tapu/i.test(last)) ms += 1200
+  // Dice settle (~1.6s) + walk (~0.3s per tile) + a short beat to read the result before the next bot rolls.
+  let ms = 1900 + Math.min(12, sum) * 300
+  if (s.card) ms += 1500
+  if (/kira ödedi|iflas|mezat|takas|satın aldı|tapu/i.test(last)) ms += 500
   return ms
 }

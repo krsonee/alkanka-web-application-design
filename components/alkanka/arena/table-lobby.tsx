@@ -957,6 +957,10 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
       return p && !p.bot ? p.id : null
     }),
     spectator,
+    // Mirrors the server: the move timer only runs with two or more humans and never in tournaments.
+    ...(data.status === 'oynaniyor' && !data.tournamentId && !data.paused && TURN_SECONDS[data.game as ArenaGame] && data.players.filter((p) => !p.bot).length > 1
+      ? { turnStartedAt: data.updatedAt, turnSeconds: TURN_SECONDS[data.game as ArenaGame] }
+      : {}),
     send,
     replay:
       ended && !spectator && !data.tournamentId && onReplay

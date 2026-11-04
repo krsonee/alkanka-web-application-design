@@ -11,6 +11,9 @@ export type Remote<S> = {
   /** Member id per seat; null for bots or empty seats. */
   userIds?: (string | null)[]
   spectator?: boolean
+  /** When the server's move timer for the current actor started; only set while that timer is enforced. */
+  turnStartedAt?: string
+  turnSeconds?: number
   send: (action: RemoteAction) => Promise<boolean>
   /** Opens a fresh table with the same settings once this one has ended. */
   replay?: () => Promise<void>

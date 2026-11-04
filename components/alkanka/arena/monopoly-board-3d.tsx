@@ -1330,10 +1330,11 @@ function createEngine(
     if (!w || !h) return;
     const ins = portrait()
       ? { l: 4, r: 4, t: 106, b: 82 }
-      : { l: w < 700 ? 60 : 68, r: w < 700 ? 60 : 68, t: 40, b: 22 };
+      : { l: w < 700 ? 60 : 68, r: w < 700 ? 60 : 68, t: h < 420 ? 34 : 40, b: h < 420 ? 12 : 22 };
+    // Short landscape phones get a lower, wider view so the board fills more of the empty sides.
     const dir = portrait()
       ? new THREE.Vector3(0, 1, 0.24).normalize()
-      : new THREE.Vector3(0, 14, 6).normalize();
+      : new THREE.Vector3(0, 14, h < 420 ? 8 : 6).normalize();
     const corners = [
       [-6.9, -6.9],
       [6.9, -6.9],
