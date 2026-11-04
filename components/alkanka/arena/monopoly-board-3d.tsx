@@ -1009,6 +1009,9 @@ function createEngine(
     THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | undefined
   )[] = [];
   const ownerOf: (number | null)[] = Array(40).fill(undefined);
+  const tintMeshes: (
+    THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | undefined
+  )[] = [];
   const renderOwner = (
     i: number,
     o: number | null,
@@ -1038,11 +1041,38 @@ function createEngine(
       scene.add(m);
       ownerMeshes[i] = m;
     }
+    if (!tintMeshes[i] && info.inward) {
+      // Covers the tile body only, stopping short of the group colour band so the two never blend.
+      const depth = C - 0.37;
+      const t = new THREE.Mesh(
+        new THREE.PlaneGeometry(
+          info.axis.x ? SW - 0.08 : depth,
+          info.axis.x ? depth : SW - 0.08,
+        ),
+        new THREE.MeshBasicMaterial({
+          color: "#fff",
+          transparent: true,
+          opacity: 0.34,
+          depthWrite: false,
+        }),
+      );
+      t.rotation.x = -Math.PI / 2;
+      t.position
+        .copy(info.center)
+        .addScaledVector(info.inward, -0.165)
+        .setY(TOP + 0.012);
+      t.renderOrder = 2;
+      scene.add(t);
+      tintMeshes[i] = t;
+    }
     const m = ownerMeshes[i]!;
+    const tint = tintMeshes[i];
     const changed = ownerOf[i] !== undefined && ownerOf[i] !== o;
     ownerOf[i] = o;
     m.visible = o != null;
+    if (tint) tint.visible = o != null;
     if (o != null && color) {
+      tint?.material.color.set(color);
       m.material.color.set(color);
       m.material.emissive.set(color);
       m.material.emissiveIntensity = 0.35;

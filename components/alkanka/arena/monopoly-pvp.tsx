@@ -7,6 +7,7 @@ import {
   Bot,
   Car,
   Dice5,
+  Check,
   Droplets,
   Eye,
   Gavel,
@@ -624,20 +625,26 @@ function BoardDock({
     )
   }
 
-  if (s.phase === 'roll' && !myPlayer.inJail) {
+  const pill = (label: string, icon: React.ReactNode, onClick: () => void) => (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={onClick}
+      className="group flex items-center gap-1.5 rounded-full border border-primary/35 bg-[#0d1324]/70 py-0.5 pl-0.5 pr-3 text-xs font-semibold text-[#f4efe4] shadow-[0_6px_16px_-8px_oklch(0_0_0/0.7)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary active:scale-95 disabled:opacity-40"
+    >
+      <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform group-hover:rotate-12">
+        {icon}
+      </span>
+      {label}
+    </button>
+  )
+
+  if ((s.phase === 'roll' && !myPlayer.inJail) || s.phase === 'end') {
     return (
       <div className="flex flex-col items-center gap-1 motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => send({ type: 'roll' })}
-          className="group flex items-center gap-2 rounded-full border border-primary/40 bg-[#0d1324]/75 py-1 pl-1 pr-4 text-sm font-semibold text-[#f4efe4] shadow-[0_8px_20px_-8px_oklch(0_0_0/0.7)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary active:scale-95 disabled:opacity-40"
-        >
-          <span className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform group-hover:rotate-12">
-            <Dice5 className="size-4" aria-hidden="true" />
-          </span>
-          Zar at
-        </button>
+        {s.phase === 'end'
+          ? pill('Turu bitir', <Check className="size-3.5" aria-hidden="true" />, () => send({ type: 'end' }))
+          : pill('Zar at', <Dice5 className="size-3.5" aria-hidden="true" />, () => send({ type: 'roll' }))}
         {canTrade && (
           <button type="button" onClick={onTrade} className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary/10">
             <ArrowLeftRight className="size-3" aria-hidden="true" /> Takas
@@ -648,7 +655,7 @@ function BoardDock({
   }
 
   return (
-    <div className="flex w-[min(15rem,calc(100cqw-8rem))] min-w-48 flex-col gap-1.5 rounded-2xl border border-primary/40 bg-[#0d1324]/85 p-2 text-[#f4efe4] shadow-[0_12px_30px_-8px_oklch(0_0_0/0.7)] backdrop-blur motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
+    <div className="mono-compact flex w-[min(13rem,calc(100cqw-8rem))] min-w-44 flex-col gap-1 rounded-xl border border-primary/35 bg-[#0d1324]/80 p-1.5 text-[#f4efe4] shadow-[0_10px_24px_-10px_oklch(0_0_0/0.7)] backdrop-blur motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
       {s.phase === 'roll' && (
         <>
           <ActionButton primary disabled={busy} onClick={() => send({ type: 'roll' })}>
@@ -680,11 +687,6 @@ function BoardDock({
             </ActionButton>
           </div>
         </>
-      )}
-      {s.phase === 'end' && (
-        <ActionButton primary disabled={busy} onClick={() => send({ type: 'end' })}>
-          Turu bitir
-        </ActionButton>
       )}
       {canTrade && s.phase !== 'debt' && (
         <button type="button" onClick={onTrade} className="flex items-center justify-center gap-1.5 rounded-lg py-1 text-xs font-bold text-primary hover:bg-primary/10">
@@ -762,7 +764,7 @@ function ActionButton({ children, onClick, disabled, primary }: { children: Reac
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold uppercase tracking-wide transition-transform active:scale-[0.98] disabled:opacity-40 [.ls-split_&]:min-h-10 [.ls-split_&]:gap-1.5 [.ls-split_&]:whitespace-nowrap [.ls-split_&]:px-2.5 [.ls-split_&]:text-xs [.ls-split_&]:tracking-normal',
+        'flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold uppercase tracking-wide transition-transform active:scale-[0.98] disabled:opacity-40 [.ls-split_&]:min-h-10 [.ls-split_&]:gap-1.5 [.ls-split_&]:whitespace-nowrap [.ls-split_&]:px-2.5 [.ls-split_&]:text-xs [.ls-split_&]:tracking-normal [.mono-compact_&]:min-h-8 [.mono-compact_&]:gap-1 [.mono-compact_&]:whitespace-nowrap [.mono-compact_&]:rounded-lg [.mono-compact_&]:px-2.5 [.mono-compact_&]:text-xs [.mono-compact_&]:normal-case [.mono-compact_&]:tracking-normal [.mono-compact_&]:shadow-none',
         primary ? 'bg-primary text-primary-foreground shadow-[0_4px_0_oklch(0_0_0/0.3)]' : 'border border-border bg-secondary text-foreground',
       )}
     >
