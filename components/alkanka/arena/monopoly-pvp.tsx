@@ -196,7 +196,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
               <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun.
             </p>
           )}
-          <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pr-8 [mask-image:linear-gradient(to_right,black_88%,transparent)] @3xl/mono:mx-0 @3xl/mono:pr-0 @3xl/mono:[mask-image:none] @3xl/mono:grid @3xl/mono:max-h-80 @3xl/mono:grid-cols-1 @3xl/mono:overflow-y-auto @3xl/mono:px-0 [.ls-split_&]:mx-0 [.ls-split_&]:grid [.ls-split_&]:max-h-[7.5rem] [.ls-split_&]:grid-cols-1 [.ls-split_&]:gap-1 [.ls-split_&]:overflow-y-auto [.ls-split_&]:px-0 [.ls-split_&]:pb-0 [.ls-split_&]:pr-0 [.ls-split_&]:[mask-image:none]">
+          <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pr-8 [mask-image:linear-gradient(to_right,black_88%,transparent)] @3xl/mono:mx-0 @3xl/mono:pr-0 @3xl/mono:[mask-image:none] @3xl/mono:grid @3xl/mono:max-h-80 @3xl/mono:grid-cols-1 @3xl/mono:overflow-y-auto @3xl/mono:px-0 [.ls-split_&]:mx-0 [.ls-split_&]:grid [.ls-split_&]:max-h-[7.5rem] [.ls-split_&]:grid-cols-2 [.ls-split_&]:gap-1 [.ls-split_&]:overflow-y-auto [.ls-split_&]:px-0 [.ls-split_&]:pb-0 [.ls-split_&]:pr-0 [.ls-split_&]:[mask-image:none]">
             {s.players.map((p, i) => (
               <PlayerChip
                 key={i}
@@ -275,7 +275,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
         </section>
 
         <section aria-label="Ayrıntılar" className="overflow-hidden rounded-2xl border border-border bg-card @3xl/mono:col-start-2 @3xl/mono:row-start-3 [.ls-split_&]:col-start-2 [.ls-split_&]:row-start-3 [.ls-split_&]:flex [.ls-split_&]:min-h-0 [.ls-split_&]:flex-col">
-          <div role="tablist" aria-label="Panel" className="flex shrink-0 gap-1 overflow-x-auto border-b border-border p-1.5 [.ls-split_&]:p-1">
+          <div role="tablist" aria-label="Panel" className="flex shrink-0 gap-1 overflow-x-auto border-b border-border p-1.5 [.ls-split_&]:flex-wrap [.ls-split_&]:overflow-visible [.ls-split_&]:p-1">
             {tabs.map(([id, label]) => (
               <button
                 key={id}
@@ -284,7 +284,7 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  'shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-colors',
+                  'shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-colors [.ls-split_&]:px-2 [.ls-split_&]:py-1.5',
                   tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                 )}
               >
@@ -437,17 +437,17 @@ function PlayerChip({
         type="button"
         onClick={onOpen}
         className={cn(
-          'flex w-40 min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 text-left transition-colors @3xl/mono:w-full sm:gap-2.5 sm:p-2 [.ls-split_&]:w-full [.ls-split_&]:gap-2 [.ls-split_&]:p-1 [.ls-split_&]:pr-2',
+          'flex w-40 min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 pr-2 text-left transition-colors @3xl/mono:w-full sm:gap-2.5 sm:p-2 [.ls-split_&]:w-full [.ls-split_&]:gap-1.5 [.ls-split_&]:p-1 [.ls-split_&]:pr-1.5',
           delta && delta.value < 0 && 'motion-safe:animate-[bj-lose-shake_450ms_ease-in-out]',
           active ? 'border-primary bg-primary/10' : 'border-border',
           out && 'opacity-45 grayscale',
         )}
       >
-        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border-2 sm:size-10 [.ls-split_&]:size-8" style={{ borderColor: TOKEN_COLOR[seat] }}>
+        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border-2 sm:size-10 [.ls-split_&]:size-7" style={{ borderColor: TOKEN_COLOR[seat] }}>
           <img src={`/images/monopoly/pawn-${seat}.png`} alt="" className="size-full scale-[1.6] object-cover object-[50%_32%]" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1 text-sm font-bold text-foreground">
+          <span className="flex items-center gap-1 text-sm font-bold text-foreground [.ls-split_&]:text-xs">
             {isBot && <Bot className="size-3.5 shrink-0 text-muted-foreground" aria-label="Bot" />}
             <span className="truncate">{name}</span>
             {inJail && <Lock className="size-3.5 shrink-0 text-destructive" aria-label="Hapiste" />}
