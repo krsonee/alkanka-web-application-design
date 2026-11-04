@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils'
 import {
   BOARD,
   canBuild,
+  buildBlocker,
   canMortgage,
   canSell,
   isBuyable,
@@ -140,7 +141,10 @@ export function MonopolyPvp({ remote }: { remote: Remote<MonopolyState> }) {
   const nameOf = (seat: number) => (seat === me ? 'Sen' : remote.names[seat] ?? `Oyuncu ${seat + 1}`)
   const fill = (t: string) => t.replace(/@(\d)/g, (_, d) => nameOf(Number(d)))
 
-  const walking = play.walking
+  // A fresh server state lands one render before the board starts walking. Until every pawn has
+  // reached its real square, money, events and buttons keep showing the pre-move picture.
+  const behind = s.players.some((p, i) => play.shown[i] !== undefined && play.shown[i] !== p.pos)
+  const walking = play.walking || behind
   const shownTurn = walking && play.walker !== null ? play.walker : s.turn
   const { feed, batch } = useEventFeed(s.log, walking)
   const { displayMoney, deltas } = useMoneyDeltas(
@@ -737,8 +741,15 @@ function BoardDock({
         ? activeSquareIndex
         : BOARD.findIndex((_, i) => s.owner[i] === me && canBuild(s, me, i))
     const buildSq = buildAt >= 0 ? (BOARD[buildAt] as { name: string; house: number }) : null
+    const blocked = buildSq ? null : buildBlocker(s, me)
     return (
       <div className="flex flex-col items-center gap-1 motion-safe:animate-[mono-event-in_260ms_ease-out_both]">
+        {blocked && (
+          <p className="flex items-center gap-1.5 rounded-full border border-[#f4efe4]/15 bg-[#0d1324]/70 px-2.5 py-1 text-[11px] font-semibold text-[#f4efe4]/75 backdrop-blur">
+            <Home className="size-3" aria-hidden="true" />
+            {`Ev dikilemez · ${blocked.reason}`}
+          </p>
+        )}
         {buildSq &&
           pill(
             `${s.houses[buildAt] === 4 ? 'Otel dik' : 'Ev dik'}${buildAt === activeSquareIndex ? '' : ` · ${buildSq.name}`} · ${buildSq.house} ₺`,

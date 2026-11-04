@@ -66,6 +66,9 @@ export const MAX_PLAYERS = 8
 export const UNTIL_BANKRUPT = 999
 export const STALEMATE_ROUND = 150
 /** The bank only has so many buildings; running out of houses is part of the classic long game. */
+export type WalkRecord = { n: number; seat: number; dice: [number, number]; from: number; legs: { to: number; back: boolean }[] }
+const WALK_HISTORY = 24
+
 export const BANK_HOUSES = 32
 export const BANK_HOTELS = 12
 export const START_MONEY = 1500
@@ -179,6 +182,8 @@ export type MonopolyState = {
   rollNo?: number
   /** Every stop of the last throw in order (dice, cards, jail) with its walking direction. */
   walk?: { n: number; seat: number; legs: { to: number; back: boolean }[] } | null
+  /** Recent throws (one server update can hold several bot turns) so clients replay each path exactly. */
+  walks?: WalkRecord[]
   again: boolean
   chance: number[]
   chest: number[]
@@ -465,6 +470,8 @@ function bankrupt(s: MonopolyState, seat: number, to: number | null) {
 
 function leg(s: MonopolyState, seat: number, to: number, back: boolean) {
   if (s.walk && s.walk.seat === seat) s.walk = { ...s.walk, legs: [...s.walk.legs, { to, back }] }
+  const last = s.walks?.[s.walks.length - 1]
+  if (last && last.seat === seat && s.walk && last.n === s.walk.n) last.legs = [...last.legs, { to, back }]
 }
 
 function sendToJail(s: MonopolyState, seat: number) {
@@ -661,6 +668,7 @@ function roll(s: MonopolyState, seat: number) {
   s.lastRoll = { seat, dice: [a, b] }
   s.rollNo = (s.rollNo ?? 0) + 1
   s.walk = { n: s.rollNo, seat, legs: [] }
+  s.walks = [...(s.walks ?? []), { n: s.rollNo, seat, dice: [a, b] as [number, number], from: p.pos, legs: [] }].slice(-WALK_HISTORY)
   s.card = null
   if (p.inJail) {
     if (dbl) {
@@ -729,6 +737,25 @@ export function canBuild(s: MonopolyState, seat: number, pos: number) {
   if (s.houses[pos] === 4 ? stock.hotels < 1 : stock.houses < 1) return false
   const min = Math.min(...group.map((i) => s.houses[i]))
   return s.houses[pos] === min && s.players[seat].money >= sq.house
+}
+
+/**
+ * For a colour group the player fully owns but cannot build on right now, explains why
+ * (so the button says it instead of silently disappearing). Null when nothing to explain.
+ */
+export function buildBlocker(s: MonopolyState, seat: number): { pos: number; reason: string } | null {
+  for (const [group, squares] of Object.entries(GROUP_SQUARES) as [Group, number[]][]) {
+    if (!ownsGroup(s, seat, group)) continue
+    if (squares.every((i) => s.houses[i] >= 5)) continue
+    const min = Math.min(...squares.map((i) => s.houses[i]))
+    const pos = squares.find((i) => s.houses[i] === min)!
+    const sq = BOARD[pos] as { name: string; house: number }
+    if (squares.some((i) => s.mortgaged[i])) return { pos, reason: 'Gruptaki ipoteği kaldır' }
+    const stock = bankStock(s)
+    if (min === 4 ? stock.hotels < 1 : stock.houses < 1) return { pos, reason: min === 4 ? 'Bankada otel kalmadı' : 'Bankada ev kalmadı' }
+    if (s.players[seat].money < sq.house) return { pos, reason: `${sq.name} için ${sq.house} ₺ gerek` }
+  }
+  return null
 }
 
 export function canSell(s: MonopolyState, seat: number, pos: number) {
