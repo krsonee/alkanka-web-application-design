@@ -68,12 +68,12 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Kanka masasında aynı başlangıç fişiyle 5 tur oynarsınız, fişi çok olan kazanır.',
   ],
   'kafa-topu': [
-    '60 saniyelik maç. Topa kafa vur, rakip kaleye sok.',
+    '90 saniyelik maç. Topa kafa vur, rakip kaleye sok. Berabere biterse uzatma oynanır.',
     'Klavye: A/D yürü, W zıpla. 2. oyuncu ok tuşları. Mobilde ekran butonlarını kullan.',
     'Kanka masasında ikiniz de bota karşı oynarsınız, gol farkı yüksek olan kazanır.',
   ],
   'kafa-basketbolu': [
-    '60 saniyelik maç. Topu potadan geçir, her sayı 2 puan.',
+    '90 saniyelik maç. Topu potadan geçir, her sayı 2 puan.',
     'Klavye: A/D yürü, W zıpla. 2. oyuncu ok tuşları. Mobilde ekran butonlarını kullan.',
     'Kanka masasında ikiniz de bota karşı oynarsınız, sayı farkı yüksek olan kazanır.',
   ],
