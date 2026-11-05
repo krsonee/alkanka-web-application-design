@@ -37,7 +37,7 @@ export const SHOT_CLOCK_STEPS = 720
 export const CHARGE_MAX = 30
 export const COUNTDOWN_STEPS = 135
 /** A goal mouth just over one player tall: a standing keeper covers most of it, so goals need a real chance. */
-export const GOAL_TOP = GROUND - 120
+export const GOAL_TOP = GROUND - 108
 /** Invisible roof: the ball never flies up into the stands. */
 export const CEIL = 150
 export const GOAL_DEPTH = 74
@@ -729,8 +729,6 @@ export function stepWorld(w: World, k0: Keys, k1: Keys, power0: boolean, power1:
       w.flashSeat = -1
       resetPositions(w, c.scorer === 0 ? 1 : 0)
       w.pause = 45
-      // The conceding side gets the first touch: the scorer stays put for a moment after the whistle.
-      w.p[c.scorer].hold = 45 + 50
       w.resets++
     }
     return
