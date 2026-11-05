@@ -89,6 +89,7 @@ function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; setti
       sport={sport}
       mode="bot"
       onEnd={(s) => api.finish(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s)}
+  onRematch={api.again ? (s) => api.again?.(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s) : undefined}
     />
   )
 }

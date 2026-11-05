@@ -792,7 +792,7 @@ function OptionGroup({
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'min-w-0 flex-1 truncate rounded-lg px-1 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 sm:text-sm',
+              'min-w-0 flex-1 text-balance break-words rounded-lg px-1 py-1.5 text-xs font-semibold leading-tight transition-colors disabled:opacity-40 sm:text-sm',
               value === o.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
             )}
           >

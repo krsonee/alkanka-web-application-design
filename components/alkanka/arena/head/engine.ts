@@ -26,7 +26,8 @@ export const W = 960
 export const H = 540
 export const GROUND = 482
 export const STEP_MS = 1000 / 60
-export const HEAD_R = 40
+/** At 40 a head was nearly as tall as the goal mouth (108); 35 keeps the cartoon look with saner proportions. */
+export const HEAD_R = 35
 /** Distance from the head centre (normal size) to the sole. */
 export const FOOT = HEAD_R + 30
 export const BALL_R = 17
@@ -142,6 +143,9 @@ export type World = {
   anchor: { x: number; y: number }
   stuck: number
   corner: number
+  /** Steps the ball has stayed inside a small area, wherever it is: catches a ball pinned on the ground between a player and a wall. */
+  stall: number
+  stallAt: { x: number; y: number }
   events: NetEvent[]
 }
 
@@ -184,6 +188,8 @@ export function newWorld(sport: Sport, ch0: number, ch1: number): World {
     anchor: { x: 0, y: 0 },
     stuck: 0,
     corner: 0,
+    stall: 0,
+    stallAt: { x: 0, y: 0 },
     events: [],
   }
   resetPositions(w, 0)
@@ -206,6 +212,8 @@ export function resetPositions(w: World, serveTo: 0 | 1) {
   w.anchor = { x: w.ball.x, y: w.ball.y }
   w.stuck = 0
   w.corner = 0
+  w.stall = 0
+  w.stallAt = { x: w.ball.x, y: w.ball.y }
   w.shot = null
   w.clockSeat = -1
   w.clockSteps = 0
@@ -591,7 +599,8 @@ function hitBall(w: World, seat: 0 | 1): boolean {
     if (head.rel > 3) {
       emit(w, 'header', head.rel / 16)
       if (head.rel > 6) {
-        w.stats.headers[seat]++
+        // Only a real header counts: the player went for it and sent the ball forward, not a bounce off a standing head.
+        if ((airborne || Math.abs(p.vx) > 2) && b.vx * p.face > 1.5) w.stats.headers[seat]++
         emit(w, 'fx', FX.headHit, p.x + head.nx * r, hy + head.ny * r)
       }
     }
@@ -765,7 +774,10 @@ export function stepWorld(w: World, k0: Keys, k1: Keys, power0: boolean, power1:
     w.touch = 'body'
     w.shot = null
   }
-  if (ball.owner === 0 || ball.owner === 1) w.stats.poss[ball.owner]++
+  // Possession goes to whoever is closest to a live ball, not to whoever it last bounced off.
+  const d0 = Math.hypot(ball.x - a.x, ball.y - a.y)
+  const d1 = Math.hypot(ball.x - b.x, ball.y - b.y)
+  if (Math.min(d0, d1) < 170 && Math.abs(d0 - d1) > 12) w.stats.poss[d0 < d1 ? 0 : 1]++
   if (ball.y > GROUND - BALL_R) ball.y = GROUND - BALL_R
 
   // Shot clock: whoever last touched the ball has 12 s to score, otherwise possession flips.
@@ -791,6 +803,18 @@ export function stepWorld(w: World, k0: Keys, k1: Keys, power0: boolean, power1:
     w.stuck = 0
   } else if (ball.y < GROUND - BALL_R - 4 || ball.x < BALL_R + 30 || ball.x > W - BALL_R - 30) {
     if (++w.stuck > 100) dropBall(w)
+  }
+  // Any ball that stays in one small patch for 3 s (pinned on the ground, two players leaning on it) restarts from the centre.
+  if (Math.hypot(ball.x - w.stallAt.x, ball.y - w.stallAt.y) > 70) {
+    w.stallAt = { x: ball.x, y: ball.y }
+    w.stall = 0
+  } else if (++w.stall > 180) {
+    emit(w, 'whistle', 0.7)
+    w.flash = 'HAKEM TOPU ATTI'
+    w.flashT = 0
+    w.flashSeat = -1
+    dropBall(w)
+    return
   }
   if (w.sport === 'basket' && (ball.x < 110 || ball.x > W - 110) && ball.y > GROUND - 160) {
     if (++w.corner > 180) dropBall(w)
@@ -820,6 +844,8 @@ function dropBall(w: World) {
   w.anchor = { x: w.ball.x, y: w.ball.y }
   w.stuck = 0
   w.corner = 0
+  w.stall = 0
+  w.stallAt = { x: w.ball.x, y: w.ball.y }
   w.shot = null
 }
 
