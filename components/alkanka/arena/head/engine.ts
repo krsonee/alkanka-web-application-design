@@ -31,17 +31,19 @@ export const HEAD_R = 35
 /** Distance from the head centre (normal size) to the sole. */
 export const FOOT = HEAD_R + 30
 export const BALL_R = 17
-export const MATCH_SECONDS = 90
+export const MATCH_SECONDS = 60
 export const OVERTIME_SECONDS = 30
 export const CAMP_LIMIT = 180
 export const SHOT_CLOCK_STEPS = 720
 export const CHARGE_MAX = 30
 export const COUNTDOWN_STEPS = 135
-/** A goal mouth just over one player tall: a standing keeper covers most of it, so goals need a real chance. */
-export const GOAL_TOP = GROUND - 108
+/** Classic head-soccer goal: well over one and a half players tall, so headers and lobs over the keeper score. */
+export const GOAL_TOP = GROUND - 172
 /** Invisible roof: the ball never flies up into the stands. */
 export const CEIL = 150
-export const GOAL_DEPTH = 74
+export const GOAL_DEPTH = 90
+/** Super powers and their meter are switched off: the game is pure head soccer. */
+export const POWERS_ON = false
 export const RIM_Y = 236
 export const RIM_W = 84
 export const NET_H = 52
@@ -205,8 +207,8 @@ export function resetPositions(w: World, serveTo: 0 | 1) {
   const base = { y: GROUND - FOOT, vx: 0, vy: 0, kick: 0, charge: 0, power: 1, camp: 0, frozen: 0, stun: 0, hold: 0 }
   Object.assign(a, base, { x: 230, face: 1 })
   Object.assign(b, base, { x: W - 230, face: -1 })
-  // Kickoff: the ball rests on the centre spot instead of dropping from the sky straight onto someone's boot.
-  Object.assign(w.ball, { x: W / 2, y: GROUND - BALL_R, vx: 0, vy: 0, fx: 0, fxT: 0, owner: -1 })
+  // Kickoff: the ball drops from high above the centre line, both players race for it.
+  Object.assign(w.ball, { x: W / 2, y: CEIL + BALL_R + 4, vx: 0, vy: 0, fx: 0, fxT: 0, owner: -1 })
   w.touch = 'body'
   void serveTo
   w.anchor = { x: w.ball.x, y: w.ball.y }
@@ -621,7 +623,7 @@ function hitBall(w: World, seat: 0 | 1): boolean {
 export function activatePower(w: World, seat: 0 | 1) {
   const p = w.p[seat]
   const o = w.p[seat === 0 ? 1 : 0]
-  if (p.meter < METER_MAX || p.frozen > 0 || p.stun > 0 || p.armed) return false
+  if (!POWERS_ON || p.meter < METER_MAX || p.frozen > 0 || p.stun > 0 || p.armed) return false
   const id = charAt(p.ch).power
   p.meter = 0
   w.stats.powers[seat]++

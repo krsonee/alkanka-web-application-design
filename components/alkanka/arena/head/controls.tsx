@@ -5,7 +5,7 @@ import NextImage from 'next/image'
 import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Maximize2, Smartphone, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { playSound, setSoundMuted, useSoundMuted } from '@/lib/sound'
-import { CHARACTERS, type BotLevel, type Keys, type NetEvent, type Sport } from './engine'
+import { CHARACTERS, POWERS_ON, type BotLevel, type Keys, type NetEvent, type Sport } from './engine'
 
 /* --------------------------- preferences --------------------------- */
 
@@ -204,6 +204,7 @@ export function OverlayControls({
       <div className="flex flex-col items-end gap-2">
         <button
           type="button"
+          hidden={!POWERS_ON}
           aria-label={powerReady ? 'Süper gücü kullan' : 'Süper güç doluyor'}
           aria-disabled={!powerReady}
           onPointerDown={(e) => {

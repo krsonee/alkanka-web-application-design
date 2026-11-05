@@ -14,6 +14,7 @@ import {
   METER_MAX,
   NET_H,
   POWERS,
+  POWERS_ON,
   RIM_W,
   RIM_Y,
   TEAM,
@@ -266,8 +267,8 @@ export const ARENA_FILL: Record<Sport, string> = {
   basket: 'linear-gradient(#0b0806, #1b130d 27.8%, #07090d 27.8%, #07090d 33.3%, #a56a37 33.3%, #c98d52)',
 }
 
-/** Ground-plane perspective: things on the far touchline converge toward the centre, the near side spreads out. */
-const px = (x: number, y: number) => W / 2 + (x - W / 2) * (1 + (0.28 * (y - GROUND)) / (H - FIELD_TOP))
+/** Flat side view, like the goals and players: every marking keeps its x, so lines meet the goal posts exactly. */
+const px = (x: number, _y: number) => x
 
 type CrowdRow = { idle: HTMLCanvasElement; cheer: HTMLCanvasElement; y: number; h: number }
 export type ArenaArt = { back: HTMLCanvasElement; rows: CrowdRow[]; glow: HTMLCanvasElement; pitch: HTMLCanvasElement; vignette: HTMLCanvasElement }
@@ -434,59 +435,52 @@ function paintGrass(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = grain() < 0.5 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)'
     ctx.fillRect(grain() * W, FIELD_TOP + grain() * (H - FIELD_TOP), 1.5, 2.5)
   }
+  // Side-view markings, all derived from the goal posts: the goal line runs through each post, the boxes start
+  // at the post and the centre circle sits on the kickoff spot, so nothing can drift out of line with the goals.
   const far = FIELD_TOP + 10
-  ctx.strokeStyle = 'rgba(255,255,255,0.82)'
-  ctx.lineWidth = 2.5
-  ctx.lineJoin = 'round'
+  const near = H - 6
+  const lineY = GROUND + 2
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+  ctx.lineWidth = 3
+  ctx.lineJoin = 'miter'
+  ctx.lineCap = 'butt'
   strokePath(ctx, [
-    [px(GOAL_DEPTH, far), far],
-    [px(W - GOAL_DEPTH, far), far],
+    [GOAL_DEPTH, far],
+    [W - GOAL_DEPTH, far],
+  ])
+  strokePath(ctx, [
+    [GOAL_DEPTH, lineY],
+    [W - GOAL_DEPTH, lineY],
   ])
   strokePath(ctx, [
     [W / 2, far],
-    [W / 2, H],
+    [W / 2, near],
   ])
-  // Every marking is centred on the GROUND row — the line the goals stand on and the players run along —
-  // so the goal mouth sits in the middle of its box and kick-off happens on the centre spot.
   ctx.beginPath()
-  ctx.ellipse(W / 2, GROUND, 150, 68, 0, 0, Math.PI * 2)
+  ctx.ellipse(W / 2, lineY, 96, 40, 0, 0, Math.PI * 2)
   ctx.stroke()
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
   ctx.beginPath()
-  ctx.ellipse(W / 2, GROUND, 5, 2.5, 0, 0, Math.PI * 2)
+  ctx.ellipse(W / 2, lineY, 6, 3, 0, 0, Math.PI * 2)
   ctx.fill()
   for (const side of [0, 1] as const) {
     const m = (x: number) => (side === 0 ? x : W - x)
     strokePath(ctx, [
-      [px(m(GOAL_DEPTH), far), far],
-      [px(m(GOAL_DEPTH), H), H],
+      [m(GOAL_DEPTH), far],
+      [m(GOAL_DEPTH), near],
     ])
-    const box = (d: number, half: number) => {
-      const y0 = GROUND - half
-      const y1 = GROUND + half * 0.45
+    const box = (d: number, top: number, bottom: number) =>
       strokePath(ctx, [
-        [px(m(GOAL_DEPTH), y0), y0],
-        [px(m(GOAL_DEPTH + d), y0), y0],
-        [px(m(GOAL_DEPTH + d), y1), y1],
-        [px(m(GOAL_DEPTH), y1), y1],
+        [m(GOAL_DEPTH), top],
+        [m(GOAL_DEPTH + d), top],
+        [m(GOAL_DEPTH + d), bottom],
+        [m(GOAL_DEPTH), bottom],
       ])
-    }
-    box(170, 150)
-    box(66, 62)
+    box(150, GROUND - 62, near)
+    box(56, GROUND - 26, GROUND + 30)
     ctx.beginPath()
-    ctx.ellipse(m(GOAL_DEPTH + 120), GROUND, 4, 2, 0, 0, Math.PI * 2)
+    ctx.ellipse(m(GOAL_DEPTH + 104), lineY + 14, 4, 2, 0, 0, Math.PI * 2)
     ctx.fill()
-    // Penalty arc ("D") outside the big box, on the ground plane.
-    ctx.beginPath()
-    for (let i = 0; i <= 16; i++) {
-      const a = -0.92 + (i / 16) * 1.84
-      const wx = m(GOAL_DEPTH + 120 + Math.cos(a) * 82)
-      const yy = GROUND + Math.sin(a) * 52 * (a > 0 ? 0.45 : 1)
-      if (Math.cos(a) * 82 + 120 < 172) continue
-      const x = px(wx, yy)
-      ctx.lineTo(x, yy)
-    }
-    ctx.stroke()
   }
   const shade = ctx.createLinearGradient(0, FIELD_TOP, 0, FIELD_TOP + 28)
   shade.addColorStop(0, 'rgba(0,0,0,0.45)')
@@ -579,72 +573,9 @@ const BOARD_LABELS = ['ALKANKA', 'KANKA COIN', 'JAKO', 'ALKANKA ARENA'] as const
  * flag waving and camera flashes; goalSeat turns the LED ribbon into a goal celebration in the scorer's colour.
  */
 export function drawArena(ctx: CanvasRenderingContext2D, art: ArenaArt, sport: Sport, frame: number, excite: number, goalSeat: number) {
+  // The stand is a static painted backdrop: no bobbing crowd, nothing that pulls the eye off the ball.
+  void excite
   ctx.drawImage(art.back, 0, 0)
-
-  const segs = 24
-  const segW = W / segs
-  // A Mexican wave rolls around the stand all match long; it runs faster when the crowd is excited.
-  const span = W + 500
-  const waveX = ((frame * (3 + excite * 4)) % span) - 250
-  art.rows.forEach((row, i) => {
-    const rh = row.h + 14
-    for (let s = 0; s < segs; s++) {
-      const phase = i * 1.3 + s * 2.1
-      const amp = (0.8 + excite * 5) * (row.h / 18)
-      const waveK = Math.max(0, 1 - Math.abs(s * segW + segW / 2 - waveX) / 110)
-      const bob = -Math.max(0, Math.sin(frame * (0.09 + excite * 0.1) + phase)) * amp - waveK * row.h * 0.8
-      const cheering = waveK > 0.35 || excite > 0.85 || (excite > 0.5 && (s + i) % 3 !== 0)
-      ctx.drawImage(cheering ? row.cheer : row.idle, s * segW, 0, segW, rh, s * segW, row.y - 14 + bob, segW, rh)
-    }
-  })
-  // Flags waving in the lower tiers, team-coloured per end.
-  const flags = [90, 300, 420, 540, 660, 870]
-  flags.forEach((fx0, i) => {
-    const home = fx0 < W / 2
-    const top = 46 + (i % 3) * 26
-    const fw = 36
-    const fh = 21
-    ctx.strokeStyle = '#c9ced6'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(fx0, top)
-    ctx.lineTo(fx0, top + 50)
-    ctx.stroke()
-    const speed = 0.12 + excite * 0.15
-    const wave = (k: number) => Math.sin(frame * speed + i + k * 0.9) * (2 + excite * 4) * (k / 6)
-    ctx.fillStyle = home ? GOLD : TEAM.away.jersey
-    ctx.beginPath()
-    ctx.moveTo(fx0, top)
-    for (let k = 1; k <= 6; k++) ctx.lineTo(fx0 + (fw * k) / 6, top + wave(k))
-    for (let k = 6; k >= 0; k--) ctx.lineTo(fx0 + (fw * k) / 6, top + fh + wave(k))
-    ctx.fill()
-    ctx.fillStyle = home ? INK : '#ffffff'
-    ctx.beginPath()
-    ctx.moveTo(fx0, top + fh * 0.4)
-    for (let k = 1; k <= 6; k++) ctx.lineTo(fx0 + (fw * k) / 6, top + fh * 0.4 + wave(k))
-    for (let k = 6; k >= 0; k--) ctx.lineTo(fx0 + (fw * k) / 6, top + fh * 0.6 + wave(k))
-    ctx.fill()
-  })
-  // Keep the stands a touch darker than the pitch so the ball and players always pop.
-  // Depth: the back rows fade into the dark, the front rows catch the floodlights.
-  const depth = ctx.createLinearGradient(0, STAND_TOP, 0, BOARD_Y)
-  depth.addColorStop(0, sport === 'basket' ? 'rgba(8,5,3,0.62)' : 'rgba(3,6,14,0.62)')
-  depth.addColorStop(1, sport === 'basket' ? 'rgba(8,5,3,0.1)' : 'rgba(3,6,14,0.08)')
-  ctx.fillStyle = depth
-  ctx.fillRect(0, STAND_TOP, W, BOARD_Y - STAND_TOP)
-  if (excite > 0.35) {
-    const n = Math.floor(excite * 5)
-    for (let i = 0; i < n; i++) {
-      if (Math.random() > 0.5) continue
-      const fx0 = Math.random() * W
-      const fy = STAND_TOP + 8 + Math.random() * (BOARD_Y - STAND_TOP - 16)
-      const f = ctx.createRadialGradient(fx0, fy, 0, fx0, fy, 9)
-      f.addColorStop(0, 'rgba(255,255,255,0.95)')
-      f.addColorStop(1, 'rgba(255,255,255,0)')
-      ctx.fillStyle = f
-      ctx.fillRect(fx0 - 9, fy - 9, 18, 18)
-    }
-  }
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
   ctx.drawImage(art.glow, 0, 0)
@@ -1438,7 +1369,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: World, names: [string,
     const p = w.p[seat]
     const px0 = seat === 0 ? bx + 28 : bx + blockW - 28
     portrait(ctx, imgs[p.ch], px0, y + h / 2, 17, '#ffffff', seat === 0 ? charAt(p.ch).facesLeft : !charAt(p.ch).facesLeft)
-    meterRing(ctx, p, px0, y + h / 2, 17, frame)
+    if (POWERS_ON) meterRing(ctx, p, px0, y + h / 2, 17, frame)
     const tx = seat === 0 ? bx + 54 : bx + blockW - 54
     const dark = seat === 0
     ctx.textAlign = seat === 0 ? 'left' : 'right'
@@ -1456,7 +1387,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: World, names: [string,
     ctx.font = '900 30px sans-serif'
     ctx.textAlign = 'center'
     ctx.fillText(String(w.sc[seat]), sx + scoreW / 2, y + h / 2 + 2)
-    readyPill(ctx, p, seat === 0 ? bx + blockW / 2 : bx + blockW / 2, y + h + 8, frame)
+    if (POWERS_ON) readyPill(ctx, p, bx + blockW / 2, y + h + 8, frame)
   }
   block(0)
   block(1)
