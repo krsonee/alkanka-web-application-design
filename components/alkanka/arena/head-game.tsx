@@ -158,7 +158,8 @@ export function HeadGame({
       return
     }
     const fit = () => {
-      const h = Math.round(Math.min(MAX_VIEW_H, Math.max(430, (W * window.innerHeight) / window.innerWidth)))
+      // Never taller than the pitch plus a small margin: square-ish screens get side bars instead of an empty lawn under the goals.
+      const h = Math.round(Math.min(MAX_VIEW_H, H + 90 + (touch ? TOUCH_STRIP : 0), Math.max(430, (W * window.innerHeight) / window.innerWidth)))
       // On phones a strip of floor is reserved under the pitch for the thumb buttons, paid for by cropping more of the stands.
       const free = h - H - (touch ? TOUCH_STRIP : 0)
       // Tall windows split the extra height between sky above the stands and floor below the pitch.
@@ -558,11 +559,10 @@ export function HeadGame({
       const nearGoal = w.ball.x < 220 || w.ball.x > W - 220 ? 0.35 : 0
       const targetExcite = scorer >= 0 ? 1 : 0.12 + nearGoal + Math.min(0.2, Math.hypot(w.ball.vx, w.ball.vy) / 80)
       excite += (targetExcite - excite) * 0.05
-      // Broadcast camera: pushes in on the goal mouth during the replay, eases back to the wide shot afterwards.
-      const goalSide = scorer === 0 ? 1 : scorer === 1 ? 0 : -1
-      const tz = goalSide >= 0 ? 1.28 : 1
-      const tx = goalSide === 1 ? W - 190 : goalSide === 0 ? 190 : W / 2
-      const ty = goalSide >= 0 ? GROUND - 120 : H / 2
+      // Fixed wide shot: both goals stay on screen at all times, the camera never zooms.
+      const tz = 1
+      const tx = W / 2
+      const ty = H / 2
       cam.z += (tz - cam.z) * 0.06
       cam.x += (tx - cam.x) * 0.06
       cam.y += (ty - cam.y) * 0.06
@@ -701,7 +701,6 @@ export function HeadGame({
                     ['A / D  ·  ← →', 'Hareket'],
                     ['W  ·  ↑', 'Zıpla'],
                     ['S  ·  Boşluk', 'Şut (basılı tut: güçlü şut)'],
-                    ['E  ·  Shift', `Süper güç: ${power.name}`],
                   ].map(([key, label]) => (
                     <li key={key} className="flex flex-col gap-1 rounded-xl bg-muted p-3">
                       <span className="font-mono text-base font-bold text-foreground">{key}</span>

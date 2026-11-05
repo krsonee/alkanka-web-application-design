@@ -45,7 +45,6 @@ export function MatchSummary({
     { label: 'Topa sahip olma', a: Math.round((stats.poss[0] / possTotal) * 100), b: Math.round((stats.poss[1] / possTotal) * 100), suffix: '%' },
     { label: sport === 'futbol' ? 'Şut' : 'Atış', a: stats.shots[0], b: stats.shots[1] },
     { label: 'Kafa vuruşu', a: stats.headers[0], b: stats.headers[1] },
-    { label: 'Süper güç', a: stats.powers[0], b: stats.powers[1] },
   ]
 
   return (

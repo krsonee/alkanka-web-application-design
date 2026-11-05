@@ -116,7 +116,7 @@ export function CharacterSelect({ sport, onStart }: { sport: Sport; onStart: (ch
               <StatBar key={k} label={label} value={current.stats[k]} />
             ))}
           </div>
-          <div className="flex gap-2 rounded-lg bg-muted/60 p-2.5">
+          <div hidden className="flex gap-2 rounded-lg bg-muted/60 p-2.5">
             <Zap className="mt-0.5 size-4 shrink-0" style={{ color: power.color }} aria-hidden="true" />
             <div className="flex flex-col gap-0.5">
               <p className="text-sm font-black">{power.name}</p>
@@ -136,8 +136,7 @@ export function CharacterSelect({ sport, onStart }: { sport: Sport; onStart: (ch
         </div>
       </div>
       <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
-        Her karakter aynı toplam güce sahip, sadece dağılımı farklı. Kupa kazandıkça yeni kafalar açılır. Güç barı topa dokundukça dolar; dolunca
-        <kbd className="mx-1 rounded bg-muted px-1 font-mono">E</kbd>ya da şimşek tuşuyla süper gücünü patlat.
+        Her karakter aynı toplam güce sahip, sadece dağılımı farklı. Kupa kazandıkça yeni kafalar açılır.
       </p>
     </section>
   )
