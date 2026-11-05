@@ -419,12 +419,14 @@ function paintGrass(ctx: CanvasRenderingContext2D) {
     [W / 2, far],
     [W / 2, H],
   ])
+  // Every marking is centred on the GROUND row — the line the goals stand on and the players run along —
+  // so the goal mouth sits in the middle of its box and kick-off happens on the centre spot.
   ctx.beginPath()
-  ctx.ellipse(W / 2, 400, 140, 62, 0, 0, Math.PI * 2)
+  ctx.ellipse(W / 2, GROUND, 150, 68, 0, 0, Math.PI * 2)
   ctx.stroke()
   ctx.fillStyle = 'rgba(255,255,255,0.85)'
   ctx.beginPath()
-  ctx.ellipse(W / 2, 400, 5, 2.5, 0, 0, Math.PI * 2)
+  ctx.ellipse(W / 2, GROUND, 5, 2.5, 0, 0, Math.PI * 2)
   ctx.fill()
   for (const side of [0, 1] as const) {
     const m = (x: number) => (side === 0 ? x : W - x)
@@ -432,18 +434,32 @@ function paintGrass(ctx: CanvasRenderingContext2D) {
       [px(m(GOAL_DEPTH), far), far],
       [px(m(GOAL_DEPTH), H), H],
     ])
-    const box = (d: number, y0: number, y1: number) =>
+    const box = (d: number, half: number) => {
+      const y0 = GROUND - half
+      const y1 = GROUND + half * 0.45
       strokePath(ctx, [
         [px(m(GOAL_DEPTH), y0), y0],
         [px(m(GOAL_DEPTH + d), y0), y0],
         [px(m(GOAL_DEPTH + d), y1), y1],
         [px(m(GOAL_DEPTH), y1), y1],
       ])
-    box(165, 270, 530)
-    box(62, 340, 470)
+    }
+    box(170, 150)
+    box(66, 62)
     ctx.beginPath()
-    ctx.ellipse(px(m(GOAL_DEPTH + 118), 400), 400, 4, 2, 0, 0, Math.PI * 2)
+    ctx.ellipse(m(GOAL_DEPTH + 120), GROUND, 4, 2, 0, 0, Math.PI * 2)
     ctx.fill()
+    // Penalty arc ("D") outside the big box, on the ground plane.
+    ctx.beginPath()
+    for (let i = 0; i <= 16; i++) {
+      const a = -0.92 + (i / 16) * 1.84
+      const wx = m(GOAL_DEPTH + 120 + Math.cos(a) * 82)
+      const yy = GROUND + Math.sin(a) * 52 * (a > 0 ? 0.45 : 1)
+      if (Math.cos(a) * 82 + 120 < 172) continue
+      const x = px(wx, yy)
+      ctx.lineTo(x, yy)
+    }
+    ctx.stroke()
   }
   const shade = ctx.createLinearGradient(0, FIELD_TOP, 0, FIELD_TOP + 28)
   shade.addColorStop(0, 'rgba(0,0,0,0.45)')
