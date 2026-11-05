@@ -36,7 +36,8 @@ export const CAMP_LIMIT = 180
 export const SHOT_CLOCK_STEPS = 720
 export const CHARGE_MAX = 30
 export const COUNTDOWN_STEPS = 135
-export const GOAL_TOP = GROUND - 162
+/** A goal mouth about 1.3 player heights tall: a header over a standing keeper can still score, a roller cannot sneak in. */
+export const GOAL_TOP = GROUND - 140
 export const GOAL_DEPTH = 74
 export const RIM_Y = 236
 export const RIM_W = 84
@@ -58,7 +59,7 @@ export const POWERS: Record<PowerId, { name: string; desc: string; kind: 'shot' 
 }
 
 export const CHARACTERS: Character[] = [
-  { id: 'jako', name: 'Jako', title: 'Kaptan', img: '/images/sprites/head-jako.png', stats: { speed: 3, jump: 3, shot: 3, head: 3, power: 3 }, power: 'fire', unlock: 0, facesLeft: false },
+  { id: 'jako', name: 'Jako', title: 'Kaptan', img: '/images/sprites/head-jako.png', stats: { speed: 4, jump: 4, shot: 3, head: 3, power: 1 }, power: 'fire', unlock: 0, facesLeft: false },
   { id: 'kurt', name: 'Kurt', title: 'Golcü', img: '/images/sprites/head-rival.png', stats: { speed: 4, jump: 2, shot: 4, head: 2, power: 3 }, power: 'ice', unlock: 0, facesLeft: true },
   { id: 'aslan', name: 'Aslan', title: 'Kral', img: '/images/sprites/head-aslan.png', stats: { speed: 2, jump: 3, shot: 5, head: 3, power: 2 }, power: 'giant', unlock: 120, facesLeft: true },
   { id: 'boga', name: 'Boğa', title: 'Tank', img: '/images/sprites/head-boga.png', stats: { speed: 2, jump: 2, shot: 4, head: 5, power: 2 }, power: 'shield', unlock: 300, facesLeft: true },
@@ -101,7 +102,9 @@ export type Player = {
 /** fx: 0 normal, 1 fireball, 2 ghost. owner: seat of the last toucher. */
 export type Ball = { x: number; y: number; vx: number; vy: number; rot: number; fx: number; fxT: number; owner: number }
 
-export const FX = { dust: 1, confetti: 2, ice: 3, fire: 4, spark: 5, grass: 6, smoke: 7 } as const
+export const FX = { dust: 1, confetti: 2, ice: 3, fire: 4, spark: 5, grass: 6, smoke: 7, kickHit: 8, headHit: 9 } as const
+export type MatchStats = { shots: [number, number]; headers: [number, number]; poss: [number, number]; powers: [number, number] }
+export const newStats = (): MatchStats => ({ shots: [0, 0], headers: [0, 0], poss: [0, 0], powers: [0, 0] })
 export type EventName = SoundName | 'h0' | 'h1' | 'hb' | 'shake' | 'fx'
 /** [name, value, x, y]. `fx` carries an FX code in value; `shake` carries the strength. */
 export type NetEvent = [EventName, number, number?, number?]
@@ -118,6 +121,9 @@ export type World = {
   slow: number
   flash: string
   flashT: number
+  /** Seat that caused the flash (the scorer), -1 for neutral messages. */
+  flashSeat: number
+  stats: MatchStats
   banner: string
   bannerSeat: number
   bannerT: number
@@ -157,6 +163,8 @@ export function newWorld(sport: Sport, ch0: number, ch1: number): World {
     slow: 0,
     flash: '',
     flashT: 0,
+    flashSeat: -1,
+    stats: newStats(),
     banner: '',
     bannerSeat: 0,
     bannerT: 0,
@@ -255,26 +263,50 @@ export function campRule(p: Player, side: 0 | 1, sport: Sport, onWhistle: () => 
   } else p.camp = Math.max(0, p.camp - 2)
 }
 
-export function separatePlayers(a: Player, b: Player) {
-  const dx = b.x - a.x
+/**
+ * Solid body-to-body contact. Players are tall capsules (head to boot), so a jumper can never sit inside or on top of
+ * the rival: landing on a head slides you off to the side, and a running bump transfers momentum like a shoulder charge.
+ */
+export function separatePlayers(a: Player, b: Player, sport: Sport = 'futbol') {
+  let dx = b.x - a.x
   const dy = b.y - a.y
-  const min = HEAD_R * 1.9
-  if (Math.abs(dx) >= min || Math.abs(dy) >= HEAD_R * 1.6) return
-  // Landing on the rival's head bounces you off it instead of standing on it.
-  if (dy < -HEAD_R && b.vy > 0) {
-    b.y = a.y - HEAD_R * 1.6
-    b.vy = -6
-    return
+  const minX = HEAD_R * 1.9
+  if (Math.abs(dx) >= minX || Math.abs(dy) >= HEAD_R + FOOT - 6) return
+  if (Math.abs(dx) < 0.5) dx = a.face === 1 ? 0.5 : -0.5
+  const s = dx > 0 ? 1 : -1
+  const top = dy < -HEAD_R ? b : dy > HEAD_R ? a : null
+  if (top && top.vy > -1) {
+    const under = top === a ? b : a
+    const away = top.x >= under.x ? 1 : -1
+    top.vy = -6.5
+    top.vx = away * 5.5
+    top.y = Math.min(top.y, under.y - HEAD_R * 1.7)
   }
-  if (dy > HEAD_R && a.vy > 0) {
-    a.y = b.y - HEAD_R * 1.6
-    a.vy = -6
-    return
-  }
-  const push = (min - Math.abs(dx)) / 2
-  const s = dx >= 0 ? 1 : -1
+  const push = (minX - Math.abs(dx)) / 2
   a.x -= push * s
   b.x += push * s
+  const closing = (a.vx - b.vx) * s
+  if (closing > 0) {
+    const mid = (a.vx + b.vx) / 2
+    a.vx = mid - s * 1.4
+    b.vx = mid + s * 1.4
+  }
+  // A player pinned against the wall passes the overlap on to the rival instead of both staying stacked.
+  const margin = sport === 'futbol' ? GOAL_DEPTH * 0.55 : 24
+  const lo = HEAD_R + margin
+  const hi = W - HEAD_R - margin
+  for (const [p, q] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    if (p.x < lo) {
+      q.x += lo - p.x
+      p.x = lo
+    } else if (p.x > hi) {
+      q.x -= p.x - hi
+      p.x = hi
+    }
+  }
 }
 
 /* ------------------------------ ball ------------------------------ */
@@ -431,7 +463,7 @@ function stepBall(w: World) {
   }
   if (b.fx !== 1) b.vx *= 0.996
   if (b.vy === 0 && b.y >= GROUND - BALL_R - 0.5) b.vx *= w.sport === 'futbol' ? 0.985 : 0.99
-  const cap = b.fx === 1 ? 30 : 26
+  const cap = b.fx === 1 ? 30 : 23
   const sp = Math.hypot(b.vx, b.vy)
   if (sp > cap) {
     b.vx *= cap / sp
@@ -471,7 +503,7 @@ function hitBall(w: World, seat: 0 | 1): boolean {
   const footX = p.x + p.face * 28
   const footY = p.y + FOOT - 12
   if (p.kick > 5 && Math.hypot(b.x - footX, b.y - footY) < BALL_R + 32) {
-    const base = basket ? 10.5 + 0.35 * st.shot : 13.4 + 0.95 * st.shot
+    const base = basket ? 10.5 + 0.35 * st.shot : 11.4 + 0.8 * st.shot
     const pw = base * p.power
     const above = footY - b.y
     const airborne = !onGround(p)
@@ -513,10 +545,12 @@ function hitBall(w: World, seat: 0 | 1): boolean {
       }
     }
     p.kick = 4
-    p.meter = Math.min(METER_MAX, p.meter + 7 * (0.8 + 0.1 * st.power))
+    p.meter = Math.min(METER_MAX, p.meter + 3.5 * (0.8 + 0.1 * st.power))
+    w.stats.shots[seat]++
     emit(w, 'kick', 0.55 + (p.power - 1) * 1.3)
     emit(w, seat === 0 ? 'h0' : 'h1', p.power > 1.2 || rocket ? 35 : 18)
     emit(w, 'fx', FX.dust, footX, footY + 8)
+    emit(w, 'fx', FX.kickHit, b.x, b.y)
     if (p.power > 1.25 && !rocket) emit(w, 'shake', 3)
     p.power = 1
     return true
@@ -533,8 +567,14 @@ function hitBall(w: World, seat: 0 | 1): boolean {
     if (head.ny < -0.85 && Math.abs(b.vx) < 1.2) b.vx += p.face * 2.2
     b.owner = seat
     if (b.fx === 1) endFire(w)
-    p.meter = Math.min(METER_MAX, p.meter + 4 * (0.8 + 0.1 * st.power))
-    if (head.rel > 3) emit(w, 'header', head.rel / 16)
+    p.meter = Math.min(METER_MAX, p.meter + 2 * (0.8 + 0.1 * st.power))
+    if (head.rel > 3) {
+      emit(w, 'header', head.rel / 16)
+      if (head.rel > 6) {
+        w.stats.headers[seat]++
+        emit(w, 'fx', FX.headHit, p.x + head.nx * r, hy + head.ny * r)
+      }
+    }
     return true
   }
   const body = collideCircle(b, p.x, p.y + FOOT - 34, 15, p.vx, p.vy, 0.45)
@@ -554,6 +594,7 @@ export function activatePower(w: World, seat: 0 | 1) {
   if (p.meter < METER_MAX || p.frozen > 0 || p.stun > 0 || p.armed) return false
   const id = charAt(p.ch).power
   p.meter = 0
+  w.stats.powers[seat]++
   if (id === 'fire' || id === 'ghost') p.armed = 1
   else if (id === 'ice') {
     o.frozen = 120
@@ -592,12 +633,13 @@ function score(w: World, scorer: 0 | 1, pts: number, label: string, goalX: numbe
   emit(w, 'fx', FX.confetti, goalX, goalY)
   w.flash = w.overtime ? (w.sport === 'futbol' ? 'ALTIN GOL!' : 'ALTIN BASKET!') : label
   w.flashT = 0
+  w.flashSeat = scorer
   w.netShake[goalX < W / 2 ? 0 : 1] = 40
   // The conceding side gets a boost so a lopsided match stays alive.
   const loser = w.p[scorer === 0 ? 1 : 0]
-  loser.meter = Math.min(METER_MAX, loser.meter + 18)
-  w.celebrate = { scorer, t: 55 }
-  w.slow = 30
+  loser.meter = Math.min(METER_MAX, loser.meter + 12)
+  w.celebrate = { scorer, t: 75 }
+  w.slow = 55
   w.shot = null
 }
 
@@ -616,14 +658,9 @@ function basket(w: World, scorer: 0 | 1, hoop: 0 | 1) {
 
 /* ------------------------------ world step ------------------------------ */
 
-function idle(w: World, celebrating?: 0 | 1) {
-  for (const s of [0, 1] as const) {
-    const p = w.p[s]
-    const k = noKeys()
-    // The scorer bounces in celebration while the replay plays out.
-    if (celebrating === s && onGround(p)) k.jump = true
-    stepPlayer(p, k, w.sport)
-  }
+/** Players stand still during stoppages; the scorer's celebration is drawn (arms up), never a physics jump. */
+function idle(w: World) {
+  for (const s of [0, 1] as const) stepPlayer(w.p[s], noKeys(), w.sport)
 }
 
 /**
@@ -633,7 +670,7 @@ function idle(w: World, celebrating?: 0 | 1) {
 export function stepWorld(w: World, k0: Keys, k1: Keys, power0: boolean, power1: boolean) {
   if (w.flash) {
     w.flashT++
-    if (w.flashT > 80) w.flash = ''
+    if (w.flashT > 80 && !w.celebrate) w.flash = ''
   }
   if (w.bannerT > 0) w.bannerT--
   if (w.slow > 0) w.slow--
@@ -659,10 +696,12 @@ export function stepWorld(w: World, k0: Keys, k1: Keys, power0: boolean, power1:
   if (w.celebrate) {
     const c = w.celebrate
     c.t--
-    idle(w, c.scorer)
+    idle(w)
     stepBall(w)
     if (c.t <= 0) {
       w.celebrate = null
+      w.flash = ''
+      w.flashSeat = -1
       resetPositions(w, c.scorer === 0 ? 1 : 0)
       w.pause = 45
       w.resets++
@@ -675,19 +714,21 @@ export function stepWorld(w: World, k0: Keys, k1: Keys, power0: boolean, power1:
   if (power1) activatePower(w, 1)
   for (const s of [0, 1] as const) {
     const p = w.p[s]
-    p.meter = Math.min(METER_MAX, p.meter + 0.045 * (0.8 + 0.1 * statsOf(p).power))
+    // About 50 s to fill from passive time alone; touches make it roughly a twice-per-half moment.
+    p.meter = Math.min(METER_MAX, p.meter + 0.028 * (0.8 + 0.1 * statsOf(p).power))
   }
   const [a, b] = w.p
   stepPlayer(a, k0, w.sport)
   stepPlayer(b, k1, w.sport)
   campRule(a, 0, w.sport, () => emit(w, 'whistle', 0.7))
   campRule(b, 1, w.sport, () => emit(w, 'whistle', 0.7))
-  separatePlayers(a, b)
+  separatePlayers(a, b, w.sport)
   const prevY = w.ball.y
   stepBall(w)
   if (hitBall(w, 0)) w.shot = { seat: 0, x: a.x }
   if (hitBall(w, 1)) w.shot = { seat: 1, x: b.x }
   const ball = w.ball
+  if (ball.owner === 0 || ball.owner === 1) w.stats.poss[ball.owner]++
   if (ball.y > GROUND - BALL_R) ball.y = GROUND - BALL_R
 
   // Shot clock: whoever last touched the ball has 12 s to score, otherwise possession flips.
@@ -719,8 +760,9 @@ export function stepWorld(w: World, k0: Keys, k1: Keys, power0: boolean, power1:
   } else w.corner = 0
 
   if (w.sport === 'futbol') {
-    if (ball.x < GOAL_DEPTH - BALL_R * 0.5 && ball.y > GOAL_TOP + 8) score(w, 1, 1, 'GOL!', GOAL_DEPTH / 2, GOAL_TOP + 60)
-    else if (ball.x > W - GOAL_DEPTH + BALL_R * 0.5 && ball.y > GOAL_TOP + 8) score(w, 0, 1, 'GOL!', W - GOAL_DEPTH / 2, GOAL_TOP + 60)
+    // The whole ball has to cross the line, like the real rule.
+    if (ball.x < GOAL_DEPTH - BALL_R && ball.y > GOAL_TOP + 8) score(w, 1, 1, 'GOL!', GOAL_DEPTH / 2, GOAL_TOP + 60)
+    else if (ball.x > W - GOAL_DEPTH + BALL_R && ball.y > GOAL_TOP + 8) score(w, 0, 1, 'GOL!', W - GOAL_DEPTH / 2, GOAL_TOP + 60)
   } else if (prevY < RIM_Y && ball.y >= RIM_Y && ball.vy > 0) {
     const L = rimOf(0)
     const R = rimOf(1)

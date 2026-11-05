@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Minimize2, Settings2 } from 'lucide-react'
+import { Loader2, Settings2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TableBrand } from './table-brand'
 import type { DuelLink } from './duel-link'
@@ -29,14 +29,20 @@ import {
   stepWorld,
   type Ball,
   type Keys,
+  type MatchStats,
   type NetEvent,
   type Player,
   type Sport,
 } from './head/engine'
 import { botInput, newBotMemory } from './head/bot'
-import { ARENA_FILL, Fx, drawBall, drawBanner, drawCountdown, drawFlash, drawGoalOrHoop, drawHud, drawPlayer, drawSlowMo, paintBackground } from './head/render'
-import { ControlSettings, OverlayControls, PHONE_PORTRAIT, RotatePrompt, charIndex, enterFullscreen, playEvents, readPrefs, useMedia, usePrefs } from './head/controls'
+import { ARENA_FILL, Fx, drawArena, drawBall, drawBanner, drawCountdown, drawFlash, drawGoalOrHoop, drawHud, drawPlayer, drawSlowMo, paintArena } from './head/render'
+import { ControlSettings, OverlayControls, RotatePrompt, charIndex, enterFullscreen, playEvents, readPrefs, useMedia, usePrefs } from './head/controls'
 import { CharacterSelect } from './head/character-select'
+import { MatchSummary } from './head/match-summary'
+
+/** Phones and small tablets always play in forced full-screen landscape. */
+const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px)'
+type Summary = { score: HeadScore; sc: [number, number]; stats: MatchStats; names: [string, string] }
 
 export type { Sport }
 /** `bot`: solo vs AI. `host`: seat 0 runs physics and streams it. `guest`: seat 1 sends keys and renders the host's stream. */
@@ -91,25 +97,25 @@ export function HeadGame({
   namesRef.current = names
   const prefs = usePrefs()
 
-  const touch = useMedia('(pointer: coarse)')
+  const touch = useMedia(MOBILE_QUERY)
   const portrait = useMedia('(orientation: portrait)')
   // Solo matches open on the lineup screen; online matches use the saved character.
   const [myCh, setMyCh] = useState<number | null>(null)
   const picked = mode !== 'bot' || myCh !== null
   const [started, setStarted] = useState(false)
   const [over, setOver] = useState(false)
-  const [minimized, setMinimized] = useState(false)
+  const [summary, setSummary] = useState<Summary | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [rivalHold, setRivalHold] = useState(false)
   const [powerReady, setPowerReady] = useState(false)
-  const needRotate = touch && portrait && !over && picked
-  const fullLandscape = touch && !portrait && started && !over && !minimized
+  const needRotate = touch && portrait && !over
+  const fullLandscape = touch && !portrait
   const pausedRef = useRef(false)
   pausedRef.current = needRotate || (mode === 'bot' && settingsOpen)
   const myChar = charAt(myCh ?? charIndex(prefs.char))
 
   useEffect(() => {
-    if (picked && linkReady && !needRotate && !window.matchMedia(PHONE_PORTRAIT).matches) setStarted(true)
+    if (picked && linkReady && !needRotate) setStarted(true)
   }, [needRotate, linkReady, picked])
 
   useEffect(() => {
@@ -179,7 +185,9 @@ export function HeadGame({
     if (!started) return
     const ctx = canvas.current?.getContext('2d')
     if (!ctx) return
-    const bg = paintBackground(sport)
+    const art = paintArena(sport)
+    const cam = { z: 1, x: W / 2, y: H / 2 }
+    let excite = 0.15
     const imgs = CHARACTERS.map((c) => {
       const i = new Image()
       i.crossOrigin = 'anonymous'
@@ -238,12 +246,13 @@ export function HeadGame({
       shownHold = v
       setRivalHold(v)
     }
-    const finish = (score: HeadScore) => {
+    // The result is reported once the player leaves the full-time card (or it times out), so the stats are actually seen.
+    const finish = (score: HeadScore, stats: MatchStats = w.stats) => {
       ended = true
       quietCrowd()
       playSound('whistleEnd')
       setOver(true)
-      endRef.current(score)
+      setSummary({ score, sc: [w.sc[0], w.sc[1]], stats: structuredClone(stats), names: displayNames() })
     }
     const handleEvents = (list: NetEvent[]) => {
       playEvents(list, seat)
@@ -306,6 +315,9 @@ export function HeadGame({
           w.overtime = !!msg.ot
           w.flash = String(msg.f ?? '')
           w.flashT = Number(msg.ft) || 0
+          w.flashSeat = Number(msg.fs ?? -1)
+          const ce = Number(msg.ce ?? -1)
+          w.celebrate = ce === 0 || ce === 1 ? { scorer: ce, t: 1 } : null
           w.countdown = Number(msg.cd) || 0
           w.slow = Number(msg.sl) || 0
           w.banner = String(msg.bn ?? '')
@@ -316,7 +328,9 @@ export function HeadGame({
           showHold(!!msg.pz)
         } else if (msg.t === 'end' && !ended) {
           const fin = msg.sc as [number, number]
-          finish({ for: fin[1], against: fin[0] })
+          w.sc[0] = fin[0]
+          w.sc[1] = fin[1]
+          finish({ for: fin[1], against: fin[0] }, (msg.st as MatchStats | undefined) ?? w.stats)
         }
       }
     }
@@ -405,7 +419,7 @@ export function HeadGame({
           blendBall(w.ball, a.b, b.b, t)
         }
         const ghost = { ...p1 }
-        separatePlayers(ghost, p2)
+        separatePlayers(ghost, p2, sport)
       } else {
         // Goal replays run in slow motion on the host clock; the guest simply receives slower frames.
         acc += dt * (w.slow > 0 ? SLOW_MO_SCALE : 1)
@@ -438,6 +452,8 @@ export function HeadGame({
             ot: w.overtime,
             f: w.flash,
             ft: w.flashT,
+            fs: w.flashSeat,
+            ce: w.celebrate ? w.celebrate.scorer : -1,
             cd: w.countdown,
             sl: w.slow,
             bn: w.banner,
@@ -465,27 +481,45 @@ export function HeadGame({
       const c = ctx!
       const n = displayNames()
       const [ox, oy] = fx.offset()
-      c.drawImage(bg, 0, 0)
+      const f = Math.floor(now / 16)
+      const scorer = w.celebrate ? w.celebrate.scorer : -1
+      // Crowd energy: idle murmur, rising when the ball is near a goal, maxed out during a celebration.
+      const nearGoal = w.ball.x < 220 || w.ball.x > W - 220 ? 0.35 : 0
+      const targetExcite = scorer >= 0 ? 1 : 0.12 + nearGoal + Math.min(0.2, Math.hypot(w.ball.vx, w.ball.vy) / 80)
+      excite += (targetExcite - excite) * 0.05
+      // Broadcast camera: pushes in on the goal mouth during the replay, eases back to the wide shot afterwards.
+      const goalSide = scorer === 0 ? 1 : scorer === 1 ? 0 : -1
+      const tz = goalSide >= 0 ? 1.28 : 1
+      const tx = goalSide === 1 ? W - 190 : goalSide === 0 ? 190 : W / 2
+      const ty = goalSide >= 0 ? GROUND - 120 : H / 2
+      cam.z += (tz - cam.z) * 0.06
+      cam.x += (tx - cam.x) * 0.06
+      cam.y += (ty - cam.y) * 0.06
+      const hw = W / (2 * cam.z)
+      const hh = H / (2 * cam.z)
+      const cx = Math.min(W - hw, Math.max(hw, cam.x))
+      const cy = Math.min(H - hh, Math.max(hh, cam.y))
       c.save()
-      if (ox || oy) {
-        c.translate(ox, oy)
-        c.drawImage(bg, 0, 0)
-      }
-      drawGoalOrHoop(c, w, false, sendQ + Math.floor(now / 16))
-      drawPlayer(c, p1, TEAM.home, imgs[p1.ch], n[0], sport, fx.squash[0], Math.floor(now / 16))
-      drawPlayer(c, p2, TEAM.away, imgs[p2.ch], n[1], sport, fx.squash[1], Math.floor(now / 16))
-      drawBall(c, w.ball, sport, seat, Math.floor(now / 16))
+      c.translate(W / 2 + ox, H / 2 + oy)
+      c.scale(cam.z, cam.z)
+      c.translate(-cx, -cy)
+      drawArena(c, art, sport, f, excite, scorer)
+      drawGoalOrHoop(c, w, false, f)
+      drawPlayer(c, p1, { kit: TEAM.home, img: imgs[p1.ch], me: seat === 0, label: n[0], sport, squash: fx.squash[0], frame: f, cheer: scorer === 0, number: 10 })
+      drawPlayer(c, p2, { kit: TEAM.away, img: imgs[p2.ch], me: seat === 1, label: n[1], sport, squash: fx.squash[1], frame: f, cheer: scorer === 1, number: 7 })
+      drawBall(c, w.ball, sport, seat, f)
       fx.draw(c)
-      drawGoalOrHoop(c, w, true, Math.floor(now / 16))
+      drawGoalOrHoop(c, w, true, f)
+      c.drawImage(art.vignette, 0, 0)
       c.restore()
-      drawSlowMo(c, w.slow)
-      drawHud(c, w, n, imgs, Math.floor(now / 16))
+      drawSlowMo(c, w.slow, f)
+      drawHud(c, w, n, imgs, f)
       drawBanner(c, w)
       drawCountdown(c, w.countdown)
-      if (w.flash) drawFlash(c, w.flash, w.flashT)
+      if (w.flash) drawFlash(c, w.flash, w.flashT, w.flashSeat, w.flashSeat >= 0 ? n[w.flashSeat] : '')
 
       if (mode !== 'guest' && !ended && refereeCheck(w)) {
-        if (mode === 'host') for (let i = 0; i < 3; i++) net?.send({ t: 'end', sc: w.sc })
+        if (mode === 'host') for (let i = 0; i < 3; i++) net?.send({ t: 'end', sc: w.sc, st: w.stats })
         finish({ for: w.sc[0], against: w.sc[1] })
         return
       }
@@ -507,7 +541,16 @@ export function HeadGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sport, mode, started])
 
-  if (!picked) return <CharacterSelect sport={sport} onStart={(ch) => setMyCh(ch)} />
+  if (!picked) {
+    if (touch && portrait) return <RotatePrompt sport={sport} paused={false} />
+    if (touch)
+      return (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-background p-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]">
+          <CharacterSelect sport={sport} onStart={(ch) => setMyCh(ch)} />
+        </div>
+      )
+    return <CharacterSelect sport={sport} onStart={(ch) => setMyCh(ch)} />
+  }
 
   const power = POWERS[myChar.power]
   return (
@@ -519,8 +562,7 @@ export function HeadGame({
       <div
         className={cn(
           needRotate && 'hidden',
-          fullLandscape &&
-            'fixed inset-0 z-[70] flex items-center justify-center bg-background pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
+          fullLandscape && 'fixed inset-0 z-[70] flex items-center justify-center overflow-hidden bg-background',
         )}
         // On phones wider than 16:9 the side bars continue the arena (stands above, floor below) instead of showing black.
         style={fullLandscape ? { background: ARENA_FILL[sport] } : undefined}
@@ -561,15 +603,15 @@ export function HeadGame({
               </p>
             </div>
           )}
-          {fullLandscape && (
-            <button
-              type="button"
-              onClick={() => setMinimized(true)}
-              className="absolute left-2 top-2 z-20 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm"
-              aria-label="Tam ekrandan çık"
-            >
-              <Minimize2 className="size-4" aria-hidden="true" />
-            </button>
+          {summary && (
+            <MatchSummary
+              sport={sport}
+              seat={mode === 'guest' ? 1 : 0}
+              score={summary.sc}
+              stats={summary.stats}
+              names={summary.names}
+              onContinue={() => endRef.current(summary.score)}
+            />
           )}
           {!over && (
             <button
@@ -579,7 +621,7 @@ export function HeadGame({
               aria-label="Kontrol ayarları"
               className={cn(
                 'absolute top-2 z-20 flex size-9 items-center justify-center rounded-full border border-foreground/30 bg-background/40 text-foreground backdrop-blur-sm',
-                fullLandscape ? 'left-13' : 'left-2',
+                'left-2',
               )}
             >
               <Settings2 className="size-4" aria-hidden="true" />
@@ -594,7 +636,7 @@ export function HeadGame({
             </div>
           )}
         </div>
-        {fullLandscape && (
+        {fullLandscape && !over && (
           <OverlayControls
             k1={k1}
             full

@@ -42,9 +42,9 @@ export const newBotMemory = (): BotMemory => ({
 
 /** react: steps between re-plans, noise: aim error in px, kick: chance to take a shot, slack: chance to idle a step. */
 const LEVEL: Record<BotLevel, { react: number; noise: number; kick: number; slack: number; power: number; look: number }> = {
-  easy: { react: 12, noise: 60, kick: 0.45, slack: 0.28, power: 240, look: 30 },
-  mid: { react: 8, noise: 36, kick: 0.7, slack: 0.13, power: 120, look: 50 },
-  hard: { react: 2, noise: 8, kick: 1, slack: 0, power: 20, look: 75 },
+  easy: { react: 18, noise: 90, kick: 0.3, slack: 0.38, power: 300, look: 24 },
+  mid: { react: 11, noise: 52, kick: 0.5, slack: 0.22, power: 180, look: 40 },
+  hard: { react: 4, noise: 14, kick: 0.92, slack: 0.04, power: 40, look: 70 },
 }
 
 /**
@@ -89,6 +89,9 @@ export function botInput(w: World, seat: 0 | 1, level: BotLevel, m: BotMemory): 
       }
       if (target === null) target = path[path.length - 1].x - dir * 26
     }
+    // Goalkeeping: when the rival is clearly first to the ball, drop between the ball and the own goal instead of chasing.
+    const rivalFirst = Math.abs(rival.x - ball.x) + 40 < Math.abs(me.x - ball.x)
+    if (level !== 'easy' && rivalFirst && !ballBehind) target = ball.x - dir * Math.min(200, Math.abs(ball.x - ownGoalX) * 0.45)
     // The easy bot drifts home when the ball is deep in the other half.
     if (level === 'easy' && (ball.x - W / 2) * dir > 120) target = (target + (ownGoalX - dir * 220)) / 2
     target += (Math.random() - 0.5) * L.noise
@@ -121,8 +124,22 @@ export function botInput(w: World, seat: 0 | 1, level: BotLevel, m: BotMemory): 
     }
   }
 
-  // Jump when the forecast puts the ball over the head within reach.
   const hy = headY(me)
+  // Running back past a low ball would shove it into the own net: hop over it instead, or wait if it is right at the line.
+  const behind = (ball.x - me.x) * dir < 0
+  const runningBack = (k.left && dir === 1) || (k.right && dir === -1)
+  const lowBall = ball.y > hy - 10
+  if (behind && runningBack && lowBall && Math.abs(ball.x - me.x) < 120) {
+    const nearOwnLine = Math.abs(ball.x - ownGoalX) < GOAL_DEPTH + 90
+    if (nearOwnLine && level !== 'hard') {
+      k.left = false
+      k.right = false
+    } else if (onGround(me) && m.jumpCd <= 0) {
+      k.jump = true
+      m.jumpCd = 26
+    }
+  }
+  // Jump when the forecast puts the ball over the head within reach.
   if (onGround(me) && m.jumpCd <= 0) {
     for (let t = 8; t <= 18 && t < path.length; t += 2) {
       const pt = path[t]

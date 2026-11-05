@@ -192,9 +192,10 @@ export function OverlayControls({
   return (
     <div
       className={cn(
-        'pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between p-2.5 lg:hidden',
-        full &&
-          'pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]',
+        'pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between p-2.5',
+        full
+          ? 'pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]'
+          : 'lg:hidden',
       )}
     >
       <DirectionPad k1={k1} size={size} icon={icon} onPress={onPress} />
@@ -323,7 +324,7 @@ export function RotatePrompt({ sport, paused }: { sport: Sport; paused: boolean 
   return (
     <div
       role="alert"
-      className="flex min-h-[60dvh] flex-col items-center justify-center gap-5 rounded-2xl border border-primary/30 bg-card px-6 py-8 text-center shadow-xl"
+      className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-5 bg-background px-6 py-8 text-center"
     >
       <div className="relative">
         <NextImage
