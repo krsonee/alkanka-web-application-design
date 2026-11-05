@@ -111,9 +111,9 @@ const OVERLAY_PAD =
 const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground opacity-100'
 
 const BTN_SIZE: Record<ControlPrefs['size'], string> = {
-  s: 'size-14 landscape:size-16',
-  m: 'size-16 landscape:size-20',
-  l: 'size-20 landscape:size-24',
+  s: 'size-12 landscape:size-14',
+  m: 'size-14 landscape:size-16',
+  l: 'size-16 landscape:size-20',
 }
 const SMALL_BTN: Record<ControlPrefs['size'], string> = {
   s: 'size-11 landscape:size-12',
@@ -193,8 +193,9 @@ export function OverlayControls({
     <div
       className={cn(
         'pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between p-2.5',
+        // Inset ~9% from each edge so both goal mouths (the outer ~8% of the pitch) stay fully visible.
         full
-          ? 'pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]'
+          ? 'pb-[max(0.5rem,env(safe-area-inset-bottom))] pl-[max(9%,env(safe-area-inset-left))] pr-[max(9%,env(safe-area-inset-right))]'
           : 'lg:hidden',
       )}
     >

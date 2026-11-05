@@ -80,7 +80,7 @@ export function botInput(w: World, seat: 0 | 1, level: BotLevel, m: BotMemory): 
     } else {
       for (let t = 4; t < path.length; t += 2) {
         const pt = path[t]
-        if (pt.y < GROUND - FOOT - HEAD_R - 150) continue
+        if (pt.y < GROUND - FOOT - HEAD_R - 100) continue
         const want = pt.x - dir * 26
         if (Math.abs(want - me.x) <= speed * t + 10) {
           target = want
@@ -143,7 +143,7 @@ export function botInput(w: World, seat: 0 | 1, level: BotLevel, m: BotMemory): 
   if (onGround(me) && m.jumpCd <= 0) {
     for (let t = 8; t <= 18 && t < path.length; t += 2) {
       const pt = path[t]
-      if (Math.abs(pt.x - me.x) < 58 && pt.y < hy - 18 && pt.y > hy - 175) {
+      if (Math.abs(pt.x - me.x) < 58 && pt.y < hy - 18 && pt.y > hy - 125) {
         if (level !== 'easy' || Math.random() < 0.6) k.jump = true
         m.jumpCd = 22
         break

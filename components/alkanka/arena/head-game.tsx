@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Settings2 } from 'lucide-react'
+import { Loader2, Maximize2, Settings2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TableBrand } from './table-brand'
 import type { DuelLink } from './duel-link'
@@ -25,6 +25,7 @@ import {
   noKeys,
   refereeCheck,
   separatePlayers,
+  skipCelebration,
   stepPlayer,
   stepWorld,
   type Ball,
@@ -35,12 +36,28 @@ import {
   type Sport,
 } from './head/engine'
 import { botInput, newBotMemory } from './head/bot'
-import { ARENA_FILL, Fx, drawArena, drawBall, drawBanner, drawCountdown, drawFlash, drawGoalOrHoop, drawHud, drawPlayer, drawSlowMo, paintArena } from './head/render'
+import {
+  ARENA_FILL,
+  Fx,
+  drawArena,
+  drawBall,
+  drawBanner,
+  drawCountdown,
+  drawFlash,
+  drawGoalOrHoop,
+  drawHud,
+  drawPlayer,
+  drawSlowMo,
+  paintArena,
+  setViewHeight,
+  viewShift,
+} from './head/render'
 import { ControlSettings, OverlayControls, RotatePrompt, charIndex, enterFullscreen, playEvents, readPrefs, useMedia, usePrefs } from './head/controls'
 import { CharacterSelect } from './head/character-select'
 import { MatchSummary } from './head/match-summary'
 
 /** Phones and small tablets always play in forced full-screen landscape. */
+const HELP_KEY = 'alkanka:head-help-seen'
 const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px), (max-height: 500px)'
 type Summary = { score: HeadScore; sc: [number, number]; stats: MatchStats; names: [string, string] }
 
@@ -109,19 +126,44 @@ export function HeadGame({
   const [rivalHold, setRivalHold] = useState(false)
   const [powerReady, setPowerReady] = useState(false)
   const needRotate = touch && portrait && !over
-  const fullLandscape = touch && !portrait
+  // Once a match is on, the game owns the whole window on every device: no site chrome around a tiny box.
+  const immersive = started && !needRotate
+  const [round, setRound] = useState(0)
+  const skipPresses = useRef(0)
+  const quitRef = useRef<() => void>(() => {})
+  const [helpOpen, setHelpOpen] = useState(() => typeof window !== 'undefined' && !touch && !window.localStorage.getItem(HELP_KEY))
+  const showHelp = helpOpen && !touch && started && !over
   const pausedRef = useRef(false)
-  pausedRef.current = needRotate || (mode === 'bot' && settingsOpen)
+  pausedRef.current = needRotate || (mode === 'bot' && (settingsOpen || showHelp))
   const myChar = charAt(myCh ?? charIndex(prefs.char))
+
+  // Wide screens get a shorter canvas (the top of the stands is cropped) so the pitch fills edge to edge without bars.
+  const [viewH, setViewH] = useState(H)
+  const viewRef = useRef(H)
+  viewRef.current = viewH
+  useEffect(() => {
+    if (!immersive) {
+      setViewH(H)
+      return
+    }
+    const fit = () => setViewH(Math.round(Math.min(H, Math.max(430, (W * window.innerHeight) / window.innerWidth))))
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [immersive])
 
   useEffect(() => {
     if (picked && linkReady && !needRotate) setStarted(true)
   }, [needRotate, linkReady, picked])
 
-  useEffect(() => {
-    if (!over) return
+  const leave = () => {
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
-  }, [over])
+  }
+  const rematch = () => {
+    setSummary(null)
+    setOver(false)
+    setRound((r) => r + 1)
+  }
 
   // A held thumb outside the buttons used to trigger Android text selection and the Google "tap to define" sheet mid-match.
   useEffect(() => {
@@ -157,6 +199,7 @@ export function HeadGame({
     }
     const powerKeys = new Set(['KeyE', 'KeyQ', 'ShiftLeft', 'ShiftRight'])
     const kd = (e: KeyboardEvent) => {
+      if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) skipPresses.current++
       if (powerKeys.has(e.code)) {
         if (!e.repeat) powerPresses.current++
         e.preventDefault()
@@ -218,6 +261,7 @@ export function HeadGame({
     let shownReady = false
     let lastScore = '0 - 0'
     let consumedPower = powerPresses.current
+    let consumedSkip = skipPresses.current
     // Host: the guest moves its own player locally and reports the result, so their controls never wait on the network.
     let remoteMe: RemoteMe | null = null
     let remoteQ = -1
@@ -253,6 +297,9 @@ export function HeadGame({
       playSound('whistleEnd')
       setOver(true)
       setSummary({ score, sc: [w.sc[0], w.sc[1]], stats: structuredClone(stats), names: displayNames() })
+    }
+    quitRef.current = () => {
+      if (!ended) finish({ for: w.sc[0], against: w.sc[1] })
     }
     const handleEvents = (list: NetEvent[]) => {
       playEvents(list, seat)
@@ -477,7 +524,13 @@ export function HeadGame({
         setPowerReady(ready)
       }
 
+      if (skipPresses.current !== consumedSkip) {
+        consumedSkip = skipPresses.current
+        if (mode !== 'guest') skipCelebration(w)
+      }
+
       fx.update(w.ball, w.p)
+      setViewHeight(viewRef.current)
       const c = ctx!
       const n = displayNames()
       const [ox, oy] = fx.offset()
@@ -499,14 +552,18 @@ export function HeadGame({
       const hh = H / (2 * cam.z)
       const cx = Math.min(W - hw, Math.max(hw, cam.x))
       const cy = Math.min(H - hh, Math.max(hh, cam.y))
+      const shift = viewShift()
+      // Close together, the second tag rises one row so the two names never sit on top of each other.
+      const lift = Math.abs(p1.x - p2.x) < 150 && Math.abs(p1.y - p2.y) < 120 ? 32 : 0
       c.save()
+      c.translate(0, shift)
       c.translate(W / 2 + ox, H / 2 + oy)
       c.scale(cam.z, cam.z)
       c.translate(-cx, -cy)
       drawArena(c, art, sport, f, excite, scorer)
       drawGoalOrHoop(c, w, false, f)
       drawPlayer(c, p1, { kit: TEAM.home, img: imgs[p1.ch], me: seat === 0, label: n[0], sport, squash: fx.squash[0], frame: f, cheer: scorer === 0, number: 10 })
-      drawPlayer(c, p2, { kit: TEAM.away, img: imgs[p2.ch], me: seat === 1, label: n[1], sport, squash: fx.squash[1], frame: f, cheer: scorer === 1, number: 7 })
+      drawPlayer(c, p2, { kit: TEAM.away, img: imgs[p2.ch], me: seat === 1, label: n[1], sport, squash: fx.squash[1], frame: f, cheer: scorer === 1, number: 7, lift })
       drawBall(c, w.ball, sport, seat, f)
       fx.draw(c)
       drawGoalOrHoop(c, w, true, f)
@@ -514,7 +571,10 @@ export function HeadGame({
       c.restore()
       drawSlowMo(c, w.slow, f)
       drawHud(c, w, n, imgs, f)
+      c.save()
+      c.translate(0, shift)
       drawBanner(c, w)
+      c.restore()
       drawCountdown(c, w.countdown)
       if (w.flash) drawFlash(c, w.flash, w.flashT, w.flashSeat, w.flashSeat >= 0 ? n[w.flashSeat] : '')
 
@@ -536,10 +596,11 @@ export function HeadGame({
       cancelAnimationFrame(raf)
       quietCrowd()
       document.removeEventListener('visibilitychange', onVis)
+      setViewHeight(H)
     }
-    // myCh is fixed once the match starts, so it is read once here rather than restarting the loop.
+    // myCh is fixed once the match starts, so it is read once here rather than restarting the loop; round restarts it for a rematch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sport, mode, started])
+  }, [sport, mode, started, round])
 
   if (!picked) {
     if (touch && portrait) return <RotatePrompt sport={sport} paused={false} />
@@ -562,33 +623,88 @@ export function HeadGame({
       <div
         className={cn(
           needRotate && 'hidden',
-          fullLandscape && 'fixed inset-0 z-[70] flex items-center justify-center overflow-hidden bg-background',
+          immersive && 'fixed inset-0 z-[70] flex items-center justify-center overflow-hidden bg-background',
         )}
-        // On phones wider than 16:9 the side bars continue the arena (stands above, floor below) instead of showing black.
-        style={fullLandscape ? { background: ARENA_FILL[sport] } : undefined}
+        style={immersive ? { background: ARENA_FILL[sport] } : undefined}
       >
         <div
-          className={cn(
-            'relative overflow-hidden rounded-2xl border border-primary/30 bg-background shadow-xl',
-            fullLandscape && 'aspect-video h-full max-w-full rounded-none border-0',
-          )}
+          className={cn('relative overflow-hidden', immersive ? 'rounded-none' : 'rounded-2xl border border-primary/30 bg-background shadow-xl')}
+          style={immersive ? { width: `min(100vw, calc(100dvh * ${W} / ${viewH}))`, aspectRatio: `${W} / ${viewH}` } : undefined}
         >
           <canvas
             ref={canvas}
             width={W}
-            height={H}
-            className={cn('block aspect-video w-full touch-none select-none', fullLandscape && 'h-full')}
+            height={viewH}
+            onPointerDown={() => skipPresses.current++}
+            className="block h-full w-full touch-none select-none"
+            style={{ aspectRatio: `${W} / ${viewH}` }}
             aria-label={sport === 'futbol' ? 'Kafa topu sahası' : 'Kafa basketbolu sahası'}
           />
-          {!fullLandscape && (
+          {touch && !over && (
             <OverlayControls
               k1={k1}
+              full
+              onPress={enterFullscreen}
               onPower={() => powerPresses.current++}
               powerReady={powerReady}
               powerColor={power.color}
             />
           )}
           <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
+          {immersive && !touch && !over && (
+            <div className="absolute right-3 top-3 z-20 flex gap-2">
+              <button
+                type="button"
+                onClick={() => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()).catch?.(() => {})}
+                aria-label="Tam ekran"
+                className="flex size-10 items-center justify-center rounded-full border border-foreground/30 bg-background/50 text-foreground backdrop-blur-sm transition-colors hover:bg-background/80"
+              >
+                <Maximize2 className="size-4" aria-hidden="true" />
+              </button>
+              {mode === 'bot' && (
+                <button
+                  type="button"
+                  onClick={() => quitRef.current()}
+                  aria-label="Maçı bitir"
+                  className="flex size-10 items-center justify-center rounded-full border border-foreground/30 bg-background/50 text-foreground backdrop-blur-sm transition-colors hover:bg-background/80"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )}
+          {showHelp && (
+            <div role="dialog" aria-label="Kontroller" className="absolute inset-0 z-30 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
+              <div className="flex w-full max-w-lg flex-col gap-4 rounded-2xl border border-primary/40 bg-card p-6 text-card-foreground shadow-2xl">
+                <p className="font-display text-2xl font-black uppercase tracking-tight">Kontroller</p>
+                <ul className="grid grid-cols-2 gap-3 text-sm">
+                  {[
+                    ['A / D  ·  ← →', 'Hareket'],
+                    ['W  ·  ↑', 'Zıpla'],
+                    ['S  ·  Boşluk', 'Şut (basılı tut: güçlü şut)'],
+                    ['E  ·  Shift', `Süper güç: ${power.name}`],
+                  ].map(([key, label]) => (
+                    <li key={key} className="flex flex-col gap-1 rounded-xl bg-muted p-3">
+                      <span className="font-mono text-base font-bold text-foreground">{key}</span>
+                      <span className="text-muted-foreground">{label}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-sm leading-relaxed text-muted-foreground">Gol tekrarını boşluk tuşu ya da tıklama ile geçebilirsin.</p>
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => {
+                    window.localStorage.setItem(HELP_KEY, '1')
+                    setHelpOpen(false)
+                  }}
+                  className="rounded-xl bg-primary px-5 py-3 text-base font-black text-primary-foreground shadow-md transition-transform active:scale-95"
+                >
+                  Anladım, başla
+                </button>
+              </div>
+            </div>
+          )}
           {mode !== 'bot' && !over && (!started || linkLost) && (
             <div
               className={cn(
@@ -610,7 +726,11 @@ export function HeadGame({
               score={summary.sc}
               stats={summary.stats}
               names={summary.names}
-              onContinue={() => endRef.current(summary.score)}
+              onContinue={() => {
+                leave()
+                endRef.current(summary.score)
+              }}
+              onRematch={mode === 'bot' ? rematch : undefined}
             />
           )}
           {!over && (
@@ -636,20 +756,7 @@ export function HeadGame({
             </div>
           )}
         </div>
-        {fullLandscape && !over && (
-          <OverlayControls
-            k1={k1}
-            full
-            onPress={enterFullscreen}
-            onPower={() => powerPresses.current++}
-            powerReady={powerReady}
-            powerColor={power.color}
-          />
-        )}
       </div>
-      <p className="hidden text-center text-xs text-muted-foreground lg:block">
-        A / D veya oklar: hareket · W / yukarı: zıpla · S / boşluk: şut (basılı tut, güçlü şut) · E / Shift: süper güç ({power.name})
-      </p>
     </div>
   )
 }

@@ -113,7 +113,7 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
   },
   'kafa-topu': {
     title: 'Kafa Topu',
-    short: 'Koca kafalı futbol. Zıpla, kafa vur, 60 saniyede rakibinden fazla gol at.',
+    short: 'Koca kafalı futbol. Zıpla, kafa vur, 90 saniyede rakibinden fazla gol at.',
     image: '/images/games/kafa-topu.png',
     players: '1v1',
     group: 2,
