@@ -212,16 +212,26 @@ const LAMPS = [150, 375, 585, 810]
 
 /** Visible canvas height. Wide phones crop the top of the stands so the pitch fills the screen edge to edge. */
 let VIEW_H = H
-export function setViewHeight(h: number) {
+let SHIFT = 0
+/** `shift` < 0 crops the top of the stands; > 0 leaves that much sky above the stands on tall screens. */
+export function setViewHeight(h: number, shift = Math.min(0, h - H)) {
   VIEW_H = h
+  SHIFT = shift
 }
-/** How far the world is shifted up so the cropped part is the top of the stands, never the pitch. */
-export const viewShift = () => Math.min(0, VIEW_H - H)
+export const viewShift = () => SHIFT
 
-/** Tall screens get extra canvas below the pitch; it continues the floor so the field fills the screen instead of leaving bands. */
+/** Fills whatever canvas the world does not cover: dark sky above the stands and more floor below the pitch. */
 export function drawFloorExtension(ctx: CanvasRenderingContext2D, sport: Sport) {
-  if (VIEW_H <= H) return
-  const g = ctx.createLinearGradient(0, H, 0, VIEW_H)
+  if (SHIFT > 0) {
+    const s = ctx.createLinearGradient(0, 0, 0, SHIFT)
+    s.addColorStop(0, sport === 'futbol' ? '#020409' : '#050302')
+    s.addColorStop(1, sport === 'futbol' ? '#05080f' : '#0b0806')
+    ctx.fillStyle = s
+    ctx.fillRect(0, 0, W, SHIFT + 1)
+  }
+  const top = H + SHIFT
+  if (VIEW_H <= top) return
+  const g = ctx.createLinearGradient(0, top, 0, VIEW_H)
   if (sport === 'futbol') {
     g.addColorStop(0, '#2f7d3b')
     g.addColorStop(1, '#1d4f26')
@@ -230,9 +240,9 @@ export function drawFloorExtension(ctx: CanvasRenderingContext2D, sport: Sport) 
     g.addColorStop(1, '#7a5230')
   }
   ctx.fillStyle = g
-  ctx.fillRect(0, H, W, VIEW_H - H)
+  ctx.fillRect(0, top, W, VIEW_H - top)
   ctx.fillStyle = 'rgba(0,0,0,0.25)'
-  ctx.fillRect(0, H, W, 6)
+  ctx.fillRect(0, top, W, 6)
 }
 
 function rand(seed: number) {

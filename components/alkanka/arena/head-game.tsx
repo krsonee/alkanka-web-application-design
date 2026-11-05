@@ -59,8 +59,12 @@ import { MatchSummary } from './head/match-summary'
 
 /** Phones and small tablets always play in forced full-screen landscape. */
 const HELP_KEY = 'alkanka:head-help-seen'
-/** Tallest canvas: beyond this a near-square window would show mostly empty floor, so the rest is letterboxed. */
-const MAX_VIEW_H = 660
+/** Tallest canvas (covers near-square desktop windows); only portrait-shaped windows get letterboxed beyond it. */
+const MAX_VIEW_H = 920
+/** World px of floor kept clear under the pitch on phones so the buttons do not sit on the players. */
+const TOUCH_STRIP = 60
+/** Never crop past the bottom of the stands: the advertising boards start at y=150. */
+const MAX_CROP = -165
 const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px), (max-height: 500px)'
 type Summary = { score: HeadScore; sc: [number, number]; stats: MatchStats; names: [string, string] }
 
@@ -144,20 +148,27 @@ export function HeadGame({
   const myChar = charAt(myCh ?? charIndex(prefs.char))
 
   // Wide screens get a shorter canvas (the top of the stands is cropped) so the pitch fills edge to edge without bars.
-  const [viewH, setViewH] = useState(H)
-  const viewRef = useRef(H)
-  viewRef.current = viewH
+  const [view, setView] = useState({ h: H, shift: 0 })
+  const viewH = view.h
+  const viewRef = useRef(view)
+  viewRef.current = view
   useEffect(() => {
     if (!immersive) {
-      setViewH(H)
+      setView({ h: H, shift: 0 })
       return
     }
-    // Tall windows (desktop, near-square) extend the floor below the pitch instead of leaving empty bands above and below.
-    const fit = () => setViewH(Math.round(Math.min(MAX_VIEW_H, Math.max(430, (W * window.innerHeight) / window.innerWidth))))
+    const fit = () => {
+      const h = Math.round(Math.min(MAX_VIEW_H, Math.max(430, (W * window.innerHeight) / window.innerWidth)))
+      // On phones a strip of floor is reserved under the pitch for the thumb buttons, paid for by cropping more of the stands.
+      const free = h - H - (touch ? TOUCH_STRIP : 0)
+      // Tall windows split the extra height between sky above the stands and floor below the pitch.
+      const shift = free >= 0 ? Math.round(free * 0.4) : Math.max(MAX_CROP, free)
+      setView({ h, shift })
+    }
     fit()
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)
-  }, [immersive])
+  }, [immersive, touch])
 
   useEffect(() => {
     if (picked && linkReady && !needRotate) setStarted(true)
@@ -537,7 +548,7 @@ export function HeadGame({
       }
 
       fx.update(w.ball, w.p)
-      setViewHeight(viewRef.current)
+      setViewHeight(viewRef.current.h, viewRef.current.shift)
       const c = ctx!
       const n = displayNames()
       const [ox, oy] = fx.offset()

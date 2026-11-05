@@ -26,7 +26,8 @@ export const W = 960
 export const H = 540
 export const GROUND = 482
 export const STEP_MS = 1000 / 60
-export const HEAD_R = 40
+/** At 40 a head was nearly as tall as the goal mouth (108); 35 keeps the cartoon look with saner proportions. */
+export const HEAD_R = 35
 /** Distance from the head centre (normal size) to the sole. */
 export const FOOT = HEAD_R + 30
 export const BALL_R = 17
