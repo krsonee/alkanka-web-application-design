@@ -78,7 +78,7 @@ export function CharacterSelect({ sport, onStart }: { sport: Sport; onStart: (ch
                     active ? 'border-primary shadow-[0_0_0_3px] shadow-primary/25' : 'border-border hover:border-primary/50',
                   )}
                 >
-                  <span className="relative block size-16 overflow-hidden rounded-full bg-muted sm:size-14 md:size-16">
+                  <span className="relative block size-16 overflow-hidden rounded-full bg-muted sm:size-14 md:size-16 [@media(max-height:500px)]:size-10">
                     <NextImage
                       src={`${c.img}.webp`}
                       alt=""
@@ -128,7 +128,7 @@ export function CharacterSelect({ sport, onStart }: { sport: Sport; onStart: (ch
             type="button"
             disabled={!canStart}
             onClick={() => onStart(selected)}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-display text-base font-black uppercase text-primary-foreground shadow-md transition-transform active:scale-95 disabled:opacity-50"
+            className="sticky bottom-3 z-10 flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-display text-base font-black uppercase text-primary-foreground shadow-md transition-transform active:scale-95 disabled:opacity-50"
           >
             <Play className="size-4" aria-hidden="true" />
             {canStart ? 'Maça çık' : `${current.unlock} kupada açılır`}

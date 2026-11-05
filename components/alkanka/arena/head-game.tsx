@@ -41,7 +41,7 @@ import { CharacterSelect } from './head/character-select'
 import { MatchSummary } from './head/match-summary'
 
 /** Phones and small tablets always play in forced full-screen landscape. */
-const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px)'
+const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px), (max-height: 500px)'
 type Summary = { score: HeadScore; sc: [number, number]; stats: MatchStats; names: [string, string] }
 
 export type { Sport }
