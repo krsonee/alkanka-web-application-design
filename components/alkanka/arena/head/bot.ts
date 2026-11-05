@@ -46,9 +46,9 @@ export const newBotMemory = (): BotMemory => ({
 
 /** react: steps between re-plans, noise: aim error in px, kick: chance to take a shot, slack: chance to idle a step. */
 const LEVEL: Record<BotLevel, { react: number; noise: number; kick: number; slack: number; power: number; look: number }> = {
-  easy: { react: 18, noise: 90, kick: 0.3, slack: 0.38, power: 300, look: 24 },
+  easy: { react: 26, noise: 140, kick: 0.2, slack: 0.52, power: 400, look: 16 },
   mid: { react: 11, noise: 52, kick: 0.5, slack: 0.22, power: 180, look: 40 },
-  hard: { react: 4, noise: 14, kick: 0.92, slack: 0.04, power: 40, look: 70 },
+  hard: { react: 3, noise: 6, kick: 1, slack: 0, power: 30, look: 80 },
 }
 
 /**
