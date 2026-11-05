@@ -111,17 +111,18 @@ const OVERLAY_PAD =
 const OVERLAY_PAD_ON = 'scale-90 border-primary bg-primary/70 text-primary-foreground opacity-100'
 
 const BTN_SIZE: Record<ControlPrefs['size'], string> = {
-  s: 'size-12 landscape:size-14',
-  m: 'size-14 landscape:size-16',
-  l: 'size-16 landscape:size-20',
-}
-const SMALL_BTN: Record<ControlPrefs['size'], string> = {
   s: 'size-11 landscape:size-12',
   m: 'size-12 landscape:size-14',
   l: 'size-14 landscape:size-16',
 }
-const ICON_SIZE: Record<ControlPrefs['size'], string> = { s: 'size-6', m: 'size-7', l: 'size-8' }
-const BTN_OPACITY: Record<ControlPrefs['opacity'], string> = { low: 'opacity-40', mid: 'opacity-75', high: 'opacity-100' }
+const SMALL_BTN: Record<ControlPrefs['size'], string> = {
+  s: 'size-10 landscape:size-11',
+  m: 'size-11 landscape:size-12',
+  l: 'size-12 landscape:size-14',
+}
+const ICON_SIZE: Record<ControlPrefs['size'], string> = { s: 'size-5', m: 'size-6', l: 'size-7' }
+// Buttons sit over the goal mouths on phones, so even the "mid" setting keeps the goal readable through them.
+const BTN_OPACITY: Record<ControlPrefs['opacity'], string> = { low: 'opacity-30', mid: 'opacity-55', high: 'opacity-90' }
 
 /** One touch zone for left/right so sliding the thumb across switches direction without lifting it. */
 function DirectionPad({ k1, size, icon, onPress }: { k1: React.RefObject<Keys>; size: string; icon: string; onPress?: () => void }) {

@@ -26,6 +26,8 @@ export type BotMemory = {
   cornerFor: number
   escapeTo: number | null
   escapeFor: number
+  blockedFor: number
+  backFor: number
 }
 
 export const newBotMemory = (): BotMemory => ({
@@ -38,6 +40,8 @@ export const newBotMemory = (): BotMemory => ({
   cornerFor: 0,
   escapeTo: null,
   escapeFor: 0,
+  blockedFor: 0,
+  backFor: 0,
 })
 
 /** react: steps between re-plans, noise: aim error in px, kick: chance to take a shot, slack: chance to idle a step. */
@@ -121,6 +125,25 @@ export function botInput(w: World, seat: 0 | 1, level: BotLevel, m: BotMemory): 
       // Turn to face the rival goal before contact.
       if (dir === 1) k.right = true
       else k.left = true
+    }
+  }
+
+  // Blocked by the rival on the way to the ball: hop over them, and if that keeps failing, back off and come again.
+  const pushing = k.left || k.right
+  const pushDir = k.right ? 1 : -1
+  const rivalInWay = pushing && (rival.x - me.x) * pushDir > 0 && Math.abs(rival.x - me.x) < HEAD_R * 2.6
+  m.blockedFor = rivalInWay && Math.abs(me.vx) < 1.5 ? m.blockedFor + 1 : Math.max(0, m.blockedFor - 2)
+  if (m.backFor > 0) {
+    m.backFor--
+    const away = rival.x > me.x ? -1 : 1
+    k.left = away === -1
+    k.right = away === 1
+  } else if (m.blockedFor > 14 && onGround(me) && m.jumpCd <= 0) {
+    k.jump = true
+    m.jumpCd = 30
+    if (m.blockedFor > 50) {
+      m.backFor = 22
+      m.blockedFor = 0
     }
   }
 

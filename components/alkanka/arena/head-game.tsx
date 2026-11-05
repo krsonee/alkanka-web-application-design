@@ -44,6 +44,7 @@ import {
   drawBanner,
   drawCountdown,
   drawFlash,
+  drawFloorExtension,
   drawGoalOrHoop,
   drawHud,
   drawPlayer,
@@ -58,6 +59,8 @@ import { MatchSummary } from './head/match-summary'
 
 /** Phones and small tablets always play in forced full-screen landscape. */
 const HELP_KEY = 'alkanka:head-help-seen'
+/** Tallest canvas: beyond this a near-square window would show mostly empty floor, so the rest is letterboxed. */
+const MAX_VIEW_H = 660
 const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px), (max-height: 500px)'
 type Summary = { score: HeadScore; sc: [number, number]; stats: MatchStats; names: [string, string] }
 
@@ -91,12 +94,15 @@ export function HeadGame({
   sport,
   mode,
   onEnd,
+  onRematch,
   names = ['Sen', 'Bot'],
   link,
-}: {
+  }: {
   sport: Sport
   mode: HeadMode
   onEnd: (score: HeadScore) => void
+  /** When set, the rematch button settles this match and the parent stakes a fresh one with the same bet. */
+  onRematch?: (score: HeadScore) => void
   names?: [string, string]
   link?: DuelLink
 }) {
@@ -146,7 +152,8 @@ export function HeadGame({
       setViewH(H)
       return
     }
-    const fit = () => setViewH(Math.round(Math.min(H, Math.max(430, (W * window.innerHeight) / window.innerWidth))))
+    // Tall windows (desktop, near-square) extend the floor below the pitch instead of leaving empty bands above and below.
+    const fit = () => setViewH(Math.round(Math.min(MAX_VIEW_H, Math.max(430, (W * window.innerHeight) / window.innerWidth))))
     fit()
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)
@@ -569,6 +576,7 @@ export function HeadGame({
       drawGoalOrHoop(c, w, true, f)
       c.drawImage(art.vignette, 0, 0)
       c.restore()
+      drawFloorExtension(c, sport)
       drawSlowMo(c, w.slow, f)
       drawHud(c, w, n, imgs, f)
       c.save()
@@ -730,7 +738,16 @@ export function HeadGame({
                 leave()
                 endRef.current(summary.score)
               }}
-              onRematch={mode === 'bot' ? rematch : undefined}
+              onRematch={
+                mode !== 'bot'
+                  ? undefined
+                  : onRematch
+                    ? () => {
+                        leave()
+                        onRematch(summary.score)
+                      }
+                    : rematch
+              }
             />
           )}
           {!over && (

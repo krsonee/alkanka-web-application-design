@@ -216,7 +216,24 @@ export function setViewHeight(h: number) {
   VIEW_H = h
 }
 /** How far the world is shifted up so the cropped part is the top of the stands, never the pitch. */
-export const viewShift = () => VIEW_H - H
+export const viewShift = () => Math.min(0, VIEW_H - H)
+
+/** Tall screens get extra canvas below the pitch; it continues the floor so the field fills the screen instead of leaving bands. */
+export function drawFloorExtension(ctx: CanvasRenderingContext2D, sport: Sport) {
+  if (VIEW_H <= H) return
+  const g = ctx.createLinearGradient(0, H, 0, VIEW_H)
+  if (sport === 'futbol') {
+    g.addColorStop(0, '#2f7d3b')
+    g.addColorStop(1, '#1d4f26')
+  } else {
+    g.addColorStop(0, '#b07a45')
+    g.addColorStop(1, '#7a5230')
+  }
+  ctx.fillStyle = g
+  ctx.fillRect(0, H, W, VIEW_H - H)
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  ctx.fillRect(0, H, W, 6)
+}
 
 function rand(seed: number) {
   let s = seed
@@ -1533,7 +1550,7 @@ export function drawBanner(ctx: CanvasRenderingContext2D, w: World) {
     ctx.restore()
     return
   }
-  const by = 118 + (H - VIEW_H)
+  const by = 118 - viewShift()
   ctx.fillStyle = 'rgba(8,10,14,0.88)'
   ctx.strokeStyle = color
   ctx.lineWidth = 2

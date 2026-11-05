@@ -34,6 +34,8 @@ export type GameApi = {
   finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
   /** Gives up the hand (counts as a loss) and goes straight back to the lobby. */
   leave?: () => void
+  /** Settles this hand and immediately stakes the same bet on a fresh one, skipping the result screen. */
+  again?: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
   saveKey?: string
 }
 
@@ -135,7 +137,12 @@ export function StakeGate({
       await finish('lose', 'Masadan ayrıldın.')
       setPhase({ kind: 'lobby' })
     }
-    const api: GameApi = { bet: phase.bet, win: Math.floor(phase.bet * botWinMultiplier(game, settings)), finish, leave, saveKey }
+    const again = async (result: GameResult, note?: string, score?: { for: number; against: number }) => {
+      const sameBet = phase.bet
+      await finish(result, note, score)
+      await start(sameBet)
+    }
+    const api: GameApi = { bet: phase.bet, win: Math.floor(phase.bet * botWinMultiplier(game, settings)), finish, leave, again, saveKey }
     return (
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
