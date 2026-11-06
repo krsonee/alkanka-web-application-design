@@ -56,6 +56,7 @@ import {
 import { ControlSettings, OverlayControls, RotatePrompt, charIndex, enterFullscreen, playEvents, readPrefs, useMedia, usePrefs } from './head/controls'
 import { CharacterSelect } from './head/character-select'
 import { MatchSummary } from './head/match-summary'
+import { KafaTopuFrame } from './head/kafa-topu-frame'
 
 /** Phones and small tablets always play in forced full-screen landscape. */
 const HELP_KEY = 'alkanka:head-help-seen'
@@ -94,14 +95,7 @@ function blendBall(out: Ball, a: Ball, b: Ball, t: number) {
 
 const validCh = (v: unknown) => Math.round(clamp(v, 0, CHARACTERS.length - 1))
 
-export function HeadGame({
-  sport,
-  mode,
-  onEnd,
-  onRematch,
-  names = ['Sen', 'Bot'],
-  link,
-  }: {
+type HeadGameProps = {
   sport: Sport
   mode: HeadMode
   onEnd: (score: HeadScore) => void
@@ -109,7 +103,15 @@ export function HeadGame({
   onRematch?: (score: HeadScore) => void
   names?: [string, string]
   link?: DuelLink
-}) {
+}
+
+/** Solo football plays the Kafa Topu v2 build; online duels and basketball keep the networked engine. */
+export function HeadGame(props: HeadGameProps) {
+  if (props.sport === 'futbol' && props.mode === 'bot') return <KafaTopuFrame onEnd={props.onEnd} onRematch={props.onRematch} />
+  return <HeadEngineGame {...props} />
+}
+
+function HeadEngineGame({ sport, mode, onEnd, onRematch, names = ['Sen', 'Bot'], link }: HeadGameProps) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const linkRef = useRef(link)
   linkRef.current = link
