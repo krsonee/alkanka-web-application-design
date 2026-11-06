@@ -95,6 +95,64 @@ export async function deleteRedirect(from: string) {
   await rows(sql`DELETE FROM seo_redirects WHERE from_path = ${from}`)
 }
 
+export type CareItem = { title: string; detail: string; done: boolean; href: string }
+
+const DAY = 1000 * 60 * 60 * 24
+
+/** Haftalık SEO rutininin otomatik ölçülebilen kısımları (son 7 gün). */
+export async function weeklyCare(): Promise<CareItem[]> {
+  const { getSiteSeo } = await import('@/lib/site-seo')
+  const { getVerification } = await import('@/lib/deals')
+  const [posts, site, verify, missing] = await Promise.all([
+    listPosts({ includeDrafts: false }).catch(() => []),
+    getSiteSeo(),
+    getVerification().catch(() => ({ google: '', bing: '', yandex: '', meta: '' })),
+    list404(200).catch(() => [] as NotFoundHit[]),
+  ])
+  const live = posts.filter((p) => p.published)
+  const now = Date.now()
+  const newThisWeek = live.filter((p) => now - new Date(p.createdAt).getTime() < 7 * DAY).length
+  const refreshed = live.filter(
+    (p) => now - new Date(p.updatedAt).getTime() < 7 * DAY && new Date(p.updatedAt).getTime() - new Date(p.createdAt).getTime() > DAY,
+  ).length
+  const hot404 = missing.filter((m) => m.hits >= 3).length
+  const siteReady = Boolean(site.title && site.description && site.keywords)
+  const verified = Boolean(verify.google && verify.bing)
+
+  return [
+    {
+      title: 'Site başlığı, açıklama ve anahtar kelimeler',
+      detail: siteReady ? 'Üç alan da dolu ve sitede yayında.' : 'En az bir alan boş, varsayılan değerler kullanılıyor.',
+      done: siteReady,
+      href: '#site-seo',
+    },
+    {
+      title: 'Bu hafta 3 yeni yazı',
+      detail: `Son 7 günde ${newThisWeek} yeni yazı yayınlandı (hedef 3).`,
+      done: newThisWeek >= 3,
+      href: '#rehber-yazilari',
+    },
+    {
+      title: 'Bu hafta 1 eski yazıyı güncelle',
+      detail: refreshed ? `${refreshed} eski yazı bu hafta güncellendi.` : 'Bu hafta güncellenen eski yazı yok.',
+      done: refreshed > 0,
+      href: '#rehber-yazilari',
+    },
+    {
+      title: 'Kırık adresler (404)',
+      detail: hot404 ? `${hot404} kırık adrese tekrar tekrar giriliyor, yönlendirme ekle.` : 'Tekrarlanan kırık adres yok.',
+      done: hot404 === 0,
+      href: '#yonlendirme',
+    },
+    {
+      title: 'Arama motoru doğrulaması',
+      detail: verified ? 'Google ve Bing doğrulama kodları yayında.' : 'Google veya Bing doğrulama kodu eksik.',
+      done: verified,
+      href: '#site-dogrulama',
+    },
+  ]
+}
+
 const words = (text: string) => text.replace(/[#*>\-[\]()?]/g, ' ').split(/\s+/).filter(Boolean).length
 
 export async function seoHealth(): Promise<HealthIssue[]> {

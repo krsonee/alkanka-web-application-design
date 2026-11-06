@@ -6,7 +6,9 @@ import { GuestHero, MarketShowcase, MemberHub, type HubData } from '@/components
 import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
 import { CUSTOM_SLIDES_KEY, readCustomSlides, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
 import { isScheduledLive } from '@/lib/schedule'
+import type { Metadata } from 'next'
 import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
+import { resolvedHomeSeo } from '@/lib/site-seo'
 import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 import { HIDDEN_KEY, readHidden, withoutHidden } from '@/lib/hidden-shared'
@@ -20,7 +22,18 @@ import { getCemberStatus, myCemberStatus } from '@/lib/cember'
 import { listProducts, type MarketProduct } from '@/lib/market'
 import { EXACT_REWARD, listLeagueMatches, type LeagueMatch } from '@/lib/community'
 
-export const metadata = pageMeta('anasayfa')
+export async function generateMetadata(): Promise<Metadata> {
+  const base = pageMeta('anasayfa')
+  const seo = await resolvedHomeSeo()
+  return {
+    ...base,
+    title: { absolute: seo.title },
+    description: seo.description,
+    keywords: seo.keywords,
+    openGraph: { ...base.openGraph, title: seo.title, description: seo.description },
+    twitter: { ...base.twitter, title: seo.title, description: seo.description },
+  }
+}
 export const dynamic = 'force-dynamic'
 
 const MAX_SLIDES = 3

@@ -96,6 +96,24 @@ export async function setDealsPublishingAction(on: boolean) {
   revalidatePath('/panel')
 }
 
+export async function saveSiteSeoAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('seo'))) return EXPIRED
+  const title = str(form, 'title', 90).replace(/\s+/g, ' ')
+  const description = str(form, 'description', 300).replace(/\s+/g, ' ')
+  const { parseKeywords, setSiteSeo } = await import('@/lib/site-seo')
+  const keywords = parseKeywords(str(form, 'keywords', 600)).join(', ')
+  if (title && title.length < 10) return { message: 'Başlık en az 10 karakter olmalı.' }
+  if (description && description.length < 50) return { message: 'Açıklama en az 50 karakter olmalı.' }
+  try {
+    await setSiteSeo({ title, description, keywords })
+    revalidatePath('/', 'layout')
+    return { ok: true, message: 'Site başlığı, açıklama ve anahtar kelimeler kaydedildi.' }
+  } catch (error) {
+    console.error('[seo] site ayarları kaydedilemedi', error)
+    return { message: 'Kaydedilemedi.' }
+  }
+}
+
 export async function saveVerificationAction(_: ActionState, form: FormData): Promise<ActionState> {
   if (!(await canPanel('seo'))) return EXPIRED
   try {
