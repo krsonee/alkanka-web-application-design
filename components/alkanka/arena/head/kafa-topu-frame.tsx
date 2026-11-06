@@ -2,18 +2,35 @@
 
 import { useEffect, useRef } from 'react'
 import { RotatePrompt, useMedia } from './controls'
+import type { DuelLink } from '../duel-link'
 
 type Score = { for: number; against: number }
-type GameMessage = { source: 'alk-kafa'; type: 'ready' | 'screen' | 'score' | 'end' | 'exit' | 'quit' | 'rematch'; for?: number; against?: number }
+type GameMessage = {
+  source: 'alk-kafa'
+  type: 'ready' | 'screen' | 'score' | 'end' | 'exit' | 'quit' | 'rematch' | 'net'
+  for?: number
+  against?: number
+  msg?: unknown
+}
+type Online = { role: 'host' | 'guest'; link: DuelLink; names: [string, string] }
 
 const GAME_SRC = '/games/kafa-topu/index.html'
 const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px), (max-height: 500px)'
 
 /**
- * Solo football runs the standalone Kafa Topu v2 build as-is in a same-origin iframe.
- * The page posts goals and the final score; this wrapper only reports them to the stake flow.
+ * Football runs the standalone Kafa Topu v2 build as-is in a same-origin iframe, solo and online.
+ * The page posts goals and the final score; this wrapper reports them to the stake flow and,
+ * in duels, relays the game's network messages over the peer link.
  */
-export function KafaTopuFrame({ onEnd, onRematch }: { onEnd: (score: Score) => void; onRematch?: (score: Score) => void }) {
+export function KafaTopuFrame({
+  onEnd,
+  onRematch,
+  online,
+}: {
+  onEnd: (score: Score) => void
+  onRematch?: (score: Score) => void
+  online?: Online
+}) {
   const frame = useRef<HTMLIFrameElement>(null)
   const score = useRef<Score>({ for: 0, against: 0 })
   const reported = useRef(false)
@@ -21,14 +38,28 @@ export function KafaTopuFrame({ onEnd, onRematch }: { onEnd: (score: Score) => v
   endRef.current = onEnd
   const rematchRef = useRef(onRematch)
   rematchRef.current = onRematch
+  const onlineRef = useRef(online)
+  onlineRef.current = online
 
   const touch = useMedia(MOBILE_QUERY)
   const portrait = useMedia('(orientation: portrait)')
   const needRotate = touch && portrait
+  const linkStatus = online?.link.status
 
   useEffect(() => {
-    const send = (type: 'start' | 'pause') =>
-      frame.current?.contentWindow?.postMessage({ source: 'alk-host', type }, window.location.origin)
+    if (!online) return
+    online.link.onMessage.current = (msg) =>
+      frame.current?.contentWindow?.postMessage({ source: 'alk-host', type: 'net', msg }, window.location.origin)
+  })
+
+  useEffect(() => {
+    if (linkStatus) frame.current?.contentWindow?.postMessage({ source: 'alk-host', type: 'link', status: linkStatus }, window.location.origin)
+  }, [linkStatus])
+
+  useEffect(() => {
+    const post = (data: Record<string, unknown>) =>
+      frame.current?.contentWindow?.postMessage({ source: 'alk-host', ...data }, window.location.origin)
+    const send = (type: 'start' | 'pause') => post({ type })
     const finish = (s: Score) => {
       if (reported.current) return
       reported.current = true
@@ -38,6 +69,15 @@ export function KafaTopuFrame({ onEnd, onRematch }: { onEnd: (score: Score) => v
       if (e.origin !== window.location.origin || e.source !== frame.current?.contentWindow) return
       const msg = e.data
       if (!msg || msg.source !== 'alk-kafa') return
+      const net = onlineRef.current
+      if (msg.type === 'net') {
+        net?.link.send(msg.msg)
+        return
+      }
+      if (msg.type === 'ready' && net) {
+        post({ type: 'init', role: net.role, names: net.names })
+        post({ type: 'link', status: net.link.status })
+      }
       const s = { for: Number(msg.for) || 0, against: Number(msg.against) || 0 }
       if (msg.type === 'score' || msg.type === 'end') score.current = s
       if (msg.type === 'quit') finish(s)

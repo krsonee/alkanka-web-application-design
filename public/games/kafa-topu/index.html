@@ -634,6 +634,8 @@ const sfx = {
     }
   },
 };
+// Online duels: the host records contact sounds so the guest hears the same match.
+for (const n of ['kick','head','bounce','post','skill']) { const f = sfx[n]; sfx[n] = (...a) => { if (isHost() && game) netEv(n, a[0]); return f(...a); }; }
 // ---------- Terrace chants ----------
 // The stands chant member usernames: a pill on screen, a davul rhythm and a quiet, muffled voice.
 let chantNames = [], chantMe = '', chantTimer = null, chantCd = 9;
@@ -772,24 +774,29 @@ function resetKickoff(){
 }
 function beginCountdown(step){ game.phase = 'countdown'; game.t = 0; game.cdStep = step; game.cdIdx = -1; }
 function startMatch(){
-  audio();
+  if (NET) return netReady();
   const me = charOf(save.char);
   const pool = CHARS.filter(c => c.id !== me.id && (!isLegend(c) || save.bot === 'zor'));
   const rival = pool[Math.floor(Math.random()*pool.length)];
   const rivalSkills = SKILLS.filter(s => s.lvl <= Math.max(save.level + 2, 4));
   const rSkill = rivalSkills[Math.floor(Math.random()*rivalSkills.length)];
-  game = { phase:'countdown', t:0, time:60, score:[0,0], players:[ mkPlayer(0, me, save.skill, false), mkPlayer(1, rival, rSkill.id, true) ],
+  setupMatch(me, save.skill, rival, rSkill.id, true);
+}
+function setupMatch(chA, skA, chB, skB, botB){
+  audio();
+  game = { phase:'countdown', t:0, time:60, score:[0,0], players:[ mkPlayer(0, chA, skA, false), mkPlayer(1, chB, skB, botB) ],
     ball:{ x:W/2, y:GROUND-400, vx:0, vy:0, rot:0, fire:0, ghost:0, tornado:0, owner:-1, held:true }, slow:0, goalBy:-1, touches:[0,0], shots:[0,0],
     net:[0,0], netY:[0,0], drumT:0, drumI:0 };
+  if (isHost()) Object.assign(game.players[1], { remote:true, kn:0, sn:0, rs:null });
   resetKickoff();
   stopChant(); chantCd = 6 + Math.random()*4;
   beginCountdown(.85);
-  $('hA').src = me.img; $('nA').textContent = me.name;
-  $('hB').src = rival.img; $('nB').textContent = rival.name;
-  const sa = skillOf(save.skill), sb = rSkill;
+  $('hA').src = chA.img; $('nA').textContent = NET ? NET.names[0] : chA.name;
+  $('hB').src = chB.img; $('nB').textContent = NET ? NET.names[1] : chB.name;
+  const sa = skillOf(skA), sb = skillOf(skB), mine = mySide() === 0 ? sa : sb;
   $('sA').innerHTML = `<i data-lucide="${sa.icon}" style="color:${sa.color}"></i>${sa.name}`;
   $('sB').innerHTML = `${sb.name}<i data-lucide="${sb.icon}" style="color:${sb.color}"></i>`;
-  $('tSkillIc').innerHTML = `<i data-lucide="${sa.icon}"></i>`;
+  $('tSkillIc').innerHTML = `<i data-lucide="${mine.icon}"></i>`;
   icons();
   showScreen(null);
 }
@@ -809,13 +816,13 @@ function callout(text, color){
   clearTimeout(calloutTimer); calloutTimer = setTimeout(() => c.classList.remove('show'), 1100);
 }
 function togglePause(){
-  if (!game) return;
+  if (!game || NET) return;
   if (game.phase === 'paused') { game.phase = game.prevPhase; showScreen(null); }
   else if (['play','countdown','goal'].includes(game.phase)) { game.prevPhase = game.phase; game.phase = 'paused'; showScreen('pause'); releaseAll(); stopChant(); }
 }
 $('pauseBtn').onclick = togglePause;
 $('resume').onclick = togglePause;
-$('toMenu').onclick = () => { if (EMBED && game) { post('quit', { for:game.score[0], against:game.score[1] }); return; } game = null; renderMenu(); showScreen('menu'); };
+$('toMenu').onclick = () => { if (EMBED && game) { post('quit', scoreFor()); return; } game = null; renderMenu(); showScreen('menu'); };
 
 const opp = p => game.players[1 - p.side];
 
@@ -825,6 +832,7 @@ function activateSkill(p){
   const s = skillOf(p.skill), o = opp(p);
   p.skillLock = (SKILL_DUR[s.id] || 3) + SKILL_REST;
   sfx.skill(s.id);
+  if (isHost()) netEv('call', [p.side, s.id]);
   callout(`${p.ch.name}: ${s.name}!`, s.color);
   burst(p.x, p.y, s.color, 26, 380);
   switch (s.id) {
@@ -872,6 +880,7 @@ function updatePlayer(p, dt){
   if (p.armed) { p.armedT -= dt; if (p.armedT <= 0) p.armed = null; }
   if (game.phase === 'play' && p.skillLock <= 0) p.meter = Math.min(100, p.meter + dt * METER_RATE * chargeMul(p));
   if (isLegend(p.ch) && Math.random() < dt*5) parts.push({ x:p.x + (Math.random()-.5)*p.R*2, y:p.y - p.R*.6 + (Math.random()-.5)*p.R, vx:0, vy:-60, life:.7, max:.7, size:3 + Math.random()*2, color:'#fbe7a1', glow:true });
+  if (p.remote) { remoteDrive(p, dt); return; }
 
   // Press buffers: human from input events, bot from rising edges of its virtual keys.
   const buf = p.isBot ? p.buf : humanBuf;
@@ -897,8 +906,8 @@ function updatePlayer(p, dt){
   p.jumpAge = (p.jumpAge || 0) + dt;
   if (p.jumpHeld && !k.jump && p.jumpAge > .09) { if (p.vy < -320) p.vy *= .72; p.jumpHeld = false; }
   if (p.vy >= 0) p.jumpHeld = false;
-  if (!locked && buf.kick > 0 && p.kickCd <= 0) { p.kickT = .001; p.kickHit = false; p.kickCd = .2; buf.kick = 0; }
-  if (!locked && buf.skill > 0) { buf.skill = 0; activateSkill(p); }
+  if (!locked && buf.kick > 0 && p.kickCd <= 0) { p.kickT = .001; p.kickHit = false; p.kickCd = .2; buf.kick = 0; if (isGuest()) NET.kn++; }
+  if (!locked && buf.skill > 0) { buf.skill = 0; if (isGuest()) { if (p.meter >= 100) NET.sn++; } else activateSkill(p); }
   for (const a in buf) buf[a] = Math.max(0, buf[a] - dt);
   if (p.kickT > 0) { p.kickT += dt / .17; if (p.kickT >= 1) p.kickT = 0; }
 
@@ -929,7 +938,7 @@ function separatePlayers(a, b){
       const side = Math.sign(top.x - low.x) || (top === a ? -1 : 1);
       top.vx = side * Math.max(Math.abs(top.vx), 380);
       top.kickT = 0; top.buf && (top.buf.kick = 0);
-      if (top === game.players[0]) humanBuf.kick = 0;
+      if (top === game.players[mySide()]) humanBuf.kick = 0;
     }
   }
   // Being pressed into your own goal by the opponent counts as trapped (the bot escapes).
@@ -1046,13 +1055,16 @@ function updateBall(dt){
 }
 
 function goal(side){
-  game.score[side]++; post('score', { for:game.score[0], against:game.score[1] }); game.phase = 'goal'; game.t = 2; game.slow = .7; game.goalBy = side;
+  game.score[side]++; post('score', scoreFor()); game.phase = 'goal'; game.t = 2; game.slow = .7; game.goalBy = side;
+  goalFx(side);
+}
+function goalFx(side){
   const p = game.players[side];
   const netIdx = side === 0 ? 1 : 0;
   game.net[netIdx] = 1; game.netY[netIdx] = game.ball.y;
   hypeBoost = 1;
   sfx.goal(); shake = .5; flash = .35;
-  if (side === 0 && chantMe) { chantCd = 22; setTimeout(() => chant(chantMe), 900); }
+  if (side === mySide() && chantMe) { chantCd = 22; setTimeout(() => chant(chantMe), 900); }
   bigText('GOL!', side === 0 ? '#e9b949' : '#d8434f');
   callout(`${p.ch.name} attı!`, side === 0 ? '#e9b949' : '#d8434f');
   const gx = side === 0 ? W - GW/2 : GW/2;
@@ -1136,12 +1148,16 @@ function frame(now){
   if (!lowQ && perfT > 2.5 && ftAvg > 21) { lowQ = true; dprCap = 1; layout(); }
   if (parts.length > 240) parts.splice(0, parts.length - 240);
   if (game && game.phase !== 'paused' && game.phase !== 'menu') {
-    tickPhase(dt);
-    let simDt = dt;
-    if (game.slow > 0) { game.slow -= dt; simDt *= .35; }
-    acc += simDt;
-    while (acc >= STEP) { stepSim(STEP); acc -= STEP; }
+    if (isGuest()) guestTick(dt);
+    else {
+      tickPhase(dt);
+      let simDt = dt;
+      if (game.slow > 0) { game.slow -= dt; simDt *= .35; }
+      acc += simDt;
+      while (acc >= STEP) { stepSim(STEP); acc -= STEP; }
+    }
   }
+  if (isHost() && game && NET.inMatch) hostSend(dt);
   for (let i = parts.length - 1; i >= 0; i--) {
     const q = parts[i]; q.life -= dt;
     if (q.life <= 0) { parts.splice(i, 1); continue; }
@@ -1171,7 +1187,7 @@ function tickPhase(dt){
     game.sinceKick = (game.sinceKick || 0) + dt;
     game.drumT -= dt;
     if (game.drumT <= 0) { game.drumT = .26; game.drumI = (game.drumI + 1) % 8; if ([1,0,1,0,1,1,1,0][game.drumI]) sfx.drum(game.drumI === 4, .45 + hype); }
-    const me = game.players[0];
+    const me = game.players[mySide()];
     if (me.meter >= 100 && !me.readyPlayed) { me.readyPlayed = true; sfx.ready(); }
     if (game.time <= 0) { game.time = 0; game.phase = 'end'; game.t = 1.4; sfx.whistle('end'); bigText('MAÇ BİTTİ'); }
   } else if (game.phase === 'goal') {
@@ -1187,6 +1203,8 @@ function tickPhase(dt){
 }
 function stepSim(dt){
   const [A, B] = game.players;
+  // Rival silent for 3s: a bot keeps their seat until their input returns.
+  if (B.remote && performance.now() - (B.rs ? B.rs.at : NET.startAt) > 3000) { B.remote = false; B.isBot = true; toast('Rakibin bağlantısı koptu, yerine bot oynuyor'); }
   if (B.isBot) botThink(B, dt);
   updatePlayer(A, dt); updatePlayer(B, dt);
   separatePlayers(A, B);
@@ -1592,7 +1610,7 @@ function drawHead(p, t){
       star(sx, sy, 9, '#ffe14a');
     }
   }
-  if (!p.isBot) {
+  if (p.side === mySide()) {
     const y = p.y - p.R - 26 + Math.sin(t*5)*3;
     ctx.fillStyle = '#e9b949'; ctx.beginPath(); ctx.moveTo(p.x - 9, y - 10); ctx.lineTo(p.x + 9, y - 10); ctx.lineTo(p.x, y); ctx.closePath(); ctx.fill();
     ctx.font = "18px 'Lilita One', sans-serif"; ctx.textAlign = 'center'; ctx.fillText('SEN', p.x, y - 16); ctx.textAlign = 'left';
@@ -1686,8 +1704,9 @@ function hud(){
   const s = Math.ceil(game.time);
   hudSet('clock', s, v => $('clock').textContent = `${Math.floor(v/60)}:${String(v%60).padStart(2,'0')}`);
   const ma = Math.round(A.meter), mb = Math.round(B.meter);
-  hudSet('mA', ma, v => { $('mA').firstElementChild.style.width = v + '%'; $('mA').classList.toggle('ready', v >= 100); $('tSkillFill').style.height = v + '%'; $('tSkill').classList.toggle('ready', v >= 100); });
+  hudSet('mA', ma, v => { $('mA').firstElementChild.style.width = v + '%'; $('mA').classList.toggle('ready', v >= 100); });
   hudSet('mB', mb, v => { $('mB').firstElementChild.style.width = v + '%'; $('mB').classList.toggle('ready', v >= 100); });
+  hudSet('mMe', mySide() === 0 ? ma : mb, v => { $('tSkillFill').style.height = v + '%'; $('tSkill').classList.toggle('ready', v >= 100); });
 }
 
 // ---------- Menu ----------
@@ -1747,10 +1766,10 @@ function renderMenu(){
       </div>
     </div>
     <div class="mbottom">
-      <div class="seg" role="group" aria-label="Rakip zorluğu">
+      ${NET ? `<div id="netSt" role="status" aria-live="polite" style="font:600 15px Geist,sans-serif;color:#cfc8b8">${netStatus()}</div>` : `<div class="seg" role="group" aria-label="Rakip zorluğu">
         ${Object.entries(BOTS).map(([k, v]) => `<button data-bot="${k}" aria-pressed="${save.bot===k}">${v.label}</button>`).join('')}
-      </div>
-      <button class="play" id="playBtn"><i data-lucide="play"></i>MAÇA BAŞLA</button>
+      </div>`}
+      <button class="play" id="playBtn" ${NET && NET.ready ? 'disabled style="opacity:.6"' : ''}><i data-lucide="play"></i>${NET ? (NET.ready ? 'RAKİP BEKLENİYOR' : 'HAZIRIM') : 'MAÇA BAŞLA'}</button>
     </div>`;
   icons();
   $('menu').querySelectorAll('[data-char]').forEach(b => b.onclick = () => {
@@ -1775,7 +1794,7 @@ function levelUnlocks(from, to){
 
 // ---------- Result ----------
 function finishMatch(){
-  const [a, b] = game.score, me = game.players[0], rv = game.players[1];
+  const my = mySide(), a = game.score[my], b = game.score[1 - my], me = game.players[my], rv = game.players[1 - my];
   const res = a > b ? 'win' : a < b ? 'lose' : 'draw';
   const base = { win:100, draw:50, lose:25 }[res], goalsXp = a*10, gained = base + goalsXp;
   const from = save.level;
@@ -1808,6 +1827,7 @@ function finishMatch(){
     $('rMenu').textContent = 'Bitir';
     $('rMenu').onclick = () => post('exit');
     $('rAgain').onclick = () => post('rematch');
+    if (NET) $('rAgain').remove();
   } else {
     $('rMenu').onclick = () => { game = null; renderMenu(); showScreen('menu'); };
     $('rAgain').onclick = startMatch;
@@ -1823,9 +1843,147 @@ function post(type, extra){
 }
 addEventListener('message', e => {
   if (e.origin !== location.origin || !e.data || e.data.source !== 'alk-host') return;
-  if (e.data.type === 'start') startMatch();
-  if (e.data.type === 'pause' && game && ['play','countdown','goal'].includes(game.phase)) { game.prevPhase = game.phase; game.phase = 'paused'; showScreen('pause'); releaseAll(); }
+  const d = e.data;
+  if (d.type === 'start' && !NET) startMatch();
+  if (d.type === 'pause' && !NET && game && ['play','countdown','goal'].includes(game.phase)) { game.prevPhase = game.phase; game.phase = 'paused'; showScreen('pause'); releaseAll(); }
+  if (d.type === 'init' && !NET && (d.role === 'host' || d.role === 'guest')) netInit(d.role, d.names);
+  if (d.type === 'link' && NET) { NET.link = d.status; updateNetMenu(); }
+  if (d.type === 'net' && NET && d.msg) onNet(d.msg);
 });
+
+// ---------- Online duel ----------
+// Host (left seat) runs the match and streams snapshots; the guest drives its own
+// mascot locally (no input lag) and sends its state, the host owns ball, goals and skills.
+var NET = null;
+function isHost(){ return !!NET && NET.role === 'host'; }
+function isGuest(){ return !!NET && NET.role === 'guest'; }
+function mySide(){ return isGuest() ? 1 : 0; }
+function scoreFor(){ const my = mySide(); return { for:game.score[my], against:game.score[1 - my] }; }
+const netSend = msg => post('net', { msg });
+const r2 = v => Math.round(v*100)/100;
+function netInit(role, names){
+  const n = Array.isArray(names) ? names.map(x => String(x || '').slice(0, 24)) : [];
+  NET = { role, names:[n[0] || 'Ev sahibi', n[1] || 'Rakip'], link:'connecting', ready:false, peer:null, inMatch:false, mid:0, q:0, lastQ:0,
+    ev:[], evId:0, evSeen:0, kn:0, sn:0, snap:null, snapAt:0, sendT:0, acc:0, startAt:0, warned:false };
+  $('pauseBtn').style.display = 'none';
+  renderMenu();
+  setInterval(() => { if (NET && !NET.inMatch) netSend({ t:'r', ok:NET.ready, ch:save.char, sk:save.skill }); }, 400);
+}
+function netStatus(){
+  if (NET.link !== 'open') return NET.link === 'lost' ? 'Bağlantı koptu, yeniden deneniyor…' : 'Rakibe bağlanılıyor…';
+  const rival = NET.names[1 - mySide()];
+  return NET.peer && NET.peer.ok ? `${rival} hazır` : `${rival} maskotunu seçiyor`;
+}
+function updateNetMenu(){ const s = $('netSt'); if (s) s.textContent = netStatus(); }
+function netReady(){ audio(); NET.ready = true; renderMenu(); hostMaybeStart(); }
+function hostMaybeStart(){
+  if (!isHost() || NET.inMatch || !NET.ready || !NET.peer || !NET.peer.ok) return;
+  const p = NET.peer, gc = charOf(p.ch), gs = SKILLS.some(s => s.id === p.sk) ? p.sk : 'fire';
+  NET.inMatch = true; NET.mid = Date.now(); NET.startAt = performance.now();
+  setupMatch(charOf(save.char), save.skill, gc, gs, false);
+}
+function netEv(name, arg){ NET.ev.push([++NET.evId, name, arg]); if (NET.ev.length > 12) NET.ev.shift(); }
+function onNet(m){
+  if (m.t === 'r') { NET.peer = m; updateNetMenu(); hostMaybeStart(); return; }
+  const now = performance.now();
+  if (m.t === 'k' && isHost() && game && m.m === NET.mid) {
+    const p = game.players[1];
+    if (p.rs && m.q <= p.rs.q) return;
+    p.rs = Object.assign(m, { at:now });
+    if (p.isBot && game.phase !== 'menu') { p.isBot = false; p.remote = true; toast('Rakip geri döndü'); }
+    return;
+  }
+  if (m.t === 's' && isGuest()) {
+    if (!NET.inMatch && NET.ready && m.m !== NET.mid) {
+      NET.inMatch = true; NET.mid = m.m; NET.lastQ = 0; NET.kn = 0; NET.sn = 0;
+      NET.evSeen = m.ev.length ? m.ev[m.ev.length - 1][0] : 0;
+      setupMatch(charOf(m.ch[0]), m.sk[0], charOf(m.ch[1]), m.sk[1], false);
+    }
+    if (m.m !== NET.mid || m.q <= NET.lastQ) return;
+    NET.lastQ = m.q; NET.snap = m; NET.snapAt = now; NET.warned = false;
+  }
+}
+const packP = p => [Math.round(p.x), Math.round(p.y), Math.round(p.vx), Math.round(p.vy), p.face, r2(p.kickT), Math.round(p.meter), r2(p.frozen), r2(p.stun), r2(p.giant), r2(p.shrink), r2(p.wall), p.armed || 0, r2(p.skillLock), r2(p.squash), p.onGround ? 1 : 0];
+function hostSend(dt){
+  NET.sendT -= dt; if (NET.sendT > 0) return; NET.sendT = 1/30;
+  const [A, B] = game.players, b = game.ball;
+  netSend({ t:'s', m:NET.mid, q:++NET.q, ch:[A.ch.id, B.ch.id], sk:[A.skill, B.skill], ph:game.phase, tm:r2(game.time), cd:game.cdIdx, sc:game.score.slice(),
+    b:[Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.fire), r2(b.ghost), r2(b.tornado), b.held ? 1 : 0],
+    p:[packP(A), packP(B)], nt:game.net.map(r2), ny:game.netY.map(Math.round), ev:NET.ev.slice() });
+}
+// Host side: the guest's mascot follows its streamed state; kicks and skills arrive as counters.
+function remoteDrive(p, dt){
+  const r = p.rs;
+  if (r) {
+    const age = Math.min(.12, (performance.now() - r.at)/1000);
+    p.x = Math.min(Math.max(r.x + r.vx*age, p.R), W - p.R);
+    p.y = Math.min(r.y + (r.g ? 0 : r.vy*age), GROUND - p.R - 24);
+    p.vx = r.vx; p.vy = r.vy; p.face = r.f; p.onGround = !!r.g;
+    const free = game.phase === 'play' && p.frozen <= 0 && p.stun <= 0;
+    if (r.kn !== p.kn) { p.kn = r.kn; if (free) { p.kickT = .001; p.kickHit = false; } }
+    if (r.sn !== p.sn) { p.sn = r.sn; if (free) activateSkill(p); }
+  }
+  if (p.kickT > 0) { p.kickT += dt / .17; if (p.kickT >= 1) p.kickT = 0; }
+}
+function playEv(e){
+  const [, name, arg] = e;
+  if (name === 'call') {
+    const [side, id] = arg, s = skillOf(id), p = game.players[side];
+    if (!p || !s) return;
+    callout(`${p.ch.name}: ${s.name}!`, s.color); burst(p.x, p.y, s.color, 26, 380);
+    if (id === 'bolt') { const o = game.players[1 - side]; bolts.push({ x:o.x, y:o.y - o.R, t:.35 }); shake = .35; flash = .25; }
+    return;
+  }
+  if (sfx[name]) sfx[name](arg);
+  if (name === 'kick') { spark(game.ball.x, game.ball.y, '#e9b949'); shake = Math.max(shake, .08); }
+}
+function follow(o, tx, ty, dt, snap){
+  if (Math.abs(tx - o.x) > snap || Math.abs(ty - o.y) > snap) { o.x = tx; o.y = ty; return; }
+  const k = Math.min(1, dt*22); o.x += (tx - o.x)*k; o.y += (ty - o.y)*k;
+}
+function guestTick(dt){
+  const s = NET.snap, now = performance.now();
+  if (!s) return;
+  if (now - NET.snapAt > 2500 && !NET.warned) { NET.warned = true; toast('Bağlantı bekleniyor…'); }
+  const prevPhase = game.phase, prevCd = game.cdIdx, prevSc = game.score;
+  const mine = game.players[1], other = game.players[0];
+  game.phase = s.ph; game.time = s.tm; game.cdIdx = s.cd; game.score = s.sc.slice();
+  if (s.sc[0] > prevSc[0]) goalFx(0);
+  if (s.sc[1] > prevSc[1]) goalFx(1);
+  if (s.sc[0] !== prevSc[0] || s.sc[1] !== prevSc[1]) post('score', scoreFor());
+  if (s.ph === 'countdown' && s.cd !== prevCd && s.cd >= 0 && s.cd < CD.length) { bigText(CD[s.cd], s.cd === 0 ? '#e6dfcf' : ''); sfx.tick(s.cd === 0); }
+  if (s.ph === 'countdown' && prevPhase !== 'countdown') { Object.assign(mine, { x:W*.73, vx:0, vy:0, kickT:0 }); mine.y = GROUND - mine.R - 24; releaseAll(); }
+  if (prevPhase === 'countdown' && s.ph === 'play') { bigText('BAŞLA!'); sfx.whistle('start'); }
+  if (prevPhase !== 'end' && s.ph === 'end' && prevPhase === 'play') { sfx.whistle('end'); bigText('MAÇ BİTTİ'); }
+  for (const e of s.ev) if (e[0] > NET.evSeen) { NET.evSeen = e[0]; playEv(e); }
+  if (s.ph === 'menu') { finishMatch(); return; }
+  if (s.ph === 'play') {
+    tickChant(dt);
+    game.drumT -= dt;
+    if (game.drumT <= 0) { game.drumT = .26; game.drumI = (game.drumI + 1) % 8; if ([1,0,1,0,1,1,1,0][game.drumI]) sfx.drum(game.drumI === 4, .45 + hype); }
+    if (mine.meter >= 100 && !mine.readyPlayed) { mine.readyPlayed = true; sfx.ready(); }
+    if (mine.meter < 100) mine.readyPlayed = false;
+  }
+  const age = Math.min(.15, (now - NET.snapAt)/1000);
+  // Ball: extrapolate the host's latest frame, then ease toward it.
+  const b = game.ball, sb = s.b, free = !sb[7] && sb[4] <= 0 && sb[6] <= 0;
+  follow(b, sb[0] + sb[2]*age, Math.min(sb[1] + sb[3]*age + (free ? 725*age*age : 0), GROUND - BR), dt, 160);
+  b.vx = sb[2]; b.vy = sb[3]; b.rot += b.vx*dt/BR; b.fire = sb[4]; b.ghost = sb[5]; b.tornado = sb[6]; b.held = !!sb[7];
+  if (b.fire > 0) trail(b, '#ff7a1a'); else if (b.tornado > 0) trail(b, '#7ee0b5');
+  // Rival mascot.
+  const a = s.p[0];
+  follow(other, Math.min(Math.max(a[0] + a[2]*age, other.R), W - other.R), Math.min(a[1] + (a[15] ? 0 : a[3]*age), GROUND - other.R - 24), dt, 150);
+  Object.assign(other, { vx:a[2], vy:a[3], face:a[4], kickT:a[5], squash:a[14], onGround:!!a[15] });
+  for (const [p, v] of [[other, a], [mine, s.p[1]]]) Object.assign(p, { meter:v[6], frozen:v[7], stun:v[8], giant:v[9], shrink:v[10], wall:v[11], armed:v[12] || null, skillLock:v[13] });
+  const tsz = other.giant > 0 ? GIANT_SZ : other.shrink > 0 ? .58 : 1;
+  other.sz += (tsz - other.sz) * Math.min(1, dt*8); other.R = BASE_R * other.sz;
+  // Own mascot: simulated here so controls answer instantly.
+  NET.acc += dt;
+  while (NET.acc >= STEP) { updatePlayer(mine, STEP); separatePlayers(other, mine); NET.acc -= STEP; }
+  game.net = s.nt.slice(); game.netY = s.ny.slice();
+  NET.sendT -= dt;
+  if (NET.sendT <= 0) { NET.sendT = 1/30; netSend({ t:'k', m:NET.mid, q:++NET.q, x:Math.round(mine.x), y:Math.round(mine.y), vx:Math.round(mine.vx), vy:Math.round(mine.vy), f:mine.face, g:mine.onGround ? 1 : 0, kn:NET.kn, sn:NET.sn }); }
+}
 
 // ---------- Boot ----------
 setMode(mode);
