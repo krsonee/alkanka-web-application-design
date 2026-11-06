@@ -186,6 +186,65 @@
   .topbar,.notes{display:none!important}
   #device.web,#device.mobile{max-width:none;width:100vw;height:100vh;height:100dvh;aspect-ratio:auto;border:0;border-radius:0;box-shadow:none}
   #lvlUp,#lvlReset{display:none!important}
+
+  /* Dock buttons are centred inside the dock (its height is set by layout()) so nothing slips under the screen edge. */
+  .touch{overflow:hidden}
+  .tbtn{top:50%;bottom:auto!important;transform:translateY(-50%)}
+  .tbtn.on{transform:translateY(-50%) scale(.94)}
+  #tL{left:40px;width:96px;height:96px}
+  #tR{left:152px;width:96px;height:96px}
+  #tKick{right:40px;width:106px;height:106px}
+  #tJump{right:162px;width:96px;height:96px}
+  #tSkill{right:274px;width:84px;height:84px}
+  .tbtn svg{width:48px;height:48px}
+
+  /* Compact start screen */
+  #menu{padding:22px 48px;gap:14px;align-items:center;justify-content:center}
+  #menu>*{width:100%;max-width:1040px}
+  #menu .mmain{flex:0 1 auto;gap:20px}
+  .logo small{font-size:12px}
+  .logo b{font-size:36px}
+  .lvl{padding:7px 14px;gap:10px;border-radius:14px}
+  .lvl .badge{width:44px;height:44px;font-size:22px}
+  .lvl .xp{width:180px}
+  .lvl .xp span{font-size:13px}
+  .bar{height:10px}
+  .ghostbtn{font-size:14px;padding:8px 12px}
+  .col{gap:10px}
+  .col h2{font-size:20px}
+  .col h2 span{font-size:13px}
+  .hero{width:236px;padding:14px;gap:6px;border-radius:20px}
+  .hero img{width:112px;height:112px;border-width:4px}
+  .hero .hn{font-size:28px}
+  .hero .ht{font-size:12px;margin-top:-2px}
+  .perk{font-size:12px;padding:5px 8px}
+  .stats{gap:6px}
+  .stat{font-size:13px}
+  .stat span{width:60px}
+  .pips i{height:9px}
+  .rtag{top:10px;left:10px;font-size:10px;padding:2px 7px}
+  .chars{grid-template-columns:repeat(4,86px);gap:8px}
+  .chars .card{padding:8px 3px 6px;border-radius:14px;border-width:2px}
+  .chars .card img{width:50px;height:50px}
+  .chars .card .cn{font-size:12px}
+  .card small.rar{font-size:9px}
+  .skills{gap:8px}
+  .skills .card{font-size:12px;padding:8px 3px 6px;border-radius:14px;border-width:2px}
+  .card .ic{width:40px;height:40px;border-radius:12px}
+  .card .ic svg{width:24px;height:24px}
+  .card small{font-size:11px}
+  .lock{font-size:11px;padding:2px 6px}
+  .skdesc{font-size:14px;padding:10px 14px;min-height:0;border-radius:14px}
+  .skdesc b{font-size:17px}
+  .mbottom .seg button{font-size:14px;padding:8px 16px}
+  .play{font-size:28px;padding:10px 38px;border-radius:16px;box-shadow:0 5px 0 #8a6418}
+  .play svg{width:26px;height:26px}
+
+  /* Terrace chant pill */
+  .chant{position:absolute;left:50%;top:104px;transform:translate(-50%,-8px);display:flex;align-items:center;gap:8px;font:400 22px 'Lilita One',sans-serif;letter-spacing:.04em;color:var(--white);background:#0b0e14cc;border:1.5px solid #e9b94980;padding:5px 16px;border-radius:99px;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;white-space:nowrap}
+  .chant small{font:700 11px Geist,sans-serif;letter-spacing:.14em;color:var(--gold)}
+  .chant.show{opacity:1;transform:translate(-50%,0)}
+  #stage.inmenu .chant{display:none}
 </style>
 </head>
 <body>
@@ -223,6 +282,7 @@
       <div class="hint"><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> koş · <kbd>W</kbd>/<kbd>↑</kbd> zıpla · <kbd>Boşluk</kbd> şut · <kbd>E</kbd> skill (bar dolunca)</div>
       <div class="center"><div class="big" id="big"></div></div>
       <div class="callout" id="callout"></div>
+      <div class="chant" id="chant" aria-live="polite"><small>TRİBÜN</small><span id="chantTx"></span></div>
 
       <div class="touch" id="touch">
         <button class="tbtn" id="tL" data-k="left" aria-label="Sola koş"><i data-lucide="chevron-left"></i></button>
@@ -350,7 +410,7 @@ function layout(){
   stage.style.transform = `scale(${scale})`;
   cv.width = Math.round(W * scale * dpr); cv.height = Math.round(VH * scale * dpr);
   cv.style.width = W + 'px'; cv.style.height = VH + 'px';
-  $('touch') && ($('touch').style.top = VH + 'px');
+  if ($('touch')) { $('touch').style.top = VH + 'px'; $('touch').style.height = (TH - VH) + 'px'; }
   RES = scale * dpr;
   ctx.setTransform(RES, 0, 0, RES, 0, -camY*RES);
   cache = null;
@@ -471,7 +531,7 @@ function startCrowdBed(){
   if (!buf || buf === bedBuf || !crowdBus) return;
   for (const s of bedSrcs) try { s.stop(); } catch {}
   bedSrcs = []; bedBuf = buf;
-  for (const [rate, off, v] of [[1, 0, .6], [.87, .5, .5]]) {
+  for (const [rate, off, v] of [[1, 0, .4], [.87, .5, .32]]) {
     const s = actx.createBufferSource(); s.buffer = buf; s.loop = true; s.playbackRate.value = rate;
     const g = actx.createGain(); g.gain.value = v;
     s.connect(g).connect(crowdBus); s.start(0, buf.duration*off);
@@ -504,7 +564,7 @@ function crowd(level, hold = 0){
 }
 function crowdIdle(v){ // per frame, v = ball danger 0..1
   if (!actx || !crowdBus || actx.state !== 'running') return;
-  const target = .1 + v*.08;
+  const target = .08 + v*.06;
   if (Math.abs(target - crowdLevel) > .008) { crowdLevel = target; crowdBus.gain.setTargetAtTime(target, actx.currentTime, .6); crowdLP.frequency.setTargetAtTime(800 + target*3600, actx.currentTime, .6); }
 }
 const throttle = (k, ms) => { const n = performance.now(); if (n - (lastSfx[k] || 0) < ms) return false; lastSfx[k] = n; return true; };
@@ -554,10 +614,10 @@ const sfx = {
   beep: (hi) => sfx.tick(!hi),
   goal: () => { if (!actx) return;
     sfx.net();
-    crowd(.55, 3.4);
-    const real = play('cheer', { vol:.95, fadeIn:.08, dur:4.2, send:.25 });
-    play('applause', { vol:.55, at:1.1, dur:4, fadeIn:.4, send:.2 });
-    if (!real) { nz(3.2, .26, { f:560, f1:780, Q:.6, attack:.35, send:.3, pink:true }); nz(2.6, .09, { f:1500, Q:1, attack:.45, send:.3, pink:true }); } },
+    // Short burst of joy, then straight back to the bed: no long applause tail.
+    crowd(.32, 1.2);
+    const real = play('cheer', { vol:.42, fadeIn:.06, dur:1.7, lp:3200, send:.18 });
+    if (!real) nz(1.5, .14, { f:560, f1:780, Q:.6, attack:.2, send:.25, pink:true }); },
   ready: () => { osc('sine', 1180, 0, .16, .035, { send:.2 }); osc('sine', 1570, 0, .2, .03, { at:.07, send:.2 }); },
   click: () => { audio(); osc('triangle', 1200, 800, .03, .04); },
   skill: (id) => { if (!actx) return;
@@ -574,7 +634,44 @@ const sfx = {
     }
   },
 };
-function setMuted(m){ muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : .85, actx.currentTime, .02); $('muteBtn').innerHTML = `<i data-lucide="${muted?'volume-x':'volume-2'}"></i>`; icons(); }
+// ---------- Terrace chants ----------
+// The stands chant member usernames: a pill on screen, a davul rhythm and a quiet, muffled voice.
+let chantNames = [], chantMe = '', chantTimer = null, chantCd = 9;
+fetch('/api/arena/chant-names', { credentials:'same-origin' })
+  .then(r => r.ok ? r.json() : null)
+  .then(d => { if (!d) return; chantMe = typeof d.me === 'string' ? d.me : ''; chantNames = Array.isArray(d.names) ? d.names.filter(n => typeof n === 'string' && n) : []; })
+  .catch(() => {});
+function trVoice(){ try { return speechSynthesis.getVoices().find(v => /^tr/i.test(v.lang)) || null; } catch { return null; } }
+function pickChantName(){
+  const pool = chantMe ? [chantMe, chantMe, ...chantNames] : chantNames;
+  return pool.length ? pool[Math.floor(Math.random()*pool.length)] : '';
+}
+function stopChant(){ clearTimeout(chantTimer); $('chant').classList.remove('show'); try { speechSynthesis.cancel(); } catch {} }
+function chant(name){
+  if (!name) return;
+  const up = name.toLocaleUpperCase('tr-TR');
+  $('chantTx').textContent = `${up}! ${up}!`;
+  $('chant').classList.add('show');
+  clearTimeout(chantTimer); chantTimer = setTimeout(() => $('chant').classList.remove('show'), 3400);
+  if (muted || !actx || actx.state !== 'running' || document.hidden) return;
+  [0, .34, .9, 1.24, 1.58].forEach((at, i) => osc('sine', i === 2 ? 88 : 74, 42, .24, i === 2 ? .085 : .06, { at, send:.4 }));
+  crowd(.14, 2.6);
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(`${name}! ${name}!`);
+    const v = trVoice(); if (v) u.voice = v;
+    u.lang = 'tr-TR'; u.volume = .18; u.rate = .8; u.pitch = .55;
+    speechSynthesis.speak(u);
+  } catch {}
+}
+function tickChant(dt){
+  if (!game || game.phase !== 'play') return;
+  chantCd -= dt;
+  if (chantCd <= 0) { chantCd = 20 + Math.random()*12; chant(pickChantName()); }
+}
+
+function setMuted(m){ muted = m; if (m) stopChant(); if (master) master.gain.setTargetAtTime(m ? 0 : .85, actx.currentTime, .02); $('muteBtn').innerHTML = `<i data-lucide="${muted?'volume-x':'volume-2'}"></i>`; icons(); }
 $('muteBtn').onclick = () => { audio(); setMuted(!muted); };
 
 // ---------- Input ----------
@@ -685,6 +782,7 @@ function startMatch(){
     ball:{ x:W/2, y:GROUND-400, vx:0, vy:0, rot:0, fire:0, ghost:0, tornado:0, owner:-1, held:true }, slow:0, goalBy:-1, touches:[0,0], shots:[0,0],
     net:[0,0], netY:[0,0], drumT:0, drumI:0 };
   resetKickoff();
+  stopChant(); chantCd = 6 + Math.random()*4;
   beginCountdown(.85);
   $('hA').src = me.img; $('nA').textContent = me.name;
   $('hB').src = rival.img; $('nB').textContent = rival.name;
@@ -713,7 +811,7 @@ function callout(text, color){
 function togglePause(){
   if (!game) return;
   if (game.phase === 'paused') { game.phase = game.prevPhase; showScreen(null); }
-  else if (['play','countdown','goal'].includes(game.phase)) { game.prevPhase = game.phase; game.phase = 'paused'; showScreen('pause'); releaseAll(); }
+  else if (['play','countdown','goal'].includes(game.phase)) { game.prevPhase = game.phase; game.phase = 'paused'; showScreen('pause'); releaseAll(); stopChant(); }
 }
 $('pauseBtn').onclick = togglePause;
 $('resume').onclick = togglePause;
@@ -954,6 +1052,7 @@ function goal(side){
   game.net[netIdx] = 1; game.netY[netIdx] = game.ball.y;
   hypeBoost = 1;
   sfx.goal(); shake = .5; flash = .35;
+  if (side === 0 && chantMe) { chantCd = 22; setTimeout(() => chant(chantMe), 900); }
   bigText('GOL!', side === 0 ? '#e9b949' : '#d8434f');
   callout(`${p.ch.name} attı!`, side === 0 ? '#e9b949' : '#d8434f');
   const gx = side === 0 ? W - GW/2 : GW/2;
@@ -1068,6 +1167,7 @@ function tickPhase(dt){
     if (idx >= CD.length) { game.phase = 'play'; game.sinceKick = 0; game.ball.held = false; bigText('BAŞLA!'); sfx.whistle('start'); }
   } else if (game.phase === 'play') {
     game.time -= dt;
+    tickChant(dt);
     game.sinceKick = (game.sinceKick || 0) + dt;
     game.drumT -= dt;
     if (game.drumT <= 0) { game.drumT = .26; game.drumI = (game.drumI + 1) % 8; if ([1,0,1,0,1,1,1,0][game.drumI]) sfx.drum(game.drumI === 4, .45 + hype); }
