@@ -461,9 +461,12 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       )
     }),
     section(ctx, 'seo', 'SEO', async () => {
-      const { seoHealth, list404, listRedirects } = await import('@/lib/seo-health')
+      const { seoHealth, list404, listRedirects, weeklyCare } = await import('@/lib/seo-health')
+      const { getSiteSeo } = await import('@/lib/site-seo')
       return (
         <SeoManager
+          siteSeo={await getSiteSeo()}
+          care={await weeklyCare().catch(() => [])}
           posts={await listPosts({ includeDrafts: true })}
           deals={await listDeals(30)}
           publishing={await dealsPublishing()}

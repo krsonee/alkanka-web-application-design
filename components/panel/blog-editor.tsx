@@ -138,7 +138,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
   const scoreTone = report.score >= 80 ? 'text-primary' : report.score >= 50 ? 'text-foreground' : 'text-destructive'
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+    <div id="rehber-yazilari" className="grid scroll-mt-24 gap-6 xl:grid-cols-[1fr_340px]">
       <form key={formKey} action={action} className={card}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">

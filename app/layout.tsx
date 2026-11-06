@@ -3,7 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Space_Grotesk } from 'next/font/google'
 import { getVerification } from '@/lib/deals'
 import { getShare } from '@/lib/share'
-import { DEFAULT_OG, PAGE_SEO, SITE_NAME, SITE_URL } from '@/lib/seo'
+import { DEFAULT_OG, SITE_NAME, SITE_URL } from '@/lib/seo'
+import { resolvedHomeSeo } from '@/lib/site-seo'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'], variable: '--font-inter' })
@@ -13,8 +14,7 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export async function generateMetadata(): Promise<Metadata> {
-  const [verify, share] = await Promise.all([getVerification(), getShare()])
-  const home = PAGE_SEO.anasayfa
+  const [verify, share, home] = await Promise.all([getVerification(), getShare(), resolvedHomeSeo()])
   const ogTitle = share.title || home.title
   const ogDescription = share.description || home.description
   const ogImage = share.image || DEFAULT_OG
