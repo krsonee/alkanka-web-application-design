@@ -105,8 +105,13 @@ type HeadGameProps = {
   link?: DuelLink
 }
 
-/** Football (solo and online duels) plays the Kafa Topu v2 build; basketball keeps the canvas engine. */
+/**
+ * Football (solo and online duels) plays the Kafa Topu v2 build. Solo basketball plays the
+ * standalone Kafa Basketbolu build; online basketball duels keep the networked canvas engine.
+ */
 export function HeadGame(props: HeadGameProps) {
+  if (props.sport === 'basket' && props.mode === 'bot')
+    return <KafaTopuFrame sport="basket" onEnd={props.onEnd} onRematch={props.onRematch} />
   if (props.sport === 'futbol') {
     if (props.mode === 'bot') return <KafaTopuFrame onEnd={props.onEnd} onRematch={props.onRematch} />
     if (props.link)

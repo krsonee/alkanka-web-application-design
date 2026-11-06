@@ -14,7 +14,10 @@ type GameMessage = {
 }
 type Online = { role: 'host' | 'guest'; link: DuelLink; names: [string, string] }
 
-const GAME_SRC = '/games/kafa-topu/index.html'
+const GAME = {
+  futbol: { src: '/games/kafa-topu/index.html', title: 'Alkanka Kafa Topu' },
+  basket: { src: '/games/kafa-basketbolu/index.html', title: 'Alkanka Kafa Basketbolu' },
+} as const
 const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px), (max-height: 500px)'
 
 /**
@@ -26,7 +29,9 @@ export function KafaTopuFrame({
   onEnd,
   onRematch,
   online,
+  sport = 'futbol',
 }: {
+  sport?: keyof typeof GAME
   onEnd: (score: Score) => void
   onRematch?: (score: Score) => void
   online?: Online
@@ -115,12 +120,12 @@ export function KafaTopuFrame({
     <div className="fixed inset-0 z-[70] bg-background">
       <iframe
         ref={frame}
-        src={GAME_SRC}
-        title="Alkanka Kafa Topu"
+        src={GAME[sport].src}
+        title={GAME[sport].title}
         allow="autoplay; fullscreen"
         className="block size-full border-0"
       />
-      {needRotate && <RotatePrompt sport="futbol" paused={false} />}
+      {needRotate && <RotatePrompt sport={sport} paused={false} />}
     </div>
   )
 }
