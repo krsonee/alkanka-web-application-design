@@ -232,11 +232,7 @@
   .play{font-size:28px;padding:10px 38px;border-radius:16px;box-shadow:0 5px 0 #8a6418}
   .play svg{width:26px;height:26px}
 
-  /* Terrace chant pill */
-  .chant{position:absolute;left:50%;top:104px;transform:translate(-50%,-8px);display:flex;align-items:center;gap:8px;font:400 22px 'Lilita One',sans-serif;letter-spacing:.04em;color:var(--white);background:#0b0e14cc;border:1.5px solid #e9b94980;padding:5px 16px;border-radius:99px;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;white-space:nowrap}
-  .chant small{font:700 11px Geist,sans-serif;letter-spacing:.14em;color:var(--gold)}
-  .chant.show{opacity:1;transform:translate(-50%,0)}
-  #stage.inmenu .chant{display:none}
+
 </style>
 </head>
 <body>
@@ -274,8 +270,7 @@
       <div class="hint"><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> koş · <kbd>W</kbd>/<kbd>↑</kbd> zıpla · <kbd>Boşluk</kbd> şut · <kbd>E</kbd> skill (bar dolunca)</div>
       <div class="center"><div class="big" id="big"></div></div>
       <div class="callout" id="callout"></div>
-      <div class="chant" id="chant" aria-live="polite"><small>TRİBÜN</small><span id="chantTx"></span></div>
-
+    
       <div class="touch" id="touch">
         <button class="tbtn" id="tL" data-k="left" aria-label="Sola koş"><i data-lucide="chevron-left"></i></button>
         <button class="tbtn" id="tR" data-k="right" aria-label="Sağa koş"><i data-lucide="chevron-right"></i></button>
@@ -493,16 +488,20 @@ function nz(dur, vol, { type = 'bandpass', f = 1000, f1 = 0, Q = 1, at = 0, send
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + attack); g.gain.exponentialRampToValueAtTime(.0006, t + dur);
   s.connect(fl).connect(g); out(g, send); s.start(t, Math.random()*3, dur + .05);
 }
-// Real recordings (whistle, crowd cheer, applause) carry the atmosphere; the synth
-// only does short impacts where samples would sound repetitive.
-const SAMPLES = { whistle:'/games/kafa-topu/assets/a8.wav', applause:'/games/kafa-topu/assets/a9.wav', cheer:'/games/kafa-topu/assets/a10.ogg' };
+// Every sound in the match is a real recording (CC0, freesound.org): a football-match
+// ambience bed, terrace chants, a goal roar, an "ooh", boot-on-ball kicks, a bounce and a
+// referee whistle. The synth below is only a fallback while the files are still loading.
+const A = '/games/kafa-topu/assets/';
+const SAMPLES = {
+  bed:A+'s-bed.mp3', chant1:A+'s-chant1.mp3', chant2:A+'s-chant2.mp3', goal:A+'s-goal.mp3', ooh:A+'s-ooh.mp3',
+  kick1:A+'s-kick1.mp3', kick2:A+'s-kick2.mp3', bounce:A+'s-bounce.mp3', whistle:A+'s-whistle.mp3', whistleLong:A+'s-whistle-long.mp3',
+};
 const buffers = {};
 let bedSrcs = [], bedBuf = null;
-function b64ToBuf(uri){ const s = atob(uri.slice(uri.indexOf(',') + 1)), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; }
 function loadSamples(){
   for (const [k, uri] of Object.entries(SAMPLES)) {
     try {
-      const done = b => { buffers[k] = b; if (k !== 'whistle') startCrowdBed(); };
+      const done = b => { buffers[k] = b; if (k === 'bed') startCrowdBed(); };
       fetch(uri).then(r => r.arrayBuffer()).then(ab => { const p = actx.decodeAudioData(ab, done, () => {}); if (p && p.catch) p.catch(() => {}); }).catch(() => {});
     } catch {}
   }
@@ -520,13 +519,14 @@ function play(name, { vol = 1, rate = 1, at = 0, dur = 0, send = 0, lp = 0, offs
   else s.start(t, offset);
   return true;
 }
-// Looped crowd recording, two copies at different speeds so the loop point never repeats audibly.
+// Real match ambience on a seamless loop; a second copy, slightly slower and offset,
+// keeps the loop point from ever being noticeable.
 function startCrowdBed(){
-  const buf = buffers.cheer || buffers.applause;
+  const buf = buffers.bed;
   if (!buf || buf === bedBuf || !crowdBus) return;
   for (const s of bedSrcs) try { s.stop(); } catch {}
   bedSrcs = []; bedBuf = buf;
-  for (const [rate, off, v] of [[1, 0, .4], [.87, .5, .32]]) {
+  for (const [rate, off, v] of [[1, 0, .9], [.96, .47, .55]]) {
     const s = actx.createBufferSource(); s.buffer = buf; s.loop = true; s.playbackRate.value = rate;
     const g = actx.createGain(); g.gain.value = v;
     s.connect(g).connect(crowdBus); s.start(0, buf.duration*off);
@@ -534,39 +534,28 @@ function startCrowdBed(){
   }
 }
 function startCrowd(){
-  // Recorded crowd loop + a low pink-noise rumble underneath for stadium body.
   crowdBus = actx.createGain(); crowdBus.gain.value = .0001;
-  crowdLP = actx.createBiquadFilter(); crowdLP.type = 'lowpass'; crowdLP.frequency.value = 1100; crowdLP.Q.value = .4;
-  crowdBus.connect(crowdLP); out(crowdLP, .25);
-  for (const [f, q, v] of [[240, .7, .35], [560, .9, .15]]) {
-    const s = actx.createBufferSource(); s.buffer = pinkBuf; s.loop = true;
-    const fl = actx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = f; fl.Q.value = q;
-    const g = actx.createGain(); g.gain.value = v;
-    for (const rate of [.07 + Math.random()*.05, .23 + Math.random()*.1]) {
-      const lfo = actx.createOscillator(), lg = actx.createGain();
-      lfo.frequency.value = rate; lg.gain.value = v*.22; lfo.connect(lg).connect(g.gain); lfo.start();
-    }
-    s.connect(fl).connect(g).connect(crowdBus); s.start(0, Math.random()*3);
-  }
+  crowdLP = actx.createBiquadFilter(); crowdLP.type = 'lowpass'; crowdLP.frequency.value = 5000; crowdLP.Q.value = .5;
+  crowdBus.connect(crowdLP); out(crowdLP, .08);
 }
+const CROWD_BASE = .55;
 function crowd(level, hold = 0){
   if (!actx || !crowdBus) return;
   const t = actx.currentTime;
-  crowdBus.gain.cancelScheduledValues(t); crowdLP.frequency.cancelScheduledValues(t);
-  crowdBus.gain.setTargetAtTime(level, t, .18);
-  crowdLP.frequency.setTargetAtTime(800 + level*3600, t, .2);
-  if (hold) { crowdBus.gain.setTargetAtTime(crowdLevel, t + hold, 1.1); crowdLP.frequency.setTargetAtTime(800 + crowdLevel*3600, t + hold, 1.1); }
+  crowdBus.gain.cancelScheduledValues(t);
+  crowdBus.gain.setTargetAtTime(level, t, .25);
+  if (hold) crowdBus.gain.setTargetAtTime(crowdLevel, t + hold, 1.2);
 }
 function crowdIdle(v){ // per frame, v = ball danger 0..1
   if (!actx || !crowdBus || actx.state !== 'running') return;
-  const target = .08 + v*.06;
-  if (Math.abs(target - crowdLevel) > .008) { crowdLevel = target; crowdBus.gain.setTargetAtTime(target, actx.currentTime, .6); crowdLP.frequency.setTargetAtTime(800 + target*3600, actx.currentTime, .6); }
+  const target = CROWD_BASE + v*.25;
+  if (Math.abs(target - crowdLevel) > .02) { crowdLevel = target; crowdBus.gain.setTargetAtTime(target, actx.currentTime, .8); }
 }
 const throttle = (k, ms) => { const n = performance.now(); if (n - (lastSfx[k] || 0) < ms) return false; lastSfx[k] = n; return true; };
 // Referee pea whistle: ~3 kHz tone with the pea's fast amplitude flutter plus breath.
 function whistleBlast(at, dur, vol = .075){
   if (!actx || actx.state !== 'running') return;
-  if (play('whistle', { at, dur:Math.min(dur, .95), vol:vol*4.5, lp:5200, send:.22 })) return;
+  if (dur > .45 ? play('whistleLong', { at, dur:Math.min(dur, 1.4), vol:.34, lp:6000, send:.12 }) : play('whistle', { at, vol:.32, lp:6000, send:.12 })) return;
   const t = actx.currentTime + at;
   const o = actx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(2900, t); o.frequency.linearRampToValueAtTime(3050, t + .04);
   const env = actx.createGain(); env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(vol, t + .025); env.gain.setValueAtTime(vol, t + dur - .05); env.gain.linearRampToValueAtTime(0, t + dur);
@@ -576,34 +565,30 @@ function whistleBlast(at, dur, vol = .075){
   o.start(t); pea.start(t); o.stop(t + dur + .02); pea.stop(t + dur + .02);
   nz(dur, vol*.22, { f:3300, Q:5, at, attack:.02 });
 }
+const rnd = (a, b) => a + Math.random()*(b - a);
 const sfx = {
-  // Leather ball on boot: low thump + short slap.
-  // Leather ball on boot: a short, dry thud with a little slap. No boomy sub sweep.
+  // Recorded boot-on-ball, two takes with slight pitch variation so repeats never sound identical.
   kick: (pow = 1) => { if (!throttle('kick', 40)) return;
-    const v = .6 + .4*Math.min(1, pow);
-    osc('sine', 120, 62, .075, .3*v, { send:.04 });
-    nz(.035, .24*v, { f:950, Q:.7 });
-    nz(.012, .07*v, { f:2600, Q:.9 }); },
+    const v = .55 + .45*Math.min(1, pow);
+    if (play(Math.random() < .5 ? 'kick1' : 'kick2', { vol:.62*v, rate:rnd(.93, 1.06), send:.05 })) return;
+    osc('sine', 120, 62, .075, .3*v); nz(.035, .24*v, { f:950, Q:.7 }); },
   head: (pow = 1) => { if (!throttle('head', 50)) return;
-    const v = .6 + .4*Math.min(1, pow);
-    osc('sine', 170, 95, .06, .2*v, { send:.04 });
-    nz(.03, .12*v, { f:800, Q:.8 }); },
+    const v = .55 + .45*Math.min(1, pow);
+    if (play('kick1', { vol:.42*v, rate:rnd(1.12, 1.24), lp:2600, send:.05 })) return;
+    osc('sine', 170, 95, .06, .2*v); nz(.03, .12*v, { f:800, Q:.8 }); },
   bounce: v => { if (!throttle('bounce', 70)) return; const k = Math.min(1, v/1400);
     if (k < .12) return;
-    osc('sine', 92, 55, .07, .17*k); nz(.04, .08*k, { type:'lowpass', f:420 }); },
+    if (play('bounce', { vol:.4*k, rate:rnd(.95, 1.05), lp:3000 })) return;
+    osc('sine', 92, 55, .07, .17*k); },
   land: () => { if (!throttle('land', 90)) return; nz(.06, .06, { type:'lowpass', f:220 }); },
   jump: () => nz(.025, .012, { f:1800, Q:.6 }),
   post: () => { if (!throttle('post', 140)) return;
     [[620, .38, .032], [1390, .22, .016]].forEach(([f, d, v]) => osc('sine', f, f*.997, d, v, { send:.25 }));
     nz(.02, .09, { f:2200, Q:1 });
     sfx.ooh(); },
-  ooh: () => { if (!actx) return; crowd(.22, .7);
-    if (!play('cheer', { rate:.72, vol:.24, lp:750, dur:1.1, fadeIn:.18, offset:1, send:.2 })) nz(1, .06, { f:460, f1:340, Q:2, attack:.22, send:.25, pink:true }); },
-  net: () => { nz(.38, .08, { f:1600, f1:600, Q:.6, attack:.015 }); },
-  // Terrace davul: distant and round, it sits under the crowd rather than on top of it.
-  drum: (acc, lv = 1) => { const k = Math.min(1.3, lv);
-    osc('sine', acc ? 86 : 72, 46, .2, (acc ? .055 : .036)*k, { send:.4 });
-    nz(.025, .016*k, { type:'lowpass', f:500 }); },
+  ooh: () => { if (!actx || !throttle('ooh', 2500)) return;
+    play('ooh', { vol:.3, lp:4000, send:.1 }); },
+  net: () => { nz(.3, .035, { f:1400, f1:600, Q:.6, attack:.015 }); },
   whistle: (kind = 'start') => { if (!actx) return;
     if (kind === 'start') whistleBlast(0, .55);
     else if (kind === 'end') { whistleBlast(0, .3); whistleBlast(.42, .3); whistleBlast(.84, .85); }
@@ -613,10 +598,10 @@ const sfx = {
   beep: () => {},
   goal: () => { if (!actx) return;
     sfx.net();
-    // A short roar that fades back into the bed: no long applause tail.
-    crowd(.26, 1);
-    const real = play('cheer', { vol:.3, fadeIn:.08, dur:1.5, lp:2800, send:.18 });
-    if (!real) nz(1.3, .08, { f:560, f1:780, Q:.6, attack:.2, send:.25, pink:true }); },
+    // A real ~3 s roar with a built-in fade, mixed under the game so it never pierces.
+    stopChant();
+    crowd(crowdLevel*.6, 3);
+    if (!play('goal', { vol:.38, lp:5000, send:.1 })) nz(1.3, .05, { f:560, f1:780, Q:.6, attack:.2, pink:true }); },
   ready: () => { osc('sine', 880, 0, .22, .012, { send:.3, attack:.02 }); },
   click: () => { audio(); nz(.02, .03, { f:1400, Q:1 }); },
   // Skills are whooshes and thuds in the same family as the ball sounds, not synth sweeps.
@@ -637,41 +622,31 @@ const sfx = {
 // Online duels: the host records contact sounds so the guest hears the same match.
 for (const n of ['kick','head','bounce','post','skill']) { const f = sfx[n]; sfx[n] = (...a) => { if (isHost() && game) netEv(n, a[0]); return f(...a); }; }
 // ---------- Terrace chants ----------
-// The stands chant member usernames: a pill on screen, a davul rhythm and a quiet, muffled voice.
-let chantNames = [], chantMe = '', chantTimer = null, chantCd = 9;
-fetch('/api/arena/chant-names', { credentials:'same-origin' })
-  .then(r => r.ok ? r.json() : null)
-  .then(d => { if (!d) return; chantMe = typeof d.me === 'string' ? d.me : ''; chantNames = Array.isArray(d.names) ? d.names.filter(n => typeof n === 'string' && n) : []; })
-  .catch(() => {});
-function trVoice(){ try { return speechSynthesis.getVoices().find(v => /^tr/i.test(v.lang)) || null; } catch { return null; } }
-function pickChantName(){
-  const pool = chantMe ? [chantMe, chantMe, ...chantNames] : chantNames;
-  return pool.length ? pool[Math.floor(Math.random()*pool.length)] : '';
+// Recorded supporters' songs rise out of the ambience now and then, quietly and in the distance.
+let chantCd = 9, chantSrc = null, chantGain = null, lastChant = '';
+function stopChant(){
+  if (!chantSrc || !actx) return;
+  const t = actx.currentTime;
+  try { chantGain.gain.cancelScheduledValues(t); chantGain.gain.setTargetAtTime(0, t, .25); chantSrc.stop(t + 1.2); } catch {}
+  chantSrc = null;
 }
-function stopChant(){ clearTimeout(chantTimer); $('chant').classList.remove('show'); try { speechSynthesis.cancel(); } catch {} }
-function chant(name){
-  if (!name) return;
-  const up = name.toLocaleUpperCase('tr-TR');
-  $('chantTx').textContent = `${up}! ${up}!`;
-  $('chant').classList.add('show');
-  clearTimeout(chantTimer); chantTimer = setTimeout(() => $('chant').classList.remove('show'), 3400);
+function chant(){
   if (muted || !actx || actx.state !== 'running' || document.hidden) return;
-  [0, .34, .9, 1.24, 1.58].forEach((at, i) => sfx.drum(i === 2, .7));
-  crowd(.13, 2.6);
-  try {
-    // A non-Turkish voice mangles Turkish names and sounds robotic, so it only speaks with a tr voice.
-    const v = trVoice();
-    if (!('speechSynthesis' in window) || !v) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(`${name}! ${name}!`);
-    u.voice = v; u.lang = 'tr-TR'; u.volume = .1; u.rate = .85; u.pitch = .7;
-    speechSynthesis.speak(u);
-  } catch {}
+  const name = lastChant === 'chant1' ? 'chant2' : 'chant1', buf = buffers[name];
+  if (!buf) return;
+  stopChant(); lastChant = name;
+  const s = actx.createBufferSource(), lp = actx.createBiquadFilter(), g = actx.createGain();
+  s.buffer = buf; s.playbackRate.value = rnd(.97, 1.02);
+  lp.type = 'lowpass'; lp.frequency.value = 2400;
+  g.gain.value = .2;
+  s.connect(lp).connect(g); out(g, .3); s.start();
+  s.onended = () => { if (chantSrc === s) chantSrc = null; };
+  chantSrc = s; chantGain = g;
 }
 function tickChant(dt){
   if (!game || game.phase !== 'play') return;
   chantCd -= dt;
-  if (chantCd <= 0) { chantCd = 20 + Math.random()*12; chant(pickChantName()); }
+  if (chantCd <= 0) { chantCd = 28 + Math.random()*14; chant(); }
 }
 
 function setMuted(m){ muted = m; if (m) stopChant(); if (master) master.gain.setTargetAtTime(m ? 0 : MASTER_VOL, actx.currentTime, .02); $('muteBtn').innerHTML = `<i data-lucide="${muted?'volume-x':'volume-2'}"></i>`; icons(); }
@@ -804,7 +779,7 @@ function setupMatch(chA, skA, chB, skB, botB){
   audio();
   game = { phase:'countdown', t:0, time:60, score:[0,0], players:[ mkPlayer(0, chA, skA, false), mkPlayer(1, chB, skB, botB) ],
     ball:{ x:W/2, y:GROUND-400, vx:0, vy:0, rot:0, fire:0, ghost:0, tornado:0, owner:-1, held:true }, slow:0, goalBy:-1, touches:[0,0], shots:[0,0],
-    net:[0,0], netY:[0,0], drumT:0, drumI:0 };
+    net:[0,0], netY:[0,0] };
   if (isHost()) Object.assign(game.players[1], { remote:true, kn:0, sn:0, rs:null });
   resetKickoff();
   stopChant(); chantCd = 6 + Math.random()*4;
@@ -1082,7 +1057,7 @@ function goalFx(side){
   game.net[netIdx] = 1; game.netY[netIdx] = game.ball.y;
   hypeBoost = 1;
   sfx.goal(); shake = .5; flash = .35;
-  if (side === mySide() && chantMe) { chantCd = 22; setTimeout(() => chant(chantMe), 900); }
+  chantCd = Math.max(chantCd, 12);
   bigText('GOL!', side === 0 ? '#e9b949' : '#d8434f');
   callout(`${p.ch.name} attı!`, side === 0 ? '#e9b949' : '#d8434f');
   const gx = side === 0 ? W - GW/2 : GW/2;
@@ -1203,8 +1178,6 @@ function tickPhase(dt){
     game.time -= dt;
     tickChant(dt);
     game.sinceKick = (game.sinceKick || 0) + dt;
-    game.drumT -= dt;
-    if (game.drumT <= 0) { game.drumT = .26; game.drumI = (game.drumI + 1) % 8; if ([1,0,1,0,1,1,1,0][game.drumI]) sfx.drum(game.drumI === 4, .45 + hype); }
     const me = game.players[mySide()];
     if (me.meter >= 100 && !me.readyPlayed) { me.readyPlayed = true; sfx.ready(); }
     if (game.time <= 0) { game.time = 0; game.phase = 'end'; game.t = 1.4; sfx.whistle('end'); bigText('MAÇ BİTTİ'); }
@@ -1977,8 +1950,6 @@ function guestTick(dt){
   if (s.ph === 'menu') { finishMatch(); return; }
   if (s.ph === 'play') {
     tickChant(dt);
-    game.drumT -= dt;
-    if (game.drumT <= 0) { game.drumT = .26; game.drumI = (game.drumI + 1) % 8; if ([1,0,1,0,1,1,1,0][game.drumI]) sfx.drum(game.drumI === 4, .45 + hype); }
     if (mine.meter >= 100 && !mine.readyPlayed) { mine.readyPlayed = true; sfx.ready(); }
     if (mine.meter < 100) mine.readyPlayed = false;
   }
