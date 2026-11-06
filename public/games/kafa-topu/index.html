@@ -66,18 +66,20 @@
   .callout.show{opacity:1}
 
   /* Touch controls */
-  /* Phones: controls sit in a dock below the pitch, so the goals stay fully visible */
-  .touch{position:absolute;left:0;right:0;top:720px;height:160px;display:none;background:linear-gradient(#0b0e14,#11151d);border-top:3px solid #e9b94966}
+  /* Phones: translucent thumb controls float over the pitch corners, inside the goals' x-range
+     edges, padded by the safe area (--inv converts screen px into stage px). */
+  .touch{position:absolute;inset:0;display:none;pointer-events:none;--inv:1}
   #device.mobile .touch{display:block}
   #device.mobile .hint{display:none}
-  .tbtn{position:absolute;pointer-events:auto;border-radius:50%;border:3px solid #ffffff40;background:#1c212c;color:var(--white);display:grid;place-items:center;font:400 28px 'Lilita One',sans-serif;touch-action:none}
-  .tbtn svg{width:58px;height:58px}
-  .tbtn.on{background:#e9b949cc;color:var(--ink);border-color:var(--gold)}
-#tL{left:30px;bottom:9px;width:108px;height:108px}
- #tR{left:156px;bottom:9px;width:108px;height:108px}
- #tKick{right:30px;bottom:5px;width:118px;height:118px;color:var(--ink);border-color:#fff8}
- #tJump{right:166px;bottom:9px;width:108px;height:108px}
- #tSkill{right:292px;bottom:16px;width:94px;height:94px;overflow:hidden}
+  .tbtn{position:absolute;pointer-events:auto;border-radius:50%;border:2.5px solid #ffffff42;background:#0b0e1480;color:#fffffff0;display:grid;place-items:center;font:400 26px 'Lilita One',sans-serif;touch-action:none;box-shadow:0 6px 18px #0005;transition:transform .06s,background-color .06s;-webkit-tap-highlight-color:transparent}
+  .tbtn svg{width:56px;height:56px}
+  .tbtn.on{background:#e9b949b8;color:var(--ink);border-color:var(--gold);transform:scale(.92)}
+  #tL,#tR{bottom:calc(34px + env(safe-area-inset-bottom) * var(--inv));width:120px;height:120px}
+  #tL{left:calc(140px + env(safe-area-inset-left) * var(--inv))}
+  #tR{left:calc(282px + env(safe-area-inset-left) * var(--inv))}
+  #tKick{right:calc(140px + env(safe-area-inset-right) * var(--inv));bottom:calc(30px + env(safe-area-inset-bottom) * var(--inv));width:138px;height:138px;color:var(--ink);border-color:#fff9;opacity:.9}
+  #tJump{right:calc(298px + env(safe-area-inset-right) * var(--inv));bottom:calc(52px + env(safe-area-inset-bottom) * var(--inv));width:112px;height:112px}
+  #tSkill{right:calc(166px + env(safe-area-inset-right) * var(--inv));bottom:calc(192px + env(safe-area-inset-bottom) * var(--inv));width:88px;height:88px;overflow:hidden}
   #tSkill .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:#e9b94988}
   #tSkill svg,#tSkill span{position:relative;width:48px;height:48px}
   #tSkill.ready{border-color:var(--gold);animation:pulse .5s infinite alternate}
@@ -187,16 +189,6 @@
   #device.web,#device.mobile{max-width:none;width:100vw;height:100vh;height:100dvh;aspect-ratio:auto;border:0;border-radius:0;box-shadow:none}
   #lvlUp,#lvlReset{display:none!important}
 
-  /* Dock buttons are centred inside the dock (its height is set by layout()) so nothing slips under the screen edge. */
-  .touch{overflow:hidden}
-  .tbtn{top:50%;bottom:auto!important;transform:translateY(-50%)}
-  .tbtn.on{transform:translateY(-50%) scale(.94)}
-  #tL{left:40px;width:96px;height:96px}
-  #tR{left:152px;width:96px;height:96px}
-  #tKick{right:40px;width:106px;height:106px}
-  #tJump{right:162px;width:96px;height:96px}
-  #tSkill{right:274px;width:84px;height:84px}
-  .tbtn svg{width:48px;height:48px}
 
   /* Compact start screen */
   #menu{padding:22px 48px;gap:14px;align-items:center;justify-content:center}
@@ -382,8 +374,8 @@ let mode = matchMedia('(pointer:coarse)').matches ? 'mobile' : 'web';
 let W = 1280, scale = 1;
 const H = 720, GROUND = 664, BR = 22, CB = GROUND - 240, GW = 118, BASE_R = 46;
 const GIANT_SZ = (GROUND - CB - 18) / 2 / BASE_R;
-// On phones the controls live in a dock under the pitch so they never cover the goals.
-const DOCK = 130;
+// Phone controls float over the pitch, so no extra space is reserved below it.
+const DOCK = 0;
 // Phones are ~2.2:1; stretching the pitch to that width made the players tiny. The world
 // is capped in width and the camera crops the sky instead, panning up for high balls.
 const WMAX_MOBILE = 1480;
@@ -410,7 +402,7 @@ function layout(){
   stage.style.transform = `scale(${scale})`;
   cv.width = Math.round(W * scale * dpr); cv.height = Math.round(VH * scale * dpr);
   cv.style.width = W + 'px'; cv.style.height = VH + 'px';
-  if ($('touch')) { $('touch').style.top = VH + 'px'; $('touch').style.height = (TH - VH) + 'px'; }
+  if ($('touch')) $('touch').style.setProperty('--inv', (1 / scale).toFixed(3));
   RES = scale * dpr;
   ctx.setTransform(RES, 0, 0, RES, 0, -camY*RES);
   cache = null;
@@ -424,6 +416,7 @@ $('mMob').onclick = () => setMode('mobile');
 // Everything is synthesized so the artifact stays self-contained. Levels are kept
 // deliberately low and close to broadcast sound: thuds, swishes, a pea whistle and
 // a crowd bed, no arcade fanfares.
+const MASTER_VOL = .62;
 let actx = null, muted = false, master, verbIn, noiseBuf, pinkBuf, crowdBus, crowdLP, crowdLevel = 0, lastSfx = {};
 let mediaEl = null;
 function silentWavUrl(){
@@ -450,9 +443,11 @@ function audio(){
     // iOS: without this Web Audio is silenced by the ringer switch (Safari 17+).
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
     const comp = actx.createDynamicsCompressor();
-    comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = .003; comp.release.value = .2;
-    master = actx.createGain(); master.gain.value = muted ? 0 : .85;
-    master.connect(comp).connect(actx.destination);
+    comp.threshold.value = -22; comp.knee.value = 14; comp.ratio.value = 3; comp.attack.value = .004; comp.release.value = .25;
+    // Gentle top-end roll-off: phone speakers turn anything above ~8 kHz into ear-piercing fizz.
+    const tone = actx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 8000; tone.Q.value = .5;
+    master = actx.createGain(); master.gain.value = muted ? 0 : MASTER_VOL;
+    master.connect(tone).connect(comp).connect(actx.destination);
     const sr = actx.sampleRate, len = sr * 4;
     noiseBuf = actx.createBuffer(1, len, sr);
     pinkBuf = actx.createBuffer(1, len, sr);
@@ -571,7 +566,7 @@ const throttle = (k, ms) => { const n = performance.now(); if (n - (lastSfx[k] |
 // Referee pea whistle: ~3 kHz tone with the pea's fast amplitude flutter plus breath.
 function whistleBlast(at, dur, vol = .075){
   if (!actx || actx.state !== 'running') return;
-  if (play('whistle', { at, dur:Math.min(dur, .95), vol:vol*9, send:.22 })) return;
+  if (play('whistle', { at, dur:Math.min(dur, .95), vol:vol*4.5, lp:5200, send:.22 })) return;
   const t = actx.currentTime + at;
   const o = actx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(2900, t); o.frequency.linearRampToValueAtTime(3050, t + .04);
   const env = actx.createGain(); env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(vol, t + .025); env.gain.setValueAtTime(vol, t + dur - .05); env.gain.linearRampToValueAtTime(0, t + dur);
@@ -583,54 +578,59 @@ function whistleBlast(at, dur, vol = .075){
 }
 const sfx = {
   // Leather ball on boot: low thump + short slap.
+  // Leather ball on boot: a short, dry thud with a little slap. No boomy sub sweep.
   kick: (pow = 1) => { if (!throttle('kick', 40)) return;
-    osc('sine', 150, 46, .13, .62*pow, { send:.05 });
-    osc('triangle', 260, 90, .04, .16*pow);
-    nz(.022, .36*pow, { f:1700, Q:.8 });
-    nz(.008, .2*pow, { type:'highpass', f:5000 }); },
+    const v = .6 + .4*Math.min(1, pow);
+    osc('sine', 120, 62, .075, .3*v, { send:.04 });
+    nz(.035, .24*v, { f:950, Q:.7 });
+    nz(.012, .07*v, { f:2600, Q:.9 }); },
   head: (pow = 1) => { if (!throttle('head', 50)) return;
-    osc('sine', 210, 92, .09, .42*pow, { send:.05 });
-    nz(.032, .2*pow, { f:1300, Q:1 }); },
+    const v = .6 + .4*Math.min(1, pow);
+    osc('sine', 170, 95, .06, .2*v, { send:.04 });
+    nz(.03, .12*v, { f:800, Q:.8 }); },
   bounce: v => { if (!throttle('bounce', 70)) return; const k = Math.min(1, v/1400);
-    osc('sine', 108, 52, .09, .32*k); nz(.05, .13*k, { type:'lowpass', f:420 }); nz(.012, .06*k, { f:1500, Q:1 }); },
-  land: () => { if (!throttle('land', 90)) return; nz(.07, .1, { type:'lowpass', f:240 }); },
-  jump: () => nz(.03, .022, { type:'highpass', f:3200 }),
+    if (k < .12) return;
+    osc('sine', 92, 55, .07, .17*k); nz(.04, .08*k, { type:'lowpass', f:420 }); },
+  land: () => { if (!throttle('land', 90)) return; nz(.06, .06, { type:'lowpass', f:220 }); },
+  jump: () => nz(.025, .012, { f:1800, Q:.6 }),
   post: () => { if (!throttle('post', 140)) return;
-    [[740, .5, .06], [1610, .32, .035], [2480, .18, .02]].forEach(([f, d, v]) => osc('sine', f, f*.997, d, v, { send:.35 }));
-    nz(.02, .18, { f:3000, Q:1.2 });
+    [[620, .38, .032], [1390, .22, .016]].forEach(([f, d, v]) => osc('sine', f, f*.997, d, v, { send:.25 }));
+    nz(.02, .09, { f:2200, Q:1 });
     sfx.ooh(); },
-  ooh: () => { if (!actx) return; crowd(.3, .8);
-    if (!play('cheer', { rate:.72, vol:.4, lp:800, dur:1.3, fadeIn:.18, offset:1, send:.2 })) nz(1.1, .1, { f:460, f1:340, Q:2, attack:.22, send:.25, pink:true }); },
-  net: () => { nz(.45, .14, { f:2200, f1:700, Q:.6, attack:.015 }); nz(.22, .05, { type:'highpass', f:5000 }); },
-  // Terrace davul: round low hit, louder when the crowd is up.
-  drum: (acc, lv = 1) => { const k = Math.min(1.5, lv);
-    osc('sine', acc ? 92 : 74, 44, .24, (acc ? .11 : .075)*k, { send:.35 });
-    nz(.03, .035*k, { type:'lowpass', f:700 }); },
+  ooh: () => { if (!actx) return; crowd(.22, .7);
+    if (!play('cheer', { rate:.72, vol:.24, lp:750, dur:1.1, fadeIn:.18, offset:1, send:.2 })) nz(1, .06, { f:460, f1:340, Q:2, attack:.22, send:.25, pink:true }); },
+  net: () => { nz(.38, .08, { f:1600, f1:600, Q:.6, attack:.015 }); },
+  // Terrace davul: distant and round, it sits under the crowd rather than on top of it.
+  drum: (acc, lv = 1) => { const k = Math.min(1.3, lv);
+    osc('sine', acc ? 86 : 72, 46, .2, (acc ? .055 : .036)*k, { send:.4 });
+    nz(.025, .016*k, { type:'lowpass', f:500 }); },
   whistle: (kind = 'start') => { if (!actx) return;
     if (kind === 'start') whistleBlast(0, .55);
     else if (kind === 'end') { whistleBlast(0, .3); whistleBlast(.42, .3); whistleBlast(.84, .85); }
     else whistleBlast(0, .3); },
-  tick: (soft) => osc('sine', soft ? 700 : 940, 0, .07, soft ? .03 : .045, { send:.15 }),
-  beep: (hi) => sfx.tick(!hi),
+  // The countdown is shown on screen; the referee's whistle is the only cue, no arcade beeps.
+  tick: () => {},
+  beep: () => {},
   goal: () => { if (!actx) return;
     sfx.net();
-    // Short burst of joy, then straight back to the bed: no long applause tail.
-    crowd(.32, 1.2);
-    const real = play('cheer', { vol:.42, fadeIn:.06, dur:1.7, lp:3200, send:.18 });
-    if (!real) nz(1.5, .14, { f:560, f1:780, Q:.6, attack:.2, send:.25, pink:true }); },
-  ready: () => { osc('sine', 1180, 0, .16, .035, { send:.2 }); osc('sine', 1570, 0, .2, .03, { at:.07, send:.2 }); },
-  click: () => { audio(); osc('triangle', 1200, 800, .03, .04); },
+    // A short roar that fades back into the bed: no long applause tail.
+    crowd(.26, 1);
+    const real = play('cheer', { vol:.3, fadeIn:.08, dur:1.5, lp:2800, send:.18 });
+    if (!real) nz(1.3, .08, { f:560, f1:780, Q:.6, attack:.2, send:.25, pink:true }); },
+  ready: () => { osc('sine', 880, 0, .22, .012, { send:.3, attack:.02 }); },
+  click: () => { audio(); nz(.02, .03, { f:1400, Q:1 }); },
+  // Skills are whooshes and thuds in the same family as the ball sounds, not synth sweeps.
   skill: (id) => { if (!actx) return;
     switch (id) {
-      case 'fire': nz(.5, .22, { type:'lowpass', f:300, f1:3000, Q:1.5, send:.2 }); break;
-      case 'ice': nz(.12, .2, { type:'highpass', f:4000 }); [2349, 3136].forEach((f, i) => osc('sine', f, f, .35, .025, { at:i*.05, send:.4 })); break;
-      case 'giant': osc('sine', 90, 200, .4, .18); break;
-      case 'shrink': osc('sine', 600, 200, .3, .06); break;
-      case 'wall': nz(.3, .3, { type:'lowpass', f:200 }); nz(.25, .08, { f:900, Q:1.5, at:.03 }); break;
-      case 'ghost': osc('sine', 500, 320, .6, .045, { send:.5, attack:.1 }); break;
-      case 'bolt': nz(.05, .35, { type:'highpass', f:1500 }); nz(.8, .25, { type:'lowpass', f:150, at:.03, send:.3 }); break;
-      case 'tornado': nz(.8, .18, { f:400, f1:1400, Q:3, send:.2, attack:.1 }); break;
-      default: nz(.2, .1, { f:900 });
+      case 'fire': nz(.45, .1, { type:'lowpass', f:300, f1:2200, Q:.8, send:.2, attack:.03 }); break;
+      case 'ice': nz(.25, .06, { f:3000, f1:1800, Q:1.2, send:.35, attack:.01 }); break;
+      case 'giant': nz(.4, .1, { type:'lowpass', f:180, f1:420, Q:.8, attack:.05, send:.2 }); break;
+      case 'shrink': nz(.25, .05, { f:1600, f1:700, Q:1, attack:.02 }); break;
+      case 'wall': nz(.28, .14, { type:'lowpass', f:180 }); nz(.2, .04, { f:700, Q:1.2, at:.03 }); break;
+      case 'ghost': nz(.6, .04, { f:700, f1:350, Q:2, send:.5, attack:.12 }); break;
+      case 'bolt': nz(.04, .12, { f:2400, Q:.8 }); nz(.7, .12, { type:'lowpass', f:140, at:.03, send:.3 }); break;
+      case 'tornado': nz(.7, .08, { f:400, f1:1200, Q:1.5, send:.2, attack:.1 }); break;
+      default: nz(.2, .05, { f:900 });
     }
   },
 };
@@ -656,14 +656,15 @@ function chant(name){
   $('chant').classList.add('show');
   clearTimeout(chantTimer); chantTimer = setTimeout(() => $('chant').classList.remove('show'), 3400);
   if (muted || !actx || actx.state !== 'running' || document.hidden) return;
-  [0, .34, .9, 1.24, 1.58].forEach((at, i) => osc('sine', i === 2 ? 88 : 74, 42, .24, i === 2 ? .085 : .06, { at, send:.4 }));
-  crowd(.14, 2.6);
+  [0, .34, .9, 1.24, 1.58].forEach((at, i) => sfx.drum(i === 2, .7));
+  crowd(.13, 2.6);
   try {
-    if (!('speechSynthesis' in window)) return;
+    // A non-Turkish voice mangles Turkish names and sounds robotic, so it only speaks with a tr voice.
+    const v = trVoice();
+    if (!('speechSynthesis' in window) || !v) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(`${name}! ${name}!`);
-    const v = trVoice(); if (v) u.voice = v;
-    u.lang = 'tr-TR'; u.volume = .18; u.rate = .8; u.pitch = .55;
+    u.voice = v; u.lang = 'tr-TR'; u.volume = .1; u.rate = .85; u.pitch = .7;
     speechSynthesis.speak(u);
   } catch {}
 }
@@ -673,7 +674,7 @@ function tickChant(dt){
   if (chantCd <= 0) { chantCd = 20 + Math.random()*12; chant(pickChantName()); }
 }
 
-function setMuted(m){ muted = m; if (m) stopChant(); if (master) master.gain.setTargetAtTime(m ? 0 : .85, actx.currentTime, .02); $('muteBtn').innerHTML = `<i data-lucide="${muted?'volume-x':'volume-2'}"></i>`; icons(); }
+function setMuted(m){ muted = m; if (m) stopChant(); if (master) master.gain.setTargetAtTime(m ? 0 : MASTER_VOL, actx.currentTime, .02); $('muteBtn').innerHTML = `<i data-lucide="${muted?'volume-x':'volume-2'}"></i>`; icons(); }
 $('muteBtn').onclick = () => { audio(); setMuted(!muted); };
 
 // ---------- Input ----------
@@ -710,10 +711,28 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) relea
 const tbtns = [...document.querySelectorAll('.tbtn')];
 const touchZone = $('device');
 const pointerBtn = new Map();
-function btnAt(x, y){
+// Left 45% of the screen is one big movement pad: anywhere left of the midline between the
+// arrows runs left, right of it runs right (with hysteresis so a resting thumb never flickers).
+// The right side snaps a tap to the nearest action button, so near-misses still count.
+const isMove = k => k === 'left' || k === 'right';
+function moveBtnAt(x, cur){
+  const a = $('tL').getBoundingClientRect(), b = $('tR').getBoundingClientRect();
+  const mid = (a.right + b.left) / 2, hy = 12;
+  if (cur === $('tL')) return x > mid + hy ? $('tR') : $('tL');
+  if (cur === $('tR')) return x < mid - hy ? $('tL') : $('tR');
+  return x < mid ? $('tL') : $('tR');
+}
+function zoneBtn(x, y){
+  const r = device.getBoundingClientRect(), fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
+  if (fy < .2) return null;
+  if (fx < .45) return moveBtnAt(x, null);
+  if (fx > .5) return btnAt(x, y, .7, tbtns.filter(b => !isMove(b.dataset.k)));
+  return null;
+}
+function btnAt(x, y, padK = .22, list = tbtns){
   let best = null, bestD = Infinity;
-  for (const b of tbtns) {
-    const r = b.getBoundingClientRect(), pad = r.width * .22;
+  for (const b of list) {
+    const r = b.getBoundingClientRect(), pad = r.width * padK;
     if (x < r.left - pad || x > r.right + pad || y < r.top - pad || y > r.bottom + pad) continue;
     const d = Math.hypot(x - (r.left + r.width/2), y - (r.top + r.height/2));
     if (d < bestD) { bestD = d; best = b; }
@@ -730,19 +749,18 @@ function setPointerBtn(id, b){
 const touchActive = () => mode === 'mobile' && game && ['play','countdown','goal'].includes(game.phase);
 touchZone.addEventListener('pointerdown', e => {
   if (!touchActive() || e.target.closest('.iconbtn')) return;
-  const b = btnAt(e.clientX, e.clientY);
+  const b = btnAt(e.clientX, e.clientY) || zoneBtn(e.clientX, e.clientY);
   if (!b) return;
   e.preventDefault();
   try { touchZone.setPointerCapture(e.pointerId); } catch {}
   setPointerBtn(e.pointerId, b);
 }, { passive:false });
 touchZone.addEventListener('pointermove', e => {
-  if (!pointerBtn.has(e.pointerId)) return;
-  const b = btnAt(e.clientX, e.clientY);
   const cur = pointerBtn.get(e.pointerId);
-  const isMove = k => k === 'left' || k === 'right';
-  // Only movement pads hand off on slide; action buttons stay pressed under the same finger.
-  if (b && b !== cur && isMove(b.dataset.k) && isMove(cur.dataset.k)) setPointerBtn(e.pointerId, b);
+  // Only the movement thumb slides between directions; action buttons stay under their finger.
+  if (!cur || !isMove(cur.dataset.k)) return;
+  const b = moveBtnAt(e.clientX, cur);
+  if (b !== cur) setPointerBtn(e.pointerId, b);
 }, { passive:true });
 const endPtr = e => { if (pointerBtn.has(e.pointerId)) setPointerBtn(e.pointerId, null); };
 touchZone.addEventListener('pointerup', endPtr);
