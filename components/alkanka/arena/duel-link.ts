@@ -14,9 +14,9 @@ const CONNECT_MS = 15000
 const FLUSH_MS = 33
 /** Concurrent flush requests; the game reorders by timestamp/sequence, so overlap only cuts latency. */
 const MAX_IN_FLIGHT = 4
-/** If the push stream has not opened by then, fall back to the polling relay. */
-const STREAM_GRACE_MS = 5000
-/** In push mode, stored match-ending frames are drained this often as a safety net across stream reconnects. */
+/** A refused push stream is retried this often; meanwhile frames are drained by polling. */
+const STREAM_RETRY_MS = 4000
+/** While the push stream is open, stored frames are still drained this often as a safety net across reconnects. */
 const DRAIN_EVERY = 45
 /** Consecutive send failures before the link is shown as lost. */
 const FAILS_LOST = 40
@@ -130,25 +130,27 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     }
     relaySend.current = queue
 
-    // ---- server path: push stream (preferred) or polling relay (fallback) ----
+    // ---- server path: frames go out with short POSTs; incoming ones arrive on the push stream when it is
+    // open, otherwise every POST also drains what the server stored for us (polling fallback). ----
     let serverOn = false
     let es: EventSource | null = null
     let streamOpen = false
-    let usePolling = false
-    let graceTimer: ReturnType<typeof setTimeout> | null = null
+    let retryStream: ReturnType<typeof setTimeout> | null = null
     let flushTimer: ReturnType<typeof setInterval> | null = null
     let inFlight = 0
     let fails = 0
     let ticks = 0
 
     const openStream = () => {
-      if (es || !alive) return
-      es = new EventSource(`/api/tables/${roomId}/stream`)
-      es.onopen = () => {
+      if (es || !alive || !serverOn) return
+      const source = new EventSource(`/api/tables/${roomId}/stream`)
+      es = source
+      source.onopen = () => {
         streamOpen = true
-        usePolling = false
+        // Collect anything stored for us before the rival noticed our stream.
+        ticks = DRAIN_EVERY - 1
       }
-      es.onmessage = (e) => {
+      source.onmessage = (e) => {
         try {
           const msgs = JSON.parse(e.data as string)
           if (Array.isArray(msgs)) deliver(msgs)
@@ -156,22 +158,20 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
           // Ignore malformed frames.
         }
       }
-      // EventSource reconnects by itself; while it is down, the polling relay carries the frames.
-      es.onerror = () => {
+      // EventSource retries by itself after a dropped connection; a refused one (4xx/5xx) closes for good,
+      // so it is reopened later while the polling fallback carries the match.
+      source.onerror = () => {
         streamOpen = false
-        if (es?.readyState === EventSource.CLOSED) {
+        if (source.readyState === EventSource.CLOSED && es === source) {
           es = null
-          usePolling = true
+          retryStream = setTimeout(openStream, STREAM_RETRY_MS)
         }
       }
-      graceTimer = setTimeout(() => {
-        if (!streamOpen) usePolling = true
-      }, STREAM_GRACE_MS)
     }
 
     const closeStream = () => {
-      if (graceTimer) clearTimeout(graceTimer)
-      graceTimer = null
+      if (retryStream) clearTimeout(retryStream)
+      retryStream = null
       es?.close()
       es = null
       streamOpen = false
@@ -179,21 +179,15 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
 
     const flush = async () => {
       if (!alive || !serverOn || inFlight >= MAX_IN_FLIGHT) return
-      const push = streamOpen && !usePolling
-      // Until push is confirmed working, the polling relay keeps the match alive.
-      if (!push && !usePolling && !streamOpen) {
-        if (!es) usePolling = true
-        else if (!outbox.length && heard) return
-      }
       ticks++
-      const drain = push && ticks % DRAIN_EVERY === 0
-      if (push && !outbox.length && !drain && heard) return
+      const drain = !streamOpen || ticks % DRAIN_EVERY === 0
+      if (!outbox.length && !drain && heard) return
       inFlight++
       if (!heard) queue({ t: '__hi' })
       const batch = outbox
       outbox = []
       try {
-        const r = await post(push ? { action: 'push', payload: batch, drain } : { action: 'relay', payload: batch })
+        const r = await post({ action: 'relay', payload: batch, drain })
         if (r.ok) {
           fails = 0
           const { msgs } = (await r.json()) as { msgs?: { t?: string }[] }
