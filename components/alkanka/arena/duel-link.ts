@@ -88,16 +88,36 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     let relayHeard = false
     let relayBusy = 0
     let relayTimer: ReturnType<typeof setInterval> | null = null
-    let outbox: { t?: string }[] = []
-    const COALESCE = new Set(['s', 'k', '__hi'])
+    type Frame = { t?: string; ev?: unknown[]; e?: unknown[] }
+    let outbox: Frame[] = []
+    // 'i' (guest input) carries press counters, so only the newest one matters; without this ~60 inputs/s flood the batch.
+    const COALESCE = new Set(['k', 'i', '__hi'])
+    // Host snapshots are interpolated on the guest, so a few real intermediate states per batch keep arcs smooth.
+    const SNAP_KEEP = 3
+
+    // Games carry their one-shot events (sounds, pops, banners) in `ev` (kafa topu) or `e` (basketbol).
+    const carryEvents = (from: Frame | undefined, into: Frame): Frame => {
+      if (!from) return into
+      const out = { ...into }
+      if (from.ev?.length) out.ev = [...from.ev, ...(into.ev ?? [])].slice(-24)
+      if (from.e?.length) out.e = [...from.e, ...(into.e ?? [])].slice(-24)
+      return out
+    }
 
     const queue = (msg: unknown) => {
-      let m = msg as { t?: string; ev?: unknown[] }
+      let m = msg as Frame
       if (m?.t && COALESCE.has(m.t)) {
-        // Only the newest frame travels, but sound/haptic events from the frames it replaces ride along.
-        const old = outbox.find((o) => o.t === m.t) as { ev?: unknown[] } | undefined
-        if (old?.ev?.length) m = { ...m, ev: [...old.ev, ...(m.ev ?? [])].slice(-24) }
+        m = carryEvents(outbox.find((o) => o.t === m.t), m)
         outbox = outbox.filter((o) => o.t !== m.t)
+      } else if (m?.t === 's') {
+        const snaps = outbox.filter((o) => o.t === 's')
+        if (snaps.length >= SNAP_KEEP) {
+          const oldest = snaps[0]
+          const next = snaps[1] ?? m
+          const merged = carryEvents(oldest, next)
+          outbox = outbox.filter((o) => o !== oldest).map((o) => (o === next ? merged : o))
+          if (next === m) m = merged
+        }
       }
       outbox.push(m)
       if (outbox.length > 20) outbox = outbox.slice(-20)
@@ -105,8 +125,8 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     relaySend.current = queue
 
     const relayTick = async () => {
-      // Two requests in flight halve the gap between frames when each round trip is slow.
-      if (!alive || relayBusy >= 2) return
+      // Several requests in flight shrink the gap between frames when each round trip is slow (TR ↔ US ≈ 150 ms).
+      if (!alive || relayBusy >= 3) return
       relayBusy++
       if (!relayHeard) queue({ t: '__hi' })
       const batch = outbox
