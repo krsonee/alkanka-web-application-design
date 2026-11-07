@@ -1374,7 +1374,7 @@ function controlRemote(p,dt){const R=NET.rin;
 /* Guest positions arrive in bursts over the relay; ease toward a lightly extrapolated target instead of snapping. */
 function applyRemoteMe(dt){const m=NET.me,p=ai;if(!m||m.rs!==game.rs||p.dunk||p.hang>0||p.frz>0)return;
  const age=Math.min(.2,(performance.now()-m.t)/1000),tx=clamp(m.x+m.vx*age,36,W-36);
- if(Math.abs(tx-p.x)>260)p.x=tx;else p.x+=(tx-p.x)*Math.min(1,dt*12);
+ if(Math.abs(tx-p.x)>480)p.x=tx;else p.x+=(tx-p.x)*Math.min(1,dt*14);
  p.vx=clamp(m.vx,-700,700);if(!(p.shoot&&p.shoot.charging))p.f=m.f}
 /* Guest: snapshots are buffered and the rival + loose ball are drawn slightly in the past, interpolated between two
    real host states. Jittery or bursty delivery (server relay, mobile radios) then still renders as smooth motion. */
@@ -1407,7 +1407,7 @@ function copyMirrored(p,s,own,age,dt){
  const snapAll=()=>{p.x=W-s.x;p.y=s.y;p.vx=-s.vx;p.vy=s.vy;p.f=-s.f;p.onG=!!s.g;p.shoot=fromSnapShot(s.sh)};
  if(p.hang>0||p.frz>0){snapAll();return}
  if(own){
-  if(NET.rs!==NET.snap.rs||Math.abs(W-s.x-p.x)>260){NET.rs=NET.snap.rs;snapAll();return}
+  if(NET.rs!==NET.snap.rs){NET.rs=NET.snap.rs;snapAll();return}
   if(!(p.shoot&&p.shoot.loc))p.shoot=fromSnapShot(s.sh);
   return}
  if(age<0){p.x=W-s.x;p.y=s.y}
