@@ -89,7 +89,8 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     let relayBusy = 0
     let relayTimer: ReturnType<typeof setInterval> | null = null
     let outbox: { t?: string }[] = []
-    const COALESCE = new Set(['s', 'k', '__hi'])
+    // 'i' (guest input) carries press counters, so only the newest one matters; without this ~60 inputs/s flood the batch.
+    const COALESCE = new Set(['s', 'k', 'i', '__hi'])
 
     const queue = (msg: unknown) => {
       let m = msg as { t?: string; ev?: unknown[] }
