@@ -136,13 +136,16 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .rb.dn{background:radial-gradient(circle,rgba(34,211,197,.7),rgba(34,211,197,.35));transform:scale(.94)}
 #bShoot{right:calc(var(--u)*26);width:calc(var(--u)*94);height:calc(var(--u)*94);bottom:calc(var(--u)*14)}
 #bJump{right:calc(var(--u)*134);width:calc(var(--u)*74);height:calc(var(--u)*74);bottom:calc(var(--u)*16)}
-#bSteal{display:none}
+#bSteal{right:calc(var(--u)*30);bottom:calc(var(--u)*118);width:calc(var(--u)*72);height:calc(var(--u)*72);border-color:var(--coral);background:radial-gradient(circle at 50% 35%,rgba(255,77,90,.55),rgba(15,27,45,.65) 70%);box-shadow:0 0 calc(var(--u)*10) rgba(255,77,90,.6)}
+#bSteal svg{width:calc(var(--u)*26);height:calc(var(--u)*26)}
+#bDunk{right:calc(var(--u)*122);bottom:calc(var(--u)*102);width:calc(var(--u)*64);height:calc(var(--u)*64);opacity:.55;transition:opacity .15s,box-shadow .15s}
+#bDunk.on{opacity:1;border-color:#ffd23f;background:radial-gradient(circle at 50% 35%,rgba(255,210,63,.6),rgba(15,27,45,.65) 70%);box-shadow:0 0 calc(var(--u)*14) rgba(255,210,63,.85)}
 #bShoot svg{width:calc(var(--u)*34);height:calc(var(--u)*34)}
 #bJump svg{width:calc(var(--u)*28);height:calc(var(--u)*28)}
 #bShoot.stl{border-color:var(--coral);background:radial-gradient(circle at 50% 35%,rgba(255,77,90,.6),rgba(15,27,45,.65) 70%);box-shadow:0 0 calc(var(--u)*12) rgba(255,77,90,.7)}
 .ring{position:absolute;inset:calc(var(--u)*-7);border-radius:50%;pointer-events:none;opacity:0;background:conic-gradient(var(--teal) calc(var(--m,0)*1turn),transparent 0);-webkit-mask:radial-gradient(circle,transparent 62%,#000 63%);mask:radial-gradient(circle,transparent 62%,#000 63%)}
 .rb.chg .ring{opacity:1}
-#bSkill{right:calc(var(--u)*44);bottom:calc(var(--u)*122);width:calc(var(--u)*60);height:calc(var(--u)*60);opacity:.7}
+#bSkill{right:calc(var(--u)*44);bottom:calc(var(--u)*202);width:calc(var(--u)*58);height:calc(var(--u)*58);opacity:.7}
 .real.kb #touch{display:none}
 .real.kb .keys{display:flex}
 #bSkill img{width:calc(var(--u)*34);height:calc(var(--u)*34);object-fit:contain;margin-top:calc(var(--u)*-4)}
@@ -295,7 +298,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    <h1 class="ttl disp">KAFA <em>BASKETBOLU</em></h1>
    <div class="chars" id="chars"></div>
    <div class="btns" style="margin-top:0"><button class="cta sec" id="exitBtn" hidden>ARENAYA DÖN</button><button class="cta" id="findBtn">MAÇ BUL</button></div>
-   <div class="keys"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla</span><span><kbd>J</kbd>Şut (top rakipteyse Çal)</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
+   <div class="keys"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla</span><span><kbd>J</kbd>Şut</span><span><kbd>K</kbd>Çal</span><span><kbd>L</kbd>Smaç</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
   </div>
   <div class="ov dim srch" id="ovSrch"><div class="ball"></div><p class="disp">Rakip aranıyor...</p><div class="heads" id="srchHeads"></div></div>
   <div class="ov vs" id="ovVs">
@@ -338,6 +341,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <button class="rb skb" id="bSkill" aria-label="Süper güç"><span class="ring2" id="ring2"></span><img id="bSkImg" alt=""><b>GÜÇ</b></button>
   <button class="rb" id="bShoot" aria-label="Şut: dokun ya da basılı tutup bırak"><span class="ring" id="ring"></span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19M5.4 5.4c3.2 3.4 3.2 9.8 0 13.2M18.6 5.4c-3.2 3.4-3.2 9.8 0 13.2"/></svg><b id="bShootB">ŞUT</b></button>
   <button class="rb" id="bJump" aria-label="Zıpla"><svg viewBox="0 0 24 24" stroke-width="3"><path d="M12 20V5M5 12l7-7 7 7"/></svg><b>ZIPLA</b></button>
+  <button class="rb" id="bDunk" aria-label="Smaç: potaya yakınken"><svg viewBox="0 0 24 24"><path d="M4 7h16M6 7l2 6h8l2-6M9 13l-1 5M15 13l1 5M12 13v6"/></svg><b>SMAÇ</b></button>
  </div>
  <div class="cam" aria-hidden="true"></div>
  <div id="rot" role="alertdialog" aria-label="Telefonu yan çevir">
@@ -350,8 +354,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
  </div>
  </div>
  <div class="legend">
-  <div class="lw"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla / Blok</span><span><kbd>J</kbd>Şut · Top rakipteyse Çal</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
-  <div class="lm"><span>Sol alt: Yürü</span><span>Sağ alt: Zıpla · Şut/Çal</span><span>Şut: dokun ya da basılı tutup bırak</span><span>Dik tutunca &quot;yan çevir&quot; uyarısı çıkar</span></div>
+  <div class="lw"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla / Blok</span><span><kbd>J</kbd>Şut (basılı tut, yeşilde bırak)</span><span><kbd>K</kbd>Çal / Tokat</span><span><kbd>L</kbd>Smaç (potaya yakın)</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
+  <div class="lm"><span>Sol alt: Yürü</span><span>Sağ alt: Şut · Zıpla · Çal · Smaç</span><span>Şut: basılı tut, halka dolunca bırak</span><span>Dik tutunca &quot;yan çevir&quot; uyarısı çıkar</span></div>
  </div>
 </div>
 
@@ -572,8 +576,8 @@ const skOn=(p,id)=>p.sk>0&&p.ch.id===id;
 function addEn(p,v){if(p.sk<=0)p.en=Math.min(100,p.en+v)}
 
 /* ---------- input ---------- */
-const inp={l:0,r:0,shoot:0,jumpP:0,shootP:0,stealP:0,superP:0};
-const KEY={ArrowLeft:'l',KeyA:'l',ArrowRight:'r',KeyD:'r',ArrowUp:'j',KeyW:'j',Space:'j',KeyJ:'s',KeyX:'s',KeyK:'t',KeyC:'t',KeyL:'t',KeyE:'e'};
+const inp={l:0,r:0,shoot:0,jumpP:0,shootP:0,stealP:0,superP:0,dunkP:0};
+const KEY={ArrowLeft:'l',KeyA:'l',ArrowRight:'r',KeyD:'r',ArrowUp:'j',KeyW:'j',Space:'j',KeyJ:'s',KeyZ:'s',KeyK:'t',KeyX:'t',KeyC:'t',KeyL:'k',KeyV:'k',KeyE:'e'};
 addEventListener('keydown',e=>{if(e.code==='Escape'){togglePause();return}if(e.code==='KeyF'){goFull();return}const k=KEY[e.code];if(!k)return;e.preventDefault();if(e.repeat)return;press(k,1)});
 addEventListener('keyup',e=>{const k=KEY[e.code];if(k)press(k,0)});
 function press(k,d){
@@ -582,13 +586,14 @@ function press(k,d){
  if(k==='j'&&d)inp.jumpP=1;if(k==='j')$('bJump').classList.toggle('dn',!!d);
  if(k==='s'){if(d&&!inp.shoot)inp.shootP=1;inp.shoot=d;$('bShoot').classList.toggle('dn',!!d)}
  if(k==='t'&&d)inp.stealP=1;if(k==='t')$('bSteal').classList.toggle('dn',!!d);
+ if(k==='k'&&d)inp.dunkP=1;if(k==='k')$('bDunk').classList.toggle('dn',!!d);
  if(k==='e'&&d)inp.superP=1;
 }
 function bindBtn(id,k){const el=$(id);
  el.addEventListener('pointerdown',e=>{e.preventDefault();el.setPointerCapture(e.pointerId);press(k,1)});
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>el.addEventListener(ev,()=>press(k,0)));
  el.addEventListener('contextmenu',e=>e.preventDefault())}
-bindBtn('bL','l');bindBtn('bR','r');bindBtn('bJump','j');bindBtn('bShoot','s');bindBtn('bSteal','t');
+bindBtn('bL','l');bindBtn('bR','r');bindBtn('bJump','j');bindBtn('bShoot','s');bindBtn('bSteal','t');bindBtn('bDunk','k');
 $('myCard').addEventListener('pointerdown',()=>inp.superP=1);
 $('bSkill').addEventListener('pointerdown',e=>{e.preventDefault();inp.superP=1;$('bSkill').classList.add('dn')});
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>$('bSkill').addEventListener(ev,()=>$('bSkill').classList.remove('dn')));
@@ -610,10 +615,20 @@ function startShot(p){
  if(ball.owner!==p){jump(p);return}
  if(p.shoot)return;
  const h=target(p),d=Math.abs(h.cx-p.x);p.f=sgn(h.cx-p.x);
- if(d<135*(skOn(p,'kakadu')?1.3:1)){startDunk(p,h,false);return}
  if(skOn(p,'ara')){startDunk(p,h,true);return}
  if(p.onG)jump(p,.86);
  p.shoot={charging:true,m:0,rel:0,pts:p.fire>0||d>402?3:2};p.st.fga++;
+}
+const DUNK_R=230;
+const dunkRange=p=>DUNK_R*(skOn(p,'kakadu')?1.3:1);
+function tryDunk(p){
+ if(p.dunk||p.hang>0||p.frz>0||p.stun>0)return;
+ if(ball.owner!==p){jump(p);return}
+ if(p.shoot)return;
+ const h=target(p);
+ if(skOn(p,'ara')){startDunk(p,h,true);return}
+ if(Math.abs(h.cx-p.x)<dunkRange(p)){startDunk(p,h,false);return}
+ if(p.isUser||p.hum)pop('POTAYA YAKLAŞ',p.x,p.y-220,'#ffd23f',22);
 }
 function startDunk(p,h,fly){
  p.st.fga++;const x1=h.cx-h.dir*30,y1=RIM_Y+122,d=Math.abs(x1-p.x);
@@ -623,16 +638,28 @@ function startDunk(p,h,fly){
 function quality(p,m){
  if(p.fire>0)return'perfect';
  const w=p.ch.sht;const d=Math.abs(m-.82);
- if(d<.07*w)return'perfect';if(d<.19*w)return'good';return'bad';
+ if(d<.05*w)return'perfect';if(d<.14*w)return'good';return'bad';
+}
+function makeChance(p,q,dist,dfn,gap){
+ const layup=dist<190;
+ let pr=layup?(q==='perfect'?.97:q==='good'?.82:.35):(q==='perfect'?.9:q==='good'?.55:.08);
+ if(!layup)pr*=clamp(1-(dist-190)/620,.32,1);
+ if(!p.onG&&Math.abs(p.vy)<260)pr*=1.08;else if(p.onG)pr*=.8;
+ const contest=gap>-25&&gap<115*Math.max(p.scl,dfn.scl)&&Math.abs(dfn.y-p.y)<170;
+ if(contest)pr*=dfn.onG?.6:.35;
+ if(p.fire>0)pr=Math.max(pr,.92);
+ return{pr:clamp(pr,.03,.98),contest};
 }
 function releaseShot(p){
  const s=p.shoot;if(!s||!s.charging)return;
- let q=quality(p,s.m);const h=target(p);
+ const q=quality(p,s.m);const h=target(p);
  const dfn=other(p),gap=(dfn.x-p.x)*p.f;
- if(p.fire<=0&&q!=='bad'&&gap>-20&&gap<95*Math.max(p.scl,dfn.scl)&&Math.random()<(dfn.isUser||dfn.hum?(dfn.onG?.45:.8):(dfn.onG?.2:.45))){q=q==='perfect'?'good':'bad';pop('BASKI!',dfn.x,dfn.y-230*dfn.scl,'#22d3c5',24)}
  const x0=p.x+p.f*24*p.scl,y0=p.y-142*p.scl;sy('whoosh',.16,p.x,.3,700,2600);if(p.fire>0)sy('flame',p.x);
- let err=q==='perfect'?0:q==='good'?rnd(-7,7):(Math.random()<.5?-1:1)*rnd(22,46);
- const dist=Math.abs(h.cx-x0);if(q!=='perfect')err*=1+dist/900;
+ const dist=Math.abs(h.cx-x0);
+ const mc=makeChance(p,q,dist,dfn,gap);
+ if(mc.contest&&p.fire<=0)pop('BASKI!',dfn.x,dfn.y-230*dfn.scl,'#22d3c5',24);
+ const make=Math.random()<mc.pr;
+ const err=make?rnd(-9,9):(Math.random()<.5?-1:1)*rnd(30,58)*(1+dist/1400);
  const tx=h.cx-h.dir*1+err,ty=RIM_Y-12;
  const T=clamp(.58+dist/1000,.62,1.2);
  ball.owner=null;ball.x=x0;ball.y=y0;ball.vx=(tx-x0)/T;ball.vy=(ty-y0-.5*G*T*T)/T;ball.cd=.32;ball.noPick=null;
@@ -650,16 +677,21 @@ function trySteal(p){
 }
 function stealCheck(p){
  if(p.stealDone)return;const o=other(p),fast=skOn(p,'lori'),hum=p.isUser||p.hum,sc=Math.max(o.scl,p.scl);
- if(ball.owner!==o||o.dunk||o.hang>0)return;
- if(!hum&&o.shoot&&o.shoot.charging&&o.y<GY-55)return;
+ if(o.dunk||o.hang>0)return;
  const reach=(fast?150:hum?125:90)*sc;
+ if(ball.owner!==o){
+  if(hum&&o.stun<=0&&Math.abs(o.x-p.x)<reach*.8&&Math.abs(o.y-p.y)<110*sc){p.stealDone=1;o.stun=.3;o.vx=sgn(o.x-p.x)*240;pop('TOKAT!',o.x,o.y-230,'#ffffff',26);play('squeak1',.3,{x:o.x})}
+  return}
+ if(!hum&&o.shoot&&o.shoot.charging&&o.y<GY-55)return;
  if(Math.min(Math.abs(o.x-p.x),Math.abs(ball.x-p.x))>reach||Math.abs(o.y-p.y)>(hum?130:90)*sc)return;
  p.stealDone=1;
  if(skOn(o,'lori')){pop('KAÇTI!',o.x,o.y-230,'#ffd23f',30);return}
  let ch=hum?.7:.3;
  if(!hum){const lead=p.score-o.score;ch*=lead>=4?.5:lead>=2?.75:lead<=-4?1.3:1}
  if(fast||Math.random()<ch){
-  ball.owner=p;ball.shot=null;ball.dribPh=0;ball.noPick=null;o.shoot=null;o.stun=.5;o.vx=sgn(o.x-p.x)*180;o.stealCd=Math.max(o.stealCd,.9);
+  const dir=sgn(p.x-o.x)||-o.f;
+  ball.owner=null;ball.shot=null;ball.dribPh=0;ball.x=o.x+dir*20;ball.y=Math.min(ball.y,o.y-90*o.scl);ball.vx=dir*rnd(150,240);ball.vy=-rnd(300,380);ball.cd=.1;ball.noPick=o;ball.noPickT=.45;
+  o.shoot=null;o.stun=.45;o.vx=-dir*180;o.stealCd=Math.max(o.stealCd,.9);
   if(o===ai)aiS.stealT=rnd(1.1,1.7);aiS.shotX=null;
   p.st.steal++;pop('TOP ÇALINDI!',o.x,o.y-230,'#ff4d5a',32);play('squeak2',.42,{x:p.x});sy('whoosh',.35,p.x,.25,1200,3600);addEn(p,15);game.excite=Math.max(game.excite,.5);
  }else if(hum)pop('ISKA',p.x,p.y-220,'#ffffff',24);
@@ -719,6 +751,7 @@ function controlAI(p,dt){
   if(p.shoot&&p.shoot.charging){if(p.shoot.m>=aiS.relM||(p.vy>-40&&p.shoot.m>.6&&aiS.relM<.9&&Math.random()<.05))releaseShot(p)}
   else if(!p.shoot){
    if(Math.abs(dx)>16)mv=sgn(dx);
+   else if(p.onG&&Math.abs(h.cx-p.x)<dunkRange(p)&&Math.random()<.6)tryDunk(p);
    else if(p.onG){const lead=p.score-u.score,bad=lead>=4?.62:lead>=2?.52:lead<=-4?.3:.44,r=Math.random();aiS.relM=r<.12?.82+rnd(-.03,.03):r<1-bad?.82+rnd(-.17,.17):(Math.random()<.5?.5:1.08);startShot(p)}
    if(Math.abs(u.x-p.x)<70&&sgn(u.x-p.x)===sgn(dx)&&aiS.decT<=0){aiS.decT=rnd(.8,1.6);if(Math.random()<.35)aiS.shotX=p.x+rnd(-20,20);}
   }
@@ -1026,7 +1059,7 @@ function hud(){
  $('eA').firstChild.style.width=eu+'%';$('eB').firstChild.style.width=ea+'%';$('eA').classList.toggle('full',user.en>=100||user.sk>0);$('eB').classList.toggle('full',ai.en>=100||ai.sk>0);
  $('bSkill').classList.toggle('rdy',rdy);$('bSkill').classList.toggle('act',user.sk>0);$('ring2').style.setProperty('--e',eu/100);
  const sb=$('bShoot');const ch=user.shoot&&user.shoot.charging;sb.classList.toggle('chg',!!ch);
- const def=ball.owner===ai;sb.classList.toggle('stl',def);setT('bShootB',def?'ÇAL':'ŞUT');if(ch)$('ring').style.setProperty('--m',clamp(user.shoot.m/1.12,0,1));
+ $('bDunk').classList.toggle('on',ball.owner===user&&!user.shoot&&(skOn(user,'ara')||Math.abs(HOOPS[1].cx-user.x)<dunkRange(user)));if(ch)$('ring').style.setProperty('--m',clamp(user.shoot.m/1.12,0,1));
 }
 
 /* ---------- loop ---------- */
@@ -1037,7 +1070,6 @@ function frame(now){
  if(game.slow>0&&dt>0){game.slow-=dt;dt*=.35}
  game.excite=Math.max(.15,game.excite-dt*.35);
  if(AC){musTick();if(crowdG)crowdG.gain.setTargetAtTime(game.state==='play'&&!game.paused?.05+game.excite*.17:.025,AC.currentTime,.25)}
- if(user&&ball&&inp.shootP&&ball.owner&&ball.owner!==user){inp.shootP=0;inp.stealP=1}
  if(NET&&NET.role==='guest'&&NET.live&&game.state!=='over'){guestFrame(dt);if(game.state==='play')hud()}
  else if(game.state==='play'&&dt>0){
   controlUser(user,dt);if(NET&&NET.live)controlRemote(ai,dt);else controlAI(ai,dt);
@@ -1052,7 +1084,7 @@ function frame(now){
   hud();
  } else if(game.state!=='play'&&user&&dt>0){idleAnim(dt)}
  if(NET&&NET.role==='host'&&NET.live)hostSend(now);
- inp.jumpP=inp.shootP=inp.stealP=inp.superP=0;
+ inp.jumpP=inp.shootP=inp.stealP=inp.superP=inp.dunkP=0;
  app.classList.toggle('playing',game.state==='play');
  render(game.t,dt);
  requestAnimationFrame(frame);
@@ -1066,6 +1098,7 @@ function controlUser(p,dt){
  if(inp.shootP)startShot(p);
  if(p.shoot&&p.shoot.charging&&!inp.shoot&&!p.shoot.auto){if(p.shoot.m<.3)p.shoot.auto=.82+rnd(-.1,.1);else{p.shoot.lastM=p.shoot.m;releaseShot(p)}}
  if(inp.stealP)trySteal(p);
+ if(inp.dunkP)tryDunk(p);
  if(inp.superP)useSuper(p);
  if(ball.owner===p&&!(inp.l||inp.r)&&p.onG&&!p.shoot)p.f=1;
 }
@@ -1129,7 +1162,7 @@ function alkNet(msg){if(EMBED)parent.postMessage({source:'alk-kafa',type:'net',m
 const r1=v=>Math.round(v*10)/10,r3=v=>Math.round(v*1000)/1000;
 function netInit(role,names){
  NET={role:role==='guest'?'guest':'host',names:Array.isArray(names)?names:['Ev sahibi','Rakip'],ev:[],live:false,ended:false,link:'open',
-  rin:{l:0,r:0,shoot:0,jumpP:0,shootP:0,stealP:0,superP:0},c:{j:0,s:0,t:0,e:0},cn:{j:0,s:0,t:0,e:0},q:0,rq:-1,sentAt:0,me:null,snap:null,snapAt:0,rs:null,peerCh:null,myCh:null,goMsg:null};
+  rin:{l:0,r:0,shoot:0,jumpP:0,shootP:0,stealP:0,superP:0,dunkP:0},c:{j:0,s:0,t:0,e:0,k:0},cn:{j:0,s:0,t:0,e:0,k:0},q:0,rq:-1,sentAt:0,me:null,snap:null,snapAt:0,rs:null,peerCh:null,myCh:null,goMsg:null};
  $('findBtn').textContent='HAZIRIM';$('againBtn').hidden=true;
 }
 function netGo(){NET.goMsg={h:NET.myCh,g:NET.peerCh};alkNet({t:'go',...NET.goMsg});aiCh=CHARS[NET.peerCh]||CHARS[1];startOnline()}
@@ -1146,7 +1179,7 @@ function onNet(m){if(!m||!NET||typeof m!=='object')return;
  if(m.t==='chat'&&ai){bubble(String(m.m||'').slice(0,40),ai);return}
  if(m.t==='i'&&NET.role==='host'){if(m.q<=NET.rq)return;NET.rq=m.q;const R=NET.rin,C=NET.c;
   R.l=m.r?1:0;R.r=m.l?1:0;R.shoot=m.s?1:0;
-  if(m.jn!==C.j){C.j=m.jn;R.jumpP=1}if(m.sn!==C.s){C.s=m.sn;R.shootP=1}if(m.tn!==C.t){C.t=m.tn;R.stealP=1}if(m.en!==C.e){C.e=m.en;R.superP=1}
+  if(m.jn!==C.j){C.j=m.jn;R.jumpP=1}if(m.sn!==C.s){C.s=m.sn;R.shootP=1}if(m.tn!==C.t){C.t=m.tn;R.stealP=1}if(m.en!==C.e){C.e=m.en;R.superP=1}if(m.kn!=null&&m.kn!==C.k){C.k=m.kn;R.dunkP=1}
   if(Number.isFinite(m.x))NET.me={x:W-m.x,vx:-(+m.vx||0),f:m.f===1?-1:1,rs:m.rs};return}
  if(m.t==='s'&&NET.role==='guest'){NET.snap=m;NET.snapAt=performance.now();if(Array.isArray(m.e))m.e.forEach(replay);return}
  if(m.t==='end'&&NET.role==='guest'&&NET.live&&!NET.ended){const S=NET.snap;
@@ -1166,9 +1199,9 @@ function controlRemote(p,dt){const R=NET.rin;
  else{move(p,(R.r?1:0)-(R.l?1:0),dt);
   if(game.dead<=0){if(R.jumpP)jump(p);if(R.shootP)startShot(p);
    if(p.shoot&&p.shoot.charging&&!R.shoot&&!p.shoot.auto){if(p.shoot.m<.3)p.shoot.auto=.82+rnd(-.1,.1);else{p.shoot.lastM=p.shoot.m;releaseShot(p)}}
-   if(R.stealP)trySteal(p);if(R.superP)useSuper(p)}
+   if(R.stealP)trySteal(p);if(R.dunkP)tryDunk(p);if(R.superP)useSuper(p)}
   if(ball.owner===p&&!(R.l||R.r)&&p.onG&&!p.shoot)p.f=-1}
- R.jumpP=R.shootP=R.stealP=R.superP=0;
+ R.jumpP=R.shootP=R.stealP=R.superP=R.dunkP=0;
 }
 function applyRemoteMe(){const m=NET.me,p=ai;if(!m||m.rs!==game.rs||p.dunk||p.hang>0||p.frz>0)return;p.x=clamp(m.x,36,W-36);p.vx=clamp(m.vx,-700,700);if(!(p.shoot&&p.shoot.charging))p.f=m.f}
 function ps(p){const s=p.shoot,d=p.dunk;return{x:r1(p.x),y:r1(p.y),vx:r1(p.vx),vy:r1(p.vy),f:p.f,g:p.onG?1:0,ph:r3(p.ph),ld:r3(p.land),st:r3(p.stealT),sc:p.score,en:r1(p.en),sk:r3(p.sk),fi:r3(p.fire),fz:r3(p.frz),pS:r3(p.pw.spd),pJ:r3(p.pw.jmp),scl:r3(p.scl),hg:r3(p.hang),ce:r3(p.cele),
@@ -1201,7 +1234,7 @@ function predictOwn(p,dt){
   move(p,(inp.r?1:0)-(inp.l?1:0),dt);
   if(game.dead<=0){
    if(inp.jumpP)jump(p);
-   if(inp.shootP){if(ball.owner===p){const h=HOOPS[1],d=Math.abs(h.cx-p.x);if(!p.shoot&&d>=135*(skOn(p,'kakadu')?1.3:1)&&!skOn(p,'ara')){p.f=sgn(h.cx-p.x);if(p.onG)jump(p,.86);p.shoot={charging:true,m:0,rel:0,pts:p.fire>0||d>402?3:2,loc:1}}}else jump(p)}
+   if(inp.shootP){if(ball.owner===p){const h=HOOPS[1],d=Math.abs(h.cx-p.x);if(!p.shoot&&!skOn(p,'ara')){p.f=sgn(h.cx-p.x);if(p.onG)jump(p,.86);p.shoot={charging:true,m:0,rel:0,pts:p.fire>0||d>402?3:2,loc:1}}}else jump(p)}
    if(inp.stealP&&p.stealCd<=0){p.stealT=.32;p.stealCd=.75}
   }
   p.stealT=Math.max(0,p.stealT-dt);p.stealCd=Math.max(0,p.stealCd-dt);p.land=Math.max(0,p.land-dt);
@@ -1236,8 +1269,8 @@ function guestFrame(dt){
    ball.vx=-S.b.vx;ball.vy=S.b.vy;ball.spin=-S.b.sp}
   if(dt>0){cosmetics(user,dt);cosmetics(ai,dt)}
  }
- if(game.state==='play'||game.state==='count'){const C=NET.cn;if(inp.jumpP)C.j++;if(inp.shootP)C.s++;if(inp.stealP)C.t++;if(inp.superP)C.e++;
-  alkNet({t:'i',q:NET.q++,l:inp.l?1:0,r:inp.r?1:0,s:inp.shoot?1:0,jn:C.j,sn:C.s,tn:C.t,en:C.e,x:r1(W-user.x),vx:r1(-user.vx),f:-user.f,rs:NET.rs})}
+ if(game.state==='play'||game.state==='count'){const C=NET.cn;if(inp.jumpP)C.j++;if(inp.shootP)C.s++;if(inp.stealP)C.t++;if(inp.superP)C.e++;if(inp.dunkP)C.k++;
+  alkNet({t:'i',q:NET.q++,l:inp.l?1:0,r:inp.r?1:0,s:inp.shoot?1:0,jn:C.j,sn:C.s,tn:C.t,en:C.e,kn:C.k,x:r1(W-user.x),vx:r1(-user.vx),f:-user.f,rs:NET.rs})}
 }
 
 /* menu / chat */
