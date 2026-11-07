@@ -23,23 +23,44 @@ const FAILS_LOST = 40
 
 export type DuelLink = {
   status: 'connecting' | 'open' | 'lost'
+  /** Which path frames currently travel: server relay, direct P2P, or P2P through the TURN relay. */
+  transport: LinkTransport
+  /** Round-trip time of the direct channel in ms (null on the server relay). */
+  rtt: number | null
   send: (msg: unknown) => void
   /** Latest-message subscriber; replaced on every render by the game loop. */
   onMessage: React.MutableRefObject<((msg: unknown) => void) | null>
 }
 
-function gathered(pc: RTCPeerConnection) {
+/**
+ * Signalling is not trickled, so the SDP must already hold the TURN relay candidate. On mobile data that
+ * allocation (TURN over TLS) often lands after 2 s; sending earlier dropped it and left the match on the slow
+ * server relay. Waits for gathering to finish, or briefly after the first relay candidate, capped.
+ */
+function gathered(pc: RTCPeerConnection, wantRelay: boolean) {
   if (pc.iceGatheringState === 'complete') return Promise.resolve()
   return new Promise<void>((resolve) => {
-    const check = () => {
-      if (pc.iceGatheringState !== 'complete') return
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
       pc.removeEventListener('icegatheringstatechange', check)
+      pc.removeEventListener('icecandidate', onCand)
       resolve()
     }
+    const check = () => {
+      if (pc.iceGatheringState === 'complete') finish()
+    }
+    const onCand = (e: RTCPeerConnectionIceEvent) => {
+      if (e.candidate && / typ relay/.test(e.candidate.candidate)) setTimeout(finish, 500)
+    }
     pc.addEventListener('icegatheringstatechange', check)
-    setTimeout(resolve, 2000)
+    pc.addEventListener('icecandidate', onCand)
+    setTimeout(finish, wantRelay ? 7000 : 2000)
   })
 }
+
+export type LinkTransport = 'server' | 'direct' | 'turn'
 
 /**
  * Real-time link between the two seated players of a duel table.
@@ -49,6 +70,8 @@ function gathered(pc: RTCPeerConnection) {
  */
 export function useDuelLink(roomId: string, host: boolean): DuelLink {
   const [status, setStatus] = useState<DuelLink['status']>('connecting')
+  const [transport, setTransport] = useState<LinkTransport>('server')
+  const [rtt, setRtt] = useState<number | null>(null)
   const channel = useRef<RTCDataChannel | null>(null)
   const onMessage = useRef<((msg: unknown) => void) | null>(null)
   const relaySend = useRef<((msg: unknown) => void) | null>(null)
@@ -64,9 +87,11 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
     let heard = false
+    let received = 0
     const deliver = (msgs: { t?: string }[]) => {
       for (const m of msgs) {
         if (!m || typeof m !== 'object') continue
+        received++
         if (!heard) {
           heard = true
           setStatus('open')
@@ -86,6 +111,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
         if (alive) startServer()
       }
       dc.onmessage = (e) => {
+        received++
         try {
           onMessage.current?.(JSON.parse(e.data as string))
         } catch {
@@ -225,6 +251,8 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     // TURN credentials are minted server-side and expire; refetched for each fresh connection after 1 hour.
     let ice: RTCConfiguration = ICE
     let iceAt = 0
+    const hasTurn = () =>
+      (ice.iceServers ?? []).some((s) => [s.urls].flat().some((u) => typeof u === 'string' && u.startsWith('turn')))
     const loadIce = async () => {
       if (Date.now() - iceAt < 3600_000) return
       try {
@@ -266,7 +294,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       const conn = fresh()
       attach(conn.createDataChannel('duel', { ordered: false, maxRetransmits: 0 }))
       await conn.setLocalDescription(await conn.createOffer())
-      await gathered(conn)
+      await gathered(conn, hasTurn())
       if (conn !== pc || !conn.localDescription) return
       const r = await post({ action: 'signal', kind: 'offer', payload: { id, sdp: conn.localDescription.toJSON() } })
       // Rival not seated yet: try again soon instead of waiting a full retry window.
@@ -302,7 +330,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
               const conn = fresh()
               await conn.setRemoteDescription(latestOffer.payload.sdp)
               await conn.setLocalDescription(await conn.createAnswer())
-              await gathered(conn)
+              await gathered(conn, hasTurn())
               if (conn === pc && conn.localDescription) {
                 await post({ action: 'signal', kind: 'answer', payload: { id: lastOfferId, sdp: conn.localDescription.toJSON() } })
               }
@@ -322,10 +350,67 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       if (alive) timer = setTimeout(tick, open ? POLL_MS * 3 : POLL_MS)
     }
 
+    // ---- diagnostics: which path is live, its RTT, received frame rate and page FPS (iframe shares this thread) ----
+    let frames = 0
+    let raf = 0
+    const countFrame = () => {
+      frames++
+      raf = requestAnimationFrame(countFrame)
+    }
+    raf = requestAnimationFrame(countFrame)
+    let statAt = performance.now()
+    let reportAt = 0
+    const sample = async () => {
+      if (!alive) return
+      const now = performance.now()
+      const secs = Math.max(0.5, (now - statAt) / 1000)
+      const fps = Math.round(frames / secs)
+      const inRate = Math.round(received / secs)
+      frames = 0
+      received = 0
+      statAt = now
+      let mode: LinkTransport = 'server'
+      let ms: number | null = null
+      let local = ''
+      let remote = ''
+      if (channel.current?.readyState === 'open' && pc) {
+        try {
+          const stats = await pc.getStats()
+          let pair: RTCIceCandidatePairStats | undefined
+          stats.forEach((s) => {
+            if (s.type === 'transport' && s.selectedCandidatePairId) pair = stats.get(s.selectedCandidatePairId)
+          })
+          if (!pair) stats.forEach((s) => {
+            if (s.type === 'candidate-pair' && s.state === 'succeeded' && (s.nominated || !pair)) pair = s
+          })
+          if (pair) {
+            local = stats.get(pair.localCandidateId)?.candidateType ?? ''
+            remote = stats.get(pair.remoteCandidateId)?.candidateType ?? ''
+            if (pair.currentRoundTripTime != null) ms = Math.round(pair.currentRoundTripTime * 1000)
+          }
+        } catch {
+          // Stats are best-effort.
+        }
+        mode = local === 'relay' || remote === 'relay' ? 'turn' : 'direct'
+      }
+      setTransport(mode)
+      setRtt(ms)
+      if (heard && Date.now() - reportAt > 15000) {
+        reportAt = Date.now()
+        void post({
+          action: 'stat',
+          payload: { host, mode, rtt: ms, fps, inRate, local, remote, turn: hasTurn(), ua: navigator.userAgent.slice(0, 160) },
+        }).catch(() => {})
+      }
+    }
+    const statTimer = setInterval(() => void sample(), 3000)
+
     startServer()
     void tick()
     return () => {
       alive = false
+      clearInterval(statTimer)
+      cancelAnimationFrame(raf)
       relaySend.current = null
       if (timer) clearTimeout(timer)
       if (flushTimer) clearInterval(flushTimer)
@@ -337,6 +422,8 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
 
   return {
     status,
+    transport,
+    rtt,
     onMessage,
     send: (msg) => {
       const dc = channel.current

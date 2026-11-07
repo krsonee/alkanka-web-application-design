@@ -20,6 +20,23 @@ const GAME = {
 } as const
 const MOBILE_QUERY = '(pointer: coarse), (max-width: 640px), (max-height: 500px)'
 
+const TRANSPORT_LABEL = { direct: 'Doğrudan', turn: 'Hızlı röle', server: 'Sunucu' } as const
+
+function LinkBadge({ link }: { link: DuelLink }) {
+  const slow = link.transport === 'server'
+  return (
+    <div
+      role="status"
+      className={`pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 font-mono text-[10px] leading-4 ${
+        slow ? 'bg-destructive text-destructive-foreground' : 'bg-foreground/60 text-background'
+      }`}
+    >
+      {TRANSPORT_LABEL[link.transport]}
+      {link.rtt != null ? ` · ${link.rtt} ms` : ''}
+    </div>
+  )
+}
+
 /**
  * Football runs the standalone Kafa Topu v2 build as-is in a same-origin iframe, solo and online.
  * The page posts goals and the final score; this wrapper reports them to the stake flow and,
@@ -128,6 +145,7 @@ export function KafaTopuFrame({
         allow="autoplay; fullscreen"
         className="block size-full border-0"
       />
+      {online && online.link.status === 'open' && <LinkBadge link={online.link} />}
       {needRotate && <RotatePrompt sport={sport} paused={false} />}
     </div>
   )
