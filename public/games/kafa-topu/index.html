@@ -74,12 +74,14 @@
   .tbtn{position:absolute;pointer-events:auto;border-radius:50%;border:2.5px solid #ffffff42;background:#0b0e1480;color:#fffffff0;display:grid;place-items:center;font:400 26px 'Lilita One',sans-serif;touch-action:none;box-shadow:0 6px 18px #0005;transition:transform .06s,background-color .06s;-webkit-tap-highlight-color:transparent}
   .tbtn svg{width:56px;height:56px}
   .tbtn.on{background:#e9b949b8;color:var(--ink);border-color:var(--gold);transform:scale(.92)}
-  #tL,#tR{bottom:calc(34px + env(safe-area-inset-bottom) * var(--inv));width:120px;height:120px}
-  #tL{left:calc(140px + env(safe-area-inset-left) * var(--inv))}
-  #tR{left:calc(282px + env(safe-area-inset-left) * var(--inv))}
-  #tKick{right:calc(140px + env(safe-area-inset-right) * var(--inv));bottom:calc(30px + env(safe-area-inset-bottom) * var(--inv));width:138px;height:138px;color:var(--ink);border-color:#fff9;opacity:.9}
-  #tJump{right:calc(298px + env(safe-area-inset-right) * var(--inv));bottom:calc(52px + env(safe-area-inset-bottom) * var(--inv));width:112px;height:112px}
-  #tSkill{right:calc(166px + env(safe-area-inset-right) * var(--inv));bottom:calc(192px + env(safe-area-inset-bottom) * var(--inv));width:88px;height:88px;overflow:hidden}
+  /* Thumb-reach layout: arrows hug the bottom-left corner, kick sits under the right thumb's resting spot
+     with jump just inside it and skill above, so neither hand has to stretch toward the middle. */
+  #tL,#tR{bottom:calc(26px + env(safe-area-inset-bottom) * var(--inv));width:136px;height:136px}
+  #tL{left:calc(54px + env(safe-area-inset-left) * var(--inv))}
+  #tR{left:calc(206px + env(safe-area-inset-left) * var(--inv))}
+  #tKick{right:calc(54px + env(safe-area-inset-right) * var(--inv));bottom:calc(26px + env(safe-area-inset-bottom) * var(--inv));width:146px;height:146px;color:var(--ink);border-color:#fff9;opacity:.9}
+  #tJump{right:calc(218px + env(safe-area-inset-right) * var(--inv));bottom:calc(34px + env(safe-area-inset-bottom) * var(--inv));width:128px;height:128px}
+  #tSkill{right:calc(84px + env(safe-area-inset-right) * var(--inv));bottom:calc(192px + env(safe-area-inset-bottom) * var(--inv));width:96px;height:96px;overflow:hidden}
   #tSkill .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:#e9b94988}
   #tSkill svg,#tSkill span{position:relative;width:48px;height:48px}
   #tSkill.ready{border-color:var(--gold);animation:pulse .5s infinite alternate}
@@ -1921,7 +1923,8 @@ function onNet(m){
 }
 const packP = p => [Math.round(p.x), Math.round(p.y), Math.round(p.vx), Math.round(p.vy), p.face, r2(p.kickT), Math.round(p.meter), r2(p.frozen), r2(p.stun), r2(p.giant), r2(p.shrink), r2(p.wall), p.armed || 0, r2(p.skillLock), r2(p.squash), p.onGround ? 1 : 0];
 function hostSend(dt){
-  NET.sendT -= dt; if (NET.sendT > 0) return; NET.sendT = 1/30;
+  // Accumulate instead of resetting, so a phone at ~37 fps still sends ~30 Hz rather than halving to ~18 Hz.
+  NET.sendT -= dt; if (NET.sendT > 0) return; NET.sendT = Math.max(-1/30, NET.sendT) + 1/30;
   const [A, B] = game.players, b = game.ball;
   netSend({ t:'s', ts:Math.round(performance.now()), m:NET.mid, q:++NET.q, ch:[A.ch.id, B.ch.id], sk:[A.skill, B.skill], ph:game.phase, tm:r2(game.time), cd:game.cdIdx, sc:game.score.slice(),
     b:[Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.fire), r2(b.ghost), r2(b.tornado), b.held ? 1 : 0],
@@ -2005,7 +2008,7 @@ function guestTick(dt){
   while (NET.acc >= STEP) { updatePlayer(mine, STEP); separatePlayers(other, mine); NET.acc -= STEP; }
   game.net = s.nt.slice(); game.netY = s.ny.slice();
   NET.sendT -= dt;
-  if (NET.sendT <= 0) { NET.sendT = 1/30; netSend({ t:'k', m:NET.mid, q:++NET.q, x:Math.round(mine.x), y:Math.round(mine.y), vx:Math.round(mine.vx), vy:Math.round(mine.vy), f:mine.face, g:mine.onGround ? 1 : 0, kn:NET.kn, sn:NET.sn }); }
+  if (NET.sendT <= 0) { NET.sendT = Math.max(-1/30, NET.sendT) + 1/30; netSend({ t:'k', m:NET.mid, q:++NET.q, x:Math.round(mine.x), y:Math.round(mine.y), vx:Math.round(mine.vx), vy:Math.round(mine.vy), f:mine.face, g:mine.onGround ? 1 : 0, kn:NET.kn, sn:NET.sn }); }
 }
 
 // ---------- Boot ----------

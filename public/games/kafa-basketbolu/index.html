@@ -556,7 +556,10 @@ function drawCrowd(t){
  [0,1,2].forEach(ri=>{
   for(const f of fans){if(f.row!==ri)continue;const im=IMG[f.img];if(!im||!im.width)continue;
    const sh=f.b.h*f.crop,dw=f.b.w*f.s,dh=sh*f.s;const amp=1.2+ex*11;const bob=-Math.abs(Math.sin(t*f.sp*(1+ex*.6)+f.ph))*amp;
-   ctx.drawImage(im,f.b.x,f.b.y,f.b.w,sh,f.x-dw/2,f.y-dh+bob+4,dw,dh)}
+   /* Scaling a sub-rect of the big crowd sheet every frame was the main per-frame cost on iPhone; pre-scale each fan once. */
+   const px=K*DPR;if(!f.c||f.cpx!==px){const c=f.c||document.createElement('canvas');c.width=Math.max(1,Math.ceil(dw*px));c.height=Math.max(1,Math.ceil(dh*px));
+    const g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.drawImage(im,f.b.x,f.b.y,f.b.w,sh,0,0,c.width,c.height);f.c=c;f.cpx=px}
+   ctx.drawImage(f.c,f.x-dw/2,f.y-dh+bob+4,dw,dh)}
   const y=[184,236,292][ri];
   if(!rowG[ri]){const gr=ctx.createLinearGradient(0,y,0,y+16);gr.addColorStop(0,'#7c8ea3');gr.addColorStop(.25,'#4f5f74');gr.addColorStop(1,'#2a3647');rowG[ri]=gr}
   ctx.fillStyle=rowG[ri];ctx.fillRect(140,y,970,16);ctx.fillStyle='rgba(255,255,255,.35)';ctx.fillRect(140,y,970,2);
@@ -1142,16 +1145,34 @@ function drawSta(p){
  for(let i=0;i<n;i++){const sx=x+i*(w+gp),k=clamp(p.sta-i,0,1);ctx.fillStyle='rgba(255,255,255,.16)';rr(sx,y,w,8,3);ctx.fill();
   if(k>0){ctx.fillStyle=k>=1?'#62d26f':'rgba(98,210,111,.45)';rr(sx,y,w*k,8,3);ctx.fill()}}
  ctx.restore()}
+/* Static scenery is flattened into two screen-sized layers (behind and in front of the crowd) and blitted 1:1,
+   instead of rescaling the arena, sides, fence and floor images every frame. */
+let backL=null,frontL=null;
+function mkScreen(prev){const c=prev&&prev.c.width===cv.width&&prev.c.height===cv.height?prev.c:document.createElement('canvas');
+ c.width=cv.width;c.height=cv.height;const g=c.getContext('2d');g.setTransform(K*DPR,0,0,K*DPR,OX*K*DPR,0);return{c,g}}
+function stageLayers(){
+ const A=IMG.arena,aOk=!!(A&&A.width);
+ if(!backL||backL.c.width!==cv.width||backL.c.height!==cv.height||backL.side!==sideC||backL.aOk!==aOk){
+  const {c,g}=mkScreen(backL);g.fillStyle='#0f1b2d';g.fillRect(-OX-20,-20,VW+40,H+40);
+  if(aOk){const sc=W/A.width;g.drawImage(A,0,-186,W,A.height*sc)}
+  if(sideC)g.drawImage(sideC.c,-sideC.e,0,W+2*sideC.e,H);
+  backL={c,side:sideC,aOk}}
+ if(!frontL||frontL.c.width!==cv.width||frontL.c.height!==cv.height||frontL.fe!==fenceC||frontL.fl!==floorC){
+  const {c,g}=mkScreen(frontL);g.clearRect(-OX-20,-20,VW+40,H+40);
+  if(fenceC)g.drawImage(fenceC,0,0,W,HOR+10);
+  if(floorC)g.drawImage(floorC,0,HOR,W,H-HOR);
+  frontL={c,fe:fenceC,fl:floorC}}
+}
+function blit(L,sx,sy){const s=ctx,px=K*DPR;s.save();s.setTransform(1,0,0,1,0,0);s.drawImage(L.c,Math.round(sx*px),Math.round(sy*px));s.restore()}
 function render(t,dt){
  const s=ctx;s.setTransform(K*DPR,0,0,K*DPR,OX*K*DPR,0);
  let sx=0,sy=0;if(game.shake>0){sx=rnd(-1,1)*game.shake;sy=rnd(-1,1)*game.shake;game.shake=Math.max(0,game.shake-dt*40)}
+ stageLayers();
+ if(sx||sy){s.fillStyle='#0f1b2d';s.fillRect(-OX-20,-20,VW+40,H+40)}
+ blit(backL,sx,sy);
  s.translate(sx,sy);
- s.fillStyle='#0f1b2d';s.fillRect(-OX-20,-20,VW+40,H+40);
- const A=IMG.arena;if(A&&A.width){const sc=W/A.width;s.drawImage(A,0,-186,W,A.height*sc)}
- drawSides();
  drawCrowd(t);
- if(fenceC)s.drawImage(fenceC,0,0,W,HOR+10);
- if(floorC)s.drawImage(floorC,0,HOR,W,H-HOR);
+ blit(frontL,sx,sy);
  HOOPS.forEach(hoopBack);
  if(ball&&!ball.owner&&!ball.shot&&ball.y<GY-160){const k=clamp((ball.y+40)/(GY-120),0,1),pu=1+Math.sin(t*10)*.08;
   s.save();s.globalAlpha=.55+k*.35;s.strokeStyle='#ffffff';s.lineWidth=4;s.setLineDash([10,8]);s.lineDashOffset=-t*40;s.beginPath();s.ellipse(W/2,GY+4,(46-k*14)*pu,(13-k*4)*pu,0,0,Math.PI*2);s.stroke();s.restore()}
@@ -1370,7 +1391,8 @@ function netSample(){const B=NET.buf;if(!B.length||NET.off==null)return null;
 const lerpV=(a,b,k)=>a+(b-a)*k;
 function ps(p){const s=p.shoot,d=p.dunk;return{x:r1(p.x),y:r1(p.y),vx:r1(p.vx),vy:r1(p.vy),f:p.f,g:p.onG?1:0,ph:r3(p.ph),ld:r3(p.land),st:r3(p.stealT),sc:p.score,en:r1(p.en),sk:r3(p.sk),fi:r3(p.fire),fz:r3(p.frz),pS:r3(p.pw.spd),pJ:r3(p.pw.jmp),scl:r3(p.scl),hg:r3(p.hang),ce:r3(p.cele),sa:r3(p.sta),da:p.dash?1:0,
  sh:s?{c:s.charging?1:0,m:r3(s.m),r:r3(s.rel),p:s.pts,a:s.auto||0}:0,dk:d?{t:r3(d.t),T:d.T,x0:d.x0,y0:d.y0,x1:d.x1,y1:d.y1,h:HOOPS.indexOf(d.h),fl:d.fly?1:0}:0}}
-function hostSend(now){if(now-NET.sentAt<33)return;NET.sentAt=now;
+/* 22 ms gate: every other frame at 60 fps (30 Hz), every frame when a phone drops to ~37 fps instead of halving to ~18 Hz. */
+function hostSend(now){if(now-NET.sentAt<22)return;NET.sentAt=now;
  alkNet({t:'s',ts:Math.round(performance.now()),c:r3(game.clock),g:game.golden?1:0,d:r3(game.dead),ex:r3(game.excite),sk:r1(game.shake),fl:r3(game.fl||0),flc:game.flc,rs:game.rs,
   p:[ps(user),ps(ai)],b:{x:r1(ball.x),y:r1(ball.y),vx:r1(ball.vx),vy:r1(ball.vy),o:ball.owner===user?0:ball.owner===ai?1:-1,sp:r3(ball.spin),f:ball.shot&&ball.shot.fire?1:0,s:ball.shot?1:0},
   n:[r3(HOOPS[0].net),r3(HOOPS[1].net)],o:orb?{x:orb.x,y:orb.y,t:r3(orb.t),k:orb.k}:0,e:NET.ev.splice(0)});

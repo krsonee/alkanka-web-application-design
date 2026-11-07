@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RotatePrompt, useMedia } from './controls'
 import type { DuelLink } from '../duel-link'
 
@@ -64,6 +64,7 @@ export function KafaTopuFrame({
   const onlineRef = useRef(online)
   onlineRef.current = online
 
+  const [closed, setClosed] = useState(false)
   const touch = useMedia(MOBILE_QUERY)
   const portrait = useMedia('(orientation: portrait)')
   const needRotate = touch && portrait
@@ -84,6 +85,8 @@ export function KafaTopuFrame({
       frame.current?.contentWindow?.postMessage({ source: 'alk-host', ...data }, window.location.origin)
     const send = (type: 'start' | 'pause') => post({ type })
     const finish = (s: Score) => {
+      // Close the full-screen game right away; the score round-trip to the server must never keep the player stuck inside it.
+      setClosed(true)
       if (reported.current) return
       reported.current = true
       endRef.current(s)
@@ -111,6 +114,7 @@ export function KafaTopuFrame({
         const again = rematchRef.current
         if (again && !reported.current) {
           reported.current = true
+          setClosed(true)
           again(score.current)
         } else if (!again) {
           score.current = { for: 0, against: 0 }
@@ -128,13 +132,16 @@ export function KafaTopuFrame({
 
   // The game owns the window: no page scroll or pull-to-refresh behind it.
   useEffect(() => {
+    if (closed) return
     const root = document.documentElement
     const prev = root.style.overflow
     root.style.overflow = 'hidden'
     return () => {
       root.style.overflow = prev
     }
-  }, [])
+  }, [closed])
+
+  if (closed) return <p className="py-8 text-center text-sm text-muted-foreground">Sonuç kaydediliyor...</p>
 
   return (
     <div className="fixed inset-0 z-[70] bg-background">
