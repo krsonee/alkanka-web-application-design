@@ -145,6 +145,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: true })
   }
 
+  // Connection diagnostics from the match (path, RTT, FPS), kept so lag reports can be checked against real data.
+  if (body.action === 'stat') {
+    const payload = JSON.stringify(body.payload ?? {})
+    if (payload.length > 2000) return NextResponse.json({ error: 'Geçersiz istek.' }, { status: 400 })
+    await pool.query(`INSERT INTO voice_signals (room, from_id, to_id, kind, payload) VALUES ($1,$2,$3,'stat',$4::jsonb)`, [
+      key,
+      m.id,
+      opp,
+      payload,
+    ])
+    return NextResponse.json({ ok: true })
+  }
+
   if (body.action === 'poll') {
     const r = await pool.query(
       `DELETE FROM voice_signals WHERE room = $1 AND to_id = $2 AND kind IN ('offer', 'answer') AND created_at > now() - interval '2 minutes' RETURNING kind, payload`,
