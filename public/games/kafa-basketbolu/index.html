@@ -121,22 +121,28 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .mob #touch,.real #touch{display:block}
 #app:not(.playing) #touch{opacity:0}
 #app.playing #touch>*{pointer-events:auto;touch-action:none}
-.arr{position:absolute;bottom:calc(var(--u)*14);width:calc(var(--u)*92);height:calc(var(--u)*64)}
+.arr{position:absolute;bottom:calc(var(--u)*14);width:calc(var(--u)*106);height:calc(var(--u)*76)}
 .arr svg{width:100%;height:100%;overflow:visible}
 .arr .sh{fill:rgba(15,27,45,.5);stroke:#fff;stroke-width:6;stroke-linejoin:round;filter:drop-shadow(0 0 8px rgba(34,211,197,.55))}
 .arr .ic{fill:#fff}
 .arr.dn .sh{fill:rgba(34,211,197,.5)}
 .arr.dn{transform:scale(.95)}
-#bL{left:calc(var(--u)*44)}#bR{left:calc(var(--u)*146)}
+#bL{left:calc(var(--u)*26)}#bR{left:calc(var(--u)*146)}
 .rb{position:absolute;bottom:calc(var(--u)*16);width:calc(var(--u)*60);height:calc(var(--u)*60);border-radius:50%;background:radial-gradient(circle at 50% 35%,rgba(47,107,255,.4),rgba(15,27,45,.65) 70%);border:calc(var(--u)*3.5) solid #fff;box-shadow:0 0 calc(var(--u)*8) rgba(34,211,197,.55),inset 0 0 calc(var(--u)*10) rgba(255,255,255,.12);display:flex;flex-direction:column;align-items:center;justify-content:center}
 .rb svg{width:calc(var(--u)*24);height:calc(var(--u)*24);stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.rb b{font-family:"Lilita One";font-weight:400;font-size:calc(var(--u)*9);line-height:1;margin-top:calc(var(--u)*1)}
+.rb b{font-family:"Lilita One";font-weight:400;font-size:calc(var(--u)*11);line-height:1;margin-top:calc(var(--u)*1)}
 .rb.dn{background:radial-gradient(circle,rgba(34,211,197,.7),rgba(34,211,197,.35));transform:scale(.94)}
-#bJump{right:calc(var(--u)*36)}#bShoot{right:calc(var(--u)*108);width:calc(var(--u)*74);height:calc(var(--u)*74);bottom:calc(var(--u)*10)}#bSteal{right:calc(var(--u)*194)}
-#bShoot svg{width:calc(var(--u)*30);height:calc(var(--u)*30)}
+#bShoot{right:calc(var(--u)*26);width:calc(var(--u)*94);height:calc(var(--u)*94);bottom:calc(var(--u)*14)}
+#bJump{right:calc(var(--u)*134);width:calc(var(--u)*74);height:calc(var(--u)*74);bottom:calc(var(--u)*16)}
+#bSteal{display:none}
+#bShoot svg{width:calc(var(--u)*34);height:calc(var(--u)*34)}
+#bJump svg{width:calc(var(--u)*28);height:calc(var(--u)*28)}
+#bShoot.stl{border-color:var(--coral);background:radial-gradient(circle at 50% 35%,rgba(255,77,90,.6),rgba(15,27,45,.65) 70%);box-shadow:0 0 calc(var(--u)*12) rgba(255,77,90,.7)}
 .ring{position:absolute;inset:calc(var(--u)*-7);border-radius:50%;pointer-events:none;opacity:0;background:conic-gradient(var(--teal) calc(var(--m,0)*1turn),transparent 0);-webkit-mask:radial-gradient(circle,transparent 62%,#000 63%);mask:radial-gradient(circle,transparent 62%,#000 63%)}
 .rb.chg .ring{opacity:1}
-#bSkill{right:calc(var(--u)*40);bottom:calc(var(--u)*94);width:calc(var(--u)*56);height:calc(var(--u)*56);opacity:.7}
+#bSkill{right:calc(var(--u)*44);bottom:calc(var(--u)*122);width:calc(var(--u)*60);height:calc(var(--u)*60);opacity:.7}
+.real.kb #touch{display:none}
+.real.kb .keys{display:flex}
 #bSkill img{width:calc(var(--u)*34);height:calc(var(--u)*34);object-fit:contain;margin-top:calc(var(--u)*-4)}
 #bSkill b{margin-top:calc(var(--u)*-3)}
 #bSkill.rdy{opacity:1;border-color:var(--teal);animation:rdyb .6s infinite alternate}
@@ -290,7 +296,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    <div class="chars" id="chars"></div>
    <button class="cta" id="findBtn">MAÇ BUL</button>
    <button class="cta sec" id="exitBtn" hidden style="margin-top:10px">ARENAYA DÖN</button>
-   <div class="keys"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla</span><span><kbd>J</kbd>Basılı tut, bırak: Şut</span><span><kbd>K</kbd>Çal</span><span><kbd>E</kbd>Süper güç</span></div>
+   <div class="keys"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla</span><span><kbd>J</kbd>Şut (top rakipteyse Çal)</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
   </div>
   <div class="ov dim srch" id="ovSrch"><div class="ball"></div><p class="disp">Rakip aranıyor...</p><div class="heads" id="srchHeads"></div></div>
   <div class="ov vs" id="ovVs">
@@ -331,7 +337,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <button class="arr" id="bR" aria-label="Sağa git"><svg viewBox="0 0 176 122"><path class="sh" d="M166 61 110 8H10v106h100z"/><path class="ic" d="M118 61 80 33v56z"/><rect class="ic" x="40" y="49" width="44" height="24" rx="5"/></svg></button>
   <button class="rb" id="bSteal" aria-label="Top çal"><svg viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/></svg><b>ÇAL</b></button>
   <button class="rb skb" id="bSkill" aria-label="Süper güç"><span class="ring2" id="ring2"></span><img id="bSkImg" alt=""><b>GÜÇ</b></button>
-  <button class="rb" id="bShoot" aria-label="Şut: dokun ya da basılı tutup bırak"><span class="ring" id="ring"></span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19M5.4 5.4c3.2 3.4 3.2 9.8 0 13.2M18.6 5.4c-3.2 3.4-3.2 9.8 0 13.2"/></svg><b>ŞUT</b></button>
+  <button class="rb" id="bShoot" aria-label="Şut: dokun ya da basılı tutup bırak"><span class="ring" id="ring"></span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19M5.4 5.4c3.2 3.4 3.2 9.8 0 13.2M18.6 5.4c-3.2 3.4-3.2 9.8 0 13.2"/></svg><b id="bShootB">ŞUT</b></button>
   <button class="rb" id="bJump" aria-label="Zıpla"><svg viewBox="0 0 24 24" stroke-width="3"><path d="M12 20V5M5 12l7-7 7 7"/></svg><b>ZIPLA</b></button>
  </div>
  <div class="cam" aria-hidden="true"></div>
@@ -345,8 +351,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
  </div>
  </div>
  <div class="legend">
-  <div class="lw"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla / Blok</span><span><kbd>J</kbd>Dokun: Şut · Basılı tut: Zamanlı şut</span><span><kbd>K</kbd>Top çal</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
-  <div class="lm"><span>Sol alt: Yürü</span><span>Sağ alt: Çal · Şut · Zıpla</span><span>Şut: dokun ya da basılı tutup bırak</span><span>Dik tutunca &quot;yan çevir&quot; uyarısı çıkar</span></div>
+  <div class="lw"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla / Blok</span><span><kbd>J</kbd>Şut · Top rakipteyse Çal</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
+  <div class="lm"><span>Sol alt: Yürü</span><span>Sağ alt: Zıpla · Şut/Çal</span><span>Şut: dokun ya da basılı tutup bırak</span><span>Dik tutunca &quot;yan çevir&quot; uyarısı çıkar</span></div>
  </div>
 </div>
 
@@ -468,6 +474,7 @@ function alkPost(type){if(EMBED)parent.postMessage({source:'alk-kafa',type,for:u
 let K=1,DPR=1;
 function fit(){
  app.classList.remove('web','mob','real','port');app.classList.add(mode);if(mode==='mob'&&port)app.classList.add('port');
+ app.classList.toggle('kb',mode==='real'&&!matchMedia('(pointer:coarse)').matches);
  let sw,sh;
  if(mode==='real'){sw=innerWidth;sh=innerHeight}
  else{const aw=innerWidth-32,ah=innerHeight-60-56;
@@ -540,7 +547,7 @@ function drawCrowd(t){
 const game={state:'select',clock:60,golden:false,dead:0,conceder:null,excite:0,shake:0,t:0,cnt:0,paused:false,orbT:9,endWait:0};
 let userCh=CHARS[0],aiCh=CHARS[1],user,ai,ball,orb=null,parts=[],pops=[];
 const aiS={shotX:null,stealT:1,relM:.8,blockT:-1,jumpT:0,decT:0};
-function mkP(ch,x,f,isUser){return{ch,x,y:GY,vx:0,vy:0,f,isUser,onG:true,ph:0,land:0,shoot:null,stealT:0,stealCd:0,score:0,en:40,sk:0,fire:0,frz:0,pw:{spd:0,jmp:0},scl:1,gh:[],ghT:0,dunk:null,hang:0,cele:0,st:{fga:0,fgm:0,dunk:0,three:0,steal:0}}}
+function mkP(ch,x,f,isUser){return{ch,x,y:GY,vx:0,vy:0,f,isUser,onG:true,ph:0,land:0,shoot:null,stealT:0,stealCd:0,stealDone:1,stun:0,score:0,en:40,sk:0,fire:0,frz:0,pw:{spd:0,jmp:0},scl:1,gh:[],ghT:0,dunk:null,hang:0,cele:0,st:{fga:0,fgm:0,dunk:0,three:0,steal:0}}}
 function newMatch(){
  user=mkP(userCh,470,1,true);ai=mkP(aiCh,810,-1,false);
  ball={x:W/2,y:-40,vx:0,vy:0,owner:null,spin:0,shot:null,cd:0,noPick:null,noPickT:0,prevY:-40,dribPh:0,trail:[]};
@@ -555,9 +562,10 @@ function tipOff(announce){
  ball.owner=null;ball.shot=null;ball.x=W/2;ball.y=-40;ball.prevY=-40;ball.vx=0;ball.vy=0;ball.cd=0;ball.noPick=null;ball.noPickT=0;ball.spin=0;aiS.shotX=null;
  if(announce)pop('TOP HAVADA!',W/2,150,'#ffffff',34);
 }
-function reposition(){
- user.x=470;ai.x=810;[user,ai].forEach(p=>{p.vx=0;p.vy=0;p.y=GY;p.onG=true;p.shoot=null;p.dunk=null;p.hang=0;p.frz=0;p.gh=[]});
- user.f=1;ai.f=-1;game.rs=(game.rs||0)+1;tipOff(true);
+function reposition(c){
+ user.x=470;ai.x=810;[user,ai].forEach(p=>{p.vx=0;p.vy=0;p.y=GY;p.onG=true;p.shoot=null;p.dunk=null;p.hang=0;p.frz=0;p.stun=0;p.stealT=0;p.gh=[]});
+ user.f=1;ai.f=-1;game.rs=(game.rs||0)+1;tipOff(!c);
+ if(c){ball.owner=c;ball.dribPh=0;ball.cd=0;aiS.shotX=null;aiS.stealT=Math.max(aiS.stealT,1.2);noRel++;pop(c.isUser?'TOP SENDE!':'TOP RAKİPTE',W/2,150,'#ffffff',30);noRel--}
 }
 const target=p=>p.isUser?HOOPS[1]:HOOPS[0];
 const other=p=>p===user?ai:user;
@@ -590,15 +598,16 @@ $('bSkill').addEventListener('pointerdown',e=>{e.preventDefault();inp.superP=1;$
 function move(p,mv,dt){
  if(p.dunk||p.hang>0)return;
  if(p.frz>0){p.vx*=Math.pow(.02,dt);return}
+ if(p.stun>0){p.vx*=Math.pow(.05,dt);return}
  const charging=p.shoot&&p.shoot.charging;
  const sp=335*p.ch.spd*(p.fire>0?1.1:1)*(skOn(p,'lori')?1.6:1)*(p.pw.spd>0?1.3:1)*(ball.owner===p?.93:1);
  const tv=mv*sp*(charging?.3:1);const acc=p.onG?2800:1300;
  p.vx+=clamp(tv-p.vx,-acc*dt,acc*dt);
  if(mv&&!charging){if(p.f!==mv&&p.onG&&Math.abs(p.vx)>180&&Math.random()<.5)play(Math.random()<.5?'squeak1':'squeak2',.32,{x:p.x,rev:.12});p.f=mv}
 }
-function jump(p,m=1){if(!p.onG||p.dunk||p.hang>0||p.frz>0)return;p.vy=-JV*p.ch.jmp*m*(skOn(p,'ara')?1.22:1)*(skOn(p,'kakadu')?1.12:1)*(p.pw.jmp>0?1.28:1);p.onG=false;sy('whoosh',.1,p.x,.22,350,1400)}
+function jump(p,m=1){if(!p.onG||p.dunk||p.hang>0||p.frz>0||p.stun>0)return;p.vy=-JV*p.ch.jmp*m*(skOn(p,'ara')?1.22:1)*(skOn(p,'kakadu')?1.12:1)*(p.pw.jmp>0?1.28:1);p.onG=false;sy('whoosh',.1,p.x,.22,350,1400)}
 function startShot(p){
- if(p.dunk||p.hang>0||p.frz>0)return;
+ if(p.dunk||p.hang>0||p.frz>0||p.stun>0)return;
  if(ball.owner!==p){jump(p);return}
  if(p.shoot)return;
  const h=target(p),d=Math.abs(h.cx-p.x);p.f=sgn(h.cx-p.x);
@@ -615,13 +624,13 @@ function startDunk(p,h,fly){
 function quality(p,m){
  if(p.fire>0)return'perfect';
  const w=p.ch.sht;const d=Math.abs(m-.82);
- if(d<.06*w)return'perfect';if(d<.17*w)return'good';return'bad';
+ if(d<.07*w)return'perfect';if(d<.19*w)return'good';return'bad';
 }
 function releaseShot(p){
  const s=p.shoot;if(!s||!s.charging)return;
  const q=quality(p,s.m),h=target(p);
  const x0=p.x+p.f*24*p.scl,y0=p.y-142*p.scl;sy('whoosh',.16,p.x,.3,700,2600);if(p.fire>0)sy('flame',p.x);
- let err=q==='perfect'?0:q==='good'?rnd(-9,9):(Math.random()<.5?-1:1)*rnd(22,46);
+ let err=q==='perfect'?0:q==='good'?rnd(-7,7):(Math.random()<.5?-1:1)*rnd(22,46);
  const dist=Math.abs(h.cx-x0);if(q!=='perfect')err*=1+dist/900;
  const tx=h.cx-h.dir*1+err,ty=RIM_Y-12;
  const T=clamp(.58+dist/1000,.62,1.2);
@@ -632,16 +641,26 @@ function releaseShot(p){
  pop(lab[0],p.x,p.y-230,lab[1],30);
 }
 function trySteal(p){
- if(p.stealCd>0||p.dunk||p.hang>0||p.frz>0)return;p.stealT=.32;p.stealCd=.75;sy('whoosh',.16,p.x,.2,900,2600);
- const o=other(p),fast=skOn(p,'lori');
- if(ball.owner===o&&Math.abs(o.x-p.x)<(fast?125:88)*Math.max(o.scl,p.scl)&&Math.abs(o.y-p.y)<70*Math.max(o.scl,p.scl)&&!o.dunk){
-  if(skOn(o,'lori')){pop('KAÇTI!',o.x,o.y-230,'#ffd23f',30);return}
-  const back=o.f===sgn(o.x-p.x)?1.25:1;
-  if(fast||Math.random()<(p.isUser||p.hum?.55:.3)*back){
-   ball.owner=null;o.shoot=null;ball.x=o.x+o.f*24;ball.y=o.y-70;ball.vx=sgn(p.x-o.x)*170;ball.vy=-420;ball.noPick=o;ball.noPickT=.55;ball.cd=0;
-   p.st.steal++;pop('TOP ÇALINDI!',o.x,o.y-230,'#ff4d5a',32);play('squeak2',.42,{x:p.x});sy('whoosh',.35,p.x,.25,1200,3600);addEn(p,15);game.excite=Math.max(game.excite,.5);
-  }
- }
+ if(p.stealCd>0||p.dunk||p.hang>0||p.frz>0||p.stun>0)return;
+ const o=other(p),hum=p.isUser||p.hum;p.stealT=.3;p.stealCd=hum?.5:.8;p.stealDone=0;sy('whoosh',.16,p.x,.2,900,2600);
+ if(ball.owner===o&&p.onG){const dx=o.x-p.x;if(Math.abs(dx)<240){p.vx=sgn(dx)*(hum?580:460);p.f=sgn(dx)}}
+ stealCheck(p);
+}
+function stealCheck(p){
+ if(p.stealDone)return;const o=other(p),fast=skOn(p,'lori'),hum=p.isUser||p.hum,sc=Math.max(o.scl,p.scl);
+ if(ball.owner!==o||o.dunk||o.hang>0)return;
+ if(o.shoot&&o.shoot.charging&&o.y<GY-55)return;
+ const reach=(fast?150:hum?120:90)*sc;
+ if(Math.min(Math.abs(o.x-p.x),Math.abs(ball.x-p.x))>reach||Math.abs(o.y-p.y)>90*sc)return;
+ p.stealDone=1;
+ if(skOn(o,'lori')){pop('KAÇTI!',o.x,o.y-230,'#ffd23f',30);return}
+ let ch=hum?.8:.3;
+ if(!hum){const lead=p.score-o.score;ch*=lead>=4?.5:lead>=2?.75:lead<=-4?1.3:1}
+ if(fast||Math.random()<ch){
+  ball.owner=p;ball.shot=null;ball.dribPh=0;ball.noPick=null;o.shoot=null;o.stun=.5;o.vx=sgn(o.x-p.x)*180;o.stealCd=Math.max(o.stealCd,.9);
+  if(o===ai)aiS.stealT=rnd(1.1,1.7);aiS.shotX=null;
+  p.st.steal++;pop('TOP ÇALINDI!',o.x,o.y-230,'#ff4d5a',32);play('squeak2',.42,{x:p.x});sy('whoosh',.35,p.x,.25,1200,3600);addEn(p,15);game.excite=Math.max(game.excite,.5);
+ }else if(hum)pop('ISKA',p.x,p.y-220,'#ffffff',24);
 }
 function useSuper(p){
  if(p.en<100||p.sk>0||p.frz>0||game.state!=='play'||game.dead>0)return;
@@ -652,7 +671,8 @@ function useSuper(p){
 }
 
 function updPlayer(p,dt){
- p.stealT=Math.max(0,p.stealT-dt);p.stealCd=Math.max(0,p.stealCd-dt);p.land=Math.max(0,p.land-dt);p.fire=Math.max(0,p.fire-dt);p.cele=Math.max(0,p.cele-dt);
+ p.stealT=Math.max(0,p.stealT-dt);p.stealCd=Math.max(0,p.stealCd-dt);p.land=Math.max(0,p.land-dt);p.fire=Math.max(0,p.fire-dt);p.cele=Math.max(0,p.cele-dt);p.stun=Math.max(0,p.stun-dt);
+ if(p.stealT>0)stealCheck(p);
  const wasSk=p.sk>0;p.sk=Math.max(0,p.sk-dt);if(wasSk&&p.sk<=0)pop('GÜÇ BİTTİ',p.x,p.y-230*p.scl,'#ffffff',22);
  if(p.sk<=0){const b=p.en;p.en=Math.min(100,p.en+dt*4.5);if(b<100&&p.en>=100&&p.isUser){noRel++;pop('GÜÇ HAZIR!',p.x,p.y-250,'#22d3c5',32);sy('ready');noRel--}else if(b<100&&p.en>=100&&p.hum&&NET)NET.ev.push(['ready'])}
  p.frz=Math.max(0,p.frz-dt);p.pw.spd=Math.max(0,p.pw.spd-dt);p.pw.jmp=Math.max(0,p.pw.jmp-dt);
@@ -666,7 +686,7 @@ function updPlayer(p,dt){
   p.x=d.x0+(d.x1-d.x0)*k;p.y=d.y0+(d.y1-d.y0)*k-Math.sin(k*Math.PI)*(d.fly?240:60);
   if(d.fly&&Math.random()<.8)parts.push({x:p.x-p.f*30,y:p.y-rnd(60,150),vx:-p.f*rnd(80,200),vy:rnd(-40,40),life:.45,max:.45,c:Math.random()<.5?'#4d8dff':'#d9e8ff',s:rnd(4,8)});
   if(k>=1){p.dunk=null;p.hang=.32;p.vx=0;p.vy=0;
-   const blk=other(p);const bl=!blk.onG&&Math.abs(blk.x-p.x)<70*blk.scl&&blk.y<GY-60&&Math.random()<(skOn(blk,'kakadu')?.85:d.fly?.15:.35);
+   const blk=other(p);const bl=!blk.onG&&Math.abs(blk.x-p.x)<70*blk.scl&&blk.y<GY-60&&Math.random()<(skOn(blk,'kakadu')?.85:d.fly?.15:blk.isUser||blk.hum?.4:.22);
    if(bl){ball.owner=null;ball.x=p.x;ball.y=p.y-140;ball.vx=-d.h.dir*260;ball.vy=-120;ball.cd=.25;ball.shot=null;pop('BLOK!',p.x,p.y-240,'#22d3c5',40);play('ooh',.55,{rev:.4,r:1});sy('impact',.45);addEn(blk,20)}
    else{ball.owner=null;ball.x=d.h.cx;ball.y=RIM_Y-16;ball.vx=0;ball.vy=420;ball.cd=1;ball.shot={by:p,hoop:HOOPS.indexOf(d.h),pts:d.fly?3:2,q:'dunk',t:0,touched:false,dunk:true,fire:p.fire>0};game.shake=d.fly?20:14;play('board2',.75,{x:p.x,rev:.35});sy('rim',.5,p.x);sy('impact',d.fly?.8:.5)}
   }return}
@@ -697,14 +717,14 @@ function controlAI(p,dt){
   if(p.shoot&&p.shoot.charging){if(p.shoot.m>=aiS.relM||(p.vy>-40&&p.shoot.m>.6&&aiS.relM<.9&&Math.random()<.05))releaseShot(p)}
   else if(!p.shoot){
    if(Math.abs(dx)>16)mv=sgn(dx);
-   else if(p.onG){const r=Math.random();aiS.relM=r<.36?.82+rnd(-.03,.03):r<.75?.82+rnd(-.13,.13):(Math.random()<.5?.52:1.06);startShot(p)}
+   else if(p.onG){const lead=p.score-u.score,bad=lead>=4?.55:lead>=2?.45:lead<=-4?.25:.38,r=Math.random();aiS.relM=r<.2?.82+rnd(-.03,.03):r<1-bad?.82+rnd(-.16,.16):(Math.random()<.5?.5:1.08);startShot(p)}
    if(Math.abs(u.x-p.x)<70&&sgn(u.x-p.x)===sgn(dx)&&aiS.decT<=0){aiS.decT=rnd(.8,1.6);if(Math.random()<.35)aiS.shotX=p.x+rnd(-20,20);}
   }
  } else if(ball.owner===u){
   aiS.shotX=null;const tx=u.x+78;const dx=tx-p.x;if(Math.abs(dx)>12)mv=sgn(dx);
-  if(Math.abs(u.x-p.x)<84&&aiS.stealT<=0){trySteal(p);aiS.stealT=rnd(.9,1.9)}
-  if(u.shoot&&u.shoot.charging&&aiS.blockT<0&&Math.abs(u.x-p.x)<140&&p.onG){aiS.blockT=Math.random()<.42?.1:-2}
-  if(u.dunk&&p.onG&&Math.abs(u.x-p.x)<160&&aiS.blockT<0){aiS.blockT=Math.random()<.4?.05:-2}
+  if(Math.abs(u.x-p.x)<84&&aiS.stealT<=0&&p.stun<=0){trySteal(p);aiS.stealT=rnd(1.3,2.4)}
+  if(u.shoot&&u.shoot.charging&&aiS.blockT<0&&Math.abs(u.x-p.x)<140&&p.onG){aiS.blockT=Math.random()<.28?.12:-2}
+  if(u.dunk&&p.onG&&Math.abs(u.x-p.x)<160&&aiS.blockT<0){aiS.blockT=Math.random()<.28?.08:-2}
  } else {
   aiS.shotX=null;const dx=ball.x-p.x;if(Math.abs(dx)>10)mv=sgn(dx);
   if(Math.abs(dx)<90&&ball.y<GY-150&&ball.vy>-100&&p.onG&&Math.random()<.06)jump(p);
@@ -1003,7 +1023,8 @@ function hud(){
  $('myCard').classList.toggle('fire',user.sk>0);$('myCard').classList.toggle('rdy',rdy);
  $('eA').firstChild.style.width=eu+'%';$('eB').firstChild.style.width=ea+'%';$('eA').classList.toggle('full',user.en>=100||user.sk>0);$('eB').classList.toggle('full',ai.en>=100||ai.sk>0);
  $('bSkill').classList.toggle('rdy',rdy);$('bSkill').classList.toggle('act',user.sk>0);$('ring2').style.setProperty('--e',eu/100);
- const sb=$('bShoot');const ch=user.shoot&&user.shoot.charging;sb.classList.toggle('chg',!!ch);if(ch)$('ring').style.setProperty('--m',clamp(user.shoot.m/1.12,0,1));
+ const sb=$('bShoot');const ch=user.shoot&&user.shoot.charging;sb.classList.toggle('chg',!!ch);
+ const def=ball.owner===ai;sb.classList.toggle('stl',def);setT('bShootB',def?'ÇAL':'ŞUT');if(ch)$('ring').style.setProperty('--m',clamp(user.shoot.m/1.12,0,1));
 }
 
 /* ---------- loop ---------- */
@@ -1014,6 +1035,7 @@ function frame(now){
  if(game.slow>0&&dt>0){game.slow-=dt;dt*=.35}
  game.excite=Math.max(.15,game.excite-dt*.35);
  if(AC){musTick();if(crowdG)crowdG.gain.setTargetAtTime(game.state==='play'&&!game.paused?.05+game.excite*.17:.025,AC.currentTime,.25)}
+ if(user&&ball&&inp.shootP&&ball.owner&&ball.owner!==user){inp.shootP=0;inp.stealP=1}
  if(NET&&NET.role==='guest'&&NET.live&&game.state!=='over'){guestFrame(dt);if(game.state==='play')hud()}
  else if(game.state==='play'&&dt>0){
   controlUser(user,dt);if(NET&&NET.live)controlRemote(ai,dt);else controlAI(ai,dt);
@@ -1023,7 +1045,7 @@ function frame(now){
    if(game.clock<=0){const inFlight=ball.shot&&!ball.owner;game.endWait+=dt;
     if((!inFlight&&game.dead<=0)||game.endWait>2.5){
      if(game.dead>0&&game.dead<90){/* wait goal anim */}
-     else{sy('horn',.7);if(user.score===ai.score){game.golden=true;showBanner('ALTIN SAYI! İLK ATAN KAZANIR');reposition(Math.random()<.5?user:ai)}else{game.state='over';setTimeout(endMatch,900)}}
+     else{sy('horn',.7);if(user.score===ai.score){game.golden=true;showBanner('ALTIN SAYI! İLK ATAN KAZANIR');reposition(null)}else{game.state='over';setTimeout(endMatch,900)}}
     }}}
   hud();
  } else if(game.state!=='play'&&user&&dt>0){idleAnim(dt)}
