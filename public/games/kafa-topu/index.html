@@ -1852,10 +1852,35 @@ function mySide(){ return isGuest() ? 1 : 0; }
 function scoreFor(){ const my = mySide(); return { for:game.score[my], against:game.score[1 - my] }; }
 const netSend = msg => post('net', { msg });
 const r2 = v => Math.round(v*100)/100;
+const clampN = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerpN = (a, b, k) => a + (b - a) * k;
+/* Guest: host snapshots are buffered with the host clock and drawn slightly in the past, interpolated between two
+   real host states. Bursty delivery (server relay, mobile radios) then still renders as smooth motion. */
+function netBuf(m){
+  if (!Number.isFinite(m.ts)) return;
+  const B = NET.buf;
+  if (B.length && m.ts <= B[B.length - 1].ts) return;
+  const o = m.ts - performance.now();
+  if (NET.off == null || o > NET.off) NET.off = o; else NET.off += (o - NET.off) * .002;
+  NET.jit += (Math.min(400, NET.off - o) - NET.jit) * .08;
+  B.push(m); if (B.length > 40) B.shift();
+}
+function netSample(){
+  const B = NET.buf;
+  if (!B.length || NET.off == null) return null;
+  const rt = performance.now() + NET.off - clampN(45 + NET.jit * 1.6, 60, 320);
+  let j = -1;
+  for (let q = B.length - 1; q >= 0; q--) if (B[q].ts <= rt) { j = q; break; }
+  if (j < 0) return { a:B[0], b:B[0], k:0, ex:0 };
+  if (j > 2) { B.splice(0, j - 1); j = 1; }
+  if (j === B.length - 1) return { a:B[j], b:B[j], k:0, ex:Math.min(.18, (rt - B[j].ts) / 1000) };
+  const a = B[j], b = B[j + 1];
+  return { a, b, k:clampN((rt - a.ts) / Math.max(1, b.ts - a.ts), 0, 1), ex:0 };
+}
 function netInit(role, names){
   const n = Array.isArray(names) ? names.map(x => String(x || '').slice(0, 24)) : [];
   NET = { role, names:[n[0] || 'Ev sahibi', n[1] || 'Rakip'], link:'connecting', ready:false, peer:null, inMatch:false, mid:0, q:0, lastQ:0,
-    ev:[], evId:0, evSeen:0, kn:0, sn:0, snap:null, snapAt:0, sendT:0, acc:0, startAt:0, warned:false };
+    ev:[], evId:0, evSeen:0, kn:0, sn:0, snap:null, snapAt:0, sendT:0, acc:0, startAt:0, warned:false, buf:[], off:null, jit:0 };
   $('pauseBtn').style.display = 'none';
   renderMenu();
   setInterval(() => { if (NET && !NET.inMatch) netSend({ t:'r', ok:NET.ready, ch:save.char, sk:save.skill }); }, 400);
@@ -1886,19 +1911,19 @@ function onNet(m){
   }
   if (m.t === 's' && isGuest()) {
     if (!NET.inMatch && NET.ready && m.m !== NET.mid) {
-      NET.inMatch = true; NET.mid = m.m; NET.lastQ = 0; NET.kn = 0; NET.sn = 0;
+      NET.inMatch = true; NET.mid = m.m; NET.lastQ = 0; NET.kn = 0; NET.sn = 0; NET.buf = []; NET.off = null; NET.jit = 0;
       NET.evSeen = m.ev.length ? m.ev[m.ev.length - 1][0] : 0;
       setupMatch(charOf(m.ch[0]), m.sk[0], charOf(m.ch[1]), m.sk[1], false);
     }
     if (m.m !== NET.mid || m.q <= NET.lastQ) return;
-    NET.lastQ = m.q; NET.snap = m; NET.snapAt = now; NET.warned = false;
+    NET.lastQ = m.q; NET.snap = m; NET.snapAt = now; NET.warned = false; netBuf(m);
   }
 }
 const packP = p => [Math.round(p.x), Math.round(p.y), Math.round(p.vx), Math.round(p.vy), p.face, r2(p.kickT), Math.round(p.meter), r2(p.frozen), r2(p.stun), r2(p.giant), r2(p.shrink), r2(p.wall), p.armed || 0, r2(p.skillLock), r2(p.squash), p.onGround ? 1 : 0];
 function hostSend(dt){
   NET.sendT -= dt; if (NET.sendT > 0) return; NET.sendT = 1/30;
   const [A, B] = game.players, b = game.ball;
-  netSend({ t:'s', m:NET.mid, q:++NET.q, ch:[A.ch.id, B.ch.id], sk:[A.skill, B.skill], ph:game.phase, tm:r2(game.time), cd:game.cdIdx, sc:game.score.slice(),
+  netSend({ t:'s', ts:Math.round(performance.now()), m:NET.mid, q:++NET.q, ch:[A.ch.id, B.ch.id], sk:[A.skill, B.skill], ph:game.phase, tm:r2(game.time), cd:game.cdIdx, sc:game.score.slice(),
     b:[Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.fire), r2(b.ghost), r2(b.tornado), b.held ? 1 : 0],
     p:[packP(A), packP(B)], nt:game.net.map(r2), ny:game.netY.map(Math.round), ev:NET.ev.slice() });
 }
@@ -1906,9 +1931,12 @@ function hostSend(dt){
 function remoteDrive(p, dt){
   const r = p.rs;
   if (r) {
-    const age = Math.min(.12, (performance.now() - r.at)/1000);
-    p.x = Math.min(Math.max(r.x + r.vx*age, p.R), W - p.R);
-    p.y = Math.min(r.y + (r.g ? 0 : r.vy*age), GROUND - p.R - 24);
+    // Guest frames arrive in bursts over the relay: ease toward a lightly extrapolated target instead of snapping.
+    const age = Math.min(.15, (performance.now() - r.at)/1000);
+    const tx = Math.min(Math.max(r.x + r.vx*age, p.R), W - p.R);
+    const ty = Math.min(r.y + (r.g ? 0 : r.vy*age + 1250*age*age), GROUND - p.R - 24);
+    if (Math.abs(tx - p.x) > 220 || Math.abs(ty - p.y) > 220) { p.x = tx; p.y = ty; }
+    else { const kx = Math.min(1, dt*16), ky = Math.min(1, dt*20); p.x += (tx - p.x)*kx; p.y += (ty - p.y)*ky; }
     p.vx = r.vx; p.vy = r.vy; p.face = r.f; p.onGround = !!r.g;
     const free = game.phase === 'play' && p.frozen <= 0 && p.stun <= 0;
     if (r.kn !== p.kn) { p.kn = r.kn; if (free) { p.kickT = .001; p.kickHit = false; } }
@@ -1953,16 +1981,22 @@ function guestTick(dt){
     if (mine.meter >= 100 && !mine.readyPlayed) { mine.readyPlayed = true; sfx.ready(); }
     if (mine.meter < 100) mine.readyPlayed = false;
   }
-  const age = Math.min(.15, (now - NET.snapAt)/1000);
-  // Ball: extrapolate the host's latest frame, then ease toward it.
-  const b = game.ball, sb = s.b, free = !sb[7] && sb[4] <= 0 && sb[6] <= 0;
-  follow(b, sb[0] + sb[2]*age, Math.min(sb[1] + sb[3]*age + (free ? 725*age*age : 0), GROUND - BR), dt, 160);
-  b.vx = sb[2]; b.vy = sb[3]; b.rot += b.vx*dt/BR; b.fire = sb[4]; b.ghost = sb[5]; b.tornado = sb[6]; b.held = !!sb[7];
+  // Ball + rival: interpolated between two buffered host frames (render slightly in the past = no stutter).
+  const S = netSample() || { a:s, b:s, k:0, ex:Math.min(.15, (now - NET.snapAt)/1000) };
+  const b = game.ball, sb = s.b, A0 = S.a.b, B0 = S.b.b, k = S.k, ex = S.ex;
+  const free = !B0[7] && B0[4] <= 0 && B0[6] <= 0;
+  if (Math.abs(A0[0] - B0[0]) > 240 || Math.abs(A0[1] - B0[1]) > 240) { b.x = B0[0]; b.y = B0[1]; }
+  else { b.x = lerpN(A0[0], B0[0], k) + B0[2]*ex; b.y = Math.min(lerpN(A0[1], B0[1], k) + B0[3]*ex + (free ? 725*ex*ex : 0), GROUND - BR); }
+  b.vx = lerpN(A0[2], B0[2], k); b.vy = lerpN(A0[3], B0[3], k); b.rot += b.vx*dt/BR;
+  b.fire = sb[4]; b.ghost = sb[5]; b.tornado = sb[6]; b.held = !!sb[7];
   if (b.fire > 0) trail(b, '#ff7a1a'); else if (b.tornado > 0) trail(b, '#7ee0b5');
-  // Rival mascot.
-  const a = s.p[0];
-  follow(other, Math.min(Math.max(a[0] + a[2]*age, other.R), W - other.R), Math.min(a[1] + (a[15] ? 0 : a[3]*age), GROUND - other.R - 24), dt, 150);
-  Object.assign(other, { vx:a[2], vy:a[3], face:a[4], kickT:a[5], squash:a[14], onGround:!!a[15] });
+  const pa = S.a.p[0], pb = S.b.p[0], a = s.p[0];
+  if (Math.abs(pa[0] - pb[0]) > 220 || Math.abs(pa[1] - pb[1]) > 220) { other.x = pb[0]; other.y = pb[1]; }
+  else {
+    other.x = Math.min(Math.max(lerpN(pa[0], pb[0], k) + pb[2]*ex, other.R), W - other.R);
+    other.y = Math.min(lerpN(pa[1], pb[1], k) + (pb[15] ? 0 : pb[3]*ex), GROUND - other.R - 24);
+  }
+  Object.assign(other, { vx:pb[2], vy:pb[3], face:pb[4], kickT:a[5], squash:a[14], onGround:!!pb[15] });
   for (const [p, v] of [[other, a], [mine, s.p[1]]]) Object.assign(p, { meter:v[6], frozen:v[7], stun:v[8], giant:v[9], shrink:v[10], wall:v[11], armed:v[12] || null, skillLock:v[13] });
   const tsz = other.giant > 0 ? GIANT_SZ : other.shrink > 0 ? .58 : 1;
   other.sz += (tsz - other.sz) * Math.min(1, dt*8); other.R = BASE_R * other.sz;
