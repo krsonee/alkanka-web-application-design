@@ -47,7 +47,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--navy);color:va
 .web .legend .lw,.mob .legend .lm{display:flex}
 .legend kbd{font-family:Barlow;font-weight:800;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:1px 7px;color:#fff;margin-right:5px}
 .mob .keys,.real .keys{display:none}
-.mob #ovSel>*,.real #ovSel>*{zoom:1.18}
+.mob #ovSel>*{zoom:1.12}
+.btns [hidden]{display:none}
 #stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;transform-origin:50% 50%;overflow:hidden}
 #cv{position:absolute;left:0;top:0;width:1280px;height:720px;display:block}
 .disp{font-family:"Lilita One",Barlow,sans-serif;letter-spacing:.5px}
@@ -77,11 +78,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #menuBtn{left:18px;top:14px}
 #chatBtn{right:18px;top:14px}
 .dots{display:flex;gap:5px}.dots i{width:7px;height:7px;border-radius:50%;background:#fff}
-.col{position:absolute;left:14px;top:82px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
-.coach{width:92px;height:92px;border-radius:16px;overflow:hidden;background:linear-gradient(#2f6bff,#1a3f9c);border:3px solid rgba(255,255,255,.85);position:relative;box-shadow:0 6px 16px rgba(0,0,0,.35)}
-.coach img{position:absolute;left:-8px;bottom:-4px;width:118px}
-.coach span{position:absolute;left:0;right:0;bottom:0;font-size:12px;text-align:center;background:rgba(15,27,45,.8);padding:1px 0}
-.card{width:92px;height:100px;border-radius:16px;background:rgba(15,27,45,.78);border:3px solid rgba(255,255,255,.85);position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:6px;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+.col{position:absolute;left:86px;top:10px;display:flex;flex-direction:row;align-items:center;gap:8px;pointer-events:auto}
+.coach{width:62px;height:62px;border-radius:14px;overflow:hidden;background:linear-gradient(#2f6bff,#1a3f9c);border:3px solid rgba(255,255,255,.85);position:relative;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+.coach img{position:absolute;left:-6px;bottom:-3px;width:80px}
+.coach span{display:none}
+.card{width:132px;height:62px;border-radius:14px;background:rgba(15,27,45,.78);border:3px solid rgba(255,255,255,.85);position:relative;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;padding:8px 6px 0;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+.card img{width:40px!important;height:40px!important;margin:0!important}
 .card.act{border-color:var(--teal);box-shadow:0 0 0 3px rgba(34,211,197,.25),0 6px 16px rgba(0,0,0,.35)}
 .card .seg{position:absolute;top:7px;left:10px;right:10px;display:flex;gap:3px}
 .card .seg i{flex:1;height:7px;border-radius:3px;background:rgba(255,255,255,.18)}
@@ -284,8 +286,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
      <img id="myCardImg" alt="">
      <div class="chg disp"><svg viewBox="0 0 24 24" fill="#22d3c5"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span id="myChg">%40</span></div>
     </button>
-    <div class="card lock"><div class="sil"></div><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><small>SEVİYE 5</small></div>
-    <div class="card lock"><div class="sil"></div><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><small>SEVİYE 10</small></div>
    </div>
    <div class="banner" id="banner"></div>
   </div>
@@ -294,8 +294,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    <div class="sub">Alkanka Sokak Arenası</div>
    <h1 class="ttl disp">KAFA <em>BASKETBOLU</em></h1>
    <div class="chars" id="chars"></div>
-   <button class="cta" id="findBtn">MAÇ BUL</button>
-   <button class="cta sec" id="exitBtn" hidden style="margin-top:10px">ARENAYA DÖN</button>
+   <div class="btns" style="margin-top:0"><button class="cta sec" id="exitBtn" hidden>ARENAYA DÖN</button><button class="cta" id="findBtn">MAÇ BUL</button></div>
    <div class="keys"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla</span><span><kbd>J</kbd>Şut (top rakipteyse Çal)</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
   </div>
   <div class="ov dim srch" id="ovSrch"><div class="ball"></div><p class="disp">Rakip aranıyor...</p><div class="heads" id="srchHeads"></div></div>
@@ -628,7 +627,9 @@ function quality(p,m){
 }
 function releaseShot(p){
  const s=p.shoot;if(!s||!s.charging)return;
- const q=quality(p,s.m),h=target(p);
+ let q=quality(p,s.m);const h=target(p);
+ const dfn=other(p),gap=(dfn.x-p.x)*p.f;
+ if(p.fire<=0&&q!=='bad'&&gap>-20&&gap<95*Math.max(p.scl,dfn.scl)&&Math.random()<(dfn.isUser||dfn.hum?(dfn.onG?.45:.8):(dfn.onG?.2:.45))){q=q==='perfect'?'good':'bad';pop('BASKI!',dfn.x,dfn.y-230*dfn.scl,'#22d3c5',24)}
  const x0=p.x+p.f*24*p.scl,y0=p.y-142*p.scl;sy('whoosh',.16,p.x,.3,700,2600);if(p.fire>0)sy('flame',p.x);
  let err=q==='perfect'?0:q==='good'?rnd(-7,7):(Math.random()<.5?-1:1)*rnd(22,46);
  const dist=Math.abs(h.cx-x0);if(q!=='perfect')err*=1+dist/900;
@@ -645,16 +646,17 @@ function trySteal(p){
  const o=other(p),hum=p.isUser||p.hum;p.stealT=.3;p.stealCd=hum?.5:.8;p.stealDone=0;sy('whoosh',.16,p.x,.2,900,2600);
  if(ball.owner===o&&p.onG){const dx=o.x-p.x;if(Math.abs(dx)<240){p.vx=sgn(dx)*(hum?580:460);p.f=sgn(dx)}}
  stealCheck(p);
+ if(hum&&ball.owner===o&&!p.stealDone&&Math.abs(o.x-p.x)>240)pop('ÇOK UZAK',p.x,p.y-220,'#ffffff',22);
 }
 function stealCheck(p){
  if(p.stealDone)return;const o=other(p),fast=skOn(p,'lori'),hum=p.isUser||p.hum,sc=Math.max(o.scl,p.scl);
  if(ball.owner!==o||o.dunk||o.hang>0)return;
- if(o.shoot&&o.shoot.charging&&o.y<GY-55)return;
- const reach=(fast?150:hum?120:90)*sc;
- if(Math.min(Math.abs(o.x-p.x),Math.abs(ball.x-p.x))>reach||Math.abs(o.y-p.y)>90*sc)return;
+ if(!hum&&o.shoot&&o.shoot.charging&&o.y<GY-55)return;
+ const reach=(fast?150:hum?125:90)*sc;
+ if(Math.min(Math.abs(o.x-p.x),Math.abs(ball.x-p.x))>reach||Math.abs(o.y-p.y)>(hum?130:90)*sc)return;
  p.stealDone=1;
  if(skOn(o,'lori')){pop('KAÇTI!',o.x,o.y-230,'#ffd23f',30);return}
- let ch=hum?.8:.3;
+ let ch=hum?.7:.3;
  if(!hum){const lead=p.score-o.score;ch*=lead>=4?.5:lead>=2?.75:lead<=-4?1.3:1}
  if(fast||Math.random()<ch){
   ball.owner=p;ball.shot=null;ball.dribPh=0;ball.noPick=null;o.shoot=null;o.stun=.5;o.vx=sgn(o.x-p.x)*180;o.stealCd=Math.max(o.stealCd,.9);
@@ -712,22 +714,22 @@ function controlAI(p,dt){
  if(p.en>=100&&p.sk<=0){const id=p.ch.id;const want=id==='ara'||id==='muhabbet'?ball.owner===p:id==='lori'?(ball.owner===u&&Math.abs(u.x-p.x)<260)||ball.owner===p:ball.owner===u;if(want&&Math.random()<dt*1.4)useSuper(p)}
  if(ball.owner===p&&p.onG&&!p.shoot&&(skOn(p,'ara')||(p.fire>0&&Math.abs(h.cx-p.x)>180&&Math.random()<dt*2))){aiS.relM=.82;startShot(p)}
  if(ball.owner===p){
-  if(aiS.shotX==null){const r=Math.random();aiS.shotX=h.cx+(r<.28?rnd(100,125):r<.62?rnd(190,380):rnd(410,480))}
+  if(aiS.shotX==null){const r=Math.random();aiS.shotX=h.cx+(r<.34?rnd(100,125):r<.82?rnd(190,370):rnd(410,460))}
   const dx=aiS.shotX-p.x;
   if(p.shoot&&p.shoot.charging){if(p.shoot.m>=aiS.relM||(p.vy>-40&&p.shoot.m>.6&&aiS.relM<.9&&Math.random()<.05))releaseShot(p)}
   else if(!p.shoot){
    if(Math.abs(dx)>16)mv=sgn(dx);
-   else if(p.onG){const lead=p.score-u.score,bad=lead>=4?.55:lead>=2?.45:lead<=-4?.25:.38,r=Math.random();aiS.relM=r<.2?.82+rnd(-.03,.03):r<1-bad?.82+rnd(-.16,.16):(Math.random()<.5?.5:1.08);startShot(p)}
+   else if(p.onG){const lead=p.score-u.score,bad=lead>=4?.62:lead>=2?.52:lead<=-4?.3:.44,r=Math.random();aiS.relM=r<.12?.82+rnd(-.03,.03):r<1-bad?.82+rnd(-.17,.17):(Math.random()<.5?.5:1.08);startShot(p)}
    if(Math.abs(u.x-p.x)<70&&sgn(u.x-p.x)===sgn(dx)&&aiS.decT<=0){aiS.decT=rnd(.8,1.6);if(Math.random()<.35)aiS.shotX=p.x+rnd(-20,20);}
   }
  } else if(ball.owner===u){
-  aiS.shotX=null;const tx=u.x+78;const dx=tx-p.x;if(Math.abs(dx)>12)mv=sgn(dx);
+  aiS.shotX=null;const tx=u.x+96;const dx=tx-p.x;if(Math.abs(dx)>12)mv=sgn(dx);
   if(Math.abs(u.x-p.x)<84&&aiS.stealT<=0&&p.stun<=0){trySteal(p);aiS.stealT=rnd(1.3,2.4)}
   if(u.shoot&&u.shoot.charging&&aiS.blockT<0&&Math.abs(u.x-p.x)<140&&p.onG){aiS.blockT=Math.random()<.28?.12:-2}
   if(u.dunk&&p.onG&&Math.abs(u.x-p.x)<160&&aiS.blockT<0){aiS.blockT=Math.random()<.28?.08:-2}
  } else {
   aiS.shotX=null;const dx=ball.x-p.x;if(Math.abs(dx)>10)mv=sgn(dx);
-  if(Math.abs(dx)<90&&ball.y<GY-150&&ball.vy>-100&&p.onG&&Math.random()<.06)jump(p);
+  if(!ball.shot&&Math.abs(dx)<90&&ball.y<GY-150&&ball.vy>-100&&p.onG&&Math.random()<.06)jump(p);
  }
  if(aiS.blockT>=0){aiS.blockT-=dt;if(aiS.blockT<0){jump(p);aiS.blockT=-1.5}}
  if(aiS.blockT<-1&&aiS.blockT>-2.5){aiS.blockT+=dt*0;}
@@ -775,7 +777,7 @@ function updBall(dt){
  if(ball.shot){ball.shot.t+=dt;
   const d=other(ball.shot.by);
   const giant=skOn(d,'kakadu');
-  if(ball.shot.t<(giant?.5:.32)&&(!d.onG||giant)&&!ball.shot.dunk){const hx=d.x+d.f*16*d.scl,hy=d.y-150*d.scl;if(Math.hypot(ball.x-hx,ball.y-hy)<52*d.scl+(giant?20:0)){
+  if(ball.shot.t<(giant?.5:.32)&&(!d.onG||giant)&&!ball.shot.dunk&&!ball.shot.blkRoll){const hx=d.x+d.f*16*d.scl,hy=d.y-150*d.scl;if(Math.hypot(ball.x-hx,ball.y-hy)<52*d.scl+(giant?20:0)&&(ball.shot.blkRoll=1)&&(giant||d.isUser||d.hum||Math.random()<.3)){
    ball.vx=(ball.x-d.x)*5+d.f*120;ball.vy=Math.max(80,ball.vy*.2);ball.shot=null;pop(giant?'DEV BLOK!':'BLOK!',d.x,d.y-240*d.scl,'#22d3c5',42);play('ooh',.5,{rev:.4,r:1});sy('impact',.45);addEn(d,20);game.excite=.7;game.shake=6}}}
  if(ball.shot&&ball.shot.fire&&Math.random()<.9)parts.push({x:ball.x+rnd(-6,6),y:ball.y+rnd(-6,6),vx:rnd(-30,30),vy:rnd(-80,-20),life:.45,max:.45,c:Math.random()<.5?'#ff4d5a':'#ff9a4d',s:rnd(5,10)});
  if(game.dead<=0&&ball.cd<=0){for(const p of [user,ai]){if(p===ball.noPick||p.dunk||p.hang>0)continue;
