@@ -1,23 +1,33 @@
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { getMember } from '@/lib/member'
-import { getTableRow } from '@/lib/pvp/tables'
+import { duelChannel, opponentOf } from '@/lib/pvp/duel-channel'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_SDP = 20000
+/** Postgres caps a NOTIFY payload at 8000 bytes. */
+const NOTIFY_MAX = 7600
 
-/**
- * Signalling relay for real-time duels (kafa topu / kafa basketbolu). Only the two seated humans may
- * exchange one offer/answer; gameplay itself then flows browser-to-browser over a WebRTC data channel.
- */
-async function opponentOf(room: string, userId: string) {
-  const t = await getTableRow(room)
-  if (!t || t.status === 'iptal' || t.status === 'bitti') return null
-  const humans = t.players.filter((p) => !p.bot)
-  if (!humans.some((p) => p.id === userId)) return null
-  return humans.find((p) => p.id !== userId)?.id ?? null
+/** Packs frames into NOTIFY-sized JSON arrays, keeping their order. */
+function chunkFrames(msgs: unknown[]) {
+  const out: string[] = []
+  let cur: string[] = []
+  let size = 2
+  for (const m of msgs) {
+    const s = JSON.stringify(m)
+    if (s.length + 2 > NOTIFY_MAX) continue
+    if (cur.length && size + s.length + 1 > NOTIFY_MAX) {
+      out.push(`[${cur.join(',')}]`)
+      cur = []
+      size = 2
+    }
+    cur.push(s)
+    size += s.length + 1
+  }
+  if (cur.length) out.push(`[${cur.join(',')}]`)
+  return out
 }
 
 /**
@@ -45,10 +55,49 @@ async function relayIdentity(req: Request, room: string) {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: room } = await params
-  const body = (await req.json().catch(() => ({}))) as { action?: string; kind?: string; payload?: unknown }
+  const body = (await req.json().catch(() => ({}))) as { action?: string; kind?: string; payload?: unknown; drain?: boolean }
   const key = `game:${room}`
 
-  // Server relay: carries the match until a direct peer-to-peer channel opens (or forever on strict NATs).
+  // Push relay: frames are NOTIFY'd straight to the rival's open stream (see ../stream) with no polling wait.
+  // Match-ending frames are also stored so the rival's periodic drain still gets them across a stream reconnect.
+  if (body.action === 'push') {
+    const who = await relayIdentity(req, room)
+    if (!who) return NextResponse.json({ error: 'Bu masada rakibin yok.' }, { status: 404 })
+    const now = Date.now()
+    if (now - who.windowAt > 10_000) {
+      who.windowAt = now
+      who.hits = 0
+    }
+    if (++who.hits > 1500) return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 })
+    const msgs = Array.isArray(body.payload) ? body.payload.slice(0, 20) : []
+    const chunks = chunkFrames(msgs)
+    const keep = msgs.filter((m) => (m as { t?: string })?.t === 'end')
+    await Promise.all([
+      chunks.length
+        ? pool.query(`SELECT pg_notify($1, c) FROM unnest($2::text[]) WITH ORDINALITY AS u(c, n) ORDER BY n`, [
+            duelChannel(key, who.opp),
+            chunks,
+          ])
+        : null,
+      keep.length
+        ? pool.query(`INSERT INTO voice_signals (room, from_id, to_id, kind, payload) VALUES ($1,$2,$3,'relay',$4::jsonb)`, [
+            key,
+            who.me,
+            who.opp,
+            JSON.stringify(keep),
+          ])
+        : null,
+    ])
+    if (!body.drain) return NextResponse.json({ ok: true })
+    const r = await pool.query<{ id: string; payload: unknown[] }>(
+      `DELETE FROM voice_signals WHERE room = $1 AND to_id = $2 AND kind = 'relay' RETURNING id, payload`,
+      [key, who.me],
+    )
+    const rows = r.rows.sort((a, b) => Number(a.id) - Number(b.id))
+    return NextResponse.json({ ok: true, msgs: rows.flatMap((row) => (Array.isArray(row.payload) ? row.payload : [])) })
+  }
+
+  // Polling relay: fallback when the push stream cannot be opened.
   if (body.action === 'relay') {
     const who = await relayIdentity(req, room)
     if (!who) return NextResponse.json({ error: 'Bu masada rakibin yok.' }, { status: 404 })
