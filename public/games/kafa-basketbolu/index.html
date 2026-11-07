@@ -484,7 +484,7 @@ let mode=REAL||EMBED?'real':'web',port=false;
 function alkPost(type){if(EMBED)parent.postMessage({source:'alk-kafa',type,for:user?user.score:0,against:ai?ai.score:0},location.origin)}
 let K=1,DPR=1;const COARSE=matchMedia('(pointer:coarse)').matches;
 let LOW=COARSE&&((navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=3);
-let dprCap=LOW?1:COARSE?1.5:2;
+let dprCap=COARSE||LOW?1.5:2;
 function fit(){
  app.classList.remove('web','mob','real','port');app.classList.add(mode);if(mode==='mob'&&port)app.classList.add('port');
  app.classList.toggle('kb',mode==='real'&&!matchMedia('(pointer:coarse)').matches);
@@ -1198,7 +1198,7 @@ function hud(){
 }
 let pfA=16,pfN=0;
 function perfTick(ms){if(game.state!=='play'||document.hidden)return;pfA=pfA*.94+ms*.06;
- if(++pfN>90&&pfA>24){pfN=0;LOW=true;if(dprCap>1){dprCap=Math.max(1,dprCap-.5);fit()}}}
+ if(++pfN>90&&pfA>24){pfN=0;LOW=true;if(dprCap>1.5){dprCap=1.5;fit()}}}
 
 /* ---------- loop ---------- */
 let last=performance.now();

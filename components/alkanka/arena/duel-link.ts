@@ -3,25 +3,23 @@
 import { useEffect, useRef, useState } from 'react'
 
 const ICE: RTCConfiguration = {
-  iceServers: [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    // Public relay fallback for mobile/strict NATs where a direct path cannot be punched.
-    {
-      urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-  ],
+  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }],
 }
 const POLL_MS = 1200
 /** Host waits this long for an answer before sending a fresh offer. */
 const RETRY_MS = 12000
 /** Once answered, ICE gets this long to open the channel before redialling. */
 const CONNECT_MS = 15000
-/** Server relay runs from the first second and carries the match until (and unless) a direct channel opens. */
-const RELAY_MS = 35
-/** Consecutive relay failures before the link is shown as lost. */
-const RELAY_FAILS_LOST = 40
+/** Outgoing frames are flushed this often while no direct channel is open. */
+const FLUSH_MS = 33
+/** Concurrent flush requests; the game reorders by timestamp/sequence, so overlap only cuts latency. */
+const MAX_IN_FLIGHT = 4
+/** A refused push stream is retried this often; meanwhile frames are drained by polling. */
+const STREAM_RETRY_MS = 4000
+/** While the push stream is open, stored frames are still drained this often as a safety net across reconnects. */
+const DRAIN_EVERY = 45
+/** Consecutive send failures before the link is shown as lost. */
+const FAILS_LOST = 40
 
 export type DuelLink = {
   status: 'connecting' | 'open' | 'lost'
@@ -39,13 +37,15 @@ function gathered(pc: RTCPeerConnection) {
       resolve()
     }
     pc.addEventListener('icegatheringstatechange', check)
-    setTimeout(resolve, 2500)
+    setTimeout(resolve, 2000)
   })
 }
 
 /**
- * Browser-to-browser data channel between the two seated players of a duel table.
- * The host (seat 0) dials; the guest answers. The server only relays one offer/answer pair.
+ * Real-time link between the two seated players of a duel table.
+ * Preferred: a direct WebRTC data channel (host dials, guest answers). Until/unless that opens, frames travel
+ * through the server: sent with short POSTs and received instantly over a server-sent-event stream (push),
+ * or — if the stream cannot open — by the older polling relay.
  */
 export function useDuelLink(roomId: string, host: boolean): DuelLink {
   const [status, setStatus] = useState<DuelLink['status']>('connecting')
@@ -63,15 +63,27 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     const post = (body: object) =>
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
+    let heard = false
+    const deliver = (msgs: { t?: string }[]) => {
+      for (const m of msgs) {
+        if (!m || typeof m !== 'object') continue
+        if (!heard) {
+          heard = true
+          setStatus('open')
+        }
+        if (m.t !== '__hi') onMessage.current?.(m)
+      }
+    }
+
     const attach = (dc: RTCDataChannel) => {
       channel.current = dc
       dc.onopen = () => {
         if (!alive) return
-        stopRelay()
+        stopServer()
         setStatus('open')
       }
       dc.onclose = () => {
-        if (alive) startRelay()
+        if (alive) startServer()
       }
       dc.onmessage = (e) => {
         try {
@@ -82,12 +94,6 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       }
     }
 
-    // Server relay fallback: used when no direct peer path opens in time.
-    let relayMode = false
-    let relayFails = 0
-    let relayHeard = false
-    let relayBusy = 0
-    let relayTimer: ReturnType<typeof setInterval> | null = null
     type Frame = { t?: string; ev?: unknown[]; e?: unknown[] }
     let outbox: Frame[] = []
     // 'i' (guest input) carries press counters, so only the newest one matters; without this ~60 inputs/s flood the batch.
@@ -124,56 +130,104 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     }
     relaySend.current = queue
 
-    const relayTick = async () => {
-      // Several requests in flight shrink the gap between frames when each round trip is slow (TR ↔ US ≈ 150 ms).
-      if (!alive || relayBusy >= 3) return
-      relayBusy++
-      if (!relayHeard) queue({ t: '__hi' })
+    // ---- server path: frames go out with short POSTs; incoming ones arrive on the push stream when it is
+    // open, otherwise every POST also drains what the server stored for us (polling fallback). ----
+    let serverOn = false
+    let es: EventSource | null = null
+    let streamOpen = false
+    let retryStream: ReturnType<typeof setTimeout> | null = null
+    let flushTimer: ReturnType<typeof setInterval> | null = null
+    let inFlight = 0
+    let fails = 0
+    let ticks = 0
+
+    const openStream = () => {
+      if (es || !alive || !serverOn) return
+      const source = new EventSource(`/api/tables/${roomId}/stream`)
+      es = source
+      source.onopen = () => {
+        streamOpen = true
+        // Collect anything stored for us before the rival noticed our stream.
+        ticks = DRAIN_EVERY - 1
+      }
+      source.onmessage = (e) => {
+        try {
+          const msgs = JSON.parse(e.data as string)
+          if (Array.isArray(msgs)) deliver(msgs)
+        } catch {
+          // Ignore malformed frames.
+        }
+      }
+      // EventSource retries by itself after a dropped connection; a refused one (4xx/5xx) closes for good,
+      // so it is reopened later while the polling fallback carries the match.
+      source.onerror = () => {
+        streamOpen = false
+        if (source.readyState === EventSource.CLOSED && es === source) {
+          es = null
+          retryStream = setTimeout(openStream, STREAM_RETRY_MS)
+        }
+      }
+    }
+
+    const closeStream = () => {
+      if (retryStream) clearTimeout(retryStream)
+      retryStream = null
+      es?.close()
+      es = null
+      streamOpen = false
+    }
+
+    const flush = async () => {
+      if (!alive || !serverOn || inFlight >= MAX_IN_FLIGHT) return
+      ticks++
+      const drain = !streamOpen || ticks % DRAIN_EVERY === 0
+      if (!outbox.length && !drain && heard) return
+      inFlight++
+      if (!heard) queue({ t: '__hi' })
       const batch = outbox
       outbox = []
       try {
-        const r = await post({ action: 'relay', payload: batch })
+        const r = await post({ action: 'relay', payload: batch, drain })
         if (r.ok) {
-          const { msgs } = (await r.json()) as { msgs: { t?: string }[] }
-          relayFails = 0
-          if (msgs.length && !relayHeard) {
-            relayHeard = true
-            setStatus('open')
-          }
-          for (const m of msgs) if (m?.t !== '__hi') onMessage.current?.(m)
+          fails = 0
+          const { msgs } = (await r.json()) as { msgs?: { t?: string }[] }
+          if (msgs?.length) deliver(msgs)
         } else {
           outbox = [...batch.filter((m) => m.t === 'end'), ...outbox]
-          relayFails++
+          fails++
         }
       } catch {
         outbox = [...batch.filter((m) => m.t === 'end'), ...outbox]
-        relayFails++
+        fails++
       }
-      if (relayFails === RELAY_FAILS_LOST && relayHeard && alive) setStatus('lost')
-      relayBusy--
+      if (fails === FAILS_LOST && heard && alive) setStatus('lost')
+      inFlight--
     }
 
-    const startRelay = () => {
-      if (relayMode || !alive) return
-      relayMode = true
-      relayTimer = setInterval(() => void relayTick(), RELAY_MS)
-      void relayTick()
+    const startServer = () => {
+      if (serverOn || !alive) return
+      serverOn = true
+      openStream()
+      flushTimer = setInterval(() => void flush(), FLUSH_MS)
+      void flush()
     }
 
-    const stopRelay = () => {
-      if (!relayMode) return
-      relayMode = false
-      if (relayTimer) clearInterval(relayTimer)
-      relayTimer = null
+    const stopServer = () => {
+      if (!serverOn) return
+      serverOn = false
+      if (flushTimer) clearInterval(flushTimer)
+      flushTimer = null
+      closeStream()
       outbox = outbox.filter((m) => m.t === 'end')
     }
 
+    // ---- direct WebRTC path ----
     const fresh = () => {
       pc?.close()
       channel.current = null
       pc = new RTCPeerConnection(ICE)
       pc.onconnectionstatechange = () => {
-        if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') && alive) startRelay()
+        if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') && alive) startServer()
       }
       if (!host) pc.ondatachannel = (e) => attach(e.channel)
       return pc
@@ -246,13 +300,14 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       if (alive) timer = setTimeout(tick, open ? POLL_MS * 3 : POLL_MS)
     }
 
-    startRelay()
+    startServer()
     void tick()
     return () => {
       alive = false
       relaySend.current = null
       if (timer) clearTimeout(timer)
-      if (relayTimer) clearInterval(relayTimer)
+      if (flushTimer) clearInterval(flushTimer)
+      closeStream()
       pc?.close()
       channel.current = null
     }
