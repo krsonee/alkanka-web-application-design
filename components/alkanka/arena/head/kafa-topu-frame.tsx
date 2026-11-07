@@ -39,6 +39,7 @@ export function KafaTopuFrame({
   const frame = useRef<HTMLIFrameElement>(null)
   const score = useRef<Score>({ for: 0, against: 0 })
   const reported = useRef(false)
+  const ended = useRef(false)
   const endRef = useRef(onEnd)
   endRef.current = onEnd
   const rematchRef = useRef(onRematch)
@@ -85,7 +86,9 @@ export function KafaTopuFrame({
       }
       const s = { for: Number(msg.for) || 0, against: Number(msg.against) || 0 }
       if (msg.type === 'score' || msg.type === 'end') score.current = s
-      if (msg.type === 'quit') finish(s)
+      if (msg.type === 'end') ended.current = true
+      // Leaving before the final whistle is a forfeit, never a refunded draw.
+      if (msg.type === 'quit') finish(ended.current ? s : { for: s.for, against: Math.max(s.against, s.for + 1) })
       if (msg.type === 'exit') finish(score.current)
       if (msg.type === 'rematch') {
         const again = rematchRef.current
