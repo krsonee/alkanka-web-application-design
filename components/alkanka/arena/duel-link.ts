@@ -222,10 +222,29 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
     }
 
     // ---- direct WebRTC path ----
+    // TURN credentials are minted server-side and expire; refetched for each fresh connection after 1 hour.
+    let ice: RTCConfiguration = ICE
+    let iceAt = 0
+    const loadIce = async () => {
+      if (Date.now() - iceAt < 3600_000) return
+      try {
+        const r = await fetch(`/api/tables/${roomId}/ice`, { cache: 'no-store' })
+        if (r.ok) {
+          const { iceServers } = (await r.json()) as { iceServers?: RTCIceServer[] }
+          if (iceServers?.length) {
+            ice = { iceServers }
+            iceAt = Date.now()
+          }
+        }
+      } catch {
+        // STUN-only fallback.
+      }
+    }
+
     const fresh = () => {
       pc?.close()
       channel.current = null
-      pc = new RTCPeerConnection(ICE)
+      pc = new RTCPeerConnection(ice)
       pc.onconnectionstatechange = () => {
         if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') && alive) startServer()
       }
@@ -242,6 +261,8 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
       answeredAt = 0
       offerId = Math.random().toString(36).slice(2)
       const id = offerId
+      await loadIce()
+      if (!alive || id !== offerId) return
       const conn = fresh()
       attach(conn.createDataChannel('duel', { ordered: false, maxRetransmits: 0 }))
       await conn.setLocalDescription(await conn.createOffer())
@@ -277,6 +298,7 @@ export function useDuelLink(roomId: string, host: boolean): DuelLink {
             const latestOffer = offers[offers.length - 1]
             if (!host && latestOffer?.payload.sdp && latestOffer.payload.id !== lastOfferId) {
               lastOfferId = latestOffer.payload.id ?? ''
+              await loadIce()
               const conn = fresh()
               await conn.setRemoteDescription(latestOffer.payload.sdp)
               await conn.setLocalDescription(await conn.createAnswer())
