@@ -1350,6 +1350,10 @@ function onNet(m){if(!m||!NET||typeof m!=='object')return;
   R.l=m.r?1:0;R.r=m.l?1:0;R.shoot=m.s?1:0;
   if(m.jn!==C.j){C.j=m.jn;R.jumpP=1}if(m.sn!==C.s){C.s=m.sn;R.shootP=1}if(m.tn!==C.t){C.t=m.tn;R.stealP=1}if(m.en!==C.e){C.e=m.en;R.superP=1}if(m.kn!=null&&m.kn!==C.k){C.k=m.kn;R.dunkP=1}
   if(Number.isFinite(m.x))NET.me={x:W-m.x,vx:-(+m.vx||0),f:m.f===1?-1:1,rs:m.rs,t:performance.now()};return}
+ if(m.t==='g'&&NET.role==='host'){const p=ai;
+  if(m.rs!==game.rs||game.state!=='play'||game.dead>0||ball.owner||ball.cd>0||(ball.tip&&!ball.tipUp)||ball.noPick===p||p.dunk||p.hang>0||p.frz>0||!Number.isFinite(m.x))return;
+  const gx=W-m.x;if(Math.abs(ball.x-gx)>200||Math.abs(ball.x-p.x)>280)return;
+  ball.owner=p;ball.tip=0;ball.shot=null;ball.dribPh=0;if(Math.abs(gx-p.x)<300)p.x=clamp(gx,36,W-36);return}
  if(m.t==='s'&&NET.role==='guest'){NET.snap=m;NET.snapAt=performance.now();netBuf(m);if(Array.isArray(m.e))m.e.forEach(replay);return}
  if(m.t==='end'&&NET.role==='guest'&&NET.live&&!NET.ended){const S=NET.snap;
   if(Array.isArray(m.sc)){user.score=m.sc[1];ai.score=m.sc[0]}if(Array.isArray(m.st)){user.st=m.st[1]||user.st;ai.st=m.st[0]||ai.st}
@@ -1382,7 +1386,9 @@ function netBuf(m){if(!Number.isFinite(m.ts))return;const B=NET.buf;if(B.length&
  const o=m.ts-performance.now();if(NET.off==null||o>NET.off)NET.off=o;else NET.off+=(o-NET.off)*.002;
  NET.jit+=(Math.min(400,NET.off-o)-NET.jit)*.08;B.push(m);if(B.length>40)B.shift()}
 function netSample(){const B=NET.buf;if(!B.length||NET.off==null)return null;
- const rt=performance.now()+NET.off-clamp(50+NET.jit*1.8,70,380);let j=-1;
+ /* Render delay grows fast on a jitter spike but shrinks slowly, so the rival never speeds up / slows down visibly. */
+ const want=clamp(40+NET.jit*1.3,50,220);NET.dly=NET.dly==null?want:NET.dly+(want-NET.dly)*(want>NET.dly?.2:.01);
+ const rt=performance.now()+NET.off-NET.dly;let j=-1;
  for(let q=B.length-1;q>=0;q--)if(B[q].ts<=rt){j=q;break}
  if(j<0)return{a:B[0],b:B[0],k:0,ex:0};
  if(j>2){B.splice(0,j-1);j=1}
@@ -1394,7 +1400,7 @@ function ps(p){const s=p.shoot,d=p.dunk;return{x:r1(p.x),y:r1(p.y),vx:r1(p.vx),v
 /* 22 ms gate: every other frame at 60 fps (30 Hz), every frame when a phone drops to ~37 fps instead of halving to ~18 Hz. */
 function hostSend(now){if(now-NET.sentAt<22)return;NET.sentAt=now;
  alkNet({t:'s',ts:Math.round(performance.now()),c:r3(game.clock),g:game.golden?1:0,d:r3(game.dead),ex:r3(game.excite),sk:r1(game.shake),fl:r3(game.fl||0),flc:game.flc,rs:game.rs,
-  p:[ps(user),ps(ai)],b:{x:r1(ball.x),y:r1(ball.y),vx:r1(ball.vx),vy:r1(ball.vy),o:ball.owner===user?0:ball.owner===ai?1:-1,sp:r3(ball.spin),f:ball.shot&&ball.shot.fire?1:0,s:ball.shot?1:0},
+  p:[ps(user),ps(ai)],b:{x:r1(ball.x),y:r1(ball.y),vx:r1(ball.vx),vy:r1(ball.vy),o:ball.owner===user?0:ball.owner===ai?1:-1,sp:r3(ball.spin),f:ball.shot&&ball.shot.fire?1:0,s:ball.shot?1:0,tp:ball.tip&&!ball.tipUp?1:0,cd:ball.cd>0?1:0},
   n:[r3(HOOPS[0].net),r3(HOOPS[1].net)],o:orb?{x:orb.x,y:orb.y,t:r3(orb.t),k:orb.k}:0,e:NET.ev.splice(0)});
 }
 const fromSnapShot=s=>s?{charging:!!s.c,m:s.m,rel:s.r,pts:s.p,auto:s.a||0}:null;
@@ -1439,6 +1445,13 @@ function cosmetics(p,dt){
  if(p.sk>0&&Math.random()<.55){const c=p.ch.sk.c;parts.push({x:p.x+rnd(-30,30)*p.scl,y:p.y-rnd(10,170)*p.scl,vx:-p.f*rnd(40,150),vy:rnd(-90,-20),life:.5,max:.5,c,s:rnd(3,7)})}
  if(skOn(p,'lori')||p.dash){p.ghT-=dt;if(p.ghT<=0){p.ghT=.04;p.gh.unshift({x:p.x,y:p.y,ph:p.ph,f:p.f,vx:p.vx,onG:p.onG});{const gm=LOW?2:4;if(p.gh.length>gm)p.gh.length=gm}}}else if(p.gh.length)p.gh.pop();
 }
+function guestPick(S,nowT){const p=user;
+ if(game.state!=='play'||game.dead>0||S.b.tp||S.b.cd||NET.rs!==S.rs||p.dunk||p.hang>0||p.frz>0||nowT-(NET.relAt||0)<350)return;
+ const reachX=(p.onG?44:58)*p.scl;
+ if(!(Math.abs(ball.x-p.x)<reachX&&ball.y>p.y-(p.onG?178:205)*p.scl&&ball.y<p.y+4))return;
+ NET.claim=nowT;ball.owner=p;ball.shot=null;ball.dribPh=0;
+ if(!p.onG)pop('HAVADA KAPTI!',p.x,p.y-230*p.scl,'#22d3c5',26);
+ alkNet({t:'g',x:r1(W-p.x),y:r1(p.y),rs:NET.rs})}
 function guestFrame(dt){
  const S=NET.snap;
  if(S&&user&&ai){
@@ -1454,14 +1467,18 @@ function guestFrame(dt){
   else copyMirrored(ai,opS,false,age,dt);
   copyMirrored(user,meS,true,age,dt);
   if(game.state==='play')predictOwn(user,dt);
-  if(S.b.o===1)NET.ballMine=true;else if(S.b.o===0||NET.rs!==S.rs)NET.ballMine=false;
-  ball.owner=S.b.o===0?ai:S.b.o===1?user:null;ball.shot=S.b.s?{fire:!!S.b.f}:null;
+  /* The loose ball is drawn at the host's latest state (not the delayed rival buffer) so it lines up with the guest's own
+     live player, and the guest grabs it locally the frame it touches; the host confirms the claim a moment later. */
+  const nowT=performance.now(),had=ball.owner===user;
+  if(S.b.o!==-1||NET.rs!==S.rs||(NET.claim&&nowT-NET.claim>450))NET.claim=0;
+  const mine=S.b.o===1||(S.b.o===-1&&!!NET.claim);
+  ball.owner=S.b.o===0?ai:mine?user:null;ball.shot=mine?null:S.b.s?{fire:!!S.b.f}:null;
+  if(had&&!mine)NET.relAt=nowT;
   if(ball.owner){muteN++;try{updBall(dt)}finally{muteN--}}
-  else if(I&&!NET.ballMine&&I.b.b.o!==1){const ba=I.a.b,bb=I.b.b,k=Math.hypot(ba.x-bb.x,ba.y-bb.y)>250?1:I.k;
-   ball.x=W-(lerpV(ba.x,bb.x,k)+bb.vx*I.ex);ball.y=Math.min(GY-BR,lerpV(ba.y,bb.y,k)+bb.vy*I.ex+.5*G*I.ex*I.ex);ball.vx=-bb.vx;ball.vy=bb.vy;ball.spin=-bb.sp}
   else{const tx=W-(S.b.x+S.b.vx*age),ty=Math.min(GY-BR,S.b.y+S.b.vy*age+.5*G*age*age);
    if(Math.hypot(tx-ball.x,ty-ball.y)>150){ball.x=tx;ball.y=ty}else{const k=Math.min(1,dt*20);ball.x+=(tx-ball.x)*k;ball.y+=(ty-ball.y)*k}
-   ball.vx=-S.b.vx;ball.vy=S.b.vy;ball.spin=-S.b.sp}
+   ball.vx=-S.b.vx;ball.vy=S.b.vy;ball.spin=-S.b.sp;
+   guestPick(S,nowT)}
   if(dt>0){cosmetics(user,dt);cosmetics(ai,dt)}
  }
  if(game.state==='play'||game.state==='count'){const C=NET.cn;if(inp.jumpP)C.j++;if(inp.shootP)C.s++;if(inp.stealP)C.t++;if(inp.superP)C.e++;if(inp.dunkP)C.k++;
