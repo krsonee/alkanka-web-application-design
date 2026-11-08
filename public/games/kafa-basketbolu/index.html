@@ -412,13 +412,14 @@ function cleanBuf(b,gate){
 function mkIR(sec,dec){const sr=AC.sampleRate,n=Math.floor(sr*sec),b=AC.createBuffer(2,n,sr);
  for(let c=0;c<2;c++){const d=b.getChannelData(c);let lp=0;for(let i=0;i<n;i++){lp+=((Math.random()*2-1)-lp)*.32;d[i]=i/sr<.011?0:lp*Math.pow(1-i/n,dec)}
   [.013,.022,.031,.047,.061].forEach((t,j)=>{const i=Math.floor(t*sr*(c?1.08:1));if(i<n)d[i]+=.55/(j+1)})}return b}
-function initAudio(){if(AC){if(AC.state==='suspended')AC.resume();return}
+function initAudio(){if(AC){if(AC.state==='suspended'&&soundOn&&!document.hidden)AC.resume();return}
  try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){return}
  const comp=AC.createDynamicsCompressor();comp.threshold.value=-16;comp.knee.value=12;comp.ratio.value=4;comp.attack.value=.003;comp.release.value=.2;
  MST=AC.createGain();MST.gain.value=soundOn?.9:0;MST.connect(comp);comp.connect(AC.destination);
- const conv=AC.createConvolver();conv.buffer=mkIR(1.6,3.4);const rg=AC.createGain();rg.gain.value=.5;conv.connect(rg);rg.connect(MST);
+ /* The reverb convolver runs every audio block for the whole match; a 0.8 s tail costs half of the old 1.6 s one. */
+ const conv=AC.createConvolver();conv.buffer=mkIR(.8,3);const rg=AC.createGain();rg.gain.value=.5;conv.connect(rg);rg.connect(MST);
  REVS=AC.createGain();REVS.connect(conv);SFX=AC.createGain();SFX.connect(MST);
- MUSB=AC.createBiquadFilter();MUSB.type='lowpass';MUSB.frequency.value=16000;const mg=AC.createGain();mg.gain.value=.3;MUSB.connect(mg);mg.connect(MST);const mr=AC.createGain();mr.gain.value=.12;MUSB.connect(mr);mr.connect(REVS);
+ MUSB=AC.createBiquadFilter();MUSB.type='lowpass';MUSB.frequency.value=16000;const mg=AC.createGain();mg.gain.value=.3;MUSB.connect(mg);mg.connect(MST);
  NZ=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);{const d=NZ.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
  startCrowd();
  Object.keys(A).filter(k=>k.startsWith('snd_')&&k!=='snd_bed'&&k!=='snd_buzzer').forEach(k=>{try{const bin=atob(A[k].split(',')[1]);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
@@ -459,9 +460,9 @@ const SY={
 };
 function sy(n,...a){rel('sy',[n,...a]);if(muteN)return;if(AC&&NZ&&soundOn)try{SY[n](...a)}catch(e){}}
 function startCrowd(){const s=AC.createBufferSource();s.buffer=NZ;s.loop=true;const f1=AC.createBiquadFilter();f1.type='bandpass';f1.frequency.value=620;f1.Q.value=.45;
- const f2=AC.createBiquadFilter();f2.type='peaking';f2.frequency.value=1700;f2.gain.value=6;f2.Q.value=1.2;const f3=AC.createBiquadFilter();f3.type='lowpass';f3.frequency.value=3200;
+ const f3=AC.createBiquadFilter();f3.type='lowpass';f3.frequency.value=3200;
  const lfo=AC.createOscillator();lfo.frequency.value=.23;const lg=AC.createGain();lg.gain.value=180;lfo.connect(lg);lg.connect(f1.frequency);lfo.start();
- crowdG=AC.createGain();crowdG.gain.value=0;s.connect(f1);f1.connect(f2);f2.connect(f3);f3.connect(crowdG);crowdG.connect(MST);s.start()}
+ crowdG=AC.createGain();crowdG.gain.value=0;s.connect(f1);f1.connect(f3);f3.connect(crowdG);crowdG.connect(MST);s.start()}
 /* generative boom-bap street beat */
 const MUS={on:false,step:0,next:0,bpm:94};
 const CHORDS=[[57,60,64,67],[53,57,60,64],[48,52,55,59],[55,59,62,65]],BASS=[45,41,36,43],mtof=m=>440*Math.pow(2,(m-69)/12);
@@ -1399,21 +1400,23 @@ function applyRemoteMe(dt){const m=NET.me,p=ai;if(!m||m.rs!==game.rs||p.dunk||p.
    real host states. Jittery or bursty delivery (server relay, mobile radios) then still renders as smooth motion. */
 function netBuf(m){if(!Number.isFinite(m.ts))return;const B=NET.buf;if(B.length&&m.ts<=B[B.length-1].ts)return;
  const o=m.ts-performance.now();if(NET.off==null||o>NET.off)NET.off=o;else NET.off+=(o-NET.off)*.002;
- NET.jit+=(Math.min(400,NET.off-o)-NET.jit)*.08;B.push(m);if(B.length>40)B.shift()}
+ /* Peak-hold jitter: an average under-sized the buffer, so every late burst drained it and the rival froze then slid. */
+ const late=clamp(NET.off-o,0,400);NET.jit+=(late-NET.jit)*(late>NET.jit?.5:.015);B.push(m);if(B.length>40)B.shift()}
 function netSample(){const B=NET.buf;if(!B.length||NET.off==null)return null;
  /* Render delay grows fast on a jitter spike but shrinks slowly, so the rival never speeds up / slows down visibly. */
- const want=clamp(40+NET.jit*1.3,50,220);NET.dly=NET.dly==null?want:NET.dly+(want-NET.dly)*(want>NET.dly?.2:.01);
+ const want=clamp(45+NET.jit*1.1,60,260);NET.dly=NET.dly==null?want:NET.dly+(want-NET.dly)*(want>NET.dly?.2:.01);
  const rt=performance.now()+NET.off-NET.dly;let j=-1;
  for(let q=B.length-1;q>=0;q--)if(B[q].ts<=rt){j=q;break}
  if(j<0)return{a:B[0],b:B[0],k:0,ex:0};
  if(j>2){B.splice(0,j-1);j=1}
- if(j===B.length-1)return{a:B[j],b:B[j],k:0,ex:Math.min(.22,(rt-B[j].ts)/1000)};
+ if(j===B.length-1)return{a:B[j],b:B[j],k:0,ex:Math.min(.1,(rt-B[j].ts)/1000)};
  const a=B[j],b=B[j+1];return{a,b,k:clamp((rt-a.ts)/Math.max(1,b.ts-a.ts),0,1),ex:0}}
 const lerpV=(a,b,k)=>a+(b-a)*k;
 function ps(p){const s=p.shoot,d=p.dunk;return{x:r1(p.x),y:r1(p.y),vx:r1(p.vx),vy:r1(p.vy),f:p.f,g:p.onG?1:0,ph:r3(p.ph),ld:r3(p.land),st:r3(p.stealT),sc:p.score,en:r1(p.en),sk:r3(p.sk),fi:r3(p.fire),fz:r3(p.frz),pS:r3(p.pw.spd),pJ:r3(p.pw.jmp),scl:r3(p.scl),hg:r3(p.hang),ce:r3(p.cele),sa:r3(p.sta),da:p.dash?1:0,
  sh:s?{c:s.charging?1:0,m:r3(s.m),r:r3(s.rel),p:s.pts,a:s.auto||0}:0,dk:d?{t:r3(d.t),T:d.T,x0:d.x0,y0:d.y0,x1:d.x1,y1:d.y1,h:HOOPS.indexOf(d.h),fl:d.fly?1:0}:0}}
 /* 22 ms gate: every other frame at 60 fps (30 Hz), every frame when a phone drops to ~37 fps instead of halving to ~18 Hz. */
-function hostSend(now){if(now-NET.sentAt<22)return;NET.sentAt=now;
+/* Outside live play (countdown, goal pause, result) nothing moves fast, so 10 Hz is enough and saves radio + CPU. */
+function hostSend(now){const busy=game.state==='play'&&game.dead<=0;if(now-NET.sentAt<(busy?22:100))return;NET.sentAt=now;
  alkNet({t:'s',ts:Math.round(performance.now()),c:r3(game.clock),g:game.golden?1:0,d:r3(game.dead),ex:r3(game.excite),sk:r1(game.shake),fl:r3(game.fl||0),flc:game.flc,rs:game.rs,
   p:[ps(user),ps(ai)],b:{x:r1(ball.x),y:r1(ball.y),vx:r1(ball.vx),vy:r1(ball.vy),o:ball.owner===user?0:ball.owner===ai?1:-1,sp:r3(ball.spin),f:ball.shot&&ball.shot.fire?1:0,s:ball.shot?1:0,tp:ball.tip&&!ball.tipUp?1:0,cd:ball.cd>0?1:0},
   n:[r3(HOOPS[0].net),r3(HOOPS[1].net)],o:orb?{x:orb.x,y:orb.y,t:r3(orb.t),k:orb.k}:0,e:NET.ev.splice(0)});
@@ -1434,7 +1437,11 @@ function copyMirrored(p,s,own,age,dt){
   if(NET.rs!==NET.snap.rs){NET.rs=NET.snap.rs;snapAll();return}
   if(!(p.shoot&&p.shoot.loc))p.shoot=fromSnapShot(s.sh);
   return}
- if(age<0){p.x=W-s.x;p.y=s.y}
+ /* Buffered rival: keep moving with its own velocity and pull toward the sample, so a late packet or the end of an
+    extrapolation becomes a quick glide instead of a stop-then-jump. Round resets (-2) and big gaps still snap. */
+ if(age<0){const tx=W-s.x,ty=s.y;
+  if(age<-1||Math.hypot(tx-p.x,ty-p.y)>200||!Number.isFinite(p.x)){p.x=tx;p.y=ty}
+  else{const k=Math.min(1,dt*20),px=p.x+(Number.isFinite(p.vx)?p.vx:0)*dt,py=Math.min(GY,p.y+(Number.isFinite(p.vy)&&!s.g?p.vy*dt:0));p.x=px+(tx-px)*k;p.y=py+(ty-py)*k}}
  else{const tx=W-(s.x+s.vx*age);let ty=s.y;if(!s.g)ty=Math.min(GY,s.y+s.vy*age+.5*G*age*age);
  if(Math.hypot(tx-p.x,ty-p.y)>200){p.x=tx;p.y=ty}else{const k=Math.min(1,dt*18);p.x+=(tx-p.x)*k;p.y+=(ty-p.y)*k}}
  p.vx=-s.vx;p.vy=s.vy;p.f=-s.f;p.onG=!!s.g;p.ph=s.ph;p.land=s.ld;p.shoot=fromSnapShot(s.sh);
@@ -1487,7 +1494,7 @@ function guestFrame(dt){
   if(game.state==='play'&&(user.score!==meS.sc||ai.score!==opS.sc)){const mine=user.score!==meS.sc;user.score=meS.sc;ai.score=opS.sc;const el=$(mine?'sA':'sB');el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');alkPost('score')}
   const I=netSample();
   if(I){const pa=I.a.p[0],pb=I.b.p[0],jump=I.a.rs!==I.b.rs||Math.abs(pa.x-pb.x)>300,k=jump?1:I.k;
-   copyMirrored(ai,{...pb,x:lerpV(pa.x,pb.x,k)+pb.vx*I.ex,y:Math.min(GY,lerpV(pa.y,pb.y,k)+(pb.g?0:pb.vy*I.ex+.5*G*I.ex*I.ex)),sc:opS.sc,en:opS.en},false,-1,dt)}
+   copyMirrored(ai,{...pb,x:lerpV(pa.x,pb.x,k)+pb.vx*I.ex,y:Math.min(GY,lerpV(pa.y,pb.y,k)+(pb.g?0:pb.vy*I.ex+.5*G*I.ex*I.ex)),sc:opS.sc,en:opS.en},false,jump?-2:-1,dt)}
   else copyMirrored(ai,opS,false,age,dt);
   copyMirrored(user,meS,true,age,dt);
   if(game.state==='play')predictOwn(user,dt);
@@ -1518,7 +1525,10 @@ function guestFrame(dt){
 function togglePause(){if(game.state!=='play'&&!game.paused)return;game.paused=!game.paused;show('ovMenu',game.paused);if(MUSB)MUSB.frequency.setTargetAtTime(game.paused?650:16000,AC.currentTime,.12)}
 $('menuBtn').onclick=()=>{if(game.state==='play')togglePause()};
 $('mResume').onclick=togglePause;
-$('mSound').onclick=()=>{soundOn=!soundOn;$('mSoundV').textContent=soundOn?'Açık':'Kapalı';if(MST)MST.gain.setTargetAtTime(soundOn?.9:0,AC.currentTime,.05)};
+$('mSound').onclick=()=>{soundOn=!soundOn;$('mSoundV').textContent=soundOn?'Açık':'Kapalı';if(MST)MST.gain.setTargetAtTime(soundOn?.9:0,AC.currentTime,.05);audioIdle()};
+/* Muting only zeroed the volume while the whole audio graph kept running; suspend it when muted or in the background. */
+function audioIdle(){if(!AC)return;if(!soundOn||document.hidden){if(AC.state==='running')setTimeout(()=>{if(AC&&(!soundOn||document.hidden))AC.suspend()},120)}else if(AC.state==='suspended')AC.resume()}
+document.addEventListener('visibilitychange',audioIdle);
 $('mFull').onclick=goFull;
 $('mQuit').onclick=()=>{if(EMBED){alkPost('quit');return}game.paused=false;show('ovMenu',0);toSelect()};
 $('rotClose').onclick=()=>{port=false;updOr();fit()};
