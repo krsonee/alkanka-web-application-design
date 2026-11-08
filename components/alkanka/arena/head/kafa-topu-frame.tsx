@@ -69,6 +69,7 @@ export function KafaTopuFrame({
   const portrait = useMedia('(orientation: portrait)')
   const needRotate = touch && portrait
   const linkStatus = online?.link.status
+  const linkTransport = online?.link.transport
 
   useEffect(() => {
     if (!online) return
@@ -77,8 +78,12 @@ export function KafaTopuFrame({
   })
 
   useEffect(() => {
-    if (linkStatus) frame.current?.contentWindow?.postMessage({ source: 'alk-host', type: 'link', status: linkStatus }, window.location.origin)
-  }, [linkStatus])
+    if (linkStatus)
+      frame.current?.contentWindow?.postMessage(
+        { source: 'alk-host', type: 'link', status: linkStatus, transport: linkTransport },
+        window.location.origin,
+      )
+  }, [linkStatus, linkTransport])
 
   useEffect(() => {
     const post = (data: Record<string, unknown>) =>
@@ -102,7 +107,7 @@ export function KafaTopuFrame({
       }
       if (msg.type === 'ready' && net) {
         post({ type: 'init', role: net.role, names: net.names })
-        post({ type: 'link', status: net.link.status })
+        post({ type: 'link', status: net.link.status, transport: net.link.transport })
       }
       const s = { for: Number(msg.for) || 0, against: Number(msg.against) || 0 }
       if (msg.type === 'score' || msg.type === 'end') score.current = s
