@@ -1250,9 +1250,9 @@ function frame(now){
   if(game.dead>0&&game.dead<90){game.dead-=dt;if(game.dead<=0)reposition(game.conceder)}
   if(!game.golden){game.clock=Math.max(0,game.clock-dt);
    if(game.clock<=0){const inFlight=ball.shot&&!ball.owner;game.endWait+=dt;
-    if((!inFlight&&game.dead<=0)||game.endWait>2.5){
+    if((!inFlight&&game.dead<=0)||game.endWait>1.2){
      if(game.dead>0&&game.dead<90){/* wait goal anim */}
-     else{sy('horn',.7);if(user.score===ai.score){game.golden=true;showBanner('ALTIN SAYI! İLK ATAN KAZANIR');reposition(null)}else{game.state='over';setTimeout(endMatch,300)}}
+     else{sy('horn',.7);if(user.score===ai.score){game.golden=true;showBanner('ALTIN SAYI! İLK ATAN KAZANIR');reposition(null)}else{game.state='over';setTimeout(endMatch,120)}}
     }}}
   }
   dt=full;
@@ -1369,7 +1369,8 @@ function onNet(m){if(!m||!NET||typeof m!=='object')return;
   const gx=m.x;if(Math.abs(ball.x-gx)>200||Math.abs(ball.x-p.x)>280)return;
   ball.owner=p;ball.tip=0;ball.shot=null;ball.dribPh=0;if(Math.abs(gx-p.x)<300)p.x=clamp(gx,36,W-36);return}
  if(m.t==='s'&&NET.role==='guest'){NET.snap=m;NET.snapAt=performance.now();netBuf(m);if(Array.isArray(m.e))m.e.forEach(replay);return}
- if(m.t==='end'&&NET.role==='guest'&&NET.live&&!NET.ended){const S=NET.snap;
+ if(m.t==='end'&&NET.role==='guest'&&NET.live&&NET.ended&&Array.isArray(m.sc)&&(user.score!==m.sc[1]||ai.score!==m.sc[0])){user.score=m.sc[1];ai.score=m.sc[0];if(Array.isArray(m.st)){user.st=m.st[1]||user.st;ai.st=m.st[0]||ai.st}$('sA').textContent=user.score;$('sB').textContent=ai.score;endMatchView()}
+ if(m.t==='end'&&NET.role==='guest'&&NET.live&&!NET.ended){const S=NET.snap;clearTimeout(NET.endFb);NET.endFb=0;
   if(Array.isArray(m.sc)){user.score=m.sc[1];ai.score=m.sc[0]}if(Array.isArray(m.st)){user.st=m.st[1]||user.st;ai.st=m.st[0]||ai.st}
   $('sA').textContent=user.score;$('sB').textContent=ai.score;endMatch()}
 }
@@ -1477,6 +1478,8 @@ function guestFrame(dt){
  const S=NET.snap;
  if(S&&user&&ai){
   const age=Math.min(.12,(performance.now()-NET.snapAt)/1000);
+  if(S.g&&NET.endFb){clearTimeout(NET.endFb);NET.endFb=0}
+  if(!NET.ended&&!NET.endFb&&S.c<=0&&!S.g)NET.endFb=setTimeout(()=>{NET.endFb=0;if(NET.live&&!NET.ended&&!game.golden&&user.score!==ai.score)endMatch()},1800);
   game.clock=S.c;game.golden=!!S.g;game.dead=S.d;game.excite=Math.max(game.excite,S.ex);game.shake=Math.max(game.shake,S.sk);if(S.fl>(game.fl||0)){game.fl=S.fl;game.flc=S.flc}
   HOOPS[0].net=Math.max(HOOPS[0].net,S.n[1]);HOOPS[1].net=Math.max(HOOPS[1].net,S.n[0]);
   orb=S.o?{x:W-S.o.x,y:S.o.y,t:S.o.t,k:S.o.k}:null;
@@ -1531,7 +1534,7 @@ let rotOn=false;
 function checkRot(){rotOn=(mode==='mob'&&port)||(mode==='real'&&innerHeight>innerWidth);$('rot').classList.toggle('on',rotOn);$('rotClose').hidden=mode!=='mob'}
 matchMedia('(orientation: portrait)').addEventListener?.('change',fit);
 
-Promise.all(loads).then(()=>document.fonts.ready).then(()=>{$('coachImg').src=IMG.coach.src;buildLayers();buildCrowd();newMatch();buildSelect();show('ovSel',1);fit();requestAnimationFrame(t=>{last=t;frame(t)})});
+Promise.all(loads).then(()=>Promise.all(Object.values(IMG).map(i=>i.decode?i.decode().catch(()=>{}):0))).then(()=>document.fonts.ready).then(()=>{try{const wc=document.createElement('canvas');wc.width=wc.height=64;const wx=wc.getContext('2d');Object.values(IMG).forEach(i=>{if(i.naturalWidth)wx.drawImage(i,0,0,64,64)})}catch(e){}$('coachImg').src=IMG.coach.src;buildLayers();buildCrowd();newMatch();buildSelect();show('ovSel',1);fit();requestAnimationFrame(t=>{last=t;frame(t)})});
 fit();
 })();
 </script>
