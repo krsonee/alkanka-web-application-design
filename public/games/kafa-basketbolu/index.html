@@ -484,7 +484,7 @@ let mode=REAL||EMBED?'real':'web',port=false;
 function alkPost(type){if(EMBED)parent.postMessage({source:'alk-kafa',type,for:user?user.score:0,against:ai?ai.score:0},location.origin)}
 let K=1,DPR=1;const COARSE=matchMedia('(pointer:coarse)').matches;
 let LOW=COARSE&&((navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=3);
-let dprCap=COARSE||LOW?1.5:2;
+let dprCap=LOW?1.25:COARSE?1.35:2;
 function fit(){
  app.classList.remove('web','mob','real','port');app.classList.add(mode);if(mode==='mob'&&port)app.classList.add('port');
  app.classList.toggle('kb',mode==='real'&&!matchMedia('(pointer:coarse)').matches);
@@ -551,7 +551,13 @@ function buildCrowd(){
  rows.forEach((r,ri)=>{for(let x=160+ri*8;x<1095;x+=rnd(44,58)){if(Math.random()<.14)continue;const p=pool[(Math.random()*pool.length)|0];
   fans.push({...p,x,y:r.y,s:r.s*rnd(.95,1.05),ph:rnd(0,6.28),sp:rnd(5,8),row:ri})}});
 }
-function drawCrowd(t){
+/* ~50 fan sprites per frame kept phones hot; the crowd band is redrawn at 20 Hz into its own canvas and blitted. */
+let crowdL=null,crowdAt=-1;
+function drawCrowdCached(t,sx,sy){const px=K*DPR,Y0=40,HH=290;
+ if(!crowdL||crowdL.px!==px||crowdL.c.width!==cv.width||crowdL.ox!==OX){const c=crowdL?crowdL.c:document.createElement('canvas');c.width=cv.width;c.height=Math.ceil(HH*px);crowdL={c,g:c.getContext('2d'),px,ox:OX};crowdAt=-1}
+ if(crowdAt<0||t-crowdAt>=.05||t<crowdAt){crowdAt=t;const g=crowdL.g;g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,crowdL.c.width,crowdL.c.height);g.setTransform(px,0,0,px,OX*px,-Y0*px);drawCrowd(t,g)}
+ const s=ctx;s.save();s.setTransform(1,0,0,1,0,0);s.drawImage(crowdL.c,Math.round(sx*px),Math.round((Y0+sy)*px));s.restore()}
+function drawCrowd(t,ctx){
  const ex=game.excite;
  [0,1,2].forEach(ri=>{
   for(const f of fans){if(f.row!==ri)continue;const im=IMG[f.img];if(!im||!im.width)continue;
@@ -788,7 +794,7 @@ function updPlayer(p,dt){
  if(p.sk>0&&Math.random()<.55){const c=p.ch.sk.c;parts.push({x:p.x+rnd(-30,30)*p.scl,y:p.y-rnd(10,170)*p.scl,vx:-p.f*rnd(40,150),vy:rnd(-90,-20),life:.5,max:.5,c,s:rnd(3,7)})}
  if(p.pw.spd>0&&Math.random()<.3)parts.push({x:p.x-p.f*20,y:p.y-rnd(10,60),vx:-p.f*rnd(60,160),vy:rnd(-30,0),life:.35,max:.35,c:'#ffd23f',s:rnd(2,5)});
  if(p.pw.jmp>0&&Math.random()<.3)parts.push({x:p.x+rnd(-14,14),y:p.y-4,vx:rnd(-20,20),vy:rnd(-120,-50),life:.4,max:.4,c:'#62d26f',s:rnd(2,5)});
- if(skOn(p,'lori')||p.dash){p.ghT-=dt;if(p.ghT<=0){p.ghT=p.dash?.03:.045;p.gh.unshift({x:p.x,y:p.y,ph:p.ph,f:p.f,vx:p.vx,onG:p.onG});{const gm=LOW?2:4;if(p.gh.length>gm)p.gh.length=gm}}}else if(p.gh.length)p.gh.pop();
+ if(skOn(p,'lori')||p.dash){p.ghT-=dt;if(p.ghT<=0){p.ghT=p.dash?.03:.045;p.gh.unshift({x:p.x,y:p.y,ph:p.ph,f:p.f,vx:p.vx,onG:p.onG});{const gm=LOW||COARSE?2:4;if(p.gh.length>gm)p.gh.length=gm}}}else if(p.gh.length)p.gh.pop();
  if(p.dunk){const d=p.dunk;d.t+=dt;const k=Math.min(1,d.t/d.T);
   p.x=d.x0+(d.x1-d.x0)*k;p.y=d.y0+(d.y1-d.y0)*k-Math.sin(k*Math.PI)*(d.fly?115:60);
   if(d.fly&&Math.random()<.8)parts.push({x:p.x-p.f*30,y:p.y-rnd(60,150),vx:-p.f*rnd(80,200),vy:rnd(-40,40),life:.45,max:.45,c:Math.random()<.5?'#4d8dff':'#d9e8ff',s:rnd(4,8)});
@@ -944,7 +950,9 @@ function updOrb(dt){
 }
 
 /* ---------- fx ---------- */
-function pop(t,x,y,c,s){if(pops.length>=3)pops.shift();pops.push({t,x,y,c,s,life:1.3});rel('pop',[t,x,y,c,s])}
+function pop(t,x,y,c,s){if(pops.some(q=>q.t===t&&q.life>.9))return;
+ for(const q of pops)if(Math.abs(q.x-x)<300&&Math.abs(q.y-y)<70)q.y-=Math.max(44,s*1.6);
+ if(pops.length>=3)pops.shift();pops.push({t,x,y,c,s,life:1.3});rel('pop',[t,x,y,c,s])}
 function burst(x,y,c,n){rel('burst',[x,y,c,n]);for(let i=0;i<n;i++){const a=rnd(0,6.28),v=rnd(120,420);parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-200,life:rnd(.6,1.1),max:1.1,c,s:rnd(4,8),conf:true,r:rnd(0,6)})}}
 
 /* ---------- drawing: player rig ---------- */
@@ -1109,7 +1117,7 @@ function drawOrb(t){if(!orb)return;const O=ORB[orb.k],y=orb.y+Math.sin(t*3)*8,a=
  ctx.save();ctx.globalAlpha=a;ctx.font='17px "Lilita One"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=6;ctx.strokeStyle=OUT;ctx.strokeText(O.l,orb.x,y+50);ctx.fillStyle='#fff';ctx.fillText(O.l,orb.x,y+50);ctx.restore()}
 
 function drawFx(dt){
- const PM=LOW?60:150;if(parts.length>PM)parts.splice(0,parts.length-PM);
+ const PM=LOW?60:COARSE?90:150;if(parts.length>PM)parts.splice(0,parts.length-PM);
  for(let i=parts.length-1;i>=0;i--){const q=parts[i];q.life-=dt;if(q.life<=0){parts.splice(i,1);continue}
   q.vy+=(q.conf?900:-60)*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.vx*=.98;ctx.globalAlpha=clamp(q.life/q.max*1.4,0,1);ctx.fillStyle=q.c;
   if(q.conf){q.r+=dt*10;ctx.save();ctx.translate(q.x,q.y);ctx.rotate(q.r);ctx.fillRect(-q.s/2,-q.s/4,q.s,q.s/2);ctx.restore()}else{ctx.beginPath();ctx.arc(q.x,q.y,q.s*(q.life/q.max),0,Math.PI*2);ctx.fill()}}
@@ -1171,7 +1179,7 @@ function render(t,dt){
  if(sx||sy){s.fillStyle='#0f1b2d';s.fillRect(-OX-20,-20,VW+40,H+40)}
  blit(backL,sx,sy);
  s.translate(sx,sy);
- drawCrowd(t);
+ drawCrowdCached(t,sx,sy);
  blit(frontL,sx,sy);
  HOOPS.forEach(hoopBack);
  if(ball&&!ball.owner&&!ball.shot&&ball.y<GY-160){const k=clamp((ball.y+40)/(GY-120),0,1),pu=1+Math.sin(t*10)*.08;
@@ -1189,7 +1197,7 @@ function render(t,dt){
   if(ball.owner&&ball.owner.hang>0){drawBall()}
  }
  drawFx(dt);
- if(user&&user.sk>0&&!LOW){ctx.save();ctx.globalAlpha=.16+Math.sin(t*6)*.05;ctx.fillStyle=vig(user.ch.sk.c,260,800);ctx.fillRect(-OX-20,-20,VW+40,H+40);ctx.restore()}
+ if(user&&user.sk>0&&!LOW&&!COARSE){ctx.save();ctx.globalAlpha=.16+Math.sin(t*6)*.05;ctx.fillStyle=vig(user.ch.sk.c,260,800);ctx.fillRect(-OX-20,-20,VW+40,H+40);ctx.restore()}
  if(game.fl>0){ctx.save();ctx.globalAlpha=Math.min(1,game.fl)*.6;ctx.fillStyle=vig(game.flc,120,760);ctx.fillRect(-OX-20,-20,VW+40,H+40);ctx.restore();game.fl=Math.max(0,game.fl-dt*1.5)}
 }
 
@@ -1219,11 +1227,13 @@ function hud(){
 }
 let pfA=16,pfN=0;
 function perfTick(ms){if(game.state!=='play'||document.hidden)return;pfA=pfA*.94+ms*.06;
- if(++pfN>90&&pfA>24){pfN=0;LOW=true;if(dprCap>1.5){dprCap=1.5;fit()}}}
+ if(++pfN>90&&pfA>24){pfN=0;LOW=true;if(dprCap>1.25){dprCap=1.25;fit()}}}
 
 /* ---------- loop ---------- */
 let last=performance.now();
 function frame(now){
+ /* 120 Hz+ screens: skip every other vsync so the game renders at ~60 fps instead of doubling GPU work and heat. */
+ if(now>=last&&now-last<10){requestAnimationFrame(frame);return}
  const raw=Math.max(0,(now-last)/1000);last=now;perfTick(raw*1000);
  let dt=Math.min(.05,raw);game.t+=dt;
  if(game.paused||rotOn)dt=0;
@@ -1242,7 +1252,7 @@ function frame(now){
    if(game.clock<=0){const inFlight=ball.shot&&!ball.owner;game.endWait+=dt;
     if((!inFlight&&game.dead<=0)||game.endWait>2.5){
      if(game.dead>0&&game.dead<90){/* wait goal anim */}
-     else{sy('horn',.7);if(user.score===ai.score){game.golden=true;showBanner('ALTIN SAYI! İLK ATAN KAZANIR');reposition(null)}else{game.state='over';setTimeout(endMatch,900)}}
+     else{sy('horn',.7);if(user.score===ai.score){game.golden=true;showBanner('ALTIN SAYI! İLK ATAN KAZANIR');reposition(null)}else{game.state='over';setTimeout(endMatch,300)}}
     }}}
   }
   dt=full;
@@ -1254,7 +1264,10 @@ function frame(now){
  render(game.t,dt);
  requestAnimationFrame(frame);
 }
-function idleAnim(dt){for(const p of [user,ai]){p.land=Math.max(0,p.land-dt);p.cele=Math.max(0,p.cele-dt)}if(ball.owner){const o=ball.owner;ball.dribPh+=dt*7;const s=Math.abs(Math.sin(ball.dribPh));ball.x=o.x+o.f*27;ball.y=GY-BR-s*44}}
+function idleAnim(dt){for(const p of [user,ai]){p.land=Math.max(0,p.land-dt);p.cele=Math.max(0,p.cele-dt);
+  /* After the buzzer: land airborne players and drop dunk/dash poses instead of freezing them mid-move. */
+  if(game.state==='over'){p.dunk=null;p.hang=0;p.dash=null;p.shoot=null;p.vx=0;if(!p.onG){p.vy+=G*dt;p.y+=p.vy*dt;if(p.y>=GY){p.y=GY;p.vy=0;p.onG=true}}}}
+ if(game.state==='over'&&user&&ai)collidePlayers();if(ball.owner){const o=ball.owner;ball.dribPh+=dt*7;const s=Math.abs(Math.sin(ball.dribPh));ball.x=o.x+o.f*27;ball.y=GY-BR-s*44}}
 function controlUser(p,dt){
  if(p.frz>0){move(p,0,dt);return}
  if(game.dead>0){move(p,(inp.r?1:0)-(inp.l?1:0),dt);return}
@@ -1414,7 +1427,8 @@ function copyMirrored(p,s,own,age,dt){
  if(s.dk){const k=s.dk.T+':'+s.dk.x0;if(!p.dunk||p.dunk.key!==k)p.dunk={t:own?0:s.dk.t,T:s.dk.T,x0:own?p.x:W-s.dk.x0,y0:own?p.y:s.dk.y0,x1:W-s.dk.x1,y1:s.dk.y1,h:HOOPS[1-s.dk.h],fly:!!s.dk.fl,key:k}}else if(!(own&&p.dunk&&p.dunk.t<p.dunk.T))p.dunk=null;
  if(p.dunk){const d=p.dunk;d.t+=dt;const k=Math.min(1,d.t/d.T);p.x=d.x0+(d.x1-d.x0)*k;p.y=d.y0+(d.y1-d.y0)*k-Math.sin(k*Math.PI)*(d.fly?115:60);p.f=d.h.dir;p.onG=false;p.shoot=null;return}
  const snapAll=()=>{p.x=W-s.x;p.y=s.y;p.vx=-s.vx;p.vy=s.vy;p.f=-s.f;p.onG=!!s.g;p.shoot=fromSnapShot(s.sh)};
- if(p.hang>0||(p.frz>0&&!own)){snapAll();return}
+ /* A frozen guest player is not predicted locally, so it must follow the host or the ice block hangs in mid-air. */
+ if(p.hang>0||p.frz>0){snapAll();return}
  if(own){
   if(NET.rs!==NET.snap.rs){NET.rs=NET.snap.rs;snapAll();return}
   if(!(p.shoot&&p.shoot.loc))p.shoot=fromSnapShot(s.sh);
@@ -1449,7 +1463,7 @@ function predictOwn(p,dt){
 }
 function cosmetics(p,dt){
  if(p.sk>0&&Math.random()<.55){const c=p.ch.sk.c;parts.push({x:p.x+rnd(-30,30)*p.scl,y:p.y-rnd(10,170)*p.scl,vx:-p.f*rnd(40,150),vy:rnd(-90,-20),life:.5,max:.5,c,s:rnd(3,7)})}
- if(skOn(p,'lori')||p.dash){p.ghT-=dt;if(p.ghT<=0){p.ghT=.04;p.gh.unshift({x:p.x,y:p.y,ph:p.ph,f:p.f,vx:p.vx,onG:p.onG});{const gm=LOW?2:4;if(p.gh.length>gm)p.gh.length=gm}}}else if(p.gh.length)p.gh.pop();
+ if(skOn(p,'lori')||p.dash){p.ghT-=dt;if(p.ghT<=0){p.ghT=.04;p.gh.unshift({x:p.x,y:p.y,ph:p.ph,f:p.f,vx:p.vx,onG:p.onG});{const gm=LOW||COARSE?2:4;if(p.gh.length>gm)p.gh.length=gm}}}else if(p.gh.length)p.gh.pop();
 }
 
 function guestPick(S,nowT){const p=user;
