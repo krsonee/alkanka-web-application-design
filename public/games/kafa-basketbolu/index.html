@@ -1465,7 +1465,11 @@ function guestFrame(dt){
   if(dt>0){cosmetics(user,dt);cosmetics(ai,dt)}
  }
  if(game.state==='play'||game.state==='count'){const C=NET.cn;if(inp.jumpP)C.j++;if(inp.shootP)C.s++;if(inp.stealP)C.t++;if(inp.superP)C.e++;if(inp.dunkP)C.k++;
-  alkNet({t:'i',q:NET.q++,l:inp.l?1:0,r:inp.r?1:0,s:inp.shoot?1:0,jn:C.j,sn:C.s,tn:C.t,en:C.e,kn:C.k,x:r1(W-user.x),vx:r1(-user.vx),f:-user.f,rs:NET.rs})}
+  /* 30 Hz cap: a per-frame stream (60-120 Hz) halved the host iPhone's frame rate and clogged the relay. Any button or
+     direction change still goes out the same frame, so controls never wait for the next slot. */
+  const key=(inp.l?1:0)+''+(inp.r?1:0)+(inp.shoot?1:0)+C.j+'.'+C.s+'.'+C.t+'.'+C.e+'.'+C.k,now=performance.now();
+  if(key!==NET.iKey||now-(NET.iAt||0)>=33){NET.iKey=key;NET.iAt=now;
+  alkNet({t:'i',q:NET.q++,l:inp.l?1:0,r:inp.r?1:0,s:inp.shoot?1:0,jn:C.j,sn:C.s,tn:C.t,en:C.e,kn:C.k,x:r1(W-user.x),vx:r1(-user.vx),f:-user.f,rs:NET.rs})}}
 }
 
 /* menu / chat */
