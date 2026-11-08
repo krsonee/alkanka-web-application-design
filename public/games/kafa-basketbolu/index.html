@@ -1406,7 +1406,9 @@ function hostSend(now){if(now-NET.sentAt<22)return;NET.sentAt=now;
 }
 const fromSnapShot=s=>s?{charging:!!s.c,m:s.m,rel:s.r,pts:s.p,auto:s.a||0}:null;
 function copyMirrored(p,s,own,age,dt){
- p.sta=s.sa!=null?s.sa:STA;p.dash=s.da?(p.dash||{t:.1,dir:-s.f,hit:1}):null;
+ p.sta=s.sa!=null?s.sa:STA;
+ /* The guest predicts its own dash locally (predictOwn); a mirrored dash without T made move() compute NaN and erased the player. */
+ if(!own)p.dash=s.da?(p.dash||{t:.1,T:.22,dir:-s.f,hit:1}):null;
  p.score=s.sc;p.en=s.en;p.sk=s.sk;p.fire=s.fi;p.frz=s.fz;p.pw.spd=s.pS;p.pw.jmp=s.pJ;p.scl=s.scl;p.hang=s.hg;p.cele=s.ce;
  if(!own)p.stealT=s.st;
  if(s.dk){const k=s.dk.T+':'+s.dk.x0;if(!p.dunk||p.dunk.key!==k)p.dunk={t:own?0:s.dk.t,T:s.dk.T,x0:own?p.x:W-s.dk.x0,y0:own?p.y:s.dk.y0,x1:W-s.dk.x1,y1:s.dk.y1,h:HOOPS[1-s.dk.h],fly:!!s.dk.fl,key:k}}else if(!(own&&p.dunk&&p.dunk.t<p.dunk.T))p.dunk=null;
@@ -1431,7 +1433,10 @@ function predictOwn(p,dt){
    if(inp.jumpP)jump(p);
    if(inp.shootP){if(ball.owner===p){const h=HOOPS[1],d=Math.abs(h.cx-p.x);if(!p.shoot&&!skOn(p,'ara')&&!(!p.onG&&d<DUNK_R)){p.f=sgn(h.cx-p.x);const g=p.onG;if(g)jump(p,.86);p.shoot={charging:g,m:0,rel:g?0:.35,pts:p.fire>0||d>402?3:2,loc:1,auto:g?1:0}}}else if(p.stealCd<=0){p.stealT=.32;p.stealCd=.75}}
    if(inp.stealP&&p.stealCd<=0){p.stealT=.32;p.stealCd=.75}
+   if(inp.dunkP&&p.onG&&!p.dash&&(p.dashCd||0)<=0&&p.sta>=1&&!(p.shoot&&p.shoot.charging)&&p.stun<=0){const dir=((inp.r?1:0)-(inp.l?1:0))||p.f;p.f=dir;p.dash={t:.22,T:.22,dir,hit:1};p.dashCd=.5}
   }
+  p.dashCd=Math.max(0,(p.dashCd||0)-dt);
+  if(p.dash){p.dash.t-=dt;if(p.dash.t<=0){p.dash=null;p.vx*=.35}}
   p.stealT=Math.max(0,p.stealT-dt);p.stealCd=Math.max(0,p.stealCd-dt);p.land=Math.max(0,p.land-dt);
   const s=p.shoot;
   if(s&&s.loc){if(s.charging){s.m+=dt;if(p.vy>=-40||s.m>.9){s.charging=false;s.rel=.35}}
@@ -1469,6 +1474,7 @@ function guestFrame(dt){
   else copyMirrored(ai,opS,false,age,dt);
   copyMirrored(user,meS,true,age,dt);
   if(game.state==='play')predictOwn(user,dt);
+  if(!Number.isFinite(user.x)||!Number.isFinite(user.y)||!Number.isFinite(user.vx)||!Number.isFinite(user.vy)){user.x=W-meS.x;user.y=meS.y;user.vx=-meS.vx;user.vy=meS.vy;user.onG=!!meS.g;user.dash=null}
   /* The loose ball is drawn at the host's latest state (not the delayed rival buffer) so it lines up with the guest's own
      live player, and the guest grabs it locally the frame it touches; the host confirms the claim a moment later. */
   const nowT=performance.now(),had=ball.owner===user;
