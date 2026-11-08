@@ -136,20 +136,54 @@ export function KafaTopuFrame({
   }, [needRotate])
 
   // The game owns the window: no page scroll or pull-to-refresh behind it.
+  // iOS Safari ignores overflow:hidden on <html>, so the body itself is pinned in place.
   useEffect(() => {
     if (closed) return
     const root = document.documentElement
-    const prev = root.style.overflow
+    const body = document.body
+    const scrollY = window.scrollY
+    const prev = {
+      rootOverflow: root.style.overflow,
+      rootOverscroll: root.style.overscrollBehavior,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    }
     root.style.overflow = 'hidden'
+    root.style.overscrollBehavior = 'none'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+    body.style.overflow = 'hidden'
+    const keepTop = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0)
+    }
+    window.addEventListener('scroll', keepTop, { passive: true })
+    window.visualViewport?.addEventListener('resize', keepTop)
     return () => {
-      root.style.overflow = prev
+      window.removeEventListener('scroll', keepTop)
+      window.visualViewport?.removeEventListener('resize', keepTop)
+      root.style.overflow = prev.rootOverflow
+      root.style.overscrollBehavior = prev.rootOverscroll
+      body.style.position = prev.position
+      body.style.top = prev.top
+      body.style.left = prev.left
+      body.style.right = prev.right
+      body.style.width = prev.width
+      body.style.overflow = prev.overflow
+      window.scrollTo(0, scrollY)
     }
   }, [closed])
 
   if (closed) return <p className="py-8 text-center text-sm text-muted-foreground">Sonuç kaydediliyor...</p>
 
   return (
-    <div className="fixed inset-0 z-[70] bg-background">
+    <div className="fixed inset-0 z-[70] touch-none overscroll-none bg-background">
       <iframe
         ref={frame}
         src={GAME[sport].src}
