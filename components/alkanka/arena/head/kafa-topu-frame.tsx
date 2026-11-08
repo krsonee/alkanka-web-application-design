@@ -151,7 +151,10 @@ export function KafaTopuFrame({
       right: body.style.right,
       width: body.style.width,
       overflow: body.style.overflow,
+      visibility: body.style.visibility,
     }
+    // The page under the full-screen game kept painting and animating every frame, heating phones for nothing.
+    body.style.visibility = 'hidden'
     root.style.overflow = 'hidden'
     root.style.overscrollBehavior = 'none'
     body.style.position = 'fixed'
@@ -176,6 +179,7 @@ export function KafaTopuFrame({
       body.style.right = prev.right
       body.style.width = prev.width
       body.style.overflow = prev.overflow
+      body.style.visibility = prev.visibility
       window.scrollTo(0, scrollY)
     }
   }, [closed])
@@ -183,7 +187,7 @@ export function KafaTopuFrame({
   if (closed) return <p className="py-8 text-center text-sm text-muted-foreground">Sonuç kaydediliyor...</p>
 
   return (
-    <div className="fixed inset-0 z-[70] touch-none overscroll-none bg-background">
+    <div className="visible fixed inset-0 z-[70] touch-none overscroll-none bg-background">
       <iframe
         ref={frame}
         src={GAME[sport].src}

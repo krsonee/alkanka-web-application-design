@@ -1240,7 +1240,7 @@ function frame(now){
  if(game.paused||rotOn)dt=0;
  if(game.slow>0&&dt>0){game.slow-=dt;dt*=.35}
  game.excite=Math.max(.15,game.excite-dt*.35);
- if(AC){musTick();if(crowdG)crowdG.gain.setTargetAtTime(game.state==='play'&&!game.paused?.05+game.excite*.17:.025,AC.currentTime,.25)}
+ if(AC){musTick();const cgv=Math.round((game.state==='play'&&!game.paused?.05+game.excite*.17:.025)*50)/50;if(crowdG&&crowdG._v!==cgv&&(crowdG._v=cgv,1))crowdG.gain.setTargetAtTime(cgv,AC.currentTime,.25)}
  if(NET&&NET.role==='guest'&&NET.live&&game.state!=='over'){guestFrame(dt);if(game.state==='play')hud()}
  else if(game.state==='play'&&dt>0){
   const n=Math.max(1,Math.ceil(dt/.0175)),full=dt;dt=full/n;
@@ -1248,7 +1248,7 @@ function frame(now){
   if(si>0)inp.jumpP=inp.shootP=inp.stealP=inp.superP=inp.dunkP=0;
   controlUser(user,dt);if(NET&&NET.live)controlRemote(ai,dt);else controlAI(ai,dt);
   updPlayer(user,dt);updPlayer(ai,dt);if(NET&&NET.live)applyRemoteMe(dt);collidePlayers();updBall(dt);updOrb(dt);
-  if(game.dead>0&&game.dead<90){game.dead-=dt;if(game.dead<=0)reposition(game.conceder)}
+  if(game.dead>0&&game.dead<90){game.dead-=dt;if(game.dead<=0)reposition(null)}
   if(!game.golden){game.clock=Math.max(0,game.clock-dt);
    if(game.clock<=0){const inFlight=ball.shot&&!ball.owner;game.endWait+=dt;
     if((!inFlight&&game.dead<=0)||game.endWait>1.2){
