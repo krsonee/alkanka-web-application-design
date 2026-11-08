@@ -332,7 +332,7 @@ const SKILLS = [
   { id:'wall',    name:'Kale Duvarı',icon:'brick-wall',  color:'#b7c0ca', lvl:4,  desc:'Kalen 2,5 saniye taş duvarla kapanır. Kısa ama hayat kurtarır.' },
   { id:'shrink',  name:'Küçült',     icon:'shrink',      color:'#c4a1ff', lvl:6,  desc:'Rakibin kafası 3 saniye minicik olur, topa zor yetişir.' },
   { id:'ghost',   name:'Hayalet Top',icon:'ghost',       color:'#d6ecff', lvl:8,  desc:'Sonraki şutun neredeyse görünmez gider.' },
-  { id:'bolt',    name:'Yıldırım',   icon:'zap',         color:'#ffe14a', lvl:10, desc:'Rakibine yıldırım düşer, 1 saniye sersemler.' },
+  { id:'bolt',    name:'Yıld��rım',   icon:'zap',         color:'#ffe14a', lvl:10, desc:'Rakibine yıldırım düşer, 1 saniye sersemler.' },
   { id:'tornado', name:'Hortum',     icon:'tornado',     color:'#7ee0b5', lvl:12, desc:'Sonraki vuruşun dalgalı bir hortumla rakip kaleye süzülür.' },
 ];
 // Effect length per skill; the bar stays empty during the effect plus a short rest.
@@ -1138,9 +1138,9 @@ let ftAvg = 16, perfT = 0;
 function frame(now){
   const ms = now - last;
   const dt = Math.min(.05, ms/1000); last = now;
-  // Adaptive quality: if frames run long for a few seconds, drop to 1x pixels and lite effects.
+  // Adaptive quality: if frames run long for a few seconds, switch to lite effects. Resolution stays sharp.
   if (ms < 200) { ftAvg += (ms - ftAvg)*.05; perfT += dt; }
-  if (!lowQ && perfT > 2.5 && ftAvg > 21) { lowQ = true; dprCap = 1; layout(); }
+  if (!lowQ && perfT > 2.5 && ftAvg > 21) lowQ = true;
   if (parts.length > 240) parts.splice(0, parts.length - 240);
   if (game && game.phase !== 'paused' && game.phase !== 'menu') {
     if (isGuest()) guestTick(dt);
@@ -1840,7 +1840,7 @@ addEventListener('message', e => {
   if (d.type === 'start' && !NET) startMatch();
   if (d.type === 'pause' && !NET && game && ['play','countdown','goal'].includes(game.phase)) { game.prevPhase = game.phase; game.phase = 'paused'; showScreen('pause'); releaseAll(); }
   if (d.type === 'init' && !NET && (d.role === 'host' || d.role === 'guest')) netInit(d.role, d.names);
-  if (d.type === 'link' && NET) { NET.link = d.status; updateNetMenu(); }
+  if (d.type === 'link' && NET) { NET.link = d.status; NET.tr = d.transport || ''; updateNetMenu(); }
   if (d.type === 'net' && NET && d.msg) onNet(d.msg);
 });
 
@@ -1856,6 +1856,8 @@ const netSend = msg => post('net', { msg });
 const r2 = v => Math.round(v*100)/100;
 const clampN = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerpN = (a, b, k) => a + (b - a) * k;
+// Peer links (direct or TURN) carry 60 updates/s; the database relay fallback stays at 30 to avoid flooding it.
+const netGap = () => NET && NET.tr === 'server' ? 1/30 : 1/60;
 /* Guest: host snapshots are buffered with the host clock and drawn slightly in the past, interpolated between two
    real host states. Bursty delivery (server relay, mobile radios) then still renders as smooth motion. */
 function netBuf(m){
@@ -1870,7 +1872,8 @@ function netBuf(m){
 function netSample(){
   const B = NET.buf;
   if (!B.length || NET.off == null) return null;
-  const rt = performance.now() + NET.off - clampN(45 + NET.jit * 1.6, 60, 320);
+  const g = netGap() * 1000;
+  const rt = performance.now() + NET.off - clampN(g * 1.5 + NET.jit * 1.6, g * 2, 300);
   let j = -1;
   for (let q = B.length - 1; q >= 0; q--) if (B[q].ts <= rt) { j = q; break; }
   if (j < 0) return { a:B[0], b:B[0], k:0, ex:0 };
@@ -1924,7 +1927,8 @@ function onNet(m){
 const packP = p => [Math.round(p.x), Math.round(p.y), Math.round(p.vx), Math.round(p.vy), p.face, r2(p.kickT), Math.round(p.meter), r2(p.frozen), r2(p.stun), r2(p.giant), r2(p.shrink), r2(p.wall), p.armed || 0, r2(p.skillLock), r2(p.squash), p.onGround ? 1 : 0];
 function hostSend(dt){
   // Accumulate instead of resetting, so a phone at ~37 fps still sends ~30 Hz rather than halving to ~18 Hz.
-  NET.sendT -= dt; if (NET.sendT > 0) return; NET.sendT = Math.max(-1/30, NET.sendT) + 1/30;
+  const gap = netGap();
+  NET.sendT -= dt; if (NET.sendT > 0) return; NET.sendT = Math.max(-gap, NET.sendT) + gap;
   const [A, B] = game.players, b = game.ball;
   netSend({ t:'s', ts:Math.round(performance.now()), m:NET.mid, q:++NET.q, ch:[A.ch.id, B.ch.id], sk:[A.skill, B.skill], ph:game.phase, tm:r2(game.time), cd:game.cdIdx, sc:game.score.slice(),
     b:[Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.fire), r2(b.ghost), r2(b.tornado), b.held ? 1 : 0],
@@ -1938,11 +1942,13 @@ function remoteDrive(p, dt){
     const age = Math.min(.15, (performance.now() - r.at)/1000);
     const tx = Math.min(Math.max(r.x + r.vx*age, p.R), W - p.R);
     const ty = Math.min(r.y + (r.g ? 0 : r.vy*age + 1250*age*age), GROUND - p.R - 24);
-    if (Math.abs(tx - p.x) > 220 || Math.abs(ty - p.y) > 220) { p.x = tx; p.y = ty; }
-    else { const kx = Math.min(1, dt*16), ky = Math.min(1, dt*20); p.x += (tx - p.x)*kx; p.y += (ty - p.y)*ky; }
+    const kicked = r.kn !== p.kn;
+    // On a kick, jump to where the guest actually was when pressing, so the hit lands on what they saw.
+    if (kicked || Math.abs(tx - p.x) > 220 || Math.abs(ty - p.y) > 220) { p.x = tx; p.y = ty; }
+    else { const kx = Math.min(1, dt*26), ky = Math.min(1, dt*30); p.x += (tx - p.x)*kx; p.y += (ty - p.y)*ky; }
     p.vx = r.vx; p.vy = r.vy; p.face = r.f; p.onGround = !!r.g;
     const free = game.phase === 'play' && p.frozen <= 0 && p.stun <= 0;
-    if (r.kn !== p.kn) { p.kn = r.kn; if (free) { p.kickT = .001; p.kickHit = false; } }
+    if (kicked) { p.kn = r.kn; if (free) { p.kickT = .001; p.kickHit = false; } }
     if (r.sn !== p.sn) { p.sn = r.sn; if (free) activateSkill(p); }
   }
   if (p.kickT > 0) { p.kickT += dt / .17; if (p.kickT >= 1) p.kickT = 0; }
@@ -2008,7 +2014,7 @@ function guestTick(dt){
   while (NET.acc >= STEP) { updatePlayer(mine, STEP); separatePlayers(other, mine); NET.acc -= STEP; }
   game.net = s.nt.slice(); game.netY = s.ny.slice();
   NET.sendT -= dt;
-  if (NET.sendT <= 0) { NET.sendT = Math.max(-1/30, NET.sendT) + 1/30; netSend({ t:'k', m:NET.mid, q:++NET.q, x:Math.round(mine.x), y:Math.round(mine.y), vx:Math.round(mine.vx), vy:Math.round(mine.vy), f:mine.face, g:mine.onGround ? 1 : 0, kn:NET.kn, sn:NET.sn }); }
+  if (NET.sendT <= 0) { const gap = netGap(); NET.sendT = Math.max(-gap, NET.sendT) + gap; netSend({ t:'k', m:NET.mid, q:++NET.q, x:Math.round(mine.x), y:Math.round(mine.y), vx:Math.round(mine.vx), vy:Math.round(mine.vy), f:mine.face, g:mine.onGround ? 1 : 0, kn:NET.kn, sn:NET.sn }); }
 }
 
 // ---------- Boot ----------
