@@ -1349,10 +1349,11 @@ function onNet(m){if(!m||!NET||typeof m!=='object')return;
  if(m.t==='i'&&NET.role==='host'){if(m.q<=NET.rq)return;NET.rq=m.q;const R=NET.rin,C=NET.c;
   R.l=m.r?1:0;R.r=m.l?1:0;R.shoot=m.s?1:0;
   if(m.jn!==C.j){C.j=m.jn;R.jumpP=1}if(m.sn!==C.s){C.s=m.sn;R.shootP=1}if(m.tn!==C.t){C.t=m.tn;R.stealP=1}if(m.en!==C.e){C.e=m.en;R.superP=1}if(m.kn!=null&&m.kn!==C.k){C.k=m.kn;R.dunkP=1}
-  if(Number.isFinite(m.x))NET.me={x:W-m.x,vx:-(+m.vx||0),f:m.f===1?-1:1,rs:m.rs,t:performance.now()};return}
+  /* The guest already sends x/vx/f converted to host coordinates; flipping them again parked its player on the mirrored spot. */
+  if(Number.isFinite(m.x))NET.me={x:m.x,vx:+m.vx||0,f:m.f===-1?-1:1,rs:m.rs,t:performance.now()};return}
  if(m.t==='g'&&NET.role==='host'){const p=ai;
   if(m.rs!==game.rs||game.state!=='play'||game.dead>0||ball.owner||ball.cd>0||(ball.tip&&!ball.tipUp)||ball.noPick===p||p.dunk||p.hang>0||p.frz>0||!Number.isFinite(m.x))return;
-  const gx=W-m.x;if(Math.abs(ball.x-gx)>200||Math.abs(ball.x-p.x)>280)return;
+  const gx=m.x;if(Math.abs(ball.x-gx)>200||Math.abs(ball.x-p.x)>280)return;
   ball.owner=p;ball.tip=0;ball.shot=null;ball.dribPh=0;if(Math.abs(gx-p.x)<300)p.x=clamp(gx,36,W-36);return}
  if(m.t==='s'&&NET.role==='guest'){NET.snap=m;NET.snapAt=performance.now();netBuf(m);if(Array.isArray(m.e))m.e.forEach(replay);return}
  if(m.t==='end'&&NET.role==='guest'&&NET.live&&!NET.ended){const S=NET.snap;
@@ -1445,6 +1446,7 @@ function cosmetics(p,dt){
  if(p.sk>0&&Math.random()<.55){const c=p.ch.sk.c;parts.push({x:p.x+rnd(-30,30)*p.scl,y:p.y-rnd(10,170)*p.scl,vx:-p.f*rnd(40,150),vy:rnd(-90,-20),life:.5,max:.5,c,s:rnd(3,7)})}
  if(skOn(p,'lori')||p.dash){p.ghT-=dt;if(p.ghT<=0){p.ghT=.04;p.gh.unshift({x:p.x,y:p.y,ph:p.ph,f:p.f,vx:p.vx,onG:p.onG});{const gm=LOW?2:4;if(p.gh.length>gm)p.gh.length=gm}}}else if(p.gh.length)p.gh.pop();
 }
+
 function guestPick(S,nowT){const p=user;
  if(game.state!=='play'||game.dead>0||S.b.tp||S.b.cd||NET.rs!==S.rs||p.dunk||p.hang>0||p.frz>0||nowT-(NET.relAt||0)<350)return;
  const reachX=(p.onG?44:58)*p.scl;
