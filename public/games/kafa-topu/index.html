@@ -993,7 +993,7 @@ function ballVsPlayer(b, p){
     }
   }
 }
-function touch(p){ game.touches[p.side]++; if (game.phase === 'play' && p.skillLock <= 0) p.meter = Math.min(100, p.meter + METER_TOUCH * chargeMul(p)); }
+function touch(p){ p.touchAt = performance.now(); game.touches[p.side]++; if (game.phase === 'play' && p.skillLock <= 0) p.meter = Math.min(100, p.meter + METER_TOUCH * chargeMul(p)); }
 
 function ballVsBar(b, x0, x1, y){
   const cx = Math.min(Math.max(b.x, x0), x1);
@@ -1036,7 +1036,8 @@ function updateBall(dt){
   if (A.wall > 0 && b.x - BR < GW + 18 && b.y > CB) { b.x = GW + 18 + BR; b.vx = Math.abs(b.vx)*.8 + 120; b.fire = 0; b.tornado = 0; spark(GW+18, b.y, '#b7c0ca'); }
   if (B.wall > 0 && b.x + BR > W - GW - 18 && b.y > CB) { b.x = W - GW - 18 - BR; b.vx = -Math.abs(b.vx)*.8 - 120; b.fire = 0; b.tornado = 0; spark(W-GW-18, b.y, '#b7c0ca'); }
 
-  if (b.tornado <= 0) { ballVsPlayer(b, A); ballVsPlayer(b, B); }
+  // Right after the guest's own hit lands, skip their (network-delayed) body so the ball isn't struck twice.
+  if (b.tornado <= 0) { ballVsPlayer(b, A); if (!(B.hitHold > 0)) ballVsPlayer(b, B); }
   else { for (const p of [A, B]) if (p.side !== b.owner) ballVsPlayer(b, p); }
 
   // Crowd tension rises as the ball nears either goal mouth.
@@ -1199,6 +1200,7 @@ function stepSim(dt){
   // Rival silent for 3s: a bot keeps their seat until their input returns.
   if (B.remote && performance.now() - (B.rs ? B.rs.at : NET.startAt) > 3000) { B.remote = false; B.isBot = true; toast('Rakibin bağlantısı koptu, yerine bot oynuyor'); }
   if (B.isBot) botThink(B, dt);
+  if (B.hitHold > 0) B.hitHold -= dt;
   updatePlayer(A, dt); updatePlayer(B, dt);
   separatePlayers(A, B);
   updateBall(dt);
@@ -1885,7 +1887,8 @@ function netSample(){
 function netInit(role, names){
   const n = Array.isArray(names) ? names.map(x => String(x || '').slice(0, 24)) : [];
   NET = { role, names:[n[0] || 'Ev sahibi', n[1] || 'Rakip'], link:'connecting', ready:false, peer:null, inMatch:false, mid:0, q:0, lastQ:0,
-    ev:[], evId:0, evSeen:0, kn:0, sn:0, snap:null, snapAt:0, sendT:0, acc:0, startAt:0, warned:false, buf:[], off:null, jit:0 };
+    ev:[], evId:0, evSeen:0, kn:0, sn:0, snap:null, snapAt:0, sendT:0, acc:0, startAt:0, warned:false, buf:[], off:null, jit:0,
+    sentAt:[], rtt:120, hid:0, hitAt:0, hitNow:false, hitKick:false, pred:false, gq:0, gqAt:0, hk:0 };
   $('pauseBtn').style.display = 'none';
   renderMenu();
   setInterval(() => { if (NET && !NET.inMatch) netSend({ t:'r', ok:NET.ready, ch:save.char, sk:save.skill }); }, 400);
@@ -1900,13 +1903,29 @@ function netReady(){ audio(); NET.ready = true; renderMenu(); hostMaybeStart(); 
 function hostMaybeStart(){
   if (!isHost() || NET.inMatch || !NET.ready || !NET.peer || !NET.peer.ok) return;
   const p = NET.peer, gc = charOf(p.ch), gs = SKILLS.some(s => s.id === p.sk) ? p.sk : 'fire';
-  NET.inMatch = true; NET.mid = Date.now(); NET.startAt = performance.now();
+  NET.inMatch = true; NET.mid = Date.now(); NET.startAt = performance.now(); NET.hk = 0; NET.gq = 0; NET.gqAt = 0;
   setupMatch(charOf(save.char), save.skill, gc, gs, false);
 }
 function netEv(name, arg){ NET.ev.push([++NET.evId, name, arg]); if (NET.ev.length > 12) NET.ev.shift(); }
 function onNet(m){
   if (m.t === 'r') { NET.peer = m; updateNetMenu(); hostMaybeStart(); return; }
   const now = performance.now();
+  if ((m.t === 'k' || m.t === 'h') && isHost() && game && m.m === NET.mid && m.q > NET.gq) { NET.gq = m.q; NET.gqAt = now; }
+  // Guest touched the ball on their own screen: adopt that result, advanced by the one-way delay, so their hits land
+  // exactly where they saw them instead of passing through their mascot.
+  if (m.t === 'h' && isHost() && game && m.m === NET.mid) {
+    const p = game.players[1], b = game.ball;
+    if (!p.remote || game.phase !== 'play' || b.held || b.tornado > 0 || b.fire > 0 || !(m.h > NET.hk)) return;
+    NET.hk = m.h;
+    Object.assign(b, { x:m.x, y:m.y, vx:m.vx, vy:m.vy });
+    const lead = clampN((m.lt || 0) / 1000, 0, .2);
+    for (let t = 0; t < lead; t += STEP) ballFlight(b, STEP);
+    p.hitHold = .25;
+    if (now - (p.touchAt || 0) > 300) touch(p);
+    if (m.k && !p.kickHit) { p.kickHit = true; game.shots[1]++; }
+    if (p.armed) fireArmed(p);
+    return;
+  }
   if (m.t === 'k' && isHost() && game && m.m === NET.mid) {
     const p = game.players[1];
     if (p.rs && m.q <= p.rs.q) return;
@@ -1916,12 +1935,15 @@ function onNet(m){
   }
   if (m.t === 's' && isGuest()) {
     if (!NET.inMatch && NET.ready && m.m !== NET.mid) {
-      NET.inMatch = true; NET.mid = m.m; NET.lastQ = 0; NET.kn = 0; NET.sn = 0; NET.buf = []; NET.off = null; NET.jit = 0;
+      NET.inMatch = true; NET.mid = m.m; NET.lastQ = 0; NET.kn = 0; NET.sn = 0; NET.buf = []; NET.off = null; NET.jit = 0; NET.hid = 0; NET.pred = false;
       NET.evSeen = m.ev.length ? m.ev[m.ev.length - 1][0] : 0;
       setupMatch(charOf(m.ch[0]), m.sk[0], charOf(m.ch[1]), m.sk[1], false);
     }
     if (m.m !== NET.mid || m.q <= NET.lastQ) return;
     NET.lastQ = m.q; NET.snap = m; NET.snapAt = now; NET.warned = false; netBuf(m);
+    // Round trip: host echoes the newest guest packet it saw and how long it held it.
+    const sent = m.aq ? NET.sentAt[m.aq & 63] : 0;
+    if (sent && sent.q === m.aq) { const r = now - sent.t - (m.ah || 0); if (r > 0 && r < 2000) NET.rtt += (r - NET.rtt) * .15; }
   }
 }
 const packP = p => [Math.round(p.x), Math.round(p.y), Math.round(p.vx), Math.round(p.vy), p.face, r2(p.kickT), Math.round(p.meter), r2(p.frozen), r2(p.stun), r2(p.giant), r2(p.shrink), r2(p.wall), p.armed || 0, r2(p.skillLock), r2(p.squash), p.onGround ? 1 : 0];
@@ -1932,7 +1954,35 @@ function hostSend(dt){
   const [A, B] = game.players, b = game.ball;
   netSend({ t:'s', ts:Math.round(performance.now()), m:NET.mid, q:++NET.q, ch:[A.ch.id, B.ch.id], sk:[A.skill, B.skill], ph:game.phase, tm:r2(game.time), cd:game.cdIdx, sc:game.score.slice(),
     b:[Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.fire), r2(b.ghost), r2(b.tornado), b.held ? 1 : 0],
-    p:[packP(A), packP(B)], nt:game.net.map(r2), ny:game.netY.map(Math.round), ev:NET.ev.slice() });
+    p:[packP(A), packP(B)], nt:game.net.map(r2), ny:game.netY.map(Math.round), ev:NET.ev.slice(),
+    aq:NET.gq, ah:NET.gqAt ? Math.round(performance.now() - NET.gqAt) : 0, hk:NET.hk });
+}
+// Ball flight without players (gravity, ground, walls, crossbars, skill walls). Shared by guest prediction and the
+// host when it fast-forwards a guest hit; silent so sounds are not doubled.
+function ballFlight(b, dt){
+  b.vy += 1450 * dt; b.vx *= (1 - .1*dt);
+  const sp = Math.hypot(b.vx, b.vy); if (sp > 1700) { b.vx *= 1700/sp; b.vy *= 1700/sp; }
+  b.x += b.vx * dt; b.y += b.vy * dt; if (b.rot != null) b.rot += b.vx * dt / BR;
+  if (b.y > GROUND - BR) { b.y = GROUND - BR; b.vy = b.vy > 90 ? -b.vy * .7 : 0; b.vx *= (1 - 1.1*dt); }
+  if (b.y < BR) { b.y = BR; b.vy = Math.abs(b.vy) * .75; }
+  if (b.x < BR) { b.x = BR; b.vx = Math.abs(b.vx) * .55; }
+  if (b.x > W - BR) { b.x = W - BR; b.vx = -Math.abs(b.vx) * .55; }
+  collideCircle(b, Math.min(Math.max(b.x, 0), GW), CB, 8, 0, 0, .62);
+  collideCircle(b, Math.min(Math.max(b.x, W - GW), W), CB, 8, 0, 0, .62);
+  const [A, B] = game.players;
+  if (A.wall > 0 && b.x - BR < GW + 18 && b.y > CB) { b.x = GW + 18 + BR; b.vx = Math.abs(b.vx)*.8 + 120; }
+  if (B.wall > 0 && b.x + BR > W - GW - 18 && b.y > CB) { b.x = W - GW - 18 - BR; b.vx = -Math.abs(b.vx)*.8 - 120; }
+}
+// Guest: the ball runs locally in the present so it meets the guest's own mascot with zero delay.
+function guestBallStep(dt, mine, other){
+  const b = game.ball;
+  ballFlight(b, dt);
+  collideCircle(b, other.x, other.y, other.R, other.vx, other.vy, .5 + other.ch.st.kafa*.06);
+  const t0 = game.touches[1], k0 = mine.kickHit, armed = mine.armed;
+  mine.armed = null;
+  ballVsPlayer(b, mine);
+  mine.armed = armed;
+  if (game.touches[1] !== t0) { NET.hitNow = true; if (mine.kickHit && !k0) NET.hitKick = true; }
 }
 // Host side: the guest's mascot follows its streamed state; kicks and skills arrive as counters.
 function remoteDrive(p, dt){
@@ -1994,9 +2044,26 @@ function guestTick(dt){
   const S = netSample() || { a:s, b:s, k:0, ex:Math.min(.15, (now - NET.snapAt)/1000) };
   const b = game.ball, sb = s.b, A0 = S.a.b, B0 = S.b.b, k = S.k, ex = S.ex;
   const free = !B0[7] && B0[4] <= 0 && B0[6] <= 0;
-  if (Math.abs(A0[0] - B0[0]) > 240 || Math.abs(A0[1] - B0[1]) > 240) { b.x = B0[0]; b.y = B0[1]; }
-  else { b.x = lerpN(A0[0], B0[0], k) + B0[2]*ex; b.y = Math.min(lerpN(A0[1], B0[1], k) + B0[3]*ex + (free ? 725*ex*ex : 0), GROUND - BR); }
-  b.vx = lerpN(A0[2], B0[2], k); b.vy = lerpN(A0[3], B0[3], k); b.rot += b.vx*dt/BR;
+  // Normal play: predict the ball locally, gently pulled toward the host's state projected to "now".
+  // Skills (fire, tornado, held ball) and dead-ball phases simply follow the host.
+  const predict = s.ph === 'play' && !sb[7] && sb[4] <= 0 && sb[6] <= 0;
+  if (predict) {
+    const T = { x:sb[0], y:sb[1], vx:sb[2], vy:sb[3] };
+    const lead = clampN((now - NET.snapAt) / 1000 + NET.rtt / 2000, 0, .3);
+    for (let t = 0; t < lead; t += STEP) ballFlight(T, STEP);
+    const owned = NET.hid > (s.hk || 0) && now - NET.hitAt < 700;
+    if (!NET.pred) { Object.assign(b, T); NET.pred = true; }
+    else if (!owned) {
+      const ex2 = T.x - b.x, ey2 = T.y - b.y;
+      if (Math.abs(ex2) > 170 || Math.abs(ey2) > 170) Object.assign(b, T);
+      else { const kk = Math.min(1, dt*7); b.x += ex2*kk; b.y += ey2*kk; b.vx += (T.vx - b.vx)*kk; b.vy += (T.vy - b.vy)*kk; }
+    }
+  } else {
+    NET.pred = false;
+    if (Math.abs(A0[0] - B0[0]) > 240 || Math.abs(A0[1] - B0[1]) > 240) { b.x = B0[0]; b.y = B0[1]; }
+    else { b.x = lerpN(A0[0], B0[0], k) + B0[2]*ex; b.y = Math.min(lerpN(A0[1], B0[1], k) + B0[3]*ex + (free ? 725*ex*ex : 0), GROUND - BR); }
+    b.vx = lerpN(A0[2], B0[2], k); b.vy = lerpN(A0[3], B0[3], k); b.rot += b.vx*dt/BR;
+  }
   b.fire = sb[4]; b.ghost = sb[5]; b.tornado = sb[6]; b.held = !!sb[7];
   if (b.fire > 0) trail(b, '#ff7a1a'); else if (b.tornado > 0) trail(b, '#7ee0b5');
   const pa = S.a.p[0], pb = S.b.p[0], a = s.p[0];
@@ -2011,10 +2078,20 @@ function guestTick(dt){
   other.sz += (tsz - other.sz) * Math.min(1, dt*8); other.R = BASE_R * other.sz;
   // Own mascot: simulated here so controls answer instantly.
   NET.acc += dt;
-  while (NET.acc >= STEP) { updatePlayer(mine, STEP); separatePlayers(other, mine); NET.acc -= STEP; }
+  while (NET.acc >= STEP) {
+    updatePlayer(mine, STEP); separatePlayers(other, mine);
+    if (NET.pred) guestBallStep(STEP, mine, other);
+    NET.acc -= STEP;
+  }
   game.net = s.nt.slice(); game.netY = s.ny.slice();
+  const stamp = () => { const q = ++NET.q; NET.sentAt[q & 63] = { q, t:performance.now() }; return q; };
+  if (NET.hitNow) {
+    NET.hid++; NET.hitAt = now;
+    netSend({ t:'h', m:NET.mid, q:stamp(), h:NET.hid, x:Math.round(b.x), y:Math.round(b.y), vx:Math.round(b.vx), vy:Math.round(b.vy), k:NET.hitKick ? 1 : 0, lt:Math.round(NET.rtt / 2) });
+    NET.hitNow = false; NET.hitKick = false;
+  }
   NET.sendT -= dt;
-  if (NET.sendT <= 0) { const gap = netGap(); NET.sendT = Math.max(-gap, NET.sendT) + gap; netSend({ t:'k', m:NET.mid, q:++NET.q, x:Math.round(mine.x), y:Math.round(mine.y), vx:Math.round(mine.vx), vy:Math.round(mine.vy), f:mine.face, g:mine.onGround ? 1 : 0, kn:NET.kn, sn:NET.sn }); }
+  if (NET.sendT <= 0) { const gap = netGap(); NET.sendT = Math.max(-gap, NET.sendT) + gap; netSend({ t:'k', m:NET.mid, q:stamp(), x:Math.round(mine.x), y:Math.round(mine.y), vx:Math.round(mine.vx), vy:Math.round(mine.vy), f:mine.face, g:mine.onGround ? 1 : 0, kn:NET.kn, sn:NET.sn }); }
 }
 
 // ---------- Boot ----------
