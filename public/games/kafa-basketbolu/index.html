@@ -790,7 +790,7 @@ function updPlayer(p,dt){
  if(p.pw.jmp>0&&Math.random()<.3)parts.push({x:p.x+rnd(-14,14),y:p.y-4,vx:rnd(-20,20),vy:rnd(-120,-50),life:.4,max:.4,c:'#62d26f',s:rnd(2,5)});
  if(skOn(p,'lori')||p.dash){p.ghT-=dt;if(p.ghT<=0){p.ghT=p.dash?.03:.045;p.gh.unshift({x:p.x,y:p.y,ph:p.ph,f:p.f,vx:p.vx,onG:p.onG});{const gm=LOW?2:4;if(p.gh.length>gm)p.gh.length=gm}}}else if(p.gh.length)p.gh.pop();
  if(p.dunk){const d=p.dunk;d.t+=dt;const k=Math.min(1,d.t/d.T);
-  p.x=d.x0+(d.x1-d.x0)*k;p.y=d.y0+(d.y1-d.y0)*k-Math.sin(k*Math.PI)*(d.fly?240:60);
+  p.x=d.x0+(d.x1-d.x0)*k;p.y=d.y0+(d.y1-d.y0)*k-Math.sin(k*Math.PI)*(d.fly?115:60);
   if(d.fly&&Math.random()<.8)parts.push({x:p.x-p.f*30,y:p.y-rnd(60,150),vx:-p.f*rnd(80,200),vy:rnd(-40,40),life:.45,max:.45,c:Math.random()<.5?'#4d8dff':'#d9e8ff',s:rnd(4,8)});
   if(k>=1){p.dunk=null;p.hang=.32;p.vx=0;p.vy=0;
    const blk=other(p);const bl=!blk.onG&&Math.abs(blk.x-p.x)<70*blk.scl&&blk.y<GY-60&&Math.random()<(skOn(blk,'kakadu')?.85:d.fly?.15:blk.isUser||blk.hum?.4:.22);
@@ -1402,10 +1402,10 @@ function copyMirrored(p,s,own,age,dt){
  p.sta=s.sa!=null?s.sa:STA;p.dash=s.da?(p.dash||{t:.1,dir:-s.f,hit:1}):null;
  p.score=s.sc;p.en=s.en;p.sk=s.sk;p.fire=s.fi;p.frz=s.fz;p.pw.spd=s.pS;p.pw.jmp=s.pJ;p.scl=s.scl;p.hang=s.hg;p.cele=s.ce;
  if(!own)p.stealT=s.st;
- if(s.dk){const k=s.dk.T+':'+s.dk.x0;if(!p.dunk||p.dunk.key!==k)p.dunk={t:s.dk.t,T:s.dk.T,x0:W-s.dk.x0,y0:s.dk.y0,x1:W-s.dk.x1,y1:s.dk.y1,h:HOOPS[1-s.dk.h],fly:!!s.dk.fl,key:k}}else p.dunk=null;
- if(p.dunk){const d=p.dunk;d.t+=dt;const k=Math.min(1,d.t/d.T);p.x=d.x0+(d.x1-d.x0)*k;p.y=d.y0+(d.y1-d.y0)*k-Math.sin(k*Math.PI)*(d.fly?240:60);p.f=d.h.dir;p.onG=false;p.shoot=null;return}
+ if(s.dk){const k=s.dk.T+':'+s.dk.x0;if(!p.dunk||p.dunk.key!==k)p.dunk={t:own?0:s.dk.t,T:s.dk.T,x0:own?p.x:W-s.dk.x0,y0:own?p.y:s.dk.y0,x1:W-s.dk.x1,y1:s.dk.y1,h:HOOPS[1-s.dk.h],fly:!!s.dk.fl,key:k}}else if(!(own&&p.dunk&&p.dunk.t<p.dunk.T))p.dunk=null;
+ if(p.dunk){const d=p.dunk;d.t+=dt;const k=Math.min(1,d.t/d.T);p.x=d.x0+(d.x1-d.x0)*k;p.y=d.y0+(d.y1-d.y0)*k-Math.sin(k*Math.PI)*(d.fly?115:60);p.f=d.h.dir;p.onG=false;p.shoot=null;return}
  const snapAll=()=>{p.x=W-s.x;p.y=s.y;p.vx=-s.vx;p.vy=s.vy;p.f=-s.f;p.onG=!!s.g;p.shoot=fromSnapShot(s.sh)};
- if(p.hang>0||p.frz>0){snapAll();return}
+ if(p.hang>0||(p.frz>0&&!own)){snapAll();return}
  if(own){
   if(NET.rs!==NET.snap.rs){NET.rs=NET.snap.rs;snapAll();return}
   if(!(p.shoot&&p.shoot.loc))p.shoot=fromSnapShot(s.sh);
