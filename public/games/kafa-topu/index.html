@@ -6,7 +6,7 @@
 <title>Kafa Topu · Alkanka</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet" />
+<link rel="preload" href="../fonts/LuckiestGuy-Regular.ttf" as="font" type="font/ttf" crossorigin><style>@font-face{font-family:"Alk Display";src:url("../fonts/LuckiestGuy-Regular.ttf") format("truetype");font-weight:400;font-style:normal;font-display:block;size-adjust:88%}</style>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <style>
   :root{
@@ -15,7 +15,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{background:var(--ink);color:var(--white);font-family:Geist,system-ui,sans-serif}
   body{padding:12px;display:flex;flex-direction:column;gap:10px;align-items:center;min-height:100vh}
-  .display{font-family:'Lilita One',Geist,sans-serif;letter-spacing:.02em}
+  .display{font-family:'Alk Display',Geist,sans-serif;letter-spacing:.02em}
   .topbar{width:100%;max-width:1100px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
   .topbar h1{font-size:18px;font-weight:400}
   .topbar h1 span{color:var(--gold)}
@@ -39,16 +39,16 @@
   .side.r img{border-color:var(--ruby)}
   .side .nm{display:flex;flex-direction:column;gap:6px;min-width:130px}
   .side.r .nm{align-items:flex-end}
-  .side .nm b{font:400 22px 'Lilita One',sans-serif}
+  .side .nm b{font:400 22px 'Alk Display',sans-serif}
   .meter{width:130px;height:12px;background:#24221d;border-radius:99px;overflow:hidden;position:relative}
   .meter i{position:absolute;inset:0 auto 0 0;width:0;background:var(--gold);border-radius:99px}
   .side.r .meter i{left:auto;right:0;background:var(--ruby)}
   .meter.ready i{animation:pulse .5s ease-in-out infinite alternate}
   @keyframes pulse{to{filter:brightness(1.6)}}
   .score{display:flex;align-items:center;gap:14px;padding:0 18px;background:#171b24}
-  .score .n{font:400 52px 'Lilita One',sans-serif;line-height:1;min-width:34px;text-align:center}
+  .score .n{font:400 52px 'Alk Display',sans-serif;line-height:1;min-width:34px;text-align:center}
   .score .t{display:flex;flex-direction:column;align-items:center;gap:2px}
-  .score .t b{font:400 26px 'Lilita One',sans-serif;color:var(--gold)}
+  .score .t b{font:400 26px 'Alk Display',sans-serif;color:var(--gold)}
   .score .t small{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.08em}
   .skchip{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--muted)}
   .skchip svg{width:15px;height:15px}
@@ -59,10 +59,10 @@
   .hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:15px;color:#e6dfcf;background:#0b0e14b3;padding:6px 14px;border-radius:99px;white-space:nowrap;pointer-events:none}
   .hint kbd{font:700 13px Geist,sans-serif;background:#33302a;padding:2px 7px;border-radius:6px;margin:0 2px}
   .center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
-  .big{font:400 150px 'Lilita One',sans-serif;color:var(--gold);text-shadow:0 6px 0 #6e4f12,0 14px 30px #000a;transform:scale(.3);opacity:0}
+  .big{font:400 150px 'Alk Display',sans-serif;color:var(--gold);text-shadow:0 6px 0 #6e4f12,0 14px 30px #000a;transform:scale(.3);opacity:0}
   .big.show{animation:pop .5s cubic-bezier(.2,1.6,.4,1) forwards}
   @keyframes pop{to{transform:scale(1);opacity:1}}
-  .callout{position:absolute;top:120px;left:50%;transform:translateX(-50%);font:400 34px 'Lilita One',sans-serif;padding:6px 20px;border-radius:14px;background:#0b0e14e6;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+  .callout{position:absolute;top:120px;left:50%;transform:translateX(-50%);font:400 34px 'Alk Display',sans-serif;padding:6px 20px;border-radius:14px;background:#0b0e14e6;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
   .callout.show{opacity:1}
 
   /* Touch controls */
@@ -71,7 +71,7 @@
   .touch{position:absolute;inset:0;display:none;pointer-events:none;--inv:1}
   #device.mobile .touch{display:block}
   #device.mobile .hint{display:none}
-  .tbtn{position:absolute;pointer-events:auto;border-radius:50%;border:2.5px solid #ffffff42;background:#0b0e1480;color:#fffffff0;display:grid;place-items:center;font:400 26px 'Lilita One',sans-serif;touch-action:none;box-shadow:0 6px 18px #0005;transition:transform .06s,background-color .06s;-webkit-tap-highlight-color:transparent}
+  .tbtn{position:absolute;pointer-events:auto;border-radius:50%;border:2.5px solid #ffffff42;background:#0b0e1480;color:#fffffff0;display:grid;place-items:center;font:400 26px 'Alk Display',sans-serif;touch-action:none;box-shadow:0 6px 18px #0005;transition:transform .06s,background-color .06s;-webkit-tap-highlight-color:transparent}
   .tbtn svg{width:56px;height:56px}
   .tbtn.on{background:#e9b949b8;color:var(--ink);border-color:var(--gold);transform:scale(.92)}
   /* Thumb-reach layout: arrows hug the bottom-left corner, kick sits under the right thumb's resting spot
@@ -94,9 +94,9 @@
   .mtop{display:flex;align-items:center;justify-content:space-between}
   .logo{display:flex;flex-direction:column;line-height:1}
   .logo small{font:600 16px Geist,sans-serif;color:var(--gold);letter-spacing:.3em}
-  .logo b{font:400 54px 'Lilita One',sans-serif}
+  .logo b{font:400 54px 'Alk Display',sans-serif}
   .lvl{display:flex;align-items:center;gap:14px;background:var(--ink2);padding:10px 18px;border-radius:18px;border:2px solid #33302a}
-  .lvl .badge{width:62px;height:62px;border-radius:50%;background:var(--gold);color:var(--ink);display:grid;place-items:center;font:400 30px 'Lilita One',sans-serif}
+  .lvl .badge{width:62px;height:62px;border-radius:50%;background:var(--gold);color:var(--ink);display:grid;place-items:center;font:400 30px 'Alk Display',sans-serif}
   .lvl .xp{display:flex;flex-direction:column;gap:6px;width:240px}
   .lvl .xp span{font-size:15px;color:var(--muted);font-weight:600}
   .bar{height:14px;background:#0b0e14;border-radius:99px;overflow:hidden}
@@ -104,12 +104,12 @@
   .ghostbtn{border:2px solid #33302a;background:transparent;color:var(--muted);font:600 15px Geist,sans-serif;padding:10px 14px;border-radius:12px;cursor:pointer}
   .mmain{flex:1;display:flex;gap:26px;min-height:0}
   .col{display:flex;flex-direction:column;gap:14px;min-height:0}
-  .col h2{font:400 26px 'Lilita One',sans-serif;color:var(--white)}
+  .col h2{font:400 26px 'Alk Display',sans-serif;color:var(--white)}
   .col h2 span{color:var(--muted);font:600 15px Geist,sans-serif;margin-left:8px}
   .hero{width:330px;background:radial-gradient(circle at 50% 35%,#33302a,#171b24 70%);border-radius:24px;border:2px solid #33302a;align-items:center;padding:20px}
   .hero img{width:200px;height:200px;border-radius:50%;border:6px solid var(--gold);box-shadow:0 14px 30px #0009;animation:bob 1.8s ease-in-out infinite}
   @keyframes bob{50%{transform:translateY(-8px)}}
-  .hero .hn{font:400 40px 'Lilita One',sans-serif;line-height:1}
+  .hero .hn{font:400 40px 'Alk Display',sans-serif;line-height:1}
   .hero .ht{color:var(--gold);font-weight:700;letter-spacing:.15em;font-size:14px;margin-top:-6px}
   .stats{width:100%;display:flex;flex-direction:column;gap:9px}
   .stat{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:#d4ccba}
@@ -133,18 +133,18 @@
   .card .ic svg{width:34px;height:34px}
   .card small{font-size:12px;color:var(--muted);font-weight:600}
   .skdesc{background:var(--ink2);border:2px solid #33302a;border-radius:16px;padding:12px 16px;font-size:16px;line-height:1.45;color:#e6dfcf;min-height:72px}
-  .skdesc b{color:var(--gold);font:400 20px 'Lilita One',sans-serif;display:block}
+  .skdesc b{color:var(--gold);font:400 20px 'Alk Display',sans-serif;display:block}
   .mbottom{display:flex;align-items:center;justify-content:space-between;gap:16px}
   .mbottom .seg button{font-size:16px;padding:10px 20px}
-  .play{border:0;background:var(--gold);color:var(--ink);font:400 40px 'Lilita One',sans-serif;padding:14px 60px;border-radius:20px;box-shadow:0 7px 0 #8a6418;cursor:pointer;display:flex;align-items:center;gap:12px}
+  .play{border:0;background:var(--gold);color:var(--ink);font:400 40px 'Alk Display',sans-serif;padding:14px 60px;border-radius:20px;box-shadow:0 7px 0 #8a6418;cursor:pointer;display:flex;align-items:center;gap:12px}
   .play:active{transform:translateY(4px);box-shadow:0 3px 0 #8a6418}
   .play svg{width:34px;height:34px}
   .toast{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);background:#0b0e14;border:2px solid var(--gold);padding:10px 20px;border-radius:14px;font-weight:600;font-size:18px;opacity:0;transition:opacity .2s;pointer-events:none}
   .toast.show{opacity:1}
 
   #result,#pause{flex-direction:column;align-items:center;justify-content:center;gap:20px}
-  #result .rt{font:400 96px 'Lilita One',sans-serif;line-height:1}
-  #result .rs{font:400 46px 'Lilita One',sans-serif;color:#e6dfcf;display:flex;align-items:center;gap:22px}
+  #result .rt{font:400 96px 'Alk Display',sans-serif;line-height:1}
+  #result .rs{font:400 46px 'Alk Display',sans-serif;color:#e6dfcf;display:flex;align-items:center;gap:22px}
   #result .rs img{width:84px;height:84px;border-radius:50%;border:4px solid var(--gold)}
   #result .rs img.b{border-color:var(--ruby)}
   .xpbox{width:560px;background:var(--ink2);border:2px solid #33302a;border-radius:20px;padding:16px 22px;display:flex;flex-direction:column;gap:10px}
@@ -791,7 +791,7 @@ function setupMatch(chA, skA, chB, skB, botB){
   resetKickoff();
   stopChant(); chantCd = 6 + Math.random()*4;
   beginCountdown(.85);
-  $('hA').src = chA.img; $('nA').textContent = NET ? NET.names[0] : chA.name;
+  $('hA').src = chA.img; $('nA').textContent = NET ? NET.names[0] : (ME_NAME || chA.name);
   $('hB').src = chB.img; $('nB').textContent = NET ? NET.names[1] : chB.name;
   const sa = skillOf(skA), sb = skillOf(skB), mine = mySide() === 0 ? sa : sb;
   $('sA').innerHTML = `<i data-lucide="${sa.icon}" style="color:${sa.color}"></i>${sa.name}`;
@@ -1339,7 +1339,7 @@ function buildCache(){
   C.haze = g;
   // Scrolling LED text strip
   const bh = ledBot - ledTop, txt = 'ALKANKA   \u25C6   KAFA TOPU   \u25C6   ';
-  b.font = `${Math.round(bh*.6)}px 'Lilita One', sans-serif`;
+  b.font = `${Math.round(bh*.6)}px 'Alk Display', sans-serif`;
   const tw = Math.ceil(b.measureText(txt).width);
   const [lc, l] = mk(tw, bh);
   l.font = b.font; l.textBaseline = 'middle';
@@ -1614,7 +1614,7 @@ function drawHead(p, t){
   if (p.side === mySide()) {
     const y = p.y - p.R - 26 + Math.sin(t*5)*3;
     ctx.fillStyle = '#e9b949'; ctx.beginPath(); ctx.moveTo(p.x - 9, y - 10); ctx.lineTo(p.x + 9, y - 10); ctx.lineTo(p.x, y); ctx.closePath(); ctx.fill();
-    ctx.font = "18px 'Lilita One', sans-serif"; ctx.textAlign = 'center'; ctx.fillText('SEN', p.x, y - 16); ctx.textAlign = 'left';
+    ctx.font = "18px 'Alk Display', sans-serif"; ctx.textAlign = 'center'; ctx.fillText('SEN', p.x, y - 16); ctx.textAlign = 'left';
   }
 }
 function star(x, y, r, c){
@@ -1842,9 +1842,14 @@ function post(type, extra){
   if (!EMBED) return;
   try { parent.postMessage(Object.assign({ source:'alk-kafa', type }, extra || {}), location.origin); } catch {}
 }
+var ME_NAME = '';
 addEventListener('message', e => {
   if (e.origin !== location.origin || !e.data || e.data.source !== 'alk-host') return;
   const d = e.data;
+  if (d.type === 'me' && typeof d.name === 'string') {
+    ME_NAME = d.name.trim().slice(0, 18);
+    if (!NET && game && ME_NAME) $('nA').textContent = ME_NAME;
+  }
   if (d.type === 'start' && !NET) startMatch();
   if (d.type === 'pause' && !NET && game && ['play','countdown','goal'].includes(game.phase)) { game.prevPhase = game.phase; game.phase = 'paused'; showScreen('pause'); releaseAll(); }
   if (d.type === 'init' && !NET && (d.role === 'host' || d.role === 'guest')) netInit(d.role, d.names);
