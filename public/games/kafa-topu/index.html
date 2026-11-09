@@ -74,15 +74,20 @@
   .tbtn{position:absolute;pointer-events:auto;border-radius:50%;border:2.5px solid #ffffff42;background:#0b0e1480;color:#fffffff0;display:grid;place-items:center;font:400 26px 'Alk Display',sans-serif;touch-action:none;box-shadow:0 6px 18px #0005;transition:transform .06s,background-color .06s;-webkit-tap-highlight-color:transparent}
   .tbtn svg{width:56px;height:56px}
   .tbtn.on{background:#e9b949b8;color:var(--ink);border-color:var(--gold);transform:scale(.92)}
-  /* Thumb-reach layout: arrows hug the bottom-left corner, kick sits under the right thumb's resting spot
-     with jump just inside it and skill above, so neither hand has to stretch toward the middle. */
-  /* Both clusters start past the goal mouths (GW = 118 world px) so neither keeper's goal is ever hidden. */
-  #tL,#tR{bottom:calc(22px + env(safe-area-inset-bottom) * var(--inv));width:126px;height:126px}
-  #tL{left:calc(136px + env(safe-area-inset-left) * var(--inv))}
-  #tR{left:calc(278px + env(safe-area-inset-left) * var(--inv))}
-  #tKick{right:calc(136px + env(safe-area-inset-right) * var(--inv));bottom:calc(22px + env(safe-area-inset-bottom) * var(--inv));width:138px;height:138px;color:var(--ink);border-color:#fff9;opacity:.9}
-  #tJump{right:calc(290px + env(safe-area-inset-right) * var(--inv));bottom:calc(28px + env(safe-area-inset-bottom) * var(--inv));width:118px;height:118px}
-  #tSkill{right:calc(157px + env(safe-area-inset-right) * var(--inv));bottom:calc(176px + env(safe-area-inset-bottom) * var(--inv));width:92px;height:92px;overflow:hidden}
+  /* Control strip under the pitch: one row, arrows bottom-left, skill · jump · kick bottom-right
+     (kick outermost under the right thumb). Heights follow the strip via --dock. */
+  .dock{position:absolute;left:0;right:0;bottom:0;height:0;display:none;pointer-events:none;background:linear-gradient(180deg,#1b1d16 0%,#0e100c 100%);border-top:4px solid #e9b949;box-shadow:inset 0 10px 18px #0007}
+  #device.mobile .dock{display:block}
+  .touch{--dock:170px;--sb:calc(env(safe-area-inset-bottom) * var(--inv));--bh:min(118px,calc(var(--dock) - 34px - var(--sb)))}
+  #device.mobile .tbtn{border-radius:28px;height:var(--bh);bottom:calc(14px + var(--sb));border-width:3px;background:#2a2c24;border-color:#4a4a3e;box-shadow:0 6px 0 #070806}
+  #device.mobile .tbtn.on{transform:translateY(4px);box-shadow:0 2px 0 #070806}
+  #tL{left:calc(36px + env(safe-area-inset-left) * var(--inv));width:168px}
+  #tR{left:calc(220px + env(safe-area-inset-left) * var(--inv));width:168px}
+  #tKick{right:calc(36px + env(safe-area-inset-right) * var(--inv));width:196px;color:var(--ink)}
+  #device.mobile #tKick{border-color:#f8dd85;background:linear-gradient(180deg,#f8dd85 0%,#e9b949 45%,#b98523 100%);box-shadow:0 6px 0 #6e4f12}
+  #device.mobile #tKick.on{box-shadow:0 2px 0 #6e4f12}
+  #tJump{right:calc(248px + env(safe-area-inset-right) * var(--inv));width:164px}
+  #tSkill{right:calc(428px + env(safe-area-inset-right) * var(--inv));width:var(--bh);overflow:hidden}
   #tSkill .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:#e9b94988}
   #tSkill svg,#tSkill span{position:relative;width:48px;height:48px}
   #tSkill.ready{border-color:var(--gold);animation:pulse .5s infinite alternate}
@@ -282,6 +287,7 @@
       <div class="center"><div class="big" id="big"></div></div>
       <div class="callout" id="callout"></div>
     
+      <div class="dock" id="dock" aria-hidden="true"></div>
       <div class="touch" id="touch">
         <button class="tbtn" id="tL" data-k="left" aria-label="Sola koş"><i data-lucide="chevron-left"></i></button>
         <button class="tbtn" id="tR" data-k="right" aria-label="Sağa koş"><i data-lucide="chevron-right"></i></button>
@@ -380,8 +386,9 @@ let mode = matchMedia('(pointer:coarse)').matches ? 'mobile' : 'web';
 let W = 1280, scale = 1;
 const H = 720, GROUND = 664, BR = 22, CB = GROUND - 240, GW = 118, BASE_R = 46;
 const GIANT_SZ = (GROUND - CB - 18) / 2 / BASE_R;
-// Phone controls float over the pitch, so no extra space is reserved below it.
-const DOCK = 0;
+// Phones get a control strip under the pitch (Head Ball style) so buttons never cover play.
+// It comes out of the same screen height: the camera crops sky instead of the page growing.
+const DOCK = 170, MIN_VIEW = 430;
 // Phones are ~2.2:1; stretching the pitch to that width made the players tiny. The world
 // is capped in width and the camera crops the sky instead, panning up for high balls.
 const WMAX_MOBILE = 1480;
@@ -401,9 +408,13 @@ function layout(){
   let TH = H + dock;
   W = Math.round(TH * asp);
   if (mode === 'mobile' && W > WMAX_MOBILE) { W = WMAX_MOBILE; TH = Math.round(W / asp); }
-  VH = Math.min(H, TH - dock); camMax = H - VH; camY = camMax;
+  VH = Math.min(H, Math.max(MIN_VIEW, TH - dock)); camMax = H - VH; camY = camMax;
   // Portrait full-time card: a 760-wide column instead of a squeezed landscape stage.
-  if (asp < 1 && $('result').classList.contains('on')) { W = 760; TH = Math.round(W / asp); VH = H; camMax = 0; camY = 0; }
+  const portraitResult = asp < 1 && $('result').classList.contains('on');
+  if (portraitResult) { W = 760; TH = Math.round(W / asp); VH = H; camMax = 0; camY = 0; }
+  const dockH = mode === 'mobile' && !portraitResult ? Math.max(0, TH - VH) : 0;
+  if ($('dock')) $('dock').style.height = dockH + 'px';
+  if ($('touch')) $('touch').style.setProperty('--dock', dockH + 'px');
   scale = r.height / TH;
   const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
   stage.style.width = W + 'px'; stage.style.height = TH + 'px';
