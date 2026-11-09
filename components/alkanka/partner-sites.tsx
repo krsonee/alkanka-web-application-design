@@ -255,11 +255,11 @@ export function MainSponsor({ sponsor }: { sponsor: Sponsor }) {
           {sponsor.perks.slice(0, 3).map((p, i) => (
             <li
               key={p}
-              className="sd-perk sd-rise flex min-w-0 items-start gap-2 overflow-hidden rounded-md px-2 py-1 text-xs leading-relaxed text-muted-foreground"
+              className="sd-perk sd-rise flex min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 py-1 text-xs text-muted-foreground"
               style={{ animationDelay: `${120 + i * 80}ms` }}
             >
-              <Check className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
-              <span className="line-clamp-2 min-w-0 flex-1">{p}</span>
+              <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="block min-w-0 flex-1 truncate">{p}</span>
             </li>
           ))}
         </ul>
@@ -1141,7 +1141,7 @@ function EndingCard({ c, index }: { c: Campaign; index: number }) {
   return (
     <li className="ending-card group w-full shrink-0 snap-center rounded-2xl md:w-auto" style={{ animationDelay: `${index * 90}ms` }}>
       <div className="ending-inner relative flex h-full overflow-hidden rounded-[calc(1rem-1px)]">
-        <div className="relative w-24 shrink-0 overflow-hidden sm:w-28 md:w-20 2xl:w-28">
+        <div className="relative w-24 shrink-0 overflow-hidden sm:w-28">
           <Image src={campaignArt(c)} alt="" fill sizes="112px" className="ending-art object-cover" />
           <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent to-card" />
           <span aria-hidden="true" className="ending-sheen" />
@@ -1152,18 +1152,16 @@ function EndingCard({ c, index }: { c: Campaign; index: number }) {
 
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-3 pl-2 pr-3">
           <div className="flex items-center gap-1.5">
-            {s && (
-              <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-background">
-                <SponsorLogoPlate sponsor={s} compact className="size-full text-[8px]" />
-              </span>
-            )}
+            <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-background">
+              {s ? <SponsorLogoPlate sponsor={s} compact className="size-full text-[8px]" /> : null}
+            </span>
             <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{s?.name}</span>
             <span className={cn('ending-timer flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums', urgent && 'is-urgent')}>
               <Clock className="size-3" aria-hidden="true" />
               {c.ends}
             </span>
           </div>
-          <h3 className="line-clamp-2 font-display text-sm font-bold leading-snug text-foreground text-pretty">{c.title}</h3>
+          <h3 className="line-clamp-1 font-display text-sm font-bold leading-snug text-foreground">{c.title}</h3>
           <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.description}</p>
           <div className="mt-auto flex items-center gap-3 pt-1">
             <div className="flex min-w-0 flex-1 flex-col gap-1">

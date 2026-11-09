@@ -487,11 +487,11 @@ export function MarketShowcase({ products, balance }: { products: MarketProduct[
   return (
     <section aria-labelledby="vitrin-title" className="flex flex-col gap-3">
       <div className="flex items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <h2 id="vitrin-title" className="font-display text-2xl font-bold uppercase tracking-tight text-primary text-balance sm:text-3xl">
+        <div className="flex flex-col">
+          <h2 id="vitrin-title" className="font-display text-lg font-bold text-foreground md:text-xl">
             Bunları kazanabilirsin
           </h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">Market’teki ödüller, Kanka Coin ile</p>
+          <p className="text-xs text-muted-foreground">Market’teki ödüller, Kanka Coin ile</p>
         </div>
         <Link href="/market" className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary hover:underline">
           Tüm market

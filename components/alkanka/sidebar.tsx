@@ -350,20 +350,20 @@ function TelegramCard({ compact }: { compact: boolean }) {
       title={compact ? 'Jako Telegram’da!' : undefined}
       className={cn(
         'flex items-center rounded-xl border border-accent/30 bg-accent/10 transition-colors hover:bg-accent/15',
-        compact ? 'justify-center p-1.5' : 'gap-2.5 p-3',
+        compact ? 'justify-center p-1.5' : 'gap-3 p-3',
       )}
     >
       <JakoAvatar pose="telegram" size="sm" />
       {compact ? (
         <span className="sr-only">Jako Telegram’da!</span>
       ) : (
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-foreground">
-            Jako Telegram’da!
-            <Send className="size-3.5 shrink-0 text-accent" aria-hidden="true" />
+        <>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-sm font-semibold text-foreground">Jako Telegram’da!</span>
+            <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
           </span>
-          <span className="text-xs leading-snug text-muted-foreground text-pretty">{subtitle}</span>
-        </span>
+          <Send className="size-4 shrink-0 text-accent" aria-hidden="true" />
+        </>
       )}
     </a>
   )

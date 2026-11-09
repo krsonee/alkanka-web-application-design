@@ -88,8 +88,8 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           }
         >
           {tgPromo.enabled && (
-          <div className="contents [body:has([data-table-live])_&]:hidden">
-            <TelegramStrip
+            <div className="[body:has([data-table-live])_&]:hidden">
+              <TelegramStrip
                 text={tgPromo.text}
                 cta={tgPromo.cta}
                 reward={tgPromo.reward}
