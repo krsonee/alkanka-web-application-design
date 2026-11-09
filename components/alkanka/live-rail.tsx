@@ -607,7 +607,7 @@ export function LiveRail() {
           className="ml-auto flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-accent/40 px-2.5 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-foreground"
         >
           <ExternalLink className="size-3.5" aria-hidden="true" />
-          {tab === 'sohbet' ? "Telegram'da izle" : 'Kanalı aç'}
+          {tab === 'sohbet' ? 'İzle' : 'Kanalı aç'}
         </a>
         <button
           type="button"
