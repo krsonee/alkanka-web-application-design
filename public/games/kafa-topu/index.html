@@ -76,12 +76,13 @@
   .tbtn.on{background:#e9b949b8;color:var(--ink);border-color:var(--gold);transform:scale(.92)}
   /* Thumb-reach layout: arrows hug the bottom-left corner, kick sits under the right thumb's resting spot
      with jump just inside it and skill above, so neither hand has to stretch toward the middle. */
-  #tL,#tR{bottom:calc(26px + env(safe-area-inset-bottom) * var(--inv));width:136px;height:136px}
-  #tL{left:calc(54px + env(safe-area-inset-left) * var(--inv))}
-  #tR{left:calc(206px + env(safe-area-inset-left) * var(--inv))}
-  #tKick{right:calc(54px + env(safe-area-inset-right) * var(--inv));bottom:calc(26px + env(safe-area-inset-bottom) * var(--inv));width:146px;height:146px;color:var(--ink);border-color:#fff9;opacity:.9}
-  #tJump{right:calc(218px + env(safe-area-inset-right) * var(--inv));bottom:calc(34px + env(safe-area-inset-bottom) * var(--inv));width:128px;height:128px}
-  #tSkill{right:calc(84px + env(safe-area-inset-right) * var(--inv));bottom:calc(192px + env(safe-area-inset-bottom) * var(--inv));width:96px;height:96px;overflow:hidden}
+  /* Both clusters start past the goal mouths (GW = 118 world px) so neither keeper's goal is ever hidden. */
+  #tL,#tR{bottom:calc(22px + env(safe-area-inset-bottom) * var(--inv));width:126px;height:126px}
+  #tL{left:calc(136px + env(safe-area-inset-left) * var(--inv))}
+  #tR{left:calc(278px + env(safe-area-inset-left) * var(--inv))}
+  #tKick{right:calc(136px + env(safe-area-inset-right) * var(--inv));bottom:calc(22px + env(safe-area-inset-bottom) * var(--inv));width:138px;height:138px;color:var(--ink);border-color:#fff9;opacity:.9}
+  #tJump{right:calc(290px + env(safe-area-inset-right) * var(--inv));bottom:calc(28px + env(safe-area-inset-bottom) * var(--inv));width:118px;height:118px}
+  #tSkill{right:calc(157px + env(safe-area-inset-right) * var(--inv));bottom:calc(176px + env(safe-area-inset-bottom) * var(--inv));width:92px;height:92px;overflow:hidden}
   #tSkill .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:#e9b94988}
   #tSkill svg,#tSkill span{position:relative;width:48px;height:48px}
   #tSkill.ready{border-color:var(--gold);animation:pulse .5s infinite alternate}
@@ -157,6 +158,14 @@
   .btns{display:flex;gap:14px}
   .btns .ghostbtn{font-size:20px;padding:14px 26px;color:var(--white)}
   .btns .play{font-size:32px;padding:12px 40px}
+  /* Full time on a phone held upright: the result card stacks into a tall column. */
+  @media (orientation:portrait){
+    #result{padding:48px 32px;gap:30px}
+    #result .rt{font-size:104px;text-align:center}
+    #result .xpbox{width:100%}
+    #result .btns{flex-direction:column;width:100%}
+    #result .btns button{width:100%;display:flex;align-items:center;justify-content:center;gap:10px}
+  }
 
   .notes{width:100%;max-width:1100px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
   .note{background:var(--ink2);border:1px solid #33302a;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;color:#d4ccba}
@@ -393,6 +402,8 @@ function layout(){
   W = Math.round(TH * asp);
   if (mode === 'mobile' && W > WMAX_MOBILE) { W = WMAX_MOBILE; TH = Math.round(W / asp); }
   VH = Math.min(H, TH - dock); camMax = H - VH; camY = camMax;
+  // Portrait full-time card: a 760-wide column instead of a squeezed landscape stage.
+  if (asp < 1 && $('result').classList.contains('on')) { W = 760; TH = Math.round(W / asp); VH = H; camMax = 0; camY = 0; }
   scale = r.height / TH;
   const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
   stage.style.width = W + 'px'; stage.style.height = TH + 'px';
@@ -688,31 +699,24 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) relea
 const tbtns = [...document.querySelectorAll('.tbtn')];
 const touchZone = $('device');
 const pointerBtn = new Map();
-// Left 45% of the screen is one big movement pad: anywhere left of the midline between the
-// arrows runs left, right of it runs right (with hysteresis so a resting thumb never flickers).
-// The right side snaps a tap to the nearest action button, so near-misses still count.
+// Only the round button itself fires: a tap beside a button does nothing. A thumb that started on an
+// arrow may slide across to the other arrow (with hysteresis) but lets go once it leaves the arrow pair.
 const isMove = k => k === 'left' || k === 'right';
-function moveBtnAt(x, cur){
-  const a = $('tL').getBoundingClientRect(), b = $('tR').getBoundingClientRect();
+const movePtrs = new Set();
+function moveBtnAt(x, y, cur){
+  const a = $('tL').getBoundingClientRect(), b = $('tR').getBoundingClientRect(), m = 16;
+  if (x < a.left - m || x > b.right + m || y < a.top - m || y > a.bottom + m) return null;
   const mid = (a.right + b.left) / 2, hy = 12;
   if (cur === $('tL')) return x > mid + hy ? $('tR') : $('tL');
   if (cur === $('tR')) return x < mid - hy ? $('tL') : $('tR');
   return x < mid ? $('tL') : $('tR');
 }
-function zoneBtn(x, y){
-  const r = device.getBoundingClientRect(), fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
-  if (fy < .2) return null;
-  if (fx < .45) return moveBtnAt(x, null);
-  if (fx > .5) return btnAt(x, y, .7, tbtns.filter(b => !isMove(b.dataset.k)));
-  return null;
-}
-function btnAt(x, y, padK = .22, list = tbtns){
+function btnAt(x, y, list = tbtns){
   let best = null, bestD = Infinity;
   for (const b of list) {
-    const r = b.getBoundingClientRect(), pad = r.width * padK;
-    if (x < r.left - pad || x > r.right + pad || y < r.top - pad || y > r.bottom + pad) continue;
+    const r = b.getBoundingClientRect();
     const d = Math.hypot(x - (r.left + r.width/2), y - (r.top + r.height/2));
-    if (d < bestD) { bestD = d; best = b; }
+    if (d <= r.width / 2 + 2 && d < bestD) { bestD = d; best = b; }
   }
   return best;
 }
@@ -726,20 +730,21 @@ function setPointerBtn(id, b){
 const touchActive = () => mode === 'mobile' && game && ['play','countdown','goal'].includes(game.phase);
 touchZone.addEventListener('pointerdown', e => {
   if (!touchActive() || e.target.closest('.iconbtn')) return;
-  const b = btnAt(e.clientX, e.clientY) || zoneBtn(e.clientX, e.clientY);
+  const b = btnAt(e.clientX, e.clientY);
   if (!b) return;
   e.preventDefault();
   try { touchZone.setPointerCapture(e.pointerId); } catch {}
+  if (isMove(b.dataset.k)) movePtrs.add(e.pointerId);
   setPointerBtn(e.pointerId, b);
 }, { passive:false });
 touchZone.addEventListener('pointermove', e => {
-  const cur = pointerBtn.get(e.pointerId);
   // Only the movement thumb slides between directions; action buttons stay under their finger.
-  if (!cur || !isMove(cur.dataset.k)) return;
-  const b = moveBtnAt(e.clientX, cur);
+  if (!movePtrs.has(e.pointerId)) return;
+  const cur = pointerBtn.get(e.pointerId) || null;
+  const b = moveBtnAt(e.clientX, e.clientY, cur);
   if (b !== cur) setPointerBtn(e.pointerId, b);
 }, { passive:true });
-const endPtr = e => { if (pointerBtn.has(e.pointerId)) setPointerBtn(e.pointerId, null); };
+const endPtr = e => { movePtrs.delete(e.pointerId); if (pointerBtn.has(e.pointerId)) setPointerBtn(e.pointerId, null); };
 touchZone.addEventListener('pointerup', endPtr);
 touchZone.addEventListener('pointercancel', endPtr);
 touchZone.addEventListener('lostpointercapture', endPtr);
@@ -799,6 +804,7 @@ function showScreen(id){
   post('screen', { id });
   for (const s of ['menu','pause','result']) $(s).classList.toggle('on', s === id);
   stage.classList.toggle('inmenu', id === 'menu' || id === 'result');
+  requestAnimationFrame(layout);
 }
 let bigTimer;
 function bigText(t, color){
