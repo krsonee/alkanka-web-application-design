@@ -7,7 +7,8 @@
 <title>Kafa Basketbolu · Alkanka Sokak Arenası</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Barlow:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" href="../fonts/LuckiestGuy-Regular.ttf" as="font" type="font/ttf" crossorigin><style>@font-face{font-family:"Alk Display";src:url("../fonts/LuckiestGuy-Regular.ttf") format("truetype");font-weight:400;font-style:normal;font-display:block;size-adjust:88%}</style>
 <style>
 :root{--navy:#0f1b2d;--cobalt:#2f6bff;--coral:#ff4d5a;--teal:#22d3c5;--white:#fff}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -52,18 +53,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--navy);color:va
 .rb[hidden],[hidden].rbtn{display:none!important}
 #stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;transform-origin:50% 50%;overflow:hidden}
 #cv{position:absolute;left:0;top:0;width:1280px;height:720px;display:block}
-.disp{font-family:"Lilita One",Barlow,sans-serif;letter-spacing:.5px}
+.disp{font-family:"Alk Display",Barlow,sans-serif;letter-spacing:.5px}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .hud{position:absolute;inset:0;pointer-events:none}
 .hud>*{pointer-events:auto}
 
 /* scoreboard */
 .sb{position:absolute;left:50%;top:12px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(#18294a,#0f1b2d);border:2px solid rgba(255,255,255,.14);border-radius:16px;box-shadow:0 10px 26px rgba(0,0,0,.45);pointer-events:none}
-.sb .tm{display:flex;align-items:center;gap:8px;width:118px}
+.sb .tm{display:flex;align-items:center;gap:8px;width:168px}
 .sb .tm.r{justify-content:flex-end}
 .sb .tm img{width:42px;height:42px;border-radius:50%;object-fit:cover;background:var(--cobalt);border:2px solid rgba(255,255,255,.85)}
 .sb .tm.r img{background:var(--coral);transform:scaleX(-1)}
-.sb .ab{font-size:26px;line-height:1}
+.sb .ab{font-family:Barlow,system-ui,sans-serif;font-weight:800;font-size:19px;line-height:1.2;min-width:0;max-width:118px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb .num{width:62px;height:52px;display:flex;align-items:center;justify-content:center;font-size:40px;background:#08111f;border-radius:10px;box-shadow:inset 0 2px 0 rgba(255,255,255,.06)}
 .sb .num.pop{animation:pop .45s}
 .sb .clk{width:112px;height:52px;display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--teal);background:#08111f;border-radius:10px;border:2px solid rgba(34,211,197,.35);text-shadow:0 0 12px rgba(34,211,197,.6)}
@@ -133,7 +134,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #bL{left:calc(var(--u)*22)}#bR{left:calc(var(--u)*150)}
 .rb{position:absolute;bottom:calc(var(--u)*16);width:calc(var(--u)*60);height:calc(var(--u)*60);border-radius:50%;background:radial-gradient(circle at 50% 35%,rgba(47,107,255,.4),rgba(15,27,45,.65) 70%);border:calc(var(--u)*3.5) solid #fff;box-shadow:0 0 calc(var(--u)*8) rgba(34,211,197,.55),inset 0 0 calc(var(--u)*10) rgba(255,255,255,.12);display:flex;flex-direction:column;align-items:center;justify-content:center}
 .rb svg{width:calc(var(--u)*24);height:calc(var(--u)*24);stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.rb b{font-family:"Lilita One";font-weight:400;font-size:calc(var(--u)*11);line-height:1;margin-top:calc(var(--u)*1)}
+.rb b{font-family:"Alk Display";font-weight:400;font-size:calc(var(--u)*11);line-height:1;margin-top:calc(var(--u)*1)}
 .rb.dn{background:radial-gradient(circle,rgba(34,211,197,.7),rgba(34,211,197,.35));transform:scale(.94)}
 /* Thumb arc (console/mobile standard): the main action (Zıpla / Şut / Smaç) is the big button in the corner,
    secondary actions sit on an arc around it at equal reach: Çal left, Atıl upper-left, Güç on top. */
@@ -152,7 +153,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
  .arr,.rb{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
  #bShoot.apex{box-shadow:0 0 0 calc(var(--u)*4) #22d3c5,0 0 calc(var(--u)*22) #22d3c5}
 #bSkill{right:calc(var(--u)*44);bottom:calc(var(--u)*152);width:calc(var(--u)*60);height:calc(var(--u)*60);opacity:.7}
-@media (orientation:portrait){.end .box{min-width:0;width:calc(100vw - 32px);padding:22px 18px}.end .res{font-size:56px;text-align:center}.end .fs{gap:14px}.end .fs img{width:68px;height:68px}.end .fs b{font-size:50px}.end .btns{flex-direction:column;width:100%}.end .btns .cta{width:100%}}
+
 .real.kb #touch{display:none}
 .real.kb .keys{display:flex}
 #bSkill img{width:calc(var(--u)*34);height:calc(var(--u)*34);object-fit:contain;margin-top:calc(var(--u)*-4)}
@@ -178,17 +179,17 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .ch .art img{width:128px;height:128px;object-fit:contain;position:relative;bottom:-8px}
 .skl{display:flex;gap:8px;align-items:flex-start;margin-top:10px;padding:8px 9px;border-radius:12px;background:rgba(255,255,255,.07)}
 .skl svg{width:18px;height:18px;flex:none;fill:var(--c);margin-top:1px}
-.skl b{display:block;font-family:"Lilita One";font-weight:400;font-size:15px;line-height:1.1;color:var(--c)}
+.skl b{display:block;font-family:"Alk Display";font-weight:400;font-size:15px;line-height:1.1;color:var(--c)}
 .skl small{display:block;font-size:12px;font-weight:600;line-height:1.35;color:rgba(255,255,255,.72);margin-top:2px}
-.ch .art .no{position:absolute;right:12px;top:6px;font-family:"Lilita One";font-size:44px;color:rgba(255,255,255,.28)}
+.ch .art .no{position:absolute;right:12px;top:6px;font-family:"Alk Display";font-size:44px;color:rgba(255,255,255,.28)}
 .ch .inf{padding:12px 14px 14px}
-.ch .nm{font-family:"Lilita One";font-size:24px;line-height:1}
+.ch .nm{font-family:"Alk Display";font-size:24px;line-height:1}
 .ch .rl{font-size:14px;font-weight:600;color:rgba(255,255,255,.65);margin:3px 0 10px}
 .st{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-top:5px}
 .st span{width:58px;color:rgba(255,255,255,.8)}
 .st i{flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden;position:relative}
 .st i b{position:absolute;inset:0 auto 0 0;background:var(--teal);border-radius:4px}
-.cta{font-family:"Lilita One";font-size:32px;padding:14px 64px;border-radius:18px;background:var(--coral);box-shadow:0 7px 0 #b3263a,0 14px 30px rgba(255,77,90,.35);letter-spacing:1px}
+.cta{font-family:"Alk Display";font-size:32px;padding:14px 64px;border-radius:18px;background:var(--coral);box-shadow:0 7px 0 #b3263a,0 14px 30px rgba(255,77,90,.35);letter-spacing:1px}
 .cta:active{transform:translateY(5px);box-shadow:0 2px 0 #b3263a}
 .cta.sec{background:#26344e;box-shadow:0 7px 0 #141e30}
 .keys{margin-top:22px;font-size:15px;font-weight:600;color:rgba(255,255,255,.65);display:flex;gap:16px}
@@ -218,7 +219,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 @keyframes slam{from{transform:scale(3);opacity:0}}
 
 .cnt{pointer-events:none}
-.cnt b{font-family:"Lilita One";font-weight:400;font-size:190px;line-height:1;-webkit-text-stroke:10px var(--navy);paint-order:stroke fill;animation:cn .9s both}
+.cnt b{font-family:"Alk Display";font-weight:400;font-size:190px;line-height:1;-webkit-text-stroke:10px var(--navy);paint-order:stroke fill;animation:cn .9s both}
 @keyframes cn{0%{transform:scale(2.4);opacity:0}25%{transform:scale(1);opacity:1}80%{opacity:1}100%{transform:scale(.8);opacity:0}}
 
 .menu .box,.end .box{background:#15233d;border:3px solid rgba(255,255,255,.18);border-radius:24px;padding:28px 36px;min-width:420px;display:flex;flex-direction:column;align-items:center;gap:12px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
@@ -226,21 +227,32 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .mi{width:100%;padding:13px 18px;border-radius:14px;background:#26344e;font-weight:800;font-size:18px;text-align:left;display:flex;justify-content:space-between}
 .mi:active{background:var(--cobalt)}
 .mi.pri{background:var(--cobalt)}
-.end .res{font-size:76px;line-height:1}
+#ovEnd{position:fixed;inset:0;z-index:60;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));background:radial-gradient(120% 70% at 50% 0%,rgba(28,50,96,.94),rgba(15,27,45,.97) 70%)}
+.end .box{width:min(560px,100%);min-width:0;padding:26px 28px 24px;gap:14px;border-radius:28px;border:2px solid rgba(255,255,255,.12);background:linear-gradient(#172848,#101d33)}
+.end .etag{font-weight:800;font-size:13px;letter-spacing:3px;color:rgba(255,255,255,.55)}
+.end .res{font-size:64px;line-height:1;text-align:center;margin-top:-4px}
 .end .res.w{color:var(--teal)}.end .res.l{color:var(--coral)}
-.end .fs{display:flex;align-items:center;gap:26px;margin:6px 0}
-.end .fs img{width:96px;height:96px;object-fit:contain}
-.end .fs .r{transform:scaleX(-1)}
-.end .fs b{font-family:"Lilita One";font-weight:400;font-size:70px}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:100%;margin:4px 0 8px}
-.grid div{background:#0f1b2d;border-radius:12px;padding:10px 8px;text-align:center}
-.grid b{display:block;font-family:"Lilita One";font-weight:400;font-size:28px}
-.grid span{font-size:12px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px}
-.rew{font-weight:800;font-size:19px;color:var(--teal)}
+.end .fs{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;width:100%;margin:4px 0}
+.end .pl{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.end .av{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;background:#0b1527;border:3px solid var(--teal);overflow:hidden}
+.end .op .av{border-color:var(--coral)}
+.end .av img{width:88%;height:88%;object-fit:contain}
+.end .av .r{transform:scaleX(-1)}
+.end .pn{max-width:100%;font-weight:800;font-size:16px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.end .fs b{font-family:"Alk Display";font-weight:400;font-size:60px;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:100%;margin:2px 0}
+.grid div{background:#0b1527;border-radius:14px;padding:12px 6px;text-align:center;display:flex;flex-direction:column;gap:4px}
+.grid b{display:block;font-family:"Alk Display";font-weight:400;font-size:28px;line-height:1}
+.grid span{font-size:11px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px;line-height:1.3}
+.rew{font-weight:800;font-size:16px;color:var(--teal);background:rgba(34,211,197,.12);border-radius:999px;padding:8px 18px}
+.end .btns{display:flex;gap:10px;width:100%}.end .btns .cta{flex:1;font-size:24px;padding:14px 12px}
+#ovEnd{overflow-y:auto}
+@media (orientation:portrait){.end .box{padding:24px 18px 20px}.end .res{font-size:54px}.end .av{width:80px;height:80px}.end .fs b{font-size:48px}.end .grid{grid-template-columns:repeat(2,1fr)}.end .btns{flex-direction:column}}
+@media (orientation:landscape) and (max-height:480px){.end .box{padding:14px 22px;gap:8px}.end .etag{display:none}.end .res{font-size:40px}.end .av{width:60px;height:60px}.end .fs{margin:0}.end .fs b{font-size:42px}.end .grid div{padding:7px 6px}.end .grid b{font-size:22px}.end .rew{padding:5px 14px;font-size:14px}.end .btns .cta{font-size:20px;padding:10px}}
 .btns{display:flex;gap:14px;margin-top:8px}
 .btns .cta{font-size:24px;padding:12px 34px}
 .banner{position:absolute;left:0;right:0;top:120px;display:flex;justify-content:center;pointer-events:none}
-.banner b{font-family:"Lilita One";font-weight:400;font-size:54px;padding:6px 40px;border-radius:16px;background:var(--coral);box-shadow:0 8px 0 #b3263a;animation:cn 2.2s both;display:flex;align-items:center;gap:14px}
+.banner b{font-family:"Alk Display";font-weight:400;font-size:54px;padding:6px 40px;border-radius:16px;background:var(--coral);box-shadow:0 8px 0 #b3263a;animation:cn 2.2s both;display:flex;align-items:center;gap:14px}
 .banner b img{width:78px;height:78px;object-fit:contain;margin:-22px 0 -18px -18px}
 .banner b{will-change:transform,opacity}
 .banner b img.fl{transform:scaleX(-1)}
@@ -254,9 +266,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #rot .ph:before{content:"";position:absolute;left:50%;top:calc(var(--u)*5);width:calc(var(--u)*16);height:calc(var(--u)*3);transform:translateX(-50%);border-radius:3px;background:#fff}
 #rot .ph i{position:absolute;inset:calc(var(--u)*13) calc(var(--u)*6);border-radius:calc(var(--u)*4);background:linear-gradient(var(--cobalt),var(--coral))}
 @keyframes rt{0%,20%{transform:rotate(0)}55%,80%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
-#rot h2{font-family:"Lilita One";font-weight:400;font-size:calc(var(--u)*24);line-height:1.1}
+#rot h2{font-family:"Alk Display";font-weight:400;font-size:calc(var(--u)*24);line-height:1.1}
 #rot p{font-size:calc(var(--u)*13);line-height:1.5;color:rgba(255,255,255,.75);max-width:calc(var(--u)*250)}
-#rot button{font-family:"Lilita One";font-size:calc(var(--u)*15);padding:calc(var(--u)*9) calc(var(--u)*22);border-radius:calc(var(--u)*12);background:var(--coral);box-shadow:0 calc(var(--u)*4) 0 #b3263a}
+#rot button{font-family:"Alk Display";font-size:calc(var(--u)*15);padding:calc(var(--u)*9) calc(var(--u)*22);border-radius:calc(var(--u)*12);background:var(--coral);box-shadow:0 calc(var(--u)*4) 0 #b3263a}
 </style>
 </head>
 <body>
@@ -329,8 +341,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   </div>
   <div class="ov dim end" id="ovEnd">
    <div class="box">
+    <span class="etag">MAÇ SONU</span>
     <div class="res disp" id="endRes">KAZANDIN!</div>
-    <div class="fs"><img id="endA" alt=""><b id="endS">0 - 0</b><img id="endB" class="r" alt=""></div>
+    <div class="fs">
+     <div class="pl me"><span class="av"><img id="endA" alt=""></span><span class="pn" id="endNA">Sen</span></div>
+     <b id="endS">0 - 0</b>
+     <div class="pl op"><span class="av"><img id="endB" class="r" alt=""></span><span class="pn" id="endNB">Rakip</span></div>
+    </div>
     <div class="grid">
      <div><b id="gPct">0%</b><span>İsabet</span></div>
      <div><b id="gDunk">0</b><span>Smaç</span></div>
@@ -539,9 +556,9 @@ function buildLayers(){
   key(0);key(1);
   const m0=P(.5,0),m1=P(.5,1);g.lineWidth=4.5;g.beginPath();g.moveTo(m0[0],m0[1]);g.lineTo(m1[0],m1[1]);g.stroke();
   const cc=P(.5,.3);g.beginPath();g.ellipse(cc[0],cc[1],108,32,0,0,Math.PI*2);g.fillStyle='#ff4d5a';g.fill();g.lineWidth=4.5;g.stroke();
-  g.save();g.translate(cc[0],cc[1]+2);g.scale(1,.6);g.font='42px "Lilita One"';g.textAlign='center';g.textBaseline='middle';g.fillStyle='#ffffff';g.fillText('ALKANKA',0,0);g.restore();
+  g.save();g.translate(cc[0],cc[1]+2);g.scale(1,.6);g.font='42px "Alk Display"';g.textAlign='center';g.textBaseline='middle';g.fillStyle='#ffffff';g.fillText('ALKANKA',0,0);g.restore();
   court();g.lineWidth=5;g.stroke();
-  g.save();g.translate(W/2,T(690));g.scale(1,.55);g.font='70px "Lilita One"';g.textAlign='center';g.textBaseline='middle';g.fillStyle='rgba(255,255,255,.2)';g.fillText('SOKAK ARENASI',0,0);g.restore();
+  g.save();g.translate(W/2,T(690));g.scale(1,.55);g.font='70px "Alk Display"';g.textAlign='center';g.textBaseline='middle';g.fillStyle='rgba(255,255,255,.2)';g.fillText('SOKAK ARENASI',0,0);g.restore();
  });
 }
 
@@ -589,7 +606,7 @@ function newMatch(){
  $('bSkImg').src=IMG[userCh.id].src;$('myCard').style.setProperty('--c',userCh.sk.c);$('bSkill').style.setProperty('--c',userCh.sk.c);
  Object.assign(aiS,{shotX:null,stealT:1,blockT:-1});
  tipOff(false);
- $('hA').src=IMG[userCh.id].src;$('hB').src=IMG[aiCh.id].src;$('aA').textContent=userCh.ab;$('aB').textContent=aiCh.ab;$('myCardImg').src=IMG[userCh.id].src;
+ $('hA').src=IMG[userCh.id].src;$('hB').src=IMG[aiCh.id].src;paintNames();$('myCardImg').src=IMG[userCh.id].src;
  $('sA').textContent='0';$('sB').textContent='0';hudCache={};
 }
 /* Hava topu: top orta noktada bekler, oyun başlayınca havaya atılır; iki oyuncu aynı anda zıplayıp kapmaya çalışır */
@@ -671,17 +688,24 @@ function tryDash(p){
  const dir=(p.isUser&&(inp.l||inp.r))?((inp.r?1:0)-(inp.l?1:0))||p.f:p.f;p.f=dir;
  p.dash={t:.22,T:.22,dir,hit:0};p.dashCd=.5;sy('whoosh',.34,p.x,.3,400,3400);play('squeak2',.32,{x:p.x,rev:.12})}
 function dashHit(p){
- const d=p.dash,o=other(p);if(d.hit||ball.owner!==o||o.dunk||o.hang>0)return;
- if(Math.abs(o.x-p.x)>66*Math.max(o.scl,p.scl)||Math.abs(o.y-p.y)>120)return;
+ const d=p.dash,o=other(p),sc=Math.max(o.scl,p.scl),hum=p.isUser||p.hum;
+ /* Top sendeyken atıl: rakibin içinden sıyrılıp geçersin, savunmacı bir an sendeler ve araya giremez */
+ if(ball.owner===p){
+  if(d.pass||o.dunk||o.hang>0)return;
+  if(Math.abs(o.x-p.x)<70*sc&&Math.abs(o.y-p.y)<140*sc){d.pass=1;d.t=Math.max(d.t,.12);o.stun=Math.max(o.stun,.35);o.stealCd=Math.max(o.stealCd,.6);o.vx=-d.dir*120;
+   if(o===ai)aiS.stealT=Math.max(aiS.stealT,.8);
+   if(hum)pop('SIYRILDI!',p.x,p.y-230,'#22d3c5',30);play('squeak2',.36,{x:p.x});game.excite=Math.max(game.excite,.45)}
+  return}
+ if(d.hit||ball.owner!==o||o.dunk||o.hang>0)return;
+ if(Math.abs(o.x-p.x)>80*sc||Math.abs(o.y-p.y)>130*sc)return;
  d.hit=1;if(skOn(o,'lori')){pop('KAÇTI!',o.x,o.y-230,'#ffd23f',30);return}
- const hum=p.isUser||p.hum;
- /* Topu koruyan (sırtı dönük) oyuncudan atılmayla top almak zordur; top temiz geçmez, havaya fırlar ve iki taraf da kapışır */
  const shielded=sgn(p.x-o.x)===-o.f;
- if(skOn(p,'lori')||Math.random()<(hum?(shielded?.22:.4):(shielded?.3:.45))){const dir=d.dir;
-  ball.owner=null;ball.shot=null;ball.x=o.x;ball.y=o.y-120*o.scl;ball.vx=rnd(-90,90)+dir*40;ball.vy=-rnd(560,680);ball.cd=.12;ball.noPick=o;ball.noPickT=.22;
-  o.shoot=null;o.stun=.25;o.vx=dir*200;p.dash.t=Math.min(p.dash.t,.04);p.stun=.18;p.st.steal++;if(o===ai)aiS.stealT=rnd(.25,.5);aiS.shotX=null;
-  pop('TOP DÜŞTÜ!',o.x,o.y-230,'#ff4d5a',32);play('squeak1',.42,{x:o.x});sy('impact',.3);game.shake=6;addEn(p,12);game.excite=Math.max(game.excite,.5)}
- else{d.t=0;p.stun=.3;pop('ÇARPIŞMA',p.x,p.y-220,'#ffffff',22)}}
+ if(skOn(p,'lori')||Math.random()<(hum?(shielded?.45:.7):(shielded?.3:.45))){
+  o.shoot=null;o.stun=.3;o.vx=d.dir*200;o.stealCd=Math.max(o.stealCd,.7);p.st.steal++;aiS.shotX=null;
+  if(hum){ball.owner=p;ball.shot=null;ball.tip=0;ball.dribPh=0;ball.cd=0;ball.noPick=null;if(o===ai)aiS.stealT=rnd(.9,1.4);pop('TOP SENDE!',p.x,p.y-230,'#22d3c5',32)}
+  else{ball.owner=null;ball.shot=null;ball.x=o.x;ball.y=o.y-120*o.scl;ball.vx=rnd(-90,90)+d.dir*40;ball.vy=-rnd(560,680);ball.cd=.12;ball.noPick=o;ball.noPickT=.22;pop('TOP DÜŞTÜ!',o.x,o.y-230,'#ff4d5a',32)}
+  play('squeak1',.42,{x:o.x});sy('impact',.3);game.shake=6;addEn(p,12);game.excite=Math.max(game.excite,.5)}
+ else{p.dash.t=Math.min(p.dash.t,.06);p.stun=.25;if(hum)pop('ÇARPIŞMA',p.x,p.y-220,'#ffffff',22)}}
 function startShot(p,aq){
  if(p.dunk||p.hang>0||p.frz>0||p.stun>0)return;
  if(ball.owner!==p){trySteal(p);return}
@@ -763,14 +787,17 @@ function stealCheck(p){
  if(Math.min(Math.abs(o.x-p.x),Math.abs(ball.x-p.x))>reach||Math.abs(o.y-p.y)>(hum?130:90)*sc)return;
  p.stealDone=1;
  if(skOn(o,'lori')){pop('KAÇTI!',o.x,o.y-230,'#ffd23f',30);return}
+ if(o.dash){if(o.isUser||o.hum)pop('SIYRILDI!',o.x,o.y-230,'#22d3c5',30);return}
  const shielded=sgn(p.x-o.x)===-o.f;
- let ch=hum?(shielded?.3:.5):(shielded?.32:.45);
+ let ch=hum?(shielded?.45:.72):(shielded?.32:.45);
  if(!hum){const lead=p.score-o.score;ch*=lead>=6?.6:lead>=3?.8:lead<=-4?1.3:1}
  if(fast||Math.random()<ch){
   const dir=sgn(p.x-o.x)||-o.f;
-  ball.owner=null;ball.shot=null;ball.dribPh=0;ball.x=o.x+dir*20;ball.y=Math.min(ball.y,o.y-110*o.scl);ball.vx=dir*rnd(60,150);ball.vy=-rnd(480,600);ball.cd=.1;ball.noPick=o;ball.noPickT=.25;
-  o.shoot=null;o.stun=.25;o.vx=-dir*160;o.stealCd=Math.max(o.stealCd,.5);
-  if(o===ai)aiS.stealT=rnd(.25,.5);aiS.shotX=null;
+  /* Oyuncu çalınca top doğrudan ona geçer; bot çalarsa top sekip serbest kalır (adil kalsın) */
+  if(hum){ball.owner=p;ball.shot=null;ball.tip=0;ball.dribPh=0;ball.cd=0;ball.noPick=null}
+  else{ball.owner=null;ball.shot=null;ball.dribPh=0;ball.x=o.x+dir*20;ball.y=Math.min(ball.y,o.y-110*o.scl);ball.vx=dir*rnd(60,150);ball.vy=-rnd(480,600);ball.cd=.1;ball.noPick=o;ball.noPickT=.25}
+  o.shoot=null;o.stun=hum?.4:.25;o.vx=-dir*160;o.stealCd=Math.max(o.stealCd,hum?.8:.5);
+  if(o===ai)aiS.stealT=hum?rnd(.9,1.4):rnd(.25,.5);aiS.shotX=null;
   p.st.steal++;pop('TOP ÇALINDI!',o.x,o.y-230,'#ff4d5a',32);play('squeak2',.42,{x:p.x});sy('whoosh',.35,p.x,.25,1200,3600);addEn(p,15);game.excite=Math.max(game.excite,.5);
  }else if(hum)pop('ISKA',p.x,p.y-220,'#ffffff',24);
 }
@@ -813,7 +840,7 @@ function updPlayer(p,dt){
  if(p.onG)p.ph+=Math.abs(p.vx)*dt*.034;
 }
 function collidePlayers(){
- const a=user,b=ai;if(a.dunk||b.dunk)return;if((a.dash&&ball.owner===a)||(b.dash&&ball.owner===b))return;const dx=b.x-a.x,w=46*(a.scl+b.scl)/2;
+ const a=user,b=ai;if(a.dunk||b.dunk)return;if(a.dash||b.dash)return;const dx=b.x-a.x,w=46*(a.scl+b.scl)/2;
  if(Math.abs(dx)<w&&Math.abs(a.y-b.y)<110*Math.max(a.scl,b.scl)){const o=(w-Math.abs(dx))*sgn(dx||1),ka=skOn(a,'kakadu'),kb=skOn(b,'kakadu');
   if(ka&&!kb)b.x+=o*1.4;else if(kb&&!ka)a.x-=o*1.4;else{a.x-=o/2;b.x+=o/2}a.x=clamp(a.x,36,W-36);b.x=clamp(b.x,36,W-36)}
 }
@@ -984,7 +1011,7 @@ function drawTorso(ch){
  if(!ch._tg){const g=ctx.createLinearGradient(-17,0,17,0);g.addColorStop(0,ch.jer2);g.addColorStop(.45,ch.jer);g.addColorStop(1,ch.jer2);ch._tg=g}ctx.fillStyle=ch._tg;ctx.fill();ctx.strokeStyle=OUT;ctx.lineWidth=3;ctx.stroke();
  ctx.strokeStyle=ch.trim;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(-10,-91);ctx.quadraticCurveTo(0,-80,10,-91);ctx.stroke();
  ctx.beginPath();ctx.moveTo(17,-88);ctx.quadraticCurveTo(12,-78,15,-70);ctx.moveTo(-17,-88);ctx.quadraticCurveTo(-12,-78,-15,-70);ctx.stroke();
- ctx.fillStyle=ch.trim;ctx.font='20px "Lilita One"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle=OUT;ctx.strokeText(ch.no,1,-67);ctx.fillText(ch.no,1,-67);
+ ctx.fillStyle=ch.trim;ctx.font='20px "Alk Display"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle=OUT;ctx.strokeText(ch.no,1,-67);ctx.fillText(ch.no,1,-67);
 }
 function drawShorts(ch){
  ctx.beginPath();ctx.moveTo(-18,-58);ctx.lineTo(18,-58);ctx.lineTo(21,-38);ctx.lineTo(3,-38);ctx.lineTo(0,-44);ctx.lineTo(-3,-38);ctx.lineTo(-21,-38);ctx.closePath();
@@ -1115,7 +1142,7 @@ function drawOrb(t){if(!orb)return;const O=ORB[orb.k],y=orb.y+Math.sin(t*3)*8,a=
  else if(orb.k==='spd'){ctx.beginPath();ctx.moveTo(-12,-12);ctx.lineTo(-1,0);ctx.lineTo(-12,12);ctx.moveTo(2,-12);ctx.lineTo(13,0);ctx.lineTo(2,12);ctx.lineWidth=4.5;ctx.stroke()}
  else{ctx.beginPath();ctx.moveTo(0,10);ctx.lineTo(0,-14);ctx.moveTo(-9,-5);ctx.lineTo(0,-15);ctx.lineTo(9,-5);ctx.moveTo(-9,16);ctx.lineTo(-3,12);ctx.lineTo(3,16);ctx.lineTo(9,12);ctx.lineWidth=4;ctx.stroke()}
  ctx.restore();
- ctx.save();ctx.globalAlpha=a;ctx.font='17px "Lilita One"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=6;ctx.strokeStyle=OUT;ctx.strokeText(O.l,orb.x,y+50);ctx.fillStyle='#fff';ctx.fillText(O.l,orb.x,y+50);ctx.restore()}
+ ctx.save();ctx.globalAlpha=a;ctx.font='17px "Alk Display"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=6;ctx.strokeStyle=OUT;ctx.strokeText(O.l,orb.x,y+50);ctx.fillStyle='#fff';ctx.fillText(O.l,orb.x,y+50);ctx.restore()}
 
 function drawFx(dt){
  const PM=LOW?60:COARSE?90:150;if(parts.length>PM)parts.splice(0,parts.length-PM);
@@ -1125,7 +1152,7 @@ function drawFx(dt){
  ctx.globalAlpha=1;
  for(let i=pops.length-1;i>=0;i--){const q=pops[i];q.life-=dt;if(q.life<=0){pops.splice(i,1);continue}
   const k=1.3-q.life,sc=k<.15?.4+k/.15*.8:k<.25?1.2-(k-.15)*2:1;ctx.save();ctx.globalAlpha=clamp(q.life*2.2,0,1);ctx.translate(q.x,q.y-k*40);ctx.scale(sc,sc);
-  ctx.font=q.s+'px "Lilita One"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='#0f1b2d';ctx.strokeText(q.t,0,0);ctx.fillStyle=q.c;ctx.fillText(q.t,0,0);ctx.restore()}
+  ctx.font=q.s+'px "Alk Display"';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='#0f1b2d';ctx.strokeText(q.t,0,0);ctx.fillStyle=q.c;ctx.fillText(q.t,0,0);ctx.restore()}
 }
 
 let sideC=null;
@@ -1287,6 +1314,13 @@ function controlUser(p,dt){
 }
 
 /* ---------- flow ---------- */
+/* Bitiş kartı ölçeklenen sahnenin dışında, tam ekran katmanda durur; dikey telefonda da okunur boyda kalır */
+document.body.appendChild($('ovEnd'));
+let ME_NAME='';
+function sideName(i){
+ if(NET)return String(NET.names[(NET.role==='host'?0:1)^i]||(i?'Rakip':'Sen')).slice(0,18);
+ return i?(aiCh?.name||aiCh?.ab||'Rakip'):(ME_NAME||'Sen')}
+function paintNames(){if(!userCh||!aiCh)return;$('aA').textContent=sideName(0);$('aB').textContent=sideName(1)}
 function show(id,on){$(id).classList.toggle('on',on);if(id==='ovEnd'){endView=!!on;fit()}}
 function buildSelect(){
  const box=$('chars');box.innerHTML='';
@@ -1319,7 +1353,7 @@ function endMatch(){
 function endMatchView(){
  game.state='over';const w=user.score>ai.score;
  $('endRes').textContent=w?'KAZANDIN!':'KAYBETTİN';$('endRes').className='res disp '+(w?'w':'l');
- $('endA').src=IMG[userCh.id].src;$('endB').src=IMG[aiCh.id].src;$('endS').textContent=user.score+' - '+ai.score;
+ $('endA').src=IMG[userCh.id].src;$('endB').src=IMG[aiCh.id].src;$('endS').textContent=user.score+' – '+ai.score;$('endNA').textContent=sideName(0);$('endNB').textContent=sideName(1);
  const s=user.st;$('gPct').textContent=(s.fga?Math.round(s.fgm/s.fga*100):0)+'%';$('gDunk').textContent=s.dunk;$('g3').textContent=s.three;$('gStl').textContent=s.steal;
  $('rew').textContent=w?'+120 Jeton · +45 XP':'+30 Jeton · +15 XP';
  if(w){play('cheer',.8);user.cele=3}else play('ooh',.6);
@@ -1332,6 +1366,7 @@ $('againBtn').onclick=()=>{if(EMBED){alkPost('rematch');return}show('ovEnd',0);f
 $('selBtn').onclick=()=>{if(EMBED){alkPost('exit');return}show('ovEnd',0);toSelect()};
 if(EMBED){$('exitBtn').hidden=false;$('exitBtn').onclick=()=>alkPost('quit');$('selBtn').textContent='ARENAYA DÖN';$('mQuit').textContent='Maçtan çık';
  addEventListener('message',e=>{if(e.origin!==location.origin||!e.data||e.data.source!=='alk-host')return;
+  if(e.data.type==='me'&&typeof e.data.name==='string'){ME_NAME=e.data.name.trim().slice(0,18);paintNames()}
   if(e.data.type==='init'&&!NET)netInit(e.data.role,e.data.names);
   if(e.data.type==='net')onNet(e.data.msg);
   if(e.data.type==='link'&&NET){if(e.data.status==='lost'&&NET.link!=='lost'&&NET.live)showBanner('RAKİBİN BAĞLANTISI KOPTU','#ff4d5a');NET.link=e.data.status}

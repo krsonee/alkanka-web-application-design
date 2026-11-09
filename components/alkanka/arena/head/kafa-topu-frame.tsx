@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RotatePrompt, useMedia } from './controls'
 import { goLandscape, lockPortrait, restorePortrait } from '../orientation'
 import type { DuelLink } from '../duel-link'
+import { useSession } from '@/lib/auth-client'
 
 type Score = { for: number; against: number }
 type GameMessage = {
@@ -71,6 +72,12 @@ export function KafaTopuFrame({
   const touch = useMedia(MOBILE_QUERY)
   const portrait = useMedia('(orientation: portrait)')
   const needRotate = touch && portrait && !finished
+  const myName = useSession().data?.user.name ?? ''
+  const myNameRef = useRef(myName)
+  myNameRef.current = myName
+  useEffect(() => {
+    if (myName) frame.current?.contentWindow?.postMessage({ source: 'alk-host', type: 'me', name: myName }, window.location.origin)
+  }, [myName])
   const linkStatus = online?.link.status
   const linkTransport = online?.link.transport
 
@@ -108,6 +115,7 @@ export function KafaTopuFrame({
         net?.link.send(msg.msg)
         return
       }
+      if (msg.type === 'ready' && myNameRef.current) post({ type: 'me', name: myNameRef.current })
       if (msg.type === 'ready' && net) {
         post({ type: 'init', role: net.role, names: net.names })
         post({ type: 'link', status: net.link.status, transport: net.link.transport })
