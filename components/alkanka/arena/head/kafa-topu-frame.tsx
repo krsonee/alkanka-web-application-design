@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { RotatePrompt, useMedia } from './controls'
+import { goLandscape, lockPortrait, restorePortrait } from '../orientation'
 import type { DuelLink } from '../duel-link'
 
 type Score = { for: number; against: number }
@@ -65,9 +66,11 @@ export function KafaTopuFrame({
   onlineRef.current = online
 
   const [closed, setClosed] = useState(false)
+  // After the final whistle the result card is built for an upright phone, so the rotate prompt stands down.
+  const [finished, setFinished] = useState(false)
   const touch = useMedia(MOBILE_QUERY)
   const portrait = useMedia('(orientation: portrait)')
-  const needRotate = touch && portrait
+  const needRotate = touch && portrait && !finished
   const linkStatus = online?.link.status
   const linkTransport = online?.link.transport
 
@@ -111,7 +114,11 @@ export function KafaTopuFrame({
       }
       const s = { for: Number(msg.for) || 0, against: Number(msg.against) || 0 }
       if (msg.type === 'score' || msg.type === 'end') score.current = s
-      if (msg.type === 'end') ended.current = true
+      if (msg.type === 'end') {
+        ended.current = true
+        setFinished(true)
+        void lockPortrait()
+      }
       // Leaving before the final whistle is a forfeit, never a refunded draw.
       if (msg.type === 'quit') finish(ended.current ? s : { for: s.for, against: Math.max(s.against, s.for + 1) })
       if (msg.type === 'exit') finish(score.current)
@@ -123,6 +130,9 @@ export function KafaTopuFrame({
           again(score.current)
         } else if (!again) {
           score.current = { for: 0, against: 0 }
+          ended.current = false
+          setFinished(false)
+          void goLandscape()
           send('start')
         }
       }
@@ -130,6 +140,11 @@ export function KafaTopuFrame({
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [])
+
+  useEffect(() => {
+    if (closed) void restorePortrait()
+  }, [closed])
+  useEffect(() => () => void restorePortrait(), [])
 
   useEffect(() => {
     if (needRotate) frame.current?.contentWindow?.postMessage({ source: 'alk-host', type: 'pause' }, window.location.origin)

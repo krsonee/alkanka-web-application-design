@@ -135,11 +135,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .rb svg{width:calc(var(--u)*24);height:calc(var(--u)*24);stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .rb b{font-family:"Lilita One";font-weight:400;font-size:calc(var(--u)*11);line-height:1;margin-top:calc(var(--u)*1)}
 .rb.dn{background:radial-gradient(circle,rgba(34,211,197,.7),rgba(34,211,197,.35));transform:scale(.94)}
-#bJump,#bShoot,#bDash{width:calc(var(--u)*84);height:calc(var(--u)*84);bottom:calc(var(--u)*14)}
-#bJump{right:calc(var(--u)*18);width:calc(var(--u)*100);height:calc(var(--u)*100)}
-#bShoot{right:calc(var(--u)*132);bottom:calc(var(--u)*20)}
-#bDash{right:calc(var(--u)*70);bottom:calc(var(--u)*124)}
-.rb::after,.arr::after{content:"";position:absolute;inset:calc(var(--u)*-10);border-radius:inherit}
+/* Thumb arc (console/mobile standard): the main action (Zıpla / Şut / Smaç) is the big button in the corner,
+   secondary actions sit on an arc around it at equal reach: Çal left, Atıl upper-left, Güç on top. */
+#bJump{right:calc(var(--u)*22);bottom:calc(var(--u)*18);width:calc(var(--u)*104);height:calc(var(--u)*104)}
+#bShoot{right:calc(var(--u)*147);bottom:calc(var(--u)*31);width:calc(var(--u)*78);height:calc(var(--u)*78)}
+#bDash{right:calc(var(--u)*117);bottom:calc(var(--u)*113);width:calc(var(--u)*72);height:calc(var(--u)*72)}
 .rb,.arr{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 #bJump.dk{border-color:#ffd23f;background:radial-gradient(circle at 50% 35%,rgba(255,210,63,.6),rgba(15,27,45,.65) 70%);box-shadow:0 0 calc(var(--u)*14) rgba(255,210,63,.85)}
 #bDash.off{opacity:.5}
@@ -151,7 +151,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
  #bJump.apex{border-color:#22d3c5;box-shadow:0 0 0 calc(var(--u)*4) #22d3c5,0 0 calc(var(--u)*22) #22d3c5}
  .arr,.rb{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
  #bShoot.apex{box-shadow:0 0 0 calc(var(--u)*4) #22d3c5,0 0 calc(var(--u)*22) #22d3c5}
-#bSkill{right:calc(var(--u)*176);bottom:calc(var(--u)*132);width:calc(var(--u)*58);height:calc(var(--u)*58);opacity:.7}
+#bSkill{right:calc(var(--u)*44);bottom:calc(var(--u)*152);width:calc(var(--u)*60);height:calc(var(--u)*60);opacity:.7}
+@media (orientation:portrait){.end .box{min-width:0;width:calc(100vw - 32px);padding:22px 18px}.end .res{font-size:56px;text-align:center}.end .fs{gap:14px}.end .fs img{width:68px;height:68px}.end .fs b{font-size:50px}.end .btns{flex-direction:column;width:100%}.end .btns .cta{width:100%}}
 .real.kb #touch{display:none}
 .real.kb .keys{display:flex}
 #bSkill img{width:calc(var(--u)*34);height:calc(var(--u)*34);object-fit:contain;margin-top:calc(var(--u)*-4)}
@@ -639,7 +640,6 @@ function dpEnd(e){if(e.pointerId!==dp.id)return;dp.id=null;dp.dir=0;press('l',0)
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>el.addEventListener(ev,dpEnd));
  el.addEventListener('contextmenu',e=>e.preventDefault())});
 bindBtn('bJump','j');bindBtn('bShoot','t');bindBtn('bDash','k');
-$('myCard').addEventListener('pointerdown',()=>inp.superP=1);
 $('bSkill').addEventListener('pointerdown',e=>{e.preventDefault();inp.superP=1;$('bSkill').classList.add('dn')});
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>$('bSkill').addEventListener(ev,()=>$('bSkill').classList.remove('dn')));
 
@@ -828,7 +828,7 @@ function controlAI(p,dt){
  if(ball.owner===p){
   if(aiS.shotX==null){const r=Math.random();aiS.shotX=h.cx+(r<.34?rnd(100,125):r<.82?rnd(190,370):rnd(410,460))}
   const dx=aiS.shotX-p.x;
-  /* Atılmayla gelen kullanıcıdan kaç: zıplayarak şut, geri adım ya da topu korumak için arkasını dön */
+  /* Atılmayla gelen kullanıcıdan kaç: z��playarak şut, geri adım ya da topu korumak için arkasını dön */
   if(!u.dash)aiS.dodged=0;
   else if(!aiS.dodged&&!p.shoot&&p.onG&&sgn(p.x-u.x)===u.dash.dir&&Math.abs(u.x-p.x)<320){aiS.dodged=1;const r=Math.random();
    if(r<.38){if(Math.abs(h.cx-p.x)<470)startShot(p,Math.random()<.5?'good':'bad');else jump(p)}
@@ -1287,7 +1287,7 @@ function controlUser(p,dt){
 }
 
 /* ---------- flow ---------- */
-function show(id,on){$(id).classList.toggle('on',on)}
+function show(id,on){$(id).classList.toggle('on',on);if(id==='ovEnd'){endView=!!on;fit()}}
 function buildSelect(){
  const box=$('chars');box.innerHTML='';
  CHARS.forEach(c=>{const b=document.createElement('button');b.className='ch'+(c===userCh?' sel':'');b.setAttribute('aria-pressed',c===userCh);
@@ -1540,8 +1540,8 @@ function bubble(m,p){const d=document.createElement('div');d.className='bub';d.t
 function goFull(){const el=document.documentElement;const rq=el.requestFullscreen||el.webkitRequestFullscreen;if(!document.fullscreenElement&&rq){Promise.resolve(rq.call(el)).then(()=>{try{screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}).catch(()=>{})}}
 
 /* rotate */
-let rotOn=false;
-function checkRot(){rotOn=(mode==='mob'&&port)||(mode==='real'&&innerHeight>innerWidth);$('rot').classList.toggle('on',rotOn);$('rotClose').hidden=mode!=='mob'}
+let rotOn=false,endView=false;
+function checkRot(){rotOn=!endView&&((mode==='mob'&&port)||(mode==='real'&&innerHeight>innerWidth));$('rot').classList.toggle('on',rotOn);$('rotClose').hidden=mode!=='mob'}
 matchMedia('(orientation: portrait)').addEventListener?.('change',fit);
 
 Promise.all(loads).then(()=>Promise.all(Object.values(IMG).map(i=>i.decode?i.decode().catch(()=>{}):0))).then(()=>document.fonts.ready).then(()=>{try{const wc=document.createElement('canvas');wc.width=wc.height=64;const wx=wc.getContext('2d');Object.values(IMG).forEach(i=>{if(i.naturalWidth)wx.drawImage(i,0,0,64,64)})}catch(e){}$('coachImg').src=IMG.coach.src;buildLayers();buildCrowd();newMatch();buildSelect();show('ovSel',1);fit();requestAnimationFrame(t=>{last=t;frame(t)})});

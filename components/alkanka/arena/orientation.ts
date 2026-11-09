@@ -8,6 +8,13 @@ export async function goLandscape() {
   } catch {}
 }
 
+/** Full time: turn the phone upright (Android, while fullscreen) without leaving the game. */
+export async function lockPortrait() {
+  try {
+    if (document.fullscreenElement) await (screen.orientation as LockableOrientation).lock?.('portrait-primary')
+  } catch {}
+}
+
 /**
  * Leaving a table: lock portrait while still fullscreen (Android honours it),
  * then drop fullscreen and release the lock so the site returns upright.
