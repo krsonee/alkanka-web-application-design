@@ -11,6 +11,7 @@ import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
 import { TableLobby } from './table-lobby'
+import { PvpTablesPanel } from './pvp-tables-panel'
 import { wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { LiveLobby } from './live-lobby'
 import { WaitingTables } from './waiting-tables'
@@ -179,7 +180,7 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
 
   return (
     <div className="flex flex-col gap-4">
-      {entered == null && modes.includes('pvp') && (
+      {entered == null && modes.includes('pvp') && mode !== 'pvp' && (
         <WaitingTables
           game={game}
           onJoin={(id, stake) => {
@@ -201,6 +202,27 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
             botExternal: houseGame,
             onEnter: (m, bet) => setEntered({ mode: m, bet }),
           }}
+          pvpContent={
+            modes.includes('pvp') ? (
+              <PvpTablesPanel
+                game={game}
+                commission={settings.commission}
+                setup={setup}
+                bets={settings.bets}
+                onSeated={(id, stake) => {
+                  const url = new URL(window.location.href)
+                  url.searchParams.set('masa', id)
+                  window.history.replaceState(window.history.state, '', url)
+                  setInvitedTable(id)
+                  setEntered({ mode: 'pvp', bet: stake })
+                }}
+                onCreate={() => {
+                  setOpenWizard(wizardEnabledFor(setup, game))
+                  setEntered({ mode: 'pvp', bet: settings.bets[0] })
+                }}
+              />
+            ) : undefined
+          }
         >
           {(api) => <BotGame game={game} api={api} settings={settings} />}
         </StakeGate>
