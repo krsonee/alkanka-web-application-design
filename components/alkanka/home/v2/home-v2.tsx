@@ -1,4 +1,5 @@
-import type { HomeV2Config } from '@/lib/home-v2-shared'
+import { HOME_GAME_LABEL, type HomeV2Config } from '@/lib/home-v2-shared'
+import { MemberHeroSlider, type MemberSlide } from './member-hero-slider'
 import type { MarketProduct } from '@/lib/market'
 import type { MiniStatus } from '@/app/actions/wallet'
 import { HeroSlider } from './hero-slider'
@@ -8,10 +9,8 @@ import {
   FreeGrid,
   GamesGrid,
   Leaderboard,
-  MemberHero,
   NewbieCard,
   PromoCards,
-  QuickRail,
   SectionHead,
   WalletCard,
   type DailyState,
@@ -29,7 +28,6 @@ export function GuestHomeV2({ config, products, weekly, bonus }: { config: HomeV
   const primaryLabel = config.guestPrimaryCta.replace('{bonus}', String(bonus))
   return (
     <div className="flex flex-col gap-10">
-      {config.showRail && <QuickRail links={config.rail} />}
       <HeroSlider
         slides={config.slides}
         eyebrow={config.guestEyebrow}
@@ -105,27 +103,45 @@ export function MemberHomeV2Page({
     })
   const readyCount = daily.filter((d) => d.nextAt === null).length
   const dailySub = config.dailySub.replace('{toplam}', String(daily.length)).replace('{hazir}', String(readyCount))
-  const readyHrefs = new Set(daily.filter((d) => d.nextAt === null && MINI_BY_HREF[d.tile.href]).map((d) => d.tile.href))
 
   const byPrice = [...products].sort((a, b) => a.price - b.price)
   const goal = byPrice.find((p) => p.price > balance) ?? null
   const picks = byPrice.filter((p) => p.price <= balance).slice(-3).reverse()
+  const lastKey = config.primaryHref.match(/^\/oyunlar\/([\w-]+)/)?.[1] ?? null
+  const heroSlides: MemberSlide[] = [
+    {
+      id: 'last',
+      label: lastKey ? (HOME_GAME_LABEL[lastKey] ?? 'Kaldığın yer') : 'Kaldığın yer',
+      thumb: lastKey ? `/images/games/${lastKey}.png` : config.heroImage,
+      image: config.heroImage,
+      eyebrow: config.eyebrow.replace('{ad}', name),
+      title: config.title,
+      pills: config.pills,
+      primary: { label: config.primaryCta, href: config.primaryHref },
+      secondary: { label: config.secondaryCta, href: config.secondaryHref },
+    },
+    ...config.slides
+      .filter((key) => key !== lastKey)
+      .map((key) => ({
+        id: key,
+        label: HOME_GAME_LABEL[key] ?? key,
+        thumb: `/images/games/${key}.png`,
+        image: `/images/slides/${key}.png`,
+        eyebrow: 'Masalar açık',
+        title: `${HOME_GAME_LABEL[key] ?? key} masasına otur, KP topla`,
+        pills: [],
+        primary: { label: 'Masa aç', href: `/oyunlar/${key}?masa-ac=1` },
+        secondary: { label: 'Oyuna göz at', href: `/oyunlar/${key}` },
+      })),
+  ]
   const top = weekly.slice(0, 3)
   const me = weeklyRank && kp !== null ? { rank: weeklyRank, points: weekly.find((r) => r.userId === meId)?.points ?? 0 } : null
 
   return (
     <div className="flex flex-col gap-8">
-      {config.showRail && <QuickRail links={config.rail} ready={readyHrefs} />}
       <div className="grid gap-6 lg:grid-cols-[1fr_330px]">
         <div className="flex min-w-0 flex-col gap-8">
-          <MemberHero
-            eyebrow={config.eyebrow.replace('{ad}', name)}
-            title={config.title}
-            image={config.heroImage}
-            pills={config.pills}
-            primary={{ label: config.primaryCta, href: config.primaryHref }}
-            secondary={{ label: config.secondaryCta, href: config.secondaryHref }}
-          />
+          <MemberHeroSlider slides={heroSlides} />
           {daily.length > 0 && (
             <section className="flex flex-col gap-4">
               <SectionHead title={config.dailyTitle} sub={dailySub} />

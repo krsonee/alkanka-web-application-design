@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { MarketProduct } from '@/lib/market'
+import { productImage } from '@/lib/home-v2-shared'
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
@@ -15,16 +16,20 @@ function ProductCard({ p }: { p: MarketProduct }) {
       href="/market"
       className="group relative isolate flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card"
     >
-      {p.image && (
-        <Image
-          src={p.image}
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 280px, 50vw"
-          className={cn('-z-10 object-cover transition-transform duration-500 group-hover:scale-105', soldOut && 'grayscale')}
-        />
-      )}
+      <Image
+        src={productImage(p)}
+        alt=""
+        fill
+        sizes="(min-width: 1024px) 280px, 50vw"
+        className={cn('-z-10 object-cover transition-transform duration-500 group-hover:scale-105', soldOut && 'grayscale')}
+      />
       <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/40 to-transparent" />
+      {p.kind === 'sponsor' && p.sponsorLogo && (
+        <span className="absolute left-3 top-3 flex h-8 items-center rounded-lg bg-background/85 px-2.5 backdrop-blur">
+          {/* eslint-disable-next-line @next/next/no-img-element -- sponsor logos are admin-provided remote URLs */}
+          <img src={p.sponsorLogo} alt={p.sponsorName ?? ''} className="h-5 w-auto max-w-24 object-contain" />
+        </span>
+      )}
       <span
         className={cn(
           'absolute right-3 top-3 rounded-full bg-background/80 px-2.5 py-1 text-[11px] font-bold backdrop-blur',

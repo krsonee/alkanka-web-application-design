@@ -14,16 +14,18 @@ import {
   Play,
   RotateCw,
   Send,
+  ShoppingBag,
   Star,
   Swords,
   Target,
   Ticket,
   Trophy,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TourButton } from '@/components/alkanka/app/site-tour'
-import { HOME_GAME_LABEL, type DailyTile, type FreeTile, type PromoCard, type RailLink } from '@/lib/home-v2-shared'
+import { HOME_GAME_LABEL, productImage, type DailyTile, type FreeTile, type PromoCard, type RailLink } from '@/lib/home-v2-shared'
 import type { MarketProduct } from '@/lib/market'
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
@@ -209,52 +211,101 @@ export function Leaderboard({
   compact?: boolean
 }) {
   const showMe = me && meId && !rows.some((r) => r.userId === meId)
+  const leader = Math.max(1, rows[0]?.points ?? 1)
   return (
-    <section aria-label={title} className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-2 pb-1">
-        <h2 className="font-display text-base font-bold text-foreground">{title}</h2>
-        {compact ? (
-          <Link href="/siralama" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+    <section aria-label={title} className="relative isolate flex flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-card p-4">
+      <span aria-hidden="true" className="absolute -right-16 -top-16 -z-10 size-48 rounded-full bg-primary/10 blur-3xl" />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <Trophy className="size-4" aria-hidden="true" />
+          </span>
+          <div className="flex flex-col">
+            <h2 className="font-display text-base font-bold leading-tight text-foreground">{title}</h2>
+            {note && <span className="text-[11px] text-muted-foreground">{note}</span>}
+          </div>
+        </div>
+        {compact && (
+          <Link href="/siralama" className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10">
             Tümü
             <ArrowRight className="size-3.5" aria-hidden="true" />
           </Link>
-        ) : (
-          note && <span className="text-xs text-muted-foreground">{note}</span>
         )}
       </div>
       {rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">Bu hafta henüz puan yok. İlk sen ol.</p>
       ) : (
-        <ol className="flex flex-col">
+        <ol className="flex flex-col gap-1.5">
           {rows.map((r, i) => (
-            <LbRow key={r.userId} rank={i + 1} name={r.name} points={r.points} mine={r.userId === meId} />
+            <LbRow key={r.userId} rank={i + 1} name={r.name} points={r.points} pct={(r.points / leader) * 100} mine={r.userId === meId} />
           ))}
-          {showMe && <LbRow rank={me.rank} name="Sen" points={me.points} mine />}
+          {showMe && (
+            <>
+              <li aria-hidden="true" className="flex justify-center py-0.5 text-xs leading-none text-muted-foreground">
+                ···
+              </li>
+              <LbRow rank={me.rank} name="Sen" points={me.points} pct={(me.points / leader) * 100} mine />
+            </>
+          )}
         </ol>
       )}
       {!compact && (
-        <Link href="/siralama" className="mt-1 inline-flex h-9 items-center justify-center rounded-lg border border-border text-sm font-semibold text-foreground transition-colors hover:bg-secondary">
+        <Link
+          href="/siralama"
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-background/40 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
+        >
           Tüm sıralama
+          <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
       )}
     </section>
   )
 }
 
-function LbRow({ rank, name, points, mine }: { rank: number; name: string; points: number; mine?: boolean }) {
+const MEDAL: Record<number, { ring: string; badge: string; bar: string }> = {
+  1: { ring: 'ring-primary', badge: 'bg-primary text-primary-foreground', bar: 'bg-primary' },
+  2: { ring: 'ring-foreground/60', badge: 'bg-foreground/80 text-background', bar: 'bg-foreground/60' },
+  3: { ring: 'ring-[oklch(0.62_0.12_50)]', badge: 'bg-[oklch(0.62_0.12_50)] text-background', bar: 'bg-[oklch(0.62_0.12_50)]' },
+}
+
+function LbRow({ rank, name, points, pct, mine }: { rank: number; name: string; points: number; pct: number; mine?: boolean }) {
+  const medal = MEDAL[rank]
   return (
     <li
       className={cn(
-        'flex items-center gap-3 border-b border-border py-2.5 last:border-b-0',
-        mine && 'rounded-lg border border-primary/40 bg-primary/10 px-2',
+        'flex items-center gap-3 rounded-xl border px-2.5 py-2 transition-colors',
+        mine ? 'border-primary/50 bg-primary/10' : medal ? 'border-border bg-background/40' : 'border-transparent hover:bg-background/40',
       )}
     >
-      <span className="w-6 text-sm font-semibold text-muted-foreground">{rank}</span>
-      <span className="flex size-7 items-center justify-center rounded-full bg-secondary text-[11px] font-bold uppercase text-foreground">
-        {name.charAt(0)}
+      <span className="relative shrink-0">
+        <span
+          className={cn(
+            'flex size-9 items-center justify-center rounded-full bg-secondary text-xs font-bold uppercase text-foreground',
+            medal && `ring-2 ring-offset-2 ring-offset-card ${medal.ring}`,
+          )}
+        >
+          {name.charAt(0)}
+        </span>
+        <span
+          className={cn(
+            'absolute -bottom-1 -right-1 flex size-4.5 min-w-[18px] items-center justify-center rounded-full border-2 border-card px-0.5 text-[9px] font-black',
+            medal ? medal.badge : 'bg-secondary text-muted-foreground',
+          )}
+        >
+          {rank}
+        </span>
       </span>
-      <span className={cn('min-w-0 flex-1 truncate text-sm', mine ? 'font-semibold text-primary' : 'text-foreground')}>{name}</span>
-      <span className={cn('text-sm font-bold', mine ? 'text-primary' : 'text-foreground')}>{fmt(points)} KP</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <span className="flex items-center justify-between gap-2">
+          <span className={cn('truncate text-sm', mine ? 'font-bold text-primary' : 'font-semibold text-foreground')}>{name}</span>
+          <span className={cn('shrink-0 font-display text-sm font-bold tabular-nums', mine ? 'text-primary' : 'text-foreground')}>
+            {fmt(points)} <span className="text-[10px] font-semibold text-muted-foreground">KP</span>
+          </span>
+        </span>
+        <span className="h-1 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+          <span className={cn('block h-full rounded-full', mine ? 'bg-primary' : (medal?.bar ?? 'bg-muted-foreground/50'))} style={{ width: `${Math.max(4, Math.min(100, pct))}%` }} />
+        </span>
+      </span>
     </li>
   )
 }
@@ -384,32 +435,50 @@ export function WalletCard({
 }) {
   const pct = goal ? Math.min(100, Math.round((balance / Math.max(1, goal.price)) * 100)) : 0
   return (
-    <section aria-label="Bakiyen" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
-      <div className="flex flex-col gap-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Bakiyen</p>
-        <p className="flex items-center gap-2.5 font-display text-4xl font-bold text-foreground">
-          <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">
+    <section aria-label="Bakiyen" className="flex flex-col gap-4 overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="relative isolate flex flex-col gap-3 border-b border-border p-5">
+        <span aria-hidden="true" className="absolute -left-10 -top-20 -z-10 size-56 rounded-full bg-primary/20 blur-3xl" />
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 opacity-[0.07] [background-image:radial-gradient(var(--primary)_1px,transparent_1px)] [background-size:14px_14px]"
+        />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Bakiyen</p>
+          <Wallet className="size-4 text-primary" aria-hidden="true" />
+        </div>
+        <p className="flex items-center gap-3 font-display text-4xl font-bold tabular-nums text-foreground">
+          <span
+            aria-hidden="true"
+            className="flex size-10 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground shadow-[0_0_24px_-4px_var(--primary)] ring-4 ring-primary/20"
+          >
             KC
           </span>
           {fmt(balance)}
           <span className="sr-only">Kanka Coin</span>
         </p>
         {kp !== null && (
-          <p className="text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{fmt(kp)} KP</span>
-            {weeklyRank ? ` · Haftalık sıralamada ${weeklyRank}.` : ''}
-          </p>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 text-xs font-semibold text-foreground backdrop-blur">
+              <Star className="size-3.5 text-primary" aria-hidden="true" />
+              {fmt(kp)} KP
+            </span>
+            {weeklyRank && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                <Trophy className="size-3.5" aria-hidden="true" />
+                Haftalık {weeklyRank}.
+              </span>
+            )}
+          </div>
         )}
       </div>
 
+      <div className="flex flex-col gap-4 px-5 pb-5">
       {goal && (
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-background/40 p-3">
           <div className="flex items-center gap-3">
-            {goal.image && (
-              <span className="relative size-11 shrink-0 overflow-hidden rounded-lg">
-                <Image src={goal.image} alt="" fill sizes="44px" className="object-cover" />
-              </span>
-            )}
+            <span className="relative size-11 shrink-0 overflow-hidden rounded-lg">
+              <Image src={productImage(goal)} alt="" fill sizes="44px" className="object-cover" />
+            </span>
             <span className="flex min-w-0 flex-col">
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Sıradaki hedefin</span>
               <span className="truncate text-sm font-semibold text-foreground">{goal.name}</span>
@@ -429,13 +498,31 @@ export function WalletCard({
 
       {picks.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-xs font-semibold text-muted-foreground">Şimdi alabileceklerin</p>
-          <ul className="grid grid-cols-3 gap-2">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-[oklch(0.72_0.17_150)]" aria-hidden="true" />
+            Şimdi alabileceklerin
+          </p>
+          <ul className="flex flex-col gap-2">
             {picks.map((p) => (
               <li key={p.id}>
-                <Link href="/market" className="relative flex aspect-square items-end overflow-hidden rounded-lg border border-border bg-background" title={p.name}>
-                  {p.image && <Image src={p.image} alt={p.name} fill sizes="90px" className="object-cover" />}
-                  <span className="relative m-1 rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-bold text-foreground">{fmt(p.price)}</span>
+                <Link
+                  href="/market"
+                  className="group flex items-center gap-3 rounded-xl border border-border bg-background/40 p-2 pr-3 transition-colors hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <span className="relative size-12 shrink-0 overflow-hidden rounded-lg">
+                    <Image src={productImage(p)} alt="" fill sizes="48px" className="object-cover transition-transform duration-500 group-hover:scale-110" />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-sm font-semibold text-foreground">{p.name}</span>
+                    <span className="flex items-center gap-1 text-xs font-bold text-primary">
+                      <span aria-hidden="true" className="flex size-3.5 items-center justify-center rounded-full bg-primary text-[6px] font-black text-primary-foreground">
+                        KC
+                      </span>
+                      {fmt(p.price)}
+                      <span className="sr-only">Kanka Coin</span>
+                    </span>
+                  </span>
+                  <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
                 </Link>
               </li>
             ))}
@@ -443,10 +530,14 @@ export function WalletCard({
         </div>
       )}
 
-      <Link href={marketHref} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border text-sm font-semibold text-foreground transition-colors hover:bg-secondary">
+      <Link
+        href={marketHref}
+        className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-[0_10px_30px_-14px_var(--primary)] transition-transform hover:-translate-y-0.5"
+      >
+        <ShoppingBag className="size-4" aria-hidden="true" />
         {"Market'e git"}
-        <ArrowRight className="size-4" aria-hidden="true" />
       </Link>
+      </div>
     </section>
   )
 }

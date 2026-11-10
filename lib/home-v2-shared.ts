@@ -17,6 +17,9 @@ export const HOME_GAME_LABEL: Record<string, string> = {
   bilardo: 'Bilardo',
   monopoly: 'Monopoly',
 }
+export const SPONSOR_FALLBACK_IMAGE = '/images/market/sponsor-bonus.png'
+export const productImage = (p: { image?: string | null; kind?: string }) =>
+  p.image?.trim() || (p.kind === 'sponsor' ? SPONSOR_FALLBACK_IMAGE : '/images/tile-market.png')
 export const RAIL_ICONS = ['wheel', 'chest', 'dice', 'target', 'swords', 'megaphone', 'handshake', 'percent', 'ticket', 'gift', 'trophy', 'star'] as const
 
 export type HomeV2Config = {
