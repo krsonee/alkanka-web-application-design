@@ -52,12 +52,14 @@ export function StakeGate({
   rules,
   children,
   modeSelect,
+  pvpContent,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
   rules: string[]
   children: (api: GameApi) => ReactNode
   modeSelect?: ModeSelect
+  pvpContent?: ReactNode
 }) {
   const meta = ARENA_META[game]
   const { member, points, setBalance, requireLogin } = usePoints()
@@ -280,7 +282,9 @@ export function StakeGate({
           </div>
         )}
 
-        {pvpMode ? (
+        {pvpMode && pvpContent ? (
+          pvpContent
+        ) : pvpMode ? (
           <p className="text-sm leading-relaxed text-muted-foreground">
             Gerçek kankalarla oyna. Açık bir masaya otur ya da kendi masanı aç, bahsi masa sahibi belirler.
           </p>
@@ -320,7 +324,7 @@ export function StakeGate({
 
         {themeGame && !pvpMode && <TableThemeField game={themeGame} />}
 
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+        <div className={cn('flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3', pvpMode && pvpContent && 'hidden')}>
           <div className="flex min-w-0 flex-1 flex-col">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {pvpMode ? `Oyuncu masası · ${formatAC(bet)} KC bahis` : `Botu yenersen · ${formatAC(bet)} KC bahis`}

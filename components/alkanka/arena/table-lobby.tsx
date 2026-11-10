@@ -227,6 +227,131 @@ export function TableLobby({
   if (invited) open.sort((a, b) => (a.id === invitedId ? -1 : b.id === invitedId ? 1 : 0))
   const invitedMine = invitedId != null && mine.some((t) => t.id === invitedId)
 
+  const invitedNote =
+    invitedId && data && !invitedMine ? (
+      <p
+        role="status"
+        className={cn(
+          'rounded-xl border p-3 text-sm',
+          invited ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-card text-muted-foreground',
+        )}
+      >
+        {invited
+          ? `${invited.players.find((p) => !p.bot)?.name ?? 'Bir kanka'} seni masasına çağırıyor. Aşağıdaki "Otur" butonuyla katıl.`
+          : 'Davet edildiğin masa doldu ya da kapandı. Diğer açık masalara göz at veya kendin bir masa aç.'}
+      </p>
+    ) : null
+
+  const tourBlock =
+    tour.length > 0 ? (
+      <div className="flex flex-col gap-2 rounded-2xl border border-primary bg-primary/10 p-4">
+        {tour.map((t) => (
+          <div key={t.id} className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Trophy className="size-4 text-primary" aria-hidden="true" />
+              {t.title} · {t.round}. tur maçın hazır
+            </span>
+            <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+              Maça gir
+            </button>
+          </div>
+        ))}
+      </div>
+    ) : null
+
+  const mineBlock =
+    mine.length > 0 ? (
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Masalarım</h3>
+        {mine.map((t) => (
+          <TableRowCard key={t.id} t={t}>
+            <div className="flex items-center gap-2">
+              <LeaveTableButton
+                id={t.id}
+                running={t.status === 'oynaniyor'}
+                stake={t.stake}
+                onDone={() => {
+                  refresh()
+                  void mutate()
+                }}
+              />
+              <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+                {t.status === 'bekliyor' ? 'Masaya dön' : 'Oyuna dön'}
+              </button>
+            </div>
+          </TableRowCard>
+        ))}
+      </div>
+    ) : null
+
+  const openRows = open.map((t) => (
+    <TableRowCard key={t.id} t={t} highlight={t.id === invitedId}>
+      <button
+        disabled={busy || (member != null && points < t.stake)}
+        onClick={async () => {
+          const r = await run(() => sitAtTable(t.id, t.stake))
+          if (r?.ok) setActiveId(t.id)
+        }}
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-50"
+      >
+        Otur · {formatAC(t.stake)} KC
+      </button>
+    </TableRowCard>
+  ))
+
+  const watchBlock =
+    watchable.length > 0 ? (
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Oynanan masalar</h3>
+        {watchable.map((t) => (
+          <TableRowCard key={t.id} t={t}>
+            {t.ambient ? (
+              <span className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-muted-foreground">
+                <Users className="size-4" aria-hidden="true" /> Masa dolu
+              </span>
+            ) : (
+              <button onClick={() => setActiveId(t.id)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground hover:bg-secondary">
+                <Eye className="size-4" aria-hidden="true" /> İzle
+              </button>
+            )}
+          </TableRowCard>
+        ))}
+      </div>
+    ) : null
+
+  const chooserTables = !data ? (
+    <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
+      <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Masalar yükleniyor
+    </div>
+  ) : open.length === 0 ? (
+    <p className="rounded-xl border border-dashed border-border p-5 text-center text-sm leading-relaxed text-muted-foreground">
+      Şu an bekleyen masa yok. İlk masayı sen aç, kankalar otururken haber verelim.
+    </p>
+  ) : (
+    <>
+      {openBets.length > 1 && (
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Bahse göre filtrele">
+          {[null, ...openBets].map((b) => (
+            <button
+              key={b ?? 'all'}
+              type="button"
+              role="radio"
+              aria-checked={betFilter === b}
+              onClick={() => setBetFilter(b)}
+              className={cn(
+                'rounded-lg px-2.5 py-1 text-xs font-bold tabular-nums transition-colors',
+                betFilter === b ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-secondary/70',
+              )}
+            >
+              {b == null ? 'Tümü' : `${formatAC(b)} KC`}
+            </button>
+          ))}
+        </div>
+      )}
+      {openRows}
+    </>
+  )
+
   const chooser =
     wizardOn && setup && isWizardGame(game) ? (
       <PlayChooser
@@ -242,6 +367,9 @@ export function TableLobby({
         guest={!member}
         balance={points}
         busy={busy}
+        commission={settings.commission}
+        openCount={data ? allOpen.length : null}
+        tables={chooserTables}
         onBot={async () => {
           const quick = BOT_QUICK[game]
           if (!quick) return
@@ -254,62 +382,20 @@ export function TableLobby({
 
   return (
     <div className="flex flex-col gap-4">
-      {chooser}
-      {chooser && playTab === 'bot' && setup?.quickBotEnabled && BOT_QUICK[game] ? null : (
+      {chooser ? (
+        <>
+          {invitedNote}
+          {tourBlock}
+          {mineBlock}
+          {chooser}
+          {watchBlock}
+        </>
+      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section aria-labelledby="lobby-title" className="flex min-w-0 flex-col gap-4">
-        {invitedId && data && !invitedMine && (
-          <p
-            role="status"
-            className={cn(
-              'rounded-xl border p-3 text-sm',
-              invited ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-card text-muted-foreground',
-            )}
-          >
-            {invited
-              ? `${invited.players.find((p) => !p.bot)?.name ?? 'Bir kanka'} seni masasına çağırıyor. Aşağıdaki "Otur" butonuyla katıl.`
-              : 'Davet edildiğin masa doldu ya da kapandı. Diğer açık masalara göz at veya kendin bir masa aç.'}
-          </p>
-        )}
-        {tour.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-2xl border border-primary bg-primary/10 p-4">
-            {tour.map((t) => (
-              <div key={t.id} className="flex flex-wrap items-center justify-between gap-3">
-                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Trophy className="size-4 text-primary" aria-hidden="true" />
-                  {t.title} · {t.round}. tur maçın hazır
-                </span>
-                <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
-                  Maça gir
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {mine.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Masalarım</h3>
-            {mine.map((t) => (
-              <TableRowCard key={t.id} t={t}>
-                <div className="flex items-center gap-2">
-                  <LeaveTableButton
-                    id={t.id}
-                    running={t.status === 'oynaniyor'}
-                    stake={t.stake}
-                    onDone={() => {
-                      refresh()
-                      void mutate()
-                    }}
-                  />
-                  <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
-                    {t.status === 'bekliyor' ? 'Masaya dön' : 'Oyuna dön'}
-                  </button>
-                </div>
-              </TableRowCard>
-            ))}
-          </div>
-        )}
+        {invitedNote}
+        {tourBlock}
+        {mineBlock}
 
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -349,40 +435,10 @@ export function TableLobby({
               Şu an bekleyen masa yok. İlk masayı sen aç, kankalar otururken haber verelim.
             </p>
           )}
-          {open.map((t) => (
-            <TableRowCard key={t.id} t={t} highlight={t.id === invitedId}>
-              <button
-                disabled={busy || (member != null && points < t.stake)}
-                onClick={async () => {
-                  const r = await run(() => sitAtTable(t.id, t.stake))
-                  if (r?.ok) setActiveId(t.id)
-                }}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-50"
-              >
-                Otur · {formatAC(t.stake)} KC
-              </button>
-            </TableRowCard>
-          ))}
+          {openRows}
         </div>
 
-        {watchable.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Oynanan masalar</h3>
-            {watchable.map((t) => (
-              <TableRowCard key={t.id} t={t}>
-                {t.ambient ? (
-                  <span className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-muted-foreground">
-                    <Users className="size-4" aria-hidden="true" /> Masa dolu
-                  </span>
-                ) : (
-                  <button onClick={() => setActiveId(t.id)} className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground hover:bg-secondary">
-                    <Eye className="size-4" aria-hidden="true" /> İzle
-                  </button>
-                )}
-              </TableRowCard>
-            ))}
-          </div>
-        )}
+        {watchBlock}
       </section>
 
       <aside className="flex flex-col gap-4">
