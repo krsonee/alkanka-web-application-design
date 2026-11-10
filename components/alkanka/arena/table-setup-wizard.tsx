@@ -218,7 +218,9 @@ export function TableSetupWizard({
   error,
   onCreate,
   onClose,
+  embedded = false,
 }: {
+  embedded?: boolean
   game: WizardGame
   config: SetupConfig
   bets: number[]
@@ -284,11 +286,11 @@ export function TableSetupWizard({
   const rule = game === 'okey' ? '' : gameCfg?.rule
 
   return (
-    <section aria-label={`${WIZARD_GAME_LABEL[game]} ${config.title}`} className="flex flex-col gap-5 rounded-3xl border border-border bg-card p-5 sm:p-7">
+    <section aria-label={`${WIZARD_GAME_LABEL[game]} ${config.title}`} className={embedded ? 'flex flex-col gap-4' : 'flex flex-col gap-5 rounded-3xl border border-border bg-card p-5 sm:p-7'}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">{WIZARD_GAME_LABEL[game]}</span>
-          <h2 className="text-2xl font-black text-foreground">{config.title}</h2>
+          <h2 className={embedded ? 'text-lg font-black text-foreground' : 'text-2xl font-black text-foreground'}>{config.title}</h2>
           {intro && <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{intro}</p>}
         </div>
         <button type="button" onClick={onClose} aria-label="Kapat" className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground">

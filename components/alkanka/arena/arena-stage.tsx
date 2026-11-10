@@ -207,6 +207,8 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
               <PvpTablesPanel
                 game={game}
                 commission={settings.commission}
+                setup={setup}
+                bets={settings.bets}
                 onSeated={(id, stake) => {
                   const url = new URL(window.location.href)
                   url.searchParams.set('masa', id)

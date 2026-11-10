@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import useSWR from 'swr'
 import { Loader2, Plus, Users } from 'lucide-react'
-import { sitAtTable } from '@/app/actions/arena'
+import { openTable, sitAtTable } from '@/app/actions/arena'
+import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
+import type { ArenaGame } from '@/lib/arena'
 import type { TableSummary } from './table-lobby'
+import { TableSetupWizard } from './table-setup-wizard'
 
 const fetcher = async (url: string) => {
   const r = await fetch(url, { cache: 'no-store' })
@@ -19,14 +22,22 @@ export function PvpTablesPanel({
   commission,
   onSeated,
   onCreate,
+  setup,
+  bets,
 }: {
-  game: string
+  game: ArenaGame
   commission: number
   onSeated: (id: string, stake: number) => void
   onCreate: () => void
+  setup?: SetupConfig
+  bets: number[]
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
   const idle = useIdle()
+  const [creating, setCreating] = useState(false)
+  const [createBusy, setCreateBusy] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const inlineWizard = setup && isWizardGame(game) && wizardEnabledFor(setup, game) ? setup : null
   const { data } = useSWR<{ open: TableSummary[] }>(`/api/tables?game=${game}`, fetcher, { refreshInterval: idle ? 30000 : 6000 })
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +52,36 @@ export function PvpTablesPanel({
     refresh()
     if (!r.ok) return setError(r.error ?? 'Masaya oturulamadı.')
     onSeated(t.id, t.stake)
+  }
+
+  if (creating && inlineWizard && isWizardGame(game)) {
+    return (
+      <TableSetupWizard
+        embedded
+        game={game}
+        config={inlineWizard}
+        bets={bets}
+        balance={member ? points : null}
+        commission={commission}
+        busy={createBusy}
+        error={createError}
+        onClose={() => {
+          setCreating(false)
+          setCreateError(null)
+        }}
+        onCreate={async (stake, options) => {
+          if (!requireLogin()) return
+          setCreateBusy(true)
+          setCreateError(null)
+          const r = await openTable(game, stake, options)
+          setCreateBusy(false)
+          refresh()
+          if (!r.ok) return setCreateError(r.error ?? 'Masa açılamadı.')
+          setCreating(false)
+          onSeated(r.id, stake)
+        }}
+      />
+    )
   }
 
   return (
@@ -108,7 +149,8 @@ export function PvpTablesPanel({
         type="button"
         onClick={() => {
           if (!requireLogin()) return
-          onCreate()
+          if (inlineWizard) setCreating(true)
+          else onCreate()
         }}
         className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/30 glow-gold transition hover:brightness-110 active:scale-95"
       >
