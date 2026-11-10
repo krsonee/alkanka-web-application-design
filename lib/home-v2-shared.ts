@@ -1,9 +1,49 @@
 export const HOME_V2_KEY = 'home-v2'
 
 export type DailyTile = { title: string; action: string; href: string; image: string }
+export type FreeTile = { title: string; sub: string; href: string; image: string }
+export type PromoCard = { title: string; text: string; cta: string; href: string; image: string }
+export type RailLink = { label: string; href: string; icon: string }
+
+export const HOME_GAME_KEYS = ['okey', 'okey101', 'tavla', 'batak', 'pisti', 'papaz', 'bilardo', 'monopoly'] as const
+export const SLIDE_GAME_KEYS = ['okey', 'tavla', 'batak', 'pisti', 'okey101', 'bilardo'] as const
+export const HOME_GAME_LABEL: Record<string, string> = {
+  okey: 'Okey',
+  okey101: '101 Okey',
+  tavla: 'Tavla',
+  batak: 'Batak',
+  pisti: 'Pişti',
+  papaz: 'Papaz',
+  bilardo: 'Bilardo',
+  monopoly: 'Monopoly',
+}
+export const RAIL_ICONS = ['wheel', 'chest', 'dice', 'target', 'swords', 'megaphone', 'handshake', 'percent', 'ticket', 'gift', 'trophy', 'star'] as const
 
 export type HomeV2Config = {
   enabled: boolean
+  fullPage: boolean
+  showRail: boolean
+  rail: RailLink[]
+  guestText: string
+  guestHighlight: string
+  slides: string[]
+  showNewbie: boolean
+  newbieTitle: string
+  newbieText: string
+  freeTitle: string
+  freeSub: string
+  free: FreeTile[]
+  gamesTitle: string
+  gamesSub: string
+  memberGamesSub: string
+  games: string[]
+  showMarket: boolean
+  marketTitle: string
+  marketSub: string
+  marketCount: number
+  promos: PromoCard[]
+  lbTitle: string
+  lbNote: string
   eyebrow: string
   title: string
   heroImage: string
@@ -77,30 +117,73 @@ export const OKEY_POINT_CHOICES = [0, 10, 20, 30] as const
 export const DEFAULT_HOME_V2: HomeV2Settings = {
   home: {
     enabled: true,
+    fullPage: true,
+    showRail: true,
+    rail: [
+      { label: 'Günlük çark', href: '/oyunlar/cark', icon: 'wheel' },
+      { label: 'Sandık', href: '/oyunlar/sandik', icon: 'chest' },
+      { label: 'Zar', href: '/oyunlar/zar', icon: 'dice' },
+      { label: 'Tahminler', href: '/tahminler', icon: 'target' },
+      { label: 'Turnuvalar', href: '/turnuvalar', icon: 'swords' },
+      { label: 'Kampanyalar', href: '/kampanyalar', icon: 'megaphone' },
+      { label: 'Sponsorlar', href: '/sponsorlar', icon: 'handshake' },
+      { label: 'Özel oran', href: '/ozel-oranlar', icon: 'percent' },
+      { label: 'Promo kod', href: '/bonuslar', icon: 'ticket' },
+    ],
+    guestText: "Okey, tavla, batak, pişti ve daha fazlası. Her oyunda Kanka Coin topla, Market'te rozete, ekstra haklara ve sponsor bonuslarına çevir.",
+    guestHighlight: 'kankalarınla',
+    slides: [...SLIDE_GAME_KEYS],
+    showNewbie: true,
+    newbieTitle: 'Siteye yeni misin?',
+    newbieText: 'Kısa tur, sitenin her bölümünü adım adım gösterir. Üst bardaki pusula butonundan da açabilirsin.',
+    freeTitle: 'Her gün ücretsiz',
+    freeSub: 'Oyun dışında da Kanka Coin toplamanın yolları',
+    free: [
+      { title: 'Günlük çark', sub: 'Her gün ücretsiz çevir', href: '/oyunlar/cark', image: '/images/tile-wheel.png' },
+      { title: 'Sandık', sub: 'Günlük sandığını aç', href: '/oyunlar/sandik', image: '/images/tile-chest.png' },
+      { title: 'Zar', sub: 'Zar at, coin topla', href: '/oyunlar/zar', image: '/images/tile-dice.png' },
+      { title: 'Görevler', sub: 'Görevi bitir, coin al', href: '/gorevler', image: '/images/tile-tasks.png' },
+      { title: 'Tahminler', sub: 'Maç tahmini yap', href: '/tahminler', image: '/images/tile-predict.png' },
+      { title: 'Market', sub: 'Coinlerini harca', href: '/market', image: '/images/tile-market.png' },
+    ],
+    gamesTitle: 'Oyunlar',
+    gamesSub: 'Bota karşı ya da oyuncularla, istediğin masaya otur',
+    memberGamesSub: 'Hangi masaya oturuyorsun?',
+    games: [...HOME_GAME_KEYS],
+    showMarket: true,
+    marketTitle: "Market'te seni bekleyenler",
+    marketSub: 'Topladığın Kanka Coin ile alabileceğin ürünler',
+    marketCount: 8,
+    promos: [
+      { title: 'Kampanyalar ve çekilişler', text: 'Güncel kampanyaları ve sponsor fırsatlarını tek yerde gör.', cta: 'İncele', href: '/kampanyalar', image: '/images/banner-events.png' },
+      { title: 'Telegram kanalı', text: 'Duyurular ve çekilişler burada paylaşılıyor.', cta: 'Katıl', href: 'https://t.me/alkankaresmi', image: '/images/banner-telegram.png' },
+    ],
+    lbTitle: 'Haftalık sıralama',
+    lbNote: 'Pazartesi sıfırlanır',
     eyebrow: 'Hoş geldin, {ad}',
     title: 'Okey masan seni bekliyor',
-    heroImage: '/images/games/okey.png',
-    primaryCta: 'Masa aç',
+    heroImage: '/images/slides/okey.png',
+    primaryCta: 'Aynı ayarla oyna',
     primaryHref: '/oyunlar/okey?masa-ac=1',
     secondaryCta: 'Başka oyun',
     secondaryHref: '/oyunlar',
-    pills: ['4 kişi', 'Tekli', '20 puan'],
+    pills: ['4 kişi', 'Tekli', '20 puan', '50 KC'],
     dailyTitle: 'Bugün senin için',
-    dailySub: 'Ücretsiz haklarını kullanmayı unutma',
+    dailySub: '{toplam} ücretsiz hakkından {hazir} tanesi hazır',
     daily: [
       { title: 'Günlük çark', action: 'Çevir', href: '/oyunlar/cark', image: '/images/tile-wheel.png' },
       { title: 'Sandık', action: 'Aç', href: '/oyunlar/sandik', image: '/images/tile-chest.png' },
-      { title: 'Görevler', action: 'Görevlere git', href: '/gorevler', image: '/images/tile-tasks.png' },
+      { title: 'Zar', action: 'At', href: '/oyunlar/zar', image: '/images/tile-dice.png' },
     ],
     showWallet: true,
     showLeaderboard: true,
     marketHref: '/market',
     guestEnabled: true,
-    guestEyebrow: 'Masaya hoş geldin',
-    guestTitle: 'Masaya otur, kankalarla oyna.',
-    guestPrimaryCta: 'Ücretsiz kayıt ol · +{bonus} KC',
+    guestEyebrow: 'Alkanka oyun salonu',
+    guestTitle: 'Masaya otur, kankalarınla oyna.',
+    guestPrimaryCta: 'Ücretsiz üye ol',
     guestPrimaryHref: '#kayit',
-    guestSecondaryCta: 'Oyunlara bak',
+    guestSecondaryCta: 'Oyunlara göz at',
     guestSecondaryHref: '/oyunlar',
     guestCardTitle: 'Kayıt ol, başla',
   },
@@ -136,9 +219,53 @@ export function mergeHomeV2(saved: unknown): HomeV2Settings {
   const points = Array.isArray(u.points)
     ? OKEY_POINT_CHOICES.filter((p) => (u.points as number[]).includes(p))
     : d.setup.points
+  const keys = (v: unknown, allowed: readonly string[], fallback: string[]) =>
+    Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string' && allowed.includes(k)).filter((k, i, a) => a.indexOf(k) === i) : fallback
+  const free = Array.isArray(h.free)
+    ? h.free.slice(0, 8).map((t) => ({ title: str(t?.title, '', 40), sub: str(t?.sub, '', 60), href: str(t?.href, '/', 200), image: str(t?.image, '', 500) })).filter((t) => t.title)
+    : d.home.free
+  const promos = Array.isArray(h.promos)
+    ? h.promos.slice(0, 2).map((p, i) => ({
+        title: str(p?.title, d.home.promos[i]?.title ?? '', 60),
+        text: str(p?.text, d.home.promos[i]?.text ?? '', 140),
+        cta: str(p?.cta, d.home.promos[i]?.cta ?? '', 24),
+        href: str(p?.href, d.home.promos[i]?.href ?? '/', 200),
+        image: str(p?.image, d.home.promos[i]?.image ?? '', 500),
+      }))
+    : d.home.promos
+  const rail = Array.isArray(h.rail)
+    ? h.rail
+        .slice(0, 12)
+        .map((r) => ({ label: str(r?.label, '', 30), href: str(r?.href, '/', 200), icon: (RAIL_ICONS as readonly string[]).includes(r?.icon as string) ? (r.icon as string) : 'star' }))
+        .filter((r) => r.label)
+    : d.home.rail
+  const marketCount = typeof h.marketCount === 'number' ? Math.min(12, Math.max(2, Math.round(h.marketCount))) : d.home.marketCount
   return {
     home: {
       enabled: bool(h.enabled, d.home.enabled),
+      fullPage: bool(h.fullPage, d.home.fullPage),
+      showRail: bool(h.showRail, d.home.showRail),
+      rail,
+      guestText: str(h.guestText, d.home.guestText, 300),
+      guestHighlight: str(h.guestHighlight, d.home.guestHighlight, 40),
+      slides: keys(h.slides, SLIDE_GAME_KEYS, d.home.slides),
+      showNewbie: bool(h.showNewbie, d.home.showNewbie),
+      newbieTitle: str(h.newbieTitle, d.home.newbieTitle, 60),
+      newbieText: str(h.newbieText, d.home.newbieText, 200),
+      freeTitle: str(h.freeTitle, d.home.freeTitle, 60),
+      freeSub: str(h.freeSub, d.home.freeSub, 120),
+      free,
+      gamesTitle: str(h.gamesTitle, d.home.gamesTitle, 60),
+      gamesSub: str(h.gamesSub, d.home.gamesSub, 120),
+      memberGamesSub: str(h.memberGamesSub, d.home.memberGamesSub, 120),
+      games: keys(h.games, HOME_GAME_KEYS, d.home.games),
+      showMarket: bool(h.showMarket, d.home.showMarket),
+      marketTitle: str(h.marketTitle, d.home.marketTitle, 60),
+      marketSub: str(h.marketSub, d.home.marketSub, 120),
+      marketCount,
+      promos,
+      lbTitle: str(h.lbTitle, d.home.lbTitle, 40),
+      lbNote: str(h.lbNote, d.home.lbNote, 40),
       eyebrow: str(h.eyebrow, d.home.eyebrow, 60),
       title: str(h.title, d.home.title, 90),
       heroImage: str(h.heroImage, d.home.heroImage, 500),

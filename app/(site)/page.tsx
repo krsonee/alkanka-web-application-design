@@ -22,6 +22,8 @@ import { getCemberStatus, myCemberStatus } from '@/lib/cember'
 import { listProducts, type MarketProduct } from '@/lib/market'
 import { getHomeV2 } from '@/lib/home-v2'
 import { MemberHomeV2 } from '@/components/alkanka/home/member-home-v2'
+import { GuestHomeV2, MemberHomeV2Page } from '@/components/alkanka/home/v2/home-v2'
+import { getMiniStatus } from '@/app/actions/wallet'
 import { EXACT_REWARD, listLeagueMatches, type LeagueMatch } from '@/lib/community'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -109,6 +111,38 @@ export default async function HomePage() {
   const myIndex = member ? ranking.findIndex((r) => r.userId === member.id) : -1
   const me = member && myIndex >= 0 ? { rank: myIndex + 1, points: ranking[myIndex].kp } : null
   const podium = ranking.slice(0, 3).map((row) => ({ userId: row.userId, name: row.name, points: row.kp }))
+  const v2 = homeV2?.home
+  const useV2 = !!v2 && v2.fullPage && (member ? v2.enabled : v2.guestEnabled)
+  if (v2 && useV2) {
+    const [weeklyRaw, mini] = await Promise.all([
+      readLeaderboard(500, 'hafta').catch(() => []),
+      member ? getMiniStatus().catch(() => null) : Promise.resolve(null),
+    ])
+    const weekly = weeklyRaw.map((r) => ({ userId: r.userId, name: r.name, points: r.kp }))
+    const weeklyIndex = member ? weekly.findIndex((r) => r.userId === member.id) : -1
+    return (
+      <>
+        <SiteJsonLd />
+        <h1 className="sr-only">AL KANKA: okey, tavla, batak, pişti ve ücretsiz mini oyunlar</h1>
+        {member && hub ? (
+          <MemberHomeV2Page
+            config={v2}
+            name={hub.name}
+            balance={hub.balance}
+            kp={me?.points ?? 0}
+            weeklyRank={weeklyIndex >= 0 ? weeklyIndex + 1 : null}
+            weekly={weekly}
+            meId={member.id}
+            mini={mini}
+            products={products}
+          />
+        ) : (
+          <GuestHomeV2 config={v2} products={allProducts.filter((p) => p.active)} weekly={weekly} bonus={bonus} />
+        )}
+      </>
+    )
+  }
+
   const levels = member ? await getKpConfig().then((c) => c.levels).catch(() => []) : []
   const lv = levels.length ? levelFor(levels, me?.points ?? 0) : null
   const level = lv
