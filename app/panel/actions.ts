@@ -318,3 +318,22 @@ export async function resetSlide(_: ActionState, form: FormData): Promise<Action
     return { message: e instanceof Error ? e.message : 'Sıfırlanamadı.' }
   }
 }
+
+export async function saveHomeV2(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin('logo')
+    const { HOME_V2_KEY, mergeHomeV2 } = await import('@/lib/home-v2-shared')
+    const raw = JSON.parse(String(form.get('payload') ?? '{}')) as unknown
+    const value = mergeHomeV2(raw)
+    const images = [value.home.heroImage, ...value.home.daily.map((t) => t.image)].filter(Boolean)
+    for (const img of images) if (!isAllowedImage(img)) throw new Error('Görseller /images/ ile ya da https:// ile başlamalı.')
+    const hrefs = [value.home.primaryHref, value.home.secondaryHref, value.home.marketHref, ...value.home.daily.map((t) => t.href)]
+    for (const h of hrefs) if (h && !h.startsWith('/') && !/^https:\/\//.test(h)) throw new Error('Bağlantılar / ya da https:// ile başlamalı.')
+    await setContent(HOME_V2_KEY, value)
+    revalidatePath('/')
+    revalidatePath('/oyunlar/okey')
+    return { ok: true, message: 'Ana sayfa ve masa açma ayarları kaydedildi.' }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
+  }
+}

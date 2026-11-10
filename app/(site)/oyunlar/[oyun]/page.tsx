@@ -7,6 +7,7 @@ import { ArenaStage } from '@/components/alkanka/arena/arena-stage'
 import { GameTabs } from '@/components/alkanka/arena/game-tabs'
 import { ARENA_GAMES, ARENA_META, isArenaGame } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
+import { getHomeV2 } from '@/lib/home-v2'
 import { getHidden } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
 
@@ -33,7 +34,11 @@ export async function generateMetadata({ params }: { params: Promise<{ oyun: str
 export default async function GamePage({ params }: { params: Promise<{ oyun: string }> }) {
   const { oyun } = await params
   if (!(oyun in TITLES)) notFound()
-  const [settings, hidden] = await Promise.all([getArenaSettings(), getHidden()])
+  const [settings, hidden, homeV2] = await Promise.all([
+    getArenaSettings(),
+    getHidden(),
+    oyun === 'okey' ? getHomeV2().catch(() => null) : Promise.resolve(null),
+  ])
   const isOpen = (k: string) => (isArenaGame(k) ? settings[k].enabled : !isHidden(hidden, 'mini', k))
 
   return (
@@ -53,7 +58,7 @@ export default async function GamePage({ params }: { params: Promise<{ oyun: str
       <h1 className="sr-only">{TITLES[oyun]}</h1>
       {isOpen(oyun) ? (
         isArenaGame(oyun) ? (
-          <ArenaStage game={oyun} settings={settings[oyun]} />
+          <ArenaStage game={oyun} settings={settings[oyun]} setup={homeV2?.setup} />
         ) : (
           <GameStage game={oyun as MiniKey} />
         )

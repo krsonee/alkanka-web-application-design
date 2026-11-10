@@ -76,6 +76,8 @@ import { BadgeRaffle } from '@/components/panel/badge-raffle'
 import { AdsEditor } from '@/components/panel/ads-editor'
 import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
+import { HomeV2Editor } from '@/components/panel/home-v2-editor'
+import { HOME_V2_KEY, mergeHomeV2 } from '@/lib/home-v2-shared'
 import { MarketManager } from '@/components/panel/market-manager'
 import { ThemeManager } from '@/components/panel/theme-manager'
 import { getThemeCatalog } from '@/lib/table-themes-server'
@@ -428,6 +430,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <TelegramTabs
           label="Paylaşım, reklam ve logolar"
           tabs={[
+            { id: 'home-v2', label: 'Ana sayfa & Masa aç', content: <HomeV2Editor initial={mergeHomeV2(content[HOME_V2_KEY])} /> },
             { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
             { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} stats={adStats} /> },
             {

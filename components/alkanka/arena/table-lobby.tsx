@@ -40,6 +40,8 @@ import { SoundToggle, actionSound } from './sound-toggle'
 import { useTableSounds } from './use-table-sounds'
 import { TableThemeField, TableThemeScope } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
+import { OkeySetupWizard } from './okey-setup-wizard'
+import type { SetupConfig } from '@/lib/home-v2-shared'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -95,14 +97,19 @@ export function TableLobby({
   rules,
   invitedId = null,
   initialStake,
+  setup,
+  openWizard = false,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
   rules: string[]
   invitedId?: string | null
   initialStake?: number
+  setup?: SetupConfig
+  openWizard?: boolean
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
+  const [wizardOpen, setWizardOpen] = useState(openWizard)
   const [activeId, setActiveIdState] = useState<string | null>(null)
   // The open table lives in the URL so a page refresh drops the player straight back into it.
   const setActiveId = useCallback((id: string | null) => {
@@ -181,6 +188,30 @@ export function TableLobby({
   }
 
   if (activeId) return <TableRoom key={activeId} id={activeId} onLeave={() => { setActiveId(null); mutate() }} onReplay={setActiveId} />
+
+  if (isOkey && setup?.enabled && wizardOpen) {
+    return (
+      <OkeySetupWizard
+        config={setup}
+        bets={settings.bets}
+        balance={member ? points : null}
+        commission={settings.commission}
+        busy={busy}
+        error={error}
+        onClose={() => {
+          setWizardOpen(false)
+          setError(null)
+        }}
+        onCreate={async ({ stake: s, options }) => {
+          const r = await run(() => openTable(game, s, options))
+          if (r?.ok && r.id) {
+            setWizardOpen(false)
+            setActiveId(r.id)
+          }
+        }}
+      />
+    )
+  }
 
   const allOpen = (data?.open ?? []).filter((t) => t.status === 'bekliyor' && t.seat < 0)
   const openBets = Array.from(new Set(allOpen.map((t) => t.stake))).sort((a, b) => a - b)
@@ -393,6 +424,16 @@ export function TableLobby({
           )}
           {isOkey && (
             <div className="flex flex-col gap-3">
+              {setup?.enabled && (
+                <button
+                  type="button"
+                  onClick={() => setWizardOpen(true)}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-sm font-bold text-primary transition-colors hover:bg-primary/15"
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  {`${setup.title} (adım adım)`}
+                </button>
+              )}
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Masalar 4 kişilik. Gerçek oyuncu gelmeyen koltuklara bot oturtabilirsin.
               </p>
