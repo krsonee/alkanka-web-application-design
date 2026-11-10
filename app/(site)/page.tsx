@@ -94,7 +94,7 @@ export default async function HomePage() {
   const [hub, bonus, homeV2] = await Promise.all([
     member ? loadHub(member, products) : Promise.resolve(null),
     member ? Promise.resolve(SIGNUP_BONUS) : getSignupBonus().catch(() => SIGNUP_BONUS),
-    member ? getHomeV2() : Promise.resolve(null),
+    getHomeV2().catch(() => null),
   ])
 
   const featured = pickFeatured(sponsors)
@@ -122,6 +122,9 @@ export default async function HomePage() {
       <div className="flex flex-col gap-4">
         {hub && homeV2?.home.enabled && (
           <MemberHomeV2 data={hub} config={homeV2.home} podium={podium} me={me} products={products} />
+        )}
+        {!hub && homeV2?.home.guestEnabled && (
+          <MemberHomeV2 data={null} config={homeV2.home} podium={podium} me={null} products={products} bonus={bonus} />
         )}
         {hub ? <MemberHub data={hub} podium={podium} me={me} links={socialLinks} level={level} /> : <GuestHero bonus={bonus} />}
         <QuickTiles />
