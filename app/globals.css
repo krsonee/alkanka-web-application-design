@@ -80,6 +80,11 @@
   --animate-win-ring: win-ring 1100ms ease-out forwards;
 }
 
+@keyframes hero-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 @keyframes win-flash {
   0% { opacity: 0; transform: scale(0.4); }
   18% { opacity: 1; transform: scale(1.15); }

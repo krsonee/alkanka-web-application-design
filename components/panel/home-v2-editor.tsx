@@ -9,9 +9,54 @@ import {
   WIZARD_GAME_LABEL,
   type HomeV2Settings,
   type DailyTile,
+  type FreeTile,
+  type PromoCard,
   type WizardGameConfig,
+  HOME_GAME_KEYS,
+  HOME_GAME_LABEL,
+  RAIL_ICONS,
+  SLIDE_GAME_KEYS,
 } from '@/lib/home-v2-shared'
 import { ImageField } from '@/components/panel/image-field'
+
+const RAIL_ICON_LABEL: Record<string, string> = {
+  wheel: 'Çark',
+  chest: 'Sandık',
+  dice: 'Zar',
+  target: 'Hedef',
+  swords: 'Turnuva',
+  megaphone: 'Duyuru',
+  handshake: 'Sponsor',
+  percent: 'Yüzde',
+  ticket: 'Bilet',
+  gift: 'Hediye',
+  trophy: 'Kupa',
+  star: 'Yıldız',
+}
+
+function KeyPicker({ label, all, value, onChange }: { label: string; all: readonly string[]; value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-semibold text-foreground">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {all.map((k) => {
+          const on = value.includes(k)
+          return (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(on ? value.filter((x) => x !== k) : all.filter((x) => x === k || value.includes(x)))}
+              className={`h-8 rounded-lg border px-3 text-xs font-semibold transition-colors ${on ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'}`}
+            >
+              {HOME_GAME_LABEL[k] ?? k}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 const input =
   'h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none'
@@ -57,10 +102,138 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
   const setSetup = (patch: Partial<HomeV2Settings['setup']>) => setV((p) => ({ ...p, setup: { ...p.setup, ...patch } }))
   const setTile = (i: number, patch: Partial<DailyTile>) =>
     setHome({ daily: home.daily.map((t, j) => (j === i ? { ...t, ...patch } : t)) })
+  const setFree = (i: number, patch: Partial<FreeTile>) => setHome({ free: home.free.map((t, j) => (j === i ? { ...t, ...patch } : t)) })
+  const setPromo = (i: number, patch: Partial<PromoCard>) => setHome({ promos: home.promos.map((t, j) => (j === i ? { ...t, ...patch } : t)) })
 
   return (
     <form action={action} className="flex flex-col gap-5">
       <input type="hidden" name="payload" value={JSON.stringify(v)} />
+
+      <Section title="Yeni ana sayfa tasarımı" desc="Onaylanan mockup tasarımı. Açıkken ana sayfanın tamamı yeni tasarımla gösterilir; kapatırsan eski ana sayfa olduğu gibi geri gelir.">
+        <Toggle
+          label="Yeni tasarımı tam sayfa göster"
+          checked={home.fullPage}
+          onChange={(fullPage) => setHome({ fullPage })}
+          hint="Misafir ve üye için ayrı ayrı açıp kapatmak için aşağıdaki bölümlerdeki anahtarları kullan."
+        />
+        <Toggle label="Hızlı erişim şeridi" checked={home.showRail} onChange={(showRail) => setHome({ showRail })} hint="Sayfanın en üstündeki çark, sandık, zar... kısayolları." />
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-semibold text-foreground">Kısayollar</span>
+          {home.rail.map((r, i) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_8rem_auto] items-center gap-2">
+              <input className={input} aria-label="Kısayol adı" value={r.label} maxLength={30} onChange={(e) => setHome({ rail: home.rail.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+              <input className={input} aria-label="Kısayol linki" value={r.href} maxLength={200} onChange={(e) => setHome({ rail: home.rail.map((x, j) => (j === i ? { ...x, href: e.target.value } : x)) })} />
+              <select className={input} aria-label="İkon" value={r.icon} onChange={(e) => setHome({ rail: home.rail.map((x, j) => (j === i ? { ...x, icon: e.target.value } : x)) })}>
+                {RAIL_ICONS.map((ic) => (
+                  <option key={ic} value={ic}>
+                    {RAIL_ICON_LABEL[ic]}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="h-9 rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:text-destructive" onClick={() => setHome({ rail: home.rail.filter((_, j) => j !== i) })}>
+                Sil
+              </button>
+            </div>
+          ))}
+          {home.rail.length < 12 && (
+            <button type="button" className="h-9 w-fit rounded-lg border border-dashed border-border px-3 text-xs font-semibold text-foreground hover:border-primary/50" onClick={() => setHome({ rail: [...home.rail, { label: 'Yeni kısayol', href: '/', icon: 'star' }] })}>
+              + Kısayol ekle
+            </button>
+          )}
+        </div>
+        <KeyPicker label="Kapak slaytında dönen oyunlar (misafir)" all={SLIDE_GAME_KEYS} value={home.slides} onChange={(slides) => setHome({ slides })} />
+        <KeyPicker label="Oyunlar bölümünde gösterilen oyunlar" all={HOME_GAME_KEYS} value={home.games} onChange={(games) => setHome({ games })} />
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="Oyunlar başlığı">
+            <input className={input} value={home.gamesTitle} maxLength={60} onChange={(e) => setHome({ gamesTitle: e.target.value })} />
+          </Field>
+          <Field label="Oyunlar alt yazısı (misafir)">
+            <input className={input} value={home.gamesSub} maxLength={120} onChange={(e) => setHome({ gamesSub: e.target.value })} />
+          </Field>
+          <Field label="Oyunlar alt yazısı (üye)">
+            <input className={input} value={home.memberGamesSub} maxLength={120} onChange={(e) => setHome({ memberGamesSub: e.target.value })} />
+          </Field>
+          <Field label="Sıralama başlığı">
+            <input className={input} value={home.lbTitle} maxLength={40} onChange={(e) => setHome({ lbTitle: e.target.value })} />
+          </Field>
+          <Field label="Sıralama notu">
+            <input className={input} value={home.lbNote} maxLength={40} onChange={(e) => setHome({ lbNote: e.target.value })} />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title="Misafir sayfası bölümleri" desc="Giriş yapmamış ziyaretçinin gördüğü kapak altı bölümler.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Başlıkta altın renkli kelime" hint="Başlıkta geçen kelimeyi yaz, o kelime altın renkte görünür.">
+            <input className={input} value={home.guestHighlight} maxLength={40} onChange={(e) => setHome({ guestHighlight: e.target.value })} />
+          </Field>
+          <Field label="Kapak açıklaması">
+            <textarea className={`${input} h-20 py-2`} value={home.guestText} maxLength={300} onChange={(e) => setHome({ guestText: e.target.value })} />
+          </Field>
+        </div>
+        <Toggle label="'Siteye yeni misin?' kartı" checked={home.showNewbie} onChange={(showNewbie) => setHome({ showNewbie })} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Kart başlığı">
+            <input className={input} value={home.newbieTitle} maxLength={60} onChange={(e) => setHome({ newbieTitle: e.target.value })} />
+          </Field>
+          <Field label="Kart yazısı">
+            <input className={input} value={home.newbieText} maxLength={200} onChange={(e) => setHome({ newbieText: e.target.value })} />
+          </Field>
+          <Field label="'Her gün ücretsiz' başlığı">
+            <input className={input} value={home.freeTitle} maxLength={60} onChange={(e) => setHome({ freeTitle: e.target.value })} />
+          </Field>
+          <Field label="'Her gün ücretsiz' alt yazısı">
+            <input className={input} value={home.freeSub} maxLength={120} onChange={(e) => setHome({ freeSub: e.target.value })} />
+          </Field>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {home.free.map((t, i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-muted-foreground">{`Kutu ${i + 1}`}</span>
+                <button type="button" className="text-xs font-semibold text-muted-foreground hover:text-destructive" onClick={() => setHome({ free: home.free.filter((_, j) => j !== i) })}>
+                  Sil
+                </button>
+              </div>
+              <input className={input} aria-label="Başlık" value={t.title} maxLength={40} onChange={(e) => setFree(i, { title: e.target.value })} />
+              <input className={input} aria-label="Alt yazı" value={t.sub} maxLength={60} onChange={(e) => setFree(i, { sub: e.target.value })} />
+              <input className={input} aria-label="Link" value={t.href} maxLength={200} onChange={(e) => setFree(i, { href: e.target.value })} />
+              <ImageField label="Görsel" value={t.image} onChange={(image) => setFree(i, { image })} uploadId={`home-v2-free-${i}`} compact />
+            </div>
+          ))}
+        </div>
+        {home.free.length < 8 && (
+          <button type="button" className="h-9 w-fit rounded-lg border border-dashed border-border px-3 text-xs font-semibold text-foreground hover:border-primary/50" onClick={() => setHome({ free: [...home.free, { title: 'Yeni kutu', sub: '', href: '/', image: '' }] })}>
+            + Kutu ekle
+          </button>
+        )}
+        <Toggle label="Market vitrini" checked={home.showMarket} onChange={(showMarket) => setHome({ showMarket })} hint="Ürünler Market'teki gerçek ürünlerden gelir; 'Alkanka ödülleri' ve 'Sponsor bonusları' sekmeleri otomatik ayrılır." />
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="Market başlığı">
+            <input className={input} value={home.marketTitle} maxLength={60} onChange={(e) => setHome({ marketTitle: e.target.value })} />
+          </Field>
+          <Field label="Market alt yazısı">
+            <input className={input} value={home.marketSub} maxLength={120} onChange={(e) => setHome({ marketSub: e.target.value })} />
+          </Field>
+          <Field label="Gösterilecek ürün sayısı">
+            <input type="number" min={2} max={12} className={input} value={home.marketCount} onChange={(e) => setHome({ marketCount: Math.min(12, Math.max(2, Number(e.target.value) || 8)) })} />
+          </Field>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {home.promos.map((p, i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+              <span className="text-xs font-bold text-muted-foreground">{`Alt kart ${i + 1}`}</span>
+              <input className={input} aria-label="Başlık" value={p.title} maxLength={60} onChange={(e) => setPromo(i, { title: e.target.value })} />
+              <input className={input} aria-label="Yazı" value={p.text} maxLength={140} onChange={(e) => setPromo(i, { text: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <input className={input} aria-label="Buton" value={p.cta} maxLength={24} onChange={(e) => setPromo(i, { cta: e.target.value })} />
+                <input className={input} aria-label="Link" value={p.href} maxLength={200} onChange={(e) => setPromo(i, { href: e.target.value })} />
+              </div>
+              <ImageField label="Görsel" value={p.image} onChange={(image) => setPromo(i, { image })} uploadId={`home-v2-promo-${i}`} compact />
+            </div>
+          ))}
+        </div>
+      </Section>
 
       <Section title="Misafir ana sayfası (giriş yapmadan)" desc="Giriş yapmamış ziyaretçiler ana sayfanın en üstünde bu bölümü görür. Kapak görseli, günlük kutular ve yan bloklar üye bölümüyle ortaktır.">
         <Toggle label="Misafir ana sayfasını göster" checked={home.guestEnabled} onChange={(guestEnabled) => setHome({ guestEnabled })} hint="Kapatırsan misafirler sadece eski karşılama bölümünü görür." />
