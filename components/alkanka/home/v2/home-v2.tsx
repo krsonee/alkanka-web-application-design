@@ -132,18 +132,18 @@ export function MemberHomeV2Page({
               <DailyGrid items={daily} />
             </section>
           )}
-          {config.games.length > 0 && (
-            <section className="flex flex-col gap-4">
-              <SectionHead title={config.gamesTitle} sub={config.memberGamesSub} link={{ label: 'Tüm oyunlar', href: '/oyunlar' }} />
-              <GamesGrid games={config.games} compact />
-            </section>
-          )}
         </div>
         <aside className="flex flex-col gap-4">
           {config.showWallet && <WalletCard balance={balance} kp={kp} weeklyRank={weeklyRank} goal={goal} picks={picks} marketHref={config.marketHref} />}
           {config.showLeaderboard && <Leaderboard title={config.lbTitle} rows={top} me={me} meId={meId} compact />}
         </aside>
       </div>
+      {config.games.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <SectionHead title={config.gamesTitle} sub={config.memberGamesSub} link={{ label: 'Tüm oyunlar', href: '/oyunlar' }} />
+          <GamesGrid games={config.games} />
+        </section>
+      )}
     </div>
   )
 }
