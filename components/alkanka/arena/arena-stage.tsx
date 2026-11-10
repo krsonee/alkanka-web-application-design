@@ -11,7 +11,7 @@ import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
 import { TableLobby } from './table-lobby'
-import type { SetupConfig } from '@/lib/home-v2-shared'
+import { wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { LiveLobby } from './live-lobby'
 import { WaitingTables } from './waiting-tables'
 
@@ -119,7 +119,7 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   useEffect(() => {
     if (!modes.includes('pvp')) return
     const params = new URLSearchParams(window.location.search)
-    if (game === 'okey' && setup?.enabled && params.has('masa-ac') && !params.get('masa')) {
+    if (wizardEnabledFor(setup, game) && params.has('masa-ac') && !params.get('masa')) {
       setOpenWizard(true)
       setMode('pvp')
       setEntered({ mode: 'pvp', bet: settings.bets[0] })

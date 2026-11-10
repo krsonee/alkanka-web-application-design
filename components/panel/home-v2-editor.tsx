@@ -2,7 +2,15 @@
 
 import { useActionState, useState } from 'react'
 import { saveHomeV2, type ActionState } from '@/app/panel/actions'
-import { DEFAULT_HOME_V2, OKEY_POINT_CHOICES, type HomeV2Settings, type DailyTile } from '@/lib/home-v2-shared'
+import {
+  DEFAULT_HOME_V2,
+  OKEY_POINT_CHOICES,
+  WIZARD_GAMES,
+  WIZARD_GAME_LABEL,
+  type HomeV2Settings,
+  type DailyTile,
+  type WizardGameConfig,
+} from '@/lib/home-v2-shared'
 import { ImageField } from '@/components/panel/image-field'
 
 const input =
@@ -124,8 +132,8 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
         </Field>
       </Section>
 
-      <Section title="Okey masa açma sihirbazı" desc="Okey sayfasında adım adım masa kurma ekranı.">
-        <Toggle label="Sihirbazı aç" checked={setup.enabled} onChange={(enabled) => setSetup({ enabled })} hint="Kapalıyken okey lobisi eskisi gibi çalışır." />
+      <Section title="Masa açma sihirbazı" desc="Masa oyunlarında adım adım masa kurma ekranı. Okeye özel puan ve kişi ayarları bu bölümde.">
+        <Toggle label="Sihirbazı aç (tüm oyunlar)" checked={setup.enabled} onChange={(enabled) => setSetup({ enabled })} hint="Kapalıyken tüm lobiler eskisi gibi çalışır." />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Başlık">
             <input className={input} value={setup.title} maxLength={40} onChange={(e) => setSetup({ title: e.target.value })} />
@@ -167,6 +175,37 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
             onChange={(e) => setSetup({ ruleFull: e.target.value })}
           />
         </Field>
+      </Section>
+
+      <Section title="Oyun bazında sihirbaz" desc="Her oyun için sihirbazı ayrı açıp kapatabilir, açıklamasını ve özet ekranındaki kural metnini düzenleyebilirsin. Blackjack, rulet ve mini oyunlarda sihirbaz yoktur.">
+        <div className="grid gap-4 lg:grid-cols-2">
+          {WIZARD_GAMES.map((g) => {
+            const cfg = setup.games[g]
+            const setGame = (patch: Partial<WizardGameConfig>) => setSetup({ games: { ...setup.games, [g]: { ...cfg, ...patch } } })
+            return (
+              <div key={g} className="flex flex-col gap-3 rounded-lg border border-border bg-background p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold text-foreground">{WIZARD_GAME_LABEL[g]}</span>
+                  <a href={`/oyunlar/${g}?masa-ac=1`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-primary hover:underline">
+                    Önizle
+                  </a>
+                </div>
+                <Toggle label="Sihirbaz açık" checked={cfg.enabled} onChange={(enabled) => setGame({ enabled })} />
+                <Field label="Açıklama" hint="Boş bırakırsan genel açıklama kullanılır.">
+                  <input className={input} value={cfg.intro} maxLength={200} onChange={(e) => setGame({ intro: e.target.value })} />
+                </Field>
+                {g === 'okey' ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">Okey kural metni yukarıdaki &quot;Puan kuralı açıklaması&quot; alanından düzenlenir.</p>
+                ) : (
+                  <Field label="Kural metni" hint="Masa özetinde gösterilir.">
+                    <textarea className={`${input} h-20 py-2 leading-relaxed`} value={cfg.rule} maxLength={800} onChange={(e) => setGame({ rule: e.target.value })} />
+                  </Field>
+                )}
+                <span className="text-xs text-muted-foreground">{`Link: /oyunlar/${g}?masa-ac=1`}</span>
+              </div>
+            )
+          })}
+        </div>
       </Section>
 
       <div className="flex flex-wrap items-center gap-3">

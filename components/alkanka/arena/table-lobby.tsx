@@ -40,8 +40,8 @@ import { SoundToggle, actionSound } from './sound-toggle'
 import { useTableSounds } from './use-table-sounds'
 import { TableThemeField, TableThemeScope } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
-import { OkeySetupWizard } from './okey-setup-wizard'
-import type { SetupConfig } from '@/lib/home-v2-shared'
+import { TableSetupWizard } from './table-setup-wizard'
+import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -189,9 +189,11 @@ export function TableLobby({
 
   if (activeId) return <TableRoom key={activeId} id={activeId} onLeave={() => { setActiveId(null); mutate() }} onReplay={setActiveId} />
 
-  if (isOkey && setup?.enabled && wizardOpen) {
+  const wizardOn = wizardEnabledFor(setup, game)
+  if (wizardOn && setup && isWizardGame(game) && wizardOpen) {
     return (
-      <OkeySetupWizard
+      <TableSetupWizard
+        game={game}
         config={setup}
         bets={settings.bets}
         balance={member ? points : null}
@@ -202,7 +204,7 @@ export function TableLobby({
           setWizardOpen(false)
           setError(null)
         }}
-        onCreate={async ({ stake: s, options }) => {
+        onCreate={async (s, options) => {
           const r = await run(() => openTable(game, s, options))
           if (r?.ok && r.id) {
             setWizardOpen(false)
@@ -361,6 +363,16 @@ export function TableLobby({
             </span>
             <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
           </div>
+          {wizardOn && setup && (
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-sm font-bold text-primary transition-colors hover:bg-primary/15"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              {`${setup.title} (adım adım)`}
+            </button>
+          )}
           {(isOkey || game === 'okey101') && (
             <div className="flex flex-col gap-1.5 rounded-xl border border-primary/30 bg-primary/5 p-2.5">
               <button
@@ -424,16 +436,6 @@ export function TableLobby({
           )}
           {isOkey && (
             <div className="flex flex-col gap-3">
-              {setup?.enabled && (
-                <button
-                  type="button"
-                  onClick={() => setWizardOpen(true)}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-sm font-bold text-primary transition-colors hover:bg-primary/15"
-                >
-                  <Plus className="size-4" aria-hidden="true" />
-                  {`${setup.title} (adım adım)`}
-                </button>
-              )}
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Masalar 4 kişilik. Gerçek oyuncu gelmeyen koltuklara bot oturtabilirsin.
               </p>

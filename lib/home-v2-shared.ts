@@ -28,6 +28,38 @@ export type SetupConfig = {
   points: number[]
   ruleFull: string
   quickBotEnabled: boolean
+  games: Record<WizardGame, WizardGameConfig>
+}
+
+export const WIZARD_GAMES = ['okey', 'okey101', 'tavla', 'batak', 'pisti', 'papaz', 'monopoly', 'bilardo'] as const
+export type WizardGame = (typeof WIZARD_GAMES)[number]
+export type WizardGameConfig = { enabled: boolean; intro: string; rule: string }
+
+export const WIZARD_GAME_LABEL: Record<WizardGame, string> = {
+  okey: 'Okey',
+  okey101: '101 Okey',
+  tavla: 'Tavla',
+  batak: 'Batak',
+  pisti: 'Pişti',
+  papaz: 'Papaz Kaçtı',
+  monopoly: 'Monopoly',
+  bilardo: 'Bilardo',
+}
+
+export const isWizardGame = (g: string): g is WizardGame => (WIZARD_GAMES as readonly string[]).includes(g)
+
+export const wizardEnabledFor = (setup: SetupConfig | undefined, game: string) =>
+  !!setup?.enabled && isWizardGame(game) && setup.games[game]?.enabled !== false
+
+const DEFAULT_GAME_RULES: Record<WizardGame, string> = {
+  okey: '',
+  okey101: 'Seçilen el sayısı oynanır, toplamda en az ceza puanı alan kazanır. Eşli modda karşılıklı oturanlar takım olur.',
+  tavla: 'Tek elde mars 2 kat, ağır mars 3 kat öder; mars güvencesi için girişte bahsin 2 katı bloke edilir, oyun bitince iade edilir. 3 ya da 5 elde, ellerin çoğunu ilk alan maçı kazanır.',
+  batak: 'Seçilen puana ilk ulaşan kazanır, zirvede eşitlik olursa bir el daha oynanır. Tek elde en yüksek puan kazanır, eşitlikte ihaleyi alan kazanır.',
+  pisti: 'En çok kart +3, eşitlikte kimseye verilmez. As ve Vale +1, ♣2 +2, ♦10 +3. Pişti +10, Vale pişti +20.',
+  papaz: 'Pot kurtulma sırasına göre bölünür: ilk kurtulan en çok alır, eşsiz kartla kalan kaybeder.',
+  monopoly: "Alınmayan tapu mezata çıkar. Oyuncular kendi sıralarında takas teklif edebilir. En iyi oyun 4-6 kişiyle oynanır.",
+  bilardo: 'Birebir bilardo maçı. Kazanan potu alır.',
 }
 
 export type HomeV2Settings = { home: HomeV2Config; setup: SetupConfig }
@@ -65,6 +97,7 @@ export const DEFAULT_HOME_V2: HomeV2Settings = {
     ruleFull:
       'Herkes seçilen puanla başlar. Normal bitişte rakipler 2 puan kaybeder (1 kat). Okeyle ya da çiftten bitiş 2 kat (4 puan), çiftten ve okeyle bitiş 4 kat (8 puan) sildirir. Göstergeyi gösteren rakiplerine 1 puan sildirir. Puanı ilk sıfırlanan olunca en yüksek puanlı kazanır.',
     quickBotEnabled: true,
+    games: Object.fromEntries(WIZARD_GAMES.map((g) => [g, { enabled: true, intro: '', rule: DEFAULT_GAME_RULES[g] }])) as Record<WizardGame, WizardGameConfig>,
   },
 }
 
@@ -113,6 +146,13 @@ export function mergeHomeV2(saved: unknown): HomeV2Settings {
       points: points.length ? points : [0],
       ruleFull: str(u.ruleFull, d.setup.ruleFull, 800),
       quickBotEnabled: bool(u.quickBotEnabled, d.setup.quickBotEnabled),
+      games: Object.fromEntries(
+        WIZARD_GAMES.map((g) => {
+          const raw = (u.games && typeof u.games === 'object' ? (u.games as Record<string, Partial<WizardGameConfig>>)[g] : undefined) ?? {}
+          const def = d.setup.games[g]
+          return [g, { enabled: bool(raw.enabled, def.enabled), intro: str(raw.intro, def.intro, 200), rule: str(raw.rule, def.rule, 800) }]
+        }),
+      ) as Record<WizardGame, WizardGameConfig>,
     },
   }
 }
