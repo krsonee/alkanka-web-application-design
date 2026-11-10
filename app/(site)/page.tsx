@@ -20,6 +20,8 @@ import { getSocialLinks, type SocialLinks } from '@/lib/social'
 import { completedTaskIds, listPublicTasks } from '@/lib/tasks'
 import { getCemberStatus, myCemberStatus } from '@/lib/cember'
 import { listProducts, type MarketProduct } from '@/lib/market'
+import { getHomeV2 } from '@/lib/home-v2'
+import { MemberHomeV2 } from '@/components/alkanka/home/member-home-v2'
 import { EXACT_REWARD, listLeagueMatches, type LeagueMatch } from '@/lib/community'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -89,9 +91,10 @@ export default async function HomePage() {
     getSocialLinks().catch(() => ({}) as SocialLinks),
   ])
   const products = allProducts.filter((p) => p.active && p.stock > 0)
-  const [hub, bonus] = await Promise.all([
+  const [hub, bonus, homeV2] = await Promise.all([
     member ? loadHub(member, products) : Promise.resolve(null),
     member ? Promise.resolve(SIGNUP_BONUS) : getSignupBonus().catch(() => SIGNUP_BONUS),
+    member ? getHomeV2() : Promise.resolve(null),
   ])
 
   const featured = pickFeatured(sponsors)
@@ -117,6 +120,9 @@ export default async function HomePage() {
       <SiteJsonLd />
       <h1 className="sr-only">AL KANKA: sponsorlar, kampanyalar ve ücretsiz mini oyunlar</h1>
       <div className="flex flex-col gap-4">
+        {hub && homeV2?.home.enabled && (
+          <MemberHomeV2 data={hub} config={homeV2.home} podium={podium} me={me} products={products} />
+        )}
         {hub ? <MemberHub data={hub} podium={podium} me={me} links={socialLinks} level={level} /> : <GuestHero bonus={bonus} />}
         <QuickTiles />
       </div>

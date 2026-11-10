@@ -40,6 +40,9 @@ import { SoundToggle, actionSound } from './sound-toggle'
 import { useTableSounds } from './use-table-sounds'
 import { TableThemeField, TableThemeScope } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
+import { TableSetupWizard } from './table-setup-wizard'
+import { BOT_QUICK, PlayChooser, type PlayTab } from './play-chooser'
+import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -95,14 +98,20 @@ export function TableLobby({
   rules,
   invitedId = null,
   initialStake,
+  setup,
+  openWizard = false,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
   rules: string[]
   invitedId?: string | null
   initialStake?: number
+  setup?: SetupConfig
+  openWizard?: boolean
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
+  const [wizardOpen, setWizardOpen] = useState(openWizard)
+  const [playTab, setPlayTab] = useState<PlayTab>('kanka')
   const [activeId, setActiveIdState] = useState<string | null>(null)
   // The open table lives in the URL so a page refresh drops the player straight back into it.
   const setActiveId = useCallback((id: string | null) => {
@@ -182,6 +191,32 @@ export function TableLobby({
 
   if (activeId) return <TableRoom key={activeId} id={activeId} onLeave={() => { setActiveId(null); mutate() }} onReplay={setActiveId} />
 
+  const wizardOn = wizardEnabledFor(setup, game)
+  if (wizardOn && setup && isWizardGame(game) && wizardOpen) {
+    return (
+      <TableSetupWizard
+        game={game}
+        config={setup}
+        bets={settings.bets}
+        balance={member ? points : null}
+        commission={settings.commission}
+        busy={busy}
+        error={error}
+        onClose={() => {
+          setWizardOpen(false)
+          setError(null)
+        }}
+        onCreate={async (s, options) => {
+          const r = await run(() => openTable(game, s, options))
+          if (r?.ok && r.id) {
+            setWizardOpen(false)
+            setActiveId(r.id)
+          }
+        }}
+      />
+    )
+  }
+
   const allOpen = (data?.open ?? []).filter((t) => t.status === 'bekliyor' && t.seat < 0)
   const openBets = Array.from(new Set(allOpen.map((t) => t.stake))).sort((a, b) => a - b)
   const open = betFilter == null ? allOpen : allOpen.filter((t) => t.stake === betFilter || t.id === invitedId)
@@ -192,7 +227,35 @@ export function TableLobby({
   if (invited) open.sort((a, b) => (a.id === invitedId ? -1 : b.id === invitedId ? 1 : 0))
   const invitedMine = invitedId != null && mine.some((t) => t.id === invitedId)
 
+  const chooser =
+    wizardOn && setup && isWizardGame(game) ? (
+      <PlayChooser
+        game={game}
+        title={ARENA_META[game]?.title ?? setup.title}
+        image={ARENA_META[game]?.image}
+        bets={settings.bets}
+        stake={stake}
+        onStake={setStake}
+        tab={playTab}
+        onTab={setPlayTab}
+        botAllowed={setup.quickBotEnabled}
+        guest={!member}
+        balance={points}
+        busy={busy}
+        onBot={async () => {
+          const quick = BOT_QUICK[game]
+          if (!quick) return
+          const r = await run(() => openTable(game, stake, quick as Parameters<typeof openTable>[2]))
+          if (r?.ok && r.id) setActiveId(r.id)
+        }}
+        onWizard={() => setWizardOpen(true)}
+      />
+    ) : null
+
   return (
+    <div className="flex flex-col gap-4">
+      {chooser}
+      {chooser && playTab === 'bot' && setup?.quickBotEnabled && BOT_QUICK[game] ? null : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section aria-labelledby="lobby-title" className="flex min-w-0 flex-col gap-4">
         {invitedId && data && !invitedMine && (
@@ -330,6 +393,16 @@ export function TableLobby({
             </span>
             <h3 className="font-bold leading-tight text-foreground">Masa aç</h3>
           </div>
+          {wizardOn && setup && (
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-sm font-bold text-primary transition-colors hover:bg-primary/15"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              {`${setup.title} (adım adım)`}
+            </button>
+          )}
           {(isOkey || game === 'okey101') && (
             <div className="flex flex-col gap-1.5 rounded-xl border border-primary/30 bg-primary/5 p-2.5">
               <button
@@ -759,6 +832,8 @@ export function TableLobby({
           </ul>
         </div>
       </aside>
+    </div>
+      )}
     </div>
   )
 }

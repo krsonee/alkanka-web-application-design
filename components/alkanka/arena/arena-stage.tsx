@@ -11,6 +11,7 @@ import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
 import { TableLobby } from './table-lobby'
+import { wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { LiveLobby } from './live-lobby'
 import { WaitingTables } from './waiting-tables'
 
@@ -99,7 +100,8 @@ function BotMode({ game, settings }: { game: ArenaGame; settings: ArenaGameSetti
   return null
 }
 
-export function ArenaStage({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
+export function ArenaStage({ game, settings, setup }: { game: ArenaGame; settings: ArenaGameSettings; setup?: SetupConfig }) {
+  const [openWizard, setOpenWizard] = useState(false)
   const meta = ARENA_META[game]
   const modes = meta.modes.filter((m) => m !== 'pvp' || settings.pvpEnabled)
   const [mode, setMode] = useState<GameMode | null>(modes.length === 1 ? modes[0] : null)
@@ -116,7 +118,14 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
   // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
   useEffect(() => {
     if (!modes.includes('pvp')) return
-    const id = new URLSearchParams(window.location.search).get('masa')
+    const params = new URLSearchParams(window.location.search)
+    if (wizardEnabledFor(setup, game) && params.has('masa-ac') && !params.get('masa')) {
+      setOpenWizard(true)
+      setMode('pvp')
+      setEntered({ mode: 'pvp', bet: settings.bets[0] })
+      return
+    }
+    const id = params.get('masa')
     if (id) {
       setInvitedTable(id)
       setMode('pvp')
@@ -198,7 +207,7 @@ export function ArenaStage({ game, settings }: { game: ArenaGame; settings: Aren
       )}
       {entered && back}
       {entered?.mode === 'bot' && <BotMode game={game} settings={settings} />}
-      {entered?.mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} initialStake={entered.bet} />}
+      {entered?.mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} initialStake={entered.bet} setup={setup} openWizard={openWizard} />}
       {modes.includes('pvp') && (
         <div className="mt-4 border-t border-border pt-6 [body:has([data-table-live])_&]:hidden">
           <LiveLobby game={game} watching={null} onWatch={watch} />
