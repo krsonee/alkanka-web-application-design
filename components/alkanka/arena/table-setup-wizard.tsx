@@ -234,22 +234,21 @@ export function TableSetupWizard({
   const gameCfg = config.games[game]
   const guest = balance == null
   const storeKey = `alkanka:masa-ac:${game}`
-  const [picks, setPicksState] = useState<Picks>((): Picks => {
+  const [picks, setPicks] = useState<Picks>((): Picks => {
     const base: Picks = game === 'okey' && (!config.allowTwoSeats || !config.quickBotEnabled) ? { seats: '4' } : {}
+    // Only the guest "Üye ol ve oyna" handoff restores picks; every other visit starts empty.
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storeKey) ?? 'null') as Picks | null
+      window.sessionStorage.removeItem(storeKey)
       if (saved && typeof saved === 'object') return prune(game, { ...base, ...saved }, config, bets, balance)
     } catch {}
     return base
   })
-  const setPicks = (fn: (p: Picks) => Picks) =>
-    setPicksState((p) => {
-      const next = fn(p)
-      try {
-        window.sessionStorage.setItem(storeKey, JSON.stringify(next))
-      } catch {}
-      return next
-    })
+  const savePicksForLogin = () => {
+    try {
+      window.sessionStorage.setItem(storeKey, JSON.stringify(picks))
+    } catch {}
+  }
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<string[]>(DEFAULT_EXTRAS[game] ?? [])
 
@@ -268,11 +267,19 @@ export function TableSetupWizard({
   }
 
   const commit = (key: string, value: string) => {
-    setPicks((p) => prune(game, { ...p, [key]: value }, config, bets, balance))
+    setPicks((p) => {
+      const next: Picks = { ...p, [key]: value }
+      if (p[key] != null && p[key] !== value) {
+        const order = buildSteps(game, p, config, bets, balance).map((s) => s.key)
+        for (const later of order.slice(order.indexOf(key) + 1)) delete next[later]
+      }
+      return prune(game, next, config, bets, balance)
+    })
     setEditing(null)
   }
 
   const openStep = (s: Step) => {
+    if (picks[s.key] == null && s.key !== current) return
     if (s.multi) setDraft((picks[s.key] ?? '').split(',').filter(Boolean))
     setEditing(s.key)
   }
@@ -308,19 +315,22 @@ export function TableSetupWizard({
           {steps.map((s) => {
             const picked = picks[s.key] != null && s.key !== current
             const active = s.key === current
+            const locked = !picked && !active
             return (
               <li key={s.key}>
                 <button
                   type="button"
                   onClick={() => openStep(s)}
+                  disabled={locked}
                   aria-current={active ? 'step' : undefined}
+                  title={locked ? 'Önce önceki adımı seç' : undefined}
                   className={cn(
                     'flex w-full items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-colors',
                     active
                       ? 'border-primary bg-primary/10'
                       : picked
                         ? 'border-border bg-secondary hover:border-primary/60'
-                        : 'border-dashed border-primary/50 bg-background hover:border-primary',
+                        : 'cursor-not-allowed border-dashed border-border bg-background opacity-60',
                   )}
                 >
                   <span className="flex min-w-0 flex-col gap-0.5">
@@ -329,15 +339,15 @@ export function TableSetupWizard({
                       <span className="text-primary" aria-hidden="true">*</span>
                       <span className="sr-only">(zorunlu)</span>
                     </span>
-                    <span className={cn('truncate text-sm font-bold', picked ? 'text-foreground' : 'text-primary')}>
-                      {picked ? labelOf(s) : active ? 'Şimdi seç' : 'Seçilmedi'}
+                    <span className={cn('truncate text-sm font-bold', picked ? 'text-foreground' : active ? 'text-primary' : 'text-muted-foreground')}>
+                      {picked ? labelOf(s) : active ? 'Şimdi seç' : 'Sırada bekliyor'}
                     </span>
                   </span>
                   {picked ? (
                     <Pencil className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  ) : (
+                  ) : active ? (
                     <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-                  )}
+                  ) : null}
                 </button>
               </li>
             )
@@ -351,7 +361,7 @@ export function TableSetupWizard({
         </ul>
         {!complete && (
           <p className="text-xs leading-relaxed text-muted-foreground">
-            <span className="font-bold text-primary">*</span> Tüm alanlar zorunlu. Hepsini seçmeden masa açılmaz.
+            <span className="font-bold text-primary">*</span> Tüm alanlar zorunlu ve sırayla seçilir. Hepsini seçmeden masa açılmaz.
           </p>
         )}
       </div>
@@ -436,7 +446,10 @@ export function TableSetupWizard({
           <button
             type="button"
             disabled={busy}
-            onClick={() => onCreate(stake, result.options)}
+            onClick={() => {
+              if (guest) savePicksForLogin()
+              onCreate(stake, result.options)
+            }}
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
