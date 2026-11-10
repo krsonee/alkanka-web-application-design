@@ -41,6 +41,7 @@ import { useTableSounds } from './use-table-sounds'
 import { TableThemeField, TableThemeScope } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
 import { TableSetupWizard } from './table-setup-wizard'
+import { BOT_QUICK, PlayChooser, type PlayTab } from './play-chooser'
 import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
@@ -110,6 +111,7 @@ export function TableLobby({
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
   const [wizardOpen, setWizardOpen] = useState(openWizard)
+  const [playTab, setPlayTab] = useState<PlayTab>('kanka')
   const [activeId, setActiveIdState] = useState<string | null>(null)
   // The open table lives in the URL so a page refresh drops the player straight back into it.
   const setActiveId = useCallback((id: string | null) => {
@@ -225,7 +227,35 @@ export function TableLobby({
   if (invited) open.sort((a, b) => (a.id === invitedId ? -1 : b.id === invitedId ? 1 : 0))
   const invitedMine = invitedId != null && mine.some((t) => t.id === invitedId)
 
+  const chooser =
+    wizardOn && setup && isWizardGame(game) ? (
+      <PlayChooser
+        game={game}
+        title={ARENA_META[game]?.title ?? setup.title}
+        image={ARENA_META[game]?.image}
+        bets={settings.bets}
+        stake={stake}
+        onStake={setStake}
+        tab={playTab}
+        onTab={setPlayTab}
+        botAllowed={setup.quickBotEnabled}
+        guest={!member}
+        balance={points}
+        busy={busy}
+        onBot={async () => {
+          const quick = BOT_QUICK[game]
+          if (!quick) return
+          const r = await run(() => openTable(game, stake, quick as Parameters<typeof openTable>[2]))
+          if (r?.ok && r.id) setActiveId(r.id)
+        }}
+        onWizard={() => setWizardOpen(true)}
+      />
+    ) : null
+
   return (
+    <div className="flex flex-col gap-4">
+      {chooser}
+      {chooser && playTab === 'bot' && setup?.quickBotEnabled && BOT_QUICK[game] ? null : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section aria-labelledby="lobby-title" className="flex min-w-0 flex-col gap-4">
         {invitedId && data && !invitedMine && (
@@ -802,6 +832,8 @@ export function TableLobby({
           </ul>
         </div>
       </aside>
+    </div>
+      )}
     </div>
   )
 }

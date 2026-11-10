@@ -63,10 +63,11 @@ function seatCount(game: WizardGame, p: Picks): number {
 function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: number[], balance: number | null): Step[] {
   const seats = seatCount(game, p)
   const steps: Step[] = []
+  const botsOn = config.quickBotEnabled
   switch (game) {
     case 'okey': {
       const two = p.seats === '2'
-      if (config.allowTwoSeats)
+      if (config.allowTwoSeats && botsOn)
         steps.push({ key: 'seats', title: 'Kişi sayısı', choices: [
           { value: '2', label: '2 kişilik', hint: 'Birebir · 2 koltuğa bot oturur' },
           { value: '4', label: '4 kişilik', hint: 'Klasik masa' },
@@ -78,7 +79,7 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
       steps.push({ key: 'points', title: 'Puan', note: config.ruleFull, choices: config.points.map((n) => ({
         value: String(n), label: n === 0 ? 'Tek el' : `${n} puan`, hint: n === 0 ? 'Tek el biter' : n === 10 ? 'Kısa' : n === 20 ? 'Orta' : 'Uzun',
       })) })
-      if (!two) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(4) })
+      if (!two && botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(4) })
       break
     }
     case 'okey101':
@@ -96,7 +97,7 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
     case 'batak':
       steps.push({ key: 'variant', title: 'Batak türü', wide: true, choices: BATAK_VARIANTS.map((v) => ({ value: v.value, label: v.label, hint: `${v.hint} · ${v.seats} kişi` })) })
       steps.push({ key: 'rounds', title: 'Oyun sonu', choices: [1, 31, 51, 101].map((n) => ({ value: String(n), label: n === 1 ? 'Tek el' : `${n} puan` })) })
-      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       {
         const list = BATAK_RULE_OPTIONS.filter((o) => o.variants.includes((p.variant ?? 'klasik') as BatakVariant))
         if (list.length) steps.push(multi('extras', 'Masa ayarları', list))
@@ -109,18 +110,18 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
         { value: '4', label: '4 kişilik', hint: 'Eşli ya da tekli' },
       ] })
       if (p.seats === '4') steps.push({ key: 'mode', title: 'Oyun modu', choices: modeChoices() })
-      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       steps.push(multi('extras', 'Masa ayarları', PISTI_RULE_OPTIONS))
       break
     case 'papaz':
       steps.push({ key: 'seats', title: 'Kişi sayısı', choices: range(2, 6).map((n) => ({ value: String(n), label: `${n} kişilik` })) })
-      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       steps.push(multi('extras', 'Masa ayarları', PAPAZ_RULE_OPTIONS))
       break
     case 'monopoly':
       steps.push({ key: 'seats', title: 'Kişi sayısı', choices: range(2, 8).map((n) => ({ value: String(n), label: `${n} kişilik`, hint: n >= 4 && n <= 6 ? 'İdeal' : undefined })) })
       steps.push({ key: 'rounds', title: 'Süre', choices: [999, 50, 30].map((n) => ({ value: String(n), label: n >= 999 ? 'Sınırsız' : `${n} tur`, hint: n >= 999 ? 'Son kalan kazanır' : 'En zengin kazanır' })) })
-      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       steps.push(multi('extras', 'Ev kuralları', MONO_RULE_OPTIONS))
       break
     case 'bilardo':
@@ -229,7 +230,24 @@ export function TableSetupWizard({
   onClose: () => void
 }) {
   const gameCfg = config.games[game]
-  const [picks, setPicks] = useState<Picks>((): Picks => (game === 'okey' && !config.allowTwoSeats ? { seats: '4' } : {}))
+  const guest = balance == null
+  const storeKey = `alkanka:masa-ac:${game}`
+  const [picks, setPicksState] = useState<Picks>((): Picks => {
+    const base: Picks = game === 'okey' && (!config.allowTwoSeats || !config.quickBotEnabled) ? { seats: '4' } : {}
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(storeKey) ?? 'null') as Picks | null
+      if (saved && typeof saved === 'object') return prune(game, { ...base, ...saved }, config, bets, balance)
+    } catch {}
+    return base
+  })
+  const setPicks = (fn: (p: Picks) => Picks) =>
+    setPicksState((p) => {
+      const next = fn(p)
+      try {
+        window.sessionStorage.setItem(storeKey, JSON.stringify(next))
+      } catch {}
+      return next
+    })
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<string[]>(DEFAULT_EXTRAS[game] ?? [])
 
@@ -387,8 +405,11 @@ export function TableSetupWizard({
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-            {`Masayı aç · ${fmt(stake)} KC`}
+            {guest ? 'Üye ol ve oyna' : `Masayı aç · ${fmt(stake)} KC`}
           </button>
+          {guest && (
+            <p className="text-center text-xs text-muted-foreground">Seçimlerini koruruz. Giriş yapınca masan bu ayarlarla hazır olur.</p>
+          )}
         </div>
       )}
     </section>

@@ -8,6 +8,7 @@ import { GameTabs } from '@/components/alkanka/arena/game-tabs'
 import { ARENA_GAMES, ARENA_META, isArenaGame } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
 import { getHomeV2 } from '@/lib/home-v2'
+import { isWizardGame } from '@/lib/home-v2-shared'
 import { getHidden } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
 
@@ -37,7 +38,7 @@ export default async function GamePage({ params }: { params: Promise<{ oyun: str
   const [settings, hidden, homeV2] = await Promise.all([
     getArenaSettings(),
     getHidden(),
-    oyun === 'okey' ? getHomeV2().catch(() => null) : Promise.resolve(null),
+    isWizardGame(oyun) ? getHomeV2().catch(() => null) : Promise.resolve(null),
   ])
   const isOpen = (k: string) => (isArenaGame(k) ? settings[k].enabled : !isHidden(hidden, 'mini', k))
 
