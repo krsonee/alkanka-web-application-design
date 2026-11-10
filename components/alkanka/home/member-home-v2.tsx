@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Play } from 'lucide-react'
+import { ArrowRight, Gift, Play } from 'lucide-react'
 import type { HubData } from '@/components/alkanka/home/home-hub'
 import type { HomeV2Config } from '@/lib/home-v2-shared'
 import type { MarketProduct } from '@/lib/market'
@@ -23,20 +23,32 @@ export function MemberHomeV2({
   podium,
   me,
   products,
+  bonus = 500,
 }: {
-  data: HubData
+  data: HubData | null
   config: HomeV2Config
   podium: Row[]
   me: { rank: number; points: number } | null
   products: MarketProduct[]
+  bonus?: number
 }) {
-  const eyebrow = config.eyebrow.replace('{ad}', data.name)
-  const goal = data.goal
-  const goalPct = goal && goal.price > 0 ? Math.min(100, Math.round((data.balance / goal.price) * 100)) : 0
-  const affordable = [...products]
-    .filter((p) => p.price <= data.balance)
-    .sort((a, b) => a.price - b.price)
-    .slice(-3)
+  const guest = !data
+  const withBonus = (s: string) => s.replaceAll('{bonus}', fmt(bonus))
+  const eyebrow = guest ? withBonus(config.guestEyebrow) : config.eyebrow.replace('{ad}', data.name)
+  const title = guest ? withBonus(config.guestTitle) : config.title
+  const primaryCta = guest ? withBonus(config.guestPrimaryCta) : config.primaryCta
+  const primaryHref = guest ? config.guestPrimaryHref : config.primaryHref
+  const secondaryCta = guest ? config.guestSecondaryCta : config.secondaryCta
+  const secondaryHref = guest ? config.guestSecondaryHref : config.secondaryHref
+  const balance = data?.balance ?? 0
+  const goal = data?.goal ?? null
+  const goalPct = goal && goal.price > 0 ? Math.min(100, Math.round((balance / goal.price) * 100)) : 0
+  const affordable = guest
+    ? []
+    : [...products]
+        .filter((p) => p.price <= balance)
+        .sort((a, b) => a.price - b.price)
+        .slice(-3)
   const showSide = config.showWallet || config.showLeaderboard
 
   return (
@@ -49,8 +61,8 @@ export function MemberHomeV2({
           <div className="absolute inset-0 -z-10 bg-gradient-to-r from-card via-card/85 to-card/10" aria-hidden="true" />
           <div className="flex max-w-lg flex-col gap-4 p-6 sm:p-9">
             <span className="text-xs font-bold uppercase tracking-wider text-primary">{eyebrow}</span>
-            <h2 className="text-balance text-3xl font-black leading-tight text-foreground sm:text-4xl">{config.title}</h2>
-            {config.pills.length > 0 && (
+            <h2 className="text-balance text-3xl font-black leading-tight text-foreground sm:text-4xl">{title}</h2>
+            {!guest && config.pills.length > 0 && (
               <ul className="flex flex-wrap gap-2" aria-label="Masa ayarları">
                 {config.pills.map((p) => (
                   <li key={p} className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-semibold text-foreground backdrop-blur">
@@ -60,13 +72,13 @@ export function MemberHomeV2({
               </ul>
             )}
             <div className="flex flex-wrap gap-3 pt-1">
-              <Link href={config.primaryHref} className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90">
-                <Play className="size-4" aria-hidden="true" />
-                {config.primaryCta}
+              <Link href={primaryHref} className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90">
+                {guest ? <Gift className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
+                {primaryCta}
               </Link>
-              {config.secondaryCta && (
-                <Link href={config.secondaryHref} className="inline-flex h-12 items-center rounded-xl border border-border bg-background/70 px-5 text-sm font-bold text-foreground backdrop-blur transition-colors hover:bg-secondary">
-                  {config.secondaryCta}
+              {secondaryCta && (
+                <Link href={secondaryHref} className="inline-flex h-12 items-center rounded-xl border border-border bg-background/70 px-5 text-sm font-bold text-foreground backdrop-blur transition-colors hover:bg-secondary">
+                  {secondaryCta}
                 </Link>
               )}
             </div>
@@ -98,7 +110,26 @@ export function MemberHomeV2({
 
       {showSide && (
         <aside className="flex flex-col gap-4">
-          {config.showWallet && (
+          {config.showWallet && guest && (
+            <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-center gap-3">
+                <Coin />
+                <div className="flex min-w-0 flex-col">
+                  <small className="text-xs text-muted-foreground">{config.guestCardTitle}</small>
+                  <b className="text-2xl font-black tabular-nums text-foreground">{`${fmt(bonus)} KC hediye`}</b>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <a href={config.guestPrimaryHref} className="inline-flex h-10 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90">
+                  Ücretsiz kayıt ol
+                </a>
+                <a href="#giris" className="inline-flex h-10 items-center justify-center rounded-lg border border-border text-sm font-semibold text-foreground transition-colors hover:bg-secondary">
+                  Giriş yap
+                </a>
+              </div>
+            </div>
+          )}
+          {config.showWallet && data && (
             <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
               <div className="flex flex-col gap-1">
                 <small className="text-xs text-muted-foreground">Bakiyen</small>

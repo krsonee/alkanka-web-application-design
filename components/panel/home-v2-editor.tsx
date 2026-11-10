@@ -62,7 +62,34 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
     <form action={action} className="flex flex-col gap-5">
       <input type="hidden" name="payload" value={JSON.stringify(v)} />
 
-      <Section title="Üye ana sayfası" desc="Giriş yapmış üyeler ana sayfada bu bölümü görür. Misafirler mevcut ana sayfayı görmeye devam eder.">
+      <Section title="Misafir ana sayfası (giriş yapmadan)" desc="Giriş yapmamış ziyaretçiler ana sayfanın en üstünde bu bölümü görür. Kapak görseli, günlük kutular ve yan bloklar üye bölümüyle ortaktır.">
+        <Toggle label="Misafir ana sayfasını göster" checked={home.guestEnabled} onChange={(guestEnabled) => setHome({ guestEnabled })} hint="Kapatırsan misafirler sadece eski karşılama bölümünü görür." />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Üst satır" hint="{bonus} yazan yere kayıt hediyesi gelir.">
+            <input className={input} value={home.guestEyebrow} maxLength={60} onChange={(e) => setHome({ guestEyebrow: e.target.value })} />
+          </Field>
+          <Field label="Başlık">
+            <input className={input} value={home.guestTitle} maxLength={90} onChange={(e) => setHome({ guestTitle: e.target.value })} />
+          </Field>
+          <Field label="Ana buton yazısı" hint="Örnek: Ücretsiz kayıt ol · +{bonus} KC">
+            <input className={input} value={home.guestPrimaryCta} maxLength={40} onChange={(e) => setHome({ guestPrimaryCta: e.target.value })} />
+          </Field>
+          <Field label="Ana buton linki" hint="Kayıt penceresi için: #kayit">
+            <input className={input} value={home.guestPrimaryHref} maxLength={200} onChange={(e) => setHome({ guestPrimaryHref: e.target.value })} />
+          </Field>
+          <Field label="İkinci buton yazısı">
+            <input className={input} value={home.guestSecondaryCta} maxLength={30} onChange={(e) => setHome({ guestSecondaryCta: e.target.value })} />
+          </Field>
+          <Field label="İkinci buton linki">
+            <input className={input} value={home.guestSecondaryHref} maxLength={200} onChange={(e) => setHome({ guestSecondaryHref: e.target.value })} />
+          </Field>
+          <Field label="Hediye kartı başlığı" hint="Yan bloktaki kayıt kartının üst yazısı.">
+            <input className={input} value={home.guestCardTitle} maxLength={40} onChange={(e) => setHome({ guestCardTitle: e.target.value })} />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title="Üye ana sayfası (giriş yapınca)" desc="Giriş yapmış üyeler ana sayfada bu bölümü görür.">
         <Toggle label="Yeni üye ana sayfasını göster" checked={home.enabled} onChange={(enabled) => setHome({ enabled })} hint="Kapatırsan üyeler eski ana sayfayı görür." />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Üst satır" hint="{ad} yazan yere üyenin adı gelir.">

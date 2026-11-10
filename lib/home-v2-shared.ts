@@ -18,6 +18,14 @@ export type HomeV2Config = {
   showWallet: boolean
   showLeaderboard: boolean
   marketHref: string
+  guestEnabled: boolean
+  guestEyebrow: string
+  guestTitle: string
+  guestPrimaryCta: string
+  guestPrimaryHref: string
+  guestSecondaryCta: string
+  guestSecondaryHref: string
+  guestCardTitle: string
 }
 
 export type SetupConfig = {
@@ -87,6 +95,14 @@ export const DEFAULT_HOME_V2: HomeV2Settings = {
     showWallet: true,
     showLeaderboard: true,
     marketHref: '/market',
+    guestEnabled: true,
+    guestEyebrow: 'Masaya hoş geldin',
+    guestTitle: 'Masaya otur, kankalarla oyna.',
+    guestPrimaryCta: 'Ücretsiz kayıt ol · +{bonus} KC',
+    guestPrimaryHref: '#kayit',
+    guestSecondaryCta: 'Oyunlara bak',
+    guestSecondaryHref: '/oyunlar',
+    guestCardTitle: 'Kayıt ol, başla',
   },
   setup: {
     enabled: true,
@@ -137,6 +153,14 @@ export function mergeHomeV2(saved: unknown): HomeV2Settings {
       showWallet: bool(h.showWallet, d.home.showWallet),
       showLeaderboard: bool(h.showLeaderboard, d.home.showLeaderboard),
       marketHref: str(h.marketHref, d.home.marketHref, 200),
+      guestEnabled: bool(h.guestEnabled, d.home.guestEnabled),
+      guestEyebrow: str(h.guestEyebrow, d.home.guestEyebrow, 60),
+      guestTitle: str(h.guestTitle, d.home.guestTitle, 90),
+      guestPrimaryCta: str(h.guestPrimaryCta, d.home.guestPrimaryCta, 40),
+      guestPrimaryHref: str(h.guestPrimaryHref, d.home.guestPrimaryHref, 200),
+      guestSecondaryCta: str(h.guestSecondaryCta, d.home.guestSecondaryCta, 30),
+      guestSecondaryHref: str(h.guestSecondaryHref, d.home.guestSecondaryHref, 200),
+      guestCardTitle: str(h.guestCardTitle, d.home.guestCardTitle, 40),
     },
     setup: {
       enabled: bool(u.enabled, d.setup.enabled),
