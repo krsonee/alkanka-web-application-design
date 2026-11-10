@@ -256,7 +256,6 @@ export function TableSetupWizard({
   const steps = buildSteps(game, picks, config, bets, balance)
   const current = editing ?? steps.find((s) => picks[s.key] == null)?.key ?? null
   const currentStep = steps.find((s) => s.key === current)
-  const done = steps.filter((s) => picks[s.key] != null && s.key !== current)
   const complete = current == null
 
   const labelOf = (s: Step) => {
@@ -298,30 +297,64 @@ export function TableSetupWizard({
         </button>
       </div>
 
-      <ol className="flex gap-1.5" aria-label="İlerleme">
-        {steps.map((s) => (
-          <li key={s.key} className={cn('h-1.5 flex-1 rounded-full', picks[s.key] != null && s.key !== current ? 'bg-primary' : s.key === current ? 'bg-primary/50' : 'bg-secondary')}>
-            <span className="sr-only">{`${s.title}${picks[s.key] != null ? ': seçildi' : ''}`}</span>
-          </li>
-        ))}
-      </ol>
-
-      {done.length > 0 && (
-        <ul className="flex flex-wrap gap-2" aria-label="Seçimlerin">
-          {done.map((s) => (
-            <li key={s.key}>
-              <button type="button" onClick={() => openStep(s)} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-primary/50">
-                <span className="text-muted-foreground">{s.title}:</span>
-                {labelOf(s)}
-                <Pencil className="size-3 text-muted-foreground" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Masa ayarların</span>
+          <span className="text-xs font-semibold text-muted-foreground">
+            {`${steps.filter((s) => picks[s.key] != null && s.key !== current).length}/${steps.length} seçildi`}
+          </span>
+        </div>
+        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Masa ayarların">
+          {steps.map((s) => {
+            const picked = picks[s.key] != null && s.key !== current
+            const active = s.key === current
+            return (
+              <li key={s.key}>
+                <button
+                  type="button"
+                  onClick={() => openStep(s)}
+                  aria-current={active ? 'step' : undefined}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-colors',
+                    active
+                      ? 'border-primary bg-primary/10'
+                      : picked
+                        ? 'border-border bg-secondary hover:border-primary/60'
+                        : 'border-dashed border-primary/50 bg-background hover:border-primary',
+                  )}
+                >
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                      {s.title}
+                      <span className="text-primary" aria-hidden="true">*</span>
+                      <span className="sr-only">(zorunlu)</span>
+                    </span>
+                    <span className={cn('truncate text-sm font-bold', picked ? 'text-foreground' : 'text-primary')}>
+                      {picked ? labelOf(s) : active ? 'Şimdi seç' : 'Seçilmedi'}
+                    </span>
+                  </span>
+                  {picked ? (
+                    <Pencil className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  ) : (
+                    <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                  )}
+                </button>
+              </li>
+            )
+          })}
           {game === 'okey' && picks.seats === '2' && (
-            <li className="inline-flex items-center rounded-full bg-secondary/60 px-3 py-1.5 text-xs text-muted-foreground">Bot: 2 bot (otomatik)</li>
+            <li className="flex flex-col gap-0.5 rounded-xl border-2 border-border bg-secondary px-3 py-2.5">
+              <span className="text-xs font-semibold text-muted-foreground">Bot</span>
+              <span className="text-sm font-bold text-foreground">2 bot · otomatik</span>
+            </li>
           )}
         </ul>
-      )}
+        {!complete && (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            <span className="font-bold text-primary">*</span> Tüm alanlar zorunlu. Hepsini seçmeden masa açılmaz.
+          </p>
+        )}
+      </div>
 
       {currentStep && (
         <div className="flex flex-col gap-3">
