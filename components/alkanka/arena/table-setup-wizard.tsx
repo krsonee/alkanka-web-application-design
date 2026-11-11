@@ -49,6 +49,23 @@ const DEFAULT_EXTRAS: Partial<Record<WizardGame, string[]>> = {
   pisti: pistiRulesToList(DEFAULT_PISTI_RULES) as string[],
 }
 
+const CARD_SCORING = 'En çok kart +3, eşitlikte kimseye verilmez. As ve Vale +1, ♣2 +2, ♦10 +3. Pişti +10, Vale pişti +20.'
+
+function gameNotes(game: WizardGame, p: Picks): string[] {
+  const notes: string[] = []
+  if ((game === 'okey' || game === 'okey101' || game === 'pisti') && p.mode === 'team')
+    notes.push('Karşılıklı oturanlar eş olur, eşlerden biri bitirince takım kazanır.')
+  if (game === 'batak' && p.rounds)
+    notes.push(
+      p.rounds === '1'
+        ? 'Tek el oynanır, en yüksek puan kazanır. Eşitlikte ihaleyi alan kazanır.'
+        : `${p.rounds} puana ilk ulaşan kazanır. Zirvede eşitlik olursa bir el daha oynanır.`,
+    )
+  if (game === 'pisti' || game === 'papaz') notes.push(CARD_SCORING)
+  if (game === 'monopoly') notes.push('Alınmayan tapu mezata çıkar. Oyuncular kendi sıralarında takas teklif edebilir. En iyi oyun 4-6 kişiyle oynanır.')
+  return notes
+}
+
 function batakSeats(p: Picks) {
   return BATAK_VARIANTS.find((v) => v.value === p.variant)?.seats ?? 4
 }
@@ -65,7 +82,6 @@ function seatCount(game: WizardGame, p: Picks): number {
 function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: number[], balance: number | null): Step[] {
   const seats = seatCount(game, p)
   const steps: Step[] = []
-  const botsOn = config.quickBotEnabled
   switch (game) {
     case 'okey': {
       steps.push({ key: 'mode', title: 'Oyun modu', note: 'Masalar 4 kişilik. Gerçek oyuncu gelmeyen koltuklara bot oturtabilirsin.', choices: [
@@ -81,8 +97,7 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
             : 'İlk bitiren masayı kazanır.',
         choices: [0, 10, 20, 30].map((n) => ({ value: String(n), label: n === 0 ? 'Tek el' : `${n} puan` })),
       })
-      if (botsOn)
-        steps.push({ key: 'bots', title: 'Bot koltuğu', choices: [
+      steps.push({ key: 'bots', title: 'Bot koltuğu', choices: [
           { value: '0', label: 'Bot yok', hint: 'Sadece oyuncular' },
           { value: '1', label: '1 bot' },
           { value: '2', label: '2 bot' },
@@ -441,6 +456,9 @@ export function TableSetupWizard({
             </div>
           </dl>
           {rule && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{rule}</p>}
+          {gameNotes(game, picks).map((note) => (
+            <p key={note} className="text-pretty text-xs leading-relaxed text-muted-foreground">{note}</p>
+          ))}
           {game === 'tavla' && (
             <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
               {picks.rounds === '1'
