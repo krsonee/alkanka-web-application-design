@@ -8,6 +8,8 @@ import { BATAK_RULE_OPTIONS, BATAK_VARIANTS, type BatakVariant } from '@/lib/gam
 import { DEFAULT_PISTI_RULES, PISTI_RULE_OPTIONS, PISTI_TARGETS, pistiRulesToList } from '@/lib/games/pisti'
 import { PAPAZ_RULE_OPTIONS } from '@/lib/games/papaz'
 import { MONO_RULE_OPTIONS } from '@/lib/games/monopoly'
+import { arenaThemeGame } from '@/lib/table-themes'
+import { TableThemeField } from './table-theme'
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
@@ -47,6 +49,23 @@ const DEFAULT_EXTRAS: Partial<Record<WizardGame, string[]>> = {
   pisti: pistiRulesToList(DEFAULT_PISTI_RULES) as string[],
 }
 
+const CARD_SCORING = 'En çok kart +3, eşitlikte kimseye verilmez. As ve Vale +1, ♣2 +2, ♦10 +3. Pişti +10, Vale pişti +20.'
+
+function gameNotes(game: WizardGame, p: Picks): string[] {
+  const notes: string[] = []
+  if ((game === 'okey' || game === 'okey101' || game === 'pisti') && p.mode === 'team')
+    notes.push('Karşılıklı oturanlar eş olur, eşlerden biri bitirince takım kazanır.')
+  if (game === 'batak' && p.rounds)
+    notes.push(
+      p.rounds === '1'
+        ? 'Tek el oynanır, en yüksek puan kazanır. Eşitlikte ihaleyi alan kazanır.'
+        : `${p.rounds} puana ilk ulaşan kazanır. Zirvede eşitlik olursa bir el daha oynanır.`,
+    )
+  if (game === 'pisti' || game === 'papaz') notes.push(CARD_SCORING)
+  if (game === 'monopoly') notes.push('Alınmayan tapu mezata çıkar. Oyuncular kendi sıralarında takas teklif edebilir. En iyi oyun 4-6 kişiyle oynanır.')
+  return notes
+}
+
 function batakSeats(p: Picks) {
   return BATAK_VARIANTS.find((v) => v.value === p.variant)?.seats ?? 4
 }
@@ -63,23 +82,27 @@ function seatCount(game: WizardGame, p: Picks): number {
 function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: number[], balance: number | null): Step[] {
   const seats = seatCount(game, p)
   const steps: Step[] = []
-  const botsOn = config.quickBotEnabled
   switch (game) {
     case 'okey': {
-      const two = p.seats === '2'
-      if (config.allowTwoSeats && botsOn)
-        steps.push({ key: 'seats', title: 'Kişi sayısı', choices: [
-          { value: '2', label: '2 kişilik', hint: 'Birebir · 2 koltuğa bot oturur' },
-          { value: '4', label: '4 kişilik', hint: 'Klasik masa' },
-        ] })
-      steps.push({ key: 'mode', title: 'Oyun modu', choices: [
+      steps.push({ key: 'mode', title: 'Oyun modu', note: 'Masalar 4 kişilik. Gerçek oyuncu gelmeyen koltuklara bot oturtabilirsin.', choices: [
         { value: 'solo', label: 'Tekli', hint: 'Herkes kendine' },
-        { value: 'team', label: 'Takımlı', hint: '2+2, sadece 4 kişide', disabled: two },
+        { value: 'team', label: 'Takımlı', hint: 'Karşılıklı oturanlar takım (2+2)' },
       ] })
-      steps.push({ key: 'points', title: 'Puan', note: config.ruleFull, choices: config.points.map((n) => ({
-        value: String(n), label: n === 0 ? 'Tek el' : `${n} puan`, hint: n === 0 ? 'Tek el biter' : n === 10 ? 'Kısa' : n === 20 ? 'Orta' : 'Uzun',
-      })) })
-      if (!two && botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(4) })
+      steps.push({
+        key: 'points',
+        title: 'Puan',
+        note:
+          p.points && p.points !== '0'
+            ? `Herkes ${p.points} puanla başlar. Normal bitişte rakipler 2 puan kaybeder (1 kat). Okeyle ya da çiftten bitiş 2 kat (4 puan), çiftten ve okeyle bitiş 4 kat (8 puan) sildirir. Göstergeyi gösteren rakiplerine 1 puan sildirir. Puanı ilk sıfırlanan olunca en yüksek puanlı kazanır.`
+            : 'İlk bitiren masayı kazanır.',
+        choices: [0, 10, 20, 30].map((n) => ({ value: String(n), label: n === 0 ? 'Tek el' : `${n} puan` })),
+      })
+      steps.push({ key: 'bots', title: 'Bot koltuğu', choices: [
+          { value: '0', label: 'Bot yok', hint: 'Sadece oyuncular' },
+          { value: '1', label: '1 bot' },
+          { value: '2', label: '2 bot' },
+          { value: '3', label: 'Bota karşı (3 bot)', hint: 'Hemen başlar' },
+        ] })
       break
     }
     case 'okey101':
@@ -97,7 +120,7 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
     case 'batak':
       steps.push({ key: 'variant', title: 'Batak türü', wide: true, choices: BATAK_VARIANTS.map((v) => ({ value: v.value, label: v.label, hint: `${v.hint} · ${v.seats} kişi` })) })
       steps.push({ key: 'rounds', title: 'Oyun sonu', choices: [1, 31, 51, 101].map((n) => ({ value: String(n), label: n === 1 ? 'Tek el' : `${n} puan` })) })
-      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       {
         const list = BATAK_RULE_OPTIONS.filter((o) => o.variants.includes((p.variant ?? 'klasik') as BatakVariant))
         if (list.length) steps.push(multi('extras', 'Masa ayarları', list))
@@ -110,18 +133,18 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
         { value: '4', label: '4 kişilik', hint: 'Eşli ya da tekli' },
       ] })
       if (p.seats === '4') steps.push({ key: 'mode', title: 'Oyun modu', choices: modeChoices() })
-      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       steps.push(multi('extras', 'Masa ayarları', PISTI_RULE_OPTIONS))
       break
     case 'papaz':
       steps.push({ key: 'seats', title: 'Kişi sayısı', choices: range(2, 6).map((n) => ({ value: String(n), label: `${n} kişilik` })) })
-      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       steps.push(multi('extras', 'Masa ayarları', PAPAZ_RULE_OPTIONS))
       break
     case 'monopoly':
       steps.push({ key: 'seats', title: 'Kişi sayısı', choices: range(2, 8).map((n) => ({ value: String(n), label: `${n} kişilik`, hint: n >= 4 && n <= 6 ? 'İdeal' : undefined })) })
       steps.push({ key: 'rounds', title: 'Süre', choices: [999, 50, 30].map((n) => ({ value: String(n), label: n >= 999 ? 'Sınırsız' : `${n} tur`, hint: n >= 999 ? 'Son kalan kazanır' : 'En zengin kazanır' })) })
-      if (botsOn) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
+      steps.push({ key: 'bots', title: 'Bot', choices: botChoices(seats) })
       steps.push(multi('extras', 'Ev kuralları', MONO_RULE_OPTIONS))
       break
     case 'bilardo':
@@ -138,15 +161,14 @@ function buildResult(game: WizardGame, p: Picks): { options: TableOptions | unde
   const modeLabel = p.mode === 'team' ? 'Eşli' : 'Tekli'
   switch (game) {
     case 'okey': {
-      const two = p.seats === '2'
-      const bots = two ? 2 : n('bots')
-      const team = !two && p.mode === 'team'
+      const bots = n('bots')
+      const team = p.mode === 'team'
       const points = n('points')
       return {
         options: { seats: 4, team, bots, ...(points ? { rounds: points } : {}) },
         humans: 4 - bots,
         bots,
-        summary: [['Masa', `${two ? 2 : 4} kişi · ${team ? 'Takımlı' : 'Tekli'}`], ['Puan', points ? `${points} puan` : 'Tek el'], ['Bot', bots ? `${bots} bot` : 'Yok']],
+        summary: [['Masa', `4 kişi · ${team ? 'Takımlı' : 'Tekli'}`], ['Puan', points ? `${points} puan` : 'Tek el'], ['Bot', bots ? `${bots} bot` : 'Yok']],
       }
     }
     case 'okey101':
@@ -235,7 +257,7 @@ export function TableSetupWizard({
   const guest = balance == null
   const storeKey = `alkanka:masa-ac:${game}`
   const [picks, setPicks] = useState<Picks>((): Picks => {
-    const base: Picks = game === 'okey' && (!config.allowTwoSeats || !config.quickBotEnabled) ? { seats: '4' } : {}
+    const base: Picks = game === 'okey' ? { seats: '4' } : {}
     // Only the guest "Üye ol ve oyna" handoff restores picks; every other visit starts empty.
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storeKey) ?? 'null') as Picks | null
@@ -290,6 +312,7 @@ export function TableSetupWizard({
   const prize = pot - Math.round((pot * commission) / 100)
   const intro = gameCfg?.intro || config.intro
   const rule = game === 'okey' ? '' : gameCfg?.rule
+  const themeGame = arenaThemeGame(game)
 
   return (
     <section aria-label={`${WIZARD_GAME_LABEL[game]} ${config.title}`} className={embedded ? 'flex flex-col gap-4' : 'flex flex-col gap-5 rounded-3xl border border-border bg-card p-5 sm:p-7'}>
@@ -352,12 +375,6 @@ export function TableSetupWizard({
               </li>
             )
           })}
-          {game === 'okey' && picks.seats === '2' && (
-            <li className="flex flex-col gap-0.5 rounded-xl border-2 border-border bg-secondary px-3 py-2.5">
-              <span className="text-xs font-semibold text-muted-foreground">Bot</span>
-              <span className="text-sm font-bold text-foreground">2 bot · otomatik</span>
-            </li>
-          )}
         </ul>
         {!complete && (
           <p className="text-xs leading-relaxed text-muted-foreground">
@@ -439,6 +456,17 @@ export function TableSetupWizard({
             </div>
           </dl>
           {rule && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{rule}</p>}
+          {gameNotes(game, picks).map((note) => (
+            <p key={note} className="text-pretty text-xs leading-relaxed text-muted-foreground">{note}</p>
+          ))}
+          {game === 'tavla' && (
+            <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+              {picks.rounds === '1'
+                ? `Tek elde mars 2 kat, ağır mars 3 kat öder. Mars güvencesi için girişte +${fmt(stake * 2)} KC bloke edilir, oyun bitince iade edilir.`
+                : `${picks.rounds === '3' ? '2' : '3'} eli ilk alan maçı kazanır. Mars 2, ağır mars 3 el sayılır.`}
+            </p>
+          )}
+          {themeGame && <TableThemeField game={themeGame} />}
           {result.humans === 1 && result.bots > 0 && (
             <p className="text-xs text-muted-foreground">Tek gerçek oyuncuyla oyun hemen botlara karşı başlar.</p>
           )}
