@@ -68,20 +68,26 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
   const botsOn = config.quickBotEnabled
   switch (game) {
     case 'okey': {
-      const two = p.seats === '2'
-      if (config.allowTwoSeats && botsOn)
-        steps.push({ key: 'seats', title: 'Kişi sayısı', choices: [
-          { value: '2', label: '2 kişilik', hint: 'Birebir · 2 koltuğa bot oturur' },
-          { value: '4', label: '4 kişilik', hint: 'Klasik masa' },
-        ] })
-      steps.push({ key: 'mode', title: 'Oyun modu', choices: [
+      steps.push({ key: 'mode', title: 'Oyun modu', note: 'Masalar 4 kişilik. Gerçek oyuncu gelmeyen koltuklara bot oturtabilirsin.', choices: [
         { value: 'solo', label: 'Tekli', hint: 'Herkes kendine' },
-        { value: 'team', label: 'Takımlı', hint: '2+2, sadece 4 kişide', disabled: two },
+        { value: 'team', label: 'Takımlı', hint: 'Karşılıklı oturanlar takım (2+2)' },
       ] })
-      steps.push({ key: 'points', title: 'Puan', note: config.ruleFull, choices: config.points.map((n) => ({
-        value: String(n), label: n === 0 ? 'Tek el' : `${n} puan`, hint: n === 0 ? 'Tek el biter' : n === 10 ? 'Kısa' : n === 20 ? 'Orta' : 'Uzun',
-      })) })
-      if (!two) steps.push({ key: 'bots', title: 'Bot', choices: botChoices(4) })
+      steps.push({
+        key: 'points',
+        title: 'Puan',
+        note:
+          p.points && p.points !== '0'
+            ? `Herkes ${p.points} puanla başlar. Normal bitişte rakipler 2 puan kaybeder (1 kat). Okeyle ya da çiftten bitiş 2 kat (4 puan), çiftten ve okeyle bitiş 4 kat (8 puan) sildirir. Göstergeyi gösteren rakiplerine 1 puan sildirir. Puanı ilk sıfırlanan olunca en yüksek puanlı kazanır.`
+            : 'İlk bitiren masayı kazanır.',
+        choices: [0, 10, 20, 30].map((n) => ({ value: String(n), label: n === 0 ? 'Tek el' : `${n} puan` })),
+      })
+      if (botsOn)
+        steps.push({ key: 'bots', title: 'Bot koltuğu', choices: [
+          { value: '0', label: 'Bot yok', hint: 'Sadece oyuncular' },
+          { value: '1', label: '1 bot' },
+          { value: '2', label: '2 bot' },
+          { value: '3', label: 'Bota karşı (3 bot)', hint: 'Hemen başlar' },
+        ] })
       break
     }
     case 'okey101':
@@ -140,15 +146,14 @@ function buildResult(game: WizardGame, p: Picks): { options: TableOptions | unde
   const modeLabel = p.mode === 'team' ? 'Eşli' : 'Tekli'
   switch (game) {
     case 'okey': {
-      const two = p.seats === '2'
-      const bots = two ? 2 : n('bots')
-      const team = !two && p.mode === 'team'
+      const bots = n('bots')
+      const team = p.mode === 'team'
       const points = n('points')
       return {
         options: { seats: 4, team, bots, ...(points ? { rounds: points } : {}) },
         humans: 4 - bots,
         bots,
-        summary: [['Masa', `${two ? 2 : 4} kişi · ${team ? 'Takımlı' : 'Tekli'}`], ['Puan', points ? `${points} puan` : 'Tek el'], ['Bot', bots ? `${bots} bot` : 'Yok']],
+        summary: [['Masa', `4 kişi · ${team ? 'Takımlı' : 'Tekli'}`], ['Puan', points ? `${points} puan` : 'Tek el'], ['Bot', bots ? `${bots} bot` : 'Yok']],
       }
     }
     case 'okey101':
@@ -237,7 +242,7 @@ export function TableSetupWizard({
   const guest = balance == null
   const storeKey = `alkanka:masa-ac:${game}`
   const [picks, setPicks] = useState<Picks>((): Picks => {
-    const base: Picks = game === 'okey' && (!config.allowTwoSeats || !config.quickBotEnabled) ? { seats: '4' } : {}
+    const base: Picks = game === 'okey' ? { seats: '4' } : {}
     // Only the guest "Üye ol ve oyna" handoff restores picks; every other visit starts empty.
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storeKey) ?? 'null') as Picks | null
@@ -355,12 +360,6 @@ export function TableSetupWizard({
               </li>
             )
           })}
-          {game === 'okey' && picks.seats === '2' && (
-            <li className="flex flex-col gap-0.5 rounded-xl border-2 border-border bg-secondary px-3 py-2.5">
-              <span className="text-xs font-semibold text-muted-foreground">Bot</span>
-              <span className="text-sm font-bold text-foreground">2 bot · otomatik</span>
-            </li>
-          )}
         </ul>
         {!complete && (
           <p className="text-xs leading-relaxed text-muted-foreground">
