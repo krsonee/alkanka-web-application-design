@@ -35,7 +35,7 @@ export function ThemeShop() {
   }
 
   return (
-    <section id="masa-temalari" aria-labelledby="masa-temalari-baslik" className="mx-auto flex w-full max-w-6xl scroll-mt-24 flex-col gap-4 px-4 py-10">
+    <section id="masa-temalari" aria-labelledby="masa-temalari-baslik" className="flex w-full scroll-mt-24 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
