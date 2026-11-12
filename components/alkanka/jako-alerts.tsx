@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
+import { TOUR_DONE_EVENT } from './app/site-tour'
 import { ArrowRight, Check, ExternalLink, Mail, X } from 'lucide-react'
 import { getMiniStatus, type MiniGame, type MiniStatus } from '@/app/actions/wallet'
 import { getInboxStatus, markInboxRead, type InboxStatus } from '@/app/actions/inbox'
@@ -130,13 +131,25 @@ export function JakoAlerts() {
       image: latest.imageUrl,
     }
     // Never cover the screen on arrival or mid-game: wait a beat, and on game pages show a corner toast instead.
-    const timer = setTimeout(() => {
+    const show = () => {
       localStorage.setItem(POPPED_KEY, String(latest.id))
       systemNotify('Sana özel mesaj var kanka!', latest.title, '/profil?sekme=mesajlar')
       if (pathRef.current?.startsWith('/oyunlar/')) push(alert)
       else setPopup(alert)
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // The site tour and this popup are both full-screen; never stack them. Wait for the tour to close first.
+    const afterTour = () => {
+      timer = setTimeout(show, 1500)
+    }
+    timer = setTimeout(() => {
+      if (document.querySelector('[data-tour-overlay]')) window.addEventListener(TOUR_DONE_EVENT, afterTour, { once: true })
+      else show()
     }, 3000)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener(TOUR_DONE_EVENT, afterTour)
+    }
   }, [inbox, push])
 
   const deferPopup = useCallback(() => {
