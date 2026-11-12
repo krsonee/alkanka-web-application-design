@@ -129,18 +129,50 @@ export function cleanPredictions(raw: unknown): Prediction[] {
   )
 }
 
+const isoDate = (v: unknown) => {
+  const s = str(v, 40)
+  return s && Number.isFinite(Date.parse(s)) ? s : undefined
+}
+
+const link = (v: unknown) => {
+  const s = str(v, 400)
+  return s.startsWith('https://') || (s.startsWith('/') && !s.startsWith('//')) ? s : undefined
+}
+
+function endsLabel(hours: number) {
+  if (hours <= 0) return 'Sona erdi'
+  if (hours < 24) return hours <= 1 ? 'Son 1 saat' : `${hours} saat kaldı`
+  return `${Math.round(hours / 24)} gün kaldı`
+}
+
+/** True while the campaign is inside its start/end window (campaigns without dates are always live). */
+export function isCampaignLive(c: Campaign, now = Date.now()) {
+  if (c.startsAt && Date.parse(c.startsAt) > now) return false
+  if (c.endsAt && Date.parse(c.endsAt) <= now) return false
+  return true
+}
+
 export function cleanCampaigns(raw: unknown): Campaign[] {
+  const now = Date.now()
   return unique(
-    list(raw).map((c: Record<string, unknown>, i) => ({
-      id: slug(c.id, i, 'kampanya'),
-      sponsorId: str(c.sponsorId, 40),
-      title: str(c.title, 80) || 'Yeni kampanya',
-      description: str(c.description, 400),
-      ends: str(c.ends, 40),
-      image: image(c.image),
-      tag: str(c.tag, 20) || 'Kampanya',
-      hoursLeft: num(c.hoursLeft, 0, 24 * 365),
-    })),
+    list(raw).map((c: Record<string, unknown>, i) => {
+      const startsAt = isoDate(c.startsAt)
+      const endsAt = isoDate(c.endsAt)
+      const hoursLeft = endsAt ? Math.max(0, Math.ceil((Date.parse(endsAt) - now) / 3_600_000)) : num(c.hoursLeft, 0, 24 * 365)
+      return {
+        id: slug(c.id, i, 'kampanya'),
+        sponsorId: str(c.sponsorId, 40),
+        title: str(c.title, 80) || 'Yeni kampanya',
+        description: str(c.description, 400),
+        ends: endsAt ? endsLabel(hoursLeft) : str(c.ends, 40),
+        image: image(c.image),
+        tag: str(c.tag, 20) || 'Kampanya',
+        hoursLeft,
+        ...(startsAt ? { startsAt } : {}),
+        ...(endsAt ? { endsAt } : {}),
+        ...(link(c.url) ? { url: link(c.url) } : {}),
+      }
+    }),
   )
 }
 

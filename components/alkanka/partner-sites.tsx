@@ -6,11 +6,11 @@ import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, Check, CircleSlash, Clock, Copy, Crown, Gem, LayoutGrid, List, ScrollText, Search, ShieldCheck, SlidersHorizontal, Star, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCatalog } from './catalog-context'
-import { sortByOrder } from '@/lib/catalog-shared'
+import { useSponsorById } from './sponsors-context'
+import { isCampaignLive, sortByOrder } from '@/lib/catalog-shared'
 import {
   SPECIAL_ODDS,
   TIER_INFO,
-  sponsorById,
   tierRank,
   type Bonus,
   type Campaign,
@@ -137,12 +137,13 @@ const TIER_FRAME: Partial<Record<SponsorTier, string>> = {
   elit: 'border-foreground/25',
 }
 
-function GoButton({ label = 'Siteye git', className, site }: { label?: string; className?: string; site?: string }) {
+function GoButton({ label = 'Siteye git', className, site, href }: { label?: string; className?: string; site?: string; href?: string }) {
+  const target = href || (site ? `/git/${site}` : undefined)
   return (
     <a
-      href={site ? `/git/${site}` : '#kayit'}
-      target={site ? '_blank' : undefined}
-      rel={site ? 'nofollow sponsored noopener' : undefined}
+      href={target ?? '#kayit'}
+      target={target ? '_blank' : undefined}
+      rel={target ? 'nofollow sponsored noopener' : undefined}
       className={cn(
         'flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90',
         className,
@@ -710,6 +711,7 @@ function bonusDetail(b: Bonus, sponsorName?: string): DetailContent {
 }
 
 function BonusCard({ b, onRules }: { b: Bonus; onRules: () => void }) {
+  const sponsorById = useSponsorById()
   const s = sponsorById(b.sponsorId)
   return (
     <li className="bonus-aura flex flex-col gap-3 rounded-2xl p-4">
@@ -758,6 +760,7 @@ function BonusCard({ b, onRules }: { b: Bonus; onRules: () => void }) {
 }
 
 export function BonusBoard() {
+  const sponsorById = useSponsorById()
   const { bonuses: BONUSES, order } = useCatalog()
   const types = ['Tümü', ...sortByOrder(BONUSES.map((b) => b.type), order?.bonusTypes ?? [])]
   const [type, setType] = useState('Tümü')
@@ -790,6 +793,7 @@ export function BonusBoard() {
 }
 
 export function OddsBoard() {
+  const sponsorById = useSponsorById()
   const leagues = Array.from(new Set(SPECIAL_ODDS.map((o) => o.league)))
   return (
     <section aria-label="Özel oranlar" className="flex flex-col gap-6">
@@ -881,6 +885,7 @@ function campaignArt(c: Campaign) {
 }
 
 function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
+  const sponsorById = useSponsorById()
   const s = sponsorById(c.sponsorId)
   const urgent = c.hoursLeft <= 24
   return (
@@ -932,7 +937,7 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
         <h3 className="line-clamp-2 font-display text-base font-bold leading-snug text-foreground text-pretty">{c.title}</h3>
         <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.description}</p>
         <div className="mt-auto flex justify-end pt-1">
-          <GoButton site={s?.id} label="Katıl" className="h-8 rounded-full px-4 text-[11px]" />
+          <GoButton site={s?.id} href={c.url} label="Katıl" className="h-8 rounded-full px-4 text-[11px]" />
         </div>
       </div>
     </li>
@@ -942,7 +947,9 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
 const CAMPAIGN_PAGE = 6
 
 export function CampaignBoard() {
-  const { campaigns: CAMPAIGNS, order } = useCatalog()
+  const sponsorById = useSponsorById()
+  const { campaigns: allCampaigns, order } = useCatalog()
+  const CAMPAIGNS = allCampaigns.filter((c) => isCampaignLive(c))
   const tags = ['Tümü', ...sortByOrder(CAMPAIGNS.map((c) => c.tag), order?.campaignTags ?? [])]
   const [tag, setTag] = useState('Tümü')
   const [sort, setSort] = useState<'bitis' | 'uzun'>('bitis')
@@ -1135,6 +1142,7 @@ function uniqueImages(list: Campaign[]): Campaign[] {
 }
 
 function EndingCard({ c, index }: { c: Campaign; index: number }) {
+  const sponsorById = useSponsorById()
   const s = sponsorById(c.sponsorId)
   const urgent = c.hoursLeft <= 24
   const left = Math.max(6, Math.min(100, (c.hoursLeft / 168) * 100))
@@ -1170,7 +1178,7 @@ function EndingCard({ c, index }: { c: Campaign; index: number }) {
                 <span className={cn('ending-bar-fill', urgent && 'is-urgent')} style={{ width: `${left}%` }} />
               </span>
             </div>
-            <GoButton site={s?.id} label="Katıl" className="ending-cta h-8 shrink-0 rounded-full px-4 text-[11px]" />
+            <GoButton site={s?.id} href={c.url} label="Katıl" className="ending-cta h-8 shrink-0 rounded-full px-4 text-[11px]" />
           </div>
         </div>
       </div>
@@ -1180,7 +1188,7 @@ function EndingCard({ c, index }: { c: Campaign; index: number }) {
 
 export function EndingCampaigns({ showAll = true }: { showAll?: boolean }) {
   const { campaigns: CAMPAIGNS } = useCatalog()
-  const list = uniqueImages([...CAMPAIGNS].sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3))
+  const list = uniqueImages(CAMPAIGNS.filter((c) => isCampaignLive(c)).sort((a, b) => a.hoursLeft - b.hoursLeft).slice(0, 3))
   const trackRef = useRef<HTMLUListElement>(null)
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
