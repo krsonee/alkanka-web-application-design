@@ -117,6 +117,8 @@ export function cleanPredictions(raw: unknown): Prediction[] {
       home: str(p.home, 40) || 'Ev sahibi',
       away: str(p.away, 40) || 'Deplasman',
       kickoff: str(p.kickoff, 40),
+      kickoffAt: isoDate(p.kickoffAt),
+      closesAt: isoDate(p.closesAt),
       reward: int(p.reward, 0, 100000),
       options: (Array.isArray(p.options) && p.options.length ? p.options : [{}, {}, {}])
         .slice(0, 3)
@@ -129,9 +131,15 @@ export function cleanPredictions(raw: unknown): Prediction[] {
   )
 }
 
-const isoDate = (v: unknown) => {
+function isoDate(v: unknown) {
   const s = str(v, 40)
   return s && Number.isFinite(Date.parse(s)) ? s : undefined
+}
+
+/** When picks close for a prediction, or null when it stays open. */
+export function predictionClosesAt(p: Pick<Prediction, 'closesAt' | 'kickoffAt'>): number | null {
+  const t = Date.parse(p.closesAt || p.kickoffAt || '')
+  return Number.isFinite(t) ? t : null
 }
 
 const link = (v: unknown) => {

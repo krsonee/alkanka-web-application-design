@@ -4,9 +4,12 @@ import { randomInt } from 'node:crypto'
 import { getContent } from '@/lib/content'
 import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
+import { predictionClosesAt } from '@/lib/catalog-shared'
+import { getPredictionVoteCounts, getUserPredictionPicks, savePredictionPick } from '@/lib/prediction-picks'
 import { diceReward, wheelBigIndices, type RewardConfig } from '@/lib/rewards-shared'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
+import { consumeExtraPlay, extraPlays } from '@/lib/mini-extras'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 import { withUserLock } from '@/lib/user-lock'
 
@@ -46,12 +49,25 @@ export async function getMiniStatus(): Promise<MiniStatus> {
   const hidden = (hiddenMap.mini ?? []) as MiniGame[]
   if (!member) return { cark: null, sandik: null, zar: null, hidden }
   const config = await getRewardConfig()
-  const [cark, sandik, zar] = await Promise.all([
-    miniNextAt(member.id, 'cark', config),
-    miniNextAt(member.id, 'sandik', config),
-    miniNextAt(member.id, 'zar', config),
-  ])
+  const withExtras = async (game: MiniGame) => {
+    const next = await miniNextAt(member.id, game, config)
+    if (next === null) return null
+    return (await extraPlays(member.id, game).catch(() => 0)) > 0 ? null : next
+  }
+  const [cark, sandik, zar] = await Promise.all([withExtras('cark'), withExtras('sandik'), withExtras('zar')])
   return { cark, sandik, zar, hidden }
+}
+
+export type PredictionState = { mine: Record<string, string>; votes: Record<string, Record<string, number>> }
+
+/** The signed-in member's saved picks plus real vote counts from every member. */
+export async function getPredictionState(): Promise<PredictionState> {
+  const member = await getMember()
+  const [mine, votes] = await Promise.all([
+    member ? getUserPredictionPicks(member.id) : Promise.resolve({}),
+    getPredictionVoteCounts(),
+  ])
+  return { mine, votes }
 }
 
 /**
@@ -66,19 +82,23 @@ export async function claimPrediction(matchId: string, optionId: string): Promis
   const { predictions } = await getCatalog()
   const match = predictions.find((p) => p.id === String(matchId))
   if (!match || !match.options.some((o) => o.id === String(optionId))) return { ok: false, error: 'Geçersiz tahmin.' }
+  const closesAt = predictionClosesAt(match)
+  if (closesAt !== null && Date.now() >= closesAt) return { ok: false, error: 'Bu maç için tahminler kapandı.' }
   const value = Math.min(limit.perClaim, Math.max(0, Math.round(Number(match.reward) / 5)))
-  if (!value) return { ok: false, error: 'Bu tahmin için ödül yok.' }
   const ref = `tahmin:${match.id}`
 
   try {
     return await withUserLock(`reward:${member.id}:tahmin`, async (): Promise<WalletResult> => {
+      const saved = await savePredictionPick(match.id, member.id, String(optionId))
+      if (!saved) return { ok: false, error: 'Bu maç için zaten tahmin yaptın.', balance: await getBalance(member.id) }
+      if (!value) return { ok: true, balance: await getBalance(member.id) }
       const r = await rows<{ today: string; done: string }>(sql`SELECT
           count(*) FILTER (WHERE created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS today,
           count(*) FILTER (WHERE table_id = ${ref}) AS done
         FROM game_history WHERE user_id = ${member.id} AND game = 'tahmin' AND mode = 'odul'`)
-      if (Number(r[0]?.done ?? 0) > 0) return { ok: false, error: 'Bu maç için zaten tahmin yaptın.', balance: await getBalance(member.id) }
-      if (Number(r[0]?.today ?? 0) >= limit.perDay) {
-        return { ok: false, error: `${limit.label} için bugünkü hakkın doldu.`, balance: await getBalance(member.id) }
+      // The pick itself is already stored; only the participation bonus is capped.
+      if (Number(r[0]?.done ?? 0) > 0 || Number(r[0]?.today ?? 0) >= limit.perDay) {
+        return { ok: true, balance: await getBalance(member.id) }
       }
       await credit(member.id, value)
       await recordHistory({ userId: member.id, userName: member.name, game: 'tahmin', mode: 'odul', opponent: limit.label, stake: 0, result: 'win', delta: value, tableId: ref })
@@ -126,7 +146,7 @@ async function playMiniLocked(
   const limit = { label }
   if (isHidden(await getHidden(), 'mini', game)) return { ok: false, error: `${limit.label} şu an kapalı.` }
   const config = await getRewardConfig()
-  if (await miniNextAt(member.id, game, config)) {
+  if ((await miniNextAt(member.id, game, config)) && !(await consumeExtraPlay(member.id, game))) {
     return { ok: false, error: `${limit.label} için hakkın henüz yenilenmedi.`, balance: await getBalance(member.id) }
   }
   const big = randomInt(100) < (await getHouseWinRate())

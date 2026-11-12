@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { canPanelAny } from '@/lib/admin-auth'
 
 const MAX_BYTES = 2 * 1024 * 1024
+const MAX_GIF_BYTES = 8 * 1024 * 1024
 const TYPES: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -28,7 +29,8 @@ export async function POST(request: NextRequest) {
   if (!(file instanceof File)) return NextResponse.json({ error: 'Dosya seçilmedi.' }, { status: 400 })
   const ext = TYPES[file.type]
   if (!ext) return NextResponse.json({ error: 'Sadece PNG, JPG, WEBP, SVG veya GIF yükleyebilirsin.' }, { status: 400 })
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Dosya en fazla 2 MB olabilir.' }, { status: 400 })
+  const maxBytes = ext === 'gif' ? MAX_GIF_BYTES : MAX_BYTES
+  if (file.size > maxBytes) return NextResponse.json({ error: `Dosya en fazla ${maxBytes / 1024 / 1024} MB olabilir.` }, { status: 400 })
 
   try {
     const blob = await put(`logos/${id}.${ext}`, file, {

@@ -506,6 +506,10 @@ export type Prediction = {
   home: string
   away: string
   kickoff: string
+  /** Match start (ISO, Turkey time). When set, the card shows this instead of `kickoff`. */
+  kickoffAt?: string
+  /** Picks close at this moment (ISO). Defaults to `kickoffAt` when empty. */
+  closesAt?: string
   options: { id: string; label: string; votes: number }[]
   reward: number
 }

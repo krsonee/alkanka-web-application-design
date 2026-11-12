@@ -5,7 +5,21 @@ import Image from 'next/image'
 import useSWR from 'swr'
 import { Coins, Users } from 'lucide-react'
 import { joinEventAction, myEventEntries } from '@/app/actions/events'
+import { getPredictionState } from '@/app/actions/wallet'
+import { predictionClosesAt } from '@/lib/catalog-shared'
 import { cn } from '@/lib/utils'
+
+const trDate = new Intl.DateTimeFormat('tr-TR', {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'Europe/Istanbul',
+})
+const formatTrDate = (iso: string) => {
+  const t = Date.parse(iso)
+  return Number.isFinite(t) ? trDate.format(t) : ''
+}
 import { TELEGRAM_URL, type EventItem } from './data'
 import { useCatalog } from './catalog-context'
 import { DetailButton, DetailModal } from './detail-modal'
@@ -164,25 +178,46 @@ function EventCards() {
 
 function Predictions() {
   const { predictions: PREDICTIONS } = useCatalog()
-  const { predict, requireLogin } = usePoints()
-  const [picks, setPicks] = useState<Record<string, string>>({})
+  const { predict, requireLogin, member } = usePoints()
+  const { data, mutate } = useSWR(['prediction-state', member?.id ?? ''], () => getPredictionState(), {
+    revalidateOnFocus: false,
+  })
+  const [pending, setPending] = useState<Record<string, string>>({})
+  const [now, setNow] = useState(() => Date.now())
+  const picks = { ...(data?.mine ?? {}), ...pending }
 
-  async function pick(matchId: string, optionId: string, _reward: number) {
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  async function pick(matchId: string, optionId: string) {
     if (picks[matchId] || !requireLogin()) return
-    setPicks((p) => ({ ...p, [matchId]: optionId }))
+    setPending((p) => ({ ...p, [matchId]: optionId }))
     await predict(matchId, optionId)
+    await mutate()
+    setPending((p) => {
+      const { [matchId]: _, ...rest } = p
+      return rest
+    })
   }
 
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {PREDICTIONS.map((m) => {
         const picked = picks[m.id]
-        const total = m.options.reduce((s, o) => s + o.votes, 0) + (picked ? 1 : 0)
+        const closesAt = predictionClosesAt(m)
+        const closed = closesAt !== null && now >= closesAt
+        const realVotes = data?.votes[m.id] ?? {}
+        const isPending = !!pending[m.id] && data?.mine[m.id] !== pending[m.id]
+        const votesOf = (id: string) => m.options.find((o) => o.id === id)!.votes + (realVotes[id] ?? 0) + (isPending && picked === id ? 1 : 0)
+        const total = Math.max(1, m.options.reduce((s, o) => s + votesOf(o.id), 0))
+        const showResults = !!picked || closed
         return (
           <article key={m.id} className="panel-gold flex flex-col gap-4 rounded-xl p-4">
             <header className="flex items-center justify-between text-xs">
               <span className="font-semibold uppercase tracking-wider text-primary">{m.league}</span>
-              <span className="text-muted-foreground">{m.kickoff}</span>
+              <span className="text-muted-foreground">{m.kickoffAt ? formatTrDate(m.kickoffAt) : m.kickoff}</span>
             </header>
             <div className="flex items-center justify-between gap-3">
               <span className="flex min-w-0 flex-1 items-center gap-2 font-display text-base font-bold text-foreground">
@@ -197,27 +232,27 @@ function Predictions() {
             </div>
             <div className="grid grid-cols-3 gap-2" role="group" aria-label={`${m.home} - ${m.away} tahmini`}>
               {m.options.map((o) => {
-                const votes = o.votes + (picked === o.id ? 1 : 0)
-                const pct = Math.round((votes / total) * 100)
+                const pct = Math.round((votesOf(o.id) / total) * 100)
                 const isPicked = picked === o.id
                 return (
                   <button
                     key={o.id}
                     type="button"
-                    onClick={() => pick(m.id, o.id, m.reward)}
-                    disabled={!!picked}
+                    onClick={() => pick(m.id, o.id)}
+                    disabled={!!picked || closed}
                     aria-pressed={isPicked}
                     className={cn(
                       'relative flex flex-col items-center gap-0.5 overflow-hidden rounded-lg border py-2.5 text-xs transition-colors',
                       isPicked ? 'border-primary text-primary' : 'border-border text-foreground',
-                      !picked && 'hover:border-primary/50',
+                      !picked && !closed && 'hover:border-primary/50',
+                      closed && !picked && 'opacity-70',
                     )}
                   >
-                    {picked && (
+                    {showResults && (
                       <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-primary/10" style={{ width: `${pct}%` }} />
                     )}
                     <span className="relative font-semibold">{o.label}</span>
-                    {picked && <span className="relative text-muted-foreground tabular-nums">%{pct}</span>}
+                    {showResults && <span className="relative text-muted-foreground tabular-nums">%{pct}</span>}
                   </button>
                 )
               })}
@@ -227,9 +262,12 @@ function Predictions() {
                 <>
                   Tahminin kaydedildi. Doğru çıkarsa <span className="font-semibold text-primary">+{m.reward} KC</span>.
                 </>
+              ) : closed ? (
+                <>Bu maç için tahminler kapandı.</>
               ) : (
                 <>
-                  Doğru tahmin: <span className="font-semibold text-primary">+{m.reward} KC</span>. Katılım bonusu anında.
+                  Doğru tahmin: <span className="font-semibold text-primary">+{m.reward} KC</span>.
+                  {closesAt !== null && <> Tahmin bitiş: <span className="font-semibold text-foreground">{formatTrDate(new Date(closesAt).toISOString())}</span>.</>}
                 </>
               )}
             </p>

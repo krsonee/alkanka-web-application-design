@@ -52,13 +52,15 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
     field: 'home',
     fields: [
       { key: 'league', label: 'Lig', type: 'text', max: 40 },
-      { key: 'kickoff', label: 'Başlama', type: 'text', max: 30 },
+      { key: 'kickoffAt', label: 'Maç tarihi', type: 'datetime' },
+      { key: 'closesAt', label: 'Tahmin bitiş · boşsa maç saatinde kapanır', type: 'datetime' },
+      { key: 'kickoff', label: 'Başlama yazısı · maç tarihi boşsa gösterilir', type: 'text', max: 30 },
       { key: 'home', label: 'Ev sahibi', type: 'text', max: 30 },
       { key: 'away', label: 'Deplasman', type: 'text', max: 30 },
       { key: 'reward', label: 'Ödül (KC)', type: 'number' },
       { key: 'options', label: 'Seçenekler', type: 'pairs', hint: 'Satır başına: seçenek | oy', a: 'label', b: 'votes', numericB: true },
     ],
-    blank: () => ({ id: '', league: 'Süper Lig', home: 'Ev sahibi', away: 'Deplasman', kickoff: 'Bugün 20:00', reward: 100, options: [{ id: 'o1', label: '1', votes: 0 }, { id: 'o2', label: 'X', votes: 0 }, { id: 'o3', label: '2', votes: 0 }] }),
+    blank: () => ({ id: '', league: 'Süper Lig', home: 'Ev sahibi', away: 'Deplasman', kickoff: '', kickoffAt: toTrIso(new Date(Date.now() + 86_400_000)), closesAt: '', reward: 100, options: [{ id: 'o1', label: '1', votes: 0 }, { id: 'o2', label: 'X', votes: 0 }, { id: 'o3', label: '2', votes: 0 }] }),
   },
   campaigns: {
     title: 'Sponsor kampanyaları',
