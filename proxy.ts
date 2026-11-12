@@ -8,6 +8,8 @@ const PANEL_HOSTS = new Set([PANEL_HOST, `www.${PANEL_HOST}`])
 
 const PANEL_ROBOTS = 'User-agent: *\nAllow: /\n'
 
+const INTERNAL_PATH = /^\/(logolar|maskot|postlar|kankatv\/onizleme|[a-z0-9-]*-(?:tmp|test|onizleme|preview))(\/|$)/
+
 function isPanelPath(pathname: string) {
   return pathname === '/panel' || pathname.startsWith('/panel/')
 }
@@ -26,7 +28,7 @@ function routeByHost(request: NextRequest): NextResponse | null {
     return NextResponse.redirect(`${SITE_ORIGIN}${pathname}${search}`, 308)
   }
 
-  if (SITE_HOSTS.has(host) && isPanelPath(pathname)) {
+  if (SITE_HOSTS.has(host) && (isPanelPath(pathname) || INTERNAL_PATH.test(pathname))) {
     return NextResponse.rewrite(new URL('/__panel-not-found', request.url))
   }
 

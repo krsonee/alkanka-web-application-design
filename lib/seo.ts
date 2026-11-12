@@ -44,10 +44,10 @@ export const PAGE_SEO = {
   },
   oyunlar: {
     path: '/oyunlar',
-    title: 'Ücretsiz Mini Oyunlar: Çark, Zar, Sandık',
-    description: 'Ücretsiz çark çevir, zar at, sandık aç ve Kanka Coin kazan. Kazandığın puanları marketten ödüle çevir.',
+    title: 'Online Okey, Tavla, Batak, Pişti ve Bilardo Oyna',
+    description: 'Okey, 101 Okey, tavla, batak, pişti ve bilardo masalarına otur; bota karşı ya da oyuncularla oyna. Çark, zar ve sandıkla her gün ücretsiz Kanka Coin topla.',
     image: '/images/heroes/oyunlar.png',
-    keywords: ['çark çevir', 'ücretsiz çark', 'zar oyunu', 'sandık aç', 'puan kazan'],
+    keywords: ['online okey', 'tavla oyna', 'batak oyna', 'pişti oyna', 'bilardo oyna', 'çark çevir', 'puan kazan'],
   },
   turnuvalar: {
     path: '/turnuvalar',

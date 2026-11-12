@@ -13,7 +13,7 @@ import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 import { HIDDEN_KEY, readHidden, withoutHidden } from '@/lib/hidden-shared'
 import { getKpConfig, levelFor, readLeaderboard } from '@/lib/kanka-puan'
-import { getBalance, getMember, SIGNUP_BONUS, type Member } from '@/lib/member'
+import { getBalance, getMember, historySummary, SIGNUP_BONUS, type Member } from '@/lib/member'
 import { getSignupBonus } from '@/lib/site-texts'
 import { getStreak } from '@/lib/checkin'
 import { getSocialLinks, type SocialLinks } from '@/lib/social'
@@ -52,7 +52,7 @@ function SiteJsonLd() {
 }
 
 async function loadHub(member: Member, products: MarketProduct[]): Promise<HubData> {
-  const [balance, streak, tasks, done, cember, cemberMe, matches] = await Promise.all([
+  const [balance, streak, tasks, done, cember, cemberMe, matches, summary] = await Promise.all([
     getBalance(member.id).catch(() => 0),
     getStreak(member.id).catch(() => ({ streak: 0, checkedToday: false })),
     listPublicTasks().catch(() => []),
@@ -60,6 +60,7 @@ async function loadHub(member: Member, products: MarketProduct[]): Promise<HubDa
     getCemberStatus().catch(() => null),
     myCemberStatus(member.id).catch(() => null),
     listLeagueMatches(member.id).catch(() => [] as LeagueMatch[]),
+    historySummary(member.id).catch(() => null),
   ])
   const now = Date.now()
   const upcoming = matches.filter((m) => !m.settled && new Date(m.kickoff).getTime() > now)
@@ -69,7 +70,8 @@ async function loadHub(member: Member, products: MarketProduct[]): Promise<HubDa
   const byPrice = [...products].sort((a, b) => a.price - b.price)
   const goal = byPrice.find((p) => p.price > balance) ?? byPrice[byPrice.length - 1] ?? null
   return {
-    name: member.name.split(' ')[0] || member.name,
+    name: member.name.length <= 16 ? member.name : member.name.split(' ')[0] || member.name,
+    played: summary ? summary.played : null,
     balance,
     streak: streak.streak,
     checkedToday: streak.checkedToday,
@@ -128,6 +130,7 @@ export default async function HomePage() {
           <MemberHomeV2Page
             config={v2}
             name={hub.name}
+            firstTime={hub.played === 0}
             balance={hub.balance}
             kp={me?.points ?? 0}
             weeklyRank={weeklyIndex >= 0 ? weeklyIndex + 1 : null}

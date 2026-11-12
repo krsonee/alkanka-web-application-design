@@ -23,7 +23,7 @@ export const RULES: Record<ArenaGame, string[]> = {
     'Tüm pulların evine geldiğinde toplamaya başlarsın. 15 pulu ilk toplayan kazanır.',
   ],
   okey: [
-    'Bot masası 4 kişilik, kanka masası 1v1. Gösterge taşının bir üstü okeydir, istediğin taşın yerine geçer.',
+    'Masa 4 kişiliktir; kanka masasında boş koltuklara bot oturtabilirsin. Gösterge taşının bir üstü okeydir, istediğin taşın yerine geçer.',
     'Sıran gelince ortadan çek ya da rakibin attığı taşı al, sonra bir taş at.',
     'Taşları ıstakada istediğin yere sürükle; seri ve perleri dizip 14 taşla ya da 7 çiftle elini aç.',
     'Bitiş katları: normal bitiş 1 kat, okeyle bitiş 2 kat, çiftten bitiş 2 kat, çiftten ve okeyle bitiş 4 kat.',

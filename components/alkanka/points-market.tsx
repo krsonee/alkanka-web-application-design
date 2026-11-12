@@ -64,7 +64,9 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
   const [stock, setStock] = useState<Record<string, number>>(() => Object.fromEntries(items.map((i) => [i.id, i.stock])))
   const { data: mine, mutate } = useSWR(member ? ['market-mine', member.id] : null, () => getMyMarketRequests())
 
-  const shown = items.filter((i) => filter === 'hepsi' || i.kind === filter)
+  const shown = items
+    .filter((i) => filter === 'hepsi' || i.kind === filter)
+    .sort((a, b) => Number((stock[a.id] ?? a.stock) <= 0) - Number((stock[b.id] ?? b.stock) <= 0))
   const sponsorCount = items.filter((i) => i.kind === 'sponsor').length
 
   function start(item: MarketProduct) {

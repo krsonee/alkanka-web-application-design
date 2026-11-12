@@ -285,7 +285,7 @@ function StatusCard({
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Senin durumun</p>
             {mine && (
               <p className="font-display text-lg font-bold leading-none text-foreground tabular-nums">
-                {mine.rank}.<span className="ml-1 text-xs font-semibold text-muted-foreground">sıra</span>
+                {mine.rank}.<span className="ml-1 text-xs font-semibold text-muted-foreground">{`${periodNoun.toLocaleLowerCase('tr')} sıran`}</span>
               </p>
             )}
           </div>

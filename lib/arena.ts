@@ -34,7 +34,7 @@ export const ARENA_META: Record<ArenaGame, ArenaMeta> = {
     title: 'Okey',
     short: 'Gösterge ve okey taşıyla klasik masa. Elini ilk açan kazanır.',
     image: '/images/games/okey.png',
-    players: 'Bot masası 4, kanka masası 1v1',
+    players: '4 kişilik masa',
     group: 2,
     category: 'masa',
     modes: ['bot', 'pvp'],

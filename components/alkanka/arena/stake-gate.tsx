@@ -238,7 +238,7 @@ export function StakeGate({
   const pvpWin = bet * 2 - Math.round((bet * 2 * settings.commission) / 100)
   const botMultiplier = botWinMultiplier(game, settings)
   const winAmount = pvpMode ? pvpWin : Math.floor(bet * botMultiplier)
-  const blocked = !pvpMode && bet > points
+  const blocked = !pvpMode && !!member && bet > points
   const themeGame = arenaThemeGame(game)
 
   return (
@@ -294,13 +294,13 @@ export function StakeGate({
               Bahsini seç
               <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <Coins className="size-3.5 text-primary" aria-hidden="true" />
-                Bakiye {formatAC(points)}
+                {member ? `Bakiye ${formatAC(points)}` : 'Üye olunca hediye KC'}
               </span>
             </legend>
             <div className="grid grid-cols-4 gap-2">
               {settings.bets.map((b) => {
                 const active = bet === b
-                const short = b > points
+                const short = !!member && b > points
                 return (
                   <label
                     key={b}
@@ -335,7 +335,7 @@ export function StakeGate({
                 {pvpMode
                   ? `%${settings.commission} kesinti`
                   : botMultiplier !== settings.multiplier
-                    ? `${botMultiplier.toLocaleString('tr-TR')}x · %${settings.commission} kesinti düşüldü`
+                    ? `${botMultiplier.toLocaleString('tr-TR')}x · %${settings.commission} kesinti dü��üldü`
                     : `${settings.multiplier}x`}
               </span>
             </span>
@@ -356,7 +356,25 @@ export function StakeGate({
             {pvpMode ? 'Masalara geç' : 'Oyna'}
           </button>
         </div>
-        {blocked && <p className="-mt-2 text-xs text-muted-foreground">Bu bahis için bakiyen yetmiyor, daha düşük bir bahis seç.</p>}
+        {blocked && (
+          <p className="-mt-2 text-xs leading-relaxed text-muted-foreground">
+            {'Bu bahis için bakiyen yetmiyor. Daha düşük bir bahis seç ya da '}
+            <a href="/gorevler" className="font-semibold text-primary underline-offset-2 hover:underline">
+              görevlerden KC kazan
+            </a>
+            .
+          </p>
+        )}
+        {!member && !pvpMode && (
+          <button
+            type="button"
+            onClick={() => requireLogin()}
+            className="-mt-1 flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-primary/20"
+          >
+            <Coins className="size-4 text-primary" aria-hidden="true" />
+            Oynamak için ücretsiz üye ol, hediye KC hesabına yüklensin
+          </button>
+        )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         <button

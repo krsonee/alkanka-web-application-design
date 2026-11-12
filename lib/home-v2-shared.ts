@@ -13,9 +13,9 @@ export const HOME_GAME_LABEL: Record<string, string> = {
   tavla: 'Tavla',
   batak: 'Batak',
   pisti: 'Pişti',
-  papaz: 'Papaz',
+  papaz: 'Papaz Kimde',
   bilardo: 'Bilardo',
-  monopoly: 'Monopoly',
+  monopoly: 'Jakopoly',
 }
 export const SPONSOR_FALLBACK_IMAGE = '/images/market/sponsor-bonus.png'
 export const productImage = (p: { image?: string | null; kind?: string }) =>
@@ -92,8 +92,8 @@ export const WIZARD_GAME_LABEL: Record<WizardGame, string> = {
   tavla: 'Tavla',
   batak: 'Batak',
   pisti: 'Pişti',
-  papaz: 'Papaz Kaçtı',
-  monopoly: 'Monopoly',
+  papaz: 'Papaz Kimde',
+  monopoly: 'Jakopoly',
   bilardo: 'Bilardo',
 }
 

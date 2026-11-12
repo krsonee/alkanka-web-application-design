@@ -114,7 +114,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
 
   const stats = [
     { icon: Medal, label: 'Toplam KP', value: fmt(kp) },
-    { icon: Trophy, label: 'KP sırası', value: kpStatus.rank ? `#${kpStatus.rank}` : '—' },
+    { icon: Trophy, label: 'Genel KP sıran', value: kpStatus.rank ? `#${kpStatus.rank}` : '—' },
     { icon: Gamepad2, label: 'Oyun · Kazanma', value: `${fmt(games.played)} · %${winRate}` },
     { icon: Users, label: 'Davet', value: fmt(referrals.length) },
   ]
@@ -154,8 +154,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
                   {member.name.slice(0, 1).toUpperCase()}
                 </span>
               )}
-              <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-background/80 py-1 text-[10px] font-bold text-foreground opacity-90 transition-opacity group-hover:opacity-100">
-                <Pencil className="size-3" aria-hidden /> {avatar ? 'Değiştir' : 'Avatar seç'}
+              <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-background/80 pb-2.5 pt-1 text-[10px] font-bold text-foreground opacity-90 transition-opacity group-hover:opacity-100">
+                <Pencil className="size-3" aria-hidden /> {avatar ? 'Değiştir' : 'Seç'}
               </span>
             </Link>
             <div className="mb-1 rounded-2xl bg-background/80 p-1.5 backdrop-blur">

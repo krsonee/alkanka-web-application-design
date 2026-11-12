@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { usePoints } from './points-context'
 
 const PREVIEW_SECONDS = 5
+const SOFT_PROMPT_SECONDS = 25
+const DISMISS_KEY = 'alkanka:guest-prompt-dismissed'
 
 const MEMBER_ONLY = ['/gorevler', '/tahminler', '/biletler', '/turnuvalar', '/market', '/rozetler', '/oyunlar', '/siralama', '/kankatv', '/profil']
 
@@ -34,8 +36,17 @@ export function GuestGate() {
   const hard = isMemberOnly(pathname)
 
   useEffect(() => {
-    setRemaining(PREVIEW_SECONDS)
-  }, [pathname])
+    setRemaining(hard ? PREVIEW_SECONDS : SOFT_PROMPT_SECONDS)
+  }, [pathname, hard])
+
+  useEffect(() => {
+    if (sessionStorage.getItem(DISMISS_KEY)) setDismissed(true)
+  }, [])
+
+  function dismiss() {
+    sessionStorage.setItem(DISMISS_KEY, '1')
+    setDismissed(true)
+  }
 
   useEffect(() => {
     if (!isGuest || remaining <= 0) return
@@ -59,7 +70,7 @@ export function GuestGate() {
   if (!locked) {
     if (!hard || remaining <= 0) return null
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 lg:bottom-6 lg:left-[var(--sidebar-w)] xl:right-80">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-4 lg:bottom-6 lg:left-[var(--sidebar-w)] xl:right-80">
         <p className="flex items-center gap-2 rounded-full border border-primary/30 bg-card/95 px-4 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur">
           <Sparkles className="size-3.5 text-primary" aria-hidden="true" />
           Önizleme modu · {remaining} sn sonra üyelik gerekli
@@ -85,7 +96,7 @@ export function GuestGate() {
         {!hard && (
           <button
             type="button"
-            onClick={() => setDismissed(true)}
+            onClick={dismiss}
             aria-label="Kapat"
             className="absolute top-3 right-3 z-10 flex size-8 items-center justify-center rounded-full bg-background/80 text-muted-foreground hover:text-foreground"
           >
