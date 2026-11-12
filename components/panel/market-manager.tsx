@@ -70,8 +70,11 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
             className="flex h-10 items-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground"
           >
             <Plus className="size-4" aria-hidden="true" />
-            Yeni ürün / sponsor bonusu
+            Yeni sponsor bonusu
           </button>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Çark, zar, seri kalkanı gibi site içi ürünler markete otomatik eklenir ve satın alındığında anında üyenin hesabına tanımlanır. Buradan yalnızca sponsor bonusu eklenir.
+          </p>
 
           {editing && (
             <ProductForm
@@ -168,13 +171,12 @@ function ProductForm({ value, sponsors, pending, onSave, onCancel }: { value: Pr
       }}
       className="grid gap-3 rounded-xl border border-primary/40 bg-card p-4 sm:grid-cols-2"
     >
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
         Tür
-        <select value={v.kind} onChange={(e) => set('kind', e.target.value as ProductInput['kind'])} className={field}>
-          <option value="sponsor">Sponsor site bonusu</option>
-          <option value="alkanka">AL KANKA ödülü</option>
-        </select>
-      </label>
+        <span className="flex h-10 items-center rounded-lg border border-border bg-secondary px-3 text-sm text-foreground">
+          {v.kind === 'sponsor' ? 'Sponsor site bonusu (manuel teslim)' : 'Site içi ürün (otomatik teslim)'}
+        </span>
+      </div>
       {v.kind === 'sponsor' ? (
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Sponsor site

@@ -224,7 +224,7 @@ export function LandscapeFit({
             title="Masa menüsü"
             className={cn(
               'absolute z-[110] flex size-7 items-center justify-center rounded-lg border border-border/60 bg-card/60 text-foreground/80 backdrop-blur-sm hover:bg-card hover:text-foreground',
-              force ? 'left-[max(0.25rem,env(safe-area-inset-left))] top-9' : 'left-[max(0.5rem,env(safe-area-inset-left))] top-12',
+              'right-[max(0.5rem,env(safe-area-inset-right))] top-1 size-8',
               menuOpen && 'bg-card text-foreground',
             )}
           >
@@ -237,7 +237,7 @@ export function LandscapeFit({
               role="menu"
               className={cn(
                 'absolute z-[115] flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150',
-                force ? 'left-[calc(max(0.25rem,env(safe-area-inset-left))+2.25rem)] top-9' : 'left-14 top-12',
+                'right-[max(0.5rem,env(safe-area-inset-right))] top-10',
               )}
             >
               {menu}

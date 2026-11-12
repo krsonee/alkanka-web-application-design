@@ -12,8 +12,9 @@ import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
 import { ChipPot } from './chip-pot'
 
-export function PlayingCard({ card, hidden, index = 0, small, medium }: { card?: Card; hidden?: boolean; index?: number; small?: boolean; medium?: boolean }) {
+export function PlayingCard({ card, hidden, index = 0, small, medium, delayMs }: { card?: Card; hidden?: boolean; index?: number; small?: boolean; medium?: boolean; delayMs?: number }) {
   const red = card && (card.s === 1 || card.s === 2)
+  const delay = delayMs ?? index * 90
   if (small || medium) {
     return (
       <div
@@ -23,7 +24,7 @@ export function PlayingCard({ card, hidden, index = 0, small, medium }: { card?:
           medium && '[&>span]:text-base [&>span>span]:text-lg',
           hidden || !card ? 'border-primary/40 bg-secondary' : 'border-border bg-[oklch(0.97_0.01_90)]',
         )}
-        style={{ animationDelay: `${index * 90}ms` }}
+        style={{ animationDelay: `${delay}ms` }}
         aria-label={hidden || !card ? 'Kapalı kart' : `${RANKS[card.r]} ${SUITS[card.s]}`}
       >
         {hidden || !card ? (
@@ -41,7 +42,7 @@ export function PlayingCard({ card, hidden, index = 0, small, medium }: { card?:
   return (
     <div
       className="card-deal relative flex h-24 w-16 shrink-0 flex-col justify-between rounded-lg border p-1.5 shadow-lg sm:h-32 sm:w-22"
-      style={{ animationDelay: `${index * 90}ms` }}
+      style={{ animationDelay: `${delay}ms` }}
       aria-label={hidden || !card ? 'Kapalı kart' : `${RANKS[card.r]} ${SUITS[card.s]}`}
     >
       {hidden || !card ? (

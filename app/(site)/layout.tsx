@@ -28,6 +28,7 @@ import { KpHeartbeat } from '@/components/alkanka/kp/heartbeat'
 import { WinnersTicker } from '@/components/alkanka/kp/winners-ticker'
 import { JakoAlerts } from '@/components/alkanka/jako-alerts'
 import { CatalogProvider } from '@/components/alkanka/catalog-context'
+import { SponsorsProvider } from '@/components/alkanka/sponsors-context'
 import { getCatalog } from '@/lib/catalog'
 import { CemberOverlay } from '@/components/alkanka/cember/cember-overlay'
 import { SessionGuard } from '@/components/alkanka/session-guard'
@@ -73,6 +74,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   return (
     <TextsProvider value={texts}>
     <CatalogProvider value={catalog}>
+    <SponsorsProvider value={sponsors}>
     <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
@@ -125,6 +127,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       </PointsProvider>
     </BrandProvider>
     </LogoProvider>
+    </SponsorsProvider>
     </CatalogProvider>
     </TextsProvider>
   )

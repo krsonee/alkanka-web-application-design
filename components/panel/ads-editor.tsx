@@ -50,7 +50,7 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
       const off = Math.abs(ratio - exp.w / exp.h) / (exp.w / exp.h) > 0.15
       setSizeWarn((w) => ({
         ...w,
-        [k]: off ? `Görsel ${img.naturalWidth}×${img.naturalHeight}. Bu alan ${exp.w}×${exp.h} oranında; kenarlar kırpılabilir.` : '',
+        [k]: off ? `Görsel ${img.naturalWidth}×${img.naturalHeight}. Önerilen oran ${exp.w}×${exp.h}; görsel kırpılmadan kendi oranında gösterilir.` : '',
       }))
     }
     img.src = url

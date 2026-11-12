@@ -81,14 +81,12 @@ function ensure() {
       created_at timestamptz NOT NULL DEFAULT now(),
       resolved_at timestamptz)`)
     await rows(sql`CREATE INDEX IF NOT EXISTS market_requests_status_idx ON market_requests (status, created_at DESC)`)
-    const count = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM market_items`)
-    if (Number(count[0]?.c ?? 0) === 0) {
-      let sort = 0
-      for (const i of MARKET_ITEMS) {
-        await rows(sql`INSERT INTO market_items (id, kind, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, sort)
-          VALUES (${i.id}, 'alkanka', ${i.type}, ${i.name}, ${i.description}, ${i.delivery}, ${JSON.stringify(i.rules)}::jsonb, ${i.image},
-            ${i.price}, ${i.stock}, ${i.total}, ${i.limit}, ${Boolean(i.refOnly)}, ${sort++}) ON CONFLICT DO NOTHING`)
-      }
+    // In-site rewards are defined in code and synced automatically; staff only add sponsor bonuses by hand.
+    let sort = 0
+    for (const i of MARKET_ITEMS) {
+      await rows(sql`INSERT INTO market_items (id, kind, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, sort)
+        VALUES (${i.id}, 'alkanka', ${i.type}, ${i.name}, ${i.description}, ${i.delivery}, ${JSON.stringify(i.rules)}::jsonb, ${i.image},
+          ${i.price}, ${i.stock}, ${i.total}, ${i.limit}, ${Boolean(i.refOnly)}, ${sort++}) ON CONFLICT (id) DO NOTHING`)
     }
   })().catch((e) => {
     ready = null
@@ -196,11 +194,12 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
     throw new Error('Kanka Coin bakiyen yetersiz.')
   }
 
-  // Free items carry no payout risk and need no username check, so they skip the manual queue.
-  const autoApprove = price === 0 && !item.needsUsername
+  // In-site rewards are delivered instantly; only sponsor bonuses need a staff member to pay out on the partner site.
+  const autoApprove = item.kind !== 'sponsor'
+  if (autoApprove) await deliverInSiteItem(member.id, item.id)
   await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, site_username, price, status, note, resolved_at)
     VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${price},
-      ${autoApprove ? 'onaylandi' : 'beklemede'}, ${autoApprove ? 'Ücretsiz ürün, otomatik onaylandı.' : null}, ${autoApprove ? new Date().toISOString() : null})`)
+      ${autoApprove ? 'onaylandi' : 'beklemede'}, ${autoApprove ? 'Site içi ürün, otomatik teslim edildi.' : null}, ${autoApprove ? new Date().toISOString() : null})`)
   await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: price, result: 'loss', delta: -price })
   if (autoApprove) return { ...item, price }
   const { notifyApproval } = await import('@/lib/telegram-bots')
@@ -209,6 +208,25 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
     detay: `${item.name} (${price} KC${pct ? `, %${pct} indirimli` : ''})${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
   }).catch(() => {})
   return { ...item, price }
+}
+
+const EXTRA_PLAY_ITEMS: Record<string, { game: 'cark' | 'zar' | 'sandik'; amount: number }> = {
+  'cark-hakki': { game: 'cark', amount: 3 },
+  'zar-hakki': { game: 'zar', amount: 5 },
+}
+
+async function deliverInSiteItem(userId: string, itemId: string) {
+  const extra = EXTRA_PLAY_ITEMS[itemId]
+  if (extra) {
+    const { grantExtraPlays } = await import('@/lib/mini-extras')
+    await grantExtraPlays(userId, extra.game, extra.amount)
+    return
+  }
+  if (itemId === 'seri-kalkani') {
+    await rows(sql`CREATE TABLE IF NOT EXISTS streak_shields (user_id text PRIMARY KEY, count int NOT NULL DEFAULT 0, used int NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`INSERT INTO streak_shields (user_id, count) VALUES (${userId}, 1)
+      ON CONFLICT (user_id) DO UPDATE SET count = streak_shields.count + 1, updated_at = now()`)
+  }
 }
 
 type ReqRow = {

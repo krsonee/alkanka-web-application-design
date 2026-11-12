@@ -308,9 +308,20 @@ export function Okey({ finish, saveKey, bet, win: winPayout, leave }: GameApi) {
   const winning = useMemo(() => (phase === 'discard' ? findWinningDiscard(hand, okey) : null), [hand, okey, phase])
   const winningId = winning?.tile.id ?? null
   // A drawn okey is auto-selected, but throwing it can break a finished hand; point the selection at the closing tile instead.
+  // A face-down okey hides the fact that the hand is already complete, so turn it up once a finish exists.
+  const flipped = rack.flipped
+  const toggleFlip = rack.toggleFlip
   useEffect(() => {
-    if (winningId !== null) setSelected(winningId)
-  }, [winningId, setSelected])
+    if (winningId === null) return
+    for (const t of hand) if (flipped.has(t.id)) toggleFlip(t.id)
+    setSelected(winningId)
+    setMessage('Elin tamam! Bitirmek için “Eli Bitir”e bas ya da parlayan taşı ortaya at')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winningId])
+  const [warnedSkip, setWarnedSkip] = useState(false)
+  useEffect(() => {
+    if (phase !== 'discard') setWarnedSkip(false)
+  }, [phase])
 
   const [win, setWin] = useState<{
     winner: string
@@ -390,6 +401,13 @@ export function Okey({ finish, saveKey, bet, win: winPayout, leave }: GameApi) {
     // Any tile whose removal leaves a complete hand closes it; a drawn okey often makes several tiles valid finishes.
     const closing = winningKindFor(hand, tileId, okey)
     if (closing) return finishHand({ tile, kind: closing })
+    if (winning && !warnedSkip) {
+      playSound('error')
+      setWarnedSkip(true)
+      setSelected(winning.tile.id)
+      setMessage(`Bu taşı atarsan el bitmez. Bitirmek için ${tileName(winning.tile)} taşını at (yine de atmak için tekrar at)`)
+      return
+    }
     playSound('tile')
     const next = {
       ...game,

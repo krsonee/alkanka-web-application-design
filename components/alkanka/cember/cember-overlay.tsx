@@ -18,6 +18,7 @@ import { PredictOutcome, PredictPanel } from './predict-panel'
 import { CemberArena, JAKO_PP, type ArenaEvent } from './cember-arena'
 import { KaraDelikCanvas, type KDEvent } from '../karadelik/karadelik-canvas'
 import { TableBrand } from '../arena/table-brand'
+import { SoundToggle } from '../arena/sound-toggle'
 import { SV_TEAMS, type SVEvent } from '../survival/survival-canvas'
 import { SurvivalArena } from '../survival/survival-arena'
 import { CemberConfetti } from './cember-confetti'
@@ -348,6 +349,8 @@ export function CemberStage({
               <Users className="size-3.5 text-gold" aria-hidden />
               {total > 0 && phase !== 'intro' ? `${alive} / ${total}` : `${total} kanka`}
             </span>
+            <span className="flex items-center gap-2">
+            <SoundToggle className="size-7 rounded-full" />
             {phase === 'result' || phase === 'empty' ? (
               <button
                 type="button"
@@ -371,6 +374,7 @@ export function CemberStage({
                 Canlı
               </span>
             )}
+            </span>
           </div>
           <h2
             id="cember-title"

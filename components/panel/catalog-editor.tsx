@@ -19,6 +19,7 @@ type Option = { id: string; name: string }
 type Field =
   | { key: string; label: string; type: 'text' | 'textarea' | 'image'; max?: number; wide?: boolean }
   | { key: string; label: string; type: 'number' }
+  | { key: string; label: string; type: 'datetime' }
   | { key: string; label: string; type: 'select'; options: string[] }
   | { key: string; label: string; type: 'sponsor' }
   | { key: string; label: string; type: 'lines'; hint: string }
@@ -51,13 +52,15 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
     field: 'home',
     fields: [
       { key: 'league', label: 'Lig', type: 'text', max: 40 },
-      { key: 'kickoff', label: 'Başlama', type: 'text', max: 30 },
+      { key: 'kickoffAt', label: 'Maç tarihi', type: 'datetime' },
+      { key: 'closesAt', label: 'Tahmin bitiş · boşsa maç saatinde kapanır', type: 'datetime' },
+      { key: 'kickoff', label: 'Başlama yazısı · maç tarihi boşsa gösterilir', type: 'text', max: 30 },
       { key: 'home', label: 'Ev sahibi', type: 'text', max: 30 },
       { key: 'away', label: 'Deplasman', type: 'text', max: 30 },
       { key: 'reward', label: 'Ödül (KC)', type: 'number' },
       { key: 'options', label: 'Seçenekler', type: 'pairs', hint: 'Satır başına: seçenek | oy', a: 'label', b: 'votes', numericB: true },
     ],
-    blank: () => ({ id: '', league: 'Süper Lig', home: 'Ev sahibi', away: 'Deplasman', kickoff: 'Bugün 20:00', reward: 100, options: [{ id: 'o1', label: '1', votes: 0 }, { id: 'o2', label: 'X', votes: 0 }, { id: 'o3', label: '2', votes: 0 }] }),
+    blank: () => ({ id: '', league: 'Süper Lig', home: 'Ev sahibi', away: 'Deplasman', kickoff: '', kickoffAt: toTrIso(new Date(Date.now() + 86_400_000)), closesAt: '', reward: 100, options: [{ id: 'o1', label: '1', votes: 0 }, { id: 'o2', label: 'X', votes: 0 }, { id: 'o3', label: '2', votes: 0 }] }),
   },
   campaigns: {
     title: 'Sponsor kampanyaları',
@@ -67,12 +70,17 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
       { key: 'title', label: 'Başlık', type: 'text', max: 60 },
       { key: 'sponsorId', label: 'Sponsor', type: 'sponsor' },
       { key: 'tag', label: 'Etiket', type: 'text', max: 20 },
-      { key: 'ends', label: 'Bitiş yazısı', type: 'text', max: 30 },
-      { key: 'hoursLeft', label: 'Kalan saat', type: 'number' },
+      { key: 'startsAt', label: 'Başlangıç tarihi', type: 'datetime' },
+      { key: 'endsAt', label: 'Bitiş tarihi', type: 'datetime' },
+      { key: 'url', label: 'Yönlendirme linki · boşsa sponsorun linki kullanılır', type: 'text', max: 400, wide: true },
       { key: 'image', label: 'Görsel', type: 'image', wide: true },
       { key: 'description', label: 'Açıklama', type: 'textarea', max: 300, wide: true },
     ],
-    blank: () => ({ id: '', sponsorId: '', title: 'Yeni kampanya', description: '', ends: '7 gün kaldı', image: '/images/banner-events.png', tag: 'Kampanya', hoursLeft: 168 }),
+    blank: () => {
+      const start = new Date()
+      const end = new Date(start.getTime() + 7 * 86_400_000)
+      return { id: '', sponsorId: '', title: 'Yeni kampanya', description: '', ends: '', image: '/images/banner-events.png', tag: 'Kampanya', hoursLeft: 168, startsAt: toTrIso(start), endsAt: toTrIso(end), url: '' }
+    },
   },
   bonuses: {
     title: 'Sponsor bonusları',
@@ -88,6 +96,17 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
     ],
     blank: () => ({ id: '', sponsorId: '', type: 'Hoş geldin', title: 'Yeni bonus', amount: '', wager: '', code: '' }),
   },
+}
+
+/** Campaign dates are entered and stored in Turkey time (UTC+3, no DST). */
+function toTrIso(d: Date) {
+  return `${new Date(d.getTime() + 3 * 3_600_000).toISOString().slice(0, 16)}:00+03:00`
+}
+
+function fromTrIso(v: unknown) {
+  if (typeof v !== 'string' || !v) return ''
+  const t = Date.parse(v)
+  return Number.isFinite(t) ? new Date(t + 3 * 3_600_000).toISOString().slice(0, 16) : ''
 }
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -121,6 +140,14 @@ function FieldInput({ field, item, set, sponsors, library }: { field: Field; ite
       </span>
       {field.type === 'number' ? (
         <input id={id} type="number" min={0} className={input} value={Number(value ?? 0)} onChange={(e) => set({ [field.key]: Number(e.target.value) })} />
+      ) : field.type === 'datetime' ? (
+        <input
+          id={id}
+          type="datetime-local"
+          className={input}
+          value={fromTrIso(value)}
+          onChange={(e) => set({ [field.key]: e.target.value ? `${e.target.value}:00+03:00` : '' })}
+        />
       ) : field.type === 'select' ? (
         <select id={id} className={input} value={String(value ?? '')} onChange={(e) => set({ [field.key]: e.target.value })}>
           {field.options.map((o) => (

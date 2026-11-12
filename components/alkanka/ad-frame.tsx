@@ -8,7 +8,7 @@ function AdBox({ slot, refId, label, className }: { slot?: AdSlot; refId: string
   const inner = (
     <>
       {/* eslint-disable-next-line @next/next/no-img-element -- ad creatives (often animated GIFs) are set in the panel from any https host */}
-      <img src={slot.image} alt={slot.alt || label} className="size-full object-cover" loading="lazy" />
+      <img src={slot.image} alt={slot.alt || label} className="mx-auto block h-auto max-h-[600px] w-full object-contain" loading="lazy" />
       <span className="absolute top-1.5 right-1.5 rounded bg-background/85 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
         Reklam
       </span>
@@ -27,24 +27,24 @@ export async function AdFrame({ page, children }: { page: AdPage; children: Reac
 
   return (
     <div className="flex flex-col gap-6">
-      <AdBox slot={ads.top} refId={`${page}:top`} label="Sponsor banner" className="aspect-[8/1] w-full min-h-16" />
+      <AdBox slot={ads.top} refId={`${page}:top`} label="Sponsor banner" className="w-full" />
       <div className={cn('flex gap-5', hasTowers && 'xl:items-start')}>
         {ads.left?.image && (
           <aside aria-label="Sponsor reklamı" className="sticky top-20 hidden w-36 shrink-0 xl:block 2xl:w-40">
-            <AdBox slot={ads.left} refId={`${page}:left`} label="Sponsor kule reklamı" className="aspect-[160/600] w-full" />
+            <AdBox slot={ads.left} refId={`${page}:left`} label="Sponsor kule reklamı" className="w-full" />
           </aside>
         )}
         <div className="flex min-w-0 flex-1 flex-col gap-6">{children}</div>
         {ads.right?.image && (
           <aside aria-label="Sponsor reklamı" className="sticky top-20 hidden w-36 shrink-0 xl:block 2xl:w-40">
-            <AdBox slot={ads.right} refId={`${page}:right`} label="Sponsor kule reklamı" className="aspect-[160/600] w-full" />
+            <AdBox slot={ads.right} refId={`${page}:right`} label="Sponsor kule reklamı" className="w-full" />
           </aside>
         )}
       </div>
       {hasTowers && (
-        <div className="grid grid-cols-2 gap-3 xl:hidden">
-          <AdBox slot={ads.left} refId={`${page}:left`} label="Sponsor reklamı" className="aspect-[4/3] w-full" />
-          <AdBox slot={ads.right} refId={`${page}:right`} label="Sponsor reklamı" className="aspect-[4/3] w-full" />
+        <div className="grid grid-cols-2 items-start gap-3 xl:hidden">
+          <AdBox slot={ads.left} refId={`${page}:left`} label="Sponsor reklamı" className="w-full" />
+          <AdBox slot={ads.right} refId={`${page}:right`} label="Sponsor reklamı" className="w-full" />
         </div>
       )}
     </div>

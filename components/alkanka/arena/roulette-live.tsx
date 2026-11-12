@@ -546,7 +546,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
 
           <section className="tavla-wood flex min-h-0 flex-1 rounded-2xl p-1" aria-label="Rulet masası">
             <div className="felt-table relative flex min-h-0 flex-1 items-center gap-2 rounded-xl p-1.5">
-              <TableBrand center={false} />
+              <TableBrand center={false} className="z-20" />
               <div className="relative aspect-square w-[min(38vw,calc(100dvh-8.5rem))] shrink-0">
                 <RouletteWheel clockOffset={offset} number={number} highlight={showWin ? number : null} />
                 {showWin && <WinBadge n={number} />}
@@ -688,7 +688,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="tavla-wood flex min-w-0 flex-col gap-4 rounded-3xl p-1.5 sm:rounded-[2rem] sm:p-3" aria-label="Rulet masası">
           <div className="felt-table relative flex flex-col gap-3 rounded-[1.25rem] p-2 sm:gap-5 sm:rounded-[1.6rem] sm:p-5">
-            <TableBrand center={false} />
+            <TableBrand center={false} className="z-20" />
             <div className="flex flex-col items-center gap-3 sm:gap-5 lg:flex-row lg:items-start">
               <div
                 ref={wheelRef}

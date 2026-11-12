@@ -118,7 +118,7 @@ export function parseEvent(raw: string, id: number): GameEvent {
   if ((m = raw.match(/^@\d (\d+) ₺ borç için para bulmalı/))) return { ...base, kind: 'debt', amount: null, title: 'Borç', detail: `${m[1]} ₺ ödemek için ev sat ya da ipotek et` }
   if ((m = raw.match(/^@\d (\d+) ₺ borcunu ödedi/))) return { ...base, kind: 'debt', amount: -Number(m[1]), title: 'Borç ödendi', detail: '' }
   if ((m = raw.match(/^@\d (.+) tapusunu (\d+) ₺'ye aldı/))) return { ...base, kind: 'buy', amount: -Number(m[2]), title: 'Tapu alındı', detail: m[1] }
-  if ((m = raw.match(/^@\d (.+) tapusunu almadı/))) return { ...base, kind: 'pass', title: 'Tapu alınmadı', detail: m[1] }
+  if ((m = raw.match(/^@\d (.+) tapusunu almadı/))) return { ...base, kind: 'info', title: 'Tapu alınmadı', detail: m[1] }
   if ((m = raw.match(/^@\d (Şans|Kamu Fonu) kartı çekti: (.+)$/))) {
     const chance = m[1] === 'Şans'
     return { ...base, kind: chance ? 'chance' : 'chest', amount: cardAmount(m[2]), title: chance ? 'Şans kartı' : 'Kamu fonu kartı', detail: m[2] }
