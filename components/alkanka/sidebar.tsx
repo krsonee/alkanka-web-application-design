@@ -251,9 +251,13 @@ function MemberCard({ onNavigate, compact }: { onNavigate?: () => void; compact:
             {formatAC(points)}
           </span>
         </span>
-        <span className="truncate text-[11px] font-medium text-muted-foreground">
-          {look ? `Seviye ${look.level} · ${look.levelName}` : 'Profilim'}
-        </span>
+        {look ? (
+          <span className="truncate text-[11px] font-medium text-muted-foreground">
+            {`Seviye ${look.level} · ${look.levelName}`}
+          </span>
+        ) : (
+          <span className="h-3 w-24 animate-pulse rounded bg-secondary" aria-hidden="true" />
+        )}
         <span
           role="progressbar"
           aria-label="Seviye ilerlemesi"

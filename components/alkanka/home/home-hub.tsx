@@ -17,6 +17,7 @@ type MyRank = { rank: number; points: number } | null
 
 export type HubData = {
   name: string
+  played?: number | null
   balance: number
   streak: number
   checkedToday: boolean

@@ -73,6 +73,7 @@ export function GuestHomeV2({ config, products, weekly, bonus }: { config: HomeV
 export function MemberHomeV2Page({
   config,
   name,
+  firstTime = false,
   balance,
   kp,
   weeklyRank,
@@ -83,6 +84,7 @@ export function MemberHomeV2Page({
 }: {
   config: HomeV2Config
   name: string
+  firstTime?: boolean
   balance: number
   kp: number | null
   weeklyRank: number | null
@@ -115,9 +117,9 @@ export function MemberHomeV2Page({
       thumb: lastKey ? `/images/games/${lastKey}.png` : config.heroImage,
       image: config.heroImage,
       eyebrow: config.eyebrow.replace('{ad}', name),
-      title: config.title,
-      pills: config.pills,
-      primary: { label: config.primaryCta, href: config.primaryHref },
+      title: firstTime ? 'İlk masan seni bekliyor' : config.title,
+      pills: firstTime ? [] : config.pills,
+      primary: firstTime ? { label: 'İlk masanı aç', href: config.primaryHref } : { label: config.primaryCta, href: config.primaryHref },
       secondary: { label: config.secondaryCta, href: config.secondaryHref },
     },
     ...config.slides

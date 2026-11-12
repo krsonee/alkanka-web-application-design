@@ -70,7 +70,7 @@ export function GuestGate() {
   if (!locked) {
     if (!hard || remaining <= 0) return null
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 lg:bottom-6 lg:left-[var(--sidebar-w)] xl:right-80">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-4 lg:bottom-6 lg:left-[var(--sidebar-w)] xl:right-80">
         <p className="flex items-center gap-2 rounded-full border border-primary/30 bg-card/95 px-4 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur">
           <Sparkles className="size-3.5 text-primary" aria-hidden="true" />
           Önizleme modu · {remaining} sn sonra üyelik gerekli

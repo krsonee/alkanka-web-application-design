@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
-import { ArrowRight, Send } from 'lucide-react'
+import { ArrowRight, Send, X } from 'lucide-react'
 import { getTelegramStripJoined } from '@/app/actions/telegram-strip'
 import { usePoints } from './points-context'
 
@@ -124,9 +124,24 @@ export function TelegramStrip({
     setTimeout(() => setFollowed(true), 300)
   }
 
+  const dismiss = () => {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ sig, at: Date.now() } satisfies Click))
+    } catch {}
+    setFollowed(true)
+  }
+
   return (
-    <div ref={ref} className="sticky top-0 z-[46]">
+    <div ref={ref} className="sticky top-0 z-[46] bg-accent pr-10">
       <TelegramStripView text={text} cta={cta} reward={reward} href={href} onFollow={follow} />
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Telegram bandını kapat"
+        className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-accent-foreground/80 transition-colors hover:bg-accent-foreground/15 hover:text-accent-foreground"
+      >
+        <X className="size-4" aria-hidden="true" />
+      </button>
     </div>
   )
 }
