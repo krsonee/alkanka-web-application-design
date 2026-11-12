@@ -10,7 +10,7 @@ const INPUT = 'rounded-lg border border-input bg-background px-3 py-2 text-foreg
 
 export function LoginForm({ configured }: { configured: boolean }) {
   const [state, action, pending] = useActionState<LoginState, FormData>(panelLogin, {})
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const router = useRouter()
   const step = state.step ?? 'password'
@@ -60,7 +60,6 @@ export function LoginForm({ configured }: { configured: boolean }) {
       <label className="flex flex-col gap-1.5 text-sm text-foreground">
         Kullanıcı adı
         <input name="username" value={username} onChange={(e) => setUsername(e.target.value)} readOnly={needsCode} required autoComplete="username" className={INPUT} />
-        <span className="text-xs text-muted-foreground">Ana yönetici için: admin</span>
       </label>
       <label className="flex flex-col gap-1.5 text-sm text-foreground">
         Şifre

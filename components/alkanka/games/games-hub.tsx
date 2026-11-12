@@ -69,7 +69,7 @@ const GAME_CARDS: { game: MiniGame; title: string; text: string; image: string; 
 
 const SHORT_PLAYERS: Record<ArenaGame, string> = {
   tavla: '1v1',
-  okey: '1v1 · 4',
+  okey: '4 kişi',
   okey101: '2-4',
   batak: '4 kişi',
   pisti: '2-4',
