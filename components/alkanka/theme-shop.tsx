@@ -87,7 +87,7 @@ export function ThemeShop() {
               <ThemeSwatch t={t} className="aspect-[16/10] w-full" />
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-bold">{t.name}</p>
+                  <p className="line-clamp-2 text-sm font-bold leading-tight text-balance" title={t.name}>{t.name}</p>
                   <p className="text-[11px] text-muted-foreground">
                     {THEME_RARITY[t.rarity]} · Lv {offer.minLevel}
                   </p>

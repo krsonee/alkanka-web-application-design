@@ -115,9 +115,11 @@ export function JakoAlerts() {
     if (!latest) return
     const popped = Number(localStorage.getItem(POPPED_KEY) ?? 0)
     if (latest.id <= popped) return
-    localStorage.setItem(POPPED_KEY, String(latest.id))
-    if (pathRef.current === '/profil' && window.location.search.includes('sekme=mesajlar')) return
-    setPopup({
+    if (pathRef.current === '/profil' && window.location.search.includes('sekme=mesajlar')) {
+      localStorage.setItem(POPPED_KEY, String(latest.id))
+      return
+    }
+    const alert: MessageAlertData = {
       kind: 'message',
       id: `msg-${latest.id}`,
       messageId: latest.id,
@@ -126,9 +128,16 @@ export function JakoAlerts() {
       url: latest.url,
       unread: inbox.unread,
       image: latest.imageUrl,
-    })
-    systemNotify('Sana özel mesaj var kanka!', latest.title, '/profil?sekme=mesajlar')
-  }, [inbox])
+    }
+    // Never cover the screen on arrival or mid-game: wait a beat, and on game pages show a corner toast instead.
+    const timer = setTimeout(() => {
+      localStorage.setItem(POPPED_KEY, String(latest.id))
+      systemNotify('Sana özel mesaj var kanka!', latest.title, '/profil?sekme=mesajlar')
+      if (pathRef.current?.startsWith('/oyunlar/')) push(alert)
+      else setPopup(alert)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [inbox, push])
 
   const deferPopup = useCallback(() => {
     setPopup((current) => {
