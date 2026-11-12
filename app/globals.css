@@ -647,7 +647,7 @@
   transform: translateY(-3px);
 }
 @utility card-deal {
-  animation: card-deal 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: card-deal 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @utility pop-in {
   animation: pop 500ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
@@ -2511,7 +2511,9 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
   pointer-events: none; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
   scrollbar-color: rgb(217 164 65 / 0.5) transparent; padding-top: calc(var(--u) * .9); gap: calc(var(--u) * .9) calc(var(--u) * .55);
 }
-.o1-mz .o1-meld { pointer-events: auto; flex: none; }
+.o1-mz .o1-meld { pointer-events: auto; flex: none; flex-wrap: wrap; max-width: 100%; row-gap: calc(var(--u) * .2); }
+/* Extra row gap leaves room for the "İşle" label that sits above each meld. */
+.o1-mz { row-gap: calc(var(--u) * 1.35) !important; }
 .o1-mz.d1 .o1-mt { width: calc(var(--mw) * .84); height: calc(var(--mw) * .84 * 1.42); }
 .o1-mz.d2 .o1-mt { width: calc(var(--mw) * .7); height: calc(var(--mw) * .7 * 1.42); }
 
@@ -2537,17 +2539,19 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 
 /* Mobil yatay tam ekran: sol/sağ per sütunları dar, atıklar orta sırada */
 .ls-split .o1-mz { --mw: calc(var(--u) * 2.6); }
-.ls-split .o101 .okt-p3 { left: 5%; top: 33%; } .ls-split .o101 .okt-p1 { left: 95%; top: 33%; } .ls-split .o101 .okt-p0 { left: 5%; top: 50%; }
+.ls-split .o101 .okt-p3 { left: 5%; top: 33%; } .ls-split .o101 .okt-p1 { left: 95%; top: 33%; }
+/* Own seat sits centred just above the rack, avatar and name side by side to stay low. */
+.ls-split .o101 .okt-p0 { left: 50%; top: 54.5%; flex-direction: row; z-index: 2; }
 .ls-split .o101 .okt-pile3 { left: 25%; top: 48%; } .ls-split .o101 .okt-pile0 { left: 75%; top: 48%; }
 .ls-split .o101 .okt-side { left: 8.5%; top: 4%; }
 .ls-split .o101 .okt-toast { left: 50%; top: 36.5%; }
 .ls-split .o101 .o1-mz2 { top: 22.5%; width: 40%; max-height: 13%; }
-.ls-split .o101 .o1-mz0 { top: 42%; width: 40%; max-height: 15.5%; }
+.ls-split .o101 .o1-mz0 { top: 40%; width: 40%; max-height: 10.5%; }
 .ls-split .o101 .o1-mz3 { left: 10.5%; top: 24%; width: 12%; max-height: 33.5%; }
 .ls-split .o101 .o1-mz1 { right: 10.5%; top: 24%; width: 12%; max-height: 33.5%; }
 .ls-split .o101 .okt-drop { left: 25%; right: 25%; top: 38%; bottom: 42%; }
-/* Yan telefonda sohbet: üst sağda, son atık ile puan kutusu arasındaki boşlukta, yalnız simge */
-.ls-split .o101 .table-chat-btn { left: auto; right: 11%; top: 5%; padding: 0; width: 2.25rem; height: 2.25rem; justify-content: center; font-size: 0; gap: 0; }
+/* Yan telefonda sohbet: sol kenarda, küçült/menü düğmelerinin altında; sağdaki puan kutusunu kapatmaz. */
+.ls-split .o101 .table-chat-btn { left: 1.6%; right: auto; top: 19%; padding: 0; width: 2.25rem; height: 2.25rem; justify-content: center; font-size: 0; gap: 0; }
 .ls-split .o101 .table-chat-btn svg { width: 1rem; height: 1rem; }
 
 /* ===== Masa temaları: yalnız [data-tt] varsa devreye girer, oyun düzenine dokunmaz ===== */

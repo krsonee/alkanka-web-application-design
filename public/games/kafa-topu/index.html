@@ -94,7 +94,9 @@
 
   /* Screens */
   .screen{position:absolute;inset:0;display:none;background:linear-gradient(#0b0e14d9,#0b0e14f2)}
-  .screen.on{display:flex}
+  .screen.on{display:flex;z-index:50}
+  /* On phones the touch pad stayed on top of the full-time card and swallowed "Tekrar oyna" / "Bitir" taps. */
+  .inmenu .touch,.inmenu .tbtn{display:none!important;pointer-events:none!important}
   #menu{flex-direction:column;padding:26px 40px;gap:20px}
   .mtop{display:flex;align-items:center;justify-content:space-between}
   .logo{display:flex;flex-direction:column;line-height:1}

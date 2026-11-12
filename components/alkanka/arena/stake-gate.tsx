@@ -3,12 +3,13 @@
 import Image from 'next/image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { finishBotGame, getOpenBotGame, startBotGame } from '@/app/actions/arena'
-import { Bot, Coins, HelpCircle, Loader2, Play, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
+import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, MODE_LABEL, botWinMultiplier, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
+import { SoundToggle } from './sound-toggle'
 import { GameErrorBoundary } from './game-error-boundary'
 import { clearSaved, loadMode, saveMode } from './saved-game'
 import { TableThemeField } from './table-theme'
@@ -45,6 +46,30 @@ type Phase =
   | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number; mars?: boolean }
 
 const SAVE_AWARE: ArenaGame[] = ['tavla', 'okey']
+
+/** Leaving forfeits the stake, so the first tap only arms the button. */
+function LeaveTableButton({ onLeave }: { onLeave: () => void }) {
+  const [arming, setArming] = useState(false)
+  useEffect(() => {
+    if (!arming) return
+    const t = setTimeout(() => setArming(false), 3000)
+    return () => clearTimeout(t)
+  }, [arming])
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={() => (arming ? onLeave() : setArming(true))}
+      className={cn(
+        'flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-bold transition-colors',
+        arming ? 'border-destructive bg-destructive/15 text-destructive' : 'border-border bg-secondary text-foreground hover:bg-secondary/70',
+      )}
+    >
+      <LogOut className="size-4" aria-hidden="true" />
+      {arming ? 'Emin misin? Bahis yanar' : 'Masadan ayrıl'}
+    </button>
+  )
+}
 
 export function StakeGate({
   game,
@@ -179,7 +204,22 @@ export function StakeGate({
           )}
         >
           <GameErrorBoundary label={meta.title}>
-            {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? children(api) : <LandscapeFit label={meta.title} force={game === 'tavla' || game === 'okey'}>{children(api)}</LandscapeFit>}
+            {game === 'kafa-topu' || game === 'kafa-basketbolu' || game === 'bilardo' ? (
+              children(api)
+            ) : (
+              <LandscapeFit
+                label={meta.title}
+                force={game === 'tavla' || game === 'okey'}
+                menu={
+                  <>
+                    <SoundToggle />
+                    <LeaveTableButton onLeave={() => void leave()} />
+                  </>
+                }
+              >
+                {children(api)}
+              </LandscapeFit>
+            )}
           </GameErrorBoundary>
         </div>
       </div>

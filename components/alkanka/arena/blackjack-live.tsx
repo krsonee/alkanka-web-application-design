@@ -47,6 +47,75 @@ import { MobileTableChat } from "./mobile-table-chat";
 import { TableBrand } from './table-brand'
 import { LandscapeFit } from './landscape-fit'
 import { ChipPot } from './chip-pot'
+import { handValue } from "@/lib/casino";
+
+const DEAL_GAP_MS = 520;
+const CARD_LAND_MS = 560;
+
+/** Initial deal: each fresh card waits for the one before it. Hits land straight away. */
+function dealDelay(index: number, offset = 0) {
+  return index < 2 ? offset + index * DEAL_GAP_MS * 2 : 0;
+}
+
+/** How many cards of a hand have actually landed, so the total climbs card by card (3 → 9) instead of jumping. */
+function useLandedCount(count: number) {
+  const [landed, setLanded] = useState(count);
+  useEffect(() => {
+    if (count < landed) {
+      setLanded(count);
+      return;
+    }
+    if (count === landed) return;
+    const fresh = landed < 2;
+    const t = setTimeout(
+      () => setLanded((n) => Math.min(count, n + 1)),
+      fresh && landed > 0 ? DEAL_GAP_MS * 2 : CARD_LAND_MS,
+    );
+    return () => clearTimeout(t);
+  }, [count, landed]);
+  return Math.min(landed, count);
+}
+
+function HandTotal({ cards, value, doubled }: { cards: { r: number; s: number }[]; value: number; doubled?: boolean }) {
+  const landed = useLandedCount(cards.length);
+  const settled = landed >= cards.length;
+  const shownValue = settled ? value : handValue(cards.slice(0, landed) as Parameters<typeof handValue>[0]);
+  if (landed === 0) return null;
+  return (
+    <span
+      aria-live="polite"
+      className={cn(
+        "absolute -right-2 -top-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums shadow",
+        settled && value > 21 ? "bg-destructive text-primary-foreground" : "bg-foreground text-background",
+      )}
+    >
+      {settled && value > 21 ? "Battı" : shownValue}
+      {settled && doubled && " ×2"}
+    </span>
+  );
+}
+
+function DealerTotal({
+  cards,
+  value,
+  hidden,
+  blackjack,
+}: {
+  cards: { r: number; s: number }[];
+  value: number;
+  hidden: boolean;
+  blackjack?: boolean;
+}) {
+  const landed = useLandedCount(cards.length);
+  if (landed === 0) return null;
+  const settled = landed >= cards.length;
+  const shownValue = settled ? value : handValue(cards.slice(0, landed) as Parameters<typeof handValue>[0]);
+  return (
+    <span className="rounded-full bg-background/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground">
+      {settled && blackjack ? "Krupiye Blackjack" : `Krupiye ${shownValue}${hidden ? " · 1 kapalı" : ""}`}
+    </span>
+  );
+}
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 type Seat = NonNullable<BlackjackLiveState["seats"][number]>;
@@ -369,7 +438,7 @@ function SeatPod({
             aria-label={seat.split ? `${k + 1}. el, ${h.value}` : undefined}
             className={cn(
               "relative flex justify-center rounded-lg",
-              seat.split ? "-space-x-7 sm:-space-x-6" : "-space-x-6 sm:-space-x-5",
+              seat.split ? "-space-x-5 sm:-space-x-4" : "-space-x-3 sm:-space-x-2",
               h.active && seat.split && "ring-2 ring-primary ring-offset-2 ring-offset-transparent",
               seat.split && !h.active && phase === "play" && "opacity-70",
             )}
@@ -379,21 +448,12 @@ function SeatPod({
                 key={`${i}-${c.r}-${c.s}`}
                 card={c}
                 index={i}
+                delayMs={dealDelay(i)}
                 small={!seat.mine || seat.split}
                 medium={seat.mine && !seat.split}
               />
             ))}
-            <span
-              className={cn(
-                "absolute -right-2 -top-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums shadow",
-                h.value > 21
-                  ? "bg-destructive text-primary-foreground"
-                  : "bg-foreground text-background",
-              )}
-            >
-              {h.value > 21 ? "Battı" : h.value}
-              {h.doubled && " ×2"}
-            </span>
+            <HandTotal cards={h.cards} value={h.value} doubled={h.doubled} />
           </div>
         ))}
       </div>
@@ -778,23 +838,25 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                     priority
                   />
                 </div>
-                <div className="flex min-h-16 justify-center -space-x-6 sm:min-h-20 sm:-space-x-6">
+                <div className="flex min-h-16 justify-center -space-x-3 sm:min-h-20 sm:-space-x-2">
                   {dealer.map((c, i) => (
                     <PlayingCard
                       key={`d-${i}-${c.r}-${c.s}`}
                       card={c}
                       index={i}
+                      delayMs={dealDelay(i, DEAL_GAP_MS)}
                       medium
                     />
                   ))}
-                  {dealerHidden && <PlayingCard hidden medium />}
+                  {dealerHidden && <PlayingCard hidden medium delayMs={dealDelay(1, DEAL_GAP_MS)} />}
                 </div>
                 {dealer.length > 0 && (
-                  <span className="rounded-full bg-background/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground">
-                    {data.dealerBlackjack
-                      ? "Krupiye Blackjack"
-                      : `Krupiye ${data.dealerValue}${dealerHidden ? " · 1 kapalı" : ""}`}
-                  </span>
+                  <DealerTotal
+                    cards={dealer}
+                    value={data.dealerValue}
+                    hidden={dealerHidden}
+                    blackjack={data.dealerBlackjack}
+                  />
                 )}
               </div>
 

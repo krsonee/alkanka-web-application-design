@@ -2000,9 +2000,23 @@ export default function MonopolyBoard3D({
   }, [shownKey, outKey, activeSeat]);
 
   const boardKey = `${s.owner.join(",")}|${s.houses.join(",")}|${s.mortgaged.map(Number).join("")}`;
+  const latestStateRef = useRef(s);
+  latestStateRef.current = s;
+  const boardDeferredRef = useRef(false);
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
+    // A purchase arrives together with the throw that led to it; tinting the square before the dice and the
+    // pawn get there spoils the move, so ownership waits until the walk queue has drained.
+    const walkAhead =
+      readyRef.current &&
+      (pendingRef.current > 0 ||
+        (s.walks ?? []).some((w) => w.n > seenWalkRef.current) ||
+        realPos.some((p, i) => queuedRef.current[i] !== undefined && queuedRef.current[i] !== p));
+    if (walkAhead) {
+      boardDeferredRef.current = true;
+      return;
+    }
     engine.setBoard(s, colorsRef.current, readyRef.current);
     readyRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2105,7 +2119,13 @@ export default function MonopolyBoard3D({
         queuedRef.current.forEach((to, seat) => engineRef.current?.place(seat, to));
       } finally {
         pendingRef.current -= 1;
-        if (pendingRef.current === 0) report(false, null);
+        if (pendingRef.current === 0) {
+          if (boardDeferredRef.current) {
+            boardDeferredRef.current = false;
+            engineRef.current?.setBoard(latestStateRef.current, colorsRef.current, true);
+          }
+          report(false, null);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

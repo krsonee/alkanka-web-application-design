@@ -300,7 +300,8 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
 
   // Okeys arrive face down, like at a real table; the player taps to reveal them.
   const [flippedRaw, setFlipped] = useState<number[]>(() => hand.filter((t) => isJoker(t, okey)).map((t) => t.id))
-  const flipped = new Set(flippedRaw.filter((id) => hand.some((t) => t.id === id)))
+  // Tile ids restart every deal, so a stale id could flip an ordinary tile; only an okey may ever be face down.
+  const flipped = new Set(flippedRaw.filter((id) => hand.some((t) => t.id === id && isJoker(t, okey))))
   function toggleFlip(id: number) {
     setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))
   }
