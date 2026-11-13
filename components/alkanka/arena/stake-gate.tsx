@@ -211,10 +211,12 @@ export function StakeGate({
                 label={meta.title}
                 force={game === 'tavla' || game === 'okey'}
                 menu={
-                  <>
-                    <SoundToggle />
-                    <LeaveTableButton onLeave={() => void leave()} />
-                  </>
+                  game === 'tavla' ? (
+                    <>
+                      <SoundToggle />
+                      <LeaveTableButton onLeave={() => void leave()} />
+                    </>
+                  ) : undefined
                 }
               >
                 {children(api)}

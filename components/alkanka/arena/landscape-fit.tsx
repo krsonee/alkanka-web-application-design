@@ -46,9 +46,12 @@ export function LandscapeFit({
   label = 'Oyun masası',
   force = false,
   menu,
+  menuRight = false,
 }: {
   children: ReactNode
   label?: string
+  /** Puts the table menu in the top-right corner (Pişti) instead of the left rail. */
+  menuRight?: boolean
   /** Table controls (resign, leave, sound) reachable while the fullscreen layer hides the page header. */
   menu?: ReactNode
   /** Sideways only: an upright phone gets a rotate prompt instead of the table, and the table drops the side rail. */
@@ -224,7 +227,11 @@ export function LandscapeFit({
             title="Masa menüsü"
             className={cn(
               'absolute z-[110] flex size-7 items-center justify-center rounded-lg border border-border/60 bg-card/60 text-foreground/80 backdrop-blur-sm hover:bg-card hover:text-foreground',
-              'right-[max(0.5rem,env(safe-area-inset-right))] top-1 size-8',
+              menuRight
+                ? 'right-[max(0.5rem,env(safe-area-inset-right))] top-1 size-8'
+                : force
+                  ? 'left-[max(0.25rem,env(safe-area-inset-left))] top-9'
+                  : 'left-[max(0.5rem,env(safe-area-inset-left))] top-12',
               menuOpen && 'bg-card text-foreground',
             )}
           >
@@ -237,7 +244,11 @@ export function LandscapeFit({
               role="menu"
               className={cn(
                 'absolute z-[115] flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150',
-                'right-[max(0.5rem,env(safe-area-inset-right))] top-10',
+                menuRight
+                  ? 'right-[max(0.5rem,env(safe-area-inset-right))] top-10'
+                  : force
+                    ? 'left-[calc(max(0.25rem,env(safe-area-inset-left))+2.25rem)] top-9'
+                    : 'left-14 top-12',
               )}
             >
               {menu}
