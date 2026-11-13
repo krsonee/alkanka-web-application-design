@@ -27,7 +27,7 @@ export function ensureCommunity() {
       match_id int NOT NULL REFERENCES league_matches(id) ON DELETE CASCADE, user_id text NOT NULL, user_name text NOT NULL,
       home int NOT NULL, away int NOT NULL, points int, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (match_id, user_id))`)
     await rows(sql`ALTER TABLE league_matches ADD COLUMN IF NOT EXISTS home_logo text,
-      ADD COLUMN IF NOT EXISTS away_logo text, ADD COLUMN IF NOT EXISTS ext_id bigint`)
+      ADD COLUMN IF NOT EXISTS away_logo text, ADD COLUMN IF NOT EXISTS ext_id bigint, ADD COLUMN IF NOT EXISTS closes_at timestamptz`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS league_matches_ext_id ON league_matches (ext_id) WHERE ext_id IS NOT NULL`)
   })().catch((error) => {
     ready = null
@@ -463,6 +463,8 @@ export type LeagueMatch = {
   awayLogo: string | null
   extId: number | null
   kickoff: string
+  /** When predictions lock; null means at kickoff. */
+  closesAt: string | null
   homeGoals: number | null
   awayGoals: number | null
   settled: boolean
@@ -487,6 +489,7 @@ export async function listLeagueMatches(userId: string | null, opts: { admin?: b
     awayLogo: x.away_logo ? String(x.away_logo) : null,
     extId: x.ext_id === null || x.ext_id === undefined ? null : Number(x.ext_id),
     kickoff: iso(x.kickoff),
+    closesAt: x.closes_at ? iso(x.closes_at) : null,
     homeGoals: x.home_goals === null ? null : Number(x.home_goals),
     awayGoals: x.away_goals === null ? null : Number(x.away_goals),
     settled: Boolean(x.settled),
@@ -500,10 +503,11 @@ const goals = (n: number) => Number.isInteger(n) && n >= 0 && n <= 20
 export async function savePick(user: { id: string; name: string }, matchId: number, home: number, away: number) {
   await ensureCommunity()
   if (!goals(home) || !goals(away)) throw new Error('Skor 0-20 arasında olmalı.')
-  const open = await rows(sql`SELECT 1 FROM league_matches WHERE id = ${matchId} AND NOT settled AND kickoff > now()`)
+  const open = await rows(sql`SELECT 1 FROM league_matches WHERE id = ${matchId} AND NOT settled AND coalesce(closes_at, kickoff) > now()`)
   if (!open.length) throw new Error('Bu maç için tahminler kapandı.')
-  await rows(sql`INSERT INTO league_picks (match_id, user_id, user_name, home, away) VALUES (${matchId}, ${user.id}, ${user.name.slice(0, 40)}, ${home}, ${away})
-    ON CONFLICT (match_id, user_id) DO UPDATE SET home = EXCLUDED.home, away = EXCLUDED.away, created_at = now()`)
+  const saved = await rows(sql`INSERT INTO league_picks (match_id, user_id, user_name, home, away) VALUES (${matchId}, ${user.id}, ${user.name.slice(0, 40)}, ${home}, ${away})
+    ON CONFLICT (match_id, user_id) DO NOTHING RETURNING match_id`)
+  if (!saved.length) throw new Error('Bu maç için zaten tahmin yaptın.')
 }
 
 export type LeagueRow = { userId: string; name: string; points: number; exact: number; picks: number }
@@ -518,13 +522,20 @@ export async function leagueTable(scope: 'week' | 'all'): Promise<LeagueRow[]> {
   return r.map((x) => ({ userId: String(x.user_id), name: String(x.name), points: Number(x.points), exact: Number(x.exact), picks: Number(x.picks) }))
 }
 
-export async function addLeagueMatch(input: { league: string; home: string; away: string; kickoff: string }) {
+export async function addLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string }) {
   await ensureCommunity()
   const when = new Date(input.kickoff)
   if (Number.isNaN(when.getTime())) throw new Error('Geçerli bir tarih gir.')
   if (!input.home.trim() || !input.away.trim()) throw new Error('Takım adlarını gir.')
-  await rows(sql`INSERT INTO league_matches (league, home, away, kickoff)
-    VALUES (${input.league.trim() || 'Futbol'}, ${input.home.trim()}, ${input.away.trim()}, ${when.toISOString()})`)
+  let closes: string | null = null
+  if (input.closesAt) {
+    const c = new Date(input.closesAt)
+    if (Number.isNaN(c.getTime())) throw new Error('Geçerli bir tahmin bitiş tarihi gir.')
+    if (c.getTime() > when.getTime()) throw new Error('Tahmin bitişi maç saatinden sonra olamaz.')
+    closes = c.toISOString()
+  }
+  await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, closes_at)
+    VALUES (${input.league.trim() || 'Futbol'}, ${input.home.trim()}, ${input.away.trim()}, ${when.toISOString()}, ${closes})`)
 }
 
 export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string }

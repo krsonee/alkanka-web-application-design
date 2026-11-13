@@ -74,7 +74,7 @@ export async function answerComplaint(id: number, status: Complaint['status'], r
   return guard(() => updateComplaint(id, status, reply))
 }
 
-export async function createLeagueMatch(input: { league: string; home: string; away: string; kickoff: string }) {
+export async function createLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string }) {
   return guard(() => addLeagueMatch(input))
 }
 

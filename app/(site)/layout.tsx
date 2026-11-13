@@ -16,7 +16,7 @@ import { getLogos } from '@/lib/content'
 import { getSiteTexts } from '@/lib/site-texts'
 import { getSocialLinks } from '@/lib/social'
 import type { SocialLinks } from '@/lib/social-shared'
-import { listPublicSponsors } from '@/lib/sites'
+import { listPublicSites, listPublicSponsors } from '@/lib/sites'
 import { TextsProvider } from '@/components/alkanka/texts-context'
 import { getAppSettings } from '@/lib/app-settings'
 import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
@@ -56,7 +56,8 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     getAppSettings(),
     getTourSettings(),
   ])
-  const [boosts, tracking, tgPromo] = await Promise.all([
+  const [lookupSponsors, boosts, tracking, tgPromo] = await Promise.all([
+    listPublicSites().catch(() => sponsors),
     currentBoosts().catch(() => []),
     getTracking().catch(() => EMPTY_TRACKING),
     getTelegramPromo().catch(() => TELEGRAM_PROMO_DEFAULTS),
@@ -74,7 +75,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   return (
     <TextsProvider value={texts}>
     <CatalogProvider value={catalog}>
-    <SponsorsProvider value={sponsors}>
+    <SponsorsProvider value={lookupSponsors}>
     <LogoProvider value={logos}>
     <BrandProvider>
       <PointsProvider>
