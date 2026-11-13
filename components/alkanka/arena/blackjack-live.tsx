@@ -947,7 +947,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               <div className={cn("flex flex-col items-center gap-2", MOBILE_BAR)}>
                 <p className="text-center text-sm font-semibold text-foreground">
                   {me.natural
-                    ? `Blackjack'in var! Eşit para al��rsan krupiye ne açarsa açsın ${formatAC(me.baseBet)} kazanırsın.`
+                    ? `Blackjack'in var! Eşit para alırsan krupiye ne açarsa açsın ${formatAC(me.baseBet)} kazanırsın.`
                     : `Krupiyenin açık kartı As. Sigorta ${formatAC(Math.floor(me.baseBet / 2))}, krupiye blackjack yaparsa 2:1 öder.`}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">

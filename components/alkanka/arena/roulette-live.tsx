@@ -687,9 +687,9 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="tavla-wood flex min-w-0 flex-col gap-4 rounded-3xl p-1.5 sm:rounded-[2rem] sm:p-3" aria-label="Rulet masası">
-          <div className="felt-table relative flex flex-col gap-3 rounded-[1.25rem] p-2 sm:gap-5 sm:rounded-[1.6rem] sm:p-5">
+          <div className="felt-table @container relative flex flex-col gap-3 rounded-[1.25rem] p-2 sm:gap-5 sm:rounded-[1.6rem] sm:p-5">
             <TableBrand center={false} className="z-20" />
-            <div className="flex flex-col items-center gap-3 sm:gap-5 lg:flex-row lg:items-start">
+            <div className="flex flex-col items-center gap-3 sm:gap-5 @4xl:flex-row @4xl:items-start">
               <div
                 ref={wheelRef}
                 className={cn(

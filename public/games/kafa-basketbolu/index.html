@@ -318,7 +318,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    <h1 class="ttl disp">KAFA <em>BASKETBOLU</em></h1>
    <div class="chars" id="chars"></div>
    <div class="btns" style="margin-top:0"><button class="cta sec" id="exitBtn" hidden>ARENAYA DÖN</button><button class="cta" id="findBtn">MAÇ BUL</button></div>
-   <div class="keys"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla / Sma��</span><span><kbd>J</kbd>Şut</span><span><kbd>K</kbd>Çal</span><span><kbd>L</kbd>Atıl</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
+   <div class="keys"><span><kbd>A</kbd><kbd>D</kbd>Yürü</span><span><kbd>W</kbd>Zıpla / Smaç</span><span><kbd>J</kbd>Şut</span><span><kbd>K</kbd>Çal</span><span><kbd>L</kbd>Atıl</span><span><kbd>E</kbd>Süper güç</span><span><kbd>Esc</kbd>Menü</span></div>
   </div>
   <div class="ov dim srch" id="ovSrch"><div class="ball"></div><p class="disp">Rakip aranıyor...</p><div class="heads" id="srchHeads"></div></div>
   <div class="ov vs" id="ovVs">
@@ -855,7 +855,7 @@ function controlAI(p,dt){
  if(ball.owner===p){
   if(aiS.shotX==null){const r=Math.random();aiS.shotX=h.cx+(r<.34?rnd(100,125):r<.82?rnd(190,370):rnd(410,460))}
   const dx=aiS.shotX-p.x;
-  /* Atılmayla gelen kullanıcıdan kaç: z��playarak şut, geri adım ya da topu korumak için arkasını dön */
+  /* Atılmayla gelen kullanıcıdan kaç: zıplayarak şut, geri adım ya da topu korumak için arkasını dön */
   if(!u.dash)aiS.dodged=0;
   else if(!aiS.dodged&&!p.shoot&&p.onG&&sgn(p.x-u.x)===u.dash.dir&&Math.abs(u.x-p.x)<320){aiS.dodged=1;const r=Math.random();
    if(r<.38){if(Math.abs(h.cx-p.x)<470)startShot(p,Math.random()<.5?'good':'bad');else jump(p)}

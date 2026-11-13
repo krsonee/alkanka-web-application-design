@@ -577,7 +577,7 @@ export const FAQ: { id: string; label: string; items: FaqItem[] }[] = [
       { q: 'Çekim paylaşımım nasıl onaylanır?', a: 'Güven merkezindeki Çekim sekmesinden sponsor sitedeki kullanıcı adını, tutarı, çekim saatini ve ekran görüntüsünü gönder. Ekip kontrol edip onaylayınca ödülün hesabına eklenir ve çekimin duvarda herkese görünür.' },
       { q: 'Üyelik ücretli mi?', a: 'Hayır. AL KANKA üyeliği, mini oyunlar ve görevler tamamen ücretsizdir. Kanka Coin hiçbir şekilde satın alınmaz.' },
       { q: 'Şifremi unuttum, ne yapmalıyım?', a: "Giriş ekranındaki Şifremi unuttum bağlantısını kullan. Telegram hesabını bağladıysan Telegram'dan destek ekibine yazarak da hesabını geri alabilirsin." },
-      { q: 'Arkadaşım���� nasıl davet ederim?', a: 'Profilindeki davet bağlantısını paylaş. Arkadaşın bu bağlantıyla üye olup ilk görevini bitirince ikinize de KC yüklenir. Masa oyunlarında oturduktan sonra Davet et butonuyla doğrudan masaya da çağırabilirsin.' },
+      { q: 'Arkadaşımı nasıl davet ederim?', a: 'Profilindeki davet bağlantısını paylaş. Arkadaşın bu bağlantıyla üye olup ilk görevini bitirince ikinize de KC yüklenir. Masa oyunlarında oturduktan sonra Davet et butonuyla doğrudan masaya da çağırabilirsin.' },
       { q: 'Hesabımı nasıl silerim?', a: "Telegram'dan destek ekibine yaz. Hesabın sana ait olduğu doğrulandıktan sonra hesabın ve verilerin silinir. Silinen hesabın bakiyesi ve rozetleri geri getirilemez." },
     ],
   },

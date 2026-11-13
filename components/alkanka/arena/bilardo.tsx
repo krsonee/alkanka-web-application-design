@@ -1319,7 +1319,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       : ui.mustCall && ui.call === null
       ? ['Siyah için bir deliğe dokun', 'Delik seç']
       : ui.ballInHand
-        ? ['Beyazı sürükle · G��cü çekip bırak', 'Beyazı koy']
+        ? ['Beyazı sürükle · Gücü çekip bırak', 'Beyazı koy']
         : aimLocked
           ? ['Nişan kilitli · Masada geri çekip bırak ya da güç çubuğu · Dokun: kilidi aç', 'Geri çek, bırak']
           : landscape

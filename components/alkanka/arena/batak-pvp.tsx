@@ -200,14 +200,14 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   }
   const illegalReason = (c: BCard) => {
     if (!s.trick.length) {
-      return s.trump != null && c.s === s.trump && !s.broken ? 'Koz kırılmadan kozla açamazsın' : 'Bu kart şu an at��lamaz'
+      return s.trump != null && c.s === s.trump && !s.broken ? 'Koz kırılmadan kozla açamazsın' : 'Bu kart şu an atılamaz'
     }
     const led = s.trick[0].card.s
     if (hand.some((x) => x.s === led)) {
       return c.s !== led ? `${SUIT_NAMES[led]} atmak zorundasın` : `Daha büyük ${SUIT_NAMES[led]} atmalısın`
     }
     if (s.trump != null && hand.some((x) => x.s === s.trump)) {
-      return c.s !== s.trump ? 'Rengin yok, koz çakmak zorundasın' : 'Daha büyük koz atmalıs��n'
+      return c.s !== s.trump ? 'Rengin yok, koz çakmak zorundasın' : 'Daha büyük koz atmalısın'
     }
     return 'Bu kart şu an atılamaz'
   }
