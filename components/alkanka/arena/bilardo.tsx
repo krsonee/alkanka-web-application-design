@@ -63,20 +63,28 @@ const DROP_MS = 560
 const CUSHION = 12
 
 /** Pockets are round holes: large ones sunk into the corners, smaller ones set into the middle of the long rails. */
-function clipPocket(ctx: CanvasRenderingContext2D, i: number) {
+const isSidePocket = (i: number) => i === 1 || i === 4
+
+/** Drawn hole per pocket. Side holes sit right on the cushion line so they don't bulge out into the wooden rail. */
+function pocketGeom(i: number): [number, number, number] {
   const [px, py] = POCKETS[i]
+  if (isSidePocket(i)) return [px, py < 0 ? -2 : H + 2, 25]
+  return [px, py, POCKET_HOLE[i]]
+}
+
+function clipPocket(ctx: CanvasRenderingContext2D, i: number) {
+  const [px, py, pr] = pocketGeom(i)
   ctx.beginPath()
-  ctx.arc(px, py, POCKET_HOLE[i], 0, Math.PI * 2)
+  ctx.arc(px, py, pr, 0, Math.PI * 2)
   ctx.clip()
 }
 
 function paintPocket(ctx: CanvasRenderingContext2D, i: number, gold: string) {
-  const [px, py] = POCKETS[i]
-  const pr = POCKET_HOLE[i]
+  const [px, py, pr] = pocketGeom(i)
   ctx.save()
   ctx.fillStyle = 'rgba(0,0,0,0.45)'
   ctx.beginPath()
-  ctx.arc(px, py, pr + 5, 0, Math.PI * 2)
+  ctx.arc(px, py, pr + (isSidePocket(i) ? 2 : 5), 0, Math.PI * 2)
   ctx.fill()
   clipPocket(ctx, i)
   const pg = ctx.createRadialGradient(px, py, pr * 0.15, px, py, pr)
@@ -100,7 +108,7 @@ function paintPocket(ctx: CanvasRenderingContext2D, i: number, gold: string) {
 function paintCushions(ctx: CanvasRenderingContext2D) {
   const c = CUSHION
   const cj = c
-  const sj = c * 0.45
+  const sj = c * 0.85
   const strips: [number, number][][] = [
     [[CORNER_MOUTH, 0], [W / 2 - SIDE_MOUTH, 0], [W / 2 - SIDE_MOUTH - sj, c], [CORNER_MOUTH + cj, c]],
     [[W / 2 + SIDE_MOUTH, 0], [W - CORNER_MOUTH, 0], [W - CORNER_MOUTH - cj, c], [W / 2 + SIDE_MOUTH + sj, c]],

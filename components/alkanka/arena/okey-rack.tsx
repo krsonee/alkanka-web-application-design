@@ -894,10 +894,14 @@ function RackTile({
             aria-label="Kapalı okey, açmak için dokun"
             aria-pressed={selected}
             className={cn(
-              'okey-tile-face okey-tile-body okey-tile-hidden absolute inset-0 rounded-[13%/10%] [backface-visibility:hidden] [transform:rotateY(180deg)]',
-              selected && 'ring-2 ring-primary',
+              'okey-tile-face okey-tile-body okey-tile-hidden absolute inset-0 flex items-center justify-center rounded-[13%/10%] ring-2 ring-primary/80 [backface-visibility:hidden] [container-type:size] [transform:rotateY(180deg)]',
+              selected && 'ring-primary',
             )}
-          />
+          >
+            <span aria-hidden="true" className="font-display text-[min(44cqh,62cqw)] font-extrabold leading-none text-primary">
+              ?
+            </span>
+          </button>
         </div>
       </div>
       {fresh && (

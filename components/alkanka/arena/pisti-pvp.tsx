@@ -253,7 +253,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
 
       <section aria-label="Pişti masası" className="bt-stage w-full overflow-hidden rounded-[1.75rem] border border-border" {...themeSurfaceProps(tableTheme)}>
         {/* On desktop the stage is capped by the window height; inside the fullscreen layer LandscapeFit sizes it. */}
-        <FixedStage width={STAGE_W} height={STAGE_H} className="max-w-[calc((100dvh-15rem)*2)] [.ls-split_&]:max-w-none">
+        <FixedStage width={STAGE_W} height={STAGE_H} className="pisti-stage max-w-[calc((100dvh-15rem)*2)] [.ls-split_&]:max-w-none">
           {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
           <div className="bt-rim absolute left-[170px] top-[78px] h-[296px] w-[760px] rounded-[3rem] p-2.5" aria-hidden="true">
             <div className="bt-felt pt-felt relative size-full overflow-hidden rounded-[2.5rem]">
@@ -301,8 +301,8 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
             {Array.from({ length: Math.min(4, pileHidden) }, (_, i) => (
               <CardBack
                 key={`h${i}`}
-                className="absolute aspect-[5/7] w-[var(--cw)] -translate-x-1/2 -translate-y-1/2"
-                style={{ rotate: `${(i - 1.5) * 7}deg`, translate: `${(i - 1.5) * 3}px 0` }}
+                className="absolute aspect-[5/7] w-[var(--cw)]"
+                style={{ rotate: `${(i - 1.5) * 7}deg`, translate: `calc(-50% + ${(i - 1.5) * 3}px) -50%` }}
               />
             ))}
             {pileFan.map((c, i) => {
