@@ -838,7 +838,7 @@ export function OddsBoard() {
                     </span>
                     <span className="text-xs font-bold text-live tabular-nums">+%{boost}</span>
                   </div>
-                  <GoButton site={s?.id} label="Oyna" className="md:w-28" />
+                  <GoButton site={s?.id ?? o.sponsorId} label="Oyna" className="md:w-28" />
                 </li>
               )
             })}
@@ -937,7 +937,7 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
         <h3 className="line-clamp-2 font-display text-base font-bold leading-snug text-foreground text-pretty">{c.title}</h3>
         <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.description}</p>
         <div className="mt-auto flex justify-end pt-1">
-          <GoButton site={s?.id} href={c.url} label="Katıl" className="h-8 rounded-full px-4 text-[11px]" />
+          <GoButton site={s?.id ?? c.sponsorId} href={c.url} label="Katıl" className="h-8 rounded-full px-4 text-[11px]" />
         </div>
       </div>
     </li>
@@ -980,7 +980,7 @@ export function CampaignBoard() {
             <Clock className="size-4 text-primary" aria-hidden="true" />
             {featured.ends} · {fs?.name}
           </span>
-          <GoButton site={fs?.id} label="Kampanyaya katıl" className="mt-2 h-11 w-full sm:w-auto sm:self-start" />
+          <GoButton site={fs?.id ?? featured.sponsorId} href={featured.url} label="Kampanyaya katıl" className="mt-2 h-11 w-full sm:w-auto sm:self-start" />
         </div>
       </article>
 
@@ -1178,7 +1178,7 @@ function EndingCard({ c, index }: { c: Campaign; index: number }) {
                 <span className={cn('ending-bar-fill', urgent && 'is-urgent')} style={{ width: `${left}%` }} />
               </span>
             </div>
-            <GoButton site={s?.id} href={c.url} label="Katıl" className="ending-cta h-8 shrink-0 rounded-full px-4 text-[11px]" />
+            <GoButton site={s?.id ?? c.sponsorId} href={c.url} label="Katıl" className="ending-cta h-8 shrink-0 rounded-full px-4 text-[11px]" />
           </div>
         </div>
       </div>

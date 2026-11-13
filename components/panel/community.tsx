@@ -224,7 +224,7 @@ function FinishRow({ m }: { m: LeagueMatch }) {
 
 function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
   const { pending, status, run } = useAction()
-  const [form, setForm] = useState({ league: 'Süper Lig', home: '', away: '', kickoff: '' })
+  const [form, setForm] = useState({ league: 'Süper Lig', home: '', away: '', kickoff: '', closesAt: '' })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
   return (
     <div className="flex flex-col gap-5">
@@ -234,7 +234,15 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
         className="flex flex-col gap-3 self-start rounded-xl border border-border bg-card p-4"
         onSubmit={(e) => {
           e.preventDefault()
-          run(() => createLeagueMatch({ ...form, kickoff: new Date(form.kickoff).toISOString() }), () => setForm({ ...form, home: '', away: '', kickoff: '' }))
+          run(
+            () =>
+              createLeagueMatch({
+                ...form,
+                kickoff: new Date(form.kickoff).toISOString(),
+                closesAt: form.closesAt ? new Date(form.closesAt).toISOString() : undefined,
+              }),
+            () => setForm({ ...form, home: '', away: '', kickoff: '', closesAt: '' }),
+          )
         }}
       >
         <h3 className="font-display text-base font-bold text-foreground">Elle maç ekle</h3>
@@ -242,9 +250,13 @@ function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Ev sahibi<input value={form.home} onChange={set('home')} placeholder="Galatasaray" className={field} /></label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Deplasman<input value={form.away} onChange={set('away')} placeholder="Fenerbahçe" className={field} /></label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">Başlama saati<input type="datetime-local" value={form.kickoff} onChange={set('kickoff')} className={field} /></label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          <span>Tahmin bitiş <span className="font-normal opacity-70">· boşsa maç saatinde kapanır</span></span>
+          <input type="datetime-local" value={form.closesAt} max={form.kickoff || undefined} onChange={set('closesAt')} className={field} />
+        </label>
         <button disabled={pending || !form.home || !form.away || !form.kickoff} className="h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-40">Maçı ekle</button>
         <StatusLine status={status} />
-        <p className="text-xs leading-relaxed text-muted-foreground">Tahminler başlama saatinde otomatik kilitlenir. Maç bitince sonucu girin; puanlar ve KC ödülleri anında dağıtılır.</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">Tahminler tahmin bitiş saatinde (boşsa başlama saatinde) otomatik kilitlenir. Her üye bir maça yalnızca bir kez tahmin yapabilir. Maç bitince sonucu girin; puanlar ve KC ödülleri anında dağıtılır.</p>
       </form>
       {matches.length ? (
         <ul className="flex flex-col gap-2">{matches.map((m) => <FinishRow key={m.id} m={m} />)}</ul>

@@ -38,7 +38,7 @@ type MatchState = 'open' | 'locked' | 'settled'
 
 function matchState(m: LeagueMatch, now: number): MatchState {
   if (m.settled) return 'settled'
-  return new Date(m.kickoff).getTime() <= now ? 'locked' : 'open'
+  return new Date(m.closesAt ?? m.kickoff).getTime() <= now || m.myPick ? 'locked' : 'open'
 }
 
 function Team({ name, logo }: { name: string; logo: string | null }) {
@@ -106,9 +106,12 @@ function MatchCard({ m, state }: { m: LeagueMatch; state: MatchState }) {
             onClick={() => requireLogin() && run(() => savePickAction(m.id, home, away))}
             className="h-11 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
           >
-            {pending ? 'Kaydediliyor...' : m.myPick && !changed ? 'Tahmin kayıtlı' : m.myPick ? 'Tahmini güncelle' : 'Tahmini kaydet'}
+            {pending ? 'Kaydediliyor...' : 'Tahmini kaydet'}
           </button>
-          <span className="text-center text-xs text-muted-foreground">{m.picks} kişi tahmin yaptı</span>
+          <span className="text-center text-xs text-muted-foreground">
+            {m.picks} kişi tahmin yaptı · Tahmin bir kez yapılır
+            {m.closesAt ? ` · Bitiş ${new Date(m.closesAt).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+          </span>
         </>
       )}
 
