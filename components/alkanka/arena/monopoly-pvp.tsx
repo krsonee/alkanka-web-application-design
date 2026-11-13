@@ -831,7 +831,7 @@ function DeedCard({ i, s, ownerName }: { i: number; s: MonopolyState; ownerName:
                   ? 'Hapis ya da sadece ziyaret.'
                   : sq.type === 'go'
                     ? s.rules?.goDouble ? "Başla'dan geçen 200 ₺, tam gelen 400 ₺ alır." : "Başla'dan her geçişte 200 ₺ maaş alınır."
-                    : sq.type === 'parking' && s.rules?.kumbara ? `Otopark kumbarası: ${s.pot ?? 0} ��. Buraya gelen hepsini alır.` : 'Burada bir şey olmaz, dinlen.'}
+                    : sq.type === 'parking' && s.rules?.kumbara ? `Otopark kumbarası: ${s.pot ?? 0} ₺. Buraya gelen hepsini alır.` : 'Burada bir şey olmaz, dinlen.'}
         </p>
       </div>
     )

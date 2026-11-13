@@ -76,6 +76,31 @@ function useLandedCount(count: number) {
   return Math.min(landed, count);
 }
 
+const DEALER_STEP_MS = 800;
+
+/**
+ * Dealer cards that have been revealed so far. When the server jumps straight to the result with the
+ * hole card and every dealer hit, this lets them land one by one before any outcome is shown.
+ */
+function useDealerReveal(count: number, round: unknown) {
+  const [state, setState] = useState({ round, n: count });
+  const n = state.round !== round ? Math.min(count, 1) : state.n;
+  useEffect(() => {
+    if (state.round !== round) {
+      setState({ round, n: Math.min(count, 1) });
+      return;
+    }
+    if (count < state.n) {
+      setState({ round, n: count });
+      return;
+    }
+    if (count === state.n) return;
+    const t = setTimeout(() => setState((s) => ({ round, n: Math.min(count, s.n + 1) })), DEALER_STEP_MS);
+    return () => clearTimeout(t);
+  }, [count, round, state]);
+  return Math.min(n, count);
+}
+
 function HandTotal({ cards, value, doubled }: { cards: { r: number; s: number }[]; value: number; doubled?: boolean }) {
   const landed = useLandedCount(cards.length);
   const settled = landed >= cards.length;
@@ -262,6 +287,7 @@ function dealerLine(
       : `Bahisler açık, ${secondsLeft} saniye. Beklemek istemezsen "Hemen dağıt" de.`;
   if (phase === "play")
     return `Kartlar dağıtıldı. Kart mı, dur mu? ${secondsLeft} saniye.`;
+  if (phase === "reveal") return "Kapalı kartımı açıyorum, gerekirse kart çekiyorum...";
   return dealerValue > 21
     ? `Krupiye ${dealerValue} ile battı! Masada kalan herkes kazandı.`
     : `Krupiye ${dealerValue}. Ödemeler yapılıyor.`;
@@ -551,7 +577,12 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const phase = data?.phase ?? "waiting";
+  const serverPhase = data?.phase ?? "waiting";
+  const dealerTotal = data?.dealer?.length ?? 0;
+  const dealerShown = useDealerReveal(dealerTotal, data?.roundId);
+  const dealerRevealing = serverPhase === "result" && dealerShown < dealerTotal;
+  // Outcomes wait until the dealer has actually drawn every card on screen.
+  const phase = dealerRevealing ? "reveal" : serverPhase;
   const seats = data?.seats ?? Array.from({ length: 6 }, () => null);
   const me = seats.find((s) => s?.mine) ?? null;
   const seated = seats.filter(Boolean).length;
@@ -603,8 +634,8 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
   // One soft "fwip" per card that lands on the felt, spaced like a real deal.
   const cardCount =
-    (data?.dealer?.length ?? 0) +
-    (data?.dealerHidden ? 1 : 0) +
+    dealerShown +
+    (data?.dealerHidden || dealerRevealing ? 1 : 0) +
     seats.reduce((n, s) => n + (s?.hands ?? []).reduce((m, h) => m + h.cards.length, 0), 0);
   const lastCount = useRef<{ round: unknown; n: number } | null>(null);
   useEffect(() => {
@@ -619,9 +650,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   }, [cardCount, data?.roundId]);
 
   useEffect(() => {
-    if (typeof data?.balance === "number" && data.phase === "result")
+    if (typeof data?.balance === "number" && phase === "result")
       setBalance(data.balance);
-  }, [data?.balance, data?.phase, setBalance]);
+  }, [data?.balance, phase, setBalance]);
 
   async function dealNow() {
     if (busy) return;
@@ -762,13 +793,15 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           ? `Sigorta · ${secondsLeft} sn`
           : phase === "play"
           ? `Oyun · ${secondsLeft} sn`
-          : "Sonuç";
+          : phase === "reveal"
+            ? "Krupiye"
+            : "Sonuç";
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
       <LandscapeFit label="Canlı Blackjack">
       <section
-        className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3 [&_.card-deal]:[animation-duration:680ms]"
+        className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3 [&_.card-deal]:[animation-duration:680ms] [&_.card-deal]:[animation-name:bj-from-shoe]"
         aria-label="Canlı blackjack masası"
       >
         <div data-ls-main className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
@@ -838,24 +871,33 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                     priority
                   />
                 </div>
-                <div className="flex min-h-16 justify-center -space-x-3 sm:min-h-20 sm:-space-x-2">
-                  {dealer.map((c, i) => (
+                <div
+                  className="flex min-h-16 justify-center -space-x-3 sm:min-h-20 sm:-space-x-2"
+                  style={{ "--shoe-x": "190px", "--shoe-y": "10px" } as React.CSSProperties}
+                >
+                  {dealer.slice(0, dealerShown).map((c, i) => (
                     <PlayingCard
                       key={`d-${i}-${c.r}-${c.s}`}
                       card={c}
                       index={i}
-                      delayMs={dealDelay(i, DEAL_GAP_MS)}
+                      delayMs={serverPhase === "result" && i > 0 ? 0 : dealDelay(i, DEAL_GAP_MS)}
                       medium
                     />
                   ))}
-                  {dealerHidden && <PlayingCard hidden medium delayMs={dealDelay(1, DEAL_GAP_MS)} />}
+                  {(dealerHidden || (dealerRevealing && dealerShown === 1)) && (
+                    <PlayingCard key="d-hole" hidden medium delayMs={dealDelay(1, DEAL_GAP_MS)} />
+                  )}
                 </div>
-                {dealer.length > 0 && (
+                {dealerShown > 0 && (
                   <DealerTotal
-                    cards={dealer}
-                    value={data.dealerValue}
-                    hidden={dealerHidden}
-                    blackjack={data.dealerBlackjack}
+                    cards={dealer.slice(0, dealerShown)}
+                    value={
+                      dealerRevealing
+                        ? handValue(dealer.slice(0, dealerShown) as Parameters<typeof handValue>[0])
+                        : data.dealerValue
+                    }
+                    hidden={dealerHidden || (dealerRevealing && dealerShown === 1)}
+                    blackjack={!dealerRevealing && data.dealerBlackjack}
                   />
                 )}
               </div>
@@ -905,7 +947,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
               <div className={cn("flex flex-col items-center gap-2", MOBILE_BAR)}>
                 <p className="text-center text-sm font-semibold text-foreground">
                   {me.natural
-                    ? `Blackjack'in var! Eşit para al��rsan krupiye ne açarsa açsın ${formatAC(me.baseBet)} kazanırsın.`
+                    ? `Blackjack'in var! Eşit para alırsan krupiye ne açarsa açsın ${formatAC(me.baseBet)} kazanırsın.`
                     : `Krupiyenin açık kartı As. Sigorta ${formatAC(Math.floor(me.baseBet / 2))}, krupiye blackjack yaparsa 2:1 öder.`}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">

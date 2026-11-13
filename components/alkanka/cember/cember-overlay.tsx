@@ -440,7 +440,7 @@ export function CemberStage({
                     {isSv && winningTeam >= 0
                       ? iSurvived
                         ? 'Takımın kazandı kanka!'
-                        : `${['Altın', 'Mavi', 'Yakut', 'Zümrüt', 'Gümüş'][winningTeam] ?? 'Altın'} Takım kazand��`
+                        : `${['Altın', 'Mavi', 'Yakut', 'Zümrüt', 'Gümüş'][winningTeam] ?? 'Altın'} Takım kazandı`
                       : isSv
                         ? iSurvived
                           ? 'Ayakta kaldın kanka!'
@@ -519,7 +519,7 @@ export function CemberStage({
 
         {phase === 'result' && round && <PredictOutcome picks={picks} podium={round.podium ?? []} kp={round.predictKp ?? 0} />}
 
-        {phase === 'play' && !round && <p className="py-16 text-sm text-muted-foreground">��ember hazırlanıyor...</p>}
+        {phase === 'play' && !round && <p className="py-16 text-sm text-muted-foreground">Çember hazırlanıyor...</p>}
 
         {!compact && phase !== 'empty' && (
           <p className="text-center text-xs text-muted-foreground text-pretty">

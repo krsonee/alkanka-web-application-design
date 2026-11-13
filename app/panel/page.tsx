@@ -248,7 +248,7 @@ async function telegramPanel() {
         {
           id: 'tvbets',
           group: 'Otomasyonlar',
-          label: 'KankaTV Canl�� Etkinlik',
+          label: 'KankaTV Canlı Etkinlik',
           status: light(betsConfig.enabled && !betsStatus.lastError),
           issue: firstIssue([Boolean(betsStatus.lastError), lastErr(betsStatus.lastError)], [!betsConfig.enabled, 'Kapalı']),
           content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,

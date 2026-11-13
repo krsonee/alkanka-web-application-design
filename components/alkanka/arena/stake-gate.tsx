@@ -377,7 +377,7 @@ export function StakeGate({
                 {pvpMode
                   ? `%${settings.commission} kesinti`
                   : botMultiplier !== settings.multiplier
-                    ? `${botMultiplier.toLocaleString('tr-TR')}x · %${settings.commission} kesinti dü��üldü`
+                    ? `${botMultiplier.toLocaleString('tr-TR')}x · %${settings.commission} kesinti düşüldü`
                     : `${settings.multiplier}x`}
               </span>
             </span>

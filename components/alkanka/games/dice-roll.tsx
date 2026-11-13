@@ -108,7 +108,7 @@ export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
         {result && result.points > 0 && <WinFlash label={`+${result.points} KC`} big={!!isDouble} />}
       </div>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="relative z-10 mb-6 flex items-center justify-between gap-3">
         <p aria-live="polite" className="min-w-0 text-sm">
           {result ? (
             <span className="animate-pop font-semibold text-gold">{result.label}</span>
