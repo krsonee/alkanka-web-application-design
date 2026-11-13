@@ -647,7 +647,7 @@
   transform: translateY(-3px);
 }
 @utility card-deal {
-  animation: card-deal 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: card-deal 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @utility pop-in {
   animation: pop 500ms cubic-bezier(0.2, 1.4, 0.4, 1) both;

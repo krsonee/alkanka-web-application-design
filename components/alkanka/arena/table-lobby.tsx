@@ -1273,6 +1273,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
             ) : (
               <LandscapeFit
                 force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'}
+                menuRight={data.game === 'pisti'}
                 menu={
                   <>
                     {mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (

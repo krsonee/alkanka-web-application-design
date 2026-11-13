@@ -768,7 +768,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
       <LandscapeFit label="Canlı Blackjack">
       <section
-        className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3"
+        className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3 [&_.card-deal]:[animation-duration:680ms]"
         aria-label="Canlı blackjack masası"
       >
         <div data-ls-main className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
