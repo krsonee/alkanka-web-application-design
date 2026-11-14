@@ -340,7 +340,7 @@ export function Tasks({
           <ul role="tabpanel" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {visibleTasks.map((task) => {
               const state = statusOf(task, claims[task.id], Boolean(done[task.id]))
-              const label = state === 'done' ? 'Tamamlandı' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? 'Ödülü al' : 'G��revi yap'
+              const label = state === 'done' ? 'Tamamlandı' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? 'Ödülü al' : 'Görevi yap'
               const locked = state !== 'open' || pending
               const className = 'flex h-9 shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100'
               const chainLocked = task.chainState === 'locked'

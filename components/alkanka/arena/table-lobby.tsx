@@ -1192,7 +1192,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       immersive={immersive}
       playing={data.status === 'oynaniyor'}
       onLeave={() => onLeave(ended)}
-      title={`${meta?.title ?? data.game} �� ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
+      title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
     >
       <div className={cn('flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm', immersive && 'max-lg:flex-nowrap max-lg:px-2 max-lg:py-2')}>
         <span className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground', immersive && 'max-lg:hidden')}>
