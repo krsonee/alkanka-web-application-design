@@ -131,6 +131,16 @@ async function toVideoFrame(image: Buffer, format: string, hd: boolean) {
   return { frame, width, height, art }
 }
 
+/** Reads the frame size from ffmpeg's stream report; it exits non-zero when given no output file. */
+async function videoSize(ffmpeg: string, file: string) {
+  const report = await run(ffmpeg, ['-hide_banner', '-i', file]).then(
+    (r) => r.stderr,
+    (error: { stderr?: string }) => String(error.stderr ?? ''),
+  )
+  const match = /Video:.*?\b(\d{3,5})x(\d{3,5})\b/.exec(report)
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : null
+}
+
 /** Burns a still, transparent layer over every frame, so logo and copy stay pixel-sharp while the scene moves. */
 async function burnOverlay(video: Buffer, overlay: Buffer) {
   if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
@@ -139,7 +149,11 @@ async function burnOverlay(video: Buffer, overlay: Buffer) {
     const input = path.join(dir, 'in.mp4')
     const layer = path.join(dir, 'overlay.png')
     const output = path.join(dir, 'out.mp4')
-    await Promise.all([writeFile(input, video), writeFile(layer, overlay)])
+    await writeFile(input, video)
+    // The model may return a size other than the one requested, so the layer is fitted to the real
+    // clip. (ffmpeg's scale2ref cannot do this: with a still image it emits no frames at all.)
+    const size = await videoSize(ffmpegPath, input)
+    await writeFile(layer, size ? await sharp(overlay).resize(size.width, size.height, { fit: 'fill' }).png().toBuffer() : overlay)
     await run(ffmpegPath, [
       '-y',
       '-i',
@@ -147,8 +161,7 @@ async function burnOverlay(video: Buffer, overlay: Buffer) {
       '-i',
       layer,
       '-filter_complex',
-      // scale2ref matches the layer to whatever size the model actually returned.
-      '[1:v][0:v]scale2ref[layer][base];[base][layer]overlay=format=auto[out]',
+      '[0:v][1:v]overlay=0:0:format=auto[out]',
       '-map',
       '[out]',
       '-map',
@@ -167,7 +180,10 @@ async function burnOverlay(video: Buffer, overlay: Buffer) {
       '+faststart',
       output,
     ])
-    return await readFile(output)
+    const stamped = await readFile(output)
+    // ffmpeg exits 0 even when it encoded nothing; never hand back a file that cannot play.
+    if (stamped.length < 10_000) throw new Error('Video üzerine yazı basılamadı.')
+    return stamped
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

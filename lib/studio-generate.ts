@@ -28,6 +28,8 @@ const NO_TEXT_RULE =
 // reserved areas are described as parts of the same scene that simply carry little detail.
 const FULL_BLEED_RULE =
   'The artwork must be full-bleed: one continuous scene that fills the whole canvas edge to edge. Never draw panels, boxes, bars, frames, borders, letterboxing or blank rectangles.'
+const SEAMLESS_RULE =
+  'The transition into that calmer area must be gradual and natural: no straight dividing line, no blurred band, no sudden change in sharpness or brightness.'
 const LOGO_RULE =
   'Do NOT draw any brand logo, watermark or website name. In the top-left corner show only low-detail background of the same scene (no faces, no key objects), because a logo is overlaid there later.'
 
@@ -39,8 +41,8 @@ function copyRules({ format, prompt, texts }: Input) {
     `Campaign brief (describes the picture only): ${prompt}`,
     NO_TEXT_RULE,
     format === '16:9'
-      ? 'Composition: the main subject sits on the right half. On the left half the same scene continues with low detail and soft shadow (out-of-focus background, mist, smoke) and no faces or key objects, because a headline is overlaid there later.'
-      : 'Composition, like a movie poster: the main subject sits in the upper two thirds. In the lower third the same scene continues with low detail and soft shadow (ground, mist, smoke, out-of-focus background) and no faces or key objects, because a headline is overlaid there later.',
+      ? `Composition: the main subject sits on the right half. On the left half the same scene continues with low detail and soft shadow (mist, smoke, distant background) and no faces or key objects, because a headline is overlaid there later. ${SEAMLESS_RULE}`
+      : `Composition, like a movie poster: the main subject sits in the upper two thirds. In the lower third the same scene continues with low detail and soft shadow (ground, mist, smoke) and no faces or key objects, because a headline is overlaid there later. ${SEAMLESS_RULE}`,
   ]
 }
 
