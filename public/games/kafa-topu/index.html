@@ -317,7 +317,7 @@
     <div class="note"><b>Canlı tribün</b>Taraftar dalga yapar, atak ve direkte coşar, golde ayağa kalkar. Flaşlar patlar, uzaktan davul çalar.</div>
     <div class="note"><b>Ses düzeldi</b>Tok vuruş, file, direk, düdük, uğultu yapan tribün. iPhone'da sessiz moddayken de çalar.</div>
     <div class="note"><b>Skill dengesi</b>Bar yaklaşık 2 kat yavaş dolar, kullanınca etki süresi + 2,5 sn boyunca dolmaz. Duvar 2,5 sn, Buz 1,4 sn. Botlar boşa basmaz, doğru anı bekler.</div>
-    <div class="note"><b>Efsane: Kral Jako</b>7 maskot, 4 nadirlik. Seviye 15'te açılan Kral Jako tüm statlarda 5, barı %30 hızlı dolar, şutu daha serttir.</div>
+    <div class="note"><b>Efsane: Kral Jako</b>7 maskot, 4 nadirlik. Ustalık 15'te açılan Kral Jako tüm statlarda 5, barı %30 hızlı dolar, şutu daha serttir.</div>
     <div class="note"><b>Mobil</b>Tuşlar sahanın altındaki panele taşındı, kaleleri artık kapatmıyor.</div>
   </div>
 
@@ -1752,10 +1752,10 @@ function renderMenu(){
       <div class="logo"><small>ALKANKA</small><b>KAFA TOPU</b></div>
       <div style="display:flex;gap:12px;align-items:center">
         ${EMBED ? '<button class="ghostbtn" id="mExit">Çık</button>' : ''}
-        <button class="ghostbtn" id="lvlUp">Demo: +1 seviye</button>
+        <button class="ghostbtn" id="lvlUp">Demo: +1 ustalık</button>
         <button class="ghostbtn" id="lvlReset">Sıfırla</button>
         <div class="lvl"><div class="badge">${save.level}</div>
-          <div class="xp"><span>Seviye ${save.level} · ${save.level >= MAX_LVL ? 'MAX' : `${save.xp} / ${need} XP`}</span><div class="bar"><i style="width:${pct}%"></i></div></div>
+          <div class="xp"><span>Kafa Topu ustalığı ${save.level} · ${save.level >= MAX_LVL ? 'MAX' : `${save.xp} / ${need} XP`}</span><div class="bar"><i style="width:${pct}%"></i></div></div>
         </div>
       </div>
     </div>
@@ -1775,18 +1775,18 @@ function renderMenu(){
       <div class="col">
         <h2>Maskot seç<span>${CHARS.filter(isCharOpen).length}/${CHARS.length} açık</span></h2>
         <div class="grid chars">
-          ${CHARS.map(x => `<button class="card ${isCharOpen(x)?'':'locked'} ${isLegend(x)?'legend':''}" data-char="${x.id}" aria-pressed="${x.id===c.id}" aria-label="${x.name}, ${RARITY[x.rar].label.toLowerCase()}${isCharOpen(x)?'':' kilitli, seviye '+x.lvl}" style="--rc:${RARITY[x.rar].color}">
+          ${CHARS.map(x => `<button class="card ${isCharOpen(x)?'':'locked'} ${isLegend(x)?'legend':''}" data-char="${x.id}" aria-pressed="${x.id===c.id}" aria-label="${x.name}, ${RARITY[x.rar].label.toLowerCase()}${isCharOpen(x)?'':' kilitli, ustalık '+x.lvl}" style="--rc:${RARITY[x.rar].color}">
             <img src="${x.img}" alt="" /><span class="cn">${x.name}</span><small class="rar">${RARITY[x.rar].label}</small>
-            ${isCharOpen(x) ? '' : `<span class="lock"><i data-lucide="lock"></i>Sv. ${x.lvl}</span>`}
+            ${isCharOpen(x) ? '' : `<span class="lock"><i data-lucide="lock"></i>Ust. ${x.lvl}</span>`}
           </button>`).join('')}
         </div>
       </div>
       <div class="col" style="flex:1">
-        <h2>Skill seç<span>seviye atladıkça açılır</span></h2>
+        <h2>Skill seç<span>ustalık arttıkça açılır</span></h2>
         <div class="grid skills">
-          ${SKILLS.map(s => `<button class="card ${isSkillOpen(s)?'':'locked'}" data-skill="${s.id}" aria-pressed="${s.id===sk.id}" aria-label="${s.name}${isSkillOpen(s)?'':' kilitli, seviye '+s.lvl}">
+          ${SKILLS.map(s => `<button class="card ${isSkillOpen(s)?'':'locked'}" data-skill="${s.id}" aria-pressed="${s.id===sk.id}" aria-label="${s.name}${isSkillOpen(s)?'':' kilitli, ustalık '+s.lvl}">
             <span class="ic" style="background:${s.color}"><i data-lucide="${s.icon}"></i></span>${s.name}
-            ${isSkillOpen(s) ? '<small>açık</small>' : `<span class="lock"><i data-lucide="lock"></i>Sv. ${s.lvl}</span>`}
+            ${isSkillOpen(s) ? '<small>açık</small>' : `<span class="lock"><i data-lucide="lock"></i>Ust. ${s.lvl}</span>`}
           </button>`).join('')}
         </div>
         <div class="skdesc"><b>${sk.name}</b>${sk.desc} Bar dolunca ${mode === 'mobile' ? 'skill tuşuna' : '<kbd style="font:700 13px Geist;background:#33302a;padding:2px 7px;border-radius:6px">E</kbd> tuşuna'} bas.</div>
@@ -1801,16 +1801,16 @@ function renderMenu(){
   icons();
   $('menu').querySelectorAll('[data-char]').forEach(b => b.onclick = () => {
     const x = charOf(b.dataset.char);
-    if (!isCharOpen(x)) return toast(`${x.name} seviye ${x.lvl}'de açılır`);
+    if (!isCharOpen(x)) return toast(`${x.name} ustalık ${x.lvl} olunca açılır`);
     save.char = x.id; persist(); renderMenu();
   });
   $('menu').querySelectorAll('[data-skill]').forEach(b => b.onclick = () => {
     const s = skillOf(b.dataset.skill);
-    if (!isSkillOpen(s)) return toast(`${s.name} seviye ${s.lvl}'de açılır`);
+    if (!isSkillOpen(s)) return toast(`${s.name} ustalık ${s.lvl} olunca açılır`);
     save.skill = s.id; persist(); renderMenu();
   });
   $('menu').querySelectorAll('[data-bot]').forEach(b => b.onclick = () => { save.bot = b.dataset.bot; persist(); renderMenu(); });
-  $('lvlUp').onclick = () => { if (save.level < MAX_LVL) { const u = levelUnlocks(save.level, save.level + 1); save.level++; save.xp = 0; persist(); renderMenu(); toast(u.length ? `Açıldı: ${u.map(x => x.name).join(', ')}` : `Seviye ${save.level}`); } };
+  $('lvlUp').onclick = () => { if (save.level < MAX_LVL) { const u = levelUnlocks(save.level, save.level + 1); save.level++; save.xp = 0; persist(); renderMenu(); toast(u.length ? `Açıldı: ${u.map(x => x.name).join(', ')}` : `Ustalık ${save.level}`); } };
   $('lvlReset').onclick = () => { save.level = 1; save.xp = 0; save.char = 'jako'; save.skill = 'fire'; persist(); renderMenu(); };
   $('playBtn').onclick = startMatch;
   if ($('mExit')) $('mExit').onclick = () => post('exit');
@@ -1841,7 +1841,7 @@ function finishMatch(){
       ${stakeRow(res)}
       <div class="row"><span>Maç sonucu</span><b>+${base} XP</b></div>
       <div class="row"><span>Goller (${a} × 10)</span><b>+${goalsXp} XP</b></div>
-      <div class="row"><span>Seviye ${save.level}${save.level > from ? ' · SEVİYE ATLADIN!' : ''}</span><span>${save.level >= MAX_LVL ? 'MAX' : `${save.xp} / ${need}`}</span></div>
+      <div class="row"><span>Ustalık ${save.level}${save.level > from ? ' · USTALIK ARTTI!' : ''}</span><span>${save.level >= MAX_LVL ? 'MAX' : `${save.xp} / ${need}`}</span></div>
       <div class="bar"><i id="rbar" style="width:0%"></i></div>
     </div>
     ${unl.length ? `<div class="unlocks">${unl.map((x, i) => `<div class="unl" style="animation-delay:${.4 + i*.15}s">${x.img ? `<img src="${x.img}" alt="" />` : `<span class="ic" style="background:${x.color}"><i data-lucide="${x.icon}"></i></span>`}<div><small>${x.img ? (isLegend(x) ? 'EFSANE MASKOT' : 'YENİ MASKOT') : 'YENİ SKILL'}</small>${x.name}</div></div>`).join('')}</div>` : ''}

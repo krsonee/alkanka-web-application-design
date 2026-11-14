@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { ARENA_META, isBotTableGame, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { StakeGate, type GameApi } from './stake-gate'
 import { Tavla } from './tavla'
+import { Okey } from './okey'
 import { BilardoPool } from './bilardo-pool'
 import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
@@ -83,6 +84,7 @@ export const RULES: Record<ArenaGame, string[]> = {
 
 function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; settings: ArenaGameSettings }) {
   if (game === 'tavla') return <Tavla {...api} />
+  if (game === 'okey') return <Okey {...api} />
   if (game === 'bilardo') return <BilardoPool bet={api.bet} win={Math.round(api.bet * settings.multiplier)} finish={api.finish} />
   const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
   return (
@@ -105,7 +107,8 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   const meta = ARENA_META[game]
   const pvp = meta.modes.includes('pvp') && settings.pvpEnabled
   // Games with server bots play "bota karşı" at a table; the rest run their bot in the browser.
-  const botPlay = isBotTableGame(game) ? 'table' : meta.modes.includes('bot') ? 'session' : null
+  // Okey is the exception: its bot game keeps its own themed table, and server bots only fill player tables.
+  const botPlay = isBotTableGame(game) && game !== 'okey' ? 'table' : meta.modes.includes('bot') ? 'session' : null
   const hasTables = pvp || botPlay === 'table'
   const [entered, setEntered] = useState<{ bet: number } | null>(null)
   const [invitedTable, setInvitedTable] = useState<string | null>(null)

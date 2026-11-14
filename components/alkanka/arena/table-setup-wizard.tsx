@@ -8,7 +8,7 @@ import { BATAK_RULE_OPTIONS, BATAK_VARIANTS, type BatakVariant } from '@/lib/gam
 import { DEFAULT_PISTI_RULES, PISTI_RULE_OPTIONS, PISTI_TARGETS, pistiRulesToList } from '@/lib/games/pisti'
 import { PAPAZ_RULE_OPTIONS } from '@/lib/games/papaz'
 import { MONO_RULE_OPTIONS } from '@/lib/games/monopoly'
-import { tablePot } from '@/lib/arena'
+import { BOT_DAILY_PROFIT_CAP, isFullPotGame, tablePot } from '@/lib/arena'
 import { arenaThemeGame } from '@/lib/table-themes'
 import { TableThemeField } from './table-theme'
 
@@ -458,7 +458,7 @@ export function TableSetupWizard({
             </div>
           </dl>
           <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
-            {`Pot ${fmt(split.pot)} KC${split.botStake ? ' (botlar birlikte tek bahis koyar)' : ''}, %${split.cut} kesinti düşülür.`}
+            {`Pot ${fmt(split.pot)} KC${split.botStake ? (isFullPotGame(game) ? ' (her bot kendi bahsini koyar)' : ' (botlar birlikte tek bahis koyar)') : ''}, %${split.cut} kesinti düşülür.${split.botStake && isFullPotGame(game) ? ` Botlu masalarda günde en çok ${fmt(BOT_DAILY_PROFIT_CAP)} KC kâr edilir.` : ''}`}
           </p>
           {rule && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{rule}</p>}
           {gameNotes(game, picks).map((note) => (
