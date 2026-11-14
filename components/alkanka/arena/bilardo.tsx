@@ -64,11 +64,15 @@ const CUSHION = 12
 
 /** Pockets are round holes: large ones sunk into the corners, smaller ones set into the middle of the long rails. */
 const isSidePocket = (i: number) => i === 1 || i === 4
+const SIDE_HOLE = 25
 
-/** Drawn hole per pocket. Side holes sit right on the cushion line so they don't bulge out into the wooden rail. */
+/**
+ * Drawn hole per pocket. Like the corner holes, a side hole is sunk into the wooden rail: it spans the rail
+ * from its outer edge to the cushion nose, so nothing bulges past the cushions onto the playing surface.
+ */
 function pocketGeom(i: number): [number, number, number] {
   const [px, py] = POCKETS[i]
-  if (isSidePocket(i)) return [px, py < 0 ? -2 : H + 2, 25]
+  if (isSidePocket(i)) return [px, py < 0 ? CUSHION - SIDE_HOLE : H - CUSHION + SIDE_HOLE, SIDE_HOLE]
   return [px, py, POCKET_HOLE[i]]
 }
 
@@ -84,7 +88,7 @@ function paintPocket(ctx: CanvasRenderingContext2D, i: number, gold: string) {
   ctx.save()
   ctx.fillStyle = 'rgba(0,0,0,0.45)'
   ctx.beginPath()
-  ctx.arc(px, py, pr + (isSidePocket(i) ? 2 : 5), 0, Math.PI * 2)
+  ctx.arc(px, py, pr + 5, 0, Math.PI * 2)
   ctx.fill()
   clipPocket(ctx, i)
   const pg = ctx.createRadialGradient(px, py, pr * 0.15, px, py, pr)
@@ -975,13 +979,14 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       const mustCall = aiming && mustCallNow()
       if (mustCall || g.call !== null) {
         const pulse = 0.5 + 0.5 * Math.sin(now / 220)
-        POCKETS.forEach(([px, py], i) => {
+        POCKETS.forEach((_, i) => {
           if (g.call !== null && g.call !== i) return
+          const [px, py, pr] = pocketGeom(i)
           ctx.strokeStyle = gold
           ctx.globalAlpha = g.call === i ? 0.95 : 0.25 + pulse * 0.35
           ctx.lineWidth = g.call === i ? 4 : 2.5
           ctx.beginPath()
-          ctx.arc(px, py, POCKET_HOLE[i] + 6 + (g.call === i ? 0 : pulse * 3), 0, Math.PI * 2)
+          ctx.arc(px, py, pr + 6 + (g.call === i ? 0 : pulse * 3), 0, Math.PI * 2)
           ctx.stroke()
         })
         ctx.globalAlpha = 1
@@ -1071,7 +1076,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       drops.current = drops.current.filter((d) => now - d.t0 < DROP_MS)
       for (const d of drops.current) {
         const t = (now - d.t0) / DROP_MS
-        const [px, py] = POCKETS[d.p]
+        const [px, py] = pocketGeom(d.p)
         // Slides to the pocket centre first, then sinks: shrinks and darkens as it falls.
         const slide = Math.min(1, t / 0.45)
         const ease = 1 - (1 - slide) * (1 - slide)

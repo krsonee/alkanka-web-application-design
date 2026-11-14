@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 import { formatAC, usePoints } from "../points-context";
 import { VoiceChat } from "./voice-chat";
 import { useIdle } from "../use-idle";
-import { PlayingCard } from "./blackjack";
+import { DeckOrigin, HoleCard, PlayingCard } from "./blackjack";
 import {
   SideBetPicker,
   SideBetTags,
@@ -47,62 +47,124 @@ import { MobileTableChat } from "./mobile-table-chat";
 import { TableBrand } from './table-brand'
 import { LandscapeFit } from './landscape-fit'
 import { ChipPot } from './chip-pot'
-import { handValue } from "@/lib/casino";
+import {
+  BJ_CARD_FLIGHT_MS,
+  BJ_DEALER_STEP_MS,
+  BJ_HOLE_PAUSE_MS,
+  BJ_SETTLE_MS,
+  bjDealDelay,
+  bjDealStep,
+  bjOpeningMs,
+  handValue,
+} from "@/lib/casino";
 
-const DEAL_GAP_MS = 520;
-const CARD_LAND_MS = 560;
-
-/** Initial deal: each fresh card waits for the one before it. Hits land straight away. */
-function dealDelay(index: number, offset = 0) {
-  return index < 2 ? offset + index * DEAL_GAP_MS * 2 : 0;
-}
-
-/** How many cards of a hand have actually landed, so the total climbs card by card (3 → 9) instead of jumping. */
-function useLandedCount(count: number) {
+/** Follows a rising card count once the new card has had time to land, so a total never changes while the card is still in the air. */
+function useLanded(count: number) {
   const [landed, setLanded] = useState(count);
   useEffect(() => {
-    if (count < landed) {
-      setLanded(count);
-      return;
-    }
     if (count === landed) return;
-    const fresh = landed < 2;
-    const t = setTimeout(
-      () => setLanded((n) => Math.min(count, n + 1)),
-      fresh && landed > 0 ? DEAL_GAP_MS * 2 : CARD_LAND_MS,
-    );
+    const t = setTimeout(() => setLanded(count), count < landed ? 0 : BJ_CARD_FLIGHT_MS);
     return () => clearTimeout(t);
   }, [count, landed]);
   return Math.min(landed, count);
 }
 
-const DEALER_STEP_MS = 800;
-
-/**
- * Dealer cards that have been revealed so far. When the server jumps straight to the result with the
- * hole card and every dealer hit, this lets them land one by one before any outcome is shown.
- */
-function useDealerReveal(count: number, round: unknown) {
-  const [state, setState] = useState({ round, n: count });
-  const n = state.round !== round ? Math.min(count, 1) : state.n;
+/** Opening cards of one hand that have landed (0, 1 or 2). `null` delays mean the hand was already on the table. */
+function useOpeningLanded(first: number | null, second: number | null) {
+  const [n, setN] = useState(first === null || second === null ? 2 : 0);
   useEffect(() => {
-    if (state.round !== round) {
-      setState({ round, n: Math.min(count, 1) });
-      return;
-    }
-    if (count < state.n) {
-      setState({ round, n: count });
-      return;
-    }
-    if (count === state.n) return;
-    const t = setTimeout(() => setState((s) => ({ round, n: Math.min(count, s.n + 1) })), DEALER_STEP_MS);
-    return () => clearTimeout(t);
-  }, [count, round, state]);
-  return Math.min(n, count);
+    if (first === null || second === null) return;
+    const timers = [first, second].map((delay, i) =>
+      setTimeout(() => setN((v) => Math.max(v, i + 1)), delay + BJ_CARD_FLIGHT_MS),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [first, second]);
+  return n;
 }
 
-function HandTotal({ cards, value, doubled }: { cards: { r: number; s: number }[]; value: number; doubled?: boolean }) {
-  const landed = useLandedCount(cards.length);
+type DealTimeline = {
+  round: number | undefined;
+  /** This client watched the cards come out, so the opening deal is animated card by card. */
+  staged: boolean;
+  /** The opening deal has landed. */
+  opened: boolean;
+  /** Dealer cards on the felt that are face up. */
+  shown: number;
+  /** The dealer has finished drawing; outcomes may be shown. */
+  done: boolean;
+};
+
+/**
+ * One clock for the whole table. The server answers with the finished hand in a single step, so the table
+ * plays it out itself: opening deal, hole card, one dealer card at a time, and only then the outcome.
+ */
+function useDealTimeline(round: number | undefined, cardsOut: boolean, result: boolean, dealerTotal: number, players: number) {
+  const fresh = (): DealTimeline => ({
+    round,
+    staged: !cardsOut,
+    opened: cardsOut,
+    shown: result ? dealerTotal : Math.min(dealerTotal, 1),
+    done: result,
+  });
+  const [state, setState] = useState(fresh);
+  let t = state;
+  if (state.round !== round) {
+    t = fresh();
+    setState(t);
+  }
+  const { opened, shown, done } = t;
+
+  useEffect(() => {
+    if (!cardsOut || opened) return;
+    const id = setTimeout(
+      () => setState((s) => (s.round === round ? { ...s, opened: true } : s)),
+      bjOpeningMs(players),
+    );
+    return () => clearTimeout(id);
+  }, [cardsOut, opened, players, round]);
+
+  useEffect(() => {
+    if (!result || !opened || done) return;
+    const drawing = shown < dealerTotal;
+    const wait = !drawing
+      ? BJ_CARD_FLIGHT_MS + BJ_SETTLE_MS
+      : shown < 2
+        ? BJ_HOLE_PAUSE_MS
+        : BJ_DEALER_STEP_MS;
+    const id = setTimeout(
+      () =>
+        setState((s) =>
+          s.round !== round ? s : drawing ? { ...s, shown: s.shown + 1 } : { ...s, done: true },
+        ),
+      wait,
+    );
+    return () => clearTimeout(id);
+  }, [result, opened, done, shown, dealerTotal, round]);
+
+  return {
+    staged: t.staged,
+    opened,
+    shown: result ? Math.min(shown, dealerTotal) : Math.min(dealerTotal, 1),
+    done: result && done,
+  };
+}
+
+function HandTotal({
+  cards,
+  value,
+  doubled,
+  firstMs,
+  secondMs,
+}: {
+  cards: { r: number; s: number }[];
+  value: number;
+  doubled?: boolean;
+  firstMs: number | null;
+  secondMs: number | null;
+}) {
+  const opening = useOpeningLanded(firstMs, secondMs);
+  const hits = useLanded(cards.length);
+  const landed = opening < 2 ? Math.min(opening, cards.length) : hits;
   const settled = landed >= cards.length;
   const shownValue = settled ? value : handValue(cards.slice(0, landed) as Parameters<typeof handValue>[0]);
   if (landed === 0) return null;
@@ -120,24 +182,28 @@ function HandTotal({ cards, value, doubled }: { cards: { r: number; s: number }[
   );
 }
 
+/** Counts only the dealer's face-up cards that have landed, so the total moves with the cards and never ahead of them. */
 function DealerTotal({
   cards,
-  value,
   hidden,
   blackjack,
 }: {
   cards: { r: number; s: number }[];
-  value: number;
   hidden: boolean;
   blackjack?: boolean;
 }) {
-  const landed = useLandedCount(cards.length);
+  const landed = useLanded(cards.length);
   if (landed === 0) return null;
   const settled = landed >= cards.length;
-  const shownValue = settled ? value : handValue(cards.slice(0, landed) as Parameters<typeof handValue>[0]);
+  const value = handValue(cards.slice(0, landed) as Parameters<typeof handValue>[0]);
   return (
-    <span className="rounded-full bg-background/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground">
-      {settled && blackjack ? "Krupiye Blackjack" : `Krupiye ${shownValue}${hidden ? " · 1 kapalı" : ""}`}
+    <span
+      aria-live="polite"
+      className="rounded-full bg-background/85 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground"
+    >
+      {settled && blackjack
+        ? "Krupiye Blackjack"
+        : `Krupiye ${value}${settled && !hidden && value > 21 ? " · battı" : ""}${hidden ? " · 1 kapalı" : ""}`}
     </span>
   );
 }
@@ -274,7 +340,9 @@ function dealerLine(
   secondsLeft: number,
   dealerValue: number,
   dealerBlackjack = false,
+  opened = true,
 ) {
+  if (!opened && phase !== "waiting" && phase !== "bet") return "Kartları desteden dağıtıyorum...";
   if (phase === "insurance")
     return `Açık kartım As. Sigorta ister misin? ${secondsLeft} saniye, sonra kapalı karta bakıyorum.`;
   if (phase === "result" && dealerBlackjack)
@@ -331,11 +399,17 @@ function SeatPod({
   selectable = false,
   selected = false,
   onSelect,
+  revealed,
+  deal,
 }: {
   index: number;
   anchor: number;
   seat: Seat | null;
   phase: string;
+  /** Outcomes stay hidden until the dealer has finished drawing on screen. */
+  revealed: boolean;
+  /** Delays of this seat's two opening cards; null when the hand was already on the table. */
+  deal: [number, number] | null;
   selectable?: boolean;
   selected?: boolean;
   onSelect?: (seat: number) => void;
@@ -424,10 +498,11 @@ function SeatPod({
     );
   }
 
-  const net = seatNet(seat);
+  const net = revealed ? seatNet(seat) : null;
   const win = net !== null && net > 0;
   const lose = net !== null && net < 0;
   const acting = phase === "play" && !seat.done;
+  const opening = seat.split ? null : deal;
   return (
     <div
       style={style}
@@ -474,12 +549,19 @@ function SeatPod({
                 key={`${i}-${c.r}-${c.s}`}
                 card={c}
                 index={i}
-                delayMs={dealDelay(i)}
+                anim="bj-shoe-deal"
+                delayMs={opening && i < 2 ? opening[i] : 0}
                 small={!seat.mine || seat.split}
                 medium={seat.mine && !seat.split}
               />
             ))}
-            <HandTotal cards={h.cards} value={h.value} doubled={h.doubled} />
+            <HandTotal
+              cards={h.cards}
+              value={h.value}
+              doubled={h.doubled}
+              firstMs={opening ? opening[0] : null}
+              secondMs={opening ? opening[1] : null}
+            />
           </div>
         ))}
       </div>
@@ -520,7 +602,7 @@ function SeatPod({
           Sigortalı {formatAC(seat.insurance)}
         </span>
       )}
-      {seat.breakdown ? (
+      {revealed && seat.breakdown ? (
         <span
           className={cn(
             "pop-in whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-black uppercase tabular-nums shadow",
@@ -579,18 +661,23 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
   const serverPhase = data?.phase ?? "waiting";
   const dealerTotal = data?.dealer?.length ?? 0;
-  const dealerShown = useDealerReveal(dealerTotal, data?.roundId);
-  const dealerRevealing = serverPhase === "result" && dealerShown < dealerTotal;
-  // Outcomes wait until the dealer has actually drawn every card on screen.
-  const phase = dealerRevealing ? "reveal" : serverPhase;
   const seats = data?.seats ?? Array.from({ length: 6 }, () => null);
   const me = seats.find((s) => s?.mine) ?? null;
   const seated = seats.filter(Boolean).length;
+  const cardsOut = dealerTotal > 0;
+  const timeline = useDealTimeline(data?.roundId, cardsOut, serverPhase === "result", dealerTotal, seated);
+  const { opened, staged } = timeline;
+  const dealerShown = timeline.shown;
+  const holeDown = cardsOut && dealerShown < 2;
+  // Outcomes wait until the dealer has actually drawn every card on screen.
+  const revealed = timeline.done;
+  const phase = serverPhase === "result" && !revealed ? "reveal" : serverPhase;
+  const deckRef = useRef<HTMLDivElement>(null);
   const msLeft =
     data?.phaseEndsAt && now ? Math.max(0, data.phaseEndsAt - now) : 0;
   const secondsLeft = Math.ceil(msLeft / 1000);
   const progress = data?.phaseTotal ? Math.min(1, msLeft / data.phaseTotal) : 0;
-  const myTurn = phase === "play" && me && !me.done;
+  const myTurn = phase === "play" && opened && me && !me.done;
   const [pickedSeat, setPickedSeat] = useState<number | null>(null);
   const canPick = !me && (phase === "waiting" || phase === "bet");
   const chosenSeat =
@@ -634,20 +721,23 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
 
   // One soft "fwip" per card that lands on the felt, spaced like a real deal.
   const cardCount =
-    dealerShown +
-    (data?.dealerHidden || dealerRevealing ? 1 : 0) +
+    (cardsOut ? 2 : 0) +
+    Math.max(0, dealerShown - 2) +
     seats.reduce((n, s) => n + (s?.hands ?? []).reduce((m, h) => m + h.cards.length, 0), 0);
+  const dealStep = bjDealStep(seated);
   const lastCount = useRef<{ round: unknown; n: number } | null>(null);
   useEffect(() => {
     const round = data?.roundId;
     const prev = lastCount.current;
     lastCount.current = { round, n: cardCount };
     if (!prev || prev.round !== round || cardCount <= prev.n) return;
-    const timers = Array.from({ length: Math.min(cardCount - prev.n, 8) }, (_, i) =>
-      setTimeout(() => playSound("card"), i * 150),
+    const fresh = cardCount - prev.n;
+    // The opening deal ticks in step with the cards; a single hit sounds at once.
+    const timers = Array.from({ length: Math.min(fresh, 14) }, (_, i) =>
+      setTimeout(() => playSound("card"), i * (prev.n === 0 && staged ? dealStep : 150)),
     );
     return () => timers.forEach(clearTimeout);
-  }, [cardCount, data?.roundId]);
+  }, [cardCount, data?.roundId, dealStep, staged]);
 
   useEffect(() => {
     if (typeof data?.balance === "number" && phase === "result")
@@ -783,7 +873,11 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   }
 
   const dealer = data.dealer;
-  const dealerHidden = data.dealerHidden;
+  const order = new Map(seats.filter((s): s is Seat => !!s).map((s, k) => [s.seat, k]));
+  /** Opening delays for one seat, or for the dealer when `at` is the number of players. */
+  const openingOf = (at: number): [number, number] | null =>
+    staged ? [bjDealDelay(at, 0, seated), bjDealDelay(at, 1, seated)] : null;
+  const dealerDeal = openingOf(seated);
   const phaseLabel =
     phase === "waiting"
       ? "Oyuncu bekleniyor"
@@ -800,8 +894,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
       <LandscapeFit label="Canlı Blackjack">
+      <DeckOrigin.Provider value={deckRef}>
       <section
-        className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3 [&_.card-deal]:[animation-duration:680ms] [&_.card-deal]:[animation-name:bj-from-shoe]"
+        className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3"
         aria-label="Canlı blackjack masası"
       >
         <div data-ls-main className="flex flex-col gap-2 px-1 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3">
@@ -838,7 +933,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
             aria-live="polite"
             className="rounded-xl border border-primary/30 bg-background/70 px-3 py-1.5 text-center text-xs font-semibold text-foreground sm:py-2 sm:text-sm"
           >
-            {dealerLine(phase, seated, secondsLeft, data.dealerValue, data.dealerBlackjack)}
+            {dealerLine(phase, seated, secondsLeft, data.dealerValue, data.dealerBlackjack, opened)}
           </p>
 
           <div className="mx-auto w-full rounded-t-[2.5rem] rounded-b-[9rem] bg-wood p-2 shadow-[inset_0_2px_0_rgb(255_255_255/0.08),0_18px_40px_-12px_rgb(0_0_0/0.7)] sm:rounded-[999px] sm:p-3.5">
@@ -848,7 +943,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 className="pointer-events-none absolute right-[9%] top-[13%] flex flex-col items-center gap-0.5 sm:right-[14%] sm:top-[9%]"
                 aria-hidden="true"
               >
-                <div className="relative h-9 w-7 rotate-[18deg] sm:h-12 sm:w-9">
+                <div ref={deckRef} className="relative h-9 w-7 rotate-[18deg] sm:h-12 sm:w-9">
                   <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-md border border-primary/30 bg-secondary" />
                   <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded-md border border-primary/40 bg-secondary" />
                   <div className="absolute inset-0 rounded-md border-2 border-primary/70 bg-[color-mix(in_oklch,var(--wood)_70%,black)] shadow-lg" />
@@ -871,33 +966,41 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                     priority
                   />
                 </div>
-                <div
-                  className="flex min-h-16 justify-center -space-x-3 sm:min-h-20 sm:-space-x-2"
-                  style={{ "--shoe-x": "190px", "--shoe-y": "10px" } as React.CSSProperties}
-                >
-                  {dealer.slice(0, dealerShown).map((c, i) => (
+                <div className="flex min-h-16 justify-center -space-x-3 sm:min-h-20 sm:-space-x-2">
+                  {cardsOut && (
                     <PlayingCard
-                      key={`d-${i}-${c.r}-${c.s}`}
+                      key={`d-${data.roundId}-0`}
+                      card={dealer[0]}
+                      anim="bj-shoe-deal"
+                      delayMs={dealerDeal ? dealerDeal[0] : 0}
+                      medium
+                    />
+                  )}
+                  {cardsOut && (
+                    <HoleCard
+                      key={`d-${data.roundId}-1`}
+                      card={dealer[1]}
+                      hidden={holeDown}
+                      delayMs={dealerDeal ? dealerDeal[1] : 0}
+                      medium
+                    />
+                  )}
+                  {dealer.slice(2, dealerShown).map((c, i) => (
+                    <PlayingCard
+                      key={`d-${data.roundId}-${i + 2}`}
                       card={c}
-                      index={i}
-                      delayMs={serverPhase === "result" && i > 0 ? 0 : dealDelay(i, DEAL_GAP_MS)}
+                      anim="bj-shoe-deal"
+                      delayMs={0}
                       medium
                     />
                   ))}
-                  {(dealerHidden || (dealerRevealing && dealerShown === 1)) && (
-                    <PlayingCard key="d-hole" hidden medium delayMs={dealDelay(1, DEAL_GAP_MS)} />
-                  )}
                 </div>
-                {dealerShown > 0 && (
+                {cardsOut && opened && (
                   <DealerTotal
+                    key={data.roundId}
                     cards={dealer.slice(0, dealerShown)}
-                    value={
-                      dealerRevealing
-                        ? handValue(dealer.slice(0, dealerShown) as Parameters<typeof handValue>[0])
-                        : data.dealerValue
-                    }
-                    hidden={dealerHidden || (dealerRevealing && dealerShown === 1)}
-                    blackjack={!dealerRevealing && data.dealerBlackjack}
+                    hidden={holeDown}
+                    blackjack={revealed && data.dealerBlackjack}
                   />
                 )}
               </div>
@@ -923,6 +1026,8 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   anchor={me ? me.seat - 1 : 0}
                   seat={s}
                   phase={phase}
+                  revealed={revealed}
+                  deal={s ? openingOf(order.get(s.seat) ?? 0) : null}
                   selectable={canPick}
                   selected={chosenSeat === i + 1}
                   onSelect={pickSeat}
@@ -942,7 +1047,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           {phase === "result" && (
             <ResultBanner key={data.roundId} seats={seats} />
           )}
-          {phase === "insurance" && me ? (
+          {me && !opened && (phase === "insurance" || phase === "play") ? (
+            <p className="text-center text-sm text-muted-foreground">Kartlar desteden dağıtılıyor...</p>
+          ) : phase === "insurance" && me ? (
             me.can.insure ? (
               <div className={cn("flex flex-col items-center gap-2", MOBILE_BAR)}>
                 <p className="text-center text-sm font-semibold text-foreground">
@@ -1153,6 +1260,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
           </p>
         </div>
       </section>
+      </DeckOrigin.Provider>
       </LandscapeFit>
 
       <aside className="flex h-fit flex-col gap-4" aria-label="Masa bilgileri">

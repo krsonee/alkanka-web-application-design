@@ -25,7 +25,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   const seat = spectator ? 0 : remote.seat
   const okey = useMemo(() => okeyFrom(s.indicator), [s.indicator])
   const hand = spectator ? [] : (s.hands[seat] ?? [])
-  const rack = useRack(hand, okey)
+  const rack = useRack(hand, okey, 2, `${s.hand ?? 1}:${s.indicator.id}`)
   const selected = rack.selected
   const [sortMode, setSortMode] = useState<'seri' | 'cift'>('seri')
   const [knownIds, setKnownIds] = useState<string>(() => hand.map((t) => t.id).join(','))

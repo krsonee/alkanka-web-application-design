@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import Image from 'next/image'
 import { Flag, Hand, Layers, Plus, RotateCcw, ShieldCheck, Split } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -12,14 +12,58 @@ import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
 import { ChipPot } from './chip-pot'
 
-export function PlayingCard({ card, hidden, index = 0, small, medium, delayMs }: { card?: Card; hidden?: boolean; index?: number; small?: boolean; medium?: boolean; delayMs?: number }) {
+/** The deck that cards on this table are dealt from. Each card measures its own distance to it, so it leaves the deck wherever it lands. */
+export const DeckOrigin = createContext<RefObject<HTMLElement | null> | null>(null)
+
+function useDealFromDeck() {
+  const deck = useContext(DeckOrigin)
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    const origin = deck?.current
+    if (!el || !origin) return
+    // The deal animation has already moved the card; measure where it will rest instead.
+    el.style.animationName = 'none'
+    const rest = el.getBoundingClientRect()
+    el.style.animationName = ''
+    const from = origin.getBoundingClientRect()
+    if (!rest.width || !from.width) return
+    // Fullscreen tables are scaled, and the offset is applied inside that scale.
+    const scale = el.offsetWidth ? rest.width / el.offsetWidth : 1
+    el.style.setProperty('--shoe-x', `${(from.left + from.width / 2 - rest.left - rest.width / 2) / scale}px`)
+    el.style.setProperty('--shoe-y', `${(from.top + from.height / 2 - rest.top - rest.height / 2) / scale}px`)
+  }, [deck])
+  return ref
+}
+
+export function PlayingCard({
+  card,
+  hidden,
+  index = 0,
+  small,
+  medium,
+  delayMs,
+  anim = 'card-deal',
+}: {
+  card?: Card
+  hidden?: boolean
+  index?: number
+  small?: boolean
+  medium?: boolean
+  delayMs?: number
+  /** Entrance animation class: `bj-shoe-deal` flies in from the table's deck, `bj-card-flip` turns the card over in place. */
+  anim?: string
+}) {
+  const ref = useDealFromDeck()
   const red = card && (card.s === 1 || card.s === 2)
   const delay = delayMs ?? index * 90
   if (small || medium) {
     return (
       <div
+        ref={ref}
         className={cn(
-          'card-deal relative flex shrink-0 flex-col items-center justify-center rounded-md border shadow-md',
+          anim,
+          'relative flex shrink-0 flex-col items-center justify-center rounded-md border shadow-md',
           medium ? 'h-16 w-12 sm:h-20 sm:w-14' : 'h-14 w-10 sm:h-16 sm:w-11',
           medium && '[&>span]:text-base [&>span>span]:text-lg',
           hidden || !card ? 'border-primary/40 bg-secondary' : 'border-border bg-[oklch(0.97_0.01_90)]',
@@ -41,7 +85,8 @@ export function PlayingCard({ card, hidden, index = 0, small, medium, delayMs }:
   }
   return (
     <div
-      className="card-deal relative flex h-24 w-16 shrink-0 flex-col justify-between rounded-lg border p-1.5 shadow-lg sm:h-32 sm:w-22"
+      ref={ref}
+      className={cn(anim, 'relative flex h-24 w-16 shrink-0 flex-col justify-between rounded-lg border p-1.5 shadow-lg sm:h-32 sm:w-22')}
       style={{ animationDelay: `${delay}ms` }}
       aria-label={hidden || !card ? 'Kapalı kart' : `${RANKS[card.r]} ${SUITS[card.s]}`}
     >
@@ -69,6 +114,34 @@ export function PlayingCard({ card, hidden, index = 0, small, medium, delayMs }:
         </>
       )}
     </div>
+  )
+}
+
+/** The dealer's second card: dealt face down from the deck, then turned over where it lies. */
+export function HoleCard({
+  card,
+  hidden,
+  delayMs,
+  small,
+  medium,
+}: {
+  card?: Card
+  hidden: boolean
+  delayMs?: number
+  small?: boolean
+  medium?: boolean
+}) {
+  const [dealtFaceDown] = useState(hidden)
+  const turned = !hidden && dealtFaceDown
+  return (
+    <PlayingCard
+      card={hidden ? undefined : card}
+      hidden={hidden}
+      anim={turned ? 'bj-card-flip' : 'bj-shoe-deal'}
+      delayMs={turned ? 0 : delayMs}
+      small={small}
+      medium={medium}
+    />
   )
 }
 
@@ -146,6 +219,7 @@ function BjTable({
   const playerCards = hand?.player.slice(0, pShown) ?? []
   const dealerCards = hand?.dealer.slice(0, dShown) ?? []
   const showHole = !!hand?.dealerHidden && dShown >= 2
+  const deckRef = useRef<HTMLDivElement>(null)
 
   const jakoLine = !hand
     ? 'Bahsini seç, kartları dağıtayım.'
@@ -166,6 +240,7 @@ function BjTable({
             : 'Tebrikler, kazancın masada!'
 
   return (
+    <DeckOrigin.Provider value={deckRef}>
     <div className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3">
       <div className="felt-table relative flex min-h-[30rem] flex-col items-center gap-4 overflow-hidden rounded-[1.25rem] rounded-b-[45%] px-4 pb-10 pt-3 sm:min-h-[34rem] sm:px-10 sm:pb-16">
         <TableBrand />
@@ -177,18 +252,21 @@ function BjTable({
           <div className="mb-2 max-w-48 rounded-2xl rounded-bl-sm border border-primary/40 bg-background/85 px-3 py-2 text-xs font-semibold text-foreground sm:text-sm" aria-live="polite">
             {jakoLine}
           </div>
-          <div className="absolute right-0 top-2 hidden h-20 w-14 rotate-6 rounded-md border border-primary/40 bg-secondary shadow-xl sm:block" aria-hidden="true">
+          <div ref={deckRef} className="absolute right-0 top-2 h-14 w-10 rotate-6 rounded-md border border-primary/40 bg-secondary shadow-xl sm:h-20 sm:w-14" aria-hidden="true">
             <div className="absolute inset-1 rounded-sm border border-primary/30 bg-background" />
-            <span className="absolute inset-x-0 bottom-1 text-center text-[9px] font-bold uppercase tracking-widest text-primary">Deste</span>
+            <span className="absolute inset-x-0 bottom-1 hidden text-center text-[9px] font-bold uppercase tracking-widest text-primary sm:block">Deste</span>
           </div>
         </div>
 
         <div className="relative flex flex-col items-center gap-2">
           <div className="flex min-h-24 justify-center -space-x-6 sm:min-h-32 sm:-space-x-8">
-            {dealerCards.map((c, i) =>
-              i === 1 && showHole ? null : <PlayingCard key={`d${dealKey}-${i}-${c.r}-${c.s}`} card={c} />,
-            )}
-            {showHole && <PlayingCard key={`hole${dealKey}`} hidden />}
+            {dealerCards.slice(0, 1).map((c) => (
+              <PlayingCard key={`d${dealKey}-0`} card={c} anim="bj-shoe-deal" />
+            ))}
+            {dShown >= 2 && <HoleCard key={`d${dealKey}-1`} card={dealerCards[1]} hidden={showHole} />}
+            {dealerCards.slice(2).map((c, i) => (
+              <PlayingCard key={`d${dealKey}-${i + 2}`} card={c} anim="bj-shoe-deal" />
+            ))}
           </div>
           {hand && dShown > 0 && (
             <ValueBadge dim value={`Krupiye ${handValue(dealerCards)}${showHole ? '+' : ''}`} />
@@ -237,12 +315,12 @@ function BjTable({
                   aria-current={current ? 'true' : undefined}
                 >
                   <div className="flex justify-center -space-x-5">
-                    {h.cards.map((c, ci) => <PlayingCard key={`h${i}-${ci}-${c.r}-${c.s}`} card={c} small />)}
+                    {h.cards.map((c, ci) => <PlayingCard key={`h${i}-${ci}-${c.r}-${c.s}`} card={c} small anim="bj-shoe-deal" />)}
                   </div>
                   <div className="flex items-center gap-1.5 text-xs font-bold">
                     <span className={cn('rounded-full px-2 py-0.5 tabular-nums', current ? 'bg-primary text-primary-foreground' : 'bg-background/70 text-foreground')}>{h.value}</span>
                     <span className="text-foreground/80">{formatAC(h.bet)}</span>
-                    {h.result && <span className="text-primary">{HAND_RESULT[h.result]}</span>}
+                    {!dealing && h.result && <span className="text-primary">{HAND_RESULT[h.result]}</span>}
                   </div>
                 </div>
               )
@@ -257,7 +335,7 @@ function BjTable({
               </span>
             )}
             <div className="flex justify-center -space-x-6 sm:-space-x-8">
-              {playerCards.map((c, i) => <PlayingCard key={`p${dealKey}-${i}-${c.r}-${c.s}`} card={c} />)}
+              {playerCards.map((c, i) => <PlayingCard key={`p${dealKey}-${i}-${c.r}-${c.s}`} card={c} anim="bj-shoe-deal" />)}
             </div>
             {!hand && <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary/70">Bahis alanı</span>}
           </div>
@@ -312,6 +390,7 @@ function BjTable({
         )}
       </div>
     </div>
+    </DeckOrigin.Provider>
   )
 }
 
