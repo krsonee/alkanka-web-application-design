@@ -4,7 +4,7 @@ import Image from 'next/image'
 import type { ReactNode } from 'react'
 import { Bot, Loader2, Play, Plus, UserPlus, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ArenaGame } from '@/lib/arena'
+import { tablePot, type ArenaGame } from '@/lib/arena'
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
@@ -69,8 +69,7 @@ export function PlayChooser({
   const hasBot = Boolean(quick)
   const active: PlayTab = hasBot ? tab : 'kanka'
   const botSeats = Number(quick?.seats ?? 4)
-  const pot = stake * botSeats
-  const prize = pot - Math.round((pot * commission) / 100)
+  const prize = Math.floor(tablePot(game, stake, commission, { humans: 1, bots: botSeats - 1 }).net)
   const openLabel = openCount == null ? 'Yükleniyor' : openCount === 0 ? 'Açık masa yok' : `${openCount} açık masa`
 
   return (

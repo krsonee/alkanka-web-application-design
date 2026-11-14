@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
-import { ARENA_META, TURN_SECONDS, botFillSeconds, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { ARENA_META, BOT_DAILY_PROFIT_CAP, TURN_SECONDS, botFillSeconds, isFullPotGame, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
 import { VoiceChat } from './voice-chat'
@@ -164,6 +164,7 @@ export function TableLobby({
   const isTavla = game === 'tavla'
   const tavlaHold = isTavla && tavlaRounds === '1' ? stake * 2 : 0
   const humanSeats = seatRule ? seatSeats - seatBots : isOkey ? seats - (seats === 4 ? bots : 0) : 2
+  const formPot = tablePot(game, stake, settings.commission, { humans: humanSeats, bots: seatRule ? seatBots : isOkey && seats === 4 ? bots : 0 })
   const tableOptions = seatRule
     ? {
         seats: seatSeats,
@@ -872,20 +873,21 @@ export function TableLobby({
             </div>
             <div className="flex flex-col gap-0.5 px-1">
               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pot</dt>
-              <dd className="text-xs font-bold tabular-nums text-foreground">{formatAC(stake * humanSeats)} KC</dd>
+              <dd className="text-xs font-bold tabular-nums text-foreground">{formatAC(formPot.pot)} KC</dd>
             </div>
             <div className="flex flex-col gap-0.5 px-1">
               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{isOkey && teamMode ? 'Takıma' : game === 'papaz' ? 'Dağıtılan' : 'Kazanan'}</dt>
               <dd className="flex items-center justify-center gap-1 text-xs font-bold tabular-nums text-primary">
                 <Coins className="size-3.5" aria-hidden="true" />
-                {formatAC(stake * humanSeats - Math.round((stake * humanSeats * settings.commission) / 100))} KC
+                {formatAC(Math.floor(formPot.net))} KC
               </dd>
             </div>
           </dl>
           <p className="-mt-1 text-[11px] leading-snug text-muted-foreground text-pretty">
             {game === 'papaz'
               ? `Pot kurtulma sırasına göre bölünür: ilk kurtulan en çok alır, eşsiz kartla kalan kaybeder. %${settings.commission} kesinti uygulanır.`
-              : `Oyuncu masasında pot kazanana gider, %${settings.commission} kesinti uygulanır.`} Masa iptal olursa bahis iade edilir.
+              : `Oyuncu masasında pot kazanana gider, %${formPot.cut} kesinti uygulanır.`} Masa iptal olursa bahis iade edilir.
+            {formPot.botStake && isFullPotGame(game) ? ` Her bot kendi bahsini koyar; botlu masalarda günde en çok ${formatAC(BOT_DAILY_PROFIT_CAP)} KC kâr edilir.` : ''}
             {seatRule && humanSeats === 1 ? ' Tek gerçek oyuncuyla oyun hemen botlara karşı başlar.' : ''}
           </p>
           <button
@@ -1190,7 +1192,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       immersive={immersive}
       playing={data.status === 'oynaniyor'}
       onLeave={() => onLeave(ended)}
-      title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
+      title={`${meta?.title ?? data.game} �� ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
     >
       <div className={cn('flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm', immersive && 'max-lg:flex-nowrap max-lg:px-2 max-lg:py-2')}>
         <span className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground', immersive && 'max-lg:hidden')}>

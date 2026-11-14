@@ -5,8 +5,8 @@ import { pool } from '@/lib/db'
 import { notifyTable } from '@/lib/pvp/table-events'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
-import { BOT_PROFIT_GAMES, CLIENT_SETTLED } from '@/lib/solo-sessions'
-import { ARENA_META, botWinMultiplier, isArenaGame, isStackedBet } from '@/lib/arena'
+import { CLIENT_SETTLED, botProfitToday } from '@/lib/solo-sessions'
+import { ARENA_META, BOT_DAILY_PROFIT_CAP, botWinMultiplier, isArenaGame, isStackedBet } from '@/lib/arena'
 import {
   bjAct,
   bjActionCost,
@@ -47,8 +47,6 @@ async function member() {
 /* ---------------- Bot tables (solo sessions) ---------------- */
 
 const MIN_WIN_SECONDS: Record<string, number> = { tavla: 60, okey: 45, bilardo: 40, 'kafa-topu': 50, 'kafa-basketbolu': 50 }
-/** Bot results are reported by the browser, so their daily net profit is capped to bound any abuse. */
-const BOT_DAILY_PROFIT_CAP = 1500
 const SCORE_GAMES = ['kafa-topu', 'kafa-basketbolu']
 const MAX_SCORE = 60
 
@@ -58,16 +56,6 @@ function scoreMatches(result: 'win' | 'draw', score?: { for: number; against: nu
   const a = Number(score.against)
   if (![f, a].every((n) => Number.isInteger(n) && n >= 0 && n <= MAX_SCORE)) return false
   return result === 'win' ? f > a : f === a
-}
-
-async function botProfitToday(userId: string) {
-  const r = await pool.query<{ net: string | null }>(
-    `SELECT sum(delta) AS net FROM game_history
-      WHERE user_id = $1 AND mode = 'bot' AND game = ANY($2::text[])
-        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`,
-    [userId, BOT_PROFIT_GAMES],
-  )
-  return Math.max(0, Number(r.rows[0]?.net ?? 0))
 }
 
 export async function startBotGame(game: string, stake: number) {

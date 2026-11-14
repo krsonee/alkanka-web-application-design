@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cancelBotGame, finishBotGame, markBotGameStarted, matchNow, playBotsNow, startBotGame } from '@/app/actions/arena'
 import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Undo2, UserPlus, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ARENA_META, botFillSeconds, botWinMultiplier, quickSeats, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { ARENA_META, BOT_DAILY_PROFIT_CAP, botFillSeconds, botWinMultiplier, isFullPotGame, quickSeats, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
@@ -486,7 +486,7 @@ export function StakeGate({
   const botWin = quick.bot === 'table' ? Math.floor(botTable.net) : Math.floor(bet * botWinMultiplier(game, settings))
   const botRate =
     quick.bot === 'table'
-      ? `pot ${formatAC(botTable.pot)} KC · %${botTable.cut} kesinti`
+      ? `pot ${formatAC(botTable.pot)} KC · %${botTable.cut} kesinti${isFullPotGame(game) ? ` · günde en çok ${formatAC(BOT_DAILY_PROFIT_CAP)} KC kâr` : ''}`
       : game === 'okey'
         ? `${botWinMultiplier(game, settings).toLocaleString('tr-TR')}x · okeyle ya da çiftten bitiş 2 kat`
         : `${settings.multiplier.toLocaleString('tr-TR')}x`

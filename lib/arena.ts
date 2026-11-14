@@ -192,16 +192,30 @@ export function botFillSeconds(game: string, quick: boolean): number | null {
   return LEGACY_FILL_GAMES.includes(game) ? LEGACY_FILL_SECONDS : null
 }
 
-/** Extra commission points on Okey and 101 tables that seat bots, so beating bots is never a coin farm. */
+/** Extra commission points on Okey tables that seat bots, so beating bots is never a coin farm. */
 export const BOT_TABLE_EXTRA_COMMISSION = 5
-const EXTRA_COMMISSION_GAMES = ['okey', 'okey101']
+const EXTRA_COMMISSION_GAMES = ['okey']
+
+/** Games where every bot stakes its own seat, like the solo okey table: the pot is always all the seats' stakes. */
+export const FULL_POT_GAMES = ['okey101']
+export const isFullPotGame = (game: string) => FULL_POT_GAMES.includes(game)
+
+/** Most KC a member can win from bots in one day, shared by the bot games and the full-pot bot tables. */
+export const BOT_DAILY_PROFIT_CAP = 1500
 
 /**
  * The one table payout rule: every human stake goes into the pot, the bots together add a single stake,
  * and the commission comes off the top. Stakes left behind by players who quit stay in the pot.
+ * At a full-pot game every bot adds its own stake instead, and no extra commission is taken.
  */
 export function tablePot(game: string, stake: number, commission: number, seats: { humans: number; bots: number; forfeits?: number }) {
   const forfeits = seats.forfeits ?? 0
+  if (isFullPotGame(game) && seats.bots > 0) {
+    // A bot that took over a quitter's seat plays on the stake that player left behind.
+    const botStake = stake * Math.max(0, seats.bots - forfeits)
+    const pot = stake * (seats.humans + seats.bots)
+    return { pot, cut: commission, botStake, net: pot * (1 - commission / 100) }
+  }
   const seatGame = (SEAT_TABLE_GAMES as readonly string[]).includes(game)
   const botStake = seats.bots > 0 && (seatGame || !forfeits) ? stake : 0
   const pot = stake * (seats.humans + forfeits) + botStake

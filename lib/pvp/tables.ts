@@ -3,8 +3,8 @@ import 'server-only'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
-import { BOT_PROFIT_GAMES } from '@/lib/solo-sessions'
-import { TURN_SECONDS, botFillSeconds, botWinMultiplier, isBotTableGame, quickSeats, tablePot } from '@/lib/arena'
+import { botProfitToday } from '@/lib/solo-sessions'
+import { BOT_DAILY_PROFIT_CAP, TURN_SECONDS, botFillSeconds, botWinMultiplier, isBotTableGame, isFullPotGame, quickSeats, tablePot } from '@/lib/arena'
 import {
   autoMove,
   applyAction,
@@ -383,20 +383,9 @@ function botFillMs(t: Pick<TableRow, 'game' | 'options'>): number | null {
 /** Daily bot-table wins that pay profit; later wins only return the stake so bots cannot be farmed endlessly. */
 export const BOT_DAILY_PAID_WINS = 15
 /** Solo okey keeps the payout and the daily profit ceiling of the bot game it replaced. */
-const SOLO_OKEY_DAILY_PROFIT_CAP = 1500
 const soloOkey = (t: Pick<TableRow, 'game' | 'options'>) => t.game === 'okey' && t.options.solo === true
 /** Solo okey is logged as a bot game, like the single-player version before it. */
 const historyMode = (t: Pick<TableRow, 'game' | 'options'>) => (soloOkey(t) ? 'bot' : 'pvp')
-
-async function soloOkeyProfitToday(userId: string) {
-  const r = await pool.query<{ net: string | null }>(
-    `SELECT sum(delta) AS net FROM game_history
-      WHERE user_id = $1 AND mode = 'bot' AND game = ANY($2::text[])
-        AND created_at >= date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul'`,
-    [userId, BOT_PROFIT_GAMES],
-  )
-  return Math.max(0, Number(r.rows[0]?.net ?? 0))
-}
 
 async function botWinsToday(userId: string) {
   const r = await pool.query<{ n: number }>(
@@ -790,7 +779,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
     const factor = won && reveal && reveal.seat === p.seat ? Math.max(1, reveal.penalty / 2) : 1
     let gross = won ? Math.floor(t.stake * botWinMultiplier('okey', settings) * factor) : 0
     if (gross > t.stake) {
-      const room = Math.max(0, SOLO_OKEY_DAILY_PROFIT_CAP - (await soloOkeyProfitToday(p.id)))
+      const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(p.id)))
       gross = Math.min(gross, t.stake + room)
     }
     const payout = await capPayout(p.id, t.stake, gross)
@@ -802,6 +791,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   // At a table with bots, the bots together put in exactly one extra stake: beating them pays 1x profit minus commission.
   // Bots that replaced a player who left are already covered by that player's forfeited stake.
   // Players who left mid-game leave their stake in the pot.
+  // 101 is the exception: every bot stakes its own seat, and the winnings count towards the daily bot profit ceiling.
   const { net, botStake: botBonus } = tablePot(t.game, t.stake, settings?.commission ?? 0, {
     humans: people.length,
     bots: t.players.filter((p) => p.bot).length,
@@ -818,7 +808,11 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
     const prizeEach = overBotCap ? Math.min(share, t.stake) : share
     // The weekend festival multiplies only the profit, never the returned stake.
     const profit = Math.max(0, prizeEach - t.stake)
-    const boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
+    let boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
+    if (botBonus > 0 && isFullPotGame(t.game) && boostedPrize > t.stake) {
+      const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(p.id)))
+      boostedPrize = Math.min(boostedPrize, t.stake + room)
+    }
     const amount = await capPayout(p.id, t.stake, boostedPrize)
     paid.set(p.id, amount)
     await credit(p.id, amount)
