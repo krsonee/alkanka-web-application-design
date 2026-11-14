@@ -196,18 +196,18 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
 
   // In-site rewards are delivered instantly; only sponsor bonuses need a staff member to pay out on the partner site.
   const autoApprove = item.kind !== 'sponsor'
-  if (autoApprove) await deliverInSiteItem(member.id, item.id)
+  const delivered = autoApprove ? await deliverInSiteItem(member.id, item.id) : null
   await rows(sql`INSERT INTO market_requests (item_id, item_name, sponsor_name, user_id, user_name, site_username, price, status, note, resolved_at)
     VALUES (${item.id}, ${item.name}, ${item.sponsorName}, ${member.id}, ${member.name}, ${username || null}, ${price},
       ${autoApprove ? 'onaylandi' : 'beklemede'}, ${autoApprove ? 'Site içi ürün, otomatik teslim edildi.' : null}, ${autoApprove ? new Date().toISOString() : null})`)
   await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: price, result: 'loss', delta: -price })
-  if (autoApprove) return { ...item, price }
+  if (autoApprove) return { ...item, price, delivered }
   const { notifyApproval } = await import('@/lib/telegram-bots')
   await notifyApproval('market', {
     uye: member.name,
     detay: `${item.name} (${price} KC${pct ? `, %${pct} indirimli` : ''})${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
   }).catch(() => {})
-  return { ...item, price }
+  return { ...item, price, delivered }
 }
 
 const EXTRA_PLAY_ITEMS: Record<string, { game: 'cark' | 'zar' | 'sandik'; amount: number }> = {
@@ -215,18 +215,26 @@ const EXTRA_PLAY_ITEMS: Record<string, { game: 'cark' | 'zar' | 'sandik'; amount
   'zar-hakki': { game: 'zar', amount: 5 },
 }
 
-async function deliverInSiteItem(userId: string, itemId: string) {
+/** What an in-site purchase put on the account, so the buyer can be told the exact new total. */
+export type Delivered =
+  | { kind: 'plays'; game: 'cark' | 'zar' | 'sandik'; amount: number; total: number }
+  | { kind: 'shield'; total: number }
+  | null
+
+async function deliverInSiteItem(userId: string, itemId: string): Promise<Delivered> {
   const extra = EXTRA_PLAY_ITEMS[itemId]
   if (extra) {
     const { grantExtraPlays } = await import('@/lib/mini-extras')
-    await grantExtraPlays(userId, extra.game, extra.amount)
-    return
+    const total = await grantExtraPlays(userId, extra.game, extra.amount)
+    return { kind: 'plays', ...extra, total }
   }
   if (itemId === 'seri-kalkani') {
     await rows(sql`CREATE TABLE IF NOT EXISTS streak_shields (user_id text PRIMARY KEY, count int NOT NULL DEFAULT 0, used int NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())`)
-    await rows(sql`INSERT INTO streak_shields (user_id, count) VALUES (${userId}, 1)
-      ON CONFLICT (user_id) DO UPDATE SET count = streak_shields.count + 1, updated_at = now()`)
+    const [r] = await rows<{ count: number }>(sql`INSERT INTO streak_shields (user_id, count) VALUES (${userId}, 1)
+      ON CONFLICT (user_id) DO UPDATE SET count = streak_shields.count + 1, updated_at = now() RETURNING count`)
+    return { kind: 'shield', total: Number(r?.count ?? 1) }
   }
+  return null
 }
 
 type ReqRow = {

@@ -2,10 +2,21 @@
 
 import { revalidatePath } from 'next/cache'
 import { getBalance, getMember } from '@/lib/member'
-import { myRequests, requestProduct, type MarketRequest } from '@/lib/market'
+import { myRequests, requestProduct, type Delivered, type MarketRequest } from '@/lib/market'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
 type Result = { ok: true; balance: number; message: string } | { ok: false; error: string }
+
+const PLAY_NAMES = { cark: 'çark', zar: 'zar', sandik: 'sandık' }
+
+function deliveredMessage(delivered: Delivered) {
+  if (delivered?.kind === 'plays') {
+    const name = PLAY_NAMES[delivered.game]
+    return `+${delivered.amount} ${name} hakkı hesabına eklendi. Şu an ${delivered.total} ekstra ${name} hakkın var, hemen kullanabilirsin.`
+  }
+  if (delivered?.kind === 'shield') return `Seri kalkanı hesabına eklendi. Toplam ${delivered.total} kalkanın var.`
+  return 'Talebin alındı. Ekibimiz onayladığında hesabına tanımlanacak.'
+}
 
 export async function requestMarketItem(itemId: string, siteUsername: string | null): Promise<Result> {
   const member = await getMember()
@@ -20,7 +31,7 @@ export async function requestMarketItem(itemId: string, siteUsername: string | n
       balance: await getBalance(member.id),
       message: item.kind === 'sponsor'
         ? `Talebin alındı. Onaylandığında bonus ${item.sponsorName} hesabına eklenecek.`
-        : 'Talebin alındı. Ekibimiz onayladığında hesabına tanımlanacak.',
+        : deliveredMessage(item.delivered),
     }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Talep oluşturulamadı.' }
