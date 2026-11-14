@@ -1,11 +1,11 @@
 'use client'
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import Image from 'next/image'
 import { Flag, Hand, Layers, Plus, RotateCcw, ShieldCheck, Split } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { blackjackAct, blackjackDeal } from '@/app/actions/arena'
-import { RANKS, SUITS, handValue, bjAct, bjActionCost, bjDeal, bjPayout, bjPublic, type BjAction, type BjPublic, type BjState, type Card } from '@/lib/casino'
+import { BJ_CARD_FLIGHT_MS, BJ_HOLE_PAUSE_MS, RANKS, SUITS, handValue, bjAct, bjActionCost, bjDeal, bjPayout, bjPublic, type BjAction, type BjPublic, type BjState, type Card } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import { playSound } from '@/lib/sound'
 import { formatAC, usePoints } from '../points-context'
@@ -163,19 +163,45 @@ function dealOrder(playerCount: number, dealerCount: number): Slot[] {
   return order
 }
 
-/** Reveals cards one by one so every deal feels like a real dealer's hand. */
+/** Sends cards out one by one. `shown` cards have left the deck; `landed` trails it by one flight, so totals and results never run ahead of the cards. */
 function useDealSequence(dealKey: number, total: number) {
-  const [state, setState] = useState({ key: dealKey, shown: 0 })
-  if (state.key !== dealKey) setState({ key: dealKey, shown: 0 })
-  const shown = state.key === dealKey ? state.shown : 0
+  const [state, setState] = useState({ key: dealKey, shown: 0, landed: 0 })
+  if (state.key !== dealKey) setState({ key: dealKey, shown: 0, landed: 0 })
+  const live = state.key === dealKey
+  const shown = live ? Math.min(state.shown, total) : 0
+  const landed = live ? Math.min(state.landed, shown) : 0
 
   useEffect(() => {
     if (shown >= total) return
-    const t = setTimeout(() => setState((s) => ({ ...s, shown: s.shown + 1 })), shown === 0 ? 250 : DEAL_STEP_MS)
+    const t = setTimeout(
+      () => setState((s) => (s.key === dealKey ? { ...s, shown: shown + 1 } : s)),
+      shown === 0 ? 250 : DEAL_STEP_MS,
+    )
     return () => clearTimeout(t)
-  }, [shown, total])
+  }, [shown, total, dealKey])
 
-  return Math.min(shown, total)
+  useEffect(() => {
+    if (landed >= shown) return
+    const t = setTimeout(() => setState((s) => (s.key === dealKey ? { ...s, landed: shown } : s)), BJ_CARD_FLIGHT_MS)
+    return () => clearTimeout(t)
+  }, [shown, landed, dealKey])
+
+  return { shown, landed }
+}
+
+/** True once the dealer's hole card has had time to turn over. */
+function useHoleTurned(dealKey: number, open: boolean) {
+  const [state, setState] = useState({ key: dealKey, turned: false })
+  if (state.key !== dealKey) setState({ key: dealKey, turned: false })
+  const turned = open && state.key === dealKey && state.turned
+
+  useEffect(() => {
+    if (!open || turned) return
+    const t = setTimeout(() => setState({ key: dealKey, turned: true }), BJ_HOLE_PAUSE_MS)
+    return () => clearTimeout(t)
+  }, [open, turned, dealKey])
+
+  return turned
 }
 
 function ValueBadge({ value, dim }: { value: string; dim?: boolean }) {
@@ -193,6 +219,7 @@ function BjTable({
   funds,
   onAct,
   footer,
+  onRevealed,
 }: {
   hand: BjPublic | null
   dealKey: number
@@ -201,6 +228,8 @@ function BjTable({
   funds: number
   onAct: (a: BjAction) => void
   footer: React.ReactNode
+  /** Called once the finished hand has been fully played out on the felt. */
+  onRevealed?: () => void
 }) {
   const extra = hand?.activeBet ?? 0
   const insureCost = Math.floor((hand?.hands[0]?.bet ?? 0) / 2)
@@ -211,20 +240,34 @@ function BjTable({
   const playerCount = hand?.player.length ?? 0
   const dealerCount = hand ? hand.dealer.length + (hand.dealerHidden ? 1 : 0) : 0
   const order = dealOrder(playerCount, dealerCount)
-  const shown = useDealSequence(dealKey, order.length)
-  const dealing = shown < order.length
-  const visible = order.slice(0, shown)
-  const pShown = visible.filter((s) => s.who === 'p').length
-  const dShown = visible.filter((s) => s.who === 'd').length
+  const { shown, landed } = useDealSequence(dealKey, order.length)
+  const count = (n: number, who: Slot['who']) => order.slice(0, n).filter((s) => s.who === who).length
+  const pShown = count(shown, 'p')
+  const dShown = count(shown, 'd')
+  const pLanded = count(landed, 'p')
+  const dLanded = count(landed, 'd')
   const playerCards = hand?.player.slice(0, pShown) ?? []
   const dealerCards = hand?.dealer.slice(0, dShown) ?? []
   const showHole = !!hand?.dealerHidden && dShown >= 2
+  const holeOpen = !!hand && !hand.dealerHidden && dShown >= 2
+  const holeTurned = useHoleTurned(dealKey, holeOpen)
+  // The hand is still being played out until the last card has landed and the hole card has turned.
+  const dealing = landed < order.length || (holeOpen && !holeTurned)
+  const dealerCounted = holeOpen && !holeTurned ? Math.min(dLanded, 1) : dLanded
   const deckRef = useRef<HTMLDivElement>(null)
+
+  const revealed = !!hand && !dealing && hand.phase === 'done'
+  const notifyRevealed = useEffectEvent(() => onRevealed?.())
+  useEffect(() => {
+    if (revealed) notifyRevealed()
+  }, [revealed])
 
   const jakoLine = !hand
     ? 'Bahsini seç, kartları dağıtayım.'
     : dealing
-      ? 'Kartlar geliyor...'
+      ? hand.phase === 'done' && holeOpen
+        ? 'Kapalı kartımı açıyorum...'
+        : 'Kartlar geliyor...'
       : hand.phase === 'insurance'
         ? 'Bende As açık. Sigorta ister misin?'
         : hand.phase === 'player'
@@ -268,8 +311,11 @@ function BjTable({
               <PlayingCard key={`d${dealKey}-${i + 2}`} card={c} anim="bj-shoe-deal" />
             ))}
           </div>
-          {hand && dShown > 0 && (
-            <ValueBadge dim value={`Krupiye ${handValue(dealerCards)}${showHole ? '+' : ''}`} />
+          {hand && dLanded > 0 && (
+            <ValueBadge
+              dim
+              value={`Krupiye ${handValue(hand.dealer.slice(0, dealerCounted))}${showHole || (holeOpen && !holeTurned) ? '+' : ''}`}
+            />
           )}
         </div>
 
@@ -339,7 +385,7 @@ function BjTable({
             </div>
             {!hand && <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary/70">Bahis alanı</span>}
           </div>
-          {pShown > 0 && <ValueBadge value={`Senin elin ${handValue(playerCards)}`} />}
+          {hand && pLanded > 0 && <ValueBadge value={`Senin elin ${handValue(hand.player.slice(0, pLanded))}`} />}
         </div>
         )}
         {hand && hand.insurance > 0 && (
@@ -465,9 +511,14 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
   const [state, setState] = useState<BjState>(() => bjDeal(DUEL_BET))
   const [chips, setChips] = useState(DUEL_CHIPS - DUEL_BET)
   const [handNo, setHandNo] = useState(1)
+  /** Payout already counted in `chips` but not yet shown, because the dealer is still drawing on the felt. */
+  const [unseen, setUnseen] = useState(0)
 
   function settle(s: BjState) {
-    if (s.phase === 'done') setChips((c) => c + bjPayout(s))
+    if (s.phase !== 'done') return
+    const payout = bjPayout(s)
+    setChips((c) => c + payout)
+    setUnseen(payout)
   }
 
   function act(a: BjAction) {
@@ -496,7 +547,7 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
           El {handNo}/{DUEL_HANDS}
         </span>
         <span className="text-muted-foreground">
-          Fiş <strong className="text-primary">{chips}</strong>
+          Fiş <strong className="text-primary">{chips - unseen}</strong>
         </span>
       </div>
       <BjTable
@@ -505,6 +556,7 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
         busy={false}
         funds={chips}
         onAct={act}
+        onRevealed={() => setUnseen(0)}
         footer={
           <button onClick={nextHand} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground">
             {handNo >= DUEL_HANDS ? 'Skoru gönder' : 'Sonraki el'}
