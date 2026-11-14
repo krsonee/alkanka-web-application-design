@@ -792,7 +792,8 @@ function startMatch(){
   const me = charOf(save.char);
   const pool = CHARS.filter(c => c.id !== me.id && (!isLegend(c) || save.bot === 'zor'));
   const rival = pool[Math.floor(Math.random()*pool.length)];
-  const rivalSkills = SKILLS.filter(s => s.lvl <= Math.max(save.level + 2, 4));
+  // The bot only gets skills the player has unlocked too, so a new player never faces a skill they cannot pick.
+  const rivalSkills = SKILLS.filter(s => s.lvl <= save.level);
   const rSkill = rivalSkills[Math.floor(Math.random()*rivalSkills.length)];
   setupMatch(me, save.skill, rival, rSkill.id, true);
 }

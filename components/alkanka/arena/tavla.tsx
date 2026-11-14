@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, Dices, Flag, Undo2, Zap } from 'lucide-react'
+import { Check, Dices, Flag, Timer, Undo2, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TavlaState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
@@ -12,6 +12,7 @@ import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
 import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { playSound } from '@/lib/sound'
+import { TURN_SECONDS } from '@/lib/arena'
 
 // Date.now() collided when several bot moves were queued in the same millisecond.
 let flySeq = Date.now()
@@ -816,6 +817,7 @@ function ControlBar({
   auto,
   onAuto,
   onResign,
+  clock,
 }: {
   message: string
   sub: string
@@ -824,6 +826,8 @@ function ControlBar({
   auto: boolean
   onAuto: (v: boolean) => void
   onResign?: () => void
+  /** Seconds left on the player's move clock, when one is running. */
+  clock?: number | null
 }) {
   const [arming, setArming] = useState(false)
   useEffect(() => {
@@ -841,6 +845,19 @@ function ControlBar({
         <p className="text-xs text-muted-foreground">{sub}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {clock != null && (
+          <span
+            role="timer"
+            aria-label={`Hamle süren: ${clock} saniye`}
+            className={cn(
+              'flex items-center gap-1.5 rounded-xl border px-3 py-3 text-xs font-bold tabular-nums',
+              clock <= 10 ? 'border-destructive bg-destructive/15 text-destructive' : 'border-border text-foreground',
+            )}
+          >
+            <Timer className="size-4" aria-hidden="true" />
+            {`0:${String(clock).padStart(2, '0')}`}
+          </span>
+        )}
         <button
           type="button"
           role="switch"
@@ -919,6 +936,22 @@ function moveTrail(moves: Move[]) {
 
 type Phase = 'roll' | 'move' | 'confirm' | 'bot' | 'over'
 
+const BOT_TURN_SECONDS = TURN_SECONDS.tavla ?? 40
+
+/** Counts a turn down from the move limit; restarts whenever `running` turns on. */
+function useTurnClock(running: boolean) {
+  const [left, setLeft] = useState<number | null>(null)
+  useEffect(() => {
+    if (!running) return setLeft(null)
+    const ends = Date.now() + BOT_TURN_SECONDS * 1000
+    const tick = () => setLeft(Math.max(0, Math.ceil((ends - Date.now()) / 1000)))
+    tick()
+    const t = setInterval(tick, 500)
+    return () => clearInterval(t)
+  }, [running])
+  return left
+}
+
 type TavlaSave = { board: Board; dice: number[]; rolled: number[]; phase: Phase; snapshot: { board: Board; dice: number[] } | null; message: string }
 
 type Opening = { mine: number; theirs: number }
@@ -966,6 +999,8 @@ export function Tavla({ finish, saveKey }: GameApi) {
   )
 
   const legal = useMemo(() => (phase === 'move' ? legalMoves(board, 'p', dice) : []), [board, dice, phase])
+  const clock = useTurnClock(phase === 'roll' || phase === 'move' || phase === 'confirm')
+  const timedOut = clock === 0
 
   function endGame(b: Board) {
     if (b.off.p === 15) {
@@ -1071,6 +1106,26 @@ export function Tavla({ finish, saveKey }: GameApi) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, phase, legal])
 
+  // Out of time: the turn plays itself to the end, the same way a table against a player does.
+  useEffect(() => {
+    if (!timedOut) return
+    const step =
+      phase === 'roll'
+        ? roll
+        : phase === 'confirm'
+          ? confirm
+          : phase === 'move' && legal[0]
+            ? () => {
+                setFly({ key: nextFlyKey(), moves: [legal[0]], side: 'p' })
+                play([legal[0]])
+              }
+            : null
+    if (!step) return
+    const t = setTimeout(step, 450)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timedOut, phase, legal])
+
   useEffect(() => {
     if (phase !== 'bot') return
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -1145,6 +1200,7 @@ export function Tavla({ finish, saveKey }: GameApi) {
         onUndo={undo}
         auto={auto}
         onAuto={setAuto}
+        clock={clock}
         onResign={
           phase === 'over'
             ? undefined

@@ -1783,7 +1783,9 @@ function LeaveTableButton({
                 (!running
                   ? 'Bahsin iade edilir.'
                   : botsOnly
-                    ? `Bot masası kapanır, bahsin (${formatAC(stake)} KC) geri gelmez.`
+                    ? stake === 0
+                      ? 'Pratik masası kapanır. Bahis yatırmadığın için bir şey kaybetmezsin.'
+                      : `Bot masası kapanır, bahsin (${formatAC(stake)} KC) geri gelmez.`
                     : isResign
                       ? `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer. Masada izleyici olarak kalırsın.`
                       : `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer ve lobiye dönersin.`)}
