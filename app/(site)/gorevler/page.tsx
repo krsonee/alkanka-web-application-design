@@ -6,7 +6,7 @@ import { MemberPerks } from '@/components/alkanka/kp/member-perks'
 import { getBirthday, getBoostConfig, shieldCount } from '@/lib/boosts'
 import { getMember } from '@/lib/member'
 import { getStreak, type StreakState } from '@/lib/checkin'
-import { bundleTarget, completedTaskIds, inviteLeague, listPublicTasks, taskClaimMap, taskProgressMap, visibleTasksFor, type ClaimStatus } from '@/lib/tasks'
+import { bundleDetail, bundleTarget, completedTaskIds, inviteLeague, listPublicTasks, taskClaimMap, taskProgressMap, visibleTasksFor, type ClaimStatus } from '@/lib/tasks'
 
 export const metadata = pageMeta('gorevler')
 export const dynamic = 'force-dynamic'
@@ -34,7 +34,7 @@ export default async function TasksPage() {
   const shown = view.tasks.map((task) => ({
     id: task.id,
     title: task.title,
-    detail: task.detail,
+    detail: task.kind === 'bundle' ? bundleDetail(task.detail, bundleTarget(task, view.tasks)) : task.detail,
     points: task.points,
     link: task.link,
     needsApproval: task.needsApproval,

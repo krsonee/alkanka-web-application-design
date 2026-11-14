@@ -13,7 +13,7 @@ const LABELS = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık', zar: 'Zar At'
 
 export function GameStage({ game }: { game: keyof typeof GAMES }) {
   const { member, requireLogin, refresh: refreshBalance } = usePoints()
-  const { remaining, locked, refresh } = useMiniLock(game)
+  const { remaining, locked, left, refresh } = useMiniLock(game)
   const Game = GAMES[game]
 
   function onWin() {
@@ -27,6 +27,7 @@ export function GameStage({ game }: { game: keyof typeof GAMES }) {
         <Game
           onWin={onWin}
           lockedFor={locked ? remaining : 0}
+          playsLeft={member ? left : null}
           canPlay={() => (member ? !locked : requireLogin())}
           onPlayed={refresh}
         />

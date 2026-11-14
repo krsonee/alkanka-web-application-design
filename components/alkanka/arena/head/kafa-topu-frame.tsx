@@ -9,7 +9,8 @@ import { useSession } from '@/lib/auth-client'
 type Score = { for: number; against: number }
 type GameMessage = {
   source: 'alk-kafa'
-  type: 'ready' | 'screen' | 'score' | 'end' | 'exit' | 'quit' | 'rematch' | 'net'
+  type: 'ready' | 'screen' | 'kickoff' | 'score' | 'end' | 'exit' | 'quit' | 'rematch' | 'net'
+  id?: string | null
   for?: number
   against?: number
   msg?: unknown
@@ -49,16 +50,31 @@ export function KafaTopuFrame({
   onRematch,
   online,
   sport = 'futbol',
+  stake,
+  refundable = true,
+  onCancel,
+  onKickoff,
 }: {
   sport?: keyof typeof GAME
   onEnd: (score: Score) => void
   onRematch?: (score: Score) => void
   online?: Online
+  stake?: number
+  refundable?: boolean
+  onCancel?: () => void
+  onKickoff?: () => void
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const score = useRef<Score>({ for: 0, against: 0 })
   const reported = useRef(false)
   const ended = useRef(false)
+  const kicked = useRef(false)
+  const stakeRef = useRef({ stake, refundable })
+  stakeRef.current = { stake, refundable }
+  const cancelRef = useRef(onCancel)
+  cancelRef.current = onCancel
+  const kickoffRef = useRef(onKickoff)
+  kickoffRef.current = onKickoff
   const endRef = useRef(onEnd)
   endRef.current = onEnd
   const rematchRef = useRef(onRematch)
@@ -116,6 +132,22 @@ export function KafaTopuFrame({
         return
       }
       if (msg.type === 'ready' && myNameRef.current) post({ type: 'me', name: myNameRef.current })
+      if (msg.type === 'ready' && !net && stakeRef.current.stake) {
+        post({ type: 'stake', amount: stakeRef.current.stake, refundable: stakeRef.current.refundable })
+      }
+      // A goal or the pitch coming on screen also proves the match is under way, in case the kick-off message was missed.
+      if (!kicked.current && (msg.type === 'kickoff' || msg.type === 'score' || (msg.type === 'screen' && msg.id == null))) {
+        kicked.current = true
+        kickoffRef.current?.()
+      }
+      // Leaving from the character screen, before a ball was kicked, hands the stake back instead of settling a result.
+      if ((msg.type === 'quit' || msg.type === 'exit') && !net && !kicked.current && !ended.current && cancelRef.current) {
+        setClosed(true)
+        if (reported.current) return
+        reported.current = true
+        cancelRef.current()
+        return
+      }
       if (msg.type === 'ready' && net) {
         post({ type: 'init', role: net.role, names: net.names })
         post({ type: 'link', status: net.link.status, transport: net.link.transport })
@@ -207,7 +239,7 @@ export function KafaTopuFrame({
     }
   }, [closed])
 
-  if (closed) return <p className="py-8 text-center text-sm text-muted-foreground">Sonuç kaydediliyor...</p>
+  if (closed) return <p className="py-8 text-center text-sm text-muted-foreground">{kicked.current ? 'Sonuç kaydediliyor...' : 'Masa kapatılıyor...'}</p>
 
   return (
     <div className="visible fixed inset-0 z-[70] touch-none overscroll-none bg-background">

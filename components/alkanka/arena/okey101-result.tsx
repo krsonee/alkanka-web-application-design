@@ -40,7 +40,9 @@ export function Okey101Result({
   onClose,
   onScores,
   onReplay,
+  replayStake,
 }: {
+  replayStake?: number
   melds: Meld101[] | null
   okey: OkeyValue
   result: HandResult
@@ -226,7 +228,7 @@ export function Okey101Result({
               className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--okt-brass)] px-4 py-2.5 text-sm font-bold text-[var(--okt-ink)] hover:brightness-110 disabled:opacity-60 phone-ls:py-2"
             >
               {replaying ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
-              Tekrar oyna
+              Tekrar oyna{replayStake ? ` · ${replayStake.toLocaleString('tr-TR')} KC` : ''}
             </button>
           ) : (
             <button

@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { finishBotGame, getOpenBotGame, startBotGame } from '@/app/actions/arena'
+import { cancelBotGame, finishBotGame, markBotGameStarted, startBotGame } from '@/app/actions/arena'
 import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, MODE_LABEL, botWinMultiplier, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
@@ -11,7 +11,7 @@ import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
 import { SoundToggle } from './sound-toggle'
 import { GameErrorBoundary } from './game-error-boundary'
-import { clearSaved, loadMode, saveMode } from './saved-game'
+import { clearSaved, saveMode } from './saved-game'
 import { TableThemeField } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
 
@@ -33,8 +33,14 @@ export type GameApi = {
   /** What a plain win pays back, commission already taken off. */
   win?: number
   finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
-  /** Gives up the hand (counts as a loss) and goes straight back to the lobby. */
+  /** Gives up the hand: it counts as a loss and lands on the result card. */
   leave?: () => void
+  /** Leaves before the match kicked off: the stake is refunded. A match that already started counts as a loss instead. */
+  cancel?: () => void
+  /** Reports that the match itself has started, which ends the refund window. */
+  kickoff?: () => void
+  /** False when this session already kicked off earlier, so leaving it forfeits the stake. */
+  refundable?: boolean
   /** Settles this hand and immediately stakes the same bet on a fresh one, skipping the result screen. */
   again?: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
   saveKey?: string
@@ -42,10 +48,68 @@ export type GameApi = {
 
 type Phase =
   | { kind: 'lobby' }
-  | { kind: 'playing'; bet: number; round: number; resumed?: boolean }
+  | { kind: 'playing'; bet: number; round: number; resumed?: boolean; started?: boolean }
   | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number; mars?: boolean }
 
 const SAVE_AWARE: ArenaGame[] = ['tavla', 'okey']
+/** These take over the whole window, so an unfinished session asks first instead of dropping the player into it. */
+const FULLSCREEN: ArenaGame[] = ['kafa-topu', 'kafa-basketbolu']
+
+type PendingSession = { sessionId: string; stake: number; started: boolean }
+
+function PendingSessionCard({
+  pending,
+  busy,
+  onResume,
+  onDrop,
+}: {
+  pending: PendingSession
+  busy: boolean
+  onResume: () => void
+  onDrop: () => void
+}) {
+  const [arming, setArming] = useState(false)
+  useEffect(() => {
+    if (!arming) return
+    const t = setTimeout(() => setArming(false), 3000)
+    return () => clearTimeout(t)
+  }, [arming])
+  const forfeit = pending.started
+  const stake = formatAC(pending.stake)
+  return (
+    <div role="group" aria-label="Yarım kalan maç" className="flex flex-col gap-3 rounded-xl border border-primary/50 bg-primary/10 p-4">
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-bold text-foreground">Yarım kalan maçın var · {stake} KC bahis</p>
+        <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+          {forfeit
+            ? 'Devam edersen maç aynı bahisle baştan başlar. Bırakırsan maç kaybedilmiş sayılır.'
+            : 'Bu maç hiç başlamadı. Devam edebilir ya da bahsini geri alabilirsin.'}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onResume}
+          className="rounded-xl bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground hover:brightness-110 disabled:opacity-60"
+        >
+          Devam et
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => (forfeit && !arming ? setArming(true) : onDrop())}
+          className={cn(
+            'rounded-xl border px-3 py-2.5 text-sm font-bold transition-colors disabled:opacity-60',
+            arming ? 'border-destructive bg-destructive/15 text-destructive' : 'border-border bg-card text-foreground hover:bg-secondary',
+          )}
+        >
+          {forfeit ? (arming ? 'Emin misin? Bahis yanar' : `Bırak · ${stake} KC yanar`) : `Bırak · ${stake} KC iade`}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /** Leaving forfeits the stake, so the first tap only arms the button. */
 function LeaveTableButton({ onLeave }: { onLeave: () => void }) {
@@ -87,40 +151,73 @@ export function StakeGate({
   pvpContent?: ReactNode
 }) {
   const meta = ARENA_META[game]
-  const { member, points, setBalance, requireLogin } = usePoints()
+  const { member, points, loading, setBalance, requireLogin } = usePoints()
   const [bet, setBet] = useState(settings.bets[0])
   const [phase, setPhase] = useState<Phase>({ kind: 'lobby' })
   const [round, setRound] = useState(0)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [showRules, setShowRules] = useState(false)
+  const [pending, setPending] = useState<PendingSession | null>(null)
+  const [notice, setNotice] = useState('')
   const session = useRef<string | null>(null)
   const phaseRef = useRef(phase)
   phaseRef.current = phase
   const resumeChecked = useRef(false)
+  const [resumeKnown, setResumeKnown] = useState(false)
   const pvpMode = modeSelect?.mode === 'pvp'
   const singleMode = modeSelect != null && modeSelect.modes.length === 1
 
   useEffect(() => {
-    if (!modeSelect || modeSelect.mode != null) return
-    const remembered = loadMode(game) as GameMode | null
-    modeSelect.onChange(remembered && modeSelect.modes.includes(remembered) ? remembered : modeSelect.modes[0])
-  }, [modeSelect, game])
-
-  useEffect(() => {
     if (!member || resumeChecked.current || modeSelect?.botExternal) return
     resumeChecked.current = true
-    getOpenBotGame(game).then((res) => {
-      if (!res.session || phaseRef.current.kind !== 'lobby') return
-      session.current = res.session.sessionId
-      setRound((r) => r + 1)
-      setPhase({ kind: 'playing', bet: res.session.stake, round: Date.now(), resumed: true })
-    })
+    fetch(`/api/arena/open-session?game=${encodeURIComponent(game)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ session: PendingSession | null }>) : { session: null }))
+      .then((res) => {
+        if (!res.session || phaseRef.current.kind !== 'lobby') return
+        if (FULLSCREEN.includes(game)) {
+          setPending(res.session)
+          return
+        }
+        session.current = res.session.sessionId
+        setRound((r) => r + 1)
+        setPhase({ kind: 'playing', bet: res.session.stake, round: Date.now(), resumed: true })
+      })
+      .catch(() => {})
+      .finally(() => setResumeKnown(true))
   }, [member, game, modeSelect?.botExternal])
 
   function pickMode(m: GameMode) {
     saveMode(game, m)
     modeSelect?.onChange(m)
+  }
+
+  function resumePending() {
+    if (!pending) return
+    session.current = pending.sessionId
+    setRound((r) => r + 1)
+    setNotice('')
+    setPhase({ kind: 'playing', bet: pending.stake, round: Date.now(), resumed: true, started: pending.started })
+    setPending(null)
+  }
+
+  async function dropPending() {
+    if (!pending || busy) return
+    setBusy(true)
+    const res = pending.started ? await finishBotGame(pending.sessionId, 'loss') : await cancelBotGame(pending.sessionId)
+    setBusy(false)
+    setPending(null)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    setBalance(res.balance)
+    setError('')
+    setNotice(
+      pending.started
+        ? `Yarım kalan maç kapatıldı, ${formatAC(pending.stake)} KC bahsin yandı.`
+        : `Yarım kalan maç kapatıldı, ${formatAC(pending.stake)} KC bahsin iade edildi.`,
+    )
   }
 
   async function start(amount: number) {
@@ -135,6 +232,7 @@ export function StakeGate({
     session.current = res.sessionId
     setBalance(res.balance)
     setError('')
+    setNotice('')
     const next = round + 1
     setRound(next)
     setPhase({ kind: 'playing', bet: amount, round: next })
@@ -160,16 +258,48 @@ export function StakeGate({
 
   if (phase.kind === 'playing') {
     const saveKey = session.current ? `${game}:${session.current}` : undefined
-    const leave = async () => {
-      await finish('lose', 'Masadan ayrıldın.')
-      setPhase({ kind: 'lobby' })
-    }
+    const leave = () => void finish('lose', 'Masadan ayrıldın.')
     const again = async (result: GameResult, note?: string, score?: { for: number; against: number }) => {
       const sameBet = phase.bet
       await finish(result, note, score)
       await start(sameBet)
     }
-    const api: GameApi = { bet: phase.bet, win: Math.floor(phase.bet * botWinMultiplier(game, settings)), finish, leave, again, saveKey }
+    const cancel = async () => {
+      const id = session.current
+      if (!id) return
+      const res = await cancelBotGame(id)
+      if (res.ok) {
+        session.current = null
+        setBalance(res.balance)
+        setError('')
+        setNotice(`Maç başlamadı, ${formatAC(res.refund)} KC bahsin iade edildi.`)
+        setPhase({ kind: 'lobby' })
+        return
+      }
+      if ('started' in res) {
+        await finish('lose', 'Yarıda bırakılan maç kaybedilmiş sayılır.')
+        return
+      }
+      session.current = null
+      setError(res.error)
+      setPending({ sessionId: id, stake: phase.bet, started: false })
+      setPhase({ kind: 'lobby' })
+    }
+    const kickoff = () => {
+      const id = session.current
+      if (id) void markBotGameStarted(id)
+    }
+    const api: GameApi = {
+      bet: phase.bet,
+      win: Math.floor(phase.bet * botWinMultiplier(game, settings)),
+      finish,
+      leave,
+      again,
+      cancel,
+      kickoff,
+      refundable: !phase.started,
+      saveKey,
+    }
     return (
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
@@ -262,7 +392,7 @@ export function StakeGate({
             className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
           >
             <RotateCcw className="size-4" aria-hidden="true" />
-            Aynı bahisle tekrar
+            Aynı bahisle tekrar · {formatAC(phase.bet)} KC
           </button>
           <button
             onClick={() => setPhase({ kind: 'lobby' })}
@@ -281,6 +411,9 @@ export function StakeGate({
   const botMultiplier = botWinMultiplier(game, settings)
   const winAmount = pvpMode ? pvpWin : Math.floor(bet * botMultiplier)
   const blocked = !pvpMode && !!member && bet > points
+  // Starting a bot game closes any session still open for this game, so "Oyna" waits until we know
+  // whether there is one to resume; it also waits for the member lookup so a member never hits the login wall.
+  const checking = loading || (!!member && !pvpMode && !modeSelect?.botExternal && !resumeKnown)
   const themeGame = arenaThemeGame(game)
 
   return (
@@ -299,6 +432,14 @@ export function StakeGate({
       </div>
 
       <div className="flex flex-col gap-4 p-4 sm:p-6 lg:p-8">
+        {pending && !pvpMode && (
+          <PendingSessionCard pending={pending} busy={busy} onResume={resumePending} onDrop={() => void dropPending()} />
+        )}
+        {notice && (
+          <p role="status" className="text-pretty rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm leading-relaxed text-foreground">
+            {notice}
+          </p>
+        )}
         {modeSelect && !singleMode && (
           <div role="radiogroup" aria-label="Oyun modu" className="grid grid-cols-2 gap-1 rounded-xl bg-secondary/60 p-1">
             {modeSelect.modes.map((m) => {
@@ -336,7 +477,7 @@ export function StakeGate({
               Bahsini seç
               <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <Coins className="size-3.5 text-primary" aria-hidden="true" />
-                {member ? `Bakiye ${formatAC(points)}` : 'Üye olunca hediye KC'}
+                {member ? `Bakiye ${formatAC(points)}` : loading ? 'Bakiye…' : 'Üye olunca hediye KC'}
               </span>
             </legend>
             <div className="grid grid-cols-4 gap-2">
@@ -391,10 +532,11 @@ export function StakeGate({
               if (!requireLogin()) return
               modeSelect.onEnter(m, bet)
             }}
-            disabled={busy || (modeSelect != null && modeSelect.mode == null) || blocked}
+            disabled={busy || checking || (modeSelect != null && modeSelect.mode == null) || blocked || (!pvpMode && pending != null)}
+            aria-busy={busy || checking}
             className="flex shrink-0 items-center gap-2 rounded-xl bg-primary px-5 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/30 glow-gold transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
           >
-            {busy ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : pvpMode ? <Swords className="size-5" aria-hidden="true" /> : <Play className="size-5" aria-hidden="true" />}
+            {busy || checking ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : pvpMode ? <Swords className="size-5" aria-hidden="true" /> : <Play className="size-5" aria-hidden="true" />}
             {pvpMode ? 'Masalara geç' : 'Oyna'}
           </button>
         </div>
@@ -407,7 +549,7 @@ export function StakeGate({
             .
           </p>
         )}
-        {!member && !pvpMode && (
+        {!member && !loading && !pvpMode && (
           <button
             type="button"
             onClick={() => requireLogin()}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { ARENA_META, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 import { StakeGate, type GameApi } from './stake-gate'
@@ -15,6 +15,9 @@ import { PvpTablesPanel } from './pvp-tables-panel'
 import { wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { LiveLobby } from './live-lobby'
 import { WaitingTables } from './waiting-tables'
+import { loadMode } from './saved-game'
+
+const noSubscribe = () => () => {}
 
 export const RULES: Record<ArenaGame, string[]> = {
   tavla: [
@@ -90,6 +93,10 @@ function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; setti
     <HeadGame
       sport={sport}
       mode="bot"
+      stake={api.bet}
+      refundable={api.refundable}
+      onCancel={api.cancel}
+      onKickoff={api.kickoff}
       onEnd={(s) => api.finish(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s)}
   onRematch={api.again ? (s) => api.again?.(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s) : undefined}
     />
@@ -105,7 +112,17 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   const [openWizard, setOpenWizard] = useState(false)
   const meta = ARENA_META[game]
   const modes = meta.modes.filter((m) => m !== 'pvp' || settings.pvpEnabled)
-  const [mode, setMode] = useState<GameMode | null>(modes.length === 1 ? modes[0] : null)
+  // The remembered mode is read as an external store, not set from a mount effect: this page hydrates at
+  // offscreen priority, so a setState in an effect lands in the idle lane and waits behind every pending
+  // server action, leaving "Oyna" disabled for seconds after load.
+  const stored = useSyncExternalStore(
+    noSubscribe,
+    () => loadMode(game) ?? '',
+    () => null,
+  )
+  const [picked, setMode] = useState<GameMode | null>(null)
+  const mode: GameMode | null =
+    modes.length === 1 ? modes[0] : (picked ?? (stored === null ? null : (modes.find((m) => m === stored) ?? modes[0])))
   const [entered, setEntered] = useState<{ mode: GameMode; bet: number } | null>(null)
   const [invitedTable, setInvitedTable] = useState<string | null>(null)
   const [watching, setWatching] = useState<string | null>(null)
@@ -117,22 +134,32 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   }
 
   // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
-  useEffect(() => {
-    if (!modes.includes('pvp')) return
-    const params = new URLSearchParams(window.location.search)
-    if (wizardEnabledFor(setup, game) && params.has('masa-ac') && !params.get('masa')) {
-      setOpenWizard(true)
-      setMode('pvp')
-      setEntered({ mode: 'pvp', bet: settings.bets[0] })
-      return
-    }
+  // Applied during render rather than in a mount effect, for the same idle-lane reason as the mode above.
+  const search = useSyncExternalStore(
+    noSubscribe,
+    () => window.location.search,
+    () => null,
+  )
+  const [linkRead, setLinkRead] = useState(false)
+  const linkTarget = (query: string) => {
+    const params = new URLSearchParams(query)
     const id = params.get('masa')
-    if (id) {
-      setInvitedTable(id)
+    if (id) return { id }
+    return wizardEnabledFor(setup, game) && params.has('masa-ac') ? { id: null } : null
+  }
+  if (search !== null && !linkRead) {
+    setLinkRead(true)
+    const target = modes.includes('pvp') ? linkTarget(search) : null
+    if (target) {
+      if (target.id) setInvitedTable(target.id)
+      else setOpenWizard(true)
       setMode('pvp')
       setEntered({ mode: 'pvp', bet: settings.bets[0] })
-      return
     }
+  }
+
+  useEffect(() => {
+    if (!modes.includes('pvp') || linkTarget(window.location.search)) return
     // A refresh (or a PWA relaunch) can drop ?masa; fall back to the table the player is still seated at.
     let cancelled = false
     fetch(`/api/tables?game=${game}`, { cache: 'no-store' })

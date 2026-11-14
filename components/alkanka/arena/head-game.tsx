@@ -101,6 +101,12 @@ type HeadGameProps = {
   onEnd: (score: HeadScore) => void
   /** When set, the rematch button settles this match and the parent stakes a fresh one with the same bet. */
   onRematch?: (score: HeadScore) => void
+  /** Staked amount, shown on every button that stakes it again or forfeits it. */
+  stake?: number
+  refundable?: boolean
+  /** Leaving before kick-off: the parent refunds the stake. */
+  onCancel?: () => void
+  onKickoff?: () => void
   names?: [string, string]
   link?: DuelLink
 }
@@ -110,8 +116,9 @@ type HeadGameProps = {
  * and in online duels. The legacy canvas engine is only a fallback when no link exists.
  */
 export function HeadGame(props: HeadGameProps) {
+  const staked = { stake: props.stake, refundable: props.refundable, onCancel: props.onCancel, onKickoff: props.onKickoff }
   if (props.sport === 'basket') {
-    if (props.mode === 'bot') return <KafaTopuFrame sport="basket" onEnd={props.onEnd} onRematch={props.onRematch} />
+    if (props.mode === 'bot') return <KafaTopuFrame sport="basket" onEnd={props.onEnd} onRematch={props.onRematch} {...staked} />
     if (props.link)
       return (
         <KafaTopuFrame
@@ -122,7 +129,7 @@ export function HeadGame(props: HeadGameProps) {
       )
   }
   if (props.sport === 'futbol') {
-    if (props.mode === 'bot') return <KafaTopuFrame onEnd={props.onEnd} onRematch={props.onRematch} />
+    if (props.mode === 'bot') return <KafaTopuFrame onEnd={props.onEnd} onRematch={props.onRematch} {...staked} />
     if (props.link)
       return (
         <KafaTopuFrame

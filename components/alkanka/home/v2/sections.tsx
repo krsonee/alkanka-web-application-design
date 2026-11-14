@@ -363,6 +363,13 @@ export function MemberHero({
 
 export type DailyState = { tile: DailyTile; nextAt: number | null }
 
+function untilLabel(nextAt: number) {
+  const mins = Math.max(1, Math.ceil((nextAt - Date.now()) / 60_000))
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return h ? `${h} sa${m ? ` ${m} dk` : ''} sonra` : `${m} dk sonra`
+}
+
 export function DailyGrid({ items }: { items: DailyState[] }) {
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -389,10 +396,10 @@ export function DailyGrid({ items }: { items: DailyState[] }) {
               <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/20 to-transparent" />
               <span className="p-3">
                 <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-[11px] font-semibold backdrop-blur">
-                  {used ? (
+                  {nextAt !== null ? (
                     <>
                       <Clock className="size-3 text-muted-foreground" aria-hidden="true" />
-                      <span className="text-muted-foreground">Yarın</span>
+                      <span className="tabular-nums text-muted-foreground">{untilLabel(nextAt)}</span>
                     </>
                   ) : (
                     <>

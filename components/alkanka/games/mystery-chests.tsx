@@ -19,13 +19,15 @@ import { TableBrand } from '../arena/table-brand'
 const rulesFor = (dailyPlays: number) => [
   `Günde ${dailyPlays} sandık hakkın var, haklar her gün 00:00’da yenilenir.`,
   'Her sandıkta garantili ödül vardır, boş sandık yoktur.',
-  'Bronz sandık sık ama küçük, altın sandık nadir ama büyük ödül verir.',
+  'Hangi sandığı açacağını sen seçersin; her sandığın ödül aralığı üstünde yazar.',
   'Kazanılan Kanka Coin anında bakiyene eklenir.',
   'Promo kod ödülleri hesabındaki “Kodlarım” alanına düşer, 7 gün geçerlidir.',
   'Bot, çoklu hesap veya otomasyon tespit edilirse ödüller iptal edilir.',
 ]
 
 type Phase = 'idle' | 'shaking' | 'opened'
+
+const rewardRange = (rewards: number[]) => `${Math.min(...rewards)}–${Math.max(...rewards)} KC`
 
 
 export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
@@ -142,7 +144,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
               ) : (
                 <span className="flex flex-col items-center text-center">
                   <span className="text-xs font-semibold text-foreground">{chest.name}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{chest.odds}</span>
+                  <span className="text-xs tabular-nums text-muted-foreground">{rewardRange(chest.rewards)}</span>
                 </span>
               )}
             </button>
@@ -204,7 +206,7 @@ export function MysteryChests({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
                 title: 'Gizemli Sandıklar kuralları',
                 image: '/images/mascots/jako-sandik.png',
                 description: 'Üç sandıktan birini seç, içindeki ödül anında senin. Sandık türüne göre ödül aralığı değişir.',
-                prizes: CHESTS.map((c) => ({ place: c.name, prize: `${c.rewards[0]} – ${c.rewards[c.rewards.length - 1]} KC` })),
+                prizes: CHESTS.map((c) => ({ place: c.name, prize: rewardRange(c.rewards) })),
                 rules: rulesFor(chestConfig.dailyPlays),
               }
             : null

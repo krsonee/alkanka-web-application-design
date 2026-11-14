@@ -788,6 +788,7 @@ function resetKickoff(){
 function beginCountdown(step){ game.phase = 'countdown'; game.t = 0; game.cdStep = step; game.cdIdx = -1; }
 function startMatch(){
   if (NET) return netReady();
+  post('kickoff');
   const me = charOf(save.char);
   const pool = CHARS.filter(c => c.id !== me.id && (!isLegend(c) || save.bot === 'zor'));
   const rival = pool[Math.floor(Math.random()*pool.length)];
@@ -836,7 +837,18 @@ function togglePause(){
 }
 $('pauseBtn').onclick = togglePause;
 $('resume').onclick = togglePause;
-$('toMenu').onclick = () => { if (EMBED && game) { post('quit', scoreFor()); return; } game = null; renderMenu(); showScreen('menu'); };
+$('toMenu').onclick = () => {
+  if (EMBED && game) {
+    // Quitting a staked match forfeits the stake, so the first tap only arms the button.
+    if (STAKE && !NET && !quitArmed) {
+      quitArmed = true; $('toMenu').textContent = 'Emin misin? Bahis yanar';
+      clearTimeout(quitTimer); quitTimer = setTimeout(() => { quitArmed = false; paintStake(); }, 3000);
+      return;
+    }
+    post('quit', scoreFor()); return;
+  }
+  game = null; renderMenu(); showScreen('menu');
+};
 
 const opp = p => game.players[1 - p.side];
 
@@ -1801,6 +1813,7 @@ function renderMenu(){
   $('lvlReset').onclick = () => { save.level = 1; save.xp = 0; save.char = 'jako'; save.skill = 'fire'; persist(); renderMenu(); };
   $('playBtn').onclick = startMatch;
   if ($('mExit')) $('mExit').onclick = () => post('exit');
+  paintStake();
 }
 function levelUnlocks(from, to){
   return [...CHARS.filter(c => c.lvl > from && c.lvl <= to), ...SKILLS.filter(s => s.lvl > from && s.lvl <= to)];
@@ -1842,6 +1855,7 @@ function finishMatch(){
     $('rMenu').onclick = () => post('exit');
     $('rAgain').onclick = () => post('rematch');
     if (NET) $('rAgain').remove();
+    paintStake();
   } else {
     $('rMenu').onclick = () => { game = null; renderMenu(); showScreen('menu'); };
     $('rAgain').onclick = startMatch;
@@ -1856,9 +1870,19 @@ function post(type, extra){
   try { parent.postMessage(Object.assign({ source:'alk-kafa', type }, extra || {}), location.origin); } catch {}
 }
 var ME_NAME = '';
+// The site tells the page what is staked so every button that stakes it again or forfeits it says so.
+var STAKE = 0, REFUND = true;
+function paintStake(){
+  if (!STAKE || NET) return;
+  if ($('mExit')) $('mExit').textContent = REFUND ? 'Çık · bahis iade' : 'Çık · bahis yanar';
+  if ($('rAgain')) $('rAgain').lastChild.textContent = 'TEKRAR OYNA · ' + STAKE + ' KC';
+  if (!quitArmed) $('toMenu').textContent = 'Maçı bırak · bahis yanar';
+}
+var quitArmed = false, quitTimer;
 addEventListener('message', e => {
   if (e.origin !== location.origin || !e.data || e.data.source !== 'alk-host') return;
   const d = e.data;
+  if (d.type === 'stake') { STAKE = Math.max(0, Number(d.amount) || 0); REFUND = d.refundable !== false; paintStake(); }
   if (d.type === 'me' && typeof d.name === 'string') {
     ME_NAME = d.name.trim().slice(0, 18);
     if (!NET && game && ME_NAME) $('nA').textContent = ME_NAME;

@@ -12,6 +12,9 @@ import { cn } from '@/lib/utils'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<Feed>)
 
+/** The strip only calls itself "live" while its newest win is this recent; the feed reaches back days. */
+const LIVE_WINDOW_MS = 60 * 60_000
+
 const KIND: Record<FeedKind, { icon: LucideIcon; verb: string; tone: string }> = {
   gorev: { icon: ListChecks, verb: 'görevi tamamladı', tone: 'bg-primary/15 text-primary' },
   rozet: { icon: Award, verb: 'rozetini kazandı', tone: 'bg-ruby/15 text-ruby' },
@@ -81,6 +84,7 @@ export function WinnersTicker() {
   }, [toast])
 
   if (!items.length) return null
+  const live = items.some((i) => i.kind !== 'duyuru' && Date.now() - new Date(i.at).getTime() < LIVE_WINDOW_MS)
   const loop = [...items, ...items]
   const duration = `${Math.max(30, items.length * 6)}s`
 
@@ -90,11 +94,11 @@ export function WinnersTicker() {
       <div className="group relative flex h-10 items-center overflow-hidden rounded-xl border border-border bg-surface">
         <Link href="/gorevler" className="relative z-10 flex h-full shrink-0 items-center gap-2 border-r border-border bg-surface px-3 text-[10px] font-bold uppercase tracking-widest text-primary sm:px-4">
           <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-live opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-live" />
+            {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-live opacity-60" />}
+            <span className={cn('relative inline-flex size-2 rounded-full', live ? 'bg-live' : 'bg-muted-foreground')} />
           </span>
-          <span className="hidden sm:inline">Canlı kazananlar</span>
-          <span className="sm:hidden">Canlı</span>
+          <span className="hidden sm:inline">{live ? 'Canlı kazananlar' : 'Son kazananlar'}</span>
+          <span className="sm:hidden">{live ? 'Canlı' : 'Son'}</span>
         </Link>
         <div className="relative min-w-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]">
           <div className="flex w-max animate-marquee group-hover:[animation-play-state:paused] motion-reduce:animate-none" style={{ animationDuration: duration }} aria-hidden="true">

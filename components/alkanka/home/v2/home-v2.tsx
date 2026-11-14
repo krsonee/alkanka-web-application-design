@@ -1,7 +1,7 @@
 import { HOME_GAME_LABEL, type HomeV2Config } from '@/lib/home-v2-shared'
 import { MemberHeroSlider, type MemberSlide } from './member-hero-slider'
 import type { MarketProduct } from '@/lib/market'
-import type { MiniStatus } from '@/app/actions/wallet'
+import type { MiniGame, MiniStatus } from '@/app/actions/wallet'
 import { HeroSlider } from './hero-slider'
 import { MarketTabs } from './market-tabs'
 import {
@@ -18,7 +18,7 @@ import {
 
 type Row = { userId: string; name: string; points: number }
 
-const MINI_BY_HREF: Record<string, keyof Omit<MiniStatus, 'hidden'>> = {
+const MINI_BY_HREF: Record<string, MiniGame> = {
   '/oyunlar/cark': 'cark',
   '/oyunlar/sandik': 'sandik',
   '/oyunlar/zar': 'zar',

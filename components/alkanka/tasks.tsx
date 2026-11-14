@@ -60,6 +60,10 @@ function statusOf(task: PublicTask, local: PublicTask['claim'] | undefined, done
   return 'open' as const
 }
 
+/** Same rule the server uses for a super task's progress: same tab and category, no other super tasks, no chain steps. */
+const countsForBundle = (bundle: PublicTask, t: PublicTask) =>
+  t.id !== bundle.id && t.kind !== 'bundle' && !t.chain && (t.category ?? 'genel') === (bundle.category ?? 'genel')
+
 export function Tasks({
   tasks: rawTasks,
   streak,
@@ -159,10 +163,13 @@ export function Tasks({
   const groups = PERIOD_ORDER.map((period) => {
     const items = tasks.filter((task) => task.period === period)
     const statuses = items.map((task) => statusOf(task, claims[task.id], Boolean(done[task.id])))
+    // A super task is the reward for the others, so it stays out of the tab's done/total count.
+    const counted = statuses.filter((_, i) => items[i].kind !== 'bundle')
     return {
       period,
       items,
-      done: statuses.filter((s) => s === 'done').length,
+      total: counted.length,
+      done: counted.filter((s) => s === 'done').length,
       open: statuses.filter((s) => s === 'open' || s === 'rejected').length,
       reward: items.reduce((sum, task, i) => (statuses[i] === 'done' ? sum : sum + task.points), 0),
     }
@@ -280,8 +287,8 @@ export function Tasks({
           >
             {groups.map((group) => {
               const active = group.period === activeTab
-              const complete = group.items.length > 0 && group.done === group.items.length
-              const progress = group.items.length ? (group.done / group.items.length) * 100 : 0
+              const complete = group.total > 0 && group.done === group.total
+              const progress = group.total ? (group.done / group.total) * 100 : 0
               return (
                 <button
                   key={group.period}
@@ -289,7 +296,7 @@ export function Tasks({
                   role="tab"
                   aria-selected={active}
                   onClick={() => setTab(group.period)}
-                  aria-label={`${PERIOD_LABEL[group.period]}: ${group.done}/${group.items.length} tamamlandı${group.open ? `, ${group.open} görev seni bekliyor` : ''}`}
+                  aria-label={`${PERIOD_LABEL[group.period]}: ${group.done}/${group.total} tamamlandı${group.open ? `, ${group.open} görev seni bekliyor` : ''}`}
                   className={cn(
                     'relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     active
@@ -311,7 +318,7 @@ export function Tasks({
                   <span className="truncate text-[13px] font-semibold leading-tight sm:text-sm">{PERIOD_LABEL[group.period]}</span>
                   <span className="flex items-center gap-1.5">
                     <span className={cn('text-[11px] font-bold tabular-nums leading-none', !active && complete && 'text-primary')}>
-                      {group.done}/{group.items.length}
+                      {group.done}/{group.total}
                     </span>
                     <span aria-hidden="true" className={cn('h-1 w-6 overflow-hidden rounded-full', active ? 'bg-primary-foreground/20' : 'bg-secondary')}>
                       <span
@@ -333,7 +340,7 @@ export function Tasks({
           <ul role="tabpanel" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {visibleTasks.map((task) => {
               const state = statusOf(task, claims[task.id], Boolean(done[task.id]))
-              const label = state === 'done' ? 'Tamamlandı' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? 'Ödülü al' : 'Görevi yap'
+              const label = state === 'done' ? 'Tamamlandı' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? 'Ödülü al' : 'G��revi yap'
               const locked = state !== 'open' || pending
               const className = 'flex h-9 shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100'
               const chainLocked = task.chainState === 'locked'
@@ -387,7 +394,7 @@ export function Tasks({
                   {task.kind === 'bundle' && bundleOpen === task.id ? (
                     <ul id={`bundle-${task.id}`} className="flex flex-col gap-1 rounded-lg bg-secondary/60 p-2">
                       {visibleTasks
-                        .filter((t) => t.kind !== 'bundle')
+                        .filter((t) => countsForBundle(task, t))
                         .map((t) => {
                           const finished = statusOf(t, claims[t.id], Boolean(done[t.id])) === 'done'
                           return (
@@ -407,6 +414,9 @@ export function Tasks({
                             </li>
                           )
                         })}
+                      {visibleTasks.some((t) => t.kind !== 'bundle' && !countsForBundle(task, t)) ? (
+                        <li className="pt-1 text-xs leading-relaxed text-muted-foreground">Bu sekmedeki diğer görevler sandığa sayılmaz.</li>
+                      ) : null}
                     </ul>
                   ) : null}
                   <div className="mt-auto flex items-center justify-between gap-2 pt-1">
