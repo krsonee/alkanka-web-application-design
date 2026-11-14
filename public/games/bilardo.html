@@ -321,7 +321,22 @@
 <script>
 (() => {
   const TW = 1112, TH = 612, R = 56, W = 1000, H = 500, BR = 12.5, RW = 38, M = 34;
-  const POCKETS = [[R-8,R-8,25],[R+W/2,R-12,22],[R+W+8,R-8,25],[R-8,R+H+8,25],[R+W/2,R+H+12,22],[R+W+8,R+H+8,25]];
+  // Pockets follow 8 Ball Pool: corner holes are sunk into the corners behind 45° cushion cuts, side holes are
+  // cut into the rail and end at the cushion nose. CM / SM are the mouth openings measured along the nose line.
+  const CM = 30, SM = 24, HC = 27, HS = 21, JC = R - RW, JS = 4;
+  // [hole x, hole y, hole radius, aim x, aim y]: the aim point is the middle of the mouth, between the jaws.
+  const POCKETS = [
+    [R-10, R-10, HC, R+CM/2, R+CM/2], [R+W/2, R-HS, HS, R+W/2, R+2], [R+W+10, R-10, HC, R+W-CM/2, R+CM/2],
+    [R-10, R+H+10, HC, R+CM/2, R+H-CM/2], [R+W/2, R+H+HS, HS, R+W/2, R+H-2], [R+W+10, R+H+10, HC, R+W-CM/2, R+H-CM/2],
+  ];
+  // Cushion ends as [nose tip x, tip y, rail end x, rail end y]; balls bounce off them, so a ball that clips a jaw rattles.
+  const JAWS = [];
+  for (const fx of [0, 1]) for (const fy of [0, 1]) {
+    const X = v => fx ? TW - v : v, Y = v => fy ? TH - v : v;
+    JAWS.push([X(R+CM), Y(R), X(R+CM-JC), Y(RW)], [X(R), Y(R+CM), X(RW), Y(R+CM-JC)]);
+  }
+  for (const fy of [0, 1]) for (const sg of [-1, 1]) JAWS.push([R+W/2 + sg*SM, fy ? R+H : R, R+W/2 + sg*(SM-JS), fy ? TH-RW : RW]);
+  const DROP_MS = 420, drops = [];
   const RGB = {0:[244,242,234],1:[246,188,22],2:[28,70,196],3:[210,34,34],4:[96,40,156],5:[242,112,22],6:[22,124,62],7:[128,26,26],8:[20,20,22]};
   const WHITE = [244,242,234];
   const rgb = n => RGB[n > 8 ? n - 8 : n];
@@ -469,6 +484,7 @@
     for (let i = 0; i < 5; i++) for (let j = 0; j <= i; j++) balls.push(mkBall(order[k++], ax + i*(BR*2*0.87+0.6), ay + (j - i/2)*(BR*2+0.6)));
     S = { balls, angle:0, aimTo:null, turn:'me', groups:{ me:null, op:null }, moving:false, shot:null, ballInHand:true, kitchen:true,
           spin:{x:0,y:0}, pull:0, strike:0, firing:null, over:false, timer:30, bot:null, charging:false, firstShot:true };
+    drops.length = 0;
     $('tube').innerHTML = ''; $('resModal').classList.remove('open'); $('hint').classList.remove('off');
     hud(); toastPill('Açılış senden. Beyaz topu çizginin gerisinde sürükleyip yerleştirebilirsin.');
   }
@@ -515,12 +531,17 @@
       for (const b of bs) {
         if (b.in) continue;
         b.x += b.vx*k/sub; b.y += b.vy*k/sub;
-        for (const p of POCKETS) if (Math.hypot(b.x - p[0], b.y - p[1]) < p[2] + 5) { pot(b); break; }
-        if (b.in) continue;
-        if (b.x < R+BR) { b.x = R+BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); railHit(b); }
-        if (b.x > R+W-BR) { b.x = R+W-BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); railHit(b); }
-        if (b.y < R+BR) { b.y = R+BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); railHit(b); }
-        if (b.y > R+H-BR) { b.y = R+H-BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); railHit(b); }
+        // A ball drops once its centre is over a hole, or once it has rolled through a mouth past the cushion nose.
+        let hole = POCKETS.findIndex(p => Math.hypot(b.x - p[0], b.y - p[1]) < p[2]);
+        if (hole < 0 && (b.x < R-1 || b.x > R+W+1 || b.y < R-1 || b.y > R+H+1)) hole = nearestPocket(b.x, b.y);
+        if (hole >= 0) { pot(b, hole); continue; }
+        // Cushions stop at the pocket mouths, so a ball can roll between the jaws into the hole.
+        const mh = b.x < R+CM || b.x > R+W-CM || Math.abs(b.x - (R+W/2)) < SM, mv = b.y < R+CM || b.y > R+H-CM;
+        if (!mv && b.x < R+BR) { b.x = R+BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); railHit(b); }
+        if (!mv && b.x > R+W-BR) { b.x = R+W-BR; Snd.cush(Math.abs(b.vx)/22); b.vx = -b.vx*0.78; cushionSpin(b, 'x'); railHit(b); }
+        if (!mh && b.y < R+BR) { b.y = R+BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); railHit(b); }
+        if (!mh && b.y > R+H-BR) { b.y = R+H-BR; Snd.cush(Math.abs(b.vy)/22); b.vy = -b.vy*0.78; cushionSpin(b, 'y'); railHit(b); }
+        if ((mh || mv) && jawHit(b)) railHit(b);
       }
       for (let i = 0; i < bs.length; i++) for (let j = i+1; j < bs.length; j++) {
         const a = bs[i], b = bs[j]; if (a.in || b.in) continue;
@@ -563,7 +584,25 @@
     if (b.n !== 0) sh.railBalls.add(b.n);
     if (sh.first !== null) sh.railAfter = true;
   }
-  function pot(b) {
+  function nearestPocket(x, y) {
+    let best = 0, bd = Infinity;
+    POCKETS.forEach((p, i) => { const d = Math.hypot(x - p[0], y - p[1]); if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+  function jawHit(b) {
+    let hit = false;
+    for (const [tx, ty, ex, ey] of JAWS) {
+      const sx = ex - tx, sy = ey - ty, t = clamp(((b.x - tx)*sx + (b.y - ty)*sy)/(sx*sx + sy*sy), 0, 1);
+      const dx = b.x - (tx + sx*t), dy = b.y - (ty + sy*t), d2 = dx*dx + dy*dy;
+      if (d2 >= BR*BR || d2 === 0) continue;
+      const d = Math.sqrt(d2), nx = dx/d, ny = dy/d, vn = b.vx*nx + b.vy*ny;
+      b.x += nx*(BR - d); b.y += ny*(BR - d);
+      if (vn < 0) { Snd.cush(-vn/22); b.vx -= 1.6*vn*nx; b.vy -= 1.6*vn*ny; hit = true; }
+    }
+    return hit;
+  }
+  function pot(b, hole) {
+    drops.push({ b, x:b.x, y:b.y, p:hole, t0:performance.now() });
     b.in = true; b.vx = b.vy = 0; Snd.pocket();
     if (S.shot) S.shot.potted.push(b.n);
     if (b.n !== 0) { const m = mini(b.n); m.dataset.n = b.n; $('tube').appendChild(m); }
@@ -677,7 +716,7 @@
     for (const b of live()) {
       if (b.n === 0 || !isOwn(b.n, 'op')) continue;
       POCKETS.forEach((p, i) => {
-        const bx = p[0] - b.x, by = p[1] - b.y, bl = Math.hypot(bx, by);
+        const bx = p[3] - b.x, by = p[4] - b.y, bl = Math.hypot(bx, by) || 1;
         const ux = bx/bl, uy = by/bl;
         if ((i === 1 || i === 4) && Math.abs(uy) < 0.5) return;
         const gx = b.x - ux*BR*2, gy = b.y - uy*BR*2;
@@ -686,7 +725,7 @@
         if (cl < 1) return;
         const cut = (vx*ux + vy*uy)/cl;
         if (cut < 0.3) return;
-        if (!pathClear(b.x, b.y, p[0], p[1], [b, c])) return;
+        if (!pathClear(b.x, b.y, p[3], p[4], [b, c])) return;
         if (!pathClear(cx, cy, gx, gy, [b, c])) return;
         const score = cut*cut*2.2 - bl/900 - cl/1300;
         out.push({ score, gx, gy, bl, cl, cut, ux, uy, ball:b });
@@ -711,9 +750,9 @@
       for (const b of live()) {
         if (b.n === 0 || !isOwn(b.n, 'op')) continue;
         POCKETS.forEach((p, i) => {
-          const bx = p[0] - b.x, by = p[1] - b.y, bl = Math.hypot(bx, by), ux = bx/bl, uy = by/bl;
+          const bx = p[3] - b.x, by = p[4] - b.y, bl = Math.hypot(bx, by) || 1, ux = bx/bl, uy = by/bl;
           if ((i === 1 || i === 4) && Math.abs(uy) < 0.5) return;
-          if (!pathClear(b.x, b.y, p[0], p[1], [b, c])) return;
+          if (!pathClear(b.x, b.y, p[3], p[4], [b, c])) return;
           for (const k of [110, 160, 80, 220]) {
             const x = b.x - ux*(BR*2 + k), y = b.y - uy*(BR*2 + k);
             if (x > maxX || !freeSpot(x, y) || !pathClear(x, y, b.x - ux*BR*2, b.y - uy*BR*2, [b, c])) continue;
@@ -886,30 +925,58 @@
       g.fillStyle = cg; g.fill();
       g.strokeStyle = 'rgba(190,255,210,.16)'; g.lineWidth = 1; g.beginPath(); g.moveTo(pts[1][0], pts[1][1]); g.lineTo(pts[2][0], pts[2][1]); g.stroke();
     };
-    const cj = 26, sj = 24, jaw = 12, cw = R - RW;
-    cush([[R+cj-jaw, RW],[R+cj, R],[R+W/2-sj, R],[R+W/2-sj+jaw*0.5, RW]], 0, 1);
-    cush([[R+W/2+sj-jaw*0.5, RW],[R+W/2+sj, R],[R+W-cj, R],[R+W-cj+jaw, RW]], 0, 1);
-    cush([[R+cj-jaw, TH-RW],[R+cj, R+H],[R+W/2-sj, R+H],[R+W/2-sj+jaw*0.5, TH-RW]], 0, -1);
-    cush([[R+W/2+sj-jaw*0.5, TH-RW],[R+W/2+sj, R+H],[R+W-cj, R+H],[R+W-cj+jaw, TH-RW]], 0, -1);
-    cush([[RW, R+cj-jaw],[R, R+cj],[R, R+H-cj],[RW, R+H-cj+jaw]], 1, 0);
-    cush([[TW-RW, R+cj-jaw],[R+W, R+cj],[R+W, R+H-cj],[TW-RW, R+H-cj+jaw]], -1, 0);
+    // The drawn cushion ends are the same points the physics uses (JAWS): 45° cuts at the corners, near-straight at the sides.
+    cush([[R+CM-JC, RW],[R+CM, R],[R+W/2-SM, R],[R+W/2-SM+JS, RW]], 0, 1);
+    cush([[R+W/2+SM-JS, RW],[R+W/2+SM, R],[R+W-CM, R],[R+W-CM+JC, RW]], 0, 1);
+    cush([[R+CM-JC, TH-RW],[R+CM, R+H],[R+W/2-SM, R+H],[R+W/2-SM+JS, TH-RW]], 0, -1);
+    cush([[R+W/2+SM-JS, TH-RW],[R+W/2+SM, R+H],[R+W-CM, R+H],[R+W-CM+JC, TH-RW]], 0, -1);
+    cush([[RW, R+CM-JC],[R, R+CM],[R, R+H-CM],[RW, R+H-CM+JC]], 1, 0);
+    cush([[TW-RW, R+CM-JC],[R+W, R+CM],[R+W, R+H-CM],[TW-RW, R+H-CM+JC]], -1, 0);
+    g.strokeStyle = 'rgba(190,255,210,.2)'; g.lineWidth = 1;
+    for (const [tx, ty, ex, ey] of JAWS) { g.beginPath(); g.moveTo(tx, ty); g.lineTo(ex, ey); g.stroke(); }
     // cushion shadow on felt
     const shade = (x, y, w, h, x0, y0, x1, y1) => { const e = g.createLinearGradient(x0, y0, x1, y1); e.addColorStop(0, 'rgba(0,20,8,.42)'); e.addColorStop(1, 'rgba(0,20,8,0)'); g.fillStyle = e; g.fillRect(x, y, w, h); };
     shade(R, R, W, 14, 0, R, 0, R+14); shade(R, R+H-14, W, 14, 0, R+H, 0, R+H-14);
     shade(R, R, 14, H, R, 0, R+14, 0); shade(R+W-14, R, 14, H, R+W, 0, R+W-14, 0);
 
-    // pockets: chrome-leather cups + deep holes
-    for (const [x, y, r] of POCKETS) {
+    // pockets: a chrome plate wraps each corner hole; side holes are cut straight into the wooden rail
+    POCKETS.forEach(([x, y, r], i) => {
+      const side = i === 1 || i === 4, fx = x > TW/2, fy = y > TH/2;
       g.save(); g.beginPath(); g.roundRect(0, 0, TW, TH, 34); g.clip();
-      let pg = g.createRadialGradient(x - 6, y - 8, 2, x, y, r + 13);
-      pg.addColorStop(0, '#5b5e66'); pg.addColorStop(.55, '#26282d'); pg.addColorStop(.85, '#111214'); pg.addColorStop(1, '#2d2f34');
-      g.fillStyle = pg; g.beginPath(); g.arc(x, y, r + 12, 0, Math.PI*2); g.fill();
-      g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1.4; g.beginPath(); g.arc(x, y, r + 11, Math.PI*1.05, Math.PI*1.65); g.stroke();
+      if (!side) {
+        const arm = R + CM - 8;
+        g.save(); g.translate(fx ? TW : 0, fy ? TH : 0); g.scale(fx ? -1 : 1, fy ? -1 : 1);
+        g.beginPath(); g.rect(0, 0, arm, RW); g.rect(0, 0, RW, arm);
+        const pl = g.createLinearGradient(0, 0, arm, arm);
+        pl.addColorStop(0, '#f4f6f9'); pl.addColorStop(.3, '#b3b9c2'); pl.addColorStop(.55, '#7c828c'); pl.addColorStop(.8, '#c3c8d0'); pl.addColorStop(1, '#8b919b');
+        g.fillStyle = pl; g.fill();
+        g.strokeStyle = 'rgba(15,6,2,.6)'; g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(arm, 0); g.lineTo(arm, RW); g.moveTo(0, arm); g.lineTo(RW, arm); g.stroke();
+        g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(arm - 1.6, 2); g.lineTo(arm - 1.6, RW - 1); g.moveTo(2, arm - 1.6); g.lineTo(RW - 1, arm - 1.6); g.stroke();
+        g.restore();
+      }
+      // the felt and the cushion ends fall away into the hole
+      g.save(); g.beginPath(); g.rect(RW, RW, TW - RW*2, TH - RW*2); g.clip();
+      let pg = g.createRadialGradient(x, y, r, x, y, r + 13);
+      pg.addColorStop(0, 'rgba(0,8,3,.6)'); pg.addColorStop(1, 'rgba(0,8,3,0)');
+      g.fillStyle = pg; g.beginPath(); g.arc(x, y, r + 13, 0, Math.PI*2); g.fill();
       g.restore();
-      pg = g.createRadialGradient(x, y + r*0.25, 1, x, y, r);
-      pg.addColorStop(0, '#000'); pg.addColorStop(.8, '#050505'); pg.addColorStop(1, '#1c1c1c');
+      // lip the hole is sunk into
+      g.strokeStyle = side ? 'rgba(18,6,2,.6)' : 'rgba(38,42,50,.85)'; g.lineWidth = 3;
+      g.beginPath(); g.arc(x, y, r + 1, 0, Math.PI*2); g.stroke();
+      // deep hole: the wall away from the lamp catches a little light
+      const lx = fx ? 1 : -1, ly = fy ? 1 : -1;
+      pg = g.createRadialGradient(x - lx*r*0.28, y - ly*r*(side ? 0.34 : 0.28), r*0.1, x, y, r);
+      pg.addColorStop(0, '#000'); pg.addColorStop(.62, '#050506'); pg.addColorStop(.9, '#1d1a18'); pg.addColorStop(1, '#2b2623');
       g.fillStyle = pg; g.beginPath(); g.arc(x, y, r, 0, Math.PI*2); g.fill();
-    }
+      g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, r - 0.6, 0, Math.PI*2); g.stroke();
+      // bright rim on the outer edge
+      const a0 = Math.atan2(ly, side ? 0 : lx);
+      g.strokeStyle = side ? 'rgba(255,205,150,.3)' : 'rgba(255,255,255,.55)'; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(x, y, r + 2.4, a0 - 0.95, a0 + 0.95); g.stroke();
+      g.restore();
+    });
 
     // mother-of-pearl sights
     const sight = (x, y) => {
@@ -1040,6 +1107,18 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.translate(geo.ox, geo.oy); ctx.scale(geo.s, geo.s);
     if (tableImg) ctx.drawImage(tableImg, -M, -M, TW + M*2, TH + M*2);
+    // A potted ball slides to the middle of its hole, then shrinks and darkens as it falls.
+    const tNow = performance.now();
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const d = drops[i], t = (tNow - d.t0)/DROP_MS;
+      if (t >= 1) { drops.splice(i, 1); continue; }
+      const p = POCKETS[d.p], slide = 1 - Math.pow(1 - Math.min(1, t/0.5), 2), sink = Math.max(0, (t - 0.25)/0.75), k = 1 - sink*0.45;
+      const x = d.x + (p[0] - d.x)*slide, y = d.y + (p[1] - d.y)*slide;
+      ctx.save(); ctx.globalAlpha = 1 - sink*sink;
+      ctx.translate(x, y); ctx.scale(k, k); ctx.translate(-d.b.x, -d.b.y); drawBall(d.b);
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${(sink*0.7).toFixed(3)})`; ctx.beginPath(); ctx.arc(x, y, BR*k, 0, Math.PI*2); ctx.fill();
+    }
     const bs = live();
     for (const b of bs) drawShadow(b);
     for (const b of bs) drawBall(b);

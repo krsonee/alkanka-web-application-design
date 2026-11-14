@@ -23,10 +23,12 @@ export async function extraPlays(userId: string, game: ExtraGame): Promise<numbe
   return Math.max(0, Number(r?.count ?? 0))
 }
 
-export async function grantExtraPlays(userId: string, game: ExtraGame, amount: number) {
+/** Adds purchased plays and returns how many the member now holds. */
+export async function grantExtraPlays(userId: string, game: ExtraGame, amount: number): Promise<number> {
   await ensure()
-  await rows(sql`INSERT INTO mini_extra_plays (user_id, game, count) VALUES (${userId}, ${game}, ${amount})
-    ON CONFLICT (user_id, game) DO UPDATE SET count = mini_extra_plays.count + ${amount}, updated_at = now()`)
+  const [r] = await rows<{ count: number }>(sql`INSERT INTO mini_extra_plays (user_id, game, count) VALUES (${userId}, ${game}, ${amount})
+    ON CONFLICT (user_id, game) DO UPDATE SET count = mini_extra_plays.count + ${amount}, updated_at = now() RETURNING count`)
+  return Number(r?.count ?? amount)
 }
 
 /** Atomically spends one purchased play; false when none are left. */

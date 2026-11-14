@@ -44,7 +44,8 @@ export function useMiniLock(game: MiniGame) {
 }
 
 export function MiniCountdown({ game, readyLabel, className }: { game: MiniGame; readyLabel: string; className?: string }) {
-  const { remaining, locked } = useMiniLock(game)
+  const { remaining, locked, left } = useMiniLock(game)
+  const ready = left !== null && left > 1 ? `${left} hak` : readyLabel
   return (
     <span
       className={cn(
@@ -54,7 +55,7 @@ export function MiniCountdown({ game, readyLabel, className }: { game: MiniGame;
       )}
     >
       {locked && <Clock className="size-3.5" aria-hidden="true" />}
-      {locked ? <span><span className="sr-only">Yeni hak: </span>{formatRemaining(remaining)}</span> : readyLabel}
+      {locked ? <span><span className="sr-only">Yeni hak: </span>{formatRemaining(remaining)}</span> : ready}
     </span>
   )
 }

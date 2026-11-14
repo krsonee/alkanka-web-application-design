@@ -9,7 +9,7 @@ import type { MiniGame } from '@/app/actions/wallet'
 import { formatRemaining, useMiniLock } from './mini-status'
 
 function MiniCard({ game, title, text, image, limit, index }: (typeof GAME_CARDS)[number] & { index: number }) {
-  const { remaining, locked } = useMiniLock(game)
+  const { remaining, locked, left } = useMiniLock(game)
   return (
     <li>
       <Link
@@ -47,7 +47,7 @@ function MiniCard({ game, title, text, image, limit, index }: (typeof GAME_CARDS
             ) : (
               <span className="flex items-center gap-2 text-xs font-bold text-primary">
                 <span className="mini-dot size-2 rounded-full bg-primary" aria-hidden="true" />
-                Hakkın hazır
+                {left !== null && left > 1 ? `${left} hakkın var` : 'Hakkın hazır'}
               </span>
             )}
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform group-hover:scale-105">

@@ -3,8 +3,21 @@
 import { useRef, useState } from 'react'
 import { ImageIcon, Images, Loader2, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DIRECT_UPLOAD_OVER_BYTES, checkImageUpload, uploadId as cleanUploadId } from '@/lib/upload-limits'
 
 export async function uploadPanelImage(file: File, id = 'img'): Promise<string> {
+  const ext = checkImageUpload(file)
+  if (file.size > DIRECT_UPLOAD_OVER_BYTES) {
+    const { upload } = await import('@vercel/blob/client')
+    const blob = await upload(`logos/${cleanUploadId(id, 'img')}.${ext}`, file, {
+      access: 'private',
+      handleUploadUrl: '/api/logo-upload/token',
+      contentType: file.type,
+    }).catch(() => {
+      throw new Error('Yükleme başarısız oldu. Oturumun açık olduğundan emin olup tekrar dene.')
+    })
+    return `/api/logo/${blob.pathname.slice('logos/'.length)}`
+  }
   const body = new FormData()
   body.append('file', file)
   body.append('id', id)
@@ -164,7 +177,7 @@ export function ImageField({
           ))}
         </ul>
       )}
-      <p className="sr-only">PNG, JPG, WEBP, SVG veya GIF, en fazla 2 MB.</p>
+      <p className="sr-only">PNG, JPG, WEBP ve SVG en fazla 2 MB, GIF en fazla 8 MB. Her piksel boyutu kabul edilir.</p>
     </div>
   )
 }

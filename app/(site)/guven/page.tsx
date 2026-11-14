@@ -12,7 +12,8 @@ import { SnapSlider } from '@/components/alkanka/home/snap-slider'
 import { WithdrawWall } from '@/components/alkanka/community/withdraw-wall'
 import { recentWithdrawals, siteWithdrawals, withdrawStats } from '@/lib/withdrawals'
 import { cn } from '@/lib/utils'
-import { getMember } from '@/lib/member'
+import { MembersOnly } from '@/components/alkanka/members-only'
+import { getSponsorAccess, MEMBERS_ONLY_ROBOTS } from '@/lib/sponsor-access'
 import {
   complaintTracker,
   helpfulThisWeek,
@@ -34,6 +35,7 @@ export const metadata: Metadata = {
   title: 'Güven merkezi: site yorumları ve şikâyetler',
   description: 'Doğrulanmış üyelerin site yorumları, puanları ve şikâyet çözüm oranları.',
   alternates: { canonical: '/guven' },
+  robots: MEMBERS_ONLY_ROBOTS,
 }
 export const dynamic = 'force-dynamic'
 
@@ -70,6 +72,9 @@ function resolveRate(t: SiteTrust) {
 }
 
 export default async function TrustPage({ searchParams }: { searchParams: Promise<{ site?: string; tab?: string }> }) {
+  // Sponsor scorecards are sponsored content: members only, behind the same one-time 18+ confirmation as the sponsor pages.
+  const access = await getSponsorAccess()
+  if (access.state !== 'open') return <MembersOnly state={access.state} title="Güven merkezi üyelere özel" />
   const { site, tab } = await searchParams
   const table = await siteTrustTable()
   const view = tab === 'sikayet' ? 'sikayet' : tab === 'cekim' ? 'cekim' : 'yorum'
@@ -87,7 +92,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
   const [reviews, complaints, withdraws] = current
     ? await Promise.all([siteReviews(selected), siteComplaints(selected), siteWithdrawals(selected).catch(() => [])])
     : [[], [], []]
-  const member = await getMember().catch(() => null)
+  const member = access.member
   const [extras, tracker, voteBoard, myVote, helpfulTop, lastWinner] = await Promise.all([
     reviewExtras(reviews.map((r) => r.id), member?.id ?? null).catch(() => ({}) as Record<number, ReviewExtra>),
     complaintTracker().catch(() => null),
