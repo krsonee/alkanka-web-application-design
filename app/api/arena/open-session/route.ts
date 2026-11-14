@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getMember } from '@/lib/member'
-import { findOpenBotSession } from '@/lib/solo-sessions'
+import { findOpenBotSession, refundRetiredSessions } from '@/lib/solo-sessions'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const member = await getMember()
   const game = req.nextUrl.searchParams.get('game') ?? ''
+  const refunded = member ? await refundRetiredSessions(member.id, game).catch(() => 0) : 0
   const session = member ? await findOpenBotSession(member.id, game).catch(() => null) : null
-  return NextResponse.json({ session }, { headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ session, refunded }, { headers: { 'Cache-Control': 'no-store' } })
 }

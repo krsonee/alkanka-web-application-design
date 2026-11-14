@@ -110,7 +110,11 @@ export type OkeyReveal = {
 export const OKEY_TARGETS = [10, 20, 30] as const
 export const isOkeyScored = (s: OkeyState) => (s.target ?? 0) > 0
 
-export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string; extras?: string[] }
+/**
+ * solo: opened with "Bota karşı hemen oyna", every other seat is a bot from the start.
+ * quick: opened with "Hemen eşleş"; seats still empty after a short wait go to bots.
+ */
+export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string; extras?: string[]; solo?: boolean; quick?: boolean }
 
 export const okeySeats = (s: OkeyState) => s.seats ?? s.hands.length
 /** In okey you draw from the discard pile of the player who played right before you. */

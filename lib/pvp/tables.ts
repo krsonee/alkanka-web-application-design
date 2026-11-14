@@ -3,7 +3,8 @@ import 'server-only'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
-import { TURN_SECONDS } from '@/lib/arena'
+import { BOT_PROFIT_GAMES } from '@/lib/solo-sessions'
+import { TURN_SECONDS, botFillSeconds, botWinMultiplier, isBotTableGame, quickSeats, tablePot } from '@/lib/arena'
 import {
   autoMove,
   applyAction,
@@ -118,6 +119,8 @@ function mapTable(r: Record<string, unknown>): TableRow {
       ...(raw.rounds ? { rounds: Number(raw.rounds) } : {}),
       ...(raw.variant ? { variant: raw.variant } : {}),
       ...(Array.isArray(raw.extras) ? { extras: raw.extras.map(String) } : {}),
+      ...(raw.solo === true ? { solo: true } : {}),
+      ...(raw.quick === true ? { quick: true } : {}),
       winners: raw.winners,
       lastActs: raw.lastActs,
       forfeits: Number(raw.forfeits ?? 0) || 0,
@@ -156,6 +159,8 @@ export function tableView(t: TableRow, userId: string | null) {
     rounds: t.options.rounds ?? null,
     variant: t.options.variant ?? null,
     extras: t.options.extras ?? null,
+    solo: t.options.solo === true,
+    quick: t.options.quick === true,
     winners: t.options.winners ?? (t.winnerId ? [t.winnerId] : []),
     status: t.status,
     players: t.players,
@@ -250,13 +255,20 @@ function normalizeOptions(game: string, input?: Partial<TableOptions>): TableOpt
   return { seats, team: input.team, bots, ...(rounds ? { rounds } : {}) }
 }
 
-export async function createTable(m: Member, game: string, stake: number, input?: Partial<TableOptions>) {
+type TableKind = 'solo' | 'quick'
+
+export async function createTable(m: Member, game: string, stake: number, input?: Partial<TableOptions>, kind?: TableKind) {
   if (!isPvpGame(game)) throw new Error('Bu oyun için kanka masası yok.')
   if (game === 'blackjack' || game === 'rulet') throw new Error('Blackjack ve rulet canlı ortak masalarda oynanıyor, oyun sayfasından masaya otur.')
   const settings = (await getArenaSettings())[game]
-  if (!settings.enabled || !settings.pvpEnabled) throw new Error('Kanka masaları şu an kapalı.')
-  if (!settings.bets.includes(stake)) throw new Error('Geçersiz bahis.')
-  const base = normalizeOptions(game, input)
+  // A solo table is the game's bot mode, so it stays open even when player tables are switched off.
+  if (!settings.enabled || (kind !== 'solo' && !settings.pvpEnabled)) throw new Error(kind === 'solo' ? 'Bu oyun şu an kapalı.' : 'Kanka masaları şu an kapalı.')
+  // Only a solo table may be a 0 KC practice table: nothing is staked, paid or recorded.
+  const practice = kind === 'solo' && stake === 0
+  if (!practice && !settings.bets.includes(stake)) throw new Error('Geçersiz bahis.')
+  const normalized = normalizeOptions(game, input)
+  if (kind === 'solo' && normalized.bots !== normalized.seats - 1) throw new Error('Bu oyunda bota karşı masa açılamıyor.')
+  const base: TableOptions = kind ? { ...normalized, [kind]: true } : normalized
   const hold = marsHold(game, stake, base)
   const opts: TableOptions & { hold?: number } = hold ? { ...base, hold } : base
   const open = await pool.query(
@@ -322,13 +334,69 @@ export async function joinTable(m: Member, id: string, expectedStake?: number) {
   }
 }
 
+/** Default setup behind the quick-play buttons: the game's standard table, against bots or open to players. */
+function quickSetup(game: string, bots: boolean): Partial<TableOptions> {
+  const seats = quickSeats(game)
+  return { seats, ...(bots ? { bots: seats - 1 } : {}), ...(game === 'okey' ? { team: false } : {}) }
+}
+
+/** "Bota karşı hemen oyna": a table where every other seat is a bot, so it starts on the spot. */
+export async function quickSoloTable(m: Member, game: string, stake: number) {
+  if (!isBotTableGame(game)) throw new Error('Bu oyunda bota karşı masa açılamıyor.')
+  const mine = await pool.query<{ id: string }>(
+    `SELECT id FROM game_tables WHERE status = 'oynaniyor' AND tournament_id IS NULL AND game = $1 AND stake = $2
+       AND options @> '{"solo": true}'::jsonb AND players @> $3::jsonb ORDER BY created_at DESC LIMIT 1`,
+    [game, stake, JSON.stringify([{ id: m.id }])],
+  )
+  if (mine.rows[0]) return String(mine.rows[0].id)
+  return createTable(m, game, stake, quickSetup(game, true), 'solo')
+}
+
+/** "Hemen eşleş": sits at the oldest waiting table with this stake, or opens one that bots fill if nobody comes. */
+export async function quickMatchTable(m: Member, game: string, stake: number) {
+  const waiting = await pool.query<{ id: string }>(
+    `SELECT id FROM game_tables WHERE status = 'bekliyor' AND tournament_id IS NULL AND game = $1 AND stake = $2
+       AND NOT players @> $3::jsonb ORDER BY created_at ASC LIMIT 5`,
+    [game, stake, JSON.stringify([{ id: m.id }])],
+  )
+  for (const row of waiting.rows) {
+    try {
+      await joinTable(m, String(row.id), stake)
+      return { id: String(row.id), joined: true }
+    } catch (e) {
+      // A full or just-closed table is skipped; a real problem (balance, table limit) is the same for the next one.
+      if (e instanceof Error && /Yetersiz|bakiyende/.test(e.message)) throw e
+    }
+  }
+  return { id: await createTable(m, game, stake, quickSetup(game, false), 'quick'), joined: false }
+}
+
 /** Okey ve 101 masaları sabit 4 kişilik; bekleyen masada boş koltuklara bu süreden sonra bot oturur. */
 export const FOUR_SEAT_GAMES = new Set(['okey', 'okey101'])
-export const BOT_FILL_MS = 30 * 1000
-/** Botlu Okey/101 masalarında ek kesinti (yüzde puan), bota karşı KC kasılmasın diye. */
-const BOT_TABLE_EXTRA_COMMISSION = 5
+
+/** How long a waiting table holds its empty seats for players, or null when bots never fill it. */
+function botFillMs(t: Pick<TableRow, 'game' | 'options'>): number | null {
+  const seconds = botFillSeconds(t.game, t.options.quick === true)
+  return seconds == null ? null : seconds * 1000
+}
+
 /** Daily bot-table wins that pay profit; later wins only return the stake so bots cannot be farmed endlessly. */
 export const BOT_DAILY_PAID_WINS = 15
+/** Solo okey keeps the payout and the daily profit ceiling of the bot game it replaced. */
+const SOLO_OKEY_DAILY_PROFIT_CAP = 1500
+const soloOkey = (t: Pick<TableRow, 'game' | 'options'>) => t.game === 'okey' && t.options.solo === true
+/** Solo okey is logged as a bot game, like the single-player version before it. */
+const historyMode = (t: Pick<TableRow, 'game' | 'options'>) => (soloOkey(t) ? 'bot' : 'pvp')
+
+async function soloOkeyProfitToday(userId: string) {
+  const r = await pool.query<{ net: string | null }>(
+    `SELECT sum(delta) AS net FROM game_history
+      WHERE user_id = $1 AND mode = 'bot' AND game = ANY($2::text[])
+        AND created_at >= date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul'`,
+    [userId, BOT_PROFIT_GAMES],
+  )
+  return Math.max(0, Number(r.rows[0]?.net ?? 0))
+}
 
 async function botWinsToday(userId: string) {
   const r = await pool.query<{ n: number }>(
@@ -370,7 +438,7 @@ async function seatBots(t: TableRow): Promise<boolean> {
 export async function startWithBots(m: Pick<Member, 'id'>, id: string) {
   const t = await getTableRow(id)
   if (!t || t.status !== 'bekliyor') throw new Error('Masa artık bekleme durumunda değil.')
-  if (!FOUR_SEAT_GAMES.has(t.game)) throw new Error('Bu oyunda botla başlatma yok.')
+  if (botFillMs(t) == null) throw new Error('Bu oyunda botla başlatma yok.')
   if (t.createdBy !== m.id) throw new Error('Botla başlatmayı sadece masayı açan yapabilir.')
   if (!(await seatBots(t))) throw new Error('Masa az önce güncellendi, tekrar dene.')
 }
@@ -463,8 +531,11 @@ export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'lea
   if (!t.state) return
   // A Papaz player who is already out keeps the seat and is paid when the game ends.
   if (t.state.kind === 'papaz' && t.state.loser == null && !t.state.hands[me.seat]?.length) return
-  const recordLoss = () =>
-    recordHistory({ userId: me.id, userName: me.name, game: t.game, mode: 'pvp', opponent: rivalName(t, me.id), stake: t.stake, result: 'loss', delta: -t.stake, tableId: t.id })
+  // A practice table staked nothing, so walking away from it leaves no trace.
+  const recordLoss = async () => {
+    if (t.stake === 0) return
+    await recordHistory({ userId: me.id, userName: me.name, game: t.game, mode: historyMode(t), opponent: soloOkey(t) ? 'Alkanka Bot' : rivalName(t, me.id), stake: t.stake, result: 'loss', delta: -t.stake, tableId: t.id })
+  }
   const others = humans(t).filter((p) => p.id !== me.id)
 
   if (others.length === 0) {
@@ -507,7 +578,8 @@ export async function kickIdlePlayers(t: TableRow): Promise<boolean> {
   if (t.tournamentId) return false
   const now = Date.now()
   if (t.status === 'bekliyor') {
-    if (FOUR_SEAT_GAMES.has(t.game) && humans(t).length > 0 && now - new Date(t.updatedAt).getTime() >= BOT_FILL_MS) {
+    const fillMs = botFillMs(t)
+    if (fillMs != null && humans(t).length > 0 && now - new Date(t.updatedAt).getTime() >= fillMs) {
       return seatBots(t).catch(() => false)
     }
     if (now - new Date(t.updatedAt).getTime() < IDLE_KICK_MS) return false
@@ -697,23 +769,44 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   }
 
   const people = humans(t)
+  // A 0 KC practice table has nothing to pay and leaves no history, so it earns no KP or task progress.
+  if (t.stake === 0) return
   if (isDraw) {
     for (const p of people) {
       await credit(p.id, entry(t))
-      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: 'draw', delta: 0, tableId: t.id })
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: historyMode(t), opponent: soloOkey(t) ? 'Alkanka Bot' : rivalName(t, p.id), stake: t.stake, result: 'draw', delta: 0, tableId: t.id })
     }
     return
   }
 
   const settings = (await getArenaSettings())[t.game as keyof Awaited<ReturnType<typeof getArenaSettings>>]
+
+  if (soloOkey(t) && settings) {
+    const p = people[0]
+    if (!p) return
+    const won = humanWinners.some((w) => w.id === p.id)
+    // Okeyle or çiftten finish doubles the payout, both together quadruple it: penalty is 2, 4 or 8.
+    const reveal = t.state?.kind === 'okey' ? t.state.reveal : null
+    const factor = won && reveal && reveal.seat === p.seat ? Math.max(1, reveal.penalty / 2) : 1
+    let gross = won ? Math.floor(t.stake * botWinMultiplier('okey', settings) * factor) : 0
+    if (gross > t.stake) {
+      const room = Math.max(0, SOLO_OKEY_DAILY_PROFIT_CAP - (await soloOkeyProfitToday(p.id)))
+      gross = Math.min(gross, t.stake + room)
+    }
+    const payout = await capPayout(p.id, t.stake, gross)
+    if (payout) await credit(p.id, payout)
+    await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'bot', opponent: 'Alkanka Bot', stake: t.stake, result: won ? 'win' : 'loss', delta: payout - t.stake, tableId: t.id })
+    return
+  }
+
   // At a table with bots, the bots together put in exactly one extra stake: beating them pays 1x profit minus commission.
   // Bots that replaced a player who left are already covered by that player's forfeited stake.
-  const hasBots = t.players.some((p) => p.bot)
-  const botBonus = hasBots && (isSeatGame(t.game) || !(t.options.forfeits ?? 0)) ? t.stake : 0
   // Players who left mid-game leave their stake in the pot.
-  const pot = t.stake * (people.length + (t.options.forfeits ?? 0)) + botBonus
-  const commission = (settings?.commission ?? 0) + (botBonus && FOUR_SEAT_GAMES.has(t.game) ? BOT_TABLE_EXTRA_COMMISSION : 0)
-  const net = pot * (1 - commission / 100)
+  const { net, botStake: botBonus } = tablePot(t.game, t.stake, settings?.commission ?? 0, {
+    humans: people.length,
+    bots: t.players.filter((p) => p.bot).length,
+    forfeits: t.options.forfeits ?? 0,
+  })
   // Papaz Kimde pays by finishing place: winnerSeats is ordered first-out first, earlier places weigh more.
   const weightOf = (p: TableRow['players'][number]) => (t.game === 'papaz' ? winnerSeats.length - winnerSeats.indexOf(p.seat) : 1)
   const totalWeight = humanWinners.reduce((a, p) => a + weightOf(p), 0)
