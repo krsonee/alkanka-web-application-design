@@ -240,6 +240,12 @@ export const BOT_PACE_MS = 1100
 /** Okey bots think for 0.7 to 1.2 seconds; the spread comes from the table itself so every poll agrees on it. */
 const okeyPaceMs = (s: OkeyState) => 700 + ((s.deck.length * 173 + s.turn * 97) % 501)
 
+/** Milliseconds until the okey bot on turn moves, or null when no okey bot is up; lets the client ask again right on time. */
+export function okeyBotDueMs(state: PvpState, updatedAt: Date | string, now = Date.now()) {
+  if (state.kind !== 'okey' || !(state.bots ?? []).includes(state.turn)) return null
+  return Math.max(0, okeyPaceMs(state) - (now - new Date(updatedAt).getTime()))
+}
+
 /** Delay before the next paced bot move for this state. */
 export function botPaceMs(state: PvpState) {
   if (state.kind === 'okey') return okeyPaceMs(state)

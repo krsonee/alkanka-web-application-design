@@ -72,6 +72,8 @@ export type TableSummary = {
   roundNo: number | null
   updatedAt: string
   paused?: boolean
+  /** Milliseconds until the okey bot on turn moves; only the table poll sends it. */
+  botDueMs?: number | null
   seat: number
   turn: number | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1024,6 +1026,8 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   const { refresh, member } = usePoints()
   const idle = useIdle()
   const { data, mutate, error } = useSWR<TableSummary>(`/api/tables/${id}`, fetcher, {
+    // SWR's default 2 second dedupe would swallow every poll faster than that, so the short intervals below never ran.
+    dedupingInterval: 100,
     refreshInterval: (d) => {
       if (!d) return 2000
       if (d.status === 'bitti' || d.status === 'iptal') return 0
@@ -1032,6 +1036,8 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       if (d.spectator) return 3000
       // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
       if (d.turn === d.seat) return 5000
+      // An okey bot moves on the first poll after its 0.7 to 1.2 second think, so ask again just as that think ends.
+      if (d.state?.kind === 'okey' && (d.state.bots ?? []).includes(d.state.turn)) return Math.min(1200, Math.max(150, (d.botDueMs ?? 500) + 50))
       // 101 bots play one turn per poll, so a quicker beat keeps their moves flowing one by one.
       return d.game === 'okey101' ? 1200 : d.game === 'batak' || d.game === 'pisti' || d.game === 'papaz' ? 1000 : 2000
     },

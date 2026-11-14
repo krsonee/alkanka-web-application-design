@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { ArrowDownToLine, Bot, Eye, Layers, Trophy, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canShowIndicator, isOkeyScored, type OkeyLast, type OkeyReveal, type OkeyState } from '@/lib/pvp/rules'
@@ -90,6 +90,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
     partner: i === partner,
     team: s.team ? (i % 2 === 0 ? 'A' : 'B') : null,
     top: s.discards[i]?.at(-1),
+    pile: s.discards[i]?.length ?? 0,
     takeable: myDraw && i === fromSeat && Boolean(takeTop),
     okey,
   })
@@ -358,8 +359,10 @@ function SeatBadge({
   userId,
   seed,
   from,
+  pile,
 }: {
   from: keyof typeof THROW_FROM
+  pile: number
   userId: string | null
   seed: string
   name: string
@@ -373,9 +376,9 @@ function SeatBadge({
   okey: OkeyValue
   vertical?: boolean
 }) {
-  // Tiles already lying there when the table opens stay put; only ones thrown afterwards fly in.
-  const [settled, setSettled] = useState(false)
-  useEffect(() => setSettled(true), [])
+  // Only a tile thrown while the table is open flies in; one already lying there, or uncovered when the tile above it is taken, stays put.
+  const [seen, setSeen] = useState<{ pile: number; thrown: number | null }>({ pile, thrown: null })
+  if (seen.pile !== pile) setSeen({ pile, thrown: pile > seen.pile && top ? top.id : null })
   return (
     <div className={cn('flex items-center gap-2', vertical && 'flex-col')}>
       <div
@@ -398,7 +401,7 @@ function SeatBadge({
       </div>
       <div className={cn('flex flex-col items-center rounded-md', takeable && 'ring-2 ring-primary')} title="Son attığı taş">
         {top ? (
-          <span key={top.id} className={cn(settled && 'tile-fly')} style={THROW_FROM[from]}>
+          <span key={top.id} className={cn('block', seen.thrown === top.id && 'tile-fly')} style={THROW_FROM[from]}>
             <TileFace tile={top} okey={okey} size="sm" />
           </span>
         ) : (

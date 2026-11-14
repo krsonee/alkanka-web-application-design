@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getMember } from '@/lib/member'
+import { okeyBotDueMs } from '@/lib/pvp/rules'
 import { notifyTable } from '@/lib/pvp/table-events'
 import { enforceTurnClock, getTableRow, kickIdlePlayers, pausedClock, tableView } from '@/lib/pvp/tables'
 
@@ -16,5 +17,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (kicked || t.version !== row.version || t.status !== row.status) await notifyTable(id, t.version)
   const view = tableView(t, m?.id ?? null)
   const clock = t.status === 'oynaniyor' ? await pausedClock(t.updatedAt) : { updatedAt: t.updatedAt, paused: false }
-  return NextResponse.json({ ...view, ...clock })
+  const botDueMs = t.status === 'oynaniyor' && t.state ? okeyBotDueMs(t.state, t.updatedAt) : null
+  return NextResponse.json({ ...view, ...clock, botDueMs })
 }
