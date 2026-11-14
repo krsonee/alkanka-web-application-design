@@ -58,7 +58,7 @@ type Phase =
   | { kind: 'playing'; bet: number; round: number; resumed?: boolean; started?: boolean }
   | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number; mars?: boolean }
 
-const SAVE_AWARE: ArenaGame[] = ['tavla']
+const SAVE_AWARE: ArenaGame[] = ['tavla', 'okey']
 /** These take over the whole window, so an unfinished session asks first instead of dropping the player into it. */
 const FULLSCREEN: ArenaGame[] = ['kafa-topu', 'kafa-basketbolu']
 
@@ -184,12 +184,8 @@ export function StakeGate({
     if (!member || resumeChecked.current) return
     resumeChecked.current = true
     fetch(`/api/arena/open-session?game=${encodeURIComponent(game)}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? (r.json() as Promise<{ session: PendingSession | null; refunded?: number }>) : { session: null, refunded: 0 }))
+      .then((r) => (r.ok ? (r.json() as Promise<{ session: PendingSession | null }>) : { session: null }))
       .then((res) => {
-        if (res.refunded) {
-          refresh()
-          setNotice(`Yarım kalan elin kapatıldı, ${formatAC(res.refunded)} KC bahsin iade edildi. Bota karşı oyun artık masada oynanıyor.`)
-        }
         if (!res.session || phaseRef.current.kind !== 'lobby') return
         if (FULLSCREEN.includes(game)) {
           setPending(res.session)
@@ -201,7 +197,7 @@ export function StakeGate({
       })
       .catch(() => {})
       .finally(() => setResumeKnown(true))
-  }, [member, game, refresh])
+  }, [member, game])
 
   function resumePending() {
     if (!pending) return
@@ -364,7 +360,9 @@ export function StakeGate({
               ? 'max-w-[min(100%,76rem,calc((100dvh-9rem)*1.3))]'
               : game === 'bilardo'
                 ? 'max-w-[min(100%,84rem,calc((100dvh-9rem)*1.87))]'
-                : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
+                : game === 'okey'
+                  ? 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))] lg:max-w-[min(100%,80rem,calc((100dvh-7rem)*1.75))]'
+                  : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
           )}
         >
           <GameErrorBoundary label={meta.title}>
@@ -374,7 +372,7 @@ export function StakeGate({
               <LandscapeFit
                 label={meta.title}
                 expandable
-                force={game === 'tavla'}
+                force={game === 'tavla' || game === 'okey'}
                 menu={
                   game === 'tavla' ? (
                     <>
@@ -484,13 +482,12 @@ export function StakeGate({
 
   const practice = bet === 0
   const seats = quickSeats(game)
-  const soloOkey = game === 'okey'
   const botTable = tablePot(game, bet, settings.commission, { humans: 1, bots: seats - 1 })
-  const botWin = quick.bot === 'table' && !soloOkey ? Math.floor(botTable.net) : Math.floor(bet * botWinMultiplier(game, settings))
+  const botWin = quick.bot === 'table' ? Math.floor(botTable.net) : Math.floor(bet * botWinMultiplier(game, settings))
   const botRate =
-    quick.bot === 'table' && !soloOkey
+    quick.bot === 'table'
       ? `pot ${formatAC(botTable.pot)} KC · %${botTable.cut} kesinti`
-      : soloOkey
+      : game === 'okey'
         ? `${botWinMultiplier(game, settings).toLocaleString('tr-TR')}x · okeyle ya da çiftten bitiş 2 kat`
         : `${settings.multiplier.toLocaleString('tr-TR')}x`
   const fullTable = tablePot(game, bet, settings.commission, { humans: seats, bots: 0 })
