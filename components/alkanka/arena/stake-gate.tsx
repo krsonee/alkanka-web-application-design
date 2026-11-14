@@ -2,10 +2,10 @@
 
 import Image from 'next/image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { cancelBotGame, finishBotGame, markBotGameStarted, startBotGame } from '@/app/actions/arena'
+import { cancelBotGame, finishBotGame, markBotGameStarted, matchNow, playBotsNow, startBotGame } from '@/app/actions/arena'
 import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ARENA_META, MODE_LABEL, botWinMultiplier, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
+import { ARENA_META, botFillSeconds, botWinMultiplier, quickSeats, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
@@ -13,20 +13,24 @@ import { SoundToggle } from './sound-toggle'
 import { GameErrorBoundary } from './game-error-boundary'
 import { GameResultCard } from './game-result-card'
 import { MatchRecapBlock, useMatchRecap } from './match-recap'
-import { clearSaved, saveMode } from './saved-game'
+import { clearSaved } from './saved-game'
 import { TableThemeField } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
 
-const MODE_ICON: Record<GameMode, typeof Bot> = { bot: Bot, pvp: Swords }
-
-/** Mode picker shown inside the stake menu; `onEnter` handles every mode StakeGate doesn't start itself. */
-export type ModeSelect = {
-  modes: GameMode[]
-  mode: GameMode | null
-  onChange: (m: GameMode) => void
-  onEnter: (m: GameMode, bet: number) => void
-  botExternal?: boolean
+/** What the lobby's two play buttons do for this game. */
+export type QuickPlay = {
+  /** session: the bot game runs in the browser and settles through a solo session. table: a server-run table full of bots. */
+  bot: 'session' | 'table' | null
+  /** Player tables are on, so "Hemen eşleş" and the table list are offered. */
+  pvp: boolean
+  /** The member now sits at this table. */
+  onTable: (id: string, stake: number) => void
+  /** Waiting tables and the custom-table entry, shown under the play buttons. */
+  tables?: ReactNode
 }
+
+/** A 0 KC bot game: nothing is staked, so it never reaches the server and earns nothing. */
+const PRACTICE_SESSION = 'pratik'
 
 export type GameResult = 'win' | 'lose' | 'draw'
 /** `saveKey` is set per bot session; games that support it snapshot their state under it so a refresh resumes the same position. */
@@ -53,7 +57,7 @@ type Phase =
   | { kind: 'playing'; bet: number; round: number; resumed?: boolean; started?: boolean }
   | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number; mars?: boolean }
 
-const SAVE_AWARE: ArenaGame[] = ['tavla', 'okey']
+const SAVE_AWARE: ArenaGame[] = ['tavla']
 /** These take over the whole window, so an unfinished session asks first instead of dropping the player into it. */
 const FULLSCREEN: ArenaGame[] = ['kafa-topu', 'kafa-basketbolu']
 
@@ -142,23 +146,21 @@ export function StakeGate({
   settings,
   rules,
   children,
-  modeSelect,
-  pvpContent,
+  quick,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
   rules: string[]
   children: (api: GameApi) => ReactNode
-  modeSelect?: ModeSelect
-  pvpContent?: ReactNode
+  quick: QuickPlay
 }) {
   const meta = ARENA_META[game]
-  const { member, points, loading, setBalance, requireLogin } = usePoints()
+  const { member, points, loading, setBalance, requireLogin, refresh } = usePoints()
   const [bet, setBet] = useState(settings.bets[0])
   const [phase, setPhase] = useState<Phase>({ kind: 'lobby' })
   const [round, setRound] = useState(0)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'bot' | 'match' | 'pending' | null>(null)
   const [showRules, setShowRules] = useState(false)
   const [pending, setPending] = useState<PendingSession | null>(null)
   const [notice, setNotice] = useState('')
@@ -167,16 +169,19 @@ export function StakeGate({
   phaseRef.current = phase
   const resumeChecked = useRef(false)
   const [resumeKnown, setResumeKnown] = useState(false)
-  const { recap, loading: recapLoading } = useMatchRecap(phase.kind === 'done' && member ? { game, round } : null)
-  const pvpMode = modeSelect?.mode === 'pvp'
-  const singleMode = modeSelect != null && modeSelect.modes.length === 1
+  const practiceDone = phase.kind === 'done' && phase.bet === 0
+  const { recap, loading: recapLoading } = useMatchRecap(phase.kind === 'done' && member && !practiceDone ? { game, round } : null)
 
   useEffect(() => {
-    if (!member || resumeChecked.current || modeSelect?.botExternal) return
+    if (!member || resumeChecked.current) return
     resumeChecked.current = true
     fetch(`/api/arena/open-session?game=${encodeURIComponent(game)}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? (r.json() as Promise<{ session: PendingSession | null }>) : { session: null }))
+      .then((r) => (r.ok ? (r.json() as Promise<{ session: PendingSession | null; refunded?: number }>) : { session: null, refunded: 0 }))
       .then((res) => {
+        if (res.refunded) {
+          refresh()
+          setNotice(`Yarım kalan elin kapatıldı, ${formatAC(res.refunded)} KC bahsin iade edildi. Bota karşı oyun artık masada oynanıyor.`)
+        }
         if (!res.session || phaseRef.current.kind !== 'lobby') return
         if (FULLSCREEN.includes(game)) {
           setPending(res.session)
@@ -188,12 +193,7 @@ export function StakeGate({
       })
       .catch(() => {})
       .finally(() => setResumeKnown(true))
-  }, [member, game, modeSelect?.botExternal])
-
-  function pickMode(m: GameMode) {
-    saveMode(game, m)
-    modeSelect?.onChange(m)
-  }
+  }, [member, game, refresh])
 
   function resumePending() {
     if (!pending) return
@@ -206,9 +206,9 @@ export function StakeGate({
 
   async function dropPending() {
     if (!pending || busy) return
-    setBusy(true)
+    setBusy('pending')
     const res = pending.started ? await finishBotGame(pending.sessionId, 'loss') : await cancelBotGame(pending.sessionId)
-    setBusy(false)
+    setBusy(null)
     setPending(null)
     if (!res.ok) {
       setError(res.error)
@@ -225,15 +225,19 @@ export function StakeGate({
 
   async function start(amount: number) {
     if (busy || !requireLogin()) return
-    setBusy(true)
-    const res = await startBotGame(game, amount)
-    setBusy(false)
-    if (!res.ok) {
-      setError(res.error)
-      return
+    if (amount === 0) {
+      session.current = PRACTICE_SESSION
+    } else {
+      setBusy('bot')
+      const res = await startBotGame(game, amount)
+      setBusy(null)
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      session.current = res.sessionId
+      setBalance(res.balance)
     }
-    session.current = res.sessionId
-    setBalance(res.balance)
     setError('')
     setNotice('')
     const next = round + 1
@@ -247,6 +251,10 @@ export function StakeGate({
     session.current = null
     clearSaved(`${game}:${id}`)
     const playedBet = phase.bet
+    if (id === PRACTICE_SESSION) {
+      setPhase({ kind: 'done', bet: 0, result, note, payout: 0 })
+      return
+    }
     const res = await finishBotGame(id, result === 'lose' ? 'loss' : result, score)
     if (!res.ok) {
       setError(res.error)
@@ -270,6 +278,11 @@ export function StakeGate({
     const cancel = async () => {
       const id = session.current
       if (!id) return
+      if (id === PRACTICE_SESSION) {
+        session.current = null
+        setPhase({ kind: 'lobby' })
+        return
+      }
       const res = await cancelBotGame(id)
       if (res.ok) {
         session.current = null
@@ -290,7 +303,7 @@ export function StakeGate({
     }
     const kickoff = () => {
       const id = session.current
-      if (id) void markBotGameStarted(id)
+      if (id && id !== PRACTICE_SESSION) void markBotGameStarted(id)
     }
     const api: GameApi = {
       bet: phase.bet,
@@ -307,14 +320,18 @@ export function StakeGate({
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
           <span className="font-display font-bold uppercase tracking-wide text-foreground">{meta.title} masası</span>
-          <span className="flex items-center gap-4 text-muted-foreground">
-            <span>
-              Bahis <strong className="text-foreground">{formatAC(phase.bet)} KC</strong>
+          {phase.bet === 0 ? (
+            <span className="text-muted-foreground">Pratik maçı · KC ve KP kazandırmaz</span>
+          ) : (
+            <span className="flex items-center gap-4 text-muted-foreground">
+              <span>
+                Bahis <strong className="text-foreground">{formatAC(phase.bet)} KC</strong>
+              </span>
+              <span>
+                Kazanç <strong className="text-primary">{formatAC(Math.floor(phase.bet * botWinMultiplier(game, settings)))} KC</strong>
+              </span>
             </span>
-            <span>
-              Kazanç <strong className="text-primary">{formatAC(Math.floor(phase.bet * botWinMultiplier(game, settings)))} KC</strong>
-            </span>
-          </span>
+          )}
         </div>
         {phase.resumed && (
           <FadingNotice key={`notice-${phase.round}`}>
@@ -331,8 +348,6 @@ export function StakeGate({
               ? 'max-w-[min(100%,76rem,calc((100dvh-9rem)*1.3))]'
               : game === 'bilardo'
                 ? 'max-w-[min(100%,84rem,calc((100dvh-9rem)*1.87))]'
-                : game === 'okey'
-                ? 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))] lg:max-w-[min(100%,80rem,calc((100dvh-7rem)*1.75))]'
                 : 'max-w-[min(100%,56rem,calc((100dvh-6rem)*1.25))]',
           )}
         >
@@ -342,7 +357,7 @@ export function StakeGate({
             ) : (
               <LandscapeFit
                 label={meta.title}
-                force={game === 'tavla' || game === 'okey'}
+                force={game === 'tavla'}
                 menu={
                   game === 'tavla' ? (
                     <>
@@ -372,7 +387,13 @@ export function StakeGate({
           title={phase.mars ? 'Mars yaptın kanka!' : won ? 'Kazandın kanka!' : draw ? 'Berabere' : 'Bu el rakibin'}
           subtitle={
             phase.note ??
-            (won
+            (practiceDone
+              ? won
+                ? 'Pratik maçını aldın. Hazırsan KC ile oyna.'
+                : draw
+                  ? 'Pratik maçı berabere bitti.'
+                  : 'Pratik maçı botun oldu. Bir el daha dene.'
+              : won
               ? `${formatAC(phase.bet)} KC bahsine ${formatAC(phase.payout)} KC geri döndü.`
               : draw
                 ? 'Bahsin iade edildi.'
@@ -384,7 +405,15 @@ export function StakeGate({
           delta={phase.payout - phase.bet}
           badge={phase.mars ? 'Mars · 3x' : undefined}
           players={[]}
-          recap={<MatchRecapBlock recap={recap} loading={recapLoading} />}
+          recap={
+            practiceDone ? (
+              <p className="w-full rounded-xl border border-border bg-background/40 px-3 py-2.5 text-pretty text-sm leading-relaxed text-muted-foreground">
+                Pratik maçı: KC yatırılmaz, KC ve Kanka Puanı kazandırmaz, görevlere sayılmaz.
+              </p>
+            ) : (
+              <MatchRecapBlock recap={recap} loading={recapLoading} />
+            )
+          }
         >
           <button
             type="button"
@@ -392,7 +421,7 @@ export function StakeGate({
             className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
           >
             <RotateCcw className="size-4" aria-hidden="true" />
-            Bir el daha · {formatAC(phase.bet)} KC
+            {practiceDone ? 'Bir el daha · pratik' : `Bir el daha · ${formatAC(phase.bet)} KC`}
           </button>
           <button
             type="button"
@@ -408,14 +437,47 @@ export function StakeGate({
     )
   }
 
-  const pvpWin = bet * 2 - Math.round((bet * 2 * settings.commission) / 100)
-  const botMultiplier = botWinMultiplier(game, settings)
-  const winAmount = pvpMode ? pvpWin : Math.floor(bet * botMultiplier)
-  const blocked = !pvpMode && !!member && bet > points
-  // Starting a bot game closes any session still open for this game, so "Oyna" waits until we know
+  const practice = bet === 0
+  const seats = quickSeats(game)
+  const soloOkey = game === 'okey'
+  const botTable = tablePot(game, bet, settings.commission, { humans: 1, bots: seats - 1 })
+  const botWin = quick.bot === 'table' && !soloOkey ? Math.floor(botTable.net) : Math.floor(bet * botWinMultiplier(game, settings))
+  const botRate =
+    quick.bot === 'table' && !soloOkey
+      ? `pot ${formatAC(botTable.pot)} KC · %${botTable.cut} kesinti`
+      : soloOkey
+        ? `${botWinMultiplier(game, settings).toLocaleString('tr-TR')}x · okeyle ya da çiftten bitiş 2 kat`
+        : `${settings.multiplier.toLocaleString('tr-TR')}x`
+  const fullTable = tablePot(game, bet, settings.commission, { humans: seats, bots: 0 })
+  const fillSeconds = botFillSeconds(game, true)
+  const blocked = !practice && !!member && bet > points
+  // Starting a bot session closes any session still open for this game, so the bot button waits until we know
   // whether there is one to resume; it also waits for the member lookup so a member never hits the login wall.
-  const checking = loading || (!!member && !pvpMode && !modeSelect?.botExternal && !resumeKnown)
+  const checking = loading || (!!member && quick.bot === 'session' && !resumeKnown)
   const themeGame = arenaThemeGame(game)
+
+  async function playBots() {
+    if (busy || !requireLogin()) return
+    if (quick.bot === 'session') return start(bet)
+    setBusy('bot')
+    const res = await playBotsNow(game, bet)
+    setBusy(null)
+    refresh()
+    if (!res.ok) return setError(res.error)
+    setError('')
+    quick.onTable(res.id, bet)
+  }
+
+  async function findMatch() {
+    if (busy || !requireLogin()) return
+    setBusy('match')
+    const res = await matchNow(game, bet)
+    setBusy(null)
+    refresh()
+    if (!res.ok) return setError(res.error)
+    setError('')
+    quick.onTable(res.id, bet)
+  }
 
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card lg:grid lg:grid-cols-[1.05fr_1fr]">
@@ -433,124 +495,91 @@ export function StakeGate({
       </div>
 
       <div className="flex flex-col gap-4 p-4 sm:p-6 lg:p-8">
-        {pending && !pvpMode && (
-          <PendingSessionCard pending={pending} busy={busy} onResume={resumePending} onDrop={() => void dropPending()} />
-        )}
+        {pending && <PendingSessionCard pending={pending} busy={busy != null} onResume={resumePending} onDrop={() => void dropPending()} />}
         {notice && (
           <p role="status" className="text-pretty rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm leading-relaxed text-foreground">
             {notice}
           </p>
         )}
-        {modeSelect && !singleMode && (
-          <div role="radiogroup" aria-label="Oyun modu" className="grid grid-cols-2 gap-1 rounded-xl bg-secondary/60 p-1">
-            {modeSelect.modes.map((m) => {
-              const Icon = MODE_ICON[m]
-              const active = modeSelect.mode === m
+
+        <fieldset className="flex min-w-0 flex-col gap-2">
+          <legend className="mb-2 flex w-full items-center justify-between text-sm font-semibold text-foreground">
+            Bahsini seç
+            <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <Coins className="size-3.5 text-primary" aria-hidden="true" />
+              {member ? `Bakiye ${formatAC(points)}` : loading ? 'Bakiye…' : 'Üye olunca hediye KC'}
+            </span>
+          </legend>
+          <div className="grid grid-cols-4 gap-2">
+            {[...(quick.bot ? [0] : []), ...settings.bets].map((b) => {
+              const active = bet === b
+              const short = b > 0 && !!member && b > points
               return (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => pickMode(m)}
+                <label
+                  key={b}
                   className={cn(
-                    'flex items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-xs font-bold uppercase tracking-wide transition-colors',
-                    active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-background/60',
+                    'flex min-w-0 cursor-pointer flex-col items-center rounded-xl border px-1 py-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary',
+                    active ? 'border-primary bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'border-border bg-surface text-foreground hover:border-primary/50',
+                    short && !active && 'opacity-45',
                   )}
                 >
-                  <Icon className="size-4" aria-hidden="true" />
-                  {MODE_LABEL[m]}
-                </button>
+                  <input type="radio" name="bet" value={b} checked={active} onChange={() => setBet(b)} className="sr-only" />
+                  <span className="font-display text-lg font-bold leading-tight tabular-nums">{b === 0 ? 'Pratik' : formatAC(b)}</span>
+                  <span className={cn('text-[10px] font-semibold uppercase tracking-wider', active ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+                    {b === 0 ? '0 KC' : short ? 'Yetersiz' : 'KC'}
+                  </span>
+                </label>
               )
             })}
           </div>
-        )}
+        </fieldset>
 
-        {pvpMode && pvpContent ? (
-          pvpContent
-        ) : pvpMode ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Gerçek kankalarla oyna. Açık bir masaya otur ya da kendi masanı aç, bahsi masa sahibi belirler.
-          </p>
-        ) : (
-          <fieldset className="flex min-w-0 flex-col gap-2">
-            <legend className="mb-2 flex w-full items-center justify-between text-sm font-semibold text-foreground">
-              Bahsini seç
-              <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <Coins className="size-3.5 text-primary" aria-hidden="true" />
-                {member ? `Bakiye ${formatAC(points)}` : loading ? 'Bakiye…' : 'Üye olunca hediye KC'}
-              </span>
-            </legend>
-            <div className="grid grid-cols-4 gap-2">
-              {settings.bets.map((b) => {
-                const active = bet === b
-                const short = !!member && b > points
-                return (
-                  <label
-                    key={b}
-                    className={cn(
-                      'flex min-w-0 cursor-pointer flex-col items-center rounded-xl border px-1 py-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary',
-                      active ? 'border-primary bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'border-border bg-surface text-foreground hover:border-primary/50',
-                      short && !active && 'opacity-45',
-                    )}
-                  >
-                    <input type="radio" name="bet" value={b} checked={active} onChange={() => setBet(b)} className="sr-only" />
-                    <span className="font-display text-lg font-bold leading-tight tabular-nums">{formatAC(b)}</span>
-                    <span className={cn('text-[10px] font-semibold uppercase tracking-wider', active ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
-                      {short ? 'Yetersiz' : 'KC'}
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-          </fieldset>
-        )}
+        {themeGame && <TableThemeField game={themeGame} />}
 
-        {themeGame && !pvpMode && <TableThemeField game={themeGame} />}
-
-        <div className={cn('flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3', pvpMode && pvpContent && 'hidden')}>
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {pvpMode ? `Oyuncu masası · ${formatAC(bet)} KC bahis` : `Botu yenersen · ${formatAC(bet)} KC bahis`}
-            </span>
-            <span className="flex flex-wrap items-baseline gap-x-1 font-display text-xl font-bold tabular-nums text-primary">
-              <span className="whitespace-nowrap">{formatAC(winAmount)} KC</span>
-              <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
-                {pvpMode
-                  ? `%${settings.commission} kesinti`
-                  : botMultiplier !== settings.multiplier
-                    ? `${botMultiplier.toLocaleString('tr-TR')}x · %${settings.commission} kesinti düşüldü`
-                    : `${settings.multiplier}x`}
-              </span>
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              if (!modeSelect) return start(bet)
-              const m = modeSelect.mode
-              if (!m) return
-              if (m === 'bot' && !modeSelect.botExternal) return start(bet)
-              if (!requireLogin()) return
-              modeSelect.onEnter(m, bet)
-            }}
-            disabled={busy || checking || (modeSelect != null && modeSelect.mode == null) || blocked || (!pvpMode && pending != null)}
-            aria-busy={busy || checking}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-primary px-5 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/30 glow-gold transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
-          >
-            {busy || checking ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : pvpMode ? <Swords className="size-5" aria-hidden="true" /> : <Play className="size-5" aria-hidden="true" />}
-            {pvpMode ? 'Masalara geç' : 'Oyna'}
-          </button>
+        <div className="flex flex-col gap-2">
+          {quick.bot && (
+            <PlayRow
+              icon={Bot}
+              primary
+              label="Bota karşı hemen oyna"
+              busy={busy === 'bot' || checking}
+              disabled={busy != null || checking || blocked || pending != null}
+              onClick={() => void playBots()}
+              caption={practice ? 'Pratik maçı' : game === 'papaz' ? `Dağıtılan pot · ${formatAC(bet)} KC bahis` : `Botu yenersen · ${formatAC(bet)} KC bahis`}
+              amount={practice ? 'Bahissiz' : `${formatAC(botWin)} KC`}
+              detail={practice ? 'KC ve Kanka Puanı kazandırmaz' : botRate}
+            />
+          )}
+          {quick.pvp && (
+            <PlayRow
+              icon={Swords}
+              primary={!quick.bot}
+              label="Hemen eşleş"
+              busy={busy === 'match'}
+              disabled={busy != null || blocked || practice}
+              onClick={() => void findMatch()}
+              caption={`Oyuncuya karşı · ${seats} kişilik masa`}
+              amount={practice ? 'Bahis seç' : `${formatAC(Math.floor(fullTable.net))} KC`}
+              detail={
+                practice
+                  ? 'Oyuncu masası için bir bahis seç'
+                  : fillSeconds
+                    ? `dolu masada · ${fillSeconds} sn'de rakip gelmezse bot oturur`
+                    : `pot ${formatAC(fullTable.pot)} KC · %${fullTable.cut} kesinti`
+              }
+            />
+          )}
         </div>
         {blocked && (
           <p className="-mt-2 text-xs leading-relaxed text-muted-foreground">
-            {'Bu bahis için bakiyen yetmiyor. Daha düşük bir bahis seç ya da '}
+            {'Bu bahis için bakiyen yetmiyor. Daha düşük bir bahis seç, pratik maçı oyna ya da '}
             <a href="/gorevler" className="font-semibold text-primary underline-offset-2 hover:underline">
               görevlerden KC kazan
             </a>
             .
           </p>
         )}
-        {!member && !loading && !pvpMode && (
+        {!member && !loading && (
           <button
             type="button"
             onClick={() => requireLogin()}
@@ -561,6 +590,8 @@ export function StakeGate({
           </button>
         )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
+        {quick.pvp && quick.tables}
 
         <button
           type="button"
@@ -583,6 +614,55 @@ export function StakeGate({
         )}
       </div>
     </section>
+  )
+}
+
+function PlayRow({
+  icon: Icon,
+  label,
+  caption,
+  amount,
+  detail,
+  primary = false,
+  busy,
+  disabled,
+  onClick,
+}: {
+  icon: typeof Bot
+  label: string
+  caption: string
+  amount: string
+  detail: string
+  primary?: boolean
+  busy: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-surface px-4 py-3">
+      <div className="flex min-w-0 flex-1 basis-40 flex-col">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{caption}</span>
+        <span className="flex flex-wrap items-baseline gap-x-1.5 font-display text-xl font-bold tabular-nums text-primary">
+          <span className="whitespace-nowrap">{amount}</span>
+          <span className="text-xs font-medium text-muted-foreground">{detail}</span>
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-busy={busy}
+        className={cn(
+          'flex shrink-0 grow items-center justify-center gap-2 rounded-xl px-4 py-3 font-display text-sm font-bold uppercase tracking-wide transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:grow-0',
+          primary
+            ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 glow-gold hover:brightness-110 disabled:shadow-none'
+            : 'border border-primary/60 bg-primary/10 text-foreground hover:bg-primary/20',
+        )}
+      >
+        {busy ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : <Icon className="size-5" aria-hidden="true" />}
+        {label}
+      </button>
+    </div>
   )
 }
 

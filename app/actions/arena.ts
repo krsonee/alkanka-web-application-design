@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
-import { CLIENT_SETTLED } from '@/lib/solo-sessions'
+import { BOT_PROFIT_GAMES, CLIENT_SETTLED } from '@/lib/solo-sessions'
 import { ARENA_META, botWinMultiplier, isArenaGame, isStackedBet } from '@/lib/arena'
 import {
   bjAct,
@@ -26,7 +26,7 @@ import {
 } from '@/lib/casino'
 
 const BJ_ACTIONS: BjAction[] = ['hit', 'stand', 'double', 'split', 'surrender', 'insure', 'noInsure']
-import { actOnTable, cancelTable, claimTimeout, createTable, getTableRow, joinTable, leaveTable, pausedClock, startWithBots, tableView } from '@/lib/pvp/tables'
+import { actOnTable, cancelTable, claimTimeout, createTable, getTableRow, joinTable, leaveTable, pausedClock, quickMatchTable, quickSoloTable, startWithBots, tableView } from '@/lib/pvp/tables'
 import { joinTournament, leaveTournament } from '@/lib/tournaments'
 import { placeLiveBets, withdrawLiveBets } from '@/lib/roulette-live'
 import { assertCanPlay, capPayout } from '@/lib/member-limits'
@@ -64,7 +64,7 @@ async function botProfitToday(userId: string) {
     `SELECT sum(delta) AS net FROM game_history
       WHERE user_id = $1 AND mode = 'bot' AND game = ANY($2::text[])
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`,
-    [userId, CLIENT_SETTLED],
+    [userId, BOT_PROFIT_GAMES],
   )
   return Math.max(0, Number(r.rows[0]?.net ?? 0))
 }
@@ -378,6 +378,31 @@ export async function openTable(game: string, stake: number, options?: { seats?:
     const id = await createTable(m, game, stake, options)
     revalidatePath('/oyunlar/masalar')
     return { ok: true as const, id }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** "Bota karşı hemen oyna": every other seat is a bot, so the table is already running when this returns. */
+export async function playBotsNow(game: string, stake: number) {
+  try {
+    const m = await member()
+    await assertCanPlay(m.id)
+    const id = await quickSoloTable(m, game, stake)
+    return { ok: true as const, id }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** "Hemen eşleş": sits at a waiting table with this stake, or opens one and waits for a rival. */
+export async function matchNow(game: string, stake: number) {
+  try {
+    const m = await member()
+    await assertCanPlay(m.id)
+    const res = await quickMatchTable(m, game, stake)
+    revalidatePath('/oyunlar/masalar')
+    return { ok: true as const, ...res }
   } catch (e) {
     return fail(e)
   }

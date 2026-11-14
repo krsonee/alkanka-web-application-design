@@ -172,6 +172,48 @@ export function botWinMultiplier(game: ArenaGame, s: ArenaGameSettings, seats = 
   return Math.round(seats * (1 - s.commission / 100) * 100) / 100
 }
 
+/** Games whose table engine seats server bots, so a table can start without a second player. */
+export const BOT_TABLE_GAMES = ['okey', 'okey101', 'batak', 'pisti', 'papaz', 'monopoly'] as const
+export const isBotTableGame = (game: string) => (BOT_TABLE_GAMES as readonly string[]).includes(game)
+
+/** Seats at a table opened by the lobby's quick-play buttons. */
+export const quickSeats = (game: string) => (['okey', 'okey101', 'batak', 'papaz', 'monopoly'].includes(game) ? 4 : 2)
+
+/** Okey and 101 tables are always four seats; a waiting one fills with bots after this many seconds. */
+const LEGACY_FILL_GAMES = ['okey', 'okey101']
+const LEGACY_FILL_SECONDS = 30
+/** A "Hemen eşleş" table waits this long for a rival before bots take the empty seats. */
+const QUICK_FILL_SECONDS = 20
+
+/** Seconds a waiting table holds its empty seats for players, or null when bots never fill it. */
+export function botFillSeconds(game: string, quick: boolean): number | null {
+  if (!isBotTableGame(game)) return null
+  if (quick) return QUICK_FILL_SECONDS
+  return LEGACY_FILL_GAMES.includes(game) ? LEGACY_FILL_SECONDS : null
+}
+
+/** Extra commission points on Okey and 101 tables that seat bots, so beating bots is never a coin farm. */
+export const BOT_TABLE_EXTRA_COMMISSION = 5
+const EXTRA_COMMISSION_GAMES = ['okey', 'okey101']
+
+/**
+ * The one table payout rule: every human stake goes into the pot, the bots together add a single stake,
+ * and the commission comes off the top. Stakes left behind by players who quit stay in the pot.
+ */
+export function tablePot(game: string, stake: number, commission: number, seats: { humans: number; bots: number; forfeits?: number }) {
+  const forfeits = seats.forfeits ?? 0
+  const seatGame = (SEAT_TABLE_GAMES as readonly string[]).includes(game)
+  const botStake = seats.bots > 0 && (seatGame || !forfeits) ? stake : 0
+  const pot = stake * (seats.humans + forfeits) + botStake
+  const cut = commission + (botStake && EXTRA_COMMISSION_GAMES.includes(game) ? BOT_TABLE_EXTRA_COMMISSION : 0)
+  return { pot, cut, botStake, net: pot * (1 - cut / 100) }
+}
+
+/** What one winner takes home at a table with these seats, for the lobby and the setup summary. */
+export function tableWinAmount(game: string, stake: number, commission: number, seats: { humans: number; bots: number }, winners = 1) {
+  return Math.floor(tablePot(game, stake, commission, seats).net / Math.max(1, winners))
+}
+
 export function isArenaGame(value: string): value is ArenaGame {
   return (ARENA_GAMES as readonly string[]).includes(value)
 }
