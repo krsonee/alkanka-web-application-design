@@ -11,7 +11,7 @@ import type { Remote } from './remote'
 import { BrandLogo } from '../logo-selector'
 import { TableBrand } from './table-brand'
 import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
-import { playSound } from '@/lib/sound'
+import { buzz, playSound } from '@/lib/sound'
 import { TURN_SECONDS } from '@/lib/arena'
 
 // Date.now() collided when several bot moves were queued in the same millisecond.
@@ -147,7 +147,7 @@ function useRollAnimation(rolled: number[], rollKey: number) {
         setFaces(null)
         setLanded(rollKey)
         playSound('chip')
-        if (typeof navigator !== 'undefined') navigator.vibrate?.(25)
+        buzz(25)
       }
     }, 75)
     return () => clearInterval(id)
@@ -1234,7 +1234,7 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
   const oppMoved = remote.myTurn && s.lastMoves.length > 0
   useEffect(() => {
     if (oppMoved) setFly({ key: remote.version, moves: s.lastMoves, side: opp })
-    if (remote.myTurn && typeof navigator !== 'undefined') navigator.vibrate?.(60)
+    if (remote.myTurn) buzz(60)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remote.version])
 

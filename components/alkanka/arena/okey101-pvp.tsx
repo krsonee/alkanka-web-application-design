@@ -201,7 +201,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   }
   useEffect(() => {
     if (!turnFlash) return
-    if (typeof navigator !== 'undefined') navigator.vibrate?.([40, 60, 40])
+    buzz([40, 60, 40])
     const t = setTimeout(() => setTurnFlash(0), 1400)
     return () => clearTimeout(t)
   }, [turnFlash])

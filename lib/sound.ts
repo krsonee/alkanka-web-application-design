@@ -45,12 +45,25 @@ export type SoundName =
   | 'poolPocket'
 
 const MUTE_KEY = 'alkanka:sound-muted'
+const VOLUME_KEY = 'alkanka:sound-volume'
+const HAPTICS_KEY = 'alkanka:haptics'
+/** Master gain at full volume; the player's volume setting scales it down. */
+const FULL_GAIN = 0.55
 const listeners = new Set<() => void>()
 let ctx: AudioContext | null = null
 let master: GainNode | null = null
 /** Bus for physical sounds: dry to master plus a short room reverb so knocks don't sound "in a vacuum". */
 let room: GainNode | null = null
 let muted = typeof window !== 'undefined' && window.localStorage?.getItem(MUTE_KEY) === '1'
+let volume = readVolume()
+let haptics = typeof window === 'undefined' || window.localStorage?.getItem(HAPTICS_KEY) !== '0'
+
+function readVolume() {
+  if (typeof window === 'undefined') return 1
+  const raw = window.localStorage?.getItem(VOLUME_KEY)
+  const v = raw == null ? 1 : Number(raw)
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1
+}
 
 function audio() {
   if (typeof window === 'undefined') return null
@@ -59,7 +72,7 @@ function audio() {
     if (!AC) return null
     ctx = new AC()
     master = ctx.createGain()
-    master.gain.value = 0.55
+    master.gain.value = FULL_GAIN * volume
     master.connect(ctx.destination)
 
     room = ctx.createGain()
@@ -673,4 +686,46 @@ export function useSoundMuted() {
     () => muted,
     () => false,
   )
+}
+
+export function setSoundVolume(value: number) {
+  volume = Math.min(1, Math.max(0, value))
+  window.localStorage?.setItem(VOLUME_KEY, String(volume))
+  if (ctx && master) master.gain.setTargetAtTime(FULL_GAIN * volume, ctx.currentTime, 0.02)
+  listeners.forEach((l) => l())
+}
+
+export function useSoundVolume() {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    () => volume,
+    () => 1,
+  )
+}
+
+export function setHaptics(value: boolean) {
+  haptics = value
+  window.localStorage?.setItem(HAPTICS_KEY, value ? '1' : '0')
+  listeners.forEach((l) => l())
+  if (value) buzz(30)
+}
+
+export function useHaptics() {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    () => haptics,
+    () => true,
+  )
+}
+
+/** The one way games vibrate the phone, so a single switch turns every game's haptics off. */
+export function buzz(pattern: number | number[]) {
+  if (!haptics || typeof navigator === 'undefined') return
+  navigator.vibrate?.(pattern)
 }

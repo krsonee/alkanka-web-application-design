@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Bot, Eye, Layers, Scissors, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { playSound } from '@/lib/sound'
+import { buzz, playSound } from '@/lib/sound'
 import { RANK_LABEL, SUIT_SYMBOLS, sideOf, type PCard, type PistiEvent, type PistiHandResult, type PistiView } from '@/lib/games/pisti'
 import { BatakCard } from './batak-card'
 import type { Remote } from './remote'
@@ -164,7 +164,7 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   const cardKey = (c: PCard) => `${c.s}-${c.r}`
   const playCard = (c: PCard) => remote.send({ type: 'play', s: c.s, r: c.r })
   useEffect(() => {
-    if (myTurn && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
+    if (myTurn) buzz(30)
   }, [myTurn])
   const captures = (c: PCard) => s.pileTop != null && (c.r === s.pileTop.r || c.r === 11)
   const makesPisti = (c: PCard) => s.pileCount === 1 && s.pileTop != null && c.r === s.pileTop.r

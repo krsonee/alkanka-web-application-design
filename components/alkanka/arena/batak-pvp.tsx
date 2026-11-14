@@ -24,7 +24,7 @@ import {
   type BCard,
   type Play,
 } from '@/lib/games/batak'
-import { playSound } from '@/lib/sound'
+import { buzz, playSound } from '@/lib/sound'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
 import { MobileTableChat } from './mobile-table-chat'
@@ -72,7 +72,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const myTurn = remote.myTurn
   const { theme: tableTheme } = useTableTheme('batak')
   useEffect(() => {
-    if (myTurn && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
+    if (myTurn) buzz(30)
   }, [myTurn])
   const isTeam = variant === 'esli'
   const kozMaca = variant === 'koz-maca'

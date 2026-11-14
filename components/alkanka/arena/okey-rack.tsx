@@ -503,7 +503,7 @@ export function OkeyRack({
       if (group.length < 2) return
       p.group = group
       setLifted(group)
-      navigator.vibrate?.(15)
+      buzz(15)
     }, LONG_PRESS_MS)
     // Shift+drag on desktop grabs the whole per right away, without waiting for the long press.
     const shiftGroup = e.shiftKey ? groupOf(id) : null
