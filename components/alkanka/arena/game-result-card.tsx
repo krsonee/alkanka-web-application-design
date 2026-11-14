@@ -17,6 +17,21 @@ const SPARKS = [
   { left: '90%', delay: '0.2s', size: 'size-1' },
 ]
 
+/** Net KC for the member: what came back minus what was staked. */
+function kcLabel(outcome: ResultOutcome, stake: number, delta: number | null | undefined) {
+  const neutral = outcome === 'draw' || outcome === 'cancel'
+  if (outcome === 'spectate') return `Bahis ${formatAC(stake)} KC`
+  if (!stake && !delta) return 'Bahissiz maç'
+  if (delta != null && !neutral) return delta > 0 ? `+${formatAC(delta)} KC` : delta < 0 ? `-${formatAC(-delta)} KC` : '0 KC'
+  if (outcome === 'win') return 'Pot senin'
+  if (outcome === 'lose') return `-${formatAC(stake)} KC`
+  return `${formatAC(stake)} KC iade`
+}
+
+/**
+ * The one match-end card every game lands on: result, net KC, and the shared recap (KP, task, next level).
+ * `extra` holds game-specific detail such as a final score table; `children` are the action buttons.
+ */
 export function GameResultCard({
   outcome,
   title,
@@ -24,8 +39,11 @@ export function GameResultCard({
   gameTitle,
   gameImage,
   stake,
+  delta,
+  badge,
   players,
   extra,
+  recap,
   children,
 }: {
   outcome: ResultOutcome
@@ -34,8 +52,13 @@ export function GameResultCard({
   gameTitle: string
   gameImage?: string
   stake: number
+  /** Net KC from the settled match; falls back to the stake while it is still unknown. */
+  delta?: number | null
+  /** Short highlight above the title, e.g. "Mars · 3x". */
+  badge?: string
   players: ResultPlayer[]
   extra?: ReactNode
+  recap?: ReactNode
   children: ReactNode
 }) {
   const win = outcome === 'win'
@@ -47,11 +70,11 @@ export function GameResultCard({
   return (
     <div
       className={cn(
-        'relative flex w-full max-w-sm flex-col overflow-hidden rounded-[28px] border bg-card text-center shadow-2xl animate-in zoom-in-90 slide-in-from-bottom-8 duration-500',
+        'relative flex max-h-[calc(100dvh-3rem)] w-full max-w-sm flex-col overflow-y-auto overflow-x-hidden rounded-[28px] border bg-card text-center shadow-2xl animate-in zoom-in-90 slide-in-from-bottom-8 duration-500 phone-ls:max-w-xl',
         win ? 'border-primary/70 glow-gold' : 'border-border',
       )}
     >
-      <div className="relative flex h-48 items-center justify-center overflow-hidden">
+      <div className="relative flex h-40 shrink-0 items-center justify-center overflow-hidden phone-ls:h-16">
         {gameImage && (
           <img
             src={gameImage || '/placeholder.svg'}
@@ -81,11 +104,11 @@ export function GameResultCard({
         )}
 
         <div className="relative flex flex-col items-center gap-3">
-          <span className="relative flex items-center justify-center">
+          <span className="relative flex items-center justify-center phone-ls:hidden">
             {win && <span aria-hidden="true" className="absolute inset-0 rounded-full bg-primary/40 animate-[app-halo_1.8s_ease-out_infinite]" />}
             <span
               className={cn(
-                'relative flex size-24 items-center justify-center rounded-full border-4 shadow-xl animate-in zoom-in-50 spin-in-12 duration-700',
+                'relative flex size-20 items-center justify-center rounded-full border-4 shadow-xl animate-in zoom-in-50 spin-in-12 duration-700',
                 win
                   ? 'border-primary/40 bg-primary text-primary-foreground'
                   : lose
@@ -93,7 +116,7 @@ export function GameResultCard({
                     : 'border-border bg-secondary text-foreground',
               )}
             >
-              <Icon className={cn('size-11', win && 'animate-[app-trophy_2.4s_ease-in-out_infinite]')} aria-hidden="true" />
+              <Icon className={cn('size-9', win && 'animate-[app-trophy_2.4s_ease-in-out_infinite]')} aria-hidden="true" />
             </span>
           </span>
           <span
@@ -107,12 +130,17 @@ export function GameResultCard({
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-4 px-6 pb-6">
+      <div className="flex flex-col items-center gap-4 px-6 pb-6 phone-ls:gap-3 phone-ls:pb-4">
         <div className="flex flex-col items-center gap-1">
+          {badge && (
+            <span className="animate-badge-pulse rounded-full border-2 border-primary bg-primary/15 px-4 py-1 font-display text-sm font-bold uppercase tracking-[0.3em] text-primary">
+              {badge}
+            </span>
+          )}
           <p
             id="game-result-title"
             className={cn(
-              'font-display text-4xl font-black uppercase tracking-tight text-balance',
+              'font-display text-4xl font-black uppercase tracking-tight text-balance phone-ls:text-2xl',
               win ? 'text-primary' : 'text-foreground',
             )}
           >
@@ -122,6 +150,7 @@ export function GameResultCard({
         </div>
 
         <div
+          aria-live="polite"
           className={cn(
             'flex items-center gap-2 rounded-2xl border px-4 py-2 font-display text-lg font-black',
             win
@@ -132,7 +161,7 @@ export function GameResultCard({
           )}
         >
           <Coins className="size-5" aria-hidden="true" />
-          {win ? 'Pot senin' : lose ? `-${formatAC(stake)} KC` : neutral ? `${formatAC(stake)} KC iade` : `Bahis ${formatAC(stake)} KC`}
+          {kcLabel(outcome, stake, delta)}
         </div>
 
         {ranked.length > 1 && (
@@ -166,6 +195,8 @@ export function GameResultCard({
         )}
 
         {extra}
+
+        {recap}
 
         <div className="grid w-full grid-cols-2 gap-2">{children}</div>
       </div>

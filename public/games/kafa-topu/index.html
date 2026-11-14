@@ -1837,6 +1837,7 @@ function finishMatch(){
     <div class="rt" style="color:${title[1]}">${title[0]}</div>
     <div class="rs"><img src="${me.ch.img}" alt="${me.ch.name}" />${a} - ${b}<img class="b" src="${rv.ch.img}" alt="${rv.ch.name}" /></div>
     <div class="xpbox">
+      ${stakeRow(res)}
       <div class="row"><span>Maç sonucu</span><b>+${base} XP</b></div>
       <div class="row"><span>Goller (${a} × 10)</span><b>+${goalsXp} XP</b></div>
       <div class="row"><span>Seviye ${save.level}${save.level > from ? ' · SEVİYE ATLADIN!' : ''}</span><span>${save.level >= MAX_LVL ? 'MAX' : `${save.xp} / ${need}`}</span></div>
@@ -1871,7 +1872,15 @@ function post(type, extra){
 }
 var ME_NAME = '';
 // The site tells the page what is staked so every button that stakes it again or forfeits it says so.
-var STAKE = 0, REFUND = true;
+var STAKE = 0, WIN = 0, REFUND = true;
+// The KC side of a staked bot match, shown above the XP rows. The site settles the real amount once the score is reported.
+function stakeRow(res){
+  if (!STAKE || NET) return '';
+  const kc = res === 'win' ? (WIN > STAKE ? '+' + (WIN - STAKE) + ' KC' : 'Kazandın')
+    : res === 'draw' ? STAKE + ' KC iade'
+    : '-' + STAKE + ' KC';
+  return `<div class="row"><span>Bahis (${STAKE} KC)</span><b${res === 'lose' ? ' style="color:#d8434f"' : ''}>${kc}</b></div>`;
+}
 function paintStake(){
   if (!STAKE || NET) return;
   if ($('mExit')) $('mExit').textContent = REFUND ? 'Çık · bahis iade' : 'Çık · bahis yanar';
@@ -1882,7 +1891,7 @@ var quitArmed = false, quitTimer;
 addEventListener('message', e => {
   if (e.origin !== location.origin || !e.data || e.data.source !== 'alk-host') return;
   const d = e.data;
-  if (d.type === 'stake') { STAKE = Math.max(0, Number(d.amount) || 0); REFUND = d.refundable !== false; paintStake(); }
+  if (d.type === 'stake') { STAKE = Math.max(0, Number(d.amount) || 0); WIN = Math.max(0, Number(d.win) || 0); REFUND = d.refundable !== false; paintStake(); }
   if (d.type === 'me' && typeof d.name === 'string') {
     ME_NAME = d.name.trim().slice(0, 18);
     if (!NET && game && ME_NAME) $('nA').textContent = ME_NAME;
