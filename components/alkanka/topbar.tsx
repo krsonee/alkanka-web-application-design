@@ -238,8 +238,10 @@ function AccountMenu() {
 }
 
 function AccountArea() {
-  const { member } = usePoints()
+  const { member, known } = usePoints()
   if (!member) {
+    // Guest or member is not decided yet: hold the space instead of flashing "Giriş yap" at a member.
+    if (!known) return <span aria-hidden="true" className="h-9 w-24 shrink-0 animate-pulse rounded-lg bg-secondary sm:w-40" />
     return (
       <>
         <a

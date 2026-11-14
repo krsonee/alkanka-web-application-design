@@ -200,13 +200,14 @@ function NavSections({ ctx, onTour }: { ctx: NavCtx; onTour?: () => void }) {
 }
 
 function MemberCard({ onNavigate, compact }: { onNavigate?: () => void; compact: boolean }) {
-  const { member, points } = usePoints()
+  const { member, points, known } = usePoints()
   const { data: look } = useSWR<LookSummary | null>(member ? 'look-summary' : null, () => getLookSummary(), {
     revalidateOnFocus: false,
   })
 
   if (!member) {
     if (compact) return null
+    if (!known) return <div aria-hidden="true" className="h-[4.5rem] animate-pulse rounded-xl border border-border bg-card/60" />
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-primary/25 bg-primary/[0.06] p-3">
         <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
