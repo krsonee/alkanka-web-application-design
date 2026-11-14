@@ -7,7 +7,8 @@ import { listPublicSponsors } from '@/lib/sites'
 
 export const revalidate = 3600
 
-const DAILY = new Set(['/', '/bonuslar', '/ozel-oranlar', '/kampanyalar'])
+const DAILY = new Set(['/'])
+const MEMBERS_ONLY_PATHS = new Set(['/sponsorlar', '/kampanyalar', '/bonuslar', '/ozel-oranlar'])
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [posts, deals, sponsors, brandDates] = await Promise.all([
@@ -29,7 +30,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return undefined
   }
 
-  const pages: MetadataRoute.Sitemap = Object.values(PAGE_SEO).map((p) => ({
+  const pages: MetadataRoute.Sitemap = Object.values(PAGE_SEO).filter((p) => !MEMBERS_ONLY_PATHS.has(p.path)).map((p) => ({
     url: `${SITE_URL}${p.path}`,
     lastModified: lastModifiedFor(p.path),
     changeFrequency: DAILY.has(p.path) ? 'daily' : 'weekly',
@@ -40,12 +41,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...pages,
     ...['cark', 'sandik', 'zar'].map((g) => ({ url: `${SITE_URL}/oyunlar/${g}`, changeFrequency: 'weekly' as const, priority: 0.5 })),
     ...LANDING_PAGES.map((p) => ({ url: `${SITE_URL}/oyna/${p.slug}`, changeFrequency: 'monthly' as const, priority: 0.7 })),
-    ...sponsors.map((s) => ({
-      url: `${SITE_URL}/siteler/${s.id}`,
-      lastModified: brandDates.get(s.name.trim().toLocaleLowerCase('en')),
-      changeFrequency: 'daily' as const,
-      priority: 0.8,
-    })),
     ...posts.map((p) => ({ url: `${SITE_URL}/rehber/${p.slug}`, lastModified: new Date(p.updatedAt), changeFrequency: 'monthly' as const, priority: 0.7 })),
   ]
 }

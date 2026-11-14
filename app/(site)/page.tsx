@@ -2,6 +2,8 @@ import { BannerCarousel } from '@/components/alkanka/banner-carousel'
 import { QuickTiles } from '@/components/alkanka/quick-tiles'
 import { EndingCampaigns, FeaturedSponsors } from '@/components/alkanka/partner-sites'
 import { TopThree } from '@/components/alkanka/top-three'
+import { MembersOnly } from '@/components/alkanka/members-only'
+import { getSponsorAccess } from '@/lib/sponsor-access'
 import { GuestHero, MarketShowcase, MemberHub, type HubData } from '@/components/alkanka/home/home-hub'
 import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
 import { CUSTOM_SLIDES_KEY, readCustomSlides, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
@@ -101,6 +103,7 @@ export default async function HomePage() {
     getHomeV2().catch(() => null),
   ])
 
+  const access = await getSponsorAccess(member)
   const featured = pickFeatured(sponsors)
   const hidden = readHidden(content[HIDDEN_KEY])
   const merged = withoutHidden(SLIDES, hidden, 'slide')
@@ -155,7 +158,7 @@ export default async function HomePage() {
   return (
     <>
       <SiteJsonLd />
-      <h1 className="sr-only">AL KANKA: sponsorlar, kampanyalar ve ücretsiz mini oyunlar</h1>
+      <h1 className="sr-only">AL KANKA: okey, tavla, batak, pişti ve ücretsiz mini oyunlar</h1>
       <div className="flex flex-col gap-4">
         {hub && homeV2?.home.enabled && (
           <MemberHomeV2 data={hub} config={homeV2.home} podium={podium} me={me} products={products} />
@@ -168,8 +171,14 @@ export default async function HomePage() {
       </div>
       <BannerCarousel slides={slides} />
       <MarketShowcase products={products.slice(0, 6)} balance={hub?.balance ?? null} />
-      <FeaturedSponsors main={featured.main} mains={featured.mains} cards={featured.cards} total={featured.total} />
-      <EndingCampaigns />
+      {access.state === 'open' ? (
+        <>
+          <FeaturedSponsors main={featured.main} mains={featured.mains} cards={featured.cards} total={featured.total} />
+          <EndingCampaigns />
+        </>
+      ) : (
+        <MembersOnly state={access.state} />
+      )}
       {!hub && <TopThree rows={podium} me={me} signedIn={Boolean(member)} />}
     </>
   )

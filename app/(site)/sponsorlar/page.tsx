@@ -3,11 +3,15 @@ import { EditableHero } from '@/components/alkanka/editable-hero'
 import { MainSponsorRotator, SponsorDirectory } from '@/components/alkanka/partner-sites'
 import { AdFrame } from '@/components/alkanka/ad-frame'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
+import { MembersOnly } from '@/components/alkanka/members-only'
+import { getSponsorAccess, MEMBERS_ONLY_ROBOTS } from '@/lib/sponsor-access'
 
-export const metadata = pageMeta('sponsorlar')
+export const metadata = { ...pageMeta('sponsorlar'), robots: MEMBERS_ONLY_ROBOTS }
 export const dynamic = 'force-dynamic'
 
 export default async function SponsorsPage() {
+  const access = await getSponsorAccess()
+  if (access.state !== 'open') return <MembersOnly state={access.state} title="Sponsorlar üyelere özel" />
   const sponsors = await listPublicSponsors().catch(() => [])
   const featured = pickFeatured(sponsors)
   const premium = sponsors.filter((site) => site.tier === 'ana' || site.tier === 'elit' || site.tier === 'vip').length

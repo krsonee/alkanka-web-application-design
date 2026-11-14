@@ -9,6 +9,8 @@ import { SITE_URL } from '@/lib/seo'
 import { listPublicSponsors, resolvePublicSite } from '@/lib/sites'
 import { DEAL_FRESH_DAYS, listDealsByBrand } from '@/lib/deals'
 import { SponsorDeals } from '@/components/alkanka/sponsor-deals'
+import { MembersOnly } from '@/components/alkanka/members-only'
+import { getSponsorAccess, MEMBERS_ONLY_ROBOTS } from '@/lib/sponsor-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,9 +25,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params
   const s = await findSponsor(slug)
   if (!s) notFound()
+  const { state } = await getSponsorAccess()
+  if (state !== 'open') return { title: 'Üyelere özel', robots: MEMBERS_ONLY_ROBOTS }
   const title = `${s.name} güncel giriş, bonuslar ve inceleme ${new Date().getFullYear()}`
   const description = `${s.name}: ${s.welcome}. Çekim süresi ${s.payout}, puan ${s.rating.toFixed(1)}. Adres değişince haber almak için takip et.`
-  return { title, description, alternates: { canonical: `${SITE_URL}/siteler/${s.id}` }, openGraph: { title, description } }
+  return { title, description, robots: MEMBERS_ONLY_ROBOTS, alternates: { canonical: `${SITE_URL}/siteler/${s.id}` }, openGraph: { title, description } }
 }
 
 function RatingStars({ value }: { value: number }) {
@@ -49,6 +53,8 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ slu
   if (slug !== s.id) permanentRedirect(`/siteler/${s.id}`)
 
   const member = await getMember()
+  const access = await getSponsorAccess(member)
+  if (access.state !== 'open') return <MembersOnly state={access.state} title="Sponsor detayları üyelere özel" />
   const following = member ? (await myFollows(member.id).catch(() => [] as string[])).includes(s.recordId) : false
   const others = (await listPublicSponsors().catch(() => [])).filter((item) => item.id !== s.id).slice(0, 4)
   const tierLabel = TIER_LABEL[s.tier] ?? 'Sponsor'
