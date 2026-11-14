@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://alkanka.com').replace(/\/$/, '')
 export const SITE_NAME = 'AL KANKA'
-export const DEFAULT_OG = '/images/og.png'
+// A JPG under 300 KB: WhatsApp and Telegram skip link previews whose image is much heavier.
+export const DEFAULT_OG = '/images/og.jpg'
 
 type PageSeo = { path: string; title: string; description: string; image?: string; keywords: string[] }
 
@@ -69,13 +70,6 @@ export const PAGE_SEO = {
     description: 'Günlük ve haftalık görevleri tamamla, Kanka Coin ve ekstra hak kazan.',
     image: '/images/heroes/gorevler.png',
     keywords: ['günlük görev', 'görev ödülü', 'puan kazan'],
-  },
-  biletler: {
-    path: '/biletler',
-    title: 'Çekiliş Biletleri ve Etkinlikler',
-    description: 'Bilet al, haftalık çekilişlere katıl, ödül kazan.',
-    image: '/images/heroes/biletler.png',
-    keywords: ['çekiliş', 'çekiliş bileti', 'ödüllü çekiliş'],
   },
   kankatv: {
     path: '/kankatv',
@@ -158,6 +152,14 @@ export function slugify(input: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 70)
+}
+
+export function breadcrumbLd(trail: { name: string; path: string }[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: trail.map((step, i) => ({ '@type': 'ListItem', position: i + 1, name: step.name, item: `${SITE_URL}${step.path}` })),
+  }
 }
 
 export function jsonLd(data: unknown) {

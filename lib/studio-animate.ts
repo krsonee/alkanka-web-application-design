@@ -83,20 +83,19 @@ export async function makeGif(image: Buffer) {
     .toBuffer()
 }
 
-export async function videoToGif(video: Buffer, squareCrop: boolean) {
+export async function videoToGif(video: Buffer) {
   if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
   const dir = await mkdtemp(path.join(tmpdir(), 'aigif-'))
   try {
     const input = path.join(dir, 'in.mp4')
     const output = path.join(dir, 'out.gif')
     await writeFile(input, video)
-    const crop = squareCrop ? 'crop=min(iw\\,ih):min(iw\\,ih),' : ''
     await run(ffmpegPath, [
       '-y',
       '-i',
       input,
       '-vf',
-      `${crop}fps=14,scale=540:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a`,
+      'fps=14,scale=540:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a',
       '-loop',
       '0',
       output,
@@ -112,21 +111,16 @@ type Rect = { left: number; top: number; width: number; height: number }
 /** Fits the picture into the clip's frame. `art` is where the picture itself sits inside that frame. */
 async function toVideoFrame(image: Buffer, format: string, hd: boolean) {
   const [long, short] = hd ? [1920, 1080] : [1280, 720]
-  const [width, height] = format === '16:9' ? [long, short] : [short, long]
+  const [width, height] = format === '9:16' ? [short, long] : [long, short]
   if (format === '16:9' || format === '9:16') {
     const frame = await sharp(image).resize(width, height, { fit: 'cover' }).png().toBuffer()
     return { frame, width, height, art: { left: 0, top: 0, width, height } satisfies Rect }
   }
-  // Square banners become a vertical clip: the square sits in the middle of a blurred copy of itself.
+  // The model only renders 16:9 and 9:16. A square banner goes in as the middle of a wide frame,
+  // padded with a blurred copy of itself, and the finished clip is cut back to that square.
+  const art: Rect = { left: (width - height) / 2, top: 0, width: height, height }
   const backdrop = await sharp(image).resize(width, height, { fit: 'cover' }).blur(40).modulate({ brightness: 0.6 }).png().toBuffer()
-  const front = await sharp(image).resize(width, height, { fit: 'inside' }).png().toBuffer()
-  const meta = await sharp(front).metadata()
-  const art: Rect = {
-    left: Math.round((width - (meta.width ?? width)) / 2),
-    top: Math.round((height - (meta.height ?? width)) / 2),
-    width: meta.width ?? width,
-    height: meta.height ?? width,
-  }
+  const front = await sharp(image).resize(art.width, art.height, { fit: 'cover' }).png().toBuffer()
   const frame = await sharp(backdrop).composite([{ input: front, left: art.left, top: art.top }]).png().toBuffer()
   return { frame, width, height, art }
 }
@@ -141,8 +135,14 @@ async function videoSize(ffmpeg: string, file: string) {
   return match ? { width: Number(match[1]), height: Number(match[2]) } : null
 }
 
-/** Burns a still, transparent layer over every frame, so logo and copy stay pixel-sharp while the scene moves. */
-async function burnOverlay(video: Buffer, overlay: Buffer) {
+const even = (n: number) => Math.round(n / 2) * 2
+
+/**
+ * Re-encodes the model's clip: cuts it down to `crop` when the picture only fills part of the
+ * frame, then burns the still, transparent `overlay` over every frame, so logo and copy stay
+ * pixel-sharp while the scene moves. `frame` is the size that was requested from the model.
+ */
+async function finishClip(video: Buffer, frame: { width: number; height: number }, crop: Rect | null, overlay: Buffer | null) {
   if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
   const dir = await mkdtemp(path.join(tmpdir(), 'stamp-'))
   try {
@@ -150,18 +150,31 @@ async function burnOverlay(video: Buffer, overlay: Buffer) {
     const layer = path.join(dir, 'overlay.png')
     const output = path.join(dir, 'out.mp4')
     await writeFile(input, video)
-    // The model may return a size other than the one requested, so the layer is fitted to the real
-    // clip. (ffmpeg's scale2ref cannot do this: with a still image it emits no frames at all.)
-    const size = await videoSize(ffmpegPath, input)
-    await writeFile(layer, size ? await sharp(overlay).resize(size.width, size.height, { fit: 'fill' }).png().toBuffer() : overlay)
+    // The model may return a size other than the one requested, so the cut and the layer are fitted
+    // to the real clip. (ffmpeg's scale2ref cannot do this: with a still image it emits no frames.)
+    const real = (await videoSize(ffmpegPath, input)) ?? frame
+    const scale = real.width / frame.width
+    const cut = crop && {
+      width: even(crop.width * scale),
+      height: even(crop.height * scale),
+      left: Math.round(crop.left * scale),
+      top: Math.round(crop.top * scale),
+    }
+    const size = cut ?? real
+    if (overlay) await writeFile(layer, await sharp(overlay).resize(size.width, size.height, { fit: 'fill' }).png().toBuffer())
+    const cropped = cut ? `[0:v]crop=${cut.width}:${cut.height}:${cut.left}:${cut.top}` : ''
+    const filter = !overlay
+      ? `${cropped}[out]`
+      : cut
+        ? `${cropped}[cut];[cut][1:v]overlay=0:0:format=auto[out]`
+        : '[0:v][1:v]overlay=0:0:format=auto[out]'
     await run(ffmpegPath, [
       '-y',
       '-i',
       input,
-      '-i',
-      layer,
+      ...(overlay ? ['-i', layer] : []),
       '-filter_complex',
-      '[0:v][1:v]overlay=0:0:format=auto[out]',
+      filter,
       '-map',
       '[out]',
       '-map',
@@ -182,7 +195,7 @@ async function burnOverlay(video: Buffer, overlay: Buffer) {
     ])
     const stamped = await readFile(output)
     // ffmpeg exits 0 even when it encoded nothing; never hand back a file that cannot play.
-    if (stamped.length < 10_000) throw new Error('Video üzerine yazı basılamadı.')
+    if (stamped.length < 10_000) throw new Error('Video son haline getirilemedi.')
     return stamped
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -209,6 +222,7 @@ export async function makeVideo({
   brush: Brush | null
 }) {
   const { frame, width, height, art } = await toVideoFrame(image, format, hd)
+  const padded = art.width < width || art.height < height
   const { video } = await generateVideo({
     model: VIDEO_MODEL,
     prompt: {
@@ -216,21 +230,21 @@ export async function makeVideo({
       text: [
         'Animate this advertising key visual into a short, premium, eye-catching promo clip.',
         motion || 'Subtle cinematic motion: light sweeps, sparkles and glints, gentle camera push-in, the character moves slightly.',
+        padded
+          ? 'Only the sharp square in the middle is the picture; the soft areas on both sides are padding that is cut off afterwards. Keep the camera locked on that square: no panning, no tilting, no zooming out.'
+          : '',
         brush
           ? 'Do not add any text, letters, numbers, logos or watermarks. Any writing already in the picture must stay static and unchanged.'
           : 'CRITICAL: keep every logo, headline, number and button text perfectly static, sharp and unchanged. Do not add new text.',
-      ].join('\n'),
+      ]
+        .filter(Boolean)
+        .join('\n'),
     },
     resolution: hd ? '1920x1080' : '1280x720',
     duration,
     generateAudio: audio,
   })
   const clip = Buffer.from(video.uint8Array)
-  const layer = brush ? await buildOverlay(art.width, art.height, brush) : null
-  if (!layer) return clip
-  const overlay = await sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
-    .composite([{ input: layer, left: art.left, top: art.top }])
-    .png()
-    .toBuffer()
-  return burnOverlay(clip, overlay)
+  const overlay = brush ? await buildOverlay(art.width, art.height, brush) : null
+  return padded || overlay ? finishClip(clip, { width, height }, padded ? art : null, overlay) : clip
 }

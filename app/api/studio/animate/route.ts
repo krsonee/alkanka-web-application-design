@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         ? { data: await makeGif(image), contentType: 'image/gif', ext: 'gif', cost: 0, folder: 'gifs' }
         : mode === 'aigif'
           ? {
-              data: await videoToGif(await clip(AI_GIF_SECONDS, false, false), source.format === '1:1'),
+              data: await videoToGif(await clip(AI_GIF_SECONDS, false, false)),
               contentType: 'image/gif',
               ext: 'gif',
               cost: videoCost(AI_GIF_SECONDS, false, false),
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     const job = await addJob({
       brandId: source.brandId,
       kind: mode === 'aigif' ? 'gif' : mode,
-      format: telegram ? '1:1' : mode === 'video' && source.format === '1:1' ? '9:16' : source.format,
+      format: telegram ? '1:1' : source.format,
       prompt,
       pathname,
       clean: '',

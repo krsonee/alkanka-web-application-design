@@ -3,6 +3,10 @@ export const ARENA_GAMES = ['tavla', 'okey', 'okey101', 'batak', 'pisti', 'papaz
 export const SEAT_TABLE_GAMES = ['okey101', 'batak', 'monopoly', 'pisti', 'papaz'] as const
 export type ArenaGame = (typeof ARENA_GAMES)[number]
 
+/** Free daily games; they share the /oyunlar/[oyun] route with the table games. */
+export const MINI_GAME_TITLES = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık', zar: 'Zar At' } as const
+export type MiniGame = keyof typeof MINI_GAME_TITLES
+
 export type GameMode = 'bot' | 'pvp'
 
 export const MODE_LABEL: Record<GameMode, string> = {

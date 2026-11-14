@@ -45,13 +45,17 @@ function loadFonts() {
   return fontsReady
 }
 
-function luminance(hex: string) {
-  const n = Number.parseInt(hex.slice(1), 16)
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+function rgbLuminance(red: number, green: number, blue: number) {
+  const [r, g, b] = [red, green, blue].map((v) => {
     const c = v / 255
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
   })
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+function luminance(hex: string) {
+  const n = Number.parseInt(hex.slice(1), 16)
+  return rgbLuminance((n >> 16) & 255, (n >> 8) & 255, n & 255)
 }
 
 function wrappedLines(words: string[], size: number, boxWidth: number) {
@@ -184,9 +188,81 @@ async function textLayer(width: number, height: number, texts: StudioTexts, colo
   return Buffer.from(await response.arrayBuffer())
 }
 
+// Largest color jump between neighbours that still counts as the same backdrop, and how far the
+// backdrop may drift from its border color. Together they follow a vignette but stop at the mark.
+const BACKDROP_STEP = 14
+const BACKDROP_REACH = 72
+// Below this average brightness the mark would disappear on a picture, so its backdrop stays.
+const MIN_MARK_LUMINANCE = 0.18
+
+/**
+ * A logo saved without transparency brings its own backdrop and prints as a box. When the border is
+ * one even color and the mark inside is bright enough to stand on a picture, the backdrop is cut
+ * away and the logo is cropped to the mark. In every other case the logo is used as uploaded.
+ */
+async function cutOutLogo(logo: Buffer) {
+  const { data, info } = await sharp(logo).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const { width, height } = info
+  const total = width * height
+  for (let i = 3; i < data.length; i += 4) if (data[i] < 250) return logo
+
+  const border: number[] = []
+  for (let x = 0; x < width; x++) border.push(x, (height - 1) * width + x)
+  for (let y = 1; y < height - 1; y++) border.push(y * width, y * width + width - 1)
+  const mean = [0, 1, 2].map((c) => border.reduce((sum, p) => sum + data[p * 4 + c], 0) / border.length)
+  const drift = (p: number) => Math.max(...mean.map((m, c) => Math.abs(data[p * 4 + c] - m)))
+  const step = (a: number, b: number) =>
+    Math.max(Math.abs(data[a * 4] - data[b * 4]), Math.abs(data[a * 4 + 1] - data[b * 4 + 1]), Math.abs(data[a * 4 + 2] - data[b * 4 + 2]))
+  if (border.filter((p) => drift(p) > BACKDROP_REACH / 2).length > border.length * 0.05) return logo
+
+  const gone = new Uint8Array(total)
+  const queue = new Int32Array(total)
+  let tail = 0
+  for (const p of border) {
+    if (!gone[p] && drift(p) <= BACKDROP_REACH) {
+      gone[p] = 1
+      queue[tail++] = p
+    }
+  }
+  for (let head = 0; head < tail; head++) {
+    const p = queue[head]
+    const x = p % width
+    for (const q of [x > 0 ? p - 1 : -1, x < width - 1 ? p + 1 : -1, p - width, p + width]) {
+      if (q < 0 || q >= total || gone[q] || step(p, q) > BACKDROP_STEP || drift(q) > BACKDROP_REACH) continue
+      gone[q] = 1
+      queue[tail++] = q
+    }
+  }
+
+  const kept = total - tail
+  if (tail < total * 0.1 || kept < total * 0.02) return logo
+  let light = 0
+  let [left, top, right, bottom] = [width, height, 0, 0]
+  for (let p = 0; p < total; p++) {
+    if (gone[p]) continue
+    light += rgbLuminance(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])
+    const x = p % width
+    const y = (p - x) / width
+    if (x < left) left = x
+    if (x > right) right = x
+    if (y < top) top = y
+    if (y > bottom) bottom = y
+  }
+  if (light / kept < MIN_MARK_LUMINANCE) return logo
+
+  // A slight blur of the mask softens the stair-stepped edge; backdrop pixels stay fully clear.
+  const mask = Buffer.from(gone.map((g) => (g ? 0 : 255)))
+  const soft = await sharp(mask, { raw: { width, height, channels: 1 } }).blur(0.6).extractChannel(0).raw().toBuffer()
+  for (let p = 0; p < total; p++) data[p * 4 + 3] = gone[p] ? 0 : soft[p]
+  return sharp(data, { raw: { width, height, channels: 4 } })
+    .extract({ left, top, width: right - left + 1, height: bottom - top + 1 })
+    .png()
+    .toBuffer()
+}
+
 async function logoLayer(width: number, height: number, logoPath: string) {
   const logoWidth = Math.round(width * (width > height ? 0.18 : 0.26))
-  const input = await sharp(await readFile(logoPath))
+  const input = await sharp(await cutOutLogo(await readFile(logoPath)))
     .resize({ width: logoWidth, height: Math.round(height * 0.12), fit: 'inside' })
     .png()
     .toBuffer()

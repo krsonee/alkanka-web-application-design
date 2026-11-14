@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getPost } from '@/lib/blog'
 import { BlogBody, bodyWordCount, extractFaq } from '@/lib/blog-format'
-import { jsonLd, SITE_NAME, SITE_URL } from '@/lib/seo'
+import { DEFAULT_OG, jsonLd, SITE_NAME, SITE_URL } from '@/lib/seo'
 
 export const revalidate = 600
 
@@ -47,7 +47,7 @@ export default async function GuideArticle({ params }: { params: Promise<{ slug:
       dateModified: post.updatedAt,
       wordCount: words,
       mainEntityOfPage: url,
-      image: post.cover || `${SITE_URL}/images/og.png`,
+      image: post.cover || `${SITE_URL}${DEFAULT_OG}`,
       author: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
       publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
     },

@@ -225,7 +225,7 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>{b('Hareket talimatı')}na ne olacağını yaz: "karakter kılıcını kaldırıyor, paralar yağıyor". Boş bırakırsan hafif sinematik hareket yapılır.</>,
               <>{b('Süre')}: 4, 6 veya 8 saniye. {b('Ses / müzik')} kutusunu istersen işaretle (biraz daha pahalı).</>,
               <>{b('Video üret')}. 1-3 dakika sürer, bu sürede sayfayı kapatma. Bitince kartın içinde oynatılır.</>,
-              <>1:1 banner videoya çevrilirken 9:16 dikey video yapılır, kenarlar bulanık arka planla doldurulur.</>,
+              <>Video banner&apos;ın formatında çıkar: 1:1 banner kare, 9:16 dikey, 16:9 yatay video olur.</>,
             ]}
           />
           <p className="flex gap-2 rounded-xl bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
