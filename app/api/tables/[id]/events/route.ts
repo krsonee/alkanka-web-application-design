@@ -25,7 +25,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   let unsubscribe: () => void
   try {
-    unsubscribe = await subscribeTable(id, (event) => (event === 'change' ? push('data: 1\n\n') : close()))
+    unsubscribe = await subscribeTable(id, (event) => (event.kind === 'change' ? push(`data: ${event.version}\n\n`) : close()))
   } catch {
     return new Response('Bağlantı kurulamadı.', { status: 503 })
   }

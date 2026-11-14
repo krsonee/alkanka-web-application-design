@@ -7,6 +7,8 @@ export type Remote<S> = {
   version: number
   myTurn: boolean
   busy: boolean
+  /** The player's own move that is on its way to the server, so the table can show it leaving the hand at once. */
+  pending?: RemoteAction | null
   names: string[]
   /** Member id per seat; null for bots or empty seats. */
   userIds?: (string | null)[]

@@ -1215,6 +1215,8 @@ export function Tavla({ finish, saveKey }: GameApi) {
   )
 }
 
+const moveSound = (moves: Move[]) => (moves.some((m) => m.hit) ? 'hit' : moves.some((m) => m.to === 'off') ? 'bearoff' : 'move')
+
 export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
   const s = remote.state
   const me: Side = remote.seat === 0 ? 'p' : 'b'
@@ -1232,8 +1234,12 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
 
   // Replay the opponent's checkers sliding into place, and buzz the phone when the turn comes back.
   const oppMoved = remote.myTurn && s.lastMoves.length > 0
+  const opened = useRef(false)
   useEffect(() => {
     if (oppMoved) setFly({ key: remote.version, moves: s.lastMoves, side: opp })
+    // The rival's hit and bear-off are heard, not just seen; the position already on the board at load stays silent.
+    if (opened.current && s.lastMoves.length > 0 && (oppMoved || remote.spectator)) playSound(moveSound(s.lastMoves))
+    opened.current = true
     if (remote.myTurn) buzz(60)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remote.version])
@@ -1282,6 +1288,7 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
     if (!m) return
     const t = setTimeout(() => {
       setFly({ key: nextFlyKey(), moves: [m], side: me })
+      playSound(moveSound([m]))
       setPending((p) => [...p, m])
     }, 550)
     return () => clearTimeout(t)
@@ -1313,6 +1320,7 @@ export function TavlaPvp({ remote }: { remote: Remote<TavlaState> }) {
         selected={selected}
         onSelect={setSelected}
         onPlay={(seq) => {
+          playSound(moveSound(seq))
           setPending((p) => [...p, ...seq])
           setSelected(null)
         }}

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
+import { notifyTable } from '@/lib/pvp/table-events'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
 import { BOT_PROFIT_GAMES, CLIENT_SETTLED } from '@/lib/solo-sessions'
@@ -401,6 +402,7 @@ export async function matchNow(game: string, stake: number) {
     const m = await member()
     await assertCanPlay(m.id)
     const res = await quickMatchTable(m, game, stake)
+    if (res.joined) await notifyTable(res.id)
     revalidatePath('/oyunlar/masalar')
     return { ok: true as const, ...res }
   } catch (e) {
@@ -413,6 +415,7 @@ export async function sitAtTable(id: string, expectedStake?: number) {
     const m = await member()
     await assertCanPlay(m.id)
     await joinTable(m, id, typeof expectedStake === 'number' && Number.isFinite(expectedStake) ? expectedStake : undefined)
+    await notifyTable(id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)
@@ -423,6 +426,7 @@ export async function closeTable(id: string) {
   try {
     const m = await member()
     await cancelTable(id, { byUser: m.id })
+    await notifyTable(id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)
@@ -448,6 +452,7 @@ export async function playMove(id: string, version: number, action: { type: stri
     await actOnTable(m, id, version, action)
     // Hand the fresh table back so the client skips a second round trip before unlocking.
     const t = await getTableRow(id)
+    await notifyTable(id, t?.version)
     if (!t) return { ok: true as const, view: null }
     const clock = t.status === 'oynaniyor' ? await pausedClock(t.updatedAt) : { updatedAt: t.updatedAt, paused: false }
     return { ok: true as const, view: { ...tableView(t, m.id), ...clock } }
@@ -459,6 +464,7 @@ export async function playMove(id: string, version: number, action: { type: stri
 export async function leaveGameTable(id: string) {
   try {
     await leaveTable(await member(), id)
+    await notifyTable(id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)
@@ -468,6 +474,7 @@ export async function leaveGameTable(id: string) {
 export async function startTableWithBots(id: string) {
   try {
     await startWithBots(await member(), id)
+    await notifyTable(id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)
@@ -477,6 +484,7 @@ export async function startTableWithBots(id: string) {
 export async function claimTableTimeout(id: string) {
   try {
     await claimTimeout(await member(), id)
+    await notifyTable(id)
     return { ok: true as const }
   } catch (e) {
     return fail(e)

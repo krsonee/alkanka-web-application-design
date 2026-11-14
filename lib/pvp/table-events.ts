@@ -9,7 +9,8 @@ const BUSY_CONNECTIONS = 70
 const KEEPALIVE_MS = 30_000
 const IDLE_CLOSE_MS = 20_000
 
-export type TableEvent = 'change' | 'lost'
+/** A change carries the table version it was sent for (0 when the sender did not know it); `lost` means the listener died. */
+export type TableEvent = { kind: 'change'; version: number } | { kind: 'lost' }
 type Listener = (event: TableEvent) => void
 
 type Hub = {
@@ -25,8 +26,8 @@ const scope = globalThis as typeof globalThis & { __alkankaTableHub?: Hub }
 const hub: Hub = (scope.__alkankaTableHub ??= { client: null, connecting: null, subs: new Map(), keepalive: null, idle: null })
 
 /** Tells every open stream of this table that its row changed. Never throws: polling still catches the change. */
-export async function notifyTable(id: string) {
-  await pool.query('SELECT pg_notify($1, $2)', [CHANNEL, id]).catch(() => {})
+export async function notifyTable(id: string, version = 0) {
+  await pool.query('SELECT pg_notify($1, $2)', [CHANNEL, `${id}:${version}`]).catch(() => {})
 }
 
 function drop() {
@@ -36,7 +37,7 @@ function drop() {
   hub.keepalive = null
   client?.removeAllListeners()
   client?.end().catch(() => {})
-  for (const set of hub.subs.values()) for (const fn of [...set]) fn('lost')
+  for (const set of hub.subs.values()) for (const fn of [...set]) fn({ kind: 'lost' })
 }
 
 async function connect() {
@@ -47,8 +48,9 @@ async function connect() {
   client.on('error', drop)
   client.on('end', drop)
   client.on('notification', (n) => {
-    const set = n.payload ? hub.subs.get(n.payload) : null
-    if (set) for (const fn of [...set]) fn('change')
+    const [id, version] = (n.payload ?? '').split(':')
+    const set = hub.subs.get(id)
+    if (set) for (const fn of [...set]) fn({ kind: 'change', version: Number(version) || 0 })
   })
   try {
     await client.connect()

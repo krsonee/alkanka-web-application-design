@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Trophy, X } from 'lucide-react'
+import { buzz } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 import {
   analyzeMeld,

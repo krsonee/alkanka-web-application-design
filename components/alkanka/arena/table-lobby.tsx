@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, TURN_SECONDS, botFillSeconds, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
@@ -39,6 +39,8 @@ import { MemberRank } from '../kp/member-rank'
 import { playSound } from '@/lib/sound'
 import { SoundToggle, actionSound } from './sound-toggle'
 import { useTableSounds } from './use-table-sounds'
+import { useTableEvents } from './use-table-events'
+import { optimisticState } from '@/lib/pvp/optimistic'
 import { TableThemeField, TableThemeScope } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
 import { TableSetupWizard } from './table-setup-wizard'
@@ -1035,6 +1037,8 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
     },
   })
   const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<RemoteAction | null>(null)
+  const ownVersion = useRef(-1)
   const [msg, setMsg] = useState<string | null>(null)
   const [resultClosed, setResultClosed] = useState(false)
   const [replaying, setReplaying] = useState(false)
@@ -1044,16 +1048,24 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
     async (action: RemoteAction) => {
       if (!data) return false
       setBusy(true)
+      setPending(action)
+      // The move is heard and, where its result is already known, seen before the server answers.
+      playSound(actionSound(data.game, action.type))
+      const guess = optimisticState(data.game, data.seat, data.state, action)
+      if (guess) void mutate({ ...data, state: guess, turn: (guess as { turn?: number }).turn ?? data.turn } as TableSummary, { revalidate: false })
       const r = await playMove(id, data.version, action)
-      if (r.ok && r.view) await mutate(r.view as TableSummary, { revalidate: false })
-      else await mutate()
+      // A refused move refetches, which also takes back whatever was shown ahead of the server.
+      if (r.ok && r.view) {
+        ownVersion.current = (r.view as TableSummary).version
+        await mutate(r.view as TableSummary, { revalidate: false })
+      } else await mutate()
+      setPending(null)
       setBusy(false)
       if (!r.ok) {
         playSound('error')
         setMsg(r.error ?? 'Hamle yapılamadı.')
         return false
       }
-      playSound(actionSound(data.game, action.type))
       setMsg(null)
       return true
     },
@@ -1070,9 +1082,17 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           humans: data.players.filter((p) => !p.bot).length,
           game: data.game,
           won: member != null && (data.winners ?? []).includes(member.id),
+          own: data.version === ownVersion.current,
         }
       : null,
   )
+
+  // Bot-only tables change only when this player polls, so the push stream is kept for tables someone else can move at.
+  const live = !!data && data.status !== 'bitti' && data.status !== 'iptal' && (data.spectator || data.status === 'bekliyor' || data.players.filter((p) => !p.bot).length > 1)
+  const seenVersion = data?.version ?? 0
+  useTableEvents(id, live, (version) => {
+    if (version === 0 || version > seenVersion) void mutate()
+  })
 
   useTurnAlert(
     !!data &&
@@ -1121,6 +1141,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
     version: data.version,
     myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
     busy,
+    pending,
     names,
     userIds: Array.from({ length: seatCount }, (_, i) => {
       const p = data.players.find((pl) => pl.seat === i)
