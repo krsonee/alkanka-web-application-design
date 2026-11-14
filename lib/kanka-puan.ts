@@ -249,6 +249,14 @@ export async function memberLevel(userId: string): Promise<{ level: number; name
   return { level: levelFor(cfg.levels, row?.total ?? 0).index + 1, names }
 }
 
+/** KP and ladder position only, without the badge and rank lookups getKpStatus does. */
+export async function getKpLevel(userId: string) {
+  const cfg = await getKpConfig()
+  const [row] = await totals(cfg.rules, userId)
+  const kp = row?.total ?? 0
+  return { kp, level: levelFor(cfg.levels, kp), rules: cfg.rules }
+}
+
 export type UserBadge = { id: string; name: string; description: string; icon: string; tier: BadgeTier; count: number; lastAt: string }
 
 export type KpStatus = {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Crown, Layers, Loader2, RotateCcw, X } from 'lucide-react'
+import { Crown, Layers, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PENALTY, type HandResult, type Meld101, type Okey101View } from '@/lib/games/okey101'
 import { MockTile } from './okey-rack'
@@ -39,10 +39,7 @@ export function Okey101Result({
   okey,
   onClose,
   onScores,
-  onReplay,
-  replayStake,
 }: {
-  replayStake?: number
   melds: Meld101[] | null
   okey: OkeyValue
   result: HandResult
@@ -53,12 +50,11 @@ export function Okey101Result({
   handsTotal: number
   detail: HandDetail | null
   face: (seat: number) => ReactNode
+  /** On the final hand this leads on to the shared match-end card, which carries the rematch button. */
   onClose: () => void
   onScores: () => void
-  onReplay?: () => Promise<void>
 }) {
   const [mounted, setMounted] = useState(false)
-  const [replaying, setReplaying] = useState(false)
   useEffect(() => setMounted(true), [])
   useEffect(() => {
     if (final) return
@@ -213,32 +209,13 @@ export function Okey101Result({
           >
             Puan tablosu
           </button>
-          {final && onReplay ? (
-            <button
-              type="button"
-              disabled={replaying}
-              onClick={async () => {
-                setReplaying(true)
-                try {
-                  await onReplay()
-                } finally {
-                  setReplaying(false)
-                }
-              }}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--okt-brass)] px-4 py-2.5 text-sm font-bold text-[var(--okt-ink)] hover:brightness-110 disabled:opacity-60 phone-ls:py-2"
-            >
-              {replaying ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
-              Tekrar oyna{replayStake ? ` · ${replayStake.toLocaleString('tr-TR')} KC` : ''}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-full bg-[var(--okt-brass)] px-4 py-2.5 text-sm font-bold text-[var(--okt-ink)] hover:brightness-110 phone-ls:py-2"
-            >
-              {final ? 'Masaya dön' : 'Sonraki el'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-full bg-[var(--okt-brass)] px-4 py-2.5 text-sm font-bold text-[var(--okt-ink)] hover:brightness-110 phone-ls:py-2"
+          >
+            {final ? 'Maç sonucu' : 'Sonraki el'}
+          </button>
         </div>
       </div>
     </div>,

@@ -51,6 +51,7 @@ export function KafaTopuFrame({
   online,
   sport = 'futbol',
   stake,
+  win,
   refundable = true,
   onCancel,
   onKickoff,
@@ -60,6 +61,7 @@ export function KafaTopuFrame({
   onRematch?: (score: Score) => void
   online?: Online
   stake?: number
+  win?: number
   refundable?: boolean
   onCancel?: () => void
   onKickoff?: () => void
@@ -69,8 +71,8 @@ export function KafaTopuFrame({
   const reported = useRef(false)
   const ended = useRef(false)
   const kicked = useRef(false)
-  const stakeRef = useRef({ stake, refundable })
-  stakeRef.current = { stake, refundable }
+  const stakeRef = useRef({ stake, win, refundable })
+  stakeRef.current = { stake, win, refundable }
   const cancelRef = useRef(onCancel)
   cancelRef.current = onCancel
   const kickoffRef = useRef(onKickoff)
@@ -133,7 +135,7 @@ export function KafaTopuFrame({
       }
       if (msg.type === 'ready' && myNameRef.current) post({ type: 'me', name: myNameRef.current })
       if (msg.type === 'ready' && !net && stakeRef.current.stake) {
-        post({ type: 'stake', amount: stakeRef.current.stake, refundable: stakeRef.current.refundable })
+        post({ type: 'stake', amount: stakeRef.current.stake, win: stakeRef.current.win, refundable: stakeRef.current.refundable })
       }
       // A goal or the pitch coming on screen also proves the match is under way, in case the kick-off message was missed.
       if (!kicked.current && (msg.type === 'kickoff' || msg.type === 'score' || (msg.type === 'screen' && msg.id == null))) {

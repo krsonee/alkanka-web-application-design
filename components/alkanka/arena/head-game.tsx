@@ -103,6 +103,8 @@ type HeadGameProps = {
   onRematch?: (score: HeadScore) => void
   /** Staked amount, shown on every button that stakes it again or forfeits it. */
   stake?: number
+  /** What a win pays back for that stake, so the result screen can show KC next to XP. */
+  win?: number
   refundable?: boolean
   /** Leaving before kick-off: the parent refunds the stake. */
   onCancel?: () => void
@@ -116,7 +118,7 @@ type HeadGameProps = {
  * and in online duels. The legacy canvas engine is only a fallback when no link exists.
  */
 export function HeadGame(props: HeadGameProps) {
-  const staked = { stake: props.stake, refundable: props.refundable, onCancel: props.onCancel, onKickoff: props.onKickoff }
+  const staked = { stake: props.stake, win: props.win, refundable: props.refundable, onCancel: props.onCancel, onKickoff: props.onKickoff }
   if (props.sport === 'basket') {
     if (props.mode === 'bot') return <KafaTopuFrame sport="basket" onEnd={props.onEnd} onRematch={props.onRematch} {...staked} />
     if (props.link)

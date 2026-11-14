@@ -94,6 +94,7 @@ function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; setti
       sport={sport}
       mode="bot"
       stake={api.bet}
+      win={api.win}
       refundable={api.refundable}
       onCancel={api.cancel}
       onKickoff={api.kickoff}

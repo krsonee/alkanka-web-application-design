@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cancelBotGame, finishBotGame, markBotGameStarted, startBotGame } from '@/app/actions/arena'
-import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
+import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, MODE_LABEL, botWinMultiplier, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
@@ -11,6 +11,8 @@ import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
 import { SoundToggle } from './sound-toggle'
 import { GameErrorBoundary } from './game-error-boundary'
+import { GameResultCard } from './game-result-card'
+import { MatchRecapBlock, useMatchRecap } from './match-recap'
 import { clearSaved, saveMode } from './saved-game'
 import { TableThemeField } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
@@ -165,6 +167,7 @@ export function StakeGate({
   phaseRef.current = phase
   const resumeChecked = useRef(false)
   const [resumeKnown, setResumeKnown] = useState(false)
+  const { recap, loading: recapLoading } = useMatchRecap(phase.kind === 'done' && member ? { game, round } : null)
   const pvpMode = modeSelect?.mode === 'pvp'
   const singleMode = modeSelect != null && modeSelect.modes.length === 1
 
@@ -360,48 +363,46 @@ export function StakeGate({
 
   if (phase.kind === 'done') {
     const won = phase.result === 'win'
+    const draw = phase.result === 'draw'
     return (
-      <div className="relative flex flex-col items-center gap-5 overflow-hidden rounded-2xl border border-primary/30 bg-card px-6 py-12 text-center">
+      <div className="relative flex flex-col items-center gap-3 py-4">
         {won && <ParticleBurst key={round} count={phase.mars ? 48 : 28} distance={phase.mars ? 220 : 160} />}
-        {phase.mars && (
-          <span className="animate-badge-pulse rounded-full border-2 border-primary bg-primary/15 px-4 py-1 font-display text-sm font-bold uppercase tracking-[0.3em] text-primary">
-            Mars · 3x
-          </span>
-        )}
-        <span
-          className={cn(
-            'flex size-16 items-center justify-center rounded-2xl',
-            won ? 'bg-primary text-primary-foreground glow-gold' : 'bg-secondary text-muted-foreground',
-          )}
+        <GameResultCard
+          outcome={won ? 'win' : draw ? 'draw' : 'lose'}
+          title={phase.mars ? 'Mars yaptın kanka!' : won ? 'Kazandın kanka!' : draw ? 'Berabere' : 'Bu el rakibin'}
+          subtitle={
+            phase.note ??
+            (won
+              ? `${formatAC(phase.bet)} KC bahsine ${formatAC(phase.payout)} KC geri döndü.`
+              : draw
+                ? 'Bahsin iade edildi.'
+                : `${formatAC(phase.bet)} KC bahsin masada kaldı.`)
+          }
+          gameTitle={meta.title}
+          gameImage={meta.image}
+          stake={phase.bet}
+          delta={phase.payout - phase.bet}
+          badge={phase.mars ? 'Mars · 3x' : undefined}
+          players={[]}
+          recap={<MatchRecapBlock recap={recap} loading={recapLoading} />}
         >
-          <Trophy className="size-8" aria-hidden="true" />
-        </span>
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">{meta.title}</p>
-          <h2 className="font-display text-4xl font-bold uppercase text-foreground text-balance">
-            {phase.mars ? 'Mars yaptın kanka!' : won ? 'Kazandın kanka!' : phase.result === 'draw' ? 'Berabere' : 'Bu el rakibin'}
-          </h2>
-          {phase.note && <p className="text-sm text-muted-foreground">{phase.note}</p>}
-        </div>
-        <p className="font-display text-3xl font-bold text-primary" aria-live="polite">
-          {phase.payout > 0 ? `+${formatAC(phase.payout)} KC` : `-${formatAC(phase.bet)} KC`}
-        </p>
-        <div className="flex flex-wrap justify-center gap-2">
           <button
+            type="button"
             onClick={() => start(phase.bet)}
-            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
+            className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
           >
             <RotateCcw className="size-4" aria-hidden="true" />
-            Aynı bahisle tekrar · {formatAC(phase.bet)} KC
+            Bir el daha · {formatAC(phase.bet)} KC
           </button>
           <button
+            type="button"
             onClick={() => setPhase({ kind: 'lobby' })}
-            className="flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-sm font-bold uppercase tracking-wide text-foreground hover:bg-secondary"
+            className="col-span-2 flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-bold text-foreground hover:bg-secondary"
           >
             <Undo2 className="size-4" aria-hidden="true" />
             Lobiye dön
           </button>
-        </div>
+        </GameResultCard>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
     )

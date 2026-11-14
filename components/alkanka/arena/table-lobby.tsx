@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable, startTableWithBots } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
 import { GameResultCard } from './game-result-card'
+import { MatchRecapBlock, useMatchRecap } from './match-recap'
 import { formatAC, usePoints } from '../points-context'
 import { useIdle } from '../use-idle'
 import type { Remote, RemoteAction } from './remote'
@@ -1072,6 +1073,9 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       data.turn === data.seat,
   )
 
+  const matchOver = !!data && data.seat >= 0 && (data.status === 'bitti' || data.status === 'iptal' || left != null)
+  const { recap, loading: recapLoading } = useMatchRecap(matchOver ? { game: data.game, tableId: id } : null)
+
   if (error) return <RoomShell onLeave={() => onLeave()}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
   if (!data) {
     return (
@@ -1361,13 +1365,13 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
             <GameResultCard
               outcome="lose"
               title={left.kind === 'resign' ? 'Pes ettin' : 'Masadan ayrıldın'}
-              subtitle={`-${formatAC(data.stake)} KC. ${
-                left.botsOnly ? 'Bot masası kapandı.' : ended ? 'Maç rakibine yazıldı.' : 'Yerine bot geçti, oyun sensiz devam ediyor.'
-              }`}
+              subtitle={left.botsOnly ? 'Bot masası kapandı.' : ended ? 'Maç rakibine yazıldı.' : 'Yerine bot geçti, oyun sensiz devam ediyor.'}
               gameTitle={meta?.title ?? 'Oyun'}
               gameImage={meta?.image}
               stake={data.stake}
+              delta={recap?.kc?.delta}
               players={member ? [{ id: member.id, name: member.name, bot: false, me: true, winner: false }] : []}
+              recap={<MatchRecapBlock recap={recap} loading={recapLoading} />}
             >
               {left.stay && !ended && (
                 <button
@@ -1431,6 +1435,8 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               gameTitle={meta?.title ?? 'Oyun'}
               gameImage={meta?.image}
               stake={data.stake}
+              delta={spectator ? undefined : recap?.kc?.delta}
+              recap={spectator ? undefined : <MatchRecapBlock recap={recap} loading={recapLoading} />}
               players={data.players.map((p) => ({
                 id: p.id,
                 name: p.name,
@@ -1459,7 +1465,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                     className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
                   >
                     {replaying ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
-                    Rövanş · {formatAC(data.stake)} KC
+                    Bir el daha · {formatAC(data.stake)} KC
                   </button>
                 )}
                 <button
