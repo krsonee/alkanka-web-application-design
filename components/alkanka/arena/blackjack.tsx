@@ -1,25 +1,69 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import Image from 'next/image'
 import { Flag, Hand, Layers, Plus, RotateCcw, ShieldCheck, Split } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { blackjackAct, blackjackDeal } from '@/app/actions/arena'
-import { RANKS, SUITS, handValue, bjAct, bjActionCost, bjDeal, bjPayout, bjPublic, type BjAction, type BjPublic, type BjState, type Card } from '@/lib/casino'
+import { BJ_CARD_FLIGHT_MS, BJ_HOLE_PAUSE_MS, RANKS, SUITS, handValue, bjAct, bjActionCost, bjDeal, bjPayout, bjPublic, type BjAction, type BjPublic, type BjState, type Card } from '@/lib/casino'
 import type { ArenaGameSettings } from '@/lib/arena'
 import { playSound } from '@/lib/sound'
 import { formatAC, usePoints } from '../points-context'
 import { TableBrand } from './table-brand'
 import { ChipPot } from './chip-pot'
 
-export function PlayingCard({ card, hidden, index = 0, small, medium, delayMs }: { card?: Card; hidden?: boolean; index?: number; small?: boolean; medium?: boolean; delayMs?: number }) {
+/** The deck that cards on this table are dealt from. Each card measures its own distance to it, so it leaves the deck wherever it lands. */
+export const DeckOrigin = createContext<RefObject<HTMLElement | null> | null>(null)
+
+function useDealFromDeck() {
+  const deck = useContext(DeckOrigin)
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    const origin = deck?.current
+    if (!el || !origin) return
+    // The deal animation has already moved the card; measure where it will rest instead.
+    el.style.animationName = 'none'
+    const rest = el.getBoundingClientRect()
+    el.style.animationName = ''
+    const from = origin.getBoundingClientRect()
+    if (!rest.width || !from.width) return
+    // Fullscreen tables are scaled, and the offset is applied inside that scale.
+    const scale = el.offsetWidth ? rest.width / el.offsetWidth : 1
+    el.style.setProperty('--shoe-x', `${(from.left + from.width / 2 - rest.left - rest.width / 2) / scale}px`)
+    el.style.setProperty('--shoe-y', `${(from.top + from.height / 2 - rest.top - rest.height / 2) / scale}px`)
+  }, [deck])
+  return ref
+}
+
+export function PlayingCard({
+  card,
+  hidden,
+  index = 0,
+  small,
+  medium,
+  delayMs,
+  anim = 'card-deal',
+}: {
+  card?: Card
+  hidden?: boolean
+  index?: number
+  small?: boolean
+  medium?: boolean
+  delayMs?: number
+  /** Entrance animation class: `bj-shoe-deal` flies in from the table's deck, `bj-card-flip` turns the card over in place. */
+  anim?: string
+}) {
+  const ref = useDealFromDeck()
   const red = card && (card.s === 1 || card.s === 2)
   const delay = delayMs ?? index * 90
   if (small || medium) {
     return (
       <div
+        ref={ref}
         className={cn(
-          'card-deal relative flex shrink-0 flex-col items-center justify-center rounded-md border shadow-md',
+          anim,
+          'relative flex shrink-0 flex-col items-center justify-center rounded-md border shadow-md',
           medium ? 'h-16 w-12 sm:h-20 sm:w-14' : 'h-14 w-10 sm:h-16 sm:w-11',
           medium && '[&>span]:text-base [&>span>span]:text-lg',
           hidden || !card ? 'border-primary/40 bg-secondary' : 'border-border bg-[oklch(0.97_0.01_90)]',
@@ -41,7 +85,8 @@ export function PlayingCard({ card, hidden, index = 0, small, medium, delayMs }:
   }
   return (
     <div
-      className="card-deal relative flex h-24 w-16 shrink-0 flex-col justify-between rounded-lg border p-1.5 shadow-lg sm:h-32 sm:w-22"
+      ref={ref}
+      className={cn(anim, 'relative flex h-24 w-16 shrink-0 flex-col justify-between rounded-lg border p-1.5 shadow-lg sm:h-32 sm:w-22')}
       style={{ animationDelay: `${delay}ms` }}
       aria-label={hidden || !card ? 'Kapalı kart' : `${RANKS[card.r]} ${SUITS[card.s]}`}
     >
@@ -72,6 +117,34 @@ export function PlayingCard({ card, hidden, index = 0, small, medium, delayMs }:
   )
 }
 
+/** The dealer's second card: dealt face down from the deck, then turned over where it lies. */
+export function HoleCard({
+  card,
+  hidden,
+  delayMs,
+  small,
+  medium,
+}: {
+  card?: Card
+  hidden: boolean
+  delayMs?: number
+  small?: boolean
+  medium?: boolean
+}) {
+  const [dealtFaceDown] = useState(hidden)
+  const turned = !hidden && dealtFaceDown
+  return (
+    <PlayingCard
+      card={hidden ? undefined : card}
+      hidden={hidden}
+      anim={turned ? 'bj-card-flip' : 'bj-shoe-deal'}
+      delayMs={turned ? 0 : delayMs}
+      small={small}
+      medium={medium}
+    />
+  )
+}
+
 const RESULT_TEXT: Record<string, string> = { blackjack: 'Blackjack!', win: 'Kazandın', push: 'Berabere', loss: 'Krupiye aldı', surrender: 'Teslim oldun' }
 const HAND_RESULT: Record<string, string> = { blackjack: 'BJ', win: 'Kazandı', push: 'Berabere', loss: 'Kaybetti', surrender: 'Teslim' }
 const DEAL_STEP_MS = 650
@@ -90,19 +163,45 @@ function dealOrder(playerCount: number, dealerCount: number): Slot[] {
   return order
 }
 
-/** Reveals cards one by one so every deal feels like a real dealer's hand. */
+/** Sends cards out one by one. `shown` cards have left the deck; `landed` trails it by one flight, so totals and results never run ahead of the cards. */
 function useDealSequence(dealKey: number, total: number) {
-  const [state, setState] = useState({ key: dealKey, shown: 0 })
-  if (state.key !== dealKey) setState({ key: dealKey, shown: 0 })
-  const shown = state.key === dealKey ? state.shown : 0
+  const [state, setState] = useState({ key: dealKey, shown: 0, landed: 0 })
+  if (state.key !== dealKey) setState({ key: dealKey, shown: 0, landed: 0 })
+  const live = state.key === dealKey
+  const shown = live ? Math.min(state.shown, total) : 0
+  const landed = live ? Math.min(state.landed, shown) : 0
 
   useEffect(() => {
     if (shown >= total) return
-    const t = setTimeout(() => setState((s) => ({ ...s, shown: s.shown + 1 })), shown === 0 ? 250 : DEAL_STEP_MS)
+    const t = setTimeout(
+      () => setState((s) => (s.key === dealKey ? { ...s, shown: shown + 1 } : s)),
+      shown === 0 ? 250 : DEAL_STEP_MS,
+    )
     return () => clearTimeout(t)
-  }, [shown, total])
+  }, [shown, total, dealKey])
 
-  return Math.min(shown, total)
+  useEffect(() => {
+    if (landed >= shown) return
+    const t = setTimeout(() => setState((s) => (s.key === dealKey ? { ...s, landed: shown } : s)), BJ_CARD_FLIGHT_MS)
+    return () => clearTimeout(t)
+  }, [shown, landed, dealKey])
+
+  return { shown, landed }
+}
+
+/** True once the dealer's hole card has had time to turn over. */
+function useHoleTurned(dealKey: number, open: boolean) {
+  const [state, setState] = useState({ key: dealKey, turned: false })
+  if (state.key !== dealKey) setState({ key: dealKey, turned: false })
+  const turned = open && state.key === dealKey && state.turned
+
+  useEffect(() => {
+    if (!open || turned) return
+    const t = setTimeout(() => setState({ key: dealKey, turned: true }), BJ_HOLE_PAUSE_MS)
+    return () => clearTimeout(t)
+  }, [open, turned, dealKey])
+
+  return turned
 }
 
 function ValueBadge({ value, dim }: { value: string; dim?: boolean }) {
@@ -120,6 +219,7 @@ function BjTable({
   funds,
   onAct,
   footer,
+  onRevealed,
 }: {
   hand: BjPublic | null
   dealKey: number
@@ -128,6 +228,8 @@ function BjTable({
   funds: number
   onAct: (a: BjAction) => void
   footer: React.ReactNode
+  /** Called once the finished hand has been fully played out on the felt. */
+  onRevealed?: () => void
 }) {
   const extra = hand?.activeBet ?? 0
   const insureCost = Math.floor((hand?.hands[0]?.bet ?? 0) / 2)
@@ -138,19 +240,34 @@ function BjTable({
   const playerCount = hand?.player.length ?? 0
   const dealerCount = hand ? hand.dealer.length + (hand.dealerHidden ? 1 : 0) : 0
   const order = dealOrder(playerCount, dealerCount)
-  const shown = useDealSequence(dealKey, order.length)
-  const dealing = shown < order.length
-  const visible = order.slice(0, shown)
-  const pShown = visible.filter((s) => s.who === 'p').length
-  const dShown = visible.filter((s) => s.who === 'd').length
+  const { shown, landed } = useDealSequence(dealKey, order.length)
+  const count = (n: number, who: Slot['who']) => order.slice(0, n).filter((s) => s.who === who).length
+  const pShown = count(shown, 'p')
+  const dShown = count(shown, 'd')
+  const pLanded = count(landed, 'p')
+  const dLanded = count(landed, 'd')
   const playerCards = hand?.player.slice(0, pShown) ?? []
   const dealerCards = hand?.dealer.slice(0, dShown) ?? []
   const showHole = !!hand?.dealerHidden && dShown >= 2
+  const holeOpen = !!hand && !hand.dealerHidden && dShown >= 2
+  const holeTurned = useHoleTurned(dealKey, holeOpen)
+  // The hand is still being played out until the last card has landed and the hole card has turned.
+  const dealing = landed < order.length || (holeOpen && !holeTurned)
+  const dealerCounted = holeOpen && !holeTurned ? Math.min(dLanded, 1) : dLanded
+  const deckRef = useRef<HTMLDivElement>(null)
+
+  const revealed = !!hand && !dealing && hand.phase === 'done'
+  const notifyRevealed = useEffectEvent(() => onRevealed?.())
+  useEffect(() => {
+    if (revealed) notifyRevealed()
+  }, [revealed])
 
   const jakoLine = !hand
     ? 'Bahsini seç, kartları dağıtayım.'
     : dealing
-      ? 'Kartlar geliyor...'
+      ? hand.phase === 'done' && holeOpen
+        ? 'Kapalı kartımı açıyorum...'
+        : 'Kartlar geliyor...'
       : hand.phase === 'insurance'
         ? 'Bende As açık. Sigorta ister misin?'
         : hand.phase === 'player'
@@ -166,6 +283,7 @@ function BjTable({
             : 'Tebrikler, kazancın masada!'
 
   return (
+    <DeckOrigin.Provider value={deckRef}>
     <div className="relative flex flex-col overflow-hidden rounded-3xl border border-primary/30 bg-[color-mix(in_oklch,var(--wood)_80%,var(--background))] p-2 sm:p-3">
       <div className="felt-table relative flex min-h-[30rem] flex-col items-center gap-4 overflow-hidden rounded-[1.25rem] rounded-b-[45%] px-4 pb-10 pt-3 sm:min-h-[34rem] sm:px-10 sm:pb-16">
         <TableBrand />
@@ -177,21 +295,27 @@ function BjTable({
           <div className="mb-2 max-w-48 rounded-2xl rounded-bl-sm border border-primary/40 bg-background/85 px-3 py-2 text-xs font-semibold text-foreground sm:text-sm" aria-live="polite">
             {jakoLine}
           </div>
-          <div className="absolute right-0 top-2 hidden h-20 w-14 rotate-6 rounded-md border border-primary/40 bg-secondary shadow-xl sm:block" aria-hidden="true">
+          <div ref={deckRef} className="absolute right-0 top-2 h-14 w-10 rotate-6 rounded-md border border-primary/40 bg-secondary shadow-xl sm:h-20 sm:w-14" aria-hidden="true">
             <div className="absolute inset-1 rounded-sm border border-primary/30 bg-background" />
-            <span className="absolute inset-x-0 bottom-1 text-center text-[9px] font-bold uppercase tracking-widest text-primary">Deste</span>
+            <span className="absolute inset-x-0 bottom-1 hidden text-center text-[9px] font-bold uppercase tracking-widest text-primary sm:block">Deste</span>
           </div>
         </div>
 
         <div className="relative flex flex-col items-center gap-2">
           <div className="flex min-h-24 justify-center -space-x-6 sm:min-h-32 sm:-space-x-8">
-            {dealerCards.map((c, i) =>
-              i === 1 && showHole ? null : <PlayingCard key={`d${dealKey}-${i}-${c.r}-${c.s}`} card={c} />,
-            )}
-            {showHole && <PlayingCard key={`hole${dealKey}`} hidden />}
+            {dealerCards.slice(0, 1).map((c) => (
+              <PlayingCard key={`d${dealKey}-0`} card={c} anim="bj-shoe-deal" />
+            ))}
+            {dShown >= 2 && <HoleCard key={`d${dealKey}-1`} card={dealerCards[1]} hidden={showHole} />}
+            {dealerCards.slice(2).map((c, i) => (
+              <PlayingCard key={`d${dealKey}-${i + 2}`} card={c} anim="bj-shoe-deal" />
+            ))}
           </div>
-          {hand && dShown > 0 && (
-            <ValueBadge dim value={`Krupiye ${handValue(dealerCards)}${showHole ? '+' : ''}`} />
+          {hand && dLanded > 0 && (
+            <ValueBadge
+              dim
+              value={`Krupiye ${handValue(hand.dealer.slice(0, dealerCounted))}${showHole || (holeOpen && !holeTurned) ? '+' : ''}`}
+            />
           )}
         </div>
 
@@ -237,12 +361,12 @@ function BjTable({
                   aria-current={current ? 'true' : undefined}
                 >
                   <div className="flex justify-center -space-x-5">
-                    {h.cards.map((c, ci) => <PlayingCard key={`h${i}-${ci}-${c.r}-${c.s}`} card={c} small />)}
+                    {h.cards.map((c, ci) => <PlayingCard key={`h${i}-${ci}-${c.r}-${c.s}`} card={c} small anim="bj-shoe-deal" />)}
                   </div>
                   <div className="flex items-center gap-1.5 text-xs font-bold">
                     <span className={cn('rounded-full px-2 py-0.5 tabular-nums', current ? 'bg-primary text-primary-foreground' : 'bg-background/70 text-foreground')}>{h.value}</span>
                     <span className="text-foreground/80">{formatAC(h.bet)}</span>
-                    {h.result && <span className="text-primary">{HAND_RESULT[h.result]}</span>}
+                    {!dealing && h.result && <span className="text-primary">{HAND_RESULT[h.result]}</span>}
                   </div>
                 </div>
               )
@@ -257,11 +381,11 @@ function BjTable({
               </span>
             )}
             <div className="flex justify-center -space-x-6 sm:-space-x-8">
-              {playerCards.map((c, i) => <PlayingCard key={`p${dealKey}-${i}-${c.r}-${c.s}`} card={c} />)}
+              {playerCards.map((c, i) => <PlayingCard key={`p${dealKey}-${i}-${c.r}-${c.s}`} card={c} anim="bj-shoe-deal" />)}
             </div>
             {!hand && <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary/70">Bahis alanı</span>}
           </div>
-          {pShown > 0 && <ValueBadge value={`Senin elin ${handValue(playerCards)}`} />}
+          {hand && pLanded > 0 && <ValueBadge value={`Senin elin ${handValue(hand.player.slice(0, pLanded))}`} />}
         </div>
         )}
         {hand && hand.insurance > 0 && (
@@ -312,6 +436,7 @@ function BjTable({
         )}
       </div>
     </div>
+    </DeckOrigin.Provider>
   )
 }
 
@@ -386,9 +511,14 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
   const [state, setState] = useState<BjState>(() => bjDeal(DUEL_BET))
   const [chips, setChips] = useState(DUEL_CHIPS - DUEL_BET)
   const [handNo, setHandNo] = useState(1)
+  /** Payout already counted in `chips` but not yet shown, because the dealer is still drawing on the felt. */
+  const [unseen, setUnseen] = useState(0)
 
   function settle(s: BjState) {
-    if (s.phase === 'done') setChips((c) => c + bjPayout(s))
+    if (s.phase !== 'done') return
+    const payout = bjPayout(s)
+    setChips((c) => c + payout)
+    setUnseen(payout)
   }
 
   function act(a: BjAction) {
@@ -417,7 +547,7 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
           El {handNo}/{DUEL_HANDS}
         </span>
         <span className="text-muted-foreground">
-          Fiş <strong className="text-primary">{chips}</strong>
+          Fiş <strong className="text-primary">{chips - unseen}</strong>
         </span>
       </div>
       <BjTable
@@ -426,6 +556,7 @@ export function BlackjackDuel({ onDone }: { onDone: (score: { for: number; again
         busy={false}
         funds={chips}
         onAct={act}
+        onRevealed={() => setUnseen(0)}
         footer={
           <button onClick={nextHand} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold uppercase text-primary-foreground">
             {handNo >= DUEL_HANDS ? 'Skoru gönder' : 'Sonraki el'}

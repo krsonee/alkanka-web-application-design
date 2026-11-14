@@ -2,10 +2,10 @@
 
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { useActionState, useState } from 'react'
-import { AlertTriangle, CalendarClock, Copy, Eye, MousePointerClick, Trash2 } from 'lucide-react'
+import { useActionState, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { CalendarClock, Copy, Eye, MousePointerClick, Ruler, Trash2 } from 'lucide-react'
 import { saveAds, type ActionState } from '@/app/panel/actions'
-import { AD_PAGES, AD_POSITIONS, type AdMap, type AdPage, type AdPosition, type AdSlot } from '@/lib/ads'
+import { AD_PAGES, AD_POSITIONS, adDisplaySize, type AdMap, type AdPage, type AdPosition, type AdSlot } from '@/lib/ads'
 import { formatLocal, scheduleState } from '@/lib/schedule'
 import { ImageField } from '@/components/panel/image-field'
 import { cn } from '@/lib/utils'
@@ -13,10 +13,15 @@ import { cn } from '@/lib/utils'
 type SlotKey = `${AdPage}:${AdPosition}`
 type Stats = Record<string, { views: number; clicks: number }>
 
-const EXPECTED: Record<AdPosition, { w: number; h: number }> = {
-  top: { w: 1200, h: 150 },
-  left: { w: 160, h: 600 },
-  right: { w: 160, h: 600 },
+type Slots = Record<string, AdSlot>
+
+/** Reads the creative's own pixel size so the site can reserve exactly that much room for it. */
+function measureInto(setSlots: Dispatch<SetStateAction<Slots>>, k: string, url: string) {
+  const img = new window.Image()
+  const store = (w?: number, h?: number) => setSlots((s) => (s[k]?.image === url ? { ...s, [k]: { ...s[k], w, h } } : s))
+  img.onload = () => (img.naturalWidth && img.naturalHeight ? store(img.naturalWidth, img.naturalHeight) : store())
+  img.onerror = () => store()
+  img.src = url
 }
 
 const input =
@@ -26,35 +31,26 @@ const emptySlot: AdSlot = { image: '', href: '', alt: '' }
 
 export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveAds, {})
-  const [slots, setSlots] = useState<Record<string, AdSlot>>(() => {
-    const out: Record<string, AdSlot> = {}
+  const [slots, setSlots] = useState<Slots>(() => {
+    const out: Slots = {}
     for (const p of AD_PAGES) for (const pos of AD_POSITIONS) out[`${p.id}:${pos.id}`] = { ...emptySlot, ...saved[`${p.id}:${pos.id}` as SlotKey] }
     return out
   })
   const [page, setPage] = useState<AdPage>(AD_PAGES[0].id)
   const [pos, setPos] = useState<AdPosition>('top')
-  const [sizeWarn, setSizeWarn] = useState<Record<string, string>>({})
   const key = `${page}:${pos}` as SlotKey
   const current = slots[key]
   const posMeta = AD_POSITIONS.find((p) => p.id === pos)!
+  const shownAt = adDisplaySize(pos, current)
 
   const update = (k: string, patch: Partial<AdSlot>) => setSlots((s) => ({ ...s, [k]: { ...s[k], ...patch } }))
 
-  const checkSize = (k: string, position: AdPosition, url: string) => {
-    if (!url) return setSizeWarn((w) => ({ ...w, [k]: '' }))
-    const img = new window.Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      const exp = EXPECTED[position]
-      const ratio = img.naturalWidth / img.naturalHeight
-      const off = Math.abs(ratio - exp.w / exp.h) / (exp.w / exp.h) > 0.15
-      setSizeWarn((w) => ({
-        ...w,
-        [k]: off ? `Görsel ${img.naturalWidth}×${img.naturalHeight}. Önerilen oran ${exp.w}×${exp.h}; görsel kırpılmadan kendi oranında gösterilir.` : '',
-      }))
+  // Ads saved before sizes were recorded pick theirs up here, so the next save stores them.
+  useEffect(() => {
+    for (const [k, slot] of Object.entries(saved)) {
+      if (slot?.image && !(slot.w && slot.h)) measureInto(setSlots, k, slot.image)
     }
-    img.src = url
-  }
+  }, [saved])
 
   const applyToAll = () => {
     void askConfirm(`Bu reklam bütün sayfaların "${posMeta.label}" alanına kopyalansın mı?`).then((ok) => {
@@ -78,6 +74,8 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
           <input type="hidden" name={`${k}:alt`} value={s.alt} />
           <input type="hidden" name={`${k}:startAt`} value={s.startAt ?? ''} />
           <input type="hidden" name={`${k}:endAt`} value={s.endAt ?? ''} />
+          <input type="hidden" name={`${k}:w`} value={s.w ?? ''} />
+          <input type="hidden" name={`${k}:h`} value={s.h ?? ''} />
         </div>
       ))}
 
@@ -135,7 +133,7 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col">
               <span className="font-display text-base font-bold text-foreground">{`${AD_PAGES.find((p) => p.id === page)!.label} · ${posMeta.label}`}</span>
-              <span className="text-xs text-muted-foreground">{`Önerilen boyut: ${posMeta.size}`}</span>
+              <span className="text-xs leading-relaxed text-muted-foreground">{`Önerilen boyut ${posMeta.size}. Başka boyutlar ve GIF de kabul edilir.`}</span>
             </div>
             {stats[key] && (
               <span className="flex shrink-0 items-center gap-3 rounded-lg bg-secondary px-2.5 py-1.5 text-xs tabular-nums text-foreground" title="Son 30 gün">
@@ -151,16 +149,19 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
             label="Reklam görseli"
             value={current.image}
             onChange={(url) => {
-              update(key, { image: url })
-              checkSize(key, pos, url)
+              update(key, { image: url, w: undefined, h: undefined })
+              if (url) measureInto(setSlots, key, url)
             }}
             uploadId={`ad-${page}-${pos}`}
-            placeholder="GIF, PNG veya JPG"
+            placeholder="Görsel linki: GIF, PNG, JPG veya WEBP"
+            hint="PNG, JPG ve WEBP en fazla 2 MB, GIF en fazla 8 MB."
           />
-          {sizeWarn[key] && (
-            <p className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              {sizeWarn[key]}
+          {current.image && current.w && current.h && shownAt && (
+            <p role="status" className="flex items-start gap-2 rounded-lg bg-secondary px-3 py-2 text-xs leading-relaxed text-foreground">
+              <Ruler className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+              {shownAt.width === current.w
+                ? `Görsel ${current.w} × ${current.h} piksel. Sitede bu boyutta gösterilir; kırpılmaz, büyütülmez. Dar ekranda oranı korunarak küçülür.`
+                : `Görsel ${current.w} × ${current.h} piksel. Bu alana sığması için ${shownAt.width} × ${shownAt.height} olarak, oranı korunarak gösterilir; kırpılmaz.`}
             </p>
           )}
           <label className="flex flex-col gap-1.5 text-sm text-foreground">
@@ -205,7 +206,7 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
             <button
               type="button"
               disabled={!current.image}
-              onClick={() => update(key, { ...emptySlot, startAt: '', endAt: '' })}
+              onClick={() => update(key, { ...emptySlot, startAt: '', endAt: '', w: undefined, h: undefined })}
               className="flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-secondary disabled:opacity-40"
             >
               <Trash2 className="size-3.5" aria-hidden="true" />

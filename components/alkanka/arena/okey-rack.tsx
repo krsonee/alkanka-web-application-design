@@ -224,10 +224,23 @@ function arrangeLayout(hand: Tile[], okey: OkeyValue, mode: 'seri' | 'cift', row
 
 export type SlotMark = { label?: string } | null
 
-export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
+const okeyIds = (hand: Tile[], okey: OkeyValue) => hand.filter((t) => isJoker(t, okey)).map((t) => t.id)
+
+/** `dealKey` names the current deal; when it changes the rack starts over, exactly like the first hand. */
+export function useRack(hand: Tile[], okey: OkeyValue, rows = 2, dealKey?: string | number) {
   const total = RACK_COLS * rows
   const [raw, setRaw] = useState<Slots>(() => arrangeLayout(hand, okey, 'seri', rows))
   const [selected, setSelected] = useState<number | null>(null)
+  // Okeys arrive face down, like at a real table; the player taps to reveal them.
+  const [flippedRaw, setFlipped] = useState<number[]>(() => okeyIds(hand, okey))
+  const [deal, setDeal] = useState(dealKey)
+  if (deal !== dealKey) {
+    // Tile ids restart every deal, so the old slots and the old face-down tiles would land on unrelated tiles.
+    setDeal(dealKey)
+    setRaw(arrangeLayout(hand, okey, 'seri', rows))
+    setFlipped(okeyIds(hand, okey))
+    setSelected(null)
+  }
   const slots = reconcile(raw, hand, total)
   const selectedId = selected != null && hand.some((t) => t.id === selected) ? selected : null
 
@@ -301,9 +314,7 @@ export function useRack(hand: Tile[], okey: OkeyValue, rows = 2) {
     setRaw(arrangeLayout(hand, okey, mode, rows))
   }
 
-  // Okeys arrive face down, like at a real table; the player taps to reveal them.
-  const [flippedRaw, setFlipped] = useState<number[]>(() => hand.filter((t) => isJoker(t, okey)).map((t) => t.id))
-  // Tile ids restart every deal, so a stale id could flip an ordinary tile; only an okey may ever be face down.
+  // Only an okey may ever be face down, whatever ids are still remembered.
   const flipped = new Set(flippedRaw.filter((id) => hand.some((t) => t.id === id && isJoker(t, okey))))
   function toggleFlip(id: number) {
     setFlipped((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))

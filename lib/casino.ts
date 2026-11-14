@@ -403,6 +403,22 @@ export const BJ_PLAY_MS = 20_000
 export const BJ_RESULT_MS = 6_000
 /** Only runs when the dealer's up card is an Ace: everyone decides on insurance before the dealer peeks. */
 export const BJ_INS_MS = 8_000
+
+/** Table animation timings. Shared with the server so the result stays on screen until the dealer has visibly finished drawing. */
+export const BJ_CARD_FLIGHT_MS = 560
+export const BJ_HOLE_PAUSE_MS = 600
+export const BJ_DEALER_STEP_MS = 800
+export const BJ_SETTLE_MS = 350
+/** Gap between two cards of the opening deal; tighter on a full table so the deal never drags. */
+export const bjDealStep = (players: number) => Math.round(Math.min(420, Math.max(180, 2400 / (2 * players + 2))))
+/**
+ * Opening deal order: a card to each seat, the dealer's up card, a second card to each seat, then the hole card.
+ * `order` is the seat's position among the seated players; the dealer deals to himself last, at `order === players`.
+ */
+export const bjDealDelay = (order: number, card: 0 | 1, players: number) => (card * (players + 1) + order) * bjDealStep(players)
+export const bjOpeningMs = (players: number) => bjDealDelay(players, 1, players) + BJ_CARD_FLIGHT_MS
+/** Time the dealer needs on screen to turn the hole card and draw up to `cards` cards. */
+export const bjRevealMs = (cards: number) => BJ_HOLE_PAUSE_MS + Math.max(0, cards - 2) * BJ_DEALER_STEP_MS + BJ_CARD_FLIGHT_MS + BJ_SETTLE_MS
 export type BlackjackPhase = 'waiting' | 'bet' | 'insurance' | 'play' | 'result'
 
 /** Optional side bets on the live table. 0 means the side bet is off. */

@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 import type { PoolClient } from 'pg'
 import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
-import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
+import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, bjOpeningMs, bjRevealMs, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
 import { isStackedBet } from '@/lib/arena'
 
@@ -261,9 +261,10 @@ async function advance(c: PoolClient, tableNo: number): Promise<Round> {
 
     const seats = await c.query(`SELECT id, ready, ${SEAT_COLS} FROM blackjack_live WHERE round_id = $1`, [round.id])
     const dealerHasBj = () => isNatural(dealerHand(round.id))
-    const finishAll = async () => {
+    // The result window grows by the time the table needs to play out the dealer's draw, so the outcome is never cut short.
+    const finishAll = async (dealMs = 0) => {
       await c.query(`UPDATE blackjack_live SET stood = true, stood2 = true WHERE round_id = $1`, [round.id])
-      return setPhase(c, round.id, 'result', BJ_RESULT_MS)
+      return setPhase(c, round.id, 'result', BJ_RESULT_MS + bjRevealMs(dealerHand(round.id).length) + dealMs)
     }
     if (round.phase === 'bet') {
       if (!seats.rowCount) {
@@ -274,9 +275,11 @@ async function advance(c: PoolClient, tableNo: number): Promise<Round> {
       if (!expired && !allReady) break
       // Dealer peek: an Ace up opens the insurance window first; a ten up with a hidden Ace ends the hand on the spot.
       const up = cardAt(round.id, 'd', 0)
-      if (up.r === 1) round = await setPhase(c, round.id, 'insurance', BJ_INS_MS)
-      else if (tenValue(up) === 10 && dealerHasBj()) round = await finishAll()
-      else round = await setPhase(c, round.id, 'play', BJ_PLAY_MS)
+      // Decision timers only start counting once the opening deal has landed on the felt.
+      const dealMs = bjOpeningMs(seats.rowCount ?? 0)
+      if (up.r === 1) round = await setPhase(c, round.id, 'insurance', BJ_INS_MS + dealMs)
+      else if (tenValue(up) === 10 && dealerHasBj()) round = await finishAll(dealMs)
+      else round = await setPhase(c, round.id, 'play', BJ_PLAY_MS + dealMs)
       continue
     }
     if (round.phase === 'insurance') {
@@ -741,7 +744,7 @@ export async function blackjackLiveState(member: Member | null, requested?: numb
     roundId,
     phase,
     phaseEndsAt: round.endsAt,
-    phaseTotal: PHASE_TOTAL[phase],
+    phaseTotal: reveal ? BJ_RESULT_MS + bjRevealMs(dealerFull.length) : PHASE_TOTAL[phase],
     serverNow: Date.now(),
     seats,
     watchers,

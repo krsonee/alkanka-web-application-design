@@ -55,7 +55,11 @@ export async function saveAds(_: ActionState, form: FormData): Promise<ActionSta
   try {
     await requireAdmin('logo')
     const { AD_PAGES, AD_POSITIONS, ADS_KEY } = await import('@/lib/ads')
-    const value: Record<string, { image: string; href: string; alt: string; startAt?: string; endAt?: string }> = {}
+    const value: Record<string, { image: string; href: string; alt: string; startAt?: string; endAt?: string; w?: number; h?: number }> = {}
+    const pixels = (v: FormDataEntryValue | null) => {
+      const n = Math.round(Number(v))
+      return n > 0 && n <= 20_000 ? n : 0
+    }
     for (const page of AD_PAGES) {
       for (const pos of AD_POSITIONS) {
         const key = `${page.id}:${pos.id}`
@@ -69,12 +73,15 @@ export async function saveAds(_: ActionState, form: FormData): Promise<ActionSta
         if (startAt && endAt && parseLocal(endAt)! <= parseLocal(startAt)!) {
           return { message: `${page.label} / ${pos.label}: bitiş, başlangıçtan sonra olmalı.` }
         }
+        const w = pixels(form.get(`${key}:w`))
+        const h = pixels(form.get(`${key}:h`))
         value[key] = {
           image,
           href,
           alt: String(form.get(`${key}:alt`) ?? '').trim().slice(0, 80),
           ...(startAt ? { startAt } : {}),
           ...(endAt ? { endAt } : {}),
+          ...(w && h ? { w, h } : {}),
         }
       }
     }

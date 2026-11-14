@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import useSWR from 'swr'
+import useSWR, { mutate as refreshShared } from 'swr'
 import { Check, Clock, Coins, Handshake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getMyMarketRequests, requestMarketItem } from '@/app/actions/market'
@@ -83,6 +83,8 @@ export function PointsMarket({ items }: { items: MarketProduct[] }) {
       setFlash({ ok: true, text: res.message })
       setAsking(null)
       mutate()
+      // Bought wheel and dice rights show up on the games right away.
+      refreshShared('mini-status')
     } else {
       setFlash({ ok: false, text: res.error })
     }

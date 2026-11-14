@@ -65,7 +65,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const mySeat = remote.spectator ? -1 : remote.seat
   const okey = useMemo(() => okeyFrom(s.indicator), [s.indicator])
   const hand = useMemo(() => (mySeat >= 0 ? s.hands[mySeat] ?? [] : []), [s.hands, mySeat])
-  const rack = useRack(hand, okey, 2)
+  const rack = useRack(hand, okey, 2, `${s.handNo}:${hand.length > 0}`)
   const [localError, setLocalError] = useState<string | null>(null)
   const [scoresOpen, setScoresOpen] = useState(false)
 
