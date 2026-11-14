@@ -7,10 +7,15 @@ import { AdFrame } from '@/components/alkanka/ad-frame'
 import { getCatalog } from '@/lib/catalog'
 import { MainSponsorRotator } from '@/components/alkanka/partner-sites'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
+import { MembersOnly } from '@/components/alkanka/members-only'
+import { getSponsorAccess, MEMBERS_ONLY_ROBOTS } from '@/lib/sponsor-access'
 
-export const metadata = pageMeta('kampanyalar')
+export const metadata = { ...pageMeta('kampanyalar'), robots: MEMBERS_ONLY_ROBOTS }
+export const dynamic = 'force-dynamic'
 
 export default async function CampaignsPage() {
+  const access = await getSponsorAccess()
+  if (access.state !== 'open') return <MembersOnly state={access.state} title="Kampanyalar üyelere özel" />
   const [sponsors, { events: EVENTS, bonuses: BONUSES, campaigns: CAMPAIGNS }] = await Promise.all([
     listPublicSponsors().catch(() => []),
     getCatalog(),

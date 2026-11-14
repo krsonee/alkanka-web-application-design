@@ -424,7 +424,7 @@ export function MemberHub({
 const STEPS = [
   { icon: Gamepad2, title: 'Oyna, görev yap', text: 'Mini oyunlar ve günlük görevler tamamen ücretsiz.' },
   { icon: Coins, title: 'Kanka Coin topla', text: 'Her oyun, görev ve seri gününde KC kazanırsın.' },
-  { icon: ShoppingBag, title: 'Ödüle çevir', text: 'Market’te KC’ni sponsor ödülleriyle takas et.' },
+  { icon: ShoppingBag, title: 'Ödüle çevir', text: 'Market’te KC’ni ödüllerle takas et.' },
 ]
 
 export function GuestHero({ bonus }: { bonus: number }) {
@@ -437,7 +437,7 @@ export function GuestHero({ bonus }: { bonus: number }) {
           {fmt(bonus)} KC hoş geldin hediyesi
         </span>
         <h2 id="guest-title" className="font-display text-2xl font-bold leading-tight text-foreground text-balance md:text-4xl">
-          Ücretsiz oyna, Kanka Coin topla, <span className="text-primary">sponsor ödüllerini kap</span>
+          Ücretsiz oyna, Kanka Coin topla, <span className="text-primary">ödülleri kap</span>
         </h2>
         <p className="text-sm leading-relaxed text-muted-foreground text-pretty md:text-base">
           Kayıt ol, cüzdanına hemen {fmt(bonus)} KC hediye yüklensin. Kart bilgisi yok, ödeme yok.

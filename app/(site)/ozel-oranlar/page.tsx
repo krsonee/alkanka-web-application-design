@@ -4,11 +4,15 @@ import { getChannelUsernames } from '@/lib/telegram-channels'
 import { istanbulDay } from '@/lib/special-odds-shared'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { OddsFeed } from '@/components/alkanka/odds/odds-feed'
+import { MembersOnly } from '@/components/alkanka/members-only'
+import { getSponsorAccess, MEMBERS_ONLY_ROBOTS } from '@/lib/sponsor-access'
 
-export const metadata = pageMeta('ozel-oranlar')
+export const metadata = { ...pageMeta('ozel-oranlar'), robots: MEMBERS_ONLY_ROBOTS }
 export const dynamic = 'force-dynamic'
 
 export default async function OddsPage() {
+  const access = await getSponsorAccess()
+  if (access.state !== 'open') return <MembersOnly state={access.state} title="Özel oranlar üyelere özel" />
   const today = istanbulDay()
   const [odds, config, channels] = await Promise.all([
     listOddsByDay(today),

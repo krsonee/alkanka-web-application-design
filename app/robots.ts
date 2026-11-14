@@ -3,7 +3,7 @@ import { SITE_URL } from '@/lib/seo'
 
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: [{ userAgent: '*', allow: '/', disallow: ['/api/', '/postlar', '/logolar', '/maskot', '/arena-onizleme', '/survival-onizleme', '/kankatv/onizleme', '/okey-onizleme', '/tavla-onizleme'] }],
+    rules: [{ userAgent: '*', allow: '/', disallow: ['/api/', '/postlar', '/logolar', '/maskot', '/arena-onizleme', '/survival-onizleme', '/kankatv/onizleme', '/okey-onizleme', '/tavla-onizleme', '/sponsorlar', '/kampanyalar', '/bonuslar', '/ozel-oranlar', '/siteler/'] }],
     sitemap: `${SITE_URL}/sitemap.xml`,
     host: SITE_URL,
   }
