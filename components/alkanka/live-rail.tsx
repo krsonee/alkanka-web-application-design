@@ -19,6 +19,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react'
+import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { sendChannelCommentAction, sendChatMessage, startTelegramLink } from '@/app/actions/chat'
 import {
@@ -526,7 +527,9 @@ export function LiveRail() {
   const [tab, setTab] = useState<ChatTab>('sohbet')
   const [mobileOpen, setMobileOpen] = useState(false)
   const isDesktopRail = useSyncExternalStore(subscribeXl, () => window.matchMedia(XL_QUERY).matches, () => false)
-  const railVisible = isDesktopRail || mobileOpen
+  // On a game page the rail starts closed so the table gets the full width; the Sohbet button opens it over the page.
+  const gamePage = /^\/oyunlar\/(?!canli(\/|$))[^/]+/.test(usePathname() ?? '')
+  const railVisible = (isDesktopRail && !gamePage) || mobileOpen
   const chat = useChatFeed(railVisible && tab === 'sohbet')
   const channel = useChannelFeed(railVisible && tab !== 'sohbet' ? tab : null)
 
@@ -565,7 +568,10 @@ export function LiveRail() {
     <button
       type="button"
       onClick={() => setMobileOpen(true)}
-      className="fixed bottom-5 right-5 z-30 hidden items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground shadow-lg transition-opacity hover:opacity-90 lg:flex xl:hidden"
+      className={cn(
+        'fixed bottom-5 right-5 z-30 hidden items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground shadow-lg transition-opacity hover:opacity-90 lg:flex [body:has([data-table-playing])_&]:hidden',
+        !gamePage && 'xl:hidden',
+      )}
     >
       <MessagesSquare className="size-4" aria-hidden="true" />
       Sohbet
@@ -576,7 +582,7 @@ export function LiveRail() {
         tabIndex={-1}
         aria-label="Sohbeti kapat"
         onClick={() => setMobileOpen(false)}
-        className="animate-in fade-in fixed inset-0 z-50 bg-background/60 backdrop-blur-sm xl:hidden"
+        className={cn('animate-in fade-in fixed inset-0 z-50 bg-background/60 backdrop-blur-sm', !gamePage && 'xl:hidden')}
       />
     )}
     <aside
@@ -584,7 +590,8 @@ export function LiveRail() {
       aria-label="Telegram canlı sohbet"
       className={cn(
         'fixed inset-x-0 bottom-0 z-50 h-[85dvh] w-full flex-col overflow-hidden rounded-t-3xl border-t border-accent/40 bg-surface shadow-2xl',
-        'xl:top-0 xl:left-auto xl:z-30 xl:flex xl:h-auto xl:w-80 xl:rounded-none xl:border-t-0 xl:border-l xl:border-border xl:shadow-none',
+        'xl:top-0 xl:left-auto xl:h-auto xl:w-80 xl:rounded-none xl:border-t-0 xl:border-l xl:border-border',
+        gamePage ? 'xl:z-50' : 'xl:z-30 xl:flex xl:shadow-none',
         mobileOpen ? 'animate-in slide-in-from-bottom flex pb-[env(safe-area-inset-bottom)] duration-300 xl:animate-none xl:pb-0' : 'hidden',
       )}
     >

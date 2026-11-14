@@ -44,6 +44,9 @@ import { TelegramStrip } from '@/components/alkanka/telegram-strip'
 import { getTelegramPromo } from '@/lib/telegram-promo'
 import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 
+/** Promo bands above the page: gone while a table is being played, and on phones for the whole game page so "Oyna" is on the first screen. */
+const CHROME_BAND = '[body:has([data-table-playing])_&]:hidden max-lg:[body:has([data-game-page])_&]:hidden'
+
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   after(() => runAutoTick())
   const [logos, texts, social, sponsors, catalog, chatConfig, appSettings, tourSettings] = await Promise.all([
@@ -86,12 +89,12 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <div
           className={
             chatLive
-              ? 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)] xl:pr-80'
+              ? 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)] xl:pr-80 xl:[body:has([data-game-page])_&]:pr-0'
               : 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)]'
           }
         >
           {tgPromo.enabled && (
-            <div className="[body:has([data-table-live])_&]:hidden">
+            <div className={CHROME_BAND}>
               <TelegramStrip
                 text={tgPromo.text}
                 cta={tgPromo.cta}
@@ -102,11 +105,15 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
             </div>
           )}
           <Topbar social={social} sponsors={searchSponsors} telegram={telegram} />
-          <div className="[body:has([data-table-live])_&]:hidden">
+          <div className={CHROME_BAND}>
             <WinnersTicker />
           </div>
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
-            {boosts.length > 0 && <BoostStrip boosts={boosts} />}
+            {boosts.length > 0 && (
+              <div className={CHROME_BAND}>
+                <BoostStrip boosts={boosts} />
+              </div>
+            )}
             {children}
             <Footer />
           </main>
