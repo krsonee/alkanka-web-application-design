@@ -23,7 +23,7 @@ const TABS: { id: Mode; label: string; icon: typeof Star }[] = [
 ]
 
 export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteId: string; siteName: string; initialMode?: Mode }) {
-  const { member } = usePoints()
+  const { member, known } = usePoints()
   const [mode, setMode] = useState<Mode>(initialMode)
   const review = useAction()
   const complaint = useAction()
@@ -33,6 +33,7 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
   const [detail, setDetail] = useState('')
 
   if (!member) {
+    if (!known) return <div aria-hidden="true" className="panel-gold h-28 animate-pulse rounded-xl" />
     return (
       <div className="panel-gold flex flex-col items-start gap-3 rounded-xl p-5">
         <p className="text-sm leading-relaxed text-muted-foreground">

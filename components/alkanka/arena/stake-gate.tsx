@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cancelBotGame, finishBotGame, markBotGameStarted, matchNow, playBotsNow, startBotGame } from '@/app/actions/arena'
-import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Undo2, Users } from 'lucide-react'
+import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Undo2, UserPlus, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, botFillSeconds, botWinMultiplier, quickSeats, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
@@ -16,6 +16,7 @@ import { MatchRecapBlock, useMatchRecap } from './match-recap'
 import { clearSaved } from './saved-game'
 import { TableThemeField } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
+import { guestTrialUsed, isGuestTrialGame, markGuestTrialUsed } from '@/lib/guest-trial'
 
 /** What the lobby's two play buttons do for this game. */
 export type QuickPlay = {
@@ -171,6 +172,13 @@ export function StakeGate({
   const [resumeKnown, setResumeKnown] = useState(false)
   const practiceDone = phase.kind === 'done' && phase.bet === 0
   const { recap, loading: recapLoading } = useMatchRecap(phase.kind === 'done' && member && !practiceDone ? { game, round } : null)
+  const guest = !member && !loading
+  const trialGame = quick.bot === 'session' && isGuestTrialGame(game)
+  const [trialUsed, setTrialUsed] = useState(false)
+
+  useEffect(() => {
+    setTrialUsed(guestTrialUsed())
+  }, [])
 
   useEffect(() => {
     if (!member || resumeChecked.current) return
@@ -224,8 +232,11 @@ export function StakeGate({
   }
 
   async function start(amount: number) {
-    if (busy || !requireLogin()) return
-    if (amount === 0) {
+    if (busy) return
+    // A guest gets one hand, always a practice one; anything else asks for an account.
+    const trial = guest && trialGame && !guestTrialUsed()
+    if (!trial && !requireLogin()) return
+    if (trial || amount === 0) {
       session.current = PRACTICE_SESSION
     } else {
       setBusy('bot')
@@ -242,7 +253,7 @@ export function StakeGate({
     setNotice('')
     const next = round + 1
     setRound(next)
-    setPhase({ kind: 'playing', bet: amount, round: next })
+    setPhase({ kind: 'playing', bet: trial ? 0 : amount, round: next })
   }
 
   async function finish(result: GameResult, note?: string, score?: { for: number; against: number }) {
@@ -252,6 +263,10 @@ export function StakeGate({
     clearSaved(`${game}:${id}`)
     const playedBet = phase.bet
     if (id === PRACTICE_SESSION) {
+      if (!member) {
+        markGuestTrialUsed()
+        setTrialUsed(true)
+      }
       setPhase({ kind: 'done', bet: 0, result, note, payout: 0 })
       return
     }
@@ -273,7 +288,8 @@ export function StakeGate({
     const again = async (result: GameResult, note?: string, score?: { for: number; against: number }) => {
       const sameBet = phase.bet
       await finish(result, note, score)
-      await start(sameBet)
+      // A guest's single hand ends at the result card, where the membership prompt is.
+      if (member) await start(sameBet)
     }
     const cancel = async () => {
       const id = session.current
@@ -321,7 +337,7 @@ export function StakeGate({
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
           <span className="font-display font-bold uppercase tracking-wide text-foreground">{meta.title} masası</span>
           {phase.bet === 0 ? (
-            <span className="text-muted-foreground">Pratik maçı · KC ve KP kazandırmaz</span>
+            <span className="text-muted-foreground">{guest ? 'Deneme eli · üyelik gerekmez, KC kazandırmaz' : 'Pratik maçı · KC ve KP kazandırmaz'}</span>
           ) : (
             <span className="flex items-center gap-4 text-muted-foreground">
               <span>
@@ -388,7 +404,13 @@ export function StakeGate({
           title={phase.mars ? 'Mars yaptın kanka!' : won ? 'Kazandın kanka!' : draw ? 'Berabere' : 'Bu el rakibin'}
           subtitle={
             phase.note ??
-            (practiceDone
+            (guest
+              ? won
+                ? 'Deneme elini aldın kanka. Gerçek masada bu el sana KC kazandırırdı.'
+                : draw
+                  ? 'Deneme eli berabere bitti.'
+                  : 'Deneme eli botun oldu. Üye ol, rövanşı gerçek masada al.'
+              : practiceDone
               ? won
                 ? 'Pratik maçını aldın. Hazırsan KC ile oyna.'
                 : draw
@@ -407,7 +429,11 @@ export function StakeGate({
           badge={phase.mars ? 'Mars · 3x' : undefined}
           players={[]}
           recap={
-            practiceDone ? (
+            guest ? (
+              <p className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-pretty text-sm leading-relaxed text-foreground">
+                Bu bir deneme eliydi, KC dönmedi. Ücretsiz üye olunca hediye KC hesabına yüklenir ve bahisli masalarda kazandığın KC senin olur.
+              </p>
+            ) : practiceDone ? (
               <p className="w-full rounded-xl border border-border bg-background/40 px-3 py-2.5 text-pretty text-sm leading-relaxed text-muted-foreground">
                 Pratik maçı: KC yatırılmaz, KC ve Kanka Puanı kazandırmaz, görevlere sayılmaz.
               </p>
@@ -416,14 +442,32 @@ export function StakeGate({
             )
           }
         >
-          <button
-            type="button"
-            onClick={() => start(phase.bet)}
-            className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-          >
-            <RotateCcw className="size-4" aria-hidden="true" />
-            {practiceDone ? 'Bir el daha · pratik' : `Bir el daha · ${formatAC(phase.bet)} KC`}
-          </button>
+          {guest ? (
+            <>
+              <a
+                href="#kayit"
+                className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+              >
+                <UserPlus className="size-4" aria-hidden="true" />
+                Ücretsiz üye ol, hediye KC al
+              </a>
+              <a
+                href="#giris"
+                className="col-span-2 flex items-center justify-center gap-2 rounded-xl border border-primary/50 py-2.5 text-sm font-bold text-foreground hover:bg-primary/10"
+              >
+                Zaten üyeyim, giriş yap
+              </a>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => start(phase.bet)}
+              className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+            >
+              <RotateCcw className="size-4" aria-hidden="true" />
+              {practiceDone ? 'Bir el daha · pratik' : `Bir el daha · ${formatAC(phase.bet)} KC`}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setPhase({ kind: 'lobby' })}
@@ -455,6 +499,7 @@ export function StakeGate({
   // Starting a bot session closes any session still open for this game, so the bot button waits until we know
   // whether there is one to resume; it also waits for the member lookup so a member never hits the login wall.
   const checking = loading || (!!member && quick.bot === 'session' && !resumeKnown)
+  const guestTrial = guest && trialGame && !trialUsed
   const themeGame = arenaThemeGame(game)
 
   async function playBots() {
@@ -543,10 +588,23 @@ export function StakeGate({
         )}
 
         <div className="flex flex-col gap-2">
+          {guestTrial && (
+            <PlayRow
+              icon={Play}
+              primary
+              label="Üye olmadan bir el dene"
+              busy={false}
+              disabled={busy != null}
+              onClick={() => void start(0)}
+              caption="Deneme eli · bota karşı"
+              amount="Bahissiz"
+              detail="üyelik gerekmez · KC kazandırmaz"
+            />
+          )}
           {quick.bot && (
             <PlayRow
               icon={Bot}
-              primary
+              primary={!guestTrial}
               label="Bota karşı hemen oyna"
               busy={busy === 'bot' || checking}
               disabled={busy != null || checking || blocked || pending != null}
@@ -592,7 +650,9 @@ export function StakeGate({
             className="-mt-1 flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-primary/20"
           >
             <Coins className="size-4 text-primary" aria-hidden="true" />
-            Oynamak için ücretsiz üye ol, hediye KC hesabına yüklensin
+            {trialGame && trialUsed
+              ? 'Deneme elini oynadın. Devam etmek için ücretsiz üye ol, hediye KC hesabına yüklensin'
+              : 'Oynamak için ücretsiz üye ol, hediye KC hesabına yüklensin'}
           </button>
         )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

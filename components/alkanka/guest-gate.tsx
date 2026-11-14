@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { Award, Gift, LogIn, Sparkles, Trophy, UserPlus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from './points-context'
+import { isGuestTrialPath } from '@/lib/guest-trial'
 
 const PREVIEW_SECONDS = 5
 const SOFT_PROMPT_SECONDS = 25
@@ -32,8 +33,10 @@ export function GuestGate() {
   const [remaining, setRemaining] = useState(PREVIEW_SECONDS)
   const [dismissed, setDismissed] = useState(false)
 
-  const isGuest = !loading && !member && !OPEN_PAGES.includes(pathname)
-  const hard = isMemberOnly(pathname)
+  // Trial game pages stay open: the guest plays one hand first and meets the membership prompt at the result.
+  const isGuest = !loading && !member && !OPEN_PAGES.includes(pathname) && !isGuestTrialPath(pathname)
+  // The game list is browsable, so a guest can reach a trial game; it only gets the dismissable prompt.
+  const hard = isMemberOnly(pathname) && pathname !== '/oyunlar'
 
   useEffect(() => {
     setRemaining(hard ? PREVIEW_SECONDS : SOFT_PROMPT_SECONDS)
