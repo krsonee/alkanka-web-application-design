@@ -1188,6 +1188,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   return (
     <RoomShell
       immersive={immersive}
+      playing={data.status === 'oynaniyor'}
       onLeave={() => onLeave(ended)}
       title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
     >
@@ -1344,6 +1345,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
             ) : (
               <LandscapeFit
+                expandable={data.status === 'oynaniyor'}
                 force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'}
                 menuRight={data.game === 'pisti'}
                 menu={
@@ -1705,10 +1707,24 @@ function HeadDuel({
   return <HeadGame sport={sport} mode={host ? 'host' : 'guest'} link={link} names={names} onEnd={onEnd} />
 }
 
-function RoomShell({ children, onLeave, title, immersive }: { children: React.ReactNode; onLeave: () => void; title?: string; immersive?: boolean }) {
+function RoomShell({
+  children,
+  onLeave,
+  title,
+  immersive,
+  playing,
+}: {
+  children: React.ReactNode
+  onLeave: () => void
+  title?: string
+  immersive?: boolean
+  /** A game is running on this table: the page around it drops its banners and tabs so the table starts higher up. */
+  playing?: boolean
+}) {
   return (
     <div
       data-table-live={immersive ? '' : undefined}
+      data-table-playing={playing ? '' : undefined}
       className={cn(
         'relative overflow-hidden rounded-2xl border border-border bg-card',
         immersive && 'max-lg:fixed max-lg:inset-0 max-lg:z-[60] max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:rounded-none max-lg:border-0 max-lg:pt-[env(safe-area-inset-top)]',

@@ -16,6 +16,12 @@ const MAX_SCALE = 1.4
 
 const PHONE_PORTRAIT = '(pointer: coarse) and (orientation: portrait) and (max-width: 600px)'
 
+const DESKTOP = '(min-width: 1024px)'
+/** Below this the in-page table would be unreadable, so it stops shrinking and the page scrolls instead. */
+const INLINE_MIN_SCALE = 0.6
+const INLINE_MIN_H = 320
+const INLINE_GAP = 12
+
 function useMedia(query: string) {
   return useSyncExternalStore(
     (cb) => {
@@ -47,6 +53,7 @@ export function LandscapeFit({
   force = false,
   menu,
   menuRight = false,
+  expandable = false,
 }: {
   children: ReactNode
   label?: string
@@ -56,6 +63,8 @@ export function LandscapeFit({
   menu?: ReactNode
   /** Sideways only: an upright phone gets a rotate prompt instead of the table, and the table drops the side rail. */
   force?: boolean
+  /** Desktop: the table is fitted to the window height in the page, and a "Tam ekran" button opens it over the whole window. */
+  expandable?: boolean
 }) {
   const landscape = usePhoneLandscape()
   const portraitPhone = useMedia(PHONE_PORTRAIT)
@@ -63,10 +72,16 @@ export function LandscapeFit({
   const [hintClosed, setHintClosed] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const fullscreen = landscape && !minimized
+  // Desktop fullscreen keeps the table's normal layout and only scales it; the sideways-phone layout is not used.
+  const [expanded, setExpanded] = useState(false)
+  const manual = expanded && !landscape
+  const fullscreen = manual || (landscape && !minimized)
   // A sideways phone has too little height for a cramped in-page table, so a minimized table is parked
   // (still mounted, still running) behind a "back to table" card instead.
   const parked = force && landscape && minimized
+  // Desktop, table still inside the page: it is shrunk just enough for its playable part to end above the window's bottom edge.
+  const desktop = useMedia(DESKTOP)
+  const inline = expandable && desktop && !fullscreen
 
   useEffect(() => {
     if (!fullscreen) setMenuOpen(false)
@@ -75,10 +90,85 @@ export function LandscapeFit({
   const area = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
+  const [fit, setFit] = useState<{ s: number; w: number; h: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const i = inner.current
+    const a = area.current
+    if (!inline || !i || !a) {
+      setFit(null)
+      return
+    }
+    let frame = 0
+    const measure = () => {
+      const availW = a.clientWidth
+      if (availW < 200) return
+      const availH = Math.max(INLINE_MIN_H, window.innerHeight - (a.getBoundingClientRect().top + window.scrollY) - INLINE_GAP)
+      const prevTransform = i.style.transform
+      i.style.transform = 'none'
+      // Whatever follows the element marked data-fit-end (move log, hints) may sit below the fold.
+      const end = i.querySelector('[data-fit-end]')
+      const h = end ? end.getBoundingClientRect().bottom - i.getBoundingClientRect().top : i.scrollHeight
+      const full = i.scrollHeight
+      i.style.transform = prevTransform
+      if (!h || !full) return
+      const s = Math.max(INLINE_MIN_SCALE, Math.min(1, availH / h))
+      setFit((cur) => {
+        if (s > 0.985) return null
+        // Small swings (a status line wrapping) must not make the whole table breathe.
+        const keep = cur && Math.abs(cur.s - s) < 0.015 ? cur.s : s
+        const next = { s: keep, w: availW, h: full * keep }
+        return cur && cur.s === next.s && Math.abs(cur.w - next.w) < 1 && Math.abs(cur.h - next.h) < 1 ? cur : next
+      })
+    }
+    const schedule = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measure)
+    }
+    measure()
+    const ro = new ResizeObserver(schedule)
+    ro.observe(i)
+    ro.observe(a)
+    window.addEventListener('resize', schedule)
+    return () => {
+      cancelAnimationFrame(frame)
+      ro.disconnect()
+      window.removeEventListener('resize', schedule)
+    }
+  }, [inline])
 
   useEffect(() => {
     if (!landscape) setMinimized(false)
+    else setExpanded(false)
   }, [landscape])
+
+  const expand = () => {
+    setExpanded(true)
+    // The window's own fullscreen is a bonus; where it is refused (an embedded preview) the layer still covers the page.
+    void document.documentElement.requestFullscreen?.().catch(() => {})
+  }
+  const shrink = () => {
+    if (!manual) return setMinimized(true)
+    setExpanded(false)
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+  }
+
+  useEffect(() => {
+    if (!manual) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.fullscreenElement) setExpanded(false)
+    }
+    // Esc in window fullscreen is taken by the browser, so leaving it is what closes the layer.
+    const onFullscreen = () => {
+      if (!document.fullscreenElement) setExpanded(false)
+    }
+    window.addEventListener('keydown', onKey)
+    document.addEventListener('fullscreenchange', onFullscreen)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('fullscreenchange', onFullscreen)
+    }
+  }, [manual])
 
   useEffect(() => {
     if (!force) return
@@ -87,13 +177,13 @@ export function LandscapeFit({
 
   // Fullscreen needs a user gesture, so the first tap on a sideways table hides the address bar (Android).
   useEffect(() => {
-    if (!force || !fullscreen || !document.fullscreenEnabled) return
+    if (!force || !fullscreen || manual || !document.fullscreenEnabled) return
     const onTap = () => {
       if (!document.fullscreenElement) void goLandscape()
     }
     document.addEventListener('pointerdown', onTap, { once: true, capture: true })
     return () => document.removeEventListener('pointerdown', onTap, { capture: true })
-  }, [force, fullscreen])
+  }, [force, fullscreen, manual])
 
   useEffect(() => {
     if (!fullscreen) return
@@ -124,7 +214,7 @@ export function LandscapeFit({
       // Layout-viewport sizes only: visualViewport shrinks while the page is pinch/double-tap zoomed,
       // which used to lock the table at a tiny wrong size after tapping the minimize/maximize button.
       // Mid-rotation some browsers still report portrait dimensions; measuring then collapses the table.
-      if (window.innerWidth <= window.innerHeight) return
+      if (!manual && window.innerWidth <= window.innerHeight) return
       // Only the fixed layer's own free area is trusted: it already excludes the rail, paddings and notch
       // insets, and follows Safari's toolbar collapsing. documentElement.clientHeight keeps the old
       // toolbar-visible height on iOS, which shrank the table when the address bar was hidden.
@@ -132,27 +222,29 @@ export function LandscapeFit({
       if (!a) return
       const availW = a.clientWidth - 4
       const availH = a.clientHeight - 4
-      if (availW < 200 || availH < 150 || availW <= availH) return
+      if (availW < 200 || availH < 150 || (!manual && availW <= availH)) return
       // Tables that opt into var(--ls-ar) take the screen's own shape, so no dark bands are left beside them.
-      if (force) {
+      if (force && !manual) {
         i.style.setProperty('--ls-ar', `${availW} / ${availH}`)
         // Tables sized with var(--ls-h) fill the screen height at scale 1 instead of being zoomed to fit.
         i.style.setProperty('--ls-h', `${availH}px`)
       }
       // Games wrap their table at different depths, so the grid is applied to whichever element holds it.
       // Wrappers marked data-ls-flat are dissolved so their siblings (e.g. a control bar) join the side column.
-      const main = i.querySelector<HTMLElement>('[data-ls-main]')
+      const main = manual ? null : i.querySelector<HTMLElement>('[data-ls-main]')
       let grid = main?.parentElement ?? null
       while (grid && grid !== i && grid.hasAttribute('data-ls-flat')) grid = grid.parentElement
       i.querySelectorAll('[data-ls-grid]').forEach((el) => {
         if (el !== grid) el.removeAttribute('data-ls-grid')
       })
       if (grid && !grid.hasAttribute('data-ls-grid')) grid.setAttribute('data-ls-grid', '')
-      const split = !!main || !!i.querySelector('[data-ls-wide]')
+      const split = !manual && (!!main || !!i.querySelector('[data-ls-wide]'))
       // A fine sweep of layout widths: coarse steps left big empty bands beside fixed-ratio boards.
-      const candidates = split
-        ? Array.from({ length: 21 }, (_, k) => availW * (0.6 + k * 0.05))
-        : [availW * 0.5, availW * 0.65, Math.min(availW, DESIGN_WIDTH), availW * 0.85, availW]
+      const candidates = manual
+        ? Array.from({ length: 15 }, (_, k) => availW * (0.3 + k * 0.05))
+        : split
+          ? Array.from({ length: 21 }, (_, k) => availW * (0.6 + k * 0.05))
+          : [availW * 0.5, availW * 0.65, Math.min(availW, DESIGN_WIDTH), availW * 0.85, availW]
       const prevWidth = i.style.width
       const prevTransform = i.style.transform
       i.style.transform = 'none'
@@ -205,7 +297,7 @@ export function LandscapeFit({
       i.style.removeProperty('--ls-ar')
       i.style.removeProperty('--ls-h')
     }
-  }, [fullscreen, force])
+  }, [fullscreen, force, manual])
 
   return (
     <div
@@ -229,7 +321,7 @@ export function LandscapeFit({
               'absolute z-[110] flex size-7 items-center justify-center rounded-lg border border-border/60 bg-card/60 text-foreground/80 backdrop-blur-sm hover:bg-card hover:text-foreground',
               menuRight
                 ? 'right-[max(0.5rem,env(safe-area-inset-right))] top-1 size-8'
-                : force
+                : force && !manual
                   ? 'left-[max(0.25rem,env(safe-area-inset-left))] top-9'
                   : 'left-[max(0.5rem,env(safe-area-inset-left))] top-12',
               menuOpen && 'bg-card text-foreground',
@@ -246,7 +338,7 @@ export function LandscapeFit({
                 'absolute z-[115] flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150',
                 menuRight
                   ? 'right-[max(0.5rem,env(safe-area-inset-right))] top-10'
-                  : force
+                  : force && !manual
                     ? 'left-[calc(max(0.25rem,env(safe-area-inset-left))+2.25rem)] top-9'
                     : 'left-14 top-12',
               )}
@@ -256,10 +348,10 @@ export function LandscapeFit({
           )}
         </>
       )}
-      {fullscreen && force ? (
+      {fullscreen && force && !manual ? (
         <button
           type="button"
-          onClick={() => setMinimized(true)}
+          onClick={shrink}
           title="Küçült"
           className="absolute left-[max(0.25rem,env(safe-area-inset-left))] top-1 z-[110] flex size-7 items-center justify-center rounded-lg border border-border/60 bg-card/60 text-foreground/80 backdrop-blur-sm hover:bg-card hover:text-foreground"
         >
@@ -286,7 +378,7 @@ export function LandscapeFit({
         <div className="flex shrink-0 flex-col items-center py-1" style={{ width: RAIL_W }}>
           <button
             type="button"
-            onClick={() => setMinimized(true)}
+            onClick={shrink}
             title="Küçült"
             className="flex size-9 items-center justify-center rounded-xl border border-border bg-card text-foreground"
           >
@@ -332,17 +424,36 @@ export function LandscapeFit({
             <X className="size-4" aria-hidden="true" />
           </button>
         </div>
+      ) : expandable && !blocked ? (
+        <button
+          type="button"
+          onClick={expand}
+          className="mb-2 ml-auto hidden h-8 w-fit items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary lg:flex"
+        >
+          <Maximize2 className="size-4" aria-hidden="true" />
+          Tam ekran
+        </button>
       ) : null}
       <div
         ref={area}
         aria-hidden={blocked || parked || undefined}
-        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden', (blocked || parked) && 'sr-only')}
+        className={cn(
+          fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden',
+          inline && fit && 'flex justify-center',
+          (blocked || parked) && 'sr-only',
+        )}
       >
-        <div style={fullscreen && box ? { width: box.w, height: box.h } : undefined}>
+        <div style={fullscreen && box ? { width: box.w, height: box.h } : inline && fit ? { width: fit.w * fit.s, height: fit.h } : undefined}>
           <div
             ref={inner}
-            className={cn(fullscreen && 'ls-split origin-top-left')}
-            style={fullscreen ? { width: box ? box.w / scale : DESIGN_WIDTH, transform: `scale(${scale})` } : undefined}
+            className={cn(fullscreen ? (manual ? 'ls-fit origin-top-left' : 'ls-split origin-top-left') : inline && fit && 'origin-top-left')}
+            style={
+              fullscreen
+                ? { width: box ? box.w / scale : DESIGN_WIDTH, transform: `scale(${scale})` }
+                : inline && fit
+                  ? { width: fit.w, transform: `scale(${fit.s})` }
+                  : undefined
+            }
           >
             {children}
           </div>

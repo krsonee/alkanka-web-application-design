@@ -317,7 +317,7 @@ export function StakeGate({
       saveKey,
     }
     return (
-      <div className="flex flex-col gap-3">
+      <div data-table-playing className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
           <span className="font-display font-bold uppercase tracking-wide text-foreground">{meta.title} masası</span>
           {phase.bet === 0 ? (
@@ -357,6 +357,7 @@ export function StakeGate({
             ) : (
               <LandscapeFit
                 label={meta.title}
+                expandable
                 force={game === 'tavla'}
                 menu={
                   game === 'tavla' ? (
@@ -481,7 +482,7 @@ export function StakeGate({
 
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card lg:grid lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative aspect-[4/3] lg:aspect-auto lg:min-h-full">
+      <div className="relative aspect-[16/7] sm:aspect-[4/3] lg:aspect-auto lg:min-h-full">
         <Image src={settings.image || meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover object-top" />
         <span className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" aria-hidden="true" />
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-4 lg:p-8">
@@ -534,7 +535,12 @@ export function StakeGate({
           </div>
         </fieldset>
 
-        {themeGame && <TableThemeField game={themeGame} />}
+        {themeGame && (
+          // Below the play buttons on phones: picking a look must not push "Oyna" off the first screen.
+          <div className="max-lg:order-1">
+            <TableThemeField game={themeGame} />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           {quick.bot && (
