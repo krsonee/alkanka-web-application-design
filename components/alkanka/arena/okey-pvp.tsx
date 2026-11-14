@@ -224,14 +224,14 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
         )}
       </div>
 
-      <LastMoves last={s.last ?? []} nameOf={nameOf} okey={okey} />
-
       {!spectator && (
         <>
-          <div data-ls-hide>
-            <TurnSteps phase={myDraw ? 'draw' : myDiscard ? 'discard' : 'wait'} />
-          </div>
-          <div data-ls-stack className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+          {/* Right under the rack, so throwing a tile never needs scrolling; the move log and hints follow below. */}
+          <div
+            data-ls-stack
+            data-fit-end
+            className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3"
+          >
             <button onClick={arrange} className="rounded-xl border border-border px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-foreground hover:bg-secondary">
               {sortMode === 'seri' ? 'Seri diz' : 'Çift diz'}
             </button>
@@ -252,12 +252,17 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
                 className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40"
               >
                 <ArrowDownToLine className="size-4" aria-hidden="true" />
-                Taşı at
+                {myDiscard && selected != null && !selectedIsTaken ? 'Seçili taşı at' : 'Taşı at'}
               </button>
             </div>
           </div>
+          <div data-ls-hide>
+            <TurnSteps phase={myDraw ? 'draw' : myDiscard ? 'discard' : 'wait'} />
+          </div>
         </>
       )}
+
+      <LastMoves last={s.last ?? []} nameOf={nameOf} okey={okey} />
     </div>
   )
 }

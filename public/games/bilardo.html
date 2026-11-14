@@ -201,6 +201,10 @@
   .notes { width:100%; max-width:1280px; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:10px; }
   .note { background:var(--panel); border-radius:12px; padding:12px 14px; box-shadow:inset 0 0 0 1px var(--line); }
   .note b { font-size:13px; } .note p { font-size:13px; color:#aab4c6; line-height:1.55; margin-top:4px; }
+  /* Readable labels when the desktop frame is scaled down (--k is set in layout()). */
+  .dev.web .prize small, .dev.web .lv, .dev.web .plabel, .dev.web .pct, .dev.web .box h4, .dev.web #msgs b, .dev.web kbd { font-size:calc(11.5px * var(--k, 1)); }
+  .dev.web .keys, .dev.web .quick button, .dev.web .tabs button, .dev.web .hint { font-size:calc(12px * var(--k, 1)); }
+  .dev.web #msgs, .dev.web .inp input, .dev.web .inp button, .dev.web .pill { font-size:calc(13px * var(--k, 1)); }
 </style>
 </head>
 <body>
@@ -479,6 +483,8 @@
     scale = Math.min(aw/dw, ah/dh);
     fit.style.width = dw*scale + 'px'; fit.style.height = dh*scale + 'px';
     device.style.transform = `scale(${scale})`;
+    // The desktop frame is drawn at 1280px and scaled to fit, so small labels are grown back by the same factor.
+    device.style.setProperty('--k', view === 'web' ? clamp(1/scale, 1, 1.35).toFixed(3) : '1');
     cv.width = game.offsetWidth*dpr; cv.height = game.offsetHeight*dpr;
     const sx = slotEl.offsetLeft, sy = slotEl.offsetTop, sw = slotEl.offsetWidth, sh = slotEl.offsetHeight;
     const s = Math.min(sw/TW, sh/TH);

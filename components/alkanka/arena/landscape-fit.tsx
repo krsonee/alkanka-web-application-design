@@ -16,6 +16,12 @@ const MAX_SCALE = 1.4
 
 const PHONE_PORTRAIT = '(pointer: coarse) and (orientation: portrait) and (max-width: 600px)'
 
+const DESKTOP = '(min-width: 1024px)'
+/** Below this the in-page table would be unreadable, so it stops shrinking and the page scrolls instead. */
+const INLINE_MIN_SCALE = 0.6
+const INLINE_MIN_H = 320
+const INLINE_GAP = 12
+
 function useMedia(query: string) {
   return useSyncExternalStore(
     (cb) => {
@@ -57,7 +63,7 @@ export function LandscapeFit({
   menu?: ReactNode
   /** Sideways only: an upright phone gets a rotate prompt instead of the table, and the table drops the side rail. */
   force?: boolean
-  /** Desktop gets a "Tam ekran" button that opens the table over the whole window, scaled so nothing needs scrolling. */
+  /** Desktop: the table is fitted to the window height in the page, and a "Tam ekran" button opens it over the whole window. */
   expandable?: boolean
 }) {
   const landscape = usePhoneLandscape()
@@ -73,6 +79,9 @@ export function LandscapeFit({
   // A sideways phone has too little height for a cramped in-page table, so a minimized table is parked
   // (still mounted, still running) behind a "back to table" card instead.
   const parked = force && landscape && minimized
+  // Desktop, table still inside the page: it is shrunk just enough for its playable part to end above the window's bottom edge.
+  const desktop = useMedia(DESKTOP)
+  const inline = expandable && desktop && !fullscreen
 
   useEffect(() => {
     if (!fullscreen) setMenuOpen(false)
@@ -81,6 +90,52 @@ export function LandscapeFit({
   const area = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
+  const [fit, setFit] = useState<{ s: number; w: number; h: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const i = inner.current
+    const a = area.current
+    if (!inline || !i || !a) {
+      setFit(null)
+      return
+    }
+    let frame = 0
+    const measure = () => {
+      const availW = a.clientWidth
+      if (availW < 200) return
+      const availH = Math.max(INLINE_MIN_H, window.innerHeight - (a.getBoundingClientRect().top + window.scrollY) - INLINE_GAP)
+      const prevTransform = i.style.transform
+      i.style.transform = 'none'
+      // Whatever follows the element marked data-fit-end (move log, hints) may sit below the fold.
+      const end = i.querySelector('[data-fit-end]')
+      const h = end ? end.getBoundingClientRect().bottom - i.getBoundingClientRect().top : i.scrollHeight
+      const full = i.scrollHeight
+      i.style.transform = prevTransform
+      if (!h || !full) return
+      const s = Math.max(INLINE_MIN_SCALE, Math.min(1, availH / h))
+      setFit((cur) => {
+        if (s > 0.985) return null
+        // Small swings (a status line wrapping) must not make the whole table breathe.
+        const keep = cur && Math.abs(cur.s - s) < 0.015 ? cur.s : s
+        const next = { s: keep, w: availW, h: full * keep }
+        return cur && cur.s === next.s && Math.abs(cur.w - next.w) < 1 && Math.abs(cur.h - next.h) < 1 ? cur : next
+      })
+    }
+    const schedule = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measure)
+    }
+    measure()
+    const ro = new ResizeObserver(schedule)
+    ro.observe(i)
+    ro.observe(a)
+    window.addEventListener('resize', schedule)
+    return () => {
+      cancelAnimationFrame(frame)
+      ro.disconnect()
+      window.removeEventListener('resize', schedule)
+    }
+  }, [inline])
 
   useEffect(() => {
     if (!landscape) setMinimized(false)
@@ -382,13 +437,23 @@ export function LandscapeFit({
       <div
         ref={area}
         aria-hidden={blocked || parked || undefined}
-        className={cn(fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden', (blocked || parked) && 'sr-only')}
+        className={cn(
+          fullscreen && 'flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden',
+          inline && fit && 'flex justify-center',
+          (blocked || parked) && 'sr-only',
+        )}
       >
-        <div style={fullscreen && box ? { width: box.w, height: box.h } : undefined}>
+        <div style={fullscreen && box ? { width: box.w, height: box.h } : inline && fit ? { width: fit.w * fit.s, height: fit.h } : undefined}>
           <div
             ref={inner}
-            className={cn(fullscreen && (manual ? 'ls-fit origin-top-left' : 'ls-split origin-top-left'))}
-            style={fullscreen ? { width: box ? box.w / scale : DESIGN_WIDTH, transform: `scale(${scale})` } : undefined}
+            className={cn(fullscreen ? (manual ? 'ls-fit origin-top-left' : 'ls-split origin-top-left') : inline && fit && 'origin-top-left')}
+            style={
+              fullscreen
+                ? { width: box ? box.w / scale : DESIGN_WIDTH, transform: `scale(${scale})` }
+                : inline && fit
+                  ? { width: fit.w, transform: `scale(${fit.s})` }
+                  : undefined
+            }
           >
             {children}
           </div>

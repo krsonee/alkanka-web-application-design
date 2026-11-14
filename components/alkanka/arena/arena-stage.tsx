@@ -228,7 +228,7 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
         <button
           type="button"
           onClick={backToLobby}
-          className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+          className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary [body:has([data-table-playing])_&]:hidden"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           Geri
