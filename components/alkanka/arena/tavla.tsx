@@ -847,7 +847,7 @@ function ControlBar({
           aria-checked={auto}
           onClick={() => onAuto(!auto)}
           title="Zarı kendiliğinden atar, tek seçenek varsa hamleyi oynar"
-          aria-label="Otomatik"
+          aria-label="Otomatik zar ve tek hamle"
           data-ls-icon
           className={cn(
             'flex items-center gap-1.5 rounded-xl border px-3 py-3 text-xs font-semibold transition-colors',
@@ -855,7 +855,7 @@ function ControlBar({
           )}
         >
           <Zap className="size-4" aria-hidden="true" />
-          <span data-ls-label>Otomatik</span>
+          <span data-ls-label>Otomatik zar</span>
         </button>
         {onResign && (
           <button

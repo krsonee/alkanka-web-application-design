@@ -239,6 +239,11 @@ export function bundleTarget(task: TaskRecord, visible: TaskRecord[]) {
   return Math.max(1, bundleSiblings(task, visible).length)
 }
 
+/** The task count written in a super task's text follows the member's real target, not the seeded number. */
+export function bundleDetail(detail: string, target: number) {
+  return detail.replace(/\d+(?=\s+görev)/, String(target))
+}
+
 /** Server-side guard: a member can only claim tasks they can see, and chain steps in order. */
 export async function canClaim(userId: string, taskId: number): Promise<{ ok: true; task: TaskRecord; visible: TaskRecord[] } | { ok: false; error: string }> {
   const view = await memberView(userId)

@@ -52,7 +52,7 @@ function Die({ value, rolling, tone }: { value: number; rolling: boolean; tone: 
 
 const rand = () => 1 + Math.floor(Math.random() * 6)
 
-export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
+export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed }: MiniGameProps) {
   const { setBalance } = usePoints()
   const { dice: diceConfig } = useCatalog().rewards
   const locked = lockedFor > 0
@@ -109,15 +109,22 @@ export function DiceRoll({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
       </div>
 
       <div className="relative z-10 mb-6 flex items-center justify-between gap-3">
-        <p aria-live="polite" className="min-w-0 text-sm">
-          {result ? (
-            <span className="animate-pop font-semibold text-gold">{result.label}</span>
-          ) : (
-            <span className="text-muted-foreground">
-              {rolling ? 'Zarlar dönüyor…' : locked ? `Haklar ${formatRemaining(lockedFor)} sonra yenilenir` : `Günde ${diceConfig.dailyPlays} atış hakkın var`}
-            </span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <p aria-live="polite" className="min-w-0 text-sm">
+            {result ? (
+              <span className="animate-pop font-semibold text-gold">{result.label}</span>
+            ) : (
+              <span className="text-muted-foreground">
+                {rolling ? 'Zarlar dönüyor…' : locked ? `Haklar ${formatRemaining(lockedFor)} sonra yenilenir` : `Günde ${diceConfig.dailyPlays} atış hakkın var`}
+              </span>
+            )}
+          </p>
+          {playsLeft != null && !locked && (
+            <p className="text-xs text-muted-foreground">
+              Kalan hak: <span className="font-bold tabular-nums text-foreground">{playsLeft}</span>
+            </p>
           )}
-        </p>
+        </div>
         <button
           type="button"
           onClick={roll}

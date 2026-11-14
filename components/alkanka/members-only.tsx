@@ -24,10 +24,10 @@ export function MembersOnly({ state, title = 'Üyelere özel fırsatlar' }: Prop
         <div className="flex min-w-0 flex-1 flex-col gap-3 py-1">
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-bold text-primary">
             <Lock className="size-3.5" aria-hidden="true" />
-            {guest ? 'Sadece üyeler' : 'Son adım · 18+'}
+            {guest ? 'Sadece üyeler' : 'Son adım'}
           </span>
           <h2 id="members-only-title" className="font-display text-2xl font-bold leading-tight text-foreground text-balance md:text-3xl">
-            {title}
+            {guest ? title : '18+ onayı gerekiyor'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground text-pretty md:text-base">
             {guest

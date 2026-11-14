@@ -6,8 +6,8 @@ import { buyShieldAction, setBirthdayAction } from '@/app/actions/boosts'
 import { usePoints } from '../points-context'
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
-const THIS_YEAR = new Date().getFullYear()
-const YEARS = Array.from({ length: THIS_YEAR - 1920 + 1 }, (_, i) => String(THIS_YEAR - i))
+const NEWEST_YEAR = new Date().getFullYear() - 18
+const YEARS = Array.from({ length: NEWEST_YEAR - 1920 + 1 }, (_, i) => String(NEWEST_YEAR - i))
 const selectCls = 'h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-sm text-foreground'
 
 type Props = { shields: number; shieldPrice: number; birthday: string | null; birthdayCoin: number }

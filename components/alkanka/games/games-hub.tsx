@@ -4,7 +4,7 @@ import type { CSSProperties } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Clock, Trophy, Users } from 'lucide-react'
-import { ARENA_GAMES, ARENA_META, type ArenaGame, type ArenaSettings } from '@/lib/arena'
+import { ARENA_GAMES, ARENA_META, botWinMultiplier, type ArenaGame, type ArenaSettings } from '@/lib/arena'
 import type { MiniGame } from '@/app/actions/wallet'
 import { formatRemaining, useMiniLock } from './mini-status'
 
@@ -117,8 +117,8 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
                       <Users className="size-3" aria-hidden="true" />
                       {SHORT_PLAYERS[g]}
                     </span>
-                    {s.multiplier > 1 && (
-                      <span className="absolute right-2 top-2 rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{s.multiplier}</span>
+                    {botWinMultiplier(g, s) > 1 && (
+                      <span className="absolute right-2 top-2 rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{botWinMultiplier(g, s).toLocaleString('tr-TR')}</span>
                     )}
                     <div className="relative flex flex-col gap-1 p-3">
                       <h3 className="font-display text-lg font-bold uppercase leading-tight text-foreground">{meta.title}</h3>

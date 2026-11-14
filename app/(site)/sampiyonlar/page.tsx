@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Crown } from 'lucide-react'
 import { pageMeta } from '@/lib/seo'
-import { listPodiums, type Podium } from '@/lib/kanka-puan'
+import { listPodiums, readLeaderboard, type Podium } from '@/lib/kanka-puan'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 
 export const revalidate = 300
@@ -43,6 +43,7 @@ function PodiumCard({ p }: { p: Podium }) {
 
 export default async function ChampionsPage() {
   const podiums = await listPodiums(24).catch(() => [] as Podium[])
+  const leaders = podiums.length ? [] : (await readLeaderboard(3, 'hafta')).filter((r) => r.kp > 0)
   return (
     <>
       <EditableHero
@@ -62,9 +63,18 @@ export default async function ChampionsPage() {
             ))}
           </ul>
         ) : (
-          <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm leading-relaxed text-muted-foreground">
-            İlk kürsü bu haftanın sonunda kurulacak. Haftalık ligde ilk 3&apos;e gir, adın burada kalsın.
-          </p>
+          <div className="flex flex-col gap-1 rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm leading-relaxed text-muted-foreground">
+            <p>Henüz yazılmış bir kürsü yok. Hafta pazartesi 00:00&apos;da kapanır; o haftanın ilk 3&apos;ü buraya kalıcı olarak yazılır.</p>
+            <p>
+              {leaders.length ? (
+                <>
+                  Bu hafta şu an önde: <strong className="font-semibold text-foreground">{leaders.map((r) => r.name).join(', ')}</strong>.
+                </>
+              ) : (
+                'Bu hafta henüz puan alan yok; ilk puanı alan kürsünün en yakın adayı olur.'
+              )}
+            </p>
+          </div>
         )}
         <Link href="/siralama" className="self-center text-sm font-semibold text-primary hover:underline">
           Canlı sıralamaya dön

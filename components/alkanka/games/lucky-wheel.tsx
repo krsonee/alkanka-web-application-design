@@ -32,6 +32,8 @@ const WIND_MS = 380
 export type MiniGameProps = {
   onWin: (points: number) => void | Promise<void>
   lockedFor: number
+  /** Plays the member still has right now (bought extras included); null for guests or while loading. */
+  playsLeft?: number | null
   canPlay: () => boolean
   onPlayed: () => void
 }

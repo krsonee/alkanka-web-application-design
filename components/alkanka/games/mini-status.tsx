@@ -40,7 +40,7 @@ export function useMiniLock(game: MiniGame) {
   useEffect(() => {
     if (expired) refresh()
   }, [expired, refresh])
-  return { remaining, locked: remaining > 0, loaded: status !== undefined, refresh }
+  return { remaining, locked: remaining > 0, left: status?.left?.[game] ?? null, loaded: status !== undefined, refresh }
 }
 
 export function MiniCountdown({ game, readyLabel, className }: { game: MiniGame; readyLabel: string; className?: string }) {
