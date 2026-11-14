@@ -112,7 +112,9 @@ function useDealTimeline(round: number | undefined, cardsOut: boolean, result: b
     t = fresh();
     setState(t);
   }
-  const { opened, shown, done } = t;
+  const { opened, done } = t;
+  // The up card is face up from the opening deal, so the dealer's turn starts by turning the hole card.
+  const shown = Math.max(t.shown, Math.min(dealerTotal, 1));
 
   useEffect(() => {
     if (!cardsOut || opened) return;
@@ -134,7 +136,7 @@ function useDealTimeline(round: number | undefined, cardsOut: boolean, result: b
     const id = setTimeout(
       () =>
         setState((s) =>
-          s.round !== round ? s : drawing ? { ...s, shown: s.shown + 1 } : { ...s, done: true },
+          s.round !== round ? s : drawing ? { ...s, shown: shown + 1 } : { ...s, done: true },
         ),
       wait,
     );
@@ -1227,7 +1229,9 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                   ? me.surrendered
                     ? "Teslim oldun, bahsinin yarısı iade edilecek."
                     : "Elin tamam, diğer oyuncular bekleniyor."
-                  : "Bu el krupiyenin."
+                  : phase === "reveal"
+                    ? "Sıra krupiyede: kapalı kartını açıyor, sonuç kartlar bitince belli olur."
+                    : "Sıra krupiyede."
                 : "Bu eli izliyorsun. Bahis süresi açılınca boş koltuğa oturabilirsin."}
             </p>
           )}

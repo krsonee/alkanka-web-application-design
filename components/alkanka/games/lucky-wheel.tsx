@@ -38,7 +38,7 @@ export type MiniGameProps = {
   onPlayed: () => void
 }
 
-export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
+export function LuckyWheel({ lockedFor, playsLeft, canPlay, onPlayed }: MiniGameProps) {
   const { setBalance } = usePoints()
   const { wheel } = useCatalog().rewards
   const [serverSegments, setServerSegments] = useState<Segment[] | null>(null)
@@ -99,7 +99,7 @@ export function LuckyWheel({ lockedFor, canPlay, onPlayed }: MiniGameProps) {
           <p className="text-sm leading-relaxed text-muted-foreground">Her {wheel.cooldownHours} saatte 1 ücretsiz çevirme. Boost, promo kod ve VIP geçiş kazan.</p>
         </div>
         <span className="shrink-0 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary">
-          {locked ? formatRemaining(lockedFor) : '1 hak'}
+          {locked ? formatRemaining(lockedFor) : `${Math.max(1, playsLeft ?? 1)} hak`}
         </span>
       </header>
 

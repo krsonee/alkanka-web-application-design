@@ -28,18 +28,21 @@ const SPEND_SOURCES: Record<string, string> = { market: 'Puan marketi', etkinlik
 export type MiniGame = 'cark' | 'sandik' | 'zar'
 export type MiniStatus = Record<MiniGame, number | null> & { hidden?: MiniGame[]; left?: Record<MiniGame, number> }
 
+/** Marks a play paid for with a market-bought right, so it never uses up or delays the free ones. */
+const EXTRA_PLAY_REF = 'ekstra'
+
 /** `next`: epoch ms when the next free play unlocks, null when available now. `left`: free plays remaining until then. */
 async function miniWindow(userId: string, game: MiniGame, config: RewardConfig): Promise<{ next: number | null; left: number }> {
   if (game === 'cark') {
     const r = await rows<{ next: string | null }>(sql`SELECT extract(epoch FROM max(created_at) + ${`${config.wheel.cooldownHours} hours`}::interval) * 1000 AS next
-      FROM game_history WHERE user_id = ${userId} AND game = 'cark' AND mode = 'odul'`)
+      FROM game_history WHERE user_id = ${userId} AND game = 'cark' AND mode = 'odul' AND table_id IS DISTINCT FROM ${EXTRA_PLAY_REF}`)
     const next = r[0]?.next ? Number(r[0].next) : null
     return next && next > Date.now() ? { next, left: 0 } : { next: null, left: 1 }
   }
   const dailyPlays = game === 'zar' ? config.dice.dailyPlays : config.chest.dailyPlays
   const r = await rows<{ used: string; next: string }>(sql`SELECT
       (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game = ${game} AND mode = 'odul'
-        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS used,
+        AND table_id IS DISTINCT FROM ${EXTRA_PLAY_REF} AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')) AS used,
       extract(epoch FROM ((date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + interval '1 day') AT TIME ZONE 'Europe/Istanbul')) * 1000 AS next`)
   const left = Math.max(0, dailyPlays - Number(r[0]?.used ?? 0))
   return { next: left > 0 ? null : Number(r[0].next), left }
@@ -146,7 +149,8 @@ async function playMiniLocked(
   const limit = { label }
   if (isHidden(await getHidden(), 'mini', game)) return { ok: false, error: `${limit.label} şu an kapalı.` }
   const config = await getRewardConfig()
-  if ((await miniWindow(member.id, game, config)).next && !(await consumeExtraPlay(member.id, game))) {
+  const paid = Boolean((await miniWindow(member.id, game, config)).next)
+  if (paid && !(await consumeExtraPlay(member.id, game))) {
     return { ok: false, error: `${limit.label} için hakkın henüz yenilenmedi.`, balance: await getBalance(member.id) }
   }
   const big = randomInt(100) < (await getHouseWinRate())
@@ -179,7 +183,7 @@ async function playMiniLocked(
   }
 
   await credit(member.id, outcome.points)
-  await recordHistory({ userId: member.id, userName: member.name, game, mode: 'odul', opponent: limit.label, stake: 0, result: big ? 'win' : 'draw', delta: outcome.points })
+  await recordHistory({ userId: member.id, userName: member.name, game, mode: 'odul', opponent: limit.label, stake: 0, result: big ? 'win' : 'draw', delta: outcome.points, tableId: paid ? EXTRA_PLAY_REF : undefined })
   return { ok: true, balance: await getBalance(member.id), ...outcome }
 }
 
