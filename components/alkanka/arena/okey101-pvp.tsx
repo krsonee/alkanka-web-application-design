@@ -530,6 +530,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
             melds={handPopup.melds ?? (s.handNo === handPopup.hand ? s.melds : null)}
             okey={okey}
             onReplay={popupFinal && gameOver && remote.replay && !remote.spectator ? remote.replay : undefined}
+            replayStake={remote.stake}
             onClose={closePopup}
             onScores={() => {
               setHandPopup(null)

@@ -1329,6 +1329,7 @@ function buildSelect(){
   b.onclick=()=>{sy('click');userCh=c;buildSelect();newMatch()};box.appendChild(b)});
 }
 function findMatch(){
+ if(!NET)alkPost('kickoff');
  if(NET){startBed();if(mode==='real')goFull();if(NET.live)return;NET.myCh=CHARS.indexOf(userCh);
   show('ovSel',0);show('ovSrch',1);$('ovSrch').querySelector('p').textContent='Rakip bekleniyor...';$('srchHeads').innerHTML='';game.state='search';
   if(NET.role==='guest'){const send=()=>{if(NET.live)return;alkNet({t:'pick',ch:NET.myCh});setTimeout(send,1000)};send()}
@@ -1367,6 +1368,7 @@ $('selBtn').onclick=()=>{if(EMBED){alkPost('exit');return}show('ovEnd',0);toSele
 if(EMBED){$('exitBtn').hidden=false;$('exitBtn').onclick=()=>alkPost('quit');$('selBtn').textContent='ARENAYA DÖN';$('mQuit').textContent='Maçtan çık';
  addEventListener('message',e=>{if(e.origin!==location.origin||!e.data||e.data.source!=='alk-host')return;
   if(e.data.type==='me'&&typeof e.data.name==='string'){ME_NAME=e.data.name.trim().slice(0,18);paintNames()}
+  if(e.data.type==='stake'&&!NET){const kc=Math.max(0,Number(e.data.amount)||0);if(kc){$('againBtn').textContent='RÖVANŞ · '+kc+' KC';$('exitBtn').textContent=e.data.refundable===false?'ARENAYA DÖN · BAHİS YANAR':'ARENAYA DÖN · BAHİS İADE';$('mQuit').textContent='Maçtan çık · bahis yanar'}}
   if(e.data.type==='init'&&!NET)netInit(e.data.role,e.data.names);
   if(e.data.type==='net')onNet(e.data.msg);
   if(e.data.type==='link'&&NET){if(e.data.status==='lost'&&NET.link!=='lost'&&NET.live)showBanner('RAKİBİN BAĞLANTISI KOPTU','#ff4d5a');NET.link=e.data.status}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
@@ -174,9 +174,13 @@ export function TableLobby({
         ? { rounds: Number(tavlaRounds) }
         : undefined
   const lobbyIdle = useIdle()
-  const { data, mutate } = useSWR<LobbyData>(activeId ? null : `/api/tables?game=${game}`, fetcher, {
+  const lobbyKey = `/api/tables?game=${game}`
+  const { data, mutate } = useSWR<LobbyData>(activeId ? null : lobbyKey, fetcher, {
     refreshInterval: lobbyIdle ? 30000 : 6000,
   })
+  const { mutate: mutateCache } = useSWRConfig()
+  // Tables this player already finished or left: they must not resurface as an "active" table or a stale invite.
+  const [doneIds, setDoneIds] = useState<string[]>([])
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string; id?: string }>) => {
     if (!requireLogin()) return
@@ -189,7 +193,16 @@ export function TableLobby({
     return res
   }
 
-  if (activeId) return <TableRoom key={activeId} id={activeId} onLeave={() => { setActiveId(null); mutate() }} onReplay={setActiveId} />
+  if (activeId) {
+    const leaveRoom = (done?: boolean) => {
+      const id = activeId
+      if (done) setDoneIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+      setActiveId(null)
+      // The lobby list is paused while a table is open, so its cached copy still lists the table that was just left.
+      void mutateCache<LobbyData>(lobbyKey, (d) => (d && done ? { ...d, mine: d.mine.filter((t) => t.id !== id) } : d), { revalidate: true })
+    }
+    return <TableRoom key={activeId} id={activeId} onLeave={leaveRoom} onReplay={setActiveId} />
+  }
 
   const wizardOn = wizardEnabledFor(setup, game)
   if (wizardOn && setup && isWizardGame(game) && wizardOpen) {
@@ -228,7 +241,7 @@ export function TableLobby({
   const invitedMine = invitedId != null && mine.some((t) => t.id === invitedId)
 
   const invitedNote =
-    invitedId && data && !invitedMine ? (
+    invitedId && data && !invitedMine && !doneIds.includes(invitedId) ? (
       <p
         role="status"
         className={cn(
@@ -259,6 +272,13 @@ export function TableLobby({
       </div>
     ) : null
 
+  // Resigning or leaving from the list takes the row out right away instead of waiting for the next poll.
+  const dropMine = (id: string) => {
+    setDoneIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+    refresh()
+    void mutate((d) => (d ? { ...d, mine: d.mine.filter((x) => x.id !== id) } : d), { revalidate: true })
+  }
+
   const mineBlock =
     mine.length > 0 ? (
       <div className="flex flex-col gap-2">
@@ -270,10 +290,8 @@ export function TableLobby({
                 id={t.id}
                 running={t.status === 'oynaniyor'}
                 stake={t.stake}
-                onDone={() => {
-                  refresh()
-                  void mutate()
-                }}
+                onDone={() => dropMine(t.id)}
+                onResigned={() => dropMine(t.id)}
               />
               <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
                 {t.status === 'bekliyor' ? 'Masaya dön' : 'Oyuna dön'}
@@ -989,7 +1007,8 @@ export function TableRowCard({ t, children, highlight = false }: { t: TableSumma
   )
 }
 
-export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () => void; onReplay?: (id: string) => void }) {
+/** `onLeave(true)` means the table is over for this player (finished, resigned or left), not just closed for now. */
+export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (done?: boolean) => void; onReplay?: (id: string) => void }) {
   const { refresh, member } = usePoints()
   const idle = useIdle()
   const { data, mutate, error } = useSWR<TableSummary>(`/api/tables/${id}`, fetcher, {
@@ -1009,6 +1028,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
   const [msg, setMsg] = useState<string | null>(null)
   const [resultClosed, setResultClosed] = useState(false)
   const [replaying, setReplaying] = useState(false)
+  const [left, setLeft] = useState<{ kind: 'resign' | 'leave'; botsOnly: boolean; stay: boolean } | null>(null)
 
   const send = useCallback(
     async (action: RemoteAction) => {
@@ -1052,10 +1072,10 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
       data.turn === data.seat,
   )
 
-  if (error) return <RoomShell onLeave={onLeave}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
+  if (error) return <RoomShell onLeave={() => onLeave()}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
   if (!data) {
     return (
-      <RoomShell onLeave={onLeave}>
+      <RoomShell onLeave={() => onLeave()}>
         <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Masa yükleniyor
         </div>
@@ -1069,6 +1089,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
   const mySeat = data.seat
   const spectator = mySeat < 0
   const ended = data.status === 'bitti' || data.status === 'iptal'
+  const botsOnly = data.players.filter((p) => !p.bot).length === 1
   const idleMs = Date.now() - new Date(data.updatedAt).getTime()
   const oppTurnStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn != null && data.turn !== mySeat && idleMs > 3 * 60 * 1000
   const duelStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn == null && data.state?.scores?.[mySeat] && idleMs > 10 * 60 * 1000
@@ -1089,6 +1110,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
       return p && !p.bot ? p.id : null
     }),
     spectator,
+    stake: data.stake,
     // Mirrors the server: the move timer only runs with two or more humans and never in tournaments.
     ...(data.status === 'oynaniyor' && !data.tournamentId && !data.paused && TURN_SECONDS[data.game as ArenaGame] && data.players.filter((p) => !p.bot).length > 1
       ? { turnStartedAt: data.updatedAt, turnSeconds: TURN_SECONDS[data.game as ArenaGame] }
@@ -1120,7 +1142,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
   return (
     <RoomShell
       immersive={immersive}
-      onLeave={onLeave}
+      onLeave={() => onLeave(ended)}
       title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
     >
       <div className={cn('flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm', immersive && 'max-lg:flex-nowrap max-lg:px-2 max-lg:py-2')}>
@@ -1169,15 +1191,17 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
               id={id}
               running
               compact={immersive}
-              botsOnly={data.players.filter((p) => !p.bot).length === 1}
+              botsOnly={botsOnly}
               stake={data.stake}
               onResigned={() => {
+                setLeft({ kind: 'resign', botsOnly, stay: true })
                 refresh()
                 void mutate()
               }}
-              onDone={() => {
+              onDone={(kind) => {
+                setLeft({ kind, botsOnly, stay: false })
                 refresh()
-                onLeave()
+                void mutate()
               }}
             />
           )}
@@ -1227,7 +1251,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                 stake={data.stake}
                 onDone={() => {
                   refresh()
-                  onLeave()
+                  onLeave(true)
                 }}
               />
             )}
@@ -1239,7 +1263,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                   await closeTable(id)
                   setBusy(false)
                   refresh()
-                  onLeave()
+                  onLeave(true)
                 }}
                 className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
               >
@@ -1281,15 +1305,17 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                         id={id}
                         running
                         compact
-                        botsOnly={data.players.filter((p) => !p.bot).length === 1}
+                        botsOnly={botsOnly}
                         stake={data.stake}
                         onResigned={() => {
+                          setLeft({ kind: 'resign', botsOnly, stay: true })
                           refresh()
                           void mutate()
                         }}
-                        onDone={() => {
+                        onDone={(kind) => {
+                          setLeft({ kind, botsOnly, stay: false })
                           refresh()
-                          onLeave()
+                          void mutate()
                         }}
                       />
                     )}
@@ -1325,7 +1351,45 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
           </div>
         )}
 
-        {ended && !resultClosed && (
+        {left && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-result-title"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-300"
+          >
+            <GameResultCard
+              outcome="lose"
+              title={left.kind === 'resign' ? 'Pes ettin' : 'Masadan ayrıldın'}
+              subtitle={`-${formatAC(data.stake)} KC. ${
+                left.botsOnly ? 'Bot masası kapandı.' : ended ? 'Maç rakibine yazıldı.' : 'Yerine bot geçti, oyun sensiz devam ediyor.'
+              }`}
+              gameTitle={meta?.title ?? 'Oyun'}
+              gameImage={meta?.image}
+              stake={data.stake}
+              players={member ? [{ id: member.id, name: member.name, bot: false, me: true, winner: false }] : []}
+            >
+              {left.stay && !ended && (
+                <button
+                  type="button"
+                  onClick={() => setLeft(null)}
+                  className="rounded-xl border border-border py-2.5 text-sm font-bold text-foreground hover:bg-secondary"
+                >
+                  Kal ve izle
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { refresh(); onLeave(true) }}
+                className={cn('rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground', !(left.stay && !ended) && 'col-span-2')}
+              >
+                Lobiye dön
+              </button>
+            </GameResultCard>
+          </div>
+        )}
+
+        {ended && !resultClosed && !left && (
           <div
             role="dialog"
             aria-modal="true"
@@ -1407,7 +1471,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
                 </button>
                 <button
                   type="button"
-                  onClick={() => { refresh(); onLeave() }}
+                  onClick={() => { refresh(); onLeave(true) }}
                   className="rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground"
                 >
                   Lobiye dön
@@ -1419,7 +1483,9 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
         {ended && (
           <div className="mt-4 flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6 text-center">
             <p className="text-xl font-bold text-foreground">
-              {data.status === 'iptal'
+              {left
+                ? 'Masadan ayrıldın, bahsin geri gelmez.'
+                : data.status === 'iptal'
                 ? 'Masa iptal edildi, bahis iade edildi.'
                 : data.winnerId == null
                   ? 'Berabere, bahisler iade edildi.'
@@ -1434,7 +1500,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: () =
             {data.tournamentId && won && (
               <p className="text-sm text-muted-foreground">Turdaki tüm maçlar bitince bir sonraki tura otomatik eşleşeceksin.</p>
             )}
-            <button onClick={() => { refresh(); onLeave() }} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground">
+            <button onClick={() => { refresh(); onLeave(true) }} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground">
               Lobiye dön
             </button>
           </div>
@@ -1607,7 +1673,7 @@ function LeaveTableButton({
   id: string
   running: boolean
   stake: number
-  onDone: () => void
+  onDone: (kind: 'resign' | 'leave') => void
   compact?: boolean
   botsOnly?: boolean
   onResigned?: () => void
@@ -1713,7 +1779,7 @@ function LeaveTableButton({
                     onResigned?.()
                     return
                   }
-                  onDone()
+                  onDone(isResign ? 'resign' : 'leave')
                 }}
                 className="flex items-center justify-center gap-1.5 rounded-xl bg-destructive py-2.5 text-sm font-bold text-foreground disabled:opacity-60"
               >

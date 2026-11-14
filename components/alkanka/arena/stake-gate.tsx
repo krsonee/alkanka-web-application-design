@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { finishBotGame, getOpenBotGame, startBotGame } from '@/app/actions/arena'
+import { cancelBotGame, finishBotGame, getOpenBotGame, markBotGameStarted, startBotGame } from '@/app/actions/arena'
 import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, MODE_LABEL, botWinMultiplier, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
@@ -33,8 +33,14 @@ export type GameApi = {
   /** What a plain win pays back, commission already taken off. */
   win?: number
   finish: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
-  /** Gives up the hand (counts as a loss) and goes straight back to the lobby. */
+  /** Gives up the hand: it counts as a loss and lands on the result card. */
   leave?: () => void
+  /** Leaves before the match kicked off: the stake is refunded. A match that already started counts as a loss instead. */
+  cancel?: () => void
+  /** Reports that the match itself has started, which ends the refund window. */
+  kickoff?: () => void
+  /** False when this session already kicked off earlier, so leaving it forfeits the stake. */
+  refundable?: boolean
   /** Settles this hand and immediately stakes the same bet on a fresh one, skipping the result screen. */
   again?: (result: GameResult, note?: string, score?: { for: number; against: number }) => void
   saveKey?: string
@@ -42,10 +48,68 @@ export type GameApi = {
 
 type Phase =
   | { kind: 'lobby' }
-  | { kind: 'playing'; bet: number; round: number; resumed?: boolean }
+  | { kind: 'playing'; bet: number; round: number; resumed?: boolean; started?: boolean }
   | { kind: 'done'; bet: number; result: GameResult; note?: string; payout: number; mars?: boolean }
 
 const SAVE_AWARE: ArenaGame[] = ['tavla', 'okey']
+/** These take over the whole window, so an unfinished session asks first instead of dropping the player into it. */
+const FULLSCREEN: ArenaGame[] = ['kafa-topu', 'kafa-basketbolu']
+
+type PendingSession = { sessionId: string; stake: number; started: boolean }
+
+function PendingSessionCard({
+  pending,
+  busy,
+  onResume,
+  onDrop,
+}: {
+  pending: PendingSession
+  busy: boolean
+  onResume: () => void
+  onDrop: () => void
+}) {
+  const [arming, setArming] = useState(false)
+  useEffect(() => {
+    if (!arming) return
+    const t = setTimeout(() => setArming(false), 3000)
+    return () => clearTimeout(t)
+  }, [arming])
+  const forfeit = pending.started
+  const stake = formatAC(pending.stake)
+  return (
+    <div role="group" aria-label="Yarım kalan maç" className="flex flex-col gap-3 rounded-xl border border-primary/50 bg-primary/10 p-4">
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-bold text-foreground">Yarım kalan maçın var · {stake} KC bahis</p>
+        <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+          {forfeit
+            ? 'Devam edersen maç aynı bahisle baştan başlar. Bırakırsan maç kaybedilmiş sayılır.'
+            : 'Bu maç hiç başlamadı. Devam edebilir ya da bahsini geri alabilirsin.'}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onResume}
+          className="rounded-xl bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground hover:brightness-110 disabled:opacity-60"
+        >
+          Devam et
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => (forfeit && !arming ? setArming(true) : onDrop())}
+          className={cn(
+            'rounded-xl border px-3 py-2.5 text-sm font-bold transition-colors disabled:opacity-60',
+            arming ? 'border-destructive bg-destructive/15 text-destructive' : 'border-border bg-card text-foreground hover:bg-secondary',
+          )}
+        >
+          {forfeit ? (arming ? 'Emin misin? Bahis yanar' : `Bırak · ${stake} KC yanar`) : `Bırak · ${stake} KC iade`}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /** Leaving forfeits the stake, so the first tap only arms the button. */
 function LeaveTableButton({ onLeave }: { onLeave: () => void }) {
@@ -94,6 +158,8 @@ export function StakeGate({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [showRules, setShowRules] = useState(false)
+  const [pending, setPending] = useState<PendingSession | null>(null)
+  const [notice, setNotice] = useState('')
   const session = useRef<string | null>(null)
   const phaseRef = useRef(phase)
   phaseRef.current = phase
@@ -112,6 +178,10 @@ export function StakeGate({
     resumeChecked.current = true
     getOpenBotGame(game).then((res) => {
       if (!res.session || phaseRef.current.kind !== 'lobby') return
+      if (FULLSCREEN.includes(game)) {
+        setPending(res.session)
+        return
+      }
       session.current = res.session.sessionId
       setRound((r) => r + 1)
       setPhase({ kind: 'playing', bet: res.session.stake, round: Date.now(), resumed: true })
@@ -121,6 +191,34 @@ export function StakeGate({
   function pickMode(m: GameMode) {
     saveMode(game, m)
     modeSelect?.onChange(m)
+  }
+
+  function resumePending() {
+    if (!pending) return
+    session.current = pending.sessionId
+    setRound((r) => r + 1)
+    setNotice('')
+    setPhase({ kind: 'playing', bet: pending.stake, round: Date.now(), resumed: true, started: pending.started })
+    setPending(null)
+  }
+
+  async function dropPending() {
+    if (!pending || busy) return
+    setBusy(true)
+    const res = pending.started ? await finishBotGame(pending.sessionId, 'loss') : await cancelBotGame(pending.sessionId)
+    setBusy(false)
+    setPending(null)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    setBalance(res.balance)
+    setError('')
+    setNotice(
+      pending.started
+        ? `Yarım kalan maç kapatıldı, ${formatAC(pending.stake)} KC bahsin yandı.`
+        : `Yarım kalan maç kapatıldı, ${formatAC(pending.stake)} KC bahsin iade edildi.`,
+    )
   }
 
   async function start(amount: number) {
@@ -135,6 +233,7 @@ export function StakeGate({
     session.current = res.sessionId
     setBalance(res.balance)
     setError('')
+    setNotice('')
     const next = round + 1
     setRound(next)
     setPhase({ kind: 'playing', bet: amount, round: next })
@@ -160,16 +259,48 @@ export function StakeGate({
 
   if (phase.kind === 'playing') {
     const saveKey = session.current ? `${game}:${session.current}` : undefined
-    const leave = async () => {
-      await finish('lose', 'Masadan ayrıldın.')
-      setPhase({ kind: 'lobby' })
-    }
+    const leave = () => void finish('lose', 'Masadan ayrıldın.')
     const again = async (result: GameResult, note?: string, score?: { for: number; against: number }) => {
       const sameBet = phase.bet
       await finish(result, note, score)
       await start(sameBet)
     }
-    const api: GameApi = { bet: phase.bet, win: Math.floor(phase.bet * botWinMultiplier(game, settings)), finish, leave, again, saveKey }
+    const cancel = async () => {
+      const id = session.current
+      if (!id) return
+      const res = await cancelBotGame(id)
+      if (res.ok) {
+        session.current = null
+        setBalance(res.balance)
+        setError('')
+        setNotice(`Maç başlamadı, ${formatAC(res.refund)} KC bahsin iade edildi.`)
+        setPhase({ kind: 'lobby' })
+        return
+      }
+      if ('started' in res) {
+        await finish('lose', 'Yarıda bırakılan maç kaybedilmiş sayılır.')
+        return
+      }
+      session.current = null
+      setError(res.error)
+      setPending({ sessionId: id, stake: phase.bet, started: false })
+      setPhase({ kind: 'lobby' })
+    }
+    const kickoff = () => {
+      const id = session.current
+      if (id) void markBotGameStarted(id)
+    }
+    const api: GameApi = {
+      bet: phase.bet,
+      win: Math.floor(phase.bet * botWinMultiplier(game, settings)),
+      finish,
+      leave,
+      again,
+      cancel,
+      kickoff,
+      refundable: !phase.started,
+      saveKey,
+    }
     return (
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
@@ -262,7 +393,7 @@ export function StakeGate({
             className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
           >
             <RotateCcw className="size-4" aria-hidden="true" />
-            Aynı bahisle tekrar
+            Aynı bahisle tekrar · {formatAC(phase.bet)} KC
           </button>
           <button
             onClick={() => setPhase({ kind: 'lobby' })}
@@ -299,6 +430,14 @@ export function StakeGate({
       </div>
 
       <div className="flex flex-col gap-4 p-4 sm:p-6 lg:p-8">
+        {pending && !pvpMode && (
+          <PendingSessionCard pending={pending} busy={busy} onResume={resumePending} onDrop={() => void dropPending()} />
+        )}
+        {notice && (
+          <p role="status" className="text-pretty rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm leading-relaxed text-foreground">
+            {notice}
+          </p>
+        )}
         {modeSelect && !singleMode && (
           <div role="radiogroup" aria-label="Oyun modu" className="grid grid-cols-2 gap-1 rounded-xl bg-secondary/60 p-1">
             {modeSelect.modes.map((m) => {
@@ -391,7 +530,7 @@ export function StakeGate({
               if (!requireLogin()) return
               modeSelect.onEnter(m, bet)
             }}
-            disabled={busy || (modeSelect != null && modeSelect.mode == null) || blocked}
+            disabled={busy || (modeSelect != null && modeSelect.mode == null) || blocked || (!pvpMode && pending != null)}
             className="flex shrink-0 items-center gap-2 rounded-xl bg-primary px-5 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/30 glow-gold transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
           >
             {busy ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : pvpMode ? <Swords className="size-5" aria-hidden="true" /> : <Play className="size-5" aria-hidden="true" />}

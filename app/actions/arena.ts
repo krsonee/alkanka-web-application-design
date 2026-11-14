@@ -92,15 +92,58 @@ export async function getOpenBotGame(game: string) {
     const m = await member()
     if (!isArenaGame(game) || !CLIENT_SETTLED.includes(game)) return { ok: true as const, session: null }
     const r = await pool.query(
-      `SELECT id, stake FROM solo_sessions
+      `SELECT id, stake, state->>'started' AS started FROM solo_sessions
         WHERE user_id = $1 AND game = $2 AND status = 'acik' AND created_at > now() - interval '3 hours'
         ORDER BY created_at DESC LIMIT 1`,
       [m.id, game],
     )
     const row = r.rows[0]
-    return { ok: true as const, session: row ? { sessionId: String(row.id), stake: Number(row.stake) } : null }
+    return {
+      ok: true as const,
+      session: row ? { sessionId: String(row.id), stake: Number(row.stake), started: row.started === 'true' } : null,
+    }
   } catch {
     return { ok: true as const, session: null }
+  }
+}
+
+/** Flags the session once the match itself kicks off; until then leaving refunds the stake. */
+export async function markBotGameStarted(sessionId: string) {
+  try {
+    const m = await member()
+    await pool.query(
+      `UPDATE solo_sessions SET state = COALESCE(state, '{}'::jsonb) || '{"started":true}'::jsonb
+        WHERE id = $1 AND user_id = $2 AND status = 'acik'`,
+      [sessionId, m.id],
+    )
+    return { ok: true as const }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Refunds a full-screen match that was left on the character screen, before kick-off. */
+export async function cancelBotGame(sessionId: string) {
+  try {
+    const m = await member()
+    const r = await pool.query(
+      `UPDATE solo_sessions SET status = 'iptal'
+        WHERE id = $1 AND user_id = $2 AND status = 'acik' AND tournament_id IS NULL
+          AND game = ANY($3::text[]) AND COALESCE(state->>'started', '') <> 'true'
+        RETURNING stake`,
+      [sessionId, m.id, SCORE_GAMES],
+    )
+    const row = r.rows[0]
+    if (!row) {
+      const open = await pool.query(`SELECT 1 FROM solo_sessions WHERE id = $1 AND user_id = $2 AND status = 'acik'`, [sessionId, m.id])
+      if (open.rowCount) return { ok: false as const, error: 'Maç başladığı için bahis iade edilemez.', started: true as const }
+      throw new Error('Oyun oturumu bulunamadı.')
+    }
+    const refund = Number(row.stake)
+    await credit(m.id, refund)
+    return { ok: true as const, refund, balance: await getBalance(m.id) }
+  } catch (e) {
+    return fail(e)
   }
 }
 
