@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { ARENA_META, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
+import { ARENA_META, isBotTableGame, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { StakeGate, type GameApi } from './stake-gate'
 import { Tavla } from './tavla'
-import { Okey } from './okey'
 import { BilardoPool } from './bilardo-pool'
 import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
@@ -14,8 +13,6 @@ import { TableLobby } from './table-lobby'
 import { PvpTablesPanel } from './pvp-tables-panel'
 import { wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { LiveLobby } from './live-lobby'
-import { WaitingTables } from './waiting-tables'
-import { loadMode } from './saved-game'
 
 const noSubscribe = () => () => {}
 
@@ -86,7 +83,6 @@ export const RULES: Record<ArenaGame, string[]> = {
 
 function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; settings: ArenaGameSettings }) {
   if (game === 'tavla') return <Tavla {...api} />
-  if (game === 'okey') return <Okey {...api} />
   if (game === 'bilardo') return <BilardoPool bet={api.bet} win={Math.round(api.bet * settings.multiplier)} finish={api.finish} />
   const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
   return (
@@ -99,43 +95,47 @@ function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; setti
       onCancel={api.cancel}
       onKickoff={api.kickoff}
       onEnd={(s) => api.finish(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s)}
-  onRematch={api.again ? (s) => api.again?.(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s) : undefined}
+      onRematch={api.again ? (s) => api.again?.(s.for > s.against ? 'win' : s.for < s.against ? 'lose' : 'draw', `${s.for} - ${s.against}`, s) : undefined}
     />
   )
-}
-
-function BotMode({ game, settings }: { game: ArenaGame; settings: ArenaGameSettings }) {
-  if (game === 'rulet') return <RouletteLive settings={settings} />
-  return null
 }
 
 export function ArenaStage({ game, settings, setup }: { game: ArenaGame; settings: ArenaGameSettings; setup?: SetupConfig }) {
   const [openWizard, setOpenWizard] = useState(false)
   const meta = ARENA_META[game]
-  const modes = meta.modes.filter((m) => m !== 'pvp' || settings.pvpEnabled)
-  // The remembered mode is read as an external store, not set from a mount effect: this page hydrates at
-  // offscreen priority, so a setState in an effect lands in the idle lane and waits behind every pending
-  // server action, leaving "Oyna" disabled for seconds after load.
-  const stored = useSyncExternalStore(
-    noSubscribe,
-    () => loadMode(game) ?? '',
-    () => null,
-  )
-  const [picked, setMode] = useState<GameMode | null>(null)
-  const mode: GameMode | null =
-    modes.length === 1 ? modes[0] : (picked ?? (stored === null ? null : (modes.find((m) => m === stored) ?? modes[0])))
-  const [entered, setEntered] = useState<{ mode: GameMode; bet: number } | null>(null)
+  const pvp = meta.modes.includes('pvp') && settings.pvpEnabled
+  // Games with server bots play "bota karşı" at a table; the rest run their bot in the browser.
+  const botPlay = isBotTableGame(game) ? 'table' : meta.modes.includes('bot') ? 'session' : null
+  const hasTables = pvp || botPlay === 'table'
+  const [entered, setEntered] = useState<{ bet: number } | null>(null)
   const [invitedTable, setInvitedTable] = useState<string | null>(null)
   const [watching, setWatching] = useState<string | null>(null)
-  const houseGame = game === 'blackjack' || game === 'rulet'
 
   const watch = (id: string | null) => {
     setWatching(id)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // Telegram invite links land here as ?masa=<id>; open the kanka lobby with that table highlighted.
-  // Applied during render rather than in a mount effect, for the same idle-lane reason as the mode above.
+  const openTableRoom = (id: string, stake: number) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('masa', id)
+    window.history.replaceState(window.history.state, '', url)
+    setInvitedTable(id)
+    setEntered({ bet: stake })
+  }
+
+  const backToLobby = () => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('masa')
+    window.history.replaceState(window.history.state, '', url)
+    setInvitedTable(null)
+    setOpenWizard(false)
+    setEntered(null)
+  }
+
+  // Telegram invite links land here as ?masa=<id>; open the table lobby with that table highlighted.
+  // Applied during render rather than in a mount effect: this page hydrates at offscreen priority, so a
+  // setState in an effect lands in the idle lane and waits behind every pending server action.
   const search = useSyncExternalStore(
     noSubscribe,
     () => window.location.search,
@@ -150,17 +150,16 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   }
   if (search !== null && !linkRead) {
     setLinkRead(true)
-    const target = modes.includes('pvp') ? linkTarget(search) : null
+    const target = hasTables ? linkTarget(search) : null
     if (target) {
       if (target.id) setInvitedTable(target.id)
       else setOpenWizard(true)
-      setMode('pvp')
-      setEntered({ mode: 'pvp', bet: settings.bets[0] })
+      setEntered({ bet: settings.bets[0] })
     }
   }
 
   useEffect(() => {
-    if (!modes.includes('pvp') || linkTarget(window.location.search)) return
+    if (!hasTables || linkTarget(window.location.search)) return
     // A refresh (or a PWA relaunch) can drop ?masa; fall back to the table the player is still seated at.
     let cancelled = false
     fetch(`/api/tables?game=${game}`, { cache: 'no-store' })
@@ -172,8 +171,7 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
         const url = new URL(window.location.href)
         url.searchParams.set('masa', live.id)
         window.history.replaceState(window.history.state, '', url)
-        setMode('pvp')
-        setEntered({ mode: 'pvp', bet: settings.bets[0] })
+        setEntered({ bet: settings.bets[0] })
       })
       .catch(() => {})
     return () => {
@@ -181,17 +179,6 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const back = (
-    <button
-      type="button"
-      onClick={() => setEntered(null)}
-      className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
-    >
-      <ArrowLeft className="size-4" aria-hidden="true" />
-      Geri
-    </button>
-  )
 
   // Roulette and blackjack are shared live tables: no bot / player choice, no stake gate.
   // Blackjack seats you at the first 6-seat table with a free spot, or opens a new one.
@@ -208,57 +195,58 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
 
   return (
     <div className="flex flex-col gap-4">
-      {entered == null && modes.includes('pvp') && mode !== 'pvp' && (
-        <WaitingTables
-          game={game}
-          onJoin={(id, stake) => {
-            setInvitedTable(id)
-            setMode('pvp')
-            setEntered({ mode: 'pvp', bet: stake })
-          }}
-        />
-      )}
       {entered == null && (
         <StakeGate
           game={game}
           settings={settings}
           rules={RULES[game]}
-          modeSelect={{
-            modes,
-            mode,
-            onChange: setMode,
-            botExternal: houseGame,
-            onEnter: (m, bet) => setEntered({ mode: m, bet }),
-          }}
-          pvpContent={
-            modes.includes('pvp') ? (
+          quick={{
+            bot: botPlay,
+            pvp,
+            onTable: openTableRoom,
+            tables: (
               <PvpTablesPanel
                 game={game}
                 commission={settings.commission}
-                setup={setup}
-                bets={settings.bets}
-                onSeated={(id, stake) => {
-                  const url = new URL(window.location.href)
-                  url.searchParams.set('masa', id)
-                  window.history.replaceState(window.history.state, '', url)
-                  setInvitedTable(id)
-                  setEntered({ mode: 'pvp', bet: stake })
+                onSeated={openTableRoom}
+                onBrowse={() => {
+                  setOpenWizard(false)
+                  setEntered({ bet: settings.bets[0] })
                 }}
                 onCreate={() => {
                   setOpenWizard(wizardEnabledFor(setup, game))
-                  setEntered({ mode: 'pvp', bet: settings.bets[0] })
+                  setEntered({ bet: settings.bets[0] })
                 }}
               />
-            ) : undefined
-          }
+            ),
+          }}
         >
           {(api) => <BotGame game={game} api={api} settings={settings} />}
         </StakeGate>
       )}
-      {entered && back}
-      {entered?.mode === 'bot' && <BotMode game={game} settings={settings} />}
-      {entered?.mode === 'pvp' && <TableLobby game={game} settings={settings} rules={RULES[game]} invitedId={invitedTable} initialStake={entered.bet} setup={setup} openWizard={openWizard} />}
-      {modes.includes('pvp') && (
+      {entered && (
+        <button
+          type="button"
+          onClick={backToLobby}
+          className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          Geri
+        </button>
+      )}
+      {entered && (
+        <TableLobby
+          game={game}
+          settings={settings}
+          rules={RULES[game]}
+          invitedId={invitedTable}
+          initialStake={entered.bet}
+          setup={setup}
+          openWizard={openWizard}
+          onRoomClosed={backToLobby}
+        />
+      )}
+      {hasTables && (
         <div className="mt-4 border-t border-border pt-6 [body:has([data-table-live])_&]:hidden">
           <LiveLobby game={game} watching={null} onWatch={watch} />
         </div>

@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
-import { ARENA_META, TURN_SECONDS, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { ARENA_META, TURN_SECONDS, botFillSeconds, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
 import { MobileTableChat } from './mobile-table-chat'
 import { VoiceChat } from './voice-chat'
@@ -11,7 +11,7 @@ import { FitToScreen } from './fit-to-screen'
 import { LandscapeFit } from './landscape-fit'
 import { useTurnAlert } from './use-turn-alert'
 import { cn } from '@/lib/utils'
-import { claimTableTimeout, closeTable, leaveGameTable, openTable, playMove, sitAtTable, startTableWithBots } from '@/app/actions/arena'
+import { claimTableTimeout, closeTable, leaveGameTable, openTable, playBotsNow, playMove, sitAtTable, startTableWithBots } from '@/app/actions/arena'
 import { InviteButton } from './invite-button'
 import { GameResultCard } from './game-result-card'
 import { MatchRecapBlock, useMatchRecap } from './match-recap'
@@ -39,6 +39,8 @@ import { MemberRank } from '../kp/member-rank'
 import { playSound } from '@/lib/sound'
 import { SoundToggle, actionSound } from './sound-toggle'
 import { useTableSounds } from './use-table-sounds'
+import { useTableEvents } from './use-table-events'
+import { optimisticState } from '@/lib/pvp/optimistic'
 import { TableThemeField, TableThemeScope } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
 import { TableSetupWizard } from './table-setup-wizard'
@@ -56,6 +58,10 @@ export type TableSummary = {
   rounds?: number | null
   variant?: string | null
   extras?: string[] | null
+  /** Opened with "Bota karşı hemen oyna": every other seat is a bot. */
+  solo?: boolean
+  /** Opened with "Hemen eşleş": empty seats go to bots after a short wait. */
+  quick?: boolean
   winners: string[]
   spectator: boolean
   status: 'bekliyor' | 'oynaniyor' | 'bitti' | 'iptal'
@@ -66,6 +72,8 @@ export type TableSummary = {
   roundNo: number | null
   updatedAt: string
   paused?: boolean
+  /** Milliseconds until the okey bot on turn moves; only the table poll sends it. */
+  botDueMs?: number | null
   seat: number
   turn: number | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +109,7 @@ export function TableLobby({
   initialStake,
   setup,
   openWizard = false,
+  onRoomClosed,
 }: {
   game: ArenaGame
   settings: ArenaGameSettings
@@ -109,6 +118,8 @@ export function TableLobby({
   initialStake?: number
   setup?: SetupConfig
   openWizard?: boolean
+  /** Leaving a table goes back to the game's main lobby instead of this table list. */
+  onRoomClosed?: () => void
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
   const [wizardOpen, setWizardOpen] = useState(openWizard)
@@ -133,10 +144,11 @@ export function TableLobby({
   const isOkey = game === 'okey'
   const seats = 4
   const [teamMode, setTeamMode] = useState<boolean | null>(null)
-  const [bots, setBots] = useState(0)
+  const [bots, setBots] = useState(3)
   const seatRule = SEAT_GAME_RULES[game]
   const [seatSeats, setSeatSeats] = useState(seatRule ? (seatRule.seats.includes(4) ? 4 : seatRule.seats[seatRule.seats.length - 1]) : 4)
-  const [seatBots, setSeatBots] = useState(0)
+  // A new table starts against bots so nobody is left waiting; fewer bots leaves seats open for kankas.
+  const [seatBots, setSeatBots] = useState(seatSeats - 1)
   const [seatRounds, setSeatRounds] = useState(seatRule?.rounds[0] ?? 0)
   const [batakVariant, setBatakVariant] = useState<BatakVariant>('klasik')
   const [batakExtras, setBatakExtras] = useState<(keyof BatakRules)[]>(['batma'])
@@ -201,6 +213,7 @@ export function TableLobby({
       setActiveId(null)
       // The lobby list is paused while a table is open, so its cached copy still lists the table that was just left.
       void mutateCache<LobbyData>(lobbyKey, (d) => (d && done ? { ...d, mine: d.mine.filter((t) => t.id !== id) } : d), { revalidate: true })
+      onRoomClosed?.()
     }
     return <TableRoom key={activeId} id={activeId} onLeave={leaveRoom} onReplay={setActiveId} />
   }
@@ -576,10 +589,10 @@ export function TableLobby({
                 label={seatSeats > 5 ? 'Bot koltuğu (boş yerleri bot doldurur)' : 'Bot koltuğu'}
                   value={String(bots)}
                   options={[
-                    { value: '0', label: 'Bot yok' },
-                    { value: '1', label: '1 bot' },
-                    { value: '2', label: '2 bot' },
                     { value: '3', label: 'Bota karşı (3 bot)' },
+                    { value: '2', label: '2 bot' },
+                    { value: '1', label: '1 bot' },
+                    { value: '0', label: 'Bot yok' },
                   ]}
                   onChange={(v) => setBots(Number(v))}
                 />
@@ -680,7 +693,7 @@ export function TableLobby({
               <OptionGroup
                 label="Bot koltuğu"
                 value={String(seatBots)}
-                options={Array.from({ length: seatSeats }, (_, i) => ({ value: String(i), label: i === 0 ? (seatSeats > 5 ? 'Yok' : 'Bot yok') : seatSeats > 5 ? String(i) : `${i} bot` }))}
+                options={Array.from({ length: seatSeats }, (_, i) => seatSeats - 1 - i).map((i) => ({ value: String(i), label: i === 0 ? (seatSeats > 5 ? 'Yok' : 'Bot yok') : seatSeats > 5 ? String(i) : `${i} bot` }))}
                 onChange={(v) => setSeatBots(Number(v))}
               />
               {seatRule.rounds.length > 0 && (
@@ -1013,6 +1026,8 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   const { refresh, member } = usePoints()
   const idle = useIdle()
   const { data, mutate, error } = useSWR<TableSummary>(`/api/tables/${id}`, fetcher, {
+    // SWR's default 2 second dedupe would swallow every poll faster than that, so the short intervals below never ran.
+    dedupingInterval: 100,
     refreshInterval: (d) => {
       if (!d) return 2000
       if (d.status === 'bitti' || d.status === 'iptal') return 0
@@ -1021,11 +1036,15 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       if (d.spectator) return 3000
       // Nothing changes server-side while it's my move (except the turn timer), so poll slowly then.
       if (d.turn === d.seat) return 5000
+      // An okey bot moves on the first poll after its 0.7 to 1.2 second think, so ask again just as that think ends.
+      if (d.state?.kind === 'okey' && (d.state.bots ?? []).includes(d.state.turn)) return Math.min(1200, Math.max(150, (d.botDueMs ?? 500) + 50))
       // 101 bots play one turn per poll, so a quicker beat keeps their moves flowing one by one.
       return d.game === 'okey101' ? 1200 : d.game === 'batak' || d.game === 'pisti' || d.game === 'papaz' ? 1000 : 2000
     },
   })
   const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<RemoteAction | null>(null)
+  const ownVersion = useRef(-1)
   const [msg, setMsg] = useState<string | null>(null)
   const [resultClosed, setResultClosed] = useState(false)
   const [replaying, setReplaying] = useState(false)
@@ -1035,16 +1054,24 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
     async (action: RemoteAction) => {
       if (!data) return false
       setBusy(true)
+      setPending(action)
+      // The move is heard and, where its result is already known, seen before the server answers.
+      playSound(actionSound(data.game, action.type))
+      const guess = optimisticState(data.game, data.seat, data.state, action)
+      if (guess) void mutate({ ...data, state: guess, turn: (guess as { turn?: number }).turn ?? data.turn } as TableSummary, { revalidate: false })
       const r = await playMove(id, data.version, action)
-      if (r.ok && r.view) await mutate(r.view as TableSummary, { revalidate: false })
-      else await mutate()
+      // A refused move refetches, which also takes back whatever was shown ahead of the server.
+      if (r.ok && r.view) {
+        ownVersion.current = (r.view as TableSummary).version
+        await mutate(r.view as TableSummary, { revalidate: false })
+      } else await mutate()
+      setPending(null)
       setBusy(false)
       if (!r.ok) {
         playSound('error')
         setMsg(r.error ?? 'Hamle yapılamadı.')
         return false
       }
-      playSound(actionSound(data.game, action.type))
       setMsg(null)
       return true
     },
@@ -1061,9 +1088,17 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           humans: data.players.filter((p) => !p.bot).length,
           game: data.game,
           won: member != null && (data.winners ?? []).includes(member.id),
+          own: data.version === ownVersion.current,
         }
       : null,
   )
+
+  // Bot-only tables change only when this player polls, so the push stream is kept for tables someone else can move at.
+  const live = !!data && data.status !== 'bitti' && data.status !== 'iptal' && (data.spectator || data.status === 'bekliyor' || data.players.filter((p) => !p.bot).length > 1)
+  const seenVersion = data?.version ?? 0
+  useTableEvents(id, live, (version) => {
+    if (version === 0 || version > seenVersion) void mutate()
+  })
 
   useTurnAlert(
     !!data &&
@@ -1074,7 +1109,10 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   )
 
   const matchOver = !!data && data.seat >= 0 && (data.status === 'bitti' || data.status === 'iptal' || left != null)
-  const { recap, loading: recapLoading } = useMatchRecap(matchOver ? { game: data.game, tableId: id } : null)
+  // A 0 KC practice table is never settled, so there is no recap to load for it.
+  const practice = !!data && data.stake === 0 && !data.tournamentId
+  const { recap, loading: recapLoading } = useMatchRecap(matchOver && !practice ? { game: data.game, tableId: id } : null)
+  const recapBlock = practice ? <PracticeNote /> : <MatchRecapBlock recap={recap} loading={recapLoading} />
 
   if (error) return <RoomShell onLeave={() => onLeave()}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
   if (!data) {
@@ -1093,6 +1131,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   const mySeat = data.seat
   const spectator = mySeat < 0
   const ended = data.status === 'bitti' || data.status === 'iptal'
+  const botFill = botFillSeconds(data.game, data.quick === true)
   const botsOnly = data.players.filter((p) => !p.bot).length === 1
   const idleMs = Date.now() - new Date(data.updatedAt).getTime()
   const oppTurnStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn != null && data.turn !== mySeat && idleMs > 3 * 60 * 1000
@@ -1108,6 +1147,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
     version: data.version,
     myTurn: !spectator && data.status === 'oynaniyor' && data.turn === mySeat,
     busy,
+    pending,
     names,
     userIds: Array.from({ length: seatCount }, (_, i) => {
       const p = data.players.find((pl) => pl.seat === i)
@@ -1123,14 +1163,16 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
     replay:
       ended && !spectator && !data.tournamentId && onReplay
         ? async () => {
-            const r = await openTable(data.game, data.stake, {
-              seats: data.seats,
-              team: data.team,
-              bots: data.bots,
-              rounds: data.rounds ?? data.state?.handsTotal ?? undefined,
-              ...(data.variant ? { variant: data.variant } : {}),
-              ...(data.extras?.length ? { extras: data.extras } : {}),
-            })
+            const r = data.solo
+              ? await playBotsNow(data.game, data.stake)
+              : await openTable(data.game, data.stake, {
+                  seats: data.seats,
+                  team: data.team,
+                  bots: data.bots,
+                  rounds: data.rounds ?? data.state?.handsTotal ?? undefined,
+                  ...(data.variant ? { variant: data.variant } : {}),
+                  ...(data.extras?.length ? { extras: data.extras } : {}),
+                })
             refresh()
             if (r.ok && r.id) onReplay(r.id)
             else {
@@ -1229,12 +1271,14 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           <div className="flex flex-col items-center gap-4 py-10 text-center">
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
             <p className="text-pretty text-sm text-muted-foreground">
-              {data.game === 'okey' || data.game === 'okey101'
-                ? '30 saniye içinde kimse oturmazsa boş koltuklara bot oturur ve oyun başlar.'
-                : 'Masan açık. Bir kanka oturduğunda oyun otomatik başlar.'}
+              {botFill
+                ? `${botFill} saniye içinde kimse oturmazsa boş koltuklara bot oturur ve oyun başlar.`
+                : data.quick
+                  ? 'Rakip aranıyor. Bu oyunda bot oturmaz; beklemek istemezsen masayı kapatıp bota karşı oynayabilirsin.'
+                  : 'Masan açık. Bir kanka oturduğunda oyun otomatik başlar.'}
             </p>
             {mySeat >= 0 && !data.tournamentId && <InviteButton tableId={id} />}
-            {mySeat === 0 && !data.tournamentId && (data.game === 'okey' || data.game === 'okey101') && (
+            {mySeat === 0 && !data.tournamentId && botFill != null && (
               <button
                 disabled={busy}
                 onClick={async () => {
@@ -1365,13 +1409,13 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
             <GameResultCard
               outcome="lose"
               title={left.kind === 'resign' ? 'Pes ettin' : 'Masadan ayrıldın'}
-              subtitle={left.botsOnly ? 'Bot masası kapandı.' : ended ? 'Maç rakibine yazıldı.' : 'Yerine bot geçti, oyun sensiz devam ediyor.'}
+              subtitle={practice ? 'Pratik masası kapandı.' : left.botsOnly ? 'Bot masası kapandı.' : ended ? 'Maç rakibine yazıldı.' : 'Yerine bot geçti, oyun sensiz devam ediyor.'}
               gameTitle={meta?.title ?? 'Oyun'}
               gameImage={meta?.image}
               stake={data.stake}
-              delta={recap?.kc?.delta}
+              delta={practice ? 0 : recap?.kc?.delta}
               players={member ? [{ id: member.id, name: member.name, bot: false, me: true, winner: false }] : []}
-              recap={<MatchRecapBlock recap={recap} loading={recapLoading} />}
+              recap={recapBlock}
             >
               {left.stay && !ended && (
                 <button
@@ -1426,7 +1470,13 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                         : 'Kaybettin'
               }
               subtitle={
-                data.status === 'iptal' || data.winnerId == null
+                practice
+                  ? data.winnerId == null
+                    ? 'Pratik maçı berabere bitti.'
+                    : won && !spectator
+                      ? 'Pratik maçını aldın. Hazırsan KC ile oyna.'
+                      : `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`
+                  : data.status === 'iptal' || data.winnerId == null
                   ? 'Bahis iade edildi.'
                   : won && !spectator
                     ? 'Pot hesabına eklendi. Helal olsun kanka!'
@@ -1435,8 +1485,8 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               gameTitle={meta?.title ?? 'Oyun'}
               gameImage={meta?.image}
               stake={data.stake}
-              delta={spectator ? undefined : recap?.kc?.delta}
-              recap={spectator ? undefined : <MatchRecapBlock recap={recap} loading={recapLoading} />}
+              delta={spectator ? undefined : practice ? 0 : recap?.kc?.delta}
+              recap={spectator ? undefined : recapBlock}
               players={data.players.map((p) => ({
                 id: p.id,
                 name: p.name,
@@ -1465,7 +1515,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                     className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-black text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
                   >
                     {replaying ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Swords className="size-4" aria-hidden="true" />}
-                    Bir el daha · {formatAC(data.stake)} KC
+                    {practice ? 'Bir el daha · pratik' : `Bir el daha · ${formatAC(data.stake)} KC`}
                   </button>
                 )}
                 <button
@@ -1517,6 +1567,14 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       )}
       </div>
     </RoomShell>
+  )
+}
+
+function PracticeNote() {
+  return (
+    <p className="w-full rounded-xl border border-border bg-background/40 px-3 py-2.5 text-pretty text-sm leading-relaxed text-muted-foreground">
+      Pratik maçı: KC yatırılmaz, KC ve Kanka Puanı kazandırmaz, görevlere sayılmaz.
+    </p>
   )
 }
 
@@ -1752,7 +1810,9 @@ function LeaveTableButton({
                 (!running
                   ? 'Bahsin iade edilir.'
                   : botsOnly
-                    ? `Bot masası kapanır, bahsin (${formatAC(stake)} KC) geri gelmez.`
+                    ? stake === 0
+                      ? 'Pratik masası kapanır. Bahis yatırmadığın için bir şey kaybetmezsin.'
+                      : `Bot masası kapanır, bahsin (${formatAC(stake)} KC) geri gelmez.`
                     : isResign
                       ? `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer. Masada izleyici olarak kalırsın.`
                       : `Hükmen kaybedersin (-${formatAC(stake)} KC), yerine bot geçer ve lobiye dönersin.`)}

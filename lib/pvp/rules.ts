@@ -110,7 +110,11 @@ export type OkeyReveal = {
 export const OKEY_TARGETS = [10, 20, 30] as const
 export const isOkeyScored = (s: OkeyState) => (s.target ?? 0) > 0
 
-export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string; extras?: string[] }
+/**
+ * solo: opened with "Bota karşı hemen oyna", every other seat is a bot from the start.
+ * quick: opened with "Hemen eşleş"; seats still empty after a short wait go to bots.
+ */
+export type TableOptions = { seats: number; team: boolean; bots: number; rounds?: number; variant?: string; extras?: string[]; solo?: boolean; quick?: boolean }
 
 export const okeySeats = (s: OkeyState) => s.seats ?? s.hands.length
 /** In okey you draw from the discard pile of the player who played right before you. */
@@ -189,7 +193,7 @@ export function initState(game: PvpGame, opts?: Partial<TableOptions> & { botSea
       starter: Math.floor(Math.random() * seats),
       reveal: null,
     })
-    return runBots(state).state
+    return state
   }
   if (game === 'bilardo') {
     return { kind: 'bilardo', balls: Pool.rack().map(Pool.toState), groups: [null, null], turn: 0, shot: null, seq: 0, note: 'Açılış vuruşu', broken: false }
@@ -233,8 +237,18 @@ const actorOf = (s: SeatState) => (s.kind === 'monopoly' ? monoActor(s) : s.turn
 
 export const BOT_PACE_MS = 1100
 
+/** Okey bots think for 0.7 to 1.2 seconds; the spread comes from the table itself so every poll agrees on it. */
+const okeyPaceMs = (s: OkeyState) => 700 + ((s.deck.length * 173 + s.turn * 97) % 501)
+
+/** Milliseconds until the okey bot on turn moves, or null when no okey bot is up; lets the client ask again right on time. */
+export function okeyBotDueMs(state: PvpState, updatedAt: Date | string, now = Date.now()) {
+  if (state.kind !== 'okey' || !(state.bots ?? []).includes(state.turn)) return null
+  return Math.max(0, okeyPaceMs(state) - (now - new Date(updatedAt).getTime()))
+}
+
 /** Delay before the next paced bot move for this state. */
 export function botPaceMs(state: PvpState) {
+  if (state.kind === 'okey') return okeyPaceMs(state)
   if (state.kind === 'batak') return batakPaceMs(state)
   if (state.kind === 'pisti') return pistiPaceMs(state)
   if (state.kind === 'papaz') return papazPaceMs(state)
@@ -244,6 +258,7 @@ export function botPaceMs(state: PvpState) {
 
 /** Plays a single paced bot turn when the seat to move belongs to a bot. */
 export function paceBotTurn(state: PvpState): ActResult | null {
+  if (state.kind === 'okey') return (state.bots ?? []).includes(state.turn) ? okeyBotTurn(state, state.turn) : null
   if (!isSeatState(state) || !pacedBots(state) || !state.bots.includes(actorOf(state))) return null
   const r = seatBotTurn(state, actorOf(state))
   return { state: r.state, outcome: seatOutcome(r.winners) }
@@ -517,19 +532,10 @@ function deckOut(s: OkeyState): ActResult {
   return { state: nextOkeyHand(s, reveal, s.scores, 'Deste bitti, el puansız geçti.'), outcome: null }
 }
 
-/** Plays every consecutive bot turn on the server so bots can never be steered by a client. */
-export function runBots(state: OkeyState): ActResult {
-  let s = state
-  const bots = s.bots ?? []
-  for (let guard = 0; guard < 16 && bots.includes(s.turn); guard++) {
-    const r = okeyBotTurn(s, s.turn)
-    if (r.outcome) return r
-    s = r.state as OkeyState
-  }
-  return { state: s, outcome: null }
-}
-
-/** Plays one full okey turn (draw if needed, then discard) for the given seat with the bot strategy. */
+/**
+ * Plays one full okey turn (draw if needed, then discard) for the given seat with the bot strategy.
+ * Bots move one turn per poll (see paceBotTurn), always on the server, so players can follow every tile.
+ */
 function okeyBotTurn(state: OkeyState, seat: number): ActResult {
   let s = state
   const ok = okeyFrom(s.indicator)
@@ -591,9 +597,7 @@ export function autoMove(state: PvpState): ActResult | null {
   }
   if (state.kind === 'okey') {
     const r = okeyBotTurn(state, state.turn)
-    if (r.outcome) return r
-    const next = runBots(r.state as OkeyState)
-    return next.outcome ? next : { ...next, state: { ...next.state, note: 'Süre doldu, otomatik taş atıldı' } as PvpState }
+    return r.outcome ? r : { ...r, state: { ...r.state, note: 'Süre doldu, otomatik taş atıldı' } as PvpState }
   }
   if (state.kind === 'bilardo') return bilardoTimeout(state)
   return null
@@ -604,14 +608,12 @@ export function seatToBot(state: OkeyState, seat: number): ActResult {
   const bots = Array.from(new Set([...(state.bots ?? []), seat]))
   const s: OkeyState = { ...state, bots, note: 'Ayrılan oyuncunun yerine bot geçti' }
   if (bots.length >= okeySeats(s)) return { state: s, outcome: { winnerSeat: null, winnerSeats: [] } }
-  return runBots(s)
+  return { state: s, outcome: null }
 }
 
 function okeyAct(s: OkeyState, seat: number, a: Action): ActResult {
   if ((s.bots ?? []).includes(seat)) throw new Error('Bu koltuk bota devredildi')
-  const r = okeyStep(s, seat, a)
-  if (r.outcome) return r
-  return runBots(r.state as OkeyState)
+  return okeyStep(s, seat, a)
 }
 
 const clampSpin = (v: unknown) => {

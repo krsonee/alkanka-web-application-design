@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { buzz } from '@/lib/sound'
 
 type Launch = { key: string; fx: number; fy: number; rot: number; at: number }
 type PlayResult = boolean | void | Promise<boolean | void>
@@ -8,9 +9,6 @@ type PlayResult = boolean | void | Promise<boolean | void>
 const DRAG_START_PX = 8
 const LAUNCH_TTL_MS = 6000
 
-const buzz = (ms: number) => {
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(ms)
-}
 
 /**
  * Lets a hand card be dragged up onto the table (tap still works) and remembers where it left the hand,

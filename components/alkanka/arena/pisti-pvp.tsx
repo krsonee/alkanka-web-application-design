@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Bot, Eye, Layers, Scissors, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { playSound } from '@/lib/sound'
+import { buzz, playSound } from '@/lib/sound'
 import { RANK_LABEL, SUIT_SYMBOLS, sideOf, type PCard, type PistiEvent, type PistiHandResult, type PistiView } from '@/lib/games/pisti'
 import { BatakCard } from './batak-card'
 import type { Remote } from './remote'
@@ -163,8 +163,10 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
   const thrower = useCardThrow(pileRef)
   const cardKey = (c: PCard) => `${c.s}-${c.r}`
   const playCard = (c: PCard) => remote.send({ type: 'play', s: c.s, r: c.r })
+  const sent = remote.pending?.type === 'play' ? remote.pending : null
+  const sentKey = sent ? cardKey({ s: sent.s, r: sent.r } as PCard) : null
   useEffect(() => {
-    if (myTurn && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
+    if (myTurn) buzz(30)
   }, [myTurn])
   const captures = (c: PCard) => s.pileTop != null && (c.r === s.pileTop.r || c.r === 11)
   const makesPisti = (c: PCard) => s.pileCount === 1 && s.pileTop != null && c.r === s.pileTop.r
@@ -438,7 +440,12 @@ export function PistiPvp({ remote }: { remote: Remote<PistiView> }) {
               return (
                 <div
                   key={`${c.s}-${c.r}`}
-                  className={cn('relative flex flex-col items-center transition-transform duration-200', myTurn && (pisti || take) && '-translate-y-2')}
+                  className={cn(
+                    'relative flex flex-col items-center transition-[transform,opacity] duration-200',
+                    myTurn && (pisti || take) && '-translate-y-2',
+                    // The card leaves the hand the moment it is played, without waiting for the server.
+                    sentKey === cardKey(c) && '-translate-y-8 opacity-50',
+                  )}
                   style={{ animation: `card-deal 380ms ease-out ${i * 70}ms both` }}
                 >
                   {myTurn && (pisti || take) && (

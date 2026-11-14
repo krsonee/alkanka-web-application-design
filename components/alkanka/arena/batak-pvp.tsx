@@ -24,7 +24,7 @@ import {
   type BCard,
   type Play,
 } from '@/lib/games/batak'
-import { playSound } from '@/lib/sound'
+import { buzz, playSound } from '@/lib/sound'
 import type { Remote } from './remote'
 import { TableBrand } from './table-brand'
 import { MobileTableChat } from './mobile-table-chat'
@@ -72,7 +72,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   const myTurn = remote.myTurn
   const { theme: tableTheme } = useTableTheme('batak')
   useEffect(() => {
-    if (myTurn && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30)
+    if (myTurn) buzz(30)
   }, [myTurn])
   const isTeam = variant === 'esli'
   const kozMaca = variant === 'koz-maca'
@@ -172,6 +172,7 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
   // My trick card sits 52% of its height (~48 design px) below the centre; see TRICK_OFFSET.bottom.
   const thrower = useCardThrow(trickRef, THROW_OFFSET)
   const cardKey = (c: BCard) => `${c.s}-${c.r}`
+  const sentKey = remote.pending?.type === 'play' ? `${remote.pending.s}-${remote.pending.r}` : null
 
   // A forced move is not a decision; play it after a short beat so the player sees it happen.
   const onlyCard = playing && legal.length === 1 ? legal[0] : null
@@ -674,7 +675,13 @@ export function BatakPvp({ remote }: { remote: Remote<BatakView> }) {
                                 })
                             : undefined
                         }
-                        className={cn('origin-bottom', playing && st.ok && 'touch-none cursor-grab', st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal')}
+                        className={cn(
+                          'origin-bottom',
+                          playing && st.ok && 'touch-none cursor-grab',
+                          st.nope ? 'card-nope ring-2 ring-destructive' : 'bt-deal',
+                          // The card leaves the hand the moment it is played, without waiting for the server.
+                          sentKey === cardKey(c) && '-translate-y-8 opacity-50',
+                        )}
                         style={{
                           animationDelay: st.nope ? undefined : `${i * 45}ms`,
                           marginLeft: i === 0 ? 0 : `min(0.15rem, calc((100% - ${hand.length} * var(--cw)) / ${Math.max(1, hand.length - 1)}))`,

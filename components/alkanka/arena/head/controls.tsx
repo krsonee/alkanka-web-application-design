@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from 'react'
 import NextImage from 'next/image'
 import { ArrowBigUp, ChevronLeft, ChevronRight, Footprints, Maximize2, Smartphone, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { playSound, setSoundMuted, useSoundMuted } from '@/lib/sound'
+import { buzz, playSound, setSoundMuted, useSoundMuted } from '@/lib/sound'
 import { CHARACTERS, POWERS_ON, type BotLevel, type Keys, type NetEvent, type Sport } from './engine'
 
 /* --------------------------- preferences --------------------------- */
@@ -52,7 +52,7 @@ export function playEvents(list: NetEvent[], seat: 0 | 1) {
   for (const [name, v] of list) {
     if (name === 'shake' || name === 'fx') continue
     if (name === 'hb' || name === 'h0' || name === 'h1') {
-      if ((name === 'hb' || name === `h${seat}`) && readPrefs().haptics) navigator.vibrate?.(v)
+      if ((name === 'hb' || name === `h${seat}`) && readPrefs().haptics) buzz(v)
     } else playSound(name, v)
   }
 }

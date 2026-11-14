@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { playSound } from '@/lib/sound'
+import { buzz, playSound } from '@/lib/sound'
 
 /**
  * Soft chime when the turn passes to the player. If the tab is in the background the title blinks
@@ -15,7 +15,7 @@ export function useTurnAlert(myTurn: boolean) {
     if (!started) return
     playSound('yourTurn')
     if (!document.hidden) return
-    navigator.vibrate?.(120)
+    buzz(120)
     const original = document.title
     let on = false
     const timer = setInterval(() => {

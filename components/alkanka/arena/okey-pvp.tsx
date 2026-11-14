@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { ArrowDownToLine, Bot, Eye, Layers, Trophy, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canShowIndicator, isOkeyScored, type OkeyLast, type OkeyReveal, type OkeyState } from '@/lib/pvp/rules'
@@ -90,6 +90,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
     partner: i === partner,
     team: s.team ? (i % 2 === 0 ? 'A' : 'B') : null,
     top: s.discards[i]?.at(-1),
+    pile: s.discards[i]?.length ?? 0,
     takeable: myDraw && i === fromSeat && Boolean(takeTop),
     okey,
   })
@@ -142,11 +143,11 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
           </div>
 
           <div className="relative flex justify-center">
-            <SeatBadge {...seatProps(around.top)} />
+            <SeatBadge {...seatProps(around.top)} from="top" />
           </div>
 
           <div className="relative flex items-center justify-between gap-2">
-            {around.left != null ? <SeatBadge {...seatProps(around.left)} vertical /> : <span />}
+            {around.left != null ? <SeatBadge {...seatProps(around.left)} vertical from="left" /> : <span />}
 
             <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6">
               <div className="flex flex-col items-center gap-1">
@@ -192,11 +193,11 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
               )}
             </div>
 
-            {around.right != null ? <SeatBadge {...seatProps(around.right)} vertical /> : <span />}
+            {around.right != null ? <SeatBadge {...seatProps(around.right)} vertical from="right" /> : <span />}
           </div>
 
           <div className="relative flex flex-col items-center gap-1">
-            <SeatBadge {...seatProps(seat)} name={spectator ? nameOf(seat) : 'Sen'} />
+            <SeatBadge {...seatProps(seat)} name={spectator ? nameOf(seat) : 'Sen'} from="bottom" />
             <p className="text-center text-sm font-semibold text-foreground" aria-live="polite">
               {message}
             </p>
@@ -357,7 +358,11 @@ function SeatBadge({
   vertical,
   userId,
   seed,
+  from,
+  pile,
 }: {
+  from: keyof typeof THROW_FROM
+  pile: number
   userId: string | null
   seed: string
   name: string
@@ -371,6 +376,9 @@ function SeatBadge({
   okey: OkeyValue
   vertical?: boolean
 }) {
+  // Only a tile thrown while the table is open flies in; one already lying there, or uncovered when the tile above it is taken, stays put.
+  const [seen, setSeen] = useState<{ pile: number; thrown: number | null }>({ pile, thrown: null })
+  if (seen.pile !== pile) setSeen({ pile, thrown: pile > seen.pile && top ? top.id : null })
   return (
     <div className={cn('flex items-center gap-2', vertical && 'flex-col')}>
       <div
@@ -392,11 +400,25 @@ function SeatBadge({
         <span className="shrink-0 text-[10px] opacity-80">{count}</span>
       </div>
       <div className={cn('flex flex-col items-center rounded-md', takeable && 'ring-2 ring-primary')} title="Son attığı taş">
-        {top ? <TileFace tile={top} okey={okey} size="sm" /> : <span className="h-11 w-8 rounded-md border border-dashed border-border/70" aria-hidden="true" />}
+        {top ? (
+          <span key={top.id} className={cn('block', seen.thrown === top.id && 'tile-fly')} style={THROW_FROM[from]}>
+            <TileFace tile={top} okey={okey} size="sm" />
+          </span>
+        ) : (
+          <span className="h-11 w-8 rounded-md border border-dashed border-border/70" aria-hidden="true" />
+        )}
       </div>
     </div>
   )
 }
+
+/** Where a thrown tile starts its flight to the seat's pile: from that player's side of the table. */
+const THROW_FROM = {
+  top: { '--fy': '-56px' },
+  left: { '--fx': '-56px' },
+  right: { '--fx': '56px' },
+  bottom: { '--fy': '150px' },
+} as Record<'top' | 'left' | 'right' | 'bottom', CSSProperties>
 
 function LastMoves({ last, nameOf, okey }: { last: OkeyLast[]; nameOf: (i: number) => string; okey: OkeyValue }) {
   if (!last.length) return null

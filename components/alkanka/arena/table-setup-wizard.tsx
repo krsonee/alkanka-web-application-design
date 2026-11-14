@@ -8,6 +8,7 @@ import { BATAK_RULE_OPTIONS, BATAK_VARIANTS, type BatakVariant } from '@/lib/gam
 import { DEFAULT_PISTI_RULES, PISTI_RULE_OPTIONS, PISTI_TARGETS, pistiRulesToList } from '@/lib/games/pisti'
 import { PAPAZ_RULE_OPTIONS } from '@/lib/games/papaz'
 import { MONO_RULE_OPTIONS } from '@/lib/games/monopoly'
+import { tablePot } from '@/lib/arena'
 import { arenaThemeGame } from '@/lib/table-themes'
 import { TableThemeField } from './table-theme'
 
@@ -27,8 +28,9 @@ export type TableOptions = {
 }
 
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i)
+/** Most bots first: a table against bots starts on the spot, an all-player table waits for kankas. */
 const botChoices = (seats: number): Choice[] =>
-  range(0, seats - 1).map((i) => ({
+  range(0, seats - 1).reverse().map((i) => ({
     value: String(i),
     label: i === 0 ? 'Bot yok' : i === seats - 1 ? `Bota karşı (${i})` : `${i} bot`,
     hint: i === 0 ? 'Sadece oyuncular' : i === seats - 1 ? 'Hemen başlar' : undefined,
@@ -98,10 +100,10 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
         choices: [0, 10, 20, 30].map((n) => ({ value: String(n), label: n === 0 ? 'Tek el' : `${n} puan` })),
       })
       steps.push({ key: 'bots', title: 'Bot koltuğu', choices: [
-          { value: '0', label: 'Bot yok', hint: 'Sadece oyuncular' },
-          { value: '1', label: '1 bot' },
-          { value: '2', label: '2 bot' },
           { value: '3', label: 'Bota karşı (3 bot)', hint: 'Hemen başlar' },
+          { value: '2', label: '2 bot' },
+          { value: '1', label: '1 bot' },
+          { value: '0', label: 'Bot yok', hint: 'Sadece oyuncular' },
         ] })
       break
     }
@@ -308,8 +310,8 @@ export function TableSetupWizard({
 
   const stake = Number(picks.stake ?? 0)
   const result = buildResult(game, picks)
-  const pot = stake * result.humans
-  const prize = pot - Math.round((pot * commission) / 100)
+  const split = tablePot(game, stake, commission, { humans: result.humans, bots: Number(picks.bots ?? 0) })
+  const prize = Math.floor(split.net)
   const intro = gameCfg?.intro || config.intro
   const rule = game === 'okey' ? '' : gameCfg?.rule
   const themeGame = arenaThemeGame(game)
@@ -455,6 +457,9 @@ export function TableSetupWizard({
               <dd className="font-bold tabular-nums text-primary">{`${fmt(prize)} KC`}</dd>
             </div>
           </dl>
+          <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+            {`Pot ${fmt(split.pot)} KC${split.botStake ? ' (botlar birlikte tek bahis koyar)' : ''}, %${split.cut} kesinti düşülür.`}
+          </p>
           {rule && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{rule}</p>}
           {gameNotes(game, picks).map((note) => (
             <p key={note} className="text-pretty text-xs leading-relaxed text-muted-foreground">{note}</p>

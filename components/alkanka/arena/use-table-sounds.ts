@@ -11,6 +11,8 @@ type Snapshot = {
   humans: number
   game: string
   won: boolean
+  /** This version came from the player's own move, which already got its sound at the click. */
+  own: boolean
 }
 
 const MOVE_SOUND: Record<string, SoundName> = {
@@ -55,6 +57,6 @@ export function useTableSounds(snap: Snapshot | null) {
       return
     }
     // Someone else moved (my own moves get their sound at the click).
-    if (snap.version > p.version && !myTurnBefore) playSound(MOVE_SOUND[snap.game] ?? 'tick')
+    if (snap.version > p.version && !myTurnBefore && !snap.own) playSound(MOVE_SOUND[snap.game] ?? 'tick')
   }, [snap?.status, snap?.version, snap?.turn, snap?.humans]) // eslint-disable-line react-hooks/exhaustive-deps
 }

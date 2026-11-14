@@ -1,13 +1,16 @@
 'use client'
 
-import { useRef, useState, type PointerEvent } from 'react'
+import { useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Hand, MousePointerClick, Move, Pointer } from 'lucide-react'
+import { buzz } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 import { TileFace } from './okey'
 import { COLOR_NAMES, isJoker, sortHand, valueOf, type Okey as OkeyValue, type Tile } from './okey-engine'
 
 export const RACK_COLS = 14
+/** A freshly drawn tile drops into the rack from the middle of the table above it. */
+const DRAWN_FROM = { '--fy': '-170px' } as CSSProperties
 
 type Slots = (number | null)[]
 
@@ -503,7 +506,7 @@ export function OkeyRack({
       if (group.length < 2) return
       p.group = group
       setLifted(group)
-      navigator.vibrate?.(15)
+      buzz(15)
     }, LONG_PRESS_MS)
     // Shift+drag on desktop grabs the whole per right away, without waiting for the long press.
     const shiftGroup = e.shiftKey ? groupOf(id) : null
@@ -741,7 +744,9 @@ export function OkeyRack({
                       'size-full cursor-grab touch-none select-none transition-transform [-webkit-touch-callout:none]',
                       dragging.has(tile.id) && 'cursor-grabbing opacity-30',
                       liftedSet.has(tile.id) && '-translate-y-1.5 rounded-sm ring-2 ring-primary',
+                      highlight === tile.id && 'tile-fly',
                     )}
+                    style={highlight === tile.id ? DRAWN_FROM : undefined}
                   >
                     <RackTile
                       tile={tile}

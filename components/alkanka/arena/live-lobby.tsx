@@ -71,7 +71,7 @@ export function LiveLobby({
 
       {!isLoading && shown.length === 0 && (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          {game ? 'Bu oyunda şu an aktif masa yok. Yukarıdan “Oyuncuya karşı”yı seçip “Masa aç”a bas, masan burada görünsün.' : 'Şu an oynanan masa yok. Bir oyuna girip masa aç, burada görünsün.'}
+          {game ? 'Bu oyunda şu an aktif masa yok. Yukarıdan “Hemen eşleş”e ya da “Özel masa aç”a bas, masan burada görünsün.' : 'Şu an oynanan masa yok. Bir oyuna girip masa aç, burada görünsün.'}
         </p>
       )}
 
