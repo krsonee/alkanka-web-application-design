@@ -484,7 +484,7 @@
     fit.style.width = dw*scale + 'px'; fit.style.height = dh*scale + 'px';
     device.style.transform = `scale(${scale})`;
     // The desktop frame is drawn at 1280px and scaled to fit, so small labels are grown back by the same factor.
-    device.style.setProperty('--k', view === 'web' ? clamp(1/scale, 1, 1.35).toFixed(3) : '1');
+    device.style.setProperty('--k', view === 'web' ? clamp(1/scale, 1, 1.55).toFixed(3) : '1');
     cv.width = game.offsetWidth*dpr; cv.height = game.offsetHeight*dpr;
     const sx = slotEl.offsetLeft, sy = slotEl.offsetTop, sw = slotEl.offsetWidth, sh = slotEl.offsetHeight;
     const s = Math.min(sw/TW, sh/TH);
