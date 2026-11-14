@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { cancelBotGame, finishBotGame, getOpenBotGame, markBotGameStarted, startBotGame } from '@/app/actions/arena'
+import { cancelBotGame, finishBotGame, markBotGameStarted, startBotGame } from '@/app/actions/arena'
 import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Trophy, Undo2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, MODE_LABEL, botWinMultiplier, type ArenaGame, type ArenaGameSettings, type GameMode } from '@/lib/arena'
@@ -11,7 +11,7 @@ import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
 import { SoundToggle } from './sound-toggle'
 import { GameErrorBoundary } from './game-error-boundary'
-import { clearSaved, loadMode, saveMode } from './saved-game'
+import { clearSaved, saveMode } from './saved-game'
 import { TableThemeField } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
 
@@ -151,7 +151,7 @@ export function StakeGate({
   pvpContent?: ReactNode
 }) {
   const meta = ARENA_META[game]
-  const { member, points, setBalance, requireLogin } = usePoints()
+  const { member, points, loading, setBalance, requireLogin } = usePoints()
   const [bet, setBet] = useState(settings.bets[0])
   const [phase, setPhase] = useState<Phase>({ kind: 'lobby' })
   const [round, setRound] = useState(0)
@@ -164,28 +164,27 @@ export function StakeGate({
   const phaseRef = useRef(phase)
   phaseRef.current = phase
   const resumeChecked = useRef(false)
+  const [resumeKnown, setResumeKnown] = useState(false)
   const pvpMode = modeSelect?.mode === 'pvp'
   const singleMode = modeSelect != null && modeSelect.modes.length === 1
 
   useEffect(() => {
-    if (!modeSelect || modeSelect.mode != null) return
-    const remembered = loadMode(game) as GameMode | null
-    modeSelect.onChange(remembered && modeSelect.modes.includes(remembered) ? remembered : modeSelect.modes[0])
-  }, [modeSelect, game])
-
-  useEffect(() => {
     if (!member || resumeChecked.current || modeSelect?.botExternal) return
     resumeChecked.current = true
-    getOpenBotGame(game).then((res) => {
-      if (!res.session || phaseRef.current.kind !== 'lobby') return
-      if (FULLSCREEN.includes(game)) {
-        setPending(res.session)
-        return
-      }
-      session.current = res.session.sessionId
-      setRound((r) => r + 1)
-      setPhase({ kind: 'playing', bet: res.session.stake, round: Date.now(), resumed: true })
-    })
+    fetch(`/api/arena/open-session?game=${encodeURIComponent(game)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ session: PendingSession | null }>) : { session: null }))
+      .then((res) => {
+        if (!res.session || phaseRef.current.kind !== 'lobby') return
+        if (FULLSCREEN.includes(game)) {
+          setPending(res.session)
+          return
+        }
+        session.current = res.session.sessionId
+        setRound((r) => r + 1)
+        setPhase({ kind: 'playing', bet: res.session.stake, round: Date.now(), resumed: true })
+      })
+      .catch(() => {})
+      .finally(() => setResumeKnown(true))
   }, [member, game, modeSelect?.botExternal])
 
   function pickMode(m: GameMode) {
@@ -412,6 +411,9 @@ export function StakeGate({
   const botMultiplier = botWinMultiplier(game, settings)
   const winAmount = pvpMode ? pvpWin : Math.floor(bet * botMultiplier)
   const blocked = !pvpMode && !!member && bet > points
+  // Starting a bot game closes any session still open for this game, so "Oyna" waits until we know
+  // whether there is one to resume; it also waits for the member lookup so a member never hits the login wall.
+  const checking = loading || (!!member && !pvpMode && !modeSelect?.botExternal && !resumeKnown)
   const themeGame = arenaThemeGame(game)
 
   return (
@@ -475,7 +477,7 @@ export function StakeGate({
               Bahsini seç
               <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <Coins className="size-3.5 text-primary" aria-hidden="true" />
-                {member ? `Bakiye ${formatAC(points)}` : 'Üye olunca hediye KC'}
+                {member ? `Bakiye ${formatAC(points)}` : loading ? 'Bakiye…' : 'Üye olunca hediye KC'}
               </span>
             </legend>
             <div className="grid grid-cols-4 gap-2">
@@ -530,10 +532,11 @@ export function StakeGate({
               if (!requireLogin()) return
               modeSelect.onEnter(m, bet)
             }}
-            disabled={busy || (modeSelect != null && modeSelect.mode == null) || blocked || (!pvpMode && pending != null)}
+            disabled={busy || checking || (modeSelect != null && modeSelect.mode == null) || blocked || (!pvpMode && pending != null)}
+            aria-busy={busy || checking}
             className="flex shrink-0 items-center gap-2 rounded-xl bg-primary px-5 py-3.5 font-display text-base font-bold uppercase tracking-wide text-primary-foreground shadow-lg shadow-primary/30 glow-gold transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
           >
-            {busy ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : pvpMode ? <Swords className="size-5" aria-hidden="true" /> : <Play className="size-5" aria-hidden="true" />}
+            {busy || checking ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : pvpMode ? <Swords className="size-5" aria-hidden="true" /> : <Play className="size-5" aria-hidden="true" />}
             {pvpMode ? 'Masalara geç' : 'Oyna'}
           </button>
         </div>
@@ -546,7 +549,7 @@ export function StakeGate({
             .
           </p>
         )}
-        {!member && !pvpMode && (
+        {!member && !loading && !pvpMode && (
           <button
             type="button"
             onClick={() => requireLogin()}
