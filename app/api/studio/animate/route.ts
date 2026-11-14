@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
-import { addJob, getJob, readFile, storeFile } from '@/lib/studio'
+import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { AI_GIF_SECONDS, makeGif, makeVideo, videoToGif } from '@/lib/studio-animate'
+import { brushOf } from '@/lib/studio-overlay'
 import { makeStickerIcon, makeVideoSticker } from '@/lib/studio-telegram'
 import { VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
 
@@ -32,18 +33,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const image = await readFile(source.pathname)
+    // With the text-free original at hand, the model animates that and the logo and copy are printed
+    // on the finished clip. Older jobs without it are animated as they are.
+    const clip = async (seconds: number, sound: boolean, hd: boolean) => {
+      if (!source.cleanPathname) return makeVideo({ image, format: source.format, motion, duration: seconds, audio: sound, hd, brush: null })
+      const [clean, brand] = await Promise.all([readFile(source.cleanPathname), source.brandId ? getBrand(source.brandId) : null])
+      return makeVideo({ image: clean, format: source.format, motion, duration: seconds, audio: sound, hd, brush: brushOf(brand, source.texts) })
+    }
     const result =
       mode === 'gif'
         ? { data: await makeGif(image), contentType: 'image/gif', ext: 'gif', cost: 0, folder: 'gifs' }
         : mode === 'aigif'
           ? {
-              data: await videoToGif(
-                await makeVideo({ image, format: source.format, motion, duration: AI_GIF_SECONDS, audio: false }),
-                source.format === '1:1',
-              ),
+              data: await videoToGif(await clip(AI_GIF_SECONDS, false, false), source.format === '1:1'),
               contentType: 'image/gif',
               ext: 'gif',
-              cost: videoCost(AI_GIF_SECONDS, false),
+              cost: videoCost(AI_GIF_SECONDS, false, false),
               folder: 'gifs',
             }
         : mode === 'tgsticker'
@@ -51,7 +56,7 @@ export async function POST(request: NextRequest) {
           : mode === 'tgicon'
             ? { data: await makeStickerIcon(image), contentType: 'image/webp', ext: 'webp', cost: 0, folder: 'stickers' }
             : {
-                data: await makeVideo({ image, format: source.format, motion, duration, audio }),
+                data: await clip(duration, audio, true),
                 contentType: 'video/mp4',
                 ext: 'mp4',
                 cost: videoCost(duration, audio),

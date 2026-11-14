@@ -25,14 +25,13 @@ export async function generateMetadata(): Promise<Metadata> {
     description: home.description,
     keywords: home.keywords,
     applicationName: SITE_NAME,
-    alternates: { canonical: '/' },
+    // No canonical or og:url here: every page would inherit "/" and tell search engines it is the home page.
     openGraph: {
       type: 'website',
       locale: 'tr_TR',
       siteName: ogSite,
       title: ogTitle,
       description: ogDescription,
-      url: '/',
       images: [{ url: ogImage, width: 1200, height: 630, alt: ogSite }],
     },
     twitter: { card: 'summary_large_image', title: ogTitle, description: ogDescription, images: [ogImage] },

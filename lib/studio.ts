@@ -1,7 +1,7 @@
 import 'server-only'
 import { get, put } from '@vercel/blob'
 import { rows, sql } from '@/lib/db'
-import type { StudioAsset, StudioBrand, StudioJob } from '@/lib/studio-types'
+import { cleanTexts, type StudioAsset, type StudioBrand, type StudioJob, type StudioTexts } from '@/lib/studio-types'
 
 let ready: Promise<unknown> | null = null
 function ensureTables() {
@@ -18,6 +18,7 @@ function ensureTables() {
       pathname text NOT NULL, parent_id int, cost numeric NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE studio_jobs ADD COLUMN IF NOT EXISTS clean text NOT NULL DEFAULT ''`)
     await rows(sql`ALTER TABLE studio_brands ADD COLUMN IF NOT EXISTS mascot text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE studio_jobs ADD COLUMN IF NOT EXISTS texts text NOT NULL DEFAULT ''`)
   })().catch((error) => {
     ready = null
     throw error
@@ -120,7 +121,17 @@ const mapJob = (r: Record<string, unknown>): StudioJob => ({
   parentId: r.parent_id == null ? null : Number(r.parent_id),
   cost: Number(r.cost),
   createdAt: new Date(String(r.created_at)).toISOString(),
+  texts: parseTexts(r.texts),
+  retextable: String(r.kind) === 'banner' && Boolean(r.clean),
 })
+
+function parseTexts(value: unknown) {
+  try {
+    return value ? cleanTexts(JSON.parse(String(value))) : null
+  } catch {
+    return null
+  }
+}
 
 export async function listJobs(limit = 60) {
   await ensureTables()
@@ -144,10 +155,12 @@ export async function addJob(j: {
   clean: string
   parentId: number | null
   cost: number
+  texts?: StudioTexts | null
 }) {
   await ensureTables()
-  const r = await rows(sql`INSERT INTO studio_jobs (brand_id, kind, format, prompt, pathname, clean, parent_id, cost)
-    VALUES (${j.brandId}, ${j.kind}, ${j.format}, ${j.prompt}, ${j.pathname}, ${j.clean}, ${j.parentId}, ${j.cost}) RETURNING *`)
+  const texts = j.texts ? JSON.stringify(j.texts) : ''
+  const r = await rows(sql`INSERT INTO studio_jobs (brand_id, kind, format, prompt, pathname, clean, parent_id, cost, texts)
+    VALUES (${j.brandId}, ${j.kind}, ${j.format}, ${j.prompt}, ${j.pathname}, ${j.clean}, ${j.parentId}, ${j.cost}, ${texts}) RETURNING *`)
   return mapJob(r[0])
 }
 

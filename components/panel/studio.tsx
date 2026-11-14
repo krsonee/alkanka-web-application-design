@@ -30,15 +30,22 @@ import {
 } from '@/app/panel/studio-actions'
 import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
 import {
-  IMAGE_COST,
+  DEFAULT_IMAGE_SIZE,
+  EMPTY_TEXTS,
+  IMAGE_SIZES,
+  imageCost,
+  sameTexts,
   STUDIO_CATEGORIES,
   STUDIO_FORMATS,
+  TEXT_LIMITS,
   VIDEO_DURATIONS,
   videoCost,
+  type ImageSize,
   type StudioAsset,
   type StudioBrand,
   type StudioJob,
   type StudioKind,
+  type StudioTexts,
   TELEGRAM_LIMITS,
 } from '@/lib/studio-types'
 import { cn } from '@/lib/utils'
@@ -133,11 +140,17 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
   const [videoRuns, setVideoRuns] = useState(0)
 
   const [mascotOn, setMascotOn] = useState(true)
+  const [texts, setTexts] = useState<StudioTexts>(EMPTY_TEXTS)
+  const [revisedTexts, setRevisedTexts] = useState<StudioTexts>(EMPTY_TEXTS)
+  const [size, setSize] = useState<ImageSize>(DEFAULT_IMAGE_SIZE)
 
   const brand = brands.find((b) => b.id === brandId)
   const useMascot = Boolean(brand?.mascot) && mascotOn
   const runs = kind === 'sticker' ? ['1:1'] : formats
-  const unitCost = IMAGE_COST + (kind === 'video' ? videoCost(duration, audio) : 0)
+  const unitCost = imageCost(kind === 'sticker' ? '1K' : size) + (kind === 'video' ? videoCost(duration, audio) : 0)
+  const textsChanged = revising?.kind === 'banner' && !sameTexts(revisedTexts, revising.texts)
+  // Copy-only changes are re-printed on the stored text-free picture, so they cost nothing.
+  const retextOnly = Boolean(revising?.retextable) && textsChanged && revision.trim().length < 5
 
   async function post(url: string, body: Record<string, unknown>): Promise<StudioJob | null> {
     try {
@@ -184,7 +197,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
     const baseKind = kind === 'sticker' ? 'sticker' : 'banner'
     await Promise.all(
       runs.map(async (format) => {
-        const banner = await generate({ kind: baseKind, format, category, prompt, brandId, assetIds: picked, useMascot })
+        const banner = await generate({ kind: baseKind, format, category, prompt, brandId, assetIds: picked, useMascot, size, texts })
         if (banner && (kind === 'gif' || kind === 'video')) {
           await animate(banner, { mode: kind, duration, audio, motion })
         }
@@ -202,8 +215,13 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
     router.refresh()
   }
 
+  function openRevision(job: StudioJob) {
+    setRevising(job)
+    setRevisedTexts(job.texts ?? EMPTY_TEXTS)
+  }
+
   async function revise() {
-    if (!revising || revision.trim().length < 5) return
+    if (!revising || (revision.trim().length < 5 && !retextOnly)) return
     setError('')
     const parent = revising
     setRevising(null)
@@ -215,6 +233,8 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
       brandId: parent.brandId ?? brandId,
       parentId: parent.id,
       useMascot: Boolean(brands.find((b) => b.id === (parent.brandId ?? brandId))?.mascot) && mascotOn,
+      size,
+      ...(parent.kind === 'banner' ? { texts: revisedTexts, retext: retextOnly } : {}),
     })
     setRevision('')
     router.refresh()
@@ -316,6 +336,28 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
                 })}
               </div>
             </fieldset>
+            <fieldset className={label}>
+              <legend className="mb-1.5">Çözünürlük</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {IMAGE_SIZES.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    aria-pressed={size === s.id}
+                    onClick={() => setSize(s.id)}
+                    className={cn(
+                      'flex flex-col items-center rounded-xl border px-2 py-2 text-xs',
+                      size === s.id ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
+                    )}
+                  >
+                    <span className="font-bold">
+                      {s.label} · {s.hint}
+                    </span>
+                    <span>~{usd(s.cost)}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             <label className={label}>
               Kategori
               <select value={category} onChange={(e) => setCategory(e.target.value)} className={input}>
@@ -324,11 +366,12 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
                 ))}
               </select>
             </label>
+            <TextFields value={texts} onChange={setTexts} />
           </>
         ) : null}
 
         <label className={label}>
-          Talimat
+          {kind === 'sticker' ? 'Talimat' : 'Talimat (sadece görseli anlat)'}
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -337,7 +380,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
             placeholder={
               kind === 'sticker'
                 ? 'Örn: Zeus karakteri göz kırpıyor, üstünde "Kod Geliyor!" yazısı'
-                : 'Örn: Büyük başlık "%500 FREESPIN BONUSU", altında "Hemen Dene" butonu, altın ve mor tonlar, erkek karakter'
+                : 'Örn: Zeus karakteri şimşek tutuyor, arkada altın paralar ve mor bulutlar, sinematik ışık'
             }
             className={cn(input, 'resize-y leading-relaxed')}
           />
@@ -403,13 +446,24 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
                 value={revision}
                 onChange={(e) => setRevision(e.target.value)}
                 rows={4}
-                placeholder='Örn: "%100" yerine "%500" yazsın, karakter erkek olsun'
+                aria-label="Görsel için revize talimatı"
+                placeholder={revising.kind === 'banner' ? 'Örn: karakter erkek olsun, arka plan daha koyu olsun' : 'Örn: maskot gülsün, yazı "KOD GELDİ!" olsun'}
                 className={cn(input, 'flex-1 resize-y')}
               />
             </div>
+            {revising.kind === 'banner' ? (
+              <>
+                <TextFields value={revisedTexts} onChange={setRevisedTexts} />
+                {!revising.retextable && textsChanged ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Bu eski bir üretim, yazısız hali saklı değil. Yazıyı değiştirmek için yukarıya kısa bir görsel talimatı da yaz.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
             <div className="flex gap-2">
-              <button type="button" onClick={revise} disabled={revision.trim().length < 5} className={primaryBtn}>
-                Revizeyi üret
+              <button type="button" onClick={revise} disabled={revision.trim().length < 5 && !retextOnly} className={primaryBtn}>
+                {retextOnly ? 'Yazıyı güncelle · ücretsiz' : `Revizeyi üret · ~${usd(imageCost(revising.kind === 'sticker' ? '1K' : size))}`}
               </button>
               <button type="button" onClick={() => setRevising(null)} className={ghostBtn}>
                 Vazgeç
@@ -435,7 +489,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
                 <Film className="size-3.5" aria-hidden /> Efekt GIF · ücretsiz
               </button>
               <button type="button" onClick={() => runAnimation('aigif')} className={ghostBtn}>
-                <Film className="size-3.5" aria-hidden /> Yapay zeka GIF · ~{usd(videoCost(4, false))}
+                <Film className="size-3.5" aria-hidden /> Yapay zeka GIF · ~{usd(videoCost(4, false, false))}
               </button>
               <button type="button" onClick={() => runAnimation('video')} className={primaryBtn}>
                 <Clapperboard className="size-4" aria-hidden /> Video üret · ~{usd(videoCost(duration, audio))}
@@ -474,7 +528,7 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
             <JobCard
               key={job.id}
               job={job}
-              onRevise={() => setRevising(job)}
+              onRevise={() => openRevision(job)}
               onAnimate={() => setAnimating(job)}
               onTelegram={async (mode) => {
                 setError('')
@@ -496,6 +550,35 @@ const KIND_LABEL: Record<StudioKind, string> = {
   video: 'Video',
   tgsticker: 'Telegram hareketli sticker',
   tgicon: 'Telegram paket ikonu',
+}
+
+const TEXT_FIELDS: { key: keyof StudioTexts; name: string; placeholder: string }[] = [
+  { key: 'headline', name: 'Başlık', placeholder: '%500 FREESPIN BONUSU' },
+  { key: 'subline', name: 'Alt yazı', placeholder: 'İlk yatırımına özel, bugün son gün' },
+  { key: 'cta', name: 'Buton', placeholder: 'HEMEN KATIL' },
+]
+
+function TextFields({ value, onChange }: { value: StudioTexts; onChange: (texts: StudioTexts) => void }) {
+  return (
+    <fieldset className="flex flex-col gap-3 rounded-xl border border-border p-3">
+      <legend className="px-1 text-xs font-semibold text-muted-foreground">Görsel üstü yazılar (opsiyonel)</legend>
+      {TEXT_FIELDS.map((field) => (
+        <label key={field.key} className={label}>
+          {field.name}
+          <input
+            value={value[field.key]}
+            onChange={(e) => onChange({ ...value, [field.key]: e.target.value })}
+            maxLength={TEXT_LIMITS[field.key]}
+            placeholder={field.placeholder}
+            className={input}
+          />
+        </label>
+      ))}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Buraya yazdıkların yapay zekaya çizdirilmez, gerçek fontla birebir basılır; Türkçe harf hatası ya da tekrar olmaz. Rakam ve % içeren kelimeler marka rengiyle vurgulanır. Doldurduysan talimata yazı yazma.
+      </p>
+    </fieldset>
+  )
 }
 
 function VideoOptions({

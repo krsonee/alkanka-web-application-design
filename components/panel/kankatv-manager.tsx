@@ -152,9 +152,9 @@ export function KankaTvManager({
         <Status state={scanState} />
         <Status state={testState} />
         <label className={label}>
-          Dakikalık cron adresi
+          Yedek cron adresi (opsiyonel)
           <input readOnly value={cronUrl} className={cn(input, 'font-mono text-xs')} onFocus={(e) => e.currentTarget.select()} />
-          <span className={hint}>cron-job.org gibi bir servise ekleyip “her dakika” çalıştır. Gol uyarıları ve tahmin ödemeleri ziyaretçi olmasa da işler.</span>
+          <span className={hint}>Sitenin kendi zamanlayıcısı gol uyarılarını ve tahmin ödemelerini ziyaretçi olmasa da dakikada bir işler. Bu adres sadece cron-job.org gibi dışarıdan yedek bir tetik eklemek istersen lazım.</span>
         </label>
       </Card>
 
@@ -249,7 +249,7 @@ export function KankaTvManager({
         </Card>
 
         <Card icon={<Trophy className="size-4" />} id="tv-weekly" title="Haftanın izleyicisi" desc="En çok izleyenler her pazartesi otomatik ödüllenir.">
-          <Toggle name="weeklyEnabled" defaultChecked={config.weekly.enabled} title="Haftalık ödül açık" />
+          <Toggle name="weeklyEnabled" defaultChecked={config.weekly.enabled} title="Haftalık öd��l açık" />
           <label className={label}>
             Ödüller (1., 2., 3. …)
             <input name="weeklyPrizes" defaultValue={config.weekly.prizes.join(', ')} className={cn(input, 'font-mono text-xs')} />

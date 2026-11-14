@@ -9,7 +9,8 @@ const nextConfig = {
   },
   serverExternalPackages: ['ffmpeg-static'],
   outputFileTracingIncludes: {
-    '/api/studio/animate': ['./node_modules/ffmpeg-static/ffmpeg'],
+    '/api/studio/animate': ['./node_modules/ffmpeg-static/ffmpeg', './assets/studio-fonts/*.ttf'],
+    '/api/studio/generate': ['./assets/studio-fonts/*.ttf'],
   },
   // Production only: `pnpm build` runs scripts/make-webp.mjs first, which guarantees
   // every rewrite target exists. In dev, freshly added images may not have a sibling yet.

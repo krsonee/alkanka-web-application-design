@@ -11,6 +11,7 @@ import { getHomeV2 } from '@/lib/home-v2'
 import { isWizardGame } from '@/lib/home-v2-shared'
 import { getHidden } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
+import { DEFAULT_OG } from '@/lib/seo'
 
 const MINI = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık', zar: 'Zar At' } as const
 type MiniKey = keyof typeof MINI
@@ -26,10 +27,28 @@ export function generateStaticParams() {
   return Object.keys(TITLES).map((oyun) => ({ oyun }))
 }
 
+const MINI_DESCRIPTIONS: Record<MiniKey, string> = {
+  cark: 'Şans Çarkı’nı her gün ücretsiz çevir, Kanka Coin ve sürpriz ödüller kazan. Üye ol, hakkını kullan.',
+  sandik: 'Gizemli Sandık’tan birini seç, içindeki Kanka Coin ödülünü anında al. Her gün yeni sandık hakkı.',
+  zar: 'Zar At oyununda zarları salla, gelen sayıya göre Kanka Coin kazan. Ücretsiz günlük haklarla oyna.',
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ oyun: string }> }): Promise<Metadata> {
   const { oyun } = await params
   if (!(oyun in TITLES)) notFound()
-  return { title: TITLES[oyun] }
+  const title = TITLES[oyun]
+  const description = isArenaGame(oyun)
+    ? `${ARENA_META[oyun].short} AL KANKA’da ücretsiz ${title} oyna, Kanka Coin kazan.`
+    : MINI_DESCRIPTIONS[oyun as MiniKey]
+  const path = `/oyunlar/${oyun}`
+  const image = isArenaGame(oyun) ? ARENA_META[oyun].image : DEFAULT_OG
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: { title, description, url: path, images: [{ url: image }] },
+    twitter: { card: 'summary_large_image', title, description, images: [image] },
+  }
 }
 
 export default async function GamePage({ params }: { params: Promise<{ oyun: string }> }) {

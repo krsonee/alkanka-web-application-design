@@ -1,13 +1,16 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 
-const TELEGRAM_EVERY_SEC = 180
-const KANKATV_EVERY_SEC = 60
-const HUB_EVERY_SEC = 60
+// Slots sit just under a minute so the once-a-minute scheduler never loses a turn to its own jitter.
+const SLOT_SEC = 50
+// A warm instance asks the database for a slot at most this often, however many pages it renders.
+const LOCAL_GAP_MS = 10_000
+
+let lastAttempt = 0
 
 /**
  * Atomically claims a time slot so only one request per interval runs the job,
- * no matter how many visitors hit the site at once.
+ * no matter how many visitors or scheduler calls arrive at once.
  */
 async function claim(key: string, seconds: number) {
   const r = await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${new Date().toISOString()})
@@ -18,7 +21,7 @@ async function claim(key: string, seconds: number) {
 }
 
 async function telegramTick() {
-  if (!(await claim('auto_tick_telegram', TELEGRAM_EVERY_SEC))) return
+  if (!(await claim('auto_tick_telegram', SLOT_SEC))) return
   const [{ runMirror }, { pollShareBot }, { pollOddsBot }] = await Promise.all([
     import('@/lib/telegram-mirror'),
     import('@/lib/telegram-bots'),
@@ -30,7 +33,7 @@ async function telegramTick() {
 }
 
 async function kankatvTick() {
-  if (!(await claim('auto_tick_kankatv', KANKATV_EVERY_SEC))) return
+  if (!(await claim('auto_tick_kankatv', SLOT_SEC))) return
   const [{ scanGoals, settlePredictions }, { syncBets }] = await Promise.all([
     import('@/lib/kankatv-engage'),
     import('@/lib/tv-bets'),
@@ -43,15 +46,22 @@ async function kankatvTick() {
 }
 
 async function hubTickSlot() {
-  if (!(await claim('auto_tick_hub', HUB_EVERY_SEC))) return
+  if (!(await claim('auto_tick_hub', SLOT_SEC))) return
   const { hubTick } = await import('@/lib/tg-hub-jobs')
   await hubTick()
 }
 
-/** Keeps bots posting even when no external cron is configured; driven by site traffic. */
-export async function runAutoTick() {
+/**
+ * Runs every background job whose slot is free. Called once a minute by the scheduler
+ * (/api/cron/tick) and after page renders as a backup, so both paths share the same slots.
+ * `telegram: false` is for callers that have just run the Telegram jobs themselves.
+ */
+export async function runAutoTick({ telegram = true, force = false }: { telegram?: boolean; force?: boolean } = {}) {
+  const now = Date.now()
+  if (!force && now - lastAttempt < LOCAL_GAP_MS) return
+  lastAttempt = now
   await Promise.all([
-    telegramTick().catch((e) => console.error('[auto-tick] telegram', e)),
+    telegram ? telegramTick().catch((e) => console.error('[auto-tick] telegram', e)) : null,
     kankatvTick().catch((e) => console.error('[auto-tick] kankatv', e)),
     hubTickSlot().catch((e) => console.error('[auto-tick] hub', e)),
   ])

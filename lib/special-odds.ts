@@ -37,6 +37,7 @@ const CONFIG_KEY = 'odds_bot'
 const SECRET_KEY = 'odds_bot_secret'
 const LAST_UPDATE_KEY = 'odds_bot_last_update'
 const OFFSET_KEY = 'odds_bot_offset'
+const PUBLISH_ERROR_KEY = 'odds_bot_publish_error'
 const CAPTION_LIMIT = 1024
 const MESSAGE_LIMIT = 4096
 const RESULT_LOOKBACK_HOURS = 48
@@ -186,19 +187,63 @@ export async function oddsBotStatus(): Promise<OddsBotStatus> {
   let webhookUrl: string | null = null
   let pending = 0
   let lastError: string | null = null
+  let channelError: string | null = null
   if (config.botId) {
     try {
-      const info = await callBot<{ url: string; pending_update_count: number; last_error_message?: string }>(await botToken(config.botId), 'getWebhookInfo')
+      const token = await botToken(config.botId)
+      const info = await callBot<{ url: string; pending_update_count: number; last_error_message?: string }>(token, 'getWebhookInfo')
       webhookUrl = info.url || null
       pending = info.pending_update_count
       lastError = info.last_error_message ?? null
+      if (config.channelId) channelError = await channelAccessError(token, config)
     } catch (error) {
       lastError = String((error as Error).message)
     }
   }
-  const [today] = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM special_odds
-    WHERE (opened_at AT TIME ZONE 'Europe/Istanbul')::date = ${istanbulDay()}::date`)
-  return { webhookUrl, pending, lastError, lastUpdateAt: (await getSetting(LAST_UPDATE_KEY)) || null, todayTotal: Number(today?.c ?? 0) }
+  const [[today], [sources], lastUpdateAt, publishError] = await Promise.all([
+    rows<{ c: string }>(sql`SELECT count(*) AS c FROM special_odds
+      WHERE (opened_at AT TIME ZONE 'Europe/Istanbul')::date = ${istanbulDay()}::date`),
+    rows<{ c: string }>(sql`SELECT count(*) AS c FROM odds_sources WHERE active`),
+    getSetting(LAST_UPDATE_KEY),
+    readPublishError(),
+  ])
+  return {
+    webhookUrl,
+    pending,
+    lastError,
+    lastUpdateAt: lastUpdateAt || null,
+    todayTotal: Number(today?.c ?? 0),
+    channelError,
+    publishError,
+    activeSources: Number(sources?.c ?? 0),
+  }
+}
+
+/** The bot is checked when the channel is saved, but it can be demoted or removed afterwards. */
+async function channelAccessError(token: string, config: OddsBotConfig) {
+  const name = config.channelTitle || 'özel oran kanalımız'
+  try {
+    const member = await callBot<{ status: string; can_post_messages?: boolean }>(token, 'getChatMember', {
+      chat_id: config.channelId,
+      user_id: Number(token.split(':')[0]),
+    })
+    if (member.status !== 'administrator' && member.status !== 'creator') {
+      return `Bot “${name}” kanalında yönetici değil, oranlar kanala düşmez. Kanal ayarlarından botu yönetici yap ve “Mesaj gönder” yetkisini aç`
+    }
+    if (member.can_post_messages === false) return `Botun “${name}” kanalında “Mesaj gönder” yetkisi kapalı. Yönetici ayarından aç`
+    return null
+  } catch (error) {
+    return `“${name}” kanalına ulaşılamadı: ${String((error as Error).message)}`
+  }
+}
+
+async function readPublishError(): Promise<OddsBotStatus['publishError']> {
+  try {
+    const data = JSON.parse((await getSetting(PUBLISH_ERROR_KEY)) || 'null') as { at?: unknown; message?: unknown } | null
+    return data && typeof data.at === 'string' && typeof data.message === 'string' ? { at: data.at, message: data.message } : null
+  } catch {
+    return null
+  }
 }
 
 // --- Sources ---------------------------------------------------------------
@@ -458,8 +503,11 @@ async function ingest(source: OddsSource, incoming: Incoming, fromChat: string |
   let ourMsg: number | null = null
   try {
     ourMsg = await publishToChannel(config, incoming, rewritten, fromChat)
+    if (ourMsg) await setSetting(PUBLISH_ERROR_KEY, '')
   } catch (error) {
     console.error('[odds-bot] publish failed', error)
+    const failure = { at: new Date().toISOString(), message: String((error as Error).message).slice(0, 300) }
+    await setSetting(PUBLISH_ERROR_KEY, JSON.stringify(failure)).catch(() => null)
   }
   const firstLine = incoming.text.split('\n').find((l) => l.trim().length > 3)?.trim() ?? 'Özel oran'
   const items = parsed.length ? parsed : [{ match: firstLine.slice(0, 80), league: '', market: '', oldOdd: null, newOdd: null, kickoff: '', limit: '' }]

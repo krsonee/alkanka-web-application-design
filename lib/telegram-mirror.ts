@@ -332,6 +332,30 @@ export async function callBot<T = unknown>(token: string, method: string, body: 
   return data.result as T
 }
 
+const LINKED_TTL_MS = 10 * 60_000
+const linkedCache = new Map<string, { linked: string | null; until: number }>()
+
+async function linkedDiscussion(token: string, chatId: string) {
+  const hit = linkedCache.get(chatId)
+  if (hit && hit.until > Date.now()) return hit.linked
+  const info = await callBot<{ type?: string; linked_chat_id?: number }>(token, 'getChat', { chat_id: chatId }).catch(() => null)
+  if (!info) return null
+  const linked = info.type === 'channel' && info.linked_chat_id ? String(info.linked_chat_id) : null
+  linkedCache.set(chatId, { linked, until: Date.now() + LINKED_TTL_MS })
+  return linked
+}
+
+/**
+ * A channel's linked discussion group receives every channel post automatically, so sending to
+ * both shows the post twice in the group. Keeps the channel and drops its discussion group.
+ */
+export async function dropAutoFed<T extends { token: string; chatId: string }>(targets: T[]): Promise<T[]> {
+  if (targets.length < 2) return targets
+  const linked = await Promise.all(targets.map((t) => linkedDiscussion(t.token, t.chatId)))
+  const autoFed = new Set(linked.filter((id): id is string => Boolean(id)))
+  return autoFed.size ? targets.filter((t) => !autoFed.has(t.chatId)) : targets
+}
+
 type UploadKind = 'photo' | 'video'
 type UploadFile = { url: string; kind: UploadKind; name: string }
 // Bot API upload caps: photos 10 MB, other files 50 MB.
@@ -714,9 +738,11 @@ export async function runMirror(): Promise<MirrorResult> {
         }
 
         const isOdds = odds.isOddsText(stripTags(post.html))
-        const postTargets = isOdds
-          ? [...targets, ...odds.extras.targetIds.map((id) => destinations.get(id)).filter((d): d is Destination => Boolean(d) && !targets.includes(d!))]
-          : targets
+        const postTargets = await dropAutoFed(
+          isOdds
+            ? [...targets, ...odds.extras.targetIds.map((id) => destinations.get(id)).filter((d): d is Destination => Boolean(d) && !targets.includes(d!))]
+            : targets,
+        )
         const failures: string[] = []
         for (const dest of postTargets) {
           try {

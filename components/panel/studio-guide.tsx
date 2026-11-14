@@ -29,24 +29,26 @@ const QUICK_START: { title: string; body: string; target: Section }[] = [
 ]
 
 const PRICES: [string, string, string][] = [
-  ['Görsel / Banner', '~$0.06', '10-30 sn'],
-  ['Sticker (şeffaf PNG)', '~$0.06', '10-30 sn'],
-  ['Revize', '~$0.06', '10-30 sn'],
+  ['Görsel / Banner (2048 px)', '~$0.10', '15-40 sn'],
+  ['Görsel / Banner (1024 px)', '~$0.07', '10-30 sn'],
+  ['Sticker (şeffaf PNG)', '~$0.07', '10-30 sn'],
+  ['Revize', 'Görsel ücreti kadar', '10-40 sn'],
+  ['Sadece yazı değişikliği', 'Ücretsiz', '2-5 sn'],
   ['Hareketli GIF', 'Banner + $0 (GIF ücretsiz)', '+3-5 sn'],
-  ['Video 4 sn (sessiz)', 'Banner + ~$0.12', '1-2 dk'],
-  ['Video 6 sn (sessiz)', 'Banner + ~$0.18', '1-2 dk'],
-  ['Video 8 sn (sessiz)', 'Banner + ~$0.24', '1-3 dk'],
-  ['Video + ses', 'saniye başı ~$0.05', '1-3 dk'],
+  ['Video 4 sn (1080p, sessiz)', 'Banner + ~$0.20', '1-2 dk'],
+  ['Video 6 sn (1080p, sessiz)', 'Banner + ~$0.30', '1-3 dk'],
+  ['Video 8 sn (1080p, sessiz)', 'Banner + ~$0.40', '1-3 dk'],
+  ['Video + ses', 'saniye başı ~$0.08', '1-3 dk'],
 ]
 
 const PROMPT_EXAMPLES = [
   {
     kind: 'Banner',
-    text: 'Büyük başlık "%500 FREESPIN BONUSU", altında "HEMEN KATIL" butonu. Zeus karakteri şimşek tutuyor, arka planda altın paralar ve mor bulutlar.',
+    text: 'Yazı alanları: Başlık "%500 FREESPIN BONUSU", Buton "HEMEN KATIL". Talimat: Zeus karakteri şimşek tutuyor, arka planda altın paralar ve mor bulutlar.',
   },
   {
     kind: 'Banner',
-    text: 'Derbi maçı için özel oran: başlık "FENERBAHÇE - GALATASARAY", altında "ORAN 3.50" büyük ve parlak. Stadyum ışıkları, futbol topu ön planda.',
+    text: 'Yazı alanları: Başlık "FENERBAHÇE - GALATASARAY", Alt yazı "ORAN 3.50". Talimat: derbi atmosferi, stadyum ışıkları, futbol topu ön planda.',
   },
   {
     kind: 'Sticker',
@@ -61,7 +63,7 @@ const PROMPT_EXAMPLES = [
 const HINTS: Record<Exclude<Section, 'guide'>, { title: string; body: string }> = {
   create: {
     title: 'Nasıl üretilir?',
-    body: 'Tür ve markayı seç, format(lar)ı işaretle, yazıları tırnak içinde yazarak talimat ver. Logo yapay zekaya çizdirilmez, kitteki orijinal logo birebir basılır.',
+    body: 'Tür ve markayı seç, format(lar)ı işaretle, başlık ve buton yazısını kendi alanlarına yaz, talimatta sadece görseli anlat. Logo ve yazılar yapay zekaya çizdirilmez; orijinal logo ve gerçek fontla birebir basılır.',
   },
   brands: {
     title: 'Marka kiti nedir?',
@@ -186,8 +188,10 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>{b('Marka')} listesinden siteyi seç. Altında o sitenin logosu ve renkleri görünür, doğru site olduğunu kontrol et.</>,
               <>{b('Formatlar')}: 1:1 kare post, 9:16 hikâye/Reels, 16:9 site banner. Birden fazla işaretlersen hepsi aynı anda üretilir.</>,
               <>{b('Kategori')} seç (Casino, Spor Bahisi, Slot vb.).</>,
-              <>{b('Talimat')} yaz. Görselde çıkmasını istediğin yazıları mutlaka {b('tırnak içinde')} yaz: "%500 FREESPIN".</>,
-              <>{b('Üret')} butonuna bas. Butonda tahmini maliyet yazar. 10-30 saniyede sağ tarafta çıkar.</>,
+              <>{b('Çözünürlük')}: Yüksek (2048 px) paylaşım için, Standart (1024 px) hızlı deneme için.</>,
+              <>{b('Görsel üstü yazılar')}: başlık, alt yazı ve buton metnini kendi kutularına yaz. Bunlar gerçek fontla basılır, harf hatası olmaz.</>,
+              <>{b('Talimat')} kutusunda sadece görseli anlat: karakter, ortam, renk, ışık. Yazı kutularını doldurduysan buraya yazı yazma.</>,
+              <>{b('Üret')} butonuna bas. Butonda tahmini maliyet yazar. 15-40 saniyede sağ tarafta çıkar.</>,
             ]}
           />
         </Block>
@@ -226,14 +230,15 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
           />
           <p className="flex gap-2 rounded-xl bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
             <TriangleAlert className="size-4 shrink-0 text-primary" aria-hidden />
-            Videoda yazı ve logo sabit kalsın diye talimat verilir ama model nadiren küçük kaymalar yapabilir. Önemli kampanyalarda GIF en güvenli seçenektir.
+            Video 1080p çıkar. Model sadece yazısız ve logosuz görseli hareketlendirir; logo ve yazı kutularına yazdıkların video bittikten sonra üstüne basılır, bu yüzden eğilmez ve bozulmaz. Yazıyı talimatla yapay zekaya çizdirdiğin eski üretimlerde model yazıyı hâlâ kaydırabilir.
           </p>
         </Block>
 
         <Block icon={<RefreshCw className="size-5" aria-hidden />} title="7. Revize, indirme, silme">
           <Steps
             items={[
-              <>{b('Revize')}: kartın altındaki butona bas, değişikliği yaz ("%100 yerine %500 yazsın, karakter erkek olsun"), {b('Revizeyi üret')} de. Aynı düzen korunur, logo yeniden temiz basılır.</>,
+              <>{b('Revize')}: kartın altındaki butona bas, görseldeki değişikliği yaz ("karakter erkek olsun"), {b('Revizeyi üret')} de. Aynı düzen korunur, logo ve yazılar yeniden temiz basılır.</>,
+              <>{b('Sadece yazı değişecekse')}: revize panelinde yazı kutularını düzelt, talimatı boş bırak, {b('Yazıyı güncelle')} de. Yapay zeka çalışmaz, ücretsizdir ve birkaç saniyede biter.</>,
               <>{b('İndir')}: dosya tam kalitede cihazına iner (banner PNG, GIF, video MP4).</>,
               <>{b('Sil')}: çöp kutusu ikonu. Silinen iş geri gelmez.</>,
               <>Üstteki sayaç bu ayki ve toplam harcamayı gösterir.</>,

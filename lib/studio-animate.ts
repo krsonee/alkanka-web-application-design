@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { experimental_generateVideo as generateVideo } from 'ai'
 import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
+import { buildOverlay, type Brush } from '@/lib/studio-overlay'
 
 const run = promisify(execFile)
 const VIDEO_MODEL = 'google/veo-3.1-lite-generate-001'
@@ -106,14 +107,70 @@ export async function videoToGif(video: Buffer, squareCrop: boolean) {
   }
 }
 
-async function toVideoFrame(image: Buffer, format: string) {
-  const [w, h] = format === '16:9' ? [1280, 720] : [720, 1280]
+type Rect = { left: number; top: number; width: number; height: number }
+
+/** Fits the picture into the clip's frame. `art` is where the picture itself sits inside that frame. */
+async function toVideoFrame(image: Buffer, format: string, hd: boolean) {
+  const [long, short] = hd ? [1920, 1080] : [1280, 720]
+  const [width, height] = format === '16:9' ? [long, short] : [short, long]
   if (format === '16:9' || format === '9:16') {
-    return sharp(image).resize(w, h, { fit: 'cover' }).png().toBuffer()
+    const frame = await sharp(image).resize(width, height, { fit: 'cover' }).png().toBuffer()
+    return { frame, width, height, art: { left: 0, top: 0, width, height } satisfies Rect }
   }
-  const backdrop = await sharp(image).resize(w, h, { fit: 'cover' }).blur(40).modulate({ brightness: 0.6 }).png().toBuffer()
-  const front = await sharp(image).resize(w, h, { fit: 'inside' }).png().toBuffer()
-  return sharp(backdrop).composite([{ input: front, gravity: 'center' }]).png().toBuffer()
+  // Square banners become a vertical clip: the square sits in the middle of a blurred copy of itself.
+  const backdrop = await sharp(image).resize(width, height, { fit: 'cover' }).blur(40).modulate({ brightness: 0.6 }).png().toBuffer()
+  const front = await sharp(image).resize(width, height, { fit: 'inside' }).png().toBuffer()
+  const meta = await sharp(front).metadata()
+  const art: Rect = {
+    left: Math.round((width - (meta.width ?? width)) / 2),
+    top: Math.round((height - (meta.height ?? width)) / 2),
+    width: meta.width ?? width,
+    height: meta.height ?? width,
+  }
+  const frame = await sharp(backdrop).composite([{ input: front, left: art.left, top: art.top }]).png().toBuffer()
+  return { frame, width, height, art }
+}
+
+/** Burns a still, transparent layer over every frame, so logo and copy stay pixel-sharp while the scene moves. */
+async function burnOverlay(video: Buffer, overlay: Buffer) {
+  if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
+  const dir = await mkdtemp(path.join(tmpdir(), 'stamp-'))
+  try {
+    const input = path.join(dir, 'in.mp4')
+    const layer = path.join(dir, 'overlay.png')
+    const output = path.join(dir, 'out.mp4')
+    await Promise.all([writeFile(input, video), writeFile(layer, overlay)])
+    await run(ffmpegPath, [
+      '-y',
+      '-i',
+      input,
+      '-i',
+      layer,
+      '-filter_complex',
+      // scale2ref matches the layer to whatever size the model actually returned.
+      '[1:v][0:v]scale2ref[layer][base];[base][layer]overlay=format=auto[out]',
+      '-map',
+      '[out]',
+      '-map',
+      '0:a?',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'medium',
+      '-crf',
+      '17',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'copy',
+      '-movflags',
+      '+faststart',
+      output,
+    ])
+    return await readFile(output)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 }
 
 export async function makeVideo({
@@ -122,26 +179,42 @@ export async function makeVideo({
   motion,
   duration,
   audio,
+  hd,
+  brush,
 }: {
+  /** The text-free, logo-free picture when `brush` is set; otherwise the finished banner. */
   image: Buffer
   format: string
   motion: string
   duration: number
   audio: boolean
+  hd: boolean
+  /** Logo and copy to print over the finished clip. Null animates `image` as it is. */
+  brush: Brush | null
 }) {
-  const frame = await toVideoFrame(image, format)
+  const { frame, width, height, art } = await toVideoFrame(image, format, hd)
   const { video } = await generateVideo({
     model: VIDEO_MODEL,
     prompt: {
       image: new Uint8Array(frame),
       text: [
-        'Animate this advertising banner into a short, premium, eye-catching promo clip.',
+        'Animate this advertising key visual into a short, premium, eye-catching promo clip.',
         motion || 'Subtle cinematic motion: light sweeps, sparkles and glints, gentle camera push-in, the character moves slightly.',
-        'CRITICAL: keep every logo, headline, number and button text perfectly static, sharp and unchanged. Do not add new text.',
+        brush
+          ? 'Do not add any text, letters, numbers, logos or watermarks. Any writing already in the picture must stay static and unchanged.'
+          : 'CRITICAL: keep every logo, headline, number and button text perfectly static, sharp and unchanged. Do not add new text.',
       ].join('\n'),
     },
+    resolution: hd ? '1920x1080' : '1280x720',
     duration,
     generateAudio: audio,
   })
-  return Buffer.from(video.uint8Array)
+  const clip = Buffer.from(video.uint8Array)
+  const layer = brush ? await buildOverlay(art.width, art.height, brush) : null
+  if (!layer) return clip
+  const overlay = await sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: layer, left: art.left, top: art.top }])
+    .png()
+    .toBuffer()
+  return burnOverlay(clip, overlay)
 }
