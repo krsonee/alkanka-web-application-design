@@ -1,0 +1,152 @@
+{
+  "/images/heroes/biletler.png": {
+    "url": "/images/share/heroes-biletler.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/bonuslar.png": {
+    "url": "/images/share/heroes-bonuslar.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/gorevler.png": {
+    "url": "/images/share/heroes-gorevler.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/guven.png": {
+    "url": "/images/share/heroes-guven.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/kampanyalar.png": {
+    "url": "/images/share/heroes-kampanyalar.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/kankatv.png": {
+    "url": "/images/share/heroes-kankatv.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/market.png": {
+    "url": "/images/share/heroes-market.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/oyunlar.png": {
+    "url": "/images/share/heroes-oyunlar.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/ozel-oranlar.png": {
+    "url": "/images/share/heroes-ozel-oranlar.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/siralama.png": {
+    "url": "/images/share/heroes-siralama.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/sponsorlar.png": {
+    "url": "/images/share/heroes-sponsorlar.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/sss.png": {
+    "url": "/images/share/heroes-sss.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/tahminler.png": {
+    "url": "/images/share/heroes-tahminler.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/turnuvalar.png": {
+    "url": "/images/share/heroes-turnuvalar.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/heroes/uygulama.png": {
+    "url": "/images/share/heroes-uygulama.jpg",
+    "width": 1200,
+    "height": 509
+  },
+  "/images/games/batak.png": {
+    "url": "/images/share/games-batak.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/bilardo.png": {
+    "url": "/images/share/games-bilardo.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/blackjack.png": {
+    "url": "/images/share/games-blackjack.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/kafa-basketbolu.png": {
+    "url": "/images/share/games-kafa-basketbolu.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/kafa-topu.png": {
+    "url": "/images/share/games-kafa-topu.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/mini-cark.png": {
+    "url": "/images/share/games-mini-cark.jpg",
+    "width": 1024,
+    "height": 1024
+  },
+  "/images/games/mini-sandik.png": {
+    "url": "/images/share/games-mini-sandik.jpg",
+    "width": 1024,
+    "height": 1024
+  },
+  "/images/games/mini-zar.png": {
+    "url": "/images/share/games-mini-zar.jpg",
+    "width": 1024,
+    "height": 1024
+  },
+  "/images/games/monopoly.png": {
+    "url": "/images/share/games-monopoly.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/okey.png": {
+    "url": "/images/share/games-okey.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/okey101.png": {
+    "url": "/images/share/games-okey101.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/papaz.png": {
+    "url": "/images/share/games-papaz.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/pisti.png": {
+    "url": "/images/share/games-pisti.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/rulet.png": {
+    "url": "/images/share/games-rulet.jpg",
+    "width": 1200,
+    "height": 896
+  },
+  "/images/games/tavla.png": {
+    "url": "/images/share/games-tavla.jpg",
+    "width": 1200,
+    "height": 896
+  }
+}

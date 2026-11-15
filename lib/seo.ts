@@ -1,9 +1,21 @@
 import type { Metadata } from 'next'
+import shareImages from './share-images.json'
 
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://alkanka.com').replace(/\/$/, '')
 export const SITE_NAME = 'AL KANKA'
 // A JPG under 300 KB: WhatsApp and Telegram skip link previews whose image is much heavier.
 export const DEFAULT_OG = '/images/og.jpg'
+
+type ShareImage = { url: string; width?: number; height?: number }
+const SHARE_IMAGES: Record<string, ShareImage> = {
+  ...shareImages,
+  [DEFAULT_OG]: { url: DEFAULT_OG, width: 1200, height: 630 },
+}
+
+/** The light JPG copy of an artwork for link previews (scripts/make-share-images.mjs); falls back to the artwork itself. */
+export function shareImage(src: string): ShareImage {
+  return SHARE_IMAGES[src] ?? { url: src }
+}
 
 type PageSeo = { path: string; title: string; description: string; image?: string; keywords: string[] }
 
@@ -131,14 +143,14 @@ export type PageKey = keyof typeof PAGE_SEO
 
 export function pageMeta(key: PageKey): Metadata {
   const page: PageSeo = PAGE_SEO[key]
-  const image = page.image ?? DEFAULT_OG
+  const image = shareImage(page.image ?? DEFAULT_OG)
   return {
     title: key === 'anasayfa' ? { absolute: page.title } : page.title,
     description: page.description,
     keywords: page.keywords,
     alternates: { canonical: page.path },
-    openGraph: { title: page.title, description: page.description, url: page.path, images: [{ url: image }] },
-    twitter: { card: 'summary_large_image', title: page.title, description: page.description, images: [image] },
+    openGraph: { title: page.title, description: page.description, url: page.path, images: [image] },
+    twitter: { card: 'summary_large_image', title: page.title, description: page.description, images: [image.url] },
   }
 }
 

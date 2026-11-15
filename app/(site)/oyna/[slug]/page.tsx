@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowRight, Check } from 'lucide-react'
 import { LANDING_PAGES, getLandingPage } from '@/lib/landing-pages'
-import { SITE_URL } from '@/lib/seo'
+import { shareImage, SITE_URL } from '@/lib/seo'
 
 export const dynamicParams = false
 
@@ -22,8 +22,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     description: p.description,
     keywords: p.keywords,
     alternates: { canonical: url },
-    openGraph: { title: p.title, description: p.description, url, images: [{ url: p.image }] },
-    twitter: { card: 'summary_large_image', title: p.title, description: p.description, images: [p.image] },
+    openGraph: { title: p.title, description: p.description, url, images: [shareImage(p.image)] },
+    twitter: { card: 'summary_large_image', title: p.title, description: p.description, images: [shareImage(p.image).url] },
   }
 }
 
