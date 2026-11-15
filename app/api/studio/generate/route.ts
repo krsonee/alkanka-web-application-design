@@ -2,9 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { runGeneration } from '@/lib/studio-generate'
-import { IMAGE_COST, STUDIO_CATEGORIES, STUDIO_FORMATS } from '@/lib/studio-types'
+import { applyOverlay, brushOf } from '@/lib/studio-overlay'
+import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
 
 export const maxDuration = 300
+
+const retextLabel = (texts: StudioTexts | null) =>
+  texts ? `Yazı güncellendi: ${[texts.headline, texts.subline, texts.cta].filter(Boolean).join(' · ')}` : 'Yazılar kaldırıldı'
 
 export async function POST(request: NextRequest) {
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
@@ -16,23 +20,46 @@ export async function POST(request: NextRequest) {
   const format = STUDIO_FORMATS.some((f) => f.id === body.format) ? String(body.format) : '1:1'
   const category = STUDIO_CATEGORIES.find((c) => c === body.category) ?? STUDIO_CATEGORIES[0]
   const prompt = String(body.prompt ?? '').trim().slice(0, 1500)
-  if (prompt.length < 5) return NextResponse.json({ error: 'Talimat en az 5 karakter olmalı.' }, { status: 400 })
 
   const brandId = Number.parseInt(String(body.brandId ?? ''), 10)
   const brand = Number.isFinite(brandId) ? await getBrand(brandId) : null
   const parentId = Number.parseInt(String(body.parentId ?? ''), 10)
   const parent = Number.isFinite(parentId) ? await getJob(parentId) : null
-  const assetIds = (Array.isArray(body.assetIds) ? body.assetIds : [])
-    .map((v) => Number.parseInt(String(v), 10))
-    .filter(Number.isFinite)
-    .slice(0, 3)
+  // Stickers are scaled down to 512 px for Telegram, so a larger render would be wasted.
+  const size = kind === 'sticker' ? '1K' : toImageSize(body.size)
+  // A revision that sends no copy at all keeps the parent's; an explicit empty set removes it.
+  const texts = kind === 'sticker' ? null : 'texts' in body ? cleanTexts(body.texts) : (parent?.texts ?? null)
+  // Changing only the copy re-prints it on the stored text-free picture, with no model call.
+  const retext = body.retext === true && kind === 'banner' && parent?.kind === 'banner' && Boolean(parent.cleanPathname)
+
+  if (!retext && prompt.length < 5) return NextResponse.json({ error: 'Talimat en az 5 karakter olmalı.' }, { status: 400 })
 
   try {
+    if (retext && parent) {
+      const data = await applyOverlay(await readFile(parent.cleanPathname), brushOf(brand, texts))
+      const job = await addJob({
+        clean: parent.cleanPathname,
+        brandId: brand?.id ?? null,
+        kind,
+        format: parent.format,
+        prompt: retextLabel(texts),
+        pathname: await storeFile('banners', data, 'image/png', 'png'),
+        parentId: parent.id,
+        cost: 0,
+        texts,
+      })
+      return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
+    }
+
     const mascot = body.useMascot === true && brand?.mascot ? await readFile(brand.mascot) : null
+    const assetIds = (Array.isArray(body.assetIds) ? body.assetIds : [])
+      .map((v) => Number.parseInt(String(v), 10))
+      .filter(Number.isFinite)
+      .slice(0, 3)
     const assetRefs = await Promise.all((await assetsByIds(assetIds)).map(readFile))
     const references = mascot ? [mascot, ...assetRefs] : assetRefs
     const revisionOf = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
-    const result = await runGeneration({ kind, format, category, prompt, brand, references, revisionOf, mascot: Boolean(mascot) })
+    const result = await runGeneration({ kind, format, category, prompt, brand, references, revisionOf, mascot: Boolean(mascot), texts, size })
     const folder = kind === 'sticker' ? 'stickers' : 'banners'
     const [pathname, clean] = await Promise.all([
       storeFile(folder, result.data, result.contentType, result.ext),
@@ -46,7 +73,8 @@ export async function POST(request: NextRequest) {
       prompt,
       pathname,
       parentId: parent?.id ?? null,
-      cost: IMAGE_COST,
+      cost: imageCost(size),
+      texts,
     })
     return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
   } catch (error) {

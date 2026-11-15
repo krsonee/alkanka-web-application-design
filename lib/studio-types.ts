@@ -21,6 +21,29 @@ export const TELEGRAM_LIMITS = {
   tgicon: { kb: 32, label: 'WEBP · 100x100 · en fazla 32 KB' },
 } as const
 
+/** Copy printed over a banner by the server with a real font, instead of being drawn by the model. */
+export type StudioTexts = { headline: string; subline: string; cta: string }
+
+export const EMPTY_TEXTS: StudioTexts = { headline: '', subline: '', cta: '' }
+export const TEXT_LIMITS: Record<keyof StudioTexts, number> = { headline: 60, subline: 110, cta: 28 }
+
+const tidy = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '')
+
+/** Normalizes overlay copy coming from the form or the database; null when every field is empty. */
+export function cleanTexts(raw: unknown): StudioTexts | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const texts: StudioTexts = {
+    headline: tidy(r.headline, TEXT_LIMITS.headline),
+    subline: tidy(r.subline, TEXT_LIMITS.subline),
+    cta: tidy(r.cta, TEXT_LIMITS.cta),
+  }
+  return texts.headline || texts.subline || texts.cta ? texts : null
+}
+
+export const sameTexts = (a: StudioTexts | null, b: StudioTexts | null) =>
+  JSON.stringify(cleanTexts(a)) === JSON.stringify(cleanTexts(b))
+
 export type StudioJob = {
   id: number
   brandId: number | null
@@ -32,6 +55,9 @@ export type StudioJob = {
   parentId: number | null
   cost: number
   createdAt: string
+  texts: StudioTexts | null
+  /** True when the text-free original is stored, so the copy can be changed without a new model call. */
+  retextable: boolean
 }
 
 export const STUDIO_FORMATS = [
@@ -50,9 +76,21 @@ export const STUDIO_CATEGORIES = [
   'Turnuva',
 ] as const
 
-export const IMAGE_COST = 0.06
+// Prices are the AI Gateway list prices for the models in studio-generate.ts and studio-animate.ts.
+export const IMAGE_SIZES = [
+  { id: '1K', label: 'Standart', hint: '1024 px', cost: 0.067 },
+  { id: '2K', label: 'Yüksek', hint: '2048 px', cost: 0.101 },
+] as const
+export type ImageSize = (typeof IMAGE_SIZES)[number]['id']
+export const DEFAULT_IMAGE_SIZE: ImageSize = '2K'
+export const toImageSize = (value: unknown): ImageSize => IMAGE_SIZES.find((s) => s.id === value)?.id ?? DEFAULT_IMAGE_SIZE
+export const imageCost = (size: ImageSize) => IMAGE_SIZES.find((s) => s.id === size)?.cost ?? IMAGE_SIZES[0].cost
 
 export const VIDEO_DURATIONS = [4, 6, 8] as const
-export const VIDEO_COST_PER_SECOND = { silent: 0.03, audio: 0.05 } as const
-export const videoCost = (seconds: number, audio: boolean) =>
-  seconds * (audio ? VIDEO_COST_PER_SECOND.audio : VIDEO_COST_PER_SECOND.silent)
+export const VIDEO_COST_PER_SECOND = {
+  hd: { silent: 0.05, audio: 0.08 },
+  sd: { silent: 0.03, audio: 0.05 },
+} as const
+/** `hd` is 1080p (videos); GIFs are rendered from the cheaper 720p clip. */
+export const videoCost = (seconds: number, audio: boolean, hd = true) =>
+  seconds * VIDEO_COST_PER_SECOND[hd ? 'hd' : 'sd'][audio ? 'audio' : 'silent']

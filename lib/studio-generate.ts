@@ -1,9 +1,9 @@
 import 'server-only'
 import { generateText } from 'ai'
 import sharp from 'sharp'
+import { applyOverlay, brushOf } from '@/lib/studio-overlay'
 import { fitStaticSticker } from '@/lib/studio-telegram'
-import { readFile } from '@/lib/studio'
-import type { StudioBrand, StudioKind } from '@/lib/studio-types'
+import type { ImageSize, StudioBrand, StudioKind, StudioTexts } from '@/lib/studio-types'
 
 const MODEL = 'google/gemini-3.1-flash-image'
 
@@ -16,21 +16,51 @@ type Input = {
   references: Buffer[]
   revisionOf: Buffer | null
   mascot?: boolean
+  /** Copy the server prints afterwards. When set, the model is told to draw no text at all. */
+  texts: StudioTexts | null
+  size: ImageSize
+}
+
+const NO_TEXT_RULE =
+  'IMPORTANT: This is a text-free key visual. Do NOT render any text, letters, numbers, words, headlines, buttons, labels or UI elements anywhere in the image. All typography is added later by a designer.'
+
+// Asking for an "empty" or "dark" area makes the model paint a literal black box or bar, so the
+// reserved areas are described as parts of the same scene that simply carry little detail.
+const FULL_BLEED_RULE =
+  'The artwork must be full-bleed: one continuous scene that fills the whole canvas edge to edge. Never draw panels, boxes, bars, frames, borders, letterboxing or blank rectangles.'
+const SEAMLESS_RULE =
+  'The transition into that calmer area must be gradual and natural: no straight dividing line, no blurred band, no sudden change in sharpness or brightness.'
+const LOGO_RULE =
+  'Do NOT draw any brand logo, watermark or website name. In the top-left corner show only low-detail background of the same scene (no faces, no key objects), because a logo is overlaid there later.'
+
+function copyRules({ format, prompt, texts }: Input) {
+  if (!texts) {
+    return [`Campaign brief (render any requested headline or button text exactly in Turkish, spelled correctly, large and readable): ${prompt}`]
+  }
+  return [
+    `Campaign brief (describes the picture only): ${prompt}`,
+    NO_TEXT_RULE,
+    format === '16:9'
+      ? `Composition: the main subject sits on the right half. On the left half the same scene continues with low detail and soft shadow (mist, smoke, distant background) and no faces or key objects, because a headline is overlaid there later. ${SEAMLESS_RULE}`
+      : `Composition, like a movie poster: the main subject sits in the upper two thirds. In the lower third the same scene continues with low detail and soft shadow (ground, mist, smoke) and no faces or key objects, because a headline is overlaid there later. ${SEAMLESS_RULE}`,
+  ]
 }
 
 const MASCOT_RULE =
   "The FIRST reference image is the brand's official mascot character. Feature this exact mascot prominently as the hero of the design, keeping its face, body shape, colors, outfit and art style identical. You may change its pose and expression to fit the brief, but never redesign it."
 
-function bannerPrompt({ format, category, prompt, brand, mascot }: Input) {
+function bannerPrompt(input: Input) {
+  const { format, category, brand, mascot, texts } = input
   const colors = brand?.colors.length ? `Use this exact brand palette as the dominant colors: ${brand.colors.join(', ')}.` : ''
   return [
     `Premium, high-end ${category} advertising banner for a Turkish online betting/casino brand${brand ? ` named "${brand.name}"` : ''}.`,
     `Aspect ratio ${format}. Cinematic lighting, sharp details, rich depth, professional marketing key visual.`,
     colors,
-    brand?.font ? `Typography style should feel similar to the font "${brand.font}".` : '',
+    brand?.font && !texts ? `Typography style should feel similar to the font "${brand.font}".` : '',
     brand?.notes ? `Brand style notes: ${brand.notes}` : '',
-    `Campaign brief (render any requested headline or button text exactly in Turkish, spelled correctly, large and readable): ${prompt}`,
-    'IMPORTANT: Do NOT draw any brand logo, watermark or website name. Keep the top-left corner area (about 25% width, 14% height) visually calm and empty so a logo can be placed there later.',
+    ...copyRules(input),
+    FULL_BLEED_RULE,
+    LOGO_RULE,
     mascot ? MASCOT_RULE : '',
     mascot
       ? 'Any additional reference images are supporting game characters or symbols; place them around the mascot.'
@@ -62,22 +92,11 @@ function revisionPrompt(input: Input) {
       : '',
     input.kind === 'sticker'
       ? 'Keep the background a flat solid pure green (#00FF00).'
-      : 'Do not add any logo or website name. Keep the top-left corner area calm and empty.',
+      : `${LOGO_RULE} ${FULL_BLEED_RULE}`,
+    input.kind !== 'sticker' && input.texts ? NO_TEXT_RULE : '',
   ]
     .filter(Boolean)
     .join('\n')
-}
-
-async function overlayLogo(image: Buffer, logoPath: string) {
-  const base = sharp(image)
-  const { width = 1024, height = 1024 } = await base.metadata()
-  const logoWidth = Math.round(width * (width > height ? 0.18 : 0.26))
-  const logo = await sharp(await readFile(logoPath))
-    .resize({ width: logoWidth, height: Math.round(height * 0.12), fit: 'inside' })
-    .png()
-    .toBuffer()
-  const pad = Math.round(Math.min(width, height) * 0.045)
-  return base.composite([{ input: logo, top: pad, left: pad }]).png().toBuffer()
 }
 
 async function chromaKeySticker(image: Buffer) {
@@ -107,7 +126,7 @@ export async function runGeneration(input: Input) {
   const aspectRatio = input.kind === 'sticker' ? '1:1' : input.format
   const result = await generateText({
     model: MODEL,
-    providerOptions: { google: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio } } },
+    providerOptions: { google: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio, imageSize: input.size } } },
     messages: [
       {
         role: 'user',
@@ -125,6 +144,5 @@ export async function runGeneration(input: Input) {
   if (input.kind === 'sticker') {
     return { data: await chromaKeySticker(raw), contentType: 'image/webp', ext: 'webp' }
   }
-  const withLogo = input.brand?.logo ? await overlayLogo(raw, input.brand.logo) : await sharp(raw).png().toBuffer()
-  return { data: withLogo, contentType: 'image/png', ext: 'png', clean: raw }
+  return { data: await applyOverlay(raw, brushOf(input.brand, input.texts)), contentType: 'image/png', ext: 'png', clean: raw }
 }

@@ -11,7 +11,7 @@ const input =
 const FALLBACK = {
   title: 'AL KANKA | Bahis ve Casino Topluluğu',
   description: 'Güvenilir siteler, bonuslar, tahmin ligi ve oyunlar tek yerde.',
-  image: '/images/og.png',
+  image: '/images/og.jpg',
   siteName: 'AL KANKA',
 }
 

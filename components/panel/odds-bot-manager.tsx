@@ -72,6 +72,13 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
   const [hookState, hookAction, hookPending] = useActionState<ActionState>(connectOddsWebhookAction, {})
   const [offState, offAction, offPending] = useActionState<ActionState>(disconnectOddsWebhookAction, {})
   const live = Boolean(status.webhookUrl) && !status.lastError
+  const blockers = [
+    status.channelError,
+    status.publishError
+      ? `Son oran kanala gönderilemedi (${new Date(status.publishError.at).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}): ${status.publishError.message}`
+      : null,
+    status.activeSources === 0 ? 'Aktif kaynak kanal yok. Aşağıdan en az bir site kanalı eklemeden bot oran yakalayamaz.' : null,
+  ].filter((text): text is string => Boolean(text))
   return (
     <Card icon={<Plug className="size-4" aria-hidden="true" />} id="ob-setup" title="1. Bot ve kanalımız" desc="Botu bizim özel oran kanalımıza yönetici olarak ekle. Aynı botu tüm kaynak site kanallarına da üye/yönetici olarak eklemen gerekecek.">
       <form action={action} className="flex flex-col gap-4">
@@ -140,6 +147,13 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
           </span>
         </div>
         {status.lastError && <p className="text-xs text-destructive">{status.lastError}</p>}
+        {blockers.length > 0 && (
+          <ul role="alert" className="flex flex-col gap-1.5 rounded-lg bg-destructive/10 p-3 text-sm leading-relaxed text-destructive">
+            {blockers.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        )}
         <p className={hint}>Oranlar 15 dakikada dolduğu için anlık bağlantı (webhook) şart. Kapalıyken bot sadece cron çalıştıkça kontrol edilir.</p>
         <div className="flex flex-wrap gap-2">
           <form action={hookAction}>

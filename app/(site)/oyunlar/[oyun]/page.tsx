@@ -5,19 +5,19 @@ import { ArrowLeft, Lock } from 'lucide-react'
 import { GameStage } from '@/components/alkanka/games/game-stage'
 import { ArenaStage } from '@/components/alkanka/arena/arena-stage'
 import { GameTabs } from '@/components/alkanka/arena/game-tabs'
-import { ARENA_GAMES, ARENA_META, isArenaGame } from '@/lib/arena'
+import { ARENA_GAMES, ARENA_META, isArenaGame, MINI_GAME_TITLES, type MiniGame } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
 import { getHomeV2 } from '@/lib/home-v2'
 import { isWizardGame } from '@/lib/home-v2-shared'
 import { getHidden } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
+import { breadcrumbLd, DEFAULT_OG, jsonLd, shareImage, SITE_NAME, SITE_URL } from '@/lib/seo'
 
-const MINI = { cark: 'Şans Çarkı', sandik: 'Gizemli Sandık', zar: 'Zar At' } as const
-type MiniKey = keyof typeof MINI
+type MiniKey = MiniGame
 
 const TITLES: Record<string, string> = {
   ...Object.fromEntries(ARENA_GAMES.map((g) => [g, ARENA_META[g].title])),
-  ...MINI,
+  ...MINI_GAME_TITLES,
 }
 
 export const dynamicParams = false
@@ -26,10 +26,58 @@ export function generateStaticParams() {
   return Object.keys(TITLES).map((oyun) => ({ oyun }))
 }
 
+const MINI_DESCRIPTIONS: Record<MiniKey, string> = {
+  cark: 'Şans Çarkı’nı her gün ücretsiz çevir, Kanka Coin ve sürpriz ödüller kazan. Üye ol, hakkını kullan.',
+  sandik: 'Gizemli Sandık’tan birini seç, içindeki Kanka Coin ödülünü anında al. Her gün yeni sandık hakkı.',
+  zar: 'Zar At oyununda zarları salla, gelen sayıya göre Kanka Coin kazan. Ücretsiz günlük haklarla oyna.',
+}
+
+const describe = (oyun: string) =>
+  isArenaGame(oyun)
+    ? `${ARENA_META[oyun].short} AL KANKA’da ücretsiz ${TITLES[oyun]} oyna, Kanka Coin kazan.`
+    : MINI_DESCRIPTIONS[oyun as MiniKey]
+
+const imageOf = (oyun: string) => (isArenaGame(oyun) ? ARENA_META[oyun].image : DEFAULT_OG)
+
+function gameLd(oyun: string) {
+  const path = `/oyunlar/${oyun}`
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'VideoGame',
+      name: TITLES[oyun],
+      description: describe(oyun),
+      url: `${SITE_URL}${path}`,
+      image: `${SITE_URL}${imageOf(oyun)}`,
+      inLanguage: 'tr-TR',
+      gamePlatform: 'Web tarayıcı',
+      applicationCategory: 'Game',
+      operatingSystem: 'Web',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'TRY' },
+      publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+    },
+    breadcrumbLd([
+      { name: 'Ana sayfa', path: '/' },
+      { name: 'Oyunlar', path: '/oyunlar' },
+      { name: TITLES[oyun], path },
+    ]),
+  ]
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ oyun: string }> }): Promise<Metadata> {
   const { oyun } = await params
   if (!(oyun in TITLES)) notFound()
-  return { title: TITLES[oyun] }
+  const title = TITLES[oyun]
+  const description = describe(oyun)
+  const path = `/oyunlar/${oyun}`
+  const image = shareImage(imageOf(oyun))
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: { title, description, url: path, images: [image] },
+    twitter: { card: 'summary_large_image', title, description, images: [image.url] },
+  }
 }
 
 export default async function GamePage({ params }: { params: Promise<{ oyun: string }> }) {
@@ -44,6 +92,7 @@ export default async function GamePage({ params }: { params: Promise<{ oyun: str
 
   return (
     <div data-game-page className="flex min-w-0 flex-col gap-5">
+      {isOpen(oyun) && <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(gameLd(oyun))} />}
       <div className="flex flex-col gap-3 [body:has([data-table-playing])_&]:hidden">
         <Link href="/oyunlar" className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" aria-hidden="true" />

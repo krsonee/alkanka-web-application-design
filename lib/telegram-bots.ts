@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables, entitiesToCleanHtml, normalizeChat, stripTags } from '@/lib/telegram-mirror'
+import { botToken, callBot, dropAutoFed, ensureTables, entitiesToCleanHtml, normalizeChat, stripTags } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
 
@@ -611,7 +611,7 @@ export async function setOddsResult(dealId: number, result: 'won' | 'lost' | nul
 
   const suite = await getBotSuite()
   const text = fill(suite.odds.winText, { marka: before[0].brand, baslik: before[0].title, link: before[0].link })
-  const targets = await targetsFor(suite.odds.targetIds, true)
+  const targets = await dropAutoFed(await targetsFor(suite.odds.targetIds, true))
   let posted = 0
   const failures: string[] = []
   for (const t of targets) {
@@ -632,7 +632,7 @@ export async function broadcastPodium(build: (origin: string) => string) {
   const suite = await getBotSuite()
   const text = build(suite.siteOrigin || '').slice(0, MESSAGE_LIMIT)
   let posted = 0
-  for (const t of await targetsFor([], true)) {
+  for (const t of await dropAutoFed(await targetsFor([], true))) {
     try {
       await callBot(t.token, 'sendMessage', { chat_id: t.chatId, text, disable_web_page_preview: true })
       posted++

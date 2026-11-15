@@ -46,7 +46,7 @@ import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { ApprovalSection, ShareSection } from '@/components/panel/telegram-bot-suite'
 import { OddsBotManager } from '@/components/panel/odds-bot-manager'
 import { getOddsBotConfig, listAdminOdds, listOddsSources, oddsBotStatus } from '@/lib/special-odds'
-import { DEFAULT_ODDS_BOT } from '@/lib/special-odds-shared'
+import { DEFAULT_ODDS_BOT, EMPTY_ODDS_STATUS } from '@/lib/special-odds-shared'
 import { KankaTvManager } from '@/components/panel/kankatv-manager'
 import { getTvConfig, tvBotStatus, tvStats } from '@/lib/kankatv-engage'
 import { DEFAULT_TV } from '@/lib/kankatv-shared'
@@ -194,7 +194,7 @@ async function section({ session, active }: SectionCtx, module: PanelModule, lab
 async function telegramPanel() {
   const [oddsConfig, oddsStatus, oddsSources, oddsList] = await Promise.all([
     getOddsBotConfig().catch(() => DEFAULT_ODDS_BOT),
-    oddsBotStatus().catch(() => ({ webhookUrl: null, pending: 0, lastError: null, lastUpdateAt: null, todayTotal: 0 })),
+    oddsBotStatus().catch(() => EMPTY_ODDS_STATUS),
     listOddsSources().catch(() => []),
     listAdminOdds().catch(() => []),
   ])
@@ -236,7 +236,7 @@ async function telegramPanel() {
         { id: 'hub', group: 'Botlar', label: 'Telegram Merkezi', status: light(hubData.hub.guard.enabled || hubData.hub.support.enabled), issue: 'Koruma ve destek botu ikisi de kapalı', content: <TgHubManager data={hubData} /> },
         { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), issue: firstIssue([bots.length === 0, 'Hiç bot eklenmemiş'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
         { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), issue: firstIssue([Boolean(chat?.webhook?.lastError), lastErr(chat?.webhook?.lastError)], [!chat?.webhook?.url, 'Webhook kurulmamış']), content: <TelegramChatSetup bots={bots} status={chat} /> },
-        { id: 'odds', group: 'Botlar', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError), issue: firstIssue([Boolean(oddsStatus.lastError), lastErr(oddsStatus.lastError)], [!oddsConfig.enabled, 'Kapalı'], [!oddsStatus.webhookUrl, 'Webhook kurulmamış']), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
+        { id: 'odds', group: 'Botlar', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError && !oddsStatus.channelError && !oddsStatus.publishError && oddsStatus.activeSources > 0), issue: firstIssue([Boolean(oddsStatus.lastError), lastErr(oddsStatus.lastError)], [!oddsConfig.enabled, 'Kapalı'], [Boolean(oddsStatus.channelError), 'Bot kanalda yönetici değil'], [Boolean(oddsStatus.publishError), 'Son oran kanala gönderilemedi'], [oddsStatus.activeSources === 0, 'Kaynak kanal eklenmemiş'], [!oddsStatus.webhookUrl, 'Webhook kurulmamış']), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
         {
           id: 'kankatv',
           group: 'Otomasyonlar',

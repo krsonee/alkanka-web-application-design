@@ -4,10 +4,14 @@ import { rows, sql } from '@/lib/db'
 const TELEGRAM_EVERY_SEC = 180
 const KANKATV_EVERY_SEC = 60
 const HUB_EVERY_SEC = 60
+// A warm instance asks the database for a slot at most this often, however many pages it renders.
+const LOCAL_GAP_MS = 10_000
+
+let lastAttempt = 0
 
 /**
  * Atomically claims a time slot so only one request per interval runs the job,
- * no matter how many visitors hit the site at once.
+ * no matter how many visitors or scheduler calls arrive at once.
  */
 async function claim(key: string, seconds: number) {
   const r = await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${new Date().toISOString()})
@@ -48,10 +52,18 @@ async function hubTickSlot() {
   await hubTick()
 }
 
-/** Keeps bots posting even when no external cron is configured; driven by site traffic. */
-export async function runAutoTick() {
+/**
+ * Runs every background job whose slot is free. Driven by site traffic (after page renders) and by
+ * the keyed external trigger, never by a built-in every-minute schedule: that would keep the
+ * database awake around the clock and burn through its monthly compute allowance.
+ * `telegram: false` is for callers that have just run the Telegram jobs themselves.
+ */
+export async function runAutoTick({ telegram = true, force = false }: { telegram?: boolean; force?: boolean } = {}) {
+  const now = Date.now()
+  if (!force && now - lastAttempt < LOCAL_GAP_MS) return
+  lastAttempt = now
   await Promise.all([
-    telegramTick().catch((e) => console.error('[auto-tick] telegram', e)),
+    telegram ? telegramTick().catch((e) => console.error('[auto-tick] telegram', e)) : null,
     kankatvTick().catch((e) => console.error('[auto-tick] kankatv', e)),
     hubTickSlot().catch((e) => console.error('[auto-tick] hub', e)),
   ])

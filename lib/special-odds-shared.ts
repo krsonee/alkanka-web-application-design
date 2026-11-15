@@ -81,6 +81,22 @@ export type OddsBotStatus = {
   lastError: string | null
   lastUpdateAt: string | null
   todayTotal: number
+  /** Set when the bot can no longer post to our channel (removed, demoted, posting right off). */
+  channelError: string | null
+  /** Last failed attempt to publish an odd to our channel. Cleared by the next successful post. */
+  publishError: { at: string; message: string } | null
+  activeSources: number
+}
+
+export const EMPTY_ODDS_STATUS: OddsBotStatus = {
+  webhookUrl: null,
+  pending: 0,
+  lastError: null,
+  lastUpdateAt: null,
+  todayTotal: 0,
+  channelError: null,
+  publishError: null,
+  activeSources: 0,
 }
 
 export type OddsPreview = {

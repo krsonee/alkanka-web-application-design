@@ -26,6 +26,9 @@ export async function GET(req: Request) {
   const repairs = await repairTelegram().catch((error) => [`Onarım hatası: ${String((error as Error).message)}`])
   const share = await pollShareBot().catch((error) => ({ handled: 0, error: String((error as Error).message) }))
   const odds = await pollOddsBot().catch((error) => ({ handled: 0, error: String((error as Error).message) }))
+  // Captcha expiry, auto-delete, DM broadcasts and KankaTV jobs ride on the same call.
+  const { runAutoTick } = await import('@/lib/auto-tick')
+  await runAutoTick({ telegram: false, force: true })
   try {
     return Response.json({ ...(await runMirror()), share, odds, repairs })
   } catch (error) {
