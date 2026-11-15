@@ -108,11 +108,11 @@ function steps(cronUrl: string): Step[] {
       ),
     },
     {
-      title: 'Otomatik kontrol (dakikada bir, kendiliğinden açık)',
+      title: 'Otomatik kontrolü aç (dakikada bir, isteğe bağlı)',
       body: (
         <ol className="flex list-decimal flex-col gap-1.5 pl-5">
           <li>
-            Site yayındayken kendi zamanlayıcısı botları <b>dakikada bir</b> çalıştırır, bir şey kurman gerekmez. Aşağıdaki adımlar sadece dışarıdan yedek bir tetik eklemek istersen lazım.
+            Bu adımı kurmazsan botlar sitede ziyaretçi oldukça çalışır. Dakikalık tetik veritabanını hiç uyutmaz; ücretsiz veritabanı planında aylık kota buna yetmez.
           </li>
           <li>
             Ücretsiz <b>cron-job.org</b> sitesine üye ol ve <b>Create cronjob</b>’a bas.

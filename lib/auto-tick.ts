@@ -1,8 +1,9 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 
-// Slots sit just under a minute so the once-a-minute scheduler never loses a turn to its own jitter.
-const SLOT_SEC = 50
+const TELEGRAM_EVERY_SEC = 180
+const KANKATV_EVERY_SEC = 60
+const HUB_EVERY_SEC = 60
 // A warm instance asks the database for a slot at most this often, however many pages it renders.
 const LOCAL_GAP_MS = 10_000
 
@@ -21,7 +22,7 @@ async function claim(key: string, seconds: number) {
 }
 
 async function telegramTick() {
-  if (!(await claim('auto_tick_telegram', SLOT_SEC))) return
+  if (!(await claim('auto_tick_telegram', TELEGRAM_EVERY_SEC))) return
   const [{ runMirror }, { pollShareBot }, { pollOddsBot }] = await Promise.all([
     import('@/lib/telegram-mirror'),
     import('@/lib/telegram-bots'),
@@ -33,7 +34,7 @@ async function telegramTick() {
 }
 
 async function kankatvTick() {
-  if (!(await claim('auto_tick_kankatv', SLOT_SEC))) return
+  if (!(await claim('auto_tick_kankatv', KANKATV_EVERY_SEC))) return
   const [{ scanGoals, settlePredictions }, { syncBets }] = await Promise.all([
     import('@/lib/kankatv-engage'),
     import('@/lib/tv-bets'),
@@ -46,14 +47,15 @@ async function kankatvTick() {
 }
 
 async function hubTickSlot() {
-  if (!(await claim('auto_tick_hub', SLOT_SEC))) return
+  if (!(await claim('auto_tick_hub', HUB_EVERY_SEC))) return
   const { hubTick } = await import('@/lib/tg-hub-jobs')
   await hubTick()
 }
 
 /**
- * Runs every background job whose slot is free. Called once a minute by the scheduler
- * (/api/cron/tick) and after page renders as a backup, so both paths share the same slots.
+ * Runs every background job whose slot is free. Driven by site traffic (after page renders) and by
+ * the keyed external trigger, never by a built-in every-minute schedule: that would keep the
+ * database awake around the clock and burn through its monthly compute allowance.
  * `telegram: false` is for callers that have just run the Telegram jobs themselves.
  */
 export async function runAutoTick({ telegram = true, force = false }: { telegram?: boolean; force?: boolean } = {}) {

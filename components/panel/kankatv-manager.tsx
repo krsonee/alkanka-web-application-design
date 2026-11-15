@@ -152,9 +152,9 @@ export function KankaTvManager({
         <Status state={scanState} />
         <Status state={testState} />
         <label className={label}>
-          Yedek cron adresi (opsiyonel)
+          Dakikalık cron adresi (isteğe bağlı)
           <input readOnly value={cronUrl} className={cn(input, 'font-mono text-xs')} onFocus={(e) => e.currentTarget.select()} />
-          <span className={hint}>Sitenin kendi zamanlayıcısı gol uyarılarını ve tahmin ödemelerini ziyaretçi olmasa da dakikada bir işler. Bu adres sadece cron-job.org gibi dışarıdan yedek bir tetik eklemek istersen lazım.</span>
+          <span className={hint}>Eklemezsen gol uyarıları ve tahmin ödemeleri sitede ziyaretçi oldukça işler. cron-job.org gibi bir servise “her dakika” eklersen ziyaretçi olmasa da işler, ama veritabanı hiç uyumaz; ücretsiz veritabanı planında aylık kota buna yetmez.</span>
         </label>
       </Card>
 
