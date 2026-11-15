@@ -4,9 +4,32 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { after } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
-import { DEFAULT_HUB, type HubConfig } from '@/lib/tg-hub-shared'
+import {
+  CONTENT_KINDS,
+  DEFAULT_HUB,
+  GUARD_TUNABLES,
+  SHIELD_TUNABLES,
+  generalRules,
+  rulesDiff,
+  type ContentRule,
+  type GroupRules,
+  type HubConfig,
+  type ShieldConfig,
+  type SuspectRow,
+} from '@/lib/tg-hub-shared'
 import { setShareBot } from '@/lib/telegram-bots'
-import { cancelBroadcast, getHub, processBroadcasts, queueBroadcast, registerHook, removeGlobalBan, resolveChatFor, saveHub, setTrusted } from '@/lib/tg-hub'
+import {
+  cancelBroadcast,
+  getHub,
+  processBroadcasts,
+  queueBroadcast,
+  registerHook,
+  removeGlobalBan,
+  resolveChatFor,
+  saveHub,
+  setTrusted,
+  syncGuardHook,
+} from '@/lib/tg-hub'
 
 type Result = { ok: boolean; message: string }
 const EXPIRED: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -62,6 +85,65 @@ function sanitizeAutoReply(r: HubConfig['autoReply']): HubConfig['autoReply'] {
   }
 }
 
+type GuardTunables = Pick<HubConfig['guard'], (typeof GUARD_TUNABLES)[number]>
+type ShieldTunables = Pick<ShieldConfig, (typeof SHIELD_TUNABLES)[number]>
+
+/** The guard settings a single group may override; the same bounds apply to the general values. */
+function guardTunables(g: Partial<GuardTunables>): GuardTunables {
+  return {
+    warnLimit: clampInt(g.warnLimit, 1, 10, 3),
+    muteMinutes: list(g.muteMinutes, 5).map((m) => clampInt(m, 1, 43200, 60)),
+    floodCount: clampInt(g.floodCount, 3, 30, 5),
+    floodSeconds: clampInt(g.floodSeconds, 3, 120, 10),
+    floodMuteMinutes: clampInt(g.floodMuteMinutes, 1, 1440, 30),
+    repeatLimit: clampInt(g.repeatLimit, 2, 20, 3),
+    linkAction: g.linkAction === 'warn' ? 'warn' : 'ban',
+    blockForwards: Boolean(g.blockForwards),
+    cleanService: Boolean(g.cleanService),
+    captcha: Boolean(g.captcha),
+    raidJoins: clampInt(g.raidJoins, 0, 500, 20),
+  }
+}
+
+/** Zero switches a limit off; anything between zero and `floor` would fire on ordinary activity, so it is raised to `floor`. */
+const limitOrOff = (v: unknown, floor: number, max: number) => {
+  const n = clampInt(v, 0, max, 0)
+  return n > 0 && n < floor ? floor : n
+}
+
+function shieldTunables(s: Partial<ShieldTunables>): ShieldTunables {
+  const content = { ...DEFAULT_HUB.shield.content }
+  for (const { key } of CONTENT_KINDS) {
+    const rule = s.content?.[key] as ContentRule | undefined
+    content[key] = rule === 'new' || rule === 'block' ? rule : 'allow'
+  }
+  return {
+    raidMode: Boolean(s.raidMode),
+    raidMinutes: clampInt(s.raidMinutes, 1, 240, 15),
+    raidLock: Boolean(s.raidLock),
+    inviteLimit: clampInt(s.inviteLimit, 0, 100, 0),
+    inviteLock: Boolean(s.inviteLock),
+    commentShield: Boolean(s.commentShield),
+    commentRate: limitOrOff(s.commentRate, 5, 500),
+    commentLockMinutes: clampInt(s.commentLockMinutes, 1, 240, 10),
+    quarantineHours: clampInt(s.quarantineHours, 0, 168, 0),
+    content,
+    swarmAccounts: limitOrOff(s.swarmAccounts, 2, 20),
+    hiddenAds: Boolean(s.hiddenAds),
+    nameWatch: Boolean(s.nameWatch),
+  }
+}
+
+/** Telegram is told which update types to send; a changed setting may need a different list. */
+async function hookNote() {
+  try {
+    await syncGuardHook()
+    return ''
+  } catch (error) {
+    return ` Ancak Bekçi botunun bağlantısı güncellenemedi (${String((error as Error).message)}). Kurulum sekmesinden Bekçi'yi tekrar "Bağla".`
+  }
+}
+
 function sanitize(input: HubConfig, current: HubConfig): HubConfig {
   const g = input.guard ?? DEFAULT_HUB.guard
   const c = input.counter ?? DEFAULT_HUB.counter
@@ -69,22 +151,12 @@ function sanitize(input: HubConfig, current: HubConfig): HubConfig {
   return {
     ...current,
     guard: {
+      ...guardTunables(g),
       enabled: Boolean(g.enabled),
       words: list(g.words, 500).map((w) => w.toLocaleLowerCase('tr').slice(0, 40)),
-      warnLimit: clampInt(g.warnLimit, 1, 10, 3),
-      muteMinutes: list(g.muteMinutes, 5).map((m) => clampInt(m, 1, 43200, 60)),
-      floodCount: clampInt(g.floodCount, 3, 30, 5),
-      floodSeconds: clampInt(g.floodSeconds, 3, 120, 10),
-      floodMuteMinutes: clampInt(g.floodMuteMinutes, 1, 1440, 30),
-      repeatLimit: clampInt(g.repeatLimit, 2, 20, 3),
       allowDomains: list(g.allowDomains, 50).map((d) => d.toLowerCase().replace(/^https?:\/\//, '').slice(0, 80)),
-      linkAction: g.linkAction === 'warn' ? 'warn' : 'ban',
-      blockForwards: Boolean(g.blockForwards),
-      cleanService: Boolean(g.cleanService),
-      captcha: Boolean(g.captcha),
       casCheck: Boolean(g.casCheck),
       impersonation: Boolean(g.impersonation),
-      raidJoins: clampInt(g.raidJoins, 0, 500, 20),
       aiModeration: Boolean(g.aiModeration),
       rules: String(g.rules ?? '').slice(0, 1500),
     },
@@ -111,7 +183,94 @@ export async function saveHubSettings(input: HubConfig): Promise<Result> {
   try {
     const current = await getHub()
     await saveHub(sanitize(input, current))
-    return done('Ayarlar kaydedildi.')
+    return done(`Ayarlar kaydedildi.${await hookNote()}`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function saveShieldSettings(input: ShieldConfig): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const current = await getHub()
+    const shield: ShieldConfig = {
+      ...shieldTunables(input ?? {}),
+      channelJoinAlert: limitOrOff(input?.channelJoinAlert, 5, 100000),
+      adminAlerts: Boolean(input?.adminAlerts),
+    }
+    await saveHub({ ...current, shield })
+    return done(`Koruma ayarları kaydedildi.${await hookNote()}`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** `null` puts the group back on the general settings. */
+export async function saveGroupRules(chatId: string, input: GroupRules | null): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const hub = await getHub()
+    const group = hub.groups.find((g) => g.chatId === String(chatId))
+    if (!group) return { ok: false, message: 'Bu grup korunan listede değil.' }
+    if (group.type === 'channel') return { ok: false, message: 'Kanalda mesaj kuralları çalışmaz; ayrı ayar sadece gruplar için.' }
+    const own = input ? rulesDiff(generalRules(hub), { ...guardTunables(input), ...shieldTunables(input) }) : {}
+    const count = Object.keys(own).length
+    const groups = hub.groups.map((g) => (g.chatId === group.chatId ? { ...g, rules: count ? own : undefined } : g))
+    await saveHub({ ...hub, groups })
+    if (!input) return done(`"${group.title}" genel ayarlara döndü.`)
+    return done(count ? `"${group.title}" için ${count} ayar genelden farklı kaydedildi.` : `"${group.title}" ayarları genel ayarlarla aynı, ayrı kayıt tutulmadı.`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function unlockChatAction(chatId: string): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const { panelUnlock } = await import('@/lib/tg-guard')
+    const res = await panelUnlock(String(chatId))
+    return res.ok ? done(res.message) : res
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function sweepWaveAction(chatId: string): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const { panelSweepWave } = await import('@/lib/tg-guard')
+    const res = await panelSweepWave(String(chatId))
+    if (!res.removed && !res.left) return { ok: true, message: 'Son 30 dakikada girip hâlâ içeride olan kimse kayıtlı değil.' }
+    return done(`${res.removed} kişi 10 dakikalığına çıkarıldı.${res.left ? ` ${res.left} kişi kaldı, tekrar bas.` : ''}`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** Loaded on request: the query reads the whole message and join history, so it does not run on every panel visit. */
+export async function loadSuspects(): Promise<SuspectRow[]> {
+  if (!(await canPanel('telegram'))) return []
+  const { listSuspects } = await import('@/lib/tg-shield')
+  return listSuspects()
+}
+
+export async function suspectAction(ids: number[], action: 'ban' | 'mute' | 'wipe' | 'clear'): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  if (!['ban', 'mute', 'wipe', 'clear'].includes(action)) return { ok: false, message: 'Geçersiz işlem.' }
+  try {
+    const { suspectAct } = await import('@/lib/tg-guard')
+    return done(await suspectAct(Array.isArray(ids) ? ids : [], action))
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function undoLogAction(logId: number): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const { undoLog } = await import('@/lib/tg-guard')
+    const res = await undoLog(Number(logId), 'Panel')
+    return res.ok ? done(res.message) : res
   } catch (error) {
     return fail(error)
   }
@@ -149,7 +308,7 @@ export async function addHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | '
     let next: HubConfig = hub
     if (kind === 'group') {
       if (hub.groups.some((g) => g.chatId === chat.id)) return { ok: false, message: 'Bu grup zaten ekli.' }
-      next = { ...hub, groups: [...hub.groups, { chatId: chat.id, title: chat.title }].slice(0, 30) }
+      next = { ...hub, groups: [...hub.groups, { chatId: chat.id, title: chat.title, type: chat.type, linkedChatId: chat.linkedChatId }].slice(0, 30) }
     } else if (kind === 'log') next = { ...hub, logChatId: chat.id, logChatTitle: chat.title }
     else if (kind === 'leader') next = { ...hub, counter: { ...hub.counter, postToChatId: chat.id } }
     else if (kind === 'staff') next = { ...hub, support: { ...hub.support, staffChatId: chat.id, staffChatTitle: chat.title } }

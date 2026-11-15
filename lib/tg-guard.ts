@@ -461,15 +461,15 @@ async function beginRaid(r: GroupRules, token: string, chatId: number | string, 
 
 async function closeLock(token: string, chatId: string, chatTitle: string, why: string) {
   const res = await unlockChat(token, chatId)
-  if (!res.found) return 'Bu grupta açık bir kilit ya da baskın modu yok.'
+  if (!res.found) return { ok: false, message: 'Bu grupta açık bir kilit ya da baskın modu yok.' }
   if (res.error) {
     await modLog({ chatId, chatTitle, action: 'Kilit açılamadı', reason: `${res.error}. Telegram'da grup izinlerinden mesaj göndermeyi elle aç.` })
-    return `Kilit açılamadı: ${res.error}`
+    return { ok: false, message: `Kilit açılamadı: ${res.error}. Telegram'da grup izinlerinden mesaj göndermeyi elle aç.` }
   }
   if (res.wasLocked) await callBot(token, 'sendMessage', { chat_id: chatId, text: 'Grup yeniden açıldı. Herkes yazabilir.' }).catch(() => null)
   const turned = res.turnedAway ? ` Bu sürede ${res.turnedAway} giriş geri çevrildi.` : ''
   await modLog({ chatId, chatTitle, action: res.kind === 'raid' ? 'Baskın modu bitti' : 'Grup kilidi açıldı', reason: `${why}.${turned}` })
-  return res.kind === 'raid' ? 'Baskın modu kapatıldı.' : 'Grup kilidi açıldı.'
+  return { ok: true, message: res.kind === 'raid' ? 'Baskın modu kapatıldı.' : 'Grup kilidi açıldı.' }
 }
 
 /** Ends raid mode when its time is up. A raid that is still going on gets five more minutes instead. */
@@ -614,7 +614,7 @@ async function handleNewMembers(hub: HubConfig, r: GroupRules, token: string, m:
     }).catch(() => null)
     await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, msg_id)
       VALUES (${String(m.chat.id)}, ${u.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), ${sent?.message_id ?? null})
-      ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id`)
+      ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id, kind = 'join'`)
   }
 }
 
@@ -742,7 +742,7 @@ export async function handleGuardCallback(botId: number, q: TgCallback) {
       callBot(token, 'editMessageReplyMarkup', { chat_id: logMessage.chat.id, message_id: logMessage.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
     const titleOf = (id: string) => hub.groups.find((g) => g.chatId === id)?.title ?? id
     const target = extra ?? ''
-    if (arg === 'unlock') return answer(await closeLock(token, target, titleOf(target), `Kapatan: ${short(q.from)}`), true)
+    if (arg === 'unlock') return answer((await closeLock(token, target, titleOf(target), `Kapatan: ${short(q.from)}`)).message, true)
     if (arg === 'wave') {
       const waiting = (await waveMembers(target)).length
       if (!waiting) return answer(`Son ${WAVE_MINUTES} dakikada girip hâlâ içeride olan kimse yok.`, true)
@@ -1567,7 +1567,8 @@ async function guardToken() {
 export async function panelUnlock(chatId: string) {
   await ensureGuardTables()
   const { hub, token } = await guardToken()
-  return closeLock(token, chatId, hub.groups.find((g) => g.chatId === chatId)?.title ?? chatId, 'Panelden kapatıldı')
+  const res = await closeLock(token, chatId, hub.groups.find((g) => g.chatId === chatId)?.title ?? chatId, 'Panelden kapatıldı')
+  return { ok: res.ok, message: res.message }
 }
 
 export async function panelSweepWave(chatId: string) {

@@ -2,13 +2,15 @@
 
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { useEffect, useState, useTransition, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR, { useSWRConfig } from 'swr'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 import { CAPTCHA_MINUTES, RAID_BAN_MINUTES } from '@/lib/tg-hub-shared'
-import type { BroadcastRow, HubConfig, HubLogRow, HubStats, LeaderRow, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
+import type { BroadcastRow, HubConfig, HubGroup, HubLogRow, HubStats, LeaderRow, LockRow, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
+import { Card, NumberField, Toggle, btn, btnGhost, fmt, input, useAction } from '@/components/panel/tg-hub-ui'
+import { ShieldSection } from '@/components/panel/tg-shield-panel'
 import {
   addHubChat,
   closeTicketAction,
@@ -25,6 +27,7 @@ import {
   stopWipe,
   sweepGhosts,
   unbanEverywhere,
+  undoLogAction,
   wipeUserMessages,
   wipeWholeChat,
 } from '@/app/panel/tg-hub-actions'
@@ -36,6 +39,7 @@ export type TgHubData = {
   bots: MirrorBot[]
   stats: HubStats
   log: HubLogRow[]
+  locks: LockRow[]
   tickets: TicketRow[]
   sponsorStats: SponsorSupportStat[]
   leaders: LeaderRow[]
@@ -47,62 +51,6 @@ export type TgHubData = {
   shareBotId: number | null
   shareHook: HookInfo
   linkedMembers: number
-}
-
-const input = 'h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground'
-const btn = 'inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50'
-const btnGhost = 'inline-flex h-9 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50'
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')
-
-function useAction() {
-  const [pending, start] = useTransition()
-  const [msg, setMsg] = useState<{ ok: boolean; message: string } | null>(null)
-  const run = (fn: () => Promise<{ ok: boolean; message: string }>) =>
-    start(async () => {
-      setMsg(await fn())
-    })
-  const note = msg ? (
-    <p role="status" className={msg.ok ? 'text-sm text-primary' : 'text-sm text-destructive'}>
-      {msg.message}
-    </p>
-  ) : null
-  return { pending, run, note }
-}
-
-function Card({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        {hint && <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>}
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="flex items-start gap-3 rounded-lg border border-border p-3">
-      <input type="checkbox" className="mt-1 size-4 accent-primary" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        {hint && <span className="text-xs leading-relaxed text-muted-foreground">{hint}</span>}
-      </span>
-    </label>
-  )
-}
-
-function NumberField({ label, value, onChange, suffix }: { label: string; value: number; onChange: (v: number) => void; suffix?: string }) {
-  return (
-    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-      {label}
-      <span className="flex items-center gap-2">
-        <input type="number" className={input} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-        {suffix && <span className="shrink-0 text-xs">{suffix}</span>}
-      </span>
-    </label>
-  )
 }
 
 function HookBadge({ info }: { info: HookInfo }) {
@@ -178,12 +126,27 @@ function ChatAdder({ kind, placeholder, withName }: { kind: 'group' | 'log' | 's
   )
 }
 
-function ChatChip({ kind, id, label }: { kind: 'group' | 'log' | 'staff' | 'sponsor' | 'leader'; id: string; label: string }) {
+/** What the guard actually does in this chat, so a channel on the list is not mistaken for a moderated group. */
+function coverageOf(g: HubGroup, hub: HubConfig) {
+  if (g.type === 'channel') {
+    const watched = hub.shield.channelJoinAlert > 0 || hub.shield.adminAlerts
+    return `Kanal · mesaj filtresi burada çalışmaz. Bekçi sadece /sil komutunu dinler${watched ? ', girişleri ve yönetici değişikliklerini izler' : '; giriş ve yönetici alarmı Koruma sekmesinden açılır'}.`
+  }
+  if (!g.type) return null
+  const linked = g.linkedChatId ? hub.groups.find((x) => x.chatId === g.linkedChatId) : null
+  const role = g.linkedChatId ? `Yorum grubu${linked ? ` (${linked.title})` : ''}` : 'Grup'
+  return `${role} · tüm mesaj kuralları çalışır${g.rules ? ', bu gruba özel ayar var' : ''}.`
+}
+
+function ChatChip({ kind, id, label, note }: { kind: 'group' | 'log' | 'staff' | 'sponsor' | 'leader'; id: string; label: string; note?: string | null }) {
   const a = useAction()
   return (
     <li className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm">
-      <span className="truncate text-foreground">{label}</span>
-      <button type="button" className="text-xs text-destructive hover:underline disabled:opacity-50" disabled={a.pending} onClick={() => a.run(() => removeHubChat(kind, id))}>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-foreground">{label}</span>
+        {note && <span className="text-xs leading-relaxed text-muted-foreground">{note}</span>}
+      </span>
+      <button type="button" className="shrink-0 text-xs text-destructive hover:underline disabled:opacity-50" disabled={a.pending} onClick={() => a.run(() => removeHubChat(kind, id))}>
         Kaldır
       </button>
     </li>
@@ -232,7 +195,7 @@ function SetupSection({ d }: { d: TgHubData }) {
         {hub.groups.length > 0 ? (
           <ul className="flex flex-col gap-2">
             {hub.groups.map((g) => (
-              <ChatChip key={g.chatId} kind="group" id={g.chatId} label={g.title} />
+              <ChatChip key={g.chatId} kind="group" id={g.chatId} label={g.title} note={coverageOf(g, hub)} />
             ))}
           </ul>
         ) : (
@@ -275,6 +238,11 @@ function GuardSection({ d }: { d: TgHubData }) {
           <Toggle label="Katıldı/ayrıldı yazılarını sil" checked={g.cleanService} onChange={(v) => set({ cleanService: v })} />
         </div>
         <NumberField label={`Baskın koruması: 1 dakikada bu sayıdan fazla kişi girerse sonraki gelenler ${RAID_BAN_MINUTES} dakikalığına gruptan çıkarılır, kalıcı banlanmaz (0 = kapalı)`} value={g.raidJoins} onChange={(v) => set({ raidJoins: v })} suffix="kişi" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {d.hub.shield.raidMode
+            ? `Baskın modu açık: bu sayı aşılınca grup ${d.hub.shield.raidMinutes} dakikalığına baskın moduna girer. Ayarı Koruma sekmesinde.`
+            : 'Grubun kilitlenmesi, toplu üye ekleme, yorum kalkanı ve diğer korumalar Koruma sekmesinde; hepsi kapalı başlar.'}
+        </p>
       </Card>
       <Card title="Kontrolcü (küfür, spam, reklam)">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -861,6 +829,30 @@ function BanRow({ b }: { b: TgHubData['bans'][number] }) {
   )
 }
 
+function LogItem({ l }: { l: HubLogRow }) {
+  const a = useAction()
+  return (
+    <li className="flex flex-col gap-0.5 py-2 text-sm">
+      <span className="flex items-start justify-between gap-2">
+        <span className="min-w-0 text-foreground">
+          <span className="font-semibold">{l.action}</span>
+          {l.who ? ` · ${l.who}` : ''}
+        </span>
+        {l.canUndo && (
+          <button type="button" className="shrink-0 text-xs text-primary hover:underline disabled:opacity-50" disabled={a.pending} onClick={() => a.run(() => undoLogAction(l.id))}>
+            {a.pending ? 'Geri alınıyor…' : 'Geri al'}
+          </button>
+        )}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {l.chatTitle ? `${l.chatTitle} · ` : ''}
+        {l.reason} · {fmt(l.createdAt)}
+      </span>
+      {a.note}
+    </li>
+  )
+}
+
 function OverviewSection({ d }: { d: TgHubData }) {
   const [cfg, setCfg] = useState(d.hub)
   const save = useAction()
@@ -899,19 +891,11 @@ function OverviewSection({ d }: { d: TgHubData }) {
         {report.note}
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Son işlemler">
+        <Card title="Son işlemler" hint={'"Geri al" uyarıyı siler, susturmayı ya da banı kaldırır ve düşen güven puanını geri verir. Silinen mesaj geri gelmez.'}>
           {d.log.length ? (
             <ul className="flex max-h-96 flex-col divide-y divide-border overflow-y-auto">
               {d.log.map((l) => (
-                <li key={l.id} className="flex flex-col gap-0.5 py-2 text-sm">
-                  <span className="text-foreground">
-                    <span className="font-semibold">{l.action}</span> · {l.who}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {l.chatTitle ? `${l.chatTitle} · ` : ''}
-                    {l.reason} · {fmt(l.createdAt)}
-                  </span>
-                </li>
+                <LogItem key={l.id} l={l} />
               ))}
             </ul>
           ) : (
@@ -964,6 +948,7 @@ export function TgHubManager({ data }: { data: TgHubData }) {
         },
         { id: 'hub-overview', label: 'Özet & Kayıtlar', content: <OverviewSection d={data} /> },
         { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? 'on' : 'idle', content: <GuardSection d={data} /> },
+        { id: 'hub-shield', label: `Koruma${data.locks.length ? ` (${data.locks.length})` : ''}`, content: <ShieldSection hub={data.hub} locks={data.locks} /> },
         { id: 'hub-support', label: `Destek${openTickets ? ` (${openTickets})` : ''}`, status: data.hub.support.enabled ? 'on' : 'idle', content: <SupportSection d={data} /> },
         { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? 'on' : 'idle', content: <AutoReplySection d={data} /> },
         { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? 'on' : 'idle', content: <CounterSection d={data} /> },

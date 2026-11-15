@@ -87,6 +87,8 @@ const LOOKALIKES: Record<string, string> = {
   α: 'a', β: 'b', ε: 'e', η: 'n', ι: 'i', κ: 'k', ν: 'v', ο: 'o', ρ: 'p', τ: 't', υ: 'u', χ: 'x',
   ı: 'i', ł: 'l', ø: 'o', đ: 'd', ɑ: 'a', ɡ: 'g',
 }
+/** Greek capitals that read as a different Latin letter than their lowercase form does (Ν looks like N, ν like v). */
+const CAPITAL_LOOKALIKES: Record<string, string> = { Ν: 'n', Η: 'h', Υ: 'y' }
 const DIGIT_LETTERS: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', $: 's', '!': 'i', '|': 'i' }
 
 /**
@@ -96,6 +98,7 @@ const DIGIT_LETTERS: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4
 export function foldName(s: string) {
   return s
     .normalize('NFKC')
+    .replace(/[ΝΗΥ]/g, (c) => CAPITAL_LOOKALIKES[c])
     .toLowerCase()
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
