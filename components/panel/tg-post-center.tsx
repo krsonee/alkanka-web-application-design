@@ -37,37 +37,6 @@ import {
   type TargetCheck,
 } from '@/lib/tg-posts-shared'
 
-type Outcome = ActionResult & { checks?: TargetCheck[] }
-type Run = (fn: () => Promise<Outcome>, after?: (result: Outcome) => void) => void
-
-function useRun() {
-  const [pending, start] = useTransition()
-  const [msg, setMsg] = useState<Outcome | null>(null)
-  const run: Run = (fn, after) =>
-    start(async () => {
-      const result = await fn()
-      setMsg(result)
-      after?.(result)
-    })
-  return { pending, msg, run }
-}
-
-function Note({ msg }: { msg: Outcome | null }) {
-  if (!msg) return null
-  return (
-    <div className="flex flex-col gap-2">
-      <p role="status" className={cn('text-sm leading-relaxed [overflow-wrap:anywhere]', msg.ok ? 'text-primary' : 'text-destructive')}>
-        {msg.message}
-      </p>
-      {msg.checks && <CheckList checks={msg.checks} />}
-    </div>
-  )
-}
-
-/** The panel is run from Turkey; a fixed zone also keeps the server and the browser printing the same text. */
-const when = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
-
 function Counter({ length, limit, note }: { length: number; limit: number; note?: string }) {
   return (
     <p className={cn('text-xs tabular-nums', length > limit ? 'text-destructive' : 'text-muted-foreground')}>

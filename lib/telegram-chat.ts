@@ -33,7 +33,10 @@ export type TgEntity = { type: string; offset: number; length: number; url?: str
 export type TgMessage = {
   message_id: number
   from?: TgUser
-  chat: { id: number; type: string; title?: string }
+  chat: { id: number; type: string; title?: string; username?: string }
+  sender_chat?: { id: number; type: string }
+  author_signature?: string
+  media_group_id?: string
   message_thread_id?: number
   is_automatic_forward?: boolean
   forward_origin?: { type: string; chat?: { id: number }; message_id?: number }

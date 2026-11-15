@@ -314,6 +314,10 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
     const { guardChannelPost } = await import('@/lib/tg-guard')
     if (await guardChannelPost(botId, update.channel_post)) return
   }
+  if (update.channel_post) {
+    const { noteChannelPost } = await import('@/lib/tg-post-manual')
+    await noteChannelPost(botId, update.channel_post).catch((error) => console.error('[tg-hub] channel post not filed', error))
+  }
 
   if (m && isSupport) {
     const { handleSupportMessage } = await import('@/lib/tg-support')

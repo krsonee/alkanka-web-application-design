@@ -6,7 +6,10 @@ import { canPanel, getPanelSession } from '@/lib/admin-auth'
 import { addTarget } from '@/lib/telegram-mirror'
 import { registerHook } from '@/lib/tg-hub'
 import { checkTargets, copyPost, deleteSend, editPost, forgetSend, morePosts, pinSend, sendPost, sendTest, type SendOutcome } from '@/lib/tg-posts'
-import type { PostRow, TargetCheck } from '@/lib/tg-posts-shared'
+import { deleteRule, saveRule } from '@/lib/tg-post-manual'
+import { deletePlan, draftFromPost, planToDraft, reschedulePlan, savePlan, sendPlanNow } from '@/lib/tg-post-plans'
+import { announceRaffle, drawRaffle, setRaffleClosed } from '@/lib/tg-post-press'
+import type { PlanKind, PostRow, TargetCheck } from '@/lib/tg-posts-shared'
 
 const EXPIRED: SendOutcome = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
 const fail = (error: unknown): SendOutcome => ({ ok: false, message: String((error as Error)?.message ?? error) })
@@ -24,7 +27,7 @@ const idOf = (v: unknown) => {
 const chatList = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
 
 /** Runs one post operation behind the panel permission and refreshes the list when it changed something. */
-async function guarded(run: () => Promise<SendOutcome>): Promise<SendOutcome> {
+async function guarded<T extends SendOutcome>(run: () => Promise<T>): Promise<T | SendOutcome> {
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const result = await run()
@@ -99,6 +102,95 @@ export async function listenPostBotAction(botId: number) {
     await registerHook(id, `https://${host}`)
     return { ok: true, message: 'Bot artık buton basışlarını dinliyor.' }
   })
+}
+
+const authorName = async () => {
+  const session = await getPanelSession()
+  return session?.displayName || session?.username || 'Panel'
+}
+
+// --- Drafts, templates, scheduled posts -------------------------------------------
+
+export async function savePlanAction(input: {
+  id?: number | null
+  kind: PlanKind
+  name: string
+  botId: number
+  chatIds: string[]
+  content: unknown
+  sendAt?: string | null
+  repeat?: string
+  graceMin?: number
+}) {
+  return guarded(async () => {
+    const kind: PlanKind = input.kind === 'template' || input.kind === 'scheduled' ? input.kind : 'draft'
+    const botId = Number(input.botId)
+    return savePlan({
+      id: input.id ? idOf(input.id) : null,
+      kind,
+      name: String(input.name ?? ''),
+      botId: Number.isInteger(botId) && botId > 0 ? botId : null,
+      chatIds: chatList(input.chatIds),
+      content: input.content,
+      author: await authorName(),
+      sendAt: input.sendAt ? String(input.sendAt) : null,
+      repeat: String(input.repeat ?? 'none'),
+      graceMin: Number(input.graceMin),
+    })
+  })
+}
+
+export async function deletePlanAction(id: number) {
+  return guarded(() => deletePlan(idOf(id)))
+}
+
+export async function reschedulePlanAction(id: number, input: { sendAt: string; repeat: string; graceMin: number }) {
+  return guarded(() => reschedulePlan(idOf(id), { sendAt: String(input.sendAt ?? ''), repeat: String(input.repeat ?? 'none'), graceMin: Number(input.graceMin) }))
+}
+
+export async function planToDraftAction(id: number) {
+  return guarded(() => planToDraft(idOf(id)))
+}
+
+export async function sendPlanNowAction(id: number) {
+  return guarded(() => sendPlanNow(idOf(id)))
+}
+
+export async function draftFromPostAction(postId: number) {
+  return guarded(async () => draftFromPost(idOf(postId), await authorName()))
+}
+
+// --- Raffle ----------------------------------------------------------------------
+
+export async function closeRaffleAction(postId: number, closed: boolean) {
+  return guarded(() => setRaffleClosed(idOf(postId), Boolean(closed)))
+}
+
+export async function drawRaffleAction(postId: number, count: number) {
+  return guarded(() => drawRaffle(idOf(postId), Number(count)))
+}
+
+export async function announceRaffleAction(postId: number) {
+  return guarded(() => announceRaffle(idOf(postId)))
+}
+
+// --- Channel rules ---------------------------------------------------------------
+
+export async function saveRuleAction(input: { botId: number; chatId: string; enabled: boolean; signature: string; sponsorId: string; buttons: unknown }) {
+  return guarded(() =>
+    saveRule({
+      botId: botIdOf(input.botId),
+      chatId: String(input.chatId ?? ''),
+      enabled: Boolean(input.enabled),
+      signature: String(input.signature ?? ''),
+      sponsorId: String(input.sponsorId ?? ''),
+      buttons: input.buttons,
+    }),
+  )
+}
+
+export async function deleteRuleAction(botId: number, chatId: string) {
+  return guarded(() => deleteRule(botIdOf(botId), String(chatId ?? '')))
 }
 
 export async function morePostsAction(beforeId: number): Promise<{ posts: PostRow[]; hasMore: boolean }> {

@@ -1,3 +1,5 @@
+import { after } from 'next/server'
+import { runPostTick } from '@/lib/auto-tick'
 import { claimUpdate, dispatchUpdate, verifyHook, type HubUpdate } from '@/lib/tg-hub'
 
 export const dynamic = 'force-dynamic'
@@ -20,5 +22,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ bot
     // Returning 200 keeps Telegram from retrying a broken update forever.
     console.error('[tg-hook]', error)
   }
+  after(() => runPostTick().catch((error) => console.error('[tg-hook] post tick', error)))
   return Response.json({ ok: true })
 }

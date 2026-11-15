@@ -11,9 +11,12 @@ import {
   MEDIA_PATH,
   PHOTO_MAX_BYTES,
   POPUP_LIMIT,
+  PRESS_KINDS,
+  buttonText,
   cleanTgHtml,
   finalText,
   mediaKindOf,
+  needsListener,
   needsSplit,
   normalizeContent,
   postProblems,
@@ -27,7 +30,9 @@ import {
   type PostRow,
   type PostSendRow,
   type PostSponsor,
+  type PostStats,
   type PostTarget,
+  type RaffleWinner,
   type TargetCheck,
 } from '@/lib/tg-posts-shared'
 
@@ -44,7 +49,7 @@ type ChatInfo = { id: number; type: string; title?: string; username?: string; l
 type Member = { status: string; can_post_messages?: boolean; can_edit_messages?: boolean; can_pin_messages?: boolean; can_send_messages?: boolean }
 type Checked = TargetCheck & { username: string | null }
 
-type SendRecord = {
+export type SendRecord = {
   id: number
   postId: number
   botId: number | null
@@ -62,12 +67,13 @@ type SendRecord = {
   sentAt: Date
   editedAt: Date | null
 }
-type PostRecord = { id: number; origin: PostOrigin; note: string; author: string; botId: number | null; content: PostContent; createdAt: Date }
+export type PostRecord = { id: number; origin: PostOrigin; note: string; author: string; botId: number | null; content: PostContent; locked: boolean; createdAt: Date }
 
 const TEST_KEY = 'post_test_content'
 const TEST_CHAT_KEY = 'post_test_chat'
 const DELETE_WINDOW_MS = 48 * 60 * 60 * 1000
 const AUTO_KEEP_DAYS = 60
+const DEAF_BOT = 'Bu bot buton basışlarını dinlemiyor; açılır yazı, üyeye özel, oy ve çekiliş butonları çalışmaz.'
 
 let ready: Promise<void> | null = null
 export function ensurePostTables() {
@@ -85,6 +91,27 @@ export function ensurePostTables() {
     await rows(sql`CREATE INDEX IF NOT EXISTS tg_post_sends_post_idx ON tg_post_sends (post_id)`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_post_clicks (
       post_id int NOT NULL, button_id text NOT NULL, clicks int NOT NULL DEFAULT 0, PRIMARY KEY (post_id, button_id))`)
+    await rows(sql`ALTER TABLE tg_posts ADD COLUMN IF NOT EXISTS locked boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE tg_posts ADD COLUMN IF NOT EXISTS rule_pending boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE tg_post_sends ADD COLUMN IF NOT EXISTS group_key text`)
+    // One row per album: the parts of an album posted by hand arrive as separate updates, often at the same moment.
+    await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS tg_post_sends_album_idx ON tg_post_sends (chat_id, group_key) WHERE group_key IS NOT NULL`)
+    await rows(sql`CREATE INDEX IF NOT EXISTS tg_post_sends_chat_idx ON tg_post_sends (chat_id, main_id)`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_post_votes (
+      post_id int NOT NULL REFERENCES tg_posts(id) ON DELETE CASCADE, tg_id bigint NOT NULL, button_id text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (post_id, tg_id))`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_post_entries (
+      post_id int NOT NULL REFERENCES tg_posts(id) ON DELETE CASCADE, tg_id bigint NOT NULL, name text NOT NULL DEFAULT '', username text,
+      winner boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (post_id, tg_id))`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_post_live (
+      post_id int PRIMARY KEY REFERENCES tg_posts(id) ON DELETE CASCADE, dirty boolean NOT NULL DEFAULT false,
+      markup_at timestamptz NOT NULL DEFAULT now(), raffle_closed boolean NOT NULL DEFAULT false)`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_post_plans (
+      id serial PRIMARY KEY, kind text NOT NULL, name text NOT NULL DEFAULT '', author text NOT NULL DEFAULT '', bot_id int,
+      chat_ids text NOT NULL DEFAULT '[]', text text NOT NULL DEFAULT '', media text NOT NULL DEFAULT '[]', buttons text NOT NULL DEFAULT '[]',
+      options text NOT NULL DEFAULT '{}', send_at timestamptz, repeat text NOT NULL DEFAULT 'none', grace_min int NOT NULL DEFAULT 180,
+      status text NOT NULL DEFAULT 'waiting', last_error text, last_run_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
     throw error
@@ -92,7 +119,7 @@ export function ensurePostTables() {
   return ready
 }
 
-const parse = <T>(value: unknown, fallback: T): T => {
+export const parse = <T>(value: unknown, fallback: T): T => {
   try {
     return JSON.parse(String(value)) as T
   } catch {
@@ -122,7 +149,7 @@ const mapSend = (r: Record<string, unknown>): SendRecord => ({
 
 const mapPost = (r: Record<string, unknown>): PostRecord => ({
   id: Number(r.id),
-  origin: (['mirror', 'share'].includes(String(r.origin)) ? String(r.origin) : 'panel') as PostOrigin,
+  origin: (['mirror', 'share', 'manual'].includes(String(r.origin)) ? String(r.origin) : 'panel') as PostOrigin,
   note: String(r.note ?? ''),
   author: String(r.author ?? ''),
   botId: r.bot_id == null ? null : Number(r.bot_id),
@@ -132,6 +159,7 @@ const mapPost = (r: Record<string, unknown>): PostRecord => ({
     buttons: parse<PostButton[][]>(r.buttons, []),
     options: { ...DEFAULT_OPTIONS, ...parse<Partial<PostContent['options']>>(r.options, {}) },
   },
+  locked: Boolean(r.locked),
   createdAt: date(r.created_at) ?? new Date(),
 })
 
@@ -144,7 +172,7 @@ function postLink(chatId: string, username: string | null, messageId: number | n
 }
 
 /** Turns Telegram's wording into what the admin has to do about it. */
-function explain(error: unknown) {
+export function explain(error: unknown) {
   const raw = error instanceof TelegramError ? error.description : String((error as Error)?.message ?? error)
   if (/message can't be deleted/i.test(raw)) return 'Telegram bu mesajı silmeme izin vermiyor (48 saatten eski olabilir). Telegram’dan elle sil.'
   if (/message to \w+ not found|message not found|MESSAGE_ID_INVALID/i.test(raw)) return 'Mesaj Telegram’da bulunamadı (elle silinmiş olabilir).'
@@ -160,7 +188,7 @@ const unchanged = (error: unknown) => /message is not modified/i.test(error inst
 
 // --- Building what goes to Telegram ---------------------------------------------
 
-async function sponsors(): Promise<PostSponsor[]> {
+export async function sponsors(): Promise<PostSponsor[]> {
   const { listPublicSponsors } = await import('@/lib/sites')
   const list = await listPublicSponsors().catch(() => [])
   return list.map((s) => ({ id: String(s.id), name: s.name, url: `${SITE_URL}/git/${encodeURIComponent(String(s.id))}` }))
@@ -170,18 +198,39 @@ async function textOf(content: PostContent) {
   return content.options.sponsorId ? finalText(content, await sponsors()) : content.text
 }
 
-/** `key` is the post id, or "t" for a trial send that has no post behind it. */
-export function keyboardFor(key: number | 't', buttons: PostButton[][]): Markup | null {
+/** `key` is the post id, or "t" for a trial send that has no post behind it. `counts` feeds the vote and raffle buttons. */
+export function keyboardFor(key: number | 't', buttons: PostButton[][], counts: Record<string, number> = {}): Markup | null {
   const keyboard = buttons
     .map((row) =>
       row.map((b): Record<string, unknown> => {
-        if (b.kind === 'popup') return { text: b.label, callback_data: `pb:${key}:${b.id}` }
+        if (PRESS_KINDS.includes(b.kind)) return { text: buttonText(b, counts), callback_data: `pb:${key}:${b.id}` }
         if (b.kind === 'copy') return { text: b.label, copy_text: { text: b.value } }
+        if (b.kind === 'bot') return { text: b.label, url: b.value }
         return { text: b.label, url: b.track && key !== 't' ? `${SITE_URL}/api/tg/go/${key}-${b.id}` : b.value }
       }),
     )
     .filter((row) => row.length > 0)
   return keyboard.length ? { inline_keyboard: keyboard } : null
+}
+
+/** Votes per vote button and entries on the raffle button. Costs nothing for a post without either. */
+export async function countsFor(postId: number, buttons: PostButton[][]): Promise<Record<string, number>> {
+  const flat = buttons.flat()
+  const counts: Record<string, number> = {}
+  if (flat.some((b) => b.kind === 'vote')) {
+    const votes = await rows<{ button_id: string; n: string }>(sql`SELECT button_id, count(*) AS n FROM tg_post_votes WHERE post_id = ${postId} GROUP BY button_id`)
+    for (const v of votes) counts[v.button_id] = Number(v.n)
+  }
+  const raffle = flat.find((b) => b.kind === 'raffle')
+  if (raffle) {
+    const [entries] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_post_entries WHERE post_id = ${postId}`)
+    counts[raffle.id] = Number(entries?.n ?? 0)
+  }
+  return counts
+}
+
+export async function markupFor(postId: number, buttons: PostButton[][]) {
+  return keyboardFor(postId, buttons, await countsFor(postId, buttons))
 }
 
 const SEND_METHOD: Record<PostMediaKind, [method: string, field: string]> = {
@@ -331,10 +380,24 @@ export async function checkTargets(botId: number, chatIds: string[], needPin: bo
 
 // --- Sending ---------------------------------------------------------------------
 
-async function getPost(id: number) {
+export async function getPost(id: number) {
   await ensurePostTables()
   const r = await rows(sql`SELECT * FROM tg_posts WHERE id = ${id}`)
   return r.length ? mapPost(r[0]) : null
+}
+
+/** The copies of a post that still stand in Telegram. */
+export async function liveSends(postId: number) {
+  return (await rows(sql`SELECT * FROM tg_post_sends WHERE post_id = ${postId} AND status = 'sent' ORDER BY id`)).map(mapSend)
+}
+
+/**
+ * A bot that listens to a channel hears every post in it, including the ones another of our bots just sent,
+ * and files them as "posted outside the panel". Once the real sender records its post, that twin is dropped.
+ */
+async function dropManualTwin(chatId: string, ids: number[]) {
+  if (!ids.length) return
+  await rows(sql`DELETE FROM tg_posts WHERE origin = 'manual' AND id IN (SELECT post_id FROM tg_post_sends WHERE chat_id = ${chatId} AND main_id IN ${ids})`)
 }
 
 async function getSend(id: number) {
@@ -359,6 +422,7 @@ async function insertSend(input: {
   deleteHours: number
 }) {
   const d = input.delivered
+  if (d) await dropManualTwin(input.chat.chatId, d.ids).catch(() => null)
   await rows(sql`INSERT INTO tg_post_sends (post_id, bot_id, chat_id, chat_title, chat_username, message_ids, main_id, main_media, status, error, pinned, unpin_at, delete_at)
     VALUES (${input.postId}, ${input.botId}, ${input.chat.chatId}, ${input.chat.title}, ${input.chat.username}, ${JSON.stringify(d?.ids ?? [])},
       ${d?.mainId ?? null}, ${d?.mainMedia ?? false}, ${d ? 'sent' : 'failed'}, ${input.error ? input.error.slice(0, 400) : null}, ${input.pinned},
@@ -371,7 +435,7 @@ async function deliverTo(post: { id: number; botId: number; content: PostContent
   const { options } = post.content
   const target = { chatId: chat.chatId, title: chat.title, username: chat.username }
   try {
-    const delivered = await deliverContent(token, chat.chatId, post.content, text, keyboardFor(post.id, post.content.buttons))
+    const delivered = await deliverContent(token, chat.chatId, post.content, text, await markupFor(post.id, post.content.buttons))
     let pinned = false
     let note: string | null = null
     if (options.pin) {
@@ -410,20 +474,36 @@ async function prepare(raw: unknown) {
   return { content, text, problems: postProblems(content, text) }
 }
 
-export async function sendPost(input: { content: unknown; botId: number; chatIds: string[]; author: string }): Promise<SendOutcome> {
+type Ready = { content: PostContent; text: string; token: string; checks: Checked[] }
+
+/** Everything that can stop a post before a single message goes out. Returns the refusal, or what sending needs. */
+async function precheck(input: { content: unknown; botId: number; chatIds: string[] }): Promise<SendOutcome | Ready> {
   await ensurePostTables()
   const { content, text, problems } = await prepare(input.content)
   if (problems.length) return { ok: false, message: problems.join(' ') }
   const chats = cleanChats(input.chatIds)
   if (!chats.length) return { ok: false, message: 'En az bir hedef seç.' }
-  if (content.buttons.flat().some((b) => b.kind === 'popup') && !(await botListens(input.botId))) {
-    return { ok: false, message: 'Bu bot buton basışlarını dinlemiyor, "Açılır yazı" butonu çalışmaz. Önce "Dinlemeyi aç"a bas ya da dinleyen bir bot seç.' }
+  if (needsListener(content.buttons) && !(await botListens(input.botId))) {
+    return { ok: false, message: `${DEAF_BOT} Önce "Dinlemeyi aç"a bas ya da dinleyen bir bot seç.` }
   }
   const token = await botToken(input.botId)
   const checks = await inspectTargets(token, chats, content.options.pin)
   if (checks.some((c) => !c.ok)) {
     return { ok: false, message: 'Bazı hedeflere gönderilemiyor, hiçbirine gönderilmedi. Sorunlu hedefi düzelt ya da seçimden çıkar.', checks: checks.map(publicCheck) }
   }
+  return { content, text, token, checks }
+}
+
+/** The same checks sending runs, for a post that will go out later. */
+export async function precheckPost(input: { content: unknown; botId: number; chatIds: string[] }): Promise<SendOutcome> {
+  const ready = await precheck(input)
+  return 'ok' in ready ? ready : { ok: true, message: '' }
+}
+
+export async function sendPost(input: { content: unknown; botId: number; chatIds: string[]; author: string }): Promise<SendOutcome> {
+  const ready = await precheck(input)
+  if ('ok' in ready) return ready
+  const { content, text, token, checks } = ready
 
   const [row] = await rows<{ id: number }>(sql`INSERT INTO tg_posts (origin, author, bot_id, text, media, buttons, options)
     VALUES ('panel', ${input.author.slice(0, 80)}, ${input.botId}, ${content.text}, ${JSON.stringify(content.media)}, ${JSON.stringify(content.buttons)},
@@ -524,7 +604,7 @@ export async function editPost(postId: number, raw: unknown): Promise<SendOutcom
   const known = new Map(post.content.media.map((m) => [m.path, m.fileId]))
   // What cannot change after sending (silent, protected, timers) keeps its stored value.
   const next: PostContent = auto
-    ? { ...post.content, text: input.text, buttons: input.buttons }
+    ? { ...post.content, text: post.locked ? post.content.text : input.text, buttons: input.buttons }
     : {
         text: input.text,
         buttons: input.buttons,
@@ -535,12 +615,12 @@ export async function editPost(postId: number, raw: unknown): Promise<SendOutcom
   const problems = postProblems(next, text).filter((p) => !(auto && p.startsWith('Yazı ya da medya')))
   if (problems.length) return { ok: false, message: problems.join(' ') }
 
-  const live = (await rows(sql`SELECT * FROM tg_post_sends WHERE post_id = ${postId} AND status = 'sent' ORDER BY id`)).map(mapSend)
+  const live = await liveSends(postId)
   if (!live.length) return { ok: false, message: 'Bu postun Telegram’da duran bir kopyası yok.' }
-  if (next.buttons.flat().some((b) => b.kind === 'popup') && post.botId && !(await botListens(post.botId))) {
-    return { ok: false, message: 'Bu bot buton basışlarını dinlemiyor, "Açılır yazı" butonu çalışmaz. Önce yeni post bölümünden "Dinlemeyi aç"a bas.' }
+  if (needsListener(next.buttons) && post.botId && !(await botListens(post.botId))) {
+    return { ok: false, message: `${DEAF_BOT} Önce yeni post bölümünden "Dinlemeyi aç"a bas.` }
   }
-  const markup = keyboardFor(postId, next.buttons) ?? { inline_keyboard: [] }
+  const markup = (await markupFor(postId, next.buttons)) ?? { inline_keyboard: [] }
   const results: Outcome[] = []
   for (const send of live) {
     try {
@@ -605,7 +685,7 @@ async function copyByTelegram(post: PostRecord, source: SendRecord, token: strin
   const copies = await callBot<{ message_id: number }[]>(token, 'copyMessages', { chat_id: chat.chatId, from_chat_id: source.chatId, message_ids: ordered })
   const ids = copies.map((c) => c.message_id)
   const mainId = ids[Math.max(0, ordered.indexOf(source.mainId ?? ordered[0]))]
-  const markup = keyboardFor(post.id, post.content.buttons)
+  const markup = await markupFor(post.id, post.content.buttons)
   if (markup && !(source.mainMedia && ids.length > 1)) {
     await callBot(token, 'editMessageReplyMarkup', { chat_id: chat.chatId, message_id: mainId, reply_markup: markup }).catch(() => null)
   }
@@ -668,6 +748,7 @@ export async function recordAutoPost(input: {
   try {
     if (!input.ids.length) return
     await ensurePostTables()
+    await dropManualTwin(input.chatId, input.ids).catch(() => null)
     const [row] = await rows<{ id: number }>(sql`INSERT INTO tg_posts (origin, note, author, bot_id, text)
       VALUES (${input.origin}, ${input.note.slice(0, 120)}, 'Otomasyon', ${input.botId}, ${cleanTgHtml(input.text)}) RETURNING id`)
     await rows(sql`INSERT INTO tg_post_sends (post_id, bot_id, chat_id, chat_title, message_ids, main_id, main_media)
@@ -688,7 +769,7 @@ async function setSetting(key: string, value: string) {
   await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${value}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
 }
 
-async function countPress(postId: number, buttonId: string) {
+export async function countPress(postId: number, buttonId: string) {
   await rows(sql`INSERT INTO tg_post_clicks (post_id, button_id, clicks) VALUES (${postId}, ${buttonId}, 1)
     ON CONFLICT (post_id, button_id) DO UPDATE SET clicks = tg_post_clicks.clicks + 1`)
 }
@@ -707,7 +788,7 @@ export async function botListens(botId: number) {
   return r.some((s) => (s.key === 'chat_bot_id' ? Number(s.value) === botId : Boolean(s.value)))
 }
 
-/** Answers a press on an "Açılır yazı" button with its text. */
+/** Answers a press on a button the bot handles itself: popup text, member check, vote or raffle entry. */
 export async function handlePostCallback(botId: number, q: TgCallback) {
   const token = await botToken(botId)
   const [, key = '', buttonId = ''] = (q.data ?? '').split(':')
@@ -716,8 +797,12 @@ export async function handlePostCallback(botId: number, q: TgCallback) {
       console.error('[tg-posts] popup answer failed', error),
     )
   await ensurePostTables()
-  const button = (await buttonsOf(key)).find((b) => b.id === buttonId && b.kind === 'popup')
+  const button = (await buttonsOf(key)).find((b) => b.id === buttonId && PRESS_KINDS.includes(b.kind))
   if (!button) return answer('Bu buton artık geçerli değil.')
+  if (button.kind !== 'popup') {
+    const { handlePress } = await import('@/lib/tg-post-press')
+    return handlePress({ token, q, postId: key === 't' ? null : Number(key), button })
+  }
   // Telegram shows a loading spinner until the answer arrives, so the answer goes out before the count is written.
   await answer(button.value)
   if (key !== 't') await countPress(Number(key), buttonId).catch(() => null)
@@ -736,9 +821,20 @@ export async function trackClick(ref: string) {
 
 // --- Timed work ------------------------------------------------------------------
 
-/** Unpins and deletes posts whose time has come. Called from the traffic-driven tick; adds no schedule of its own. */
+/**
+ * Sends scheduled posts, unpins and deletes posts whose time has come, and catches up on counters and channel rules.
+ * Called from the traffic-driven tick and after Telegram updates; adds no schedule of its own.
+ */
 export async function runPostJobs() {
   await ensurePostTables()
+  const [{ runDuePlans }, { flushMarkups }, { applyPendingRules }] = await Promise.all([
+    import('@/lib/tg-post-plans'),
+    import('@/lib/tg-post-press'),
+    import('@/lib/tg-post-manual'),
+  ])
+  await runDuePlans().catch((error) => console.error('[tg-posts] scheduled posts', error))
+  await applyPendingRules().catch((error) => console.error('[tg-posts] channel rules', error))
+  await flushMarkups().catch((error) => console.error('[tg-posts] counters', error))
   const due = (
     await rows(sql`SELECT * FROM tg_post_sends WHERE status = 'sent' AND ((pinned AND unpin_at <= now()) OR delete_at <= now()) ORDER BY id LIMIT 20`)
   ).map(mapSend)
@@ -790,13 +886,40 @@ export async function listPosts(limit = 20, beforeId?: number): Promise<PostRow[
   const found = await rows(sql`SELECT p.*, b.name AS bot_name, b.username AS bot_username FROM tg_posts p LEFT JOIN tg_bots b ON b.id = p.bot_id
     WHERE ${beforeId ? sql`p.id < ${beforeId}` : sql`true`} ORDER BY p.id DESC LIMIT ${limit}`)
   if (!found.length) return []
-  const ids = found.map((p) => Number(p.id))
-  const [sends, clicks] = await Promise.all([
+  const posts = found.map(mapPost)
+  const ids = posts.map((p) => p.id)
+  const counted = posts.filter((p) => p.content.buttons.flat().some((b) => b.kind === 'vote' || b.kind === 'raffle')).map((p) => p.id)
+  const [sends, clicks, votes, entries, closed] = await Promise.all([
     rows(sql`SELECT * FROM tg_post_sends WHERE post_id IN ${ids} ORDER BY id`),
     rows(sql`SELECT post_id, button_id, clicks FROM tg_post_clicks WHERE post_id IN ${ids}`),
+    counted.length ? rows(sql`SELECT post_id, button_id, count(*) AS n FROM tg_post_votes WHERE post_id IN ${counted} GROUP BY post_id, button_id`) : [],
+    counted.length
+      ? rows(sql`SELECT post_id, count(*) AS n,
+          COALESCE(json_agg(json_build_object('tgId', tg_id, 'name', name, 'username', username) ORDER BY created_at) FILTER (WHERE winner), '[]') AS winners
+          FROM tg_post_entries WHERE post_id IN ${counted} GROUP BY post_id`)
+      : [],
+    counted.length ? rows(sql`SELECT post_id FROM tg_post_live WHERE raffle_closed AND post_id IN ${counted}`) : [],
   ])
-  return found.map((r): PostRow => {
-    const post = mapPost(r)
+  return posts.map((post, i): PostRow => {
+    const r = found[i]
+    const mine = (list: Record<string, unknown>[]) => list.filter((x) => Number(x.post_id) === post.id)
+    const raffle = post.content.buttons.flat().find((b) => b.kind === 'raffle')
+    const entered = mine(entries)[0]
+    const stats: PostStats = {
+      counts: Object.fromEntries(mine(votes).map((v) => [String(v.button_id), Number(v.n)])),
+      raffle: raffle
+        ? {
+            entries: Number(entered?.n ?? 0),
+            closed: mine(closed).length > 0,
+            winners: (typeof entered?.winners === 'string' ? parse<RaffleWinner[]>(entered.winners, []) : ((entered?.winners as RaffleWinner[] | undefined) ?? [])).map((w) => ({
+              tgId: Number(w.tgId),
+              name: String(w.name ?? ''),
+              username: w.username ? String(w.username) : null,
+            })),
+          }
+        : null,
+    }
+    if (raffle) stats.counts[raffle.id] = stats.raffle!.entries
     return {
       id: post.id,
       origin: post.origin,
@@ -805,9 +928,11 @@ export async function listPosts(limit = 20, beforeId?: number): Promise<PostRow[
       botId: post.botId,
       botName: r.bot_username ? `@${String(r.bot_username)}` : r.bot_name ? String(r.bot_name) : 'Silinmiş bot',
       content: { ...post.content, media: post.content.media.map(({ kind, path, name, size }) => ({ kind: kind ?? mediaKindOf(path), path, name, size })) },
+      locked: post.locked,
       createdAt: post.createdAt.toISOString(),
-      sends: sends.filter((s) => Number(s.post_id) === post.id).map((s) => toSendRow(mapSend(s))),
-      clicks: Object.fromEntries(clicks.filter((c) => Number(c.post_id) === post.id).map((c) => [String(c.button_id), Number(c.clicks)])),
+      sends: mine(sends).map((s) => toSendRow(mapSend(s))),
+      clicks: Object.fromEntries(mine(clicks).map((c) => [String(c.button_id), Number(c.clicks)])),
+      stats,
     }
   })
 }
@@ -816,14 +941,21 @@ const PAGE = 20
 
 export async function loadPostCenter(bots: { id: number; name: string; username: string }[]): Promise<PostCenterData> {
   await ensurePostTables()
-  const [{ getHub }, { listJobs }] = await Promise.all([import('@/lib/tg-hub'), import('@/lib/studio')])
-  const [targetRows, hub, settings, sponsorList, jobs, posts] = await Promise.all([
+  const [{ getHub }, { listJobs }, { listPlans }, { getRules }] = await Promise.all([
+    import('@/lib/tg-hub'),
+    import('@/lib/studio'),
+    import('@/lib/tg-post-plans'),
+    import('@/lib/tg-post-manual'),
+  ])
+  const [targetRows, hub, settings, sponsorList, jobs, posts, plans, rules] = await Promise.all([
     rows(sql`SELECT bot_id, chat_id, title FROM tg_targets WHERE active ORDER BY id`),
     getHub().catch(() => null),
     rows<{ key: string; value: string }>(sql`SELECT key, value FROM tg_settings WHERE key LIKE 'hook_secret_%' OR key IN ('chat_bot_id', ${TEST_CHAT_KEY})`),
     sponsors().catch(() => []),
     listJobs(40).catch(() => []),
     listPosts(PAGE + 1),
+    listPlans(),
+    getRules(),
   ])
 
   const targets: PostTarget[] = targetRows.map((t) => ({ botId: Number(t.bot_id), chatId: String(t.chat_id), title: String(t.title) }))
@@ -848,6 +980,8 @@ export async function loadPostCenter(bots: { id: number; name: string; username:
     posts: posts.slice(0, PAGE),
     hasMore: posts.length > PAGE,
     testChat: settings.find((s) => s.key === TEST_CHAT_KEY)?.value || hub?.logChatId || '',
+    plans,
+    rules,
   }
 }
 
