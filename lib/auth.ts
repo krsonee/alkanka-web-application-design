@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { pool } from '@/lib/db'
 import { mailEnabled, sendResetMail, sendVerifyMail } from '@/lib/mail'
+import { SIGNUP_CLOSED_MESSAGE, isSignupClosed } from '@/lib/signup-gate'
 
 export const auth = betterAuth({
   database: pool,
@@ -54,6 +55,7 @@ export const auth = betterAuth({
         return
       }
       if (ctx.path !== '/sign-up/email') return
+      if (await isSignupClosed()) throw new APIError('FORBIDDEN', { message: SIGNUP_CLOSED_MESSAGE })
       const name = String(ctx.body?.name ?? '').normalize('NFC').trim()
       if (name.length < 3 || name.includes('@')) {
         throw new APIError('BAD_REQUEST', { message: 'Kullanıcı adı en az 3 karakter olmalı ve @ içermemeli.' })

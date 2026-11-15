@@ -30,9 +30,8 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
   )
 }
 
-export function AuthModal() {
+export function AuthModal({ signupClosed = false }: { signupClosed?: boolean }) {
   const [mode, setMode] = useState<Mode | null>(null)
-  const [submitted, setSubmitted] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,7 +46,6 @@ export function AuthModal() {
   useEffect(() => {
     const sync = () => {
       setMode(readHash())
-      setSubmitted(false)
       setNotice(null)
       setError(null)
     }
@@ -62,7 +60,6 @@ export function AuthModal() {
   }
 
   function switchTo(next: Mode) {
-    setSubmitted(false)
     setNotice(null)
     setError(null)
     history.replaceState(null, '', `#${next}`)
@@ -113,6 +110,10 @@ export function AuthModal() {
           return
         }
         const msg = res.error.message ?? ''
+        if (res.error.status === 403) {
+          setError(msg || 'Yeni üyelik şu an kapalı.')
+          return
+        }
         setError(/kullanıcı adı/i.test(msg) ? msg : 'Kayıt tamamlanamadı. Bu e-posta kullanılıyor olabilir.')
         return
       }
@@ -131,13 +132,15 @@ export function AuthModal() {
 
   const isRegister = mode === 'kayit'
   const isForgot = mode === 'sifremi-unuttum'
+  const registerClosed = isRegister && signupClosed
+  const registerOpen = isRegister && !signupClosed
 
   return (
     <Modal open={!!mode} onClose={close} title={isRegister ? 'Kayıt ol' : isForgot ? 'Şifremi unuttum' : 'Giriş yap'} className="max-w-3xl">
       <div className="grid md:grid-cols-2">
         <div className="relative hidden min-h-full flex-col justify-end overflow-hidden bg-background p-6 md:flex">
           <Image
-            src={isRegister ? '/images/mascots/jako-merhaba.png' : '/images/mascots/jako.png'}
+            src={registerOpen ? '/images/mascots/jako-merhaba.png' : '/images/mascots/jako.png'}
             alt="AL KANKA maskotu Jako"
             fill
             sizes="(min-width: 768px) 384px, 0px"
@@ -147,7 +150,7 @@ export function AuthModal() {
           <div className="relative flex flex-col gap-1">
             <span className="text-xs font-semibold uppercase tracking-widest text-primary">{t('auth.eyebrow')}</span>
             <p className="font-display text-xl font-bold text-balance">
-              {isRegister ? t('auth.registerSpeech') : t('auth.loginSpeech')}
+              {registerOpen ? t('auth.registerSpeech') : t('auth.loginSpeech')}
             </p>
           </div>
         </div>
@@ -171,11 +174,11 @@ export function AuthModal() {
             ))}
           </div>
 
-          {submitted ? (
+          {registerClosed ? (
             <div role="status" className="flex flex-col gap-4">
-              <h2 className="font-display text-xl font-bold">Üyelik çok yakında açılıyor</h2>
+              <h2 className="font-display text-xl font-bold">Yeni üyelik şu an kapalı</h2>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Hesap sistemi henüz aktif değil. Açıldığı an ilk Telegram kanalımızda duyuracağız, kayıt bonusu da açılışta tanımlanacak.
+                Kısa bir süreliğine yeni kayıt almıyoruz kanka. Açıldığı an Telegram kanalımızda duyuracağız. Hesabın varsa giriş yapabilirsin.
               </p>
               <a
                 href={TELEGRAM_URL}
@@ -186,6 +189,13 @@ export function AuthModal() {
                 <Send className="size-4" aria-hidden="true" />
                 Telegram’dan haber al
               </a>
+              <button
+                type="button"
+                onClick={() => switchTo('giris')}
+                className="flex h-11 items-center justify-center rounded-lg border border-input text-xs font-bold uppercase tracking-wider text-foreground transition-colors hover:bg-background"
+              >
+                Giriş yap
+              </button>
             </div>
           ) : (
             <form onSubmit={onSubmit} className="flex flex-col gap-4">
