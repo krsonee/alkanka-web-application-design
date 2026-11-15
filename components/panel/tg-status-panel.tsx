@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { BotHealth, ChatHealth, Health } from '@/lib/tg-status-shared'
+import { STATUS_TAB, type BotHealth, type ChatHealth, type Health } from '@/lib/tg-status-shared'
 import { useSiblingTabs, type TabInfo } from '@/components/panel/telegram-tabs'
 import { Card, btn, btnGhost, fmt, useAction } from '@/components/panel/tg-hub-ui'
 import { loadTgStatusAction, repairTelegramAction } from '@/app/panel/tg-hub-actions'
@@ -154,7 +154,7 @@ export function StatusSection({ canRepair }: { canRepair: boolean }) {
   const router = useRouter()
   const repair = useAction()
   const { data, error, isLoading, isValidating, mutate } = useSWR('tg-status', () => loadTgStatusAction(), { revalidateOnFocus: false })
-  const sections = (siblings?.tabs ?? []).filter((t) => t.status)
+  const sections = (siblings?.tabs ?? []).filter((t) => t.status && t.id !== STATUS_TAB)
   const counted: Health[] = [...sections.map(sectionState), ...(data?.bots ?? []).map((b) => b.state), ...(data?.chats ?? []).map((c) => c.state)]
   const bad = counted.filter((s) => s === 'bad').length
   const warn = counted.filter((s) => s === 'warn').length

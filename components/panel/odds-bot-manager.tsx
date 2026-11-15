@@ -1,6 +1,7 @@
 'use client'
 
-import { useActionState, useState, useTransition } from 'react'
+import { useActionState, useState, useTransition, type FormEvent } from 'react'
+import useSWR from 'swr'
 import { Check, FlaskConical, Link2, ListChecks, Loader2, Plug, Radio, Tag, Trash2, Trophy } from 'lucide-react'
 import {
   addOddsSourceAction,
@@ -11,6 +12,7 @@ import {
   ingestManualAction,
   previewOddsAction,
   saveOddsBotAction,
+  searchOddsAction,
   toggleOddsSourceAction,
   updateOddsSourceTagAction,
   updateOddsSourceTextAction,
@@ -18,7 +20,7 @@ import {
 import { SourceTextEditor, SourceTextFields } from './source-text-fields'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot } from '@/lib/telegram-mirror'
-import { ODDS_TAG_OPTIONS, ODD_RESULT_LABELS, fillMinutes, oddsTagText, type OddsTag, type OddsBotConfig, type OddsBotStatus, type OddsPreview, type OddsSource, type SpecialOdd } from '@/lib/special-odds-shared'
+import { ODDS_MAX, ODDS_PAGE, ODDS_TAG_OPTIONS, ODD_RESULT_LABELS, fillMinutes, oddsTagText, type OddsTag, type OddsBotConfig, type OddsBotStatus, type OddsPage, type OddsPreview, type OddsSource } from '@/lib/special-odds-shared'
 import { cn } from '@/lib/utils'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -365,10 +367,42 @@ function TestCard({ sources }: { sources: OddsSource[] }) {
 
 const STATUS_LABEL = { open: 'Açık', filled: 'Doldu', expired: 'Kapandı' } as const
 
-function OddsListCard({ odds }: { odds: SpecialOdd[] }) {
+function OddsListCard({ initial }: { initial: OddsPage }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(bulkOddsAction, {})
+  const [draft, setDraft] = useState('')
+  const [q, setQ] = useState('')
   const [onlyPending, setOnlyPending] = useState(false)
-  const list = onlyPending ? odds.filter((o) => !o.result && o.status !== 'open') : odds
+  const [size, setSize] = useState(ODDS_PAGE)
+  // Every change made in the panel re-renders the page with a fresh first page; a new version makes a searched or longer list ask again.
+  const [seen, setSeen] = useState(initial)
+  const [version, setVersion] = useState(0)
+  if (seen !== initial) {
+    setSeen(initial)
+    setVersion((v) => v + 1)
+  }
+  // The plain first page comes with the panel itself; only a search, the filter or a longer list is asked for.
+  const first = !q && !onlyPending && size === ODDS_PAGE
+  const found = useSWR(first ? null : ['odds-admin', version, q, onlyPending, size], () => searchOddsAction({ q, pending: onlyPending }, size), {
+    revalidateOnFocus: false,
+    keepPreviousData: true,
+  })
+  const data = first ? initial : (found.data ?? initial)
+  const loading = !first && found.isValidating
+  const error = !first && Boolean(found.error)
+  const list = data.rows
+  const hasMore = data.hasMore
+  const filtered = Boolean(q) || onlyPending
+
+  const search = (e: FormEvent) => {
+    e.preventDefault()
+    setQ(draft.trim())
+    setSize(ODDS_PAGE)
+  }
+  const clear = () => {
+    setDraft('')
+    setQ('')
+    setSize(ODDS_PAGE)
+  }
   const buttons: { action: string; text: string; tone?: string }[] = [
     { action: 'won', text: 'Kazandı', tone: 'text-live' },
     { action: 'lost', text: 'Kaybetti', tone: 'text-destructive' },
@@ -380,8 +414,30 @@ function OddsListCard({ odds }: { odds: SpecialOdd[] }) {
   ]
   return (
     <Card icon={<ListChecks className="size-4" aria-hidden="true" />} id="ob-list" title="4. Oranlar ve sonuçlar" desc="Bot sonuç postu atmazsa buradan toplu işaretle: kutuları seç, sonra Kazandı/Kaybetti'ye bas.">
+      <form onSubmit={search} role="search" className="flex flex-wrap items-end gap-2">
+        <label className={cn(label, 'min-w-0 flex-1 basis-56')}>
+          Oranlarda ara
+          <input type="search" className={input} value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={80} placeholder="Maç, site, lig ya da market" />
+        </label>
+        <button type="submit" className={ghostBtn}>
+          Ara
+        </button>
+        {q && (
+          <button type="button" className={ghostBtn} onClick={clear}>
+            Temizle
+          </button>
+        )}
+      </form>
       <label className="flex items-center gap-2 text-sm text-foreground">
-        <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} className="size-4 accent-primary" />
+        <input
+          type="checkbox"
+          checked={onlyPending}
+          onChange={(e) => {
+            setOnlyPending(e.target.checked)
+            setSize(ODDS_PAGE)
+          }}
+          className="size-4 accent-primary"
+        />
         Sadece sonuç bekleyenler
       </label>
       <form action={action} className="flex flex-col gap-3">
@@ -424,14 +480,31 @@ function OddsListCard({ odds }: { odds: SpecialOdd[] }) {
             })}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">Gösterilecek oran yok.</p>
+          <p className="text-sm text-muted-foreground">{filtered ? 'Aramaya uyan oran yok.' : 'Gösterilecek oran yok.'}</p>
         )}
       </form>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          Liste yenilenemedi. Sayfayı yenileyip tekrar dene.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p role="status" className="text-xs text-muted-foreground">
+          {loading ? 'Yükleniyor…' : `${list.length} oran gösteriliyor`}
+        </p>
+        {hasMore && size < ODDS_MAX ? (
+          <button type="button" className={ghostBtn} disabled={loading} onClick={() => setSize((s) => Math.min(s + ODDS_PAGE, ODDS_MAX))}>
+            Daha fazla göster
+          </button>
+        ) : hasMore ? (
+          <p className="text-xs text-muted-foreground">En yeni {ODDS_MAX} oran listelendi. Daha eskisi için arama yap.</p>
+        ) : null}
+      </div>
     </Card>
   )
 }
 
-export function OddsBotManager(props: { config: OddsBotConfig; status: OddsBotStatus; bots: MirrorBot[]; sources: OddsSource[]; odds: SpecialOdd[] }) {
+export function OddsBotManager(props: { config: OddsBotConfig; status: OddsBotStatus; bots: MirrorBot[]; sources: OddsSource[]; odds: OddsPage }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -443,7 +516,7 @@ export function OddsBotManager(props: { config: OddsBotConfig; status: OddsBotSt
       <SetupCard config={props.config} bots={props.bots} status={props.status} />
       <SourcesCard sources={props.sources} />
       <TestCard sources={props.sources} />
-      <OddsListCard odds={props.odds} />
+      <OddsListCard initial={props.odds} />
     </div>
   )
 }

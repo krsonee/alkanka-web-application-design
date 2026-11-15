@@ -45,7 +45,7 @@ import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { ApprovalSection, ShareSection } from '@/components/panel/telegram-bot-suite'
 import { OddsBotManager } from '@/components/panel/odds-bot-manager'
-import { getOddsBotConfig, listAdminOdds, listOddsSources, oddsBotStatus } from '@/lib/special-odds'
+import { getOddsBotConfig, listOddsSources, oddsBotStatus, searchAdminOdds } from '@/lib/special-odds'
 import { DEFAULT_ODDS_BOT, EMPTY_ODDS_STATUS } from '@/lib/special-odds-shared'
 import { KankaTvManager } from '@/components/panel/kankatv-manager'
 import { getTvConfig, tvBotStatus, tvStats } from '@/lib/kankatv-engage'
@@ -148,7 +148,7 @@ import { LimitsManager } from '@/components/panel/limits-manager'
 import { listLimits } from '@/lib/member-limits'
 import { StaffManager, type StaffRow } from '@/components/panel/staff-manager'
 import { AccountSettings } from '@/components/panel/account-settings'
-import { cleanPermissions } from '@/lib/panel-modules'
+import { cleanPermissions, telegramAccess, type TelegramAccess } from '@/lib/panel-modules'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
@@ -156,7 +156,12 @@ import { SystemStatus } from '@/components/panel/system-status'
 import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
-import { TgHubManager } from '@/components/panel/tg-hub-manager'
+import { BroadcastSection, TgHubManager } from '@/components/panel/tg-hub-manager'
+import { TgPanelProvider } from '@/components/panel/tg-hub-ui'
+import { StatusSection } from '@/components/panel/tg-status-panel'
+import { getHub, listBroadcasts } from '@/lib/tg-hub'
+import { uniqueChats } from '@/lib/tg-hub-shared'
+import { STATUS_TAB } from '@/lib/tg-status-shared'
 import { loadTgHub } from '@/lib/tg-hub-panel'
 import { PostComposer, PostList } from '@/components/panel/tg-post-center'
 import { ScheduledPosts } from '@/components/panel/tg-post-plans'
@@ -383,7 +388,7 @@ async function telegramPanel(access: TelegramAccess) {
     // The status screen is the one place failing sections are listed, so its own light only ever warns.
     const failing = tabs.filter((t) => t.status === 'off').length
     tabs.splice(afterPosts, 0, {
-      id: 'status',
+      id: STATUS_TAB,
       group: 'Durum',
       label: 'Durum',
       status: failing ? 'off' : null,
@@ -396,6 +401,19 @@ async function telegramPanel(access: TelegramAccess) {
       <TelegramTabs issues={access.mod ? 'none' : 'box'} tabs={tabs} />
     </TgPanelProvider>
   )
+}
+
+/** Telegram opens with any of its three permissions, so it cannot use the single-module check in section(). */
+async function telegramSection({ session, active }: SectionCtx): Promise<ReactNode> {
+  if (active !== 'telegram') return null
+  const access = telegramAccess(session)
+  if (!access.posts && !access.mod) return null
+  try {
+    return await telegramPanel(access)
+  } catch (error) {
+    console.error('[panel:telegram]', error)
+    return failed('Telegram')
+  }
 }
 
 async function marketPanel() {
@@ -732,7 +750,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )),
     section(ctx, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
-    section(ctx, 'telegram', 'Telegram', telegramPanel),
+    telegramSection(ctx),
     section(ctx, 'push', 'Bildirimler', async () => {
       const [stats, appSettings, mCounts] = await Promise.all([
         pushStats().catch(() => ({ total: 0, members: 0, log: [] })),

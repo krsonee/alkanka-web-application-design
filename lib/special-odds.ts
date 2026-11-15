@@ -1,5 +1,6 @@
 import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
+import type { SQL } from 'drizzle-orm'
 import { rows, sql } from '@/lib/db'
 import {
   botToken,
@@ -19,6 +20,8 @@ import { isOddsText } from '@/lib/telegram-bots'
 import type { TgMessage } from '@/lib/telegram-chat'
 import {
   DEFAULT_ODDS_BOT,
+  ODDS_MAX,
+  ODDS_PAGE,
   istanbulDay,
   oddsTagText,
   splitWords,
@@ -27,6 +30,8 @@ import {
   type OddsBotConfig,
   type OddsBotStatus,
   type OddsDayStats,
+  type OddsFilter,
+  type OddsPage,
   type OddsPreview,
   type OddsSource,
   type SpecialOdd,
@@ -689,10 +694,19 @@ export function dayStats(odds: SpecialOdd[]): OddsDayStats {
   }
 }
 
-export async function listAdminOdds(limit = 60) {
+export async function searchAdminOdds(filter: OddsFilter, limit = ODDS_PAGE): Promise<OddsPage> {
   await expireStaleOdds()
-  const r = await rows(sql`SELECT * FROM special_odds ORDER BY opened_at DESC LIMIT ${limit}`)
-  return r.map(mapOdd)
+  const size = Math.min(Math.max(Math.trunc(Number(limit)) || ODDS_PAGE, 1), ODDS_MAX)
+  const parts: SQL[] = []
+  const q = String(filter.q ?? '').trim().slice(0, 80)
+  if (q) {
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+    parts.push(sql`(match ILIKE ${like} OR site_name ILIKE ${like} OR league ILIKE ${like} OR market ILIKE ${like})`)
+  }
+  if (filter.pending) parts.push(sql`result IS NULL AND status <> 'open'`)
+  const where = parts.length ? sql`WHERE ${sql.join(parts, sql` AND `)}` : sql``
+  const r = await rows(sql`SELECT * FROM special_odds ${where} ORDER BY opened_at DESC, id DESC LIMIT ${size + 1}`)
+  return { rows: r.slice(0, size).map(mapOdd), hasMore: r.length > size }
 }
 
 export async function setOddsStatus(ids: number[], action: 'filled' | 'open' | OddResult | 'clear') {

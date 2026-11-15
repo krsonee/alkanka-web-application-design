@@ -1,3 +1,6 @@
+/** Id of the status tab. Its light sums up the other tabs, so the status screen leaves itself out of its own list. */
+export const STATUS_TAB = 'status'
+
 /** ok: working · warn: works but needs a look · bad: broken · idle: not in use, which is not a fault. */
 export type Health = 'ok' | 'warn' | 'bad' | 'idle'
 

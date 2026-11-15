@@ -12,12 +12,13 @@ import {
   ingestManual,
   previewOddsPost,
   saveOddsBotConfig,
+  searchAdminOdds,
   setOddsSourceActive,
   setOddsStatus,
   updateOddsSourceTag,
   updateOddsSourceText,
 } from '@/lib/special-odds'
-import type { OddsPreview } from '@/lib/special-odds-shared'
+import type { OddsFilter, OddsPage, OddsPreview } from '@/lib/special-odds-shared'
 import type { ActionState } from './actions'
 
 const EXPIRED = { message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -157,6 +158,11 @@ export async function ingestManualAction(_: ActionState, form: FormData): Promis
   } catch (error) {
     return { message: errorText(error) }
   }
+}
+
+export async function searchOddsAction(filter: OddsFilter, limit: number): Promise<OddsPage> {
+  if (!(await canPanel('telegram'))) throw new Error(EXPIRED.message)
+  return searchAdminOdds({ q: String(filter?.q ?? ''), pending: Boolean(filter?.pending) }, limit)
 }
 
 const ACTIONS = ['filled', 'open', 'won', 'lost', 'void', 'clear', 'delete'] as const
