@@ -1,6 +1,7 @@
 import 'server-only'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
+import { appSecrets, openWithAny } from '@/lib/secrets'
 import { filterWords } from '@/lib/telegram-filters'
 import { decodeEntities } from '@/lib/html-entities'
 import { recordDeal } from '@/lib/deals'
@@ -82,24 +83,27 @@ export function ensureTables() {
   return ready
 }
 
-function cipherKey() {
-  const secret = process.env.BETTER_AUTH_SECRET
-  if (!secret) throw new Error('BETTER_AUTH_SECRET tanımlı değil')
-  return createHash('sha256').update(`tg-token:${secret}`).digest()
+function cipherKeys() {
+  const secrets = appSecrets()
+  if (!secrets.length) throw new Error('BETTER_AUTH_SECRET tanımlı değil')
+  return secrets.map((secret) => createHash('sha256').update(`tg-token:${secret}`).digest())
 }
 
 function encrypt(value: string) {
   const iv = randomBytes(12)
-  const cipher = createCipheriv('aes-256-gcm', cipherKey(), iv)
+  const cipher = createCipheriv('aes-256-gcm', cipherKeys()[0], iv)
   const data = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
   return [iv, cipher.getAuthTag(), data].map((b) => b.toString('base64')).join('.')
 }
 
+/** Older secrets are tried too, so a bot added before a rotation keeps posting. */
 function decrypt(value: string) {
   const [iv, tag, data] = value.split('.').map((p) => Buffer.from(p, 'base64'))
-  const decipher = createDecipheriv('aes-256-gcm', cipherKey(), iv)
-  decipher.setAuthTag(tag)
-  return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
+  return openWithAny(cipherKeys(), (key) => {
+    const decipher = createDecipheriv('aes-256-gcm', key, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
+  })
 }
 
 export function normalizeChannel(input: string) {
@@ -684,7 +688,7 @@ async function activeDestinations() {
     try {
       map.set(Number(t.id), { token: decrypt(String(t.token_enc)), chatId: String(t.chat_id), title: String(t.title) })
     } catch {
-      // A token encrypted with a previous secret can't be used; the panel shows it so the bot can be re-added.
+      // A token that none of the known secrets opens can't be used; the panel shows it so the bot can be re-added.
     }
   }
   return map

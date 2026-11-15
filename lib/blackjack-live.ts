@@ -6,16 +6,26 @@ import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/mem
 import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, bjOpeningMs, bjRevealMs, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
 import { isStackedBet } from '@/lib/arena'
+import { gameSecret, loadGameKey, usesRotatedKey } from '@/lib/game-keys'
 
 const SHOE_DECKS = 6
 const SHOE_SIZE = 52 * SHOE_DECKS
-const shoeCache = new Map<number, number[]>()
+const shoeCache = new Map<string, number[]>()
+
+/** Rounds already on a table keep their shoe; the margin covers hands opened by requests that are in flight at the switch. */
+async function firstRotatedRound() {
+  const r = await pool.query(
+    `SELECT GREATEST((SELECT COALESCE(MAX(id), 0) FROM blackjack_round), (SELECT COALESCE(MAX(round_id), 0) FROM blackjack_live)) AS id`,
+  )
+  return Number(r.rows[0].id) + 20
+}
 
 /** Each round deals from a freshly shuffled 6-deck shoe keyed by the server secret: unpredictable, but identical for every viewer. */
 function shoeOf(roundId: number) {
-  const cached = shoeCache.get(roundId)
+  const cacheKey = `${roundId}:${usesRotatedKey('blackjack', roundId)}`
+  const cached = shoeCache.get(cacheKey)
   if (cached) return cached
-  const secret = process.env.BETTER_AUTH_SECRET ?? 'alkanka-blackjack'
+  const secret = gameSecret('blackjack', roundId) ?? 'alkanka-blackjack'
   const shoe = Array.from({ length: SHOE_SIZE }, (_, i) => i % 52)
   let buf = Buffer.alloc(0)
   let off = 32
@@ -29,7 +39,7 @@ function shoeOf(roundId: number) {
     off += 4
     ;[shoe[i], shoe[j]] = [shoe[j], shoe[i]]
   }
-  shoeCache.set(roundId, shoe)
+  shoeCache.set(cacheKey, shoe)
   if (shoeCache.size > 64) shoeCache.delete(shoeCache.keys().next().value!)
   return shoe
 }
@@ -161,6 +171,7 @@ type Round = { id: number; tableNo: number; phase: BlackjackPhase; endsAt: numbe
 const JOIN_LOCK = 4_200_117
 
 async function inTx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
+  await loadGameKey('blackjack', firstRotatedRound)
   const c = await pool.connect()
   try {
     await c.query('BEGIN')

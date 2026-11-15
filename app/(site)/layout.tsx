@@ -43,6 +43,7 @@ import { EMPTY_TRACKING } from '@/lib/marketing-shared'
 import { TelegramStrip } from '@/components/alkanka/telegram-strip'
 import { getTelegramPromo } from '@/lib/telegram-promo'
 import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
+import { isSignupClosed } from '@/lib/signup-gate'
 
 /** Promo bands above the page: gone while a table is being played, and on phones for the whole game page so "Oyna" is on the first screen. */
 const CHROME_BAND = '[body:has([data-table-playing])_&]:hidden max-lg:[body:has([data-game-page])_&]:hidden'
@@ -59,11 +60,12 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     getAppSettings(),
     getTourSettings(),
   ])
-  const [lookupSponsors, boosts, tracking, tgPromo] = await Promise.all([
+  const [lookupSponsors, boosts, tracking, tgPromo, signupClosed] = await Promise.all([
     listPublicSites().catch(() => sponsors),
     currentBoosts().catch(() => []),
     getTracking().catch(() => EMPTY_TRACKING),
     getTelegramPromo().catch(() => TELEGRAM_PROMO_DEFAULTS),
+    isSignupClosed(),
   ])
   const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
@@ -120,7 +122,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         </div>
         <MobileNav />
         {chatLive && <TelegramBubble />}
-        <AuthModal />
+        <AuthModal signupClosed={signupClosed} />
         <GuestGate />
         <AppPrompts />
         <SiteTour settings={tourSettings} />

@@ -6,21 +6,25 @@ import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/mem
 import { betLabel, betReturn, RL_BET_MS, rouletteClock as clock, validBet, type RouletteBet } from '@/lib/casino'
 import { roundBots } from '@/lib/roulette-bots'
 import { capPayout } from '@/lib/member-limits'
+import { gameSecret, loadGameKey } from '@/lib/game-keys'
 
 /** Distinct spots per player per round; chips on the same spot are merged into one entry. */
 const MAX_SPOTS = 60
 /** The server refuses bets this close to the end of the betting window. */
 const CLOSE_MARGIN_MS = 800
 
-function secret() {
-  const s = process.env.ROULETTE_SECRET ?? process.env.BETTER_AUTH_SECRET
+function secretFor(roundId: number) {
+  const s = process.env.ROULETTE_SECRET ?? gameSecret('rulet', roundId)
   if (!s) throw new Error('Rulet anahtarı tanımlı değil.')
   return s
 }
 
+/** Two rounds of slack, so the round whose commit is already on screen keeps the seed it was opened with. */
+const keyReady = () => loadGameKey('rulet', () => clock().roundId + 2)
+
 /** Per-round seed. Its SHA-256 is published while bets are open, the seed itself only once betting has closed. */
 export function roundSeed(roundId: number) {
-  return createHmac('sha256', secret()).update(`rulet:${roundId}`).digest('hex')
+  return createHmac('sha256', secretFor(roundId)).update(`rulet:${roundId}`).digest('hex')
 }
 
 export const roundCommit = (roundId: number) => createHash('sha256').update(roundSeed(roundId)).digest('hex')
@@ -56,6 +60,7 @@ function merge(into: StoredBet[], add: StoredBet[], sign = 1) {
  * the moment anyone at the table loads the result. The UPDATE ... RETURNING claim makes double payment impossible.
  */
 export async function settleRounds(userId?: string) {
+  await keyReady()
   const last = resolvedRound()
   const r = await pool.query(
     `UPDATE roulette_bets SET settled = true

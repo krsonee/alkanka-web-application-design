@@ -88,6 +88,7 @@ export const PAGE_SEO = {
     title: 'KankaTV — Canlı Skor ve Ücretsiz Canlı Yayın',
     description:
       'Premier Lig, LaLiga, Serie A, Bundesliga, Ligue 1 ve Liga Portugal maçları, canlı skorlar ve açık kanalların resmi canlı yayınları.',
+    image: '/images/heroes/kankatv.png',
     keywords: ['canlı skor', 'canlı maç', 'kankatv', 'basketbol canlı skor', 'voleybol canlı skor', 'premier lig', 'süper lig', 'a spor canlı'],
   },
   tahminler: {
