@@ -4,6 +4,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { cookies, headers } from 'next/headers'
 import { rows, sql } from '@/lib/db'
 import { cleanPermissions, PANEL_MODULES, type PanelModule } from '@/lib/panel-modules'
+import { currentSecret } from '@/lib/secrets'
 
 export const PANEL_COOKIE = 'alk_panel'
 const SESSION_HOURS = 12
@@ -40,7 +41,7 @@ export type PanelSession = {
 
 function signingKey() {
   const a = process.env.ADMIN_PASSWORD ?? ''
-  const b = process.env.BETTER_AUTH_SECRET ?? ''
+  const b = currentSecret() ?? ''
   if (!a && !b) return null
   return createHash('sha256').update(`${a}|${b}|alkanka-panel-session`).digest()
 }

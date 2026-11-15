@@ -1,5 +1,6 @@
 import 'server-only'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
+import { appSecrets, openWithAny } from '@/lib/secrets'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 
@@ -64,24 +65,28 @@ export function otpauthUrl(secret: string, account: string) {
   return `otpauth://totp/${encodeURIComponent(`${issuer}:${account}`)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`
 }
 
-function key() {
-  const base = process.env.BETTER_AUTH_SECRET || process.env.ADMIN_PASSWORD || ''
-  if (!base) throw new Error('Şifreleme anahtarı yok (BETTER_AUTH_SECRET).')
-  return createHash('sha256').update(`${base}:panel-totp`).digest()
+function keys() {
+  const bases = appSecrets()
+  if (!bases.length && process.env.ADMIN_PASSWORD) bases.push(process.env.ADMIN_PASSWORD)
+  if (!bases.length) throw new Error('Şifreleme anahtarı yok (BETTER_AUTH_SECRET).')
+  return bases.map((base) => createHash('sha256').update(`${base}:panel-totp`).digest())
 }
 
 export function encryptSecret(plain: string) {
   const iv = randomBytes(12)
-  const cipher = createCipheriv('aes-256-gcm', key(), iv)
+  const cipher = createCipheriv('aes-256-gcm', keys()[0], iv)
   const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()])
   return [iv, cipher.getAuthTag(), data].map((b) => b.toString('base64url')).join('.')
 }
 
+/** Older secrets are tried too, so an authenticator enrolled before a rotation keeps working. */
 export function decryptSecret(value: string) {
   const [iv, tag, data] = value.split('.').map((p) => Buffer.from(p, 'base64url'))
-  const decipher = createDecipheriv('aes-256-gcm', key(), iv)
-  decipher.setAuthTag(tag)
-  return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
+  return openWithAny(keys(), (key) => {
+    const decipher = createDecipheriv('aes-256-gcm', key, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
+  })
 }
 
 export function hashBackupCode(code: string) {

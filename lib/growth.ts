@@ -45,6 +45,7 @@ export function cleanSrc(value: string | null | undefined) {
 
 export function hashNetwork(ip: string | null | undefined) {
   if (!ip) return null
+  // Stays on the original secret: a rotated salt would stop new visits matching the hashes already stored.
   const salt = process.env.BETTER_AUTH_SECRET ?? 'alkanka'
   return createHash('sha256').update(`${salt}:${ip.split(',')[0].trim()}`).digest('hex').slice(0, 32)
 }
