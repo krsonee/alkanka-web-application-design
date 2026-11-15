@@ -2,7 +2,7 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
 import { SPRINT_MULTIPLIER, sprintState } from '@/lib/sprint'
-import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, publicRankName, type BadgeTier, type LevelDef, type PointRules } from '@/lib/kanka-puan-shared'
+import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, ROLE_STYLES, publicRankName, type BadgeTier, type LevelDef, type MemberRole, type PointRules } from '@/lib/kanka-puan-shared'
 
 export * from '@/lib/kanka-puan-shared'
 
@@ -22,6 +22,10 @@ export type SpecialBadge = {
   season?: string | null
   /** Market discount every holder gets. */
   perkPct?: number
+  /** Set when the badge is a role (Moderatör, VIP...); the value is its colour key. */
+  roleStyle?: string | null
+  /** Staff roles earn no KP and stay out of rankings, the market and events. */
+  roleStaff?: boolean
 }
 
 export type AutoKind = 'tahmin-hafta' | 'tahmin-ay' | 'sohbet-hafta' | 'sohbet-ay' | 'turnuva'
@@ -80,7 +84,13 @@ export function ensureKp() {
       await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, sort)
         VALUES (${b.id}, ${b.name}, ${b.description}, ${b.icon}, 'elmas', 0, NULL, 900) ON CONFLICT DO NOTHING`)
     }
-    await rows(sql`ALTER TABLE kp_badges ADD COLUMN IF NOT EXISTS season text, ADD COLUMN IF NOT EXISTS perk_pct int NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE kp_badges ADD COLUMN IF NOT EXISTS season text, ADD COLUMN IF NOT EXISTS perk_pct int NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS role_style text, ADD COLUMN IF NOT EXISTS role_staff boolean NOT NULL DEFAULT false`)
+    const roles = await rows(sql`INSERT INTO kp_settings (key, value) VALUES ('roles_seeded', 'true'::jsonb) ON CONFLICT DO NOTHING RETURNING key`)
+    if (roles.length) {
+      await rows(sql`UPDATE kp_badges SET role_staff = true, role_style = CASE id WHEN 'moderator' THEN 'moderator' ELSE 'sponsor' END
+        WHERE id IN ('moderator', 'sponsor-destek')`)
+    }
     const perks = await rows(sql`INSERT INTO kp_settings (key, value) VALUES ('badge_perks_seeded', 'true'::jsonb) ON CONFLICT DO NOTHING RETURNING key`)
     if (perks.length) {
       await rows(sql`UPDATE kp_badges SET perk_pct = CASE tier WHEN 'efsane' THEN 10 WHEN 'elmas' THEN 5 ELSE 3 END
@@ -172,7 +182,7 @@ async function totals(rules: PointRules, userId: string | null, limit = 1, perio
   const until = win?.until ?? NO_END
   const [chat, tg, awards] = await Promise.all([tableExists('tg_chat_messages'), tableExists('tg_links'), tableExists('kp_awards')])
   const notRoleHolder = awards
-    ? sql`AND NOT EXISTS (SELECT 1 FROM kp_awards ra WHERE ra.user_id = ids.user_id AND ra.badge_id IN ('moderator', 'sponsor-destek'))`
+    ? sql`AND NOT EXISTS (SELECT 1 FROM kp_awards ra WHERE ra.user_id = ids.user_id AND ra.badge_id IN (SELECT id FROM kp_badges WHERE role_staff))`
     : sql``
   const chatCte = chat
     ? sql`SELECT user_id, sum(least(n, ${rules.chatDailyCap}))::bigint AS v FROM (
@@ -416,10 +426,10 @@ export async function awardBadgeId(awardId: number): Promise<string | null> {
   return a?.badge_id ?? null
 }
 
-/** True when the member holds a staff badge (Moderatör / Sponsor Destek). */
+/** True when the member holds a staff role (Moderatör, Sponsor Destek or any role marked as staff). */
 export async function isRoleHolder(userId: string): Promise<boolean> {
   if (!(await tableExists('kp_awards'))) return false
-  const r = await rows(sql`SELECT 1 FROM kp_awards WHERE user_id = ${userId} AND badge_id IN ('moderator', 'sponsor-destek') LIMIT 1`)
+  const r = await rows(sql`SELECT 1 FROM kp_awards WHERE user_id = ${userId} AND badge_id IN (SELECT id FROM kp_badges WHERE role_staff) LIMIT 1`)
   return r.length > 0
 }
 
@@ -465,6 +475,8 @@ const mapBadge = (r: Record<string, unknown>): SpecialBadge => ({
   holders: Number(r.holders ?? 0),
   season: r.season ? String(r.season) : null,
   perkPct: Number(r.perk_pct ?? 0),
+  roleStyle: r.role_style ? String(r.role_style) : null,
+  roleStaff: Boolean(r.role_staff),
 })
 
 export async function listSpecialBadges(opts: { includeInactive?: boolean } = {}) {
@@ -530,6 +542,99 @@ export async function deleteSpecialBadge(id: string) {
   await rows(sql`DELETE FROM kp_events WHERE source = 'rozet' AND ref LIKE ${`${id}:%`}`)
   if (ROLE_BADGE_IDS.includes(id)) throw new Error('Görevli rozetleri silinemez.')
   await rows(sql`DELETE FROM kp_badges WHERE id = ${id}`)
+  roleCache = null
+}
+
+// --- Roles ---------------------------------------------------------------
+
+export type RoleDef = { id: string; name: string; icon: string; style: string; staff: boolean; builtIn: boolean; holders: number }
+
+export type RoleInput = { id?: string; name: string; icon: string; style: string; staff: boolean }
+
+let roleCache: { at: number; data: Record<string, MemberRole> } | null = null
+
+export async function isRoleBadge(id: string): Promise<boolean> {
+  await ensureKp()
+  const r = await rows(sql`SELECT 1 FROM kp_badges WHERE id = ${id} AND role_style IS NOT NULL`)
+  return r.length > 0
+}
+
+export async function listRoles(): Promise<RoleDef[]> {
+  await ensureKp()
+  const r = await rows(sql`SELECT b.id, b.name, b.icon, b.role_style, b.role_staff,
+      (SELECT count(DISTINCT user_id) FROM kp_awards a WHERE a.badge_id = b.id) AS holders
+    FROM kp_badges b WHERE b.role_style IS NOT NULL ORDER BY b.sort, b.created_at`)
+  return r.map((x) => ({
+    id: String(x.id),
+    name: String(x.name),
+    icon: String(x.icon),
+    style: String(x.role_style),
+    staff: Boolean(x.role_staff),
+    builtIn: ROLE_BADGE_IDS.includes(String(x.id)),
+    holders: Number(x.holders ?? 0),
+  }))
+}
+
+export async function saveRole(input: RoleInput) {
+  await ensureKp()
+  const name = String(input.name).trim().slice(0, 24)
+  if (name.length < 2) throw new Error('Rol adı en az 2 karakter olmalı.')
+  if (!BADGE_ICONS.includes(input.icon)) throw new Error('Geçersiz simge.')
+  if (!ROLE_STYLES.some((s) => s.id === input.style)) throw new Error('Geçersiz renk.')
+  const staff = Boolean(input.staff)
+  if (input.id) {
+    const r = await rows(sql`UPDATE kp_badges SET name = ${name}, icon = ${input.icon}, role_style = ${input.style}, role_staff = ${staff}
+      WHERE id = ${input.id} AND role_style IS NOT NULL RETURNING id`)
+    if (!r.length) throw new Error('Rol bulunamadı.')
+  } else {
+    const id = `rol-${slug(name) || Date.now()}`
+    const r = await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, active, perk_pct, sort, role_style, role_staff)
+      VALUES (${id}, ${name}, ${`AL KANKA ${name} ekibi üyesi.`}, ${input.icon}, 'elmas', 0, NULL, true, 0, 900, ${input.style}, ${staff})
+      ON CONFLICT DO NOTHING RETURNING id`)
+    if (!r.length) throw new Error('Bu isimde bir rol zaten var.')
+  }
+  roleCache = null
+}
+
+/** Removes a custom role; everyone holding it loses it. The two built-in staff roles stay. */
+export async function deleteRole(id: string) {
+  await ensureKp()
+  if (ROLE_BADGE_IDS.includes(id)) throw new Error('Hazır roller silinemez, adını ve rengini düzenleyebilirsin.')
+  const r = await rows(sql`DELETE FROM kp_badges WHERE id = ${id} AND role_style IS NOT NULL RETURNING id`)
+  if (!r.length) throw new Error('Rol bulunamadı.')
+  roleCache = null
+  levelCache = null
+}
+
+/** A member holds one role at a time: giving one replaces the previous, null removes it. Returns the new role's name. */
+export async function setMemberRole(userId: string, roleId: string | null): Promise<string | null> {
+  await ensureKp()
+  let name: string | null = null
+  if (roleId) {
+    const [role] = await rows<{ name: string }>(sql`SELECT name FROM kp_badges WHERE id = ${roleId} AND role_style IS NOT NULL`)
+    if (!role) throw new Error('Rol bulunamadı.')
+    const user = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${userId}`)
+    if (!user.length) throw new Error('Üye bulunamadı.')
+    name = role.name
+  }
+  await rows(sql`DELETE FROM kp_awards WHERE user_id = ${userId} AND badge_id IN (SELECT id FROM kp_badges WHERE role_style IS NOT NULL)`)
+  if (roleId) await rows(sql`INSERT INTO kp_awards (badge_id, user_id, period, note) VALUES (${roleId}, ${userId}, 'rol', 'Panelden verildi') ON CONFLICT DO NOTHING`)
+  roleCache = null
+  levelCache = null
+  return name
+}
+
+/** userId → role for every role holder; cached briefly because it rides along with the site-wide rank chips. */
+export async function roleMap(): Promise<Record<string, MemberRole>> {
+  if (roleCache && Date.now() - roleCache.at < 60_000) return roleCache.data
+  await ensureKp()
+  const r = await rows<{ user_id: string; name: string; role_style: string; icon: string }>(sql`SELECT DISTINCT ON (a.user_id) a.user_id, b.name, b.role_style, b.icon
+    FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id WHERE b.role_style IS NOT NULL AND b.active
+    ORDER BY a.user_id, a.awarded_at DESC`)
+  const data: Record<string, MemberRole> = {}
+  for (const x of r) data[x.user_id] = { name: x.name, style: x.role_style, icon: x.icon }
+  roleCache = { at: Date.now(), data }
+  return data
 }
 
 /** Awards a badge once per period and pays its KP bonus. Returns false when that period was already awarded. */

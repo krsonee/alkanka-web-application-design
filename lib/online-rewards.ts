@@ -160,7 +160,7 @@ export async function winnersFeed(limit = 30): Promise<FeedItem[]> {
     rows<{ id: number; badge: string; bonus: number; name: string | null; user_id: string; awarded_at: string }>(sql`
       SELECT a.id, b.name AS badge, b.bonus, u.name, a.user_id, a.awarded_at
       FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id LEFT JOIN public."user" u ON u.id = a.user_id
-      WHERE a.awarded_at > now() - interval '7 days' AND a.badge_id NOT IN ('moderator', 'sponsor-destek')
+      WHERE a.awarded_at > now() - interval '7 days' AND a.badge_id NOT IN (SELECT id FROM kp_badges WHERE role_style IS NOT NULL)
       ORDER BY a.awarded_at DESC LIMIT ${limit}`),
   ])
   const payouts = await import('@/lib/withdrawals')

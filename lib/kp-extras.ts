@@ -280,7 +280,7 @@ export async function getLiveFeed(limit = 8): Promise<FeedItem[]> {
     SELECT * FROM (
       (SELECT 'a' || a.id AS id, 'rozet' AS kind, u.name, b.name AS text, b.tier, b.icon, a.awarded_at AS at
         FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id LEFT JOIN public."user" u ON u.id = a.user_id
-        WHERE a.badge_id NOT IN ('moderator', 'sponsor-destek') ORDER BY a.awarded_at DESC LIMIT ${limit})
+        WHERE a.badge_id NOT IN (SELECT id FROM kp_badges WHERE role_style IS NOT NULL) ORDER BY a.awarded_at DESC LIMIT ${limit})
       UNION ALL
       (SELECT 'e' || e.id, 'turnuva', u.name, coalesce(e.note, 'Turnuva'), NULL, 'trophy', e.created_at
         FROM kp_events e LEFT JOIN public."user" u ON u.id = e.user_id WHERE e.source = 'turnuva' ORDER BY e.created_at DESC LIMIT ${limit})

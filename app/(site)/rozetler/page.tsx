@@ -167,7 +167,7 @@ export default async function BadgesPage() {
         <AutoScrollRow label="Değerli rozetler" className="-mx-4 scroll-px-4 gap-3 px-4 pb-1 sm:mx-0 sm:scroll-px-0 sm:px-0">
           {specials.map((b) => {
             const owners = holders[b.id] ?? []
-            const role = ROLE_BADGES[b.id]
+            const role = ROLE_BADGES[b.id] ?? (b.roleStyle ? { tier: b.roleStyle, label: 'Özel rol' } : undefined)
             const tier = role?.tier ?? b.tier
             return (
               <li key={b.id} className={cn('flex w-[calc(50%-0.375rem)] shrink-0 snap-start flex-col gap-2 rounded-2xl border p-3 sm:gap-3 sm:p-4 xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[tier])}>

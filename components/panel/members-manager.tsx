@@ -366,6 +366,9 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
                   userId={m.id}
                   activity={act.activity}
                   badges={act.badges}
+                  roles={act.roles}
+                  roleId={act.roleId}
+                  canRoles={act.canRoles}
                   onDone={(r) => {
                     setMsg(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error })
                     if (r.ok) {

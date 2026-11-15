@@ -2,7 +2,20 @@
 
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
-import { adjustPoints, awardBadge, awardBadgeId, listSpecialBadges, revokeAward, ROLE_BADGE_IDS } from '@/lib/kanka-puan'
+import {
+  adjustPoints,
+  awardBadge,
+  awardBadgeId,
+  deleteRole,
+  isRoleBadge,
+  listRoles,
+  listSpecialBadges,
+  revokeAward,
+  saveRole,
+  setMemberRole,
+  type RoleInput,
+} from '@/lib/kanka-puan'
+import { closeSignup, openSignup } from '@/lib/signup-gate'
 import {
   adjustWallet,
   banMember,
@@ -85,10 +98,83 @@ export async function walletAction(userId: string, amount: number, reason: strin
   })
 }
 
-export async function memberActivityAction(userId: string): Promise<{ activity: MemberActivity; badges: { id: string; name: string; tier: string }[] } | null> {
+export async function memberActivityAction(userId: string): Promise<{
+  activity: MemberActivity
+  badges: { id: string; name: string; tier: string }[]
+  roles: { id: string; name: string; staff: boolean }[]
+  roleId: string | null
+  canRoles: boolean
+} | null> {
   if (!(await canPanel('users'))) return null
-  const [activity, badges] = await Promise.all([memberActivity(String(userId)), listSpecialBadges().catch(() => [])])
-  return { activity, badges: badges.map((b) => ({ id: b.id, name: b.name, tier: b.tier })) }
+  const [activity, badges, roles, canRoles] = await Promise.all([
+    memberActivity(String(userId)),
+    listSpecialBadges().catch(() => []),
+    listRoles().catch(() => []),
+    canPanel('roles'),
+  ])
+  const roleIds = new Set(roles.map((r) => r.id))
+  return {
+    activity,
+    badges: badges.filter((b) => !roleIds.has(b.id)).map((b) => ({ id: b.id, name: b.name, tier: b.tier })),
+    roles: roles.map((r) => ({ id: r.id, name: r.name, staff: r.staff })),
+    roleId: activity.badges.find((b) => roleIds.has(b.id))?.id ?? null,
+    canRoles,
+  }
+}
+
+const NO_ROLE_PERMISSION = 'Rol vermek ve düzenlemek için "Görevliler" yetkin olmalı.'
+
+async function roleGuard(fn: () => Promise<string>) {
+  return guard(async () => {
+    if (!(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
+    return fn()
+  })
+}
+
+export async function memberRoleAction(userId: string, roleId: string | null) {
+  return roleGuard(async () => {
+    const name = await setMemberRole(String(userId), roleId ? String(roleId) : null)
+    await logAudit(name ? 'Rol verildi' : 'Rol kaldırıldı', await memberLabel(String(userId)), name)
+    return name
+      ? `${name} rolü verildi. Sohbette ve sitede görünmesi birkaç dakika sürebilir.`
+      : 'Rol kaldırıldı. Üye tekrar seviyesiyle görünür.'
+  })
+}
+
+export async function saveRoleAction(input: RoleInput) {
+  return roleGuard(async () => {
+    const role = { id: input.id ? String(input.id) : undefined, name: String(input.name), icon: String(input.icon), style: String(input.style), staff: !!input.staff }
+    await saveRole(role)
+    await logAudit(role.id ? 'Rol düzenlendi' : 'Rol oluşturuldu', null, `${role.name.trim()}${role.staff ? ' · görevli' : ''}`)
+    return role.id ? 'Rol güncellendi.' : 'Rol oluşturuldu. Üye detayındaki "Hediye ve rozet" sekmesinden verebilirsin.'
+  })
+}
+
+export async function deleteRoleAction(id: string) {
+  return roleGuard(async () => {
+    await deleteRole(String(id))
+    await logAudit('Rol silindi', null, String(id))
+    return 'Rol silindi, bu roldeki üyelerden de kaldırıldı.'
+  })
+}
+
+export async function signupGateAction(open: boolean, hours: number, slots: number) {
+  return guard(async () => {
+    if (!open) {
+      await closeSignup()
+      await logAudit('Yeni üyelik kapatıldı', null, null)
+      revalidatePath('/', 'layout')
+      return 'Yeni üyelik kapatıldı.'
+    }
+    const h = Math.floor(Number(hours) || 0)
+    const cap = Math.floor(Number(slots) || 0)
+    await openSignup(h, cap > 0 ? cap : null)
+    await logAudit('Yeni üyelik açıldı', null, `${h > 0 ? `${h} saat` : 'süresiz'}${h > 0 && cap > 0 ? ` · ${cap} kayıt` : ''}`)
+    revalidatePath('/', 'layout')
+    return h > 0
+      ? `Yeni üyelik ${h} saatliğine açıldı${cap > 0 ? `, ${cap} kayıt dolunca da kapanır` : ''}.`
+      : 'Yeni üyelik süresiz açıldı. Kapatmak için "Şimdi kapat" düğmesini kullan.'
+  })
 }
 
 export async function giftAction(userId: string, amount: number, message: string) {
@@ -100,6 +186,7 @@ export async function giftAction(userId: string, amount: number, message: string
 
 export async function memberBadgeAction(userId: string, badgeId: string, note: string) {
   return guard(async () => {
+    if (await isRoleBadge(String(badgeId))) throw new Error('Roller "Rol ver" kartından verilir.')
     const ok = await awardBadge(String(badgeId), String(userId), `manuel-${Date.now()}`, String(note).trim() || undefined)
     if (!ok) throw new Error('Rozet verilemedi.')
     await logAudit('Rozet verildi', await memberLabel(String(userId)), `${badgeId}${note ? ` · ${note}` : ''}`)
@@ -111,7 +198,7 @@ export async function memberRevokeBadgeAction(userId: string, awardId: number) {
   return guard(async () => {
     const badgeId = await awardBadgeId(Number(awardId))
     if (!badgeId) throw new Error('Rozet kaydı bulunamadı.')
-    if (ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error('Rol rozetlerini geri almak için rol yetkin olmalı.')
+    if ((await isRoleBadge(badgeId)) && !(await canPanel('roles'))) throw new Error('Rol rozetlerini geri almak için rol yetkin olmalı.')
     await revokeAward(Number(awardId))
     await logAudit('Rozet geri alındı', await memberLabel(String(userId)), badgeId)
     return 'Rozet ve bonus puanı geri alındı.'

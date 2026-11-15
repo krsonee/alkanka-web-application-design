@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { getKpConfig, levelMap } from '@/lib/kanka-puan'
+import { getKpConfig, levelMap, roleMap } from '@/lib/kanka-puan'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const [levels, cfg] = await Promise.all([levelMap(), getKpConfig()])
+  const [levels, cfg, roles] = await Promise.all([levelMap(), getKpConfig(), roleMap().catch(() => ({}))])
   return NextResponse.json(
-    { levels, names: cfg.levels.map((l) => l.name) },
+    { levels, names: cfg.levels.map((l) => l.name), roles },
     { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
   )
 }

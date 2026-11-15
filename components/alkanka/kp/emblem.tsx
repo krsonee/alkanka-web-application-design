@@ -214,6 +214,17 @@ export function SpecialEmblem({ icon, tier, size = 'md', locked, className }: { 
   return <Medallion tier={tier} shape="round" size={size} Icon={ICONS[icon] ?? Award} locked={locked} glow={tier !== 'altin'} className={className} />
 }
 
+/** Title chip for a member holding a role (Moderatör, VIP...); it takes the place of the level chip. */
+export function RoleChip({ name, style, icon, className }: { name: string; style: string; icon: string; className?: string }) {
+  const tier = style in TIER_TEXT ? style : 'moderator'
+  return (
+    <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border py-px pl-px pr-1.5 align-middle', TIER_BG[tier], className)} title={name}>
+      <Medallion tier={tier} shape="round" size="chip" Icon={ICONS[icon] ?? Shield} />
+      <span className={cn('font-display text-[10px] font-bold uppercase leading-none tracking-wide', TIER_TEXT[tier])}>{name}</span>
+    </span>
+  )
+}
+
 /** Compact rank marker shown next to a member's name across the site. */
 export function RankChip({ level, name, showName = false, className }: { level: number; name?: string; showName?: boolean; className?: string }) {
   if (!level || level < 1) return null

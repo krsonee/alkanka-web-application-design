@@ -7,7 +7,7 @@ import {
   awardBadge,
   awardBadgeId,
   awardContest,
-  ROLE_BADGE_IDS,
+  isRoleBadge,
   contestStandings,
   deleteSpecialBadge,
   revokeAward,
@@ -96,7 +96,7 @@ const NO_ROLE_PERMISSION = 'Görevli rozetlerini sadece yönetici veya yetkili p
 
 export async function giveBadge(badgeId: string, userId: string, note: string) {
   return guard(async () => {
-    if (ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
+    if ((await isRoleBadge(badgeId)) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     const ok = await awardBadge(badgeId, userId, `manuel-${Date.now()}`, note || undefined)
     return ok ? 'Rozet verildi.' : 'Bu üye rozeti zaten almış.'
   })
@@ -109,7 +109,7 @@ export async function giveContestBadge(badgeId: string) {
 export async function takeBackAward(awardId: number) {
   return guard(async () => {
     const badgeId = await awardBadgeId(awardId)
-    if (badgeId && ROLE_BADGE_IDS.includes(badgeId) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
+    if (badgeId && (await isRoleBadge(badgeId)) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     await revokeAward(awardId)
     return 'Rozet geri alındı.'
   })
