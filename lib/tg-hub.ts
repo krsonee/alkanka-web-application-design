@@ -1,8 +1,8 @@
 import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
-import { TelegramError, botToken, callBot, ensureTables, normalizeChat } from '@/lib/telegram-mirror'
-import { DEFAULT_HUB, type BroadcastRow, type HubConfig, type HubLogRow, type HubStats, type LeaderRow } from '@/lib/tg-hub-shared'
+import { botToken, callBot, ensureTables, normalizeChat } from '@/lib/telegram-mirror'
+import { DEFAULT_HUB, type HubConfig, type HubLogRow, type HubStats, type LeaderRow } from '@/lib/tg-hub-shared'
 import type { TgMessage } from '@/lib/telegram-chat'
 
 export type TgUser = { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string }
@@ -69,6 +69,11 @@ export function ensureHubTables() {
     await rows(sql`ALTER TABLE tg_links ADD COLUMN IF NOT EXISTS dm_off boolean NOT NULL DEFAULT false`).catch(() => null)
     await rows(sql`ALTER TABLE tg_links ADD COLUMN IF NOT EXISTS dm_blocked boolean NOT NULL DEFAULT false`).catch(() => null)
     await rows(sql`ALTER TABLE tg_broadcasts ADD COLUMN IF NOT EXISTS blocked int NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE tg_broadcasts
+      ADD COLUMN IF NOT EXISTS photo_path text, ADD COLUMN IF NOT EXISTS photo_file_id text, ADD COLUMN IF NOT EXISTS buttons text,
+      ADD COLUMN IF NOT EXISTS send_at timestamptz, ADD COLUMN IF NOT EXISTS audience text NOT NULL DEFAULT 'all',
+      ADD COLUMN IF NOT EXISTS author text, ADD COLUMN IF NOT EXISTS note text,
+      ADD COLUMN IF NOT EXISTS finished_at timestamptz, ADD COLUMN IF NOT EXISTS lease_until timestamptz`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_seen_updates (
       bot_id int NOT NULL, update_id bigint NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (bot_id, update_id))`)
     // Added without a default first: members who were already here keep NULL and are never treated as newcomers.
@@ -86,7 +91,7 @@ export function ensureHubTables() {
   return ready
 }
 
-async function getSetting(key: string) {
+export async function getSetting(key: string) {
   const r = await rows<{ value: string }>(sql`SELECT value FROM tg_settings WHERE key = ${key}`)
   return r[0]?.value ?? null
 }
@@ -274,7 +279,7 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
       const { handlePostCallback } = await import('@/lib/tg-posts')
       return handlePostCallback(botId, update.callback_query)
     }
-    if (isGuard && /^(cap|gd|wp):/.test(data)) {
+    if (isGuard && /^(cap|cq|gd|wp):/.test(data)) {
       const { handleGuardCallback } = await import('@/lib/tg-guard')
       return handleGuardCallback(botId, update.callback_query)
     }
@@ -530,84 +535,7 @@ export async function chatLeaderboard(fromIso: string, toIso: string, limit = 10
   return r.map((x) => ({ key: String(x.key), name: String(x.name), count: Number(x.n) }))
 }
 
-// --- DM broadcast ------------------------------------------------------------
-
-const BROADCAST_PER_RUN = 900
-const BROADCAST_DELAY_MS = 40
-
-export async function queueBroadcast(text: string, buttonText: string, buttonUrl: string) {
-  await ensureHubTables()
-  const body = text.trim()
-  if (body.length < 3) throw new Error('Mesaj çok kısa')
-  if (body.length > 3500) throw new Error('Mesaj en fazla 3500 karakter olabilir')
-  if (buttonUrl && !/^https:\/\//.test(buttonUrl)) throw new Error('Buton linki https ile başlamalı')
-  const [{ n }] = await rows(sql`SELECT count(*) AS n FROM tg_links WHERE NOT dm_off AND NOT dm_blocked`)
-  await rows(sql`INSERT INTO tg_broadcasts (text, button_text, button_url, total)
-    VALUES (${body}, ${buttonText.trim() || null}, ${buttonUrl.trim() || null}, ${Number(n)})`)
-  return Number(n)
-}
-
-export async function listBroadcasts(limit = 10): Promise<BroadcastRow[]> {
-  await ensureHubTables()
-  const r = await rows(sql`SELECT id, text, status, sent, failed, blocked, total, created_at FROM tg_broadcasts ORDER BY id DESC LIMIT ${limit}`)
-  return r.map((x) => ({
-    id: Number(x.id),
-    text: String(x.text),
-    status: String(x.status),
-    sent: Number(x.sent),
-    failed: Number(x.failed),
-    blocked: Number(x.blocked ?? 0),
-    total: Number(x.total),
-    createdAt: new Date(String(x.created_at)).toISOString(),
-  }))
-}
-
-export async function cancelBroadcast(id: number) {
-  await rows(sql`UPDATE tg_broadcasts SET status = 'cancelled' WHERE id = ${id} AND status IN ('queued','sending')`)
-}
-
-/** Sends the next slice of the oldest queued broadcast through the chat bot (members pressed Start there). */
-export async function processBroadcasts() {
-  await ensureHubTables()
-  const [job] = await rows(sql`SELECT * FROM tg_broadcasts WHERE status IN ('queued','sending') ORDER BY id LIMIT 1`)
-  if (!job) return
-  const { getChatConfig } = await import('@/lib/telegram-chat')
-  const chat = await getChatConfig()
-  if (!chat) return
-  const token = await botToken(chat.botId)
-  await rows(sql`UPDATE tg_broadcasts SET status = 'sending' WHERE id = ${job.id}`)
-  const people = await rows<{ tg_id: string }>(sql`SELECT tg_id FROM tg_links
-    WHERE NOT dm_off AND NOT dm_blocked AND tg_id > ${job.cursor} ORDER BY tg_id LIMIT ${BROADCAST_PER_RUN}`)
-  const keyboard: { text: string; url?: string; callback_data?: string }[][] = []
-  if (job.button_text && job.button_url) keyboard.push([{ text: String(job.button_text), url: String(job.button_url) }])
-  keyboard.push([{ text: 'Bildirimleri kapat', callback_data: 'dm:off' }])
-  let sent = 0
-  let failed = 0
-  let blocked = 0
-  let cursor = Number(job.cursor)
-  const started = Date.now()
-  for (const p of people) {
-    if (Date.now() - started > 25_000) break
-    const tgId = Number(p.tg_id)
-    try {
-      await callBot(token, 'sendMessage', { chat_id: tgId, text: String(job.text), reply_markup: { inline_keyboard: keyboard }, link_preview_options: { is_disabled: true } })
-      sent++
-    } catch (error) {
-      const tg = error instanceof TelegramError ? error : null
-      // Still rate-limited after callBot's own short waits: stop before moving the cursor so this member is retried next run.
-      if (tg?.code === 429) break
-      if (tg && (tg.code === 403 || /chat not found|user is deactivated/i.test(tg.description))) {
-        blocked++
-        await rows(sql`UPDATE tg_links SET dm_blocked = true WHERE tg_id = ${tgId}`).catch(() => null)
-      } else failed++
-    }
-    cursor = tgId
-    await new Promise((r) => setTimeout(r, BROADCAST_DELAY_MS))
-  }
-  const done = people.length < BROADCAST_PER_RUN && cursor === Number(people.at(-1)?.tg_id ?? cursor)
-  await rows(sql`UPDATE tg_broadcasts SET sent = sent + ${sent}, failed = failed + ${failed}, blocked = blocked + ${blocked}, cursor = ${cursor},
-    status = CASE WHEN status = 'cancelled' THEN 'cancelled' WHEN ${done} THEN 'done' ELSE 'sending' END WHERE id = ${job.id}`)
-}
+// --- DM helpers (the announcements themselves live in tg-broadcast.ts) ---------
 
 export async function dmOptOut(botId: number, q: TgCallback) {
   await ensureHubTables()

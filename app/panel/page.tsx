@@ -156,10 +156,12 @@ import { SystemStatus } from '@/components/panel/system-status'
 import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
-import { BroadcastSection, TgHubManager } from '@/components/panel/tg-hub-manager'
+import { TgHubManager } from '@/components/panel/tg-hub-manager'
+import { DmPanel } from '@/components/panel/tg-dm-panel'
 import { TgPanelProvider } from '@/components/panel/tg-hub-ui'
 import { StatusSection } from '@/components/panel/tg-status-panel'
-import { getHub, listBroadcasts } from '@/lib/tg-hub'
+import { getHub } from '@/lib/tg-hub'
+import { loadDmPanel } from '@/lib/tg-broadcast'
 import { uniqueChats } from '@/lib/tg-hub-shared'
 import { STATUS_TAB } from '@/lib/tg-status-shared'
 import { loadTgHub } from '@/lib/tg-hub-panel'
@@ -341,7 +343,12 @@ async function telegramPanel(access: TelegramAccess) {
         return null
       })
     : null
-  const broadcasts = !access.posts ? [] : hubData ? hubData.broadcasts : await listBroadcasts(10).catch(() => [])
+  const dmData = access.posts
+    ? await loadDmPanel().catch((error) => {
+        console.error('[panel:tg-dm]', error)
+        return null
+      })
+    : null
   const setup = access.setup ? await telegramSetupTabs({ bots, targets, suite, chat }) : { tabs: [], chats: [] }
 
   const hub = hubData?.hub ?? savedHub
@@ -363,7 +370,7 @@ async function telegramPanel(access: TelegramAccess) {
       { id: 'post-list', group: 'Postlar', label: 'Gönderilenler', content: postData ? <PostList data={postData} /> : failed('Gönderilen postlar') },
       { id: 'post-plans', group: 'Postlar', label: 'Zamanlı postlar', content: postData ? <ScheduledPosts data={postData} /> : failed('Zamanlı postlar') },
       { id: 'post-rules', group: 'Postlar', label: 'Elle atılan postlar', content: postData ? <ChannelRules data={postData} /> : failed('Elle atılan postlar') },
-      { id: 'post-dm', group: 'Postlar', label: 'DM duyuru', content: <BroadcastSection d={{ broadcasts, linkedMembers }} /> },
+      { id: 'post-dm', group: 'Postlar', label: 'DM duyuru', content: dmData ? <DmPanel data={dmData} /> : failed('DM duyuru') },
     )
   }
   const afterPosts = tabs.length

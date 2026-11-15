@@ -4,7 +4,7 @@ import { rows, sql } from '@/lib/db'
 import { botToken, callBot } from '@/lib/telegram-mirror'
 import type { TgMessage } from '@/lib/telegram-chat'
 import { ensureHubTables, getHub, modLog, who, type TgCallback, type TgUser } from '@/lib/tg-hub'
-import type { HubConfig, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
+import { TICKET_PAGE, type HubConfig, type SponsorSupportStat, type TicketPage, type TicketRow } from '@/lib/tg-hub-shared'
 
 const AI_MODEL = 'google/gemini-3.5-flash'
 const MAX_OPEN_PER_USER = 3
@@ -25,6 +25,7 @@ export function ensureSupportTables() {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_support_state (
       tg_id bigint PRIMARY KEY, step text NOT NULL, sponsor text, category text, pending_text text, pending_msg bigint,
       updated_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE tg_tickets ADD COLUMN IF NOT EXISTS nudged_at timestamptz`)
   })().catch((error) => {
     supportReady = null
     throw error
@@ -366,27 +367,92 @@ export async function handleSupportCallback(botId: number, q: TgCallback) {
 
 // --- Panel / reports ---------------------------------------------------------
 
+const TICKET_COLUMNS = sql`id, name, username, sponsor, category, text, status, answer, rating, claimed_by, created_at, closed_at,
+  floor(EXTRACT(EPOCH FROM now() - created_at) / 60)::int AS wait_min`
+
+const mapTicket = (t: Record<string, unknown>): TicketRow => ({
+  id: Number(t.id),
+  name: String(t.name),
+  username: (t.username as string | null) ?? null,
+  sponsor: String(t.sponsor),
+  category: String(t.category),
+  text: String(t.text),
+  status: String(t.status) as TicketRow['status'],
+  answer: (t.answer as string | null) ?? null,
+  rating: t.rating == null ? null : Number(t.rating),
+  createdAt: new Date(String(t.created_at)).toISOString(),
+  closedAt: t.closed_at ? new Date(String(t.closed_at)).toISOString() : null,
+  claimedBy: (t.claimed_by as string | null) ?? null,
+  waitMin: Number(t.wait_min ?? 0),
+})
+
 export async function listTickets(filter: 'open' | 'closed' | 'all' = 'open', limit = 40): Promise<TicketRow[]> {
   await ensureSupportTables()
   const r =
     filter === 'open'
-      ? await rows(sql`SELECT * FROM tg_tickets WHERE status IN ('open','claimed') ORDER BY id DESC LIMIT ${limit}`)
+      ? await rows(sql`SELECT ${TICKET_COLUMNS} FROM tg_tickets WHERE status IN ('open','claimed') ORDER BY id DESC LIMIT ${limit}`)
       : filter === 'closed'
-        ? await rows(sql`SELECT * FROM tg_tickets WHERE status IN ('resolved','rejected') ORDER BY id DESC LIMIT ${limit}`)
-        : await rows(sql`SELECT * FROM tg_tickets ORDER BY id DESC LIMIT ${limit}`)
-  return r.map((t) => ({
-    id: Number(t.id),
-    name: String(t.name),
-    username: (t.username as string | null) ?? null,
-    sponsor: String(t.sponsor),
-    category: String(t.category),
-    text: String(t.text),
-    status: String(t.status) as TicketRow['status'],
-    answer: (t.answer as string | null) ?? null,
-    rating: t.rating == null ? null : Number(t.rating),
-    createdAt: new Date(String(t.created_at)).toISOString(),
-    closedAt: t.closed_at ? new Date(String(t.closed_at)).toISOString() : null,
-  }))
+        ? await rows(sql`SELECT ${TICKET_COLUMNS} FROM tg_tickets WHERE status IN ('resolved','rejected') ORDER BY id DESC LIMIT ${limit}`)
+        : await rows(sql`SELECT ${TICKET_COLUMNS} FROM tg_tickets ORDER BY id DESC LIMIT ${limit}`)
+  return r.map(mapTicket)
+}
+
+const likeSafe = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`)
+
+/** The panel's ticket search and "older" paging. A bare number is read as a ticket number or a Telegram id. */
+export async function searchTickets(input: { filter: 'open' | 'closed'; q?: string; beforeId?: number }, limit = TICKET_PAGE): Promise<TicketPage> {
+  await ensureSupportTables()
+  const parts = [input.filter === 'open' ? sql`status IN ('open','claimed')` : sql`status IN ('resolved','rejected')`]
+  const q = String(input.q ?? '').trim().replace(/^[#@]/, '').slice(0, 80)
+  if (q) {
+    const like = `%${likeSafe(q)}%`
+    parts.push(
+      /^\d{1,15}$/.test(q)
+        ? sql`(id = ${Number(q)} OR tg_id = ${Number(q)} OR text ILIKE ${like})`
+        : sql`(name ILIKE ${like} OR username ILIKE ${like} OR text ILIKE ${like} OR sponsor ILIKE ${like} OR category ILIKE ${like} OR answer ILIKE ${like})`,
+    )
+  }
+  if (Number.isSafeInteger(input.beforeId) && Number(input.beforeId) > 0) parts.push(sql`id < ${Number(input.beforeId)}`)
+  const r = await rows(sql`SELECT ${TICKET_COLUMNS} FROM tg_tickets WHERE ${sql.join(parts, sql` AND `)} ORDER BY id DESC LIMIT ${limit + 1}`)
+  return { rows: r.slice(0, limit).map(mapTicket), hasMore: r.length > limit }
+}
+
+const NUDGE_BATCH = 10
+
+/** Reminds the staff groups, once per ticket, about tickets nobody has picked up. Runs from the background tick. */
+export async function nudgeStaleTickets() {
+  const hub = await getHub()
+  const minutes = hub.support.alertMinutes
+  if (!hub.support.enabled || !hub.supportBotId || !(minutes > 0)) return 0
+  await ensureSupportTables()
+  // Marked in the same statement that finds them, so two ticks running together never remind twice.
+  const stale = await rows<{ id: number; sponsor: string; category: string; name: string; wait_min: number }>(sql`UPDATE tg_tickets SET nudged_at = now()
+    WHERE id IN (SELECT id FROM tg_tickets
+      WHERE status = 'open' AND nudged_at IS NULL AND created_at < now() - make_interval(mins => ${minutes}) ORDER BY id LIMIT ${NUDGE_BATCH})
+    RETURNING id, sponsor, category, name, floor(EXTRACT(EPOCH FROM now() - created_at) / 60)::int AS wait_min`)
+  if (!stale.length) return 0
+  const token = await botToken(hub.supportBotId)
+  for (const t of stale) {
+    for (const chat of staffChatsFor(hub, String(t.sponsor))) {
+      const [first] = await rows<{ message_id: string | null }>(sql`SELECT min(message_id) AS message_id FROM tg_ticket_msgs WHERE ticket_id = ${t.id} AND chat_id = ${chat}`)
+      const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
+        chat_id: chat,
+        text: `Cevapsız talep #${t.id} · ${t.sponsor} · ${t.category} · ${t.name}\n${t.wait_min} dakikadır kimse üstlenmedi. Cevaplamak için talep mesajına yanıt yaz.`,
+        reply_parameters: first?.message_id ? { message_id: Number(first.message_id), allow_sending_without_reply: true } : undefined,
+      }).catch((error) => {
+        console.error('[tg-support] reminder failed', error)
+        return null
+      })
+      // A reply to the reminder itself should still answer the ticket.
+      if (sent) await rows(sql`INSERT INTO tg_ticket_msgs (chat_id, message_id, ticket_id) VALUES (${chat}, ${sent.message_id}, ${t.id}) ON CONFLICT DO NOTHING`)
+    }
+  }
+  await modLog({
+    action: 'Destek talebi cevapsız',
+    reason: `${stale.map((t) => `#${t.id}`).join(', ')} · ${minutes} dakikadır üstlenilmedi, yetkili grubuna hatırlatıldı`,
+    notify: false,
+  })
+  return stale.length
 }
 
 export async function panelCloseTicket(ticketId: number, status: 'resolved' | 'rejected', answer: string) {

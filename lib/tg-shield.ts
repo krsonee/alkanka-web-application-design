@@ -40,6 +40,8 @@ export function ensureShieldTables() {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_thread_locks (chat_id text NOT NULL, thread_id bigint NOT NULL, until timestamptz NOT NULL, PRIMARY KEY (chat_id, thread_id))`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_post_roots (chat_id text NOT NULL, message_id bigint NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (chat_id, message_id))`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_quiet (chat_id text PRIMARY KEY, mode text NOT NULL, perms text, msg_id bigint,
+      failed_at timestamptz, started_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_suspect_state (tg_id bigint PRIMARY KEY, state text NOT NULL, reason text, name text, updated_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
@@ -291,16 +293,22 @@ export async function closeInvites(token: string, chatId: number | string) {
     .then(() => true)
     .catch(() => false)
   if (!ok) return false
-  // A running lock restores its saved permissions later; without this it would switch invites back on.
-  const [lock] = await rows<{ perms: string | null }>(sql`SELECT perms FROM tg_locks WHERE chat_id = ${id}`)
-  if (lock?.perms) {
+  // A running lock or quiet-hours window restores its saved permissions later; without this it would switch invites back on.
+  const withoutInvites = (perms: string | null | undefined) => {
+    if (!perms) return null
     try {
-      const saved = { ...(JSON.parse(lock.perms) as Record<string, boolean>), can_invite_users: false }
-      await rows(sql`UPDATE tg_locks SET perms = ${JSON.stringify(saved)} WHERE chat_id = ${id}`)
+      return JSON.stringify({ ...(JSON.parse(perms) as Record<string, boolean>), can_invite_users: false })
     } catch {
       // Unreadable saved permissions fall back to the default set on unlock.
+      return null
     }
   }
+  const [lock] = await rows<{ perms: string | null }>(sql`SELECT perms FROM tg_locks WHERE chat_id = ${id}`)
+  const lockPerms = withoutInvites(lock?.perms)
+  if (lockPerms) await rows(sql`UPDATE tg_locks SET perms = ${lockPerms} WHERE chat_id = ${id}`)
+  const [quiet] = await rows<{ perms: string | null }>(sql`SELECT perms FROM tg_quiet WHERE chat_id = ${id}`)
+  const quietPerms = withoutInvites(quiet?.perms)
+  if (quietPerms) await rows(sql`UPDATE tg_quiet SET perms = ${quietPerms} WHERE chat_id = ${id}`)
   return true
 }
 

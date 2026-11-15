@@ -1,31 +1,28 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
-import { useEffect, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useTransition } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
+import { Plus, Trash2 } from 'lucide-react'
 import type { MirrorBot } from '@/lib/telegram-mirror'
-import { CAPTCHA_MINUTES, RAID_BAN_MINUTES } from '@/lib/tg-hub-shared'
-import type { BroadcastRow, HubConfig, HubGroup, HubStats, KnownChat, LeaderRow, LockRow, LogPage, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
+import { CANNED_MAX, CAPTCHA_MINUTES, CAPTCHA_MODES, RAID_BAN_MINUTES, REPLY_BUTTON_MAX, REPLY_RULE_MAX, REPLY_WORD_MAX } from '@/lib/tg-hub-shared'
+import type { HubConfig, HubGroup, HubStats, KnownChat, LeaderRow, LockRow, LogPage, QuietRow, ReplyRule, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { ChatField } from '@/components/panel/tg-chat-field'
-import { Card, NumberField, Toggle, btn, btnGhost, fmt, input, useAction, useKnownChats, useTgAccess } from '@/components/panel/tg-hub-ui'
+import { Card, NumberField, Toggle, btn, btnGhost, input, useAction, useKnownChats, useTgAccess } from '@/components/panel/tg-hub-ui'
 import { LogSection } from '@/components/panel/tg-log-panel'
 import { MemberCardHost, MemberName, openMemberCard } from '@/components/panel/tg-member-card'
+import { ReplyButtonsEditor } from '@/components/panel/tg-reply-buttons'
 import { ShieldSection } from '@/components/panel/tg-shield-panel'
+import { TicketDesk } from '@/components/panel/tg-support-desk'
 import {
   addHubChat,
-  closeTicketAction,
-  deleteTicketAction,
   findMemberAction,
   markTrusted,
   removeHubChat,
   saveHubSettings,
-  sendBroadcast,
   sendWeeklyNow,
   setRoleBot,
-  stopBroadcast,
   pumpWipes,
   repairTelegramAction,
   stopWipe,
@@ -44,10 +41,10 @@ export type TgHubData = {
   /** First page of the log; the Kayıtlar tab asks for anything beyond it. */
   log: LogPage
   locks: LockRow[]
+  quiet: QuietRow[]
   tickets: TicketRow[]
   sponsorStats: SponsorSupportStat[]
   leaders: LeaderRow[]
-  broadcasts: BroadcastRow[]
   bans: { tgId: number; who: string; reason: string; createdAt: string }[]
   trustLow: { tgId: number; score: number; trusted: boolean; name: string }[]
   guardHook: HookInfo
@@ -242,6 +239,17 @@ function GuardSection({ d }: { d: TgHubData }) {
           <Toggle label="Sahte yönetici koruması" hint="Adında Alkanka, admin, destek geçen ve yönetici taklidi yapan hesaplar engellenir." checked={g.impersonation} onChange={(v) => set({ impersonation: v })} />
           <Toggle label="Katıldı/ayrıldı yazılarını sil" checked={g.cleanService} onChange={(v) => set({ cleanService: v })} />
         </div>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Doğrulama türü
+          <select className={input} value={g.captchaMode} disabled={!g.captcha} onChange={(e) => set({ captchaMode: e.target.value as HubConfig['guard']['captchaMode'] })}>
+            {CAPTCHA_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <span className="leading-relaxed">{CAPTCHA_MODES.find((m) => m.value === g.captchaMode)?.hint}</span>
+        </label>
         <NumberField label={`Baskın koruması: 1 dakikada bu sayıdan fazla kişi girerse sonraki gelenler ${RAID_BAN_MINUTES} dakikalığına gruptan çıkarılır, kalıcı banlanmaz (0 = kapalı)`} value={g.raidJoins} onChange={(v) => set({ raidJoins: v })} suffix="kişi" />
         <p className="text-xs leading-relaxed text-muted-foreground">
           {d.hub.shield.raidMode
@@ -297,68 +305,13 @@ function GuardSection({ d }: { d: TgHubData }) {
 
 // --- Support -------------------------------------------------------------------
 
-function TicketItem({ t }: { t: TicketRow }) {
-  const [answer, setAnswer] = useState('')
-  const a = useAction()
-  const open = t.status === 'open' || t.status === 'claimed'
-  return (
-    <li className="flex flex-col gap-2 rounded-lg border border-border p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          <span className="font-semibold text-foreground">#{t.id}</span> · {t.name}
-          {t.username ? ` (@${t.username})` : ''} · {t.sponsor} · {t.category}
-        </span>
-        <span>{fmt(t.createdAt)}</span>
-      </div>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{t.text}</p>
-      {open ? (
-        <>
-          <textarea aria-label="Cevap" className="min-h-16 rounded-lg border border-border bg-background p-2 text-sm text-foreground" placeholder="Üyeye gidecek cevap ya da red nedeni" value={answer} onChange={(e) => setAnswer(e.target.value)} />
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => closeTicketAction(t.id, 'resolved', answer))}>
-              Çözüldü olarak gönder
-            </button>
-            <button type="button" className={btnGhost} disabled={a.pending} onClick={() => a.run(() => closeTicketAction(t.id, 'rejected', answer))}>
-              Reddet
-            </button>
-          </div>
-          {a.note}
-        </>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="min-w-0 text-xs text-muted-foreground">
-              {t.status === 'resolved' ? 'Çözüldü' : 'Reddedildi'} · {t.answer}
-              {t.rating ? ` · Puan ${t.rating}/5` : ''}
-            </p>
-            <button
-              type="button"
-              className="shrink-0 text-xs text-destructive hover:underline disabled:opacity-50"
-              disabled={a.pending}
-              onClick={() => {
-                void askConfirm(`#${t.id} numaralı bilet kalıcı olarak silinsin mi? Sponsor karnesinden de düşer, geri alınamaz.`).then((ok) => {
-                  if (ok) a.run(() => deleteTicketAction(t.id))
-                })
-              }}
-            >
-              {a.pending ? 'Siliniyor…' : 'Sil'}
-            </button>
-          </div>
-          {a.note}
-        </>
-      )}
-    </li>
-  )
-}
-
 function SupportSection({ d }: { d: TgHubData }) {
   const [cfg, setCfg] = useState(d.hub)
   const [cats, setCats] = useState(d.hub.support.categories.join(', '))
   const a = useAction()
   const s = cfg.support
   const set = (patch: Partial<HubConfig['support']>) => setCfg((c) => ({ ...c, support: { ...c.support, ...patch } }))
-  const open = d.tickets.filter((t) => t.status === 'open' || t.status === 'claimed')
-  const closed = d.tickets.filter((t) => t.status === 'resolved' || t.status === 'rejected')
+  const setCanned = (index: number, patch: Partial<HubConfig['support']['canned'][number]>) => set({ canned: s.canned.map((c, i) => (i === index ? { ...c, ...patch } : c)) })
   const { setup } = useTgAccess()
   return (
     <div className="flex flex-col gap-4">
@@ -388,6 +341,49 @@ function SupportSection({ d }: { d: TgHubData }) {
           <input className={input} value={cats} onChange={(e) => setCats(e.target.value)} />
         </label>
         <Toggle label="Sık sorulara otomatik cevap" hint="Üyenin sorusu sitedeki SSS'de varsa bot önce cevabı gösterir. 'Çözülmedi' derse bilet açılır." checked={s.aiFaq} onChange={(v) => set({ aiFaq: v })} />
+        <NumberField
+          label="Cevapsız bilet uyarısı: bir bileti bu kadar dakika kimse üstlenmezse yetkili grubuna bir kez hatırlatma gider ve bilet panelde kırmızı işaretlenir (0 = kapalı, en az 5)"
+          value={s.alertMinutes}
+          onChange={(v) => set({ alertMinutes: v })}
+          suffix="dk"
+        />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Hatırlatma dakikası dakikasına gelmez: sitede dakikalık zamanlayıcı çalışmadığı için süre dolduktan sonraki ilk site ziyaretinde gönderilir.
+        </p>
+        <div role="group" aria-label="Hazır cevaplar" className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">
+            Hazır cevaplar: bilet cevaplarken listeden seçilir, cevap kutusuna yazılır; göndermeden önce düzeltebilirsin (en fazla {CANNED_MAX})
+          </span>
+          {s.canned.map((c, i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+              <div className="flex items-center gap-2">
+                <input aria-label={`${i + 1}. hazır cevabın başlığı`} className={input} placeholder="Başlık (örnek: Çekim süresi)" maxLength={40} value={c.title} onChange={(e) => setCanned(i, { title: e.target.value })} />
+                <button
+                  type="button"
+                  aria-label={`${i + 1}. hazır cevabı sil`}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-destructive"
+                  onClick={() => set({ canned: s.canned.filter((_, j) => j !== i) })}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+              <textarea
+                aria-label={`${i + 1}. hazır cevabın yazısı`}
+                className="min-h-16 rounded-lg border border-border bg-background p-2 text-sm text-foreground"
+                placeholder="Üyeye gidecek cevap"
+                maxLength={1000}
+                value={c.text}
+                onChange={(e) => setCanned(i, { text: e.target.value })}
+              />
+            </div>
+          ))}
+          {s.canned.length < CANNED_MAX && (
+            <button type="button" className={`${btnGhost} gap-1.5 self-start`} onClick={() => set({ canned: [...s.canned, { title: '', text: '' }] })}>
+              <Plus className="size-4" aria-hidden="true" />
+              Hazır cevap ekle
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => saveHubSettings({ ...cfg, support: { ...s, categories: cats.split(',').map((x) => x.trim()).filter(Boolean) } }))}>
             {a.pending ? 'Kaydediliyor…' : 'Destek ayarlarını kaydet'}
@@ -397,31 +393,7 @@ function SupportSection({ d }: { d: TgHubData }) {
       </Card>
         </>
       )}
-      <Card title={`Açık biletler (${open.length})`} hint="Biletleri Telegram grubundan da cevaplayabilirsin; burası yedek ekran.">
-        {open.length ? (
-          <ul className="flex flex-col gap-2">
-            {open.map((t) => (
-              <TicketItem key={t.id} t={t} />
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">Açık bilet yok.</p>
-        )}
-      </Card>
-      <Card title={`Kapanan biletler (son ${closed.length})`} hint="Çözülen ve reddedilen son biletler. Deneme için açılmış bir bileti buradan silebilirsin; silinen bilet sponsor karnesinden de düşer.">
-        {closed.length ? (
-          <details>
-            <summary className="cursor-pointer text-sm font-medium text-primary">Listeyi göster / gizle</summary>
-            <ul className="mt-3 flex flex-col gap-2">
-              {closed.map((t) => (
-                <TicketItem key={t.id} t={t} />
-              ))}
-            </ul>
-          </details>
-        ) : (
-          <p className="text-xs text-muted-foreground">Kapanan bilet yok.</p>
-        )}
-      </Card>
+      <TicketDesk tickets={d.tickets} canned={d.hub.support.canned} alertMinutes={d.hub.support.alertMinutes} />
       <Card title="Sponsor destek karnesi (son 7 gün)" hint="Bu veriler Güven Merkezi'ndeki sponsor karnesine de otomatik yansır.">
         {d.sponsorStats.length ? (
           <div className="overflow-x-auto">
@@ -460,12 +432,52 @@ function SupportSection({ d }: { d: TgHubData }) {
 
 // --- Counter --------------------------------------------------------------------
 
+const replyArea = 'min-h-20 rounded-lg border border-border bg-background p-3 text-sm text-foreground'
+
+/** Keeps the trigger words as typed text, so a comma or a space can be entered before the next word exists. */
+function ReplyRuleEditor({ rule, index, onChange, onRemove }: { rule: ReplyRule; index: number; onChange: (patch: Partial<ReplyRule>) => void; onRemove: () => void }) {
+  const [words, setWords] = useState(rule.words.join(', '))
+  return (
+    <li className="flex flex-col gap-3 rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <input type="checkbox" className="size-4 accent-primary" checked={rule.enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
+          {index + 1}. kural açık
+        </label>
+        <button type="button" className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive hover:underline" onClick={onRemove}>
+          <Trash2 className="size-3.5" aria-hidden="true" />
+          Kuralı sil
+        </button>
+      </div>
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        Tetikleyici kelimeler (virgülle ayır, en fazla {REPLY_WORD_MAX})
+        <input
+          className={input}
+          placeholder="bonus, çevrim, promosyon"
+          value={words}
+          onChange={(e) => {
+            setWords(e.target.value)
+            onChange({ words: e.target.value.split(',').map((w) => w.trim()).filter(Boolean) })
+          }}
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        Botun cevabı
+        <textarea className={replyArea} maxLength={1000} value={rule.text} onChange={(e) => onChange({ text: e.target.value })} />
+      </label>
+      <ReplyButtonsEditor value={rule.buttons} onChange={(buttons) => onChange({ buttons })} max={REPLY_BUTTON_MAX} />
+    </li>
+  )
+}
+
 function AutoReplySection({ d }: { d: TgHubData }) {
   const [cfg, setCfg] = useState(d.hub)
   const a = useAction()
   const r = cfg.autoReply
   const set = (patch: Partial<HubConfig['autoReply']>) => setCfg((c) => ({ ...c, autoReply: { ...c.autoReply, ...patch } }))
-  const area = 'min-h-20 rounded-lg border border-border bg-background p-3 text-sm text-foreground'
+  const setRule = (id: string, patch: Partial<ReplyRule>) => set({ rules: r.rules.map((rule) => (rule.id === id ? { ...rule, ...patch } : rule)) })
+  const setWelcome = (patch: Partial<HubConfig['autoReply']['welcome']>) => set({ welcome: { ...r.welcome, ...patch } })
+  const area = replyArea
   return (
     <div className="flex flex-col gap-4">
       <Toggle
@@ -490,6 +502,40 @@ function AutoReplySection({ d }: { d: TgHubData }) {
           <textarea className={area} value={r.sponsorText} onChange={(e) => set({ sponsorText: e.target.value })} />
         </label>
         <NumberField label="Kaç sponsor butonu gösterilsin" value={r.sponsorLimit} onChange={(v) => set({ sponsorLimit: v })} suffix="buton" />
+      </Card>
+      <Card
+        title={`Kendi kuralların (${r.rules.length}/${REPLY_RULE_MAX})`}
+        hint="Kelime, mesajdaki bir kelimenin başında geçerse cevap gider: 'bonus' yazarsan 'bonuslar' da tetikler, 'abonus' tetiklemez. Büyük-küçük harf ve Türkçe karakter fark etmez. Birden çok kural uyarsa listede üstteki kazanır. Kendi kuralların, yukarıdaki 'site' ve 'sponsor' cevaplarından önce bakılır. Bu cevaplar da 10 dakika sonra silinir."
+      >
+        {r.rules.length > 0 && (
+          <ul className="flex flex-col gap-3">
+            {r.rules.map((rule, i) => (
+              <ReplyRuleEditor key={rule.id} rule={rule} index={i} onChange={(patch) => setRule(rule.id, patch)} onRemove={() => set({ rules: r.rules.filter((x) => x.id !== rule.id) })} />
+            ))}
+          </ul>
+        )}
+        {r.rules.length < REPLY_RULE_MAX && (
+          <button
+            type="button"
+            className={`${btnGhost} gap-1.5 self-start`}
+            onClick={() => set({ rules: [...r.rules, { id: Math.random().toString(36).slice(2, 10).padEnd(6, '0'), enabled: true, words: [], text: '', buttons: [] }] })}
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            Kural ekle
+          </button>
+        )}
+      </Card>
+      <Card
+        title="Karşılama mesajı"
+        hint="Gruba yeni giren üyeye atılır; doğrulama açıksa doğrulamayı geçtikten sonra. Oto cevap kapalı olsa da çalışır, Bekçi açık olmalıdır. Aynı anda çok kişi girerse 20 saniyede en fazla bir karşılama atılır."
+      >
+        <Toggle label="Karşılama mesajı açık" checked={r.welcome.enabled} onChange={(v) => setWelcome({ enabled: v })} />
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          {'Mesaj ({isim} yazdığın yere üyenin adı gelir)'}
+          <textarea className={area} maxLength={1000} value={r.welcome.text} onChange={(e) => setWelcome({ text: e.target.value })} />
+        </label>
+        <ReplyButtonsEditor value={r.welcome.buttons} onChange={(buttons) => setWelcome({ buttons })} max={REPLY_BUTTON_MAX} />
+        <NumberField label="Karşılama mesajı kaç dakika sonra silinsin (0 = silinmez)" value={r.welcome.deleteMinutes} onChange={(v) => setWelcome({ deleteMinutes: v })} suffix="dk" />
       </Card>
       <Card title="Spam koruması">
         <NumberField label="Aynı cevap aynı grupta en erken kaç saniyede bir atılsın" value={r.cooldownSeconds} onChange={(v) => set({ cooldownSeconds: v })} suffix="sn" />
@@ -714,78 +760,6 @@ function CleanupSection({ d }: { d: TgHubData }) {
   )
 }
 
-// --- Broadcast -------------------------------------------------------------------
-
-/** Takes only what it shows, so an account limited to posting is never sent moderation data. */
-export function BroadcastSection({ d }: { d: Pick<TgHubData, 'broadcasts' | 'linkedMembers'> }) {
-  const [text, setText] = useState('')
-  const [bText, setBText] = useState('')
-  const [bUrl, setBUrl] = useState('')
-  const a = useAction()
-  const stop = useAction()
-  const router = useRouter()
-  const sending = d.broadcasts.some((b) => b.status === 'queued' || b.status === 'sending')
-  useEffect(() => {
-    if (!sending) return
-    const t = setInterval(() => router.refresh(), 4000)
-    return () => clearInterval(t)
-  }, [sending, router])
-  return (
-    <div className="flex flex-col gap-4">
-      <Card title="DM duyuru gönder" hint={`Hesabını Telegram'a bağlamış ${d.linkedMembers} üyeye Canlı Sohbet botundan özel mesaj gider. Mesajın altında "Bildirimleri kapat" butonu otomatik olur. Haftada 1-2 duyurudan fazlası şikâyete yol açar.`}>
-        <textarea aria-label="Duyuru metni" className="min-h-28 rounded-lg border border-border bg-background p-3 text-sm text-foreground" placeholder="Duyuru metni" value={text} onChange={(e) => setText(e.target.value)} />
-        <div className="grid gap-2 md:grid-cols-2">
-          <input aria-label="Buton yazısı" className={input} placeholder="Buton yazısı (isteğe bağlı)" value={bText} onChange={(e) => setBText(e.target.value)} />
-          <input aria-label="Buton linki" className={input} placeholder="https://…" value={bUrl} onChange={(e) => setBUrl(e.target.value)} />
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className={btn}
-            disabled={a.pending || text.trim().length < 5}
-            onClick={() => {
-              void askConfirm(`Bu mesaj ${d.linkedMembers} kişiye gidecek. Emin misin?`).then((ok) => {
-      if (!ok) return
-              a.run(async () => {
-                const r = await sendBroadcast(text, bText, bUrl)
-                if (r.ok) setText('')
-                return r
-              })
-    })
-  }}
-          >
-            {a.pending ? 'Gönderiliyor…' : 'Duyuruyu gönder'}
-          </button>
-          {a.note}
-        </div>
-      </Card>
-      <Card title="Son duyurular">
-        {d.broadcasts.length ? (
-          <ul className="flex flex-col gap-2">
-            {d.broadcasts.map((b) => (
-              <li key={b.id} className="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm">
-                <p className="line-clamp-2 text-foreground">{b.text}</p>
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>
-                    {fmt(b.createdAt)} · {b.status === 'done' ? 'Bitti' : b.status === 'cancelled' ? 'Durduruldu' : 'Gönderiliyor'} · {b.sent}/{b.total} ulaştı{b.blocked ? `, ${b.blocked} kişi botu engellemiş` : ''}{b.failed ? `, ${b.failed} hata` : ''}
-                  </span>
-                  {b.status !== 'done' && b.status !== 'cancelled' && (
-                    <button type="button" className="text-destructive hover:underline" disabled={stop.pending} onClick={() => stop.run(() => stopBroadcast(b.id))}>
-                      Durdur
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">Henüz duyuru yok.</p>
-        )}
-      </Card>
-    </div>
-  )
-}
-
 // --- Overview: stats, log, bans, trust ------------------------------------------
 
 function TrustRow({ t }: { t: TgHubData['trustLow'][number] }) {
@@ -964,7 +938,7 @@ export function TgHubManager({ data }: { data: TgHubData }) {
     { id: 'hub-overview', label: 'Özet', content: <OverviewSection d={data} /> },
     { id: 'hub-log', label: 'Kayıtlar', content: <LogSection initial={data.log} groups={groups} /> },
     setup && { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? ('on' as const) : ('idle' as const), content: <GuardSection d={data} /> },
-    { id: 'hub-shield', label: `Koruma${data.locks.length ? ` (${data.locks.length})` : ''}`, content: <ShieldSection hub={data.hub} locks={data.locks} canSetup={setup} /> },
+    { id: 'hub-shield', label: `Koruma${data.locks.length ? ` (${data.locks.length})` : ''}`, content: <ShieldSection hub={data.hub} locks={data.locks} quiet={data.quiet} canSetup={setup} /> },
     {
       id: 'hub-support',
       label: `Destek${openTickets ? ` (${openTickets})` : ''}`,

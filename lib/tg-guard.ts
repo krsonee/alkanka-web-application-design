@@ -1,5 +1,5 @@
 import 'server-only'
-import { createHash } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 import { generateText } from 'ai'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot } from '@/lib/telegram-mirror'
@@ -23,7 +23,19 @@ import {
   type TgMemberUpdate,
   type TgUser,
 } from '@/lib/tg-hub'
-import { CAPTCHA_MINUTES, CONTENT_KINDS, NEW_MEMBER_HOURS, RAID_BAN_MINUTES, WAVE_MINUTES, rulesFor, type GroupRules, type HubConfig, type MemberAction } from '@/lib/tg-hub-shared'
+import {
+  CAPTCHA_MINUTES,
+  CAPTCHA_TRIES,
+  CONTENT_KINDS,
+  NEW_MEMBER_HOURS,
+  RAID_BAN_MINUTES,
+  WAVE_MINUTES,
+  inQuietHours,
+  rulesFor,
+  type GroupRules,
+  type HubConfig,
+  type MemberAction,
+} from '@/lib/tg-hub-shared'
 import {
   adminLookalike,
   chatAdmins,
@@ -56,7 +68,8 @@ import {
   type ShieldMsg,
   type SwarmHit,
 } from '@/lib/tg-shield'
-import { autoReply } from '@/lib/tg-autoreply'
+import { autoReply, greet } from '@/lib/tg-autoreply'
+import { quietOutOfStep, runQuietHours } from '@/lib/tg-quiet'
 
 type GuardMsg = ShieldMsg & {
   entities?: { type: string; url?: string; offset: number; length: number }[]
@@ -76,6 +89,7 @@ function ensureGuardTables() {
     await ensureShieldTables()
     await rows(sql`ALTER TABLE tg_captcha ADD COLUMN IF NOT EXISTS msg_id bigint`)
     await rows(sql`ALTER TABLE tg_captcha ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'join'`)
+    await rows(sql`ALTER TABLE tg_captcha ADD COLUMN IF NOT EXISTS answer int, ADD COLUMN IF NOT EXISTS tries int NOT NULL DEFAULT 0`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_autodel (id serial PRIMARY KEY, chat_id text NOT NULL, message_id bigint NOT NULL, due_at timestamptz NOT NULL)`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_wipe (chat_id text PRIMARY KEY, bot_id int NOT NULL, title text NOT NULL DEFAULT '',
       next_id bigint NOT NULL, total bigint NOT NULL, done bigint NOT NULL DEFAULT 0, started_by text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now())`)
@@ -519,18 +533,104 @@ async function screenNewcomer(hub: HubConfig, r: GroupRules, token: string, chat
   return null
 }
 
+// --- Verification ------------------------------------------------------------------
+
+const CAPTCHA_PICKS = [
+  { emoji: '🍎', name: 'elma' },
+  { emoji: '🚗', name: 'araba' },
+  { emoji: '⚽', name: 'top' },
+  { emoji: '🐱', name: 'kedi' },
+  { emoji: '🔑', name: 'anahtar' },
+  { emoji: '🎈', name: 'balon' },
+  { emoji: '🐟', name: 'balık' },
+  { emoji: '🌳', name: 'ağaç' },
+  { emoji: '⭐', name: 'yıldız' },
+  { emoji: '🍌', name: 'muz' },
+  { emoji: '🚲', name: 'bisiklet' },
+  { emoji: '🏠', name: 'ev' },
+]
+const PASS_MINUTES = 10
+
+/** The question names the thing in words and the buttons show only pictures, so pressing the first button does not pass. */
+function emojiChallenge(prefix: string) {
+  const pool = [...CAPTCHA_PICKS]
+  const picks = [0, 1, 2].map(() => pool.splice(randomInt(pool.length), 1)[0])
+  const answer = randomInt(picks.length)
+  return { name: picks[answer].name, answer, keyboard: [picks.map((p, i) => ({ text: p.emoji, callback_data: `${prefix}:${i}` }))] }
+}
+
+/** Asks the applicant in private. False when the bot could not write to them, so the caller falls back to the check inside the group. */
+async function askInPrivate(token: string, r: TgJoinRequest) {
+  const chatId = String(r.chat.id)
+  const [old] = await rows<{ msg_id: string | null }>(sql`SELECT msg_id FROM tg_captcha WHERE chat_id = ${chatId} AND tg_id = ${r.from.id} AND kind = 'request'`)
+  if (old?.msg_id) await del(token, r.from.id, Number(old.msg_id))
+  const ask = emojiChallenge(`cq:${chatId}`)
+  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
+    // Telegram lets a bot write here for five minutes after the request, even if the person never started the bot.
+    chat_id: r.user_chat_id ?? r.from.id,
+    text: `"${r.chat.title ?? 'Grup'}" grubuna katılma isteğin alındı. Onaylanması için ${CAPTCHA_MINUTES} dakika içinde aşağıdan "${ask.name}" olanı seç.`,
+    reply_markup: { inline_keyboard: ask.keyboard },
+  }).catch(() => null)
+  if (!sent) return false
+  await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, msg_id, kind, answer, tries)
+    VALUES (${chatId}, ${r.from.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), ${sent.message_id}, 'request', ${ask.answer}, 0)
+    ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id, kind = 'request', answer = EXCLUDED.answer, tries = 0`)
+  return true
+}
+
 export async function handleJoinRequest(botId: number, r: TgJoinRequest) {
   await ensureGuardTables()
   const hub = await getHub()
   if (!(await isProtectedChat(hub, r.chat.id))) return
   const token = await botToken(botId)
-  const reason = await screenNewcomer(hub, rulesFor(hub, r.chat.id), token, r.chat.id, r.chat.title ?? '', r.from)
+  const rules = rulesFor(hub, r.chat.id)
+  const reason = await screenNewcomer(hub, rules, token, r.chat.id, r.chat.title ?? '', r.from)
   if (reason) {
     await callBot(token, 'declineChatJoinRequest', { chat_id: r.chat.id, user_id: r.from.id }).catch(() => null)
     await modLog({ chatId: r.chat.id, chatTitle: r.chat.title, user: r.from, action: 'Giriş reddedildi', reason, notify: reason !== RAID_REASON })
     return
   }
+  if (rules.captcha && rules.captchaMode === 'dm' && (await askInPrivate(token, r))) return
   await callBot(token, 'approveChatJoinRequest', { chat_id: r.chat.id, user_id: r.from.id }).catch(() => null)
+}
+
+/** The private answer to a join request: the right picture lets the person in, a second wrong one turns the request down. */
+async function answerJoinRequest(token: string, q: TgCallback, groupId: string, pick: number, answer: (text: string, alert?: boolean) => Promise<unknown>) {
+  const editPrompt = (text: string) =>
+    q.message
+      ? callBot(token, 'editMessageText', { chat_id: q.message.chat.id, message_id: q.message.message_id, text, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      : null
+  const [row] = await rows<{ answer: number | null }>(sql`SELECT answer FROM tg_captcha
+    WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request' AND expires_at > now()`)
+  if (!row) {
+    await editPrompt('Bu doğrulamanın süresi doldu. Gruba yeniden katılma isteği gönderebilirsin.')
+    return answer('Süre doldu.')
+  }
+  if (pick !== Number(row.answer)) {
+    const [t] = await rows<{ tries: number }>(sql`UPDATE tg_captcha SET tries = tries + 1
+      WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request' RETURNING tries`)
+    if (Number(t?.tries ?? CAPTCHA_TRIES) < CAPTCHA_TRIES) return answer('Yanlış seçim. Bir hakkın daha var.', true)
+    await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request'`)
+    await callBot(token, 'declineChatJoinRequest', { chat_id: groupId, user_id: q.from.id }).catch(() => null)
+    await editPrompt('İki kez yanlış seçtin, katılma isteğin reddedildi. İstersen yeniden istek gönderebilirsin.')
+    await modLog({ chatId: groupId, user: q.from, action: 'Doğrulanmadı, istek reddedildi', reason: 'Özelden sorulan emojiyi iki kez yanlış seçti', notify: false })
+    return answer('Katılma isteğin reddedildi.', true)
+  }
+  // Kept as a short-lived pass so the join that follows the approval is not asked a second time inside the group.
+  const passed = await rows(sql`UPDATE tg_captcha SET kind = 'passed', msg_id = NULL, expires_at = now() + make_interval(mins => ${PASS_MINUTES})
+    WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request' RETURNING tg_id`)
+  if (!passed.length) return answer('')
+  try {
+    await callBot(token, 'approveChatJoinRequest', { chat_id: groupId, user_id: q.from.id })
+  } catch (error) {
+    await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'passed'`)
+    await editPrompt('Doğrulandın ama istek onaylanamadı. Gruba yeniden katılma isteği gönder.')
+    console.error('[tg-guard] join request approval failed', error)
+    return answer('İstek onaylanamadı.', true)
+  }
+  await setNeedsCheck(q.from.id, false)
+  await editPrompt('Doğrulandın, gruba alındın. Hoş geldin!')
+  return answer('Doğrulandı!')
 }
 
 /** A member who mass-adds people: everyone they added leaves for a while, they are banned, and adding can be switched off for the group. */
@@ -605,16 +705,24 @@ async function handleNewMembers(hub: HubConfig, r: GroupRules, token: string, m:
     }
     await logJoin({ chatId, user: u, inviter }).catch(() => null)
     await meetMember(u.id).catch(() => null)
-    if (!r.captcha) continue
+    // Answered in private before the join request was approved: asking again here would test the same person twice.
+    const passed = r.captcha ? await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${chatId} AND tg_id = ${u.id} AND kind = 'passed' RETURNING tg_id`) : []
+    if (!r.captcha || passed.length) {
+      await greet(hub, token, m.chat.id, short(u)).catch((error) => console.error('[tg-guard] welcome failed', error))
+      continue
+    }
     await mute(token, m.chat.id, u.id, 60 * 24 * 366).catch(() => null)
+    const ask = r.captchaMode === 'button' ? null : emojiChallenge(`cap:${u.id}`)
     const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
       chat_id: m.chat.id,
-      text: `Hoş geldin ${short(u)}! Yazabilmek için ${CAPTCHA_MINUTES} dakika içinde aşağıdaki butona bas.`,
-      reply_markup: { inline_keyboard: [[{ text: 'Ben insanım', callback_data: `cap:${u.id}` }]] },
+      text: ask
+        ? `Hoş geldin ${short(u)}! Yazabilmek için ${CAPTCHA_MINUTES} dakika içinde aşağıdan "${ask.name}" olanı seç.`
+        : `Hoş geldin ${short(u)}! Yazabilmek için ${CAPTCHA_MINUTES} dakika içinde aşağıdaki butona bas.`,
+      reply_markup: { inline_keyboard: ask ? ask.keyboard : [[{ text: 'Ben insanım', callback_data: `cap:${u.id}` }]] },
     }).catch(() => null)
-    await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, msg_id)
-      VALUES (${String(m.chat.id)}, ${u.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), ${sent?.message_id ?? null})
-      ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id, kind = 'join'`)
+    await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, msg_id, answer, tries)
+      VALUES (${String(m.chat.id)}, ${u.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), ${sent?.message_id ?? null}, ${ask?.answer ?? null}, 0)
+      ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id, kind = 'join', answer = EXCLUDED.answer, tries = 0`)
   }
 }
 
@@ -626,7 +734,17 @@ export async function expireCaptchas() {
   const token = await botToken(hub.guardBotId)
   const due = await rows(sql`DELETE FROM tg_captcha WHERE expires_at < now() RETURNING chat_id, tg_id, msg_id, kind`)
   let kicked = 0
+  let declined = 0
   for (const d of due) {
+    // A used-up pass from a private check: the person is already in and verified.
+    if (d.kind === 'passed') continue
+    if (d.kind === 'request') {
+      // Never answered in private: the request is turned down, and the question is removed from that private chat.
+      await callBot(token, 'declineChatJoinRequest', { chat_id: String(d.chat_id), user_id: Number(d.tg_id) }).catch(() => null)
+      if (d.msg_id) await del(token, Number(d.tg_id), Number(d.msg_id))
+      declined++
+      continue
+    }
     // A commenter who is not a member has nothing to be kicked from; their comments just keep being removed.
     if (d.kind !== 'comment') {
       await kick(token, String(d.chat_id), Number(d.tg_id)).catch(() => null)
@@ -634,7 +752,8 @@ export async function expireCaptchas() {
     }
     if (d.msg_id) await del(token, String(d.chat_id), Number(d.msg_id))
   }
-  if (kicked) await modLog({ action: 'Doğrulanmadı, atıldı', reason: `${kicked} hesap butona basmadı (muhtemel bot)`, notify: kicked >= 5 })
+  if (kicked) await modLog({ action: 'Doğrulanmadı, atıldı', reason: `${kicked} hesap süresi içinde doğrulamayı geçmedi (muhtemel bot)`, notify: kicked >= 5 })
+  if (declined) await modLog({ action: 'Doğrulanmadı, istek reddedildi', reason: `${declined} katılma isteği özelden sorulan soruya cevap vermedi`, notify: declined >= 5 })
   return due.length
 }
 
@@ -723,14 +842,28 @@ export async function handleGuardCallback(botId: number, q: TgCallback) {
   const answer = (text: string, alert = false) =>
     callBot(token, 'answerCallbackQuery', { callback_query_id: q.id, text: text.slice(0, 190), show_alert: alert }).catch(() => null)
   const [kind, arg, extra] = (q.data ?? '').split(':')
+  if (kind === 'cq') return answerJoinRequest(token, q, arg ?? '', Number(extra), answer)
   if (kind === 'cap' && q.message) {
     if (Number(arg) !== q.from.id) return answer('Bu buton sana ait değil.')
     const chatId = q.message.chat.id
+    const [asked] = await rows<{ answer: number | null }>(sql`SELECT answer FROM tg_captcha WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} AND kind = 'join'`)
+    // Checked against the stored answer, not the button's own data, so a press that names no picture cannot pass an emoji check.
+    if (asked?.answer != null && Number(extra) !== Number(asked.answer)) {
+      const [t] = await rows<{ tries: number }>(sql`UPDATE tg_captcha SET tries = tries + 1
+        WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} AND kind = 'join' RETURNING tries`)
+      if (Number(t?.tries ?? CAPTCHA_TRIES) < CAPTCHA_TRIES) return answer('Yanlış seçim. Bir hakkın daha var.', true)
+      await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} AND kind = 'join'`)
+      await del(token, chatId, q.message.message_id)
+      await kick(token, chatId, q.from.id).catch(() => null)
+      await modLog({ chatId, chatTitle: q.message.chat.title, user: q.from, action: 'Doğrulanmadı, atıldı', reason: 'Emojiyi iki kez yanlış seçti', notify: false })
+      return answer('İki kez yanlış seçtin, gruptan çıkarıldın. Yeniden katılıp tekrar deneyebilirsin.', true)
+    }
     const [row] = await rows<{ kind: string }>(sql`DELETE FROM tg_captcha WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} RETURNING kind`)
     await setNeedsCheck(q.from.id, false)
     await del(token, chatId, q.message.message_id)
     if (row?.kind === 'comment') return answer('Doğrulandı, yorumunu tekrar gönderebilirsin.')
     await unmute(token, chatId, q.from.id).catch(() => null)
+    if (row?.kind === 'join') await greet(await getHub(), token, chatId, short(q.from)).catch((error) => console.error('[tg-guard] welcome failed', error))
     return answer('Doğrulandı, artık yazabilirsin!')
   }
   if (kind === 'gd' && q.message) {
@@ -1306,6 +1439,9 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
   const r = rulesFor(hub, m.chat.id)
   const chatId = String(m.chat.id)
 
+  // No timer starts a quiet window; the first message after its clock time does, and this asks the database only when the two disagree.
+  if (quietOutOfStep(chatId, r.quiet)) await runQuietHours().catch((error) => console.error('[tg-guard] quiet hours', error))
+
   if (m.new_chat_members?.length) {
     await handleNewMembers(hub, r, token, m)
     if (r.cleanService) await del(token, m.chat.id, m.message_id)
@@ -1330,6 +1466,12 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
   if (admin) {
     if (!edited) await recordMessage(hub, m, null)
     return false
+  }
+
+  // Covers the moment before the group's permissions change, and a group where the bot may not change them at all.
+  if (inQuietHours(r.quiet) && (r.quiet.mode === 'lock' || contentKinds(m).length > 0)) {
+    await del(token, m.chat.id, m.message_id)
+    return true
   }
 
   const trust = await trustOf(m.from.id)

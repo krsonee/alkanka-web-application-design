@@ -249,7 +249,7 @@ function fileIdOf(m: TgSent | undefined, kind: PostMediaKind) {
   return m.document?.file_id
 }
 
-async function readMedia(item: PostMedia) {
+export async function readMedia(item: PostMedia) {
   if (!MEDIA_PATH.test(item.path) || item.path.includes('..')) throw new Error('Geçersiz medya dosyası')
   const result = await get(item.path, { access: 'private' })
   if (!result || result.statusCode !== 200) throw new Error(`Medya bulunamadı: ${item.name}`)

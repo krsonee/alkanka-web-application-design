@@ -5,6 +5,7 @@ import { askConfirm } from '@/components/panel/confirm-dialog'
 import { Card, NumberField, Toggle, btn, btnDanger, btnGhost, fmt, input, useAction } from '@/components/panel/tg-hub-ui'
 import {
   CAPTCHA_MINUTES,
+  CAPTCHA_MODES,
   CONTENT_KINDS,
   NEW_MEMBER_HOURS,
   RAID_BAN_MINUTES,
@@ -18,6 +19,8 @@ import {
   type HubConfig,
   type HubGroup,
   type LockRow,
+  type QuietConfig,
+  type QuietRow,
   type ShieldConfig,
   type SuspectRow,
 } from '@/lib/tg-hub-shared'
@@ -59,21 +62,74 @@ function LockItem({ l }: { l: LockRow }) {
   )
 }
 
-function LocksCard({ locks }: { locks: LockRow[] }) {
+function LocksCard({ locks, quiet }: { locks: LockRow[]; quiet: QuietRow[] }) {
   return (
     <Card
       title="Şu an açık kilitler"
-      hint="Süresi dolan baskın modu, siteye gelen ilk ziyarette ya da gruba ilk yeni girişte kapanır; girişler hâlâ sınırın üstündeyse 5 dakika uzar. Buradan elle de kapatabilirsin."
+      hint="Süresi dolan baskın modu, siteye gelen ilk ziyarette ya da gruba ilk yeni girişte kapanır; girişler hâlâ sınırın üstündeyse 5 dakika uzar. Buradan elle de kapatabilirsin. Sessiz saatler kendi saatinde biter; erken bitirmek için ayarını kapatıp kaydet."
     >
-      {locks.length ? (
+      {locks.length || quiet.length ? (
         <ul className="flex flex-col gap-2">
           {locks.map((l) => (
             <LockItem key={l.chatId} l={l} />
           ))}
+          {quiet.map((q) => (
+            <li key={`quiet-${q.chatId}`} className={`flex flex-col gap-0.5 rounded-lg border p-3 ${q.stuck ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-muted/50'}`}>
+              <span className="text-sm font-semibold text-foreground">{q.title} · Sessiz saatler</span>
+              <span className="text-xs leading-relaxed text-muted-foreground">
+                {q.mode === 'text' ? 'Grup sadece yazıya açık.' : 'Grup yazmaya kapalı.'} Başlangıç {fmt(q.since)}
+              </span>
+              {q.stuck && (
+                <span className="text-xs leading-relaxed text-destructive">
+                  Süre bitti ama grubun izinleri geri açılamadı; bot denemeye devam ediyor. Acilse Telegram’da grup izinlerinden mesaj göndermeyi elle aç.
+                </span>
+              )}
+            </li>
+          ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">Açık baskın modu ya da kilit yok.</p>
+        <p className="text-sm text-muted-foreground">Açık baskın modu, kilit ya da sessiz saat yok.</p>
       )}
+    </Card>
+  )
+}
+
+function QuietCard({ value, set }: { value: QuietConfig; set: (patch: Partial<QuietConfig>) => void }) {
+  const field = 'flex flex-col gap-1 text-xs text-muted-foreground'
+  return (
+    <Card
+      title="Sessiz saatler"
+      hint="Belirlediğin saatlerde grup kapanır ya da sadece yazıya açık kalır; süre bitince grubun izinleri eski haline döner. Saatler Türkiye saatidir. Bitiş başlangıçtan küçükse pencere gece yarısını geçer (01:00 – 08:00 gibi). Yöneticiler etkilenmez."
+    >
+      <Toggle label="Sessiz saatleri kullan" checked={value.enabled} onChange={(v) => set({ enabled: v })} />
+      <div className="grid gap-3 md:grid-cols-3">
+        <label className={field}>
+          Başlangıç
+          <input type="time" className={input} value={value.from} onChange={(e) => set({ from: e.target.value })} />
+        </label>
+        <label className={field}>
+          Bitiş
+          <input type="time" className={input} value={value.to} onChange={(e) => set({ to: e.target.value })} />
+        </label>
+        <label className={field}>
+          Bu saatlerde grup
+          <select className={input} value={value.mode} onChange={(e) => set({ mode: e.target.value === 'text' ? 'text' : 'lock' })}>
+            <option value="lock">Tamamen yazmaya kapalı</option>
+            <option value="text">Sadece yazıya açık (medya kapalı)</option>
+          </select>
+        </label>
+      </div>
+      <Toggle
+        label="Başlarken ve biterken gruba kısa bilgi mesajı at"
+        hint="Başlangıç mesajı pencere bitince silinir, bitiş mesajı 10 dakika sonra silinir."
+        checked={value.announce}
+        onChange={(v) => set({ announce: v })}
+      />
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Zamanlama dakikası dakikasına değildir: sitede dakikalık zamanlayıcı çalışmıyor. Pencere, saatinden sonraki ilk site ziyaretinde ya da ilk Telegram bildiriminde (gruba yazılan ilk mesaj dahil) başlar ve
+        biter; o ilk mesaj da silinir. Grup tamamen kapalıyken içeriden mesaj gelemediği için sabah açılış, sitenin ilk ziyaretçisini ya da botlara gelen başka bir bildirimi bekler. Baskın modu ya da /kilit grubu
+        kapatmışken sessiz saat başlamaz, kilit bitince başlar. Bekçi botunda {'"üyeleri kısıtlama"'} yetkisi olmalı; yoksa bot izinleri değiştiremez ama bu saatlerde gelen mesajları tek tek siler.
+      </p>
     </Card>
   )
 }
@@ -200,6 +256,8 @@ function ShieldFields({ value, set, raidJoins, floodMuteMinutes }: { value: Shie
           />
         </div>
       </Card>
+
+      <QuietCard value={value.quiet} set={(patch) => set({ quiet: { ...value.quiet, ...patch } })} />
     </>
   )
 }
@@ -233,6 +291,16 @@ function GuardFields({ value, set }: { value: GuardRules; set: (patch: Partial<G
           <select className={input} value={value.linkAction} onChange={(e) => set({ linkAction: e.target.value as 'ban' | 'warn' })}>
             <option value="ban">Sil ve banla</option>
             <option value="warn">Sil ve uyar</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Doğrulama türü
+          <select className={input} value={value.captchaMode} disabled={!value.captcha} onChange={(e) => set({ captchaMode: e.target.value as GuardRules['captchaMode'] })}>
+            {CAPTCHA_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -539,11 +607,13 @@ function SuspectsCard({ initial }: { initial?: SuspectRow[] }) {
 export function ShieldSection({
   hub,
   locks,
+  quiet = [],
   initialSuspects,
   canSetup = true,
 }: {
   hub: HubConfig
   locks: LockRow[]
+  quiet?: QuietRow[]
   initialSuspects?: SuspectRow[]
   /** False for a moderator: locks and suspect lists stay, the rule settings are left out. */
   canSetup?: boolean
@@ -555,7 +625,7 @@ export function ShieldSection({
           {canSetup ? 'Bekçi kapalı. Buradaki ayarlar kaydedilir ama Bekçi açılana kadar hiçbiri çalışmaz.' : 'Bekçi kapalı; koruma kuralları şu an çalışmıyor.'}
         </p>
       )}
-      <LocksCard locks={locks} />
+      <LocksCard locks={locks} quiet={quiet} />
       {canSetup && <GeneralForm hub={hub} />}
       {canSetup && <GroupRulesCard hub={hub} />}
       <WaveCard hub={hub} />

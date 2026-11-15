@@ -48,7 +48,7 @@ const ACCEPT = Object.keys(UPLOAD_TYPES)
   .join(',')
 const MULTIPART_OVER_BYTES = 8 * 1024 * 1024
 
-async function uploadPostMedia(file: File): Promise<PostMedia> {
+export async function uploadPostMedia(file: File): Promise<PostMedia> {
   const problem = uploadProblem(file)
   if (problem) throw new Error(`${file.name}: ${problem}`)
   const ext = extensionOf(file.name)

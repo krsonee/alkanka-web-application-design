@@ -2,7 +2,8 @@ import 'server-only'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 import type { TgHubData } from '@/components/panel/tg-hub-manager'
 import { DEFAULT_HUB, LOG_PAGE } from '@/lib/tg-hub-shared'
-import { chatLeaderboard, fillGroupDetails, getHub, hookStatus, hubStats, listBroadcasts, listGlobalBans, listModLog, listTrustLow, weekStart } from '@/lib/tg-hub'
+import { chatLeaderboard, fillGroupDetails, getHub, hookStatus, hubStats, listGlobalBans, listModLog, listTrustLow, weekStart } from '@/lib/tg-hub'
+import { listQuiet } from '@/lib/tg-quiet'
 import { listLocks } from '@/lib/tg-shield'
 import { listTickets, sponsorSupportStats } from '@/lib/tg-support'
 
@@ -11,7 +12,7 @@ const EMPTY_STATS = { deletedWeek: 0, mutedWeek: 0, bannedWeek: 0, joinsBlockedW
 export async function loadTgHub(bots: MirrorBot[], shareBotId: number | null, linkedMembers: number): Promise<TgHubData> {
   const saved = await getHub().catch(() => DEFAULT_HUB)
   const hub = await fillGroupDetails(saved).catch(() => saved)
-  const [stats, log, locks, tickets, sponsorStats, leaders, broadcasts, bans, trustLow, guardHook, supportHook, shareHook] = await Promise.all([
+  const [stats, log, locks, tickets, sponsorStats, leaders, quiet, bans, trustLow, guardHook, supportHook, shareHook] = await Promise.all([
     hubStats().catch(() => EMPTY_STATS),
     listModLog(LOG_PAGE + 1)
       .then((all) => ({ rows: all.slice(0, LOG_PAGE), hasMore: all.length > LOG_PAGE }))
@@ -23,12 +24,12 @@ export async function loadTgHub(bots: MirrorBot[], shareBotId: number | null, li
       .catch(() => []),
     sponsorSupportStats(7).catch(() => []),
     chatLeaderboard(weekStart(), new Date(Date.now() + 60_000).toISOString(), 10).catch(() => []),
-    listBroadcasts(10).catch(() => []),
+    listQuiet().catch(() => []),
     listGlobalBans(50).catch(() => []),
     listTrustLow(20).catch(() => []),
     hookStatus(hub.guardBotId),
     hookStatus(hub.supportBotId),
     hookStatus(shareBotId),
   ])
-  return { hub, bots, stats, log, locks, tickets, sponsorStats, leaders, broadcasts, bans, trustLow, guardHook, supportHook, shareBotId, shareHook, linkedMembers }
+  return { hub, bots, stats, log, locks, quiet, tickets, sponsorStats, leaders, bans, trustLow, guardHook, supportHook, shareBotId, shareHook, linkedMembers }
 }

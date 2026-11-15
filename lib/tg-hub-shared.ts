@@ -8,6 +8,71 @@ export const RAID_BAN_MINUTES = 10
 export const NEW_MEMBER_HOURS = 24
 export const WAVE_MINUTES = 30
 
+/** How a newcomer proves they are a person. `dm` asks in private before the join request is approved. */
+export type CaptchaMode = 'button' | 'emoji' | 'dm'
+export const CAPTCHA_MODES: { value: CaptchaMode; label: string; hint: string }[] = [
+  { value: 'button', label: 'Tek buton ("Ben insanım")', hint: 'Yeni gelen, gruba atılan butona basar. En kolayı; butona basabilen botları durdurmaz.' },
+  {
+    value: 'emoji',
+    label: 'Üç emojiden doğru olanı seç',
+    hint: 'Gruba üç emojili bir soru atılır ("elma olanı seç"). İki kez yanlış seçen gruptan çıkarılır, yeniden katılıp tekrar deneyebilir.',
+  },
+  {
+    value: 'dm',
+    label: 'Katılma isteği + özelden doğrulama',
+    hint: 'Emojili soru, kişi gruba alınmadan önce özelden sorulur. Doğru seçen içeri alınır; cevap vermeyenin ya da iki kez yanlış seçenin isteği reddedilir. Çalışması için Telegram’da grubun ayarlarından "Yeni üyeleri onayla" açık olmalı ya da davet linki yönetici onaylı oluşturulmalı; bunu bot açamaz. Onay kapalıysa gelenler doğrudan girer ve soru grupta sorulur.',
+  },
+]
+/** A second wrong emoji ends the attempt. */
+export const CAPTCHA_TRIES = 2
+
+/** Clock times are Turkey time, `SS:DD`. A window whose end is earlier than its start runs past midnight. */
+export type QuietConfig = { enabled: boolean; from: string; to: string; mode: 'lock' | 'text'; announce: boolean }
+
+const CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/
+const TR_OFFSET_MS = 3 * 60 * 60 * 1000
+
+export function clockMinutes(value: string) {
+  const m = CLOCK.exec(String(value ?? '').trim())
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+export function inQuietHours(q: QuietConfig | undefined, now = Date.now()) {
+  if (!q?.enabled) return false
+  const from = clockMinutes(q.from)
+  const to = clockMinutes(q.to)
+  if (from == null || to == null || from === to) return false
+  const d = new Date(now + TR_OFFSET_MS)
+  const t = d.getUTCHours() * 60 + d.getUTCMinutes()
+  return from < to ? t >= from && t < to : t >= from || t < to
+}
+
+export type ReplyButton = { text: string; url: string }
+export type ReplyRule = { id: string; enabled: boolean; words: string[]; text: string; buttons: ReplyButton[] }
+export type WelcomeConfig = { enabled: boolean; text: string; buttons: ReplyButton[]; deleteMinutes: number }
+export type CannedReply = { title: string; text: string }
+
+export const REPLY_RULE_MAX = 30
+export const REPLY_WORD_MAX = 10
+export const REPLY_BUTTON_MAX = 4
+export const CANNED_MAX = 20
+
+/** Empty rows are dropped; the first row that is half filled or has a bad link is reported instead of being silently lost. */
+export function readReplyButtons(raw: unknown, max: number): { buttons: ReplyButton[]; problem: string | null } {
+  const buttons: ReplyButton[] = []
+  let problem: string | null = null
+  for (const item of Array.isArray(raw) ? raw : []) {
+    const text = String((item as Partial<ReplyButton> | null)?.text ?? '').trim().slice(0, 40)
+    const url = String((item as Partial<ReplyButton> | null)?.url ?? '').trim().slice(0, 300)
+    if (!text && !url) continue
+    if (!text) problem ??= 'Linki yazılmış bir butonun yazısı boş.'
+    else if (!/^https:\/\/\S+$/i.test(url)) problem ??= `"${text}" butonunun linki https:// ile başlamalı.`
+    else if (buttons.length >= max) problem ??= `En fazla ${max} buton eklenebilir.`
+    else buttons.push({ text, url })
+  }
+  return { buttons, problem }
+}
+
 export type ContentKind = 'media' | 'sticker' | 'gif' | 'voice' | 'poll' | 'contact' | 'location' | 'viaBot'
 export type ContentRule = 'allow' | 'new' | 'block'
 export const CONTENT_KINDS: { key: ContentKind; label: string }[] = [
@@ -35,6 +100,7 @@ export type ShieldConfig = {
   swarmAccounts: number
   hiddenAds: boolean
   nameWatch: boolean
+  quiet: QuietConfig
   channelJoinAlert: number
   adminAlerts: boolean
 }
@@ -50,6 +116,7 @@ export const GUARD_TUNABLES = [
   'blockForwards',
   'cleanService',
   'captcha',
+  'captchaMode',
   'raidJoins',
 ] as const
 export const SHIELD_TUNABLES = [
@@ -66,6 +133,7 @@ export const SHIELD_TUNABLES = [
   'swarmAccounts',
   'hiddenAds',
   'nameWatch',
+  'quiet',
 ] as const
 
 export type HubGroup = { chatId: string; title: string; type?: string; linkedChatId?: string; rules?: Partial<GroupRules> }
@@ -91,6 +159,7 @@ export type HubConfig = {
     blockForwards: boolean
     cleanService: boolean
     captcha: boolean
+    captchaMode: CaptchaMode
     casCheck: boolean
     impersonation: boolean
     raidJoins: number
@@ -106,6 +175,9 @@ export type HubConfig = {
     categories: string[]
     aiFaq: boolean
     welcome: string
+    canned: CannedReply[]
+    /** Minutes an unclaimed ticket may wait before the staff group is reminded; 0 switches the reminder off. */
+    alertMinutes: number
   }
   report: { enabled: boolean }
   autoReply: {
@@ -115,6 +187,8 @@ export type HubConfig = {
     siteText: string
     sponsorText: string
     sponsorLimit: number
+    rules: ReplyRule[]
+    welcome: WelcomeConfig
   }
 }
 
@@ -142,6 +216,8 @@ export function rulesDiff(base: GroupRules, own: GroupRules): Partial<GroupRules
   return out as Partial<GroupRules>
 }
 
+const QUIET_OFF: QuietConfig = { enabled: false, from: '01:00', to: '08:00', mode: 'lock', announce: true }
+
 /** Every new protection starts switched off, so a deploy never changes how a live group behaves on its own. */
 const SHIELD_OFF: ShieldConfig = {
   raidMode: false,
@@ -157,6 +233,7 @@ const SHIELD_OFF: ShieldConfig = {
   swarmAccounts: 0,
   hiddenAds: false,
   nameWatch: false,
+  quiet: QUIET_OFF,
   channelJoinAlert: 0,
   adminAlerts: false,
 }
@@ -175,6 +252,8 @@ export const RECOMMENDED_SHIELD: ShieldConfig = {
   swarmAccounts: 4,
   hiddenAds: true,
   nameWatch: true,
+  // Closing a group every night is a choice about the community, not a safety default, so it is never pre-filled.
+  quiet: QUIET_OFF,
   channelJoinAlert: 50,
   adminAlerts: true,
 }
@@ -200,6 +279,7 @@ export const DEFAULT_HUB: HubConfig = {
     blockForwards: true,
     cleanService: true,
     captcha: true,
+    captchaMode: 'button',
     casCheck: true,
     impersonation: true,
     raidJoins: 20,
@@ -215,6 +295,8 @@ export const DEFAULT_HUB: HubConfig = {
     categories: ['Yatırım', 'Çekim', 'Bonus', 'Hesap', 'Diğer'],
     aiFaq: true,
     welcome: 'Merhaba! Alkanka Destek’e hoş geldin. Sorununu hızlıca çözmek için birkaç soru soracağım.',
+    canned: [],
+    alertMinutes: 0,
   },
   report: { enabled: true },
   autoReply: {
@@ -224,6 +306,8 @@ export const DEFAULT_HUB: HubConfig = {
     siteText: 'Güncel Alkanka adresimiz aşağıda. Butona basman yeterli, eski linkleri kullanma.',
     sponsorText: 'Güvenilir sponsorlarımız aşağıda. Alkanka üzerinden girersen bonusların ve görevlerin hesabına işlenir.',
     sponsorLimit: 8,
+    rules: [],
+    welcome: { enabled: false, text: 'Hoş geldin {isim}! Kuralları görmek için /kurallar yazabilirsin.', buttons: [], deleteMinutes: 5 },
   },
 }
 
@@ -255,7 +339,7 @@ export const LOG_KINDS = [
   { key: 'delete', label: 'Silinen mesaj', prefixes: ['Mesaj silindi', 'Toplu silme', 'Koordineli spam', 'Site mesajı engellendi'] },
   { key: 'mute', label: 'Susturma', prefixes: ['Susturuldu'] },
   { key: 'ban', label: 'Ban', prefixes: ['Banlandı'] },
-  { key: 'join', label: 'Giriş ve baskın', prefixes: ['Giriş', 'Baskın', 'Doğrulanmadı', 'Grup kili', 'Kilit', 'Kanala toplu giriş', 'Şüpheli isim', 'Yorumlar kapatıldı'] },
+  { key: 'join', label: 'Giriş ve baskın', prefixes: ['Giriş', 'Baskın', 'Doğrulanmadı', 'Grup kili', 'Kilit', 'Sessiz saat', 'Kanala toplu giriş', 'Şüpheli isim', 'Yorumlar kapatıldı'] },
   { key: 'admin', label: 'Bot ve yönetici', prefixes: ['Bekçi', 'Yeni yönetici', 'Yönetici çıkarıldı'] },
   { key: 'cleanup', label: 'Temizlik', prefixes: ['Tüm sohbet', 'Silinmiş hesap'] },
   { key: 'support', label: 'Destek', prefixes: ['Destek', 'Bilet'] },
@@ -330,10 +414,61 @@ export type TicketRow = {
   rating: number | null
   createdAt: string
   closedAt: string | null
+  claimedBy: string | null
+  /** Whole minutes since the ticket was opened, counted on the server so the screen needs no clock of its own. */
+  waitMin: number
 }
+
+export const TICKET_PAGE = 30
+export type TicketPage = { rows: TicketRow[]; hasMore: boolean }
+
+/** A group that is inside its quiet hours right now. */
+export type QuietRow = { chatId: string; title: string; mode: 'lock' | 'text'; since: string; stuck: boolean }
 
 export type SponsorSupportStat = { sponsor: string; total: number; resolved: number; rejected: number; avgMin: number | null; rating: number | null }
 
 export type LeaderRow = { key: string; name: string; count: number }
 
-export type BroadcastRow = { id: number; text: string; status: string; sent: number; failed: number; blocked: number; total: number; createdAt: string }
+export type DmAudience = 'all' | 'linked7' | 'chat7' | 'site7' | 'away30'
+export const DM_AUDIENCES: { value: DmAudience; label: string; hint: string }[] = [
+  { value: 'all', label: 'Herkes', hint: 'Telegram hesabını siteye bağlamış ve duyuruları kapatmamış tüm üyeler.' },
+  { value: 'linked7', label: 'Yeni bağlananlar', hint: 'Telegram hesabını son 7 günde bağlayanlar.' },
+  { value: 'chat7', label: 'Grupta yazanlar', hint: 'Son 7 günde korunan gruplardan birinde mesaj yazanlar.' },
+  { value: 'site7', label: 'Sitede aktif olanlar', hint: 'Son 7 günde siteye giriş yapmış ya da oturumu açık olanlar.' },
+  { value: 'away30', label: 'Uzak kalanlar', hint: '30 gündür siteye girmeyenler.' },
+]
+
+export const DM_TEXT_MAX = 3500
+/** Telegram's limit for the text under a photo. */
+export const DM_CAPTION_MAX = 1024
+export const DM_BUTTON_MAX = 6
+export const DM_SCHEDULE_MAX_DAYS = 60
+
+/** `sendAt` is `YYYY-AA-GGTSS:DD` in Turkey time, or null to send now. */
+export type DmDraft = { text: string; photoPath: string | null; buttons: ReplyButton[]; audience: DmAudience; sendAt: string | null }
+
+export type BroadcastRow = {
+  id: number
+  text: string
+  status: string
+  sent: number
+  failed: number
+  blocked: number
+  total: number
+  createdAt: string
+  sendAt: string | null
+  finishedAt: string | null
+  audience: DmAudience
+  photoPath: string | null
+  buttons: ReplyButton[]
+  author: string | null
+  note: string | null
+}
+
+export type DmPanelData = {
+  broadcasts: BroadcastRow[]
+  audiences: Record<DmAudience, number>
+  testChat: string
+  /** False when the live chat bot, which sends the announcements, is not connected. */
+  botReady: boolean
+}

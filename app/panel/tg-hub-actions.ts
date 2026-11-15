@@ -6,36 +6,36 @@ import { after } from 'next/server'
 import { getPanelSession } from '@/lib/admin-auth'
 import { telegramAccess, type TelegramArea } from '@/lib/panel-modules'
 import {
+  CANNED_MAX,
+  CAPTCHA_MODES,
   CONTENT_KINDS,
   DEFAULT_HUB,
   GUARD_TUNABLES,
+  REPLY_BUTTON_MAX,
+  REPLY_RULE_MAX,
+  REPLY_WORD_MAX,
   SHIELD_TUNABLES,
+  clockMinutes,
   generalRules,
+  readReplyButtons,
   rulesDiff,
   type ContentRule,
+  type DmDraft,
   type GroupRules,
   type HubConfig,
   type LogFilter,
   type LogPage,
   type MemberAction,
   type MemberCard,
+  type QuietConfig,
+  type ReplyRule,
   type ShieldConfig,
   type SuspectRow,
+  type TicketPage,
 } from '@/lib/tg-hub-shared'
 import type { TgStatus } from '@/lib/tg-status-shared'
 import { setShareBot } from '@/lib/telegram-bots'
-import {
-  cancelBroadcast,
-  getHub,
-  processBroadcasts,
-  queueBroadcast,
-  registerHook,
-  removeGlobalBan,
-  resolveChatFor,
-  saveHub,
-  setTrusted,
-  syncGuardHook,
-} from '@/lib/tg-hub'
+import { getHub, registerHook, removeGlobalBan, resolveChatFor, saveHub, setTrusted, syncGuardHook } from '@/lib/tg-hub'
 
 type Result = { ok: boolean; message: string }
 const EXPIRED: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -102,6 +102,7 @@ function sanitizeAutoReply(r: HubConfig['autoReply']): HubConfig['autoReply'] {
   } catch {
     siteUrl = ''
   }
+  const w = r.welcome ?? DEFAULT_HUB.autoReply.welcome
   return {
     enabled: Boolean(r.enabled),
     cooldownSeconds: clampInt(r.cooldownSeconds, 10, 3600, 120),
@@ -109,7 +110,75 @@ function sanitizeAutoReply(r: HubConfig['autoReply']): HubConfig['autoReply'] {
     siteText: String(r.siteText ?? '').slice(0, 400) || DEFAULT_HUB.autoReply.siteText,
     sponsorText: String(r.sponsorText ?? '').slice(0, 400) || DEFAULT_HUB.autoReply.sponsorText,
     sponsorLimit: clampInt(r.sponsorLimit, 1, 20, 8),
+    rules: replyRules(r.rules),
+    welcome: {
+      enabled: Boolean(w.enabled),
+      text: String(w.text ?? '').trim().slice(0, 1000) || DEFAULT_HUB.autoReply.welcome.text,
+      buttons: readReplyButtons(w.buttons, REPLY_BUTTON_MAX).buttons,
+      deleteMinutes: clampInt(w.deleteMinutes, 0, 1440, 5),
+    },
   }
+}
+
+const RULE_ID = /^[a-z0-9]{4,16}$/i
+
+function replyRules(raw: unknown): ReplyRule[] {
+  const seen = new Set<string>()
+  return (Array.isArray(raw) ? (raw as Partial<ReplyRule>[]) : []).slice(0, REPLY_RULE_MAX).map((rule) => {
+    // The id names the rule's cooldown slot, so two rules must never share one.
+    let id = RULE_ID.test(String(rule?.id ?? '')) ? String(rule.id) : ''
+    if (!id || seen.has(id)) id = crypto.randomUUID().replace(/-/g, '').slice(0, 10)
+    seen.add(id)
+    return {
+      id,
+      enabled: Boolean(rule?.enabled),
+      words: list(rule?.words, REPLY_WORD_MAX).map((word) => word.slice(0, 40)),
+      text: String(rule?.text ?? '').trim().slice(0, 1000),
+      buttons: readReplyButtons(rule?.buttons, REPLY_BUTTON_MAX).buttons,
+    }
+  })
+}
+
+/** What would be lost or left unusable on save, in words; null when the form can be stored as it is. */
+function autoReplyProblem(r: HubConfig['autoReply'] | undefined): string | null {
+  const rules = Array.isArray(r?.rules) ? r.rules : []
+  if (rules.length > REPLY_RULE_MAX) return `En fazla ${REPLY_RULE_MAX} oto cevap kuralı olabilir.`
+  for (const [i, rule] of rules.entries()) {
+    const label = `${i + 1}. oto cevap kuralı`
+    if (!list(rule?.words, REPLY_WORD_MAX + 1).length) return `${label}: en az bir tetikleyici kelime yaz.`
+    if (list(rule?.words, REPLY_WORD_MAX + 1).length > REPLY_WORD_MAX) return `${label}: en fazla ${REPLY_WORD_MAX} tetikleyici kelime olabilir.`
+    if (!String(rule?.text ?? '').trim()) return `${label}: cevap yazısı boş.`
+    const { problem } = readReplyButtons(rule?.buttons, REPLY_BUTTON_MAX)
+    if (problem) return `${label}: ${problem}`
+  }
+  const welcome = readReplyButtons(r?.welcome?.buttons, REPLY_BUTTON_MAX).problem
+  return welcome ? `Karşılama mesajı: ${welcome}` : null
+}
+
+function quietConfig(q: Partial<QuietConfig> | undefined): QuietConfig {
+  const base = DEFAULT_HUB.shield.quiet
+  const clock = (value: unknown, fallback: string) => (clockMinutes(String(value ?? '')) == null ? fallback : String(value).trim())
+  return {
+    enabled: Boolean(q?.enabled),
+    from: clock(q?.from, base.from),
+    to: clock(q?.to, base.to),
+    mode: q?.mode === 'text' ? 'text' : 'lock',
+    announce: q?.announce !== false,
+  }
+}
+
+function quietProblem(q: Partial<QuietConfig> | undefined): string | null {
+  if (!q?.enabled) return null
+  if (clockMinutes(String(q.from ?? '')) == null || clockMinutes(String(q.to ?? '')) == null) return 'Sessiz saatler: başlangıç ve bitiş saatini SS:DD biçiminde yaz (örnek 01:00).'
+  return q.from === q.to ? 'Sessiz saatler: başlangıç ile bitiş aynı olamaz.' : null
+}
+
+/** A changed window should take hold now, not at the next visitor. */
+function applyQuietHours() {
+  after(async () => {
+    const { runQuietHours } = await import('@/lib/tg-quiet')
+    await runQuietHours().catch((error) => console.error('[panel] quiet hours', error))
+  })
 }
 
 type GuardTunables = Pick<HubConfig['guard'], (typeof GUARD_TUNABLES)[number]>
@@ -128,6 +197,7 @@ function guardTunables(g: Partial<GuardTunables>): GuardTunables {
     blockForwards: Boolean(g.blockForwards),
     cleanService: Boolean(g.cleanService),
     captcha: Boolean(g.captcha),
+    captchaMode: CAPTCHA_MODES.find((m) => m.value === g.captchaMode)?.value ?? 'button',
     raidJoins: clampInt(g.raidJoins, 0, 500, 20),
   }
 }
@@ -158,6 +228,7 @@ function shieldTunables(s: Partial<ShieldTunables>): ShieldTunables {
     swarmAccounts: limitOrOff(s.swarmAccounts, 2, 20),
     hiddenAds: Boolean(s.hiddenAds),
     nameWatch: Boolean(s.nameWatch),
+    quiet: quietConfig(s.quiet),
   }
 }
 
@@ -199,6 +270,11 @@ function sanitize(input: HubConfig, current: HubConfig): HubConfig {
       categories: list(s.categories, 12).map((x) => x.slice(0, 30)),
       aiFaq: Boolean(s.aiFaq),
       welcome: String(s.welcome ?? '').slice(0, 600),
+      canned: (Array.isArray(s.canned) ? s.canned : [])
+        .map((c) => ({ title: String(c?.title ?? '').trim().slice(0, 40), text: String(c?.text ?? '').trim().slice(0, 1000) }))
+        .filter((c) => c.title && c.text)
+        .slice(0, CANNED_MAX),
+      alertMinutes: limitOrOff(s.alertMinutes, 5, 1440),
     },
     report: { enabled: Boolean(input.report?.enabled) },
     autoReply: sanitizeAutoReply(input.autoReply ?? DEFAULT_HUB.autoReply),
@@ -209,6 +285,10 @@ export async function saveHubSettings(input: HubConfig): Promise<Result> {
   const no = await blocked('setup')
   if (no) return no
   try {
+    const problem = autoReplyProblem(input?.autoReply)
+    if (problem) return { ok: false, message: problem }
+    const half = (Array.isArray(input?.support?.canned) ? input.support.canned : []).findIndex((c) => Boolean(String(c?.title ?? '').trim()) !== Boolean(String(c?.text ?? '').trim()))
+    if (half >= 0) return { ok: false, message: `${half + 1}. hazır cevap: hem başlık hem cevap yazısı dolu olmalı.` }
     const current = await getHub()
     await saveHub(sanitize(input, current))
     return done(`Ayarlar kaydedildi.${await hookNote()}`)
@@ -221,6 +301,8 @@ export async function saveShieldSettings(input: ShieldConfig): Promise<Result> {
   const no = await blocked('setup')
   if (no) return no
   try {
+    const problem = quietProblem(input?.quiet)
+    if (problem) return { ok: false, message: problem }
     const current = await getHub()
     const shield: ShieldConfig = {
       ...shieldTunables(input ?? {}),
@@ -228,6 +310,7 @@ export async function saveShieldSettings(input: ShieldConfig): Promise<Result> {
       adminAlerts: Boolean(input?.adminAlerts),
     }
     await saveHub({ ...current, shield })
+    applyQuietHours()
     return done(`Koruma ayarları kaydedildi.${await hookNote()}`)
   } catch (error) {
     return fail(error)
@@ -243,10 +326,13 @@ export async function saveGroupRules(chatId: string, input: GroupRules | null): 
     const group = hub.groups.find((g) => g.chatId === String(chatId))
     if (!group) return { ok: false, message: 'Bu grup korunan listede değil.' }
     if (group.type === 'channel') return { ok: false, message: 'Kanalda mesaj kuralları çalışmaz; ayrı ayar sadece gruplar için.' }
+    const problem = quietProblem(input?.quiet)
+    if (problem) return { ok: false, message: problem }
     const own = input ? rulesDiff(generalRules(hub), { ...guardTunables(input), ...shieldTunables(input) }) : {}
     const count = Object.keys(own).length
     const groups = hub.groups.map((g) => (g.chatId === group.chatId ? { ...g, rules: count ? own : undefined } : g))
     await saveHub({ ...hub, groups })
+    applyQuietHours()
     if (!input) return done(`"${group.title}" genel ayarlara döndü.`)
     return done(count ? `"${group.title}" için ${count} ayar genelden farklı kaydedildi.` : `"${group.title}" ayarları genel ayarlarla aynı, ayrı kayıt tutulmadı.`)
   } catch (error) {
@@ -603,20 +689,38 @@ export async function deleteTicketAction(ticketId: number): Promise<Result> {
   }
 }
 
-export async function sendBroadcast(text: string, buttonText: string, buttonUrl: string): Promise<Result> {
+export async function searchTicketsAction(filter: 'open' | 'closed', q: string, beforeId?: number): Promise<TicketPage> {
+  if (await blocked('mod')) return { rows: [], hasMore: false }
+  const { searchTickets } = await import('@/lib/tg-support')
+  return searchTickets({ filter: filter === 'closed' ? 'closed' : 'open', q: String(q ?? ''), beforeId: Number(beforeId) || undefined }).catch(() => ({ rows: [], hasMore: false }))
+}
+
+export async function sendBroadcast(input: DmDraft): Promise<Result> {
   const no = await blocked('posts')
   if (no) return no
-  const body = String(text ?? '').trim().slice(0, 3500)
-  if (body.length < 5) return { ok: false, message: 'Mesaj çok kısa.' }
-  const url = String(buttonUrl ?? '').trim()
-  if (url && !/^https:\/\//.test(url)) return { ok: false, message: 'Buton linki https:// ile başlamalı.' }
   try {
     const { getChatConfig } = await import('@/lib/telegram-chat')
     if (!(await getChatConfig())) return { ok: false, message: 'Canlı Sohbet botu bağlı değil. Önce Canlı Sohbet sekmesinden botu bağla.' }
-    const n = await queueBroadcast(body, String(buttonText ?? '').trim().slice(0, 40), url.slice(0, 300))
-    if (!n) return done('Duyuru kaydedildi ama Telegram hesabını bağlamış üye yok, kimseye gitmeyecek.')
+    const { processBroadcasts, queueBroadcast } = await import('@/lib/tg-broadcast')
+    const { total, sendAt } = await queueBroadcast(input, await actor())
+    if (sendAt) {
+      const when = new Date(sendAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+      return done(`Duyuru ${when} için zamanlandı. O saatten sonraki ilk site ziyaretinde ya da Telegram bildiriminde çıkar; kime gideceği o an yeniden sayılır (şu an ${total} kişi).`)
+    }
+    if (!total) return done('Duyuru kaydedildi ama bu kitlede kimse yok, kimseye gitmeyecek.')
     after(() => processBroadcasts().catch((e) => console.error('[broadcast] immediate send failed', e)))
-    return done(`Duyuru gönderilmeye başladı, ${n} kişiye gidiyor. Liste kendini yeniler.`)
+    return done(`Duyuru gönderilmeye başladı, ${total} kişiye gidiyor. Liste kendini yeniler.`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function testBroadcastAction(input: DmDraft, chat: string): Promise<Result> {
+  const no = await blocked('posts')
+  if (no) return no
+  try {
+    const { testBroadcast } = await import('@/lib/tg-broadcast')
+    return await testBroadcast(input, String(chat ?? ''))
   } catch (error) {
     return fail(error)
   }
@@ -625,8 +729,9 @@ export async function sendBroadcast(text: string, buttonText: string, buttonUrl:
 export async function stopBroadcast(id: number): Promise<Result> {
   const no = await blocked('posts')
   if (no) return no
-  await cancelBroadcast(Number(id))
-  return done('Duyuru durduruldu.')
+  const { cancelBroadcast } = await import('@/lib/tg-broadcast')
+  const stopped = await cancelBroadcast(Number(id))
+  return stopped ? done('Duyuru durduruldu. O ana kadar gidenler geri alınamaz.') : { ok: false, message: 'Bu duyuru zaten bitmiş ya da durdurulmuş.' }
 }
 
 export async function sendWeeklyNow(): Promise<Result> {
