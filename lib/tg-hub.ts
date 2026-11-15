@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, ensureTables, normalizeChat } from '@/lib/telegram-mirror'
+import { TelegramError, botToken, callBot, ensureTables, normalizeChat } from '@/lib/telegram-mirror'
 import { DEFAULT_HUB, type BroadcastRow, type HubConfig, type HubLogRow, type HubStats, type LeaderRow } from '@/lib/tg-hub-shared'
 import type { TgMessage } from '@/lib/telegram-chat'
 
@@ -43,6 +43,10 @@ export function ensureHubTables() {
       cursor bigint NOT NULL DEFAULT 0, sent int NOT NULL DEFAULT 0, failed int NOT NULL DEFAULT 0, total int NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE tg_links ADD COLUMN IF NOT EXISTS dm_off boolean NOT NULL DEFAULT false`).catch(() => null)
+    await rows(sql`ALTER TABLE tg_links ADD COLUMN IF NOT EXISTS dm_blocked boolean NOT NULL DEFAULT false`).catch(() => null)
+    await rows(sql`ALTER TABLE tg_broadcasts ADD COLUMN IF NOT EXISTS blocked int NOT NULL DEFAULT 0`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_seen_updates (
+      bot_id int NOT NULL, update_id bigint NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (bot_id, update_id))`)
   })().catch((error) => {
     ready = null
     throw error
@@ -163,6 +167,18 @@ export async function hookStatus(botId: number | null) {
   }
 }
 
+/**
+ * Telegram delivers an update again when the webhook answers too slowly. The first delivery wins,
+ * so one message can never earn two warnings. Returns false for a repeat.
+ */
+export async function claimUpdate(botId: number, updateId: unknown) {
+  if (!Number.isSafeInteger(updateId)) return true
+  await ensureHubTables()
+  const r = await rows(sql`INSERT INTO tg_seen_updates (bot_id, update_id) VALUES (${botId}, ${Number(updateId)})
+    ON CONFLICT DO NOTHING RETURNING update_id`)
+  return r.length > 0
+}
+
 /** Routes one Telegram update to every role this bot plays. */
 export async function dispatchUpdate(botId: number, update: HubUpdate) {
   const hub = await getHub()
@@ -171,6 +187,11 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
   const isGuard = hub.guardBotId === botId && hub.guard.enabled
   const isSupport = hub.supportBotId === botId && hub.support.enabled
   const isChat = chat?.botId === botId
+
+  // Writing to the bot again means the member unblocked it, so DM broadcasts may reach them once more.
+  if (isChat && update.message?.chat.type === 'private' && update.message.from) {
+    await rows(sql`UPDATE tg_links SET dm_blocked = false WHERE tg_id = ${update.message.from.id} AND dm_blocked`).catch(() => null)
+  }
 
   if (update.callback_query) {
     const data = update.callback_query.data ?? ''
@@ -385,7 +406,7 @@ export async function queueBroadcast(text: string, buttonText: string, buttonUrl
   if (body.length < 3) throw new Error('Mesaj çok kısa')
   if (body.length > 3500) throw new Error('Mesaj en fazla 3500 karakter olabilir')
   if (buttonUrl && !/^https:\/\//.test(buttonUrl)) throw new Error('Buton linki https ile başlamalı')
-  const [{ n }] = await rows(sql`SELECT count(*) AS n FROM tg_links WHERE NOT dm_off`)
+  const [{ n }] = await rows(sql`SELECT count(*) AS n FROM tg_links WHERE NOT dm_off AND NOT dm_blocked`)
   await rows(sql`INSERT INTO tg_broadcasts (text, button_text, button_url, total)
     VALUES (${body}, ${buttonText.trim() || null}, ${buttonUrl.trim() || null}, ${Number(n)})`)
   return Number(n)
@@ -393,8 +414,17 @@ export async function queueBroadcast(text: string, buttonText: string, buttonUrl
 
 export async function listBroadcasts(limit = 10): Promise<BroadcastRow[]> {
   await ensureHubTables()
-  const r = await rows(sql`SELECT id, text, status, sent, failed, total, created_at FROM tg_broadcasts ORDER BY id DESC LIMIT ${limit}`)
-  return r.map((x) => ({ id: Number(x.id), text: String(x.text), status: String(x.status), sent: Number(x.sent), failed: Number(x.failed), total: Number(x.total), createdAt: new Date(String(x.created_at)).toISOString() }))
+  const r = await rows(sql`SELECT id, text, status, sent, failed, blocked, total, created_at FROM tg_broadcasts ORDER BY id DESC LIMIT ${limit}`)
+  return r.map((x) => ({
+    id: Number(x.id),
+    text: String(x.text),
+    status: String(x.status),
+    sent: Number(x.sent),
+    failed: Number(x.failed),
+    blocked: Number(x.blocked ?? 0),
+    total: Number(x.total),
+    createdAt: new Date(String(x.created_at)).toISOString(),
+  }))
 }
 
 export async function cancelBroadcast(id: number) {
@@ -411,29 +441,36 @@ export async function processBroadcasts() {
   if (!chat) return
   const token = await botToken(chat.botId)
   await rows(sql`UPDATE tg_broadcasts SET status = 'sending' WHERE id = ${job.id}`)
-  const people = await rows<{ tg_id: string }>(sql`SELECT tg_id FROM tg_links WHERE NOT dm_off AND tg_id > ${job.cursor} ORDER BY tg_id LIMIT ${BROADCAST_PER_RUN}`)
+  const people = await rows<{ tg_id: string }>(sql`SELECT tg_id FROM tg_links
+    WHERE NOT dm_off AND NOT dm_blocked AND tg_id > ${job.cursor} ORDER BY tg_id LIMIT ${BROADCAST_PER_RUN}`)
   const keyboard: { text: string; url?: string; callback_data?: string }[][] = []
   if (job.button_text && job.button_url) keyboard.push([{ text: String(job.button_text), url: String(job.button_url) }])
   keyboard.push([{ text: 'Bildirimleri kapat', callback_data: 'dm:off' }])
   let sent = 0
   let failed = 0
+  let blocked = 0
   let cursor = Number(job.cursor)
   const started = Date.now()
   for (const p of people) {
     if (Date.now() - started > 25_000) break
+    const tgId = Number(p.tg_id)
     try {
-      await callBot(token, 'sendMessage', { chat_id: Number(p.tg_id), text: String(job.text), reply_markup: { inline_keyboard: keyboard }, link_preview_options: { is_disabled: true } })
+      await callBot(token, 'sendMessage', { chat_id: tgId, text: String(job.text), reply_markup: { inline_keyboard: keyboard }, link_preview_options: { is_disabled: true } })
       sent++
     } catch (error) {
-      failed++
-      const retry = String((error as Error).message).match(/retry after (\d+)/i)
-      if (retry) await new Promise((r) => setTimeout(r, Number(retry[1]) * 1000))
+      const tg = error instanceof TelegramError ? error : null
+      // Still rate-limited after callBot's own short waits: stop before moving the cursor so this member is retried next run.
+      if (tg?.code === 429) break
+      if (tg && (tg.code === 403 || /chat not found|user is deactivated/i.test(tg.description))) {
+        blocked++
+        await rows(sql`UPDATE tg_links SET dm_blocked = true WHERE tg_id = ${tgId}`).catch(() => null)
+      } else failed++
     }
-    cursor = Number(p.tg_id)
+    cursor = tgId
     await new Promise((r) => setTimeout(r, BROADCAST_DELAY_MS))
   }
   const done = people.length < BROADCAST_PER_RUN && cursor === Number(people.at(-1)?.tg_id ?? cursor)
-  await rows(sql`UPDATE tg_broadcasts SET sent = sent + ${sent}, failed = failed + ${failed}, cursor = ${cursor},
+  await rows(sql`UPDATE tg_broadcasts SET sent = sent + ${sent}, failed = failed + ${failed}, blocked = blocked + ${blocked}, cursor = ${cursor},
     status = CASE WHEN status = 'cancelled' THEN 'cancelled' WHEN ${done} THEN 'done' ELSE 'sending' END WHERE id = ${job.id}`)
 }
 

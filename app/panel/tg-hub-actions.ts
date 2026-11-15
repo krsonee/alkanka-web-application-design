@@ -274,10 +274,18 @@ export async function wipeWholeChat(chatInput: string): Promise<Result> {
 
 export async function wipeUserMessages(tgIdInput: string): Promise<Result> {
   if (!(await canPanel('telegram'))) return EXPIRED
-  const tgId = Number(String(tgIdInput).trim())
-  if (!Number.isSafeInteger(tgId) || tgId <= 0) return { ok: false, message: 'Geçerli bir Telegram ID gir (sadece rakam).' }
+  const raw = String(tgIdInput ?? '').trim().slice(0, 80)
+  if (!raw) return { ok: false, message: 'Telegram ID ya da @kullaniciadi yaz.' }
   try {
-    const { deleteUserMessages } = await import('@/lib/tg-guard')
+    const { deleteUserMessages, findWriterIds } = await import('@/lib/tg-guard')
+    let tgId = Number(raw)
+    if (!/^\d+$/.test(raw)) {
+      const ids = await findWriterIds(raw)
+      if (!ids.length) return { ok: false, message: `"${raw}" son 35 günde korunan gruplarda yazmamış, bulamadım. Telegram ID'sini yaz (log grubundaki kayıtta yazar).` }
+      if (ids.length > 1) return { ok: false, message: `"${raw}" adıyla birden çok hesap var. Yanlış kişiyi silmemek için Telegram ID'sini yaz.` }
+      tgId = ids[0]
+    }
+    if (!Number.isSafeInteger(tgId) || tgId <= 0) return { ok: false, message: 'Geçerli bir Telegram ID ya da @kullaniciadi yaz.' }
     const n = await deleteUserMessages(tgId)
     return done(`${n} mesaj silindi (Telegram sadece son 48 saati sildirir).`)
   } catch (error) {
@@ -309,6 +317,22 @@ export async function closeTicketAction(ticketId: number, status: 'resolved' | '
     const { panelCloseTicket } = await import('@/lib/tg-support')
     await panelCloseTicket(Number(ticketId), status, text)
     return done(status === 'resolved' ? 'Bilet çözüldü, üyeye bildirildi.' : 'Bilet reddedildi, üyeye nedeni bildirildi.')
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteTicketAction(ticketId: number): Promise<Result> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  const id = Number(ticketId)
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, message: 'Geçersiz bilet.' }
+  try {
+    const { deleteClosedTicket } = await import('@/lib/tg-support')
+    const removed = await deleteClosedTicket(id)
+    if (!removed) return { ok: false, message: 'Sadece kapanmış bilet silinir. Açık bileti önce çöz ya da reddet.' }
+    const { modLog } = await import('@/lib/tg-hub')
+    await modLog({ action: 'Bilet silindi', reason: `#${id} · ${removed.sponsor} · ${removed.name} (panelden)`, notify: false })
+    return done(`#${id} silindi, sponsor karnesinden de düştü.`)
   } catch (error) {
     return fail(error)
   }

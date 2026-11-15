@@ -1,5 +1,9 @@
 export type SupportSponsor = { name: string; chatId: string; title: string }
 
+/** Shared by the guard and the panel text so the screen never promises a different number than the bot uses. */
+export const CAPTCHA_MINUTES = 3
+export const RAID_BAN_MINUTES = 10
+
 export type HubConfig = {
   guardBotId: number | null
   supportBotId: number | null
@@ -125,4 +129,4 @@ export type SponsorSupportStat = { sponsor: string; total: number; resolved: num
 
 export type LeaderRow = { key: string; name: string; count: number }
 
-export type BroadcastRow = { id: number; text: string; status: string; sent: number; failed: number; total: number; createdAt: string }
+export type BroadcastRow = { id: number; text: string; status: string; sent: number; failed: number; blocked: number; total: number; createdAt: string }

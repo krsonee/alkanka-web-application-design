@@ -14,6 +14,7 @@ import {
 } from '@/lib/telegram-mirror'
 import { applyReplacements, parseReplacements, pickLink } from '@/lib/text-replace'
 import { parseOddsPost } from '@/lib/odds-parse'
+import { decodeEntities } from '@/lib/html-entities'
 import { isOddsText } from '@/lib/telegram-bots'
 import type { TgMessage } from '@/lib/telegram-chat'
 import {
@@ -650,9 +651,10 @@ function mapOdd(r: Record<string, unknown>): SpecialOdd {
     tag: toOddsTag(r.tag),
     tagText: String(r.tag_text ?? ''),
     link: String(r.link),
-    match: String(r.match),
-    league: String(r.league ?? ''),
-    market: String(r.market ?? ''),
+    // Rows saved before the scraper decoded entities still hold text like "&#33;".
+    match: decodeEntities(String(r.match)),
+    league: decodeEntities(String(r.league ?? '')),
+    market: decodeEntities(String(r.market ?? '')),
     oldOdd: numOrNull(r.old_odd),
     newOdd: numOrNull(r.new_odd),
     kickoff: String(r.kickoff ?? ''),

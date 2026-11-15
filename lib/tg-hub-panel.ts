@@ -12,7 +12,10 @@ export async function loadTgHub(bots: MirrorBot[], shareBotId: number | null, li
   const [stats, log, tickets, sponsorStats, leaders, broadcasts, bans, trustLow, guardHook, supportHook, shareHook] = await Promise.all([
     hubStats().catch(() => EMPTY_STATS),
     listModLog(40).catch(() => []),
-    listTickets('all', 40).catch(() => []),
+    // Loaded separately so a pile of finished tickets can never push an open one off the list.
+    Promise.all([listTickets('open', 40), listTickets('closed', 30)])
+      .then(([open, closed]) => [...open, ...closed])
+      .catch(() => []),
     sponsorSupportStats(7).catch(() => []),
     chatLeaderboard(weekStart(), new Date(Date.now() + 60_000).toISOString(), 10).catch(() => []),
     listBroadcasts(10).catch(() => []),

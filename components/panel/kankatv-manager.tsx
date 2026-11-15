@@ -7,6 +7,7 @@ import type { ActionState } from '@/app/panel/actions'
 import type { MirrorTarget } from '@/lib/telegram-mirror'
 import { TV_LIMITS, tiersText, type TvBotStatus, type TvConfig, type TvStats } from '@/lib/kankatv-shared'
 import { cn } from '@/lib/utils'
+import { SecretUrl } from './secret-url'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
 const label = 'flex flex-col gap-1.5 text-sm font-medium text-foreground'
@@ -133,7 +134,7 @@ export function KankaTvManager({
           </p>
         ) : null}
         {botLive && stale ? (
-          <p className={hint}>Son 10 dakikada tarama yok. Site trafiği azken de çalışması için aşağıdaki cron adresini her dakika çağır.</p>
+          <p className={hint}>Son 10 dakikada tarama yok. Tarama sitede ziyaretçi oldukça çalışır; ziyaretçi yokken de çalışsın istersen aşağıdaki adresi bir dış zamanlayıcıya ekleyebilirsin (veritabanı faturasını artırır).</p>
         ) : null}
         <div className="flex flex-col gap-2 sm:flex-row">
           <form action={scan} className="flex-1">
@@ -151,11 +152,11 @@ export function KankaTvManager({
         </div>
         <Status state={scanState} />
         <Status state={testState} />
-        <label className={label}>
-          Dakikalık cron adresi (isteğe bağlı)
-          <input readOnly value={cronUrl} className={cn(input, 'font-mono text-xs')} onFocus={(e) => e.currentTarget.select()} />
-          <span className={hint}>Eklemezsen gol uyarıları ve tahmin ödemeleri sitede ziyaretçi oldukça işler. cron-job.org gibi bir servise “her dakika” eklersen ziyaretçi olmasa da işler, ama veritabanı hiç uyumaz; ücretsiz veritabanı planında aylık kota buna yetmez.</span>
-        </label>
+        <div className={label}>
+          <span>Dış zamanlayıcı adresi (isteğe bağlı)</span>
+          <SecretUrl url={cronUrl} label="KankaTV dış zamanlayıcı adresi" />
+          <span className={hint}>Eklemezsen gol uyarıları ve tahmin ödemeleri sitede ziyaretçi oldukça işler. cron-job.org gibi bir servise eklersen ziyaretçi olmasa da işler; ama her çağrı veritabanını uyandırır. Veritabanı kullandıkça öde planında, uyanık kaldığı her saat faturaya yazılır; “her dakika” seçersen hiç uyumaz. Adres gizli anahtar içerir, kimseyle paylaşma.</span>
+        </div>
       </Card>
 
       <form action={save} className="flex flex-col gap-5">
@@ -249,7 +250,7 @@ export function KankaTvManager({
         </Card>
 
         <Card icon={<Trophy className="size-4" />} id="tv-weekly" title="Haftanın izleyicisi" desc="En çok izleyenler her pazartesi otomatik ödüllenir.">
-          <Toggle name="weeklyEnabled" defaultChecked={config.weekly.enabled} title="Haftalık öd��l açık" />
+          <Toggle name="weeklyEnabled" defaultChecked={config.weekly.enabled} title="Haftalık ödül açık" />
           <label className={label}>
             Ödüller (1., 2., 3. …)
             <input name="weeklyPrizes" defaultValue={config.weekly.prizes.join(', ')} className={cn(input, 'font-mono text-xs')} />

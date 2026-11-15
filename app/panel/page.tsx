@@ -242,42 +242,59 @@ async function telegramPanel() {
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
   const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
-  const light = (ok: boolean) => (ok ? 'on' : 'off') as 'on' | 'off'
-  const firstIssue = (...checks: Array<[boolean, string]>) => checks.find(([bad]) => bad)?.[1] ?? null
+  // The first failing check decides the light: 'idle' for switched off or never set up, 'off' for switched on but failing.
+  const tabState = (...checks: Array<[bad: boolean, issue: string, as: 'off' | 'idle']>) => {
+    const hit = checks.find(([bad]) => bad)
+    return hit ? { status: hit[2], issue: hit[1] } : { status: 'on' as const, issue: null }
+  }
   const lastErr = (e: unknown) => (e ? `Son hata: ${String(e).slice(0, 160)}` : '')
   const hubData = await loadTgHub(bots, suite.share.botId ?? null, chat?.linkedMembers ?? 0)
   return (
     <TelegramTabs
       tabs={[
-        { id: 'hub', group: 'Botlar', label: 'Telegram Merkezi', status: light(hubData.hub.guard.enabled || hubData.hub.support.enabled), issue: 'Koruma ve destek botu ikisi de kapalı', content: <TgHubManager data={hubData} /> },
-        { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', status: light(bots.length > 0 && sources.length > 0), issue: firstIssue([bots.length === 0, 'Hiç bot eklenmemiş'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
-        { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', status: light(Boolean(chat?.webhook?.url) && !chat?.webhook?.lastError), issue: firstIssue([Boolean(chat?.webhook?.lastError), lastErr(chat?.webhook?.lastError)], [!chat?.webhook?.url, 'Webhook kurulmamış']), content: <TelegramChatSetup bots={bots} status={chat} /> },
-        { id: 'odds', group: 'Botlar', label: 'Özel Oran Botu', status: light(oddsConfig.enabled && Boolean(oddsStatus.webhookUrl) && !oddsStatus.lastError && !oddsStatus.channelError && !oddsStatus.publishError && oddsStatus.activeSources > 0), issue: firstIssue([Boolean(oddsStatus.lastError), lastErr(oddsStatus.lastError)], [!oddsConfig.enabled, 'Kapalı'], [Boolean(oddsStatus.channelError), 'Bot kanalda yönetici değil'], [Boolean(oddsStatus.publishError), 'Son oran kanala gönderilemedi'], [oddsStatus.activeSources === 0, 'Kaynak kanal eklenmemiş'], [!oddsStatus.webhookUrl, 'Webhook kurulmamış']), content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} /> },
+        { id: 'hub', group: 'Botlar', label: 'Telegram Merkezi', ...tabState([!(hubData.hub.guard.enabled || hubData.hub.support.enabled), 'Koruma ve destek botu ikisi de kapalı', 'idle']), content: <TgHubManager data={hubData} /> },
+        { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
+        { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', ...tabState([!chat?.webhook?.url, 'Webhook kurulmamış', 'idle'], [Boolean(chat?.webhook?.lastError), lastErr(chat?.webhook?.lastError), 'off']), content: <TelegramChatSetup bots={bots} status={chat} /> },
+        {
+          id: 'odds',
+          group: 'Botlar',
+          label: 'Özel Oran Botu',
+          ...tabState(
+            [!oddsConfig.enabled, 'Kapalı', 'idle'],
+            [Boolean(oddsStatus.lastError), lastErr(oddsStatus.lastError), 'off'],
+            [Boolean(oddsStatus.channelError), 'Bot kanalda yönetici değil', 'off'],
+            [Boolean(oddsStatus.publishError), 'Son oran kanala gönderilemedi', 'off'],
+            [oddsStatus.activeSources === 0, 'Kaynak kanal eklenmemiş', 'off'],
+            [!oddsStatus.webhookUrl, 'Webhook kurulmamış', 'off'],
+          ),
+          content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsList} />,
+        },
         {
           id: 'kankatv',
           group: 'Otomasyonlar',
           label: 'KankaTV Gol Botu',
-          status: light((tvConfig.goalBot.enabled || tvConfig.goalBot.push) && !tvStatus.lastError),
-          issue: firstIssue([Boolean(tvStatus.lastError), lastErr(tvStatus.lastError)], [!(tvConfig.goalBot.enabled || tvConfig.goalBot.push), 'Kapalı (Telegram ve bildirim gönderimi ikisi de kapalı)']),
+          ...tabState(
+            [!(tvConfig.goalBot.enabled || tvConfig.goalBot.push), 'Kapalı (Telegram ve bildirim gönderimi ikisi de kapalı)', 'idle'],
+            [Boolean(tvStatus.lastError), lastErr(tvStatus.lastError), 'off'],
+          ),
           content: <KankaTvManager config={tvConfig} status={tvStatus} stats={tvToday} targets={targets} cronUrl={tvCronUrl} />,
         },
         {
           id: 'tvbets',
           group: 'Otomasyonlar',
           label: 'KankaTV Canlı Etkinlik',
-          status: light(betsConfig.enabled && !betsStatus.lastError),
-          issue: firstIssue([Boolean(betsStatus.lastError), lastErr(betsStatus.lastError)], [!betsConfig.enabled, 'Kapalı']),
+          ...tabState([!betsConfig.enabled, 'Kapalı', 'idle'], [Boolean(betsStatus.lastError), lastErr(betsStatus.lastError), 'off']),
           content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
         },
-        { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', status: light(suite.approvals.enabled && suite.approvals.botId != null && Boolean(suite.approvals.chatId)), issue: firstIssue([!suite.approvals.enabled, 'Kapalı'], [suite.approvals.botId == null, 'Bot seçilmemiş'], [!suite.approvals.chatId, 'Bildirimin gideceği sohbet seçilmemiş']), content: <ApprovalSection suite={suite} bots={bots} /> },
-        { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', status: light(suite.share.enabled && suite.share.botId != null && !shareInfo.lastError), issue: firstIssue([Boolean(shareInfo.lastError), lastErr(shareInfo.lastError)], [!suite.share.enabled, 'Kapalı'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
-        { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', status: light(invite != null), issue: 'Davet linki ayarı yapılmamış', content: <TelegramInviteSetup bots={bots} status={invite} /> },
+        { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', ...tabState([!suite.approvals.enabled, 'Kapalı', 'idle'], [suite.approvals.botId == null, 'Bot seçilmemiş', 'off'], [!suite.approvals.chatId, 'Bildirimin gideceği sohbet seçilmemiş', 'off']), content: <ApprovalSection suite={suite} bots={bots} /> },
+        { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
+        { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', ...tabState([invite == null, 'Davet linki ayarı yapılmamış', 'idle']), content: <TelegramInviteSetup bots={bots} status={invite} /> },
         { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
         {
           id: 'strip',
           group: 'Kanallar',
           label: 'Site şeridi',
-          status: light(tgPromo.enabled),
+          ...tabState([!tgPromo.enabled, 'Kapalı', 'idle']),
           content: (
             <TelegramPromoEditor
               settings={tgPromo}

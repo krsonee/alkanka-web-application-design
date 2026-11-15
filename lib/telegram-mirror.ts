@@ -324,16 +324,49 @@ async function resolveMissingVideos(post: ScrapedPost, items: MediaItem[]) {
   }
 }
 
+export class TelegramError extends Error {
+  readonly code: number
+  /** Telegram's own untranslated error text. */
+  readonly description: string
+  readonly retryAfter: number | null
+
+  constructor(message: string, code: number, description: string, retryAfter: number | null) {
+    super(message)
+    this.name = 'TelegramError'
+    this.code = code
+    this.description = description
+    this.retryAfter = retryAfter
+  }
+}
+
+const RATE_LIMIT_WAIT_MAX_SEC = 5
+const RATE_LIMIT_RETRIES = 2
+
 export async function callBot<T = unknown>(token: string, method: string, body: Record<string, unknown> = {}): Promise<T> {
-  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000),
-  })
-  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string; result?: T }
-  if (!data.ok) throw new Error(translateError(data.description ?? `Telegram HTTP ${res.status}`))
-  return data.result as T
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000),
+    })
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean
+      description?: string
+      error_code?: number
+      parameters?: { retry_after?: number }
+      result?: T
+    }
+    if (data.ok) return data.result as T
+    const retryAfter = typeof data.parameters?.retry_after === 'number' ? data.parameters.retry_after : null
+    // Short flood waits are sat out here; longer ones go back to the caller so a webhook never hangs on them.
+    if (retryAfter != null && retryAfter <= RATE_LIMIT_WAIT_MAX_SEC && attempt < RATE_LIMIT_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000 + 250))
+      continue
+    }
+    const description = data.description ?? `Telegram HTTP ${res.status}`
+    throw new TelegramError(translateError(description), data.error_code ?? res.status, description, retryAfter)
+  }
 }
 
 const LINKED_TTL_MS = 10 * 60_000

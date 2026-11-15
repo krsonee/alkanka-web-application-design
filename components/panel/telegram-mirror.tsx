@@ -21,6 +21,7 @@ import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot, MirrorLog, MirrorSource, MirrorTarget } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS, describeFilter } from '@/lib/telegram-filters'
 import { TelegramGuide } from './telegram-guide'
+import { SecretUrl } from './secret-url'
 
 type Props = { bots: MirrorBot[]; targets: MirrorTarget[]; sources: MirrorSource[]; log: MirrorLog[]; cronUrl: string }
 
@@ -204,7 +205,7 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) 
         <div className="flex flex-wrap items-center gap-3 rounded-xl bg-secondary p-3 text-sm">
           <KeyRound className="size-4 shrink-0 text-primary" aria-hidden />
           <span className="text-foreground">Otomatik kontrol adresi:</span>
-          <code className="min-w-0 flex-1 break-all font-mono text-xs text-muted-foreground">{cronUrl}</code>
+          <SecretUrl url={cronUrl} label="Otomatik kontrol adresi" />
           <form action={rotateCronKeyAction}>
             <button className={ghostBtn}>Anahtarı yenile</button>
           </form>

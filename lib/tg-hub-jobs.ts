@@ -88,4 +88,5 @@ export async function hubTick() {
   // Keep the guard's message log small; 35 days covers weekly counts and 48h deletions.
   await rows(sql`DELETE FROM tg_guard_msgs WHERE created_at < now() - interval '35 days'`).catch(() => null)
   await rows(sql`DELETE FROM tg_joins WHERE created_at < now() - interval '1 day'`).catch(() => null)
+  await rows(sql`DELETE FROM tg_seen_updates WHERE created_at < now() - interval '2 days'`).catch(() => null)
 }

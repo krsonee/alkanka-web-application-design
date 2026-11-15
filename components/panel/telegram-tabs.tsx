@@ -1,24 +1,29 @@
 'use client'
 
 import { useId, useState, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export type TabStatus = 'on' | 'off' | null
+/** on: working · off: switched on but failing · idle: switched off or never set up, which is not a fault. */
+export type TabStatus = 'on' | 'off' | 'idle' | null
 
 type Tab = { id: string; label: string; group?: string; status?: TabStatus; issue?: string | null; content: ReactNode }
 
+const STATUS_TEXT: Record<Exclude<TabStatus, null>, string> = { on: '(çalışıyor)', off: '(hata var)', idle: '(kapalı)' }
+
 function StatusLight({ status }: { status: TabStatus }) {
   if (!status) return null
+  if (status === 'idle') return <span className="size-2.5 shrink-0 rounded-full bg-muted-foreground/40" aria-hidden="true" />
   const on = status === 'on'
   return (
     <span className="relative flex size-2.5 shrink-0" aria-hidden="true">
-      <span className={cn('absolute inline-flex size-full animate-ping rounded-full opacity-60', on ? 'bg-success' : 'bg-destructive')} />
-      <span className={cn('relative inline-flex size-2.5 rounded-full', on ? 'bg-success' : 'bg-destructive')} />
+      <span className={cn('absolute inline-flex size-full animate-ping rounded-full opacity-60', on ? 'bg-emerald' : 'bg-destructive')} />
+      <span className={cn('relative inline-flex size-2.5 rounded-full', on ? 'bg-emerald' : 'bg-destructive')} />
     </span>
   )
 }
 
-export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: Tab[]; label?: string }) {
+export function TelegramTabs({ tabs, label = 'Telegram bölümleri', legend = true }: { tabs: Tab[]; label?: string; legend?: boolean }) {
   const [active, setActive] = useState(tabs[0]?.id)
   const uid = useId()
   const hasStatus = tabs.some((t) => t.status)
@@ -53,7 +58,7 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
                   <span className={cn('rounded-full px-1.5 text-xs font-semibold tabular-nums', isActive ? 'bg-background/20' : 'bg-secondary')}>
                     {groupTabs.length}
                   </span>
-                  {offCount > 0 ? <span className="sr-only">{`(${offCount} kurulmamış)`}</span> : null}
+                  {offCount > 0 ? <span className="sr-only">{`(${offCount} bölümde hata var)`}</span> : null}
                   {offCount > 0 ? <span className="size-2 rounded-full bg-destructive" aria-hidden="true" /> : null}
                 </button>
               )
@@ -70,7 +75,7 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
               aria-selected={active === t.id}
               aria-controls={`${uid}-panel-${t.id}`}
               onClick={() => setActive(t.id)}
-              title={t.status === 'off' && t.issue ? t.issue : undefined}
+              title={t.status !== 'on' && t.issue ? t.issue : undefined}
               className={cn(
                 'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
                 active === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
@@ -78,21 +83,26 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
             >
               <StatusLight status={t.status ?? null} />
               {t.label}
-              {t.status ? <span className="sr-only">{t.status === 'on' ? '(bağlı)' : '(bağlı değil)'}</span> : null}
+              {t.status ? <span className="sr-only">{STATUS_TEXT[t.status]}</span> : null}
             </button>
           ))}
         </div>
       </div>
-      {hasStatus ? (
+      {hasStatus && legend ? (
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5"><StatusLight status="on" /> Bağlı ve çalışıyor</span>
-          <span className="flex items-center gap-1.5"><StatusLight status="off" /> Kurulmadı veya hata var</span>
+          <span className="flex items-center gap-1.5"><StatusLight status="on" /> Çalışıyor</span>
+          <span className="flex items-center gap-1.5"><StatusLight status="off" /> Açık ama hata var</span>
+          <span className="flex items-center gap-1.5"><StatusLight status="idle" /> Kapalı ya da kurulmadı</span>
         </p>
       ) : null}
       {broken.length > 0 ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3">
-          <p className="text-sm font-semibold text-foreground">{`${broken.length} bölüm çalışmıyor`}</p>
-          <ul className="mt-2 flex flex-col gap-1.5">
+        <details className="group rounded-xl border border-destructive/30 bg-destructive/5">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
+            <span className="shrink-0 font-semibold text-foreground">{`${broken.length} bölümde hata var`}</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">{broken.map((t) => t.label).join(', ')}</span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <ul className="flex flex-col gap-1.5 px-1 pb-2">
             {broken.map((t) => (
               <li key={t.id}>
                 <button
@@ -103,12 +113,12 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri' }: { tabs: T
                   <span className="font-semibold text-foreground">
                     {t.group ? `${t.group} · ${t.label}` : t.label}
                   </span>
-                  <span className="break-all text-muted-foreground">{t.issue ?? 'Kurulum tamamlanmamış'}</span>
+                  <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{t.issue ?? 'Kurulum tamamlanmamış'}</span>
                 </button>
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ) : null}
       {tabs.map((t) => (
         <div key={t.id} role="tabpanel" id={`${uid}-panel-${t.id}`} aria-labelledby={`${uid}-tab-${t.id}`} hidden={active !== t.id}>

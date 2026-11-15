@@ -6,11 +6,13 @@ import { useEffect, useState, useTransition, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR, { useSWRConfig } from 'swr'
 import type { MirrorBot } from '@/lib/telegram-mirror'
+import { CAPTCHA_MINUTES, RAID_BAN_MINUTES } from '@/lib/tg-hub-shared'
 import type { BroadcastRow, HubConfig, HubLogRow, HubStats, LeaderRow, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import {
   addHubChat,
   closeTicketAction,
+  deleteTicketAction,
   markTrusted,
   removeHubChat,
   saveHubSettings,
@@ -267,12 +269,12 @@ function GuardSection({ d }: { d: TgHubData }) {
       <Toggle label="Bekçi açık" hint="Kapalıyken bot hiçbir şeye dokunmaz." checked={g.enabled} onChange={(v) => set({ enabled: v })} />
       <Card title="Güvenlik (saldırı koruması)">
         <div className="grid gap-2 md:grid-cols-2">
-          <Toggle label="Yeni gelene doğrulama (captcha)" hint="Katılan kişi 2 dakika içinde butona basmazsa atılır. Botları durdurur." checked={g.captcha} onChange={(v) => set({ captcha: v })} />
+          <Toggle label="Yeni gelene doğrulama (captcha)" hint={`Katılan kişi ${CAPTCHA_MINUTES} dakika içinde butona basmazsa atılır. Botları durdurur.`} checked={g.captcha} onChange={(v) => set({ captcha: v })} />
           <Toggle label="Bilinen spam hesap kontrolü" hint="Dünya çapındaki spam listesindeki hesaplar girer girmez banlanır." checked={g.casCheck} onChange={(v) => set({ casCheck: v })} />
           <Toggle label="Sahte yönetici koruması" hint="Adında Alkanka, admin, destek geçen ve yönetici taklidi yapan hesaplar engellenir." checked={g.impersonation} onChange={(v) => set({ impersonation: v })} />
           <Toggle label="Katıldı/ayrıldı yazılarını sil" checked={g.cleanService} onChange={(v) => set({ cleanService: v })} />
         </div>
-        <NumberField label="Baskın koruması: 1 dakikada bu kadar kişi girerse grup otomatik kilitlenir (0 = kapalı)" value={g.raidJoins} onChange={(v) => set({ raidJoins: v })} suffix="kişi" />
+        <NumberField label={`Baskın koruması: 1 dakikada bu sayıdan fazla kişi girerse sonraki gelenler ${RAID_BAN_MINUTES} dakikalığına gruptan çıkarılır, kalıcı banlanmaz (0 = kapalı)`} value={g.raidJoins} onChange={(v) => set({ raidJoins: v })} suffix="kişi" />
       </Card>
       <Card title="Kontrolcü (küfür, spam, reklam)">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -303,7 +305,7 @@ function GuardSection({ d }: { d: TgHubData }) {
         </label>
         <div className="grid gap-2 md:grid-cols-2">
           <Toggle label="Başka kanaldan iletilen mesajları sil" hint="Reklamcılar genelde iletme ile reklam yapar." checked={g.blockForwards} onChange={(v) => set({ blockForwards: v })} />
-          <Toggle label="Yapay zekâ moderasyonu" hint="Listeye takılmayan hakaret ve dolandırıcılık mesajlarını anlar. Şüpheli mesajı siler, log grubuna yazar." checked={g.aiModeration} onChange={(v) => set({ aiModeration: v })} />
+          <Toggle label="Yapay zekâ moderasyonu" hint="Listeye takılmayan hakaret ve dolandırıc��lık mesajlarını anlar. Şüpheli mesajı siler, log grubuna yazar." checked={g.aiModeration} onChange={(v) => set({ aiModeration: v })} />
         </div>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Grup kuralları (/kurallar yazınca gösterilir)
@@ -350,10 +352,27 @@ function TicketItem({ t }: { t: TicketRow }) {
           {a.note}
         </>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {t.status === 'resolved' ? 'Çözüldü' : 'Reddedildi'} · {t.answer}
-          {t.rating ? ` · Puan ${t.rating}/5` : ''}
-        </p>
+        <>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="min-w-0 text-xs text-muted-foreground">
+              {t.status === 'resolved' ? 'Çözüldü' : 'Reddedildi'} · {t.answer}
+              {t.rating ? ` · Puan ${t.rating}/5` : ''}
+            </p>
+            <button
+              type="button"
+              className="shrink-0 text-xs text-destructive hover:underline disabled:opacity-50"
+              disabled={a.pending}
+              onClick={() => {
+                void askConfirm(`#${t.id} numaralı bilet kalıcı olarak silinsin mi? Sponsor karnesinden de düşer, geri alınamaz.`).then((ok) => {
+                  if (ok) a.run(() => deleteTicketAction(t.id))
+                })
+              }}
+            >
+              {a.pending ? 'Siliniyor…' : 'Sil'}
+            </button>
+          </div>
+          {a.note}
+        </>
       )}
     </li>
   )
@@ -366,6 +385,7 @@ function SupportSection({ d }: { d: TgHubData }) {
   const s = cfg.support
   const set = (patch: Partial<HubConfig['support']>) => setCfg((c) => ({ ...c, support: { ...c.support, ...patch } }))
   const open = d.tickets.filter((t) => t.status === 'open' || t.status === 'claimed')
+  const closed = d.tickets.filter((t) => t.status === 'resolved' || t.status === 'rejected')
   return (
     <div className="flex flex-col gap-4">
       <Toggle label="Destek botu açık" checked={s.enabled} onChange={(v) => set({ enabled: v })} />
@@ -400,14 +420,28 @@ function SupportSection({ d }: { d: TgHubData }) {
         </div>
       </Card>
       <Card title={`Açık biletler (${open.length})`} hint="Biletleri Telegram grubundan da cevaplayabilirsin; burası yedek ekran.">
-        {d.tickets.length ? (
+        {open.length ? (
           <ul className="flex flex-col gap-2">
-            {d.tickets.map((t) => (
+            {open.map((t) => (
               <TicketItem key={t.id} t={t} />
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">Bilet yok.</p>
+          <p className="text-xs text-muted-foreground">Açık bilet yok.</p>
+        )}
+      </Card>
+      <Card title={`Kapanan biletler (son ${closed.length})`} hint="Çözülen ve reddedilen son biletler. Deneme için açılmış bir bileti buradan silebilirsin; silinen bilet sponsor karnesinden de düşer.">
+        {closed.length ? (
+          <details>
+            <summary className="cursor-pointer text-sm font-medium text-primary">Listeyi göster / gizle</summary>
+            <ul className="mt-3 flex flex-col gap-2">
+              {closed.map((t) => (
+                <TicketItem key={t.id} t={t} />
+              ))}
+            </ul>
+          </details>
+        ) : (
+          <p className="text-xs text-muted-foreground">Kapanan bilet yok.</p>
         )}
       </Card>
       <Card title="Sponsor destek karnesi (son 7 gün)" hint="Bu veriler Güven Merkezi'ndeki sponsor karnesine de otomatik yansır.">
@@ -607,6 +641,37 @@ function WipeProgress() {
   )
 }
 
+const MANUAL = '__manual'
+
+/** Protected groups by name; typing an address is the fallback for a chat that is not on the list. */
+function ChatPicker({ label, groups, value, onChange, manualHint }: { label: string; groups: HubConfig['groups']; value: string; onChange: (v: string) => void; manualHint: string }) {
+  const [manual, setManual] = useState(groups.length === 0)
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
+      {groups.length > 0 && (
+        <select
+          aria-label={label}
+          className={input}
+          value={manual ? MANUAL : value}
+          onChange={(e) => {
+            const next = e.target.value
+            setManual(next === MANUAL)
+            onChange(next === MANUAL ? '' : next)
+          }}
+        >
+          {groups.map((g) => (
+            <option key={g.chatId} value={g.chatId}>
+              {g.title}
+            </option>
+          ))}
+          <option value={MANUAL}>Listede yok, elle yaz…</option>
+        </select>
+      )}
+      {manual && <input aria-label={`${label} adresi`} className={input} placeholder={manualHint} value={value} onChange={(e) => onChange(e.target.value)} />}
+    </div>
+  )
+}
+
 function CleanupSection({ d }: { d: TgHubData }) {
   const [chat, setChat] = useState(d.hub.groups[0]?.chatId ?? '')
   const [tgId, setTgId] = useState('')
@@ -622,24 +687,16 @@ function CleanupSection({ d }: { d: TgHubData }) {
       <WipeProgress />
       <Card title="Sohbeti komple temizle (tüm geçmiş)" hint="Seçtiğin grup ya da kanaldaki mesajları en yeniden en eskiye siler. Önemli: Telegram botlara sadece son 48 saatteki mesajları sildirir; daha eski postlara ulaşınca bot durur ve haber verir, onları Telegram uygulamasından elle silmen gerekir. Grupta veya kanalda /sil yazıp çıkan butona basarak da başlatabilirsin. Bir mesaja yanıt olarak /sil yazarsan sadece o mesaj silinir. Bot orada 'Mesajları sil' yetkisiyle yönetici olmalı. Listede olmayan bir kanal için @kullaniciadi ya da -100… ID yazabilirsin.">
         <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            aria-label="Grup veya kanal"
-            className={input}
-            list="tg-wipe-targets"
-            placeholder="@kanal ya da -100…"
+          <ChatPicker
+            label="Grup veya kanal"
+            groups={d.hub.groups}
+            manualHint="@kanal ya da -100…"
             value={wipeTarget}
-            onChange={(e) => {
-              setWipeTarget(e.target.value)
+            onChange={(v) => {
+              setWipeTarget(v)
               setConfirmWipe(false)
             }}
           />
-          <datalist id="tg-wipe-targets">
-            {d.hub.groups.map((g) => (
-              <option key={g.chatId} value={g.chatId}>
-                {g.title}
-              </option>
-            ))}
-          </datalist>
           {confirmWipe ? (
             <button
               type="button"
@@ -667,21 +724,7 @@ function CleanupSection({ d }: { d: TgHubData }) {
       </Card>
       <Card title="Silinmiş hesapları topluca çıkar" hint="Grubu tarar, 'Silinmiş Hesap' görünen üyeleri çıkarır. Listeden seç ya da @kullaniciadi / -100… ID yaz. Grupta /hayalet yazarak da çalıştırabilirsin.">
         <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            aria-label="Grup"
-            className={input}
-            list="tg-ghost-targets"
-            placeholder="@grup ya da -100…"
-            value={chat}
-            onChange={(e) => setChat(e.target.value)}
-          />
-          <datalist id="tg-ghost-targets">
-            {d.hub.groups.map((g) => (
-              <option key={g.chatId} value={g.chatId}>
-                {g.title}
-              </option>
-            ))}
-          </datalist>
+          <ChatPicker label="Grup" groups={d.hub.groups} manualHint="@grup ya da -100…" value={chat} onChange={setChat} />
           <button type="button" className={btn} disabled={ghost.pending || !chat.trim()} onClick={() => ghost.run(() => sweepGhosts(chat))}>
             {ghost.pending ? 'Taranıyor…' : 'Taramayı başlat'}
           </button>
@@ -691,10 +734,10 @@ function CleanupSection({ d }: { d: TgHubData }) {
           Kanallar için önemli: Telegram, kanal abone listesini hiçbir bota vermez. Kanaldaki silinmiş aboneleri sadece Telegram uygulamasından (Kanal bilgisi &gt; Aboneler) elle çıkarabilirsin. Gruplarda da bot, gruba girdikten sonra yazmış üyeleri tanıyabilir.
         </p>
       </Card>
-      <Card title="Bir kişinin mesajlarını topluca sil" hint="Telegram ID'sini gir (log grubunda her kaydın yanında yazar). Son 48 saatteki tüm mesajları tüm gruplardan silinir.">
+      <Card title="Bir kişinin mesajlarını topluca sil" hint="Kişinin @kullanıcı adını ya da Telegram ID'sini yaz (ID, log grubunda her kaydın yanında yazar). Kullanıcı adıyla arama, son 35 günde korunan gruplarda yazmış kişilerde çalışır. Son 48 saatteki tüm mesajları tüm gruplardan silinir.">
         <div className="flex flex-col gap-2 sm:flex-row">
-          <input aria-label="Telegram ID" className={input} inputMode="numeric" placeholder="ör. 123456789" value={tgId} onChange={(e) => setTgId(e.target.value)} />
-          <button type="button" className={btn} disabled={wipe.pending || !tgId} onClick={() => wipe.run(() => wipeUserMessages(tgId))}>
+          <input aria-label="Kullanıcı adı ya da Telegram ID" className={input} placeholder="@kullaniciadi ya da 123456789" value={tgId} onChange={(e) => setTgId(e.target.value)} />
+          <button type="button" className={btn} disabled={wipe.pending || !tgId.trim()} onClick={() => wipe.run(() => wipeUserMessages(tgId))}>
             {wipe.pending ? 'Siliniyor…' : 'Mesajlarını sil'}
           </button>
         </div>
@@ -766,7 +809,7 @@ function BroadcastSection({ d }: { d: TgHubData }) {
                 <p className="line-clamp-2 text-foreground">{b.text}</p>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {fmt(b.createdAt)} · {b.status === 'done' ? 'Bitti' : b.status === 'cancelled' ? 'Durduruldu' : 'Gönderiliyor'} · {b.sent}/{b.total} ulaştı{b.failed ? `, ${b.failed} hata` : ''}
+                    {fmt(b.createdAt)} · {b.status === 'done' ? 'Bitti' : b.status === 'cancelled' ? 'Durduruldu' : 'Gönderiliyor'} · {b.sent}/{b.total} ulaştı{b.blocked ? `, ${b.blocked} kişi botu engellemiş` : ''}{b.failed ? `, ${b.failed} hata` : ''}
                   </span>
                   {b.status !== 'done' && b.status !== 'cancelled' && (
                     <button type="button" className="text-destructive hover:underline" disabled={stop.pending} onClick={() => stop.run(() => stopBroadcast(b.id))}>
@@ -876,7 +919,7 @@ function OverviewSection({ d }: { d: TgHubData }) {
           )}
         </Card>
         <div className="flex flex-col gap-4">
-          <Card title="Gizli güven puanı (en düşükler)" hint="Herkes 50 ile başlar. Temiz yazdıkça artar, uyarı/susturma aldıkça düşer. 30'un altındakilerin linkleri ve medyası otomatik silinir. Üyeler bu puanı görmez.">
+          <Card title="Gizli güven puanı (en düşükler)" hint="Herkes 50 ile başlar. Temiz yazdıkça artar, uyarı/susturma aldıkça düşer. 30'un altındaki biri yabancı link atarsa uyarı yerine doğrudan banlanır. Üyeler bu puanı görmez.">
             {d.trustLow.length ? (
               <ul className="flex flex-col divide-y divide-border">
                 {d.trustLow.map((t) => (
@@ -909,13 +952,21 @@ export function TgHubManager({ data }: { data: TgHubData }) {
   return (
     <TelegramTabs
       label="Telegram Merkezi bölümleri"
+      legend={false}
       tabs={[
-        { id: 'hub-setup', label: 'Kurulum', status: data.hub.guardBotId && data.hub.groups.length ? 'on' : 'off', content: <SetupSection d={data} /> },
+        {
+          id: 'hub-setup',
+          label: 'Kurulum',
+          // An unfinished setup only counts as a fault once the guard is switched on and has nothing to guard with.
+          status: data.hub.guardBotId && data.hub.groups.length ? 'on' : data.hub.guard.enabled ? 'off' : 'idle',
+          issue: 'Bekçi açık ama bot ya da korunan grup seçilmemiş',
+          content: <SetupSection d={data} />,
+        },
         { id: 'hub-overview', label: 'Özet & Kayıtlar', content: <OverviewSection d={data} /> },
-        { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? 'on' : 'off', content: <GuardSection d={data} /> },
-        { id: 'hub-support', label: `Destek${openTickets ? ` (${openTickets})` : ''}`, status: data.hub.support.enabled ? 'on' : 'off', content: <SupportSection d={data} /> },
-        { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? 'on' : 'off', content: <AutoReplySection d={data} /> },
-        { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? 'on' : 'off', content: <CounterSection d={data} /> },
+        { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? 'on' : 'idle', content: <GuardSection d={data} /> },
+        { id: 'hub-support', label: `Destek${openTickets ? ` (${openTickets})` : ''}`, status: data.hub.support.enabled ? 'on' : 'idle', content: <SupportSection d={data} /> },
+        { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? 'on' : 'idle', content: <AutoReplySection d={data} /> },
+        { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? 'on' : 'idle', content: <CounterSection d={data} /> },
         { id: 'hub-clean', label: 'Temizlik', content: <CleanupSection d={data} /> },
         { id: 'hub-dm', label: 'DM Duyuru', content: <BroadcastSection d={data} /> },
       ]}

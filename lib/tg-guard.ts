@@ -19,7 +19,7 @@ import {
   type TgJoinRequest,
   type TgUser,
 } from '@/lib/tg-hub'
-import type { HubConfig } from '@/lib/tg-hub-shared'
+import { CAPTCHA_MINUTES, RAID_BAN_MINUTES, type HubConfig } from '@/lib/tg-hub-shared'
 import { autoReply } from '@/lib/tg-autoreply'
 
 type GuardMsg = TgMessage & {
@@ -30,8 +30,8 @@ type GuardMsg = TgMessage & {
 }
 
 const AI_MODEL = 'google/gemini-3.5-flash'
-const CAPTCHA_MINUTES = 3
 const RAID_WINDOW_SEC = 60
+const RAID_REASON = `Baskın koruması: ${RAID_BAN_MINUTES} dakikalığına çıkarıldı (kalıcı ban değil)`
 const PURGE_MAX = 300
 const ADMIN_CACHE_MS = 10 * 60 * 1000
 
@@ -126,6 +126,14 @@ async function unmute(token: string, chatId: number | string, userId: number) {
 async function ban(token: string, chatId: number | string, userId: number) {
   await dropUserFromSite(chatId, userId)
   await callBot(token, 'banChatMember', { chat_id: chatId, user_id: userId, revoke_messages: true })
+}
+
+/**
+ * Telegram lifts this ban by itself, so a real member caught in a raid can simply join again later.
+ * One call on purpose: a ban followed by a separate unban would turn permanent whenever the unban is rate-limited.
+ */
+async function tempBan(token: string, chatId: number | string, userId: number, minutes: number) {
+  await callBot(token, 'banChatMember', { chat_id: chatId, user_id: userId, until_date: Math.floor(Date.now() / 1000) + minutes * 60 })
 }
 
 async function kick(token: string, chatId: number | string, userId: number) {
@@ -364,9 +372,14 @@ async function screenNewcomer(hub: HubConfig, token: string, chatId: number | st
     WHERE chat_id = ${String(chatId)} AND created_at > now() - make_interval(secs => ${RAID_WINDOW_SEC})`)
   if (hub.guard.raidJoins > 0 && Number(n) > hub.guard.raidJoins) {
     if (Number(n) === hub.guard.raidJoins + 1) {
-      await modLog({ chatId, chatTitle, action: 'Baskın algılandı', reason: `1 dakikada ${n} giriş. Yeni gelenler geçici olarak engelleniyor.` })
+      await modLog({
+        chatId,
+        chatTitle,
+        action: 'Baskın algılandı',
+        reason: `1 dakikada ${n} giriş. Girişler yavaşlayana kadar yeni gelenler ${RAID_BAN_MINUTES} dakikalığına çıkarılıyor, kalıcı ban yok. Çıkarılanlar tek tek bildirilmez, panelde "Son işlemler"de görünür.`,
+      })
     }
-    return 'Baskın koruması (çok hızlı toplu giriş)'
+    return RAID_REASON
   }
   return null
 }
@@ -379,7 +392,7 @@ export async function handleJoinRequest(botId: number, r: TgJoinRequest) {
   const reason = await screenNewcomer(hub, token, r.chat.id, r.chat.title ?? '', r.from)
   if (reason) {
     await callBot(token, 'declineChatJoinRequest', { chat_id: r.chat.id, user_id: r.from.id }).catch(() => null)
-    await modLog({ chatId: r.chat.id, chatTitle: r.chat.title, user: r.from, action: 'Giriş reddedildi', reason })
+    await modLog({ chatId: r.chat.id, chatTitle: r.chat.title, user: r.from, action: 'Giriş reddedildi', reason, notify: reason !== RAID_REASON })
     return
   }
   await callBot(token, 'approveChatJoinRequest', { chat_id: r.chat.id, user_id: r.from.id }).catch(() => null)
@@ -397,6 +410,12 @@ async function handleNewMembers(hub: HubConfig, token: string, m: GuardMsg) {
       continue
     }
     const reason = await screenNewcomer(hub, token, m.chat.id, chatTitle, u)
+    if (reason === RAID_REASON) {
+      // Real members join in bursts too (right after an announcement), so a raid never bans for good.
+      await tempBan(token, m.chat.id, u.id, RAID_BAN_MINUTES).catch(() => null)
+      await modLog({ chatId: m.chat.id, chatTitle, user: u, action: 'Giriş reddedildi', reason, notify: false })
+      continue
+    }
     if (reason) {
       await ban(token, m.chat.id, u.id).catch(() => null)
       await modLog({ chatId: m.chat.id, chatTitle, user: u, action: 'Giriş reddedildi', reason })
@@ -790,6 +809,16 @@ export async function sweepDeletedAccounts(chatId: string, title?: string) {
   const r = await deletedAccountSweep(await botToken(hub.guardBotId), chatId)
   await modLog({ chatId, chatTitle: title ?? hub.groups.find((g) => g.chatId === chatId)?.title, action: 'Silinmiş hesap temizliği', reason: `${r.removed}/${r.checked} hesap çıkarıldı (panelden)` })
   return r
+}
+
+/** Telegram ids of people who wrote in a protected group under this @username or display name. */
+export async function findWriterIds(name: string) {
+  await ensureGuardTables()
+  const plain = name.trim().replace(/^@/, '')
+  if (!plain) return []
+  const r = await rows<{ tg_id: string }>(sql`SELECT DISTINCT tg_id FROM tg_guard_msgs
+    WHERE lower(name) = lower(${plain}) OR lower(name) = lower(${`@${plain}`}) LIMIT 5`)
+  return r.map((x) => Number(x.tg_id))
 }
 
 export async function deleteUserMessages(tgId: number) {

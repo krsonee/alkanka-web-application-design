@@ -2,6 +2,7 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot, dropAutoFed, ensureTables, entitiesToCleanHtml, normalizeChat, stripTags } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
+import { decodeEntities } from '@/lib/html-entities'
 import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
 
 export type ApprovalKind = 'market' | 'task' | 'complaint'
@@ -593,7 +594,7 @@ export async function listOddsDeals(limit = 30): Promise<OddsDeal[]> {
   return r.map((d) => ({
     id: Number(d.id),
     brand: String(d.brand),
-    title: String(d.title),
+    title: decodeEntities(String(d.title)),
     link: String(d.link),
     createdAt: new Date(String(d.created_at)).toISOString(),
     result: d.result === 'won' || d.result === 'lost' ? d.result : null,

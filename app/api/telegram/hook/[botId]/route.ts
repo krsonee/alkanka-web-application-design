@@ -1,4 +1,4 @@
-import { dispatchUpdate, verifyHook, type HubUpdate } from '@/lib/tg-hub'
+import { claimUpdate, dispatchUpdate, verifyHook, type HubUpdate } from '@/lib/tg-hub'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -12,7 +12,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ bot
   })
   if (!authorized) return new Response('unauthorized', { status: 401 })
   try {
-    await dispatchUpdate(botId, (await request.json()) as HubUpdate)
+    const update = (await request.json()) as HubUpdate
+    // If the repeat check itself fails, handling the update beats dropping it.
+    const fresh = await claimUpdate(botId, update.update_id).catch(() => true)
+    if (fresh) await dispatchUpdate(botId, update)
   } catch (error) {
     // Returning 200 keeps Telegram from retrying a broken update forever.
     console.error('[tg-hook]', error)

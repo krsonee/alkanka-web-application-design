@@ -366,12 +366,14 @@ export async function handleSupportCallback(botId: number, q: TgCallback) {
 
 // --- Panel / reports ---------------------------------------------------------
 
-export async function listTickets(filter: 'open' | 'all' = 'open', limit = 40): Promise<TicketRow[]> {
+export async function listTickets(filter: 'open' | 'closed' | 'all' = 'open', limit = 40): Promise<TicketRow[]> {
   await ensureSupportTables()
   const r =
     filter === 'open'
       ? await rows(sql`SELECT * FROM tg_tickets WHERE status IN ('open','claimed') ORDER BY id DESC LIMIT ${limit}`)
-      : await rows(sql`SELECT * FROM tg_tickets ORDER BY id DESC LIMIT ${limit}`)
+      : filter === 'closed'
+        ? await rows(sql`SELECT * FROM tg_tickets WHERE status IN ('resolved','rejected') ORDER BY id DESC LIMIT ${limit}`)
+        : await rows(sql`SELECT * FROM tg_tickets ORDER BY id DESC LIMIT ${limit}`)
   return r.map((t) => ({
     id: Number(t.id),
     name: String(t.name),
@@ -395,6 +397,15 @@ export async function panelCloseTicket(ticketId: number, status: 'resolved' | 'r
   const ok = await closeTicket(token, ticketId, status, answer.trim(), undefined)
   if (ok) await markStaffMessages(token, ticketId, status === 'resolved' ? 'Çözüldü · panel' : 'Reddedildi · panel')
   return ok
+}
+
+/** Removes a finished ticket (a test, a joke) so it stops counting in the sponsor report. Open tickets must be closed first. */
+export async function deleteClosedTicket(ticketId: number) {
+  await ensureSupportTables()
+  const r = await rows(sql`DELETE FROM tg_tickets WHERE id = ${ticketId} AND status IN ('resolved','rejected') RETURNING sponsor, name`)
+  if (!r.length) return null
+  await rows(sql`DELETE FROM tg_ticket_msgs WHERE ticket_id = ${ticketId}`)
+  return { sponsor: String(r[0].sponsor), name: String(r[0].name) }
 }
 
 export async function sponsorSupportStats(days = 7): Promise<SponsorSupportStat[]> {
