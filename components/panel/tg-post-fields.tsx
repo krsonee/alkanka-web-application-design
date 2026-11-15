@@ -1,12 +1,14 @@
 'use client'
 
-import { useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useId, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CheckCircle2, Images, Loader2, Plus, RefreshCw, Trash2, Upload, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NumberField, Toggle, btnGhost, input } from '@/components/panel/tg-hub-ui'
 import { BUTTON_ICON, MediaTile } from '@/components/panel/tg-post-preview'
 import {
   BUTTON_KINDS,
+  DEFAULT_ALT,
+  DEFAULT_JOINED,
   LABEL_LIMIT,
   MAX_BUTTONS_PER_ROW,
   MAX_BUTTON_ROWS,
@@ -14,13 +16,17 @@ import {
   MAX_MEDIA,
   MAX_UNPIN_HOURS,
   MEDIA_KIND_LABEL,
+  PRESS_KINDS,
   UPLOAD_TYPES,
+  botLink,
+  buttonText,
   extensionOf,
   mediaUrl,
   newButtonId,
   signatureHtml,
   uploadProblem,
   type PostButton,
+  type PostButtonKind,
   type PostCenterData,
   type PostMedia,
   type PostOptions,
@@ -234,7 +240,152 @@ function placeIn(rows: PostButton[][], id: string, row: number, index: number): 
 
 const allowDrop = (e: DragEvent) => e.preventDefault()
 
-export function ButtonsField({ rows, update, canPopup, popupHelp }: { rows: PostButton[][]; update: Update<PostButton[][]>; canPopup: boolean; popupHelp?: ReactNode }) {
+/** Kinds whose value is a piece of text shown to a person, so it survives a switch between them. */
+const TEXT_KINDS: PostButtonKind[] = ['popup', 'copy', 'member', 'raffle']
+
+function switchKind(b: PostButton, to: PostButtonKind): Partial<PostButton> {
+  const limit = BUTTON_KINDS.find((k) => k.kind === to)!.limit
+  return {
+    kind: to,
+    value: TEXT_KINDS.includes(b.kind) && TEXT_KINDS.includes(to) ? b.value.slice(0, limit) : '',
+    track: to === 'link',
+    alt: to === 'member' ? '' : undefined,
+    gate: to === 'raffle' ? false : undefined,
+  }
+}
+
+function TextValue({ label, value, limit, placeholder, onChange }: { label: string; value: string; limit: number; placeholder?: string; onChange: (v: string) => void }) {
+  return (
+    <label className={fieldLabel}>
+      <span className="flex items-center justify-between gap-2">
+        {label}
+        <span className="shrink-0 tabular-nums">{`${value.length} / ${limit}`}</span>
+      </span>
+      <textarea className={cn(input, 'h-24 resize-y py-2 leading-relaxed')} value={value} maxLength={limit} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  )
+}
+
+const BOT_PARTS = /^https:\/\/t\.me\/([A-Za-z0-9_]*)(?:\?start=([A-Za-z0-9_-]*))?$/
+
+function BotValue({ value, bots, onChange }: { value: string; bots: PostCenterData['bots']; onChange: (v: string) => void }) {
+  const listId = useId()
+  const [, username = '', start = ''] = BOT_PARTS.exec(value) ?? []
+  const named = bots.filter((b) => b.username)
+  return (
+    <div className="flex flex-col gap-2">
+      <label className={fieldLabel}>
+        Gidilecek botun kullanıcı adı (@ olmadan)
+        <input
+          className={input}
+          value={username}
+          list={listId}
+          placeholder="ornek_bot"
+          autoCapitalize="none"
+          spellCheck={false}
+          onChange={(e) => {
+            const next = e.target.value.replace(/[^A-Za-z0-9_]/g, '').slice(0, 32)
+            onChange(next ? botLink(next, start) : '')
+          }}
+        />
+        <datalist id={listId}>
+          {named.map((b) => (
+            <option key={b.id} value={b.username}>
+              {b.name}
+            </option>
+          ))}
+        </datalist>
+      </label>
+      <label className={fieldLabel}>
+        Başlangıç kodu (boş bırakabilirsin)
+        <input
+          className={input}
+          value={start}
+          disabled={!username}
+          placeholder="Örn: post"
+          autoCapitalize="none"
+          spellCheck={false}
+          onChange={(e) => onChange(botLink(username, e.target.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)))}
+        />
+      </label>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Kişi butona basınca botla özel sohbeti açılır ve “Başlat”a basar. Başlangıç kodu bota /start ile birlikte gider; hangi posttan gelindiğini ayırmak için kullanılır.
+      </p>
+    </div>
+  )
+}
+
+function ButtonValue({ button: b, bots, patch }: { button: PostButton; bots: PostCenterData['bots']; patch: (change: Partial<PostButton>) => void }) {
+  const kind = BUTTON_KINDS.find((k) => k.kind === b.kind)!
+  const setValue = (value: string) => patch({ value })
+  switch (b.kind) {
+    case 'link':
+      return (
+        <>
+          <label className={fieldLabel}>
+            {kind.valueLabel}
+            <input className={input} value={b.value} maxLength={kind.limit} inputMode="url" placeholder="https://…" onChange={(e) => setValue(e.target.value)} />
+          </label>
+          <Toggle
+            label="Tıklamayı say"
+            hint="Link önce siteden geçer, sonra adrese gider; kaç kişinin bastığı gönderilenler listesinde görünür. Telegram kanalı ya da t.me linklerinde kapat: açıkken link uygulama yerine tarayıcıda açılır."
+            checked={b.track}
+            onChange={(v) => patch({ track: v })}
+          />
+        </>
+      )
+    case 'copy':
+      return (
+        <label className={fieldLabel}>
+          <span className="flex items-center justify-between gap-2">
+            {kind.valueLabel}
+            <span className="shrink-0 tabular-nums">{`${b.value.length} / ${kind.limit}`}</span>
+          </span>
+          <input className={input} value={b.value} maxLength={kind.limit} placeholder="Örn: KANKA50" onChange={(e) => setValue(e.target.value)} />
+        </label>
+      )
+    case 'popup':
+      return <TextValue label={kind.valueLabel} value={b.value} limit={kind.limit} onChange={setValue} />
+    case 'member':
+      return (
+        <>
+          <TextValue label={kind.valueLabel} value={b.value} limit={kind.limit} placeholder="Örn: Kodun KANKA50" onChange={setValue} />
+          <TextValue label="Üye olmayanın göreceği yazı (boş bırakırsan aşağıdaki hazır yazı çıkar)" value={b.alt ?? ''} limit={kind.limit} placeholder={DEFAULT_ALT} onChange={(alt) => patch({ alt })} />
+        </>
+      )
+    case 'raffle':
+      return (
+        <>
+          <TextValue label={kind.valueLabel} value={b.value} limit={kind.limit} placeholder={DEFAULT_JOINED} onChange={setValue} />
+          <Toggle
+            label="Sadece üyeler katılabilsin"
+            hint="Basan kişi postun durduğu kanala ya da gruba üye değilse çekilişe yazılmaz, önce katılması istenir."
+            checked={Boolean(b.gate)}
+            onChange={(gate) => patch({ gate })}
+          />
+        </>
+      )
+    case 'bot':
+      return <BotValue value={b.value} bots={bots} onChange={setValue} />
+    case 'vote':
+      return null
+  }
+}
+
+/** `listens`: the sending bot receives button presses, which the kinds it answers itself depend on. */
+export function ButtonsField({
+  rows,
+  update,
+  listens,
+  listenHelp,
+  bots,
+}: {
+  rows: PostButton[][]
+  update: Update<PostButton[][]>
+  listens: boolean
+  listenHelp?: ReactNode
+  bots: PostCenterData['bots']
+}) {
   const [selected, setSelected] = useState<string | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
 
@@ -368,7 +519,7 @@ export function ButtonsField({ rows, update, canPopup, popupHelp }: { rows: Post
                     key={k.kind}
                     type="button"
                     aria-pressed={on}
-                    onClick={() => patch(current.id, { kind: k.kind, track: k.kind === 'link' && (current.kind !== 'link' || current.track) })}
+                    onClick={() => on || patch(current.id, switchKind(current, k.kind))}
                     className={cn(
                       'flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium',
                       on ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-muted',
@@ -387,38 +538,13 @@ export function ButtonsField({ rows, update, canPopup, popupHelp }: { rows: Post
             Butonun üstündeki yazı
             <input className={input} value={current.label} maxLength={LABEL_LIMIT} placeholder="Örn: Siteye git" onChange={(e) => patch(current.id, { label: e.target.value })} />
           </label>
-          <label className={fieldLabel}>
-            <span className="flex items-center justify-between gap-2">
-              {kind.valueLabel}
-              {current.kind !== 'link' && <span className="tabular-nums">{`${current.value.length} / ${kind.limit}`}</span>}
-            </span>
-            {current.kind === 'popup' ? (
-              <textarea
-                className={cn(input, 'h-24 resize-y py-2 leading-relaxed')}
-                value={current.value}
-                maxLength={kind.limit}
-                onChange={(e) => patch(current.id, { value: e.target.value })}
-              />
-            ) : (
-              <input
-                className={input}
-                value={current.value}
-                maxLength={kind.limit}
-                inputMode={current.kind === 'link' ? 'url' : undefined}
-                placeholder={current.kind === 'link' ? 'https://…' : 'Örn: KANKA50'}
-                onChange={(e) => patch(current.id, { value: e.target.value })}
-              />
-            )}
-          </label>
-          {current.kind === 'link' && (
-            <Toggle
-              label="Tıklamayı say"
-              hint="Link önce siteden geçer, sonra adrese gider; kaç kişinin bastığı gönderilenler listesinde görünür. Telegram kanalı ya da t.me linklerinde kapat: açıkken link uygulama yerine tarayıcıda açılır."
-              checked={current.track}
-              onChange={(v) => patch(current.id, { track: v })}
-            />
+          {(current.kind === 'vote' || current.kind === 'raffle') && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {`Telegram’da yazının yanında sayı durur: “${buttonText({ ...current, label: current.label || 'Buton' }, {})}”`}
+            </p>
           )}
-          {current.kind === 'popup' && !canPopup && popupHelp}
+          <ButtonValue button={current} bots={bots} patch={(change) => patch(current.id, change)} />
+          {PRESS_KINDS.includes(current.kind) && !listens && listenHelp}
         </div>
       )}
       <p className="text-xs leading-relaxed text-muted-foreground">
