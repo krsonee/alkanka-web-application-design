@@ -480,8 +480,13 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
     }
     try {
       let sentId: number
+      // What the panel's post list needs to edit or delete this copy later.
+      let sentIds: number[]
+      let onMedia = Boolean(media)
+      let sentText: ReturnType<typeof composeShare> | null = null
       if (album.length > 1) {
         const caption = composeShare(body, share.appendText, CAPTION_LIMIT)
+        sentText = caption
         const sent = await callBot<{ message_id: number }[]>(sourceToken, 'sendMediaGroup', {
           chat_id: target.chatId,
           media: album.map((part, i) => ({
@@ -491,19 +496,21 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
           })),
         })
         sentId = sent[0].message_id
+        sentIds = sent.map((x) => x.message_id)
+        onMedia = true
       } else if (media) {
         // copyMessage only works with the bot that can see the source, so the share bot must also be admin in every target.
         try {
+          const c = composeShare(body, share.appendText, CAPTION_LIMIT)
           const res = await callBot<{ message_id: number }>(sourceToken, 'copyMessage', {
             chat_id: target.chatId,
             from_chat_id: m.chat.id,
             message_id: m.message_id,
-            ...(() => {
-              const c = composeShare(body, share.appendText, CAPTION_LIMIT)
-              return { caption: c.text, ...(c.parse_mode ? { parse_mode: c.parse_mode } : {}) }
-            })(),
+            caption: c.text,
+            ...(c.parse_mode ? { parse_mode: c.parse_mode } : {}),
           })
           sentId = res.message_id
+          sentText = c
         } catch (error) {
           if (!/caption|can't be edited|message can't be copied/i.test(String((error as Error).message))) throw error
           const res = await callBot<{ message_id: number }>(sourceToken, 'copyMessage', {
@@ -514,13 +521,25 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
           sentId = res.message_id
           if (share.appendText) await callBot(sourceToken, 'sendMessage', { chat_id: target.chatId, text: share.appendText })
         }
+        sentIds = [sentId]
       } else {
-        const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', {
-          chat_id: target.chatId,
-          ...composeShare(body, share.appendText, MESSAGE_LIMIT),
-        })
+        sentText = composeShare(body, share.appendText, MESSAGE_LIMIT)
+        const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', { chat_id: target.chatId, ...sentText })
         sentId = res.message_id
+        sentIds = [sentId]
       }
+      const { recordAutoPost } = await import('@/lib/tg-posts')
+      await recordAutoPost({
+        origin: 'share',
+        note: share.name || share.sourceTitle || 'Paylaşım kuralı',
+        botId: viaBotId,
+        chatId: target.chatId,
+        chatTitle: target.title,
+        ids: sentIds,
+        mainId: sentId,
+        mainMedia: onMedia,
+        text: sentText ? (sentText.parse_mode ? sentText.text : escapeHtml(sentText.text)) : '',
+      })
       const link = postLink(infos.get(target.chatId) ?? { id: target.chatId }, sentId)
       links.push(link ? `${target.title}: ${link}` : target.title)
     } catch (error) {

@@ -268,6 +268,11 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
   if (update.callback_query) {
     const data = update.callback_query.data ?? ''
     if (data === 'dm:off') return dmOptOut(botId, update.callback_query)
+    // Buttons under panel posts work for whichever bot sent the post, whatever other role it has.
+    if (data.startsWith('pb:')) {
+      const { handlePostCallback } = await import('@/lib/tg-posts')
+      return handlePostCallback(botId, update.callback_query)
+    }
     if (isGuard && /^(cap|gd|wp):/.test(data)) {
       const { handleGuardCallback } = await import('@/lib/tg-guard')
       return handleGuardCallback(botId, update.callback_query)

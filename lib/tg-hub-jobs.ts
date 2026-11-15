@@ -77,7 +77,9 @@ export async function hubTick() {
   const { endDueLocks, expireCaptchas, flushAutoDelete, processWipes } = await import('@/lib/tg-guard')
   const { healChatHook } = await import('@/lib/tg-hub')
   const { purgeShield } = await import('@/lib/tg-shield')
+  const { runPostJobs } = await import('@/lib/tg-posts')
   await Promise.all([
+    runPostJobs().catch((e) => console.error('[hub-tick] posts', e)),
     endDueLocks().catch((e) => console.error('[hub-tick] locks', e)),
     processWipes().catch((e) => console.error('[hub-tick] wipe', e)),
     healChatHook().catch((e) => console.error('[hub-tick] chat hook', e)),
