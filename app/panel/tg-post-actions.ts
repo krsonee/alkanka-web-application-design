@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
-import { canPanel, getPanelSession } from '@/lib/admin-auth'
+import { getPanelSession } from '@/lib/admin-auth'
+import { telegramAccess, type TelegramArea } from '@/lib/panel-modules'
 import { addTarget } from '@/lib/telegram-mirror'
 import { registerHook } from '@/lib/tg-hub'
 import { checkTargets, copyPost, deleteSend, editPost, forgetSend, morePosts, pinSend, sendPost, sendTest, type SendOutcome } from '@/lib/tg-posts'
@@ -26,9 +27,23 @@ const idOf = (v: unknown) => {
 }
 const chatList = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
 
+const DENIED: Record<TelegramArea, string> = {
+  posts: 'Bu işlem için "Telegram postları" izni gerekli.',
+  mod: 'Bu işlem için "Telegram moderasyon" izni gerekli.',
+  setup: 'Bu işlem için "Telegram kurulum" izni gerekli.',
+}
+
+/** Null when the signed-in account may go on; otherwise the reason to show it. */
+async function blocked(area: TelegramArea): Promise<SendOutcome | null> {
+  const session = await getPanelSession()
+  if (!session) return EXPIRED
+  return telegramAccess(session)[area] ? null : { ok: false, message: DENIED[area] }
+}
+
 /** Runs one post operation behind the panel permission and refreshes the list when it changed something. */
-async function guarded<T extends SendOutcome>(run: () => Promise<T>): Promise<T | SendOutcome> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+async function guarded<T extends SendOutcome>(run: () => Promise<T>, area: TelegramArea = 'posts'): Promise<T | SendOutcome> {
+  const no = await blocked(area)
+  if (no) return no
   try {
     const result = await run()
     if (result.ok) revalidatePath('/panel')
@@ -40,7 +55,8 @@ async function guarded<T extends SendOutcome>(run: () => Promise<T>): Promise<T 
 }
 
 export async function checkPostTargets(botId: number, chatIds: string[], needPin: boolean): Promise<{ ok: boolean; message: string; checks: TargetCheck[] }> {
-  if (!(await canPanel('telegram'))) return { ...EXPIRED, checks: [] }
+  const no = await blocked('posts')
+  if (no) return { ...no, checks: [] }
   try {
     const checks = await checkTargets(botIdOf(botId), chatList(chatIds), Boolean(needPin))
     const bad = checks.filter((c) => !c.ok).length
@@ -88,7 +104,10 @@ export async function addPostTargetAction(botId: number, chat: string) {
   })
 }
 
-/** Points the bot's webhook at the site so presses on "Açılır yazı" buttons reach it. */
+/**
+ * Points the bot's webhook at the site so presses on "Açılır yazı" buttons reach it.
+ * It changes where a bot's updates are delivered, so it needs the setup permission rather than posting.
+ */
 export async function listenPostBotAction(botId: number) {
   return guarded(async () => {
     const h = await headers()
@@ -101,7 +120,7 @@ export async function listenPostBotAction(botId: number) {
     if (odds?.botId === id) throw new Error('Bu bot Özel Oran botu; kendi bağlantısını kullanıyor. Açılır yazı butonu için başka bir bot seç.')
     await registerHook(id, `https://${host}`)
     return { ok: true, message: 'Bot artık buton basışlarını dinliyor.' }
-  })
+  }, 'setup')
 }
 
 const authorName = async () => {
@@ -194,6 +213,6 @@ export async function deleteRuleAction(botId: number, chatId: string) {
 }
 
 export async function morePostsAction(beforeId: number): Promise<{ posts: PostRow[]; hasMore: boolean }> {
-  if (!(await canPanel('telegram'))) return { posts: [], hasMore: false }
+  if (await blocked('posts')) return { posts: [], hasMore: false }
   return morePosts(idOf(beforeId)).catch(() => ({ posts: [], hasMore: false }))
 }

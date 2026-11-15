@@ -78,6 +78,7 @@ export function ensureHubTables() {
     await rows(sql`ALTER TABLE tg_mod_log ADD COLUMN IF NOT EXISTS undo text`)
     await rows(sql`ALTER TABLE tg_mod_log ADD COLUMN IF NOT EXISTS undone boolean NOT NULL DEFAULT false`)
     await rows(sql`ALTER TABLE tg_guard_msgs ADD COLUMN IF NOT EXISTS thread_id bigint`)
+    await rows(sql`CREATE INDEX IF NOT EXISTS tg_mod_log_user_idx ON tg_mod_log (tg_id, id DESC) WHERE tg_id IS NOT NULL`)
   })().catch((error) => {
     ready = null
     throw error
@@ -381,19 +382,27 @@ export async function modLog(input: {
   }).catch((error) => console.error('[tg-hub] log send failed', error))
 }
 
-export async function listModLog(limit = 40): Promise<HubLogRow[]> {
-  await ensureHubTables()
-  const r = await rows(sql`SELECT id, action, chat_title, who, reason, created_at, (undo IS NOT NULL AND NOT undone) AS can_undo
-    FROM tg_mod_log ORDER BY id DESC LIMIT ${limit}`)
-  return r.map((x) => ({
+/** Columns every log reader selects, so `mapLogRow` always finds what it needs. */
+export const LOG_COLUMNS = sql`id, action, chat_id, chat_title, tg_id, who, reason, created_at, (undo IS NOT NULL AND NOT undone) AS can_undo`
+
+export function mapLogRow(x: Record<string, unknown>): HubLogRow {
+  return {
     id: Number(x.id),
     action: String(x.action),
+    chatId: x.chat_id == null ? null : String(x.chat_id),
     chatTitle: String(x.chat_title ?? ''),
+    tgId: x.tg_id == null ? null : Number(x.tg_id),
     who: String(x.who ?? ''),
     reason: String(x.reason ?? ''),
     createdAt: new Date(String(x.created_at)).toISOString(),
     canUndo: Boolean(x.can_undo),
-  }))
+  }
+}
+
+export async function listModLog(limit = 40): Promise<HubLogRow[]> {
+  await ensureHubTables()
+  const r = await rows(sql`SELECT ${LOG_COLUMNS} FROM tg_mod_log ORDER BY id DESC LIMIT ${limit}`)
+  return r.map(mapLogRow)
 }
 
 // --- Trust score -------------------------------------------------------------

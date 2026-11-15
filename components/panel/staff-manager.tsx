@@ -246,11 +246,16 @@ function StaffForm({
                   {g.label}
                 </label>
                 {g.modules.map((m) => (
-                  <label key={m.id} className="flex items-center gap-2 text-sm text-foreground">
+                  <label key={m.id} title={m.hint} className="flex items-center gap-2 text-sm text-foreground">
                     <input type="checkbox" checked={v.permissions.includes(m.id)} onChange={() => toggle(m.id)} className="accent-primary" />
                     {m.label}
                   </label>
                 ))}
+                {g.id === 'telegram' && (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Kurulum izni post ve moderasyonu da kapsar. Tüm sohbeti silme, bot kaldırma ve genel yasağı kaldırma sadece ana yöneticide.
+                  </p>
+                )}
               </div>
             )
           })}

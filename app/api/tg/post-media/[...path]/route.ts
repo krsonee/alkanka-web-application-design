@@ -1,11 +1,11 @@
 import { get } from '@vercel/blob'
 import { NextResponse, type NextRequest } from 'next/server'
-import { canPanel } from '@/lib/admin-auth'
+import { canTelegram } from '@/lib/admin-auth'
 import { MEDIA_PATH } from '@/lib/tg-posts-shared'
 
 /** Shows post media to panel staff only; the files themselves stay private in Blob. */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
-  if (!(await canPanel('telegram'))) return new NextResponse('Unauthorized', { status: 401 })
+  if (!(await canTelegram('posts'))) return new NextResponse('Unauthorized', { status: 401 })
   const pathname = (await params).path.join('/')
   if (!MEDIA_PATH.test(pathname) || pathname.includes('..')) return new NextResponse('Not found', { status: 404 })
 

@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { Loader2, MessagesSquare, Unplug } from 'lucide-react'
 import { connectChatAction, disconnectChatAction } from '@/app/panel/telegram-actions'
+import { KnownChatField } from '@/components/panel/tg-chat-field'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 
@@ -111,10 +112,10 @@ export function TelegramChatSetup({ bots, status }: { bots: MirrorBot[]; status:
               ))}
             </select>
           </label>
-          <label className="flex flex-1 flex-col gap-1.5 text-sm text-foreground">
+          <div className="flex flex-1 flex-col gap-1.5 text-sm text-foreground">
             Grup
-            <input name="chat" required placeholder="@alkankasohbet ya da -1001234567890" className={input} />
-          </label>
+            <KnownChatField label="Grup" name="chat" required placeholder="@alkankasohbet ya da -1001234567890" inputClassName={input} />
+          </div>
           <button
             type="submit"
             disabled={pending}

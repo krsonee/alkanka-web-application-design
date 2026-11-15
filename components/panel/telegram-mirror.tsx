@@ -21,6 +21,8 @@ import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot, MirrorLog, MirrorSource, MirrorTarget } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS, describeFilter } from '@/lib/telegram-filters'
 import { TelegramGuide } from './telegram-guide'
+import { KnownChatField } from './tg-chat-field'
+import { useTgAccess } from './tg-hub-ui'
 import { SecretUrl } from './secret-url'
 
 type Props = { bots: MirrorBot[]; targets: MirrorTarget[]; sources: MirrorSource[]; log: MirrorLog[]; cronUrl: string }
@@ -89,6 +91,7 @@ function TargetRow({ target }: { target: MirrorTarget }) {
 
 function BotCard({ bot, targets }: { bot: MirrorBot; targets: MirrorTarget[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(addTargetAction, {})
+  const { owner } = useTgAccess()
   return (
     <li className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -103,13 +106,17 @@ function BotCard({ bot, targets }: { bot: MirrorBot; targets: MirrorTarget[] }) 
             <span className="font-mono text-xs text-muted-foreground">{bot.tokenHint}</span>
           </div>
         </div>
-        <form action={deleteBotAction}>
-          <input type="hidden" name="id" value={bot.id} />
-          <button className={`${dangerBtn} gap-1.5 text-xs font-semibold`}>
-            <Trash2 className="size-3.5" aria-hidden />
-            Botu kaldır
-          </button>
-        </form>
+        {owner ? (
+          <form action={deleteBotAction}>
+            <input type="hidden" name="id" value={bot.id} />
+            <button className={`${dangerBtn} gap-1.5 text-xs font-semibold`}>
+              <Trash2 className="size-3.5" aria-hidden />
+              Botu kaldır
+            </button>
+          </form>
+        ) : (
+          <span className="text-xs text-muted-foreground">Botu sadece ana yönetici kaldırabilir</span>
+        )}
       </div>
 
       {targets.length ? (
@@ -124,16 +131,16 @@ function BotCard({ bot, targets }: { bot: MirrorBot; targets: MirrorTarget[] }) 
 
       <form action={action} className="flex flex-col gap-2">
         <input type="hidden" name="botId" value={bot.id} />
-        <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
+        <div className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
           Hedef kanal ekle
-          <div className="flex gap-2">
-            <input name="chat" required placeholder="@kanaladi ya da -100..." className={`${input} min-w-0 flex-1`} />
-            <button disabled={pending} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <KnownChatField label="Hedef kanal" name="chat" required placeholder="@kanaladi ya da -100..." inputClassName={`${input} min-w-0 flex-1`} exclude={targets.map((t) => t.chatId)} />
+            <button disabled={pending} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50">
               {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Link2 className="size-4" aria-hidden />}
               Bağla
             </button>
           </div>
-        </label>
+        </div>
         <Feedback state={state} />
       </form>
     </li>

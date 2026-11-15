@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { after } from 'next/server'
-import { canPanel } from '@/lib/admin-auth'
+import { getPanelSession } from '@/lib/admin-auth'
+import { telegramAccess, type TelegramArea } from '@/lib/panel-modules'
 import {
   CONTENT_KINDS,
   DEFAULT_HUB,
@@ -14,9 +15,14 @@ import {
   type ContentRule,
   type GroupRules,
   type HubConfig,
+  type LogFilter,
+  type LogPage,
+  type MemberAction,
+  type MemberCard,
   type ShieldConfig,
   type SuspectRow,
 } from '@/lib/tg-hub-shared'
+import type { TgStatus } from '@/lib/tg-status-shared'
 import { setShareBot } from '@/lib/telegram-bots'
 import {
   cancelBroadcast,
@@ -33,14 +39,35 @@ import {
 
 type Result = { ok: boolean; message: string }
 const EXPIRED: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
+const DENIED: Record<TelegramArea | 'owner', string> = {
+  posts: 'Bu işlem için "Telegram postları" izni gerekli.',
+  mod: 'Bu işlem için "Telegram moderasyon" izni gerekli.',
+  setup: 'Bu işlem için "Telegram kurulum" izni gerekli.',
+  owner: 'Bu işlemi sadece ana yönetici yapabilir.',
+}
 const fail = (error: unknown): Result => ({ ok: false, message: String((error as Error)?.message ?? error) })
+
+/** Null when the signed-in account may go on; otherwise the reason to show it. */
+async function blocked(area: TelegramArea | 'owner'): Promise<Result | null> {
+  const session = await getPanelSession()
+  if (!session) return EXPIRED
+  const access = telegramAccess(session)
+  return (area === 'owner' ? access.owner : access[area]) ? null : { ok: false, message: DENIED[area] }
+}
+
+/** Written into the log so an action taken from the panel can be traced to a person. */
+async function actor() {
+  const session = await getPanelSession()
+  return session?.displayName || session?.username || 'Panel'
+}
 const done = (message: string): Result => {
   revalidatePath('/panel')
   return { ok: true, message }
 }
 
 export async function repairTelegramAction(): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('setup')
+  if (no) return no
   try {
     const { repairTelegram } = await import('@/lib/tg-health')
     const fixes = await repairTelegram()
@@ -179,7 +206,8 @@ function sanitize(input: HubConfig, current: HubConfig): HubConfig {
 }
 
 export async function saveHubSettings(input: HubConfig): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('setup')
+  if (no) return no
   try {
     const current = await getHub()
     await saveHub(sanitize(input, current))
@@ -190,7 +218,8 @@ export async function saveHubSettings(input: HubConfig): Promise<Result> {
 }
 
 export async function saveShieldSettings(input: ShieldConfig): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('setup')
+  if (no) return no
   try {
     const current = await getHub()
     const shield: ShieldConfig = {
@@ -207,7 +236,8 @@ export async function saveShieldSettings(input: ShieldConfig): Promise<Result> {
 
 /** `null` puts the group back on the general settings. */
 export async function saveGroupRules(chatId: string, input: GroupRules | null): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('setup')
+  if (no) return no
   try {
     const hub = await getHub()
     const group = hub.groups.find((g) => g.chatId === String(chatId))
@@ -225,7 +255,8 @@ export async function saveGroupRules(chatId: string, input: GroupRules | null): 
 }
 
 export async function unlockChatAction(chatId: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   try {
     const { panelUnlock } = await import('@/lib/tg-guard')
     const res = await panelUnlock(String(chatId))
@@ -236,7 +267,8 @@ export async function unlockChatAction(chatId: string): Promise<Result> {
 }
 
 export async function sweepWaveAction(chatId: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   try {
     const { panelSweepWave } = await import('@/lib/tg-guard')
     const res = await panelSweepWave(String(chatId))
@@ -249,13 +281,14 @@ export async function sweepWaveAction(chatId: string): Promise<Result> {
 
 /** Loaded on request: the query reads the whole message and join history, so it does not run on every panel visit. */
 export async function loadSuspects(): Promise<SuspectRow[]> {
-  if (!(await canPanel('telegram'))) return []
+  if (await blocked('mod')) return []
   const { listSuspects } = await import('@/lib/tg-shield')
   return listSuspects()
 }
 
 export async function suspectAction(ids: number[], action: 'ban' | 'mute' | 'wipe' | 'clear'): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   if (!['ban', 'mute', 'wipe', 'clear'].includes(action)) return { ok: false, message: 'Geçersiz işlem.' }
   try {
     const { suspectAct } = await import('@/lib/tg-guard')
@@ -266,10 +299,11 @@ export async function suspectAction(ids: number[], action: 'ban' | 'mute' | 'wip
 }
 
 export async function undoLogAction(logId: number): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   try {
     const { undoLog } = await import('@/lib/tg-guard')
-    const res = await undoLog(Number(logId), 'Panel')
+    const res = await undoLog(Number(logId), await actor())
     return res.ok ? done(res.message) : res
   } catch (error) {
     return fail(error)
@@ -277,7 +311,8 @@ export async function undoLogAction(logId: number): Promise<Result> {
 }
 
 export async function setRoleBot(role: 'guard' | 'support' | 'share', botId: number | null): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('setup')
+  if (no) return no
   try {
     if (role === 'share') {
   if (!botId) return { ok: false, message: 'Bot seç.' }
@@ -297,7 +332,8 @@ export async function setRoleBot(role: 'guard' | 'support' | 'share', botId: num
 }
 
 export async function addHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | 'leader', input: string, sponsorName = ''): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('setup')
+  if (no) return no
   try {
     const hub = await getHub()
     const botId = kind === 'staff' || kind === 'sponsor' ? hub.supportBotId : hub.guardBotId
@@ -326,7 +362,8 @@ export async function addHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | '
 }
 
 export async function removeHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | 'leader', key: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('setup')
+  if (no) return no
   const hub = await getHub()
   let next: HubConfig = hub
   if (kind === 'group') next = { ...hub, groups: hub.groups.filter((g) => g.chatId !== key) }
@@ -339,7 +376,8 @@ export async function removeHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' 
 }
 
 export async function sweepGhosts(chatInput: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   try {
     const hub = await getHub()
     if (!hub.guardBotId) return { ok: false, message: 'Önce Bekçi botunu seç (Kurulum sekmesi).' }
@@ -376,7 +414,7 @@ export type WipeJob = {
 
 /** Pushes running wipes forward while the panel is open, then reports where each one stands. */
 export async function pumpWipes(): Promise<WipeJob[]> {
-  if (!(await canPanel('telegram'))) return []
+  if (await blocked('mod')) return []
   const { processWipes, listWipes } = await import('@/lib/tg-guard')
   await processWipes(12_000).catch((e) => console.error('[tg-hub] wipe pump', e))
   const jobs = await listWipes()
@@ -405,13 +443,15 @@ async function kickWipeRunner() {
 }
 
 export async function stopWipe(chatId: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   const { cancelWipe } = await import('@/lib/tg-guard')
   return (await cancelWipe(chatId)) ? done('Temizlik durduruldu.') : { ok: false, message: 'Bu sohbet için çalışan temizlik yok.' }
 }
 
 export async function wipeWholeChat(chatInput: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('owner')
+  if (no) return no
   try {
     const hub = await getHub()
     if (!hub.guardBotId) return { ok: false, message: 'Önce Bekçi botunu seç.' }
@@ -432,7 +472,8 @@ export async function wipeWholeChat(chatInput: string): Promise<Result> {
 }
 
 export async function wipeUserMessages(tgIdInput: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   const raw = String(tgIdInput ?? '').trim().slice(0, 80)
   if (!raw) return { ok: false, message: 'Telegram ID ya da @kullaniciadi yaz.' }
   try {
@@ -453,23 +494,87 @@ export async function wipeUserMessages(tgIdInput: string): Promise<Result> {
 }
 
 export async function unbanEverywhere(tgId: number): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('owner')
+  if (no) return no
+  const id = Number(tgId)
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, message: 'Geçersiz Telegram ID.' }
   try {
-    await removeGlobalBan(Number(tgId))
-    return done('Yasak kaldırıldı.')
+    await removeGlobalBan(id)
+    const { modLog } = await import('@/lib/tg-hub')
+    await modLog({ user: { id }, action: 'Yasak kaldırıldı', reason: `Genel yasak listesinden çıkarıldı (panelden, ${await actor()})`, notify: false })
+    return done('Yasak kaldırıldı. Kişi gruplara kendisi tekrar girmeli.')
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// --- Status, log browser, member card ------------------------------------------------
+
+/** Calls Telegram for every bot and chat, so the panel asks for it instead of loading it with the page. */
+export async function loadTgStatusAction(): Promise<TgStatus | null> {
+  const session = await getPanelSession()
+  const access = telegramAccess(session)
+  if (!access.mod && !access.setup) return null
+  const { loadTgStatus } = await import('@/lib/tg-status')
+  return loadTgStatus()
+}
+
+export async function searchLogAction(filter: LogFilter, beforeId?: number): Promise<LogPage> {
+  if (await blocked('mod')) return { rows: [], hasMore: false }
+  const { searchModLog } = await import('@/lib/tg-log')
+  return searchModLog(filter ?? {}, beforeId)
+}
+
+export async function exportLogAction(filter: LogFilter): Promise<Result & { csv?: string }> {
+  const no = await blocked('mod')
+  if (no) return no
+  try {
+    const { exportModLog } = await import('@/lib/tg-log')
+    const r = await exportModLog(filter ?? {})
+    if (!r.count) return { ok: false, message: 'Bu filtreyle kayıt yok.' }
+    return { ok: true, csv: r.csv, message: r.capped ? `İlk ${r.count} kayıt indirildi; daha fazlası için tarih aralığını daralt.` : `${r.count} kayıt indirildi.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function loadMemberCardAction(tgId: number): Promise<MemberCard | null> {
+  if (await blocked('mod')) return null
+  const session = await getPanelSession()
+  const { memberCard } = await import('@/lib/tg-member')
+  // The e-mail address is member data; it is shown only to accounts that may open the members list anyway.
+  return memberCard(Number(tgId), { withEmail: Boolean(session && (session.isOwner || session.permissions.includes('users'))) })
+}
+
+/** Turns what was typed into the lookup box into Telegram ids; more than one means the name is shared. */
+export async function findMemberAction(query: string): Promise<number[]> {
+  if (await blocked('mod')) return []
+  const { findMemberIds } = await import('@/lib/tg-member')
+  return findMemberIds(String(query ?? ''))
+}
+
+export async function memberAction(tgId: number, action: MemberAction): Promise<Result> {
+  const no = await blocked('mod')
+  if (no) return no
+  if (!['ban', 'mute', 'unmute', 'wipe', 'clearWarns'].includes(action)) return { ok: false, message: 'Geçersiz işlem.' }
+  try {
+    const { memberAct } = await import('@/lib/tg-guard')
+    return done(await memberAct(Number(tgId), action, await actor()))
   } catch (error) {
     return fail(error)
   }
 }
 
 export async function markTrusted(tgId: number, trusted: boolean): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   await setTrusted(Number(tgId), trusted)
   return done(trusted ? 'Güvenilir olarak işaretlendi.' : 'İşaret kaldırıldı.')
 }
 
 export async function closeTicketAction(ticketId: number, status: 'resolved' | 'rejected', answer: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   const text = String(answer ?? '').trim().slice(0, 1000)
   if (!text) return { ok: false, message: 'Üyeye gidecek cevabı yaz.' }
   try {
@@ -482,7 +587,8 @@ export async function closeTicketAction(ticketId: number, status: 'resolved' | '
 }
 
 export async function deleteTicketAction(ticketId: number): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   const id = Number(ticketId)
   if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, message: 'Geçersiz bilet.' }
   try {
@@ -498,7 +604,8 @@ export async function deleteTicketAction(ticketId: number): Promise<Result> {
 }
 
 export async function sendBroadcast(text: string, buttonText: string, buttonUrl: string): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('posts')
+  if (no) return no
   const body = String(text ?? '').trim().slice(0, 3500)
   if (body.length < 5) return { ok: false, message: 'Mesaj çok kısa.' }
   const url = String(buttonUrl ?? '').trim()
@@ -516,13 +623,15 @@ export async function sendBroadcast(text: string, buttonText: string, buttonUrl:
 }
 
 export async function stopBroadcast(id: number): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('posts')
+  if (no) return no
   await cancelBroadcast(Number(id))
   return done('Duyuru durduruldu.')
 }
 
 export async function sendWeeklyNow(): Promise<Result> {
-  if (!(await canPanel('telegram'))) return EXPIRED
+  const no = await blocked('mod')
+  if (no) return no
   try {
     const { runWeeklyHub } = await import('@/lib/tg-hub-jobs')
     await runWeeklyHub(true)

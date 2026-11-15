@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState, type ReactNode } from 'react'
+import { createContext, useContext, useId, useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -9,9 +9,18 @@ export type TabStatus = 'on' | 'off' | 'idle' | null
 
 type Tab = { id: string; label: string; group?: string; status?: TabStatus; issue?: string | null; content: ReactNode }
 
+export type TabInfo = { id: string; label: string; group: string | null; status: TabStatus; issue: string | null }
+
+const TabsContext = createContext<{ tabs: TabInfo[]; open: (id: string) => void } | null>(null)
+
+/** Lets a tab's content read its siblings' status lights and jump to one of them; null outside a tab set. */
+export function useSiblingTabs() {
+  return useContext(TabsContext)
+}
+
 const STATUS_TEXT: Record<Exclude<TabStatus, null>, string> = { on: '(çalışıyor)', off: '(hata var)', idle: '(kapalı)' }
 
-function StatusLight({ status }: { status: TabStatus }) {
+export function StatusLight({ status }: { status: TabStatus }) {
   if (!status) return null
   if (status === 'idle') return <span className="size-2.5 shrink-0 rounded-full bg-muted-foreground/40" aria-hidden="true" />
   const on = status === 'on'
@@ -23,7 +32,18 @@ function StatusLight({ status }: { status: TabStatus }) {
   )
 }
 
-export function TelegramTabs({ tabs, label = 'Telegram bölümleri', legend = true }: { tabs: Tab[]; label?: string; legend?: boolean }) {
+export function TelegramTabs({
+  tabs,
+  label = 'Telegram bölümleri',
+  legend = true,
+  issues = 'box',
+}: {
+  tabs: Tab[]
+  label?: string
+  legend?: boolean
+  /** 'none' when one of the tabs is a status screen that already lists every failing section. */
+  issues?: 'box' | 'none'
+}) {
   const [active, setActive] = useState(tabs[0]?.id)
   const uid = useId()
   const hasStatus = tabs.some((t) => t.status)
@@ -32,9 +52,17 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri', legend = tr
   const grouped = groups.length > 1
   const activeGroup = tabs.find((t) => t.id === active)?.group ?? groups[0]
   const visibleTabs = grouped ? tabs.filter((t) => t.group === activeGroup) : tabs
-  const broken = tabs.filter((t) => t.status === 'off')
+  const broken = issues === 'box' ? tabs.filter((t) => t.status === 'off') : []
+  const shared = useMemo(
+    () => ({
+      tabs: tabs.map((t): TabInfo => ({ id: t.id, label: t.label, group: t.group ?? null, status: t.status ?? null, issue: t.issue ?? null })),
+      open: (id: string) => setActive(id),
+    }),
+    [tabs],
+  )
 
   return (
+    <TabsContext.Provider value={shared}>
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-1 shadow-sm">
         {grouped ? (
@@ -126,5 +154,6 @@ export function TelegramTabs({ tabs, label = 'Telegram bölümleri', legend = tr
         </div>
       ))}
     </div>
+    </TabsContext.Provider>
   )
 }

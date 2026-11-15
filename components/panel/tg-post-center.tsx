@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { CalendarClock, Copy, ExternalLink, FilePlus2, Pencil, Pin, PinOff, Send, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { askConfirm } from '@/components/panel/confirm-dialog'
+import { KnownChatField } from '@/components/panel/tg-chat-field'
 import { Card, btn, btnDanger, btnGhost, input } from '@/components/panel/tg-hub-ui'
 import { PostEditor } from '@/components/panel/tg-post-editor'
 import { ButtonsField, CheckList, MediaField, OptionsField, TargetField, type Update } from '@/components/panel/tg-post-fields'
@@ -249,10 +250,10 @@ export function PostComposer({ data }: { data: PostCenterData }) {
           </label>
           <TargetField targets={targets} selected={chosenIds} onChange={pickTargets} />
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
               Listede olmayan kanal ya da grup
-              <input className={input} value={newChat} placeholder="@kanaladi ya da -100…" onChange={(e) => setNewChat(e.target.value)} />
-            </label>
+              <KnownChatField label="Listede olmayan kanal ya da grup" value={newChat} onChange={setNewChat} exclude={targets.map((t) => t.chatId)} />
+            </div>
             <button
               type="button"
               className={btnGhost}
@@ -292,10 +293,10 @@ export function PostComposer({ data }: { data: PostCenterData }) {
 
         <Card title="Gönder" hint="Göndermeden önce postu kendine ya da bir deneme grubuna atıp Telegram’da nasıl göründüğüne bak.">
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
               Deneme sohbeti
-              <input className={input} value={testChat} placeholder="Sayı ID’n, -100… ya da @kanaladi" onChange={(e) => setTestChat(e.target.value)} />
-            </label>
+              <KnownChatField label="Deneme sohbeti" value={testChat} onChange={setTestChat} placeholder="Sayı ID’n, -100… ya da @kanaladi" />
+            </div>
             <button type="button" className={btnGhost} disabled={blocked || !testChat.trim()} onClick={() => run(() => testPostAction({ content, botId: bot.id, chat: testChat }))}>
               Önce bana gönder
             </button>
@@ -341,7 +342,7 @@ export function PostComposer({ data }: { data: PostCenterData }) {
 
         <Card
           title="Sonra kullanmak için kaydet"
-          hint="Taslak yarım kalan postu saklar. Şablon tekrar tekrar kullanılır: yazıda ya da butonlarda {sponsor}, {kod} ve {link} yazdığın yerler, şablonu her açışında sorulur."
+          hint="Taslak yarım kalan postu saklar. Şablon tekrar tekrar kullanılır: yazıda ya da butonlarda {sponsor}, {kod} ve {link} yazdığın yerler, şablonu her açı��ında sorulur."
         >
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Ad (taslakta boş bırakabilirsin)
@@ -490,7 +491,7 @@ function EditForm({ post, data, pending, run, onClose }: { post: PostRow; data: 
           <h4 className="text-sm font-semibold text-foreground">Butonlar</h4>
           <ButtonsField rows={content.buttons} update={set.buttons} listens={listens} listenHelp={listenHelp} bots={data.bots} />
           {post.stats.raffle || Object.keys(post.stats.counts).length > 0 ? (
-            <p className="text-xs leading-relaxed text-muted-foreground">Oy ya da çekiliş butonunu silersen o butonun sayıları da görünmez olur; yazısını değiştirmek sayıları etkilemez.</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">Oy ya da çekili�� butonunu silersen o butonun sayıları da görünmez olur; yazısını değiştirmek sayıları etkilemez.</p>
           ) : null}
         </div>
         {!auto && (

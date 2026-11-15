@@ -59,9 +59,29 @@ export const PANEL_GROUPS = [
   {
     id: 'telegram',
     label: 'Telegram',
-    modules: [{ id: 'telegram', label: 'Telegram botları', hint: 'Botlar, otomasyonlar ve kanallar' }],
+    modules: [
+      { id: 'tg_posts', label: 'Telegram postları', hint: 'Post hazırlama, gönderme, zamanlama ve DM duyuru' },
+      { id: 'tg_mod', label: 'Telegram moderasyon', hint: 'Kayıtlar, üye kartı, şüpheliler, biletler ve temizlik' },
+      { id: 'telegram', label: 'Telegram kurulum', hint: 'Botlar, koruma ayarları ve otomasyonlar. Post ve moderasyonu da kapsar' },
+    ],
   },
 ] as const
+
+export type TelegramArea = 'posts' | 'mod' | 'setup'
+export type TelegramAccess = Record<TelegramArea, boolean> & { owner: boolean }
+
+/** Modules that share the single "Telegram" entry in the panel menu instead of getting one each. */
+export const TELEGRAM_MODULES: readonly string[] = ['telegram', 'tg_posts', 'tg_mod']
+
+/**
+ * Setup can add bot tokens and change every rule, so it already covers posting and moderation.
+ * Accounts that held the single Telegram permission before it was split keep everything they had.
+ */
+export function telegramAccess(session: { isOwner: boolean; permissions: readonly string[] } | null): TelegramAccess {
+  const has = (id: string) => Boolean(session?.permissions.includes(id))
+  const setup = Boolean(session?.isOwner) || has('telegram')
+  return { setup, posts: setup || has('tg_posts'), mod: setup || has('tg_mod'), owner: Boolean(session?.isOwner) }
+}
 
 /** Moderation is a combined queue; anyone who may open one of these modules sees it. */
 export const MODERATION_SOURCES = ['community', 'tasks', 'market'] as const

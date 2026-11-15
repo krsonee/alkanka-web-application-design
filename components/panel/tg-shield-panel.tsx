@@ -22,6 +22,7 @@ import {
   type SuspectRow,
 } from '@/lib/tg-hub-shared'
 import { loadSuspects, saveGroupRules, saveShieldSettings, suspectAction, sweepWaveAction, unlockChatAction } from '@/app/panel/tg-hub-actions'
+import { openMemberCard } from '@/components/panel/tg-member-card'
 
 const CONTENT_RULES: { value: ContentRule; label: string }[] = [
   { value: 'allow', label: 'Serbest' },
@@ -497,7 +498,7 @@ function SuspectsCard({ initial }: { initial?: SuspectRow[] }) {
               </button>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              {'Ban, "Özet & Kayıtlar" sekmesindeki yasaklılar listesinden geri alınır. "Şüpheli değil" hesabı bu listeden kalıcı olarak çıkarır. Mesaj silme sadece son 48 saati kapsar.'}
+              {'Ban, "Özet" sekmesindeki yasaklılar listesinden geri alınır. "Şüpheli değil" hesabı bu listeden kalıcı olarak çıkarır. Mesaj silme sadece son 48 saati kapsar.'}
             </p>
             {a.note}
           </div>
@@ -514,6 +515,11 @@ function SuspectsCard({ initial }: { initial?: SuspectRow[] }) {
                       <span className="text-xs text-muted-foreground"> · ID {s.tgId}</span>
                     </span>
                     <span className="text-xs leading-relaxed text-muted-foreground">{s.reasons.join(' · ')}</span>
+                    <span>
+                      <button type="button" className="text-xs text-primary hover:underline" onClick={() => openMemberCard(s.tgId)}>
+                        Üye kartını aç
+                      </button>
+                    </span>
                   </span>
                   <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                     {s.msgs} mesaj
@@ -530,17 +536,28 @@ function SuspectsCard({ initial }: { initial?: SuspectRow[] }) {
   )
 }
 
-export function ShieldSection({ hub, locks, initialSuspects }: { hub: HubConfig; locks: LockRow[]; initialSuspects?: SuspectRow[] }) {
+export function ShieldSection({
+  hub,
+  locks,
+  initialSuspects,
+  canSetup = true,
+}: {
+  hub: HubConfig
+  locks: LockRow[]
+  initialSuspects?: SuspectRow[]
+  /** False for a moderator: locks and suspect lists stay, the rule settings are left out. */
+  canSetup?: boolean
+}) {
   return (
     <div className="flex flex-col gap-4">
       {!hub.guard.enabled && (
         <p className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
-          Bekçi kapalı. Buradaki ayarlar kaydedilir ama Bekçi açılana kadar hiçbiri çalışmaz.
+          {canSetup ? 'Bekçi kapalı. Buradaki ayarlar kaydedilir ama Bekçi açılana kadar hiçbiri çalışmaz.' : 'Bekçi kapalı; koruma kuralları şu an çalışmıyor.'}
         </p>
       )}
       <LocksCard locks={locks} />
-      <GeneralForm hub={hub} />
-      <GroupRulesCard hub={hub} />
+      {canSetup && <GeneralForm hub={hub} />}
+      {canSetup && <GroupRulesCard hub={hub} />}
       <WaveCard hub={hub} />
       <SuspectsCard initial={initialSuspects} />
     </div>

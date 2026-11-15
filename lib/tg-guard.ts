@@ -23,7 +23,7 @@ import {
   type TgMemberUpdate,
   type TgUser,
 } from '@/lib/tg-hub'
-import { CAPTCHA_MINUTES, CONTENT_KINDS, NEW_MEMBER_HOURS, RAID_BAN_MINUTES, WAVE_MINUTES, rulesFor, type GroupRules, type HubConfig } from '@/lib/tg-hub-shared'
+import { CAPTCHA_MINUTES, CONTENT_KINDS, NEW_MEMBER_HOURS, RAID_BAN_MINUTES, WAVE_MINUTES, rulesFor, type GroupRules, type HubConfig, type MemberAction } from '@/lib/tg-hub-shared'
 import {
   adminLookalike,
   chatAdmins,
@@ -1625,4 +1625,55 @@ export async function suspectAct(ids: number[], action: 'ban' | 'mute' | 'wipe' 
   return action === 'ban'
     ? `${done.length} hesap tüm gruplardan banlandı.${rest} Yanlış olanı "Tüm gruplardan yasaklılar" listesinden geri alabilirsin.`
     : `${done.length} hesap 24 saat susturuldu.${rest}`
+}
+
+/** What the panel's member card can do to one account. Every action covers all protected groups at once. */
+export async function memberAct(tgId: number, action: MemberAction, by: string) {
+  await ensureGuardTables()
+  if (!Number.isSafeInteger(tgId) || tgId <= 0) throw new Error('Geçersiz Telegram ID')
+  const name = (await suspectNames([tgId])).get(tgId) ?? ''
+  const user: TgUser = name.startsWith('@') ? { id: tgId, username: name.slice(1) } : { id: tgId, first_name: name || undefined }
+  const note = `panelden, ${by}`
+
+  if (action === 'clearWarns') {
+    await rows(sql`DELETE FROM tg_warns WHERE tg_id = ${tgId}`)
+    await modLog({ user, action: 'Uyarılar sıfırlandı', reason: note, notify: false })
+    return 'Uyarılar sıfırlandı.'
+  }
+  const { hub, token } = await guardToken()
+  if (action === 'wipe') {
+    const n = await deleteUserMessages(tgId)
+    await modLog({ user, action: 'Mesaj silindi', reason: `Son 48 saatteki ${n} mesajı silindi (${note})`, notify: false })
+    return `${n} mesaj silindi (Telegram sadece son 48 saati sildirir).`
+  }
+  if (action === 'ban') {
+    // Listed first: even if Telegram refuses every group right now, the account is turned away the next time it tries to join.
+    await rows(sql`INSERT INTO tg_global_bans (tg_id, who, reason) VALUES (${tgId}, ${who(user)}, ${`Panelden banlandı (${by})`})
+      ON CONFLICT (tg_id) DO UPDATE SET reason = EXCLUDED.reason`)
+  }
+  const groups = hub.groups.filter((g) => action === 'ban' || g.type !== 'channel')
+  let reached = 0
+  let lastError = ''
+  for (const g of groups) {
+    try {
+      if (action === 'ban') await ban(token, g.chatId, tgId)
+      else if (action === 'mute') await mute(token, g.chatId, tgId, 1440)
+      else await unmute(token, g.chatId, tgId)
+      reached++
+    } catch (error) {
+      lastError = String((error as Error).message)
+    }
+  }
+  if (action !== 'ban' && !reached) {
+    throw new Error(groups.length ? `Telegram hiçbir grupta izin vermedi: ${lastError}` : 'Korunan grup yok.')
+  }
+  const where = `${reached}/${groups.length} sohbet`
+  await modLog({
+    user,
+    action: action === 'ban' ? 'Banlandı (tüm gruplar)' : action === 'mute' ? 'Susturuldu (1440 dk)' : 'Susturma kaldırıldı',
+    reason: `${where} (${note})`,
+    notify: false,
+  })
+  if (action === 'ban') return `Tüm gruplardan banlandı (${where}). Genel yasak listesine eklendi.`
+  return action === 'mute' ? `24 saat susturuldu (${where}).` : `Susturma kaldırıldı (${where}).`
 }

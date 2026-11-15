@@ -3,7 +3,7 @@ import { cache } from 'react'
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { cookies, headers } from 'next/headers'
 import { rows, sql } from '@/lib/db'
-import { cleanPermissions, PANEL_MODULES, type PanelModule } from '@/lib/panel-modules'
+import { cleanPermissions, PANEL_MODULES, telegramAccess, type PanelModule, type TelegramArea } from '@/lib/panel-modules'
 import { currentSecret } from '@/lib/secrets'
 
 export const PANEL_COOKIE = 'alk_panel'
@@ -153,6 +153,10 @@ export async function canPanelAny(modules: PanelModule[]) {
 
 export async function isPanelOwner() {
   return Boolean((await getPanelSession())?.isOwner)
+}
+
+export async function canTelegram(area: TelegramArea) {
+  return telegramAccess(await getPanelSession())[area]
 }
 
 async function clientIp() {

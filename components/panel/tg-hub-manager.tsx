@@ -2,19 +2,23 @@
 
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR, { useSWRConfig } from 'swr'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 import { CAPTCHA_MINUTES, RAID_BAN_MINUTES } from '@/lib/tg-hub-shared'
-import type { BroadcastRow, HubConfig, HubGroup, HubLogRow, HubStats, LeaderRow, LockRow, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
+import type { BroadcastRow, HubConfig, HubGroup, HubStats, KnownChat, LeaderRow, LockRow, LogPage, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
-import { Card, NumberField, Toggle, btn, btnGhost, fmt, input, useAction } from '@/components/panel/tg-hub-ui'
+import { ChatField } from '@/components/panel/tg-chat-field'
+import { Card, NumberField, Toggle, btn, btnGhost, fmt, input, useAction, useKnownChats, useTgAccess } from '@/components/panel/tg-hub-ui'
+import { LogSection } from '@/components/panel/tg-log-panel'
+import { MemberCardHost, MemberName, openMemberCard } from '@/components/panel/tg-member-card'
 import { ShieldSection } from '@/components/panel/tg-shield-panel'
 import {
   addHubChat,
   closeTicketAction,
   deleteTicketAction,
+  findMemberAction,
   markTrusted,
   removeHubChat,
   saveHubSettings,
@@ -27,7 +31,6 @@ import {
   stopWipe,
   sweepGhosts,
   unbanEverywhere,
-  undoLogAction,
   wipeUserMessages,
   wipeWholeChat,
 } from '@/app/panel/tg-hub-actions'
@@ -38,7 +41,8 @@ export type TgHubData = {
   hub: HubConfig
   bots: MirrorBot[]
   stats: HubStats
-  log: HubLogRow[]
+  /** First page of the log; the Kayıtlar tab asks for anything beyond it. */
+  log: LogPage
   locks: LockRow[]
   tickets: TicketRow[]
   sponsorStats: SponsorSupportStat[]
@@ -98,11 +102,12 @@ function ChatAdder({ kind, placeholder, withName }: { kind: 'group' | 'log' | 's
   const [value, setValue] = useState('')
   const [name, setName] = useState('')
   const a = useAction()
+  const chats = useKnownChats()
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-2 sm:flex-row">
         {withName && <input aria-label="Sponsor adı" className={input} placeholder="Sponsor adı (ör. Betkanka)" value={name} onChange={(e) => setName(e.target.value)} />}
-        <input aria-label="Grup adresi" className={input} placeholder={placeholder} value={value} onChange={(e) => setValue(e.target.value)} />
+        <ChatField label="Grup ya da kanal" chats={chats} placeholder={placeholder} value={value} onChange={setValue} />
         <button
           type="button"
           className={btn}
@@ -354,8 +359,11 @@ function SupportSection({ d }: { d: TgHubData }) {
   const set = (patch: Partial<HubConfig['support']>) => setCfg((c) => ({ ...c, support: { ...c.support, ...patch } }))
   const open = d.tickets.filter((t) => t.status === 'open' || t.status === 'claimed')
   const closed = d.tickets.filter((t) => t.status === 'resolved' || t.status === 'rejected')
+  const { setup } = useTgAccess()
   return (
     <div className="flex flex-col gap-4">
+      {setup && (
+        <>
       <Toggle label="Destek botu açık" checked={s.enabled} onChange={(v) => set({ enabled: v })} />
       <Card title="Yetkili grubu" hint="Alkanka ekibinin olduğu grup. Tüm biletler buraya düşer. Destek botunu bu grupta yönetici yap.">
         {d.hub.support.staffChatId ? <ul><ChatChip kind="staff" id={d.hub.support.staffChatId} label={d.hub.support.staffChatTitle} /></ul> : <ChatAdder kind="staff" placeholder="Yetkili grubunun ID'si (-100…)" />}
@@ -387,6 +395,8 @@ function SupportSection({ d }: { d: TgHubData }) {
           {a.note}
         </div>
       </Card>
+        </>
+      )}
       <Card title={`Açık biletler (${open.length})`} hint="Biletleri Telegram grubundan da cevaplayabilirsin; burası yedek ekran.">
         {open.length ? (
           <ul className="flex flex-col gap-2">
@@ -609,37 +619,6 @@ function WipeProgress() {
   )
 }
 
-const MANUAL = '__manual'
-
-/** Protected groups by name; typing an address is the fallback for a chat that is not on the list. */
-function ChatPicker({ label, groups, value, onChange, manualHint }: { label: string; groups: HubConfig['groups']; value: string; onChange: (v: string) => void; manualHint: string }) {
-  const [manual, setManual] = useState(groups.length === 0)
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
-      {groups.length > 0 && (
-        <select
-          aria-label={label}
-          className={input}
-          value={manual ? MANUAL : value}
-          onChange={(e) => {
-            const next = e.target.value
-            setManual(next === MANUAL)
-            onChange(next === MANUAL ? '' : next)
-          }}
-        >
-          {groups.map((g) => (
-            <option key={g.chatId} value={g.chatId}>
-              {g.title}
-            </option>
-          ))}
-          <option value={MANUAL}>Listede yok, elle yaz…</option>
-        </select>
-      )}
-      {manual && <input aria-label={`${label} adresi`} className={input} placeholder={manualHint} value={value} onChange={(e) => onChange(e.target.value)} />}
-    </div>
-  )
-}
-
 function CleanupSection({ d }: { d: TgHubData }) {
   const [chat, setChat] = useState(d.hub.groups[0]?.chatId ?? '')
   const [tgId, setTgId] = useState('')
@@ -650,15 +629,24 @@ function CleanupSection({ d }: { d: TgHubData }) {
   const [confirmWipe, setConfirmWipe] = useState(false)
   const { mutate: globalMutate } = useSWRConfig()
   const mutate = () => globalMutate('tg-wipe-jobs')
+  const { owner } = useTgAccess()
+  // The guard bot does the cleaning, so only chats it works in are offered by name.
+  const guarded: KnownChat[] = d.hub.groups.map((g) => ({ chatId: g.chatId, title: g.title }))
   return (
     <div className="flex flex-col gap-4">
       <WipeProgress />
+      {!owner && (
+        <p className="rounded-lg border border-border bg-muted/50 p-3 text-sm leading-relaxed text-muted-foreground">
+          Bir sohbetin tüm geçmişini silmek sadece ana yöneticiye açık. Aşağıdaki diğer temizlikleri kullanabilirsin.
+        </p>
+      )}
+      {owner && (
       <Card title="Sohbeti komple temizle (tüm geçmiş)" hint="Seçtiğin grup ya da kanaldaki mesajları en yeniden en eskiye siler. Önemli: Telegram botlara sadece son 48 saatteki mesajları sildirir; daha eski postlara ulaşınca bot durur ve haber verir, onları Telegram uygulamasından elle silmen gerekir. Grupta veya kanalda /sil yazıp çıkan butona basarak da başlatabilirsin. Bir mesaja yanıt olarak /sil yazarsan sadece o mesaj silinir. Bot orada 'Mesajları sil' yetkisiyle yönetici olmalı. Listede olmayan bir kanal için @kullaniciadi ya da -100… ID yazabilirsin.">
         <div className="flex flex-col gap-2 sm:flex-row">
-          <ChatPicker
+          <ChatField
             label="Grup veya kanal"
-            groups={d.hub.groups}
-            manualHint="@kanal ya da -100…"
+            chats={guarded}
+            placeholder="@kanal ya da -100…"
             value={wipeTarget}
             onChange={(v) => {
               setWipeTarget(v)
@@ -690,9 +678,10 @@ function CleanupSection({ d }: { d: TgHubData }) {
         {confirmWipe && <p className="text-sm text-destructive">Geri alınamaz. Onaylamak için butona bir kez daha bas.</p>}
         {wipeAll.note}
       </Card>
+      )}
       <Card title="Silinmiş hesapları topluca çıkar" hint="Grubu tarar, 'Silinmiş Hesap' görünen üyeleri çıkarır. Listeden seç ya da @kullaniciadi / -100… ID yaz. Grupta /hayalet yazarak da çalıştırabilirsin.">
         <div className="flex flex-col gap-2 sm:flex-row">
-          <ChatPicker label="Grup" groups={d.hub.groups} manualHint="@grup ya da -100…" value={chat} onChange={setChat} />
+          <ChatField label="Grup" chats={guarded} placeholder="@grup ya da -100…" value={chat} onChange={setChat} />
           <button type="button" className={btn} disabled={ghost.pending || !chat.trim()} onClick={() => ghost.run(() => sweepGhosts(chat))}>
             {ghost.pending ? 'Taranıyor…' : 'Taramayı başlat'}
           </button>
@@ -727,7 +716,8 @@ function CleanupSection({ d }: { d: TgHubData }) {
 
 // --- Broadcast -------------------------------------------------------------------
 
-function BroadcastSection({ d }: { d: TgHubData }) {
+/** Takes only what it shows, so an account limited to posting is never sent moderation data. */
+export function BroadcastSection({ d }: { d: Pick<TgHubData, 'broadcasts' | 'linkedMembers'> }) {
   const [text, setText] = useState('')
   const [bText, setBText] = useState('')
   const [bUrl, setBUrl] = useState('')
@@ -803,7 +793,7 @@ function TrustRow({ t }: { t: TgHubData['trustLow'][number] }) {
   return (
     <li className="flex items-center justify-between gap-2 py-1.5 text-sm">
       <span className="text-foreground">
-        {t.name} <span className="text-xs text-muted-foreground">· ID {t.tgId}</span>
+        <MemberName tgId={t.tgId}>{t.name}</MemberName> <span className="text-xs text-muted-foreground">· ID {t.tgId}</span>
       </span>
       <span className="flex items-center gap-3">
         <span className={t.score < 30 ? 'tabular-nums text-destructive' : 'tabular-nums text-muted-foreground'}>{t.score}/100</span>
@@ -817,39 +807,67 @@ function TrustRow({ t }: { t: TgHubData['trustLow'][number] }) {
 
 function BanRow({ b }: { b: TgHubData['bans'][number] }) {
   const a = useAction()
+  const { owner } = useTgAccess()
   return (
-    <li className="flex items-center justify-between gap-2 py-1.5 text-sm">
-      <span className="min-w-0 truncate text-foreground">
-        {b.who} <span className="text-xs text-muted-foreground">· {b.reason}</span>
+    <li className="flex flex-col gap-0.5 py-1.5 text-sm">
+      <span className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-foreground">
+          <MemberName tgId={b.tgId}>{b.who}</MemberName> <span className="text-xs text-muted-foreground">· {b.reason}</span>
+        </span>
+        {owner && (
+          <button type="button" className="shrink-0 text-xs text-primary hover:underline" disabled={a.pending} onClick={() => a.run(() => unbanEverywhere(b.tgId))}>
+            Yasağı kaldır
+          </button>
+        )}
       </span>
-      <button type="button" className="shrink-0 text-xs text-primary hover:underline" disabled={a.pending} onClick={() => a.run(() => unbanEverywhere(b.tgId))}>
-        Yasağı kaldır
-      </button>
+      {a.note}
     </li>
   )
 }
 
-function LogItem({ l }: { l: HubLogRow }) {
-  const a = useAction()
+/** Opens a member card from an id or a name, for someone who is not on any of the lists below. */
+function MemberLookup() {
+  const [query, setQuery] = useState('')
+  const [pending, start] = useTransition()
+  const [found, setFound] = useState<{ ids: number[]; asked: string } | null>(null)
+  const search = () =>
+    start(async () => {
+      const ids = await findMemberAction(query)
+      setFound({ ids, asked: query.trim() })
+      if (ids.length === 1) openMemberCard(ids[0])
+    })
   return (
-    <li className="flex flex-col gap-0.5 py-2 text-sm">
-      <span className="flex items-start justify-between gap-2">
-        <span className="min-w-0 text-foreground">
-          <span className="font-semibold">{l.action}</span>
-          {l.who ? ` · ${l.who}` : ''}
-        </span>
-        {l.canUndo && (
-          <button type="button" className="shrink-0 text-xs text-primary hover:underline disabled:opacity-50" disabled={a.pending} onClick={() => a.run(() => undoLogAction(l.id))}>
-            {a.pending ? 'Geri alınıyor…' : 'Geri al'}
-          </button>
-        )}
-      </span>
-      <span className="text-xs text-muted-foreground">
-        {l.chatTitle ? `${l.chatTitle} · ` : ''}
-        {l.reason} · {fmt(l.createdAt)}
-      </span>
-      {a.note}
-    </li>
+    <Card title="Üye kartı aç" hint="Telegram ID, @kullanıcı adı ya da grupta görünen ad yaz. Kartta güven puanı, uyarılar, bağlı site hesabı ve işlemler var. Listelerdeki bir isme basmak da aynı kartı açar.">
+      <form
+        className="flex flex-col gap-2 sm:flex-row"
+        onSubmit={(e) => {
+          e.preventDefault()
+          search()
+        }}
+      >
+        <input aria-label="Telegram ID ya da kullanıcı adı" className={input} placeholder="123456789 ya da @kullaniciadi" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button type="submit" className={btn} disabled={pending || !query.trim()}>
+          {pending ? 'Aranıyor…' : 'Kartı aç'}
+        </button>
+      </form>
+      {found && found.ids.length === 0 && (
+        <p role="status" className="text-sm text-destructive">
+          {`"${found.asked}" son 35 günde korunan gruplarda yazmamış ve siteye bağlı değil. Telegram ID'sini yaz; kayıt grubundaki her bildirimde yazar.`}
+        </p>
+      )}
+      {found && found.ids.length > 1 && (
+        <div role="status" className="flex flex-col gap-2">
+          <p className="text-sm text-foreground">{`"${found.asked}" adını ${found.ids.length} hesap kullanıyor. Hangisi?`}</p>
+          <div className="flex flex-wrap gap-2">
+            {found.ids.map((id) => (
+              <button key={id} type="button" className={btnGhost} onClick={() => openMemberCard(id)}>
+                ID {id}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -857,6 +875,7 @@ function OverviewSection({ d }: { d: TgHubData }) {
   const [cfg, setCfg] = useState(d.hub)
   const save = useAction()
   const report = useAction()
+  const { owner, setup } = useTgAccess()
   const s = d.stats
   const tiles = [
     ['Silinen mesaj', s.deletedWeek],
@@ -878,11 +897,17 @@ function OverviewSection({ d }: { d: TgHubData }) {
       </div>
       <p className="text-xs text-muted-foreground">Son 7 gün. {s.avgResolveMin != null ? `Ortalama bilet çözüm süresi ${s.avgResolveMin} dk.` : ''}</p>
       <Card title="Pazartesi raporu" hint="Her pazartesi sabah haftanın özeti log grubuna gelir: güvenlik, destek, sohbet, paylaşım.">
-        <Toggle label="Haftalık raporu gönder" checked={cfg.report.enabled} onChange={(v) => setCfg((c) => ({ ...c, report: { enabled: v } }))} />
+        {setup ? (
+          <Toggle label="Haftalık raporu gönder" checked={cfg.report.enabled} onChange={(v) => setCfg((c) => ({ ...c, report: { enabled: v } }))} />
+        ) : (
+          <p className="text-sm text-muted-foreground">{`Haftalık rapor şu an ${d.hub.report.enabled ? 'açık' : 'kapalı'}. Açıp kapatmak için Telegram kurulum izni gerekli.`}</p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={btn} disabled={save.pending} onClick={() => save.run(() => saveHubSettings(cfg))}>
-            Kaydet
-          </button>
+          {setup && (
+            <button type="button" className={btn} disabled={save.pending} onClick={() => save.run(() => saveHubSettings(cfg))}>
+              Kaydet
+            </button>
+          )}
           <button type="button" className={btnGhost} disabled={report.pending || !d.hub.logChatId} onClick={() => report.run(sendWeeklyNow)}>
             {report.pending ? 'Gönderiliyor…' : 'Raporu şimdi gönder (deneme)'}
           </button>
@@ -890,42 +915,33 @@ function OverviewSection({ d }: { d: TgHubData }) {
         {save.note}
         {report.note}
       </Card>
+      <MemberLookup />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Son işlemler" hint={'"Geri al" uyarıyı siler, susturmayı ya da banı kaldırır ve düşen güven puanını geri verir. Silinen mesaj geri gelmez.'}>
-          {d.log.length ? (
-            <ul className="flex max-h-96 flex-col divide-y divide-border overflow-y-auto">
-              {d.log.map((l) => (
-                <LogItem key={l.id} l={l} />
+        <Card title="Gizli güven puanı (en düşükler)" hint="Herkes 50 ile başlar. Temiz yazdıkça artar, uyarı/susturma aldıkça düşer. 30'un altındaki biri yabancı link atarsa uyarı yerine doğrudan banlanır. Üyeler bu puanı görmez.">
+          {d.trustLow.length ? (
+            <ul className="flex flex-col divide-y divide-border">
+              {d.trustLow.map((t) => (
+                <TrustRow key={t.tgId} t={t} />
               ))}
             </ul>
           ) : (
-            <p className="text-xs text-muted-foreground">Henüz kayıt yok.</p>
+            <p className="text-xs text-muted-foreground">Henüz veri yok.</p>
           )}
         </Card>
-        <div className="flex flex-col gap-4">
-          <Card title="Gizli güven puanı (en düşükler)" hint="Herkes 50 ile başlar. Temiz yazdıkça artar, uyarı/susturma aldıkça düşer. 30'un altındaki biri yabancı link atarsa uyarı yerine doğrudan banlanır. Üyeler bu puanı görmez.">
-            {d.trustLow.length ? (
-              <ul className="flex flex-col divide-y divide-border">
-                {d.trustLow.map((t) => (
-                  <TrustRow key={t.tgId} t={t} />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-muted-foreground">Henüz veri yok.</p>
-            )}
-          </Card>
-          <Card title={`Tüm gruplardan yasaklılar (${s.globalBans})`} hint="Bir grupta banlanan kişi tüm Alkanka gruplarından banlanır.">
-            {d.bans.length ? (
-              <ul className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto">
-                {d.bans.map((b) => (
-                  <BanRow key={b.tgId} b={b} />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-muted-foreground">Yasaklı yok.</p>
-            )}
-          </Card>
-        </div>
+        <Card
+          title={`Tüm gruplardan yasaklılar (${s.globalBans})`}
+          hint={`Bir grupta banlanan kişi tüm Alkanka gruplarından banlanır.${owner ? '' : ' Yasağı sadece ana yönetici kaldırabilir.'}`}
+        >
+          {d.bans.length ? (
+            <ul className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto">
+              {d.bans.map((b) => (
+                <BanRow key={b.tgId} b={b} />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">Yasaklı yok.</p>
+          )}
+        </Card>
       </div>
     </div>
   )
@@ -933,28 +949,37 @@ function OverviewSection({ d }: { d: TgHubData }) {
 
 export function TgHubManager({ data }: { data: TgHubData }) {
   const openTickets = data.tickets.filter((t) => t.status === 'open' || t.status === 'claimed').length
+  const { setup } = useTgAccess()
+  const groups: KnownChat[] = data.hub.groups.map((g) => ({ chatId: g.chatId, title: g.title }))
+  // Settings need the setup permission; lists, tickets and cleaning are open to moderators as well.
+  const tabs = [
+    setup && {
+      id: 'hub-setup',
+      label: 'Kurulum',
+      // An unfinished setup only counts as a fault once the guard is switched on and has nothing to guard with.
+      status: data.hub.guardBotId && data.hub.groups.length ? ('on' as const) : data.hub.guard.enabled ? ('off' as const) : ('idle' as const),
+      issue: 'Bekçi açık ama bot ya da korunan grup seçilmemiş',
+      content: <SetupSection d={data} />,
+    },
+    { id: 'hub-overview', label: 'Özet', content: <OverviewSection d={data} /> },
+    { id: 'hub-log', label: 'Kayıtlar', content: <LogSection initial={data.log} groups={groups} /> },
+    setup && { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? ('on' as const) : ('idle' as const), content: <GuardSection d={data} /> },
+    { id: 'hub-shield', label: `Koruma${data.locks.length ? ` (${data.locks.length})` : ''}`, content: <ShieldSection hub={data.hub} locks={data.locks} canSetup={setup} /> },
+    {
+      id: 'hub-support',
+      label: `Destek${openTickets ? ` (${openTickets})` : ''}`,
+      status: data.hub.support.enabled ? ('on' as const) : ('idle' as const),
+      content: <SupportSection d={data} />,
+    },
+    setup && { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? ('on' as const) : ('idle' as const), content: <AutoReplySection d={data} /> },
+    setup && { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? ('on' as const) : ('idle' as const), content: <CounterSection d={data} /> },
+    { id: 'hub-clean', label: 'Temizlik', content: <CleanupSection d={data} /> },
+  ].filter((t): t is Exclude<typeof t, false> => Boolean(t))
   return (
-    <TelegramTabs
-      label="Telegram Merkezi bölümleri"
-      legend={false}
-      tabs={[
-        {
-          id: 'hub-setup',
-          label: 'Kurulum',
-          // An unfinished setup only counts as a fault once the guard is switched on and has nothing to guard with.
-          status: data.hub.guardBotId && data.hub.groups.length ? 'on' : data.hub.guard.enabled ? 'off' : 'idle',
-          issue: 'Bekçi açık ama bot ya da korunan grup seçilmemiş',
-          content: <SetupSection d={data} />,
-        },
-        { id: 'hub-overview', label: 'Özet & Kayıtlar', content: <OverviewSection d={data} /> },
-        { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? 'on' : 'idle', content: <GuardSection d={data} /> },
-        { id: 'hub-shield', label: `Koruma${data.locks.length ? ` (${data.locks.length})` : ''}`, content: <ShieldSection hub={data.hub} locks={data.locks} /> },
-        { id: 'hub-support', label: `Destek${openTickets ? ` (${openTickets})` : ''}`, status: data.hub.support.enabled ? 'on' : 'idle', content: <SupportSection d={data} /> },
-        { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? 'on' : 'idle', content: <AutoReplySection d={data} /> },
-        { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? 'on' : 'idle', content: <CounterSection d={data} /> },
-        { id: 'hub-clean', label: 'Temizlik', content: <CleanupSection d={data} /> },
-        { id: 'hub-dm', label: 'DM Duyuru', content: <BroadcastSection d={data} /> },
-      ]}
-    />
+    <>
+      {/* The Durum tab one level up lists every failing section, so the red box is not repeated here. */}
+      <TelegramTabs label="Telegram Merkezi bölümleri" legend={false} issues="none" tabs={tabs} />
+      <MemberCardHost />
+    </>
   )
 }

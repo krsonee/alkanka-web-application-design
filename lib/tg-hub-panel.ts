@@ -1,7 +1,7 @@
 import 'server-only'
 import type { MirrorBot } from '@/lib/telegram-mirror'
 import type { TgHubData } from '@/components/panel/tg-hub-manager'
-import { DEFAULT_HUB } from '@/lib/tg-hub-shared'
+import { DEFAULT_HUB, LOG_PAGE } from '@/lib/tg-hub-shared'
 import { chatLeaderboard, fillGroupDetails, getHub, hookStatus, hubStats, listBroadcasts, listGlobalBans, listModLog, listTrustLow, weekStart } from '@/lib/tg-hub'
 import { listLocks } from '@/lib/tg-shield'
 import { listTickets, sponsorSupportStats } from '@/lib/tg-support'
@@ -13,7 +13,9 @@ export async function loadTgHub(bots: MirrorBot[], shareBotId: number | null, li
   const hub = await fillGroupDetails(saved).catch(() => saved)
   const [stats, log, locks, tickets, sponsorStats, leaders, broadcasts, bans, trustLow, guardHook, supportHook, shareHook] = await Promise.all([
     hubStats().catch(() => EMPTY_STATS),
-    listModLog(40).catch(() => []),
+    listModLog(LOG_PAGE + 1)
+      .then((all) => ({ rows: all.slice(0, LOG_PAGE), hasMore: all.length > LOG_PAGE }))
+      .catch(() => ({ rows: [], hasMore: false })),
     listLocks().catch(() => []),
     // Loaded separately so a pile of finished tickets can never push an open one off the list.
     Promise.all([listTickets('open', 40), listTickets('closed', 30)])

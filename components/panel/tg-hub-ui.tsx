@@ -1,6 +1,38 @@
 'use client'
 
-import { useState, useTransition, type ReactNode } from 'react'
+import { createContext, useContext, useState, useTransition, type ReactNode } from 'react'
+import type { TelegramAccess } from '@/lib/panel-modules'
+import type { KnownChat } from '@/lib/tg-hub-shared'
+
+const NO_ACCESS: TelegramAccess = { posts: false, mod: false, setup: false, owner: false }
+
+/**
+ * Which Telegram areas the signed-in account may use. It only decides what the screen offers;
+ * every server action checks the permission again.
+ */
+export const TgAccessContext = createContext<TelegramAccess>(NO_ACCESS)
+
+export function useTgAccess() {
+  return useContext(TgAccessContext)
+}
+
+export const OWNER_ONLY = 'Bu işlemi sadece ana yönetici yapabilir.'
+
+/** Groups and channels the panel already has a name for; chat pickers offer these first. */
+export const TgChatsContext = createContext<KnownChat[]>([])
+
+export function useKnownChats() {
+  return useContext(TgChatsContext)
+}
+
+/** Wraps the whole Telegram section once, so any form inside can read the account's access and the known chats. */
+export function TgPanelProvider({ access, chats, children }: { access: TelegramAccess; chats: KnownChat[]; children: ReactNode }) {
+  return (
+    <TgAccessContext.Provider value={access}>
+      <TgChatsContext.Provider value={chats}>{children}</TgChatsContext.Provider>
+    </TgAccessContext.Provider>
+  )
+}
 
 export const input = 'h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground'
 export const btn = 'inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50'

@@ -238,7 +238,72 @@ export type HubStats = {
   globalBans: number
 }
 
-export type HubLogRow = { id: number; action: string; chatTitle: string; who: string; reason: string; createdAt: string; canUndo: boolean }
+export type HubLogRow = {
+  id: number
+  action: string
+  chatId: string | null
+  chatTitle: string
+  tgId: number | null
+  who: string
+  reason: string
+  createdAt: string
+  canUndo: boolean
+}
+
+/** The guard writes log actions as free text; a kind is the set of openings those texts start with. */
+export const LOG_KINDS = [
+  { key: 'delete', label: 'Silinen mesaj', prefixes: ['Mesaj silindi', 'Toplu silme', 'Koordineli spam', 'Site mesajı engellendi'] },
+  { key: 'mute', label: 'Susturma', prefixes: ['Susturuldu'] },
+  { key: 'ban', label: 'Ban', prefixes: ['Banlandı'] },
+  { key: 'join', label: 'Giriş ve baskın', prefixes: ['Giriş', 'Baskın', 'Doğrulanmadı', 'Grup kili', 'Kilit', 'Kanala toplu giriş', 'Şüpheli isim', 'Yorumlar kapatıldı'] },
+  { key: 'admin', label: 'Bot ve yönetici', prefixes: ['Bekçi', 'Yeni yönetici', 'Yönetici çıkarıldı'] },
+  { key: 'cleanup', label: 'Temizlik', prefixes: ['Tüm sohbet', 'Silinmiş hesap'] },
+  { key: 'support', label: 'Destek', prefixes: ['Destek', 'Bilet'] },
+  { key: 'undo', label: 'Geri alma', prefixes: ['Geri alındı', 'Susturma kaldırıldı', 'Uyarılar sıfırlandı', 'Yasak kaldırıldı'] },
+] as const
+
+export type LogKind = (typeof LOG_KINDS)[number]['key'] | 'other'
+
+export function logKindOf(action: string): LogKind {
+  return LOG_KINDS.find((k) => k.prefixes.some((p) => action.startsWith(p)))?.key ?? 'other'
+}
+
+/** Days are `YYYY-AA-GG` in Istanbul time; both ends are included. */
+export type LogFilter = { kind?: string; chatId?: string; tgId?: number; q?: string; from?: string; to?: string }
+
+export type LogPage = { rows: HubLogRow[]; hasMore: boolean }
+
+export const LOG_PAGE = 50
+
+export type MemberAction = 'ban' | 'mute' | 'unmute' | 'wipe' | 'clearWarns'
+
+export type MemberCard = {
+  tgId: number
+  name: string
+  username: string | null
+  /** False when no table has ever seen this account. */
+  known: boolean
+  trust: { score: number; trusted: boolean; firstSeen: string | null; needsCheck: boolean }
+  warns: number
+  ban: { reason: string; at: string } | null
+  messages: { total: number; lastAt: string | null; chats: { title: string; count: number }[] }
+  joins: { title: string; at: string; via: string | null; removed: boolean }[]
+  site: { userId: string; name: string; email: string | null; linkedAt: string } | null
+  log: HubLogRow[]
+}
+
+/** A chat the panel already knows by name, offered in pickers so nobody has to type a -100… id. */
+export type KnownChat = { chatId: string; title: string }
+
+/** First name wins; entries without an id (a role that was never set up) are dropped. */
+export function uniqueChats(list: Array<{ chatId?: string | null; title?: string | null }>): KnownChat[] {
+  const seen = new Map<string, string>()
+  for (const c of list) {
+    const id = String(c.chatId ?? '').trim()
+    if (id && !seen.has(id)) seen.set(id, String(c.title ?? '').trim() || id)
+  }
+  return [...seen.entries()].map(([chatId, title]) => ({ chatId, title }))
+}
 
 export type SuspectRow = { tgId: number; name: string; username: string | null; msgs: number; joinedAt: string | null; reasons: string[] }
 
