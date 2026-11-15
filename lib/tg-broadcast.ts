@@ -119,9 +119,11 @@ export async function queueBroadcast(input: DmDraft, author: string) {
   await ensureHubTables()
   const d = check(input)
   const total = await countAudience(d.audience)
+  // Left in the queue it would wait for the next pass and reach whoever joins the audience in between, after the panel said nobody would get it.
+  if (!total && !d.sendAt) return { total, sendAt: null, queued: false }
   await rows(sql`INSERT INTO tg_broadcasts (text, photo_path, buttons, audience, send_at, author, total)
     VALUES (${d.text}, ${d.photoPath}, ${JSON.stringify(d.buttons)}, ${d.audience}, ${d.sendAt}::timestamptz, ${author.slice(0, 80)}, ${total})`)
-  return { total, sendAt: d.sendAt }
+  return { total, sendAt: d.sendAt, queued: true }
 }
 
 /** One copy to a single chat, exactly as members will get it, without queueing anything. */

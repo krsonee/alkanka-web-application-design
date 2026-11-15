@@ -96,12 +96,16 @@ async function begin(token: string, chatId: string, title: string, q: QuietConfi
   })
 }
 
-async function finish(token: string, row: Open, title: string) {
+async function finish(token: string, row: Open, title: string, raidLock: boolean) {
   const chatId = row.chat_id
+  let handedOver = false
   if (row.perms) {
     // A raid or /kilit lock took over while the group was quiet: it now carries the original permissions and restores them when it ends.
-    const handed = await rows(sql`UPDATE tg_locks SET perms = ${row.perms}, locked = true WHERE chat_id = ${chatId} AND (locked OR kind = 'manual') RETURNING chat_id`)
-    if (!handed.length) {
+    // One that began in a fully closed group found nothing to close and left itself unlocked, so it is recognised by its kind instead.
+    const handed = await rows(sql`UPDATE tg_locks SET perms = ${row.perms}, locked = true
+      WHERE chat_id = ${chatId} AND (locked OR kind = 'manual' OR (${raidLock} AND kind = 'raid' AND until > now())) RETURNING chat_id`)
+    handedOver = handed.length > 0
+    if (!handedOver) {
       let perms: Perms | null = null
       try {
         perms = JSON.parse(row.perms) as Perms
@@ -128,15 +132,25 @@ async function finish(token: string, row: Open, title: string) {
       }
     }
   }
-  await rows(sql`DELETE FROM tg_quiet WHERE chat_id = ${chatId}`)
+  // Two passes can get here together; only the one that removes the row tells the group and writes the log.
+  const closed = await rows(sql`DELETE FROM tg_quiet WHERE chat_id = ${chatId} RETURNING chat_id`)
+  if (!closed.length) return
   if (row.msg_id) {
     await callBot(token, 'deleteMessage', { chat_id: chatId, message_id: Number(row.msg_id) }).catch(() => null)
-    const sent = await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: chatId, text: 'Sessiz saatler bitti. Grup yeniden açıldı.', disable_notification: true }).catch(() => null)
+    // A group that stays closed under a lock is not told it has reopened; the lock says so itself when it ends.
+    const sent = handedOver
+      ? null
+      : await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: chatId, text: 'Sessiz saatler bitti. Grup yeniden açıldı.', disable_notification: true }).catch(() => null)
     if (sent) {
       await rows(sql`INSERT INTO tg_autodel (chat_id, message_id, due_at) VALUES (${chatId}, ${sent.message_id}, now() + make_interval(mins => ${END_NOTE_MINUTES}))`).catch(() => null)
     }
   }
-  await modLog({ chatId, chatTitle: title, action: 'Sessiz saatler bitti', reason: row.perms ? 'Grubun izinleri eski haline döndü.' : 'İzinlere dokunulmamıştı.', notify: false })
+  const reason = handedOver
+    ? 'Grup kapalı kaldı: baskın modu ya da kilit sürüyor. Asıl izinler ona devredildi, o bitince grup açılır.'
+    : row.perms
+      ? 'Grubun izinleri eski haline döndü.'
+      : 'İzinlere dokunulmamıştı.'
+  await modLog({ chatId, chatTitle: title, action: 'Sessiz saatler bitti', reason, notify: false })
 }
 
 /** What this server instance last saw, so a message handler can tell without a query whether a pass is needed. */
@@ -173,7 +187,9 @@ export async function runQuietHours() {
     const titleOf = (chatId: string) => groups.find((g) => g.chatId === chatId)?.title ?? chatId
     // Also covers a group whose setting was switched off, or the guard itself, in the middle of a window.
     const ending = open.filter((row) => wanted.get(row.chat_id)?.q.mode !== row.mode)
-    for (const row of ending) await finish(token, row, titleOf(row.chat_id)).catch((error) => console.error('[tg-quiet] end failed', error))
+    for (const row of ending) {
+      await finish(token, row, titleOf(row.chat_id), rulesFor(hub, row.chat_id).raidLock).catch((error) => console.error('[tg-quiet] end failed', error))
+    }
     if (ending.length) open = await openRows()
     const starting = [...wanted].filter(([chatId]) => !open.some((row) => row.chat_id === chatId))
     for (const [chatId, w] of starting) await begin(token, chatId, w.title, w.q).catch((error) => console.error('[tg-quiet] start failed', error))

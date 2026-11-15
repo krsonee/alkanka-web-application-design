@@ -702,12 +702,12 @@ export async function sendBroadcast(input: DmDraft): Promise<Result> {
     const { getChatConfig } = await import('@/lib/telegram-chat')
     if (!(await getChatConfig())) return { ok: false, message: 'Canlı Sohbet botu bağlı değil. Önce Canlı Sohbet sekmesinden botu bağla.' }
     const { processBroadcasts, queueBroadcast } = await import('@/lib/tg-broadcast')
-    const { total, sendAt } = await queueBroadcast(input, await actor())
+    const { total, sendAt, queued } = await queueBroadcast(input, await actor())
+    if (!queued) return { ok: false, message: 'Bu kitlede şu an kimse yok, duyuru gönderilmedi. Başka bir kitle seç ya da ileri bir saate zamanla.' }
     if (sendAt) {
       const when = new Date(sendAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
       return done(`Duyuru ${when} için zamanlandı. O saatten sonraki ilk site ziyaretinde ya da Telegram bildiriminde çıkar; kime gideceği o an yeniden sayılır (şu an ${total} kişi).`)
     }
-    if (!total) return done('Duyuru kaydedildi ama bu kitlede kimse yok, kimseye gitmeyecek.')
     after(() => processBroadcasts().catch((e) => console.error('[broadcast] immediate send failed', e)))
     return done(`Duyuru gönderilmeye başladı, ${total} kişiye gidiyor. Liste kendini yeniler.`)
   } catch (error) {
