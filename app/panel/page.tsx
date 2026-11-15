@@ -158,6 +158,8 @@ import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
 import { loadTgHub } from '@/lib/tg-hub-panel'
+import { PostComposer, PostList } from '@/components/panel/tg-post-center'
+import { loadPostCenter } from '@/lib/tg-posts'
 import { listAudit, listMembers } from '@/lib/members-admin'
 import { levelMap, listRoles, roleMap } from '@/lib/kanka-puan'
 import { getSignupGate } from '@/lib/signup-gate'
@@ -249,9 +251,15 @@ async function telegramPanel() {
   }
   const lastErr = (e: unknown) => (e ? `Son hata: ${String(e).slice(0, 160)}` : '')
   const hubData = await loadTgHub(bots, suite.share.botId ?? null, chat?.linkedMembers ?? 0)
+  const postData = await loadPostCenter(bots).catch((error) => {
+    console.error('[panel:tg-posts]', error)
+    return null
+  })
   return (
     <TelegramTabs
       tabs={[
+        { id: 'post-new', group: 'Postlar', label: 'Yeni post', content: postData ? <PostComposer data={postData} /> : failed('Post Merkezi') },
+        { id: 'post-list', group: 'Postlar', label: 'Gönderilenler', content: postData ? <PostList data={postData} /> : failed('Gönderilen postlar') },
         { id: 'hub', group: 'Botlar', label: 'Telegram Merkezi', ...tabState([!(hubData.hub.guard.enabled || hubData.hub.support.enabled), 'Koruma ve destek botu ikisi de kapalı', 'idle']), content: <TgHubManager data={hubData} /> },
         { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
         { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', ...tabState([!chat?.webhook?.url, 'Webhook kurulmamış', 'idle'], [Boolean(chat?.webhook?.lastError), lastErr(chat?.webhook?.lastError), 'off']), content: <TelegramChatSetup bots={bots} status={chat} /> },

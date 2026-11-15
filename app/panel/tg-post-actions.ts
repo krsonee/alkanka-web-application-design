@@ -91,7 +91,12 @@ export async function listenPostBotAction(botId: number) {
     const h = await headers()
     const host = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? h.get('x-forwarded-host') ?? h.get('host') ?? ''
     if (!host || /localhost|127\.0\.0\.1/.test(host)) throw new Error('Bu işlem yayındaki siteden yapılmalı; önizlemede botun bildirim adresi ayarlanamaz.')
-    await registerHook(botIdOf(botId), `https://${host}`)
+    const id = botIdOf(botId)
+    // The odds bot reads its channel by polling when it has no webhook of its own; a webhook here would cut that off.
+    const { getOddsBotConfig } = await import('@/lib/special-odds')
+    const odds = await getOddsBotConfig().catch(() => null)
+    if (odds?.botId === id) throw new Error('Bu bot Özel Oran botu; kendi bağlantısını kullanıyor. Açılır yazı butonu için başka bir bot seç.')
+    await registerHook(id, `https://${host}`)
     return { ok: true, message: 'Bot artık buton basışlarını dinliyor.' }
   })
 }
