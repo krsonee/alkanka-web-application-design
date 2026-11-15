@@ -100,6 +100,20 @@ export const BADGE_TIERS: { id: BadgeTier; label: string }[] = [
   { id: 'efsane', label: 'Efsane' },
 ]
 
+/** Colours a role can take. Ids match the emblem tier keys, so chips and medallions share one palette. */
+export const ROLE_STYLES = [
+  { id: 'moderator', label: 'Gümüş' },
+  { id: 'sponsor', label: 'Zümrüt' },
+  { id: 'kurucu', label: 'Ametist' },
+  { id: 'efsane', label: 'Yakut' },
+  { id: 'altin', label: 'Altın' },
+  { id: 'elmas', label: 'Mavi' },
+  { id: 'bronz', label: 'Bronz' },
+] as const
+
+/** What the site shows next to a member who holds a role. */
+export type MemberRole = { name: string; style: string; icon: string }
+
 export const BADGE_ICONS = ['award', 'trophy', 'crown', 'target', 'eye', 'message', 'feather', 'flame', 'gem', 'medal', 'shield', 'star', 'swords', 'zap', 'heart', 'rocket']
 
 /** Tier band for level emblems: every 5 levels the emblem material changes. */

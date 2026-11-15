@@ -87,7 +87,7 @@ export async function frameTiers(userIds: string[]): Promise<Record<string, Badg
   if (!userIds.length) return {}
   await ensure()
   const r = await rows<{ user_id: string; tier: BadgeTier }>(sql`SELECT DISTINCT a.user_id, b.tier FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
-    WHERE a.user_id IN ${userIds} AND a.badge_id NOT IN ('moderator', 'sponsor-destek')`)
+    WHERE a.user_id IN ${userIds} AND a.badge_id NOT IN (SELECT id FROM kp_badges WHERE role_style IS NOT NULL)`)
   const out: Record<string, BadgeTier> = {}
   for (const x of r) if (!out[x.user_id] || TIER_RANK[x.tier] > TIER_RANK[out[x.user_id]]) out[x.user_id] = x.tier
   return out

@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Award, Gift, Sparkles, X } from 'lucide-react'
+import { Award, Gift, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { giftAction, memberBadgeAction, memberPointsAction, memberRevokeBadgeAction } from '@/app/panel/members-actions'
+import { giftAction, memberBadgeAction, memberPointsAction, memberRevokeBadgeAction, memberRoleAction } from '@/app/panel/members-actions'
 import type { MemberActivity } from '@/lib/members-admin'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
@@ -34,22 +34,30 @@ const MARKET: Record<string, string> = { beklemede: 'Bekliyor', onaylandi: 'Onay
 
 export type ActivityTab = 'oyunlar' | 'islemler' | 'odul'
 
+type RoleOption = { id: string; name: string; staff: boolean }
+
 export function MemberActivityTabs({
   tab,
   userId,
   activity,
   badges,
+  roles,
+  roleId,
+  canRoles,
   onDone,
 }: {
   tab: ActivityTab
   userId: string
   activity: MemberActivity
   badges: { id: string; name: string; tier: string }[]
+  roles: RoleOption[]
+  roleId: string | null
+  canRoles: boolean
   onDone: (r: Result) => void
 }) {
   if (tab === 'oyunlar') return <GamesTab activity={activity} />
   if (tab === 'islemler') return <TransactionsTab activity={activity} />
-  return <RewardsTab userId={userId} activity={activity} badges={badges} onDone={onDone} />
+  return <RewardsTab userId={userId} activity={activity} badges={badges} roles={roles} roleId={roleId} canRoles={canRoles} onDone={onDone} />
 }
 
 function Empty({ text }: { text: string }) {
@@ -197,14 +205,24 @@ function RewardsTab({
   userId,
   activity,
   badges,
+  roles,
+  roleId,
+  canRoles,
   onDone,
 }: {
   userId: string
   activity: MemberActivity
   badges: { id: string; name: string; tier: string }[]
+  roles: RoleOption[]
+  roleId: string | null
+  canRoles: boolean
   onDone: (r: Result) => void
 }) {
   const [busy, start] = useTransition()
+  const [pickedRole, setPickedRole] = useState(roleId ?? roles[0]?.id ?? '')
+  const currentRole = roles.find((r) => r.id === roleId)
+  const nextRole = roles.find((r) => r.id === pickedRole)
+  const ownBadges = activity.badges.filter((b) => !roles.some((r) => r.id === b.id))
   const [gift, setGift] = useState('')
   const [giftMsg, setGiftMsg] = useState('')
   const [badgeId, setBadgeId] = useState(badges[0]?.id ?? '')
@@ -233,10 +251,63 @@ function RewardsTab({
         </button>
       </Card>
 
+      <Card
+        icon={<ShieldCheck className="size-4" aria-hidden="true" />}
+        title="Rol ver"
+        hint="Rol, üyenin adının yanında sohbette ve sitede seviye yerine kendi rengiyle görünür. Bir üyede tek rol olur; yenisini verince eskisi kalkar."
+      >
+        <p className="text-sm text-foreground">
+          Şu anki rol: <span className="font-semibold">{currentRole?.name ?? 'Yok'}</span>
+        </p>
+        {!canRoles ? (
+          <p className="text-sm text-muted-foreground">Rol vermek için hesabında &quot;Görevliler&quot; yetkisi olmalı.</p>
+        ) : roles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Henüz rol yok. Üye listesinin üstündeki &quot;Roller ve özel yetkiler&quot; kartından oluşturabilirsin.</p>
+        ) : (
+          <>
+            <select aria-label="Rol" value={pickedRole} onChange={(e) => setPickedRole(e.target.value)} className={input}>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                  {r.staff ? ' (görevli)' : ''}
+                </option>
+              ))}
+            </select>
+            {nextRole?.staff && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Görevli rolü: bu üye Kanka Puan kazanmaz, sıralamada görünmez, marketten alışveriş yapamaz ve etkinliklere katılamaz.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy || !pickedRole || pickedRole === roleId}
+                onClick={() => run(() => memberRoleAction(userId, pickedRole), () => {})}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+              >
+                Rolü ver
+              </button>
+              {currentRole && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void askConfirm(`${currentRole.name} rolü bu üyeden kaldırılsın mı?`).then((ok) => ok && run(() => memberRoleAction(userId, null), () => {}))
+                  }
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-40"
+                >
+                  Rolü kaldır
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </Card>
+
       <Card icon={<Award className="size-4" aria-hidden="true" />} title="Rozet ver" hint="Rozetin bonus puanı varsa otomatik eklenir. Yeni rozetleri Kanka Puan bölümünden oluşturabilirsin.">
-        {activity.badges.length > 0 && (
+        {ownBadges.length > 0 && (
           <ul className="flex flex-wrap gap-2">
-            {activity.badges.map((b) => (
+            {ownBadges.map((b) => (
               <li key={b.id} className="flex items-center gap-1 rounded-full bg-primary/15 py-1 pl-3 pr-1 text-xs font-semibold text-primary">
                 {b.name}
                 {b.count > 1 ? ` x${b.count}` : ''}

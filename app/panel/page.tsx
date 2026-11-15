@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { adminConfigured } from '@/lib/admin-auth'
+import { adminConfigured, canPanel } from '@/lib/admin-auth'
 import { getPanelSession, type PanelSession } from '@/lib/panel-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { rows, sql } from '@/lib/db'
@@ -159,7 +159,9 @@ import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
 import { loadTgHub } from '@/lib/tg-hub-panel'
 import { listAudit, listMembers } from '@/lib/members-admin'
-import { levelMap } from '@/lib/kanka-puan'
+import { levelMap, listRoles, roleMap } from '@/lib/kanka-puan'
+import { getSignupGate } from '@/lib/signup-gate'
+import { AccessManager } from '@/components/panel/access-manager'
 import { AvatarManager } from '@/components/panel/avatar-manager'
 import { COVERS, avatarStats, listCatalog } from '@/lib/avatars'
 import { getHouseWinRate } from '@/app/actions/wallet'
@@ -168,9 +170,23 @@ import { getTelegramPromo } from '@/lib/telegram-promo'
 import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 
 async function usersPanel() {
-  const [{ members, counts }, levels, cfg] = await Promise.all([listMembers(), levelMap().catch(() => ({}) as Record<string, number>), getKpConfig()])
+  const [{ members, counts }, levels, cfg, roles, held, gate, canRoles] = await Promise.all([
+    listMembers(),
+    levelMap().catch(() => ({}) as Record<string, number>),
+    getKpConfig(),
+    listRoles(),
+    roleMap().catch(() => ({}) as Awaited<ReturnType<typeof roleMap>>),
+    getSignupGate(),
+    canPanel('roles'),
+  ])
   const names = Object.fromEntries(Object.entries(levels).map(([id, n]) => [id, cfg.levels[n - 1]?.name ?? 'Çaylak']))
-  return <MembersManager initial={members} counts={counts} levels={names} />
+  for (const [id, role] of Object.entries(held)) names[id] = role.name
+  return (
+    <div className="flex flex-col gap-6">
+      <AccessManager gate={gate} roles={roles} canRoles={canRoles} />
+      <MembersManager initial={members} counts={counts} levels={names} />
+    </div>
+  )
 }
 
 function failed(label: string) {

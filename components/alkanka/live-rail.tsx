@@ -33,7 +33,7 @@ import {
 } from '@/lib/telegram-channels-shared'
 import { TELEGRAM_URL } from './data'
 import { useChannelFeed, useChatFeed, type ChatResponse } from './use-chat-feed'
-import { MemberRank } from './kp/member-rank'
+import { MemberName, MemberRank } from './kp/member-rank'
 
 export const OPEN_CHAT_EVENT = 'alkanka:open-chat'
 
@@ -312,7 +312,7 @@ function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefr
           data.messages.map((m) => (
             <li key={m.id} className="animate-slide-in flex flex-col gap-0.5 text-sm leading-relaxed">
               <span className="flex items-center gap-1.5 text-xs">
-                <span className={cn('font-semibold', m.origin === 'site' ? 'text-primary' : 'text-accent')}>{m.author}</span>
+                <MemberName userId={m.userId} className={m.origin === 'site' ? 'text-primary' : 'text-accent'}>{m.author}</MemberName>
                 <MemberRank userId={m.userId} />
                 {m.origin === 'site' && <SiteBadge />}
                 <time dateTime={m.createdAt} className="ml-auto text-[10px] text-muted-foreground tabular-nums">
@@ -363,7 +363,7 @@ function CommentList({ comments }: { comments: ChannelComment[] }) {
       {comments.map((c) => (
         <li key={c.id} className="flex flex-col gap-0.5 text-xs leading-relaxed">
           <span className="flex items-center gap-1.5">
-            <span className={cn('font-semibold', c.origin === 'site' ? 'text-primary' : 'text-accent')}>{c.author}</span>
+            <MemberName userId={c.userId} className={c.origin === 'site' ? 'text-primary' : 'text-accent'}>{c.author}</MemberName>
             <MemberRank userId={c.userId} />
             {c.origin === 'site' && <SiteBadge />}
             <time dateTime={c.createdAt} className="ml-auto text-[10px] text-muted-foreground tabular-nums">
