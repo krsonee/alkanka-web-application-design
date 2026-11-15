@@ -4,12 +4,79 @@ export type SupportSponsor = { name: string; chatId: string; title: string }
 export const CAPTCHA_MINUTES = 3
 export const RAID_BAN_MINUTES = 10
 
+/** How long a newcomer counts as "new" for per-type content rules when no quarantine is set. */
+export const NEW_MEMBER_HOURS = 24
+export const WAVE_MINUTES = 30
+
+export type ContentKind = 'media' | 'sticker' | 'gif' | 'voice' | 'poll' | 'contact' | 'location' | 'viaBot'
+export type ContentRule = 'allow' | 'new' | 'block'
+export const CONTENT_KINDS: { key: ContentKind; label: string }[] = [
+  { key: 'media', label: 'Fotoğraf, video, dosya' },
+  { key: 'sticker', label: 'Çıkartma' },
+  { key: 'gif', label: 'GIF' },
+  { key: 'voice', label: 'Sesli / yuvarlak video mesaj' },
+  { key: 'poll', label: 'Anket' },
+  { key: 'contact', label: 'Kişi kartı' },
+  { key: 'location', label: 'Konum' },
+  { key: 'viaBot', label: 'Başka bot üzerinden mesaj (@gif dahil), oyun' },
+]
+
+export type ShieldConfig = {
+  raidMode: boolean
+  raidMinutes: number
+  raidLock: boolean
+  inviteLimit: number
+  inviteLock: boolean
+  commentShield: boolean
+  commentRate: number
+  commentLockMinutes: number
+  quarantineHours: number
+  content: Record<ContentKind, ContentRule>
+  swarmAccounts: number
+  hiddenAds: boolean
+  nameWatch: boolean
+  channelJoinAlert: number
+  adminAlerts: boolean
+}
+
+export const GUARD_TUNABLES = [
+  'warnLimit',
+  'muteMinutes',
+  'floodCount',
+  'floodSeconds',
+  'floodMuteMinutes',
+  'repeatLimit',
+  'linkAction',
+  'blockForwards',
+  'cleanService',
+  'captcha',
+  'raidJoins',
+] as const
+export const SHIELD_TUNABLES = [
+  'raidMode',
+  'raidMinutes',
+  'raidLock',
+  'inviteLimit',
+  'inviteLock',
+  'commentShield',
+  'commentRate',
+  'commentLockMinutes',
+  'quarantineHours',
+  'content',
+  'swarmAccounts',
+  'hiddenAds',
+  'nameWatch',
+] as const
+
+export type HubGroup = { chatId: string; title: string; type?: string; linkedChatId?: string; rules?: Partial<GroupRules> }
+
 export type HubConfig = {
   guardBotId: number | null
   supportBotId: number | null
   logChatId: string
   logChatTitle: string
-  groups: { chatId: string; title: string }[]
+  groups: HubGroup[]
+  shield: ShieldConfig
   guard: {
     enabled: boolean
     words: string[]
@@ -51,12 +118,74 @@ export type HubConfig = {
   }
 }
 
+/** The settings one group may set differently from the rest. */
+export type GroupRules = Pick<HubConfig['guard'], (typeof GUARD_TUNABLES)[number]> & Pick<ShieldConfig, (typeof SHIELD_TUNABLES)[number]>
+
+export function generalRules(hub: HubConfig): GroupRules {
+  const out: Record<string, unknown> = {}
+  for (const k of GUARD_TUNABLES) out[k] = hub.guard[k]
+  for (const k of SHIELD_TUNABLES) out[k] = hub.shield[k]
+  return out as GroupRules
+}
+
+export function rulesFor(hub: HubConfig, chatId: string | number): GroupRules {
+  const own = hub.groups.find((g) => g.chatId === String(chatId))?.rules
+  return own ? { ...generalRules(hub), ...own } : generalRules(hub)
+}
+
+/** Only the fields a group sets differently are stored, so a later change to the general value still reaches it. */
+export function rulesDiff(base: GroupRules, own: GroupRules): Partial<GroupRules> {
+  const out: Record<string, unknown> = {}
+  for (const k of [...GUARD_TUNABLES, ...SHIELD_TUNABLES]) {
+    if (JSON.stringify(base[k]) !== JSON.stringify(own[k])) out[k] = own[k]
+  }
+  return out as Partial<GroupRules>
+}
+
+/** Every new protection starts switched off, so a deploy never changes how a live group behaves on its own. */
+const SHIELD_OFF: ShieldConfig = {
+  raidMode: false,
+  raidMinutes: 15,
+  raidLock: true,
+  inviteLimit: 0,
+  inviteLock: true,
+  commentShield: false,
+  commentRate: 0,
+  commentLockMinutes: 10,
+  quarantineHours: 0,
+  content: { media: 'allow', sticker: 'allow', gif: 'allow', voice: 'allow', poll: 'allow', contact: 'allow', location: 'allow', viaBot: 'allow' },
+  swarmAccounts: 0,
+  hiddenAds: false,
+  nameWatch: false,
+  channelJoinAlert: 0,
+  adminAlerts: false,
+}
+
+export const RECOMMENDED_SHIELD: ShieldConfig = {
+  raidMode: true,
+  raidMinutes: 15,
+  raidLock: true,
+  inviteLimit: 5,
+  inviteLock: true,
+  commentShield: true,
+  commentRate: 30,
+  commentLockMinutes: 10,
+  quarantineHours: 24,
+  content: { media: 'new', sticker: 'allow', gif: 'allow', voice: 'new', poll: 'block', contact: 'block', location: 'block', viaBot: 'new' },
+  swarmAccounts: 4,
+  hiddenAds: true,
+  nameWatch: true,
+  channelJoinAlert: 50,
+  adminAlerts: true,
+}
+
 export const DEFAULT_HUB: HubConfig = {
   guardBotId: null,
   supportBotId: null,
   logChatId: '',
   logChatTitle: '',
   groups: [],
+  shield: SHIELD_OFF,
   guard: {
     enabled: false,
     words: ['amk', 'aq', 'orospu', 'piç', 'sik', 'yarrak', 'göt', 'ananı', 'pezevenk', 'kahpe', 'şerefsiz', 'gavat'],
@@ -109,7 +238,20 @@ export type HubStats = {
   globalBans: number
 }
 
-export type HubLogRow = { id: number; action: string; chatTitle: string; who: string; reason: string; createdAt: string }
+export type HubLogRow = { id: number; action: string; chatTitle: string; who: string; reason: string; createdAt: string; canUndo: boolean }
+
+export type SuspectRow = { tgId: number; name: string; username: string | null; msgs: number; joinedAt: string | null; reasons: string[] }
+
+export type LockRow = {
+  chatId: string
+  title: string
+  kind: 'raid' | 'manual'
+  locked: boolean
+  until: string | null
+  startedAt: string
+  reason: string
+  turnedAway: number
+}
 
 export type TicketRow = {
   id: number

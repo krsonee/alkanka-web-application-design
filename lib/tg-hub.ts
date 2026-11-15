@@ -8,6 +8,17 @@ import type { TgMessage } from '@/lib/telegram-chat'
 export type TgUser = { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string }
 export type TgCallback = { id: string; from: TgUser; data?: string; message?: TgMessage }
 export type TgJoinRequest = { chat: { id: number; title?: string }; from: TgUser; user_chat_id?: number; date: number }
+export type TgMemberState = { status: string; user: TgUser; is_member?: boolean; can_delete_messages?: boolean; can_restrict_members?: boolean }
+export type TgMemberUpdate = {
+  chat: { id: number; type: string; title?: string }
+  from: TgUser
+  date: number
+  old_chat_member: TgMemberState
+  new_chat_member: TgMemberState
+  invite_link?: { name?: string; invite_link?: string }
+  via_join_request?: boolean
+  via_chat_folder_invite_link?: boolean
+}
 export type HubUpdate = {
   update_id: number
   message?: TgMessage
@@ -15,10 +26,23 @@ export type HubUpdate = {
   channel_post?: TgMessage
   callback_query?: TgCallback
   chat_join_request?: TgJoinRequest
+  chat_member?: TgMemberUpdate
+  my_chat_member?: TgMemberUpdate
 }
+export type LogUndo = { kind: 'warn' | 'mute' | 'ban'; chatId: string; tgIds: number[]; trust: number; warns: number }
 
 const HUB_KEY = 'hub_config'
 const HOOK_UPDATES = ['message', 'edited_message', 'channel_post', 'callback_query', 'chat_join_request']
+const MEMBER_UPDATES = ['chat_member', 'my_chat_member']
+
+/**
+ * Telegram only sends member changes when asked, and each one is a webhook call that wakes the database.
+ * The guard bot asks for them only while a setting that needs them is switched on.
+ */
+function hookUpdatesFor(hub: HubConfig, botId: number) {
+  const wantsMembers = hub.guardBotId === botId && hub.guard.enabled && (hub.shield.channelJoinAlert > 0 || hub.shield.adminAlerts)
+  return wantsMembers ? [...HOOK_UPDATES, ...MEMBER_UPDATES] : HOOK_UPDATES
+}
 
 let ready: Promise<void> | null = null
 export function ensureHubTables() {
@@ -47,6 +71,13 @@ export function ensureHubTables() {
     await rows(sql`ALTER TABLE tg_broadcasts ADD COLUMN IF NOT EXISTS blocked int NOT NULL DEFAULT 0`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_seen_updates (
       bot_id int NOT NULL, update_id bigint NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (bot_id, update_id))`)
+    // Added without a default first: members who were already here keep NULL and are never treated as newcomers.
+    await rows(sql`ALTER TABLE tg_trust ADD COLUMN IF NOT EXISTS first_seen timestamptz`)
+    await rows(sql`ALTER TABLE tg_trust ALTER COLUMN first_seen SET DEFAULT now()`)
+    await rows(sql`ALTER TABLE tg_trust ADD COLUMN IF NOT EXISTS needs_check boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE tg_mod_log ADD COLUMN IF NOT EXISTS undo text`)
+    await rows(sql`ALTER TABLE tg_mod_log ADD COLUMN IF NOT EXISTS undone boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE tg_guard_msgs ADD COLUMN IF NOT EXISTS thread_id bigint`)
   })().catch((error) => {
     ready = null
     throw error
@@ -68,6 +99,7 @@ export async function healChatHook() {
   const last = Number((await getSetting('chat_hook_checked_at')) ?? 0)
   if (Date.now() - last < 60 * 60 * 1000) return
   await setSetting('chat_hook_checked_at', String(Date.now()))
+  await syncGuardHook().catch((error) => console.error('[tg-hub] guard hook sync failed', error))
   const botId = Number(await getSetting('chat_bot_id'))
   const secret = await getSetting('chat_secret')
   if (!botId || !secret) return
@@ -76,7 +108,23 @@ export async function healChatHook() {
   if (!info.url) return
   const have = info.allowed_updates ?? []
   if (HOOK_UPDATES.every((u) => have.includes(u))) return
-  await callBot(token, 'setWebhook', { url: info.url, secret_token: secret, allowed_updates: HOOK_UPDATES })
+  await callBot(token, 'setWebhook', { url: info.url, secret_token: secret, allowed_updates: hookUpdatesFor(await getHub(), botId) })
+}
+
+/** Makes the guard bot's webhook ask for exactly the update types the current settings need. */
+export async function syncGuardHook() {
+  const hub = await getHub()
+  const botId = hub.guardBotId
+  if (!botId) return
+  const secret = await getSetting(`hook_secret_${botId}`)
+  if (!secret) return
+  const token = await botToken(botId)
+  const info = await callBot<{ url: string; allowed_updates?: string[] }>(token, 'getWebhookInfo')
+  if (!info.url.endsWith(`/api/telegram/hook/${botId}`)) return
+  const want = hookUpdatesFor(hub, botId)
+  const have = info.allowed_updates ?? []
+  if (want.length === have.length && want.every((u) => have.includes(u))) return
+  await callBot(token, 'setWebhook', { url: info.url, secret_token: secret, allowed_updates: want })
 }
 
 // --- Config ------------------------------------------------------------------
@@ -118,10 +166,34 @@ export async function saveHub(cfg: HubConfig) {
 export async function resolveChatFor(botId: number, input: string) {
   const ref = normalizeChat(input)
   const token = await botToken(botId)
-  const info = await callBot<{ id: number; title?: string; type: string }>(token, 'getChat', { chat_id: ref })
+  const info = await callBot<{ id: number; title?: string; type: string; linked_chat_id?: number }>(token, 'getChat', { chat_id: ref })
   const me = await callBot<{ id: number }>(token, 'getMe')
   const member = await callBot<{ status: string }>(token, 'getChatMember', { chat_id: info.id, user_id: me.id })
-  return { id: String(info.id), title: info.title ?? String(info.id), type: info.type, isAdmin: ['administrator', 'creator'].includes(member.status) }
+  return {
+    id: String(info.id),
+    title: info.title ?? String(info.id),
+    type: info.type,
+    /** For a channel: its comment group. For a group: the channel it serves as comment group for. */
+    linkedChatId: info.linked_chat_id ? String(info.linked_chat_id) : undefined,
+    isAdmin: ['administrator', 'creator'].includes(member.status),
+  }
+}
+
+/** Protected chats saved before their kind was recorded get it filled in once, so the panel can tell channels from groups. */
+export async function fillGroupDetails(hub: HubConfig): Promise<HubConfig> {
+  if (!hub.guardBotId || hub.groups.every((g) => g.type)) return hub
+  const token = await botToken(hub.guardBotId)
+  const groups = await Promise.all(
+    hub.groups.map(async (g) => {
+      if (g.type) return g
+      const info = await callBot<{ type: string; linked_chat_id?: number }>(token, 'getChat', { chat_id: g.chatId }).catch(() => null)
+      return info ? { ...g, type: info.type, linkedChatId: info.linked_chat_id ? String(info.linked_chat_id) : undefined } : g
+    }),
+  )
+  if (groups.every((g, i) => g === hub.groups[i])) return hub
+  const next = { ...hub, groups }
+  await saveHub(next)
+  return next
 }
 
 // --- Webhooks ----------------------------------------------------------------
@@ -138,7 +210,7 @@ export async function registerHook(botId: number, origin: string) {
   await callBot(token, 'setWebhook', {
     url: `${origin}/api/telegram/hook/${botId}`,
     secret_token: secret,
-    allowed_updates: HOOK_UPDATES,
+    allowed_updates: hookUpdatesFor(await getHub(), botId),
     drop_pending_updates: false,
   })
   await setSetting(`hook_secret_${botId}`, secret)
@@ -216,6 +288,15 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
     return
   }
 
+  const member = update.chat_member ?? update.my_chat_member
+  if (member) {
+    if (isGuard) {
+      const { handleMemberUpdate } = await import('@/lib/tg-guard')
+      await handleMemberUpdate(botId, member, Boolean(update.my_chat_member))
+    }
+    return
+  }
+
   const m = update.message ?? update.edited_message
   if (m && m.chat.type !== 'private' && m.chat.type !== 'channel' && isGuard) {
     const { guardMessage } = await import('@/lib/tg-guard')
@@ -256,12 +337,25 @@ export function who(u?: TgUser) {
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-export async function modLog(input: { chatId?: string | number; chatTitle?: string; user?: TgUser; action: string; reason: string; notify?: boolean }) {
+export async function modLog(input: {
+  chatId?: string | number
+  chatTitle?: string
+  user?: TgUser
+  action: string
+  reason: string
+  notify?: boolean
+  /** Extra buttons under the log-group message; `data` is handled by the guard's callback handler. */
+  buttons?: { text: string; data: string }[]
+  /** Lets staff reverse this action from the log group or the panel. */
+  undo?: LogUndo
+}) {
   await ensureHubTables()
-  await rows(sql`INSERT INTO tg_mod_log (chat_id, chat_title, tg_id, who, action, reason)
+  const [row] = await rows<{ id: number }>(sql`INSERT INTO tg_mod_log (chat_id, chat_title, tg_id, who, action, reason, undo)
     VALUES (${input.chatId != null ? String(input.chatId) : null}, ${input.chatTitle ?? null}, ${input.user?.id ?? null},
-      ${input.user ? who(input.user) : null}, ${input.action}, ${input.reason.slice(0, 500)})`)
+      ${input.user ? who(input.user) : null}, ${input.action}, ${input.reason.slice(0, 500)}, ${input.undo ? JSON.stringify(input.undo) : null})
+    RETURNING id`)
   if (input.notify === false) return
+  const buttons = [...(input.buttons ?? []), ...(input.undo ? [{ text: 'Geri al', data: `gd:undo:${row.id}` }] : [])]
   const hub = await getHub()
   const botId = hub.guardBotId ?? hub.supportBotId
   if (!hub.logChatId || !botId) return
@@ -274,12 +368,14 @@ export async function modLog(input: { chatId?: string | number; chatTitle?: stri
     text: lines.join('\n'),
     parse_mode: 'HTML',
     link_preview_options: { is_disabled: true },
+    reply_markup: buttons.length ? { inline_keyboard: buttons.map((b) => [{ text: b.text, callback_data: b.data }]) } : undefined,
   }).catch((error) => console.error('[tg-hub] log send failed', error))
 }
 
 export async function listModLog(limit = 40): Promise<HubLogRow[]> {
   await ensureHubTables()
-  const r = await rows(sql`SELECT id, action, chat_title, who, reason, created_at FROM tg_mod_log ORDER BY id DESC LIMIT ${limit}`)
+  const r = await rows(sql`SELECT id, action, chat_title, who, reason, created_at, (undo IS NOT NULL AND NOT undone) AS can_undo
+    FROM tg_mod_log ORDER BY id DESC LIMIT ${limit}`)
   return r.map((x) => ({
     id: Number(x.id),
     action: String(x.action),
@@ -287,6 +383,7 @@ export async function listModLog(limit = 40): Promise<HubLogRow[]> {
     who: String(x.who ?? ''),
     reason: String(x.reason ?? ''),
     createdAt: new Date(String(x.created_at)).toISOString(),
+    canUndo: Boolean(x.can_undo),
   }))
 }
 
@@ -294,8 +391,28 @@ export async function listModLog(limit = 40): Promise<HubLogRow[]> {
 
 export async function trustOf(tgId: number) {
   await ensureHubTables()
-  const r = await rows<{ score: number; trusted: boolean }>(sql`SELECT score, trusted FROM tg_trust WHERE tg_id = ${tgId}`)
-  return { score: r[0] ? Number(r[0].score) : 50, trusted: Boolean(r[0]?.trusted) }
+  const r = await rows<{ score: number; trusted: boolean; first_seen: string | Date | null; needs_check: boolean }>(
+    sql`SELECT score, trusted, first_seen, needs_check FROM tg_trust WHERE tg_id = ${tgId}`,
+  )
+  return {
+    score: r[0] ? Number(r[0].score) : 50,
+    trusted: Boolean(r[0]?.trusted),
+    /** False until the guard has met this account at least once. */
+    known: Boolean(r[0]),
+    /** When the guard first met the account; null for members who were here before newcomer tracking existed. */
+    firstSeen: r[0]?.first_seen ? new Date(r[0].first_seen).getTime() : null,
+    needsCheck: Boolean(r[0]?.needs_check),
+  }
+}
+
+/** Starts the newcomer clock the first time the guard meets an account. */
+export async function meetMember(tgId: number, needsCheck = false) {
+  await rows(sql`INSERT INTO tg_trust (tg_id, needs_check) VALUES (${tgId}, ${needsCheck}) ON CONFLICT (tg_id) DO NOTHING`)
+}
+
+export async function setNeedsCheck(tgId: number, needsCheck: boolean) {
+  await rows(sql`INSERT INTO tg_trust (tg_id, needs_check) VALUES (${tgId}, ${needsCheck})
+    ON CONFLICT (tg_id) DO UPDATE SET needs_check = EXCLUDED.needs_check`)
 }
 
 export async function adjustTrust(tgId: number, delta: number) {

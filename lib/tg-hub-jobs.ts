@@ -74,9 +74,11 @@ export async function runWeeklyHub(force = false) {
 /** Runs every minute from the traffic-driven tick. */
 export async function hubTick() {
   const hub = await getHub()
-  const { expireCaptchas, flushAutoDelete, processWipes } = await import('@/lib/tg-guard')
+  const { endDueLocks, expireCaptchas, flushAutoDelete, processWipes } = await import('@/lib/tg-guard')
   const { healChatHook } = await import('@/lib/tg-hub')
+  const { purgeShield } = await import('@/lib/tg-shield')
   await Promise.all([
+    endDueLocks().catch((e) => console.error('[hub-tick] locks', e)),
     processWipes().catch((e) => console.error('[hub-tick] wipe', e)),
     healChatHook().catch((e) => console.error('[hub-tick] chat hook', e)),
     hub.guard.enabled ? expireCaptchas().catch((e) => console.error('[hub-tick] captcha', e)) : null,
@@ -89,4 +91,5 @@ export async function hubTick() {
   await rows(sql`DELETE FROM tg_guard_msgs WHERE created_at < now() - interval '35 days'`).catch(() => null)
   await rows(sql`DELETE FROM tg_joins WHERE created_at < now() - interval '1 day'`).catch(() => null)
   await rows(sql`DELETE FROM tg_seen_updates WHERE created_at < now() - interval '2 days'`).catch(() => null)
+  await purgeShield().catch(() => null)
 }
