@@ -162,7 +162,7 @@ export async function canTelegram(area: TelegramArea) {
   return telegramAccess(await getPanelSession())[area]
 }
 
-async function clientIp() {
+export async function clientIp() {
   const h = await headers()
   return (h.get('x-forwarded-for')?.split(',')[0] ?? h.get('x-real-ip') ?? 'unknown').trim().slice(0, 64)
 }

@@ -18,6 +18,7 @@ export type StaffRow = {
   totpRequired: boolean
   active: boolean
   lastLoginAt: string | null
+  lastLoginIp: string | null
 }
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
@@ -80,6 +81,7 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
               </span>
               <span className="text-xs text-muted-foreground">
                 {a.isOwner ? 'Ana yönetici, tüm bölümler' : `${a.permissions.length} bölüm`} · Son giriş: {formatDate(a.lastLoginAt)}
+                {a.lastLoginIp ? ` (${a.lastLoginIp})` : ''}
               </span>
             </div>
             <span

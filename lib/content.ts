@@ -1,4 +1,6 @@
 import { neon } from '@neondatabase/serverless'
+import { recordContentChange } from '@/lib/content-history'
+import { trackedSetting } from '@/lib/panel-log-shared'
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -67,16 +69,25 @@ export async function getAllContent(): Promise<Record<string, unknown>> {
   }
 }
 
+async function currentValue(key: string): Promise<unknown> {
+  const rows = await sql`SELECT value FROM site_content WHERE key = ${key}`
+  return rows[0]?.value ?? null
+}
+
 export async function setContent(key: string, value: unknown) {
   await ensureTable()
+  const before = trackedSetting(key) ? await currentValue(key) : null
   await sql`INSERT INTO site_content (key, value, updated_at)
     VALUES (${key}, ${JSON.stringify(value)}::jsonb, now())
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`
+  await recordContentChange(key, before, value)
 }
 
 export async function deleteContent(key: string) {
   await ensureTable()
+  const before = trackedSetting(key) ? await currentValue(key) : null
   await sql`DELETE FROM site_content WHERE key = ${key}`
+  await recordContentChange(key, before, null)
 }
 
 export function withoutEmpty<T extends Record<string, unknown>>(obj: T | null | undefined): Partial<T> {

@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { getPanelSession } from '@/lib/panel-auth'
+import { logPanel } from '@/lib/panel-log'
 
 export type MemberStatus = 'aktif' | 'donduruldu' | 'banli' | 'supheli'
 
@@ -30,7 +30,7 @@ export type MemberDetail = MemberRow & {
   sameIpMembers: { id: string; name: string; email: string }[]
 }
 
-export type AuditRow = { id: number; actor: string; action: string; target: string | null; detail: string | null; createdAt: string }
+export type { AuditRow } from '@/lib/panel-log-shared'
 
 let ready: Promise<void> | null = null
 
@@ -60,24 +60,9 @@ export function ensureMemberAdmin() {
   return ready
 }
 
-/** Records a panel staff action. Never throws: an audit failure must not block the action itself. */
+/** Records a member-screen action in the panel log. */
 export async function logAudit(action: string, target: string | null, detail: string | null) {
-  try {
-    await ensureMemberAdmin()
-    const session = await getPanelSession()
-    const actor = session ? `${session.displayName} (@${session.username})` : 'sistem'
-    await rows(sql`INSERT INTO panel_audit (actor, action, target, detail) VALUES (${actor}, ${action}, ${target?.slice(0, 160) ?? null}, ${detail?.slice(0, 400) ?? null})`)
-  } catch (error) {
-    console.error('[audit]', error)
-  }
-}
-
-export async function listAudit(limit = 200): Promise<AuditRow[]> {
-  await ensureMemberAdmin()
-  const r = await rows<{ id: number; actor: string; action: string; target: string | null; detail: string | null; created_at: string }>(
-    sql`SELECT id, actor, action, target, detail, created_at FROM panel_audit ORDER BY created_at DESC LIMIT ${limit}`,
-  )
-  return r.map((a) => ({ id: Number(a.id), actor: a.actor, action: a.action, target: a.target, detail: a.detail, createdAt: new Date(a.created_at).toISOString() }))
+  await logPanel('users', action, target, detail)
 }
 
 /** True when the member is suspended or banned right now. Missing tables count as "not banned". */

@@ -172,7 +172,10 @@ import { PostComposer, PostList } from '@/components/panel/tg-post-center'
 import { ScheduledPosts } from '@/components/panel/tg-post-plans'
 import { ChannelRules } from '@/components/panel/tg-post-rules'
 import { loadPostCenter } from '@/lib/tg-posts'
-import { listAudit, listMembers } from '@/lib/members-admin'
+import { listMembers } from '@/lib/members-admin'
+import { lastLoginAddresses, recentAudit, searchAudit } from '@/lib/panel-log'
+import { listContentHistory } from '@/lib/content-history'
+import { ContentHistory } from '@/components/panel/content-history'
 import { levelMap, listRoles, roleMap } from '@/lib/kanka-puan'
 import { getSignupGate } from '@/lib/signup-gate'
 import { AccessManager } from '@/components/panel/access-manager'
@@ -480,6 +483,7 @@ async function staffPanel() {
     active: boolean
     last_login_at: string | null
   }>(sql`SELECT id, username, display_name, is_owner, permissions, totp_enabled, totp_required, active, last_login_at FROM panel_accounts ORDER BY is_owner DESC, username`)
+  const addresses = await lastLoginAddresses().catch((): Record<string, string> => ({}))
   const accounts: StaffRow[] = list.map((a) => ({
     id: Number(a.id),
     username: a.username,
@@ -490,6 +494,7 @@ async function staffPanel() {
     totpRequired: a.totp_required,
     active: a.active,
     lastLoginAt: a.last_login_at ? new Date(a.last_login_at).toISOString() : null,
+    lastLoginIp: addresses[a.username.toLowerCase()] ?? null,
   }))
   return <StaffManager accounts={accounts} />
 }
@@ -807,13 +812,27 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'users', 'Tüm üyeler', usersPanel),
   ])
-  const audit = session.isOwner && active === 'audit' ? await listAudit(2000).then((e) => <AuditLog entries={e} />).catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları'))) : null
+  const audit =
+    session.isOwner && active === 'audit'
+      ? await Promise.all([searchAudit(), listContentHistory()])
+          .then(([log, history]) => (
+            <TelegramTabs
+              label="Log bölümleri"
+              legend={false}
+              tabs={[
+                { id: 'log', label: 'İşlemler', content: <AuditLog initial={log} /> },
+                { id: 'history', label: 'Ayar geçmişi', content: <ContentHistory initial={history} /> },
+              ]}
+            />
+          ))
+          .catch((error) => (console.error('[panel:audit]', error), failed('İşlem logları')))
+      : null
 
   const onDash = active === 'dashboard'
   const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
     pendingDetail(can).catch((): PendingDetail => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0, proofs: 0 })),
     onDash && can('users') ? listMembers().then((r) => r.counts).catch(() => null) : null,
-    onDash && session.isOwner ? listAudit(8).catch(() => []) : [],
+    onDash && session.isOwner ? recentAudit(8).catch(() => []) : [],
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
     onDash && session.isOwner ? loadSystemStatus().catch((error) => (console.error('[panel:system-status]', error), null)) : null,
   ])
