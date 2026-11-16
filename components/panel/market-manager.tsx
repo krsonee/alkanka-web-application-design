@@ -142,7 +142,9 @@ function RequestList({ requests, pending, onResolve }: { requests: MarketRequest
               <input
                 value={notes[r.id] ?? ''}
                 onChange={(e) => setNotes((n) => ({ ...n, [r.id]: e.target.value }))}
-                placeholder="Not (opsiyonel, üyeye görünür)"
+                maxLength={300}
+                aria-label={`${r.userName} için not (en fazla 300 karakter, üyeye görünür)`}
+                placeholder="Not (opsiyonel, üyeye görünür, en fazla 300 karakter)"
                 className={cn(field, 'min-w-0 flex-1')}
               />
               <button type="button" disabled={pending} onClick={() => void askConfirm(`${r.userName} adlı üyenin "${r.itemName}" talebi onaylansın mı? Onay geri alınamaz; ödülü üyeye teslim ettiğinden emin ol.`).then((ok) => ok && onResolve(r.id, true, notes[r.id] ?? ''))} className="flex h-10 items-center gap-1.5 rounded-lg bg-success px-3 text-sm font-semibold text-background disabled:opacity-50">

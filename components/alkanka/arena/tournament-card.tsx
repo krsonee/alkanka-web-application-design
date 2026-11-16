@@ -233,7 +233,7 @@ export function TournamentCard({ t }: { t: Tournament }) {
           {t.format === 'lig' ? (
             <LeagueView bracket={t.bracket} names={t.names} order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)} />
           ) : (
-            <BracketView bracket={t.bracket} />
+            <BracketView bracket={t.bracket} names={t.names} closed={t.status !== 'basladi'} />
           )}
         </div>
       )}

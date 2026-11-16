@@ -6,13 +6,15 @@ import { cn } from '@/lib/utils'
 import { roundLabel, type Bracket, type Match } from '@/lib/bracket'
 
 type RenderPick = (round: number, match: number, m: Match) => ReactNode
+type NameOf = (key: string) => string
+type Shared = { nameOf: NameOf; closed: boolean; renderPick?: RenderPick }
 
 function splitName(raw: string) {
   const guest = raw.startsWith('misafir:')
   return { name: guest ? raw.slice(8) : raw, guest }
 }
 
-function PlayerRow({ player, seed, state, placeholder }: { player: string | null; seed: number; state: 'win' | 'lose' | 'idle'; placeholder: string }) {
+function PlayerRow({ player, seed, state, placeholder, nameOf }: { player: string | null; seed: number; state: 'win' | 'lose' | 'idle'; placeholder: string; nameOf: NameOf }) {
   if (!player) {
     return (
       <div className="flex h-11 items-center gap-2.5 px-2.5 text-sm text-muted-foreground">
@@ -21,7 +23,8 @@ function PlayerRow({ player, seed, state, placeholder }: { player: string | null
       </div>
     )
   }
-  const { name, guest } = splitName(player)
+  const { guest } = splitName(player)
+  const name = nameOf(player)
   return (
     <div
       className={cn(
@@ -49,9 +52,9 @@ function PlayerRow({ player, seed, state, placeholder }: { player: string | null
   )
 }
 
-function MatchCard({ m, ri, mi, last, renderPick }: { m: Match; ri: number; mi: number; last: boolean; renderPick?: RenderPick }) {
+function MatchCard({ m, ri, mi, last, nameOf, closed, renderPick }: { m: Match; ri: number; mi: number; last: boolean } & Shared) {
   const empty = m.players.every((p) => !p)
-  const live = !m.winner && m.players.every(Boolean)
+  const live = !closed && !m.winner && m.players.every(Boolean)
   return (
     <div
       className={cn(
@@ -76,6 +79,7 @@ function MatchCard({ m, ri, mi, last, renderPick }: { m: Match; ri: number; mi: 
           <PlayerRow
             key={pi}
             player={p}
+            nameOf={nameOf}
             seed={mi * 2 + pi + 1}
             state={!p || !m.winner ? 'idle' : m.winner === p ? 'win' : 'lose'}
             placeholder={ri === 0 ? 'Bay (otomatik tur atlar)' : 'Bekleniyor'}
@@ -107,7 +111,7 @@ function ChampionCard({ champion, compact }: { champion: string | null; compact?
   )
 }
 
-function MobileBracket({ bracket, champion, renderPick }: { bracket: Bracket; champion: string | null; renderPick?: RenderPick }) {
+function MobileBracket({ bracket, champion, ...shared }: { bracket: Bracket; champion: string | null } & Shared) {
   const total = bracket.rounds.length
   const firstOpen = bracket.rounds.findIndex((r) => r.some((m) => !m.winner))
   const [active, setActive] = useState(firstOpen === -1 ? total - 1 : firstOpen)
@@ -150,7 +154,7 @@ function MobileBracket({ bracket, champion, renderPick }: { bracket: Bracket; ch
       <ol role="tabpanel" aria-label={roundLabel(active, total)} className="grid grid-cols-1 gap-2.5 min-[480px]:grid-cols-2">
         {round.map((m, mi) => (
           <li key={`${active}-${mi}`} className="animate-in fade-in slide-in-from-bottom-1 duration-300">
-            <MatchCard m={m} ri={active} mi={mi} last={active === total - 1} renderPick={renderPick} />
+            <MatchCard m={m} ri={active} mi={mi} last={active === total - 1} {...shared} />
           </li>
         ))}
       </ol>
@@ -160,7 +164,7 @@ function MobileBracket({ bracket, champion, renderPick }: { bracket: Bracket; ch
   )
 }
 
-function DesktopBracket({ bracket, champion, renderPick }: { bracket: Bracket; champion: string | null; renderPick?: RenderPick }) {
+function DesktopBracket({ bracket, champion, ...shared }: { bracket: Bracket; champion: string | null } & Shared) {
   const total = bracket.rounds.length
   return (
     <div className="-mx-1 hidden overflow-x-auto px-1 pb-3 md:block">
@@ -181,7 +185,7 @@ function DesktopBracket({ bracket, champion, renderPick }: { bracket: Bracket; c
                   <li key={mi} className="relative">
                     {!last && <span className="absolute -right-8 top-1/2 h-px w-8 bg-border" aria-hidden="true" />}
                     {ri > 0 && <span className="absolute -left-8 top-1/2 h-px w-8 bg-border" aria-hidden="true" />}
-                    <MatchCard m={m} ri={ri} mi={mi} last={last} renderPick={renderPick} />
+                    <MatchCard m={m} ri={ri} mi={mi} last={last} {...shared} />
                   </li>
                 ))}
               </ol>
@@ -200,15 +204,27 @@ function DesktopBracket({ bracket, champion, renderPick }: { bracket: Bracket; c
   )
 }
 
-export function BracketView({ bracket, renderPick }: { bracket: Bracket; renderPick?: RenderPick }) {
+export function BracketView({
+  bracket,
+  names = {},
+  closed = false,
+  renderPick,
+}: {
+  bracket: Bracket
+  names?: Record<string, string>
+  closed?: boolean
+  renderPick?: RenderPick
+}) {
   const total = bracket.rounds.length
   const final = bracket.rounds[total - 1]?.[0]
-  const champion = final?.winner ? splitName(final.winner).name : null
+  const nameOf: NameOf = (key) => splitName(names[key] ?? key).name
+  const champion = final?.winner ? nameOf(final.winner) : null
+  const shared: Shared = { nameOf, closed, renderPick }
 
   return (
     <>
-      <MobileBracket bracket={bracket} champion={champion} renderPick={renderPick} />
-      <DesktopBracket bracket={bracket} champion={champion} renderPick={renderPick} />
+      <MobileBracket bracket={bracket} champion={champion} {...shared} />
+      <DesktopBracket bracket={bracket} champion={champion} {...shared} />
     </>
   )
 }

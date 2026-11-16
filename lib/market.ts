@@ -276,6 +276,7 @@ export async function pendingCount(): Promise<number> {
 }
 
 export async function resolveRequest(id: number, approve: boolean, note: string) {
+  if (note.trim().length > 300) throw new Error(`Not en fazla 300 karakter olabilir (şu an ${note.trim().length}). Üyeye yarım not gitmesin diye kaydedilmedi.`)
   await ensure()
   if (approve) {
     const r = await rows<ReqRow>(sql`UPDATE market_requests SET status = 'onaylandi',

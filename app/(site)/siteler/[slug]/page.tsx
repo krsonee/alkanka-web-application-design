@@ -5,7 +5,7 @@ import { ArrowRight, ArrowUpRight, BadgeCheck, Check, ChevronRight, Crown, Messa
 import { FollowButton } from '@/components/alkanka/growth-widgets'
 import { getMember } from '@/lib/member'
 import { myFollows } from '@/lib/growth'
-import { SITE_URL } from '@/lib/seo'
+import { OG_BASE, SITE_URL } from '@/lib/seo'
 import { listPublicSponsors, resolvePublicSite } from '@/lib/sites'
 import { DEAL_FRESH_DAYS, listDealsByBrand } from '@/lib/deals'
 import { SponsorDeals } from '@/components/alkanka/sponsor-deals'
@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (state !== 'open') return { title: 'Üyelere özel', robots: MEMBERS_ONLY_ROBOTS }
   const title = `${s.name} güncel giriş, bonuslar ve inceleme ${new Date().getFullYear()}`
   const description = `${s.name}: ${s.welcome}. Çekim süresi ${s.payout}, puan ${s.rating.toFixed(1)}. Adres değişince haber almak için takip et.`
-  return { title, description, robots: MEMBERS_ONLY_ROBOTS, alternates: { canonical: `${SITE_URL}/siteler/${s.id}` }, openGraph: { title, description } }
+  return { title, description, robots: MEMBERS_ONLY_ROBOTS, alternates: { canonical: `${SITE_URL}/siteler/${s.id}` }, openGraph: { ...OG_BASE, title, description } }
 }
 
 function RatingStars({ value }: { value: number }) {

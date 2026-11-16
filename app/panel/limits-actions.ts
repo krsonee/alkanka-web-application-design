@@ -17,10 +17,11 @@ export async function saveMemberLimit(userId: string, input: LimitInput): Promis
   if (!(await canPanel('limits'))) return DENIED
   const session = await getPanelSession()
   try {
-    await saveLimit(String(userId), input, session?.username ?? '')
+    const result = await saveLimit(String(userId), input, session?.username ?? '')
     revalidatePath('/panel')
-    await logPanel('limits', 'Gizli kısıtlama kaydedildi', await memberTag(userId))
-    return { ok: true, message: 'Kısıtlama kaydedildi.' }
+    const cleared = result === 'cleared'
+    await logPanel('limits', cleared ? 'Gizli kısıtlama kaldırıldı' : 'Gizli kısıtlama kaydedildi', await memberTag(userId))
+    return { ok: true, message: cleared ? 'Tüm alanlar boş olduğu için bu üyenin kısıtlaması kaldırıldı.' : 'Kısıtlama kaydedildi.' }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Kaydedilemedi.' }
   }

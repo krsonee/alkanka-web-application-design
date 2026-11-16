@@ -245,7 +245,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
       {t.bracket && t.format === 'eleme' && (
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-bold text-foreground">Eşleşmeler (kazananı seçince otomatik bir üst tura geçer)</h4>
-          <BracketView bracket={t.bracket} renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />} />
+          <BracketView bracket={t.bracket} names={t.names} closed={t.status !== 'basladi'} renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />} />
         </div>
       )}
 

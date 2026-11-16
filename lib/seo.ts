@@ -150,10 +150,13 @@ export function pageMeta(key: PageKey): Metadata {
     description: page.description,
     keywords: page.keywords,
     alternates: { canonical: page.path },
-    openGraph: { title: page.title, description: page.description, url: page.path, images: [image] },
+    openGraph: { ...OG_BASE, title: page.title, description: page.description, url: page.path, images: [image] },
     twitter: { card: 'summary_large_image', title: page.title, description: page.description, images: [image.url] },
   }
 }
+
+/** A page that sets its own openGraph replaces the layout's whole block, so these have to be repeated on every page. */
+export const OG_BASE = { type: 'website', locale: 'tr_TR', siteName: SITE_NAME } as const
 
 export function slugify(input: string) {
   const map: Record<string, string> = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', İ: 'i' }

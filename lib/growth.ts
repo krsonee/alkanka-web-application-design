@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { parseAmount } from '@/lib/amount'
-import { rows, sql } from '@/lib/db'
+import { pool, rows, sql } from '@/lib/db'
 import { sponsorExists } from '@/lib/sites'
 
 /** A 3rd account from the same network within this window gets flagged. */
@@ -319,9 +319,22 @@ export async function importWagers(siteId: string, period: string, text: string)
   }
   if (!entries.size) throw new Error('Geçerli satır bulunamadı. Her satır: kullaniciadi,tutar')
   await ensureGrowth()
-  await rows(sql`DELETE FROM wager_entries WHERE site_id = ${siteId} AND period = ${period}`)
-  for (const [key, amount] of entries) {
-    await rows(sql`INSERT INTO wager_entries (site_id, username_key, period, amount) VALUES (${siteId}, ${key}, ${period}, ${amount})`)
+  // Replace the month in one transaction: a failure half way must not leave the month empty.
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('DELETE FROM wager_entries WHERE site_id = $1 AND period = $2', [siteId, period])
+    await client.query(
+      `INSERT INTO wager_entries (site_id, username_key, period, amount)
+       SELECT $1, k, $2, a FROM unnest($3::text[], $4::numeric[]) AS t(k, a)`,
+      [siteId, period, [...entries.keys()], [...entries.values()]],
+    )
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
   }
   const matched = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM wager_entries w JOIN sponsor_accounts a
     ON a.site_id = w.site_id AND lower(a.username) = w.username_key AND a.status = 'approved'

@@ -590,15 +590,18 @@ export async function listRoles(): Promise<RoleDef[]> {
 
 export async function saveRole(input: RoleInput) {
   await ensureKp()
-  const name = String(input.name).trim().slice(0, 24)
+  const name = String(input.name).trim().replace(/\s+/g, ' ')
   if (name.length < 2) throw new Error('Rol adı en az 2 karakter olmalı.')
+  if (name.length > 24) throw new Error(`Rol adı en fazla 24 karakter olabilir (şu an ${name.length}).`)
+  const twin = await rows(sql`SELECT 1 FROM kp_badges WHERE role_style IS NOT NULL AND lower(name) = lower(${name}) AND id <> ${input.id ?? ''} LIMIT 1`)
+  if (twin.length) throw new Error(`"${name}" adında bir rol zaten var. Başka bir ad seç.`)
   if (!BADGE_ICONS.includes(input.icon)) throw new Error('Geçersiz simge.')
   if (!ROLE_STYLES.some((s) => s.id === input.style)) throw new Error('Geçersiz renk.')
   const staff = Boolean(input.staff)
   if (input.id) {
     const r = await rows(sql`UPDATE kp_badges SET name = ${name}, icon = ${input.icon}, role_style = ${input.style}, role_staff = ${staff}
       WHERE id = ${input.id} AND role_style IS NOT NULL RETURNING id`)
-    if (!r.length) throw new Error('Rol bulunamadı.')
+    if (!r.length) throw new Error('Rol bulunamad��.')
   } else {
     const id = `rol-${slug(name) || Date.now()}`
     const r = await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, active, perk_pct, sort, role_style, role_staff)
