@@ -1,7 +1,6 @@
 import { FeatureGuide, guideCode as code, type GuideStep } from '@/components/panel/feature-guide'
 import type { TelegramAccess } from '@/lib/panel-modules'
-
-const GUIDE_URL = '/downloads/alkanka-telegram-kilavuz.html'
+import { TG_GUIDE_URL as GUIDE_URL } from '@/lib/tg-hub-shared'
 
 const ol = 'flex list-decimal flex-col gap-1.5 pl-5'
 const ul = 'flex list-disc flex-col gap-1.5 pl-5'
@@ -356,15 +355,15 @@ const FULL_GUIDE: GuideStep = {
   body: (
     <div className="flex flex-col gap-2">
       <p>
-        Buradaki başlıklar özet. BotFather adımları, yetki tablosu, bütün grup komutları, acil durum planı ve sorun giderme tablosu tam kılavuzda. Yazdırılabilir, ekip arkadaşına
-        gönderilebilir.
+        Buradaki başlıklar özet. BotFather adımları, yetki tablosu, bütün grup komutları, acil durum planı ve sorun giderme tablosu tam kılavuzda. Sadece panele giriş yapmış
+        hesaplara açılır; sitede yayınlanmaz.
       </p>
       <p className="flex flex-wrap gap-x-4 gap-y-1">
         <a className={link} href={GUIDE_URL} target="_blank" rel="noreferrer">
           Tam kılavuzu aç
           <span className="sr-only"> (yeni sekmede açılır)</span>
         </a>
-        <a className={link} href={GUIDE_URL} download="alkanka-telegram-kilavuz.html">
+        <a className={link} href={`${GUIDE_URL}?indir=1`} download="alkanka-telegram-kilavuz.html">
           Kılavuzu indir
         </a>
       </p>

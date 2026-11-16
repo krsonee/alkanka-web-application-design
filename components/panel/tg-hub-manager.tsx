@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { Plus, Trash2 } from 'lucide-react'
 import type { MirrorBot } from '@/lib/telegram-mirror'
-import { CANNED_MAX, CAPTCHA_MINUTES, CAPTCHA_MODES, RAID_BAN_MINUTES, REPLY_BUTTON_MAX, REPLY_RULE_MAX, REPLY_WORD_MAX } from '@/lib/tg-hub-shared'
+import { CANNED_MAX, CAPTCHA_MINUTES, CAPTCHA_MODES, RAID_BAN_MINUTES, REPLY_BUTTON_MAX, REPLY_RULE_MAX, REPLY_WORD_MAX, TG_GUIDE_URL } from '@/lib/tg-hub-shared'
 import type { HubConfig, HubGroup, HubStats, KnownChat, LeaderRow, LockRow, LogPage, QuietRow, ReplyRule, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { ChatField } from '@/components/panel/tg-chat-field'
@@ -166,10 +166,10 @@ function RepairCard() {
         <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => repairTelegramAction())}>
           {a.pending ? 'Kontrol ediliyor…' : 'Kontrol et ve onar'}
         </button>
-        <a className={btnGhost} href="/downloads/alkanka-telegram-kilavuz.html" target="_blank" rel="noreferrer">
+        <a className={btnGhost} href={TG_GUIDE_URL} target="_blank" rel="noreferrer">
           Kullanım kılavuzunu aç
         </a>
-        <a className={btnGhost} href="/downloads/alkanka-telegram-kilavuz.html" download="alkanka-telegram-kilavuz.html">
+        <a className={btnGhost} href={`${TG_GUIDE_URL}?indir=1`} download="alkanka-telegram-kilavuz.html">
           Kılavuzu indir
         </a>
       </div>
