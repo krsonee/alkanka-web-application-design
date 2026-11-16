@@ -308,7 +308,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
           ) : (
             <ul className="flex flex-col gap-2">
               {posts.map((p) => (
-                <li key={p.id} className={`flex items-center gap-2 rounded-xl border p-2 ${editing?.id === p.id ? 'border-primary' : 'border-border'}`}>
+                <li key={p.id} data-find={`post-${p.id}`} className={`flex items-center gap-2 rounded-xl border p-2 ${editing?.id === p.id ? 'border-primary' : 'border-border'}`}>
                   <button type="button" onClick={() => open(p)} className="flex min-w-0 flex-1 flex-col text-left">
                     <span className="truncate text-sm font-semibold text-foreground">{p.title}</span>
                     <span className="text-xs text-muted-foreground">

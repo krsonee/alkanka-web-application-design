@@ -37,7 +37,7 @@ const KIND_LINK: Record<ModerationKind, string> = {
   proof: '/panel?b=community&s=kanit',
   review: '/panel?b=community&s=reviews',
   complaint: '/panel?b=community&s=complaints',
-  withdraw: '/panel?b=community&s=cekim',
+  withdraw: '/panel?b=withdrawals',
   claim: '/panel?b=tasks',
   market: '/panel?b=market',
 }
@@ -62,7 +62,7 @@ function decide(item: ModerationItem, approve: boolean, note: string): Promise<R
     case 'withdraw':
       return approve ? Promise.resolve({ ok: false, error: 'Çekim paylaşımı ödül seçilerek onaylanır, "İncele" ile aç.' }) : (rejectShare(item.id, note) as Promise<Result>)
     default:
-      return Promise.resolve({ ok: false, error: 'Şikayetler yanıt gerektirir, Topluluk bölümünden işle.' })
+      return Promise.resolve({ ok: false, error: 'Şikayetler yanıt gerektirir, "İncele" ile aç.' })
   }
 }
 

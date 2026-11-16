@@ -78,6 +78,7 @@ const TRACKED: Array<[key: string, label: string, area: string]> = [
   ['boosts:config', 'Kampanyalar ve çarpanlar', 'badges'],
   ['social:links', 'Sosyal medya hesapları', 'social'],
   ['auth:signup', 'Yeni üyelik kapısı', 'users'],
+  ['studio:budget', 'Stüdyo aylık tavanı', 'studio'],
 ]
 
 export function trackedSetting(key: string): { label: string; area: string } | null {

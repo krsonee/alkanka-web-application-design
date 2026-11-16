@@ -69,6 +69,7 @@ import { CommunityManager } from '@/components/panel/community'
 import { adminComplaints, listLeagueMatches, pendingReviews, publishedReviews } from '@/lib/community'
 import { siteOptions } from '@/lib/sites'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
+import { getStudioCap } from '@/lib/studio-budget'
 import { KpManager } from '@/components/panel/kp-manager'
 import { BoostManager } from '@/components/panel/boost-manager'
 import { getBoostConfig } from '@/lib/boosts'
@@ -179,7 +180,9 @@ import { LimitsManager } from '@/components/panel/limits-manager'
 import { listLimits } from '@/lib/member-limits'
 import { StaffManager, type StaffRow } from '@/components/panel/staff-manager'
 import { AccountSettings } from '@/components/panel/account-settings'
-import { cleanPermissions, telegramAccess, type TelegramAccess } from '@/lib/panel-modules'
+import { cleanPermissions, movedAddress, rowPermission, tabHome, telegramAccess, type PanelView, type TelegramAccess } from '@/lib/panel-modules'
+import { redirect } from 'next/navigation'
+import { WithdrawManager } from '@/components/panel/withdraw-manager'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
@@ -218,21 +221,22 @@ import { getTelegramPromo } from '@/lib/telegram-promo'
 import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 
 async function usersPanel() {
-  const [{ members, counts }, levels, cfg, roles, held, gate, canRoles] = await Promise.all([
+  const [{ members, counts }, levels, cfg, roles, held, gate, canRoles, canMessage] = await Promise.all([
     listMembers(),
-    levelMap().catch(() => ({}) as Record<string, number>),
+    levelMap().catch(miss(({}) as Record<string, number>)),
     getKpConfig(),
     listRoles(),
-    roleMap().catch(() => ({}) as Awaited<ReturnType<typeof roleMap>>),
+    roleMap().catch(miss(({}) as Awaited<ReturnType<typeof roleMap>>)),
     getSignupGate(),
     canPanel('roles'),
+    canPanel('messages'),
   ])
   const names = Object.fromEntries(Object.entries(levels).map(([id, n]) => [id, cfg.levels[n - 1]?.name ?? 'Çaylak']))
   for (const [id, role] of Object.entries(held)) names[id] = role.name
   return (
     <div className="flex flex-col gap-6">
       <AccessManager gate={gate} roles={roles} canRoles={canRoles} />
-      <MembersManager initial={members} counts={counts} levels={names} />
+      <MembersManager initial={members} counts={counts} levels={names} canMessage={canMessage} />
     </div>
   )
 }
@@ -244,13 +248,13 @@ function failed(label: string) {
 type SectionCtx = { session: PanelSession; active: string }
 
 /** Loads a panel section only when it is the open one and the account may see it, so other sections never query their data. */
-async function section({ session, active }: SectionCtx, module: PanelModule, label: string, load: () => Promise<ReactNode> | ReactNode): Promise<ReactNode> {
-  if (active !== module) return null
-  if (!session.isOwner && !session.permissions.includes(module)) return null
+async function section({ session, active }: SectionCtx, id: PanelModule | PanelView, label: string, load: () => Promise<ReactNode> | ReactNode): Promise<ReactNode> {
+  if (active !== id) return null
+  if (!session.isOwner && !session.permissions.includes(rowPermission(id))) return null
   try {
     return await load()
   } catch (error) {
-    console.error(`[panel:${module}]`, error)
+    console.error(`[panel:${id}]`, error)
     return failed(label)
   }
 }
@@ -275,32 +279,32 @@ type TgShared = {
 /** Bots, automations and channel settings: the tabs that need the setup permission, and the data only they use. */
 async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Promise<{ tabs: TgTab[]; chats: Array<{ chatId?: string | null; title?: string | null }> }> {
   const [oddsConfig, oddsStatus, oddsSources, oddsPage] = await Promise.all([
-    getOddsBotConfig().catch(() => DEFAULT_ODDS_BOT),
-    oddsBotStatus().catch(() => EMPTY_ODDS_STATUS),
-    listOddsSources().catch(() => []),
-    searchAdminOdds({}).catch(() => ({ rows: [], hasMore: false })),
+    getOddsBotConfig().catch(miss(DEFAULT_ODDS_BOT)),
+    oddsBotStatus().catch(miss(EMPTY_ODDS_STATUS)),
+    listOddsSources().catch(miss([])),
+    searchAdminOdds({}).catch(miss({ rows: [], hasMore: false })),
   ])
   const [sources, log, cronKey, invite, addresses, shareInfo] = await Promise.all([
-    listSources().catch(() => []),
-    listLog().catch(() => []),
-    getCronKey().catch(() => 'ANAHTAR'),
-    getInviteConfig().catch(() => null),
-    getTelegramAddresses(TELEGRAM_URL).catch(() => null),
-    shareStatus().catch(() => ({ lastError: null, lastRunAt: null, shared: 0 })),
+    listSources().catch(miss([])),
+    listLog().catch(miss([])),
+    getCronKey().catch(miss('ANAHTAR')),
+    getInviteConfig().catch(miss(null)),
+    getTelegramAddresses(TELEGRAM_URL).catch(miss(null)),
+    shareStatus().catch(miss({ lastError: null, lastRunAt: null, shared: 0 })),
   ])
   const [tvConfig, tvStatus, tvToday] = await Promise.all([
-    getTvConfig().catch(() => DEFAULT_TV),
-    tvBotStatus().catch(() => ({ lastRunAt: null, lastError: null, sent: 0, tracked: 0 })),
-    tvStats().catch(() => ({ watchersToday: 0, minutesToday: 0, coinsToday: 0, predictionsToday: 0, openPredictions: 0, follows: 0 })),
+    getTvConfig().catch(miss(DEFAULT_TV)),
+    tvBotStatus().catch(miss({ lastRunAt: null, lastError: null, sent: 0, tracked: 0 })),
+    tvStats().catch(miss({ watchersToday: 0, minutesToday: 0, coinsToday: 0, predictionsToday: 0, openPredictions: 0, follows: 0 })),
   ])
   const [betsConfig, betsStatus, betsToday, betsMarkets, betsHistory] = await Promise.all([
-    getBetsConfig().catch(() => DEFAULT_BETS),
-    betsBotStatus().catch(() => ({ lastRunAt: null, lastError: null, sent: 0, opened: 0, settled: 0, voided: 0 })),
-    betsStats().catch(() => ({ betsToday: 0, stakedToday: 0, paidToday: 0, burnedToday: 0, openMarkets: 0, openStake: 0, players: 0 })),
-    adminMarkets().catch(() => []),
-    betsLog().catch(() => []),
+    getBetsConfig().catch(miss(DEFAULT_BETS)),
+    betsBotStatus().catch(miss({ lastRunAt: null, lastError: null, sent: 0, opened: 0, settled: 0, voided: 0 })),
+    betsStats().catch(miss({ betsToday: 0, stakedToday: 0, paidToday: 0, burnedToday: 0, openMarkets: 0, openStake: 0, players: 0 })),
+    adminMarkets().catch(miss([])),
+    betsLog().catch(miss([])),
   ])
-  const tgPromo = await getTelegramPromo().catch(() => TELEGRAM_PROMO_DEFAULTS)
+  const tgPromo = await getTelegramPromo().catch(miss(TELEGRAM_PROMO_DEFAULTS))
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
   const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
@@ -366,11 +370,11 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
 /** One section for all three Telegram permissions; each tab is built only for an account that may use it. */
 async function telegramPanel(access: TelegramAccess) {
   const [bots, targets, suite, chat, savedHub] = await Promise.all([
-    listBots().catch(() => []),
-    listTargets().catch(() => []),
-    getBotSuite().catch(() => DEFAULT_SUITE),
-    chatStatus().catch(() => null),
-    getHub().catch(() => null),
+    listBots().catch(miss([])),
+    listTargets().catch(miss([])),
+    getBotSuite().catch(miss(DEFAULT_SUITE)),
+    chatStatus().catch(miss(null)),
+    getHub().catch(miss(null)),
   ])
   const linkedMembers = chat?.linkedMembers ?? 0
   const hubData = access.mod ? await loadTgHub(bots, suite.share.botId ?? null, linkedMembers) : null
@@ -469,10 +473,10 @@ async function telegramSection({ session, active }: SectionCtx): Promise<ReactNo
   }
 }
 
-async function marketPanel() {
+async function marketPanel(themesHere: boolean) {
   const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
-  const themeCatalog = await getThemeCatalog().catch(miss(DEFAULT_OFFERS))
+  const themeCatalog = themesHere ? await getThemeCatalog().catch(miss(DEFAULT_OFFERS)) : null
   const [avatars, stats, coverRows] = await Promise.all([
     listCatalog({ includeInactive: true }),
     avatarStats(),
@@ -485,7 +489,7 @@ async function marketPanel() {
       tabs={[
         { id: 'products', label: `Ürünler & talepler${requests.length ? ` (${requests.length})` : ''}`, content: <MarketManager products={products} requests={requests} sponsors={sponsors} /> },
         { id: 'avatars', label: 'Avatarlar & kapaklar', content: <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} /> },
-{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> },
+        ...(themeCatalog ? [{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> }] : []),
       ]}
     />
   )
@@ -514,7 +518,7 @@ async function staffPanel() {
     active: boolean
     last_login_at: string | null
   }>(sql`SELECT id, username, display_name, is_owner, permissions, totp_enabled, totp_required, active, last_login_at FROM panel_accounts ORDER BY is_owner DESC, username`)
-  const addresses = await lastLoginAddresses().catch((): Record<string, string> => ({}))
+  const addresses = await lastLoginAddresses().catch(miss<Record<string, string>>({}))
   const accounts: StaffRow[] = list.map((a) => ({
     id: Number(a.id),
     username: a.username,
@@ -532,7 +536,7 @@ async function staffPanel() {
 
 export const metadata: Metadata = { title: { absolute: 'Yönetim paneli | AL KANKA' }, robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
-export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; r?: string; from?: string; to?: string }> }) {
+export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; s?: string; r?: string; from?: string; to?: string }> }) {
   const [session, params] = await Promise.all([getPanelSession(), searchParams])
   if (!session) {
     return (
@@ -542,9 +546,23 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )
   }
 
-  const content = await getAllContent()
   const can = (m: PanelModule) => session.isOwner || session.permissions.includes(m)
+  const moved = movedAddress(params.b, params.s, can)
+  if (moved) {
+    const next = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+    next.set('b', moved.b)
+    if (moved.s) next.set('s', moved.s)
+    else next.delete('s')
+    redirect(`/panel?${next}`)
+  }
+
+  const content = await getAllContent()
   const allowed = session.isOwner ? null : session.permissions
+  const adsTab = (stats: Awaited<ReturnType<typeof readPromoTotals>>) => ({
+    id: 'ads',
+    label: 'Reklam alanları',
+    content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} stats={stats} />,
+  })
   const active = params.b || 'dashboard'
   const ctx: SectionCtx = { session, active }
 
@@ -607,6 +625,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     rewards,
     catalog,
     users,
+    home,
+    withdrawals,
   ] = await Promise.all([
     section(ctx, 'texts', 'Site yazıları', () => (
       <TelegramTabs
@@ -622,14 +642,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
     }),
     section(ctx, 'logo', 'Logolar', async () => {
-      const [logoSponsors, adStats] = await Promise.all([listLogoSponsors(), readPromoTotals('ad')])
+      const [logoSponsors, adStats] = await Promise.all([listLogoSponsors(), tabHome('ads', can) === 'logo' ? readPromoTotals('ad') : null])
       return (
         <TelegramTabs
-          label="Paylaşım, reklam ve logolar"
+          label="Paylaşım ve logolar"
           tabs={[
-            { id: 'home-v2', label: 'Ana sayfa & Masa aç', content: <HomeV2Editor initial={mergeHomeV2(content[HOME_V2_KEY])} /> },
             { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
-            { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} stats={adStats} /> },
+            ...(adStats ? [adsTab(adStats)] : []),
             {
               id: 'sponsor-logos',
               label: `Sponsor logoları (${logoSponsors.length})`,
@@ -692,7 +711,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'growth', 'Büyüme', async () => {
       const [referral, ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
         getReferralSettings(),
-        getAmbientSettings(),
+        tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
         siteOptions(),
         listSites().catch(miss([])),
         getSiteLinks().catch(miss({})),
@@ -726,17 +745,18 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
               ),
             },
             { id: 'referral', label: 'Davet sistemi', content: <ReferralEditor settings={referral} /> },
-            { id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> },
+            ...(ambient ? [{ id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> }] : []),
           ]}
         />
       )
     }),
     section(ctx, 'marketing', 'Pazarlama', async () => {
-      const [tracking, campaigns, earnings, mSites] = await Promise.all([
+      const [tracking, campaigns, earnings, mSites, adStats] = await Promise.all([
         getTracking(),
         listCampaigns().catch(miss([])),
         listEarnings().catch(miss([])),
         listSites().catch(miss([])),
+        tabHome('ads', can) === 'marketing' ? readPromoTotals('ad').catch(miss<Awaited<ReturnType<typeof readPromoTotals>>>({})) : null,
       ])
       const opts = mSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))
       return (
@@ -746,6 +766,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
             label="Pazarlama bölümleri"
             tabs={[
               { id: 'campaigns', label: 'Kampanya linkleri', content: <CampaignsManager campaigns={campaigns} sites={opts} siteUrl={SITE_URL} /> },
+              ...(adStats ? [adsTab(adStats)] : []),
               { id: 'earnings', label: 'Affiliate hakediş', content: <EarningsManager earnings={earnings} sites={opts} /> },
               { id: 'tracking', label: 'Ölçüm etiketleri', content: <TrackingEditor settings={tracking} /> },
             ]}
@@ -761,17 +782,6 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         complaints={await adminComplaints().catch(miss([]))}
         matches={await listLeagueMatches(null, { admin: true }).catch(miss([]))}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
-        withdraw={await (async () => {
-          const w = await import('@/lib/withdrawals')
-          const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
-            w.adminWithdrawals().catch(miss([])),
-            w.getWithdrawSettings().catch(miss(w.WITHDRAW_DEFAULTS)),
-            w.listSiteRewards().catch(miss([])),
-            siteOptions().catch(miss([])),
-            w.listWithdrawBlocks().catch(miss([])),
-          ])
-          return { shares, settings, siteRewards, sites: sites.map((s) => ({ id: s.id, name: s.name })), blocks }
-        })()}
       />
     )),
     section(ctx, 'badges', 'Rozet sistemi', kpPanel),
@@ -779,7 +789,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       const [list, claims, sites] = await Promise.all([listTasks(), listPendingClaims(), siteOptions().catch(miss([]))])
       return <TasksManager tasks={list} claims={claims} sites={sites.map((x) => ({ id: x.id, name: x.name }))} />
     }),
-    section(ctx, 'market', 'Market', marketPanel),
+    section(ctx, 'market', 'Market', () => marketPanel(tabHome('themes', can) === 'market')),
     section(ctx, 'social', 'Sosyal medya', async () => (
       <SocialManager
         links={await getSocialLinks().catch(miss(({}) as SocialLinks))}
@@ -792,35 +802,50 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           .catch(miss(undefined))}
       />
     )),
-    section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch((e) => { console.error('[panel-limits]', e); return [] })} />),
-    section(ctx, 'games', 'Oyun ayarları', async () => (
-      <div className="flex flex-col gap-6">
-        <GameStats />
-        <TableMetrics />
-        <OpenTables
-          now={Date.now()}
-          tables={await import('@/lib/pvp/tables')
-            .then((m) => m.listOpenTables())
-            .then((list) =>
-              list.map((t) => ({
-                id: t.id,
-                game: t.game,
-                status: t.status as 'bekliyor' | 'oynaniyor',
-                stake: t.stake,
-                seats: t.seats,
-                players: t.players.map((pl) => ({ name: pl.name, bot: Boolean(pl.bot) })),
-                updatedAt: t.updatedAt,
-                createdAt: t.createdAt,
-              })),
-            )
-            .catch(miss([]))}
+    section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch(miss([]))} />),
+    section(ctx, 'games', 'Oyun ayarları', async () => {
+      const [openTables, ambient, themeCatalog] = await Promise.all([
+        import('@/lib/pvp/tables')
+          .then((m) => m.listOpenTables())
+          .then((list) =>
+            list.map((t) => ({
+              id: t.id,
+              game: t.game,
+              status: t.status as 'bekliyor' | 'oynaniyor',
+              stake: t.stake,
+              seats: t.seats,
+              players: t.players.map((pl) => ({ name: pl.name, bot: Boolean(pl.bot) })),
+              updatedAt: t.updatedAt,
+              createdAt: t.createdAt,
+            })),
+          )
+          .catch(miss([])),
+        tabHome('ambient', can) === 'games' ? getAmbientSettings().catch(miss(null)) : null,
+        tabHome('themes', can) === 'games' ? getThemeCatalog().catch(miss(DEFAULT_OFFERS)) : null,
+      ])
+      const tables = (
+        <div className="flex flex-col gap-6">
+          <GameStats />
+          <TableMetrics />
+          <OpenTables now={Date.now()} tables={openTables} />
+          <ArenaSettingsEditor
+            settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
+            winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
+          />
+        </div>
+      )
+      if (!ambient && !themeCatalog) return tables
+      return (
+        <TelegramTabs
+          label="Oyun bölümleri"
+          tabs={[
+            { id: 'tables', label: 'Ayarlar & masalar', content: tables },
+            ...(ambient ? [{ id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> }] : []),
+            ...(themeCatalog ? [{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> }] : []),
+          ]}
         />
-        <ArenaSettingsEditor
-          settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
-          winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
-        />
-      </div>
-    )),
+      )
+    }),
     section(ctx, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     telegramSection(ctx),
@@ -848,6 +873,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         assets={await listAssets().catch(miss([]))}
         jobs={await listJobs().catch(miss([]))}
         spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
+        budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
       />
     )),
     section(ctx, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
@@ -860,6 +886,18 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <CatalogEditor catalog={catalog} sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))} library={IMAGE_LIBRARY} hidden={hidden} />
     }),
     section(ctx, 'users', 'Tüm üyeler', usersPanel),
+    section(ctx, 'home', 'Ana sayfa ayarları', () => <HomeV2Editor initial={mergeHomeV2(content[HOME_V2_KEY])} />),
+    section(ctx, 'withdrawals', 'Çekim paylaşımları', async () => {
+      const w = await import('@/lib/withdrawals')
+      const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
+        w.adminWithdrawals().catch(miss([])),
+        w.getWithdrawSettings().catch(miss(w.WITHDRAW_DEFAULTS)),
+        w.listSiteRewards().catch(miss([])),
+        siteOptions().catch(miss([])),
+        w.listWithdrawBlocks().catch(miss([])),
+      ])
+      return <WithdrawManager shares={shares} settings={settings} siteRewards={siteRewards} sites={sites.map((s) => ({ id: s.id, name: s.name }))} blocks={blocks} />
+    }),
   ])
   const audit =
     session.isOwner && active === 'audit'
@@ -879,14 +917,15 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
 
   const onDash = active === 'dashboard'
   const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
-    pendingDetail(can).catch((): PendingDetail => EMPTY_PENDING),
+    pendingDetail(can).catch(miss<PendingDetail>(EMPTY_PENDING)),
     onDash && can('users') ? memberCounts().catch(miss(null)) : null,
     onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
-    onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
-    onDash && session.isOwner ? loadSystemStatus({ totpEnabled: session.totpEnabled }).catch((error) => (console.error('[panel:system-status]', error), null)) : null,
+    onDash && session.isOwner ? dashStats(parseQuery(params)).catch(miss(null)) : null,
+    onDash && session.isOwner ? loadSystemStatus({ totpEnabled: session.totpEnabled }).catch(miss(null)) : null,
   ])
   const pending: Record<string, number> = {
-    community: detail.reviews + detail.complaints + detail.withdrawals + (detail.proofs ?? 0),
+    community: detail.reviews + detail.complaints + (detail.proofs ?? 0),
+    withdrawals: detail.withdrawals,
     tasks: detail.claims,
     market: detail.market,
     growth: detail.sponsorAccounts ?? 0,
@@ -937,6 +976,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           growth={growth}
           marketing={marketing}
           community={community}
+          home={home}
+          withdrawals={withdrawals}
           badges={badges}
           tasks={tasks}
           market={market}

@@ -199,7 +199,7 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
 
 function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
   return (
-    <article className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5">
+    <article data-find={`tournament-${t.id}`} className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">

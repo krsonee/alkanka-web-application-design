@@ -38,8 +38,14 @@ import {
   MEMBER_SORTS,
   type MemberStatus,
 } from '@/lib/members-admin'
+import { bulkMembers } from '@/lib/members-bulk'
+import { addMemberNote, deleteMemberNote, listMemberNotes } from '@/lib/member-notes'
+import type { BulkInput, BulkSkipped, MemberNote } from '@/lib/members-bulk-shared'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
+
+export type MemberDetailFull = MemberDetail & { staffNotes: MemberNote[] }
+export type BulkOutcome = { ok: true; message: string; done: number; skipped: BulkSkipped[] } | { ok: false; error: string }
 
 async function guard(fn: () => Promise<string>): Promise<Result> {
   if (!(await canPanel('users'))) return { ok: false, error: 'Bu işlem için yetkin yok ya da oturum süren doldu.' }
@@ -88,9 +94,52 @@ export async function exportMembersAction(
   return { ok: true, ...r }
 }
 
-export async function memberDetailAction(userId: string): Promise<MemberDetail | null> {
+export async function memberDetailAction(userId: string): Promise<MemberDetailFull | null> {
   if (!(await canPanel('users'))) return null
-  return memberDetail(String(userId))
+  const [detail, staffNotes] = await Promise.all([memberDetail(String(userId)), listMemberNotes(String(userId))])
+  return detail ? { ...detail, staffNotes } : null
+}
+
+export async function addNoteAction(userId: string, body: string) {
+  return guard(async () => {
+    await addMemberNote(String(userId), String(body))
+    return 'Not eklendi. Sadece panel personeli görür.'
+  })
+}
+
+export async function deleteNoteAction(noteId: number) {
+  return guard(async () => {
+    await deleteMemberNote(Number(noteId))
+    return 'Not silindi.'
+  })
+}
+
+function cleanBulk(input: BulkInput): BulkInput | null {
+  if (input?.kind === 'message') return { kind: 'message', title: String(input.title ?? ''), body: String(input.body ?? ''), url: String(input.url ?? '') }
+  if (input?.kind === 'gift') return { kind: 'gift', amount: Number(input.amount), message: String(input.message ?? '') }
+  if (input?.kind === 'suspend') return { kind: 'suspend', duration: String(input.duration ?? ''), reason: String(input.reason ?? '') }
+  return null
+}
+
+const BULK_DONE: Record<BulkInput['kind'], string> = {
+  message: 'üyenin gelen kutusuna mesaj gönderildi',
+  gift: 'üyeye hediye gönderildi',
+  suspend: 'üye donduruldu, açık oturumları kapatıldı',
+}
+
+export async function bulkMembersAction(ids: string[], input: BulkInput): Promise<BulkOutcome> {
+  if (!(await canPanel('users'))) return { ok: false, error: 'Bu işlem için yetkin yok ya da oturum süren doldu.' }
+  const clean = cleanBulk(input)
+  if (!clean) return { ok: false, error: 'Geçersiz işlem.' }
+  if (clean.kind === 'message' && !(await canPanel('messages'))) return { ok: false, error: 'Toplu mesaj için "Site içi mesajlar" yetkin de olmalı.' }
+  try {
+    const r = await bulkMembers(Array.isArray(ids) ? ids.map(String) : [], clean)
+    revalidatePath('/panel')
+    const left = r.skipped.length ? ` ${r.skipped.length} üye atlandı.` : ''
+    return { ok: true, message: `${r.done} ${BULK_DONE[clean.kind]}.${left}`, done: r.done, skipped: r.skipped }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'İşlem yapılamadı.' }
+  }
 }
 
 export async function suspendAction(userId: string, duration: string, reason: string) {

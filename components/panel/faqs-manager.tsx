@@ -45,7 +45,7 @@ export function FaqsManager({ faqs }: { faqs: FaqRecord[] }) {
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
           {faqs.map((faq) => (
-            <li key={faq.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+            <li key={faq.id} data-find={`faq-${faq.id}`} className="flex flex-wrap items-center gap-3 p-3 text-sm">
               <span className="w-8 shrink-0 text-xs tabular-nums text-muted-foreground">{faq.sortOrder}</span>
               <span className={cn('min-w-0 flex-1 font-medium text-foreground', !faq.active && 'opacity-50')}>
                 {faq.question}

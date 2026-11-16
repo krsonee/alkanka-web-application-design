@@ -118,7 +118,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
           {tasks.map((task) => (
-            <li key={task.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+            <li key={task.id} data-find={`task-${task.id}`} className="flex flex-wrap items-center gap-3 p-3 text-sm">
               <span className="w-8 shrink-0 text-xs tabular-nums text-muted-foreground">{task.sort}</span>
               <span className={cn('min-w-0 flex-1 font-medium text-foreground', !task.active && 'opacity-50')}>
                 {task.title}

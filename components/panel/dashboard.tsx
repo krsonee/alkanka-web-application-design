@@ -792,9 +792,9 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
 
 function JobsCard({ counts, pending }: { counts: Props['counts']; pending: PendingDetail }) {
   const jobs = [
-    { label: 'Para çekme kanıtları', hint: 'Topluluk › Çekim talepleri', count: pending.withdrawals, href: '?b=community' },
-    { label: 'Onay bekleyen yorumlar', hint: 'Topluluk › Yorumlar', count: pending.reviews, href: '?b=community' },
-    { label: 'Açık şikâyetler', hint: 'Topluluk › Şikâyetler', count: pending.complaints, href: '?b=community' },
+    { label: 'Çekim paylaşımları', hint: 'Üyeler › Çekim paylaşımları', count: pending.withdrawals, href: '?b=withdrawals' },
+    { label: 'Onay bekleyen yorumlar', hint: 'Üyeler › Yorum, şikayet & kanıt', count: pending.reviews, href: '?b=community&s=reviews' },
+    { label: 'Açık şikâyetler', hint: 'Üyeler › Yorum, şikayet & kanıt', count: pending.complaints, href: '?b=community&s=complaints' },
     { label: 'Görev onayları', hint: 'Üyeler › Görevler', count: pending.claims, href: '?b=tasks' },
     { label: 'Market talepleri', hint: 'Üyeler › Market', count: pending.market, href: '?b=market' },
     { label: 'Onay bekleyen sponsor hesapları', hint: 'Sponsorlar › Sponsor performansı', count: pending.sponsorAccounts ?? 0, href: '?b=growth' },

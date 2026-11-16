@@ -3,6 +3,7 @@ import { canPanel } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
+import { budgetBlock } from '@/lib/studio-budget'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
 import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
@@ -37,6 +38,8 @@ export async function POST(request: NextRequest) {
   const retext = body.retext === true && kind === 'banner' && parent?.kind === 'banner' && Boolean(parent.cleanPathname)
 
   if (!retext && prompt.length < 5) return NextResponse.json({ error: 'Talimat en az 5 karakter olmalı.' }, { status: 400 })
+  const overCap = retext ? null : await budgetBlock(imageCost(size))
+  if (overCap) return NextResponse.json({ error: overCap }, { status: 409 })
 
   try {
     if (retext && parent) {
