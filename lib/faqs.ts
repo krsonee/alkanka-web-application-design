@@ -1,6 +1,6 @@
 import 'server-only'
 import { FAQ } from '@/components/alkanka/data'
-import { rows, sql } from '@/lib/db'
+import { pool, rows, sql } from '@/lib/db'
 
 export type FaqRecord = {
   id: number
@@ -109,6 +109,19 @@ export async function listPublicFaqs(): Promise<PublicFaqGroup[]> {
     group.items.push({ id: String(item.id), slug: item.slug, q: item.question, a: item.answer })
   }
   return groups
+}
+
+/** Writes 1, 2, 3… in the given order. Questions left out of the list keep the number they had. */
+export async function reorderFaqs(ids: number[]) {
+  await ensureFaqs()
+  const list = Array.isArray(ids) ? ids.map(Number) : []
+  if (!list.length || list.length > 2000 || list.some((id) => !Number.isInteger(id) || id < 1) || new Set(list).size !== list.length) {
+    throw new Error('Sıra kaydedilemedi. Sayfayı yenileyip tekrar dene.')
+  }
+  await pool.query(
+    `UPDATE faqs f SET sort_order = v.ord::int FROM unnest($1::int[]) WITH ORDINALITY AS v(id, ord) WHERE f.id = v.id`,
+    [list],
+  )
 }
 
 function cleanFaq(input: FaqInput) {

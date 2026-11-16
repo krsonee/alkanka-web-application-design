@@ -2,8 +2,9 @@
 
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
-import { Pencil, Plus } from 'lucide-react'
-import { saveFaqAction } from '@/app/panel/faq-actions'
+import { Pencil, Plus, Search } from 'lucide-react'
+import { reorderFaqsAction, saveFaqAction } from '@/app/panel/faq-actions'
+import { SortableList, mergeOrder, useOrder } from '@/components/panel/sortable-list'
 import type { FaqInput, FaqRecord } from '@/lib/faqs'
 import { cn } from '@/lib/utils'
 
@@ -14,6 +15,27 @@ export function FaqsManager({ faqs }: { faqs: FaqRecord[] }) {
   const [editing, setEditing] = useState<FaqInput | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
+  const order = useOrder(faqs, (faq) => String(faq.id))
+  const [sorting, startSort] = useTransition()
+  const [category, setCategory] = useState('')
+  const [query, setQuery] = useState('')
+
+  const categories = Array.from(new Set(faqs.map((faq) => faq.category)))
+  const q = query.trim().toLocaleLowerCase('tr')
+  const shown = order.ordered.filter(
+    (faq) => (!category || faq.category === category) && (!q || `${faq.question} ${faq.answer}`.toLocaleLowerCase('tr').includes(q)),
+  )
+  const filtered = shown.length !== order.ordered.length
+
+  function move(visible: string[]) {
+    const ids = mergeOrder(order.ordered.map((faq) => String(faq.id)), visible)
+    order.set(ids)
+    startSort(async () => {
+      const res = await reorderFaqsAction(ids.map(Number))
+      if (!res.ok) order.reset()
+      setMsg(res.ok ? { ok: true, text: res.message ?? 'Sıra kaydedildi.' } : { ok: false, text: res.error })
+    })
+  }
 
   function save(input: FaqInput) {
     start(async () => {
@@ -40,14 +62,58 @@ export function FaqsManager({ faqs }: { faqs: FaqRecord[] }) {
         {msg && <p className={cn('text-sm', msg.ok ? 'text-success' : 'text-destructive')} aria-live="polite">{msg.text}</p>}
       </div>
       {editing && <FaqForm value={editing} pending={pending} onCancel={() => setEditing(null)} onSave={save} />}
+      {faqs.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+            Soru ya da cevapta ara
+            <span className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="çekim, bonus, davet…" className={cn(field, 'pl-9')} />
+            </span>
+          </label>
+          <div role="group" aria-label="Kategoriye göre süz" className="flex flex-wrap gap-2">
+            {['', ...categories].map((name) => (
+              <button
+                key={name || 'tumu'}
+                type="button"
+                aria-pressed={category === name}
+                onClick={() => setCategory(name)}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-xs font-semibold',
+                  category === name ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary',
+                )}
+              >
+                {name || 'Tümü'}
+                <span className="ml-1.5 font-normal tabular-nums">{name ? faqs.filter((faq) => faq.category === name).length : faqs.length}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {filtered
+              ? `${shown.length} soru gösteriliyor. Sürüklediğin sorular sadece kendi aralarında yer değiştirir; gizlenen soruların yeri bozulmaz.`
+              : 'Sırayı değiştirmek için soldaki tutamağı sürükle; bıraktığın an kaydedilir. Sitede kategoriler, ilk sorularının sırasına göre dizilir.'}
+          </p>
+        </div>
+      )}
       {faqs.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz soru yok.</p>
+      ) : shown.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Bu aramaya uyan soru yok.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
-          {faqs.map((faq) => (
-            <li key={faq.id} data-find={`faq-${faq.id}`} className="flex flex-wrap items-center gap-3 p-3 text-sm">
-              <span className="w-8 shrink-0 text-xs tabular-nums text-muted-foreground">{faq.sortOrder}</span>
-              <span className={cn('min-w-0 flex-1 font-medium text-foreground', !faq.active && 'opacity-50')}>
+        <SortableList
+          items={shown}
+          idOf={(faq) => String(faq.id)}
+          nameOf={(faq) => faq.question}
+          onMove={move}
+          disabled={sorting}
+          className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card"
+          itemClassName="bg-card first:rounded-t-xl last:rounded-b-xl"
+        >
+          {(faq, handle, i) => (
+            <div data-find={`faq-${faq.id}`} className="flex flex-wrap items-center gap-2 p-2 pr-3 text-sm">
+              {handle}
+              <span className="w-6 shrink-0 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+              <span className={cn('min-w-0 flex-1 basis-40 font-medium text-foreground', !faq.active && 'opacity-50')}>
                 {faq.question}
                 <span className="ml-2 font-normal text-muted-foreground">{faq.category}</span>
               </span>
@@ -61,9 +127,9 @@ export function FaqsManager({ faqs }: { faqs: FaqRecord[] }) {
               >
                 <Pencil className="size-4" aria-hidden="true" />
               </button>
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+        </SortableList>
       )}
     </div>
   )

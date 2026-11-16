@@ -287,6 +287,24 @@ export async function moveSlide(_: ActionState, form: FormData): Promise<ActionS
   }
 }
 
+export async function reorderSlides(ids: string[]): Promise<ActionState> {
+  try {
+    await requireAdmin('slide')
+    const current = await currentSlideIds()
+    const next = Array.isArray(ids) ? ids.map(String) : []
+    if (next.length !== current.length || new Set(next).size !== next.length || next.some((id) => !current.includes(id))) {
+      return { message: 'Slayt listesi bu arada değişmiş. Sayfayı yenileyip tekrar dene.' }
+    }
+    await setContent(SLIDE_ORDER_KEY, next)
+    revalidatePath('/')
+    revalidatePath('/panel')
+    await logPanel('slide', 'Slayt sırası değişti', null, 'sürüklenerek sıralandı')
+    return { ok: true, message: 'Sıra güncellendi.' }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Sıra kaydedilemedi.' }
+  }
+}
+
 export async function duplicateSlide(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('slide')

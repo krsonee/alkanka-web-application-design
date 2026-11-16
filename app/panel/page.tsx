@@ -847,7 +847,11 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         />
       )
     }),
-    section(ctx, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
+    section(ctx, 'tournaments', 'Turnuvalar', async () => {
+      const { listTournamentTemplates } = await import('@/lib/tournament-templates')
+      const [tournaments, templates] = await Promise.all([listTournaments(), listTournamentTemplates().catch(miss([]))])
+      return <TournamentManager tournaments={tournaments} templates={templates} />
+    }),
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     telegramSection(ctx),
     section(ctx, 'push', 'Bildirimler', async () => {
@@ -887,8 +891,21 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} />
     }),
     section(ctx, 'catalog', 'Etkinlik ve kampanyalar', async () => {
-      const [{ rewards: _rewards, ...catalog }, hidden, options] = await Promise.all([getCatalog({ includeHidden: true }), getHidden(), siteOptions()])
-      return <CatalogEditor catalog={catalog} sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))} library={IMAGE_LIBRARY} hidden={hidden} />
+      const [{ rewards: _rewards, ...catalog }, hidden, options, cups] = await Promise.all([
+        getCatalog({ includeHidden: true }),
+        getHidden(),
+        siteOptions(),
+        listTournaments().catch(miss([])),
+      ])
+      return (
+        <CatalogEditor
+          catalog={catalog}
+          sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))}
+          library={IMAGE_LIBRARY}
+          hidden={hidden}
+          tournaments={cups.map((t) => ({ id: t.id, title: t.title, startsAt: t.startsAt, status: t.status }))}
+        />
+      )
     }),
     section(ctx, 'users', 'Tüm üyeler', usersPanel),
     section(ctx, 'home', 'Ana sayfa ayarları', () => <HomeV2Editor initial={mergeHomeV2(content[HOME_V2_KEY])} />),

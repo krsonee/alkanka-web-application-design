@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import { useUnsavedGuard, UnsavedBar } from '@/components/panel/unsaved-guard'
 import { formatLocal, scheduleState } from '@/lib/schedule'
 import Image from 'next/image'
@@ -33,7 +33,8 @@ import { MAX_CUSTOM_SLIDES } from '@/lib/custom-slides'
 import { useActionPulse } from '@/components/panel/flash'
 import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
-import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
+import { addSlide, duplicateSlide, moveSlide, reorderSlides, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
+import { SortableList, useOrder } from '@/components/panel/sortable-list'
 import { AlertTriangle, ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
 import { ImageField } from '@/components/panel/image-field'
 import { JAKO_POSES } from '@/lib/site-registry'
@@ -575,17 +576,15 @@ export function ContentEditor({
       ) : tab === 'logo' ? (
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-          {tab === 'slide' && <AddSlideCard />}
-          {items.map((item, i) => (
-            <ItemCard
-              key={`${item.kind}-${item.id}`}
-              item={item}
-              library={library}
-              position={tab === 'slide' ? { index: i, total: items.length } : undefined}
-            />
-          ))}
-        </div>
+        tab === 'slide' ? (
+          <SlideGrid slides={items} library={library} />
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+            {items.map((item) => (
+              <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
+            ))}
+          </div>
+        )
       )}
         </div>
       </div>
@@ -732,6 +731,39 @@ const poseImage = (p: string) => (p === 'jako' ? '/images/mascots/jako.png' : `/
 const PREVIEW_KEYS = ['eyebrow', 'title', 'description', 'cta', 'speech'] as const
 type LiveFields = Record<(typeof PREVIEW_KEYS)[number], string>
 
+function SlideGrid({ slides, library }: { slides: EditorItem[]; library: string[] }) {
+  const order = useOrder(slides, (slide) => slide.id)
+  const [sorting, startSort] = useTransition()
+
+  function move(ids: string[]) {
+    order.set(ids)
+    startSort(async () => {
+      const result = await reorderSlides(ids)
+      if (!result.ok) {
+        order.reset()
+        notify(false, result.message ?? 'Sıra kaydedilemedi.')
+      }
+    })
+  }
+
+  return (
+    <SortableList
+      layout="grid"
+      items={order.ordered}
+      idOf={(slide) => slide.id}
+      nameOf={(slide) => slide.saved?.title || slide.defaults.title || 'Slayt'}
+      onMove={move}
+      disabled={sorting}
+      className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3"
+      itemClassName="rounded-2xl"
+      handleClassName="size-7 bg-background/80 text-foreground backdrop-blur hover:bg-background max-sm:size-9"
+      before={<AddSlideCard />}
+    >
+      {(slide, handle, i) => <ItemCard item={slide} library={library} position={{ index: i, total: order.ordered.length }} handle={handle} />}
+    </SortableList>
+  )
+}
+
 function SlideOrderTools({ id, index, total }: { id: string; index: number; total: number }) {
   const [moveState, moveAction, moving] = useActionState<ActionState, FormData>(moveSlide, {})
   const [dupState, dupAction, duplicating] = useActionState<ActionState, FormData>(duplicateSlide, {})
@@ -800,10 +832,12 @@ function ItemCard({
   item,
   library,
   position,
+  handle,
 }: {
   item: EditorItem
   library: string[]
   position?: { index: number; total: number }
+  handle?: ReactNode
 }) {
   const isSlide = item.kind === 'slide'
   const [saveState, saveAction, saving] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
@@ -857,6 +891,7 @@ function ItemCard({
         <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
         <div className="absolute inset-x-0 top-0 z-10 flex flex-wrap items-start justify-between gap-2 p-3">
           <div className="flex flex-wrap items-center gap-1">
+            {handle}
             {position && <SlideOrderTools id={item.id} index={position.index} total={position.total} />}
             {item.hidden && (
               <span className="rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur">Siteden gizli</span>

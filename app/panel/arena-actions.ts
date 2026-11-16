@@ -14,12 +14,14 @@ import {
   cancelTournament,
   createTournament,
   deleteTournament,
+  getTournament,
   removeEntry,
   startTournament,
   updateTournament,
   type TournamentInput,
 } from '@/lib/tournaments'
-import { isTournamentFormat } from '@/lib/tournaments-shared'
+import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tournament-templates'
+import { MAX_TOURNAMENT_TEMPLATES, isTournamentFormat } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import type { ActionState } from './actions'
 
@@ -132,6 +134,36 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
     return { ok: true, message: id ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
+  }
+}
+
+export async function keepTournamentTemplate(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin('tournaments')
+    const t = await getTournament(Number(form.get('id')))
+    if (!t) return { message: 'Turnuva bulunamadı. Sayfayı yenile.' }
+    const name = String(form.get('name') ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)
+    if (name.length < 3) return { message: 'Şablon adı en az 3 karakter olmalı.' }
+    const result = await saveTournamentTemplate(name, t)
+    if (result === 'full') return { message: `En fazla ${MAX_TOURNAMENT_TEMPLATES} şablon saklanır. Önce birini sil.` }
+    revalidatePath('/panel')
+    await logPanel('tournaments', result === 'updated' ? 'Turnuva şablonu güncellendi' : 'Turnuva şablonu kaydedildi', name, `kaynak: ${t.title}`)
+    return { ok: true, message: result === 'updated' ? `"${name}" şablonu bu turnuvanın ayarlarıyla güncellendi.` : `"${name}" şablonu kaydedildi.` }
+  } catch (e) {
+    return fail(e, 'Şablon kaydedilemedi.')
+  }
+}
+
+export async function dropTournamentTemplate(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin('tournaments')
+    const name = await deleteTournamentTemplate(Number(form.get('id')))
+    if (!name) return { message: 'Şablon bulunamadı. Sayfayı yenile.' }
+    revalidatePath('/panel')
+    await logPanel('tournaments', 'Turnuva şablonu silindi', name)
+    return { ok: true, message: `"${name}" şablonu silindi.` }
+  } catch (e) {
+    return fail(e, 'Şablon silinemedi.')
   }
 }
 

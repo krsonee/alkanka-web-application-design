@@ -3,8 +3,9 @@
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { ImageField } from '@/components/panel/image-field'
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useUrlTab } from '@/components/panel/use-url-tab'
+import { CatalogCalendar, type CalendarTournament } from '@/components/panel/catalog-calendar'
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
 import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
@@ -256,10 +257,14 @@ function CategoryOrderEditor({ title, values, order, onSave }: { title: string; 
   )
 }
 
-function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[]; order: CategoryOrder; setOrder: (o: CategoryOrder) => void }) {
+function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder, focusId }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[]; order: CategoryOrder; setOrder: (o: CategoryOrder) => void; focusId?: string }) {
   const schema = SCHEMAS[kind]
   const [items, setItems] = useState<Item[]>(initial)
-  const [open, setOpen] = useState<number | null>(null)
+  const [open, setOpen] = useState<number | null>(() => {
+    const i = focusId ? initial.findIndex((x) => String(x.id) === focusId) : -1
+    return i >= 0 ? i : null
+  })
+  const arrived = useRef(false)
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
 
@@ -369,7 +374,19 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
           const isHidden = hidden.includes(id)
           const name = kind === 'predictions' ? `${item.home} - ${item.away}` : String(item[schema.field] || 'Adsız')
           return (
-            <li key={id} className={cn('overflow-hidden rounded-xl border border-border', isHidden && 'border-dashed')}>
+            <li
+              key={id}
+              ref={
+                id === focusId
+                  ? (el) => {
+                      if (!el || arrived.current) return
+                      arrived.current = true
+                      el.scrollIntoView({ block: 'center' })
+                    }
+                  : undefined
+              }
+              className={cn('overflow-hidden rounded-xl border border-border', isHidden && 'border-dashed')}
+            >
               <div className="flex items-center gap-2 pr-2 hover:bg-secondary/60">
                 <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : i)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left">
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', isHidden ? 'text-muted-foreground line-through' : 'text-foreground')}>{name}</span>
@@ -419,16 +436,32 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
   )
 }
 
-const TABS: { id: Kind; label: string }[] = [
+type Tab = Kind | 'calendar'
+
+const TABS: { id: Tab; label: string }[] = [
   { id: 'events', label: 'Etkinlik & bilet' },
   { id: 'predictions', label: 'Tahminler' },
   { id: 'campaigns', label: 'Kampanyalar' },
   { id: 'bonuses', label: 'Bonuslar' },
+  { id: 'calendar', label: 'Takvim' },
 ]
 
-export function CatalogEditor({ catalog, sponsors, library, hidden = {} }: { catalog: Omit<Catalog, 'rewards'>; sponsors: Option[]; library: string[]; hidden?: HiddenMap }) {
-  const [tab, setTab] = useUrlTab<Kind>(['events', 'predictions', 'campaigns', 'bonuses'], 'events')
+export function CatalogEditor({
+  catalog,
+  sponsors,
+  library,
+  hidden = {},
+  tournaments = [],
+}: {
+  catalog: Omit<Catalog, 'rewards'>
+  sponsors: Option[]
+  library: string[]
+  hidden?: HiddenMap
+  tournaments?: CalendarTournament[]
+}) {
+  const [tab, setTab] = useUrlTab<Tab>(['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
   const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
+  const [focus, setFocus] = useState<{ kind: Kind; id: string } | null>(null)
   return (
     <div className="flex flex-col gap-4">
       <div role="tablist" aria-label="Katalog bölümleri" className="flex flex-wrap gap-2">
@@ -445,8 +478,28 @@ export function CatalogEditor({ catalog, sponsors, library, hidden = {} }: { cat
           </button>
         ))}
       </div>
-      {TABS.map((t) =>
-        t.id === tab ? <ListEditor key={t.id} kind={t.id} initial={catalog[t.id] as unknown as Item[]} sponsors={sponsors} library={library} hidden={hidden[SCOPE[t.id]] ?? []} order={order} setOrder={setOrder} /> : null,
+      {tab === 'calendar' ? (
+        <CatalogCalendar
+          catalog={catalog}
+          tournaments={tournaments}
+          hidden={hidden}
+          onOpen={(kind, id) => {
+            setFocus({ kind, id })
+            setTab(kind)
+          }}
+        />
+      ) : (
+        <ListEditor
+          key={tab}
+          kind={tab}
+          initial={catalog[tab] as unknown as Item[]}
+          sponsors={sponsors}
+          library={library}
+          hidden={hidden[SCOPE[tab]] ?? []}
+          order={order}
+          setOrder={setOrder}
+          focusId={focus?.kind === tab ? focus.id : undefined}
+        />
       )}
     </div>
   )
