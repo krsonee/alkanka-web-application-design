@@ -1,5 +1,6 @@
 'use server'
 
+import { logged } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { after } from 'next/server'
@@ -82,7 +83,7 @@ export async function repairTelegramAction(): Promise<Result> {
   try {
     const { repairTelegram } = await import('@/lib/tg-health')
     const fixes = await repairTelegram()
-    return done(fixes.length ? `Düzeltildi: ${fixes.join(' · ')}` : 'Her şey yolunda, düzeltilecek bir şey bulunmadı.')
+    return logged('telegram', done(fixes.length ? `Düzeltildi: ${fixes.join(' · ')}` : 'Her şey yolunda, düzeltilecek bir şey bulunmadı.'))
   } catch (error) {
     return fail(error)
   }
@@ -314,7 +315,7 @@ export async function saveHubSettings(input: HubConfig): Promise<Result> {
     if (half >= 0) return { ok: false, message: `${half + 1}. hazır cevap: hem başlık hem cevap yazısı dolu olmalı.` }
     const current = await getHub()
     await commit(current, sanitize(input, current), 'Genel ayarlar')
-    return done(`Ayarlar kaydedildi.${await hookNote()}`)
+    return logged('telegram', done(`Ayarlar kaydedildi.${await hookNote()}`))
   } catch (error) {
     return fail(error)
   }
@@ -329,7 +330,7 @@ export async function saveShieldSettings(input: ShieldConfig): Promise<Result> {
     const current = await getHub()
     await commit(current, { ...current, shield: shieldConfig(input) }, 'Koruma ayarları')
     applyQuietHours()
-    return done(`Koruma ayarları kaydedildi.${await hookNote()}`)
+    return logged('telegram', done(`Koruma ayarları kaydedildi.${await hookNote()}`))
   } catch (error) {
     return fail(error)
   }
@@ -351,8 +352,8 @@ export async function saveGroupRules(chatId: string, input: GroupRules | null): 
     const groups = hub.groups.map((g) => (g.chatId === group.chatId ? { ...g, rules: count ? own : undefined } : g))
     await commit(hub, { ...hub, groups }, 'Gruba özel ayar')
     applyQuietHours()
-    if (!input) return done(`"${group.title}" genel ayarlara döndü.`)
-    return done(count ? `"${group.title}" için ${count} ayar genelden farklı kaydedildi.` : `"${group.title}" ayarları genel ayarlarla aynı, ayrı kayıt tutulmadı.`)
+    if (!input) return logged('telegram', done(`"${group.title}" genel ayarlara döndü.`))
+    return logged('telegram', done(count ? `"${group.title}" için ${count} ayar genelden farklı kaydedildi.` : `"${group.title}" ayarları genel ayarlarla aynı, ayrı kayıt tutulmadı.`))
   } catch (error) {
     return fail(error)
   }
@@ -364,7 +365,7 @@ export async function unlockChatAction(chatId: string): Promise<Result> {
   try {
     const { panelUnlock } = await import('@/lib/tg-guard')
     const res = await panelUnlock(String(chatId))
-    return res.ok ? done(res.message) : res
+    return logged('tg_mod', res.ok ? done(res.message) : res)
   } catch (error) {
     return fail(error)
   }
@@ -376,8 +377,8 @@ export async function sweepWaveAction(chatId: string): Promise<Result> {
   try {
     const { panelSweepWave } = await import('@/lib/tg-guard')
     const res = await panelSweepWave(String(chatId))
-    if (!res.removed && !res.left) return { ok: true, message: 'Son 30 dakikada girip hâlâ içeride olan kimse kayıtlı değil.' }
-    return done(`${res.removed} kişi 10 dakikalığına çıkarıldı.${res.left ? ` ${res.left} kişi kaldı, tekrar bas.` : ''}`)
+    if (!res.removed && !res.left) return logged('tg_mod', { ok: true, message: 'Son 30 dakikada girip hâlâ içeride olan kimse kayıtlı değil.' })
+    return logged('tg_mod', done(`${res.removed} kişi 10 dakikalığına çıkarıldı.${res.left ? ` ${res.left} kişi kaldı, tekrar bas.` : ''}`))
   } catch (error) {
     return fail(error)
   }
@@ -396,7 +397,7 @@ export async function suspectAction(ids: number[], action: 'ban' | 'mute' | 'wip
   if (!['ban', 'mute', 'wipe', 'clear'].includes(action)) return { ok: false, message: 'Geçersiz işlem.' }
   try {
     const { suspectAct } = await import('@/lib/tg-guard')
-    return done(await suspectAct(Array.isArray(ids) ? ids : [], action))
+    return logged('tg_mod', done(await suspectAct(Array.isArray(ids) ? ids : [], action)))
   } catch (error) {
     return fail(error)
   }
@@ -408,7 +409,7 @@ export async function undoLogAction(logId: number): Promise<Result> {
   try {
     const { undoLog } = await import('@/lib/tg-guard')
     const res = await undoLog(Number(logId), await actor())
-    return res.ok ? done(res.message) : res
+    return logged('tg_mod', res.ok ? done(res.message) : res)
   } catch (error) {
     return fail(error)
   }
@@ -424,12 +425,12 @@ export async function setRoleBot(role: 'guard' | 'support' | 'share', botId: num
   } else {
       const hub = await getHub()
       await commit(hub, role === 'guard' ? { ...hub, guardBotId: botId } : { ...hub, supportBotId: botId }, 'Bot görevi')
-      if (!botId) return done('Rol kaldırıldı.')
+      if (!botId) return logged('telegram', done('Rol kaldırıldı.'))
     }
     const origin = await siteOrigin()
     if (!origin) return { ok: false, message: 'Bot bağlantısı yalnızca yayındaki sitede kurulabilir. Siteyi yayınla, paneli canlı adresten aç.' }
     await registerHook(botId!, origin)
-    return done('Bot bağlandı ve anında haber alacak şekilde ayarlandı.')
+    return logged('telegram', done('Bot bağlandı ve anında haber alacak şekilde ayarlandı.'))
   } catch (error) {
     return fail(error)
   }
@@ -459,7 +460,7 @@ export async function addHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | '
       next = { ...hub, support: { ...hub.support, sponsors: [...sponsors, { name, chatId: chat.id, title: chat.title }].slice(0, 40) } }
     }
     await commit(hub, next, 'Sohbet bağlantısı')
-    return done(`"${chat.title}" eklendi.`)
+    return logged('telegram', done(`"${chat.title}" eklendi.`))
   } catch (error) {
     return fail(error)
   }
@@ -476,7 +477,7 @@ export async function removeHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' 
   else if (kind === 'staff') next = { ...hub, support: { ...hub.support, staffChatId: '', staffChatTitle: '' } }
   else next = { ...hub, support: { ...hub.support, sponsors: hub.support.sponsors.filter((s) => s.name !== key) } }
   await commit(hub, next, 'Sohbet bağlantısı')
-  return done('Kaldırıldı.')
+  return logged('telegram', done('Kaldırıldı.'))
 }
 
 // --- Settings history and backup -----------------------------------------------------
@@ -532,8 +533,8 @@ export async function restoreConfigAction(id: number): Promise<Result> {
     const snap = await snapshotBefore(Number(id))
     if (!snap) return { ok: false, message: 'Bu kayıt bulunamadı ya da okunamıyor.' }
     const changes = await applySettings(snap.config, CHANGE_RESTORE)
-    if (changes && !changes.length) return { ok: true, message: 'Ayarlar zaten o kayıttaki hâlinde; değişen bir şey olmadı.' }
-    return done(`Ayarlar seçtiğin değişiklikten önceki hâline döndü. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`)
+    if (changes && !changes.length) return logged('telegram', { ok: true, message: 'Ayarlar zaten o kayıttaki hâlinde; değişen bir şey olmadı.' })
+    return logged('telegram', done(`Ayarlar seçtiğin değişiklikten önceki hâline döndü. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`))
   } catch (error) {
     return fail(error)
   }
@@ -544,7 +545,7 @@ export async function exportConfigAction(): Promise<Result & { json?: string }> 
   if (no) return no
   try {
     const config = await getHub()
-    return { ok: true, message: 'Yedek indirildi.', json: JSON.stringify({ kind: BACKUP_KIND, savedAt: new Date().toISOString(), config }, null, 2) }
+    return logged('telegram', { ok: true, message: 'Yedek indirildi.', json: JSON.stringify({ kind: BACKUP_KIND, savedAt: new Date().toISOString(), config }, null, 2) })
   } catch (error) {
     return fail(error)
   }
@@ -567,8 +568,8 @@ export async function importConfigAction(json: string): Promise<Result> {
       return { ok: false, message: 'Bu dosya bir Telegram ayar yedeği değil.' }
     }
     const changes = await applySettings(config, CHANGE_IMPORT)
-    if (changes && !changes.length) return { ok: true, message: 'Yedekteki ayarlar şu ankiyle aynı; değişen bir şey olmadı.' }
-    return done(`Yedekteki ayarlar yüklendi${changes ? ` (${changes.length} ayar değişti)` : ''}. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`)
+    if (changes && !changes.length) return logged('telegram', { ok: true, message: 'Yedekteki ayarlar şu ankiyle aynı; değişen bir şey olmadı.' })
+    return logged('telegram', done(`Yedekteki ayarlar yüklendi${changes ? ` (${changes.length} ayar değişti)` : ''}. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`))
   } catch (error) {
     return fail(error)
   }
@@ -592,9 +593,9 @@ export async function sweepGhosts(chatInput: string): Promise<Result> {
     const { sweepDeletedAccounts } = await import('@/lib/tg-guard')
     const r = await sweepDeletedAccounts(chat.id, chat.title)
     if (r.checked === 0) {
-      return { ok: true, message: `"${chat.title}" için kontrol edilecek üye yok. Bot sadece grupta yazmış üyeleri tanıyabilir; bot gruba girdikten sonra mesaj atanlar taranır.` }
+      return logged('tg_mod', { ok: true, message: `"${chat.title}" için kontrol edilecek üye yok. Bot sadece grupta yazmış üyeleri tanıyabilir; bot gruba girdikten sonra mesaj atanlar taranır.` })
     }
-    return done(`"${chat.title}": ${r.checked} hesap kontrol edildi, ${r.removed} silinmiş hesap çıkarıldı.`)
+    return logged('tg_mod', done(`"${chat.title}": ${r.checked} hesap kontrol edildi, ${r.removed} silinmiş hesap çıkarıldı.`))
   } catch (error) {
     return fail(error)
   }
@@ -645,7 +646,7 @@ export async function stopWipe(chatId: string): Promise<Result> {
   const no = await blocked('mod')
   if (no) return no
   const { cancelWipe } = await import('@/lib/tg-guard')
-  return (await cancelWipe(chatId)) ? done('Temizlik durduruldu.') : { ok: false, message: 'Bu sohbet için çalışan temizlik yok.' }
+  return logged('tg_mod', (await cancelWipe(chatId)) ? done('Temizlik durduruldu.') : { ok: false, message: 'Bu sohbet için çalışan temizlik yok.' })
 }
 
 export async function wipeWholeChat(chatInput: string): Promise<Result> {
@@ -664,7 +665,7 @@ export async function wipeWholeChat(chatInput: string): Promise<Result> {
     const { startWipe } = await import('@/lib/tg-guard')
     await startWipe(hub.guardBotId, chat.id, chat.title, marker.message_id, 'Panel')
     await kickWipeRunner()
-    return done(`"${chat.title}" temizliği başladı. Arka planda kendi kendine devam eder, paneli kapatsan da durmaz.`)
+    return logged('telegram', done(`"${chat.title}" temizliği başladı. Arka planda kendi kendine devam eder, paneli kapatsan da durmaz.`))
   } catch (error) {
     return fail(error)
   }
@@ -686,7 +687,7 @@ export async function wipeUserMessages(tgIdInput: string): Promise<Result> {
     }
     if (!Number.isSafeInteger(tgId) || tgId <= 0) return { ok: false, message: 'Geçerli bir Telegram ID ya da @kullaniciadi yaz.' }
     const n = await deleteUserMessages(tgId)
-    return done(`${n} mesaj silindi (Telegram sadece son 48 saati sildirir).`)
+    return logged('tg_mod', done(`${n} mesaj silindi (Telegram sadece son 48 saati sildirir).`))
   } catch (error) {
     return fail(error)
   }
@@ -701,7 +702,7 @@ export async function unbanEverywhere(tgId: number): Promise<Result> {
     await removeGlobalBan(id)
     const { modLog } = await import('@/lib/tg-hub')
     await modLog({ user: { id }, action: 'Yasak kaldırıldı', reason: `Genel yasak listesinden çıkarıldı (panelden, ${await actor()})`, notify: false })
-    return done('Yasak kaldırıldı. Kişi gruplara kendisi tekrar girmeli.')
+    return logged('telegram', done('Yasak kaldırıldı. Kişi gruplara kendisi tekrar girmeli.'))
   } catch (error) {
     return fail(error)
   }
@@ -731,7 +732,7 @@ export async function exportLogAction(filter: LogFilter): Promise<Result & { csv
     const { exportModLog } = await import('@/lib/tg-log')
     const r = await exportModLog(filter ?? {})
     if (!r.count) return { ok: false, message: 'Bu filtreyle kayıt yok.' }
-    return { ok: true, csv: r.csv, message: r.capped ? `İlk ${r.count} kayıt indirildi; daha fazlası için tarih aralığını daralt.` : `${r.count} kayıt indirildi.` }
+    return logged('tg_mod', { ok: true, csv: r.csv, message: r.capped ? `İlk ${r.count} kayıt indirildi; daha fazlası için tarih aralığını daralt.` : `${r.count} kayıt indirildi.` })
   } catch (error) {
     return fail(error)
   }
@@ -758,7 +759,7 @@ export async function memberAction(tgId: number, action: MemberAction): Promise<
   if (!['ban', 'mute', 'unmute', 'wipe', 'clearWarns'].includes(action)) return { ok: false, message: 'Geçersiz işlem.' }
   try {
     const { memberAct } = await import('@/lib/tg-guard')
-    return done(await memberAct(Number(tgId), action, await actor()))
+    return logged('tg_mod', done(await memberAct(Number(tgId), action, await actor())))
   } catch (error) {
     return fail(error)
   }
@@ -768,7 +769,7 @@ export async function markTrusted(tgId: number, trusted: boolean): Promise<Resul
   const no = await blocked('mod')
   if (no) return no
   await setTrusted(Number(tgId), trusted)
-  return done(trusted ? 'Güvenilir olarak işaretlendi.' : 'İşaret kaldırıldı.')
+  return logged('tg_mod', done(trusted ? 'Güvenilir olarak işaretlendi.' : 'İşaret kaldırıldı.'))
 }
 
 export async function closeTicketAction(ticketId: number, status: 'resolved' | 'rejected', answer: string): Promise<Result> {
@@ -779,7 +780,7 @@ export async function closeTicketAction(ticketId: number, status: 'resolved' | '
   try {
     const { panelCloseTicket } = await import('@/lib/tg-support')
     await panelCloseTicket(Number(ticketId), status, text)
-    return done(status === 'resolved' ? 'Bilet çözüldü, üyeye bildirildi.' : 'Bilet reddedildi, üyeye nedeni bildirildi.')
+    return logged('tg_mod', done(status === 'resolved' ? 'Bilet çözüldü, üyeye bildirildi.' : 'Bilet reddedildi, üyeye nedeni bildirildi.'))
   } catch (error) {
     return fail(error)
   }
@@ -796,7 +797,7 @@ export async function deleteTicketAction(ticketId: number): Promise<Result> {
     if (!removed) return { ok: false, message: 'Sadece kapanmış bilet silinir. Açık bileti önce çöz ya da reddet.' }
     const { modLog } = await import('@/lib/tg-hub')
     await modLog({ action: 'Bilet silindi', reason: `#${id} · ${removed.sponsor} · ${removed.name} (panelden)`, notify: false })
-    return done(`#${id} silindi, sponsor karnesinden de düştü.`)
+    return logged('tg_mod', done(`#${id} silindi, sponsor karnesinden de düştü.`))
   } catch (error) {
     return fail(error)
   }
@@ -819,10 +820,10 @@ export async function sendBroadcast(input: DmDraft): Promise<Result> {
     if (!queued) return { ok: false, message: 'Bu kitlede şu an kimse yok, duyuru gönderilmedi. Başka bir kitle seç ya da ileri bir saate zamanla.' }
     if (sendAt) {
       const when = new Date(sendAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-      return done(`Duyuru ${when} için zamanlandı. O saatten sonraki ilk site ziyaretinde ya da Telegram bildiriminde çıkar; kime gideceği o an yeniden sayılır (şu an ${total} kişi).`)
+      return logged('tg_posts', done(`Duyuru ${when} için zamanlandı. O saatten sonraki ilk site ziyaretinde ya da Telegram bildiriminde çıkar; kime gideceği o an yeniden sayılır (şu an ${total} kişi).`))
     }
     after(() => processBroadcasts().catch((e) => console.error('[broadcast] immediate send failed', e)))
-    return done(`Duyuru gönderilmeye başladı, ${total} kişiye gidiyor. Liste kendini yeniler.`)
+    return logged('tg_posts', done(`Duyuru gönderilmeye başladı, ${total} kişiye gidiyor. Liste kendini yeniler.`))
   } catch (error) {
     return fail(error)
   }
@@ -844,7 +845,7 @@ export async function stopBroadcast(id: number): Promise<Result> {
   if (no) return no
   const { cancelBroadcast } = await import('@/lib/tg-broadcast')
   const stopped = await cancelBroadcast(Number(id))
-  return stopped ? done('Duyuru durduruldu. O ana kadar gidenler geri alınamaz.') : { ok: false, message: 'Bu duyuru zaten bitmiş ya da durdurulmuş.' }
+  return logged('tg_posts', stopped ? done('Duyuru durduruldu. O ana kadar gidenler geri alınamaz.') : { ok: false, message: 'Bu duyuru zaten bitmiş ya da durdurulmuş.' })
 }
 
 export async function sendWeeklyNow(): Promise<Result> {
@@ -853,7 +854,7 @@ export async function sendWeeklyNow(): Promise<Result> {
   try {
     const { runWeeklyHub } = await import('@/lib/tg-hub-jobs')
     await runWeeklyHub(true)
-    return done('Haftalık rapor gönderildi.')
+    return logged('tg_mod', done('Haftalık rapor gönderildi.'))
   } catch (error) {
     return fail(error)
   }

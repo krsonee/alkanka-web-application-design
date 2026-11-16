@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
+import { logPanel } from '@/lib/panel-log'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
@@ -11,6 +13,8 @@ const retextLabel = (texts: StudioTexts | null) =>
   texts ? `Yazı güncellendi: ${[texts.headline, texts.subline, texts.cta].filter(Boolean).join(' · ')}` : 'Yazılar kaldırıldı'
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
@@ -48,6 +52,7 @@ export async function POST(request: NextRequest) {
         cost: 0,
         texts,
       })
+      await logPanel('studio', 'Görselin yazısı değiştirildi', brand?.name || null, `Görsel #${job.id}`)
       return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
     }
 
@@ -76,6 +81,7 @@ export async function POST(request: NextRequest) {
       cost: imageCost(size),
       texts,
     })
+    await logPanel('studio', 'Görsel üretildi', brand?.name || null, `Görsel #${job.id} · ${prompt.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
   } catch (error) {
     console.error('Studio generation failed:', error)

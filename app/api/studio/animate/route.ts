@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
+import { logPanel } from '@/lib/panel-log'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { AI_GIF_SECONDS, makeGif, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { brushOf } from '@/lib/studio-overlay'
@@ -12,6 +14,8 @@ type Mode = 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgicon'
 const MODES: Mode[] = ['gif', 'aigif', 'video', 'tgsticker', 'tgicon']
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
@@ -80,6 +84,7 @@ export async function POST(request: NextRequest) {
       parentId: source.id,
       cost: result.cost,
     })
+    await logPanel('studio', 'Hareketli içerik üretildi', source.brandName || null, `Üretim #${job.id} · ${prompt.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: source.brandName } })
   } catch (error) {
     console.error('Studio animation failed:', error)

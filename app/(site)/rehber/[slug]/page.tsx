@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getPost } from '@/lib/blog'
 import { BlogBody, bodyWordCount, extractFaq } from '@/lib/blog-format'
-import { DEFAULT_OG, jsonLd, SITE_NAME, SITE_URL } from '@/lib/seo'
+import { DEFAULT_OG, jsonLd, OG_BASE, SITE_NAME, SITE_URL } from '@/lib/seo'
 
 export const revalidate = 600
 
@@ -18,6 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     keywords: post.keywords ? post.keywords.split(',').map((k) => k.trim()).filter(Boolean) : undefined,
     alternates: { canonical: url },
     openGraph: {
+      ...OG_BASE,
       type: 'article',
       title: post.title,
       description: post.excerpt,

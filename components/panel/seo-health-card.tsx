@@ -3,7 +3,9 @@
 import { useState, useTransition } from 'react'
 import { AlertTriangle, ArrowRight, CircleAlert, CircleCheck, Loader2, Trash2 } from 'lucide-react'
 import { clear404Action, deleteRedirectAction, saveRedirectAction } from '@/app/panel/seo-actions'
+import { confirmed } from '@/components/panel/confirm-dialog'
 import type { HealthIssue, NotFoundHit, Redirect } from '@/lib/seo-health'
+import { Flash } from '@/components/panel/flash'
 
 const input =
   'min-w-0 flex-1 rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -121,11 +123,7 @@ function RedirectsCard({ notFound, redirects }: { notFound: NotFoundHit[]; redir
           Yönlendir
         </button>
       </form>
-      {message && (
-        <p role="status" className={`text-sm font-semibold ${message.ok ? 'text-primary' : 'text-destructive'}`}>
-          {message.text}
-        </p>
-      )}
+      <Flash ok={message?.ok} text={message?.text} token={message} className="font-semibold" />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
@@ -147,7 +145,7 @@ function RedirectsCard({ notFound, redirects }: { notFound: NotFoundHit[]; redir
                     type="button"
                     aria-label={`${n.path} kaydını sil`}
                     className="text-muted-foreground hover:text-destructive"
-                    onClick={() => run(() => clear404Action(n.path))}
+                    onClick={() => confirmed(`${n.path} adresinin 404 kaydı silinsin mi?`, () => run(() => clear404Action(n.path)))}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>
@@ -172,7 +170,7 @@ function RedirectsCard({ notFound, redirects }: { notFound: NotFoundHit[]; redir
                     type="button"
                     aria-label={`${r.from} yönlendirmesini sil`}
                     className="text-muted-foreground hover:text-destructive"
-                    onClick={() => run(() => deleteRedirectAction(r.from))}
+                    onClick={() => confirmed(`${r.from} yönlendirmesi silinsin mi? Bu adrese gelenler artık "sayfa bulunamadı" görür.`, () => run(() => deleteRedirectAction(r.from)))}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>

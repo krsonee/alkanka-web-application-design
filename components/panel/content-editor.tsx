@@ -28,11 +28,13 @@ import {
   MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
-import { askConfirm, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
+import { askConfirm, notify, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
+import { MAX_CUSTOM_SLIDES } from '@/lib/custom-slides'
+import { useActionPulse } from '@/components/panel/flash'
 import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
 import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
-import { ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
 import { ImageField } from '@/components/panel/image-field'
 import { JAKO_POSES } from '@/lib/site-registry'
 import { PANEL_GROUPS, TELEGRAM_MODULES, type PanelModule } from '@/lib/panel-modules'
@@ -106,8 +108,11 @@ export function ContentEditor({
   siteUrl,
   logout,
   initialTab,
+  dataGaps = 0,
 }: {
   initialTab: string
+  /** How many lists on this screen could not be read and are shown empty instead. */
+  dataGaps?: number
   moderation?: React.ReactNode | null
   userName: string
   siteUrl: string
@@ -251,12 +256,14 @@ export function ContentEditor({
         setNavOpen(true)
         requestAnimationFrame(() => filterRef.current?.focus())
       }
+      if (e.key === 'Escape') setNavOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const guard = useUnsavedGuard(contentRef)
+  useActionPulse()
   const pick = async (id: PanelTab) => {
     setNavOpen(false)
     if (id === tab) return
@@ -413,7 +420,7 @@ export function ContentEditor({
             <button
               type="button"
               onClick={() => pick(hasModeration ? 'moderation' : 'dashboard')}
-              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-secondary"
+              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-secondary max-sm:min-h-9"
             >
               <MessageSquare className="size-3.5 sm:hidden" aria-hidden="true" />
               <span className="hidden sm:inline">Bekleyen iş</span>
@@ -422,6 +429,17 @@ export function ContentEditor({
           )}
         </header>
         <UnsavedBar count={guard.count} onSave={guard.saveAll} onDiscard={guard.discardAll} />
+        {dataGaps > 0 && !loading && (
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-foreground lg:px-8">
+            <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-pretty">
+              {`Bu ekrandaki ${dataGaps} liste okunamadı ve boş gösteriliyor. Boş görünen bir liste "kayıt yok" anlamına gelmeyebilir; kaydetmeden önce sayfayı yenile.`}
+            </span>
+            <button type="button" onClick={() => window.location.reload()} className="h-8 shrink-0 rounded-md border border-border bg-card px-3 text-sm font-medium text-foreground hover:bg-secondary">
+              Yenile
+            </button>
+          </div>
+        )}
         <div
           ref={contentRef}
           className={cn(
@@ -552,7 +570,7 @@ function NavButton({ active, onClick, label, pending, icon: Icon }: { active: bo
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition-colors',
+        'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition-colors max-lg:min-h-9',
         active ? 'bg-primary text-primary-foreground' : 'text-foreground/80 hover:bg-secondary hover:text-foreground',
       )}
     >
@@ -585,7 +603,7 @@ function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: Panel
         </span>
         <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
       </summary>
-      <div className="grid grid-cols-4 gap-4 border-t border-border p-4">
+      <div className="grid grid-cols-1 gap-4 border-t border-border p-4 sm:grid-cols-2 xl:grid-cols-4">
         {groups.map((g) => {
           const Icon = GROUP_ICONS[g.id] ?? Wrench
           return (
@@ -635,7 +653,7 @@ function AddSlideCard() {
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-lg font-bold text-foreground">Yeni slayt ekle</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Ana sayfa slider&apos;ına istediğin kadar yeni slayt ekle. Eklenen slayt listenin sonuna düşer, görselini bilgisayardan yükleyebilirsin.
+          Ana sayfa slider&apos;ına en fazla {MAX_CUSTOM_SLIDES} yeni slayt ekleyebilirsin. Eklenen slayt listenin sonuna düşer, görselini bilgisayardan yükleyebilirsin.
         </p>
       </div>
       <button
@@ -676,7 +694,7 @@ function SlideOrderTools({ id, index, total }: { id: string; index: number; tota
   const [moveState, moveAction, moving] = useActionState<ActionState, FormData>(moveSlide, {})
   const [dupState, dupAction, duplicating] = useActionState<ActionState, FormData>(duplicateSlide, {})
   const btn =
-    'flex size-7 items-center justify-center rounded-md bg-background/80 text-foreground backdrop-blur hover:bg-background disabled:opacity-30'
+    'flex size-7 items-center justify-center rounded-md bg-background/80 text-foreground backdrop-blur hover:bg-background disabled:opacity-30 max-sm:size-9'
   const failed = (!moveState.ok && moveState.message) || (!dupState.ok && dupState.message)
   return (
     <div className="flex items-center gap-1">
@@ -747,7 +765,12 @@ function ItemCard({
 }) {
   const isSlide = item.kind === 'slide'
   const [saveState, saveAction, saving] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
-  const [resetState, resetAction, resetting] = useActionState<ActionState, FormData>(isSlide ? resetSlide : resetHero, {})
+  const [resetState, resetAction, resetting] = useActionState<ActionState, FormData>(async (prev, form) => {
+    const result = await (isSlide ? resetSlide : resetHero)(prev, form)
+    // A deleted slide's card is gone before its own status line could show the result.
+    if (item.custom && result.message) notify(Boolean(result.ok), result.message)
+    return result
+  }, {})
   const [image, setImage] = useState(item.saved?.image || '')
   const value = (k: keyof Fields) => item.saved?.[k] ?? ''
   const initialLive = (): LiveFields =>
@@ -787,10 +810,10 @@ function ItemCard({
 
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="relative aspect-[16/7] bg-secondary">
+      <div className="relative aspect-[16/11] bg-secondary max-sm:min-h-68 sm:aspect-[16/7]">
         <Image src={preview || '/placeholder.svg'} alt="" fill sizes="(min-width: 1536px) 520px, 600px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
-        <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
+        <div className="absolute inset-x-0 top-0 z-10 flex flex-wrap items-start justify-between gap-2 p-3">
           <div className="flex flex-wrap items-center gap-1">
             {position && <SlideOrderTools id={item.id} index={position.index} total={position.total} />}
             {item.hidden && (
@@ -813,9 +836,11 @@ function ItemCard({
               href={item.path}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs text-foreground backdrop-blur hover:bg-background"
+              title="Sitede aç"
+              className="flex items-center justify-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs text-foreground backdrop-blur hover:bg-background max-sm:size-9 max-sm:p-0"
             >
-              Sitede aç <ExternalLink className="size-3" aria-hidden="true" />
+              <span className="max-sm:sr-only">Sitede aç</span>
+              <ExternalLink className="size-3 max-sm:size-4" aria-hidden="true" />
             </a>
           </div>
         </div>
@@ -907,11 +932,11 @@ function ItemCard({
                 <button
                   type="button"
                   onClick={(e) => e.currentTarget.form && applyPreset(e.currentTarget.form, presetPending)}
-                  className="rounded-md bg-primary px-2.5 py-1 font-semibold text-primary-foreground"
+                    className="rounded-md bg-primary px-2.5 py-1 font-semibold text-primary-foreground max-sm:min-h-9 max-sm:px-3"
                 >
                   Evet, doldur
                 </button>
-                <button type="button" onClick={() => setPresetPending(null)} className="rounded-md border border-border px-2.5 py-1">
+                <button type="button" onClick={() => setPresetPending(null)} className="rounded-md border border-border px-2.5 py-1 max-sm:min-h-9 max-sm:px-3">
                   Vazgeç
                 </button>
               </div>
@@ -922,7 +947,7 @@ function ItemCard({
                     key={p.label}
                     type="button"
                     onClick={() => setPresetPending(p)}
-                    className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
+                    className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary max-sm:min-h-9 max-sm:px-3"
                   >
                     {p.label}
                   </button>

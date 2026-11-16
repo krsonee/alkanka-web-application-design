@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { deleteAvatar, saveAvatar, type AvatarInput } from '@/lib/avatars'
@@ -12,6 +13,7 @@ export async function saveAvatarAction(input: AvatarInput): Promise<Result> {
     await saveAvatar(input)
     revalidatePath('/panel')
     revalidatePath('/profil')
+    await logPanel('market', input.id ? 'Avatar güncellendi' : 'Avatar eklendi', input.name)
     return { ok: true, message: input.id ? 'Avatar güncellendi.' : 'Yeni avatar eklendi.' }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -24,6 +26,7 @@ export async function deleteAvatarAction(id: string): Promise<Result> {
     const message = await deleteAvatar(String(id))
     revalidatePath('/panel')
     revalidatePath('/profil')
+    await logPanel('market', 'Avatar silindi', id)
     return { ok: true, message }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Silinemedi.' }

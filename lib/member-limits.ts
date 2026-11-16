@@ -122,19 +122,31 @@ export async function findMember(query: string) {
   return r.rows.map((u) => ({ id: String(u.id), name: u.name ?? '', email: u.email }))
 }
 
-const cleanInt = (v: number | null) => (v === null || !Number.isFinite(v) || v < 0 ? null : Math.floor(Math.min(v, 100_000_000)))
+const LIMIT_MAX = 100_000_000
+const LIMIT_NOTE_MAX = 300
 
-export async function saveLimit(userId: string, input: LimitInput, by: string) {
+function cleanInt(v: number | null, label: string) {
+  if (v === null || v === undefined) return null
+  if (!Number.isFinite(v) || v < 0 || v > LIMIT_MAX) {
+    throw new Error(`${label} 0 ile ${LIMIT_MAX.toLocaleString('tr-TR')} arasında olmalı. Sınır koymak istemiyorsan alanı boş bırak.`)
+  }
+  return Math.floor(v)
+}
+
+/** Returns 'cleared' when every field was empty and an existing restriction was removed. */
+export async function saveLimit(userId: string, input: LimitInput, by: string): Promise<'saved' | 'cleared'> {
   const u = await pool.query<{ name: string | null; email: string }>(`SELECT name, email FROM "user" WHERE id = $1`, [userId])
   if (!u.rows[0]) throw new Error('Üye bulunamadı.')
-  const dailyWin = cleanInt(input.dailyWinLimit)
-  const dailyGame = cleanInt(input.dailyGameLimit)
-  const spend = cleanInt(input.marketSpendLimit)
+  const dailyWin = cleanInt(input.dailyWinLimit, 'Günlük kazanç sınırı')
+  const dailyGame = cleanInt(input.dailyGameLimit, 'Günlük oyun sınırı')
+  const spend = cleanInt(input.marketSpendLimit, 'Market harcama sınırı')
   const ban = !!input.marketBan
-  const note = String(input.note ?? '').slice(0, 300)
+  const note = String(input.note ?? '').trim()
+  if (note.length > LIMIT_NOTE_MAX) throw new Error(`Not en fazla ${LIMIT_NOTE_MAX} karakter olabilir (şu an ${note.length}).`)
   if (dailyWin === null && dailyGame === null && spend === null && !ban) {
-    await pool.query(`DELETE FROM member_limits WHERE user_id = $1`, [userId])
-    return
+    const gone = await pool.query(`DELETE FROM member_limits WHERE user_id = $1 RETURNING user_id`, [userId])
+    if (!gone.rowCount) throw new Error('Kaydedilecek bir kısıtlama yok. En az bir sınır gir ya da market yasağını aç.')
+    return 'cleared'
   }
   await pool.query(
     `INSERT INTO member_limits (user_id, user_name, user_email, daily_win_limit, daily_game_limit, market_ban, market_spend_limit, note, updated_by, updated_at)
@@ -144,6 +156,7 @@ export async function saveLimit(userId: string, input: LimitInput, by: string) {
        market_spend_limit = EXCLUDED.market_spend_limit, note = EXCLUDED.note, updated_by = EXCLUDED.updated_by, updated_at = now()`,
     [userId, u.rows[0].name ?? '', u.rows[0].email, dailyWin, dailyGame, ban, spend, note, by],
   )
+  return 'saved'
 }
 
 export async function removeLimit(userId: string) {

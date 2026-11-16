@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { canPanel } from '@/lib/admin-auth'
 import {
   cancelInstantRound,
@@ -14,6 +15,7 @@ import {
   type UpcomingSlot,
 } from '@/lib/cember'
 import type { CemberConfig } from '@/lib/cember-shared'
+import { wholeInRange } from '@/lib/drift'
 
 export type CemberActionResult = {
   ok: boolean
@@ -28,6 +30,7 @@ export async function setInstantBudget(dailyKc: number): Promise<CemberActionRes
   if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const budget = await saveInstantBudget(dailyKc)
+    await logPanel('cember', 'Anlık etkinlik bütçesi değişti', null, budget.dailyKc ? `günde ${budget.dailyKc} KC` : 'limit kaldırıldı')
     return {
       ok: true,
       message: budget.dailyKc ? `Anlık etkinlik bütçesi günde ${budget.dailyKc.toLocaleString('tr-TR')} KC olarak kaydedildi.` : 'Anlık etkinlik bütçesi kaldırıldı, limit yok.',
@@ -42,6 +45,7 @@ export async function setChatAlert(perHour: number): Promise<CemberActionResult>
   if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const budget = await saveChatAlert(perHour)
+    await logPanel('cember', 'Sohbet aktivite eşiği değişti', null, budget.chatAlert ? `saatte ${budget.chatAlert} mesaj` : 'kapatıldı')
     return {
       ok: true,
       message: budget.chatAlert ? `Sohbet saatte ${budget.chatAlert.toLocaleString('tr-TR')} mesajı geçince anlık etkinlik önerilecek.` : 'Sohbet aktivite bildirimi kapatıldı.',
@@ -65,6 +69,7 @@ export async function startInstantEvent(eventId: string, delaySeconds: number, p
         clash: { title: r.clashTitle, at: r.clashAt, suggestAt: r.suggestAt },
       }
     }
+    await logPanel('cember', 'Anlık etkinlik başlatıldı', r.events.find((e) => e.id === eventId)?.title ?? eventId, `${trTime(r.at)} için kuruldu`)
     return {
       ok: true,
       message: `Anlık etkinlik ${trTime(r.at)} için kuruldu. O saatte sitedeki herkese açılır.`,
@@ -81,6 +86,7 @@ export async function cancelInstantEvent(eventId: string, slotIso: string): Prom
   if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const events = await cancelInstantRound(eventId, slotIso)
+    await logPanel('cember', 'Anlık tur iptal edildi', events.find((e) => e.id === eventId)?.title ?? eventId, trTime(slotIso))
     return { ok: true, message: `${trTime(slotIso)} anlık turu iptal edildi, ödül dağıtılmayacak.`, events, upcoming: upcomingSlots(events), budget: await getInstantBudget(events) }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'İptal edilemedi.' }
@@ -90,7 +96,20 @@ export async function cancelInstantEvent(eventId: string, slotIso: string): Prom
 export async function saveCember(input: CemberConfig[]): Promise<CemberActionResult> {
   if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
+    // Prizes are paid in real coin, so a blank name or an out-of-range amount stops the save
+    // instead of being replaced with a default.
+    for (const [i, ev] of (Array.isArray(input) ? input : []).entries()) {
+      const title = String(ev?.title ?? '').trim()
+      const where = `${i + 1}. etkinlik${title ? ` ("${title.slice(0, 30)}")` : ''}`
+      if (!title) throw new Error(`${where}: etkinlik adı boş bırakılamaz. Hiçbir şey kaydedilmedi.`)
+      if (title.length > 40) throw new Error(`${where}: etkinlik adı en fazla 40 karakter olabilir (yazdığın ${title.length}). Hiçbir şey kaydedilmedi.`)
+      for (const p of Array.isArray(ev?.prizes) ? ev.prizes : []) {
+        if (p?.type === 'coin' || p?.type === 'kp') wholeInRange(p.amount, 1, 1_000_000, `${where} · ${p.type === 'coin' ? 'coin' : 'puan'} ödülü`)
+      }
+      wholeInRange(ev?.predictKp ?? 0, 0, 10_000, `${where} · tahmin puanı`)
+    }
     const events = await saveCemberEvents(input)
+    await logPanel('cember', 'Jako Çemberi etkinlikleri kaydedildi', null, `${events.length} etkinlik`)
     return { ok: true, message: `${events.length} etkinlik kaydedildi. Sitede 5 saniye içinde güncellenir.`, events, upcoming: upcomingSlots(events) }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi, tekrar dene.' }
@@ -102,6 +121,7 @@ export async function startTestRound(eventId: string, delaySeconds: number): Pro
   try {
     const at = await scheduleTestRound(eventId, Math.min(600, Math.max(20, Math.round(delaySeconds))))
     const time = new Date(at).toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' })
+    await logPanel('cember', 'Ek tur kuruldu', eventId, time)
     return { ok: true, message: `Ek tur ${time} için kuruldu. O saatte sitedeki herkese açılır.` }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Tur kurulamadı.' }

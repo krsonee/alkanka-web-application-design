@@ -4,6 +4,7 @@ import { Check, Send, X } from 'lucide-react'
 import { decideReviewProof, postKarneNow } from '@/app/panel/community-actions'
 import type { PendingProof } from '@/lib/trust-extra'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
+import { confirmed } from '@/components/panel/confirm-dialog'
 
 export function TrustProofs({ proofs, siteNames }: { proofs: PendingProof[]; siteNames: Record<string, string> }) {
   const action = useAction()
@@ -19,7 +20,7 @@ export function TrustProofs({ proofs, siteNames }: { proofs: PendingProof[]; sit
         <button
           type="button"
           disabled={karne.pending}
-          onClick={() => karne.run(() => postKarneNow())}
+          onClick={() => confirmed('Haftalık güven karnesi şimdi Telegram kanalına gönderilsin mi? Gönderilen mesaj buradan geri alınamaz.', () => karne.run(() => postKarneNow()))}
           className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-50"
         >
           <Send className="size-3.5" aria-hidden />

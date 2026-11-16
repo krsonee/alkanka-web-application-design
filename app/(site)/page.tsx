@@ -11,6 +11,7 @@ import { isScheduledLive } from '@/lib/schedule'
 import type { Metadata } from 'next'
 import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
 import { resolvedHomeSeo } from '@/lib/site-seo'
+import { getShare } from '@/lib/share'
 import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
 import { HIDDEN_KEY, readHidden, withoutHidden } from '@/lib/hidden-shared'
@@ -31,14 +32,23 @@ import { EXACT_REWARD, listLeagueMatches, type LeagueMatch } from '@/lib/communi
 
 export async function generateMetadata(): Promise<Metadata> {
   const base = pageMeta('anasayfa')
-  const seo = await resolvedHomeSeo()
+  const [seo, share] = await Promise.all([resolvedHomeSeo(), getShare()])
+  const cardTitle = share.title || seo.title
+  const cardDescription = share.description || seo.description
+  const cardImage = share.image ? { url: share.image, width: 1200, height: 630 } : null
   return {
     ...base,
     title: { absolute: seo.title },
     description: seo.description,
     keywords: seo.keywords,
-    openGraph: { ...base.openGraph, title: seo.title, description: seo.description },
-    twitter: { ...base.twitter, title: seo.title, description: seo.description },
+    openGraph: {
+      ...base.openGraph,
+      siteName: share.siteName || SITE_NAME,
+      title: cardTitle,
+      description: cardDescription,
+      ...(cardImage ? { images: [cardImage] } : {}),
+    },
+    twitter: { ...base.twitter, title: cardTitle, description: cardDescription, ...(cardImage ? { images: [cardImage.url] } : {}) },
   }
 }
 export const dynamic = 'force-dynamic'

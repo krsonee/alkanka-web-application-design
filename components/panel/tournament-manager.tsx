@@ -14,6 +14,7 @@ import { beginTournament, kickEntry, pickMatchWinner, removeTournament, saveTour
 import type { ActionState } from '@/app/panel/actions'
 import { BracketView } from '@/components/alkanka/arena/bracket-view'
 import { formatTR } from '@/components/alkanka/arena/tournament-card'
+import { Flash } from '@/components/panel/flash'
 
 const ISTANBUL_OFFSET = -180
 
@@ -26,12 +27,7 @@ const field = 'rounded-xl border border-input bg-background px-3 py-2.5 text-sm 
 const labelCls = 'flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground'
 
 function Feedback({ state }: { state: ActionState }) {
-  if (!state.message) return null
-  return (
-    <p role="status" className={cn('text-sm font-semibold', state.ok ? 'text-primary' : 'text-destructive')}>
-      {state.message}
-    </p>
-  )
+  return <Flash ok={state.ok} text={state.message} token={state} className="font-semibold" />
 }
 
 function ActionButton({
@@ -82,7 +78,7 @@ function ActionButton({
         {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
         {children}
       </button>
-      {!state.ok && state.message && <span className="text-xs text-destructive">{state.message}</span>}
+      <Flash ok={false} text={state.ok ? null : state.message} token={state} className="text-xs" />
     </form>
   )
 }
@@ -169,14 +165,28 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
       <select
         id={`w-${t.id}-${round}-${match}`}
         name="winner"
+        key={winner ?? ''}
         defaultValue={winner ?? ''}
         disabled={pending || real.length < 2}
-        onChange={(e) => e.currentTarget.form?.requestSubmit()}
+        onChange={(e) => {
+          const select = e.currentTarget
+          const picked = select.value
+          if (!picked) {
+            select.value = winner ?? ''
+            return
+          }
+          void askConfirm(
+            `"${t.names[picked] ?? picked}" bu maçın kazananı olarak işaretlensin mi? Bu son maçsa turnuva biter ve ödül havuzu hemen ödenir; geri alınamaz.`,
+          ).then((ok) => {
+            if (ok) select.form?.requestSubmit()
+            else select.value = winner ?? ''
+          })
+        }}
         className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
       >
         <option value="">Kazanan seç</option>
-        {real.map((p) => (
-          <option key={p} value={p}>
+        {real.map((p, i) => (
+          <option key={`${i}-${p}`} value={p}>
             {t.names[p] ?? p}
           </option>
         ))}
@@ -235,7 +245,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
       {t.bracket && t.format === 'eleme' && (
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-bold text-foreground">Eşleşmeler (kazananı seçince otomatik bir üst tura geçer)</h4>
-          <BracketView bracket={t.bracket} renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />} />
+          <BracketView bracket={t.bracket} names={t.names} closed={t.status !== 'basladi'} renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />} />
         </div>
       )}
 
@@ -253,7 +263,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
                   <span className="text-muted-foreground">{e.telegram}</span>
                 </span>
                 {t.status === 'kayit' && (
-                  <ActionButton act={kickEntry} fields={{ entryId: e.id }} variant="danger">
+                  <ActionButton act={kickEntry} fields={{ entryId: e.id }} variant="danger" confirm={`${e.nickname} turnuvadan çıkarılsın mı? Katılım ücreti iade edilir.`}>
                     <UserX className="size-3.5" aria-hidden="true" />
                     <span className="sr-only sm:not-sr-only">Çıkar</span>
                   </ActionButton>

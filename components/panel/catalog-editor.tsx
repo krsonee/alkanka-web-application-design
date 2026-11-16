@@ -4,9 +4,10 @@
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
-import { BONUS_TYPES, EVENT_KINDS, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
 import type { HiddenMap, HiddenScope } from '@/lib/hidden-shared'
@@ -48,7 +49,7 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
   },
   predictions: {
     title: 'Maç tahminleri',
-    hint: 'Doğru tahmin edene verilecek puanı belirle. Seçenek oyları sitede birikir.',
+    hint: `Sitede "Doğru tahmin: +ödül KC" diye görünür. Üyeye ödenen ise ödülün ${PREDICTION_PAYOUT.share}'te biridir (en fazla ${PREDICTION_PAYOUT.max} KC) ve tahmini yaptığı an hesabına geçer; günde ${PREDICTION_PAYOUT.perDay} tahmine kadar. Maç sonucu girilmez, doğru tahmine ayrıca ödeme yapılmaz.`,
     field: 'home',
     fields: [
       { key: 'league', label: 'Lig', type: 'text', max: 40 },
@@ -57,7 +58,7 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
       { key: 'kickoff', label: 'Başlama yazısı · maç tarihi boşsa gösterilir', type: 'text', max: 30 },
       { key: 'home', label: 'Ev sahibi', type: 'text', max: 30 },
       { key: 'away', label: 'Deplasman', type: 'text', max: 30 },
-      { key: 'reward', label: 'Ödül (KC)', type: 'number' },
+      { key: 'reward', label: `Ödül (KC) · üyeye ${PREDICTION_PAYOUT.share}'te biri ödenir, en fazla ${PREDICTION_PAYOUT.max}`, type: 'number' },
       { key: 'options', label: 'Seçenekler', type: 'pairs', hint: 'Satır başına: seçenek | oy', a: 'label', b: 'votes', numericB: true },
     ],
     blank: () => ({ id: '', league: 'Süper Lig', home: 'Ev sahibi', away: 'Deplasman', kickoff: '', kickoffAt: toTrIso(new Date(Date.now() + 86_400_000)), closesAt: '', reward: 100, options: [{ id: 'o1', label: '1', votes: 0 }, { id: 'o2', label: 'X', votes: 0 }, { id: 'o3', label: '2', votes: 0 }] }),
@@ -284,10 +285,19 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
       if (!ok) return
     start(async () => {
       const r = await resetCatalog(kind)
-      setStatus(r.ok ? { ok: true, text: `${r.message} Sayfayı yenile.` } : { ok: false, text: r.error })
+      setStatus(r.ok ? { ok: true, text: `${r.message} Ekran yenileniyor...` } : { ok: false, text: r.error })
+      // The form keeps its own copy of the list, so only a reload shows the restored defaults.
+      if (r.ok) setTimeout(() => window.location.reload(), 900)
     })
     })
   }
+
+  const orphans =
+    kind === 'campaigns' || kind === 'bonuses'
+      ? items
+          .filter((x) => !sponsors.some((s) => s.id === String(x.sponsorId ?? '')) && (kind === 'bonuses' || !String(x.url ?? '').trim()))
+          .map((x) => `"${String(x.title ?? '').slice(0, 30)}"`)
+      : []
 
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
@@ -303,6 +313,15 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
           Yeni ekle
         </button>
       </header>
+
+      {orphans.length > 0 && (
+        <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs leading-relaxed text-foreground">
+          <strong>{`${orphans.length} kayıtta sponsor listede yok${kind === 'campaigns' ? ' ve yönlendirme linki boş' : ''}.`}</strong>{' '}
+          {`Sitede bu ${kind === 'campaigns' ? 'kampanyaların "Katıl"' : 'bonusların "Siteye git"'} düğmesi hiçbir yere gitmez. Sponsor seç${kind === 'campaigns' ? ', link yaz' : ''} ya da kaydı sil: `}
+          {orphans.slice(0, 6).join(', ')}
+          {orphans.length > 6 ? ` ve ${orphans.length - 6} kayıt daha.` : '.'}
+        </p>
+      )}
 
       {(kind === 'campaigns' || kind === 'bonuses') && (
         <CategoryOrderEditor
@@ -356,7 +375,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', isHidden ? 'text-muted-foreground line-through' : 'text-foreground')}>{name}</span>
                   {isHidden && <span className="shrink-0 text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {kind === 'events' ? `${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : String(item.sponsorId || '')}
+                    {kind === 'events' ? `${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : (sponsors.find((s) => s.id === String(item.sponsorId))?.name ?? 'Sponsor yok')}
                   </span>
                   <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-180')} aria-hidden />
                 </button>
@@ -408,7 +427,7 @@ const TABS: { id: Kind; label: string }[] = [
 ]
 
 export function CatalogEditor({ catalog, sponsors, library, hidden = {} }: { catalog: Omit<Catalog, 'rewards'>; sponsors: Option[]; library: string[]; hidden?: HiddenMap }) {
-  const [tab, setTab] = useState<Kind>('events')
+  const [tab, setTab] = useUrlTab<Kind>(['events', 'predictions', 'campaigns', 'bonuses'], 'events')
   const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
   return (
     <div className="flex flex-col gap-4">

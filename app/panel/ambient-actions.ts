@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { canPanel } from '@/lib/admin-auth'
 import { setContent } from '@/lib/content'
 import { AMBIENT_KEY, clearAmbientCache, normalizeAmbient } from '@/lib/ambient-tables'
@@ -17,6 +18,7 @@ export async function saveAmbient(_: AmbientActionState, form: FormData): Promis
   try {
     await setContent(AMBIENT_KEY, value)
     clearAmbientCache()
+    await logPanel('growth', 'Masa doluluğu ayarı kaydedildi')
     return { ok: true, message: 'Kaydedildi. Diğer sunucularda en geç 1 dakikada uygulanır.' }
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }

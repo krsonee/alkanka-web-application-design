@@ -1,12 +1,12 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { setContent } from '@/lib/content'
-import { pool } from '@/lib/db'
-import { credit, debit, recordHistory } from '@/lib/member'
 import { ARENA_GAMES, ARENA_META, isArenaGame, type ArenaSettings } from '@/lib/arena'
+import { getArenaSettings } from '@/lib/arena-server'
 import { cancelTable } from '@/lib/pvp/tables'
 import {
   MAX_TOURNAMENT_PLAYERS,
@@ -22,6 +22,8 @@ import {
 import { isTournamentFormat } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import type { ActionState } from './actions'
+
+const MAX_BET_OPTIONS = 8
 
 async function requireAdmin(module: PanelModule) {
   if (!(await canPanel(module))) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
@@ -46,24 +48,30 @@ function int(form: FormData, name: string, label: string, min: number, max: numb
 export async function saveArenaSettings(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('games')
+    const current = await getArenaSettings()
     const value = {} as ArenaSettings
     for (const g of ARENA_GAMES) {
       const title = ARENA_META[g].title
-      const bets = String(form.get(`${g}:bets`) ?? '')
+      const tokens = String(form.get(`${g}:bets`) ?? '')
         .split(/[,\s]+/)
-        .map((v) => Math.round(Number(v)))
-        .filter((v) => Number.isFinite(v) && v > 0 && v <= 100000)
-      const unique = [...new Set(bets)].sort((a, b) => a - b).slice(0, 6)
+        .filter(Boolean)
+      const bad = tokens.find((t) => !/^\d+$/.test(t) || Number(t) < 1 || Number(t) > 100000)
+      if (bad !== undefined) return { message: `${title}: "${bad.slice(0, 20)}" geçerli bir bahis tutarı değil. 1 ile 100.000 arasında tam sayı yaz.` }
+      const unique = [...new Set(tokens.map(Number))].sort((a, b) => a - b)
       if (!unique.length) return { message: `${title}: en az bir bahis tutarı gir.` }
+      if (unique.length > MAX_BET_OPTIONS) return { message: `${title}: en fazla ${MAX_BET_OPTIONS} bahis tutarı girilebilir.` }
       const multiplier = Number(String(form.get(`${g}:multiplier`) ?? '').replace(',', '.'))
       if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 20) return { message: `${title}: çarpan 1 ile 20 arasında olmalı.` }
-      const commission = Math.round(Number(form.get(`${g}:commission`) ?? 0))
-      if (!Number.isFinite(commission) || commission < 0 || commission > 30) return { message: `${title}: komisyon %0 ile %30 arasında olmalı.` }
+      // The settings form has no commission or kanka-table field. Reading a missing field as 0 / off
+      // closed player tables and zeroed the table cut for every game on each save.
+      const hasCommission = form.has(`${g}:commission`)
+      const commission = hasCommission ? Math.round(Number(form.get(`${g}:commission`))) : current[g].commission
+      if (hasCommission && (!Number.isFinite(commission) || commission < 0 || commission > 30)) return { message: `${title}: komisyon %0 ile %30 arasında olmalı.` }
       const image = String(form.get(`${g}:image`) ?? '').trim().slice(0, 500)
       if (image && !/^(https:\/\/|\/)/.test(image)) return { message: `${title}: görsel adresi https:// veya / ile başlamalı.` }
       value[g] = {
         enabled: form.get(`${g}:enabled`) === 'on',
-        pvpEnabled: form.get(`${g}:pvp`) === 'on',
+        pvpEnabled: form.has(`${g}:pvp`) ? form.get(`${g}:pvp`) === 'on' : current[g].pvpEnabled,
         bets: unique,
         multiplier: Math.round(multiplier * 100) / 100,
         commission,
@@ -75,6 +83,7 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
     await setContent('arena:settings', value)
     await setContent('arena:house', { winRate })
     refresh()
+    await logPanel('games', 'Oyun ayarları kaydedildi', null, `mini oyun kazanma oranı %${winRate}`)
     return { ok: true, message: 'Oyun ayarları kaydedildi.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
@@ -119,6 +128,7 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
     if (id) await updateTournament(id, input)
     else await createTournament(input)
     refresh()
+    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · ödül ${input.prizePool} KC · ${input.maxPlayers} kişi`)
     return { ok: true, message: id ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
@@ -130,6 +140,7 @@ export async function removeTournament(_: ActionState, form: FormData): Promise<
     await requireAdmin('tournaments')
     await deleteTournament(Number(form.get('id')))
     refresh()
+    await logPanel('tournaments', 'Turnuva silindi', `Turnuva #${Number(form.get('id'))}`, 'Kayıt ücretleri iade edildi')
     return { ok: true, message: 'Turnuva silindi, kayıt ücretleri iade edildi.' }
   } catch (e) {
     return fail(e, 'Silinemedi.')
@@ -141,6 +152,7 @@ export async function beginTournament(_: ActionState, form: FormData): Promise<A
     await requireAdmin('tournaments')
     await startTournament(Number(form.get('id')))
     refresh()
+    await logPanel('tournaments', 'Turnuva başlatıldı', `Turnuva #${Number(form.get('id'))}`)
     return { ok: true, message: 'Turnuva başladı. Tüm eşleşmeler aynı anda açıldı.' }
   } catch (e) {
     return fail(e, 'Başlatılamadı.')
@@ -152,6 +164,7 @@ export async function stopTournament(_: ActionState, form: FormData): Promise<Ac
     await requireAdmin('tournaments')
     await cancelTournament(Number(form.get('id')))
     refresh()
+    await logPanel('tournaments', 'Turnuva iptal edildi', `Turnuva #${Number(form.get('id'))}`, 'Kayıt ücretleri iade edildi')
     return { ok: true, message: 'Turnuva iptal edildi, kayıt ücretleri iade edildi.' }
   } catch (e) {
     return fail(e, 'İptal edilemedi.')
@@ -165,6 +178,7 @@ export async function pickMatchWinner(_: ActionState, form: FormData): Promise<A
     if (!winner) return { message: 'Kazananı seç.' }
     await adminSetMatchWinner(Number(form.get('id')), Number(form.get('round')), Number(form.get('match')), winner)
     refresh()
+    await logPanel('tournaments', 'Maç kazananı girildi', `Turnuva #${Number(form.get('id'))}`, `tur ${Number(form.get('round'))} · maç ${Number(form.get('match'))} · kazanan ${winner}`)
     return { ok: true, message: 'Maç sonucu girildi, tur ilerletildi.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
@@ -176,6 +190,7 @@ export async function kickEntry(_: ActionState, form: FormData): Promise<ActionS
     await requireAdmin('tournaments')
     await removeEntry(Number(form.get('entryId')))
     refresh()
+    await logPanel('tournaments', 'Turnuva katılımcısı çıkarıldı', `Kayıt #${Number(form.get('entryId'))}`, 'Ücreti iade edildi')
     return { ok: true, message: 'Katılımcı çıkarıldı, ücreti iade edildi.' }
   } catch (e) {
     return fail(e, 'Çıkarılamadı.')
@@ -187,28 +202,9 @@ export async function adminCancelTable(_: ActionState, form: FormData): Promise<
     await requireAdmin('games')
     await cancelTable(String(form.get('id')), { admin: true })
     refresh()
+    await logPanel('games', 'Masa kapatıldı', String(form.get('id')), 'Bahisler iade edildi')
     return { ok: true, message: 'Masa kapatıldı, bahisler iade edildi.' }
   } catch (e) {
     return fail(e, 'Masa kapatılamadı.')
-  }
-}
-
-export async function adjustMemberBalance(_: ActionState, form: FormData): Promise<ActionState> {
-  try {
-    await requireAdmin('games')
-    const email = String(form.get('email') ?? '').trim().toLowerCase()
-    const amount = Math.round(Number(form.get('amount')))
-    if (!email) return { message: 'Üye e-postası gir.' }
-    if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 1000000) return { message: 'Geçerli bir tutar gir (örn. 500 veya -200).' }
-    const u = await pool.query('SELECT id, name FROM "user" WHERE lower(email) = $1', [email])
-    const user = u.rows[0]
-    if (!user) return { message: 'Bu e-postaya ait üye bulunamadı.' }
-    if (amount > 0) await credit(user.id, amount)
-    else if (!(await debit(user.id, -amount))) return { message: 'Üyenin bakiyesi yetersiz.' }
-    await recordHistory({ userId: user.id, userName: user.name, game: 'panel', mode: 'admin', opponent: 'Panel düzenlemesi', stake: 0, result: amount > 0 ? 'win' : 'loss', delta: amount })
-    refresh()
-    return { ok: true, message: `${user.name}: ${amount > 0 ? '+' : ''}${amount} KC uygulandı.` }
-  } catch (e) {
-    return fail(e, 'Uygulanamadı.')
   }
 }

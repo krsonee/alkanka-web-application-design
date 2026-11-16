@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
@@ -17,8 +18,12 @@ export type ActionState = { ok?: boolean; message?: string }
 
 const LIMITS = { eyebrow: 40, title: 90, description: 280, speech: 160, cta: 30 } as const
 
+const LIMIT_LABELS: Record<keyof typeof LIMITS, string> = { eyebrow: 'Üst etiket', title: 'Başlık', description: 'Açıklama', speech: 'Jako konuşma balonu', cta: 'Düğme yazısı' }
+
 function field(form: FormData, name: keyof typeof LIMITS) {
-  return String(form.get(name) ?? '').trim().slice(0, LIMITS[name])
+  const value = String(form.get(name) ?? '').trim()
+  if (value.length > LIMITS[name]) throw new Error(`${LIMIT_LABELS[name]} en fazla ${LIMITS[name]} karakter olabilir (yazdığın ${value.length} karakter). Hiçbir şey kaydedilmedi.`)
+  return value
 }
 
 function imageField(form: FormData) {
@@ -45,6 +50,7 @@ export async function saveShare(_: ActionState, form: FormData): Promise<ActionS
       image,
     })
     revalidatePath('/', 'layout')
+    await logPanel('logo', 'Paylaşım görseli kaydedildi')
     return { ok: true, message: 'Paylaşım önizlemesi kaydedildi. WhatsApp/Telegram eski önizlemeyi bir süre önbellekte tutabilir.' }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -87,6 +93,7 @@ export async function saveAds(_: ActionState, form: FormData): Promise<ActionSta
     }
     await setContent(ADS_KEY, value)
     for (const page of AD_PAGES) revalidatePath(`/${page.id}`)
+    await logPanel('logo', 'Reklam alanları kaydedildi', null, `${Object.keys(value).length} dolu alan`)
     return { ok: true, message: 'Reklam alanları kaydedildi.' }
   } catch (error) {
     return { message: error instanceof Error ? error.message : 'Kaydedilemedi.' }
@@ -114,6 +121,7 @@ export async function saveHero(_: ActionState, form: FormData): Promise<ActionSt
     }
     await setContent(`hero:${slug}`, value)
     revalidatePath(page.path)
+    await logPanel('hero', 'Sayfa başlığı kaydedildi', page.path)
     return { ok: true, message: 'Kaydedildi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -128,6 +136,7 @@ export async function resetHero(_: ActionState, form: FormData): Promise<ActionS
     await deleteContent(`hero:${page.slug}`)
     revalidatePath(page.path)
     revalidatePath('/panel')
+    await logPanel('hero', 'Sayfa başlığı varsayılana döndü', page.path)
     return { ok: true, message: 'Varsayılana döndü.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Sıfırlanamadı.' }
@@ -139,13 +148,18 @@ export async function saveTexts(_: ActionState, form: FormData): Promise<ActionS
     await requireAdmin('texts')
     const value: Record<string, string> = {}
     for (const f of TEXT_FIELDS) {
-      const v = String(form.get(f.key) ?? '').trim().slice(0, f.max)
+      const v = String(form.get(f.key) ?? '').trim()
       if (!v) continue
-      if (f.key === 'auth.bonus' && !/^\d{1,6}$/.test(v)) return { message: 'Kayıt bonusu sadece rakam olmalı.' }
+      if (f.key === 'auth.bonus') {
+        if (!/^\d+$/.test(v)) return { message: 'Kayıt bonusu sadece rakam olmalı. Hiçbir şey kaydedilmedi.' }
+        if (v.length > 6) return { message: `Kayıt bonusu en fazla 999.999 KC olabilir (yazdığın ${Number(v).toLocaleString('tr-TR')}). Hiçbir şey kaydedilmedi.` }
+      }
+      if (v.length > f.max) return { message: `"${f.label}" en fazla ${f.max} karakter olabilir (yazdığın ${v.length} karakter). Hiçbir şey kaydedilmedi.` }
       value[f.key] = v
     }
     await setContent(TEXTS_KEY, value)
     revalidatePath('/', 'layout')
+    await logPanel('texts', 'Site yazıları kaydedildi', null, `${Object.keys(value).length} özel metin`)
     return { ok: true, message: `Kaydedildi (${Object.keys(value).length} özel metin).` }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -193,11 +207,13 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       await setContent(CUSTOM_SLIDES_KEY, next)
       revalidatePath('/')
       revalidatePath('/panel')
+      await logPanel('slide', 'Slayt kaydedildi', value.title || id)
       return { ok: true, message: 'Kaydedildi.' }
     }
     if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     await setContent(`slide:${id}`, value)
     revalidatePath('/')
+    await logPanel('slide', 'Slayt kaydedildi', value.title || id)
     return { ok: true, message: 'Kaydedildi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -216,6 +232,7 @@ export async function addSlide(_: ActionState): Promise<ActionState> {
     ])
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt eklendi', id)
     return { ok: true, message: 'Yeni slayt eklendi. Aşağıdan düzenleyip kaydet.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Eklenemedi.' }
@@ -237,6 +254,7 @@ export async function saveLogos(_: ActionState, form: FormData): Promise<ActionS
     }
     await setContent(`logos:${kind}`, value)
     revalidatePath('/', 'layout')
+    await logPanel('logo', kind === 'sponsors' ? 'Sponsor logoları kaydedildi' : 'Takım logoları kaydedildi', null, `${Object.keys(value).length} logo`)
     return { ok: true, message: `Kaydedildi (${Object.keys(value).length} logo).` }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -262,6 +280,7 @@ export async function moveSlide(_: ActionState, form: FormData): Promise<ActionS
     await setContent(SLIDE_ORDER_KEY, ids)
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt sırası değişti', id, dir < 0 ? 'öne alındı' : 'arkaya alındı')
     return { ok: true, message: 'Sıra güncellendi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Taşınamadı.' }
@@ -299,6 +318,7 @@ export async function duplicateSlide(_: ActionState, form: FormData): Promise<Ac
     }
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt kopyalandı', copy.title)
     return { ok: true, message: 'Kopyası eklendi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kopyalanamadı.' }
@@ -314,12 +334,14 @@ export async function resetSlide(_: ActionState, form: FormData): Promise<Action
       await setContent(CUSTOM_SLIDES_KEY, list.filter((s) => s.id !== id))
       revalidatePath('/')
       revalidatePath('/panel')
+      await logPanel('slide', 'Slayt silindi', list.find((s) => s.id === id)?.title ?? id)
       return { ok: true, message: 'Slayt silindi.' }
     }
     if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     await deleteContent(`slide:${id}`)
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt varsayılana döndü', id)
     return { ok: true, message: 'Varsayılana döndü.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Sıfırlanamadı.' }
@@ -332,13 +354,23 @@ export async function saveHomeV2(_: ActionState, form: FormData): Promise<Action
     const { HOME_V2_KEY, mergeHomeV2 } = await import('@/lib/home-v2-shared')
     const raw = JSON.parse(String(form.get('payload') ?? '{}')) as unknown
     const value = mergeHomeV2(raw)
-    const images = [value.home.heroImage, ...value.home.daily.map((t) => t.image)].filter(Boolean)
+    const tiles = [...value.home.daily, ...value.home.free, ...value.home.promos]
+    const images = [value.home.heroImage, ...tiles.map((t) => t.image)].filter(Boolean)
     for (const img of images) if (!isAllowedImage(img)) throw new Error('Görseller /images/ ile ya da https:// ile başlamalı.')
-    const hrefs = [value.home.primaryHref, value.home.secondaryHref, value.home.marketHref, ...value.home.daily.map((t) => t.href)]
+    const hrefs = [
+      value.home.primaryHref,
+      value.home.secondaryHref,
+      value.home.marketHref,
+      value.home.guestPrimaryHref,
+      value.home.guestSecondaryHref,
+      ...tiles.map((t) => t.href),
+      ...value.home.rail.map((t) => t.href),
+    ]
     for (const h of hrefs) if (h && !h.startsWith('/') && !/^https:\/\//.test(h)) throw new Error('Bağlantılar / ya da https:// ile başlamalı.')
     await setContent(HOME_V2_KEY, value)
     revalidatePath('/')
     revalidatePath('/oyunlar/okey')
+    await logPanel('logo', 'Ana sayfa ve masa açma ayarları kaydedildi')
     return { ok: true, message: 'Ana sayfa ve masa açma ayarları kaydedildi.' }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }

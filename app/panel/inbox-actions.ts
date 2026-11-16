@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel, getPanelSession } from '@/lib/panel-auth'
 import { findMember } from '@/lib/member-limits'
@@ -35,6 +36,7 @@ export async function sendInboxMessage(input: { userId: string | null; title: st
     const session = await getPanelSession()
     await sendMessage({ userId, targetLabel, title, body, url: rawUrl ? rawUrl.slice(0, 200) : null, imageUrl: imageUrl || null, sentBy: session?.username ?? '' })
     revalidatePath('/panel')
+    await logPanel('messages', userId ? 'Üyeye mesaj gönderildi' : 'Tüm üyelere mesaj gönderildi', userId ? targetLabel : null, title)
     return { ok: true, message: userId ? `${targetLabel} adlı üyeye gönderildi.` : 'Tüm üyelere gönderildi.' }
   } catch (error) {
     console.error('[inbox] gönderilemedi', error)
@@ -46,5 +48,6 @@ export async function deleteInboxMessage(id: number): Promise<Result> {
   if (!(await canPanel('messages'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
   await deleteMessage(Number(id))
   revalidatePath('/panel')
+  await logPanel('messages', 'Mesaj silindi', `Mesaj #${id}`)
   return { ok: true, message: 'Mesaj silindi.' }
 }

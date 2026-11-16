@@ -62,7 +62,9 @@ export function RewardsEditor({ initial, hidden = [], winRate = 40 }: { initial:
       if (!ok) return
     start(async () => {
       const r = await resetCatalog('rewards')
-      setStatus(r.ok ? { ok: true, text: `${r.message} Sayfayı yenile.` } : { ok: false, text: r.error })
+      setStatus(r.ok ? { ok: true, text: `${r.message} Ekran yenileniyor...` } : { ok: false, text: r.error })
+      // The form keeps its own copy of the list, so only a reload shows the restored defaults.
+      if (r.ok) setTimeout(() => window.location.reload(), 900)
     })
     })
   }
@@ -132,10 +134,10 @@ export function RewardsEditor({ initial, hidden = [], winRate = 40 }: { initial:
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <Num text="Günlük hak" value={cfg.dice.dailyPlays} min={1} max={20} onChange={(n) => patch('dice', { dailyPlays: n })} />
           <Num text="Jackpot (6-6) puanı" value={cfg.dice.jackpot} onChange={(n) => patch('dice', { jackpot: n })} />
-          <Num text="Çift zar çarpanı" value={cfg.dice.doubleX} max={1000} onChange={(n) => patch('dice', { doubleX: n })} />
+          <Num text="Çift zar çarpanı" value={cfg.dice.doubleX} max={10000} onChange={(n) => patch('dice', { doubleX: n })} />
           <Num text="Yüksek toplam eşiği" value={cfg.dice.highMin} min={2} max={12} onChange={(n) => patch('dice', { highMin: n })} />
-          <Num text="Yüksek toplam çarpanı" value={cfg.dice.highX} max={1000} onChange={(n) => patch('dice', { highX: n })} />
-          <Num text="Düşük toplam çarpanı" value={cfg.dice.lowX} max={1000} onChange={(n) => patch('dice', { lowX: n })} />
+          <Num text="Yüksek toplam çarpanı" value={cfg.dice.highX} max={10000} onChange={(n) => patch('dice', { highX: n })} />
+          <Num text="Düşük toplam çarpanı" value={cfg.dice.lowX} max={10000} onChange={(n) => patch('dice', { lowX: n })} />
         </div>
       </Card>
 

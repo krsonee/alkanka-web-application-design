@@ -111,7 +111,8 @@ export function ShareEditor({ saved }: { saved: ShareSettings }) {
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-lg font-bold uppercase text-foreground">Link paylaşım önizlemesi</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          alkanka.com linkini WhatsApp, Telegram, X veya Discord&apos;da paylaşınca çıkan kart. Görsel 1200×630 olmalı. Boş alanlar varsayılanı kullanır.
+          alkanka.com linkini WhatsApp, Telegram, X veya Discord&apos;da paylaşınca çıkan kart. Görsel 1200×630 olmalı. Boş alanlar varsayılanı kullanır. Bu kart ana
+          sayfada ve kendi kartı olmayan sayfalarda çıkar; oyun, rehber ve bölüm sayfaları kendi başlık ve görselini gösterir.
         </p>
       </div>
       <div className="grid gap-6 lg:grid-cols-2">

@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { deletePost, savePost } from '@/lib/blog'
@@ -21,6 +22,7 @@ export async function saveRedirectAction(from: string, to: string): Promise<Resu
     const { saveRedirect } = await import('@/lib/seo-health')
     await saveRedirect(from, to)
     revalidatePath('/panel')
+    await logPanel('seo', 'Yönlendirme kaydedildi', from, to)
     return { ok: true, message: 'Yönlendirme kaydedildi. 1 dakika içinde çalışır.' }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'Kaydedilemedi.' }
@@ -32,6 +34,7 @@ export async function deleteRedirectAction(from: string): Promise<Result> {
   const { deleteRedirect } = await import('@/lib/seo-health')
   await deleteRedirect(from)
   revalidatePath('/panel')
+  await logPanel('seo', 'Yönlendirme silindi', from)
   return { ok: true, message: 'Yönlendirme silindi.' }
 }
 
@@ -40,6 +43,7 @@ export async function clear404Action(path: string): Promise<Result> {
   const { clear404 } = await import('@/lib/seo-health')
   await clear404(path)
   revalidatePath('/panel')
+  await logPanel('seo', '404 kaydı silindi', path)
   return { ok: true, message: 'Kayıt silindi.' }
 }
 
@@ -68,6 +72,7 @@ export async function savePostAction(_: ActionState, form: FormData): Promise<Ac
     revalidatePath('/rehber', 'layout')
     revalidatePath('/sitemap.xml')
     revalidatePath('/panel')
+    await logPanel('seo', 'Rehber yazısı kaydedildi', title, `/rehber/${slug}`)
     return { ok: true, message: 'Yazı kaydedildi.' }
   } catch (error) {
     console.error('[blog] kaydedilemedi', error)
@@ -79,6 +84,7 @@ export async function savePostAction(_: ActionState, form: FormData): Promise<Ac
 export async function deletePostAction(id: number) {
   if (!(await canPanel('seo'))) return
   await deletePost(id)
+  await logPanel('seo', 'Rehber yazısı silindi', `Yazı #${id}`)
   revalidatePath('/rehber', 'layout')
   revalidatePath('/panel')
 }
@@ -86,6 +92,7 @@ export async function deletePostAction(id: number) {
 export async function deleteDealAction(id: number) {
   if (!(await canPanel('seo'))) return
   await deleteDeal(id)
+  await logPanel('seo', 'Fırsat silindi', `Fırsat #${id}`)
   revalidatePath('/ozel-oranlar')
   revalidatePath('/panel')
 }
@@ -93,6 +100,7 @@ export async function deleteDealAction(id: number) {
 export async function setDealsPublishingAction(on: boolean) {
   if (!(await canPanel('seo'))) return
   await setDealsPublishing(on)
+  await logPanel('seo', on ? 'Fırsat yayını açıldı' : 'Fırsat yayını kapatıldı')
   revalidatePath('/panel')
 }
 
@@ -107,6 +115,7 @@ export async function saveSiteSeoAction(_: ActionState, form: FormData): Promise
   try {
     await setSiteSeo({ title, description, keywords })
     revalidatePath('/', 'layout')
+    await logPanel('seo', 'Site başlığı ve açıklaması kaydedildi')
     return { ok: true, message: 'Site başlığı, açıklama ve anahtar kelimeler kaydedildi.' }
   } catch (error) {
     console.error('[seo] site ayarları kaydedilemedi', error)
@@ -124,6 +133,7 @@ export async function saveVerificationAction(_: ActionState, form: FormData): Pr
       meta: extractVerificationCode(str(form, 'meta', 400)),
     })
     revalidatePath('/', 'layout')
+    await logPanel('seo', 'Arama motoru doğrulama kodları kaydedildi')
     return { ok: true, message: 'Doğrulama kodları kaydedildi.' }
   } catch (error) {
     console.error('[seo] doğrulama kaydedilemedi', error)

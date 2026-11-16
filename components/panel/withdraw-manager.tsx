@@ -1,8 +1,9 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, confirmed } from '@/components/panel/confirm-dialog'
 import { useState } from 'react'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { Ban, Check, ShieldOff, Trash2, X } from 'lucide-react'
 import {
   approveShare,
@@ -40,7 +41,7 @@ const STATUS: Record<AdminWithdrawShare['status'], { label: string; tone: string
 const time = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 export function WithdrawManager({ shares, settings, siteRewards, sites, blocks }: Props) {
-  const [view, setView] = useState<'queue' | 'rewards' | 'rules'>('queue')
+  const [view, setView] = useUrlTab<'queue' | 'rewards' | 'rules'>(['queue', 'rewards', 'rules'], 'queue', 'v')
   const pendingCount = shares.filter((s) => s.status === 'pending').length
   return (
     <div className="flex flex-col gap-4">
@@ -151,10 +152,26 @@ function ShareRow({
           </div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ret sebebi (reddedersen üyeye gider)" className={field} />
           <div className="flex flex-wrap gap-2">
-            <button disabled={pending} onClick={() => run(() => approveShare(s.id, reward))} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-50">
+            <button
+              disabled={pending}
+              onClick={() => {
+                const prize = [reward.coin > 0 && `${Number(reward.coin).toLocaleString('tr-TR')} KC`, reward.kp > 0 && `${Number(reward.kp).toLocaleString('tr-TR')} KP`, reward.item.trim()].filter(Boolean).join(' + ')
+                confirmed(`${s.userName} adlı üyenin paylaşımı onaylanıp yayınlansın mı? ${prize ? `Ödül hemen hesabına eklenir: ${prize}.` : 'Ödül verilmeyecek.'} Bu işlem geri alınamaz.`, () => run(() => approveShare(s.id, reward)))
+              }}
+              className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-50">
               <Check className="size-4" aria-hidden /> Onayla ve yayınla
             </button>
-            <button disabled={pending} onClick={() => run(() => rejectShare(s.id, note))} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 text-xs font-bold text-secondary-foreground disabled:opacity-50">
+            <button
+              disabled={pending}
+              onClick={() =>
+                confirmed(
+                  note.trim()
+                    ? `Paylaşım reddedilsin mi? Üyeye şu sebep gider: "${note.trim().slice(0, 120)}"`
+                    : 'Ret sebebi yazmadın. Üyeye hazır metin gider: "Kurallara uygun değil." Yine de reddedilsin mi?',
+                  () => run(() => rejectShare(s.id, note)),
+                )
+              }
+              className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 text-xs font-bold text-secondary-foreground disabled:opacity-50">
               <X className="size-4" aria-hidden /> Reddet
             </button>
             <button disabled={pending} onClick={() => void askConfirm('Sahte olarak işaretlenecek ve üye çekim paylaşımından engellenecek. Emin misin?').then((ok) => ok && run(() => fakeShare(s.id)))} className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-destructive/15 px-3 text-xs font-bold text-destructive disabled:opacity-50">
@@ -269,7 +286,7 @@ function Rules({ settings, blocks }: { settings: WithdrawSettings; blocks: Block
           <input type="checkbox" checked={cfg.tgShowAmount} onChange={(e) => setCfg({ ...cfg, tgShowAmount: e.target.checked })} className="size-4 accent-primary" />
           Telegram mesajında tutarı göster
         </label>
-        <button disabled={pending} onClick={() => run(() => updateWithdrawSettings(cfg))} className="h-9 w-fit rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-50">
+        <button disabled={pending} onClick={() => run(() => updateWithdrawSettings({ weekly: cfg.weekly, minAmount: cfg.minAmount, maxAgeDays: cfg.maxAgeDays, minAccountDays: cfg.minAccountDays, tgEnabled: cfg.tgEnabled, tgShowAmount: cfg.tgShowAmount }))} className="h-9 w-fit rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-50">
           Kuralları kaydet
         </button>
       </section>

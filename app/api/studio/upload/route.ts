@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import sharp from 'sharp'
 import { canPanel } from '@/lib/admin-auth'
+import { logPanel } from '@/lib/panel-log'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { addAsset, storeFile } from '@/lib/studio'
 
 export const maxDuration = 120
@@ -22,6 +24,8 @@ async function fromUrl(raw: string): Promise<Source> {
 }
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const form = await request.formData()
@@ -65,5 +69,6 @@ export async function POST(request: NextRequest) {
   }
 
   if (!saved.length) return NextResponse.json({ error: `Hiçbiri eklenemedi: ${failed.join(', ')}` }, { status: 400 })
+  await logPanel('studio', 'Stüdyoya dosya yüklendi', target === 'asset' ? provider : null, `${saved.length} dosya${failed.length ? ` · ${failed.length} eklenemedi` : ''}`)
   return NextResponse.json({ pathnames: saved, failed })
 }

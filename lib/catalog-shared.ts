@@ -54,6 +54,10 @@ export function sortByOrder(values: string[], order: string[]): string[] {
   return [...order.filter((v) => unique.includes(v)), ...unique.filter((v) => !order.includes(v))]
 }
 
+/** What a member is actually paid for a prediction: a share of the listed reward, on making the pick. */
+export const PREDICTION_PAYOUT = { share: 5, max: 200, perDay: 10 }
+export const predictionPayout = (reward: number) => Math.min(PREDICTION_PAYOUT.max, Math.max(0, Math.round(Number(reward) / PREDICTION_PAYOUT.share)))
+
 export const EVENT_KINDS: EventItem['kind'][] = ['Günlük', 'Haftalık', 'Aylık']
 export const BONUS_TYPES: Bonus['type'][] = ['Hoş geldin', 'Yatırım', 'Kayıp', 'Freespin', 'Deneme']
 

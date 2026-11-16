@@ -1,8 +1,9 @@
 'use client'
 
-import { createContext, useContext, useId, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useId, useMemo, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 
 /** on: working · off: switched on but failing · idle: switched off or never set up, which is not a fault. */
 export type TabStatus = 'on' | 'off' | 'idle' | null
@@ -37,14 +38,21 @@ export function TelegramTabs({
   label = 'Telegram bölümleri',
   legend = true,
   issues = 'box',
+  param = 's',
 }: {
   tabs: Tab[]
   label?: string
   legend?: boolean
   /** 'none' when one of the tabs is a status screen that already lists every failing section. */
   issues?: 'box' | 'none'
+  /** Address parameter that remembers the open tab; a tab set nested in another one needs its own. */
+  param?: string
 }) {
-  const [active, setActive] = useState(tabs[0]?.id)
+  const [active, setActive] = useUrlTab(
+    tabs.map((t) => t.id),
+    tabs[0]?.id ?? '',
+    param,
+  )
   const uid = useId()
   const hasStatus = tabs.some((t) => t.status)
 
@@ -58,7 +66,7 @@ export function TelegramTabs({
       tabs: tabs.map((t): TabInfo => ({ id: t.id, label: t.label, group: t.group ?? null, status: t.status ?? null, issue: t.issue ?? null })),
       open: (id: string) => setActive(id),
     }),
-    [tabs],
+    [tabs, setActive],
   )
 
   return (

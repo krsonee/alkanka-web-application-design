@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 type Props = {
   counts: Record<MemberStatus | 'tumu', number> | null
   pending: PendingDetail
-  recent: AuditRow[]
+  recent: AuditRow[] | null
   stats: DashStats | null
 }
 type Params = { r?: string; from?: string; to?: string }
@@ -39,6 +39,8 @@ const shortDateTime = (iso: string) =>
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 const trDate = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
 const DELETED_SPONSORS = 'Silinmiş sponsorlar'
+const LIVE_REFRESH_MS = 5 * 60_000
+const LIVE_IDLE_MS = 10 * 60_000
 
 const PRESETS: { value: Preset; label: string }[] = [
   { value: 'today', label: 'Bugün' },
@@ -149,12 +151,23 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
   const live = stats?.live ?? false
   useEffect(() => {
     if (!live) return
+    // Every refresh wakes the database, which is billed by the hour it stays awake. Refresh
+    // slowly, and only while somebody is actually using the page.
+    let lastActive = Date.now()
+    const touch = () => {
+      lastActive = Date.now()
+    }
+    const events = ['pointerdown', 'keydown', 'pointermove'] as const
+    for (const name of events) window.addEventListener(name, touch, { passive: true })
     const id = window.setInterval(async () => {
-      if (document.hidden) return
+      if (document.hidden || Date.now() - lastActive > LIVE_IDLE_MS) return
       const fresh = await loadDashStats(paramsRef.current)
       if (fresh) setStats(fresh)
-    }, 60_000)
-    return () => window.clearInterval(id)
+    }, LIVE_REFRESH_MS)
+    return () => {
+      window.clearInterval(id)
+      for (const name of events) window.removeEventListener(name, touch)
+    }
   }, [live])
 
   const pickDay = (p: SeriesPoint) => {
@@ -216,7 +229,7 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
 
       {stats && (
         <div className="flex flex-wrap items-center gap-3">
-          <div role="tablist" aria-label="Zaman aralığı" className="flex items-center gap-1 rounded-lg bg-card p-1 ring-1 ring-border">
+          <div role="tablist" aria-label="Zaman aralığı" className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-card p-1 ring-1 ring-border">
             {PRESETS.map((p, i) => {
               const disabled = isDisabled(p.value)
               return (
@@ -229,7 +242,7 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
                   title={disabled ? `Veriler ${trDate(stats.dataStart)} tarihinden başlıyor` : `Kısayol: ${i + 1}`}
                   onClick={() => stats.query.preset !== p.value && load({ r: p.value })}
                   className={cn(
-                    'rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                    'shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:px-3.5',
                     stats.query.preset === p.value ? 'bg-secondary text-foreground shadow-sm' : 'text-muted-foreground enabled:hover:text-foreground',
                   )}
                 >
@@ -342,6 +355,14 @@ function RangePicker({ stats, onApply }: { stats: DashStats; onApply: (from: str
   const [end, setEnd] = useState<string | null>(stats.to)
   const [hover, setHover] = useState<string | null>(null)
   const custom = stats.query.preset === 'custom'
+
+  useEffect(() => {
+    if (!open) return
+    // Focus stays on the trigger when the calendar opens, so Escape has to be caught on the window.
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   const toggle = () => {
     if (!open) {
@@ -776,6 +797,9 @@ function JobsCard({ counts, pending }: { counts: Props['counts']; pending: Pendi
     { label: 'Açık şikâyetler', hint: 'Topluluk › Şikâyetler', count: pending.complaints, href: '?b=community' },
     { label: 'Görev onayları', hint: 'Üyeler › Görevler', count: pending.claims, href: '?b=tasks' },
     { label: 'Market talepleri', hint: 'Üyeler › Market', count: pending.market, href: '?b=market' },
+    { label: 'Onay bekleyen sponsor hesapları', hint: 'Sponsorlar › Sponsor performansı', count: pending.sponsorAccounts ?? 0, href: '?b=growth' },
+    { label: 'Onay bekleyen sosyal hesaplar', hint: 'Üyeler › Sosyal medya', count: pending.socialAccounts ?? 0, href: '?b=social' },
+    { label: 'Sosyal etkinlik katılımları', hint: 'Üyeler › Sosyal medya', count: pending.socialEntries ?? 0, href: '?b=social' },
   ]
   const open = jobs.filter((j) => j.count > 0).sort((a, b) => b.count - a.count)
   const total = open.reduce((s, j) => s + j.count, 0)
@@ -1170,7 +1194,9 @@ function MembersCard({ counts }: { counts: NonNullable<Props['counts']> }) {
   )
 }
 
-function AuditCard({ recent }: { recent: AuditRow[] }) {
+function AuditCard({ recent }: { recent: AuditRow[] | null }) {
+  // Null for accounts that may not open the logs: an empty card with a dead "Tümünü gör" link helps nobody.
+  if (!recent) return null
   return (
     <Card title="Son yönetici işlemleri" link={{ href: '?b=audit', label: 'Tümünü gör' }}>
       {recent.length === 0 ? (

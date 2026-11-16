@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Ticket } from 'lucide-react'
 import { drawRaffleAction } from '@/app/panel/raffle-actions'
+import { confirmed } from '@/components/panel/confirm-dialog'
 import type { RaffleRow } from '@/lib/badge-value'
 
 const field = 'h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground'
@@ -14,11 +15,17 @@ export function BadgeRaffle({ badges, recent }: { badges: { id: string; name: st
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
-  const draw = () =>
-    start(async () => {
-      const r = await drawRaffleAction(badgeId, prize, note)
-      setMsg(r.ok ? `Kazanan: ${r.winner}. ${prize} KP hesabına geçti.` : r.error)
-    })
+  const draw = () => {
+    const badge = badges.find((b) => b.id === badgeId)
+    confirmed(
+      `"${badge?.name ?? ''}" rozetinin ${badge?.holders ?? 0} sahibi arasından bir kişi seçilip ${Number(prize).toLocaleString('tr-TR')} KP hemen hesabına yatırılsın mı? Çekiliş geri alınamaz.`,
+      () =>
+        start(async () => {
+          const r = await drawRaffleAction(badgeId, prize, note)
+          setMsg(r.ok ? `Kazanan: ${r.winner}. ${prize} KP hesabına geçti.` : r.error)
+        }),
+    )
+  }
 
   return (
     <section aria-labelledby="rozet-cekilis" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">

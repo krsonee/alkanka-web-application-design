@@ -1,7 +1,7 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, confirmed, notify } from '@/components/panel/confirm-dialog'
 import { useRef, useState, useTransition } from 'react'
 import { ImagePlus, Loader2, Mail, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react'
 import { EmojiPicker } from './emoji-picker'
@@ -61,15 +61,32 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
   const [searching, startSearch] = useTransition()
   const [sending, startSend] = useTransition()
   const [, startDelete] = useTransition()
+  const [searchNote, setSearchNote] = useState('')
+  const [show, setShow] = useState<'all' | 'manual' | 'auto'>('all')
 
   const search = () => {
-    if (query.trim().length < 2) return
-    startSearch(async () => setResults(await searchMembersForMessage(query)))
+    if (query.trim().length < 2) {
+      setResults([])
+      return setSearchNote('Aramak için en az 2 karakter yaz.')
+    }
+    setSearchNote('')
+    startSearch(async () => {
+      const found = await searchMembersForMessage(query)
+      setResults(found)
+      setSearchNote(found.length ? '' : 'Bu aramaya uyan üye yok. Kullanıcı adını ya da e-postayı kontrol et.')
+    })
   }
+
+  const shown = sent.filter((m) => (show === 'all' ? true : show === 'manual' ? m.manual : !m.manual))
 
   const send = () => {
     setStatus(null)
     if (mode === 'one' && !target) return setStatus({ ok: false, text: 'Önce bir üye seç.' })
+    if (mode === 'all') return confirmed('Bu mesaj TÜM üyelerin gelen kutusuna hemen gönderilsin mi?', deliver)
+    deliver()
+  }
+
+  const deliver = () => {
     startSend(async () => {
       const r = await sendInboxMessage({ userId: mode === 'one' ? target!.id : null, title, body, url, imageUrl })
       if (r.ok) {
@@ -131,7 +148,7 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                 <span className="min-w-0 truncate">
                   <strong className="text-foreground">{target.name || 'İsimsiz'}</strong> <span className="text-muted-foreground">{target.email}</span>
                 </span>
-                <button type="button" onClick={() => setTarget(null)} aria-label="Seçimi kaldır" className="rounded-full p-1 text-muted-foreground hover:bg-secondary">
+                <button type="button" onClick={() => setTarget(null)} aria-label="Seçimi kaldır" className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary">
                   <X className="size-4" aria-hidden />
                 </button>
               </div>
@@ -148,6 +165,7 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                     }}
                     placeholder="Kullanıcı adı veya e-posta"
                     aria-label="Üye ara"
+                    data-no-guard
                     className={cn(input, 'flex-1')}
                   />
                   <button type="button" onClick={search} className="flex items-center gap-1.5 rounded-xl border border-border px-3 text-sm font-semibold text-foreground hover:bg-secondary">
@@ -173,6 +191,11 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                       </li>
                     ))}
                   </ul>
+                )}
+                {searchNote && !searching && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {searchNote}
+                  </p>
                 )}
               </>
             )}
@@ -256,9 +279,35 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
 
       <aside className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5">
         <h3 className="font-display text-base font-bold uppercase text-foreground">Gönderilenler</h3>
-        {sent.length ? (
+        <div role="radiogroup" aria-label="Hangi mesajlar görünsün" className="flex flex-wrap gap-1.5">
+          {(
+            [
+              { id: 'all', label: 'Hepsi' },
+              { id: 'manual', label: 'Elle gönderilen' },
+              { id: 'auto', label: 'Otomatik' },
+            ] as const
+          ).map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              role="radio"
+              aria-checked={show === o.id}
+              onClick={() => setShow(o.id)}
+              className={cn(
+                'flex h-9 items-center rounded-lg border px-3 text-xs font-semibold',
+                show === o.id ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-secondary',
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Otomatik: ödül, hediye ve onay sonrası sistemin kendiliğinden gönderdiği mesajlar. Liste son {sent.length} mesajı gösterir.
+        </p>
+        {shown.length ? (
           <ul className="flex flex-col gap-2">
-            {sent.map((m) => (
+            {shown.map((m) => (
               <li key={m.id} className="flex flex-col gap-1 rounded-xl border border-border p-3 text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-foreground text-pretty">{m.title}</span>
@@ -266,11 +315,16 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                     type="button"
                     aria-label={`${m.title} mesajını sil`}
                     onClick={() => {
-                      void askConfirm('Bu mesaj tüm üyelerin kutusundan silinsin mi?').then((ok) => {
-      if (ok) startDelete(async () => void (await deleteInboxMessage(m.id)))
-    })
-  }}
-                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-destructive"
+                      const where = m.toAll ? 'tüm üyelerin kutusundan' : `gönderildiği tek üyenin kutusundan (${m.target})`
+                      void askConfirm(`"${m.title}" mesajı ${where} silinsin mi? Geri alınamaz.`).then((ok) => {
+                        if (!ok) return
+                        startDelete(async () => {
+                          const r = await deleteInboxMessage(m.id)
+                          notify(r.ok, r.ok ? r.message : r.error)
+                        })
+                      })
+                    }}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-destructive"
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>
@@ -281,13 +335,20 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                 )}
                 <p className="line-clamp-2 text-xs text-muted-foreground">{m.body}</p>
                 <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-                  <span>{m.target}</span>·<span>{m.reads} okundu</span>·<span>{dateFmt.format(new Date(m.createdAt))}</span>
+                  <span>{m.target}</span>·<span>{m.reads} okundu</span>·<span>{dateFmt.format(new Date(m.createdAt))}</span>·
+                  <span>{m.manual ? `Gönderen: ${m.sentBy || 'panel'}` : `Otomatik: ${m.sentBy || 'Sistem'}`}</span>
                 </p>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">Henüz mesaj gönderilmedi.</p>
+          <p className="text-sm text-muted-foreground">
+            {sent.length === 0
+              ? 'Henüz mesaj gönderilmedi.'
+              : show === 'manual'
+                ? `Son ${sent.length} mesajın içinde elle gönderilen yok.`
+                : `Son ${sent.length} mesajın içinde otomatik gönderilen yok.`}
+          </p>
         )}
       </aside>
     </div>

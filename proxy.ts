@@ -56,6 +56,29 @@ async function siteExists(key: string): Promise<boolean> {
   }
 }
 
+const GUIDE_HIT_TTL = 600_000
+const GUIDE_RECHECK = 5_000
+let guideCache: { slugs: Set<string>; at: number } | null = null
+
+/**
+ * Same reason as siteExists: only the proxy can give a missing guide article a real 404 status.
+ * A known slug is trusted for 10 minutes without a query; only an unknown one reloads the list, at most every 5 seconds.
+ * Fails open on DB errors.
+ */
+async function guideExists(slug: string): Promise<boolean> {
+  const age = guideCache ? Date.now() - guideCache.at : Infinity
+  if (guideCache && age < GUIDE_HIT_TTL && guideCache.slugs.has(slug)) return true
+  if (guideCache && age < GUIDE_RECHECK) return false
+  try {
+    const query = neon(process.env.DATABASE_URL!)
+    const list = (await query`SELECT slug FROM blog_posts WHERE published`) as { slug: string }[]
+    guideCache = { slugs: new Set(list.map((r) => r.slug)), at: Date.now() }
+    return guideCache.slugs.has(slug)
+  } catch {
+    return true
+  }
+}
+
 const REDIRECT_TTL = 60_000
 let redirectCache: { map: Map<string, string>; at: number } | null = null
 
@@ -93,6 +116,19 @@ export async function proxy(request: NextRequest) {
       const headers = new Headers(request.headers)
       headers.set('x-alk-path', request.nextUrl.pathname)
       return NextResponse.rewrite(new URL('/__site-not-found', request.url), { request: { headers } })
+    }
+  }
+
+  const guideMatch = request.nextUrl.pathname.match(/^\/rehber\/([^/]+)\/?$/)
+  if (guideMatch && process.env.DATABASE_URL) {
+    let slug = guideMatch[1]
+    try {
+      slug = decodeURIComponent(slug)
+    } catch {}
+    if (!(await guideExists(slug.slice(0, 200)))) {
+      const headers = new Headers(request.headers)
+      headers.set('x-alk-path', request.nextUrl.pathname)
+      return NextResponse.rewrite(new URL('/__guide-not-found', request.url), { request: { headers } })
     }
   }
 

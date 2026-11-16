@@ -1,6 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { getContent, setContent } from '@/lib/content'
+import { driftMessage } from '@/lib/drift'
 import {
   activeBoosts,
   applyMult,
@@ -12,6 +13,24 @@ import {
 } from '@/lib/boosts-shared'
 
 const KEY = 'boosts:config'
+const BOOST_LABELS = {
+  'happyHour.start': 'Mutlu saat başlangıcı',
+  'happyHour.end': 'Mutlu saat bitişi',
+  'happyHour.mult': 'Mutlu saat çarpanı',
+  'weekend.mult': 'Hafta sonu çarpanı',
+  'derby.mult': 'Derbi çarpanı',
+  'flash.pct': 'Flaş indirim yüzdesi',
+  'badgeDay.pct': 'Rozet günü yüzdesi',
+  'comeback.days': 'Geri dönüş gün sayısı',
+  'comeback.coin': 'Geri dönüş hediyesi',
+  'birthday.coin': 'Doğum günü hediyesi',
+  streak14: '14 gün serisi ödülü',
+  shieldPrice: 'Kalkan fiyatı',
+  'bestBonus.kp': 'En iyi bonus puanı',
+  mult: 'Çarpan',
+  pct: 'Yüzde',
+  coin: 'Coin',
+}
 const LOYALTY_BADGE = 'sponsor-mudavimi'
 let cache: { at: number; cfg: BoostConfig } | null = null
 
@@ -24,6 +43,8 @@ export async function getBoostConfig(): Promise<BoostConfig> {
 
 export async function saveBoostConfig(input: Partial<BoostConfig>) {
   const cfg = cleanBoosts(input)
+  const drift = driftMessage(input, cfg, { labels: BOOST_LABELS, ignore: ['until', 'day', 'siteId', 'badgeId', 'id'], blankOk: ['title', 'text'] })
+  if (drift) throw new Error(drift)
   await setContent(KEY, cfg)
   cache = { at: Date.now(), cfg }
   return cfg

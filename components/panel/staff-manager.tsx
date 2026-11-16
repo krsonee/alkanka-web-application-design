@@ -18,6 +18,7 @@ export type StaffRow = {
   totpRequired: boolean
   active: boolean
   lastLoginAt: string | null
+  lastLoginIp: string | null
 }
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
@@ -80,6 +81,7 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
               </span>
               <span className="text-xs text-muted-foreground">
                 {a.isOwner ? 'Ana yönetici, tüm bölümler' : `${a.permissions.length} bölüm`} · Son giriş: {formatDate(a.lastLoginAt)}
+                {a.lastLoginIp ? ` (${a.lastLoginIp})` : ''}
               </span>
             </div>
             <span
@@ -153,7 +155,7 @@ const STAFF_TEMPLATES: { label: string; permissions: string[] }[] = [
   { label: 'İçerik editörü', permissions: ['slide', 'hero', 'texts', 'seo', 'faqs', 'catalog', 'studio', 'logo'] },
   { label: 'Sponsor destek', permissions: ['sponsors', 'growth', 'marketing', 'community'] },
   { label: 'Oyun sorumlusu', permissions: ['games', 'rewards', 'tournaments', 'cember'] },
-  { label: 'Topluluk & bot', permissions: ['push', 'messages', 'telegram', 'social'] },
+  { label: 'Topluluk & bot', permissions: ['push', 'messages', 'tg_posts', 'tg_mod', 'social'] },
 ]
 
 function StaffForm({
@@ -201,7 +203,7 @@ function StaffForm({
           <input className={field} value={v.displayName} onChange={(e) => setV({ ...v, displayName: e.target.value })} placeholder="Ahmet (Moderatör)" />
         </label>
         <label className="flex flex-col gap-1 text-sm font-medium text-foreground">
-          {v.id ? 'Yeni şifre (boş bırak = değişmez)' : 'Şifre (en az 10 karakter)'}
+          {v.id ? 'Yeni şifre (boş bırak = değişmez)' : 'Şifre (en az 10 karakter, harf ve rakam)'}
           <input
             className={field}
             type="password"

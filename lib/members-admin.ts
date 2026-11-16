@@ -1,6 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { getPanelSession } from '@/lib/panel-auth'
+import { logPanel } from '@/lib/panel-log'
 
 export type MemberStatus = 'aktif' | 'donduruldu' | 'banli' | 'supheli'
 
@@ -30,7 +31,7 @@ export type MemberDetail = MemberRow & {
   sameIpMembers: { id: string; name: string; email: string }[]
 }
 
-export type AuditRow = { id: number; actor: string; action: string; target: string | null; detail: string | null; createdAt: string }
+export type { AuditRow } from '@/lib/panel-log-shared'
 
 let ready: Promise<void> | null = null
 
@@ -60,24 +61,9 @@ export function ensureMemberAdmin() {
   return ready
 }
 
-/** Records a panel staff action. Never throws: an audit failure must not block the action itself. */
+/** Records a member-screen action in the panel log. */
 export async function logAudit(action: string, target: string | null, detail: string | null) {
-  try {
-    await ensureMemberAdmin()
-    const session = await getPanelSession()
-    const actor = session ? `${session.displayName} (@${session.username})` : 'sistem'
-    await rows(sql`INSERT INTO panel_audit (actor, action, target, detail) VALUES (${actor}, ${action}, ${target?.slice(0, 160) ?? null}, ${detail?.slice(0, 400) ?? null})`)
-  } catch (error) {
-    console.error('[audit]', error)
-  }
-}
-
-export async function listAudit(limit = 200): Promise<AuditRow[]> {
-  await ensureMemberAdmin()
-  const r = await rows<{ id: number; actor: string; action: string; target: string | null; detail: string | null; created_at: string }>(
-    sql`SELECT id, actor, action, target, detail, created_at FROM panel_audit ORDER BY created_at DESC LIMIT ${limit}`,
-  )
-  return r.map((a) => ({ id: Number(a.id), actor: a.actor, action: a.action, target: a.target, detail: a.detail, createdAt: new Date(a.created_at).toISOString() }))
+  await logPanel('users', action, target, detail)
 }
 
 /** True when the member is suspended or banned right now. Missing tables count as "not banned". */
@@ -141,6 +127,13 @@ function toRow(m: RawMember): MemberRow {
   }
 }
 
+const memberJoins = sql`
+  FROM public."user" u
+  LEFT JOIN member_origin o ON o.user_id = u.id
+  LEFT JOIN wallets w ON w.user_id = u.id
+  LEFT JOIN tg_links l ON l.user_id = u.id
+  LEFT JOIN member_bans b ON b.user_id = u.id AND (b.until IS NULL OR b.until > now())`
+
 const baseSelect = sql`
   SELECT u.id, u.name, u.email, u.phone, u.image, u."createdAt" AS created_at,
     o.src, o.flagged, w.balance,
@@ -148,36 +141,96 @@ const baseSelect = sql`
     l.tg_id::text AS tg_id, coalesce(l.tg_username, l.tg_name) AS tg_name,
     b.kind, b.until, b.reason,
     (SELECT count(*) FROM member_origin o2 WHERE o.ip_hash IS NOT NULL AND o2.ip_hash = o.ip_hash AND o2.user_id <> u.id) AS shared_ip
-  FROM public."user" u
-  LEFT JOIN member_origin o ON o.user_id = u.id
-  LEFT JOIN wallets w ON w.user_id = u.id
-  LEFT JOIN tg_links l ON l.user_id = u.id
-  LEFT JOIN member_bans b ON b.user_id = u.id AND (b.until IS NULL OR b.until > now())`
+  ${memberJoins}`
+
+/** Same rule as toRow(), in SQL, so status filtering and counting happen in the database. */
+const statusExpr = sql`CASE
+  WHEN b.kind = 'ban' THEN 'banli'
+  WHEN b.kind = 'suspend' THEN 'donduruldu'
+  WHEN coalesce(o.flagged, false)
+    OR (o.ip_hash IS NOT NULL AND EXISTS (SELECT 1 FROM member_origin o2 WHERE o2.ip_hash = o.ip_hash AND o2.user_id <> u.id)) THEN 'supheli'
+  ELSE 'aktif' END`
 
 export const MEMBERS_PAGE_SIZE = 100
+const EXPORT_LIMIT = 20000
 
-async function matchingMembers(q: string, status: MemberStatus | 'tumu') {
-  const like = `%${q}%`
-  const filter = q
-    ? sql`WHERE (u.name ILIKE ${like} OR u.email ILIKE ${like} OR coalesce(u.phone, '') ILIKE ${like} OR coalesce(l.tg_id::text, '') ILIKE ${like} OR coalesce(l.tg_username, '') ILIKE ${like})`
-    : sql``
-  const raw = await rows<RawMember>(sql`${baseSelect} ${filter} ORDER BY u."createdAt" DESC LIMIT 20000`)
-  const all = raw.map(toRow)
-  const counts = { tumu: all.length, aktif: 0, donduruldu: 0, banli: 0, supheli: 0 }
-  for (const m of all) counts[m.status]++
-  const filtered = status === 'tumu' ? all : all.filter((m) => m.status === status)
-  return { filtered, counts }
+export type MemberSort = 'yeni' | 'eski' | 'bakiye' | 'puan' | 'son'
+export const MEMBER_SORTS: readonly MemberSort[] = ['yeni', 'eski', 'bakiye', 'puan', 'son']
+
+export type MemberFilters = {
+  q?: string
+  status?: MemberStatus | 'tumu'
+  sort?: MemberSort
+  /** Part of the signup source, e.g. "telegram" or a campaign code. */
+  source?: string
+  /** Signup date range, YYYY-MM-DD, both ends included. */
+  from?: string
+  to?: string
+  minBalance?: number | null
+  maxBalance?: number | null
+  telegram?: 'var' | 'yok' | ''
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+const wholeOrNull = (v: unknown) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Math.trunc(Number(v)))
+
+function memberWhere(f: MemberFilters, withStatus: boolean) {
+  const parts = [sql`TRUE`]
+  const q = (f.q ?? '').trim().slice(0, 80)
+  if (q) {
+    const like = `%${q}%`
+    parts.push(sql`(u.name ILIKE ${like} OR u.email ILIKE ${like} OR coalesce(u.phone, '') ILIKE ${like} OR coalesce(l.tg_id::text, '') ILIKE ${like} OR coalesce(l.tg_username, '') ILIKE ${like})`)
+  }
+  const source = (f.source ?? '').trim().slice(0, 60)
+  if (source) parts.push(sql`coalesce(o.src, '') ILIKE ${`%${source}%`}`)
+  if (f.from && DAY.test(f.from)) parts.push(sql`u."createdAt" >= ${f.from}::date`)
+  if (f.to && DAY.test(f.to)) parts.push(sql`u."createdAt" < (${f.to}::date + 1)`)
+  const min = wholeOrNull(f.minBalance)
+  const max = wholeOrNull(f.maxBalance)
+  if (min != null) parts.push(sql`coalesce(w.balance, 0) >= ${min}`)
+  if (max != null) parts.push(sql`coalesce(w.balance, 0) <= ${max}`)
+  if (f.telegram === 'var') parts.push(sql`l.tg_id IS NOT NULL`)
+  if (f.telegram === 'yok') parts.push(sql`l.tg_id IS NULL`)
+  if (withStatus && f.status && f.status !== 'tumu') parts.push(sql`${statusExpr} = ${f.status}`)
+  return sql`WHERE ${sql.join(parts, sql` AND `)}`
+}
+
+function memberOrder(sort: MemberSort | undefined) {
+  if (sort === 'eski') return sql`ORDER BY u."createdAt" ASC`
+  if (sort === 'bakiye') return sql`ORDER BY coalesce(w.balance, 0) DESC, u."createdAt" DESC`
+  if (sort === 'puan') return sql`ORDER BY points DESC, u."createdAt" DESC`
+  if (sort === 'son') return sql`ORDER BY (SELECT max(s."updatedAt") FROM session s WHERE s."userId" = u.id) DESC NULLS LAST, u."createdAt" DESC`
+  return sql`ORDER BY u."createdAt" DESC`
+}
+
+type MemberCounts = Record<MemberStatus | 'tumu', number>
+
+/** Per-status totals under the given filters (the status filter itself is ignored so every tab shows its own count). */
+export async function memberCounts(f: MemberFilters = {}): Promise<MemberCounts> {
+  await ensureMemberAdmin()
+  const tally = await rows<{ st: MemberStatus; c: string }>(sql`
+    SELECT st, count(*) AS c FROM (SELECT ${statusExpr} AS st ${memberJoins} ${memberWhere(f, false)}) x GROUP BY st`)
+  const counts: MemberCounts = { tumu: 0, aktif: 0, donduruldu: 0, banli: 0, supheli: 0 }
+  for (const t of tally) {
+    const n = Number(t.c)
+    if (t.st in counts) counts[t.st] = n
+    counts.tumu += n
+  }
+  return counts
 }
 
 export async function listMembers(
-  opts: { q?: string; status?: MemberStatus | 'tumu'; page?: number } = {},
-): Promise<{ members: MemberRow[]; counts: Record<MemberStatus | 'tumu', number>; total: number; page: number; pageSize: number }> {
-  await ensureMemberAdmin()
-  const { filtered, counts } = await matchingMembers((opts.q ?? '').trim(), opts.status ?? 'tumu')
-  const lastPage = Math.max(0, Math.ceil(filtered.length / MEMBERS_PAGE_SIZE) - 1)
+  opts: MemberFilters & { page?: number } = {},
+): Promise<{ members: MemberRow[]; counts: MemberCounts; total: number; page: number; pageSize: number }> {
+  const counts = await memberCounts(opts)
+  const status = opts.status ?? 'tumu'
+  const total = counts[status] ?? 0
+  const lastPage = Math.max(0, Math.ceil(total / MEMBERS_PAGE_SIZE) - 1)
   const page = Math.min(Math.max(0, Math.floor(opts.page ?? 0)), lastPage)
-  const members = filtered.slice(page * MEMBERS_PAGE_SIZE, (page + 1) * MEMBERS_PAGE_SIZE)
-  return { members, counts, total: filtered.length, page, pageSize: MEMBERS_PAGE_SIZE }
+  const raw = await rows<RawMember>(
+    sql`${baseSelect} ${memberWhere(opts, true)} ${memberOrder(opts.sort)} LIMIT ${MEMBERS_PAGE_SIZE} OFFSET ${page * MEMBERS_PAGE_SIZE}`,
+  )
+  return { members: raw.map(toRow), counts, total, page, pageSize: MEMBERS_PAGE_SIZE }
 }
 
 function csvCell(v: unknown) {
@@ -186,14 +239,15 @@ function csvCell(v: unknown) {
   return /[",\n;]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
-export async function exportMembersCsv(opts: { q?: string; status?: MemberStatus | 'tumu' } = {}) {
+export async function exportMembersCsv(opts: MemberFilters = {}) {
   await ensureMemberAdmin()
-  const { filtered } = await matchingMembers((opts.q ?? '').trim(), opts.status ?? 'tumu')
+  const raw = await rows<RawMember>(sql`${baseSelect} ${memberWhere(opts, true)} ${memberOrder(opts.sort)} LIMIT ${EXPORT_LIMIT}`)
+  const filtered = raw.map(toRow)
   const head = ['id', 'ad', 'e-posta', 'telefon', 'kayit', 'kaynak', 'bakiye', 'puan', 'telegram_id', 'telegram', 'durum', 'ortak_ip']
   const lines = filtered.map((m) =>
     [m.id, m.name, m.email, m.phone, m.createdAt, m.source, m.balance, m.points, m.telegramId, m.telegramName, m.status, m.sharedIp].map(csvCell).join(','),
   )
-  return { csv: '\uFEFF' + [head.join(','), ...lines].join('\n'), count: filtered.length }
+  return { csv: '\uFEFF' + [head.join(','), ...lines].join('\n'), count: filtered.length, capped: filtered.length >= EXPORT_LIMIT }
 }
 
 export async function memberDetail(userId: string): Promise<MemberDetail | null> {

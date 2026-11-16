@@ -11,7 +11,7 @@ import { getHomeV2 } from '@/lib/home-v2'
 import { isWizardGame } from '@/lib/home-v2-shared'
 import { getHidden } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
-import { breadcrumbLd, DEFAULT_OG, jsonLd, shareImage, SITE_NAME, SITE_URL } from '@/lib/seo'
+import { breadcrumbLd, DEFAULT_OG, jsonLd, OG_BASE, shareImage, SITE_NAME, SITE_URL } from '@/lib/seo'
 
 type MiniKey = MiniGame
 
@@ -75,7 +75,7 @@ export async function generateMetadata({ params }: { params: Promise<{ oyun: str
     title,
     description,
     alternates: { canonical: path },
-    openGraph: { title, description, url: path, images: [image] },
+    openGraph: { ...OG_BASE, title, description, url: path, images: [image] },
     twitter: { card: 'summary_large_image', title, description, images: [image.url] },
   }
 }

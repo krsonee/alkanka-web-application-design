@@ -13,6 +13,8 @@ import { GrowthGuide } from '@/components/panel/growth-guide'
 import type { AffLinkView } from '@/lib/aff-links'
 import type { FlaggedMember, SiteLink, SponsorAccount, TrafficReport } from '@/lib/growth'
 import { cn } from '@/lib/utils'
+import { askReason, confirmed } from '@/components/panel/confirm-dialog'
+import { Flash } from '@/components/panel/flash'
 
 type Site = { id: string; name: string }
 type Props = {
@@ -41,8 +43,7 @@ function useRunner() {
 }
 
 function Note({ msg }: { msg: { ok: boolean; message: string } | null }) {
-  if (!msg) return null
-  return <p role="status" className={cn('text-sm', msg.ok ? 'text-primary' : 'text-destructive')}>{msg.message}</p>
+  return <Flash ok={msg?.ok} text={msg?.message} token={msg} />
 }
 
 function LinkBuilder({ siteUrl }: { siteUrl: string }) {
@@ -232,10 +233,15 @@ function Accounts({ accounts, names }: { accounts: SponsorAccount[]; names: Reco
                     type="button"
                     disabled={pending}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground disabled:opacity-50"
-                    onClick={() => {
-                      const note = window.prompt('Red sebebi (üyeye görünür)', 'Referansımızla kayıtlı değil') ?? ''
-                      run(() => reviewSponsorAccountAction(a.userId, a.siteId, false, note))
-                    }}
+                    onClick={() =>
+                      void askReason('Hesap eşleştirmesi reddedilecek. Sebebi üye kendi ekranında görür.', {
+                        label: 'Red sebebi',
+                        initial: 'Referansımızla kayıtlı değil',
+                        maxLength: 200,
+                        confirm: 'Reddet',
+                        presets: ['Referansımızla kayıtlı değil', 'Kullanıcı adı sitede bulunamadı', 'Bu hesap başka bir üyeye bağlı'],
+                      }).then((note) => note !== null && run(() => reviewSponsorAccountAction(a.userId, a.siteId, false, note)))
+                    }
                   >
                     <X className="size-4" aria-hidden="true" /> Reddet
                   </button>
@@ -288,7 +294,13 @@ function Wagers({ sites, period }: { sites: Site[]; period: string }) {
         aria-label="Çevrim verisi"
       />
       <Note msg={msg} />
-      <button type="button" className={cn(btn, 'self-start')} disabled={pending || !text.trim()} onClick={() => run(() => importWagersAction(siteId, p, text))}>
+      <button type="button" className={cn(btn, 'self-start')} disabled={pending || !text.trim()} onClick={() =>
+          confirmed(
+            `${sites.find((s) => s.id === siteId)?.name ?? 'Seçili site'} için ${p} döneminin mevcut çevrim verisi silinip yapıştırdığın liste yazılsın mı? Eski veri geri gelmez.`,
+            () => run(() => importWagersAction(siteId, p, text)),
+          )
+        }
+      >
         {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
         Yükle
       </button>

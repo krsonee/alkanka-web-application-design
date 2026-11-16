@@ -18,6 +18,7 @@ import { SeoHealthCard } from '@/components/panel/seo-health-card'
 import type { CareItem, HealthIssue, NotFoundHit, Redirect } from '@/lib/seo-health'
 import type { SiteSeo } from '@/lib/site-seo'
 import { SiteSeoCard, WeeklyCareCard } from '@/components/panel/site-seo-card'
+import { Flash } from '@/components/panel/flash'
 
 type Props = {
   posts: BlogPost[]
@@ -53,12 +54,7 @@ export function SeoManager({ posts, deals, publishing, verification, siteUrl, is
 }
 
 function Status({ state }: { state: ActionState }) {
-  if (!state.message) return null
-  return (
-    <p role="status" className={state.ok ? 'text-sm text-primary' : 'text-sm text-destructive'}>
-      {state.message}
-    </p>
-  )
+  return <Flash ok={state.ok} text={state.message} token={state} />
 }
 
 function openSection(id: string) {

@@ -1,6 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
+import { wholeInRange } from '@/lib/drift'
 import { SPRINT_MULTIPLIER, sprintState } from '@/lib/sprint'
 import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, ROLE_STYLES, publicRankName, type BadgeTier, type LevelDef, type MemberRole, type PointRules } from '@/lib/kanka-puan-shared'
 
@@ -122,10 +123,22 @@ export async function getKpConfig(): Promise<KpConfig> {
 
 export async function saveLevels(input: LevelDef[]) {
   await ensureKp()
-  const levels = input
-    .map((l) => ({ name: String(l.name).trim().slice(0, 30), badge: String(l.badge).trim().slice(0, 40), min: Math.max(0, Math.floor(Number(l.min))) }))
-    .filter((l) => l.name && l.badge && Number.isFinite(l.min))
-    .sort((a, b) => a.min - b.min)
+  // Levels are saved exactly as written. Dropping, trimming or re-sorting a row changes which
+  // level name members carry, so a row that cannot be kept as it is stops the save instead.
+  const levels = input.map((l, i) => {
+    const row = `${i + 1}. seviye`
+    const name = String(l.name ?? '').trim()
+    const badge = String(l.badge ?? '').trim()
+    if (!name) throw new Error(`${row}: ad boş bırakılamaz.`)
+    if (name.length > 30) throw new Error(`${row}: ad en fazla 30 karakter olabilir (yazdığın ${name.length}).`)
+    if (!badge) throw new Error(`${row} ("${name}"): rozet seçilmemiş.`)
+    return { name, badge: badge.slice(0, 40), min: wholeInRange(l.min, 0, 1_000_000_000, `${row} ("${name}") puanı`) }
+  })
+  const outOfOrder = levels.findIndex((l, i) => i > 0 && l.min < levels[i - 1].min)
+  if (outOfOrder > 0) {
+    const [prev, cur] = [levels[outOfOrder - 1], levels[outOfOrder]]
+    throw new Error(`"${cur.name}" (${cur.min} puan), üstündeki "${prev.name}" seviyesinden (${prev.min} puan) düşük. Puanlar yukarıdan aşağı artmalı; puanı düzelt. Hiçbir şey kaydedilmedi.`)
+  }
   if (levels.length < 2) throw new Error('En az 2 seviye olmalı.')
   if (levels.length > 50) throw new Error('En fazla 50 seviye olabilir.')
   if (levels[0].min !== 0) throw new Error('İlk seviyenin puanı 0 olmalı.')
@@ -577,8 +590,16 @@ export async function listRoles(): Promise<RoleDef[]> {
 
 export async function saveRole(input: RoleInput) {
   await ensureKp()
-  const name = String(input.name).trim().slice(0, 24)
+  const name = String(input.name).trim().replace(/\s+/g, ' ')
   if (name.length < 2) throw new Error('Rol adı en az 2 karakter olmalı.')
+  if (name.length > 24) throw new Error(`Rol adı en fazla 24 karakter olabilir (şu an ${name.length}).`)
+  // Compared here, not in SQL: the database's lower() does not fold İ/I the Turkish way. A role that already shares its name can still be edited.
+  const nameKey = (s: string) => s.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr')
+  const roles = await rows<{ id: string; name: string }>(sql`SELECT id, name FROM kp_badges WHERE role_style IS NOT NULL`)
+  const sameName = roles.filter((r) => nameKey(r.name) === nameKey(name))
+  if (sameName.length && !sameName.some((r) => String(r.id) === String(input.id ?? ''))) {
+    throw new Error(`"${name}" adında bir rol zaten var. Başka bir ad seç.`)
+  }
   if (!BADGE_ICONS.includes(input.icon)) throw new Error('Geçersiz simge.')
   if (!ROLE_STYLES.some((s) => s.id === input.style)) throw new Error('Geçersiz renk.')
   const staff = Boolean(input.staff)
@@ -700,7 +721,19 @@ export async function adjustPoints(userId: string, points: number, note: string)
   if (!Number.isFinite(p) || p === 0 || Math.abs(p) > 100000) throw new Error('Puan -100.000 ile 100.000 arasında ve sıfırdan farklı olmalı.')
   const user = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${userId}`)
   if (!user.length) throw new Error('Üye bulunamadı.')
+  if (p < 0) {
+    const { kp } = await getKpLevel(userId)
+    if (kp + p < 0) {
+      throw new Error(kp > 0 ? `Üyenin ${kp.toLocaleString('tr-TR')} puanı var, en fazla o kadar düşebilirsin.` : 'Üyenin puanı zaten sıfır, düşülecek puan yok.')
+    }
+  }
   await rows(sql`INSERT INTO kp_events (user_id, source, points, note) VALUES (${userId}, 'admin', ${p}, ${note.trim().slice(0, 120) || null})`)
+}
+
+export async function badgeCount(userId: string, badgeId: string) {
+  await ensureKp()
+  const [row] = await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM kp_awards WHERE user_id = ${userId} AND badge_id = ${badgeId}`)
+  return row?.n ?? 0
 }
 
 export async function searchMembers(q: string) {

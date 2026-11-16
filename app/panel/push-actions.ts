@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { sendToAll } from '@/lib/push'
@@ -15,6 +16,7 @@ export async function sendPushAction(_: ActionState, form: FormData): Promise<Ac
   try {
     const r = await sendToAll({ title, body, url: rawUrl.slice(0, 200) })
     revalidatePath('/panel')
+    await logPanel('push', 'Tüm cihazlara bildirim gönderildi', title, `${r.sent} cihaz${r.failed ? ` · ${r.failed} başarısız` : ''}`)
     return { ok: true, message: `${r.sent} cihaza gönderildi${r.failed ? `, ${r.failed} başarısız` : ''}${r.removed ? ` (${r.removed} eski abonelik silindi)` : ''}.` }
   } catch (error) {
     console.error('[push] gönderilemedi', error)

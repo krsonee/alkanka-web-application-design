@@ -93,6 +93,10 @@ export async function saveCampaign(input: CampaignInput) {
   await ensureMarketing()
   const code = cleanCampaignCode(input.code)
   if (code.length < 2) throw new Error('Kampanya kodu en az 2 karakter olmalı (harf, rakam, -).')
+  // The code is the link people share; saving a rewritten one would hand out a link nobody typed.
+  if (code !== String(input.code).trim().toLowerCase()) throw new Error(`Kampanya kodunda sadece küçük harf, rakam ve tire olabilir. "${code}" yazabilirsin.`)
+  const rawCost = Number(input.cost)
+  if (!Number.isFinite(rawCost) || rawCost < 0 || rawCost > 1e9) throw new Error('Bütçe 0 ile 1.000.000.000 arasında olmalı.')
   if (RESERVED_SRC.has(code)) throw new Error('Bu kod sistem tarafından kullanılıyor, başka bir kod seç.')
   const name = input.name.trim().slice(0, 80)
   if (!name) throw new Error('Kampanyaya bir ad ver.')

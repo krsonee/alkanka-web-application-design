@@ -48,7 +48,7 @@ export function LeagueView({
             {standings.map((s, i) => {
               const isChampion = champion === s.key
               return (
-                <tr key={s.key} className={cn(i === 0 && 'bg-primary/10')}>
+                <tr key={`${s.key}:${i}`} className={cn(i === 0 && 'bg-primary/10')}>
                   <td className="px-3 py-2.5 font-bold text-muted-foreground">{i + 1}</td>
                   <td className="px-3 py-2.5 font-semibold text-foreground">
                     <span className="flex items-center gap-1.5">

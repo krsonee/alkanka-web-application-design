@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { setContent } from '@/lib/content'
@@ -7,20 +8,24 @@ import { LEGAL_DEFAULTS, LEGAL_KEY, LEGAL_MAX, type LegalOverrides } from '@/lib
 
 export type LegalActionState = { ok?: boolean; message?: string }
 
+const unixLines = (text: string) => text.replace(/\r\n?/g, '\n')
+
 export async function saveLegal(_: LegalActionState, form: FormData): Promise<LegalActionState> {
   if (!(await canPanel('texts'))) return { message: 'Oturum süresi doldu, tekrar giriş yap.' }
   const value: LegalOverrides = {}
   for (const d of LEGAL_DEFAULTS) {
     const title = String(form.get(`${d.slug}.title`) ?? '').trim().slice(0, 80)
-    const body = String(form.get(`${d.slug}.body`) ?? '').trim().slice(0, LEGAL_MAX)
+    // Browsers submit textarea line breaks as CRLF; without this every untouched page looks edited.
+    const body = unixLines(String(form.get(`${d.slug}.body`) ?? '')).trim().slice(0, LEGAL_MAX)
     const entry: { title?: string; body?: string } = {}
     if (title && title !== d.title) entry.title = title
-    if (body && body !== d.body.trim()) entry.body = body
+    if (body && body !== unixLines(d.body).trim()) entry.body = body
     if (entry.title || entry.body) value[d.slug] = entry
   }
   try {
     await setContent(LEGAL_KEY, value)
     revalidatePath('/yasal', 'layout')
+    await logPanel('texts', 'Yasal metinler kaydedildi', null, `${Object.keys(value).length} sayfa özelleştirildi`)
     return { ok: true, message: `Kaydedildi (${Object.keys(value).length} sayfa özelleştirildi).` }
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }

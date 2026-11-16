@@ -527,6 +527,8 @@ export async function addLeagueMatch(input: { league: string; home: string; away
   const when = new Date(input.kickoff)
   if (Number.isNaN(when.getTime())) throw new Error('Geçerli bir tarih gir.')
   if (!input.home.trim() || !input.away.trim()) throw new Error('Takım adlarını gir.')
+  if (input.home.trim().toLocaleLowerCase('tr') === input.away.trim().toLocaleLowerCase('tr')) throw new Error('İki takım aynı olamaz.')
+  if (when.getTime() < Date.now()) throw new Error('Maç saati geçmişte olamaz. Tarihi kontrol et.')
   let closes: string | null = null
   if (input.closesAt) {
     const c = new Date(input.closesAt)

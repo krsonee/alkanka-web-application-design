@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/panel-auth'
 import type { PanelModule } from '@/lib/panel-modules'
@@ -36,6 +37,11 @@ const MODULE: Record<VisibilityKind, PanelModule> = {
   campaign: 'catalog',
   bonus: 'catalog',
   tournament: 'tournaments',
+}
+
+const KIND_LABEL: Record<VisibilityKind, string> = {
+  sponsor: 'Sponsor', task: 'Görev', faq: 'SSS', market: 'Market ürünü', badge: 'Rozet', social: 'Sosyal etkinlik', arena: 'Oyun',
+  slide: 'Slayt', mini: 'Mini oyun', event: 'Etkinlik', prediction: 'Tahmin', campaign: 'Kampanya', bonus: 'Bonus', tournament: 'Turnuva',
 }
 
 async function toggleListed(scope: HiddenScope, id: string, visible: boolean) {
@@ -83,6 +89,7 @@ export async function setVisibility(kind: VisibilityKind, rawId: string | number
         await toggleListed(kind, id, visible)
     }
     revalidatePath('/', 'layout')
+    await logPanel(module, visible ? 'Sitede gösterildi' : 'Siteden gizlendi', `${KIND_LABEL[kind]} · ${id}`)
     return { ok: true, message: visible ? 'Sitede tekrar görünüyor.' : 'Siteden gizlendi, üyeler göremez.' }
   } catch (error) {
     console.error(`[visibility:${kind}]`, error)

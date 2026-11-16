@@ -703,10 +703,14 @@ function JobCard({
             disabled={pending}
             aria-label="Sil"
             onClick={() =>
-              start(async () => {
-                await deleteJobAction(job.id)
-                router.refresh()
-              })
+              void askConfirm('Bu üretim ve dosyası kalıcı olarak silinsin mi? Geri alınamaz.').then(
+                (ok) =>
+                  ok &&
+                  start(async () => {
+                    await deleteJobAction(job.id)
+                    router.refresh()
+                  }),
+              )
             }
             className={cn(ghostBtn, 'ml-auto text-destructive')}
           >
@@ -1143,10 +1147,10 @@ function Library({ assets }: { assets: StudioAsset[] }) {
                     type="button"
                     aria-label="Görseli sil"
                     onClick={() =>
-                      start(async () => {
+                      void askConfirm('Bu görsel kütüphaneden kalıcı olarak silinsin mi? Geri alınamaz.').then((ok) => ok && start(async () => {
                         await deleteAssetAction(a.id)
                         router.refresh()
-                      })
+                      }))
                     }
                     className="absolute right-1 top-1 rounded-md bg-card/90 p-1 text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100"
                   >

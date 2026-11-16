@@ -1,6 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
+import { driftMessage, wholeInRange } from '@/lib/drift'
 import { credit } from '@/lib/member'
 
 export type WithdrawStatus = 'pending' | 'approved' | 'rejected' | 'fake'
@@ -116,6 +117,16 @@ function mapAdmin(r: Record<string, unknown>): AdminWithdrawShare {
 
 const int = (v: unknown, min: number, max: number) => Math.min(max, Math.max(min, Math.trunc(Number(v) || 0)))
 
+const SETTING_LABELS = {
+  coin: 'Coin ödülü',
+  kp: 'Puan ödülü',
+  item: 'Eşya ödülü',
+  weekly: 'Haftalık paylaşım hakkı',
+  minAmount: 'En düşük çekim tutarı',
+  maxAgeDays: 'Çekim en fazla kaç günlük olabilir',
+  minAccountDays: 'Hesap en az kaç günlük olmalı',
+}
+
 function cleanSettings(input: Partial<WithdrawSettings> | null | undefined): WithdrawSettings {
   const d = WITHDRAW_DEFAULTS
   const v = input ?? {}
@@ -140,7 +151,12 @@ export async function getWithdrawSettings(): Promise<WithdrawSettings> {
 
 export async function saveWithdrawSettings(input: Partial<WithdrawSettings>) {
   await ensure()
-  const s = cleanSettings(input)
+  // The reward card and the rules card each send only their own fields. Start from what is
+  // stored so saving one card does not put the other card back to its defaults.
+  const [stored] = await rows<{ value: Partial<WithdrawSettings> }>(sql`SELECT value FROM withdraw_config WHERE id = 1`)
+  const s = cleanSettings({ ...(stored?.value ?? {}), ...input })
+  const drift = driftMessage(input, s, { labels: SETTING_LABELS, blankOk: ['item'] })
+  if (drift) throw new Error(drift)
   await rows(sql`INSERT INTO withdraw_config (id, value) VALUES (1, ${JSON.stringify(s)}::jsonb)
     ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`)
 }
@@ -158,8 +174,8 @@ export async function saveSiteReward(siteId: string, reward: WithdrawReward | nu
     await rows(sql`DELETE FROM withdraw_rewards WHERE site_id = ${siteId}`)
     return
   }
-  const coin = int(reward.coin, 0, 100000)
-  const kp = int(reward.kp, 0, 100000)
+  const coin = wholeInRange(reward.coin ?? 0, 0, 100000, 'Coin ödülü')
+  const kp = wholeInRange(reward.kp ?? 0, 0, 100000, 'Puan ödülü')
   const item = String(reward.item ?? '').trim().slice(0, 80)
   await rows(sql`INSERT INTO withdraw_rewards (site_id, coin, kp, item) VALUES (${siteId}, ${coin}, ${kp}, ${item})
     ON CONFLICT (site_id) DO UPDATE SET coin = EXCLUDED.coin, kp = EXCLUDED.kp, item = EXCLUDED.item`)
@@ -308,8 +324,10 @@ async function message(userId: string, title: string, body: string) {
 
 export async function approveWithdrawal(id: number, reward: WithdrawReward) {
   await ensure()
-  const coin = int(reward.coin, 0, 100000)
-  const kp = int(reward.kp, 0, 100000)
+  // The reward is paid out the moment the share is approved, so an out-of-range amount is
+  // refused rather than clamped.
+  const coin = wholeInRange(reward.coin ?? 0, 0, 100000, 'Coin ödülü')
+  const kp = wholeInRange(reward.kp ?? 0, 0, 100000, 'Puan ödülü')
   const item = String(reward.item ?? '').trim().slice(0, 80) || null
   const [row] = await rows<Record<string, unknown>>(sql`UPDATE withdraw_shares SET status = 'approved', reward_coin = ${coin}, reward_kp = ${kp},
     reward_item = ${item}, resolved_at = now() WHERE id = ${id} AND status = 'pending' RETURNING *`)

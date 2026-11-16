@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { canPanel } from '@/lib/admin-auth'
 import { isSegment, mobileMembers, segmentUserIds, type MobileRow, type MobileSegment } from '@/lib/mobile'
 import { sendToUsers } from '@/lib/push'
@@ -37,6 +38,7 @@ export async function sendSegmentPush(input: {
       sent += r.sent
       failed += r.failed
     }
+    await logPanel('push', 'Seçili kitleye bildirim gönderildi', title, `${input.segment} · ${ids.length} üye · ${sent} cihaz${failed ? ` · ${failed} başarısız` : ''}`)
     return { ok: true, message: `${ids.length} üyeden ${sent} cihaza gönderildi${failed ? `, ${failed} başarısız` : ''}.` }
   } catch (error) {
     console.error('[mobile] segment push failed', error)

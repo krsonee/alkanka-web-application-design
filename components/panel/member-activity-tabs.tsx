@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Award, Gift, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, confirmed } from '@/components/panel/confirm-dialog'
 import { giftAction, memberBadgeAction, memberPointsAction, memberRevokeBadgeAction, memberRoleAction } from '@/app/panel/members-actions'
 import type { MemberActivity } from '@/lib/members-admin'
 
@@ -240,11 +240,20 @@ function RewardsTab({
   return (
     <div className="flex flex-col gap-4">
       <Card icon={<Gift className="size-4" aria-hidden="true" />} title="Hediye gönder" hint="Kanka Coin hesabına eklenir ve gelen kutusuna hediye mesajı düşer.">
-        <input aria-label="Hediye tutarı" inputMode="numeric" value={gift} onChange={(e) => setGift(e.target.value.replace(/\D/g, ''))} placeholder="Tutar (KC)" className={input} />
+        <input aria-label="Hediye tutarı" inputMode="numeric" value={gift} onChange={(e) => setGift(e.target.value.replace(/[^\d-]/g, ''))} placeholder="Tutar (KC)" className={input} />
+        {gift !== '' && !(Number(gift) >= 1 && Number(gift) <= 100000) && (
+          <p role="alert" className="text-xs text-destructive">
+            Hediye 1 ile 100.000 KC arasında olmalı. Bakiye düşmek için &quot;Bakiye düzeltme&quot; bölümünü kullan.
+          </p>
+        )}
         <textarea aria-label="Hediye mesajı" value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} rows={2} placeholder="Mesaj (isteğe bağlı) — örn. Turnuva tesellisi, iyi şanslar!" className={cn(input, 'resize-y leading-relaxed')} />
         <button
-          disabled={busy || !Number(gift)}
-          onClick={() => run(() => giftAction(userId, Number(gift), giftMsg), () => (setGift(''), setGiftMsg('')))}
+          disabled={busy || !(Number(gift) >= 1 && Number(gift) <= 100000)}
+          onClick={() =>
+            confirmed(`Bu üyeye ${Number(gift).toLocaleString('tr-TR')} KC hediye gönderilsin mi? Hesabına hemen eklenir ve gelen kutusuna mesaj düşer.`, () =>
+              run(() => giftAction(userId, Number(gift), giftMsg), () => (setGift(''), setGiftMsg(''))),
+            )
+          }
           className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
         >
           Hediyeyi gönder
@@ -282,7 +291,14 @@ function RewardsTab({
               <button
                 type="button"
                 disabled={busy || !pickedRole || pickedRole === roleId}
-                onClick={() => run(() => memberRoleAction(userId, pickedRole), () => {})}
+                onClick={() =>
+                  confirmed(
+                    `${currentRole ? `Üyenin şu anki "${currentRole.name}" rolü kalkar, yerine "${nextRole?.name ?? ''}" verilir.` : `Üyeye "${nextRole?.name ?? ''}" rolü verilir.`}${
+                      nextRole?.staff ? ' Görevli rolüyle Kanka Puan kazanamaz, alışveriş yapamaz ve etkinliklere katılamaz.' : ''
+                    } Onaylıyor musun?`,
+                    () => run(() => memberRoleAction(userId, pickedRole), () => {}),
+                  )
+                }
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
               >
                 Rolü ver
@@ -343,7 +359,12 @@ function RewardsTab({
             <input aria-label="Rozet notu" value={badgeNote} onChange={(e) => setBadgeNote(e.target.value)} placeholder="Not (isteğe bağlı)" className={input} />
             <button
               disabled={busy || !badgeId}
-              onClick={() => run(() => memberBadgeAction(userId, badgeId, badgeNote), () => setBadgeNote(''))}
+              onClick={() => {
+                const give = () => run(() => memberBadgeAction(userId, badgeId, badgeNote), () => setBadgeNote(''))
+                const held = activity.badges.find((b) => b.id === badgeId)
+                if (!held) return confirmed(`Bu üyeye "${badges.find((b) => b.id === badgeId)?.name ?? ''}" rozeti verilsin mi? Bonus puanı varsa hemen eklenir.`, give)
+                void askConfirm(`Bu üyede "${held.name}" rozeti zaten var. Bir kez daha verirsen bonus puanı da tekrar eklenir. Yine de verilsin mi?`).then((ok) => ok && give())
+              }}
               className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-40"
             >
               Rozeti ver
@@ -357,7 +378,14 @@ function RewardsTab({
         <input aria-label="Puan gerekçesi" value={kpNote} onChange={(e) => setKpNote(e.target.value)} placeholder="Gerekçe (zorunlu)" className={input} />
         <button
           disabled={busy || !Number(kp) || kpNote.trim().length < 3}
-          onClick={() => run(() => memberPointsAction(userId, Number(kp), kpNote), () => (setKp(''), setKpNote('')))}
+          onClick={() =>
+            confirmed(
+              Number(kp) < 0
+                ? `Bu üyeden ${Math.abs(Number(kp)).toLocaleString('tr-TR')} Kanka Puan düşülsün mü? Seviyesi ve sıralaması değişebilir.`
+                : `Bu üyeye ${Number(kp).toLocaleString('tr-TR')} Kanka Puan eklensin mi? Seviyesi ve sıralaması değişebilir.`,
+              () => run(() => memberPointsAction(userId, Number(kp), kpNote), () => (setKp(''), setKpNote(''))),
+            )
+          }
           className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-40"
         >
           {Number(kp) < 0 ? 'Puanı düş' : 'Puan ekle'}

@@ -3,6 +3,7 @@ import { rows, sql } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { MARKET_ITEMS } from '@/components/alkanka/data'
 import { assertCanBuy } from '@/lib/member-limits'
+import { isAllowedImage } from '@/lib/site-registry'
 
 export type MarketKind = 'alkanka' | 'sponsor'
 export type RequestStatus = 'beklemede' | 'onaylandi' | 'reddedildi'
@@ -131,6 +132,8 @@ export async function listProducts(opts: { includeInactive?: boolean } = {}): Pr
 
 export type ProductInput = Omit<MarketProduct, 'id' | 'needsUsername' | 'sponsorSlug'> & { id: string | null; needsUsername: boolean }
 
+const MAX_PRICE = 10_000_000
+const MAX_STOCK = 100_000
 const clean = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max)
 const int = (v: unknown, min: number, max: number) => Math.min(max, Math.max(min, Math.floor(Number(v) || 0)))
 
@@ -145,12 +148,17 @@ export async function saveProduct(input: ProductInput) {
   const sponsorName = sponsor ? clean(sponsor.name, 80) || null : null
   const id = input.id || `${kind === 'sponsor' ? 'sp' : 'ak'}-${Date.now().toString(36)}`
   const rules = (input.rules ?? []).map((x) => clean(x, 200)).filter(Boolean).slice(0, 12)
-  const total = int(input.total, 0, 100000)
-  const stock = Math.min(int(input.stock, 0, 100000), total || 100000)
+  const image = clean(input.image, 500)
+  if (image && !isAllowedImage(image)) throw new Error('Görsel linki /images/ ile ya da https:// ile başlamalı.')
+  if (Number(input.price) > MAX_PRICE) throw new Error(`Fiyat en fazla ${MAX_PRICE.toLocaleString('tr-TR')} KC olabilir.`)
+  if (Number(input.total) > MAX_STOCK || Number(input.stock) > MAX_STOCK) throw new Error(`Stok en fazla ${MAX_STOCK.toLocaleString('tr-TR')} olabilir.`)
+  const total = int(input.total, 0, MAX_STOCK)
+  if (total > 0 && Number(input.stock) > total) throw new Error(`Kalan stok (${Number(input.stock)}) toplam stoktan (${total}) fazla olamaz.`)
+  const stock = Math.min(int(input.stock, 0, MAX_STOCK), total || MAX_STOCK)
   await rows(sql`INSERT INTO market_items (id, kind, sponsor_id, sponsor_name, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, active, sort)
     VALUES (${id}, ${kind}, ${kind === 'sponsor' ? clean(input.sponsorId, 80) || null : null}, ${sponsorName}, ${clean(input.type, 30) || 'HEDİYE'}, ${name},
-      ${clean(input.description, 600)}, ${clean(input.delivery, 300)}, ${JSON.stringify(rules)}::jsonb, ${clean(input.image, 500)},
-      ${int(input.price, 1, 10_000_000)}, ${stock}, ${total}, ${int(input.perUser, 1, 100)}, ${Boolean(input.needsUsername) || kind === 'sponsor'},
+      ${clean(input.description, 600)}, ${clean(input.delivery, 300)}, ${JSON.stringify(rules)}::jsonb, ${image},
+      ${int(input.price, 1, MAX_PRICE)}, ${stock}, ${total}, ${int(input.perUser, 1, 100)}, ${Boolean(input.needsUsername) || kind === 'sponsor'},
       ${input.active !== false}, ${int(input.sort, 0, 9999)})
     ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, sponsor_id = EXCLUDED.sponsor_id, sponsor_name = EXCLUDED.sponsor_name,
       type = EXCLUDED.type, name = EXCLUDED.name, description = EXCLUDED.description, delivery = EXCLUDED.delivery, rules = EXCLUDED.rules,
@@ -268,13 +276,26 @@ export async function pendingCount(): Promise<number> {
 }
 
 export async function resolveRequest(id: number, approve: boolean, note: string) {
+  if (note.trim().length > 300) throw new Error(`Not en fazla 300 karakter olabilir (şu an ${note.trim().length}). Üyeye yarım not gitmesin diye kaydedilmedi.`)
   await ensure()
-  const r = await rows<ReqRow>(sql`UPDATE market_requests SET status = ${approve ? 'onaylandi' : 'reddedildi'},
-    note = ${clean(note, 300) || null}, resolved_at = now() WHERE id = ${id} AND status = 'beklemede' RETURNING *`)
+  if (approve) {
+    const r = await rows<ReqRow>(sql`UPDATE market_requests SET status = 'onaylandi',
+      note = ${clean(note, 300) || null}, resolved_at = now() WHERE id = ${id} AND status = 'beklemede' RETURNING *`)
+    if (!r[0]) throw new Error('Talep bulunamadı ya da zaten sonuçlandı.')
+    return
+  }
+  // One statement, so a rejected request can never be left without its refund and its stock.
+  const r = await rows<ReqRow & { refunded: string }>(sql`WITH req AS (
+      UPDATE market_requests SET status = 'reddedildi', note = ${clean(note, 300) || null}, resolved_at = now()
+      WHERE id = ${id} AND status = 'beklemede' RETURNING *
+    ), refund AS (
+      UPDATE wallets w SET balance = w.balance + req.price, updated_at = now() FROM req WHERE w.user_id = req.user_id RETURNING w.user_id
+    ), restock AS (
+      UPDATE market_items i SET stock = i.stock + 1 FROM req WHERE i.id = req.item_id RETURNING i.id
+    )
+    SELECT req.*, (SELECT count(*) FROM refund) AS refunded, (SELECT count(*) FROM restock) AS restocked FROM req`)
   const req = r[0]
   if (!req) throw new Error('Talep bulunamadı ya da zaten sonuçlandı.')
-  if (!approve) {
-    await credit(req.user_id, req.price)
-    await rows(sql`UPDATE market_items SET stock = stock + 1 WHERE id = ${req.item_id}`)
-  }
+  // A member who paid always has a wallet row; this only covers one that was removed since.
+  if (Number(req.refunded) === 0) await credit(req.user_id, req.price)
 }

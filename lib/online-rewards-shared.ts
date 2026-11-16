@@ -57,6 +57,7 @@ export function cleanTickerConfig(input: Partial<TickerConfig> | null | undefine
 
 export const IDLE_MINUTES = 10
 export const MAX_ONLINE_HOURS = 48
+export const MAX_ONLINE_TIERS = 24
 
 export const DEFAULT_ONLINE: OnlineConfig = {
   enabled: true,
@@ -131,7 +132,7 @@ export function cleanOnlineConfig(input: Partial<OnlineConfig> | null | undefine
     }))
     .filter((t) => t.hour > 0 && (t.coin > 0 || t.kp > 0) && !seen.has(t.hour) && seen.add(t.hour))
     .sort((a, b) => a.hour - b.hour)
-    .slice(0, 24)
+    .slice(0, MAX_ONLINE_TIERS)
   return {
     enabled: raw.enabled ?? DEFAULT_ONLINE.enabled,
     graceMinutes: clampInt(raw.graceMinutes, 2, 30, DEFAULT_ONLINE.graceMinutes),

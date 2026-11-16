@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { setContent } from '@/lib/content'
@@ -18,6 +19,7 @@ export async function saveReferral(_: ReferralActionState, form: FormData): Prom
   try {
     await setContent(REFERRAL_KEY, value)
     revalidatePath('/profil')
+    await logPanel('growth', 'Davet ödülleri kaydedildi')
     return { ok: true, message: 'Davet ödülleri kaydedildi.' }
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }

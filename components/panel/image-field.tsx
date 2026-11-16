@@ -5,6 +5,16 @@ import { ImageIcon, Images, Loader2, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DIRECT_UPLOAD_OVER_BYTES, checkImageUpload, uploadId as cleanUploadId } from '@/lib/upload-limits'
 
+/** "/images/slides/okey-masa.webp" -> "okey masa", so a gallery thumbnail has a name a screen reader can say. */
+function imageName(src: string) {
+  const file = src.split(/[?#]/)[0].split('/').pop() ?? ''
+  let name = file.replace(/\.[a-z0-9]+$/i, '')
+  try {
+    name = decodeURIComponent(name)
+  } catch {}
+  return name.replace(/[-_]+/g, ' ').trim() || 'adsız görsel'
+}
+
 export async function uploadPanelImage(file: File, id = 'img'): Promise<string> {
   const ext = checkImageUpload(file)
   if (file.size > DIRECT_UPLOAD_OVER_BYTES) {
@@ -97,9 +107,13 @@ export function ImageField({
               type="button"
               onClick={() => set('')}
               aria-label="Görseli kaldır"
-              className="absolute right-1 top-1 rounded-full bg-card/90 p-1 text-foreground hover:bg-card"
+              className={cn(
+                'absolute right-1 top-1 flex items-center justify-center rounded-full bg-card/90 p-1 text-foreground hover:bg-card',
+                // The compact thumbnail is 56px wide; a full-size target would cover it.
+                !compact && 'max-sm:size-9',
+              )}
             >
-              <X className="size-3" aria-hidden="true" />
+              <X className={cn('size-3', !compact && 'max-sm:size-4')} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -130,7 +144,7 @@ export function ImageField({
               type="button"
               disabled={busy}
               onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-card px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-card px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50 max-sm:min-h-9"
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Upload className="size-3.5" aria-hidden="true" />}
               {busy ? 'Yükleniyor…' : 'Bilgisayardan yükle'}
@@ -140,7 +154,7 @@ export function ImageField({
                 type="button"
                 onClick={() => setPicker((p) => !p)}
                 aria-expanded={picker}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
+                className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary max-sm:min-h-9"
               >
                 <Images className="size-3.5" aria-hidden="true" />
                 {picker ? 'Galeriyi kapat' : 'Galeriden seç'}
@@ -157,7 +171,7 @@ export function ImageField({
       </div>
       {picker && library && (
         <ul className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto rounded-lg border border-border bg-background p-2 sm:grid-cols-5">
-          {library.map((src) => (
+          {library.map((src, i) => (
             <li key={src}>
               <button
                 type="button"
@@ -165,6 +179,8 @@ export function ImageField({
                   set(src)
                   setPicker(false)
                 }}
+                aria-label={`Galeri görseli ${i + 1}/${library.length}: ${imageName(src)}${src === url ? ' (seçili)' : ''}`}
+                title={imageName(src)}
                 className={cn(
                   'block aspect-video w-full overflow-hidden rounded-md border-2',
                   src === url ? 'border-primary' : 'border-transparent hover:border-border',

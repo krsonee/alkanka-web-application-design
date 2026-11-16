@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import useSWR from 'swr'
 import { BellOff, BellRing, Send, Smartphone } from 'lucide-react'
 import { loadMobileMembers, sendSegmentPush } from '@/app/panel/mobile-actions'
+import { confirmed } from '@/components/panel/confirm-dialog'
 import type { MobileSegment } from '@/lib/mobile'
 import { cn } from '@/lib/utils'
 
@@ -142,14 +143,16 @@ function SegmentSender({ segment, from, to }: { segment: MobileSegment; from: st
       className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
       onSubmit={(e) => {
         e.preventDefault()
-        start(async () => {
-          const r = await sendSegmentPush({ segment, from: from || null, to: to || null, title, body, url })
-          setMsg({ ok: r.ok, text: r.message })
-          if (r.ok) {
-            setTitle('')
-            setBody('')
-          }
-        })
+        confirmed('Bu bildirim seçili segmentteki tüm üyelere hemen gönderilsin mi? Gönderilen bildirim geri alınamaz.', () =>
+          start(async () => {
+            const r = await sendSegmentPush({ segment, from: from || null, to: to || null, title, body, url })
+            setMsg({ ok: r.ok, text: r.message })
+            if (r.ok) {
+              setTitle('')
+              setBody('')
+            }
+          }),
+        )
       }}
     >
       <p className="text-sm font-bold text-foreground">Bu segmente bildirim gönder</p>

@@ -5,12 +5,14 @@ import { askConfirm } from '@/components/panel/confirm-dialog'
 import { HideButton } from '@/components/panel/hide-button'
 import { KpGuide } from '@/components/panel/area-guides'
 import { useState, useTransition } from 'react'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { Minus, Plus, Search, Trash2, Undo2 } from 'lucide-react'
 import {
   changePoints,
   findMembers,
   giveBadge,
   giveContestBadge,
+  heldBadgeCount,
   previewContest,
   removeBadge,
   takeBackAward,
@@ -67,7 +69,7 @@ type Props = {
 }
 
 export function KpManager({ levels, rules, badges, awards, board, autoLabels, online, ticker, quest, questWinners }: Props) {
-  const [tab, setTab] = useState<Tab>('levels')
+  const [tab, setTab] = useUrlTab<Tab>(['levels', 'rules', 'badges', 'award', 'board', 'online', 'ticker', 'quest'], 'levels')
   return (
     <div className="flex flex-col gap-5">
       <KpGuide />
@@ -600,7 +602,20 @@ type Member = { id: string; name: string; email: string }
 function MemberPicker({ value, onChange }: { value: Member | null; onChange: (m: Member | null) => void }) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Member[]>([])
+  const [note, setNote] = useState('')
   const [loading, start] = useTransition()
+  const search = () => {
+    if (q.trim().length < 2) {
+      setResults([])
+      return setNote('Aramak için en az 2 karakter yaz.')
+    }
+    setNote('')
+    start(async () => {
+      const found = await findMembers(q)
+      setResults(found)
+      setNote(found.length ? '' : 'Bu aramaya uyan üye yok. Adı ya da e-postayı kontrol et.')
+    })
+  }
   if (value) {
     return (
       <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
@@ -618,14 +633,14 @@ function MemberPicker({ value, onChange }: { value: Member | null; onChange: (m:
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               e.preventDefault()
-              start(async () => setResults(await findMembers(q)))
+              search()
             }
           }}
           placeholder="Üye adı ya da e-posta"
           className={field}
           aria-label="Üye ara"
         />
-        <button type="button" onClick={() => start(async () => setResults(await findMembers(q)))} disabled={loading} className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-secondary">
+        <button type="button" onClick={search} disabled={loading} className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-secondary">
           <Search className="size-4" aria-hidden /> Ara
         </button>
       </div>
@@ -641,6 +656,11 @@ function MemberPicker({ value, onChange }: { value: Member | null; onChange: (m:
           ))}
         </ul>
       )}
+      {note && !loading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {note}
+        </p>
+      )}
     </div>
   )
 }
@@ -651,6 +671,12 @@ function ManualAward({ badges }: { badges: SpecialBadge[] }) {
   const [note, setNote] = useState('')
   const [points, setPoints] = useState(100)
   const { pending, status, run } = useAction()
+  const giveBadgeChecked = async (userId: string) => {
+    const held = await heldBadgeCount(badgeId, userId)
+    const name = badges.find((b) => b.id === badgeId)?.name ?? 'Bu'
+    if (held > 0 && !(await askConfirm(`Bu üyede "${name}" rozeti zaten var. Bir kez daha verirsen bonus puanı da tekrar eklenir. Yine de verilsin mi?`))) return
+    run(() => giveBadge(badgeId, userId, note))
+  }
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -663,7 +689,7 @@ function ManualAward({ badges }: { badges: SpecialBadge[] }) {
           {badges.map((b) => <option key={b.id} value={b.id}>{b.name} (+{b.bonus} KP)</option>)}
         </select>
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Not (örn. Ekim yazı yarışması birincisi)" className={field} aria-label="Not" />
-        <button disabled={pending || !member || !badgeId} onClick={() => member && run(() => giveBadge(badgeId, member.id, note))} className="h-10 rounded-lg bg-primary text-sm font-bold text-primary-foreground disabled:opacity-40">
+        <button disabled={pending || !member || !badgeId} onClick={() => member && void giveBadgeChecked(member.id)} className="h-10 rounded-lg bg-primary text-sm font-bold text-primary-foreground disabled:opacity-40">
           Rozeti ver
         </button>
         <div className="flex items-center gap-2 border-t border-border pt-3">

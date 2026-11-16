@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { Check, X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { askConfirm, notify } from '@/components/panel/confirm-dialog'
+import { askConfirm, askReason, notify } from '@/components/panel/confirm-dialog'
 import { decideReviewProof, moderateReview } from '@/app/panel/community-actions'
 import { approveClaimAction, rejectClaimAction } from '@/app/panel/task-actions'
 import { resolveMarketRequestAction } from '@/app/panel/market-actions'
+import { rejectShare } from '@/app/panel/withdraw-actions'
 
-export type ModerationKind = 'proof' | 'review' | 'claim' | 'market' | 'complaint'
+export type ModerationKind = 'proof' | 'review' | 'claim' | 'market' | 'complaint' | 'withdraw'
 
 export type ModerationItem = {
   key: string
@@ -28,28 +29,38 @@ const KIND_LABEL: Record<ModerationKind, string> = {
   claim: 'Görev onayı',
   market: 'Market talebi',
   complaint: 'Şikayet',
+  withdraw: 'Çekim paylaşımı',
 }
 
-const KIND_SECTION: Record<ModerationKind, string> = {
-  proof: 'community',
-  review: 'community',
-  complaint: 'community',
-  claim: 'tasks',
-  market: 'market',
+/** Where the full screen for a kind lives; `s` opens the right tab inside that section. */
+const KIND_LINK: Record<ModerationKind, string> = {
+  proof: '/panel?b=community&s=kanit',
+  review: '/panel?b=community&s=reviews',
+  complaint: '/panel?b=community&s=complaints',
+  withdraw: '/panel?b=community&s=cekim',
+  claim: '/panel?b=tasks',
+  market: '/panel?b=market',
 }
+
+/** These need more than yes or no (a reply, or a reward amount), so the queue sends the admin to their own screen to approve. */
+const OPEN_TO_APPROVE = new Set<ModerationKind>(['complaint', 'withdraw'])
+/** A rejection of these reaches the member, so the queue asks why. */
+const REASONED = new Set<ModerationKind>(['claim', 'market', 'withdraw'])
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
-function decide(item: ModerationItem, approve: boolean): Promise<Result> {
+function decide(item: ModerationItem, approve: boolean, note: string): Promise<Result> {
   switch (item.kind) {
     case 'proof':
       return decideReviewProof(item.id, approve)
     case 'review':
       return moderateReview(item.id, approve ? 'approved' : 'rejected')
     case 'claim':
-      return approve ? approveClaimAction(item.id) : rejectClaimAction(item.id)
+      return approve ? approveClaimAction(item.id) : rejectClaimAction(item.id, note)
     case 'market':
-      return resolveMarketRequestAction(item.id, approve, '') as Promise<Result>
+      return resolveMarketRequestAction(item.id, approve, note) as Promise<Result>
+    case 'withdraw':
+      return approve ? Promise.resolve({ ok: false, error: 'Çekim paylaşımı ödül seçilerek onaylanır, "İncele" ile aç.' }) : (rejectShare(item.id, note) as Promise<Result>)
     default:
       return Promise.resolve({ ok: false, error: 'Şikayetler yanıt gerektirir, Topluluk bölümünden işle.' })
   }
@@ -63,7 +74,7 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
 
   const counts = list.reduce<Record<string, number>>((acc, i) => ((acc[i.kind] = (acc[i.kind] ?? 0) + 1), acc), {})
   const visible = filter === 'all' ? list : list.filter((i) => i.kind === filter)
-  const actionable = visible.filter((i) => i.kind !== 'complaint')
+  const actionable = visible.filter((i) => !OPEN_TO_APPROVE.has(i.kind))
   const allChecked = actionable.length > 0 && actionable.every((i) => selected.has(i.key))
 
   const toggle = (key: string) =>
@@ -74,12 +85,29 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
       return next
     })
 
-  const run = (targets: ModerationItem[], approve: boolean) =>
+  /** Null when the admin backs out of the reason box; an empty string when no reason is needed. */
+  const reasonFor = (targets: ModerationItem[]) => {
+    const reasoned = targets.filter((i) => REASONED.has(i.kind))
+    if (reasoned.length === 0) return Promise.resolve('')
+    return askReason(
+      reasoned.length === 1
+        ? `"${reasoned[0].title}" reddedilecek. Sebep üyeye gider.`
+        : `${reasoned.length} kayıt reddedilecek. Yazdığın sebep hepsinde üyeye gider.`,
+      { label: 'Red sebebi', confirm: 'Reddet', presets: ['Kanıt eksik ya da okunmuyor', 'Bilgiler eşleşmiyor', 'Kurallara uygun değil'] },
+    )
+  }
+
+  const reject = async (targets: ModerationItem[]) => {
+    const note = await reasonFor(targets)
+    if (note !== null) run(targets, false, note)
+  }
+
+  const run = (targets: ModerationItem[], approve: boolean, note = '') =>
     startBusy(async () => {
       const doneKeys = new Set<string>()
       const failed: string[] = []
       for (const item of targets) {
-        const res = await decide(item, approve)
+        const res = await decide(item, approve, note)
         if (res.ok) doneKeys.add(item.key)
         else failed.push(res.error)
       }
@@ -90,8 +118,9 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
     })
 
   const bulk = async (approve: boolean) => {
-    const targets = list.filter((i) => selected.has(i.key) && i.kind !== 'complaint')
+    const targets = list.filter((i) => selected.has(i.key) && !OPEN_TO_APPROVE.has(i.kind))
     if (!targets.length) return
+    if (!approve && targets.some((i) => REASONED.has(i.kind))) return reject(targets)
     if (!(await askConfirm(`${targets.length} kayıt ${approve ? 'onaylanacak' : 'reddedilecek'}. Emin misin?`))) return
     run(targets, approve)
   }
@@ -99,7 +128,7 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Kuyruk filtresi">
-        {(['all', 'proof', 'review', 'claim', 'market', 'complaint'] as const).map((k) => {
+        {(['all', 'proof', 'review', 'withdraw', 'claim', 'market', 'complaint'] as const).map((k) => {
           const n = k === 'all' ? list.length : counts[k] ?? 0
           return (
             <button
@@ -160,7 +189,7 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
             {visible.map((item) => (
               <li key={item.key} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-start gap-3">
-                  {item.kind !== 'complaint' ? (
+                  {!OPEN_TO_APPROVE.has(item.kind) ? (
                     <input
                       type="checkbox"
                       aria-label={`${item.title} seç`}
@@ -174,7 +203,7 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
                   {item.image && (
                     <a href={item.image} target="_blank" rel="noreferrer" className="shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={item.image} alt={`${item.who} çekim kanıtı`} className="size-14 rounded-md border border-border object-cover" />
+                      <img src={item.image || '/placeholder.svg'} alt={`${item.who} çekim kanıtı`} className="size-14 rounded-md border border-border object-cover" />
                     </a>
                   )}
                   <div className="flex min-w-0 flex-col gap-0.5">
@@ -190,13 +219,20 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2 pl-7 sm:pl-0">
-                  {item.kind === 'complaint' ? (
-                    <Link href={`/panel?b=${KIND_SECTION[item.kind]}`} className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-secondary">
-                      Yanıtla <ExternalLink className="size-3.5" aria-hidden="true" />
-                    </Link>
+                  {OPEN_TO_APPROVE.has(item.kind) ? (
+                    <>
+                      {item.kind === 'withdraw' && (
+                        <button type="button" disabled={busy} onClick={() => reject([item])} className="flex size-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-secondary disabled:opacity-50" aria-label="Reddet">
+                          <X className="size-4" aria-hidden="true" />
+                        </button>
+                      )}
+                      <Link href={KIND_LINK[item.kind]} className="flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-foreground hover:bg-secondary">
+                        {item.kind === 'complaint' ? 'Yanıtla' : 'İncele ve onayla'} <ExternalLink className="size-3.5" aria-hidden="true" />
+                      </Link>
+                    </>
                   ) : (
                     <>
-                      <button type="button" disabled={busy} onClick={() => run([item], false)} className="flex size-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-secondary disabled:opacity-50" aria-label="Reddet">
+                      <button type="button" disabled={busy} onClick={() => reject([item])} className="flex size-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-secondary disabled:opacity-50" aria-label="Reddet">
                         <X className="size-4" aria-hidden="true" />
                       </button>
                       <button type="button" disabled={busy} onClick={() => run([item], true)} className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50" aria-label="Onayla">
