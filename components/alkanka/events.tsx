@@ -20,7 +20,8 @@ const formatTrDate = (iso: string) => {
   const t = Date.parse(iso)
   return Number.isFinite(t) ? trDate.format(t) : ''
 }
-import { TELEGRAM_URL, type EventItem } from './data'
+import type { EventItem } from './data'
+import { useTelegramUrl } from './telegram-address'
 import { useCatalog } from './catalog-context'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
@@ -279,6 +280,7 @@ function Predictions() {
 }
 
 export function Events({ view }: { view: 'biletler' | 'tahminler' }) {
+  const telegramUrl = useTelegramUrl()
   return (
     <section aria-label={view === 'biletler' ? 'Biletler' : 'Tahminler'} className="flex flex-col gap-5">
       {view === 'biletler' ? (
@@ -286,7 +288,7 @@ export function Events({ view }: { view: 'biletler' | 'tahminler' }) {
           <JakoTip pose="promo" title="Jako fısıldıyor">
             Özel oranlar ve promo kodlar önce Telegram&apos;a düşer, sonra biter kanka.{' '}
             <a
-              href={TELEGRAM_URL}
+              href={telegramUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="font-bold text-primary underline-offset-2 hover:underline"

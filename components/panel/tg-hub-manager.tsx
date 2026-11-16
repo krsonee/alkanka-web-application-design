@@ -10,6 +10,7 @@ import type { HubConfig, HubGroup, HubStats, KnownChat, LeaderRow, LockRow, LogP
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { ChatField } from '@/components/panel/tg-chat-field'
 import { Card, NumberField, Toggle, btn, btnGhost, input, useAction, useKnownChats, useTgAccess } from '@/components/panel/tg-hub-ui'
+import { HistorySection } from '@/components/panel/tg-history-panel'
 import { LogSection } from '@/components/panel/tg-log-panel'
 import { MemberCardHost, MemberName, openMemberCard } from '@/components/panel/tg-member-card'
 import { ReplyButtonsEditor } from '@/components/panel/tg-reply-buttons'
@@ -52,6 +53,8 @@ export type TgHubData = {
   shareBotId: number | null
   shareHook: HookInfo
   linkedMembers: number
+  /** Changes when the settings were rewritten from outside their own form; the forms are rebuilt on it. */
+  rev: number
 }
 
 function HookBadge({ info }: { info: HookInfo }) {
@@ -180,7 +183,7 @@ function SetupSection({ d }: { d: TgHubData }) {
   return (
     <div className="flex flex-col gap-4">
       <RepairCard />
-      <Card title="1. Botları görevlere ata" hint="Her rol için ayrı bot önerilir. Aynı bot birden fazla rol yapabilir ama Oran ve KankaTV botlarını burada kullanma.">
+      <Card title="1. Botlar�� görevlere ata" hint="Her rol için ayrı bot önerilir. Aynı bot birden fazla rol yapabilir ama Oran ve KankaTV botlarını burada kullanma.">
         <RoleRow role="guard" label="Bekçi (güvenlik + kontrolcü + sayaç)" hint="Gruplarda küfür, spam, reklam, bot saldırısı ve sahte hesapları engeller; mesajları sayar." botId={hub.guardBotId} bots={d.bots} info={d.guardHook} />
         <RoleRow role="support" label="Destek botu" hint="Üyeler bu bota özelden yazar. Sorun yetkili grubuna ve sponsor grubuna bilet olarak düşer." botId={hub.supportBotId} bots={d.bots} info={d.supportHook} />
         <RoleRow
@@ -558,7 +561,7 @@ function CounterSection({ d }: { d: TgHubData }) {
   return (
     <div className="flex flex-col gap-4">
       <Toggle label="Mesaj sayacı açık" hint="Telegram gruplarında ve sitedeki canlı sohbette yazılanları sayar. Grupta /liste haftanın sıralamasını, /ben kişinin kendi sırasını gösterir." checked={c.enabled} onChange={(v) => setCfg((x) => ({ ...x, counter: { ...x.counter, enabled: v } }))} />
-      <Card title="Ayarlar" hint="Pazartesi 00:00'da geçen haftanın listesi gruba atılır, ödüller hesabını siteye bağlamış üyelere otomatik yüklenir.">
+      <Card title="Ayarlar" hint="Pazartesi 00:00'da geçen haftanın listesi gruba atılır, ��düller hesabını siteye bağlamış üyelere otomatik yüklenir.">
         <NumberField label="En az kaç harf olan mesaj sayılsın (tek harf spamı sayılmaz)" value={c.minLength} onChange={(v) => setCfg((x) => ({ ...x, counter: { ...x.counter, minLength: v } }))} />
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Haftalık ödüller (1., 2., 3. … sırayla KC)
@@ -925,6 +928,9 @@ export function TgHubManager({ data }: { data: TgHubData }) {
   const openTickets = data.tickets.filter((t) => t.status === 'open' || t.status === 'claimed').length
   const { setup } = useTgAccess()
   const groups: KnownChat[] = data.hub.groups.map((g) => ({ chatId: g.chatId, title: g.title }))
+  // A form keeps what it was opened with. After a restore, a loaded backup or a channel switch that would be
+  // the old settings, and its next save would write them back, so those forms start again from the new ones.
+  const rev = data.rev
   // Settings need the setup permission; lists, tickets and cleaning are open to moderators as well.
   const tabs = [
     setup && {
@@ -933,21 +939,26 @@ export function TgHubManager({ data }: { data: TgHubData }) {
       // An unfinished setup only counts as a fault once the guard is switched on and has nothing to guard with.
       status: data.hub.guardBotId && data.hub.groups.length ? ('on' as const) : data.hub.guard.enabled ? ('off' as const) : ('idle' as const),
       issue: 'Bekçi açık ama bot ya da korunan grup seçilmemiş',
-      content: <SetupSection d={data} />,
+      content: <SetupSection key={rev} d={data} />,
     },
     { id: 'hub-overview', label: 'Özet', content: <OverviewSection d={data} /> },
     { id: 'hub-log', label: 'Kayıtlar', content: <LogSection initial={data.log} groups={groups} /> },
-    setup && { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? ('on' as const) : ('idle' as const), content: <GuardSection d={data} /> },
-    { id: 'hub-shield', label: `Koruma${data.locks.length ? ` (${data.locks.length})` : ''}`, content: <ShieldSection hub={data.hub} locks={data.locks} quiet={data.quiet} canSetup={setup} /> },
+    setup && { id: 'hub-guard', label: 'Bekçi', status: data.hub.guard.enabled ? ('on' as const) : ('idle' as const), content: <GuardSection key={rev} d={data} /> },
+    {
+      id: 'hub-shield',
+      label: `Koruma${data.locks.length ? ` (${data.locks.length})` : ''}`,
+      content: <ShieldSection key={rev} hub={data.hub} locks={data.locks} quiet={data.quiet} canSetup={setup} />,
+    },
     {
       id: 'hub-support',
       label: `Destek${openTickets ? ` (${openTickets})` : ''}`,
       status: data.hub.support.enabled ? ('on' as const) : ('idle' as const),
-      content: <SupportSection d={data} />,
+      content: <SupportSection key={rev} d={data} />,
     },
-    setup && { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? ('on' as const) : ('idle' as const), content: <AutoReplySection d={data} /> },
-    setup && { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? ('on' as const) : ('idle' as const), content: <CounterSection d={data} /> },
+    setup && { id: 'hub-autoreply', label: 'Oto Cevap', status: data.hub.autoReply.enabled ? ('on' as const) : ('idle' as const), content: <AutoReplySection key={rev} d={data} /> },
+    setup && { id: 'hub-counter', label: 'Sayaç', status: data.hub.counter.enabled ? ('on' as const) : ('idle' as const), content: <CounterSection key={rev} d={data} /> },
     { id: 'hub-clean', label: 'Temizlik', content: <CleanupSection d={data} /> },
+    setup && { id: 'hub-history', label: 'Ayar geçmişi', content: <HistorySection /> },
   ].filter((t): t is Exclude<typeof t, false> => Boolean(t))
   return (
     <>

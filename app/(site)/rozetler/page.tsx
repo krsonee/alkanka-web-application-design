@@ -8,6 +8,8 @@ import { AUTO_LABELS, badgeHolders, getKpConfig, getKpStatus, getKpToday, levelR
 import { LevelEmblem, ROLE_BADGES, SpecialEmblem, TIER_BG, TIER_TEXT } from '@/components/alkanka/kp/emblem'
 import { ProgressHero } from '@/components/alkanka/kp/progress-hero'
 import { EarnActions } from '@/components/alkanka/kp/earn-actions'
+import { TELEGRAM_URL } from '@/components/alkanka/data'
+import { getTelegramAddresses } from '@/lib/telegram-channels'
 import { LevelSections } from '@/components/alkanka/kp/level-sections'
 import { TIER_NAMES } from '@/lib/kanka-puan-shared'
 import { SocialTaskStrip, type SocialTaskItem } from '@/components/alkanka/kp/social-task-strip'
@@ -48,7 +50,7 @@ async function loadSocialTasks(userId: string | null): Promise<SocialTaskItem[]>
 export default async function BadgesPage() {
   const member = await getMember()
   const cfgPromise = getKpConfig()
-  const [cfg, specials, holders, me, today, reach, socialTasks] = await Promise.all([
+  const [cfg, specials, holders, me, today, reach, socialTasks, telegramUrl] = await Promise.all([
     cfgPromise,
     listSpecialBadges(),
     badgeHolders(),
@@ -56,6 +58,9 @@ export default async function BadgesPage() {
     member ? getKpToday(member.id).catch(() => null) : Promise.resolve(null),
     cfgPromise.then((c) => levelReach(c.levels.length)).catch(() => ({ total: 0, reached: [] as number[] })),
     loadSocialTasks(member?.id ?? null),
+    getTelegramAddresses(TELEGRAM_URL)
+      .then((a) => a.main)
+      .catch(() => TELEGRAM_URL),
   ])
   const [streak, weekly, feed] = await Promise.all([
     member ? getStreak(member.id).catch(() => null) : Promise.resolve(null),
@@ -130,7 +135,7 @@ export default async function BadgesPage() {
             Karta dokun, hemen başla. Günde en fazla {cfg.rules.minuteDailyCap} dakika ve {cfg.rules.chatDailyCap} sohbet mesajı sayılır.
           </p>
         </div>
-        <EarnActions rules={cfg.rules} today={today?.breakdown ?? null} telegramLinked={(me?.breakdown.telegram ?? 0) > 0} />
+        <EarnActions rules={cfg.rules} today={today?.breakdown ?? null} telegramLinked={(me?.breakdown.telegram ?? 0) > 0} chatUrl={telegramUrl} />
         {socialTasks.length ? (
           <div className="mt-6 flex flex-col gap-3">
             <div className="flex items-end justify-between gap-3">

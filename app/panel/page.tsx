@@ -57,7 +57,7 @@ import { DEFAULT_SUITE, getBotSuite, shareStatus } from '@/lib/telegram-bots'
 import { chatStatus } from '@/lib/telegram-chat'
 import { getInviteConfig } from '@/lib/table-invite'
 import { TelegramInviteSetup } from '@/components/panel/telegram-invite-setup'
-import { getChannelUsernames } from '@/lib/telegram-channels'
+import { getChannelUsernames, getTelegramAddresses } from '@/lib/telegram-channels'
 import { TelegramChannelsSetup } from '@/components/panel/telegram-channels-setup'
 import { SeoManager } from '@/components/panel/seo-manager'
 import { listPosts } from '@/lib/blog'
@@ -160,6 +160,8 @@ import { TgHubManager } from '@/components/panel/tg-hub-manager'
 import { DmPanel } from '@/components/panel/tg-dm-panel'
 import { TgPanelProvider } from '@/components/panel/tg-hub-ui'
 import { StatusSection } from '@/components/panel/tg-status-panel'
+import { ResilienceSection } from '@/components/panel/tg-resilience-panel'
+import { StatsSection } from '@/components/panel/tg-stats-panel'
 import { getHub } from '@/lib/tg-hub'
 import { loadDmPanel } from '@/lib/tg-broadcast'
 import { uniqueChats } from '@/lib/tg-hub-shared'
@@ -243,12 +245,12 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
     listOddsSources().catch(() => []),
     searchAdminOdds({}).catch(() => ({ rows: [], hasMore: false })),
   ])
-  const [sources, log, cronKey, invite, channels, shareInfo] = await Promise.all([
+  const [sources, log, cronKey, invite, addresses, shareInfo] = await Promise.all([
     listSources().catch(() => []),
     listLog().catch(() => []),
     getCronKey().catch(() => 'ANAHTAR'),
     getInviteConfig().catch(() => null),
-    getChannelUsernames().catch(() => null),
+    getTelegramAddresses(TELEGRAM_URL).catch(() => null),
     shareStatus().catch(() => ({ lastError: null, lastRunAt: null, shared: 0 })),
   ])
   const [tvConfig, tvStatus, tvToday] = await Promise.all([
@@ -309,7 +311,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
       { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', ...tabState([!suite.approvals.enabled, 'Kapalı', 'idle'], [suite.approvals.botId == null, 'Bot seçilmemiş', 'off'], [!suite.approvals.chatId, 'Bildirimin gideceği sohbet seçilmemiş', 'off']), content: <ApprovalSection suite={suite} bots={bots} /> },
       { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
       { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', ...tabState([invite == null, 'Davet linki ayarı yapılmamış', 'idle']), content: <TelegramInviteSetup bots={bots} status={invite} /> },
-      { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={channels} /> },
+      { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={addresses?.usernames ?? null} /> },
       {
         id: 'strip',
         group: 'Kanallar',
@@ -318,7 +320,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
         content: (
           <TelegramPromoEditor
             settings={tgPromo}
-            fallbackUrl={channels?.duyuru ? `https://t.me/${channels.duyuru.replace(/^@/, '')}` : TELEGRAM_URL}
+            fallbackUrl={addresses?.main ?? TELEGRAM_URL}
           />
         ),
       },
@@ -402,6 +404,12 @@ async function telegramPanel(access: TelegramAccess) {
       issue: failing ? `${failing} bölümde hata var` : null,
       content: <StatusSection canRepair={access.setup} />,
     })
+    tabs.splice(
+      afterPosts + 1,
+      0,
+      { id: 'resilience', group: 'Durum', label: 'Dayanıklılık', content: <ResilienceSection canSetup={access.setup} /> },
+      { id: 'tg-stats', group: 'Durum', label: 'İstatistik', content: <StatsSection /> },
+    )
   }
   return (
     <TgPanelProvider access={access} chats={chats}>

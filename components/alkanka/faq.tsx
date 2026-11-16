@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowUpRight, Check, ChevronDown, Link2, Search, SearchX, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TELEGRAM_URL } from './data'
+import { useTelegramUrl } from './telegram-address'
 
 export type FaqItem = { id: string; slug: string; q: string; a: string }
 export type FaqGroup = { id: string; label: string; items: FaqItem[] }
@@ -76,8 +77,9 @@ function Highlight({ text, terms }: { text: string; terms: string[] }) {
 }
 
 function TelegramLink({ className, children }: { className?: string; children: ReactNode }) {
+  const telegramUrl = useTelegramUrl()
   return (
-    <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer" className={className}>
+    <a href={telegramUrl} target="_blank" rel="noopener noreferrer" className={className}>
       {children}
     </a>
   )
@@ -88,6 +90,7 @@ export function Faq({ groups }: { groups: FaqGroup[] }) {
   const [open, setOpen] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
+  const telegramUrl = useTelegramUrl()
   const deferredQuery = useDeferredValue(query)
 
   const all = useMemo(
@@ -325,7 +328,7 @@ export function Faq({ groups }: { groups: FaqGroup[] }) {
                             {cta &&
                               (cta.external ? (
                                 <a
-                                  href={cta.href}
+                                  href={cta.href === TELEGRAM_URL ? telegramUrl : cta.href}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"

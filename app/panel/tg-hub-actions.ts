@@ -33,7 +33,7 @@ import {
   type SuspectRow,
   type TicketPage,
 } from '@/lib/tg-hub-shared'
-import type { ConfigChange } from '@/lib/tg-resilience-shared'
+import { CHANGE_IMPORT, CHANGE_RESTORE, type ConfigChange } from '@/lib/tg-resilience-shared'
 import type { TgStatus } from '@/lib/tg-status-shared'
 import { setShareBot } from '@/lib/telegram-bots'
 import { getHub, registerHook, removeGlobalBan, resolveChatFor, saveHub, setTrusted, syncGuardHook } from '@/lib/tg-hub'
@@ -531,7 +531,7 @@ export async function restoreConfigAction(id: number): Promise<Result> {
     const { snapshotBefore } = await import('@/lib/tg-history')
     const snap = await snapshotBefore(Number(id))
     if (!snap) return { ok: false, message: 'Bu kayıt bulunamadı ya da okunamıyor.' }
-    const changes = await applySettings(snap.config, 'Eski ayara dönüldü')
+    const changes = await applySettings(snap.config, CHANGE_RESTORE)
     if (changes && !changes.length) return { ok: true, message: 'Ayarlar zaten o kayıttaki hâlinde; değişen bir şey olmadı.' }
     return done(`Ayarlar seçtiğin değişiklikten önceki hâline döndü. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`)
   } catch (error) {
@@ -566,7 +566,7 @@ export async function importConfigAction(json: string): Promise<Result> {
     if (!config || typeof config !== 'object' || typeof config.guard !== 'object' || typeof config.shield !== 'object') {
       return { ok: false, message: 'Bu dosya bir Telegram ayar yedeği değil.' }
     }
-    const changes = await applySettings(config, 'Yedekten yüklendi')
+    const changes = await applySettings(config, CHANGE_IMPORT)
     if (changes && !changes.length) return { ok: true, message: 'Yedekteki ayarlar şu ankiyle aynı; değişen bir şey olmadı.' }
     return done(`Yedekteki ayarlar yüklendi${changes ? ` (${changes.length} ayar değişti)` : ''}. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`)
   } catch (error) {

@@ -100,6 +100,15 @@ export const STATS_SPANS = [7, 30] as const
 
 export type ConfigChange = { id: number; at: string; who: string; what: string; changes: string[] }
 
+/**
+ * Saves that rewrite settings from outside the form that shows them. The panel's open forms still hold
+ * the old values after one of these, so they are rebuilt instead of being allowed to save them back.
+ */
+export const CHANGE_ADDRESS = 'Kanal adresi değişti'
+export const CHANGE_RESTORE = 'Eski ayara dönüldü'
+export const CHANGE_IMPORT = 'Yedekten yüklendi'
+export const OUTSIDE_CHANGES = [CHANGE_ADDRESS, CHANGE_RESTORE, CHANGE_IMPORT]
+
 // --- What changed between two saved configs ----------------------------------------
 
 const FIELD: Record<string, string> = {

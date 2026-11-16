@@ -31,7 +31,7 @@ import {
   type ChatTab,
   type TelegramAccess,
 } from '@/lib/telegram-channels-shared'
-import { TELEGRAM_URL } from './data'
+import { useTelegramUrl } from './telegram-address'
 import { useChannelFeed, useChatFeed, type ChatResponse } from './use-chat-feed'
 import { MemberName, MemberRank } from './kp/member-rank'
 
@@ -279,7 +279,8 @@ function SiteBadge() {
 
 function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefresh: () => void }) {
   const listRef = useStickToBottom(data?.messages.at(-1)?.id)
-  const inviteUrl = data?.inviteUrl ?? TELEGRAM_URL
+  const telegramUrl = useTelegramUrl()
+  const inviteUrl = data?.inviteUrl ?? telegramUrl
   const locked = Boolean(data?.configured && data.locked)
 
   return (
@@ -488,6 +489,7 @@ function PostCard({ slug, post, onRefresh }: { slug: BroadcastSlug; post: Channe
 
 function ChannelPanel({ slug, data, onRefresh }: { slug: BroadcastSlug; data: ChannelFeed | undefined; onRefresh: () => void }) {
   const listRef = useStickToBottom(`${slug}:${data?.locked}:${data?.posts.at(-1)?.id}`)
+  const telegramUrl = useTelegramUrl()
   const label = BROADCAST_CHANNELS.find((c) => c.slug === slug)!.title
   const name = label.charAt(0).toLocaleUpperCase('tr-TR') + label.slice(1)
 
@@ -499,7 +501,7 @@ function ChannelPanel({ slug, data, onRefresh }: { slug: BroadcastSlug; data: Ch
         ) : !data.configured ? (
           <EmptyState title={`${name} yakında burada`} body="Kanalımız bağlandığında paylaşımlar burada görünecek." />
         ) : data.locked ? (
-          <JoinGate me={data.me} inviteUrl={data.inviteUrl ?? TELEGRAM_URL} place={{ name, join: 'Kanala katıl' }} onRecheck={onRefresh} />
+          <JoinGate me={data.me} inviteUrl={data.inviteUrl ?? telegramUrl} place={{ name, join: 'Kanala katıl' }} onRecheck={onRefresh} />
         ) : data.posts.length === 0 ? (
           <EmptyState title="Henüz paylaşım yok" body="Kanala atılan yeni paylaşımlar burada görünecek." />
         ) : (
@@ -524,6 +526,7 @@ function subscribeXl(onChange: () => void) {
 }
 
 export function LiveRail() {
+  const telegramUrl = useTelegramUrl()
   const [tab, setTab] = useState<ChatTab>('sohbet')
   const [mobileOpen, setMobileOpen] = useState(false)
   const isDesktopRail = useSyncExternalStore(subscribeXl, () => window.matchMedia(XL_QUERY).matches, () => false)
@@ -608,7 +611,7 @@ export function LiveRail() {
           </span>
         </span>
         <a
-          href={(tab === 'sohbet' ? chat.data?.inviteUrl : channel.data?.inviteUrl) ?? TELEGRAM_URL}
+          href={(tab === 'sohbet' ? chat.data?.inviteUrl : channel.data?.inviteUrl) ?? telegramUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="ml-auto flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-accent/40 px-2.5 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-foreground"

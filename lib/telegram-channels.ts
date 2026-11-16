@@ -10,6 +10,7 @@ import {
   type ChannelPost,
   type TelegramAccess,
 } from '@/lib/telegram-channels-shared'
+import { cache } from 'react'
 import { MAIN_CHANNEL_KEY } from '@/lib/tg-resilience-shared'
 
 const CACHE_MS = 60_000
@@ -82,15 +83,16 @@ export async function getChannelUsernames(): Promise<Record<BroadcastSlug, strin
 /**
  * The address every "join our channel" link on the site and in the bots points at. An explicit override
  * wins (a private invite link, or a new channel whose feed could not be connected yet); otherwise it is
- * the announcement channel; `fallback` covers a site that has set up neither.
+ * the announcement channel; `fallback` covers a site that has set up neither. A layout and its page ask
+ * during the same render and share one read.
  */
-export async function getTelegramAddresses(fallback: string) {
+export const getTelegramAddresses = cache(async (fallback: string) => {
   const map = await readChannelSettings()
   const usernames = usernamesFrom(configsFrom(map))
   const override = map[MAIN_CHANNEL_KEY] || null
   const main = override ?? (usernames.duyuru ? `https://t.me/${usernames.duyuru.replace(/^@/, '')}` : fallback)
   return { usernames, main, custom: Boolean(override) }
-}
+})
 
 function cachedPosts(username: string) {
   const hit = postCache.get(username)

@@ -7,7 +7,7 @@ import { Send } from 'lucide-react'
 import { useSWRConfig } from 'swr'
 import { cn } from '@/lib/utils'
 import { authClient } from '@/lib/auth-client'
-import { TELEGRAM_URL } from './data'
+import { useTelegramUrl } from './telegram-address'
 import { Modal } from './modal'
 import { useTexts } from './texts-context'
 
@@ -31,6 +31,7 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
 }
 
 export function AuthModal({ signupClosed = false }: { signupClosed?: boolean }) {
+  const telegramUrl = useTelegramUrl()
   const [mode, setMode] = useState<Mode | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -181,7 +182,7 @@ export function AuthModal({ signupClosed = false }: { signupClosed?: boolean }) 
                 Kısa bir süreliğine yeni kayıt almıyoruz kanka. Açıldığı an Telegram kanalımızda duyuracağız. Hesabın varsa giriş yapabilirsin.
               </p>
               <a
-                href={TELEGRAM_URL}
+                href={telegramUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex h-11 items-center justify-center gap-2 rounded-lg bg-accent text-xs font-bold uppercase tracking-wider text-accent-foreground"

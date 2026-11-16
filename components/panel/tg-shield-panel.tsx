@@ -7,6 +7,7 @@ import {
   CAPTCHA_MINUTES,
   CAPTCHA_MODES,
   CONTENT_KINDS,
+  MEMBER_DROP_FLOOR,
   NEW_MEMBER_HOURS,
   RAID_BAN_MINUTES,
   RECOMMENDED_SHIELD,
@@ -365,6 +366,39 @@ function GeneralForm({ hub }: { hub: HubConfig }) {
         />
         <p className="text-xs leading-relaxed text-muted-foreground">
           Giriş takibi açıkken tüm gruplardan yasaklı bir hesap kanala girerse kanaldan da çıkarılır.
+        </p>
+      </Card>
+
+      <Card
+        title="Kanal sağlığı"
+        hint="Bekçi saatte bir, korunan her grup ve kanalın üye sayısını Telegram'a sorar. Ek bildirim istemez; kontrol sitenin zaten çalışan arka plan işleriyle birlikte yapılır. Toplanan üye sayıları İstatistik ekranında da görünür."
+      >
+        <Toggle
+          label="Kanal sağlığı alarmı"
+          hint="Bot bir sohbete artık erişemiyorsa (çıkarılmış, sohbet silinmiş ya da kısıtlanmış) ya da üye sayısı bir günde aşağıdaki orandan fazla düşerse kayıt grubuna alarm gelir."
+          checked={shield.healthAlert}
+          onChange={(v) => set({ healthAlert: v })}
+        />
+        <NumberField
+          label={`Üye sayısı 24 saatte bu orandan fazla düşerse alarm ver (1-90; ${MEMBER_DROP_FLOOR} kişiden az düşüşte alarm gelmez)`}
+          value={shield.memberDropPercent}
+          onChange={(v) => set({ memberDropPercent: v })}
+          suffix="%"
+        />
+      </Card>
+
+      <Card
+        title="Tepki (emoji) seli"
+        hint="Maliyet: bu açıkken Telegram, korunan gruplardaki her emoji tepkisini siteye bildirir ve her bildirim veritabanını uyandırır. Hareketli bir grupta veritabanı neredeyse hiç uyumaz. Tepki seliyle karşılaşmadıysan kapalı kalsın."
+      >
+        <NumberField
+          label={`Bir hesap 1 dakikada bu kadar tepki bırakırsa tepkileri silinir ve ${hub.guard.floodMuteMinutes} dakika susturulur (0 = kapalı, en az 5, en çok 120)`}
+          value={shield.reactionLimit}
+          onChange={(v) => set({ reactionLimit: v })}
+          suffix="tepki"
+        />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Sadece gruplarda çalışır: Telegram, kanaldaki tepkilerin kimden geldiğini botlara söylemez. Yöneticilere ve güvenilir işaretli üyelere dokunulmaz.
         </p>
       </Card>
 

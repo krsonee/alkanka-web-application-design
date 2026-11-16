@@ -31,5 +31,6 @@ export async function loadTgHub(bots: MirrorBot[], shareBotId: number | null, li
     hookStatus(hub.supportBotId),
     hookStatus(shareBotId),
   ])
-  return { hub, bots, stats, log, locks, quiet, tickets, sponsorStats, leaders, bans, trustLow, guardHook, supportHook, shareBotId, shareHook, linkedMembers }
+  const rev = await import('@/lib/tg-history').then((m) => m.outsideChangeRev()).catch(() => 0)
+  return { hub, bots, stats, log, locks, quiet, tickets, sponsorStats, leaders, bans, trustLow, guardHook, supportHook, shareBotId, shareHook, linkedMembers, rev }
 }

@@ -5,6 +5,7 @@ import { getTelegramAddresses, setChannel } from '@/lib/telegram-channels'
 import { getHub, modLog, saveHub } from '@/lib/tg-hub'
 import type { HubConfig } from '@/lib/tg-hub-shared'
 import {
+  CHANGE_ADDRESS,
   MAIN_CHANNEL_KEY,
   parseChannelAddress,
   swapAddress,
@@ -45,6 +46,19 @@ const STORES: { name: string; run: (swap: Swap, from: ChannelAddress) => Promise
       if (!next.changed) return null
       await saveSocialLinks(next.value)
       return `Sosyal hesap linklerinde ${next.changed} adres güncellendi.`
+    },
+  },
+  {
+    name: 'Ana sayfa kartları',
+    run: async (swap) => {
+      const { getContent, setContent } = await import('@/lib/content')
+      const { HOME_V2_KEY } = await import('@/lib/home-v2-shared')
+      const saved = await getContent<unknown>(HOME_V2_KEY)
+      if (!saved) return null
+      const next = swapDeep(saved, swap)
+      if (!next.changed) return null
+      await setContent(HOME_V2_KEY, next.value)
+      return 'Ana sayfadaki tanıtım kartları yeni adrese döndü.'
     },
   },
   {
@@ -161,7 +175,7 @@ export async function switchChannel(input: string, by: string): Promise<{ url: s
     if (texts || allowed) {
       await saveHub(next)
       const { recordHubChange } = await import('@/lib/tg-history')
-      await recordHubChange(hub, next, by, 'Kanal adresi değişti').catch((error) => console.error('[tg-address] history', error))
+      await recordHubChange(hub, next, by, CHANGE_ADDRESS).catch((error) => console.error('[tg-address] history', error))
       if (texts) notes.push(`Oto cevap, karşılama ve destek yazılarında ${texts} yer güncellendi.`)
       if (allowed) notes.push('Yeni adres Bekçi’nin izinli linklerine eklendi; grupta paylaşılınca silinmez.')
     }
@@ -179,7 +193,7 @@ export async function switchChannel(input: string, by: string): Promise<{ url: s
     }
   }
 
-  await modLog({ action: 'Kanal adresi değişti', reason: `${from.url} → ${to.url} (değiştiren: ${by})` })
+  await modLog({ action: CHANGE_ADDRESS, reason: `${from.url} → ${to.url} (değiştiren: ${by})` })
   return { url: to.url, notes }
 }
 

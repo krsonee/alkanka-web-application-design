@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useTransition, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import type { TelegramAccess } from '@/lib/panel-modules'
 import type { KnownChat } from '@/lib/tg-hub-shared'
 
@@ -39,6 +39,25 @@ export const btn = 'inline-flex h-9 items-center justify-center rounded-lg bg-pr
 export const btnGhost = 'inline-flex h-9 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50'
 export const btnDanger = 'inline-flex h-9 items-center justify-center rounded-lg border border-destructive/40 px-3 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50'
 export const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')
+
+/**
+ * Every tab of the panel is mounted at once and only the open one is visible. A screen that reads on
+ * its own waits for the first time it is actually shown, so opening the panel does not pay for all of them.
+ */
+export function useFirstShown<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || shown) return
+    const watcher = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) setShown(true)
+    })
+    watcher.observe(el)
+    return () => watcher.disconnect()
+  }, [shown])
+  return { ref, shown }
+}
 
 export type ActionResult = { ok: boolean; message: string }
 

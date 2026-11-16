@@ -2,7 +2,7 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureHubTables } from '@/lib/tg-hub'
 import type { HubConfig } from '@/lib/tg-hub-shared'
-import { describeChanges, type ConfigChange } from '@/lib/tg-resilience-shared'
+import { OUTSIDE_CHANGES, describeChanges, type ConfigChange } from '@/lib/tg-resilience-shared'
 
 const KEEP = 200
 
@@ -45,6 +45,13 @@ export async function listHubChanges(limit = 60): Promise<ConfigChange[]> {
     }
     return { id: Number(x.id), at: new Date(String(x.at)).toISOString(), who: String(x.who), what: String(x.what), changes }
   })
+}
+
+/** Changes whenever the settings were rewritten from outside their own form; 0 when that never happened. */
+export async function outsideChangeRev(): Promise<number> {
+  await ensureHistoryTables()
+  const [row] = await rows<{ id: number | null }>(sql`SELECT max(id) AS id FROM tg_config_log WHERE what IN ${OUTSIDE_CHANGES}`)
+  return Number(row?.id ?? 0)
 }
 
 /** The settings as they stood just before the given change was saved, exactly as stored. */
