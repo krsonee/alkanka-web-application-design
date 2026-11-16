@@ -33,6 +33,7 @@ import {
   type SuspectRow,
   type TicketPage,
 } from '@/lib/tg-hub-shared'
+import type { ConfigChange } from '@/lib/tg-resilience-shared'
 import type { TgStatus } from '@/lib/tg-status-shared'
 import { setShareBot } from '@/lib/telegram-bots'
 import { getHub, registerHook, removeGlobalBan, resolveChatFor, saveHub, setTrusted, syncGuardHook } from '@/lib/tg-hub'
@@ -63,6 +64,16 @@ async function actor() {
 const done = (message: string): Result => {
   revalidatePath('/panel')
   return { ok: true, message }
+}
+
+/** Saves the settings and keeps what they were, so a change can be traced to a person and reversed. Returns the lines that changed. */
+async function commit(before: HubConfig, after: HubConfig, what: string) {
+  await saveHub(after)
+  const { recordHubChange } = await import('@/lib/tg-history')
+  return recordHubChange(before, after, await actor(), what).catch((error) => {
+    console.error('[panel] settings history', error)
+    return null
+  })
 }
 
 export async function repairTelegramAction(): Promise<Result> {
@@ -232,6 +243,18 @@ function shieldTunables(s: Partial<ShieldTunables>): ShieldTunables {
   }
 }
 
+/** The whole protection form: the per-group tunables plus the switches that only exist once for all chats. */
+function shieldConfig(input: Partial<ShieldConfig> | undefined): ShieldConfig {
+  return {
+    ...shieldTunables(input ?? {}),
+    channelJoinAlert: limitOrOff(input?.channelJoinAlert, 5, 100000),
+    adminAlerts: Boolean(input?.adminAlerts),
+    reactionLimit: limitOrOff(input?.reactionLimit, 5, 120),
+    healthAlert: Boolean(input?.healthAlert),
+    memberDropPercent: clampInt(input?.memberDropPercent, 1, 90, 10),
+  }
+}
+
 /** Telegram is told which update types to send; a changed setting may need a different list. */
 async function hookNote() {
   try {
@@ -290,7 +313,7 @@ export async function saveHubSettings(input: HubConfig): Promise<Result> {
     const half = (Array.isArray(input?.support?.canned) ? input.support.canned : []).findIndex((c) => Boolean(String(c?.title ?? '').trim()) !== Boolean(String(c?.text ?? '').trim()))
     if (half >= 0) return { ok: false, message: `${half + 1}. hazır cevap: hem başlık hem cevap yazısı dolu olmalı.` }
     const current = await getHub()
-    await saveHub(sanitize(input, current))
+    await commit(current, sanitize(input, current), 'Genel ayarlar')
     return done(`Ayarlar kaydedildi.${await hookNote()}`)
   } catch (error) {
     return fail(error)
@@ -304,12 +327,7 @@ export async function saveShieldSettings(input: ShieldConfig): Promise<Result> {
     const problem = quietProblem(input?.quiet)
     if (problem) return { ok: false, message: problem }
     const current = await getHub()
-    const shield: ShieldConfig = {
-      ...shieldTunables(input ?? {}),
-      channelJoinAlert: limitOrOff(input?.channelJoinAlert, 5, 100000),
-      adminAlerts: Boolean(input?.adminAlerts),
-    }
-    await saveHub({ ...current, shield })
+    await commit(current, { ...current, shield: shieldConfig(input) }, 'Koruma ayarları')
     applyQuietHours()
     return done(`Koruma ayarları kaydedildi.${await hookNote()}`)
   } catch (error) {
@@ -331,7 +349,7 @@ export async function saveGroupRules(chatId: string, input: GroupRules | null): 
     const own = input ? rulesDiff(generalRules(hub), { ...guardTunables(input), ...shieldTunables(input) }) : {}
     const count = Object.keys(own).length
     const groups = hub.groups.map((g) => (g.chatId === group.chatId ? { ...g, rules: count ? own : undefined } : g))
-    await saveHub({ ...hub, groups })
+    await commit(hub, { ...hub, groups }, 'Gruba özel ayar')
     applyQuietHours()
     if (!input) return done(`"${group.title}" genel ayarlara döndü.`)
     return done(count ? `"${group.title}" için ${count} ayar genelden farklı kaydedildi.` : `"${group.title}" ayarları genel ayarlarla aynı, ayrı kayıt tutulmadı.`)
@@ -405,7 +423,7 @@ export async function setRoleBot(role: 'guard' | 'support' | 'share', botId: num
   await setShareBot(botId)
   } else {
       const hub = await getHub()
-      await saveHub(role === 'guard' ? { ...hub, guardBotId: botId } : { ...hub, supportBotId: botId })
+      await commit(hub, role === 'guard' ? { ...hub, guardBotId: botId } : { ...hub, supportBotId: botId }, 'Bot görevi')
       if (!botId) return done('Rol kaldırıldı.')
     }
     const origin = await siteOrigin()
@@ -440,7 +458,7 @@ export async function addHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | '
       const sponsors = hub.support.sponsors.filter((s) => s.name.toLocaleLowerCase('tr') !== name.toLocaleLowerCase('tr'))
       next = { ...hub, support: { ...hub.support, sponsors: [...sponsors, { name, chatId: chat.id, title: chat.title }].slice(0, 40) } }
     }
-    await saveHub(next)
+    await commit(hub, next, 'Sohbet bağlantısı')
     return done(`"${chat.title}" eklendi.`)
   } catch (error) {
     return fail(error)
@@ -457,8 +475,103 @@ export async function removeHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' 
   else if (kind === 'leader') next = { ...hub, counter: { ...hub.counter, postToChatId: '' } }
   else if (kind === 'staff') next = { ...hub, support: { ...hub.support, staffChatId: '', staffChatTitle: '' } }
   else next = { ...hub, support: { ...hub.support, sponsors: hub.support.sponsors.filter((s) => s.name !== key) } }
-  await saveHub(next)
+  await commit(hub, next, 'Sohbet bağlantısı')
   return done('Kaldırıldı.')
+}
+
+// --- Settings history and backup -----------------------------------------------------
+
+const BACKUP_KIND = 'alkanka-telegram-ayar'
+const BACKUP_MAX_CHARS = 400_000
+
+/**
+ * Rebuilds the settings from a saved copy, with the same bounds a form save gets. Which bot does which job
+ * and which chats are connected is wiring, not a setting: that always stays as it is now, so an old copy
+ * can never point the panel at a bot or a group that no longer exists.
+ */
+function settingsFrom(raw: unknown, current: HubConfig): HubConfig {
+  const saved = (raw && typeof raw === 'object' ? raw : {}) as Partial<HubConfig>
+  const part = <K extends 'guard' | 'counter' | 'support' | 'report' | 'autoReply' | 'shield'>(key: K): HubConfig[K] => ({
+    ...DEFAULT_HUB[key],
+    ...((saved[key] && typeof saved[key] === 'object' ? saved[key] : {}) as HubConfig[K]),
+  })
+  const input = { ...current, guard: part('guard'), counter: part('counter'), support: part('support'), report: part('report'), autoReply: part('autoReply') }
+  const next: HubConfig = { ...sanitize(input, current), shield: shieldConfig(part('shield')) }
+  const general = generalRules(next)
+  const savedGroups = new Map((Array.isArray(saved.groups) ? saved.groups : []).map((g) => [String(g?.chatId ?? ''), g]))
+  const groups = current.groups.map((g) => {
+    const old = savedGroups.get(g.chatId)
+    // A group the copy has never heard of keeps the rules it has today.
+    if (!old) return g
+    if (g.type === 'channel' || !old.rules || typeof old.rules !== 'object') return { ...g, rules: undefined }
+    const full = { ...general, ...old.rules }
+    const own = rulesDiff(general, { ...guardTunables(full), ...shieldTunables(full) })
+    return { ...g, rules: Object.keys(own).length ? own : undefined }
+  })
+  return { ...next, groups }
+}
+
+async function applySettings(raw: unknown, what: string): Promise<string[] | null> {
+  const current = await getHub()
+  const changes = await commit(current, settingsFrom(raw, current), what)
+  applyQuietHours()
+  return changes
+}
+
+export async function loadConfigHistoryAction(): Promise<ConfigChange[]> {
+  if (await blocked('setup')) return []
+  const { listHubChanges } = await import('@/lib/tg-history')
+  return listHubChanges()
+}
+
+export async function restoreConfigAction(id: number): Promise<Result> {
+  const no = await blocked('setup')
+  if (no) return no
+  try {
+    const { snapshotBefore } = await import('@/lib/tg-history')
+    const snap = await snapshotBefore(Number(id))
+    if (!snap) return { ok: false, message: 'Bu kayıt bulunamadı ya da okunamıyor.' }
+    const changes = await applySettings(snap.config, 'Eski ayara dönüldü')
+    if (changes && !changes.length) return { ok: true, message: 'Ayarlar zaten o kayıttaki hâlinde; değişen bir şey olmadı.' }
+    return done(`Ayarlar seçtiğin değişiklikten önceki hâline döndü. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`)
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function exportConfigAction(): Promise<Result & { json?: string }> {
+  const no = await blocked('setup')
+  if (no) return no
+  try {
+    const config = await getHub()
+    return { ok: true, message: 'Yedek indirildi.', json: JSON.stringify({ kind: BACKUP_KIND, savedAt: new Date().toISOString(), config }, null, 2) }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function importConfigAction(json: string): Promise<Result> {
+  const no = await blocked('setup')
+  if (no) return no
+  try {
+    if (typeof json !== 'string' || json.length > BACKUP_MAX_CHARS) return { ok: false, message: 'Dosya çok büyük ya da boş; bu bir ayar yedeği değil.' }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(json)
+    } catch {
+      return { ok: false, message: 'Dosya okunamadı. Panelden indirdiğin .json yedeğini seç.' }
+    }
+    const wrapper = parsed as { kind?: unknown; config?: unknown } | null
+    const config = (wrapper?.kind === BACKUP_KIND ? wrapper.config : parsed) as Partial<HubConfig> | null
+    if (!config || typeof config !== 'object' || typeof config.guard !== 'object' || typeof config.shield !== 'object') {
+      return { ok: false, message: 'Bu dosya bir Telegram ayar yedeği değil.' }
+    }
+    const changes = await applySettings(config, 'Yedekten yüklendi')
+    if (changes && !changes.length) return { ok: true, message: 'Yedekteki ayarlar şu ankiyle aynı; değişen bir şey olmadı.' }
+    return done(`Yedekteki ayarlar yüklendi${changes ? ` (${changes.length} ayar değişti)` : ''}. Bot ve sohbet bağlantılarına dokunulmadı.${await hookNote()}`)
+  } catch (error) {
+    return fail(error)
+  }
 }
 
 export async function sweepGhosts(chatInput: string): Promise<Result> {

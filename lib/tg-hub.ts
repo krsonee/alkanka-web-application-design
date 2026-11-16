@@ -19,6 +19,8 @@ export type TgMemberUpdate = {
   via_join_request?: boolean
   via_chat_folder_invite_link?: boolean
 }
+/** `user` is missing when an anonymous admin or a channel reacted. */
+export type TgReaction = { chat: { id: number; type: string; title?: string }; message_id: number; user?: TgUser; date: number; old_reaction: unknown[]; new_reaction: unknown[] }
 export type HubUpdate = {
   update_id: number
   message?: TgMessage
@@ -28,6 +30,7 @@ export type HubUpdate = {
   chat_join_request?: TgJoinRequest
   chat_member?: TgMemberUpdate
   my_chat_member?: TgMemberUpdate
+  message_reaction?: TgReaction
 }
 export type LogUndo = { kind: 'warn' | 'mute' | 'ban'; chatId: string; tgIds: number[]; trust: number; warns: number }
 
@@ -36,12 +39,17 @@ const HOOK_UPDATES = ['message', 'edited_message', 'channel_post', 'callback_que
 const MEMBER_UPDATES = ['chat_member', 'my_chat_member']
 
 /**
- * Telegram only sends member changes when asked, and each one is a webhook call that wakes the database.
- * The guard bot asks for them only while a setting that needs them is switched on.
+ * Telegram only sends member changes and reactions when asked, and each one is a webhook call that wakes
+ * the database. The guard bot asks for them only while something that needs them is switched on.
  */
-function hookUpdatesFor(hub: HubConfig, botId: number) {
-  const wantsMembers = hub.guardBotId === botId && hub.guard.enabled && (hub.shield.channelJoinAlert > 0 || hub.shield.adminAlerts)
-  return wantsMembers ? [...HOOK_UPDATES, ...MEMBER_UPDATES] : HOOK_UPDATES
+async function hookUpdatesFor(hub: HubConfig, botId: number) {
+  if (hub.guardBotId !== botId || !hub.guard.enabled) return HOOK_UPDATES
+  const out = [...HOOK_UPDATES]
+  // A campaign link can only count its joins from member updates.
+  const openInvites = () => import('@/lib/tg-invites').then((m) => m.hasOpenInvites()).catch(() => false)
+  if (hub.shield.channelJoinAlert > 0 || hub.shield.adminAlerts || (await openInvites())) out.push(...MEMBER_UPDATES)
+  if (hub.shield.reactionLimit > 0) out.push('message_reaction')
+  return out
 }
 
 let ready: Promise<void> | null = null
@@ -114,7 +122,7 @@ export async function healChatHook() {
   if (!info.url) return
   const have = info.allowed_updates ?? []
   if (HOOK_UPDATES.every((u) => have.includes(u))) return
-  await callBot(token, 'setWebhook', { url: info.url, secret_token: secret, allowed_updates: hookUpdatesFor(await getHub(), botId) })
+  await callBot(token, 'setWebhook', { url: info.url, secret_token: secret, allowed_updates: await hookUpdatesFor(await getHub(), botId) })
 }
 
 /** Makes the guard bot's webhook ask for exactly the update types the current settings need. */
@@ -127,7 +135,7 @@ export async function syncGuardHook() {
   const token = await botToken(botId)
   const info = await callBot<{ url: string; allowed_updates?: string[] }>(token, 'getWebhookInfo')
   if (!info.url.endsWith(`/api/telegram/hook/${botId}`)) return
-  const want = hookUpdatesFor(hub, botId)
+  const want = await hookUpdatesFor(hub, botId)
   const have = info.allowed_updates ?? []
   if (want.length === have.length && want.every((u) => have.includes(u))) return
   await callBot(token, 'setWebhook', { url: info.url, secret_token: secret, allowed_updates: want })
@@ -216,7 +224,7 @@ export async function registerHook(botId: number, origin: string) {
   await callBot(token, 'setWebhook', {
     url: `${origin}/api/telegram/hook/${botId}`,
     secret_token: secret,
-    allowed_updates: hookUpdatesFor(await getHub(), botId),
+    allowed_updates: await hookUpdatesFor(await getHub(), botId),
     drop_pending_updates: false,
   })
   await setSetting(`hook_secret_${botId}`, secret)
@@ -295,6 +303,14 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
     if (isGuard) {
       const { handleJoinRequest } = await import('@/lib/tg-guard')
       await handleJoinRequest(botId, update.chat_join_request)
+    }
+    return
+  }
+
+  if (update.message_reaction) {
+    if (isGuard) {
+      const { handleReaction } = await import('@/lib/tg-guard')
+      await handleReaction(botId, update.message_reaction)
     }
     return
   }

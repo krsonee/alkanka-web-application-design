@@ -81,7 +81,9 @@ export async function hubTick() {
   const { processBroadcasts } = await import('@/lib/tg-broadcast')
   const { runQuietHours } = await import('@/lib/tg-quiet')
   const { nudgeStaleTickets } = await import('@/lib/tg-support')
+  const { checkChatHealth, purgePulse } = await import('@/lib/tg-pulse')
   await Promise.all([
+    checkChatHealth().catch((e) => console.error('[hub-tick] chat health', e)),
     runPostJobs().catch((e) => console.error('[hub-tick] posts', e)),
     // Locks first, then quiet hours: a quiet window waits for a lock that still holds the group's permissions.
     endDueLocks()
@@ -102,4 +104,5 @@ export async function hubTick() {
   await rows(sql`DELETE FROM tg_joins WHERE created_at < now() - interval '1 day'`).catch(() => null)
   await rows(sql`DELETE FROM tg_seen_updates WHERE created_at < now() - interval '2 days'`).catch(() => null)
   await purgeShield().catch(() => null)
+  await purgePulse().catch(() => null)
 }

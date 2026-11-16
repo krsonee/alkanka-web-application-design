@@ -15,6 +15,7 @@ import {
   signatureHtml,
   visibleLength,
   type ChannelRule,
+  type PostButton,
 } from '@/lib/tg-posts-shared'
 
 const RULES_KEY = 'post_rules'
@@ -43,6 +44,26 @@ export async function getRules(): Promise<ChannelRule[]> {
 
 async function storeRules(rules: ChannelRule[]) {
   await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${RULES_KEY}, ${JSON.stringify(rules)}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+}
+
+/** Passes the signature and every button of the stored rules through `swap`; returns how many rules it changed. */
+export async function rewriteRuleLinks(swap: (text: string) => string) {
+  const rules = await getRules()
+  let changed = 0
+  const next = rules.map((rule) => {
+    const signature = swap(rule.signature)
+    const buttons = swapButtons(rule.buttons, swap)
+    const same = signature === rule.signature && JSON.stringify(buttons) === JSON.stringify(rule.buttons)
+    if (!same) changed++
+    return same ? rule : { ...rule, signature, buttons }
+  })
+  if (changed) await storeRules(next)
+  return changed
+}
+
+/** A button's id and kind are what clicks and votes are filed under, so only the words a reader sees are rewritten. */
+export function swapButtons(buttons: PostButton[][], swap: (text: string) => string): PostButton[][] {
+  return buttons.map((row) => row.map((b) => ({ ...b, label: swap(b.label), value: swap(b.value), ...(b.alt == null ? {} : { alt: swap(b.alt) }) })))
 }
 
 export async function saveRule(input: { botId: number; chatId: string; enabled: boolean; signature: string; sponsorId: string; buttons: unknown }): Promise<SendOutcome> {

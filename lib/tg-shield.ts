@@ -43,6 +43,8 @@ export function ensureShieldTables() {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_quiet (chat_id text PRIMARY KEY, mode text NOT NULL, perms text, msg_id bigint,
       failed_at timestamptz, started_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_suspect_state (tg_id bigint PRIMARY KEY, state text NOT NULL, reason text, name text, updated_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tg_reaction_log (chat_id text NOT NULL, tg_id bigint NOT NULL, at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE INDEX IF NOT EXISTS tg_reaction_log_user_idx ON tg_reaction_log (chat_id, tg_id, at DESC)`)
   })().catch((error) => {
     ready = null
     throw error
@@ -365,6 +367,22 @@ export async function sweepWave(token: string, chatId: string, budgetMs = 40_000
   return { removed: done.length, left: ids.length - done.length }
 }
 
+// --- Reactions -----------------------------------------------------------------
+
+/** Stores one reaction and returns how many this account added here in the last minute, this one included. */
+export async function logReaction(chatId: string, tgId: number) {
+  const [r] = await rows<{ recent: string }>(sql`INSERT INTO tg_reaction_log (chat_id, tg_id) VALUES (${chatId}, ${tgId})
+    RETURNING (SELECT count(*) FROM tg_reaction_log WHERE chat_id = ${chatId} AND tg_id = ${tgId} AND at > now() - interval '1 minute') AS recent`)
+  // The count is taken from before this insert, so the new row is added by hand.
+  return Number(r.recent) + 1
+}
+
+/** Empties the account's count and returns how many rows it held, so of several updates arriving together only one finds a full count. */
+export async function takeReactions(chatId: string, tgId: number) {
+  const r = await rows(sql`DELETE FROM tg_reaction_log WHERE chat_id = ${chatId} AND tg_id = ${tgId} RETURNING 1`)
+  return r.length
+}
+
 /** True at most once per `minutes` for a key, across all server instances. */
 export async function claimAlert(key: string, minutes: number) {
   const r = await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${new Date().toISOString()})
@@ -519,4 +537,5 @@ export async function purgeShield() {
   await rows(sql`DELETE FROM tg_join_log WHERE joined_at < now() - interval '35 days'`)
   await rows(sql`DELETE FROM tg_post_roots WHERE created_at < now() - interval '35 days'`)
   await rows(sql`DELETE FROM tg_thread_locks WHERE until < now() - interval '1 day'`)
+  await rows(sql`DELETE FROM tg_reaction_log WHERE at < now() - interval '1 hour'`)
 }

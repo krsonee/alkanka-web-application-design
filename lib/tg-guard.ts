@@ -21,6 +21,7 @@ import {
   type TgJoinRequest,
   type TgMemberState,
   type TgMemberUpdate,
+  type TgReaction,
   type TgUser,
 } from '@/lib/tg-hub'
 import {
@@ -53,6 +54,7 @@ import {
   lockThread,
   logChannelJoin,
   logJoin,
+  logReaction,
   markPostRoot,
   markRemoved,
   raidActive,
@@ -61,6 +63,7 @@ import {
   suspectNames,
   swarmHits,
   sweepWave,
+  takeReactions,
   threadState,
   unlockChat,
   unlockThread,
@@ -69,6 +72,8 @@ import {
   type SwarmHit,
 } from '@/lib/tg-shield'
 import { autoReply, greet } from '@/lib/tg-autoreply'
+import { noteInviteJoin } from '@/lib/tg-invites'
+import { countLeave } from '@/lib/tg-pulse'
 import { quietOutOfStep, runQuietHours } from '@/lib/tg-quiet'
 
 type GuardMsg = ShieldMsg & {
@@ -1448,6 +1453,7 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
     return true
   }
   if (m.left_chat_member) {
+    if (!m.left_chat_member.is_bot) await countLeave(chatId).catch(() => null)
     if (r.cleanService) await del(token, m.chat.id, m.message_id)
     return true
   }
@@ -1668,7 +1674,14 @@ export async function handleMemberUpdate(botId: number, up: TgMemberUpdate, own:
     })
   }
 
-  if (up.chat.type !== 'channel' || now.user.is_bot || isInChat(was) || !isInChat(now)) return
+  if (now.user.is_bot) return
+  const joined = !isInChat(was) && isInChat(now)
+  if (joined && up.invite_link?.invite_link) {
+    await noteInviteJoin(chatId, up.invite_link.invite_link).catch((error) => console.error('[tg-guard] invite join not counted', error))
+  }
+  // Groups report a leave as a message, which is counted there; a channel only reports it here.
+  if (up.chat.type === 'channel' && isInChat(was) && !isInChat(now)) await countLeave(chatId).catch(() => null)
+  if (up.chat.type !== 'channel' || !joined) return
   const via = up.via_join_request
     ? 'katılma isteği'
     : up.via_chat_folder_invite_link
@@ -1696,6 +1709,50 @@ export async function handleMemberUpdate(botId: number, up: TgMemberUpdate, own:
       buttons: [{ text: `Son ${WAVE_MINUTES} dk girenleri çıkar`, data: `gd:wave:${chatId}` }],
     })
   }
+}
+
+// --- Reactions (message_reaction) -----------------------------------------------
+
+/**
+ * A reaction carries no text to screen, so only its speed is watched. Telegram sends these to an admin bot
+ * that asked for them, and names the account only in groups; channel reactions are anonymous.
+ */
+export async function handleReaction(botId: number, r: TgReaction) {
+  const hub = await getHub()
+  const limit = hub.shield.reactionLimit
+  // Taking a reaction back is not a flood, and an anonymous admin has no account to act on.
+  if (limit <= 0 || !r.user || r.user.is_bot || !r.new_reaction?.length || r.chat.type === 'channel') return
+  const chatId = String(r.chat.id)
+  if (!(await isProtectedChat(hub, chatId))) return
+  await ensureGuardTables()
+  if ((await logReaction(chatId, r.user.id)) < limit) return
+  const taken = await takeReactions(chatId, r.user.id)
+  if (taken < limit) return
+  const token = await botToken(botId)
+  if (await isChatAdmin(token, chatId, r.user.id)) return
+  if ((await trustOf(r.user.id)).trusted) return
+  const minutes = rulesFor(hub, chatId).floodMuteMinutes
+  const cleared = await callBot(token, 'deleteAllMessageReactions', { chat_id: chatId, user_id: r.user.id })
+    .then(() => true)
+    .catch(() => false)
+  const muted = await mute(token, chatId, r.user.id, minutes)
+    .then(() => true)
+    .catch(() => false)
+  await adjustTrust(r.user.id, -10)
+  await modLog({
+    chatId,
+    chatTitle: r.chat.title ?? chatId,
+    user: r.user,
+    action: muted ? `Susturuldu (${minutes} dk)` : 'Tepki seli',
+    reason: [
+      `Tepki seli: 1 dakikada ${taken} tepki (sınır ${limit}).`,
+      cleared ? 'Bıraktığı tepkiler silindi.' : 'Tepkileri silinemedi; Bekçi’nin bu grupta mesaj silme yetkisi olmalı.',
+      muted ? '' : 'Susturulamadı; Bekçi’nin üye engelleme yetkisi olmalı.',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    undo: muted ? { kind: 'mute', chatId, tgIds: [r.user.id], trust: 10, warns: 0 } : undefined,
+  })
 }
 
 // --- Panel: locks, join waves, suspects -----------------------------------------

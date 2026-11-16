@@ -103,7 +103,14 @@ export type ShieldConfig = {
   quiet: QuietConfig
   channelJoinAlert: number
   adminAlerts: boolean
+  /** Reactions one account may add in a minute before it is muted; 0 means reactions are not listened to at all. */
+  reactionLimit: number
+  healthAlert: boolean
+  memberDropPercent: number
 }
+
+/** A drop smaller than this many members never raises the alarm, whatever the percentage says. */
+export const MEMBER_DROP_FLOOR = 20
 
 export const GUARD_TUNABLES = [
   'warnLimit',
@@ -236,6 +243,9 @@ const SHIELD_OFF: ShieldConfig = {
   quiet: QUIET_OFF,
   channelJoinAlert: 0,
   adminAlerts: false,
+  reactionLimit: 0,
+  healthAlert: false,
+  memberDropPercent: 10,
 }
 
 export const RECOMMENDED_SHIELD: ShieldConfig = {
@@ -256,6 +266,10 @@ export const RECOMMENDED_SHIELD: ShieldConfig = {
   quiet: QUIET_OFF,
   channelJoinAlert: 50,
   adminAlerts: true,
+  // Every reaction would become a webhook call, so listening to them stays a deliberate choice.
+  reactionLimit: 0,
+  healthAlert: true,
+  memberDropPercent: 10,
 }
 
 export const DEFAULT_HUB: HubConfig = {
@@ -340,7 +354,11 @@ export const LOG_KINDS = [
   { key: 'mute', label: 'Susturma', prefixes: ['Susturuldu'] },
   { key: 'ban', label: 'Ban', prefixes: ['Banlandı'] },
   { key: 'join', label: 'Giriş ve baskın', prefixes: ['Giriş', 'Baskın', 'Doğrulanmadı', 'Grup kili', 'Kilit', 'Sessiz saat', 'Kanala toplu giriş', 'Şüpheli isim', 'Yorumlar kapatıldı'] },
-  { key: 'admin', label: 'Bot ve yönetici', prefixes: ['Bekçi', 'Yeni yönetici', 'Yönetici çıkarıldı'] },
+  {
+    key: 'admin',
+    label: 'Bot ve yönetici',
+    prefixes: ['Bekçi', 'Yeni yönetici', 'Yönetici çıkarıldı', 'Sohbete erişilemiyor', 'Üye sayısı düştü', 'Kanal adresi', 'Davet linki', 'Ayarlar'],
+  },
   { key: 'cleanup', label: 'Temizlik', prefixes: ['Tüm sohbet', 'Silinmiş hesap'] },
   { key: 'support', label: 'Destek', prefixes: ['Destek', 'Bilet'] },
   { key: 'undo', label: 'Geri alma', prefixes: ['Geri alındı', 'Susturma kaldırıldı', 'Uyarılar sıfırlandı', 'Yasak kaldırıldı'] },
