@@ -10,12 +10,19 @@ type Toast = { id: number; ok: boolean; text: string }
 let openDialog: ((request: Request) => void) | null = null
 let pushToast: ((toast: Omit<Toast, 'id'>) => void) | null = null
 
-const DANGER = /sil|ban|kaldır|sıfırla|geri al|sahte|varsayılan/i
+const DANGER = /sil|ban|kaldır|sıfırla|geri al|sahte|varsayılan|dondur|düşül|çıkar|kapat|geri alınamaz/i
 
 /** Themed replacement for window.confirm; falls back to the native box if the host is not mounted. */
 export function askConfirm(message: string): Promise<boolean> {
   if (!openDialog) return Promise.resolve(window.confirm(message))
   return new Promise((resolve) => openDialog?.({ message, resolve }))
+}
+
+/** Runs the action only after the admin confirms; for actions that cannot be undone. */
+export function confirmed(message: string, action: () => void) {
+  void askConfirm(message).then((ok) => {
+    if (ok) action()
+  })
 }
 
 /** Shows a short "saved" / error notice in the panel corner. */

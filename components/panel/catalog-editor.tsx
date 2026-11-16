@@ -289,6 +289,13 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
     })
   }
 
+  const orphans =
+    kind === 'campaigns' || kind === 'bonuses'
+      ? items
+          .filter((x) => !sponsors.some((s) => s.id === String(x.sponsorId ?? '')) && (kind === 'bonuses' || !String(x.url ?? '').trim()))
+          .map((x) => `"${String(x.title ?? '').slice(0, 30)}"`)
+      : []
+
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -303,6 +310,15 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
           Yeni ekle
         </button>
       </header>
+
+      {orphans.length > 0 && (
+        <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs leading-relaxed text-foreground">
+          <strong>{`${orphans.length} kayıtta sponsor listede yok${kind === 'campaigns' ? ' ve yönlendirme linki boş' : ''}.`}</strong>{' '}
+          {`Sitede bu ${kind === 'campaigns' ? 'kampanyaların "Katıl"' : 'bonusların "Siteye git"'} düğmesi hiçbir yere gitmez. Sponsor seç${kind === 'campaigns' ? ', link yaz' : ''} ya da kaydı sil: `}
+          {orphans.slice(0, 6).join(', ')}
+          {orphans.length > 6 ? ` ve ${orphans.length - 6} kayıt daha.` : '.'}
+        </p>
+      )}
 
       {(kind === 'campaigns' || kind === 'bonuses') && (
         <CategoryOrderEditor
@@ -356,7 +372,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', isHidden ? 'text-muted-foreground line-through' : 'text-foreground')}>{name}</span>
                   {isHidden && <span className="shrink-0 text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {kind === 'events' ? `${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : String(item.sponsorId || '')}
+                    {kind === 'events' ? `${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : (sponsors.find((s) => s.id === String(item.sponsorId))?.name ?? 'Sponsor yok')}
                   </span>
                   <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-180')} aria-hidden />
                 </button>

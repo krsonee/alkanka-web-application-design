@@ -151,7 +151,10 @@ export async function getWithdrawSettings(): Promise<WithdrawSettings> {
 
 export async function saveWithdrawSettings(input: Partial<WithdrawSettings>) {
   await ensure()
-  const s = cleanSettings(input)
+  // The reward card and the rules card each send only their own fields. Start from what is
+  // stored so saving one card does not put the other card back to its defaults.
+  const [stored] = await rows<{ value: Partial<WithdrawSettings> }>(sql`SELECT value FROM withdraw_config WHERE id = 1`)
+  const s = cleanSettings({ ...(stored?.value ?? {}), ...input })
   const drift = driftMessage(input, s, { labels: SETTING_LABELS, blankOk: ['item'] })
   if (drift) throw new Error(drift)
   await rows(sql`INSERT INTO withdraw_config (id, value) VALUES (1, ${JSON.stringify(s)}::jsonb)

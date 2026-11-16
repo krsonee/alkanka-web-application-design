@@ -49,6 +49,10 @@ const CATALOG_LABELS = {
   participants: 'Katılımcı sayısı',
   hoursLeft: 'Kalan süre (saat)',
   prize: 'Ödül yazısı',
+  steps: 'Nasıl katılınır',
+  rules: 'Kurallar',
+  prizes: 'Ödül sıralaması',
+  place: 'Ödül sırası',
   image: 'Görsel linki',
   reward: 'Tahmin ödülü',
   home: 'Ev sahibi takım',
@@ -58,6 +62,16 @@ const CATALOG_LABELS = {
   tag: 'Etiket',
   link: 'Link',
   href: 'Link',
+  url: 'Yönlendirme linki (https:// ile başlamalı)',
+  startsAt: 'Başlangıç tarihi',
+  endsAt: 'Bitiş tarihi',
+  kickoffAt: 'Maç tarihi',
+  closesAt: 'Tahmin bitiş tarihi',
+  league: 'Lig',
+  kickoff: 'Başlama yazısı',
+  wager: 'Çevrim',
+  options: 'Seçenekler',
+  label: 'Seçenek adı',
   sponsorId: 'Sponsor',
   amount: 'Tutar',
   code: 'Kod',
@@ -65,7 +79,7 @@ const CATALOG_LABELS = {
 
 /** Fields the cleaner derives or rewrites itself, so they never count as a typing mistake. */
 const CATALOG_DERIVED = ['id', 'ends', 'kind', 'type', 'status', 'startsAt', 'endsAt', 'closesAt', 'kickoffAt', 'resolvedAt', 'result', 'winner']
-const CATALOG_BLANK_OK = ['image', 'tag', 'subtitle', 'description', 'prize', 'link', 'href', 'ends', 'code', 'match']
+const CATALOG_BLANK_OK = ['image', 'tag', 'subtitle', 'description', 'prize', 'link', 'href', 'ends', 'code', 'match', 'league', 'kickoff', 'wager', 'amount', 'label']
 
 function campaignDateError(items: unknown): string | null {
   if (!Array.isArray(items)) return null
@@ -107,6 +121,7 @@ export async function saveCatalogList(kind: ListKind, items: unknown): Promise<R
         labels: CATALOG_LABELS,
         ignore: kind === 'campaigns' ? [...CATALOG_DERIVED, 'hoursLeft'] : CATALOG_DERIVED,
         blankOk: CATALOG_BLANK_OK,
+        mustKeep: ['url', 'startsAt', 'endsAt', 'kickoffAt', 'closesAt'],
       })
     if (drift) return { ok: false, error: drift }
     await setContent(CATALOG_KEYS[kind], cleaned)

@@ -13,6 +13,8 @@ export type DriftOptions = {
   ignore?: string[]
   /** Keys that may be left blank and then fall back to a default. */
   blankOk?: string[]
+  /** Optional keys the cleaner drops entirely when the value is invalid (links, dates). */
+  mustKeep?: string[]
 }
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
@@ -51,7 +53,11 @@ export function findDrift(wrote: unknown, saved: unknown, options: DriftOptions 
   if (saved && typeof saved === 'object') {
     if (typeof wrote !== 'object' || Array.isArray(wrote)) return []
     const source = wrote as Record<string, unknown>
-    return Object.entries(saved).flatMap(([name, value]) => findDrift(source[name], value, options, [...path, name]))
+    const kept = saved as Record<string, unknown>
+    const dropped = (options.mustKeep ?? [])
+      .filter((name) => typeof source[name] === 'string' && (source[name] as string).trim() && (kept[name] === undefined || kept[name] === null))
+      .map((name) => ({ path: [...path, name], wrote: source[name], saved: '' }))
+    return [...dropped, ...Object.entries(kept).flatMap(([name, value]) => findDrift(source[name], value, options, [...path, name]))]
   }
   return []
 }
@@ -65,14 +71,27 @@ function labelOf(path: Path, labels: DriftLabels) {
   return prefix + ((last && labels[last]) || last || 'alan')
 }
 
+function explainList(label: string, wrote: unknown[], saved: unknown[]) {
+  const typed = wrote.map((v) => String(v).trim()).filter(Boolean)
+  const kept = saved.map(String)
+  const lost = typed.filter((v) => !kept.includes(v))
+  if (!lost.length) return `${label}: aynı değer birden fazla kez yazılmış.`
+  if (kept.length < typed.length && kept.every((v, i) => v === typed[i])) return `${label}: en fazla ${kept.length} satır olabilir (yazdığın ${typed.length}).`
+  const [first] = lost
+  if (first === 'NaN') return `${label}: sayı olmayan bir değer var. Sadece sayıları, virgülle ayırarak yaz.`
+  const cut = saved.find((v): v is string => typeof v === 'string' && v.length > 0 && first.startsWith(v))
+  if (cut) return `${label}: bir satır en fazla ${cut.length} karakter olabilir (yazdığın ${first.length} karakter).`
+  return `${label}: "${first.slice(0, 40)}" geçerli değil.`
+}
+
 function explain({ path, wrote, saved, rows }: Drift, labels: DriftLabels) {
   const label = labelOf(path, labels)
   if (rows) return `${path.length ? label : 'Liste'}: ${wrote} satır yazdın, ${saved} tanesi geçerli. Boş ya da aynı olan satırları düzelt.`
-  if (Array.isArray(saved)) return `${label}: yazdıklarının bir kısmı geçersiz. Sadece geçerli sayıları, virgülle ayırarak yaz.`
+  if (Array.isArray(saved)) return explainList(label, Array.isArray(wrote) ? wrote : [], saved)
   if (typeof saved === 'string') {
     if (!String(wrote).trim()) return `${label} boş bırakılamaz.`
     const text = String(wrote).trim()
-    if (text.length > saved.length && text.startsWith(saved)) return `${label} en fazla ${saved.length} karakter olabilir (yazdığın ${text.length} karakter).`
+    if (saved && text.length > saved.length && text.startsWith(saved)) return `${label} en fazla ${saved.length} karakter olabilir (yazdığın ${text.length} karakter).`
     return `${label} geçerli değil: "${text.slice(0, 40)}" kabul edilmedi.`
   }
   const n = toNumber(wrote)

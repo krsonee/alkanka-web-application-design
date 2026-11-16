@@ -17,8 +17,12 @@ export type ActionState = { ok?: boolean; message?: string }
 
 const LIMITS = { eyebrow: 40, title: 90, description: 280, speech: 160, cta: 30 } as const
 
+const LIMIT_LABELS: Record<keyof typeof LIMITS, string> = { eyebrow: 'Üst etiket', title: 'Başlık', description: 'Açıklama', speech: 'Jako konuşma balonu', cta: 'Düğme yazısı' }
+
 function field(form: FormData, name: keyof typeof LIMITS) {
-  return String(form.get(name) ?? '').trim().slice(0, LIMITS[name])
+  const value = String(form.get(name) ?? '').trim()
+  if (value.length > LIMITS[name]) throw new Error(`${LIMIT_LABELS[name]} en fazla ${LIMITS[name]} karakter olabilir (yazdığın ${value.length} karakter). Hiçbir şey kaydedilmedi.`)
+  return value
 }
 
 function imageField(form: FormData) {
@@ -141,8 +145,11 @@ export async function saveTexts(_: ActionState, form: FormData): Promise<ActionS
     for (const f of TEXT_FIELDS) {
       const v = String(form.get(f.key) ?? '').trim()
       if (!v) continue
+      if (f.key === 'auth.bonus') {
+        if (!/^\d+$/.test(v)) return { message: 'Kayıt bonusu sadece rakam olmalı. Hiçbir şey kaydedilmedi.' }
+        if (v.length > 6) return { message: `Kayıt bonusu en fazla 999.999 KC olabilir (yazdığın ${Number(v).toLocaleString('tr-TR')}). Hiçbir şey kaydedilmedi.` }
+      }
       if (v.length > f.max) return { message: `"${f.label}" en fazla ${f.max} karakter olabilir (yazdığın ${v.length} karakter). Hiçbir şey kaydedilmedi.` }
-      if (f.key === 'auth.bonus' && !/^\d{1,6}$/.test(v)) return { message: 'Kayıt bonusu sadece rakam olmalı.' }
       value[f.key] = v
     }
     await setContent(TEXTS_KEY, value)

@@ -1,7 +1,7 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, confirmed } from '@/components/panel/confirm-dialog'
 import { useEffect, useState, useTransition } from 'react'
 import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Coins, Download, Link2Off, Lock, LogOut, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -405,7 +405,11 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
               <textarea aria-label="Dondurma sebebi" value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} rows={2} placeholder="Dondurma sebebi (zorunlu)" className={cn(input, 'resize-y leading-relaxed')} />
               <button
                 disabled={busy || suspendReason.trim().length < 3}
-                onClick={() => run(() => suspendAction(m.id, duration, suspendReason), () => setSuspendReason(''))}
+                onClick={() =>
+                  confirmed(`${m.name} ${duration === 'sure' ? 'süresiz' : `${duration} gün`} dondurulsun mu? Bu sürede hesabına giremez.`, () =>
+                    run(() => suspendAction(m.id, duration, suspendReason), () => setSuspendReason('')),
+                  )
+                }
                 className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-40"
               >
                 Dondur
@@ -436,7 +440,14 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
               <input aria-label="İşlem gerekçesi" value={walletReason} onChange={(e) => setWalletReason(e.target.value)} placeholder="İşlem gerekçesi (zorunlu)" className={input} />
               <button
                 disabled={busy || !Number(amount) || walletReason.trim().length < 3}
-                onClick={() => run(() => walletAction(m.id, Number(amount), walletReason), () => (setAmount(''), setWalletReason('')))}
+                onClick={() =>
+                  confirmed(
+                    Number(amount) < 0
+                      ? `${m.name} bakiyesinden ${Math.abs(Number(amount)).toLocaleString('tr-TR')} KC düşülsün mü?`
+                      : `${m.name} bakiyesine ${Number(amount).toLocaleString('tr-TR')} KC eklensin mi?`,
+                    () => run(() => walletAction(m.id, Number(amount), walletReason), () => (setAmount(''), setWalletReason(''))),
+                  )
+                }
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
               >
                 {Number(amount) < 0 ? 'Bakiyeden düş' : 'Bakiyeye ekle'}
@@ -450,13 +461,13 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
                   <span className="truncate font-medium text-foreground">{m.telegramId ? `${m.telegramName ?? ''} · ID ${m.telegramId}` : 'Bağlı değil'}</span>
                 </div>
                 {m.telegramId && (
-                  <button disabled={busy} onClick={() => run(() => unlinkTelegramAction(m.id))} className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-40">
+                  <button disabled={busy} onClick={() => confirmed(`${m.name} hesabının Telegram bağlantısı kaldırılsın mı? Üye yeniden bağlamak zorunda kalır.`, () => run(() => unlinkTelegramAction(m.id)))} className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary disabled:opacity-40">
                     <Link2Off className="size-3.5" aria-hidden="true" />
                     Bağlantıyı kaldır
                   </button>
                 )}
               </div>
-              <button disabled={busy} onClick={() => run(() => revokeSessionsAction(m.id))} className="flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-40">
+              <button disabled={busy} onClick={() => confirmed(`${m.name} tüm cihazlarda oturumdan çıkarılsın mı? Yeniden giriş yapması gerekir.`, () => run(() => revokeSessionsAction(m.id)))} className="flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-40">
                 <LogOut className="size-4" aria-hidden="true" />
                 Güvenlik sıfırla (tüm oturumları kapat)
               </button>

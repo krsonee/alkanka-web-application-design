@@ -269,7 +269,7 @@ function Rules({ settings, blocks }: { settings: WithdrawSettings; blocks: Block
           <input type="checkbox" checked={cfg.tgShowAmount} onChange={(e) => setCfg({ ...cfg, tgShowAmount: e.target.checked })} className="size-4 accent-primary" />
           Telegram mesajında tutarı göster
         </label>
-        <button disabled={pending} onClick={() => run(() => updateWithdrawSettings(cfg))} className="h-9 w-fit rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-50">
+        <button disabled={pending} onClick={() => run(() => updateWithdrawSettings({ weekly: cfg.weekly, minAmount: cfg.minAmount, maxAgeDays: cfg.maxAgeDays, minAccountDays: cfg.minAccountDays, tgEnabled: cfg.tgEnabled, tgShowAmount: cfg.tgShowAmount }))} className="h-9 w-fit rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-50">
           Kuralları kaydet
         </button>
       </section>
