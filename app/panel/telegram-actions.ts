@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
-import { canPanel } from '@/lib/admin-auth'
+import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { connectChat, disconnectChat } from '@/lib/telegram-chat'
 import {
   addBot,
@@ -40,7 +40,8 @@ export async function addBotAction(_: ActionState, form: FormData): Promise<Acti
 }
 
 export async function deleteBotAction(form: FormData) {
-  if (!(await canPanel('telegram'))) return
+  // Removing a bot takes every job it does offline at once, so it is left to the owner account.
+  if (!(await isPanelOwner())) return
   await deleteBot(Number(form.get('id')))
   revalidatePath('/panel')
 }

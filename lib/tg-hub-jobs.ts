@@ -1,7 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot } from '@/lib/telegram-mirror'
-import { chatLeaderboard, ensureHubTables, getHub, hubStats, modLog, processBroadcasts, weekStart } from '@/lib/tg-hub'
+import { chatLeaderboard, ensureHubTables, getHub, hubStats, modLog, weekStart } from '@/lib/tg-hub'
 
 async function claimOnce(key: string) {
   const r = await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${new Date().toISOString()}) ON CONFLICT (key) DO NOTHING RETURNING key`)
@@ -74,18 +74,35 @@ export async function runWeeklyHub(force = false) {
 /** Runs every minute from the traffic-driven tick. */
 export async function hubTick() {
   const hub = await getHub()
-  const { expireCaptchas, flushAutoDelete, processWipes } = await import('@/lib/tg-guard')
+  const { endDueLocks, expireCaptchas, flushAutoDelete, processWipes } = await import('@/lib/tg-guard')
   const { healChatHook } = await import('@/lib/tg-hub')
+  const { purgeShield } = await import('@/lib/tg-shield')
+  const { runPostJobs } = await import('@/lib/tg-posts')
+  const { processBroadcasts } = await import('@/lib/tg-broadcast')
+  const { runQuietHours } = await import('@/lib/tg-quiet')
+  const { nudgeStaleTickets } = await import('@/lib/tg-support')
+  const { checkChatHealth, purgePulse } = await import('@/lib/tg-pulse')
   await Promise.all([
+    checkChatHealth().catch((e) => console.error('[hub-tick] chat health', e)),
+    runPostJobs().catch((e) => console.error('[hub-tick] posts', e)),
+    // Locks first, then quiet hours: a quiet window waits for a lock that still holds the group's permissions.
+    endDueLocks()
+      .catch((e) => console.error('[hub-tick] locks', e))
+      .then(() => runQuietHours())
+      .catch((e) => console.error('[hub-tick] quiet hours', e)),
     processWipes().catch((e) => console.error('[hub-tick] wipe', e)),
     healChatHook().catch((e) => console.error('[hub-tick] chat hook', e)),
     hub.guard.enabled ? expireCaptchas().catch((e) => console.error('[hub-tick] captcha', e)) : null,
     flushAutoDelete().catch((e) => console.error('[hub-tick] autodel', e)),
     processBroadcasts().catch((e) => console.error('[hub-tick] broadcast', e)),
+    nudgeStaleTickets().catch((e) => console.error('[hub-tick] ticket reminder', e)),
   ])
   // Monday after 00:00 Istanbul; claimOnce keeps it to a single run per week.
   await runWeeklyHub().catch((e) => console.error('[hub-tick] weekly', e))
   // Keep the guard's message log small; 35 days covers weekly counts and 48h deletions.
   await rows(sql`DELETE FROM tg_guard_msgs WHERE created_at < now() - interval '35 days'`).catch(() => null)
   await rows(sql`DELETE FROM tg_joins WHERE created_at < now() - interval '1 day'`).catch(() => null)
+  await rows(sql`DELETE FROM tg_seen_updates WHERE created_at < now() - interval '2 days'`).catch(() => null)
+  await purgeShield().catch(() => null)
+  await purgePulse().catch(() => null)
 }

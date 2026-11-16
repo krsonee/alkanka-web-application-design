@@ -37,6 +37,7 @@
   --color-amethyst: var(--amethyst);
   --color-silver: var(--silver);
   --color-emerald: var(--emerald);
+  --color-success: var(--emerald);
   --color-gold-foreground: var(--gold-foreground);
   --color-live: var(--live);
   --color-live-foreground: var(--live-foreground);

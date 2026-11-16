@@ -49,7 +49,7 @@ type ScrapedPost = {
   ref?: string
   items?: MediaItem[]
 }
-type Destination = { token: string; chatId: string; title: string }
+type Destination = { token: string; chatId: string; title: string; botId?: number }
 
 const MAX_PER_RUN = 5
 const CAPTION_LIMIT = 1000
@@ -324,16 +324,49 @@ async function resolveMissingVideos(post: ScrapedPost, items: MediaItem[]) {
   }
 }
 
+export class TelegramError extends Error {
+  readonly code: number
+  /** Telegram's own untranslated error text. */
+  readonly description: string
+  readonly retryAfter: number | null
+
+  constructor(message: string, code: number, description: string, retryAfter: number | null) {
+    super(message)
+    this.name = 'TelegramError'
+    this.code = code
+    this.description = description
+    this.retryAfter = retryAfter
+  }
+}
+
+const RATE_LIMIT_WAIT_MAX_SEC = 5
+const RATE_LIMIT_RETRIES = 2
+
 export async function callBot<T = unknown>(token: string, method: string, body: Record<string, unknown> = {}): Promise<T> {
-  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000),
-  })
-  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string; result?: T }
-  if (!data.ok) throw new Error(translateError(data.description ?? `Telegram HTTP ${res.status}`))
-  return data.result as T
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000),
+    })
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean
+      description?: string
+      error_code?: number
+      parameters?: { retry_after?: number }
+      result?: T
+    }
+    if (data.ok) return data.result as T
+    const retryAfter = typeof data.parameters?.retry_after === 'number' ? data.parameters.retry_after : null
+    // Short flood waits are sat out here; longer ones go back to the caller so a webhook never hangs on them.
+    if (retryAfter != null && retryAfter <= RATE_LIMIT_WAIT_MAX_SEC && attempt < RATE_LIMIT_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000 + 250))
+      continue
+    }
+    const description = data.description ?? `Telegram HTTP ${res.status}`
+    throw new TelegramError(translateError(description), data.error_code ?? res.status, description, retryAfter)
+  }
 }
 
 const LINKED_TTL_MS = 10 * 60_000
@@ -383,15 +416,23 @@ async function download(file: UploadFile) {
  * refuses remote videos above 20 MB, so media is downloaded here and uploaded as a file.
  */
 export async function callBotFiles<T = unknown>(token: string, method: string, body: Record<string, unknown>, files: Record<string, UploadFile>): Promise<T> {
+  const parts = await Promise.all(Object.entries(files).map(async ([key, file]) => [key, { blob: await download(file), name: file.name }] as const))
+  return callBotUpload<T>(token, method, body, Object.fromEntries(parts))
+}
+
+/** Calls a Bot API method with files that are already in memory, sent as a multipart upload. */
+export async function callBotUpload<T = unknown>(token: string, method: string, body: Record<string, unknown>, files: Record<string, { blob: Blob; name: string }>): Promise<T> {
   const form = new FormData()
   for (const [key, value] of Object.entries(body)) {
     if (value !== undefined && value !== null) form.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value))
   }
-  const blobs = await Promise.all(Object.entries(files).map(async ([key, file]) => [key, await download(file), file.name] as const))
-  for (const [key, blob, name] of blobs) form.append(key, blob, name)
+  for (const [key, file] of Object.entries(files)) form.append(key, file.blob, file.name)
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', body: form, signal: AbortSignal.timeout(90_000) })
-  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string; result?: T }
-  if (!data.ok) throw new Error(translateError(data.description ?? `Telegram HTTP ${res.status}`))
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string; error_code?: number; parameters?: { retry_after?: number }; result?: T }
+  if (!data.ok) {
+    const description = data.description ?? `Telegram HTTP ${res.status}`
+    throw new TelegramError(translateError(description), data.error_code ?? res.status, description, data.parameters?.retry_after ?? null)
+  }
   return data.result as T
 }
 
@@ -413,8 +454,12 @@ function translateError(message: string) {
   return message
 }
 
-async function deliver(dest: Destination, post: ScrapedPost, text: string, parseMode: 'HTML' | undefined) {
-  const send = (method: string, body: Record<string, unknown>) => callBot(dest.token, method, { chat_id: dest.chatId, ...body })
+type Sent = { message_id: number }
+/** Which messages a post became, so the panel can later edit, pin or delete it. `mainId` carries the text. */
+type Delivered = { ids: number[]; mainId: number; mainMedia: boolean }
+
+async function deliver(dest: Destination, post: ScrapedPost, text: string, parseMode: 'HTML' | undefined): Promise<Delivered> {
+  const send = <T = Sent>(method: string, body: Record<string, unknown>) => callBot<T>(dest.token, method, { chat_id: dest.chatId, ...body })
   const visible = parseMode ? stripTags(text).length : text.length
   const fmt = parseMode ? { parse_mode: parseMode } : {}
   const fitsCaption = visible <= CAPTION_LIMIT
@@ -424,19 +469,21 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
     ...post.photos.map((url) => ({ type: 'photo' as const, url })),
     ...(post.video ? [{ type: 'video' as const, url: post.video }] : []),
   ]
-  if (!scraped.length) {
-    await send('sendMessage', { text, ...fmt })
-    return
+  const textOnly = async (extra: Record<string, unknown> = {}): Promise<Delivered> => {
+    const m = await send('sendMessage', { text, ...fmt, ...extra })
+    return { ids: [m.message_id], mainId: m.message_id, mainMedia: false }
   }
+  if (!scraped.length) return textOnly()
   const items = await resolveMissingVideos(post, scraped.slice(0, 10))
-  const finish = async () => {
-    if (!fitsCaption) await send('sendMessage', { text, ...fmt, link_preview_options: { is_disabled: true } })
+  const finish = async (media: Sent[]): Promise<Delivered> => {
+    const ids = media.map((m) => m.message_id)
+    if (fitsCaption) return { ids, mainId: ids[0], mainMedia: true }
+    const m = await send('sendMessage', { text, ...fmt, link_preview_options: { is_disabled: true } })
+    return { ids: [...ids, m.message_id], mainId: m.message_id, mainMedia: false }
   }
   // Never substitute a video/GIF cover frame: if the real file can't be sent, Telegram's own preview of the original post is used.
   const viaOriginal = () =>
-    send('sendMessage', {
-      text,
-      ...fmt,
+    textOnly({
       link_preview_options: post.ref ? { url: `https://t.me/${post.ref}`, prefer_large_media: true, show_above_text: true } : { is_disabled: true },
     })
   if (items.some((item) => !item.url)) return viaOriginal()
@@ -450,33 +497,34 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
         ...(item.type === 'photo' ? {} : { supports_streaming: true }),
         ...(i === 0 ? captioned : {}),
       }))
+      let album: Sent[]
       try {
-        await callBotFiles(dest.token, 'sendMediaGroup', { chat_id: dest.chatId, media }, Object.fromEntries(items.map((item, i) => [
+        album = await callBotFiles<Sent[]>(dest.token, 'sendMediaGroup', { chat_id: dest.chatId, media }, Object.fromEntries(items.map((item, i) => [
           `m${i}`,
           { url: item.url!, kind: item.type === 'photo' ? ('photo' as const) : ('video' as const), name: item.type === 'photo' ? `m${i}.jpg` : `m${i}.mp4` },
         ])))
       } catch (error) {
         if (isParseError(error)) throw error
-        await send('sendMediaGroup', { media: media.map((m, i) => ({ ...m, media: items[i].url })) })
+        album = await send<Sent[]>('sendMediaGroup', { media: media.map((m, i) => ({ ...m, media: items[i].url })) })
       }
-      return await finish()
+      return await finish(album)
     }
 
     const [item] = items
     if (item.type === 'photo') {
-      await sendPhotoFile(dest.token, { chat_id: dest.chatId, ...captioned }, item.url!)
-      return await finish()
+      return await finish([await sendPhotoFile<Sent>(dest.token, { chat_id: dest.chatId, ...captioned }, item.url!)])
     }
     const method = item.type === 'gif' ? 'sendAnimation' : 'sendVideo'
     const field = item.type === 'gif' ? 'animation' : 'video'
     const body = { chat_id: dest.chatId, ...(item.type === 'video' ? { supports_streaming: true } : {}), ...captioned }
+    let single: Sent
     try {
-      await callBotFiles(dest.token, method, body, { [field]: { url: item.url!, kind: 'video', name: item.type === 'gif' ? 'animation.mp4' : 'video.mp4' } })
+      single = await callBotFiles<Sent>(dest.token, method, body, { [field]: { url: item.url!, kind: 'video', name: item.type === 'gif' ? 'animation.mp4' : 'video.mp4' } })
     } catch (error) {
       if (isParseError(error)) throw error
-      await callBot(dest.token, method, { ...body, [field]: item.url })
+      single = await callBot<Sent>(dest.token, method, { ...body, [field]: item.url })
     }
-    return await finish()
+    return await finish([single])
   } catch (error) {
     if (isParseError(error)) throw error
     console.error('[mirror] media send failed, sharing original post instead', error)
@@ -499,13 +547,14 @@ function buildMessage(post: ScrapedPost, source: PostSource, note: string) {
   }
 }
 
+/** Returns the messages the post became and the text as sent (Telegram HTML), for the panel's post list. */
 async function sendPost(dest: Destination, post: ScrapedPost, source: PostSource, note = '') {
   const { html, plain } = buildMessage(post, source, note)
   try {
-    await deliver(dest, post, html, 'HTML')
+    return { ...(await deliver(dest, post, html, 'HTML')), text: html }
   } catch (error) {
     if (!/parse entities|can't parse/i.test(String((error as Error).message))) throw error
-    await deliver(dest, post, plain, undefined)
+    return { ...(await deliver(dest, post, plain, undefined)), text: escapeHtml(plain) }
   }
 }
 
@@ -682,11 +731,11 @@ export async function getCronKey(rotate = false) {
 }
 
 async function activeDestinations() {
-  const r = await rows(sql`SELECT t.id, t.chat_id, t.title, b.token_enc FROM tg_targets t JOIN tg_bots b ON b.id = t.bot_id WHERE t.active ORDER BY t.id`)
+  const r = await rows(sql`SELECT t.id, t.chat_id, t.title, t.bot_id, b.token_enc FROM tg_targets t JOIN tg_bots b ON b.id = t.bot_id WHERE t.active ORDER BY t.id`)
   const map = new Map<number, Destination>()
   for (const t of r) {
     try {
-      map.set(Number(t.id), { token: decrypt(String(t.token_enc)), chatId: String(t.chat_id), title: String(t.title) })
+      map.set(Number(t.id), { token: decrypt(String(t.token_enc)), chatId: String(t.chat_id), title: String(t.title), botId: Number(t.bot_id) })
     } catch {
       // A token that none of the known secrets opens can't be used; the panel shows it so the bot can be re-added.
     }
@@ -702,6 +751,7 @@ export async function runMirror(): Promise<MirrorResult> {
   const result: MirrorResult = { checked: 0, sent: 0, skipped: 0, failed: 0, primed: 0, errors: [] }
   // Imported lazily: telegram-bots depends on this module.
   const bots = await import('@/lib/telegram-bots')
+  const postLog = await import('@/lib/tg-posts')
   const odds = { isOddsText: bots.isOddsText, extras: await bots.oddsMirrorExtras() }
 
   for (const source of sources) {
@@ -750,7 +800,8 @@ export async function runMirror(): Promise<MirrorResult> {
         const failures: string[] = []
         for (const dest of postTargets) {
           try {
-            await sendPost(dest, post, source, isOdds ? odds.extras.note : '')
+            const sent = await sendPost(dest, post, source, isOdds ? odds.extras.note : '')
+            await postLog.recordAutoPost({ origin: 'mirror', note: `@${source.channel} kanalından`, botId: dest.botId ?? null, chatId: dest.chatId, chatTitle: dest.title, ...sent })
           } catch (error) {
             failures.push(`${dest.title}: ${String((error as Error).message)}`)
           }

@@ -17,7 +17,7 @@ type Action = {
 
 const per = (kp: number, rate: number) => (rate > 0 ? Math.round(kp / rate) : 0)
 
-function buildActions(rules: PointRules, today: KpBreakdown | null, telegramLinked: boolean): Action[] {
+function buildActions(rules: PointRules, today: KpBreakdown | null, telegramLinked: boolean, chatUrl: string): Action[] {
   const t = today
   return [
     {
@@ -27,7 +27,7 @@ function buildActions(rules: PointRules, today: KpBreakdown | null, telegramLink
     { key: 'game', label: 'Oyun oyna', icon: Gamepad2, href: '/oyunlar', cta: 'Oyna', status: t ? `Bugün ${per(t.games, rules.game)} oyun` : undefined },
     { key: 'task', label: 'Görev tamamla', icon: ListChecks, href: '/gorevler', cta: 'Görevler', status: t ? `Bugün ${per(t.tasks, rules.task)} görev` : undefined },
     {
-      key: 'chat', label: 'Sohbete yaz', icon: MessageCircle, href: TELEGRAM_URL, cta: 'Sohbet',
+      key: 'chat', label: 'Sohbete yaz', icon: MessageCircle, href: chatUrl, cta: 'Sohbet',
       cap: t ? { value: per(t.chat, rules.chat), max: rules.chatDailyCap } : undefined,
     },
     { key: 'leaguePoint', label: 'Tahmin ligi', icon: Target, href: '/tahminler', cta: 'Tahmin yap', status: t ? `Bugün ${per(t.league, rules.leaguePoint)} lig puanı` : 'Lig puanı başına' },
@@ -45,12 +45,14 @@ export function EarnActions({
   rules,
   today,
   telegramLinked = false,
+  chatUrl = TELEGRAM_URL,
 }: {
   rules: PointRules
   today: KpBreakdown | null
   telegramLinked?: boolean
+  chatUrl?: string
 }) {
-  const actions = buildActions(rules, today, telegramLinked).filter((a) => rules[a.key] > 0)
+  const actions = buildActions(rules, today, telegramLinked, chatUrl).filter((a) => rules[a.key] > 0)
 
   return (
     <ul className="kp-stagger grid grid-cols-2 gap-2 lg:grid-cols-3">

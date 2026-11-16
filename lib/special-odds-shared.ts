@@ -24,6 +24,14 @@ export type SpecialOdd = {
 
 export type OddsDayStats = { total: number; open: number; won: number; lost: number; avgFillMinutes: number | null }
 
+/** `pending` keeps only closed odds that still have no result. */
+export type OddsFilter = { q?: string; pending?: boolean }
+export type OddsPage = { rows: SpecialOdd[]; hasMore: boolean }
+
+export const ODDS_PAGE = 30
+/** The panel list grows a page at a time up to this many rows; older odds are reached by searching. */
+export const ODDS_MAX = 300
+
 export type OddsSource = {
   id: number
   chatId: string

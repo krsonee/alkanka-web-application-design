@@ -1,7 +1,7 @@
 import 'server-only'
-import { canPanel, canPanelAny, getPanelSession, isPanelOwner } from '@/lib/panel-auth'
+import { canPanel, canPanelAny, canTelegram, getPanelSession, isPanelOwner } from '@/lib/panel-auth'
 
-export { canPanel, canPanelAny, getPanelSession, isPanelOwner }
+export { canPanel, canPanelAny, canTelegram, getPanelSession, isPanelOwner }
 
 export async function isAdmin() {
   return Boolean(await getPanelSession())

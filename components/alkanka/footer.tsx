@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { ArrowUpRight, Send } from 'lucide-react'
+import { parseChannelAddress } from '@/lib/tg-resilience-shared'
 import { TELEGRAM_URL } from './data'
 import { BrandLogo } from './logo-selector'
 
@@ -21,11 +22,12 @@ const LEGAL_LINKS = [
   { label: 'Sorumlu Oyun', href: '/yasal/sorumlu-oyun' },
 ]
 
-export function Footer() {
+export function Footer({ telegramUrl = TELEGRAM_URL }: { telegramUrl?: string }) {
+  const handle = parseChannelAddress(telegramUrl)?.username
   return (
     <footer className="flex flex-col gap-6 border-t border-border pt-8 pb-24 lg:pb-8">
       <a
-        href={TELEGRAM_URL}
+        href={telegramUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="tg-cta flex flex-wrap items-center gap-4 rounded-2xl p-4 sm:flex-nowrap sm:gap-5 sm:p-5"
@@ -43,7 +45,7 @@ export function Footer() {
         <span className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-accent">
             <Send className="size-3.5" aria-hidden="true" />
-            @AlkankaOfficial
+            {handle ? `@${handle}` : 'Telegram kanalı'}
           </span>
           <span className="font-display text-base font-bold text-foreground text-balance sm:text-lg">Kaçırma kanka, Jako her şeyi Telegram’da öter!</span>
           <span className="text-sm leading-relaxed text-muted-foreground text-pretty">
@@ -68,7 +70,7 @@ export function Footer() {
               {l.label}
             </a>
           ))}
-          <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline">
+          <a href={telegramUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline">
             Telegram
           </a>
         </nav>

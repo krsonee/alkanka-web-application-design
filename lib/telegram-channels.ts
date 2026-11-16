@@ -10,6 +10,8 @@ import {
   type ChannelPost,
   type TelegramAccess,
 } from '@/lib/telegram-channels-shared'
+import { cache } from 'react'
+import { MAIN_CHANNEL_KEY } from '@/lib/tg-resilience-shared'
 
 const CACHE_MS = 60_000
 const MAX_POSTS = 20
@@ -51,25 +53,46 @@ function ensureChannelTables() {
   return ready
 }
 
-async function getChannelConfigs(): Promise<ChannelConfig[]> {
+/** One read for the channel settings and the main-address override, so the site layout pays for a single query. */
+async function readChannelSettings() {
   await ensureChannelTables()
-  const keys = BROADCAST_CHANNELS.flatMap((c) => [settingKey(c.slug), idKey(c.slug), discussionKey(c.slug)])
+  const keys = [...BROADCAST_CHANNELS.flatMap((c) => [settingKey(c.slug), idKey(c.slug), discussionKey(c.slug)]), MAIN_CHANNEL_KEY]
   const r = await rows<{ key: string; value: string }>(sql`SELECT key, value FROM tg_settings WHERE key IN ${keys}`)
-  const map = Object.fromEntries(r.map((s) => [s.key, s.value]))
-  return BROADCAST_CHANNELS.filter((c) => map[settingKey(c.slug)]).map((c) => ({
+  return Object.fromEntries(r.map((s) => [s.key, s.value])) as Record<string, string | undefined>
+}
+
+const configsFrom = (map: Record<string, string | undefined>): ChannelConfig[] =>
+  BROADCAST_CHANNELS.filter((c) => map[settingKey(c.slug)]).map((c) => ({
     slug: c.slug,
-    username: map[settingKey(c.slug)],
+    username: map[settingKey(c.slug)]!,
     channelId: map[idKey(c.slug)] ?? null,
     discussionId: map[discussionKey(c.slug)] ?? null,
   }))
+
+const usernamesFrom = (configs: ChannelConfig[]) =>
+  Object.fromEntries(BROADCAST_CHANNELS.map((c) => [c.slug, configs.find((x) => x.slug === c.slug)?.username ?? null])) as Record<BroadcastSlug, string | null>
+
+async function getChannelConfigs(): Promise<ChannelConfig[]> {
+  return configsFrom(await readChannelSettings())
 }
 
 export async function getChannelUsernames(): Promise<Record<BroadcastSlug, string | null>> {
-  const configs = await getChannelConfigs()
-  return Object.fromEntries(
-    BROADCAST_CHANNELS.map((c) => [c.slug, configs.find((x) => x.slug === c.slug)?.username ?? null]),
-  ) as Record<BroadcastSlug, string | null>
+  return usernamesFrom(await getChannelConfigs())
 }
+
+/**
+ * The address every "join our channel" link on the site and in the bots points at. An explicit override
+ * wins (a private invite link, or a new channel whose feed could not be connected yet); otherwise it is
+ * the announcement channel; `fallback` covers a site that has set up neither. A layout and its page ask
+ * during the same render and share one read.
+ */
+export const getTelegramAddresses = cache(async (fallback: string) => {
+  const map = await readChannelSettings()
+  const usernames = usernamesFrom(configsFrom(map))
+  const override = map[MAIN_CHANNEL_KEY] || null
+  const main = override ?? (usernames.duyuru ? `https://t.me/${usernames.duyuru.replace(/^@/, '')}` : fallback)
+  return { usernames, main, custom: Boolean(override) }
+})
 
 function cachedPosts(username: string) {
   const hit = postCache.get(username)
@@ -294,8 +317,32 @@ async function resolveChannel(title: string, username: string) {
   return { channelId: String(info.id), discussionId }
 }
 
+/** Connects one of the site's channel feeds to a public channel. Returns whether its comments can be read too. */
+export async function setChannel(slug: BroadcastSlug, raw: string) {
+  await ensureChannelTables()
+  const title = BROADCAST_CHANNELS.find((c) => c.slug === slug)!.title
+  const username = normalizeChannel(raw)
+  if (!username) throw new Error(`${title}: geçerli bir kanal kullanıcı adı yaz (ör. @alkankaduyuru).`)
+  try {
+    await fetchChannel(username)
+  } catch (error) {
+    throw new Error(`${title}: ${(error as Error).message}. Kanalın herkese açık olduğundan emin ol.`)
+  }
+  const { channelId, discussionId } = await resolveChannel(title, username)
+  const upsert = (key: string, value: string) =>
+    rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${value}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+  await upsert(settingKey(slug), username)
+  await upsert(idKey(slug), channelId)
+  if (discussionId) await upsert(discussionKey(slug), discussionId)
+  else await rows(sql`DELETE FROM tg_settings WHERE key = ${discussionKey(slug)}`)
+  postCache.delete(username)
+  for (const key of joinedCache.keys()) if (key.startsWith(`${slug}:`)) joinedCache.delete(key)
+  return { title, comments: Boolean(discussionId) }
+}
+
 export async function saveChannels(input: Record<BroadcastSlug, string>) {
   await ensureChannelTables()
+  const before = await getChannelUsernames()
   const saved: string[] = []
   for (const { slug, title } of BROADCAST_CHANNELS) {
     const raw = input[slug]?.trim() ?? ''
@@ -303,23 +350,13 @@ export async function saveChannels(input: Record<BroadcastSlug, string>) {
       await rows(sql`DELETE FROM tg_settings WHERE key IN ${[settingKey(slug), idKey(slug), discussionKey(slug)]}`)
       continue
     }
-    const username = normalizeChannel(raw)
-    if (!username) throw new Error(`${title}: geçerli bir kanal kullanıcı adı yaz (ör. @alkankaduyuru).`)
-    try {
-      await fetchChannel(username)
-    } catch (error) {
-      throw new Error(`${title}: ${(error as Error).message}. Kanalın herkese açık olduğundan emin ol.`)
-    }
-    const { channelId, discussionId } = await resolveChannel(title, username)
-    const upsert = (key: string, value: string) =>
-      rows(sql`INSERT INTO tg_settings (key, value) VALUES (${key}, ${value}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
-    await upsert(settingKey(slug), username)
-    await upsert(idKey(slug), channelId)
-    if (discussionId) await upsert(discussionKey(slug), discussionId)
-    else await rows(sql`DELETE FROM tg_settings WHERE key = ${discussionKey(slug)}`)
-    postCache.delete(username)
-    for (const key of joinedCache.keys()) if (key.startsWith(`${slug}:`)) joinedCache.delete(key)
-    saved.push(discussionId ? title : `${title} (yorumlar kapalı: tartışma grubu yok ya da bot grupta değil)`)
+    const { comments } = await setChannel(slug, raw)
+    saved.push(comments ? title : `${title} (yorumlar kapalı: tartışma grubu yok ya da bot grupta değil)`)
+  }
+  // Naming a different announcement channel here is the newer decision, so an older address override must not keep masking it.
+  const after = await getChannelUsernames()
+  if ((after.duyuru ?? '').toLowerCase() !== (before.duyuru ?? '').toLowerCase()) {
+    await rows(sql`DELETE FROM tg_settings WHERE key = ${MAIN_CHANNEL_KEY}`)
   }
   return saved
 }

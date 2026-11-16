@@ -1,5 +1,6 @@
 import { BookOpen, ChevronDown } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { SecretUrl } from './secret-url'
 
 type Step = { title: string; body: ReactNode }
 
@@ -108,21 +109,23 @@ function steps(cronUrl: string): Step[] {
       ),
     },
     {
-      title: 'Otomatik kontrolü aç (dakikada bir, isteğe bağlı)',
+      title: 'Dış zamanlayıcı (isteğe bağlı, çoğu zaman gerekmez)',
       body: (
         <ol className="flex list-decimal flex-col gap-1.5 pl-5">
           <li>
-            Bu adımı kurmazsan botlar sitede ziyaretçi oldukça çalışır. Dakikalık tetik veritabanını hiç uyutmaz; ücretsiz veritabanı planında aylık kota buna yetmez.
+            Bu adımı kurmazsan botlar sitede ziyaretçi oldukça çalışır; çoğu durumda bu yeter. Veritabanı kullandıkça öde planında: uyanık kaldığı her saat faturaya yazılır. Dış zamanlayıcı ne kadar sık çağırırsa veritabanı o kadar az uyur ve fatura o kadar artar; dakikada bir çağrı veritabanını hiç uyutmaz.
           </li>
           <li>
-            Ücretsiz <b>cron-job.org</b> sitesine üye ol ve <b>Create cronjob</b>’a bas.
+            Yine de kuracaksan: ücretsiz <b>cron-job.org</b> sitesine üye ol ve <b>Create cronjob</b>’a bas.
           </li>
           <li>
-            URL alanına şu adresi yapıştır:
-            <code className="mt-1 block break-all rounded-lg bg-background p-2 font-mono text-xs text-foreground">{cronUrl}</code>
+            URL alanına aşağıdaki adresi yapıştır. Adres ekranda kapalı durur, <b>Kopyala</b> ile al:
+            <span className="mt-1 flex">
+              <SecretUrl url={cronUrl} label="Otomatik kontrol adresi" />
+            </span>
           </li>
           <li>
-            Zamanlamayı <b>Every 1 minute</b> (her dakika) seç ve kaydet.
+            Zamanlamada işine yeten en seyrek aralığı seç (ör. <b>Every 15 minutes</b>) ve kaydet.
           </li>
           <li>Bu adres gizli anahtar içerir, kimseyle paylaşma. Paylaştıysan aşağıdan <b>Anahtarı yenile</b>’ye bas ve cron-job.org’daki adresi güncelle.</li>
           <li>

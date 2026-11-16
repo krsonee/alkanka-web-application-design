@@ -1,5 +1,5 @@
 import 'server-only'
-import { createHash } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 import { generateText } from 'ai'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot } from '@/lib/telegram-mirror'
@@ -8,38 +8,93 @@ import {
   adjustTrust,
   chatLeaderboard,
   dailyTrustBump,
-  ensureHubTables,
   getHub,
+  meetMember,
   modLog,
+  setNeedsCheck,
   setTrusted,
   trustOf,
   weekStart,
   who,
+  type LogUndo,
   type TgCallback,
   type TgJoinRequest,
+  type TgMemberState,
+  type TgMemberUpdate,
+  type TgReaction,
   type TgUser,
 } from '@/lib/tg-hub'
-import type { HubConfig } from '@/lib/tg-hub-shared'
-import { autoReply } from '@/lib/tg-autoreply'
+import {
+  CAPTCHA_MINUTES,
+  CAPTCHA_TRIES,
+  CONTENT_KINDS,
+  NEW_MEMBER_HOURS,
+  RAID_BAN_MINUTES,
+  WAVE_MINUTES,
+  inQuietHours,
+  rulesFor,
+  type GroupRules,
+  type HubConfig,
+  type MemberAction,
+} from '@/lib/tg-hub-shared'
+import {
+  adminLookalike,
+  chatAdmins,
+  claimAlert,
+  closeInvites,
+  confirmTwice,
+  contentKinds,
+  dueLocks,
+  ensureShieldTables,
+  extendLock,
+  flagSuspect,
+  hiddenLinks,
+  invitedBy,
+  lockChat,
+  lockThread,
+  logChannelJoin,
+  logJoin,
+  logReaction,
+  markPostRoot,
+  markRemoved,
+  raidActive,
+  setSuspectState,
+  staffWordInName,
+  suspectNames,
+  swarmHits,
+  sweepWave,
+  takeReactions,
+  threadState,
+  unlockChat,
+  unlockThread,
+  waveMembers,
+  type ShieldMsg,
+  type SwarmHit,
+} from '@/lib/tg-shield'
+import { autoReply, greet } from '@/lib/tg-autoreply'
+import { noteInviteJoin } from '@/lib/tg-invites'
+import { countLeave } from '@/lib/tg-pulse'
+import { quietOutOfStep, runQuietHours } from '@/lib/tg-quiet'
 
-type GuardMsg = TgMessage & {
-  sender_chat?: { id: number; type: string }
-  left_chat_member?: TgUser
+type GuardMsg = ShieldMsg & {
   entities?: { type: string; url?: string; offset: number; length: number }[]
   caption_entities?: { type: string; url?: string; offset: number; length: number }[]
 }
 
 const AI_MODEL = 'google/gemini-3.5-flash'
-const CAPTCHA_MINUTES = 3
 const RAID_WINDOW_SEC = 60
+const RAID_REASON = `Baskın koruması: ${RAID_BAN_MINUTES} dakikalığına çıkarıldı (kalıcı ban değil)`
 const PURGE_MAX = 300
+const SWARM_MIN_LENGTH = 20
 const ADMIN_CACHE_MS = 10 * 60 * 1000
 
 let guardReady: Promise<void> | null = null
 function ensureGuardTables() {
   guardReady ??= (async () => {
-    await ensureHubTables()
+    await ensureShieldTables()
     await rows(sql`ALTER TABLE tg_captcha ADD COLUMN IF NOT EXISTS msg_id bigint`)
+    await rows(sql`ALTER TABLE tg_captcha ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'join'`)
+    await rows(sql`ALTER TABLE tg_captcha ADD COLUMN IF NOT EXISTS answer int, ADD COLUMN IF NOT EXISTS tries int NOT NULL DEFAULT 0`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_autodel (id serial PRIMARY KEY, chat_id text NOT NULL, message_id bigint NOT NULL, due_at timestamptz NOT NULL)`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_wipe (chat_id text PRIMARY KEY, bot_id int NOT NULL, title text NOT NULL DEFAULT '',
       next_id bigint NOT NULL, total bigint NOT NULL, done bigint NOT NULL DEFAULT 0, started_by text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now())`)
@@ -128,17 +183,40 @@ async function ban(token: string, chatId: number | string, userId: number) {
   await callBot(token, 'banChatMember', { chat_id: chatId, user_id: userId, revoke_messages: true })
 }
 
+/**
+ * Telegram lifts this ban by itself, so a real member caught in a raid can simply join again later.
+ * One call on purpose: a ban followed by a separate unban would turn permanent whenever the unban is rate-limited.
+ */
+async function tempBan(token: string, chatId: number | string, userId: number, minutes: number) {
+  await callBot(token, 'banChatMember', { chat_id: chatId, user_id: userId, until_date: Math.floor(Date.now() / 1000) + minutes * 60 })
+}
+
 async function kick(token: string, chatId: number | string, userId: number) {
   await callBot(token, 'banChatMember', { chat_id: chatId, user_id: userId })
   await callBot(token, 'unbanChatMember', { chat_id: chatId, user_id: userId, only_if_banned: true })
 }
 
-async function notice(token: string, chatId: number | string, text: string, seconds = 20) {
-  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: chatId, text, link_preview_options: { is_disabled: true } }).catch(() => null)
+async function notice(token: string, chatId: number | string, text: string, seconds = 20, replyTo?: number) {
+  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
+    chat_id: chatId,
+    text,
+    link_preview_options: { is_disabled: true },
+    reply_parameters: replyTo ? { message_id: replyTo, allow_sending_without_reply: true } : undefined,
+  }).catch(() => null)
   if (!sent) return
   // Serverless functions freeze after responding, so cleanup is queued for the background tick.
   await rows(sql`INSERT INTO tg_autodel (chat_id, message_id, due_at)
     VALUES (${String(chatId)}, ${sent.message_id}, now() + make_interval(secs => ${seconds}))`).catch(() => null)
+}
+
+/** A deleted message earns one explanation a minute per person, so a spammer cannot make the bot flood the chat. */
+const noticeAt = new Map<string, number>()
+function mayNotice(key: string) {
+  const now = Date.now()
+  if (now - (noticeAt.get(key) ?? 0) < 60_000) return false
+  if (noticeAt.size > 2000) noticeAt.clear()
+  noticeAt.set(key, now)
+  return true
 }
 
 export async function flushAutoDelete() {
@@ -197,11 +275,25 @@ function foreignLinks(m: GuardMsg, allow: string[]) {
       if (/(bot|channel|kanal|vip|bonus)$/.test(mention)) found.add(`t.me/${mention.slice(1)}`)
     }
   }
+  return foreignOnly([...found], allow)
+}
+
+function foreignOnly(links: string[], allow: string[]) {
   const allowed = allow.map((a) => a.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, ''))
-  return [...found].filter((link) => {
+  return links.filter((link) => {
     const clean = link.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '')
     return !allowed.some((a) => a && clean.startsWith(a))
   })
+}
+
+/** Ads that hide outside the message text. Chats on the protected list are our own, so quoting them is fine. */
+function hiddenAdReason(m: GuardMsg, allow: string[], ownChats: Set<string>) {
+  const links = foreignOnly([...hiddenLinks(m), ...((m.quote?.text ?? '').match(URL_RE) ?? [])], allow)
+  if (links.length) return `Gizlenmiş link (buton ya da alıntı): ${links[0].slice(0, 60)}`
+  const source = m.external_reply?.chat
+  if (source?.type === 'channel' && source.id !== m.chat.id && !ownChats.has(String(source.id))) return 'Başka kanaldan alıntı'
+  if (m.story) return 'Hikâye iletme'
+  return null
 }
 
 const isForwardedFromChannel = (m: GuardMsg) => m.forward_origin?.type === 'channel' || Boolean(m.forward_from_chat)
@@ -298,22 +390,30 @@ async function addWarn(tgId: number) {
   return Number(r.count)
 }
 
-async function punish(hub: HubConfig, token: string, m: GuardMsg, reason: string, opts: { hard?: boolean } = {}) {
+/** What "Geri al" must put back: the trust points and warnings this action took away. */
+const undoFor = (m: GuardMsg, kind: LogUndo['kind'], trust: number, warns: number): LogUndo => ({
+  kind,
+  chatId: String(m.chat.id),
+  tgIds: [m.from!.id],
+  trust,
+  warns,
+})
+
+async function punish(g: Pick<GroupRules, 'warnLimit' | 'muteMinutes'>, token: string, m: GuardMsg, reason: string, opts: { hard?: boolean } = {}) {
   const user = m.from!
   const chatTitle = m.chat.title ?? String(m.chat.id)
   await del(token, m.chat.id, m.message_id)
   if (opts.hard) {
     await ban(token, m.chat.id, user.id).catch(() => null)
     await adjustTrust(user.id, -50)
-    await modLog({ chatId: m.chat.id, chatTitle, user, action: 'Banlandı', reason })
+    await modLog({ chatId: m.chat.id, chatTitle, user, action: 'Banlandı', reason, undo: undoFor(m, 'ban', 50, 0) })
     return
   }
   const count = await addWarn(user.id)
   await adjustTrust(user.id, -10)
-  const g = hub.guard
   if (count < g.warnLimit) {
     await notice(token, m.chat.id, `${short(user)} uyarı ${count}/${g.warnLimit}: ${reason}`)
-    await modLog({ chatId: m.chat.id, chatTitle, user, action: 'Mesaj silindi', reason: `${reason} (uyarı ${count}/${g.warnLimit})` })
+    await modLog({ chatId: m.chat.id, chatTitle, user, action: 'Mesaj silindi', reason: `${reason} (uyarı ${count}/${g.warnLimit})`, undo: undoFor(m, 'warn', 10, 1) })
     return
   }
   const step = count - g.warnLimit
@@ -322,12 +422,12 @@ async function punish(hub: HubConfig, token: string, m: GuardMsg, reason: string
     await mute(token, m.chat.id, user.id, minutes).catch(() => null)
     await adjustTrust(user.id, -15)
     await notice(token, m.chat.id, `${short(user)} ${minutes >= 1440 ? `${Math.round(minutes / 1440)} gün` : `${minutes} dakika`} susturuldu: ${reason}`)
-    await modLog({ chatId: m.chat.id, chatTitle, user, action: `Susturuldu (${minutes} dk)`, reason })
+    await modLog({ chatId: m.chat.id, chatTitle, user, action: `Susturuldu (${minutes} dk)`, reason, undo: undoFor(m, 'mute', 25, 1) })
     return
   }
   await ban(token, m.chat.id, user.id).catch(() => null)
   await notice(token, m.chat.id, `${short(user)} kuralları tekrar tekrar çiğnediği için gruptan atıldı.`)
-  await modLog({ chatId: m.chat.id, chatTitle, user, action: 'Banlandı (uyarı limiti)', reason })
+  await modLog({ chatId: m.chat.id, chatTitle, user, action: 'Banlandı (uyarı limiti)', reason, undo: undoFor(m, 'ban', 10, 1) })
 }
 
 async function globalBan(hub: HubConfig, token: string, user: TgUser, reason: string) {
@@ -349,26 +449,138 @@ async function casBanned(userId: number) {
   }
 }
 
-function impersonates(u: TgUser) {
-  const name = normalizeText(`${u.first_name ?? ''} ${u.last_name ?? ''} ${u.username ?? ''}`).replace(/\s/g, '')
-  return /(alkanka|alkankadestek|alkankaadmin)/.test(name) || /(destek|admin|yonetici|yönetici|support|moderator)/.test(name)
+async function recentJoins(chatId: number | string) {
+  const [{ n }] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_joins
+    WHERE chat_id = ${String(chatId)} AND created_at > now() - make_interval(secs => ${RAID_WINDOW_SEC})`)
+  return Number(n)
 }
 
-async function screenNewcomer(hub: HubConfig, token: string, chatId: number | string, chatTitle: string, u: TgUser) {
+/** Opens raid mode once; later triggers only push its end time back. */
+async function beginRaid(r: GroupRules, token: string, chatId: number | string, chatTitle: string, why: string) {
+  const res = await lockChat(token, { id: chatId, title: chatTitle }, { kind: 'raid', minutes: r.raidMinutes, lock: r.raidLock, reason: why })
+  if (!res.fresh) return
+  if (res.locked) {
+    await callBot(token, 'sendMessage', {
+      chat_id: chatId,
+      text: `Olağan dışı hareket algılandı. Grup yaklaşık ${r.raidMinutes} dakikalığına yazmaya kapatıldı, kendiliğinden açılacak.`,
+    }).catch(() => null)
+  }
+  const lockNote = res.locked ? `Grup ${r.raidMinutes} dakika yazmaya kapatıldı. ` : res.error ? `Grup yazmaya kapatılamadı (${res.error}). ` : ''
+  await modLog({
+    chatId,
+    chatTitle,
+    action: 'Baskın modu açıldı',
+    reason: `${why}. ${lockNote}Bu sürede yeni gelenler ${RAID_BAN_MINUTES} dakikalığına çıkarılır, kalıcı ban yok. Çıkarılanlar tek tek bildirilmez.`,
+    buttons: [
+      { text: 'Baskın modunu kapat', data: `gd:unlock:${chatId}` },
+      { text: `Son ${WAVE_MINUTES} dk girenleri çıkar`, data: `gd:wave:${chatId}` },
+    ],
+  })
+}
+
+async function closeLock(token: string, chatId: string, chatTitle: string, why: string) {
+  const res = await unlockChat(token, chatId)
+  if (!res.found) return { ok: false, message: 'Bu grupta açık bir kilit ya da baskın modu yok.' }
+  if (res.error) {
+    await modLog({ chatId, chatTitle, action: 'Kilit açılamadı', reason: `${res.error}. Telegram'da grup izinlerinden mesaj göndermeyi elle aç.` })
+    return { ok: false, message: `Kilit açılamadı: ${res.error}. Telegram'da grup izinlerinden mesaj göndermeyi elle aç.` }
+  }
+  if (res.wasLocked) await callBot(token, 'sendMessage', { chat_id: chatId, text: 'Grup yeniden açıldı. Herkes yazabilir.' }).catch(() => null)
+  const turned = res.turnedAway ? ` Bu sürede ${res.turnedAway} giriş geri çevrildi.` : ''
+  await modLog({ chatId, chatTitle, action: res.kind === 'raid' ? 'Baskın modu bitti' : 'Grup kilidi açıldı', reason: `${why}.${turned}` })
+  return { ok: true, message: res.kind === 'raid' ? 'Baskın modu kapatıldı.' : 'Grup kilidi açıldı.' }
+}
+
+/** Ends raid mode when its time is up. A raid that is still going on gets five more minutes instead. */
+export async function endDueLocks() {
+  const due = await dueLocks()
+  if (!due.length) return 0
+  const hub = await getHub()
+  if (!hub.guardBotId) return 0
+  const token = await botToken(hub.guardBotId)
+  for (const l of due) {
+    const limit = rulesFor(hub, l.chatId).raidJoins
+    if (l.kind === 'raid' && limit > 0 && (await recentJoins(l.chatId)) > limit) {
+      await extendLock(l.chatId, 5)
+      continue
+    }
+    await closeLock(token, l.chatId, l.title, 'Süre doldu')
+  }
+  return due.length
+}
+
+async function screenNewcomer(hub: HubConfig, r: GroupRules, token: string, chatId: number | string, chatTitle: string, u: TgUser) {
   const banned = await rows(sql`SELECT 1 FROM tg_global_bans WHERE tg_id = ${u.id}`)
   if (banned.length) return 'Global ban listesinde'
   if (hub.guard.casCheck && (await casBanned(u.id))) return 'Bilinen spam hesabı (CAS listesi)'
-  if (hub.guard.impersonation && impersonates(u)) return 'Yönetici / Alkanka taklidi yapan isim'
+  if (hub.guard.impersonation && staffWordInName(u)) return 'Yönetici / Alkanka taklidi yapan isim'
   await rows(sql`INSERT INTO tg_joins (chat_id) VALUES (${String(chatId)})`)
-  const [{ n }] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_joins
-    WHERE chat_id = ${String(chatId)} AND created_at > now() - make_interval(secs => ${RAID_WINDOW_SEC})`)
-  if (hub.guard.raidJoins > 0 && Number(n) > hub.guard.raidJoins) {
-    if (Number(n) === hub.guard.raidJoins + 1) {
-      await modLog({ chatId, chatTitle, action: 'Baskın algılandı', reason: `1 dakikada ${n} giriş. Yeni gelenler geçici olarak engelleniyor.` })
+  const n = await recentJoins(chatId)
+  const over = r.raidJoins > 0 && n > r.raidJoins
+  if (r.raidMode) {
+    if (over) {
+      await beginRaid(r, token, chatId, chatTitle, `1 dakikada ${n} giriş`)
+      return RAID_REASON
     }
-    return 'Baskın koruması (çok hızlı toplu giriş)'
+    return (await raidActive(String(chatId))) ? RAID_REASON : null
+  }
+  if (over) {
+    if (n === r.raidJoins + 1) {
+      await modLog({
+        chatId,
+        chatTitle,
+        action: 'Baskın algılandı',
+        reason: `1 dakikada ${n} giriş. Girişler yavaşlayana kadar yeni gelenler ${RAID_BAN_MINUTES} dakikalığına çıkarılıyor, kalıcı ban yok. Çıkarılanlar tek tek bildirilmez, panelde "Son işlemler"de görünür.`,
+      })
+    }
+    return RAID_REASON
   }
   return null
+}
+
+// --- Verification ------------------------------------------------------------------
+
+const CAPTCHA_PICKS = [
+  { emoji: '🍎', name: 'elma' },
+  { emoji: '🚗', name: 'araba' },
+  { emoji: '⚽', name: 'top' },
+  { emoji: '🐱', name: 'kedi' },
+  { emoji: '🔑', name: 'anahtar' },
+  { emoji: '🎈', name: 'balon' },
+  { emoji: '🐟', name: 'balık' },
+  { emoji: '🌳', name: 'ağaç' },
+  { emoji: '⭐', name: 'yıldız' },
+  { emoji: '🍌', name: 'muz' },
+  { emoji: '🚲', name: 'bisiklet' },
+  { emoji: '🏠', name: 'ev' },
+]
+const PASS_MINUTES = 10
+
+/** The question names the thing in words and the buttons show only pictures, so pressing the first button does not pass. */
+function emojiChallenge(prefix: string) {
+  const pool = [...CAPTCHA_PICKS]
+  const picks = [0, 1, 2].map(() => pool.splice(randomInt(pool.length), 1)[0])
+  const answer = randomInt(picks.length)
+  return { name: picks[answer].name, answer, keyboard: [picks.map((p, i) => ({ text: p.emoji, callback_data: `${prefix}:${i}` }))] }
+}
+
+/** Asks the applicant in private. False when the bot could not write to them, so the caller falls back to the check inside the group. */
+async function askInPrivate(token: string, r: TgJoinRequest) {
+  const chatId = String(r.chat.id)
+  const [old] = await rows<{ msg_id: string | null }>(sql`SELECT msg_id FROM tg_captcha WHERE chat_id = ${chatId} AND tg_id = ${r.from.id} AND kind = 'request'`)
+  if (old?.msg_id) await del(token, r.from.id, Number(old.msg_id))
+  const ask = emojiChallenge(`cq:${chatId}`)
+  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
+    // Telegram lets a bot write here for five minutes after the request, even if the person never started the bot.
+    chat_id: r.user_chat_id ?? r.from.id,
+    text: `"${r.chat.title ?? 'Grup'}" grubuna katılma isteğin alındı. Onaylanması için ${CAPTCHA_MINUTES} dakika içinde aşağıdan "${ask.name}" olanı seç.`,
+    reply_markup: { inline_keyboard: ask.keyboard },
+  }).catch(() => null)
+  if (!sent) return false
+  await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, msg_id, kind, answer, tries)
+    VALUES (${chatId}, ${r.from.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), ${sent.message_id}, 'request', ${ask.answer}, 0)
+    ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id, kind = 'request', answer = EXCLUDED.answer, tries = 0`)
+  return true
 }
 
 export async function handleJoinRequest(botId: number, r: TgJoinRequest) {
@@ -376,18 +588,104 @@ export async function handleJoinRequest(botId: number, r: TgJoinRequest) {
   const hub = await getHub()
   if (!(await isProtectedChat(hub, r.chat.id))) return
   const token = await botToken(botId)
-  const reason = await screenNewcomer(hub, token, r.chat.id, r.chat.title ?? '', r.from)
+  const rules = rulesFor(hub, r.chat.id)
+  const reason = await screenNewcomer(hub, rules, token, r.chat.id, r.chat.title ?? '', r.from)
   if (reason) {
     await callBot(token, 'declineChatJoinRequest', { chat_id: r.chat.id, user_id: r.from.id }).catch(() => null)
-    await modLog({ chatId: r.chat.id, chatTitle: r.chat.title, user: r.from, action: 'Giriş reddedildi', reason })
+    await modLog({ chatId: r.chat.id, chatTitle: r.chat.title, user: r.from, action: 'Giriş reddedildi', reason, notify: reason !== RAID_REASON })
     return
   }
+  if (rules.captcha && rules.captchaMode === 'dm' && (await askInPrivate(token, r))) return
   await callBot(token, 'approveChatJoinRequest', { chat_id: r.chat.id, user_id: r.from.id }).catch(() => null)
 }
 
-async function handleNewMembers(hub: HubConfig, token: string, m: GuardMsg) {
-  const chatTitle = m.chat.title ?? String(m.chat.id)
-  for (const u of m.new_chat_members ?? []) {
+/** The private answer to a join request: the right picture lets the person in, a second wrong one turns the request down. */
+async function answerJoinRequest(token: string, q: TgCallback, groupId: string, pick: number, answer: (text: string, alert?: boolean) => Promise<unknown>) {
+  const editPrompt = (text: string) =>
+    q.message
+      ? callBot(token, 'editMessageText', { chat_id: q.message.chat.id, message_id: q.message.message_id, text, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      : null
+  const [row] = await rows<{ answer: number | null }>(sql`SELECT answer FROM tg_captcha
+    WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request' AND expires_at > now()`)
+  if (!row) {
+    await editPrompt('Bu doğrulamanın süresi doldu. Gruba yeniden katılma isteği gönderebilirsin.')
+    return answer('Süre doldu.')
+  }
+  if (pick !== Number(row.answer)) {
+    const [t] = await rows<{ tries: number }>(sql`UPDATE tg_captcha SET tries = tries + 1
+      WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request' RETURNING tries`)
+    if (Number(t?.tries ?? CAPTCHA_TRIES) < CAPTCHA_TRIES) return answer('Yanlış seçim. Bir hakkın daha var.', true)
+    await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request'`)
+    await callBot(token, 'declineChatJoinRequest', { chat_id: groupId, user_id: q.from.id }).catch(() => null)
+    await editPrompt('İki kez yanlış seçtin, katılma isteğin reddedildi. İstersen yeniden istek gönderebilirsin.')
+    await modLog({ chatId: groupId, user: q.from, action: 'Doğrulanmadı, istek reddedildi', reason: 'Özelden sorulan emojiyi iki kez yanlış seçti', notify: false })
+    return answer('Katılma isteğin reddedildi.', true)
+  }
+  // Kept as a short-lived pass so the join that follows the approval is not asked a second time inside the group.
+  const passed = await rows(sql`UPDATE tg_captcha SET kind = 'passed', msg_id = NULL, expires_at = now() + make_interval(mins => ${PASS_MINUTES})
+    WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'request' RETURNING tg_id`)
+  if (!passed.length) return answer('')
+  try {
+    await callBot(token, 'approveChatJoinRequest', { chat_id: groupId, user_id: q.from.id })
+  } catch (error) {
+    await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${groupId} AND tg_id = ${q.from.id} AND kind = 'passed'`)
+    await editPrompt('Doğrulandın ama istek onaylanamadı. Gruba yeniden katılma isteği gönder.')
+    console.error('[tg-guard] join request approval failed', error)
+    return answer('İstek onaylanamadı.', true)
+  }
+  await setNeedsCheck(q.from.id, false)
+  await editPrompt('Doğrulandın, gruba alındın. Hoş geldin!')
+  return answer('Doğrulandı!')
+}
+
+/** A member who mass-adds people: everyone they added leaves for a while, they are banned, and adding can be switched off for the group. */
+async function stopInviter(r: GroupRules, token: string, m: GuardMsg, adder: TgUser, earlier: number[], invited: TgUser[]) {
+  const chatId = String(m.chat.id)
+  const chatTitle = m.chat.title ?? chatId
+  for (const u of m.new_chat_members ?? []) if (u.is_bot) await ban(token, chatId, u.id).catch(() => null)
+  for (const u of invited) {
+    await tempBan(token, chatId, u.id, RAID_BAN_MINUTES).catch(() => null)
+    await logJoin({ chatId, user: u, inviter: adder.id, removed: true }).catch(() => null)
+  }
+  for (const id of earlier) await tempBan(token, chatId, id, RAID_BAN_MINUTES).catch(() => null)
+  await markRemoved(chatId, earlier)
+  if (earlier.length) {
+    const prompts = await rows<{ msg_id: string | null }>(sql`DELETE FROM tg_captcha
+      WHERE chat_id = ${chatId} AND tg_id = ANY(${`{${earlier.join(',')}}`}::bigint[]) RETURNING msg_id`)
+    for (const p of prompts) if (p.msg_id) await del(token, chatId, Number(p.msg_id))
+  }
+  await ban(token, chatId, adder.id).catch(() => null)
+  await adjustTrust(adder.id, -50)
+  const closed = r.inviteLock ? await closeInvites(token, chatId) : false
+  await modLog({
+    chatId,
+    chatTitle,
+    user: adder,
+    action: 'Banlandı',
+    reason: `Toplu üye ekleme: 10 dakikada ${earlier.length + invited.length} kişi ekledi (sınır ${r.inviteLimit}). Eklenenler ${RAID_BAN_MINUTES} dakikalığına çıkarıldı.${
+      closed ? ' Üyelerin başkasını ekleme izni kapatıldı; grup izinlerinden tekrar açabilirsin.' : ''
+    }`,
+    undo: { kind: 'ban', chatId, tgIds: [adder.id], trust: 50, warns: 0 },
+  })
+}
+
+async function handleNewMembers(hub: HubConfig, r: GroupRules, token: string, m: GuardMsg) {
+  const chatId = String(m.chat.id)
+  const chatTitle = m.chat.title ?? chatId
+  const members = m.new_chat_members ?? []
+  const adder = m.from
+  if (r.raidMode) await endDueLocks().catch((error) => console.error('[tg-guard] lock check failed', error))
+
+  const invited = adder ? members.filter((u) => !u.is_bot && u.id !== adder.id) : []
+  if (adder && invited.length && r.inviteLimit > 0 && !(await isChatAdmin(token, m.chat.id, adder.id))) {
+    const earlier = await invitedBy(chatId, adder.id)
+    if (earlier.length + invited.length > r.inviteLimit) {
+      await stopInviter(r, token, m, adder, earlier, invited)
+      return
+    }
+  }
+
+  for (const u of members) {
     if (u.is_bot) {
       // Only admins may add bots; anything else is a spam bot drop.
       if (m.from && !(await isChatAdmin(token, m.chat.id, m.from.id))) {
@@ -396,22 +694,40 @@ async function handleNewMembers(hub: HubConfig, token: string, m: GuardMsg) {
       }
       continue
     }
-    const reason = await screenNewcomer(hub, token, m.chat.id, chatTitle, u)
+    const inviter = adder && adder.id !== u.id ? adder.id : null
+    const reason = await screenNewcomer(hub, r, token, m.chat.id, chatTitle, u)
+    if (reason === RAID_REASON) {
+      // Real members join in bursts too (right after an announcement), so a raid never bans for good.
+      await tempBan(token, m.chat.id, u.id, RAID_BAN_MINUTES).catch(() => null)
+      await logJoin({ chatId, user: u, inviter, raid: true, removed: true }).catch(() => null)
+      await modLog({ chatId: m.chat.id, chatTitle, user: u, action: 'Giriş reddedildi', reason, notify: false })
+      continue
+    }
     if (reason) {
       await ban(token, m.chat.id, u.id).catch(() => null)
       await modLog({ chatId: m.chat.id, chatTitle, user: u, action: 'Giriş reddedildi', reason })
       continue
     }
-    if (!hub.guard.captcha) continue
+    await logJoin({ chatId, user: u, inviter }).catch(() => null)
+    await meetMember(u.id).catch(() => null)
+    // Answered in private before the join request was approved: asking again here would test the same person twice.
+    const passed = r.captcha ? await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${chatId} AND tg_id = ${u.id} AND kind = 'passed' RETURNING tg_id`) : []
+    if (!r.captcha || passed.length) {
+      await greet(hub, token, m.chat.id, short(u)).catch((error) => console.error('[tg-guard] welcome failed', error))
+      continue
+    }
     await mute(token, m.chat.id, u.id, 60 * 24 * 366).catch(() => null)
+    const ask = r.captchaMode === 'button' ? null : emojiChallenge(`cap:${u.id}`)
     const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
       chat_id: m.chat.id,
-      text: `Hoş geldin ${short(u)}! Yazabilmek için ${CAPTCHA_MINUTES} dakika içinde aşağıdaki butona bas.`,
-      reply_markup: { inline_keyboard: [[{ text: 'Ben insanım', callback_data: `cap:${u.id}` }]] },
+      text: ask
+        ? `Hoş geldin ${short(u)}! Yazabilmek için ${CAPTCHA_MINUTES} dakika içinde aşağıdan "${ask.name}" olanı seç.`
+        : `Hoş geldin ${short(u)}! Yazabilmek için ${CAPTCHA_MINUTES} dakika içinde aşağıdaki butona bas.`,
+      reply_markup: { inline_keyboard: ask ? ask.keyboard : [[{ text: 'Ben insanım', callback_data: `cap:${u.id}` }]] },
     }).catch(() => null)
-    await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, msg_id)
-      VALUES (${String(m.chat.id)}, ${u.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), ${sent?.message_id ?? null})
-      ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id`)
+    await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, msg_id, answer, tries)
+      VALUES (${String(m.chat.id)}, ${u.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), ${sent?.message_id ?? null}, ${ask?.answer ?? null}, 0)
+      ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, msg_id = EXCLUDED.msg_id, kind = 'join', answer = EXCLUDED.answer, tries = 0`)
   }
 }
 
@@ -421,27 +737,187 @@ export async function expireCaptchas() {
   const hub = await getHub()
   if (!hub.guardBotId || !hub.guard.enabled) return 0
   const token = await botToken(hub.guardBotId)
-  const due = await rows(sql`DELETE FROM tg_captcha WHERE expires_at < now() RETURNING chat_id, tg_id, msg_id`)
+  const due = await rows(sql`DELETE FROM tg_captcha WHERE expires_at < now() RETURNING chat_id, tg_id, msg_id, kind`)
+  let kicked = 0
+  let declined = 0
   for (const d of due) {
-    await kick(token, String(d.chat_id), Number(d.tg_id)).catch(() => null)
+    // A used-up pass from a private check: the person is already in and verified.
+    if (d.kind === 'passed') continue
+    if (d.kind === 'request') {
+      // Never answered in private: the request is turned down, and the question is removed from that private chat.
+      await callBot(token, 'declineChatJoinRequest', { chat_id: String(d.chat_id), user_id: Number(d.tg_id) }).catch(() => null)
+      if (d.msg_id) await del(token, Number(d.tg_id), Number(d.msg_id))
+      declined++
+      continue
+    }
+    // A commenter who is not a member has nothing to be kicked from; their comments just keep being removed.
+    if (d.kind !== 'comment') {
+      await kick(token, String(d.chat_id), Number(d.tg_id)).catch(() => null)
+      kicked++
+    }
     if (d.msg_id) await del(token, String(d.chat_id), Number(d.msg_id))
   }
-  if (due.length) await modLog({ action: 'Doğrulanmadı, atıldı', reason: `${due.length} hesap butona basmadı (muhtemel bot)`, notify: due.length >= 5 })
+  if (kicked) await modLog({ action: 'Doğrulanmadı, atıldı', reason: `${kicked} hesap süresi içinde doğrulamayı geçmedi (muhtemel bot)`, notify: kicked >= 5 })
+  if (declined) await modLog({ action: 'Doğrulanmadı, istek reddedildi', reason: `${declined} katılma isteği özelden sorulan soruya cevap vermedi`, notify: declined >= 5 })
   return due.length
+}
+
+/** First comment from an account that is not a member of the group: removed, and the account must press a button before writing. */
+async function challengeComment(token: string, m: GuardMsg) {
+  const u = m.from!
+  const chatId = String(m.chat.id)
+  await del(token, chatId, m.message_id)
+  // One prompt at a time per person; further comments are removed silently until it is answered or expires.
+  const claimed = await rows(sql`INSERT INTO tg_captcha (chat_id, tg_id, expires_at, kind)
+    VALUES (${chatId}, ${u.id}, now() + make_interval(mins => ${CAPTCHA_MINUTES}), 'comment')
+    ON CONFLICT (chat_id, tg_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, kind = 'comment', msg_id = NULL
+    WHERE tg_captcha.expires_at < now() RETURNING tg_id`)
+  if (!claimed.length) return
+  const thread = m.message_thread_id ?? m.reply_to_message?.message_id
+  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
+    chat_id: chatId,
+    text: `${short(u)} yorumun silindi. Burada ilk kez yazıyorsun; ${CAPTCHA_MINUTES} dakika içinde butona bas, sonra yorumunu tekrar gönder.`,
+    reply_parameters: thread ? { message_id: thread, allow_sending_without_reply: true } : undefined,
+    reply_markup: { inline_keyboard: [[{ text: 'Ben insanım', callback_data: `cap:${u.id}` }]] },
+  }).catch(() => null)
+  if (sent) await rows(sql`UPDATE tg_captcha SET msg_id = ${sent.message_id} WHERE chat_id = ${chatId} AND tg_id = ${u.id}`)
+  await modLog({
+    chatId,
+    chatTitle: m.chat.title,
+    user: u,
+    action: 'Mesaj silindi',
+    reason: 'Yorum kalkanı: gruba üye olmayan hesabın ilk yorumu, doğrulama istendi',
+    notify: false,
+  })
+}
+
+/** Reverses a logged warning, mute or ban. Deleted messages cannot be brought back. */
+export async function undoLog(logId: number, by: string): Promise<{ ok: boolean; message: string }> {
+  await ensureGuardTables()
+  if (!Number.isSafeInteger(logId) || logId <= 0) return { ok: false, message: 'Geçersiz kayıt.' }
+  // Claimed first so two people pressing the button together cannot undo twice.
+  const [row] = await rows<{ undo: string; chat_title: string | null; who: string | null; action: string }>(sql`UPDATE tg_mod_log SET undone = true
+    WHERE id = ${logId} AND undo IS NOT NULL AND NOT undone RETURNING undo, chat_title, who, action`)
+  if (!row) return { ok: false, message: 'Bu işlem zaten geri alınmış ya da geri alınamaz.' }
+  const release = () => rows(sql`UPDATE tg_mod_log SET undone = false WHERE id = ${logId}`).catch(() => null)
+  const hub = await getHub()
+  let u: LogUndo
+  try {
+    u = JSON.parse(row.undo) as LogUndo
+  } catch {
+    return { ok: false, message: 'Kayıt okunamadı.' }
+  }
+  if (!hub.guardBotId) {
+    await release()
+    return { ok: false, message: 'Bekçi botu seçili değil.' }
+  }
+  const token = await botToken(hub.guardBotId)
+  try {
+    for (const id of u.tgIds) {
+      if (u.kind === 'ban') await callBot(token, 'unbanChatMember', { chat_id: u.chatId, user_id: id, only_if_banned: true })
+      if (u.kind === 'mute') await unmute(token, u.chatId, id)
+    }
+  } catch (error) {
+    await release()
+    return { ok: false, message: `Geri alınamadı: ${String((error as Error).message)}` }
+  }
+  for (const id of u.tgIds) {
+    if (u.warns) await rows(sql`UPDATE tg_warns SET count = GREATEST(0, count - ${u.warns}) WHERE tg_id = ${id}`)
+    if (u.trust) await adjustTrust(id, u.trust)
+  }
+  await modLog({
+    chatId: u.chatId,
+    chatTitle: row.chat_title ?? undefined,
+    action: 'Geri alındı',
+    reason: `"${row.action}"${row.who ? ` · ${row.who}` : ''} · geri alan: ${by}`,
+    notify: false,
+  })
+  const message =
+    u.kind === 'ban'
+      ? 'Ban kaldırıldı. Kişi gruba kendisi tekrar girmeli; silinen mesajlar geri gelmez.'
+      : u.kind === 'mute'
+        ? 'Susturma kaldırıldı. Silinen mesaj geri gelmez.'
+        : 'Uyarı silindi. Silinen mesaj geri gelmez.'
+  return { ok: true, message }
 }
 
 export async function handleGuardCallback(botId: number, q: TgCallback) {
   await ensureGuardTables()
   const token = await botToken(botId)
-  const answer = (text: string) => callBot(token, 'answerCallbackQuery', { callback_query_id: q.id, text }).catch(() => null)
-  const [kind, arg] = (q.data ?? '').split(':')
+  const answer = (text: string, alert = false) =>
+    callBot(token, 'answerCallbackQuery', { callback_query_id: q.id, text: text.slice(0, 190), show_alert: alert }).catch(() => null)
+  const [kind, arg, extra] = (q.data ?? '').split(':')
+  if (kind === 'cq') return answerJoinRequest(token, q, arg ?? '', Number(extra), answer)
   if (kind === 'cap' && q.message) {
     if (Number(arg) !== q.from.id) return answer('Bu buton sana ait değil.')
     const chatId = q.message.chat.id
-    await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id}`)
-    await unmute(token, chatId, q.from.id).catch(() => null)
+    const [asked] = await rows<{ answer: number | null }>(sql`SELECT answer FROM tg_captcha WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} AND kind = 'join'`)
+    // Checked against the stored answer, not the button's own data, so a press that names no picture cannot pass an emoji check.
+    if (asked?.answer != null && Number(extra) !== Number(asked.answer)) {
+      const [t] = await rows<{ tries: number }>(sql`UPDATE tg_captcha SET tries = tries + 1
+        WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} AND kind = 'join' RETURNING tries`)
+      if (Number(t?.tries ?? CAPTCHA_TRIES) < CAPTCHA_TRIES) return answer('Yanlış seçim. Bir hakkın daha var.', true)
+      await rows(sql`DELETE FROM tg_captcha WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} AND kind = 'join'`)
+      await del(token, chatId, q.message.message_id)
+      await kick(token, chatId, q.from.id).catch(() => null)
+      await modLog({ chatId, chatTitle: q.message.chat.title, user: q.from, action: 'Doğrulanmadı, atıldı', reason: 'Emojiyi iki kez yanlış seçti', notify: false })
+      return answer('İki kez yanlış seçtin, gruptan çıkarıldın. Yeniden katılıp tekrar deneyebilirsin.', true)
+    }
+    const [row] = await rows<{ kind: string }>(sql`DELETE FROM tg_captcha WHERE chat_id = ${String(chatId)} AND tg_id = ${q.from.id} RETURNING kind`)
+    await setNeedsCheck(q.from.id, false)
     await del(token, chatId, q.message.message_id)
+    if (row?.kind === 'comment') return answer('Doğrulandı, yorumunu tekrar gönderebilirsin.')
+    await unmute(token, chatId, q.from.id).catch(() => null)
+    if (row?.kind === 'join') await greet(await getHub(), token, chatId, short(q.from)).catch((error) => console.error('[tg-guard] welcome failed', error))
     return answer('Doğrulandı, artık yazabilirsin!')
+  }
+  if (kind === 'gd' && q.message) {
+    const hub = await getHub()
+    // These buttons act on whole groups, so they only work from the staff log group.
+    if (!hub.logChatId || String(q.message.chat.id) !== hub.logChatId) return answer('Bu buton sadece kayıt grubunda çalışır.')
+    const logMessage = q.message
+    const dropButtons = () =>
+      callBot(token, 'editMessageReplyMarkup', { chat_id: logMessage.chat.id, message_id: logMessage.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+    const titleOf = (id: string) => hub.groups.find((g) => g.chatId === id)?.title ?? id
+    const target = extra ?? ''
+    if (arg === 'unlock') return answer((await closeLock(token, target, titleOf(target), `Kapatan: ${short(q.from)}`)).message, true)
+    if (arg === 'wave') {
+      const waiting = (await waveMembers(target)).length
+      if (!waiting) return answer(`Son ${WAVE_MINUTES} dakikada girip hâlâ içeride olan kimse yok.`, true)
+      if (!(await confirmTwice(`wave_confirm_${target}`, 30))) {
+        return answer(`Son ${WAVE_MINUTES} dakikada giren ${waiting} kişi ${RAID_BAN_MINUTES} dakikalığına çıkarılacak. Onaylamak için 30 saniye içinde butona tekrar bas.`, true)
+      }
+      await answer('Çıkarılıyor…')
+      const res = await sweepWave(token, target)
+      await modLog({
+        chatId: target,
+        chatTitle: titleOf(target),
+        action: 'Giriş dalgası çıkarıldı',
+        reason: `${res.removed} kişi ${RAID_BAN_MINUTES} dakikalığına çıkarıldı${res.left ? `, ${res.left} kişi kaldı (butona tekrar bas)` : ''}. Yapan: ${short(q.from)}`,
+      })
+      return
+    }
+    if (arg === 'undo') {
+      const res = await undoLog(Number(target), short(q.from))
+      if (res.ok) await dropButtons()
+      return answer(res.message, true)
+    }
+    if (arg === 'tun') {
+      const [, , chat, thread] = (q.data ?? '').split(':')
+      await unlockThread(chat, Number(thread))
+      await dropButtons()
+      return answer('Bu gönderinin yorumları yeniden açıldı.')
+    }
+    if (arg === 'ban') {
+      const id = Number(target)
+      if (!Number.isSafeInteger(id) || id <= 0) return answer('Geçersiz hesap.')
+      const name = (await suspectNames([id])).get(id) ?? String(id)
+      await globalBan(hub, token, { id, first_name: name }, `Kayıt grubundan banlandı: ${short(q.from)}`)
+      await setSuspectState([id], 'removed')
+      await dropButtons()
+      return answer('Tüm gruplardan banlandı. Yanlışsa panelde "Tüm gruplardan yasaklılar" listesinden kaldırabilirsin.', true)
+    }
+    return answer('')
   }
   if (kind === 'wp' && q.message) {
     const chatId = q.message.chat.id
@@ -731,7 +1207,7 @@ async function handleCommand(hub: HubConfig, token: string, m: GuardMsg, isAdmin
     case 'uyar':
     case 'warn': {
       const fake = { ...m.reply_to_message!, chat: m.chat } as GuardMsg
-      await punish(hub, token, fake, arg || 'Yönetici uyarısı')
+      await punish(rulesFor(hub, m.chat.id), token, fake, arg || 'Yönetici uyarısı')
       break
     }
     case 'affet':
@@ -767,18 +1243,28 @@ async function handleCommand(hub: HubConfig, token: string, m: GuardMsg, isAdmin
       await modLog({ chatId: m.chat.id, chatTitle, user: m.from, action: 'Silinmiş hesap temizliği', reason: `${r.removed}/${r.checked} hesap çıkarıldı` })
       break
     }
-    case 'kilit':
-      await callBot(token, 'setChatPermissions', { chat_id: m.chat.id, permissions: { can_send_messages: false } }).catch(() => null)
+    case 'kilit': {
+      const res = await lockChat(token, { id: m.chat.id, title: chatTitle }, { kind: 'manual', minutes: null, lock: true, reason: `Yönetici: ${short(m.from)}` })
+      if (res.error) {
+        await notice(token, m.chat.id, `Grup kilitlenemedi: ${res.error}`)
+        break
+      }
       await callBot(token, 'sendMessage', { chat_id: m.chat.id, text: 'Grup geçici olarak kilitlendi. Sadece yöneticiler yazabilir.' }).catch(() => null)
       await modLog({ chatId: m.chat.id, chatTitle, user: m.from, action: 'Grup kilitlendi', reason: 'Yönetici komutu' })
       break
-    case 'kilitac':
-      await callBot(token, 'setChatPermissions', {
-        chat_id: m.chat.id,
-        permissions: { can_send_messages: true, can_send_photos: true, can_send_videos: true, can_send_other_messages: true, can_add_web_page_previews: true, can_send_polls: true },
-      }).catch(() => null)
+    }
+    case 'kilitac': {
+      const res = await unlockChat(token, m.chat.id)
+      // No lock of ours to restore (closed by hand, or before locks were remembered): open with the usual set.
+      if (!res.found || !res.wasLocked || res.error) {
+        await callBot(token, 'setChatPermissions', {
+          chat_id: m.chat.id,
+          permissions: { can_send_messages: true, can_send_photos: true, can_send_videos: true, can_send_other_messages: true, can_add_web_page_previews: true, can_send_polls: true },
+        }).catch(() => null)
+      }
       await callBot(token, 'sendMessage', { chat_id: m.chat.id, text: 'Grup kilidi açıldı. Herkes yazabilir.' }).catch(() => null)
       break
+    }
   }
   return true
 }
@@ -790,6 +1276,16 @@ export async function sweepDeletedAccounts(chatId: string, title?: string) {
   const r = await deletedAccountSweep(await botToken(hub.guardBotId), chatId)
   await modLog({ chatId, chatTitle: title ?? hub.groups.find((g) => g.chatId === chatId)?.title, action: 'Silinmiş hesap temizliği', reason: `${r.removed}/${r.checked} hesap çıkarıldı (panelden)` })
   return r
+}
+
+/** Telegram ids of people who wrote in a protected group under this @username or display name. */
+export async function findWriterIds(name: string) {
+  await ensureGuardTables()
+  const plain = name.trim().replace(/^@/, '')
+  if (!plain) return []
+  const r = await rows<{ tg_id: string }>(sql`SELECT DISTINCT tg_id FROM tg_guard_msgs
+    WHERE lower(name) = lower(${plain}) OR lower(name) = lower(${`@${plain}`}) LIMIT 5`)
+  return r.map((x) => Number(x.tg_id))
 }
 
 export async function deleteUserMessages(tgId: number) {
@@ -812,12 +1308,106 @@ export async function deleteUserMessages(tgId: number) {
 
 // --- Main entry --------------------------------------------------------------
 
+/** The reply thread a message belongs to. Forum topics are left out: a topic is a room, not a comment thread. */
+const threadOf = (m: GuardMsg) => (!m.is_topic_message && m.message_thread_id ? m.message_thread_id : null)
+
 async function recordMessage(hub: HubConfig, m: GuardMsg, textHash: string | null) {
   const text = (m.text ?? m.caption ?? '').trim()
   const counted = hub.counter.enabled && !text.startsWith('/') && normalizeText(text).replace(/\s/g, '').length >= hub.counter.minLength
-  await rows(sql`INSERT INTO tg_guard_msgs (chat_id, message_id, tg_id, name, text_hash, counted)
-    VALUES (${String(m.chat.id)}, ${m.message_id}, ${m.from!.id}, ${short(m.from).slice(0, 60)}, ${textHash}, ${counted})
+  await rows(sql`INSERT INTO tg_guard_msgs (chat_id, message_id, tg_id, name, text_hash, counted, thread_id)
+    VALUES (${String(m.chat.id)}, ${m.message_id}, ${m.from!.id}, ${short(m.from).slice(0, 60)}, ${textHash}, ${counted}, ${threadOf(m)})
     ON CONFLICT (chat_id, message_id) DO NOTHING`)
+}
+
+type Trust = Awaited<ReturnType<typeof trustOf>>
+
+const isNewcomer = (trust: Trust, hours: number) => !trust.known || (trust.firstSeen != null && Date.now() - trust.firstSeen < hours * 3_600_000)
+
+/** Why this message type may not be sent here, or null when it is fine. */
+function contentBlock(r: GroupRules, m: GuardMsg, trust: Trust): { reason: string; notice: string } | null {
+  const kinds = contentKinds(m)
+  const fresh = isNewcomer(trust, r.quarantineHours || NEW_MEMBER_HOURS)
+  for (const kind of kinds) {
+    const rule = r.content?.[kind] ?? 'allow'
+    if (rule === 'allow' || (rule === 'new' && !fresh)) continue
+    const label = CONTENT_KINDS.find((c) => c.key === kind)?.label ?? kind
+    return rule === 'new'
+      ? { reason: `Yeni üyeye kapalı içerik: ${label}`, notice: `yeni üyeler bu türde mesaj gönderemez (${label}).` }
+      : { reason: `Kapalı içerik türü: ${label}`, notice: `bu grupta bu tür mesaj kapalı (${label}).` }
+  }
+  if (r.quarantineHours > 0 && isNewcomer(trust, r.quarantineHours)) {
+    const mentions = [...(m.entities ?? []), ...(m.caption_entities ?? [])].some((e) => e.type === 'mention' || e.type === 'text_mention')
+    const what = kinds.length ? 'medya' : m.forward_origin || m.forward_from_chat ? 'iletilmiş mesaj' : mentions ? 'etiket' : null
+    if (what) {
+      return {
+        reason: `Karantina: yeni üye ${what} gönderdi`,
+        notice: `yeni üyeler ilk ${r.quarantineHours} saat sadece düz yazı yazabilir (medya, iletme, etiket yok).`,
+      }
+    }
+  }
+  return null
+}
+
+/** Removes a message without a warning or a strike: the sender broke a house rule, not the law. */
+async function softDelete(token: string, m: GuardMsg, block: { reason: string; notice: string }) {
+  await del(token, m.chat.id, m.message_id)
+  if (mayNotice(`${m.chat.id}:${m.from!.id}`)) await notice(token, m.chat.id, `${short(m.from)} ${block.notice}`, 15)
+  await modLog({ chatId: m.chat.id, chatTitle: m.chat.title, user: m.from, action: 'Mesaj silindi', reason: block.reason, notify: false })
+}
+
+/** Remembers the last name seen per account on this instance, so the admin list is consulted only when a name is new or changed. */
+const nameSeen = new Map<number, string>()
+
+/** Catches accounts that take a staff-like name after joining. Returns true when the account was removed. */
+async function nameAlarm(hub: HubConfig, token: string, m: GuardMsg) {
+  const u = m.from!
+  const tag = `${u.first_name ?? ''}|${u.last_name ?? ''}|${u.username ?? ''}`
+  if (nameSeen.get(u.id) === tag) return false
+  if (nameSeen.size > 5000) nameSeen.clear()
+  nameSeen.set(u.id, tag)
+  const chatTitle = m.chat.title ?? String(m.chat.id)
+  if (hub.guard.impersonation && staffWordInName(u)) {
+    await del(token, m.chat.id, m.message_id)
+    await ban(token, m.chat.id, u.id).catch(() => null)
+    await modLog({ chatId: m.chat.id, chatTitle, user: u, action: 'Banlandı', reason: 'Yönetici / Alkanka taklidi yapan isim', undo: undoFor(m, 'ban', 0, 0) })
+    return true
+  }
+  const twin = adminLookalike(u, await chatAdmins(token, m.chat.id))
+  // A matching name is a hint, not proof, so staff decide; each account is reported once.
+  if (twin && (await flagSuspect(u.id, short(u), `Yönetici ${short(twin)} ile aynı görünen isim`))) {
+    await modLog({
+      chatId: m.chat.id,
+      chatTitle,
+      user: u,
+      action: 'Şüpheli isim',
+      reason: `Yönetici ${who(twin)} ile aynı görünen isim. Otomatik işlem yapılmadı; sahteyse butonla banla.`,
+      buttons: [{ text: 'Tüm gruplardan banla', data: `gd:ban:${u.id}` }],
+    })
+  }
+  return false
+}
+
+async function punishSwarm(r: GroupRules, token: string, m: GuardMsg, hits: SwarmHit[], text: string) {
+  const chatId = String(m.chat.id)
+  const chatTitle = m.chat.title ?? chatId
+  const ids = hits.map((h) => h.messageId)
+  await dropFromSite(chatId, ids)
+  for (let i = 0; i < ids.length; i += 100) await callBot(token, 'deleteMessages', { chat_id: chatId, message_ids: ids.slice(i, i + 100) }).catch(() => null)
+  const accounts = [...new Map(hits.map((h) => [h.tgId, h.name])).entries()]
+  for (const [id] of accounts) {
+    await mute(token, chatId, id, r.floodMuteMinutes).catch(() => null)
+    await adjustTrust(id, -10)
+  }
+  await modLog({
+    chatId,
+    chatTitle,
+    action: 'Koordineli spam',
+    reason: `${accounts.length} hesap aynı yazıyı attı (${accounts.map(([, name]) => name).join(', ').slice(0, 160)}). ${ids.length} mesaj silindi, hesaplar ${r.floodMuteMinutes} dakika susturuldu. Yazı: "${text.slice(0, 80)}"`,
+    // Stragglers of an already reported swarm are logged quietly.
+    notify: accounts.length >= r.swarmAccounts,
+    undo: { kind: 'mute', chatId, tgIds: accounts.map(([id]) => id), trust: 10, warns: 0 },
+  })
+  if (r.raidMode) await beginRaid(r, token, chatId, chatTitle, `Koordineli spam: ${accounts.length} hesap aynı yazıyı attı`)
 }
 
 /** The site's chat group is always protected, even if it was never added to the guard list. */
@@ -851,17 +1441,28 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
   if (!(await isProtectedChat(hub, m.chat.id))) return false
   const token = await botToken(botId)
   const g = hub.guard
+  const r = rulesFor(hub, m.chat.id)
+  const chatId = String(m.chat.id)
+
+  // No timer starts a quiet window; the first message after its clock time does, and this asks the database only when the two disagree.
+  if (quietOutOfStep(chatId, r.quiet)) await runQuietHours().catch((error) => console.error('[tg-guard] quiet hours', error))
 
   if (m.new_chat_members?.length) {
-    await handleNewMembers(hub, token, m)
-    if (g.cleanService) await del(token, m.chat.id, m.message_id)
+    await handleNewMembers(hub, r, token, m)
+    if (r.cleanService) await del(token, m.chat.id, m.message_id)
     return true
   }
   if (m.left_chat_member) {
-    if (g.cleanService) await del(token, m.chat.id, m.message_id)
+    if (!m.left_chat_member.is_bot) await countLeave(chatId).catch(() => null)
+    if (r.cleanService) await del(token, m.chat.id, m.message_id)
     return true
   }
-  if (!m.from || m.is_automatic_forward) return false
+  if (m.is_automatic_forward) {
+    // The channel post that opens a comment thread. Remembered so the comment speed limit only counts real posts.
+    if (r.commentRate > 0) await markPostRoot(chatId, m.message_id).catch(() => null)
+    return false
+  }
+  if (!m.from) return false
   // Anonymous admins and the linked channel post as the chat itself.
   if (m.sender_chat && (m.sender_chat.id === m.chat.id || m.from.username === 'GroupAnonymousBot')) return false
   if (m.from.is_bot) return false
@@ -871,6 +1472,12 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
   if (admin) {
     if (!edited) await recordMessage(hub, m, null)
     return false
+  }
+
+  // Covers the moment before the group's permissions change, and a group where the bot may not change them at all.
+  if (inQuietHours(r.quiet) && (r.quiet.mode === 'lock' || contentKinds(m).length > 0)) {
+    await del(token, m.chat.id, m.message_id)
+    return true
   }
 
   const trust = await trustOf(m.from.id)
@@ -884,24 +1491,52 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
       return true
     }
 
+    let needsCheck = trust.needsCheck
+    if (!trust.known) {
+      if (r.commentShield) {
+        // Only an account that is not a member can be writing here without having joined: it is commenting on a channel post.
+        const status = await callBot<{ status: string }>(token, 'getChatMember', { chat_id: m.chat.id, user_id: m.from.id })
+          .then((x) => x.status)
+          .catch(() => 'member')
+        needsCheck = status === 'left' || status === 'kicked'
+      }
+      await meetMember(m.from.id, needsCheck)
+    }
+    if (r.commentShield && needsCheck) {
+      await challengeComment(token, m)
+      return true
+    }
+
+    if (r.nameWatch && (await nameAlarm(hub, token, m))) return true
+
     // A channel sender_chat that is not ours means someone is posting as a foreign channel.
     if (m.sender_chat && m.sender_chat.type === 'channel') {
-      await punish(hub, token, m, 'Başka bir kanal adına mesaj', { hard: g.linkAction === 'ban' })
+      await punish(r, token, m, 'Başka bir kanal adına mesaj', { hard: r.linkAction === 'ban' })
       return true
     }
 
     const links = foreignLinks(m, g.allowDomains)
     if (links.length) {
-      await punish(hub, token, m, `Yabancı link / reklam: ${links[0].slice(0, 60)}`, { hard: g.linkAction === 'ban' || trust.score < 30 })
+      await punish(r, token, m, `Yabancı link / reklam: ${links[0].slice(0, 60)}`, { hard: r.linkAction === 'ban' || trust.score < 30 })
       return true
     }
-    if (g.blockForwards && isForwardedFromChannel(m)) {
-      await punish(hub, token, m, 'Başka kanaldan iletilen mesaj')
+    const hidden = r.hiddenAds ? hiddenAdReason(m, g.allowDomains, new Set(hub.groups.map((x) => x.chatId))) : null
+    if (hidden) {
+      await punish(r, token, m, hidden, { hard: r.linkAction === 'ban' || trust.score < 30 })
+      return true
+    }
+    if (r.blockForwards && isForwardedFromChannel(m)) {
+      await punish(r, token, m, 'Başka kanaldan iletilen mesaj')
       return true
     }
     const bad = text ? findBadWord(text, g.words) : null
     if (bad) {
-      await punish(hub, token, m, 'Küfür / hakaret')
+      await punish(r, token, m, 'Küfür / hakaret')
+      return true
+    }
+    const blocked = contentBlock(r, m, trust)
+    if (blocked) {
+      await softDelete(token, m, blocked)
       return true
     }
   }
@@ -912,30 +1547,72 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
   if (!trust.trusted) {
     // Record first: a burst arrives as parallel webhooks, so counting before inserting lets every message see zero.
     await recordMessage(hub, m, textHash)
+    const thread = threadOf(m)
+    if (thread && r.commentRate > 0) {
+      const state = await threadState(chatId, thread)
+      const tooFast = state.isPost && state.recent > r.commentRate
+      if (state.locked || tooFast) {
+        await del(token, m.chat.id, m.message_id)
+        await rows(sql`UPDATE tg_guard_msgs SET counted = false WHERE chat_id = ${chatId} AND message_id = ${m.message_id}`)
+        if (!state.locked && (await lockThread(chatId, thread, r.commentLockMinutes))) {
+          await notice(token, m.chat.id, `Bu gönderiye çok hızlı yorum geldi. Yorumlar ${r.commentLockMinutes} dakikalığına kapatıldı.`, r.commentLockMinutes * 60, thread)
+          await modLog({
+            chatId,
+            chatTitle: m.chat.title,
+            action: 'Yorumlar kapatıldı',
+            reason: `Bir gönderiye 1 dakikada ${state.recent} yorum geldi (sınır ${r.commentRate}). O gönderinin yorumları ${r.commentLockMinutes} dakika kapalı; yeni yorumlar silinir.`,
+            buttons: [{ text: 'Yorumları şimdi aç', data: `gd:tun:${chatId}:${thread}` }],
+          })
+        }
+        return true
+      }
+    }
     const [flood] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_guard_msgs
-      WHERE chat_id = ${String(m.chat.id)} AND tg_id = ${m.from.id} AND created_at > now() - make_interval(secs => ${g.floodSeconds})`)
-    if (Number(flood.n) >= g.floodCount) {
+      WHERE chat_id = ${chatId} AND tg_id = ${m.from.id} AND created_at > now() - make_interval(secs => ${r.floodSeconds})`)
+    if (Number(flood.n) >= r.floodCount) {
       await del(token, m.chat.id, m.message_id)
-      await mute(token, m.chat.id, m.from.id, g.floodMuteMinutes).catch(() => null)
+      await mute(token, m.chat.id, m.from.id, r.floodMuteMinutes).catch(() => null)
       await adjustTrust(m.from.id, -10)
-      await notice(token, m.chat.id, `${short(m.from)} çok hızlı yazdığı için ${g.floodMuteMinutes} dakika susturuldu.`)
-      await modLog({ chatId: m.chat.id, chatTitle: m.chat.title, user: m.from, action: `Susturuldu (${g.floodMuteMinutes} dk)`, reason: `Flood: ${g.floodSeconds} sn içinde ${flood.n} mesaj` })
+      await notice(token, m.chat.id, `${short(m.from)} çok hızlı yazdığı için ${r.floodMuteMinutes} dakika susturuldu.`)
+      await modLog({
+        chatId: m.chat.id,
+        chatTitle: m.chat.title,
+        user: m.from,
+        action: `Susturuldu (${r.floodMuteMinutes} dk)`,
+        reason: `Flood: ${r.floodSeconds} sn içinde ${flood.n} mesaj`,
+        undo: undoFor(m, 'mute', 10, 0),
+      })
       return true
     }
-    if (textHash && g.repeatLimit > 1) {
+    if (textHash && r.repeatLimit > 1) {
       const [rep] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tg_guard_msgs
         WHERE tg_id = ${m.from.id} AND text_hash = ${textHash} AND created_at > now() - interval '10 minutes'`)
-      if (Number(rep.n) >= g.repeatLimit) {
+      if (Number(rep.n) >= r.repeatLimit) {
         await del(token, m.chat.id, m.message_id)
-        await mute(token, m.chat.id, m.from.id, g.floodMuteMinutes).catch(() => null)
-        await modLog({ chatId: m.chat.id, chatTitle: m.chat.title, user: m.from, action: `Susturuldu (${g.floodMuteMinutes} dk)`, reason: `Aynı mesajı ${rep.n} kez tekrarladı` })
+        await mute(token, m.chat.id, m.from.id, r.floodMuteMinutes).catch(() => null)
+        await modLog({
+          chatId: m.chat.id,
+          chatTitle: m.chat.title,
+          user: m.from,
+          action: `Susturuldu (${r.floodMuteMinutes} dk)`,
+          reason: `Aynı mesajı ${rep.n} kez tekrarladı`,
+          undo: undoFor(m, 'mute', 0, 0),
+        })
+        return true
+      }
+    }
+    // Short lines ("gol", "tebrikler") are typed by many real people at once, so only longer texts count as a swarm.
+    if (textHash && r.swarmAccounts > 1 && normalizeText(text).length >= SWARM_MIN_LENGTH) {
+      const hits = await swarmHits(chatId, textHash, r.swarmAccounts)
+      if (hits.length) {
+        await punishSwarm(r, token, m, hits, text)
         return true
       }
     }
     if (g.aiModeration && text.length >= 12 && trust.score < 85) {
       const verdict = await aiVerdict(text)
       if (verdict.bad) {
-        await punish(hub, token, m, `Yapay zekâ: ${verdict.reason}`)
+        await punish(r, token, m, `Yapay zekâ: ${verdict.reason}`)
         return true
       }
     }
@@ -945,4 +1622,257 @@ export async function guardMessage(botId: number, raw: TgMessage, edited: boolea
   await dailyTrustBump(m.from.id)
   await autoReply(hub, token, m, text).catch((error) => console.error('[tg-autoreply]', error))
   return false
+}
+
+// --- Member changes (chat_member / my_chat_member) -----------------------------
+
+const isAdminStatus = (s: string) => s === 'administrator' || s === 'creator'
+const isInChat = (s: TgMemberState) => s.status === 'member' || isAdminStatus(s.status) || (s.status === 'restricted' && s.is_member !== false)
+
+/**
+ * Telegram reports these only to an admin bot that asked for them. Groups already report joins as messages,
+ * so here they are used for what messages cannot show: channel subscribers and changes to who is an admin.
+ */
+export async function handleMemberUpdate(botId: number, up: TgMemberUpdate, own: boolean) {
+  await ensureGuardTables()
+  const hub = await getHub()
+  const chatId = String(up.chat.id)
+  const isLogChat = chatId === hub.logChatId
+  if (!isLogChat && !(await isProtectedChat(hub, chatId))) return
+  const chatTitle = up.chat.title ?? chatId
+  const was = up.old_chat_member
+  const now = up.new_chat_member
+  const place = up.chat.type === 'channel' ? 'kanaldan' : 'gruptan'
+
+  if (own) {
+    if (!hub.shield.adminAlerts) return
+    if (isInChat(was) && !isInChat(now)) {
+      await modLog({ chatId, chatTitle, action: 'Bekçi çıkarıldı', reason: `Bekçi botu bu ${place} çıkarıldı (yapan: ${who(up.from)}). Burada koruma artık çalışmıyor.` })
+    } else if (isAdminStatus(was.status) && !isAdminStatus(now.status)) {
+      await modLog({ chatId, chatTitle, action: 'Bekçi yetkisi alındı', reason: `Bekçi botunun yöneticiliği kaldırıldı (yapan: ${who(up.from)}). Mesaj silemez, kimseyi engelleyemez.` })
+    } else if (isAdminStatus(now.status)) {
+      const lost = [
+        was.can_delete_messages && !now.can_delete_messages ? 'mesaj silme' : null,
+        was.can_restrict_members && !now.can_restrict_members ? 'üye engelleme' : null,
+      ].filter(Boolean)
+      if (lost.length) {
+        await modLog({ chatId, chatTitle, action: 'Bekçi yetkisi kısıldı', reason: `Kapatılan yetki: ${lost.join(', ')} (yapan: ${who(up.from)}). Koruma eksik çalışır.` })
+      }
+    }
+    return
+  }
+  if (isLogChat) return
+
+  if (hub.shield.adminAlerts && isAdminStatus(was.status) !== isAdminStatus(now.status)) {
+    adminCache.delete(`${chatId}:${now.user.id}`)
+    await modLog({
+      chatId,
+      chatTitle,
+      user: now.user,
+      action: isAdminStatus(now.status) ? 'Yeni yönetici eklendi' : 'Yönetici çıkarıldı',
+      reason: `Yapan: ${who(up.from)}. Bu değişikliği sen ya da ekibin yapmadıysa hesabın ele geçirilmiş olabilir.`,
+    })
+  }
+
+  if (now.user.is_bot) return
+  const joined = !isInChat(was) && isInChat(now)
+  if (joined && up.invite_link?.invite_link) {
+    await noteInviteJoin(chatId, up.invite_link.invite_link).catch((error) => console.error('[tg-guard] invite join not counted', error))
+  }
+  // Groups report a leave as a message, which is counted there; a channel only reports it here.
+  if (up.chat.type === 'channel' && isInChat(was) && !isInChat(now)) await countLeave(chatId).catch(() => null)
+  if (up.chat.type !== 'channel' || !joined) return
+  const via = up.via_join_request
+    ? 'katılma isteği'
+    : up.via_chat_folder_invite_link
+      ? 'klasör linki'
+      : up.invite_link
+        ? `davet linki${up.invite_link.name ? `: ${up.invite_link.name.slice(0, 40)}` : ''}`
+        : up.from.id !== now.user.id
+          ? 'biri ekledi'
+          : null
+  const join = await logChannelJoin(chatId, now.user, via)
+  const token = await botToken(botId)
+  if (join.banned) {
+    await callBot(token, 'banChatMember', { chat_id: chatId, user_id: now.user.id }).catch(() => null)
+    await markRemoved(chatId, [now.user.id])
+    await modLog({ chatId, chatTitle, user: now.user, action: 'Giriş reddedildi', reason: 'Global ban listesinde (kanal)', notify: false })
+    return
+  }
+  const limit = hub.shield.channelJoinAlert
+  if (limit > 0 && join.recent >= limit && (await claimAlert(`chan_alert_${chatId}`, WAVE_MINUTES))) {
+    await modLog({
+      chatId,
+      chatTitle,
+      action: 'Kanala toplu giriş',
+      reason: `Son 10 dakikada ${join.recent} yeni abone (alarm sınırı ${limit}). Reklam ya da duyuru yaptıysan normaldir; yapmadıysan kanala sahte abone basılıyor olabilir.`,
+      buttons: [{ text: `Son ${WAVE_MINUTES} dk girenleri çıkar`, data: `gd:wave:${chatId}` }],
+    })
+  }
+}
+
+// --- Reactions (message_reaction) -----------------------------------------------
+
+/**
+ * A reaction carries no text to screen, so only its speed is watched. Telegram sends these to an admin bot
+ * that asked for them, and names the account only in groups; channel reactions are anonymous.
+ */
+export async function handleReaction(botId: number, r: TgReaction) {
+  const hub = await getHub()
+  const limit = hub.shield.reactionLimit
+  // Taking a reaction back is not a flood, and an anonymous admin has no account to act on.
+  if (limit <= 0 || !r.user || r.user.is_bot || !r.new_reaction?.length || r.chat.type === 'channel') return
+  const chatId = String(r.chat.id)
+  if (!(await isProtectedChat(hub, chatId))) return
+  await ensureGuardTables()
+  if ((await logReaction(chatId, r.user.id)) < limit) return
+  const taken = await takeReactions(chatId, r.user.id)
+  if (taken < limit) return
+  const token = await botToken(botId)
+  if (await isChatAdmin(token, chatId, r.user.id)) return
+  if ((await trustOf(r.user.id)).trusted) return
+  const minutes = rulesFor(hub, chatId).floodMuteMinutes
+  const cleared = await callBot(token, 'deleteAllMessageReactions', { chat_id: chatId, user_id: r.user.id })
+    .then(() => true)
+    .catch(() => false)
+  const muted = await mute(token, chatId, r.user.id, minutes)
+    .then(() => true)
+    .catch(() => false)
+  await adjustTrust(r.user.id, -10)
+  await modLog({
+    chatId,
+    chatTitle: r.chat.title ?? chatId,
+    user: r.user,
+    action: muted ? `Susturuldu (${minutes} dk)` : 'Tepki seli',
+    reason: [
+      `Tepki seli: 1 dakikada ${taken} tepki (sınır ${limit}).`,
+      cleared ? 'Bıraktığı tepkiler silindi.' : 'Tepkileri silinemedi; Bekçi’nin bu grupta mesaj silme yetkisi olmalı.',
+      muted ? '' : 'Susturulamadı; Bekçi’nin üye engelleme yetkisi olmalı.',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    undo: muted ? { kind: 'mute', chatId, tgIds: [r.user.id], trust: 10, warns: 0 } : undefined,
+  })
+}
+
+// --- Panel: locks, join waves, suspects -----------------------------------------
+
+async function guardToken() {
+  const hub = await getHub()
+  if (!hub.guardBotId) throw new Error('Önce Bekçi botunu seç')
+  return { hub, token: await botToken(hub.guardBotId) }
+}
+
+export async function panelUnlock(chatId: string) {
+  await ensureGuardTables()
+  const { hub, token } = await guardToken()
+  const res = await closeLock(token, chatId, hub.groups.find((g) => g.chatId === chatId)?.title ?? chatId, 'Panelden kapatıldı')
+  return { ok: res.ok, message: res.message }
+}
+
+export async function panelSweepWave(chatId: string) {
+  await ensureGuardTables()
+  const { hub, token } = await guardToken()
+  if (!(await isProtectedChat(hub, chatId))) throw new Error('Bu sohbet korunan listede değil')
+  const res = await sweepWave(token, chatId)
+  await modLog({
+    chatId,
+    chatTitle: hub.groups.find((g) => g.chatId === chatId)?.title,
+    action: 'Giriş dalgası çıkarıldı',
+    reason: `${res.removed} kişi ${RAID_BAN_MINUTES} dakikalığına çıkarıldı${res.left ? `, ${res.left} kişi kaldı` : ''} (panelden)`,
+    notify: false,
+  })
+  return res
+}
+
+export async function suspectAct(ids: number[], action: 'ban' | 'mute' | 'wipe' | 'clear') {
+  await ensureGuardTables()
+  const list = [...new Set(ids.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))].slice(0, 100)
+  if (!list.length) throw new Error('Kimse seçilmedi')
+  if (action === 'clear') {
+    await setSuspectState(list, 'cleared')
+    return `${list.length} hesap listeden çıkarıldı, bir daha şüpheli gösterilmez.`
+  }
+  const { hub, token } = await guardToken()
+  if (action === 'wipe') {
+    let deleted = 0
+    for (const id of list) deleted += await deleteUserMessages(id)
+    return `${deleted} mesaj silindi (Telegram sadece son 48 saati sildirir).`
+  }
+  const names = await suspectNames(list)
+  const started = Date.now()
+  const done: number[] = []
+  for (const id of list) {
+    // Each account costs one Telegram call per group; the rest wait for the next press instead of timing out.
+    if (Date.now() - started > 40_000) break
+    if (action === 'ban') {
+      await rows(sql`INSERT INTO tg_global_bans (tg_id, who, reason) VALUES (${id}, ${names.get(id) ?? String(id)}, 'Şüpheli listesinden banlandı (panel)')
+        ON CONFLICT (tg_id) DO UPDATE SET reason = EXCLUDED.reason`)
+      for (const g of hub.groups) await ban(token, g.chatId, id).catch(() => null)
+    } else {
+      for (const g of hub.groups) if (g.type !== 'channel') await mute(token, g.chatId, id, 1440).catch(() => null)
+    }
+    done.push(id)
+  }
+  if (action === 'ban') await setSuspectState(done, 'removed')
+  await modLog({
+    action: action === 'ban' ? 'Banlandı (tüm gruplar)' : 'Susturuldu (1440 dk)',
+    reason: `Şüpheli listesinden ${done.length} hesap (panelden): ${done.map((id) => names.get(id) ?? String(id)).join(', ').slice(0, 300)}`,
+    notify: false,
+  })
+  const rest = list.length - done.length ? ` ${list.length - done.length} hesap kaldı, tekrar dene.` : ''
+  return action === 'ban'
+    ? `${done.length} hesap tüm gruplardan banlandı.${rest} Yanlış olanı "Tüm gruplardan yasaklılar" listesinden geri alabilirsin.`
+    : `${done.length} hesap 24 saat susturuldu.${rest}`
+}
+
+/** What the panel's member card can do to one account. Every action covers all protected groups at once. */
+export async function memberAct(tgId: number, action: MemberAction, by: string) {
+  await ensureGuardTables()
+  if (!Number.isSafeInteger(tgId) || tgId <= 0) throw new Error('Geçersiz Telegram ID')
+  const name = (await suspectNames([tgId])).get(tgId) ?? ''
+  const user: TgUser = name.startsWith('@') ? { id: tgId, username: name.slice(1) } : { id: tgId, first_name: name || undefined }
+  const note = `panelden, ${by}`
+
+  if (action === 'clearWarns') {
+    await rows(sql`DELETE FROM tg_warns WHERE tg_id = ${tgId}`)
+    await modLog({ user, action: 'Uyarılar sıfırlandı', reason: note, notify: false })
+    return 'Uyarılar sıfırlandı.'
+  }
+  const { hub, token } = await guardToken()
+  if (action === 'wipe') {
+    const n = await deleteUserMessages(tgId)
+    await modLog({ user, action: 'Mesaj silindi', reason: `Son 48 saatteki ${n} mesajı silindi (${note})`, notify: false })
+    return `${n} mesaj silindi (Telegram sadece son 48 saati sildirir).`
+  }
+  if (action === 'ban') {
+    // Listed first: even if Telegram refuses every group right now, the account is turned away the next time it tries to join.
+    await rows(sql`INSERT INTO tg_global_bans (tg_id, who, reason) VALUES (${tgId}, ${who(user)}, ${`Panelden banlandı (${by})`})
+      ON CONFLICT (tg_id) DO UPDATE SET reason = EXCLUDED.reason`)
+  }
+  const groups = hub.groups.filter((g) => action === 'ban' || g.type !== 'channel')
+  let reached = 0
+  let lastError = ''
+  for (const g of groups) {
+    try {
+      if (action === 'ban') await ban(token, g.chatId, tgId)
+      else if (action === 'mute') await mute(token, g.chatId, tgId, 1440)
+      else await unmute(token, g.chatId, tgId)
+      reached++
+    } catch (error) {
+      lastError = String((error as Error).message)
+    }
+  }
+  if (action !== 'ban' && !reached) {
+    throw new Error(groups.length ? `Telegram hiçbir grupta izin vermedi: ${lastError}` : 'Korunan grup yok.')
+  }
+  const where = `${reached}/${groups.length} sohbet`
+  await modLog({
+    user,
+    action: action === 'ban' ? 'Banlandı (tüm gruplar)' : action === 'mute' ? 'Susturuldu (1440 dk)' : 'Susturma kaldırıldı',
+    reason: `${where} (${note})`,
+    notify: false,
+  })
+  if (action === 'ban') return `Tüm gruplardan banlandı (${where}). Genel yasak listesine eklendi.`
+  return action === 'mute' ? `24 saat susturuldu (${where}).` : `Susturma kaldırıldı (${where}).`
 }

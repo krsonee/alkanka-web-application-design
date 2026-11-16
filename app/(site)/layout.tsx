@@ -5,8 +5,9 @@ import { Topbar } from '@/components/alkanka/topbar'
 import { LiveRail } from '@/components/alkanka/live-rail'
 import { TelegramBubble } from '@/components/alkanka/telegram-bubble'
 import { getChatConfig } from '@/lib/telegram-chat'
-import { getChannelUsernames } from '@/lib/telegram-channels'
+import { getTelegramAddresses } from '@/lib/telegram-channels'
 import { TELEGRAM_URL, type TelegramLinks } from '@/components/alkanka/data'
+import { TelegramAddressProvider } from '@/components/alkanka/telegram-address'
 import { MobileNav } from '@/components/alkanka/mobile-nav'
 import { Footer } from '@/components/alkanka/footer'
 import { AuthModal } from '@/components/alkanka/auth-modal'
@@ -69,15 +70,17 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   ])
   const chatLive = Boolean(chatConfig)
   const searchSponsors = sponsors.map((s) => ({ id: s.id, name: s.name, welcome: s.welcome }))
-  const channels = await getChannelUsernames().catch(() => null)
-  const tgUrl = (username?: string | null) => (username ? `https://t.me/${username.replace(/^@/, '')}` : TELEGRAM_URL)
+  const addresses = await getTelegramAddresses(TELEGRAM_URL).catch(() => null)
+  const mainTelegram = addresses?.main ?? TELEGRAM_URL
+  const tgUrl = (username?: string | null) => (username ? `https://t.me/${username.replace(/^@/, '')}` : mainTelegram)
   const telegram: TelegramLinks = {
-    duyuru: tgUrl(channels?.duyuru),
-    sohbet: social.telegram || chatConfig?.inviteUrl || TELEGRAM_URL,
-    ozelOran: tgUrl(channels?.['ozel-oran']),
-    promo: tgUrl(channels?.promo),
+    duyuru: mainTelegram,
+    sohbet: social.telegram || chatConfig?.inviteUrl || mainTelegram,
+    ozelOran: tgUrl(addresses?.usernames['ozel-oran']),
+    promo: tgUrl(addresses?.usernames.promo),
   }
   return (
+    <TelegramAddressProvider url={mainTelegram}>
     <TextsProvider value={texts}>
     <CatalogProvider value={catalog}>
     <SponsorsProvider value={lookupSponsors}>
@@ -117,7 +120,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
               </div>
             )}
             {children}
-            <Footer />
+            <Footer telegramUrl={mainTelegram} />
           </main>
         </div>
         <MobileNav />
@@ -140,5 +143,6 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     </SponsorsProvider>
     </CatalogProvider>
     </TextsProvider>
+    </TelegramAddressProvider>
   )
 }

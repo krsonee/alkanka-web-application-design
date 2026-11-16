@@ -17,8 +17,10 @@ export async function POST(request: Request) {
     const chat = await getChatConfig()
     if (chat) {
       // The live-chat bot can also hold the guard or support role, so it goes through the shared dispatcher.
-      const { dispatchUpdate } = await import('@/lib/tg-hub')
-      await dispatchUpdate(chat.botId, update)
+      const { claimUpdate, dispatchUpdate } = await import('@/lib/tg-hub')
+      // If the repeat check itself fails, handling the update beats dropping it.
+      const fresh = await claimUpdate(chat.botId, update.update_id).catch(() => true)
+      if (fresh) await dispatchUpdate(chat.botId, update)
     } else if (!update.callback_query) {
       await handleUpdate(update)
     }

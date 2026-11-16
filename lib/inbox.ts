@@ -65,8 +65,8 @@ const toMessage = (r: Row): InboxMessage => ({
   personal: !!r.personal,
 })
 
-/** Broadcasts only reach members who existed when they were sent, so new members don't inherit old announcements. */
-const visibleTo = (userId: string) => sql`(m.user_id = ${userId} OR (m.user_id IS NULL AND m.created_at >= coalesce((SELECT "createdAt" FROM "user" WHERE id = ${userId}), now()) - interval '30 days'))`
+/** Broadcasts only reach members who existed when they were sent, so new members never inherit announcements from before they joined. */
+const visibleTo = (userId: string) => sql`(m.user_id = ${userId} OR (m.user_id IS NULL AND m.created_at >= coalesce((SELECT "createdAt" FROM "user" WHERE id = ${userId}), now())))`
 
 export async function listInbox(userId: string, limit = 50): Promise<InboxMessage[]> {
   await ensure()

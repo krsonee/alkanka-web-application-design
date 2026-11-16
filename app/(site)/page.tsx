@@ -23,6 +23,7 @@ import { completedTaskIds, listPublicTasks } from '@/lib/tasks'
 import { getCemberStatus, myCemberStatus } from '@/lib/cember'
 import { listProducts, type MarketProduct } from '@/lib/market'
 import { getHomeV2 } from '@/lib/home-v2'
+import { getTelegramAddresses } from '@/lib/telegram-channels'
 import { MemberHomeV2 } from '@/components/alkanka/home/member-home-v2'
 import { GuestHomeV2, MemberHomeV2Page } from '@/components/alkanka/home/v2/home-v2'
 import { getMiniStatus } from '@/app/actions/wallet'
@@ -44,13 +45,12 @@ export const dynamic = 'force-dynamic'
 
 const MAX_SLIDES = 3
 
-const SITE_LD = [
-  { '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/app-icon-512.png`, sameAs: [TELEGRAM_URL] },
-  { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE_NAME, url: SITE_URL, inLanguage: 'tr-TR' },
-]
-
-function SiteJsonLd() {
-  return <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(SITE_LD)} />
+function SiteJsonLd({ telegram }: { telegram: string }) {
+  const data = [
+    { '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/app-icon-512.png`, sameAs: [telegram] },
+    { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE_NAME, url: SITE_URL, inLanguage: 'tr-TR' },
+  ]
+  return <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(data)} />
 }
 
 async function loadHub(member: Member, products: MarketProduct[]): Promise<HubData> {
@@ -88,14 +88,18 @@ async function loadHub(member: Member, products: MarketProduct[]): Promise<HubDa
 }
 
 export default async function HomePage() {
-  const [content, sponsors, ranking, member, allProducts, socialLinks] = await Promise.all([
+  const [content, sponsors, ranking, member, allProducts, savedLinks, telegramUrl] = await Promise.all([
     getAllContent(),
     listPublicSponsors().catch(() => []),
     readLeaderboard(500).catch(() => []),
     getMember().catch(() => null),
     listProducts().catch(() => [] as MarketProduct[]),
     getSocialLinks().catch(() => ({}) as SocialLinks),
+    getTelegramAddresses(TELEGRAM_URL)
+      .then((a) => a.main)
+      .catch(() => TELEGRAM_URL),
   ])
+  const socialLinks: SocialLinks = savedLinks.telegram ? savedLinks : { ...savedLinks, telegram: telegramUrl }
   const products = allProducts.filter((p) => p.active && p.stock > 0)
   const [hub, bonus, homeV2] = await Promise.all([
     member ? loadHub(member, products) : Promise.resolve(null),
@@ -112,6 +116,7 @@ export default async function HomePage() {
   const slides = sortByOrder(merged, readSlideOrder(content[SLIDE_ORDER_KEY]))
     .filter((s) => isScheduledLive(s))
     .slice(0, MAX_SLIDES)
+    .map((s) => (s.href === TELEGRAM_URL ? { ...s, href: telegramUrl } : s))
 
   const myIndex = member ? ranking.findIndex((r) => r.userId === member.id) : -1
   const me = member && myIndex >= 0 ? { rank: myIndex + 1, points: ranking[myIndex].kp } : null
@@ -127,7 +132,7 @@ export default async function HomePage() {
     const weeklyIndex = member ? weekly.findIndex((r) => r.userId === member.id) : -1
     return (
       <>
-        <SiteJsonLd />
+        <SiteJsonLd telegram={telegramUrl} />
         <h1 className="sr-only">AL KANKA: okey, tavla, batak, pişti ve ücretsiz mini oyunlar</h1>
         {member && hub ? (
           <MemberHomeV2Page
@@ -157,7 +162,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <SiteJsonLd />
+      <SiteJsonLd telegram={telegramUrl} />
       <h1 className="sr-only">AL KANKA: okey, tavla, batak, pişti ve ücretsiz mini oyunlar</h1>
       <div className="flex flex-col gap-4">
         {hub && homeV2?.home.enabled && (

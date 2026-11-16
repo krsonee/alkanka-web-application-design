@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Bell, Gift } from 'lucide-react'
 import type { CemberGame } from '@/lib/cember-shared'
-import { TELEGRAM_URL } from './data'
+import { useTelegramUrl } from './telegram-address'
 import { DetailButton, DetailModal } from './detail-modal'
 
 export type ArenaEvent = {
@@ -107,6 +107,7 @@ function soonest(events: ArenaEvent[]) {
 }
 
 export function ArenaCards({ cards, notice }: { cards: ArenaGameCard[]; notice: number }) {
+  const telegramUrl = useTelegramUrl()
   const now = useNow()
   const [detail, setDetail] = useState<ArenaGameCard | null>(null)
   const detailNext = detail ? soonest(detail.events) : null
@@ -160,7 +161,7 @@ export function ArenaCards({ cards, notice }: { cards: ArenaGameCard[]; notice: 
                   <div className="mt-auto flex items-stretch gap-2">
                     <DetailButton onClick={() => setDetail(c)} label="Kurallar" />
                     <a
-                      href={TELEGRAM_URL}
+                      href={telegramUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex h-8 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90"

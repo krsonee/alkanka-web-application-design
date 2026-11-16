@@ -35,7 +35,7 @@ import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, s
 import { ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
 import { ImageField } from '@/components/panel/image-field'
 import { JAKO_POSES } from '@/lib/site-registry'
-import { PANEL_GROUPS, type PanelModule } from '@/lib/panel-modules'
+import { PANEL_GROUPS, TELEGRAM_MODULES, type PanelModule } from '@/lib/panel-modules'
 import { HideButton } from '@/components/panel/hide-button'
 
 type Fields = {
@@ -153,17 +153,22 @@ export function ContentEditor({
       id: g.id as string,
       label: g.label as string,
       items: g.modules
-        .filter((m) => m.id !== 'roles' && allowed.includes(m.id))
+        // The three Telegram permissions open one shared section; what it shows inside depends on which ones the account holds.
+        .filter((m) =>
+          m.id === 'telegram' ? TELEGRAM_MODULES.some((id) => allowed.includes(id)) : m.id !== 'roles' && !TELEGRAM_MODULES.includes(m.id) && allowed.includes(m.id),
+        )
         .map((m) => ({
           id: m.id as PanelTab,
           pending: pending[m.id] ?? 0,
-          hint: m.hint as string,
+          hint: m.id === 'telegram' ? 'Postlar, botlar, koruma ve otomasyonlar' : (m.hint as string),
           label:
             m.id === 'slide'
                 ? `Slider (${slides.length})`
                 : m.id === 'hero'
                   ? `Sayfa başlıkları (${heroes.length})`
-                  : (m.label as string),
+                  : m.id === 'telegram'
+                    ? 'Telegram botları'
+                    : (m.label as string),
         })),
     })),
     {

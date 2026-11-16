@@ -10,7 +10,6 @@ import { getLookSummary, type LookSummary } from '@/app/actions/look'
 import { AvatarFace } from './member-avatar'
 import { cn } from '@/lib/utils'
 import { authClient } from '@/lib/auth-client'
-import { TELEGRAM_URL } from './data'
 import { BrandLogo } from './logo-selector'
 import { MobileDrawer } from './sidebar'
 import { formatAC, usePoints } from './points-context'
@@ -314,7 +313,7 @@ export function Topbar({
           <CemberButton />
           <RadioPlayer />
           <a
-            href={TELEGRAM_URL}
+            href={telegram.duyuru}
             target="_blank"
             rel="noopener noreferrer"
             className="hidden h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold uppercase tracking-wider text-foreground transition-colors hover:border-accent/50 hover:text-accent xl:hidden 2xl:flex"

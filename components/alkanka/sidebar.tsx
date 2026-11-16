@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import { ChevronDown, ChevronsLeft, ChevronsRight, Coins, Megaphone, MessagesSquare, Percent, Send, Ticket, X, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { NAV_SECTIONS, TELEGRAM_URL, type NavGroup, type NavItem, type TelegramLinks } from './data'
+import { NAV_SECTIONS, type NavGroup, type NavItem, type TelegramLinks } from './data'
+import { useTelegramUrl } from './telegram-address'
 import { JakoAvatar } from './jako'
 import { BrandLogo } from './logo-selector'
 import { TourButton } from './app/site-tour'
@@ -344,11 +345,12 @@ function TelegramChannels({ links, compact }: { links: TelegramLinks; compact: b
 
 function TelegramCard({ compact }: { compact: boolean }) {
   const { data } = useChatFeed()
+  const telegramUrl = useTelegramUrl()
   const subtitle =
     data?.configured && data.members != null ? `${data.members.toLocaleString('tr-TR')} üye · canlı sohbet` : 'Topluluğa katıl, sohbete gel'
   return (
     <a
-      href={data?.inviteUrl ?? TELEGRAM_URL}
+      href={data?.inviteUrl ?? telegramUrl}
       data-tour="telegram"
       target="_blank"
       rel="noopener noreferrer"

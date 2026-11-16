@@ -52,6 +52,29 @@ async function hubTickSlot() {
   await hubTick()
 }
 
+let lastPostAttempt = 0
+
+/**
+ * For Telegram webhooks. The update has already woken the database, so scheduled posts, scheduled DM announcements,
+ * quiet hours and button counters ride along with it instead of waiting for the next site visitor. Starts nothing on its own.
+ */
+export async function runPostTick() {
+  const now = Date.now()
+  if (now - lastPostAttempt < LOCAL_GAP_MS) return
+  lastPostAttempt = now
+  if (!(await claim('auto_tick_posts', HUB_EVERY_SEC))) return
+  const [{ runPostJobs }, { processBroadcasts }, { runQuietHours }] = await Promise.all([
+    import('@/lib/tg-posts'),
+    import('@/lib/tg-broadcast'),
+    import('@/lib/tg-quiet'),
+  ])
+  await Promise.all([
+    runPostJobs().catch((e) => console.error('[post-tick] posts', e)),
+    processBroadcasts().catch((e) => console.error('[post-tick] broadcast', e)),
+    runQuietHours().catch((e) => console.error('[post-tick] quiet hours', e)),
+  ])
+}
+
 /**
  * Runs every background job whose slot is free. Driven by site traffic (after page renders) and by
  * the keyed external trigger, never by a built-in every-minute schedule: that would keep the

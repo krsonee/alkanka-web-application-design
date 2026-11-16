@@ -2,6 +2,7 @@
 
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
+import { KnownChatField } from '@/components/panel/tg-chat-field'
 import { useActionState, useTransition, useState } from 'react'
 import { BellRing, Loader2, Pencil, Plus, Send, Share2, Trash2, Trophy } from 'lucide-react'
 import {
@@ -222,10 +223,10 @@ function ShareRuleForm({ rule, targets, onDone }: { rule?: ShareRule; targets: M
           Sponsor adı
           <input name="name" defaultValue={rule?.name ?? ''} maxLength={60} placeholder="Makrobet" className={input} />
         </label>
-        <label className={label}>
+        <div className={label}>
           Sponsor destek grubu
-          <input name="sourceChat" defaultValue={rule?.sourceChat ?? ''} required placeholder="@grupadi ya da -100…" className={input} />
-        </label>
+          <KnownChatField label="Sponsor destek grubu" name="sourceChat" defaultValue={rule?.sourceChat ?? ''} required placeholder="@grupadi ya da -100…" inputClassName={input} />
+        </div>
         <label className={label}>
           Tetik kelimesi
           <input name="trigger" defaultValue={rule?.trigger ?? '#paylaş'} maxLength={40} placeholder="#paylaş" className={input} />
@@ -405,10 +406,10 @@ export function ApprovalSection({ suite, bots }: { suite: BotSuite; bots: Mirror
             Bot
             <BotSelect bots={bots} value={a.botId} />
           </label>
-          <label className={label}>
+          <div className={label}>
             Yönetici grubu
-            <input name="chatId" defaultValue={a.chatId} placeholder="@grupadi ya da -100…" className={input} />
-          </label>
+            <KnownChatField label="Yönetici grubu" name="chatId" defaultValue={a.chatId} placeholder="@grupadi ya da -100…" inputClassName={input} />
+          </div>
         </div>
         {APPROVAL_FIELDS.map((f) => (
           <label key={f.kind} className={label}>
