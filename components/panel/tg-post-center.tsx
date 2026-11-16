@@ -342,7 +342,7 @@ export function PostComposer({ data }: { data: PostCenterData }) {
 
         <Card
           title="Sonra kullanmak için kaydet"
-          hint="Taslak yarım kalan postu saklar. Şablon tekrar tekrar kullanılır: yazıda ya da butonlarda {sponsor}, {kod} ve {link} yazdığın yerler, şablonu her açı��ında sorulur."
+          hint="Taslak yarım kalan postu saklar. Şablon tekrar tekrar kullanılır: yazıda ya da butonlarda {sponsor}, {kod} ve {link} yazdığın yerler, şablonu her açışında sorulur."
         >
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Ad (taslakta boş bırakabilirsin)
@@ -491,7 +491,7 @@ function EditForm({ post, data, pending, run, onClose }: { post: PostRow; data: 
           <h4 className="text-sm font-semibold text-foreground">Butonlar</h4>
           <ButtonsField rows={content.buttons} update={set.buttons} listens={listens} listenHelp={listenHelp} bots={data.bots} />
           {post.stats.raffle || Object.keys(post.stats.counts).length > 0 ? (
-            <p className="text-xs leading-relaxed text-muted-foreground">Oy ya da çekili�� butonunu silersen o butonun sayıları da görünmez olur; yazısını değiştirmek sayıları etkilemez.</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">Oy ya da çekiliş butonunu silersen o butonun sayıları da görünmez olur; yazısını değiştirmek sayıları etkilemez.</p>
           ) : null}
         </div>
         {!auto && (
