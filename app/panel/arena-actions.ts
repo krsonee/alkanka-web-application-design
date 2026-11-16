@@ -7,6 +7,7 @@ import { setContent } from '@/lib/content'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory } from '@/lib/member'
 import { ARENA_GAMES, ARENA_META, isArenaGame, type ArenaSettings } from '@/lib/arena'
+import { getArenaSettings } from '@/lib/arena-server'
 import { cancelTable } from '@/lib/pvp/tables'
 import {
   MAX_TOURNAMENT_PLAYERS,
@@ -22,6 +23,8 @@ import {
 import { isTournamentFormat } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import type { ActionState } from './actions'
+
+const MAX_BET_OPTIONS = 8
 
 async function requireAdmin(module: PanelModule) {
   if (!(await canPanel(module))) throw new Error('Oturum süresi doldu, tekrar giriş yap.')
@@ -46,24 +49,30 @@ function int(form: FormData, name: string, label: string, min: number, max: numb
 export async function saveArenaSettings(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('games')
+    const current = await getArenaSettings()
     const value = {} as ArenaSettings
     for (const g of ARENA_GAMES) {
       const title = ARENA_META[g].title
-      const bets = String(form.get(`${g}:bets`) ?? '')
+      const tokens = String(form.get(`${g}:bets`) ?? '')
         .split(/[,\s]+/)
-        .map((v) => Math.round(Number(v)))
-        .filter((v) => Number.isFinite(v) && v > 0 && v <= 100000)
-      const unique = [...new Set(bets)].sort((a, b) => a - b).slice(0, 6)
+        .filter(Boolean)
+      const bad = tokens.find((t) => !/^\d+$/.test(t) || Number(t) < 1 || Number(t) > 100000)
+      if (bad !== undefined) return { message: `${title}: "${bad.slice(0, 20)}" geçerli bir bahis tutarı değil. 1 ile 100.000 arasında tam sayı yaz.` }
+      const unique = [...new Set(tokens.map(Number))].sort((a, b) => a - b)
       if (!unique.length) return { message: `${title}: en az bir bahis tutarı gir.` }
+      if (unique.length > MAX_BET_OPTIONS) return { message: `${title}: en fazla ${MAX_BET_OPTIONS} bahis tutarı girilebilir.` }
       const multiplier = Number(String(form.get(`${g}:multiplier`) ?? '').replace(',', '.'))
       if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 20) return { message: `${title}: çarpan 1 ile 20 arasında olmalı.` }
-      const commission = Math.round(Number(form.get(`${g}:commission`) ?? 0))
-      if (!Number.isFinite(commission) || commission < 0 || commission > 30) return { message: `${title}: komisyon %0 ile %30 arasında olmalı.` }
+      // The settings form has no commission or kanka-table field. Reading a missing field as 0 / off
+      // closed player tables and zeroed the table cut for every game on each save.
+      const hasCommission = form.has(`${g}:commission`)
+      const commission = hasCommission ? Math.round(Number(form.get(`${g}:commission`))) : current[g].commission
+      if (hasCommission && (!Number.isFinite(commission) || commission < 0 || commission > 30)) return { message: `${title}: komisyon %0 ile %30 arasında olmalı.` }
       const image = String(form.get(`${g}:image`) ?? '').trim().slice(0, 500)
       if (image && !/^(https:\/\/|\/)/.test(image)) return { message: `${title}: görsel adresi https:// veya / ile başlamalı.` }
       value[g] = {
         enabled: form.get(`${g}:enabled`) === 'on',
-        pvpEnabled: form.get(`${g}:pvp`) === 'on',
+        pvpEnabled: form.has(`${g}:pvp`) ? form.get(`${g}:pvp`) === 'on' : current[g].pvpEnabled,
         bets: unique,
         multiplier: Math.round(multiplier * 100) / 100,
         commission,

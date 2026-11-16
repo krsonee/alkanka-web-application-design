@@ -89,7 +89,8 @@ export async function importWagersAction(siteId: string, period: string, text: s
     const r = await importWagers(siteId, period, text)
     revalidatePath('/siralama')
     revalidatePath('/panel')
-    return { ok: true, message: `${r.rows} satır yüklendi, ${r.matched} tanesi onaylı üyeyle eşleşti.` }
+    const skipped = r.skipped ? ` ${r.skipped} satır okunamadığı için atlandı.` : ''
+    return { ok: true, message: `${r.rows} satır yüklendi, ${r.matched} tanesi onaylı üyeyle eşleşti.${skipped}` }
   } catch (error) {
     return fail(error)
   }

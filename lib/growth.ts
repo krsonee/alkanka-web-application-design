@@ -1,5 +1,6 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
+import { parseAmount } from '@/lib/amount'
 import { rows, sql } from '@/lib/db'
 import { sponsorExists } from '@/lib/sites'
 
@@ -297,26 +298,23 @@ export async function setSponsorAccountStatus(userId: string, siteId: string, st
     WHERE user_id = ${userId} AND site_id = ${siteId}`)
 }
 
-function parseAmount(raw: string) {
-  let v = raw.replace(/[^\d.,-]/g, '')
-  if (v.includes(',') && v.includes('.')) v = v.lastIndexOf(',') > v.lastIndexOf('.') ? v.replace(/\./g, '').replace(',', '.') : v.replace(/,/g, '')
-  else if (v.includes(',')) v = v.replace(',', '.')
-  const n = Number(v)
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null
-}
-
 /** Accepts "kullaniciadi,tutar" lines (comma, semicolon or tab). Replaces the period's data for that site. */
 export async function importWagers(siteId: string, period: string, text: string) {
   if (!(await isSponsor(siteId))) throw new Error('Site bulunamadı.')
-  if (!/^\d{4}-\d{2}$/.test(period)) throw new Error('Dönem YYYY-AA biçiminde olmalı (ör. 2026-10).')
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new Error('Dönem YYYY-AA biçiminde olmalı (ör. 2026-10).')
   const entries = new Map<string, number>()
+  let skipped = 0
   for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue
     const match = line.trim().match(/^([^,;\t]+)[,;\t]\s*(.+)$/)
-    if (!match) continue
-    const [, name, amount] = match
-    const key = name.trim().toLowerCase().replace(/\s+/g, '')
-    const value = amount ? parseAmount(amount) : null
-    if (!key || key.length < 3 || value === null || /kullan|user|name/i.test(key)) continue
+    const key = match?.[1].trim().toLowerCase().replace(/\s+/g, '') ?? ''
+    if (/kullan|user|name/i.test(key)) continue
+    const amount = match?.[2] ?? ''
+    const value = amount.includes('-') ? null : parseAmount(amount.replace(/[^\d.,]/g, ''))
+    if (key.length < 3 || value === null) {
+      skipped += 1
+      continue
+    }
     entries.set(key, (entries.get(key) ?? 0) + value)
   }
   if (!entries.size) throw new Error('Geçerli satır bulunamadı. Her satır: kullaniciadi,tutar')
@@ -328,7 +326,7 @@ export async function importWagers(siteId: string, period: string, text: string)
   const matched = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM wager_entries w JOIN sponsor_accounts a
     ON a.site_id = w.site_id AND lower(a.username) = w.username_key AND a.status = 'approved'
     WHERE w.site_id = ${siteId} AND w.period = ${period}`)
-  return { rows: entries.size, matched: Number(matched[0]?.n ?? 0) }
+  return { rows: entries.size, matched: Number(matched[0]?.n ?? 0), skipped }
 }
 
 export type WagerRow = { userId: string; name: string; amount: number; sites: number }

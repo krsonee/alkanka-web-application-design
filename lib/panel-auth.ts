@@ -9,6 +9,9 @@ import { currentSecret } from '@/lib/secrets'
 export const PANEL_COOKIE = 'alk_panel'
 const SESSION_HOURS = 12
 const MAX_FAILS = 8
+const MAX_FAILS_PER_IP = 24
+const SLOW_AFTER_FAILS = 20
+const SLOW_DELAY_MS = 2000
 const FAIL_WINDOW_MIN = 15
 
 export type PanelAccountRow = {
@@ -164,21 +167,31 @@ async function clientIp() {
   return (h.get('x-forwarded-for')?.split(',')[0] ?? h.get('x-real-ip') ?? 'unknown').trim().slice(0, 64)
 }
 
+const userKey = (username: string) => `u:${username.toLowerCase()}`
+const pairKey = (username: string, ip: string) => `p:${username.toLowerCase()}|${ip}`
+
+// The lock is per (username, address) pair. A lock on the username alone lets anyone who knows
+// the panel address keep the owner out by sending wrong passwords for "admin".
 export async function loginBlocked(username: string) {
   const ip = await clientIp()
-  const [row] = await rows<{ n: number }>(sql`
-    SELECT count(*)::int AS n FROM panel_login_attempts
-    WHERE key IN (${`u:${username.toLowerCase()}`}, ${`ip:${ip}`}) AND at > now() - make_interval(mins => ${FAIL_WINDOW_MIN})
+  const found = await rows<{ key: string; n: number }>(sql`
+    SELECT key, count(*)::int AS n FROM panel_login_attempts
+    WHERE key IN (${pairKey(username, ip)}, ${`ip:${ip}`}, ${userKey(username)}) AND at > now() - make_interval(mins => ${FAIL_WINDOW_MIN})
+    GROUP BY key
   `)
-  return (row?.n ?? 0) >= MAX_FAILS
+  const count = (key: string) => found.find((r) => r.key === key)?.n ?? 0
+  if (count(pairKey(username, ip)) >= MAX_FAILS || count(`ip:${ip}`) >= MAX_FAILS_PER_IP) return true
+  if (count(userKey(username)) >= SLOW_AFTER_FAILS) await new Promise((resolve) => setTimeout(resolve, SLOW_DELAY_MS))
+  return false
 }
 
 export async function recordFailedLogin(username: string) {
   const ip = await clientIp()
-  await rows(sql`INSERT INTO panel_login_attempts (key) VALUES (${`u:${username.toLowerCase()}`}), (${`ip:${ip}`})`)
+  await rows(sql`INSERT INTO panel_login_attempts (key) VALUES (${pairKey(username, ip)}), (${`ip:${ip}`}), (${userKey(username)})`)
   await rows(sql`DELETE FROM panel_login_attempts WHERE at < now() - interval '1 day'`)
 }
 
 export async function clearFailedLogins(username: string) {
-  await rows(sql`DELETE FROM panel_login_attempts WHERE key = ${`u:${username.toLowerCase()}`}`)
+  const ip = await clientIp()
+  await rows(sql`DELETE FROM panel_login_attempts WHERE key = ${pairKey(username, ip)}`)
 }

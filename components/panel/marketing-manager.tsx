@@ -2,6 +2,7 @@
 
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
+import { amountInput, parseAmount } from '@/lib/amount'
 import { useMemo, useState, useTransition } from 'react'
 import { Check, Copy, Loader2, Pause, Pencil, Play, Plus, Send, Trash2, X } from 'lucide-react'
 import {
@@ -26,6 +27,8 @@ import { cn } from '@/lib/utils'
 
 export type MarketingSite = { id: number; name: string; slug: string; active: boolean }
 type Msg = { ok: boolean; message: string } | null
+
+const AMOUNT_HINT = 'Tutar okunamadı. Kuruşu virgülle yaz: 1.250,50'
 
 const input = 'rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none'
 const btn = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50'
@@ -190,8 +193,13 @@ function CampaignEditor({ draft, sites, siteUrl, onClose }: { draft: CampaignDra
       className="flex flex-col gap-3"
       onSubmit={(e) => {
         e.preventDefault()
+        const cost = d.cost ? parseAmount(d.cost) : 0
+        if (cost === null) {
+          setMsg({ ok: false, message: AMOUNT_HINT })
+          return
+        }
         start(async () => {
-          const r = await saveCampaignAction({ id: d.id, code: d.code, name: d.name, channel: d.channel, target: d.target, cost: Number(d.cost || 0), active: d.active })
+          const r = await saveCampaignAction({ id: d.id, code: d.code, name: d.name, channel: d.channel, target: d.target, cost, active: d.active })
           setMsg(r)
           if (r.ok && !d.id) {
             setD(EMPTY_CAMPAIGN)
@@ -273,7 +281,7 @@ function CampaignEditor({ draft, sites, siteUrl, onClose }: { draft: CampaignDra
         </label>
         <label className={label}>
           Harcanan bütçe (₺, opsiyonel)
-          <input className={input} value={d.cost} onChange={(e) => set({ cost: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal" placeholder="0" />
+          <input className={input} value={d.cost} onChange={(e) => set({ cost: e.target.value.replace(/[^\d.,]/g, '') })} inputMode="decimal" placeholder="Örn. 1.250,50" />
           <span className="font-normal">Girersen üye başı maliyeti otomatik hesaplarız.</span>
         </label>
       </div>
@@ -307,7 +315,7 @@ function CampaignCard({ c, sites, siteUrl }: { c: CampaignView; sites: Marketing
     return (
       <li className="rounded-xl border border-primary/40 bg-card p-4">
         <CampaignEditor
-          draft={{ id: c.id, code: c.code, name: c.name, channel: c.channel, target: c.target, cost: c.cost ? String(c.cost) : '', active: c.active }}
+          draft={{ id: c.id, code: c.code, name: c.name, channel: c.channel, target: c.target, cost: amountInput(c.cost), active: c.active }}
           sites={sites}
           siteUrl={siteUrl}
           onClose={() => setEditing(false)}
@@ -446,6 +454,11 @@ function EarningEditor({ draft, sites, onClose }: { draft: EarningDraft; sites: 
       className="flex flex-col gap-3"
       onSubmit={(e) => {
         e.preventDefault()
+        const amount = parseAmount(d.amount)
+        if (amount === null) {
+          setMsg({ ok: false, message: AMOUNT_HINT })
+          return
+        }
         start(async () => {
           const r = await saveEarningAction({
             id: d.id,
@@ -453,7 +466,7 @@ function EarningEditor({ draft, sites, onClose }: { draft: EarningDraft; sites: 
             period: d.period,
             model: d.model,
             ftd: Number(d.ftd || 0),
-            amount: Number(d.amount || 0),
+            amount,
             currency: d.currency,
             note: d.note,
           })
@@ -496,7 +509,7 @@ function EarningEditor({ draft, sites, onClose }: { draft: EarningDraft; sites: 
         <label className={label}>
           Hakediş tutarı
           <div className="flex gap-2">
-            <input className={cn(input, 'min-w-0 flex-1')} value={d.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal" placeholder="0" required />
+            <input className={cn(input, 'min-w-0 flex-1')} value={d.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.,]/g, '') })} inputMode="decimal" placeholder="Örn. 1.250,50" required />
             <select className={input} value={d.currency} onChange={(e) => set({ currency: e.target.value })} aria-label="Para birimi">
               {['TRY', 'USD', 'EUR', 'USDT'].map((c) => (
                 <option key={c}>{c}</option>
@@ -553,7 +566,7 @@ function EarningRow({ e, sites }: { e: EarningView; sites: MarketingSite[] }) {
     return (
       <li className="rounded-xl border border-primary/40 bg-card p-4">
         <EarningEditor
-          draft={{ id: e.id, siteId: String(e.siteId), period: e.period, model: e.model, ftd: String(e.ftd), amount: String(e.amount), currency: e.currency, note: e.note }}
+          draft={{ id: e.id, siteId: String(e.siteId), period: e.period, model: e.model, ftd: String(e.ftd), amount: amountInput(e.amount), currency: e.currency, note: e.note }}
           sites={sites}
           onClose={() => setEditing(false)}
         />
