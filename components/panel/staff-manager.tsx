@@ -5,7 +5,7 @@ import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { deleteStaffAccount, resetAccountTotp, saveStaffAccount, type StaffInput } from '@/app/panel/auth-actions'
-import { PANEL_GROUPS } from '@/lib/panel-modules'
+import { PANEL_GROUPS, PERMISSION_EXTRAS } from '@/lib/panel-modules'
 import { cn } from '@/lib/utils'
 
 export type StaffRow = {
@@ -248,9 +248,12 @@ function StaffForm({
                   {g.label}
                 </label>
                 {g.modules.map((m) => (
-                  <label key={m.id} title={m.hint} className="flex items-center gap-2 text-sm text-foreground">
-                    <input type="checkbox" checked={v.permissions.includes(m.id)} onChange={() => toggle(m.id)} className="accent-primary" />
-                    {m.label}
+                  <label key={m.id} title={m.hint} className="flex items-start gap-2 text-sm text-foreground">
+                    <input type="checkbox" checked={v.permissions.includes(m.id)} onChange={() => toggle(m.id)} className="mt-1 accent-primary" />
+                    <span className="flex flex-col">
+                      {m.label}
+                      {PERMISSION_EXTRAS[m.id] && <span className="text-xs leading-relaxed text-muted-foreground">{PERMISSION_EXTRAS[m.id]}</span>}
+                    </span>
                   </label>
                 ))}
                 {g.id === 'telegram' && (

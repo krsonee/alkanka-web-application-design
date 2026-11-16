@@ -2,8 +2,7 @@
 
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { useState, type ComponentProps } from 'react'
-import { WithdrawManager } from './withdraw-manager'
+import { useState } from 'react'
 import { Check, Star, Trash2, X } from 'lucide-react'
 import { answerComplaint, createLeagueMatch, finishLeagueMatch, moderateReview, removeComplaint, removeLeagueMatch, removeReview } from '@/app/panel/community-actions'
 import type { Complaint, LeagueMatch, Review } from '@/lib/community'
@@ -26,12 +25,11 @@ type Props = {
   complaints: Complaint[]
   matches: LeagueMatch[]
   siteNames: Record<string, string>
-  withdraw: ComponentProps<typeof WithdrawManager>
   proofs: PendingProof[]
 }
 
-export function CommunityManager({ reviews, published, complaints, matches, siteNames, withdraw, proofs }: Props) {
-  const [tab, setTab] = useUrlTab<CommunityTab>(['reviews', 'kanit', 'complaints', 'cekim', 'league'], 'reviews')
+export function CommunityManager({ reviews, published, complaints, matches, siteNames, proofs }: Props) {
+  const [tab, setTab] = useUrlTab<CommunityTab>(['reviews', 'kanit', 'complaints', 'league'], 'reviews')
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'forwarded').length
   return (
     <div className="flex flex-col gap-5">
@@ -42,7 +40,6 @@ export function CommunityManager({ reviews, published, complaints, matches, site
             ['reviews', `Yorum onayı (${reviews.length})`],
             ['kanit', `Kanıt & karne (${proofs.length})`],
             ['complaints', `Şikâyetler (${openComplaints})`],
-            ['cekim', `Çekim paylaşımları (${withdraw.shares.filter((s) => s.status === 'pending').length})`],
             ['league', `Tahmin ligi (${matches.filter((m) => !m.settled).length})`],
           ] as const
         ).map(([id, label]) => (
@@ -55,7 +52,6 @@ export function CommunityManager({ reviews, published, complaints, matches, site
       {tab === 'reviews' && <Reviews reviews={reviews} published={published} siteNames={siteNames} />}
       {tab === 'kanit' && <TrustProofs proofs={proofs} siteNames={siteNames} />}
       {tab === 'complaints' && <Complaints complaints={complaints} siteNames={siteNames} />}
-      {tab === 'cekim' && <WithdrawManager {...withdraw} />}
       {tab === 'league' && <LeagueAdmin matches={matches} />}
     </div>
   )

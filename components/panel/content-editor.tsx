@@ -37,7 +37,7 @@ import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, s
 import { AlertTriangle, ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
 import { ImageField } from '@/components/panel/image-field'
 import { JAKO_POSES } from '@/lib/site-registry'
-import { PANEL_GROUPS, TELEGRAM_MODULES, type PanelModule } from '@/lib/panel-modules'
+import { PANEL_GROUPS, PANEL_VIEWS, TELEGRAM_MODULES, type PanelModule, type PanelView } from '@/lib/panel-modules'
 import { HideButton } from '@/components/panel/hide-button'
 
 type Fields = {
@@ -53,7 +53,20 @@ type Fields = {
   endAt?: string
 }
 
-type PanelTab = PanelModule | 'staff' | 'account' | 'audit' | 'dashboard' | 'moderation'
+type PanelTab = PanelModule | PanelView | 'staff' | 'account' | 'audit' | 'dashboard' | 'moderation'
+
+const HIT_LABEL: Record<SearchHit['kind'], string> = {
+  setting: 'Ayar',
+  member: 'Üye',
+  sponsor: 'Sponsor',
+  post: 'Yazı',
+  task: 'Görev',
+  product: 'Ürün',
+  tournament: 'Turnuva',
+  faq: 'SSS',
+}
+
+const FOUND_MARK = ['ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background']
 
 export type EditorItem = {
   kind: 'slide' | 'hero'
@@ -84,6 +97,8 @@ export function ContentEditor({
   seo,
   studio,
   community,
+  home,
+  withdrawals,
   badges,
   tasks,
   faqs,
@@ -145,6 +160,8 @@ export function ContentEditor({
   seo: React.ReactNode
   studio: React.ReactNode
   community: React.ReactNode
+  home: React.ReactNode
+  withdrawals: React.ReactNode
   badges: React.ReactNode
   tasks: React.ReactNode
   faqs: React.ReactNode
@@ -157,24 +174,26 @@ export function ContentEditor({
     ...PANEL_GROUPS.map((g) => ({
       id: g.id as string,
       label: g.label as string,
-      items: g.modules
+      items: g.modules.flatMap((m): NavItem[] => {
         // The three Telegram permissions open one shared section; what it shows inside depends on which ones the account holds.
-        .filter((m) =>
-          m.id === 'telegram' ? TELEGRAM_MODULES.some((id) => allowed.includes(id)) : m.id !== 'roles' && !TELEGRAM_MODULES.includes(m.id) && allowed.includes(m.id),
-        )
-        .map((m) => ({
-          id: m.id as PanelTab,
+        const visible = m.id === 'telegram' ? TELEGRAM_MODULES.some((id) => allowed.includes(id)) : m.id !== 'roles' && !TELEGRAM_MODULES.includes(m.id) && allowed.includes(m.id)
+        const own: NavItem = {
+          id: m.id,
           pending: pending[m.id] ?? 0,
-          hint: m.id === 'telegram' ? 'Postlar, botlar, koruma ve otomasyonlar' : (m.hint as string),
+          hint: m.id === 'telegram' ? 'Postlar, botlar, koruma ve otomasyonlar' : m.hint,
           label:
             m.id === 'slide'
-                ? `Slider (${slides.length})`
-                : m.id === 'hero'
-                  ? `Sayfa başlıkları (${heroes.length})`
-                  : m.id === 'telegram'
-                    ? 'Telegram botları'
-                    : (m.label as string),
-        })),
+              ? `Slider (${slides.length})`
+              : m.id === 'hero'
+                ? `Sayfa başlıkları (${heroes.length})`
+                : m.id === 'telegram'
+                  ? 'Telegram botları'
+                  : m.label,
+        }
+        // A view sits right under the module it is listed after, whether or not the account can open that module.
+        const views = PANEL_VIEWS.filter((v) => v.after === m.id && allowed.includes(v.needs)).map((v): NavItem => ({ id: v.id, label: v.label, hint: v.hint, pending: pending[v.id] ?? 0 }))
+        return visible ? [own, ...views] : views
+      }),
     })),
     {
       id: 'settings',
@@ -262,6 +281,24 @@ export function ContentEditor({
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useEffect(() => {
+    // A search hit opens its section with `f`; bring that record into view and mark it for a moment.
+    const find = new URLSearchParams(window.location.search).get('f')
+    const el = find ? contentRef.current?.querySelector<HTMLElement>(`[data-find="${CSS.escape(find)}"]`) : null
+    if (!el) return
+    el.scrollIntoView({ block: 'center' })
+    el.classList.add(...FOUND_MARK)
+    const t = setTimeout(() => {
+      el.classList.remove(...FOUND_MARK)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('f')
+      window.history.replaceState(window.history.state, '', url)
+    }, 4000)
+    return () => {
+      clearTimeout(t)
+      el.classList.remove(...FOUND_MARK)
+    }
+  }, [])
   const guard = useUnsavedGuard(contentRef)
   useActionPulse()
   const pick = async (id: PanelTab) => {
@@ -272,6 +309,19 @@ export function ContentEditor({
     setTab(id)
     window.scrollTo({ top: 0 })
     startLoading(() => router.push(id === 'dashboard' ? '/panel' : `/panel?b=${id}`, { scroll: false }))
+  }
+  const openHit = async (h: SearchHit) => {
+    setFilter('')
+    setNavOpen(false)
+    if (guard.count && !(await askConfirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?'))) return
+    guard.clear()
+    // The open section reads its tab and filters from the address only when it mounts, so a hit inside it needs a fresh load.
+    if (h.tab === tab) {
+      window.location.assign(h.href)
+      return
+    }
+    setTab(h.tab as PanelTab)
+    startLoading(() => router.push(h.href, { scroll: false }))
   }
   const moderationItem = { id: 'moderation' as PanelTab, label: 'Moderasyon kuyruğu', hint: 'Onay bekleyen kanıt, yorum, şikayet, görev ve market talepleri tek yerde', pending: 0 }
   const currentGroup = groups.find((g) => g.items.some((i) => i.id === tab))
@@ -320,10 +370,12 @@ export function ContentEditor({
                   if (first) {
                     setFilter('')
                     pick(first.id as PanelTab)
+                  } else if (hits[0]) {
+                    openHit(hits[0])
                   }
                 }
               }}
-              placeholder="Bölüm, üye, sponsor, yazı ara"
+              placeholder="Bölüm, ayar, üye, kayıt ara"
               className="h-8 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <kbd className="hidden shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground lg:inline">Ctrl K</kbd>
@@ -355,33 +407,19 @@ export function ContentEditor({
             <div className="flex flex-col gap-0.5" aria-live="polite">
               <span className="flex items-center gap-2 px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Search className="size-3.5" aria-hidden="true" />
-                Kayıtlar
+                Ayarlar ve kayıtlar
               </span>
               {searching && hits.length === 0 && <p className="px-2 text-sm text-muted-foreground">Aranıyor...</p>}
               {hits.map((h) => (
                 <button
                   key={`${h.kind}-${h.id}`}
                   type="button"
-                  onClick={async () => {
-                    setFilter('')
-                    setNavOpen(false)
-                    if (guard.count && !(await askConfirm('Kaydedilmemiş değişiklikler var. Kaydetmeden çıkılsın mı?'))) return
-                    guard.clear()
-                    setTab(h.tab)
-                    const url = h.kind === 'member' ? `/panel?b=users&q=${encodeURIComponent(h.query)}` : `/panel?b=${h.tab}`
-                    if (h.kind === 'member' && tab === 'users') {
-                      window.location.assign(url)
-                      return
-                    }
-                    startLoading(() => router.push(url, { scroll: false }))
-                  }}
-                  className="flex flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-secondary"
+                  onClick={() => openHit(h)}
+                  className="flex flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-secondary max-lg:min-h-9"
                 >
                   <span className="flex w-full items-center gap-2 text-sm text-foreground">
                     <span className="truncate">{h.title}</span>
-                    <span className="ml-auto shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground">
-                      {h.kind === 'member' ? 'Üye' : h.kind === 'sponsor' ? 'Sponsor' : 'Yazı'}
-                    </span>
+                    <span className="ml-auto shrink-0 rounded border border-border px-1.5 text-xs text-muted-foreground">{HIT_LABEL[h.kind]}</span>
                   </span>
                   {h.detail && <span className="w-full truncate text-xs text-muted-foreground">{h.detail}</span>}
                 </button>
@@ -514,6 +552,10 @@ export function ContentEditor({
         seo
       ) : tab === 'community' ? (
         community
+      ) : tab === 'home' ? (
+        home
+      ) : tab === 'withdrawals' ? (
+        withdrawals
       ) : tab === 'badges' ? (
         badges
       ) : tab === 'tasks' ? (

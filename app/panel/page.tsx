@@ -180,7 +180,9 @@ import { LimitsManager } from '@/components/panel/limits-manager'
 import { listLimits } from '@/lib/member-limits'
 import { StaffManager, type StaffRow } from '@/components/panel/staff-manager'
 import { AccountSettings } from '@/components/panel/account-settings'
-import { cleanPermissions, telegramAccess, type TelegramAccess } from '@/lib/panel-modules'
+import { cleanPermissions, movedAddress, rowPermission, tabHome, telegramAccess, type PanelView, type TelegramAccess } from '@/lib/panel-modules'
+import { redirect } from 'next/navigation'
+import { WithdrawManager } from '@/components/panel/withdraw-manager'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
@@ -245,13 +247,13 @@ function failed(label: string) {
 type SectionCtx = { session: PanelSession; active: string }
 
 /** Loads a panel section only when it is the open one and the account may see it, so other sections never query their data. */
-async function section({ session, active }: SectionCtx, module: PanelModule, label: string, load: () => Promise<ReactNode> | ReactNode): Promise<ReactNode> {
-  if (active !== module) return null
-  if (!session.isOwner && !session.permissions.includes(module)) return null
+async function section({ session, active }: SectionCtx, id: PanelModule | PanelView, label: string, load: () => Promise<ReactNode> | ReactNode): Promise<ReactNode> {
+  if (active !== id) return null
+  if (!session.isOwner && !session.permissions.includes(rowPermission(id))) return null
   try {
     return await load()
   } catch (error) {
-    console.error(`[panel:${module}]`, error)
+    console.error(`[panel:${id}]`, error)
     return failed(label)
   }
 }
@@ -470,10 +472,10 @@ async function telegramSection({ session, active }: SectionCtx): Promise<ReactNo
   }
 }
 
-async function marketPanel() {
+async function marketPanel(themesHere: boolean) {
   const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
-  const themeCatalog = await getThemeCatalog().catch(miss(DEFAULT_OFFERS))
+  const themeCatalog = themesHere ? await getThemeCatalog().catch(miss(DEFAULT_OFFERS)) : null
   const [avatars, stats, coverRows] = await Promise.all([
     listCatalog({ includeInactive: true }),
     avatarStats(),
@@ -486,7 +488,7 @@ async function marketPanel() {
       tabs={[
         { id: 'products', label: `Ürünler & talepler${requests.length ? ` (${requests.length})` : ''}`, content: <MarketManager products={products} requests={requests} sponsors={sponsors} /> },
         { id: 'avatars', label: 'Avatarlar & kapaklar', content: <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} /> },
-{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> },
+        ...(themeCatalog ? [{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> }] : []),
       ]}
     />
   )
@@ -533,7 +535,7 @@ async function staffPanel() {
 
 export const metadata: Metadata = { title: { absolute: 'Yönetim paneli | AL KANKA' }, robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
-export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; r?: string; from?: string; to?: string }> }) {
+export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; s?: string; r?: string; from?: string; to?: string }> }) {
   const [session, params] = await Promise.all([getPanelSession(), searchParams])
   if (!session) {
     return (
@@ -543,9 +545,23 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )
   }
 
-  const content = await getAllContent()
   const can = (m: PanelModule) => session.isOwner || session.permissions.includes(m)
+  const moved = movedAddress(params.b, params.s, can)
+  if (moved) {
+    const next = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+    next.set('b', moved.b)
+    if (moved.s) next.set('s', moved.s)
+    else next.delete('s')
+    redirect(`/panel?${next}`)
+  }
+
+  const content = await getAllContent()
   const allowed = session.isOwner ? null : session.permissions
+  const adsTab = (stats: Awaited<ReturnType<typeof readPromoTotals>>) => ({
+    id: 'ads',
+    label: 'Reklam alanları',
+    content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} stats={stats} />,
+  })
   const active = params.b || 'dashboard'
   const ctx: SectionCtx = { session, active }
 
@@ -608,6 +624,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     rewards,
     catalog,
     users,
+    home,
+    withdrawals,
   ] = await Promise.all([
     section(ctx, 'texts', 'Site yazıları', () => (
       <TelegramTabs
@@ -623,14 +641,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
     }),
     section(ctx, 'logo', 'Logolar', async () => {
-      const [logoSponsors, adStats] = await Promise.all([listLogoSponsors(), readPromoTotals('ad')])
+      const [logoSponsors, adStats] = await Promise.all([listLogoSponsors(), tabHome('ads', can) === 'logo' ? readPromoTotals('ad') : null])
       return (
         <TelegramTabs
-          label="Paylaşım, reklam ve logolar"
+          label="Paylaşım ve logolar"
           tabs={[
-            { id: 'home-v2', label: 'Ana sayfa & Masa aç', content: <HomeV2Editor initial={mergeHomeV2(content[HOME_V2_KEY])} /> },
             { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
-            { id: 'ads', label: 'Reklam alanları', content: <AdsEditor saved={(content[ADS_KEY] as AdMap | undefined) ?? {}} stats={adStats} /> },
+            ...(adStats ? [adsTab(adStats)] : []),
             {
               id: 'sponsor-logos',
               label: `Sponsor logoları (${logoSponsors.length})`,
@@ -693,7 +710,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'growth', 'Büyüme', async () => {
       const [referral, ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
         getReferralSettings(),
-        getAmbientSettings(),
+        tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
         siteOptions(),
         listSites().catch(miss([])),
         getSiteLinks().catch(miss({})),
@@ -727,17 +744,18 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
               ),
             },
             { id: 'referral', label: 'Davet sistemi', content: <ReferralEditor settings={referral} /> },
-            { id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> },
+            ...(ambient ? [{ id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> }] : []),
           ]}
         />
       )
     }),
     section(ctx, 'marketing', 'Pazarlama', async () => {
-      const [tracking, campaigns, earnings, mSites] = await Promise.all([
+      const [tracking, campaigns, earnings, mSites, adStats] = await Promise.all([
         getTracking(),
         listCampaigns().catch(miss([])),
         listEarnings().catch(miss([])),
         listSites().catch(miss([])),
+        tabHome('ads', can) === 'marketing' ? readPromoTotals('ad').catch(miss<Awaited<ReturnType<typeof readPromoTotals>>>({})) : null,
       ])
       const opts = mSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))
       return (
@@ -747,6 +765,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
             label="Pazarlama bölümleri"
             tabs={[
               { id: 'campaigns', label: 'Kampanya linkleri', content: <CampaignsManager campaigns={campaigns} sites={opts} siteUrl={SITE_URL} /> },
+              ...(adStats ? [adsTab(adStats)] : []),
               { id: 'earnings', label: 'Affiliate hakediş', content: <EarningsManager earnings={earnings} sites={opts} /> },
               { id: 'tracking', label: 'Ölçüm etiketleri', content: <TrackingEditor settings={tracking} /> },
             ]}
@@ -762,17 +781,6 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         complaints={await adminComplaints().catch(miss([]))}
         matches={await listLeagueMatches(null, { admin: true }).catch(miss([]))}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
-        withdraw={await (async () => {
-          const w = await import('@/lib/withdrawals')
-          const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
-            w.adminWithdrawals().catch(miss([])),
-            w.getWithdrawSettings().catch(miss(w.WITHDRAW_DEFAULTS)),
-            w.listSiteRewards().catch(miss([])),
-            siteOptions().catch(miss([])),
-            w.listWithdrawBlocks().catch(miss([])),
-          ])
-          return { shares, settings, siteRewards, sites: sites.map((s) => ({ id: s.id, name: s.name })), blocks }
-        })()}
       />
     )),
     section(ctx, 'badges', 'Rozet sistemi', kpPanel),
@@ -780,7 +788,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       const [list, claims, sites] = await Promise.all([listTasks(), listPendingClaims(), siteOptions().catch(miss([]))])
       return <TasksManager tasks={list} claims={claims} sites={sites.map((x) => ({ id: x.id, name: x.name }))} />
     }),
-    section(ctx, 'market', 'Market', marketPanel),
+    section(ctx, 'market', 'Market', () => marketPanel(tabHome('themes', can) === 'market')),
     section(ctx, 'social', 'Sosyal medya', async () => (
       <SocialManager
         links={await getSocialLinks().catch(miss(({}) as SocialLinks))}
@@ -794,34 +802,49 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       />
     )),
     section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch(miss([]))} />),
-    section(ctx, 'games', 'Oyun ayarları', async () => (
-      <div className="flex flex-col gap-6">
-        <GameStats />
-        <TableMetrics />
-        <OpenTables
-          now={Date.now()}
-          tables={await import('@/lib/pvp/tables')
-            .then((m) => m.listOpenTables())
-            .then((list) =>
-              list.map((t) => ({
-                id: t.id,
-                game: t.game,
-                status: t.status as 'bekliyor' | 'oynaniyor',
-                stake: t.stake,
-                seats: t.seats,
-                players: t.players.map((pl) => ({ name: pl.name, bot: Boolean(pl.bot) })),
-                updatedAt: t.updatedAt,
-                createdAt: t.createdAt,
-              })),
-            )
-            .catch(miss([]))}
+    section(ctx, 'games', 'Oyun ayarları', async () => {
+      const [openTables, ambient, themeCatalog] = await Promise.all([
+        import('@/lib/pvp/tables')
+          .then((m) => m.listOpenTables())
+          .then((list) =>
+            list.map((t) => ({
+              id: t.id,
+              game: t.game,
+              status: t.status as 'bekliyor' | 'oynaniyor',
+              stake: t.stake,
+              seats: t.seats,
+              players: t.players.map((pl) => ({ name: pl.name, bot: Boolean(pl.bot) })),
+              updatedAt: t.updatedAt,
+              createdAt: t.createdAt,
+            })),
+          )
+          .catch(miss([])),
+        tabHome('ambient', can) === 'games' ? getAmbientSettings().catch(miss(null)) : null,
+        tabHome('themes', can) === 'games' ? getThemeCatalog().catch(miss(DEFAULT_OFFERS)) : null,
+      ])
+      const tables = (
+        <div className="flex flex-col gap-6">
+          <GameStats />
+          <TableMetrics />
+          <OpenTables now={Date.now()} tables={openTables} />
+          <ArenaSettingsEditor
+            settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
+            winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
+          />
+        </div>
+      )
+      if (!ambient && !themeCatalog) return tables
+      return (
+        <TelegramTabs
+          label="Oyun bölümleri"
+          tabs={[
+            { id: 'tables', label: 'Ayarlar & masalar', content: tables },
+            ...(ambient ? [{ id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> }] : []),
+            ...(themeCatalog ? [{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> }] : []),
+          ]}
         />
-        <ArenaSettingsEditor
-          settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
-          winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
-        />
-      </div>
-    )),
+      )
+    }),
     section(ctx, 'tournaments', 'Turnuvalar', async () => <TournamentManager tournaments={await listTournaments()} />),
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     telegramSection(ctx),
@@ -862,6 +885,18 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <CatalogEditor catalog={catalog} sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))} library={IMAGE_LIBRARY} hidden={hidden} />
     }),
     section(ctx, 'users', 'Tüm üyeler', usersPanel),
+    section(ctx, 'home', 'Ana sayfa ayarları', () => <HomeV2Editor initial={mergeHomeV2(content[HOME_V2_KEY])} />),
+    section(ctx, 'withdrawals', 'Çekim paylaşımları', async () => {
+      const w = await import('@/lib/withdrawals')
+      const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
+        w.adminWithdrawals().catch(miss([])),
+        w.getWithdrawSettings().catch(miss(w.WITHDRAW_DEFAULTS)),
+        w.listSiteRewards().catch(miss([])),
+        siteOptions().catch(miss([])),
+        w.listWithdrawBlocks().catch(miss([])),
+      ])
+      return <WithdrawManager shares={shares} settings={settings} siteRewards={siteRewards} sites={sites.map((s) => ({ id: s.id, name: s.name }))} blocks={blocks} />
+    }),
   ])
   const audit =
     session.isOwner && active === 'audit'
@@ -888,7 +923,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     onDash && session.isOwner ? loadSystemStatus({ totpEnabled: session.totpEnabled }).catch(miss(null)) : null,
   ])
   const pending: Record<string, number> = {
-    community: detail.reviews + detail.complaints + detail.withdrawals + (detail.proofs ?? 0),
+    community: detail.reviews + detail.complaints + (detail.proofs ?? 0),
+    withdrawals: detail.withdrawals,
     tasks: detail.claims,
     market: detail.market,
     growth: detail.sponsorAccounts ?? 0,
@@ -939,6 +975,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           growth={growth}
           marketing={marketing}
           community={community}
+          home={home}
+          withdrawals={withdrawals}
           badges={badges}
           tasks={tasks}
           market={market}

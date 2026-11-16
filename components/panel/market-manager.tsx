@@ -92,7 +92,7 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
 
           <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
             {products.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+              <li key={p.id} data-find={`product-${p.id}`} className="flex flex-wrap items-center gap-3 p-3 text-sm">
                 <span className={cn('rounded px-2 py-0.5 text-xs font-bold uppercase', p.kind === 'sponsor' ? 'bg-accent text-accent-foreground' : 'bg-secondary text-foreground')}>
                   {p.kind === 'sponsor' ? p.sponsorName : 'AL KANKA'}
                 </span>
