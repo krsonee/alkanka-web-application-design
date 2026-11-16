@@ -48,8 +48,9 @@ async function kankatvTick() {
 
 async function hubTickSlot() {
   if (!(await claim('auto_tick_hub', HUB_EVERY_SEC))) return
-  const { hubTick } = await import('@/lib/tg-hub-jobs')
-  await hubTick()
+  const [{ hubTick }, { runOutbox }] = await Promise.all([import('@/lib/tg-hub-jobs'), import('@/lib/outbox')])
+  // Scheduled notifications and inbox messages share this slot, so they cost no claim of their own.
+  await Promise.all([hubTick(), runOutbox().catch((e) => console.error('[auto-tick] outbox', e))])
 }
 
 let lastPostAttempt = 0

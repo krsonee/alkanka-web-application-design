@@ -4,10 +4,13 @@ import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel, getPanelSession } from '@/lib/panel-auth'
 import { findMember } from '@/lib/member-limits'
-import { deleteMessage, sendMessage } from '@/lib/inbox'
-import { rows, sql } from '@/lib/db'
+import { deleteMessage, memberLabel, sendMessage } from '@/lib/inbox'
+import { deleteTemplate, saveTemplate } from '@/lib/outbox'
+import { MAX_TEMPLATES, cleanMessage, type SendResult } from '@/lib/outbox-shared'
 
-type Result = { ok: true; message: string } | { ok: false; error: string }
+type Result = SendResult
+
+const NO_ACCESS: Result = { ok: false, error: 'Bu bölüm için yetkin yok.' }
 
 export async function searchMembersForMessage(query: string) {
   if (!(await canPanel('messages'))) return []
@@ -15,28 +18,23 @@ export async function searchMembersForMessage(query: string) {
 }
 
 export async function sendInboxMessage(input: { userId: string | null; title: string; body: string; url: string; imageUrl?: string }): Promise<Result> {
-  if (!(await canPanel('messages'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
-  const title = String(input.title ?? '').trim().slice(0, 80)
-  const body = String(input.body ?? '').trim().slice(0, 1000)
-  const rawUrl = String(input.url ?? '').trim()
-  const imageUrl = String(input.imageUrl ?? '').trim()
-  if (imageUrl && !/^\/api\/logo\/[a-z0-9._-]+$/i.test(imageUrl)) return { ok: false, error: 'Görsel geçersiz, tekrar yükle.' }
-  if (!title || (!body && !imageUrl)) return { ok: false, error: 'Başlık ve mesaj (ya da görsel) zorunlu.' }
-  if (rawUrl && (!rawUrl.startsWith('/') || rawUrl.startsWith('//'))) return { ok: false, error: 'Link / ile başlamalı (ör. /oyunlar/cark).' }
+  if (!(await canPanel('messages'))) return NO_ACCESS
+  const clean = cleanMessage(input)
+  if (!clean.ok) return clean
 
   let targetLabel = 'Tüm üyeler'
   const userId = input.userId ? String(input.userId) : null
   if (userId) {
-    const u = await rows<{ name: string | null; email: string }>(sql`SELECT name, email FROM "user" WHERE id = ${userId}`)
-    if (!u[0]) return { ok: false, error: 'Üye bulunamadı.' }
-    targetLabel = u[0].name || u[0].email
+    const label = await memberLabel(userId)
+    if (!label) return { ok: false, error: 'Üye bulunamadı.' }
+    targetLabel = label
   }
 
   try {
     const session = await getPanelSession()
-    await sendMessage({ userId, targetLabel, title, body, url: rawUrl ? rawUrl.slice(0, 200) : null, imageUrl: imageUrl || null, sentBy: session?.username ?? '' })
+    await sendMessage({ userId, targetLabel, ...clean.value, sentBy: session?.username ?? '' })
     revalidatePath('/panel')
-    await logPanel('messages', userId ? 'Üyeye mesaj gönderildi' : 'Tüm üyelere mesaj gönderildi', userId ? targetLabel : null, title)
+    await logPanel('messages', userId ? 'Üyeye mesaj gönderildi' : 'Tüm üyelere mesaj gönderildi', userId ? targetLabel : null, clean.value.title)
     return { ok: true, message: userId ? `${targetLabel} adlı üyeye gönderildi.` : 'Tüm üyelere gönderildi.' }
   } catch (error) {
     console.error('[inbox] gönderilemedi', error)
@@ -45,9 +43,31 @@ export async function sendInboxMessage(input: { userId: string | null; title: st
 }
 
 export async function deleteInboxMessage(id: number): Promise<Result> {
-  if (!(await canPanel('messages'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
+  if (!(await canPanel('messages'))) return NO_ACCESS
   await deleteMessage(Number(id))
   revalidatePath('/panel')
   await logPanel('messages', 'Mesaj silindi', `Mesaj #${id}`)
   return { ok: true, message: 'Mesaj silindi.' }
+}
+
+export async function saveMessageTemplate(input: { title: string; body: string; url: string }): Promise<Result> {
+  if (!(await canPanel('messages'))) return NO_ACCESS
+  const clean = cleanMessage(input)
+  if (!clean.ok) return clean
+  if (!clean.value.body) return { ok: false, error: 'Şablon için mesaj metni gerekli.' }
+  const session = await getPanelSession()
+  const outcome = await saveTemplate({ title: clean.value.title, body: clean.value.body, url: clean.value.url ?? '', by: session?.username ?? '' })
+  if (outcome === 'full') return { ok: false, error: `En fazla ${MAX_TEMPLATES} şablon saklanır. Önce kullanmadığın birini sil.` }
+  revalidatePath('/panel')
+  await logPanel('messages', outcome === 'updated' ? 'Mesaj şablonu güncellendi' : 'Mesaj şablonu kaydedildi', clean.value.title)
+  return { ok: true, message: outcome === 'updated' ? 'Aynı başlıklı şablon güncellendi.' : 'Şablon kaydedildi.' }
+}
+
+export async function deleteMessageTemplate(id: number): Promise<Result> {
+  if (!(await canPanel('messages'))) return NO_ACCESS
+  const title = await deleteTemplate(Number(id))
+  if (!title) return { ok: false, error: 'Şablon bulunamadı.' }
+  revalidatePath('/panel')
+  await logPanel('messages', 'Mesaj şablonu silindi', title)
+  return { ok: true, message: 'Şablon silindi.' }
 }

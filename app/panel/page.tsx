@@ -38,6 +38,7 @@ import { MOBILE_SEGMENTS, mobileCounts, PUSH_TOPICS } from '@/lib/mobile'
 import { getAppSettings } from '@/lib/app-settings'
 import { MessageSender } from '@/components/panel/message-sender'
 import { listSent } from '@/lib/inbox'
+import { listOutbox, listTemplates } from '@/lib/outbox'
 import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
 import { RewardsEditor } from '@/components/panel/rewards-editor'
 import { CatalogEditor } from '@/components/panel/catalog-editor'
@@ -850,8 +851,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     telegramSection(ctx),
     section(ctx, 'push', 'Bildirimler', async () => {
-      const [stats, appSettings, mCounts] = await Promise.all([
+      const [stats, pushOutbox, appSettings, mCounts] = await Promise.all([
         pushStats().catch(miss({ total: 0, members: 0, log: [] })),
+        listOutbox('push').catch(miss([])),
         getAppSettings(),
         mobileCounts().catch(miss({ total: 0, installed: 0, push: 0, both: 0, none: 0, opensToday: 0, turnedOff: 0 })),
       ])
@@ -860,7 +862,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <TelegramTabs
           label="Bildirim bölümleri"
           tabs={[
-            { id: 'send', label: 'Bildirim gönder', content: <PushSender {...stats} configured={stats.total > 0} /> },
+            { id: 'send', label: 'Bildirim gönder', content: <PushSender {...stats} configured={stats.total > 0} outbox={pushOutbox} /> },
             { id: 'mobile', label: 'Mobil', content: <MobilePanel counts={mCounts} segments={MOBILE_SEGMENTS} topicLabels={topicLabels} /> },
             { id: 'app-rewards', label: 'Uygulama ödülleri', content: <AppRewardsEditor settings={appSettings} /> },
           ]}
@@ -876,7 +878,10 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
       />
     )),
-    section(ctx, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
+    section(ctx, 'messages', 'Site içi mesajlar', async () => {
+      const [sent, outbox, templates] = await Promise.all([listSent(), listOutbox('message').catch(miss([])), listTemplates().catch(miss([]))])
+      return <MessageSender sent={sent} outbox={outbox} templates={templates} />
+    }),
     section(ctx, 'rewards', 'Ödül ayarları', async () => {
       const [config, hidden, winRate] = await Promise.all([getRewardConfig(), getHidden(), getHouseWinRate()])
       return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} />

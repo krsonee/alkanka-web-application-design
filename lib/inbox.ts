@@ -20,6 +20,8 @@ export type SentMessage = {
   createdAt: string
   target: string
   reads: number
+  /** How many members could see it: everyone who had joined by then for a broadcast, 1 for a personal message. */
+  audience: number
   sentBy: string
   /** Sent to every member rather than to one inbox. */
   toAll: boolean
@@ -116,6 +118,12 @@ export async function sendMessage(input: { userId: string | null; targetLabel: s
   return Number(r[0].id)
 }
 
+/** The name a message to this member is filed under, or null when there is no such member. */
+export async function memberLabel(userId: string) {
+  const [u] = await rows<{ name: string | null; email: string }>(sql`SELECT name, email FROM "user" WHERE id = ${userId}`)
+  return u ? u.name || u.email : null
+}
+
 export async function deleteMessage(id: number) {
   await ensure()
   await rows(sql`DELETE FROM member_messages WHERE id = ${id}`)
@@ -124,9 +132,10 @@ export async function deleteMessage(id: number) {
 export async function listSent(limit = 30): Promise<SentMessage[]> {
   await ensure()
   // Only the panel's message form signs with a panel username; rewards, gifts and approvals sign with "Sistem" or an event name.
-  const r = await rows<{ id: number; title: string; body: string; url: string | null; image_url: string | null; created_at: string; target_label: string; reads: string; sent_by: string; to_all: boolean; manual: boolean }>(
+  const r = await rows<{ id: number; title: string; body: string; url: string | null; image_url: string | null; created_at: string; target_label: string; reads: string; audience: string; sent_by: string; to_all: boolean; manual: boolean }>(
     sql`SELECT m.id, m.title, m.body, m.url, m.image_url, m.created_at, m.target_label, m.sent_by,
         m.user_id IS NULL AS to_all,
+        CASE WHEN m.user_id IS NULL THEN (SELECT count(*) FROM "user" u WHERE u."createdAt" <= m.created_at) ELSE 1 END AS audience,
         (m.sent_by = '' OR EXISTS (SELECT 1 FROM panel_accounts a WHERE a.username = m.sent_by)) AS manual,
         (SELECT count(*) FROM member_message_reads r WHERE r.message_id = m.id) AS reads
       FROM member_messages m ORDER BY m.created_at DESC LIMIT ${limit}`,
@@ -140,6 +149,7 @@ export async function listSent(limit = 30): Promise<SentMessage[]> {
     createdAt: new Date(m.created_at).toISOString(),
     target: m.target_label,
     reads: Number(m.reads),
+    audience: Number(m.audience),
     sentBy: m.sent_by,
     toAll: Boolean(m.to_all),
     manual: Boolean(m.manual),
