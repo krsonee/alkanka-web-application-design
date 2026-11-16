@@ -98,12 +98,17 @@ function encrypt(value: string) {
 
 /** Older secrets are tried too, so a bot added before a rotation keeps posting. */
 function decrypt(value: string) {
-  const [iv, tag, data] = value.split('.').map((p) => Buffer.from(p, 'base64'))
-  return openWithAny(cipherKeys(), (key) => {
-    const decipher = createDecipheriv('aes-256-gcm', key, iv)
-    decipher.setAuthTag(tag)
-    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
-  })
+  try {
+    const [iv, tag, data] = value.split('.').map((p) => Buffer.from(p, 'base64'))
+    return openWithAny(cipherKeys(), (key) => {
+      const decipher = createDecipheriv('aes-256-gcm', key, iv)
+      decipher.setAuthTag(tag)
+      return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
+    })
+  } catch {
+    // Node's own text ("Invalid initialization vector") reaches the panel as is and tells the admin nothing.
+    throw new Error('Kayıtlı bot anahtarı okunamadı. Telegram bölümünde botu silip anahtarıyla yeniden ekle.')
+  }
 }
 
 export function normalizeChannel(input: string) {

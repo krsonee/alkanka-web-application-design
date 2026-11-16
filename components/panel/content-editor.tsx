@@ -28,7 +28,8 @@ import {
   MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
-import { askConfirm, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
+import { askConfirm, notify, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
+import { MAX_CUSTOM_SLIDES } from '@/lib/custom-slides'
 import { useActionPulse } from '@/components/panel/flash'
 import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
@@ -569,7 +570,7 @@ function NavButton({ active, onClick, label, pending, icon: Icon }: { active: bo
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition-colors',
+        'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition-colors max-lg:min-h-9',
         active ? 'bg-primary text-primary-foreground' : 'text-foreground/80 hover:bg-secondary hover:text-foreground',
       )}
     >
@@ -652,7 +653,7 @@ function AddSlideCard() {
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-lg font-bold text-foreground">Yeni slayt ekle</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Ana sayfa slider&apos;ına istediğin kadar yeni slayt ekle. Eklenen slayt listenin sonuna düşer, görselini bilgisayardan yükleyebilirsin.
+          Ana sayfa slider&apos;ına en fazla {MAX_CUSTOM_SLIDES} yeni slayt ekleyebilirsin. Eklenen slayt listenin sonuna düşer, görselini bilgisayardan yükleyebilirsin.
         </p>
       </div>
       <button
@@ -764,7 +765,12 @@ function ItemCard({
 }) {
   const isSlide = item.kind === 'slide'
   const [saveState, saveAction, saving] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
-  const [resetState, resetAction, resetting] = useActionState<ActionState, FormData>(isSlide ? resetSlide : resetHero, {})
+  const [resetState, resetAction, resetting] = useActionState<ActionState, FormData>(async (prev, form) => {
+    const result = await (isSlide ? resetSlide : resetHero)(prev, form)
+    // A deleted slide's card is gone before its own status line could show the result.
+    if (item.custom && result.message) notify(Boolean(result.ok), result.message)
+    return result
+  }, {})
   const [image, setImage] = useState(item.saved?.image || '')
   const value = (k: keyof Fields) => item.saved?.[k] ?? ''
   const initialLive = (): LiveFields =>
@@ -804,7 +810,7 @@ function ItemCard({
 
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="relative aspect-[16/7] bg-secondary">
+      <div className="relative aspect-[16/11] bg-secondary sm:aspect-[16/7]">
         <Image src={preview || '/placeholder.svg'} alt="" fill sizes="(min-width: 1536px) 520px, 600px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
         <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">

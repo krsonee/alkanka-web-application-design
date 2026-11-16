@@ -602,7 +602,20 @@ type Member = { id: string; name: string; email: string }
 function MemberPicker({ value, onChange }: { value: Member | null; onChange: (m: Member | null) => void }) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Member[]>([])
+  const [note, setNote] = useState('')
   const [loading, start] = useTransition()
+  const search = () => {
+    if (q.trim().length < 2) {
+      setResults([])
+      return setNote('Aramak için en az 2 karakter yaz.')
+    }
+    setNote('')
+    start(async () => {
+      const found = await findMembers(q)
+      setResults(found)
+      setNote(found.length ? '' : 'Bu aramaya uyan üye yok. Adı ya da e-postayı kontrol et.')
+    })
+  }
   if (value) {
     return (
       <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
@@ -620,14 +633,14 @@ function MemberPicker({ value, onChange }: { value: Member | null; onChange: (m:
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               e.preventDefault()
-              start(async () => setResults(await findMembers(q)))
+              search()
             }
           }}
           placeholder="Üye adı ya da e-posta"
           className={field}
           aria-label="Üye ara"
         />
-        <button type="button" onClick={() => start(async () => setResults(await findMembers(q)))} disabled={loading} className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-secondary">
+        <button type="button" onClick={search} disabled={loading} className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-secondary">
           <Search className="size-4" aria-hidden /> Ara
         </button>
       </div>
@@ -642,6 +655,11 @@ function MemberPicker({ value, onChange }: { value: Member | null; onChange: (m:
             </li>
           ))}
         </ul>
+      )}
+      {note && !loading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {note}
+        </p>
       )}
     </div>
   )

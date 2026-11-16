@@ -61,7 +61,7 @@ export function HideButton({
       aria-label={`${label ? `${label}: ` : ''}${isHidden ? 'Göster' : 'Gizle'}`}
       aria-pressed={isHidden}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold transition-colors disabled:opacity-60',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold transition-colors disabled:opacity-60 max-sm:min-h-9 max-sm:px-3',
         isHidden
           ? 'border-primary/60 bg-primary/10 text-primary hover:bg-primary/20'
           : 'border-border text-foreground hover:bg-secondary',

@@ -883,7 +883,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     onDash && can('users') ? memberCounts().catch(miss(null)) : null,
     onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
-    onDash && session.isOwner ? loadSystemStatus().catch((error) => (console.error('[panel:system-status]', error), null)) : null,
+    onDash && session.isOwner ? loadSystemStatus({ totpEnabled: session.totpEnabled }).catch((error) => (console.error('[panel:system-status]', error), null)) : null,
   ])
   const pending: Record<string, number> = {
     community: detail.reviews + detail.complaints + detail.withdrawals + (detail.proofs ?? 0),

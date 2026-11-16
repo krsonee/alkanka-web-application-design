@@ -392,6 +392,14 @@ export async function saveTask(input: TaskInput): Promise<number> {
   if (kind === 'secret_code' && (!param || param.length < 3)) throw new Error('Gizli kod en az 3 karakter olmalı.')
   const approval = isAutoKind(kind) ? false : needsApproval
   await ensureTasks()
+  // Two tasks with one name look like a single task to members. A task that already shares its name can still be edited.
+  const editingId = input.id != null && input.id !== 0 ? Number(input.id) : 0
+  // Compared here, not in SQL: the database's lower() does not fold İ/I the Turkish way.
+  const nameKey = (s: string) => s.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr')
+  const all = await rows<{ id: number; title: string }>(sql`SELECT id, title FROM tasks`)
+  const sameName = all.filter((t) => nameKey(t.title) === nameKey(title))
+  const keepsOwnName = sameName.some((t) => Number(t.id) === editingId)
+  if (!keepsOwnName && sameName.length) throw new Error(`"${title}" adında bir görev zaten var. Başka bir ad yaz ya da var olanı düzenle.`)
   const active = Boolean(input.active)
   const category = input.category === undefined ? null : isCategory(input.category) ? input.category : 'genel'
   const pool = input.pool === undefined ? null : Boolean(input.pool)

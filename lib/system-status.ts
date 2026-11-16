@@ -23,7 +23,7 @@ function runState(lastRunAt: string | Date | null | undefined, lastError: string
 
 const settled = <T,>(p: Promise<T>) => p.then((v) => v).catch(() => null)
 
-export async function loadSystemStatus(): Promise<StatusItem[]> {
+export async function loadSystemStatus(account?: { totpEnabled: boolean }): Promise<StatusItem[]> {
   const [bots, suite, share, chat, tv, bets, verify, tracking, tvCfg, betsCfg] = await Promise.all([
     settled(listBots()),
     settled(getBotSuite()),
@@ -41,6 +41,17 @@ export async function loadSystemStatus(): Promise<StatusItem[]> {
   const seo = '/panel?b=seo'
   const mk = '/panel?b=marketing'
   const items: StatusItem[] = []
+
+  if (account) {
+    items.push({
+      id: '2fa',
+      group: 'Güvenlik',
+      label: 'İki adımlı doğrulama',
+      level: account.totpEnabled ? 'ok' : 'warn',
+      detail: account.totpEnabled ? 'Bu hesapta açık' : 'Ana yönetici hesabında kapalı: şifre tek başına paneli açıyor',
+      href: '/panel?b=account',
+    })
+  }
 
   // A row in the bot table is not a working bot: an unreadable token means it cannot send anything.
   const botCount = bots?.length ?? 0
