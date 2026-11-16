@@ -46,7 +46,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Ölçüm etiketleri', words: 'piksel analytics gtm meta tiktok', row: 'marketing', query: 's=tracking' },
   { title: 'Trafik & hesaplar', words: 'sponsor hesabı eşleştirme tıklama', row: 'growth', query: 's=traffic' },
   { title: 'Davet sistemi', words: 'referans arkadaşını getir davet ödülü', row: 'growth', query: 's=referral' },
-  { title: 'Masa doluluğu', words: 'canlı masa görünümü kalabalık', query: 's=ambient', moved: 'ambient' },
+  { title: 'Masa doluluğu', words: 'doluluk canlı masa görünümü kalabalık', query: 's=ambient', moved: 'ambient' },
   { title: 'Üyelik kapısı', words: 'yeni kayıt kapat aç kayıt olma', row: 'users' },
   { title: 'Yorum onayı', row: 'community', query: 's=reviews' },
   { title: 'Kanıt & karne', words: 'ekran görüntüsü kanıtlı yorum', row: 'community', query: 's=kanit' },
