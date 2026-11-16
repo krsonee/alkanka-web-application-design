@@ -1,46 +1,9 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { getPanelSession } from '@/lib/panel-auth'
+import { ensureContentHistory as ensureHistory } from '@/lib/content'
 import { HISTORY_PAGE_SIZE, trackedSetting, type HistoryChange, type HistoryPage, type HistoryRow } from '@/lib/panel-log-shared'
 
-const KEEP_PER_KEY = 40
 const MAX_CHANGES = 12
-
-let ready: Promise<void> | null = null
-
-function ensureHistory() {
-  ready ??= (async () => {
-    await rows(sql`CREATE TABLE IF NOT EXISTS site_content_history (
-      id bigserial PRIMARY KEY, key text NOT NULL, before jsonb, after jsonb, actor text NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now())`)
-    await rows(sql`CREATE INDEX IF NOT EXISTS site_content_history_key ON site_content_history (key, created_at DESC)`)
-  })().catch((error) => {
-    ready = null
-    throw error
-  })
-  return ready
-}
-
-/**
- * Keeps the state a tracked setting had before a save. Never throws: history is a safety net and
- * must not be the reason a save fails.
- */
-export async function recordContentChange(key: string, before: unknown, after: unknown) {
-  try {
-    if (!trackedSetting(key)) return
-    const prev = before === undefined || before === null ? null : JSON.stringify(before)
-    const next = after === undefined || after === null ? null : JSON.stringify(after)
-    if (prev === next) return
-    await ensureHistory()
-    const session = await getPanelSession().catch(() => null)
-    const actor = session ? `${session.displayName} (@${session.username})` : 'sistem'
-    await rows(sql`INSERT INTO site_content_history (key, before, after, actor) VALUES (${key}, ${prev}::jsonb, ${next}::jsonb, ${actor})`)
-    await rows(sql`DELETE FROM site_content_history WHERE key = ${key} AND id NOT IN (
-      SELECT id FROM site_content_history WHERE key = ${key} ORDER BY created_at DESC, id DESC LIMIT ${KEEP_PER_KEY})`)
-  } catch (error) {
-    console.error('[content-history]', key, error)
-  }
-}
 
 function flatten(value: unknown, path: string, out: Map<string, string>) {
   if (Array.isArray(value)) {

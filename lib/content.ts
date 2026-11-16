@@ -1,8 +1,47 @@
 import { neon } from '@neondatabase/serverless'
-import { recordContentChange } from '@/lib/content-history'
 import { trackedSetting } from '@/lib/panel-log-shared'
 
 const sql = neon(process.env.DATABASE_URL!)
+
+const HISTORY_PER_KEY = 40
+
+// Client components reach this file through the settings modules they take constants from, so it
+// must not import anything server-only. The panel session code registers itself here instead.
+let actorResolver: (() => Promise<string | null>) | null = null
+export function setContentActorResolver(resolve: () => Promise<string | null>) {
+  actorResolver = resolve
+}
+
+let historyReady: Promise<unknown> | null = null
+export function ensureContentHistory() {
+  historyReady ??= (async () => {
+    await sql`CREATE TABLE IF NOT EXISTS site_content_history (
+      id bigserial PRIMARY KEY, key text NOT NULL, before jsonb, after jsonb, actor text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now())`
+    await sql`CREATE INDEX IF NOT EXISTS site_content_history_key ON site_content_history (key, created_at DESC)`
+  })().catch((error) => {
+    historyReady = null
+    throw error
+  })
+  return historyReady
+}
+
+/** Keeps the state a tracked setting had before a save. Never throws: history must not be the reason a save fails. */
+async function recordContentChange(key: string, before: unknown, after: unknown) {
+  try {
+    if (!trackedSetting(key)) return
+    const prev = before === undefined || before === null ? null : JSON.stringify(before)
+    const next = after === undefined || after === null ? null : JSON.stringify(after)
+    if (prev === next) return
+    await ensureContentHistory()
+    const actor = (await actorResolver?.().catch(() => null)) || 'sistem'
+    await sql`INSERT INTO site_content_history (key, before, after, actor) VALUES (${key}, ${prev}::jsonb, ${next}::jsonb, ${actor})`
+    await sql`DELETE FROM site_content_history WHERE key = ${key} AND id NOT IN (
+      SELECT id FROM site_content_history WHERE key = ${key} ORDER BY created_at DESC, id DESC LIMIT ${HISTORY_PER_KEY})`
+  } catch (error) {
+    console.error('[content-history]', key, error)
+  }
+}
 
 let ready: Promise<unknown> | null = null
 function ensureTable() {

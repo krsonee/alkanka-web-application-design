@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
@@ -84,6 +85,7 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
     await setContent('arena:settings', value)
     await setContent('arena:house', { winRate })
     refresh()
+    await logPanel('games', 'Oyun ayarları kaydedildi', null, `mini oyun kazanma oranı %${winRate}`)
     return { ok: true, message: 'Oyun ayarları kaydedildi.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
@@ -128,6 +130,7 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
     if (id) await updateTournament(id, input)
     else await createTournament(input)
     refresh()
+    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · ödül ${input.prizePool} KC · ${input.maxPlayers} kişi`)
     return { ok: true, message: id ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
@@ -139,6 +142,7 @@ export async function removeTournament(_: ActionState, form: FormData): Promise<
     await requireAdmin('tournaments')
     await deleteTournament(Number(form.get('id')))
     refresh()
+    await logPanel('tournaments', 'Turnuva silindi', `Turnuva #${Number(form.get('id'))}`, 'Kayıt ücretleri iade edildi')
     return { ok: true, message: 'Turnuva silindi, kayıt ücretleri iade edildi.' }
   } catch (e) {
     return fail(e, 'Silinemedi.')
@@ -150,6 +154,7 @@ export async function beginTournament(_: ActionState, form: FormData): Promise<A
     await requireAdmin('tournaments')
     await startTournament(Number(form.get('id')))
     refresh()
+    await logPanel('tournaments', 'Turnuva başlatıldı', `Turnuva #${Number(form.get('id'))}`)
     return { ok: true, message: 'Turnuva başladı. Tüm eşleşmeler aynı anda açıldı.' }
   } catch (e) {
     return fail(e, 'Başlatılamadı.')
@@ -161,6 +166,7 @@ export async function stopTournament(_: ActionState, form: FormData): Promise<Ac
     await requireAdmin('tournaments')
     await cancelTournament(Number(form.get('id')))
     refresh()
+    await logPanel('tournaments', 'Turnuva iptal edildi', `Turnuva #${Number(form.get('id'))}`, 'Kayıt ücretleri iade edildi')
     return { ok: true, message: 'Turnuva iptal edildi, kayıt ücretleri iade edildi.' }
   } catch (e) {
     return fail(e, 'İptal edilemedi.')
@@ -174,6 +180,7 @@ export async function pickMatchWinner(_: ActionState, form: FormData): Promise<A
     if (!winner) return { message: 'Kazananı seç.' }
     await adminSetMatchWinner(Number(form.get('id')), Number(form.get('round')), Number(form.get('match')), winner)
     refresh()
+    await logPanel('tournaments', 'Maç kazananı girildi', `Turnuva #${Number(form.get('id'))}`, `tur ${Number(form.get('round'))} · maç ${Number(form.get('match'))} · kazanan ${winner}`)
     return { ok: true, message: 'Maç sonucu girildi, tur ilerletildi.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
@@ -185,6 +192,7 @@ export async function kickEntry(_: ActionState, form: FormData): Promise<ActionS
     await requireAdmin('tournaments')
     await removeEntry(Number(form.get('entryId')))
     refresh()
+    await logPanel('tournaments', 'Turnuva katılımcısı çıkarıldı', `Kayıt #${Number(form.get('entryId'))}`, 'Ücreti iade edildi')
     return { ok: true, message: 'Katılımcı çıkarıldı, ücreti iade edildi.' }
   } catch (e) {
     return fail(e, 'Çıkarılamadı.')
@@ -196,6 +204,7 @@ export async function adminCancelTable(_: ActionState, form: FormData): Promise<
     await requireAdmin('games')
     await cancelTable(String(form.get('id')), { admin: true })
     refresh()
+    await logPanel('games', 'Masa kapatıldı', String(form.get('id')), 'Bahisler iade edildi')
     return { ok: true, message: 'Masa kapatıldı, bahisler iade edildi.' }
   } catch (e) {
     return fail(e, 'Masa kapatılamadı.')

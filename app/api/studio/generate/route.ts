@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
+import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { runGeneration } from '@/lib/studio-generate'
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
         cost: 0,
         texts,
       })
+      await logPanel('studio', 'Görselin yazısı değiştirildi', brand?.name || null, `Görsel #${job.id}`)
       return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
     }
 
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest) {
       cost: imageCost(size),
       texts,
     })
+    await logPanel('studio', 'Görsel üretildi', brand?.name || null, `Görsel #${job.id} · ${prompt.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
   } catch (error) {
     console.error('Studio generation failed:', error)

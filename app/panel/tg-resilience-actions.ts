@@ -1,5 +1,6 @@
 'use server'
 
+import { logged } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { getPanelSession } from '@/lib/admin-auth'
 import { telegramAccess, type TelegramArea } from '@/lib/panel-modules'
@@ -50,7 +51,7 @@ export async function switchChannelAction(address: string): Promise<Result & { n
     const { switchChannel } = await import('@/lib/tg-address')
     const done = await switchChannel(String(address ?? ''), await actor())
     revalidatePath('/', 'layout')
-    return { ok: true, message: `Güncel kanal adresi artık ${done.url}`, notes: done.notes }
+    return logged('telegram', { ok: true, message: `Güncel kanal adresi artık ${done.url}`, notes: done.notes })
   } catch (error) {
     return fail(error)
   }
@@ -62,7 +63,7 @@ export async function createInviteAction(chatId: string, name: string, approval:
   try {
     const { createInvite } = await import('@/lib/tg-invites')
     const invite = await createInvite({ chatId: String(chatId ?? ''), name: String(name ?? ''), approval: Boolean(approval), by: await actor() })
-    return { ok: true, message: `"${invite.name}" linki açıldı.${await hookNote()}`, invite }
+    return logged('tg_mod', { ok: true, message: `"${invite.name}" linki açıldı.${await hookNote()}`, invite })
   } catch (error) {
     return fail(error)
   }
@@ -74,7 +75,7 @@ export async function revokeInviteAction(id: number): Promise<Result> {
   try {
     const { revokeInvite } = await import('@/lib/tg-invites')
     const res = await revokeInvite(Number(id), await actor())
-    return res.ok ? { ok: true, message: `${res.message}${await hookNote()}` } : res
+    return logged('tg_mod', res.ok ? { ok: true, message: `${res.message}${await hookNote()}` } : res)
   } catch (error) {
     return fail(error)
   }

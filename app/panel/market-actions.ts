@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { deleteProduct, resolveRequest, saveProduct, type ProductInput } from '@/lib/market'
@@ -21,6 +22,7 @@ async function guard(fn: () => Promise<string | void>): Promise<Result> {
 export async function saveMarketProductAction(input: ProductInput) {
   return guard(async () => {
     await saveProduct(input)
+    await logPanel('market', input.id ? 'Ürün güncellendi' : 'Ürün eklendi', input.name)
     return 'Ürün kaydedildi.'
   })
 }
@@ -28,6 +30,7 @@ export async function saveMarketProductAction(input: ProductInput) {
 export async function deleteMarketProductAction(id: string) {
   return guard(async () => {
     await deleteProduct(id)
+    await logPanel('market', 'Ürün silindi', id)
     return 'Ürün silindi.'
   })
 }
@@ -35,6 +38,7 @@ export async function deleteMarketProductAction(id: string) {
 export async function resolveMarketRequestAction(id: number, approve: boolean, note: string) {
   return guard(async () => {
     await resolveRequest(id, approve, note)
+    await logPanel('market', approve ? 'Market talebi onaylandı' : 'Market talebi reddedildi', `Talep #${id}`, note || null)
     return approve ? 'Talep onaylandı.' : 'Talep reddedildi, KC iade edildi.'
   })
 }

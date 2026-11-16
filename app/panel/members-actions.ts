@@ -61,7 +61,7 @@ export async function searchMembersAction(
 export async function exportMembersAction(q: string, status: MemberStatus | 'tumu'): Promise<{ ok: true; csv: string; count: number } | { ok: false; error: string }> {
   if (!(await canPanel('users'))) return { ok: false, error: 'Bu işlem için yetkin yok.' }
   const r = await exportMembersCsv({ q: q.slice(0, 80), status })
-  await logAudit('members.export', null, `${r.count} üye dışa aktarıldı`)
+  await logAudit('Üye listesi dışa aktarıldı', null, `${r.count} üye dışa aktarıldı`)
   return { ok: true, ...r }
 }
 

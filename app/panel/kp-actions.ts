@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel, memberTag } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import {
@@ -31,6 +32,7 @@ import type { OnlineConfig, TickerConfig } from '@/lib/online-rewards-shared'
 export async function updateTicker(cfg: TickerConfig) {
   return guard(async () => {
     await saveTickerConfig(cfg)
+    await logPanel('badges', 'Kazananlar şeridi kaydedildi')
     return 'Kazananlar şeridi kaydedildi.'
   })
 }
@@ -53,6 +55,7 @@ async function guard(fn: () => Promise<string | void>): Promise<Result> {
 export async function updateLevels(levels: LevelDef[]) {
   return guard(async () => {
     await saveLevels(levels)
+    await logPanel('badges', 'Seviyeler kaydedildi', null, `${levels.length} seviye`)
     return 'Seviyeler kaydedildi.'
   })
 }
@@ -60,6 +63,7 @@ export async function updateLevels(levels: LevelDef[]) {
 export async function updateRules(rules: PointRules) {
   return guard(async () => {
     await saveRules(rules)
+    await logPanel('badges', 'Puan kuralları kaydedildi')
     return 'Puan kuralları kaydedildi.'
   })
 }
@@ -67,6 +71,7 @@ export async function updateRules(rules: PointRules) {
 export async function updateWeeklyQuest(cfg: WeeklyQuestConfig) {
   return guard(async () => {
     await saveQuestConfig(cfg)
+    await logPanel('badges', cfg.enabled ? 'Haftalık görev yayına alındı' : 'Haftalık görev kapatıldı')
     return cfg.enabled ? 'Haftalık görev yayında.' : 'Haftalık görev kapatıldı.'
   })
 }
@@ -75,6 +80,7 @@ export async function updateOnlineRewards(cfg: OnlineConfig) {
   return guard(async () => {
     await saveOnlineConfig(cfg)
     revalidatePath('/gorevler')
+    await logPanel('badges', 'Online ödülleri kaydedildi')
     return 'Online ödülleri kaydedildi.'
   })
 }
@@ -82,6 +88,7 @@ export async function updateOnlineRewards(cfg: OnlineConfig) {
 export async function upsertBadge(input: BadgeInput) {
   return guard(async () => {
     await saveSpecialBadge(input)
+    await logPanel('badges', 'Rozet kaydedildi', input.name)
     return 'Rozet kaydedildi.'
   })
 }
@@ -89,6 +96,7 @@ export async function upsertBadge(input: BadgeInput) {
 export async function removeBadge(id: string) {
   return guard(async () => {
     await deleteSpecialBadge(id)
+    await logPanel('badges', 'Rozet silindi', id)
     return 'Rozet silindi.'
   })
 }
@@ -104,12 +112,17 @@ export async function giveBadge(badgeId: string, userId: string, note: string) {
   return guard(async () => {
     if ((await isRoleBadge(badgeId)) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     const ok = await awardBadge(badgeId, userId, `manuel-${Date.now()}`, note || undefined)
+    if (ok) await logPanel('badges', 'Rozet verildi', await memberTag(userId), `${badgeId}${note ? ` · ${note}` : ''}`)
     return ok ? 'Rozet verildi.' : 'Bu üye rozeti zaten almış.'
   })
 }
 
 export async function giveContestBadge(badgeId: string) {
-  return guard(() => awardContest(badgeId))
+  return guard(async () => {
+    const message = await awardContest(badgeId)
+    await logPanel('badges', 'Yarışma rozeti dağıtıldı', badgeId, typeof message === 'string' ? message : null)
+    return message
+  })
 }
 
 export async function takeBackAward(awardId: number) {
@@ -117,6 +130,7 @@ export async function takeBackAward(awardId: number) {
     const badgeId = await awardBadgeId(awardId)
     if (badgeId && (await isRoleBadge(badgeId)) && !(await canPanel('roles'))) throw new Error(NO_ROLE_PERMISSION)
     await revokeAward(awardId)
+    await logPanel('badges', 'Rozet geri alındı', badgeId ?? `Kayıt #${awardId}`)
     return 'Rozet geri alındı.'
   })
 }
@@ -124,6 +138,7 @@ export async function takeBackAward(awardId: number) {
 export async function changePoints(userId: string, points: number, note: string) {
   return guard(async () => {
     await adjustPoints(userId, points, note)
+    await logPanel('badges', points > 0 ? 'Kanka puanı eklendi' : 'Kanka puanı düşüldü', await memberTag(userId), `${points} KP · ${note}`)
     return `${points > 0 ? '+' : ''}${points} KP işlendi.`
   })
 }

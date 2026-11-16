@@ -1,5 +1,6 @@
 'use server'
 
+import { logged } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { getTvConfig, saveTvConfig, scanGoals, settlePredictions, testGoalBot } from '@/lib/kankatv-engage'
@@ -54,7 +55,7 @@ export async function saveTvAction(_: ActionState, form: FormData): Promise<Acti
       halftime: { enabled: on(form, 'halftimeEnabled'), min: num(form, 'halftimeMin'), max: num(form, 'halftimeMax') },
     })
     refresh()
-    return { ok: true, message: 'KankaTV ayarları kaydedildi.' }
+    return logged('telegram', { ok: true, message: 'KankaTV ayarları kaydedildi.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -65,7 +66,7 @@ export async function testGoalBotAction(_: ActionState): Promise<ActionState> {
   try {
     const sent = await testGoalBot()
     refresh()
-    return sent ? { ok: true, message: `Test mesajı ${sent} hedefe gönderildi.` } : { message: 'Hiçbir hedefe gönderilemedi. Botun grupta yönetici olduğunu kontrol et.' }
+    return logged('telegram', sent ? { ok: true, message: `Test mesajı ${sent} hedefe gönderildi.` } : { message: 'Hiçbir hedefe gönderilemedi. Botun grupta yönetici olduğunu kontrol et.' })
   } catch (error) {
     refresh()
     return { message: errorText(error) }
@@ -78,9 +79,9 @@ export async function runScanAction(_: ActionState): Promise<ActionState> {
     const cfg = await getTvConfig()
     const [scan, settled] = await Promise.all([scanGoals(true), settlePredictions({ limit: 200 })])
     refresh()
-    if (!scan.ran && !cfg.goalBot.enabled && !cfg.goalBot.push) return { ok: true, message: `Gol botu ve bildirimler kapalı. ${settled} tahmin sonuçlandı.` }
+    if (!scan.ran && !cfg.goalBot.enabled && !cfg.goalBot.push) return logged('telegram', { ok: true, message: `Gol botu ve bildirimler kapalı. ${settled} tahmin sonuçlandı.` })
     if (scan.error) return { message: `Tarama yapıldı ama hata var: ${scan.error}` }
-    return { ok: true, message: `${scan.goals} yeni gol bulundu, ${scan.sent} mesaj gitti, ${settled} tahmin sonuçlandı.` }
+    return logged('telegram', { ok: true, message: `${scan.goals} yeni gol bulundu, ${scan.sent} mesaj gitti, ${settled} tahmin sonuçlandı.` })
   } catch (error) {
     return { message: errorText(error) }
   }

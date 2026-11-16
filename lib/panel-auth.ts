@@ -2,6 +2,7 @@ import 'server-only'
 import { cache } from 'react'
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { cookies, headers } from 'next/headers'
+import { setContentActorResolver } from '@/lib/content'
 import { rows, sql } from '@/lib/db'
 import { cleanPermissions, PANEL_MODULES, telegramAccess, type PanelModule, type TelegramArea } from '@/lib/panel-modules'
 import { currentSecret } from '@/lib/secrets'
@@ -195,3 +196,9 @@ export async function clearFailedLogins(username: string) {
   const ip = await clientIp()
   await rows(sql`DELETE FROM panel_login_attempts WHERE key = ${pairKey(username, ip)}`)
 }
+
+// Every panel save checks its permission through this file first, so the settings history always knows who saved.
+setContentActorResolver(async () => {
+  const session = await getPanelSession()
+  return session ? `${session.displayName} (@${session.username})` : null
+})

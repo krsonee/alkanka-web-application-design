@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
@@ -49,6 +50,7 @@ export async function saveShare(_: ActionState, form: FormData): Promise<ActionS
       image,
     })
     revalidatePath('/', 'layout')
+    await logPanel('logo', 'Paylaşım görseli kaydedildi')
     return { ok: true, message: 'Paylaşım önizlemesi kaydedildi. WhatsApp/Telegram eski önizlemeyi bir süre önbellekte tutabilir.' }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -91,6 +93,7 @@ export async function saveAds(_: ActionState, form: FormData): Promise<ActionSta
     }
     await setContent(ADS_KEY, value)
     for (const page of AD_PAGES) revalidatePath(`/${page.id}`)
+    await logPanel('logo', 'Reklam alanları kaydedildi', null, `${Object.keys(value).length} dolu alan`)
     return { ok: true, message: 'Reklam alanları kaydedildi.' }
   } catch (error) {
     return { message: error instanceof Error ? error.message : 'Kaydedilemedi.' }
@@ -118,6 +121,7 @@ export async function saveHero(_: ActionState, form: FormData): Promise<ActionSt
     }
     await setContent(`hero:${slug}`, value)
     revalidatePath(page.path)
+    await logPanel('hero', 'Sayfa başlığı kaydedildi', page.path)
     return { ok: true, message: 'Kaydedildi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -132,6 +136,7 @@ export async function resetHero(_: ActionState, form: FormData): Promise<ActionS
     await deleteContent(`hero:${page.slug}`)
     revalidatePath(page.path)
     revalidatePath('/panel')
+    await logPanel('hero', 'Sayfa başlığı varsayılana döndü', page.path)
     return { ok: true, message: 'Varsayılana döndü.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Sıfırlanamadı.' }
@@ -154,6 +159,7 @@ export async function saveTexts(_: ActionState, form: FormData): Promise<ActionS
     }
     await setContent(TEXTS_KEY, value)
     revalidatePath('/', 'layout')
+    await logPanel('texts', 'Site yazıları kaydedildi', null, `${Object.keys(value).length} özel metin`)
     return { ok: true, message: `Kaydedildi (${Object.keys(value).length} özel metin).` }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -201,11 +207,13 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       await setContent(CUSTOM_SLIDES_KEY, next)
       revalidatePath('/')
       revalidatePath('/panel')
+      await logPanel('slide', 'Slayt kaydedildi', value.title || id)
       return { ok: true, message: 'Kaydedildi.' }
     }
     if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     await setContent(`slide:${id}`, value)
     revalidatePath('/')
+    await logPanel('slide', 'Slayt kaydedildi', value.title || id)
     return { ok: true, message: 'Kaydedildi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -224,6 +232,7 @@ export async function addSlide(_: ActionState): Promise<ActionState> {
     ])
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt eklendi', id)
     return { ok: true, message: 'Yeni slayt eklendi. Aşağıdan düzenleyip kaydet.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Eklenemedi.' }
@@ -245,6 +254,7 @@ export async function saveLogos(_: ActionState, form: FormData): Promise<ActionS
     }
     await setContent(`logos:${kind}`, value)
     revalidatePath('/', 'layout')
+    await logPanel('logo', kind === 'sponsors' ? 'Sponsor logoları kaydedildi' : 'Takım logoları kaydedildi', null, `${Object.keys(value).length} logo`)
     return { ok: true, message: `Kaydedildi (${Object.keys(value).length} logo).` }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
@@ -270,6 +280,7 @@ export async function moveSlide(_: ActionState, form: FormData): Promise<ActionS
     await setContent(SLIDE_ORDER_KEY, ids)
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt sırası değişti', id, dir < 0 ? 'öne alındı' : 'arkaya alındı')
     return { ok: true, message: 'Sıra güncellendi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Taşınamadı.' }
@@ -307,6 +318,7 @@ export async function duplicateSlide(_: ActionState, form: FormData): Promise<Ac
     }
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt kopyalandı', copy.title)
     return { ok: true, message: 'Kopyası eklendi.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kopyalanamadı.' }
@@ -322,12 +334,14 @@ export async function resetSlide(_: ActionState, form: FormData): Promise<Action
       await setContent(CUSTOM_SLIDES_KEY, list.filter((s) => s.id !== id))
       revalidatePath('/')
       revalidatePath('/panel')
+      await logPanel('slide', 'Slayt silindi', list.find((s) => s.id === id)?.title ?? id)
       return { ok: true, message: 'Slayt silindi.' }
     }
     if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
     await deleteContent(`slide:${id}`)
     revalidatePath('/')
     revalidatePath('/panel')
+    await logPanel('slide', 'Slayt varsayılana döndü', id)
     return { ok: true, message: 'Varsayılana döndü.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Sıfırlanamadı.' }
@@ -356,6 +370,7 @@ export async function saveHomeV2(_: ActionState, form: FormData): Promise<Action
     await setContent(HOME_V2_KEY, value)
     revalidatePath('/')
     revalidatePath('/oyunlar/okey')
+    await logPanel('logo', 'Ana sayfa ve masa açma ayarları kaydedildi')
     return { ok: true, message: 'Ana sayfa ve masa açma ayarları kaydedildi.' }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }

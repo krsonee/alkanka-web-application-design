@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { extractBrand } from '@/lib/brand-extract'
@@ -46,6 +47,7 @@ export async function saveBrandAction(input: {
     notes: input.notes.trim().slice(0, 600),
   })
   revalidatePath('/panel')
+  await logPanel('studio', 'Marka kiti kaydedildi', input.name)
   return { ok: true, message: 'Marka kiti kaydedildi.' }
 }
 
@@ -53,6 +55,7 @@ export async function deleteBrandAction(id: number): Promise<Result> {
   if (!(await canPanel('studio'))) return EXPIRED
   await deleteBrand(id)
   revalidatePath('/panel')
+  await logPanel('studio', 'Marka kiti silindi', `Marka #${id}`)
   return { ok: true }
 }
 
@@ -60,6 +63,7 @@ export async function deleteAssetAction(id: number): Promise<Result> {
   if (!(await canPanel('studio'))) return EXPIRED
   await deleteAsset(id)
   revalidatePath('/panel')
+  await logPanel('studio', 'Stüdyo görseli silindi', `Görsel #${id}`)
   return { ok: true }
 }
 
@@ -67,5 +71,6 @@ export async function deleteJobAction(id: number): Promise<Result> {
   if (!(await canPanel('studio'))) return EXPIRED
   await deleteJob(id)
   revalidatePath('/panel')
+  await logPanel('studio', 'Stüdyo üretim kaydı silindi', `Üretim #${id}`)
   return { ok: true }
 }

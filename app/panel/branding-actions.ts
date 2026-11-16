@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { updateBranding } from '@/lib/branding'
@@ -15,6 +16,7 @@ export async function saveHeaderLogo(logoUrl: string, logoHeight: number): Promi
   const height = Math.min(64, Math.max(20, Math.round(Number(logoHeight) || 36)))
   await updateBranding({ logoUrl: url || undefined, logoHeight: height })
   revalidatePath('/', 'layout')
+  await logPanel('branding', url ? 'Header logosu kaydedildi' : 'Varsayılan logoya dönüldü')
   return { ok: true, message: url ? 'Header logosu kaydedildi.' : 'Varsayılan logoya dönüldü.' }
 }
 
@@ -22,5 +24,6 @@ export async function resetAppIcon(): Promise<Result> {
   if (!(await canPanel('branding'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
   await updateBranding({ icons: undefined })
   revalidatePath('/', 'layout')
+  await logPanel('branding', 'Varsayılan uygulama ikonuna dönüldü')
   return { ok: true, message: 'Varsayılan uygulama ikonuna dönüldü.' }
 }

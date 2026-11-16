@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { saveBoostConfig } from '@/lib/boosts'
@@ -10,6 +11,7 @@ export async function saveBoostsAction(input: BoostConfig) {
   try {
     const cfg = await saveBoostConfig(input)
     revalidatePath('/', 'layout')
+    await logPanel('badges', 'Kampanya ve çarpan ayarları kaydedildi')
     return { ok: true as const, cfg }
   } catch (e) {
     return { ok: false as const, error: (e as Error).message }

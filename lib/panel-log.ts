@@ -45,6 +45,21 @@ export async function logPanel(area: AuditArea, action: string, target?: string 
   }
 }
 
+/**
+ * Logs a finished action from the message it shows the admin and hands the result back, so a `return` stays one line.
+ * The first sentence becomes the action, the rest the detail. Results that did not succeed are not logged.
+ */
+export async function logged<T extends { ok?: boolean; message?: string }>(area: AuditArea, result: T | Promise<T>): Promise<T> {
+  const settled = await result
+  const text = settled.ok ? String(settled.message ?? '').trim() : ''
+  if (!text) return settled
+  const end = text.search(/[.:!?](\s|$)/)
+  const action = (end > 0 ? text.slice(0, end) : text).trim()
+  const detail = end > 0 ? text.slice(end + 1).trim() : ''
+  await logPanel(area, action || text, null, detail || null)
+  return settled
+}
+
 /** "Ad <e-posta>" for a log line; falls back to the id so a deleted member never breaks the action being logged. */
 export async function memberTag(userId: string) {
   try {

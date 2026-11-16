@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { saveSite } from '@/lib/sites'
@@ -14,6 +15,7 @@ export async function saveSiteAction(input: SiteInput): Promise<Result> {
     revalidatePath('/panel')
     revalidatePath('/')
     revalidatePath('/sponsorlar')
+    await logPanel('sponsors', input.id ? 'Sponsor güncellendi' : 'Sponsor eklendi', input.name)
     return { ok: true, message: input.id ? 'Sponsor güncellendi.' : 'Sponsor kaydedildi.' }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'İşlem başarısız.' }

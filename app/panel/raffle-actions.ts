@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { drawBadgeRaffle } from '@/lib/badge-value'
@@ -11,6 +12,7 @@ export async function drawRaffleAction(badgeId: string, prize: number, note: str
     const winner = await drawBadgeRaffle(badgeId, prize, String(note ?? ''))
     revalidatePath('/rozetler')
     revalidatePath('/panel')
+    await logPanel('badges', 'Rozet çekilişi yapıldı', badgeId, `ödül ${prize} KP`)
     return { ok: true as const, winner }
   } catch (e) {
     return { ok: false as const, error: (e as Error).message }

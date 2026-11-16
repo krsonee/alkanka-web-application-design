@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/panel-auth'
 import { deleteContent, setContent } from '@/lib/content'
@@ -15,6 +16,7 @@ import { driftMessage } from '@/lib/drift'
 import { mergeRewards, type RewardConfig } from '@/lib/rewards-shared'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
+const KIND_LABEL: Record<string, string> = { events: 'Etkinlikler', predictions: 'Tahminler', campaigns: 'Kampanyalar', bonuses: 'Bonuslar', rewards: 'Mini oyun ödülleri' }
 type ListKind = 'events' | 'predictions' | 'campaigns' | 'bonuses'
 
 const CLEANERS: Record<ListKind, (raw: unknown) => unknown[]> = {
@@ -102,6 +104,7 @@ export async function saveRewards(input: RewardConfig): Promise<Result> {
     if (drift) return { ok: false, error: drift }
     await setContent(CATALOG_KEYS.rewards, clean)
     revalidatePath('/', 'layout')
+    await logPanel('rewards', 'Mini oyun ödülleri kaydedildi')
     return { ok: true, message: 'Ödüller kaydedildi, sitede hemen geçerli.' }
   } catch (error) {
     console.error('[rewards] kaydedilemedi', error)
@@ -126,6 +129,7 @@ export async function saveCatalogList(kind: ListKind, items: unknown): Promise<R
     if (drift) return { ok: false, error: drift }
     await setContent(CATALOG_KEYS[kind], cleaned)
     revalidatePath('/', 'layout')
+    await logPanel('catalog', 'İçerik listesi kaydedildi', KIND_LABEL[kind] ?? kind, `${Array.isArray(items) ? items.length : 0} kayıt`)
     return { ok: true, message: 'Kaydedildi, sitede hemen geçerli.' }
   } catch (error) {
     console.error(`[catalog:${kind}] kaydedilemedi`, error)
@@ -138,6 +142,7 @@ export async function saveCategoryOrder(input: unknown): Promise<Result> {
   try {
     await setContent(CATALOG_KEYS.order, cleanOrder(input))
     revalidatePath('/', 'layout')
+    await logPanel('catalog', 'Kategori sıralaması kaydedildi')
     return { ok: true, message: 'Sıralama kaydedildi, sitede hemen geçerli.' }
   } catch (error) {
     console.error('[catalog:order] kaydedilemedi', error)
@@ -150,6 +155,7 @@ export async function resetCatalog(kind: ListKind | 'rewards'): Promise<Result> 
   try {
     await deleteContent(CATALOG_KEYS[kind])
     revalidatePath('/', 'layout')
+    await logPanel(kind === 'rewards' ? 'rewards' : 'catalog', 'Varsayılana döndürüldü', KIND_LABEL[kind] ?? kind)
     return { ok: true, message: 'Varsayılana döndürüldü.' }
   } catch (error) {
     console.error(`[catalog:${kind}] sıfırlanamadı`, error)

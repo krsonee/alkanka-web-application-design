@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { setContent } from '@/lib/content'
@@ -21,6 +22,7 @@ export async function saveLegal(_: LegalActionState, form: FormData): Promise<Le
   try {
     await setContent(LEGAL_KEY, value)
     revalidatePath('/yasal', 'layout')
+    await logPanel('texts', 'Yasal metinler kaydedildi', null, `${Object.keys(value).length} sayfa özelleştirildi`)
     return { ok: true, message: `Kaydedildi (${Object.keys(value).length} sayfa özelleştirildi).` }
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }

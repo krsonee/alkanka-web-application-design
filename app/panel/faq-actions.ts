@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { saveFaq, type FaqInput } from '@/lib/faqs'
@@ -12,6 +13,7 @@ export async function saveFaqAction(input: FaqInput): Promise<Result> {
     await saveFaq(input)
     revalidatePath('/panel')
     revalidatePath('/sss')
+    await logPanel('faqs', input.id ? 'Soru güncellendi' : 'Soru eklendi', input.question)
     return { ok: true, message: input.id ? 'Soru güncellendi.' : 'Soru kaydedildi.' }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'İşlem başarısız.' }

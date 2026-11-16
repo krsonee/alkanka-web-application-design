@@ -1,5 +1,6 @@
 'use server'
 
+import { logged } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { saveTelegramPromo } from '@/lib/telegram-promo'
@@ -18,8 +19,8 @@ export async function saveTelegramPromoAction(_: ActionState, form: FormData): P
       reshowDays: Number(form.get('reshowDays')),
     })
     revalidatePath('/', 'layout')
-    if (rawUrl && !saved.url) return { ok: true, message: 'Kaydedildi, ama link geçersiz olduğu için ana kanal linki kullanılacak. t.me/... ya da @kullaniciadi gir.' }
-    return { ok: true, message: saved.enabled ? 'Kaydedildi, şerit sitede yayında.' : 'Kaydedildi, şerit kapalı.' }
+    if (rawUrl && !saved.url) return logged('telegram', { ok: true, message: 'Kaydedildi, ama link geçersiz olduğu için ana kanal linki kullanılacak. t.me/... ya da @kullaniciadi gir.' })
+    return logged('telegram', { ok: true, message: saved.enabled ? 'Kaydedildi, şerit sitede yayında.' : 'Kaydedildi, şerit kapalı.' })
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }
   }

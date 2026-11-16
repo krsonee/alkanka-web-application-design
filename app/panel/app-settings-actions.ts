@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { setContent } from '@/lib/content'
@@ -16,6 +17,7 @@ export async function saveAppSettings(_: ActionState, form: FormData): Promise<A
   try {
     await setContent(APP_SETTINGS_KEY, value)
     revalidatePath('/', 'layout')
+    await logPanel('push', 'Uygulama ödülleri kaydedildi', null, `kurulum ${value.installBonus} KC · bildirim ${value.pushBonus} KC · ikisi birden +${value.comboBonus} KC`)
     return { ok: true, message: `Kaydedildi: kurulum ${value.installBonus} KC, bildirim ${value.pushBonus} KC, ikisi birden +${value.comboBonus} KC.` }
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { logged } from '@/lib/panel-log'
 import { headers } from 'next/headers'
 import { getPanelSession } from '@/lib/admin-auth'
 import { telegramAccess, type TelegramArea } from '@/lib/panel-modules'
@@ -47,7 +48,7 @@ async function guarded<T extends SendOutcome>(run: () => Promise<T>, area: Teleg
   try {
     const result = await run()
     if (result.ok) revalidatePath('/panel')
-    return result
+    return logged(area === 'posts' ? 'tg_posts' : area === 'mod' ? 'tg_mod' : 'telegram', result)
   } catch (error) {
     console.error('[tg-post-action]', error)
     return fail(error)

@@ -1,5 +1,6 @@
 'use server'
 
+import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import {
@@ -34,13 +35,18 @@ async function guard(fn: () => Promise<string | void>): Promise<Result> {
 }
 
 export async function moderateReview(id: number, status: 'approved' | 'rejected') {
-  return guard(() => setReviewStatus(id, status))
+  return guard(async () => {
+    const message = await setReviewStatus(id, status)
+    await logPanel('community', status === 'approved' ? 'Yorum yayınlandı' : 'Yorum reddedildi', `Yorum #${id}`)
+    return message
+  })
 }
 
 export async function decideReviewProof(id: number, ok: boolean) {
   return guard(async () => {
     const { decideProof } = await import('@/lib/trust-extra')
     await decideProof(id, ok)
+    await logPanel('community', ok ? 'Yorum kanıtı onaylandı' : 'Yorum kanıtı reddedildi', `Yorum #${id}`)
     return ok ? 'Yorum doğrulandı, rozet ve KP verildi.' : 'Kanıt reddedildi.'
   })
 }
@@ -52,6 +58,7 @@ export async function postKarneNow() {
     const list = await weeklyKarne()
     if (!list.length) return 'Son 7 günde karneye girecek veri yok.'
     const posted = await broadcastPodium((origin) => karneText(list, origin))
+    if (posted) await logPanel('community', 'Haftalık karne gönderildi', null, `${posted} kanal`)
     return posted ? `Karne ${posted} kanala gönderildi.` : 'Bağlı aktif kanal bulunamadı.'
   })
 }
@@ -59,6 +66,7 @@ export async function postKarneNow() {
 export async function removeReview(id: number) {
   return guard(async () => {
     await deleteReview(id)
+    await logPanel('community', 'Yorum silindi', `Yorum #${id}`)
     return 'Yorum silindi.'
   })
 }
@@ -66,16 +74,25 @@ export async function removeReview(id: number) {
 export async function removeComplaint(id: number) {
   return guard(async () => {
     await deleteComplaint(id)
+    await logPanel('community', 'Şikâyet kaldırıldı', `Şikâyet #${id}`)
     return 'Şikâyet kaldırıldı.'
   })
 }
 
 export async function answerComplaint(id: number, status: Complaint['status'], reply: string) {
-  return guard(() => updateComplaint(id, status, reply))
+  return guard(async () => {
+    const message = await updateComplaint(id, status, reply)
+    await logPanel('community', 'Şikâyet yanıtlandı', `Şikâyet #${id}`, `${status}${reply ? ` · ${String(reply).slice(0, 200)}` : ''}`)
+    return message
+  })
 }
 
 export async function createLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string }) {
-  return guard(() => addLeagueMatch(input))
+  return guard(async () => {
+    const message = await addLeagueMatch(input)
+    await logPanel('community', 'Tahmin maçı eklendi', `${input.home} - ${input.away}`, input.league)
+    return message
+  })
 }
 
 export async function loadFixtures(day: string): Promise<{ ok: true; fixtures: Fixture[]; published: number[] } | { ok: false; error: string }> {
@@ -88,6 +105,7 @@ export async function loadFixtures(day: string): Promise<{ ok: true; fixtures: F
 export async function publishFixtures(list: FixtureInput[]) {
   return guard(async () => {
     const added = await importLeagueFixtures(list)
+    if (added) await logPanel('community', 'Fikstür maçları yayınlandı', null, `${added} maç`)
     return added ? `${added} maç sitede yayınlandı.` : 'Seçilen maçlar zaten yayında veya başlamış.'
   })
 }
@@ -95,17 +113,23 @@ export async function publishFixtures(list: FixtureInput[]) {
 export async function autoSettleMatches() {
   return guard(async () => {
     const r = await autoSettleLeague(getFinalScore)
+    if (r.settled) await logPanel('community', 'Maçlar otomatik sonuçlandırıldı', null, `${r.settled} maç`)
     return r.checked ? `${r.checked} maç kontrol edildi, ${r.settled} tanesi sonuçlandırıldı.` : 'Sonucu bekleyen fikstür maçı yok.'
   })
 }
 
 export async function removeLeagueMatch(id: number) {
-  return guard(() => deleteLeagueMatch(id))
+  return guard(async () => {
+    const message = await deleteLeagueMatch(id)
+    await logPanel('community', 'Tahmin maçı silindi', `Maç #${id}`)
+    return message
+  })
 }
 
 export async function finishLeagueMatch(id: number, home: number, away: number) {
   return guard(async () => {
     const r = await settleLeagueMatch(id, home, away)
+    await logPanel('community', 'Maç sonucu girildi ve puanlandı', `Maç #${id}`, `${home}-${away} · ${r.picks} tahmin · ${r.winners} kazanan`)
     return `${r.picks} tahmin puanlandı, ${r.winners} kişi KC kazandı.`
   })
 }

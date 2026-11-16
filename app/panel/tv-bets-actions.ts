@@ -1,5 +1,6 @@
 'use server'
 
+import { logged } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { saveBetsConfig, setMarketLock, setMarketOdds, settleMarket, syncBets, testBetsBot, voidMarket } from '@/lib/tv-bets'
@@ -52,7 +53,7 @@ export async function saveBetsAction(_: ActionState, form: FormData): Promise<Ac
       ACTOR,
     )
     refresh()
-    return { ok: true, message: 'Canlı etkinlik ayarları kaydedildi.' }
+    return logged('telegram', { ok: true, message: 'Canlı etkinlik ayarları kaydedildi.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -64,11 +65,11 @@ export async function syncBetsAction(_: ActionState): Promise<ActionState> {
     const r = await syncBets(true)
     refresh()
     if (r.error) return { message: `Tarama yapıldı ama hata var: ${r.error}` }
-    if (!r.ran) return { ok: true, message: 'Sistem kapalı, tarama yapılmadı.' }
-    return {
+    if (!r.ran) return logged('telegram', { ok: true, message: 'Sistem kapalı, tarama yapılmadı.' })
+    return logged('telegram', {
       ok: true,
       message: `${r.games} maç tarandı · ${r.opened} etkinlik açıldı · ${r.settled} sonuçlandı · ${r.voided} iptal · ${r.refundedLate} geç bahis iade · ${r.sent} bot mesajı`,
-    }
+    })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -79,7 +80,7 @@ export async function testBetsBotAction(_: ActionState): Promise<ActionState> {
   try {
     const sent = await testBetsBot()
     refresh()
-    return sent ? { ok: true, message: `Test mesajı ${sent} hedefe gönderildi.` } : { message: 'Hiçbir hedefe gönderilemedi. Botun grupta yönetici olduğunu kontrol et.' }
+    return logged('telegram', sent ? { ok: true, message: `Test mesajı ${sent} hedefe gönderildi.` } : { message: 'Hiçbir hedefe gönderilemedi. Botun grupta yönetici olduğunu kontrol et.' })
   } catch (error) {
     refresh()
     return { message: errorText(error) }
@@ -114,7 +115,7 @@ export async function marketAction(_: ActionState, form: FormData): Promise<Acti
       }
     } else return { message: 'Bilinmeyen işlem.' }
     refresh()
-    return { ok: true, message: 'Etkinlik güncellendi.' }
+    return logged('telegram', { ok: true, message: 'Etkinlik güncellendi.' })
   } catch (error) {
     return { message: errorText(error) }
   }

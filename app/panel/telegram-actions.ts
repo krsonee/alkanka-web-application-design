@@ -1,5 +1,6 @@
 'use server'
 
+import { logged, logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { canPanel, isPanelOwner } from '@/lib/admin-auth'
@@ -33,7 +34,7 @@ export async function addBotAction(_: ActionState, form: FormData): Promise<Acti
   try {
     const me = await addBot(String(form.get('token') ?? '').trim())
     revalidatePath('/panel')
-    return { ok: true, message: `@${me.username} bağlandı. Şimdi bu bot için hedef kanal ekle.` }
+    return logged('telegram', { ok: true, message: `@${me.username} bağlandı. Şimdi bu bot için hedef kanal ekle.` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -43,6 +44,7 @@ export async function deleteBotAction(form: FormData) {
   // Removing a bot takes every job it does offline at once, so it is left to the owner account.
   if (!(await isPanelOwner())) return
   await deleteBot(Number(form.get('id')))
+  await logPanel('telegram', 'Bot kaldırıldı', `Bot #${Number(form.get('id'))}`)
   revalidatePath('/panel')
 }
 
@@ -53,7 +55,7 @@ export async function addTargetAction(_: ActionState, form: FormData): Promise<A
   try {
     const title = await addTarget(botId, String(form.get('chat') ?? ''))
     revalidatePath('/panel')
-    return { ok: true, message: `"${title}" hedef kanal olarak bağlandı.` }
+    return logged('telegram', { ok: true, message: `"${title}" hedef kanal olarak bağlandı.` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -62,12 +64,14 @@ export async function addTargetAction(_: ActionState, form: FormData): Promise<A
 export async function toggleTargetAction(form: FormData) {
   if (!(await canPanel('telegram'))) return
   await setTargetActive(Number(form.get('id')), form.get('active') === 'true')
+  await logPanel('telegram', form.get('active') === 'true' ? 'Hedef kanal açıldı' : 'Hedef kanal durduruldu', `Hedef #${Number(form.get('id'))}`)
   revalidatePath('/panel')
 }
 
 export async function deleteTargetAction(form: FormData) {
   if (!(await canPanel('telegram'))) return
   await deleteTarget(Number(form.get('id')))
+  await logPanel('telegram', 'Hedef kanal silindi', `Hedef #${Number(form.get('id'))}`)
   revalidatePath('/panel')
 }
 
@@ -75,7 +79,7 @@ export async function testTargetAction(_: ActionState, form: FormData): Promise<
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
     const title = await testTarget(Number(form.get('id')))
-    return { ok: true, message: `Test mesajı "${title}" kanalına gönderildi.` }
+    return logged('telegram', { ok: true, message: `Test mesajı "${title}" kanalına gönderildi.` })
   } catch (error) {
     return { message: `Gönderilemedi: ${errorText(error)}` }
   }
@@ -101,7 +105,7 @@ export async function addSourceAction(_: ActionState, form: FormData): Promise<A
   const footer = String(form.get('footer') ?? '').trim().slice(0, 300)
   await addSource({ channel, brand, link, keywords, targetId, replacements, footer })
   revalidatePath('/panel')
-  return { ok: true, message: `@${channel} eklendi. İlk kontrolde mevcut postlar atlanır, sadece yeni postlar paylaşılır.` }
+  return logged('telegram', { ok: true, message: `@${channel} eklendi. İlk kontrolde mevcut postlar atlanır, sadece yeni postlar paylaşılır.` })
 }
 
 export async function updateSourceTextAction(_: ActionState, form: FormData): Promise<ActionState> {
@@ -118,24 +122,27 @@ export async function updateSourceTextAction(_: ActionState, form: FormData): Pr
     footer: String(form.get('footer') ?? '').trim().slice(0, 300),
   })
   revalidatePath('/panel')
-  return { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' }
+  return logged('telegram', { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' })
 }
 
 export async function toggleSourceAction(form: FormData) {
   if (!(await canPanel('telegram'))) return
   await setSourceActive(Number(form.get('id')), form.get('active') === 'true')
+  await logPanel('telegram', form.get('active') === 'true' ? 'Kaynak kanal açıldı' : 'Kaynak kanal durduruldu', `Kaynak #${Number(form.get('id'))}`)
   revalidatePath('/panel')
 }
 
 export async function deleteSourceAction(form: FormData) {
   if (!(await canPanel('telegram'))) return
   await deleteSource(Number(form.get('id')))
+  await logPanel('telegram', 'Kaynak kanal silindi', `Kaynak #${Number(form.get('id'))}`)
   revalidatePath('/panel')
 }
 
 export async function rotateCronKeyAction() {
   if (!(await canPanel('telegram'))) return
   await getCronKey(true)
+  await logPanel('telegram', 'Cron anahtarı yenilendi')
   revalidatePath('/panel')
 }
 
@@ -149,7 +156,7 @@ export async function connectInviteAction(_: ActionState, form: FormData): Promi
     const { connectInviteChannel } = await import('@/lib/table-invite')
     const title = await connectInviteChannel(botId, chat)
     revalidatePath('/panel')
-    return { ok: true, message: `"${title}" bağlandı. Masa davetleri bu kanala düşecek.` }
+    return logged('telegram', { ok: true, message: `"${title}" bağlandı. Masa davetleri bu kanala düşecek.` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -161,7 +168,7 @@ export async function saveChannelsAction(_: ActionState, form: FormData): Promis
     const input = Object.fromEntries(BROADCAST_CHANNELS.map((c) => [c.slug, String(form.get(c.slug) ?? '')])) as Record<BroadcastSlug, string>
     const saved = await saveChannels(input)
     revalidatePath('/panel')
-    return { ok: true, message: saved.length ? `Kaydedildi: ${saved.join(', ')}.` : 'Kanal bağlantıları temizlendi.' }
+    return logged('telegram', { ok: true, message: saved.length ? `Kaydedildi: ${saved.join(', ')}.` : 'Kanal bağlantıları temizlendi.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -171,6 +178,7 @@ export async function disconnectInviteAction() {
   if (!(await canPanel('telegram'))) return
   const { disconnectInviteChannel } = await import('@/lib/table-invite')
   await disconnectInviteChannel()
+  await logPanel('telegram', 'Masa daveti kanalı ayrıldı')
   revalidatePath('/panel')
 }
 
@@ -189,7 +197,7 @@ export async function connectChatAction(_: ActionState, form: FormData): Promise
   try {
     const title = await connectChat(botId, chat, `https://${host}`)
     revalidatePath('/panel')
-    return { ok: true, message: `"${title}" bağlandı. Gruba yazılan yeni mesajlar sitede görünecek.` }
+    return logged('telegram', { ok: true, message: `"${title}" bağlandı. Gruba yazılan yeni mesajlar sitede görünecek.` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -198,6 +206,7 @@ export async function connectChatAction(_: ActionState, form: FormData): Promise
 export async function disconnectChatAction() {
   if (!(await canPanel('telegram'))) return
   await disconnectChat()
+  await logPanel('telegram', 'Site sohbeti grubu ayrıldı')
   revalidatePath('/panel')
 }
 
@@ -219,7 +228,7 @@ export async function saveShareAction(_: ActionState, form: FormData): Promise<A
     const enabled = form.get('enabled') === 'on'
     await saveShareSettings({ enabled, botId: Number(form.get('botId')) || null, siteOrigin: await siteOrigin() })
     revalidatePath('/panel')
-    return { ok: true, message: enabled ? 'Paylaşım botu açık. Aşağıdan sponsorları ekle.' : 'Paylaşım botu kapatıldı.' }
+    return logged('telegram', { ok: true, message: enabled ? 'Paylaşım botu açık. Aşağıdan sponsorları ekle.' : 'Paylaşım botu kapatıldı.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -240,7 +249,7 @@ export async function saveShareRuleAction(_: ActionState, form: FormData): Promi
       targetIds: formIds(form, 'targetIds'),
     })
     revalidatePath('/panel')
-    return { ok: true, message: `${id ? 'Kaydedildi' : 'Eklendi'}: "${rule.name}" (${rule.sourceTitle}) grubu dinleniyor.` }
+    return logged('telegram', { ok: true, message: `${id ? 'Kaydedildi' : 'Eklendi'}: "${rule.name}" (${rule.sourceTitle}) grubu dinleniyor.` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -251,7 +260,7 @@ export async function deleteShareRuleAction(_: ActionState, form: FormData): Pro
   try {
     await deleteShareRule(String(form.get('id') ?? ''))
     revalidatePath('/panel')
-    return { ok: true, message: 'Sponsor silindi.' }
+    return logged('telegram', { ok: true, message: 'Sponsor silindi.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -266,7 +275,7 @@ export async function saveOddsAction(_: ActionState, form: FormData): Promise<Ac
       targetIds: formIds(form, 'targetIds'),
     })
     revalidatePath('/panel')
-    return { ok: true, message: 'Özel oran ayarları kaydedildi.' }
+    return logged('telegram', { ok: true, message: 'Özel oran ayarları kaydedildi.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -282,8 +291,8 @@ export async function setOddsResultAction(_: ActionState, form: FormData): Promi
     const { posted } = await setOddsResult(dealId, result)
     revalidatePath('/panel')
     revalidatePath('/ozel-oranlar')
-    if (result === 'won') return { ok: true, message: posted ? `Kazandı olarak işaretlendi, ${posted} kanala duyuruldu.` : 'Kazandı olarak işaretlendi.' }
-    return { ok: true, message: result === 'lost' ? 'Kaybetti olarak işaretlendi.' : 'Sonuç temizlendi.' }
+    if (result === 'won') return logged('telegram', { ok: true, message: posted ? `Kazandı olarak işaretlendi, ${posted} kanala duyuruldu.` : 'Kazandı olarak işaretlendi.' })
+    return logged('telegram', { ok: true, message: result === 'lost' ? 'Kaybetti olarak işaretlendi.' : 'Sonuç temizlendi.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -305,7 +314,7 @@ export async function saveApprovalsAction(_: ActionState, form: FormData): Promi
       siteOrigin: await siteOrigin(),
     })
     revalidatePath('/panel')
-    return { ok: true, message: enabled ? `Onay bildirimleri "${title}" grubuna gidecek.` : 'Onay bildirimleri kapatıldı.' }
+    return logged('telegram', { ok: true, message: enabled ? `Onay bildirimleri "${title}" grubuna gidecek.` : 'Onay bildirimleri kapatıldı.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -315,7 +324,7 @@ export async function testApprovalAction(): Promise<ActionState> {
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
     await testApproval()
-    return { ok: true, message: 'Test bildirimi gönderildi.' }
+    return logged('telegram', { ok: true, message: 'Test bildirimi gönderildi.' })
   } catch (error) {
     return { message: errorText(error) }
   }

@@ -1,5 +1,6 @@
 'use server'
 
+import { logged, logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { canPanel } from '@/lib/admin-auth'
@@ -56,7 +57,7 @@ export async function saveOddsBotAction(_: ActionState, form: FormData): Promise
       postResults: form.get('postResults') === 'on',
     })
     refresh()
-    return { ok: true, message: config.enabled ? `Kaydedildi. Bot "${config.channelTitle}" kanalına paylaşacak.` : 'Kaydedildi. Bot şu an kapalı.' }
+    return logged('telegram', { ok: true, message: config.enabled ? `Kaydedildi. Bot "${config.channelTitle}" kanalına paylaşacak.` : 'Kaydedildi. Bot şu an kapalı.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -67,7 +68,7 @@ export async function connectOddsWebhookAction(_: ActionState): Promise<ActionSt
   try {
     await connectOddsWebhook(await siteOrigin())
     refresh()
-    return { ok: true, message: 'Anlık bağlantı (webhook) açıldı. Kaynak kanallara gelen postlar saniyeler içinde işlenecek.' }
+    return logged('telegram', { ok: true, message: 'Anlık bağlantı (webhook) açıldı. Kaynak kanallara gelen postlar saniyeler içinde işlenecek.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -78,7 +79,7 @@ export async function disconnectOddsWebhookAction(_: ActionState): Promise<Actio
   try {
     await disconnectOddsWebhook()
     refresh()
-    return { ok: true, message: 'Webhook kapatıldı. Bot artık cron ile birkaç dakikada bir kontrol edilecek.' }
+    return logged('telegram', { ok: true, message: 'Webhook kapatıldı. Bot artık cron ile birkaç dakikada bir kontrol edilecek.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -98,7 +99,7 @@ export async function addOddsSourceAction(_: ActionState, form: FormData): Promi
       tagText: text(form, 'tagText'),
     })
     refresh()
-    return { ok: true, message: `"${title}" kaynak olarak eklendi.` }
+    return logged('telegram', { ok: true, message: `"${title}" kaynak olarak eklendi.` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -109,7 +110,7 @@ export async function updateOddsSourceTagAction(_: ActionState, form: FormData):
   try {
     await updateOddsSourceTag(Number(form.get('id')), { tag: text(form, 'tag'), tagText: text(form, 'tagText') })
     refresh()
-    return { ok: true, message: 'Etiket kaydedildi.' }
+    return logged('telegram', { ok: true, message: 'Etiket kaydedildi.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -120,7 +121,7 @@ export async function updateOddsSourceTextAction(_: ActionState, form: FormData)
   try {
     await updateOddsSourceText(Number(form.get('id')), { siteLink: text(form, 'siteLink'), replacements: text(form, 'replacements'), footer: text(form, 'footer') })
     refresh()
-    return { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' }
+    return logged('telegram', { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -129,12 +130,14 @@ export async function updateOddsSourceTextAction(_: ActionState, form: FormData)
 export async function toggleOddsSourceAction(form: FormData) {
   if (!(await canPanel('telegram'))) return
   await setOddsSourceActive(Number(form.get('id')), form.get('active') === '1')
+  await logPanel('telegram', form.get('active') === '1' ? 'Özel oran kaynağı açıldı' : 'Özel oran kaynağı durduruldu', `Kaynak #${Number(form.get('id'))}`)
   refresh()
 }
 
 export async function deleteOddsSourceAction(form: FormData) {
   if (!(await canPanel('telegram'))) return
   await deleteOddsSource(Number(form.get('id')))
+  await logPanel('telegram', 'Özel oran kaynağı silindi', `Kaynak #${Number(form.get('id'))}`)
   refresh()
 }
 
@@ -154,7 +157,7 @@ export async function ingestManualAction(_: ActionState, form: FormData): Promis
     refresh()
     const labels = { odds: 'yeni özel oran', filled: 'oran “doldu” yapıldı', won: 'oran kazandı', lost: 'oran kaybetti', void: 'oran iade', ignore: 'işlem yok' } as const
     if (!res.count) return { message: res.kind === 'ignore' ? 'Bu post özel oran, doldu ya da sonuç postu olarak tanınmadı.' : 'Eşleşen açık oran bulunamadı.' }
-    return { ok: true, message: `${res.count} ${labels[res.kind]}.` }
+    return logged('telegram', { ok: true, message: `${res.count} ${labels[res.kind]}.` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -177,7 +180,7 @@ export async function bulkOddsAction(_: ActionState, form: FormData): Promise<Ac
     if (action === 'delete') await deleteOdds(ids)
     else await setOddsStatus(ids, action)
     refresh()
-    return { ok: true, message: `${ids.length} oran güncellendi.` }
+    return logged('telegram', { ok: true, message: `${ids.length} oran güncellendi.` })
   } catch (error) {
     return { message: errorText(error) }
   }
