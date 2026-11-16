@@ -33,7 +33,7 @@ import { useActionPulse } from '@/components/panel/flash'
 import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
 import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
-import { ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
 import { ImageField } from '@/components/panel/image-field'
 import { JAKO_POSES } from '@/lib/site-registry'
 import { PANEL_GROUPS, TELEGRAM_MODULES, type PanelModule } from '@/lib/panel-modules'
@@ -107,8 +107,11 @@ export function ContentEditor({
   siteUrl,
   logout,
   initialTab,
+  dataGaps = 0,
 }: {
   initialTab: string
+  /** How many lists on this screen could not be read and are shown empty instead. */
+  dataGaps?: number
   moderation?: React.ReactNode | null
   userName: string
   siteUrl: string
@@ -252,6 +255,7 @@ export function ContentEditor({
         setNavOpen(true)
         requestAnimationFrame(() => filterRef.current?.focus())
       }
+      if (e.key === 'Escape') setNavOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -424,6 +428,17 @@ export function ContentEditor({
           )}
         </header>
         <UnsavedBar count={guard.count} onSave={guard.saveAll} onDiscard={guard.discardAll} />
+        {dataGaps > 0 && !loading && (
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-foreground lg:px-8">
+            <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-pretty">
+              {`Bu ekrandaki ${dataGaps} liste okunamadı ve boş gösteriliyor. Boş görünen bir liste "kayıt yok" anlamına gelmeyebilir; kaydetmeden önce sayfayı yenile.`}
+            </span>
+            <button type="button" onClick={() => window.location.reload()} className="h-8 shrink-0 rounded-md border border-border bg-card px-3 text-sm font-medium text-foreground hover:bg-secondary">
+              Yenile
+            </button>
+          </div>
+        )}
         <div
           ref={contentRef}
           className={cn(
@@ -587,7 +602,7 @@ function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: Panel
         </span>
         <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
       </summary>
-      <div className="grid grid-cols-4 gap-4 border-t border-border p-4">
+      <div className="grid grid-cols-1 gap-4 border-t border-border p-4 sm:grid-cols-2 xl:grid-cols-4">
         {groups.map((g) => {
           const Icon = GROUP_ICONS[g.id] ?? Wrench
           return (

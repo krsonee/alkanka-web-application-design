@@ -1,7 +1,7 @@
 'use client'
 
 
-import { askConfirm, confirmed } from '@/components/panel/confirm-dialog'
+import { askConfirm, confirmed, notify } from '@/components/panel/confirm-dialog'
 import { useEffect, useState, useTransition } from 'react'
 import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Coins, Download, Link2Off, Lock, LogOut, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,6 +13,7 @@ import {
   restoreAction,
   revokeSessionsAction,
   searchMembersAction,
+  type MemberExtra,
   suspendAction,
   unlinkTelegramAction,
   walletAction,
@@ -40,6 +41,9 @@ const STATUS: Record<MemberStatus, { label: string; cls: string }> = {
 const input = 'rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary'
 const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 
+const NO_EXTRA: MemberExtra = { sort: 'yeni', source: '', from: '', to: '', minBalance: null, maxBalance: null, telegram: '' }
+const EXTRA_KEYS = ['sort', 'source', 'from', 'to', 'minBalance', 'maxBalance', 'telegram'] as const
+
 function Avatar({ name, image }: { name: string; image: string | null }) {
   return image ? (
     // eslint-disable-next-line @next/next/no-img-element
@@ -56,6 +60,8 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
     if (fromUrl) setQ(fromUrl)
   }, [])
   const [filter, setFilter] = useState<Filter>('tumu')
+  const [extra, setExtra] = useState<MemberExtra>(NO_EXTRA)
+  const extraCount = EXTRA_KEYS.filter((k) => extra[k] !== NO_EXTRA[k] && extra[k] != null && extra[k] !== '').length
   const [list, setList] = useState(initial)
   const [counts, setCounts] = useState(initialCounts)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -67,7 +73,7 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
 
   const load = (targetPage: number) =>
     start(async () => {
-      const r = await searchMembersAction(q, filter, targetPage)
+      const r = await searchMembersAction(q, filter, targetPage, extra)
       if (r) {
         setList(r.members)
         setCounts(r.counts)
@@ -81,7 +87,7 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
     const t = setTimeout(() => load(0), 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, filter])
+  }, [q, filter, extra])
 
   const refresh = () => load(page)
 
@@ -92,8 +98,9 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
   const exportCsv = async () => {
     setExporting(true)
     try {
-      const r = await exportMembersAction(q, filter)
-      if (!r.ok) return
+      const r = await exportMembersAction(q, filter, extra)
+      if (!r.ok) return notify(false, r.error)
+      if (r.capped) notify(false, `Dosyaya ilk ${r.count.toLocaleString('tr-TR')} üye sığdı. Daha dar bir süzgeçle tekrar indir.`)
       const url = URL.createObjectURL(new Blob([r.csv], { type: 'text/csv;charset=utf-8' }))
       const a = document.createElement('a')
       a.href = url
@@ -144,6 +151,68 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
               {f.label} ({counts[f.id] ?? 0})
             </button>
           ))}
+        </div>
+        <div className="flex flex-wrap items-end gap-3 border-t border-border pt-3">
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Sıralama
+            <select value={extra.sort ?? 'yeni'} onChange={(e) => setExtra({ ...extra, sort: e.target.value as MemberExtra['sort'] })} className={input}>
+              <option value="yeni">En yeni kayıt</option>
+              <option value="eski">En eski kayıt</option>
+              <option value="bakiye">En yüksek bakiye</option>
+              <option value="puan">En yüksek puan</option>
+              <option value="son">Son görülen</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Kayıt kaynağı
+            <input value={extra.source ?? ''} onChange={(e) => setExtra({ ...extra, source: e.target.value })} placeholder="örn. telegram" className={cn(input, 'w-36')} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Kayıt tarihi (ilk)
+            <input type="date" value={extra.from ?? ''} max={extra.to || undefined} onChange={(e) => setExtra({ ...extra, from: e.target.value })} className={input} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Kayıt tarihi (son)
+            <input type="date" value={extra.to ?? ''} min={extra.from || undefined} onChange={(e) => setExtra({ ...extra, to: e.target.value })} className={input} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            En az bakiye (KC)
+            <input
+              inputMode="numeric"
+              value={extra.minBalance ?? ''}
+              onChange={(e) => setExtra({ ...extra, minBalance: e.target.value.replace(/\D/g, '') === '' ? null : Number(e.target.value.replace(/\D/g, '')) })}
+              className={cn(input, 'w-28')}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            En çok bakiye (KC)
+            <input
+              inputMode="numeric"
+              value={extra.maxBalance ?? ''}
+              onChange={(e) => setExtra({ ...extra, maxBalance: e.target.value.replace(/\D/g, '') === '' ? null : Number(e.target.value.replace(/\D/g, '')) })}
+              className={cn(input, 'w-28')}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Telegram
+            <select value={extra.telegram ?? ''} onChange={(e) => setExtra({ ...extra, telegram: e.target.value as MemberExtra['telegram'] })} className={input}>
+              <option value="">Fark etmez</option>
+              <option value="var">Bağlı</option>
+              <option value="yok">Bağlı değil</option>
+            </select>
+          </label>
+          {(extraCount > 0 || q) && (
+            <button
+              type="button"
+              onClick={() => {
+                setExtra(NO_EXTRA)
+                setQ('')
+              }}
+              className="h-9 rounded-lg border border-border px-3 text-sm text-foreground hover:bg-secondary"
+            >
+              Süzgeçleri temizle
+            </button>
+          )}
         </div>
       </div>
 

@@ -605,7 +605,8 @@ function CounterSection({ d }: { d: TgHubData }) {
 
 function WipeProgress() {
   const { data: jobs, mutate } = useSWR('tg-wipe-jobs', () => pumpWipes(), {
-    refreshInterval: (latest) => (latest?.some((j) => !j.note) ? 2000 : 15000),
+    // Idle screens must not keep the database awake: poll only while a wipe is running. Starting one revalidates this key.
+    refreshInterval: (latest) => (latest?.some((j) => !j.note) ? 2000 : 0),
     revalidateOnFocus: true,
   })
   const stop = useAction()

@@ -155,7 +155,7 @@ const STAFF_TEMPLATES: { label: string; permissions: string[] }[] = [
   { label: 'İçerik editörü', permissions: ['slide', 'hero', 'texts', 'seo', 'faqs', 'catalog', 'studio', 'logo'] },
   { label: 'Sponsor destek', permissions: ['sponsors', 'growth', 'marketing', 'community'] },
   { label: 'Oyun sorumlusu', permissions: ['games', 'rewards', 'tournaments', 'cember'] },
-  { label: 'Topluluk & bot', permissions: ['push', 'messages', 'telegram', 'social'] },
+  { label: 'Topluluk & bot', permissions: ['push', 'messages', 'tg_posts', 'tg_mod', 'social'] },
 ]
 
 function StaffForm({
@@ -203,7 +203,7 @@ function StaffForm({
           <input className={field} value={v.displayName} onChange={(e) => setV({ ...v, displayName: e.target.value })} placeholder="Ahmet (Moderatör)" />
         </label>
         <label className="flex flex-col gap-1 text-sm font-medium text-foreground">
-          {v.id ? 'Yeni şifre (boş bırak = değişmez)' : 'Şifre (en az 10 karakter)'}
+          {v.id ? 'Yeni şifre (boş bırak = değişmez)' : 'Şifre (en az 10 karakter, harf ve rakam)'}
           <input
             className={field}
             type="password"

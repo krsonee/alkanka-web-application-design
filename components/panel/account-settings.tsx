@@ -1,5 +1,6 @@
 'use client'
 
+import { PASSWORD_HINT, passwordProblem } from '@/lib/panel-password'
 import { useState, useTransition } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { changeOwnPassword, confirmTotpSetup, disableOwnTotp, regenerateBackupCodes, startTotpSetup } from '@/app/panel/auth-actions'
@@ -24,7 +25,7 @@ export function AccountSettings({
   const [setup, setSetup] = useState<{ qr: string; secret: string } | null>(null)
   const [codes, setCodes] = useState<string[] | null>(null)
   const [code, setCode] = useState('')
-  const [pw, setPw] = useState({ current: '', next: '' })
+  const [pw, setPw] = useState({ current: '', next: '', repeat: '' })
 
   const show = (res: { ok: boolean; error?: string; message?: string }, okText = 'Kaydedildi.') =>
     setMsg(res.ok ? { ok: true, text: res.message ?? okText } : { ok: false, text: res.error ?? 'Olmadı.' })
@@ -184,10 +185,12 @@ export function AccountSettings({
             className="grid gap-3 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault()
+              const problem = pw.next !== pw.repeat ? 'Yeni şifre ile tekrarı aynı değil.' : passwordProblem(pw.next, username)
+              if (problem) return show({ ok: false, error: problem })
               start(async () => {
                 const res = await changeOwnPassword(pw.current, pw.next)
                 show(res)
-                if (res.ok) setPw({ current: '', next: '' })
+                if (res.ok) setPw({ current: '', next: '', repeat: '' })
               })
             }}
           >
@@ -196,7 +199,7 @@ export function AccountSettings({
               <input className={field} type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} autoComplete="current-password" required />
             </label>
             <label className="flex flex-col gap-1 text-sm text-foreground">
-              Yeni şifre (en az 10 karakter)
+              Yeni şifre
               <input
                 className={field}
                 type="password"
@@ -205,7 +208,22 @@ export function AccountSettings({
                 autoComplete="new-password"
                 minLength={10}
                 required
+                aria-describedby="panel-pw-hint"
               />
+              <span id="panel-pw-hint" className="text-xs text-muted-foreground">{PASSWORD_HINT}</span>
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-foreground">
+              Yeni şifre (tekrar)
+              <input
+                className={field}
+                type="password"
+                value={pw.repeat}
+                onChange={(e) => setPw({ ...pw, repeat: e.target.value })}
+                autoComplete="new-password"
+                minLength={10}
+                required
+              />
+              {pw.repeat && pw.repeat !== pw.next && <span className="text-xs text-destructive">İki şifre aynı değil.</span>}
             </label>
             <button type="submit" disabled={pending} className={cn(btn, 'self-start')}>
               Şifreyi değiştir

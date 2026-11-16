@@ -32,7 +32,10 @@ import {
   suspendMember,
   unlinkTelegram,
   type MemberDetail,
+  type MemberFilters,
   type MemberRow,
+  type MemberSort,
+  MEMBER_SORTS,
   type MemberStatus,
 } from '@/lib/members-admin'
 
@@ -49,18 +52,38 @@ async function guard(fn: () => Promise<string>): Promise<Result> {
   }
 }
 
+export type MemberExtra = Pick<MemberFilters, 'sort' | 'source' | 'from' | 'to' | 'minBalance' | 'maxBalance' | 'telegram'>
+
+function cleanExtra(extra: MemberExtra | undefined): MemberExtra {
+  const e = extra ?? {}
+  return {
+    sort: MEMBER_SORTS.includes(e.sort as MemberSort) ? e.sort : 'yeni',
+    source: String(e.source ?? '').slice(0, 60),
+    from: String(e.from ?? ''),
+    to: String(e.to ?? ''),
+    minBalance: e.minBalance ?? null,
+    maxBalance: e.maxBalance ?? null,
+    telegram: e.telegram === 'var' || e.telegram === 'yok' ? e.telegram : '',
+  }
+}
+
 export async function searchMembersAction(
   q: string,
   status: MemberStatus | 'tumu',
   page = 0,
+  extra?: MemberExtra,
 ): Promise<{ members: MemberRow[]; counts: Record<MemberStatus | 'tumu', number>; total: number; page: number; pageSize: number } | null> {
   if (!(await canPanel('users'))) return null
-  return listMembers({ q: q.slice(0, 80), status, page })
+  return listMembers({ ...cleanExtra(extra), q: q.slice(0, 80), status, page })
 }
 
-export async function exportMembersAction(q: string, status: MemberStatus | 'tumu'): Promise<{ ok: true; csv: string; count: number } | { ok: false; error: string }> {
+export async function exportMembersAction(
+  q: string,
+  status: MemberStatus | 'tumu',
+  extra?: MemberExtra,
+): Promise<{ ok: true; csv: string; count: number; capped: boolean } | { ok: false; error: string }> {
   if (!(await canPanel('users'))) return { ok: false, error: 'Bu işlem için yetkin yok.' }
-  const r = await exportMembersCsv({ q: q.slice(0, 80), status })
+  const r = await exportMembersCsv({ ...cleanExtra(extra), q: q.slice(0, 80), status })
   await logAudit('Üye listesi dışa aktarıldı', null, `${r.count} üye dışa aktarıldı`)
   return { ok: true, ...r }
 }

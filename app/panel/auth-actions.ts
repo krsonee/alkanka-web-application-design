@@ -1,5 +1,7 @@
 'use server'
 
+import { passwordProblem } from '@/lib/panel-password'
+
 import QRCode from 'qrcode'
 import { revalidatePath } from 'next/cache'
 import { rows, sql } from '@/lib/db'
@@ -218,7 +220,9 @@ export async function changeOwnPassword(current: string, next: string): Promise<
     if (session.isOwner) throw new Error('Ana yönetici şifresi ADMIN_PASSWORD ortam değişkeninden gelir. Vercel > Settings > Environment Variables bölümünden değiştir.')
     const row = await accountById(session.id)
     if (!row || !verifyPassword(current, row.password_hash)) throw new Error('Mevcut şifre yanlış.')
-    if (next.length < 10) throw new Error('Yeni şifre en az 10 karakter olmalı.')
+    const weak = passwordProblem(next, row.username)
+    if (weak) throw new Error(weak)
+    if (next === current) throw new Error('Yeni şifre eskisiyle aynı olamaz.')
     const [updated] = await rows<PanelAccountRow>(sql`
       UPDATE panel_accounts SET password_hash = ${hashPassword(next)}, session_version = session_version + 1 WHERE id = ${row.id} RETURNING *
     `)
@@ -243,13 +247,16 @@ export async function saveStaffAccount(input: StaffInput): Promise<Result> {
     await owner()
     const username = String(input.username ?? '').trim().toLowerCase()
     const displayName = String(input.displayName ?? '').trim().slice(0, 40)
-    const permissions = JSON.stringify(cleanPermissions(input.permissions))
+    const granted = cleanPermissions(input.permissions)
+    if (granted.length === 0 && input.active !== false) throw new Error('En az bir bölüm seç. Hiçbir bölüme giremeyen hesap panelde boş ekran görür.')
+    const permissions = JSON.stringify(granted)
     const password = String(input.password ?? '')
     if (input.id) {
       const row = await accountById(Number(input.id))
       if (!row) throw new Error('Hesap bulunamadı.')
       if (row.is_owner) throw new Error('Ana yönetici hesabı buradan düzenlenmez.')
-      if (password && password.length < 10) throw new Error('Şifre en az 10 karakter olmalı.')
+      const weak = password ? passwordProblem(password, username) : null
+      if (weak) throw new Error(weak)
       const deactivated = row.active && !input.active
       await rows(sql`
         UPDATE panel_accounts SET
@@ -276,13 +283,13 @@ export async function saveStaffAccount(input: StaffInput): Promise<Result> {
     }
     if (!USERNAME_RE.test(username)) throw new Error('Kullanıcı adı 3-32 karakter olmalı; harf, rakam, nokta, alt çizgi veya tire.')
     if (username === 'admin') throw new Error('"admin" ana yöneticiye ayrılmış.')
-    if (password.length < 10) throw new Error('Şifre en az 10 karakter olmalı.')
+    const weak = passwordProblem(password, username)
+    if (weak) throw new Error(weak)
     if (await accountByUsername(username)) throw new Error('Bu kullanıcı adı zaten var.')
     await rows(sql`
       INSERT INTO panel_accounts (username, display_name, password_hash, permissions, totp_required, active)
       VALUES (${username}, ${displayName}, ${hashPassword(password)}, ${permissions}::jsonb, ${Boolean(input.totpRequired)}, ${Boolean(input.active)})
     `)
-    const granted = cleanPermissions(input.permissions)
     await logPanel('staff', 'Personel hesabı açıldı', `@${username}`, `${granted.length} bölüm${granted.length ? `: ${granted.map(moduleLabel).join(', ')}` : ''}${input.totpRequired ? ' · 2FA zorunlu' : ''}`)
     return 'Personel hesabı oluşturuldu.'
   })

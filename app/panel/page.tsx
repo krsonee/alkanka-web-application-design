@@ -23,6 +23,7 @@ import { ContentEditor } from '@/components/panel/content-editor'
 import { LogoEditor } from '@/components/panel/logo-editor'
 import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
+import { OpenTables } from '@/components/panel/open-tables'
 import { GameStats } from '@/components/panel/game-stats'
 import { TableMetrics } from '@/components/panel/table-metrics'
 import { TournamentManager } from '@/components/panel/tournament-manager'
@@ -202,7 +203,7 @@ import { PostComposer, PostList } from '@/components/panel/tg-post-center'
 import { ScheduledPosts } from '@/components/panel/tg-post-plans'
 import { ChannelRules } from '@/components/panel/tg-post-rules'
 import { loadPostCenter } from '@/lib/tg-posts'
-import { listMembers } from '@/lib/members-admin'
+import { listMembers, memberCounts } from '@/lib/members-admin'
 import { lastLoginAddresses, recentAudit, searchAudit } from '@/lib/panel-log'
 import { listContentHistory } from '@/lib/content-history'
 import { ContentHistory } from '@/components/panel/content-history'
@@ -792,10 +793,28 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       />
     )),
     section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch((e) => { console.error('[panel-limits]', e); return [] })} />),
-    section(ctx, 'games', 'Oyun ayarları', () => (
+    section(ctx, 'games', 'Oyun ayarları', async () => (
       <div className="flex flex-col gap-6">
         <GameStats />
         <TableMetrics />
+        <OpenTables
+          now={Date.now()}
+          tables={await import('@/lib/pvp/tables')
+            .then((m) => m.listOpenTables())
+            .then((list) =>
+              list.map((t) => ({
+                id: t.id,
+                game: t.game,
+                status: t.status as 'bekliyor' | 'oynaniyor',
+                stake: t.stake,
+                seats: t.seats,
+                players: t.players.map((pl) => ({ name: pl.name, bot: Boolean(pl.bot) })),
+                updatedAt: t.updatedAt,
+                createdAt: t.createdAt,
+              })),
+            )
+            .catch(miss([]))}
+        />
         <ArenaSettingsEditor
           settings={mergeArena(content['arena:settings'] as Partial<ArenaSettings> | undefined)}
           winRate={Number((content['arena:house'] as { winRate?: number } | undefined)?.winRate ?? 40)}
@@ -861,7 +880,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const onDash = active === 'dashboard'
   const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
     pendingDetail(can).catch((): PendingDetail => EMPTY_PENDING),
-    onDash && can('users') ? listMembers().then((r) => r.counts).catch(miss(null)) : null,
+    onDash && can('users') ? memberCounts().catch(miss(null)) : null,
     onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
     onDash && session.isOwner ? loadSystemStatus().catch((error) => (console.error('[panel:system-status]', error), null)) : null,

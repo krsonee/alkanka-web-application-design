@@ -285,7 +285,9 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder 
       if (!ok) return
     start(async () => {
       const r = await resetCatalog(kind)
-      setStatus(r.ok ? { ok: true, text: `${r.message} Sayfayı yenile.` } : { ok: false, text: r.error })
+      setStatus(r.ok ? { ok: true, text: `${r.message} Ekran yenileniyor...` } : { ok: false, text: r.error })
+      // The form keeps its own copy of the list, so only a reload shows the restored defaults.
+      if (r.ok) setTimeout(() => window.location.reload(), 900)
     })
     })
   }

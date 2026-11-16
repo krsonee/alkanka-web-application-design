@@ -2,8 +2,8 @@ import 'server-only'
 import { listBots } from '@/lib/telegram-mirror'
 import { shareStatus, getBotSuite } from '@/lib/telegram-bots'
 import { chatStatus } from '@/lib/telegram-chat'
-import { tvBotStatus } from '@/lib/kankatv-engage'
-import { betsBotStatus } from '@/lib/tv-bets'
+import { getTvConfig, tvBotStatus } from '@/lib/kankatv-engage'
+import { betsBotStatus, getBetsConfig } from '@/lib/tv-bets'
 import { getVerification } from '@/lib/deals'
 import { getTracking } from '@/lib/marketing'
 
@@ -24,7 +24,7 @@ function runState(lastRunAt: string | Date | null | undefined, lastError: string
 const settled = <T,>(p: Promise<T>) => p.then((v) => v).catch(() => null)
 
 export async function loadSystemStatus(): Promise<StatusItem[]> {
-  const [bots, suite, share, chat, tv, bets, verify, tracking] = await Promise.all([
+  const [bots, suite, share, chat, tv, bets, verify, tracking, tvCfg, betsCfg] = await Promise.all([
     settled(listBots()),
     settled(getBotSuite()),
     settled(shareStatus()),
@@ -33,6 +33,8 @@ export async function loadSystemStatus(): Promise<StatusItem[]> {
     settled(betsBotStatus()),
     settled(getVerification()),
     settled(getTracking()),
+    settled(getTvConfig()),
+    settled(getBetsConfig()),
   ])
 
   const tg = '/panel?b=telegram'
@@ -40,8 +42,22 @@ export async function loadSystemStatus(): Promise<StatusItem[]> {
   const mk = '/panel?b=marketing'
   const items: StatusItem[] = []
 
+  // A row in the bot table is not a working bot: an unreadable token means it cannot send anything.
   const botCount = bots?.length ?? 0
-  items.push({ id: 'bots', group: 'Telegram', label: 'Bot bağlantısı', level: botCount > 0 ? 'ok' : 'off', detail: botCount > 0 ? `${botCount} bot bağlı` : 'Bot eklenmemiş', href: tg })
+  const broken = bots?.filter((b) => !b.tokenHint.includes(':')).length ?? 0
+  items.push({
+    id: 'bots',
+    group: 'Telegram',
+    label: 'Bot kaydı',
+    level: botCount === 0 ? 'off' : broken > 0 ? 'warn' : 'ok',
+    detail:
+      botCount === 0
+        ? 'Bot eklenmemiş'
+        : broken > 0
+          ? `${botCount} bottan ${broken} tanesinin anahtarı okunamıyor`
+          : `${botCount} bot kayıtlı (bağlantı denenmedi)`,
+    href: tg,
+  })
 
   const webhook = chat?.webhook
   items.push({
@@ -55,8 +71,9 @@ export async function loadSystemStatus(): Promise<StatusItem[]> {
 
   const shareOn = Boolean(suite?.share.enabled)
   items.push({ id: 'share', group: 'Otomasyon', label: 'Post paylaşım', ...(shareOn ? runState(share?.lastRunAt, share?.lastError) : { level: 'off' as const, detail: 'Kapalı' }), href: tg })
-  items.push({ id: 'tv', group: 'Otomasyon', label: 'KankaTV gol botu cron', ...runState(tv?.lastRunAt, tv?.lastError), href: tg })
-  items.push({ id: 'bets', group: 'Otomasyon', label: 'Canlı etkinlik cron', ...runState(bets?.lastRunAt, bets?.lastError), href: tg })
+  const closed = { level: 'off' as const, detail: 'Kapalı' }
+  items.push({ id: 'tv', group: 'Otomasyon', label: 'KankaTV gol botu', ...(tvCfg?.goalBot.enabled ? runState(tv?.lastRunAt, tv?.lastError) : closed), href: tg })
+  items.push({ id: 'bets', group: 'Otomasyon', label: 'Canlı etkinlik botu', ...(betsCfg?.bot.enabled ? runState(bets?.lastRunAt, bets?.lastError) : closed), href: tg })
 
   const v = verify ?? { google: '', bing: '', yandex: '', meta: '' }
   for (const [id, label] of [['google', 'Google doğrulama'], ['bing', 'Bing doğrulama'], ['yandex', 'Yandex doğrulama']] as const) {

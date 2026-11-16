@@ -2,19 +2,20 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { StatusItem, StatusLevel } from '@/lib/system-status'
 
-const DOT: Record<StatusLevel, string> = { ok: 'bg-primary', warn: 'bg-gold', off: 'bg-destructive' }
-const WORD: Record<StatusLevel, string> = { ok: 'Çalışıyor', warn: 'Dikkat', off: 'Kurulmadı' }
+const DOT: Record<StatusLevel, string> = { ok: 'bg-primary', warn: 'bg-destructive', off: 'bg-muted-foreground/40' }
+const WORD: Record<StatusLevel, string> = { ok: 'Çalışıyor', warn: 'Sorun var', off: 'Kapalı ya da kurulmadı' }
 
 export function SystemStatus({ items }: { items: StatusItem[] }) {
   const groups = Array.from(new Set(items.map((i) => i.group)))
-  const problems = items.filter((i) => i.level !== 'ok').length
+  const problems = items.filter((i) => i.level === 'warn').length
+  const closed = items.filter((i) => i.level === 'off').length
 
   return (
     <section aria-labelledby="system-status-title" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-col gap-0.5">
           <h2 id="system-status-title" className="font-display text-lg font-bold text-foreground">Sistem durumu</h2>
-          <p className="text-sm text-muted-foreground">Botlar, cron&apos;lar, doğrulamalar ve takip kodları tek bakışta.</p>
+          <p className="text-sm text-muted-foreground">Botlar, otomasyonlar, doğrulamalar ve takip kodları. Gri nokta kapalı ya da kurulmamış, kırmızı nokta bozuk demek.</p>
         </div>
         <span
           className={cn(
@@ -22,7 +23,7 @@ export function SystemStatus({ items }: { items: StatusItem[] }) {
             problems === 0 ? 'bg-primary/15 text-primary' : 'bg-destructive/15 text-destructive',
           )}
         >
-          {problems === 0 ? 'Her şey yolunda' : `${problems} kalem ilgi bekliyor`}
+          {problems === 0 ? (closed > 0 ? `Sorun yok, ${closed} kalem kapalı` : 'Her şey yolunda') : `${problems} kalemde sorun var`}
         </span>
       </header>
 
