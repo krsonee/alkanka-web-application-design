@@ -8,7 +8,9 @@ import { Check, Star, Trash2, X } from 'lucide-react'
 import { answerComplaint, createLeagueMatch, finishLeagueMatch, moderateReview, removeComplaint, removeLeagueMatch, removeReview } from '@/app/panel/community-actions'
 import type { Complaint, LeagueMatch, Review } from '@/lib/community'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
-import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
+import { StatusLine } from '@/components/alkanka/community/use-action'
+import { usePanelAction as useAction } from '@/components/panel/flash'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { cn } from '@/lib/utils'
 import { CommunityGuide, CommunityHint, type CommunityTab } from './community-guide'
 import { FixturePicker } from './fixture-picker'
@@ -29,7 +31,7 @@ type Props = {
 }
 
 export function CommunityManager({ reviews, published, complaints, matches, siteNames, withdraw, proofs }: Props) {
-  const [tab, setTab] = useState<CommunityTab>('reviews')
+  const [tab, setTab] = useUrlTab<CommunityTab>(['reviews', 'kanit', 'complaints', 'cekim', 'league'], 'reviews')
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'forwarded').length
   return (
     <div className="flex flex-col gap-5">

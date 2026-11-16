@@ -4,6 +4,7 @@
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
 import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
@@ -424,7 +425,7 @@ const TABS: { id: Kind; label: string }[] = [
 ]
 
 export function CatalogEditor({ catalog, sponsors, library, hidden = {} }: { catalog: Omit<Catalog, 'rewards'>; sponsors: Option[]; library: string[]; hidden?: HiddenMap }) {
-  const [tab, setTab] = useState<Kind>('events')
+  const [tab, setTab] = useUrlTab<Kind>(['events', 'predictions', 'campaigns', 'bonuses'], 'events')
   const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
   return (
     <div className="flex flex-col gap-4">

@@ -5,6 +5,7 @@ import { askConfirm } from '@/components/panel/confirm-dialog'
 import { HideButton } from '@/components/panel/hide-button'
 import { KpGuide } from '@/components/panel/area-guides'
 import { useState, useTransition } from 'react'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { Minus, Plus, Search, Trash2, Undo2 } from 'lucide-react'
 import {
   changePoints,
@@ -68,7 +69,7 @@ type Props = {
 }
 
 export function KpManager({ levels, rules, badges, awards, board, autoLabels, online, ticker, quest, questWinners }: Props) {
-  const [tab, setTab] = useState<Tab>('levels')
+  const [tab, setTab] = useUrlTab<Tab>(['levels', 'rules', 'badges', 'award', 'board', 'online', 'ticker', 'quest'], 'levels')
   return (
     <div className="flex flex-col gap-5">
       <KpGuide />

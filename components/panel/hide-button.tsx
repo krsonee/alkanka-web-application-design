@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { setVisibility, type VisibilityKind } from '@/app/panel/visibility-actions'
 import { cn } from '@/lib/utils'
-import { confirmed } from '@/components/panel/confirm-dialog'
+import { confirmed, notify } from '@/components/panel/confirm-dialog'
 
 const CLOSES_FOR_EVERYONE = new Set<VisibilityKind>(['arena', 'mini'])
 
@@ -42,8 +42,10 @@ export function HideButton({
       const result = await setVisibility(kind, id, !next)
       if (!result.ok) {
         setError(result.error)
+        notify(false, result.error)
         return
       }
+      notify(true, `${label ? `"${label}"` : 'Kayıt'} ${next ? 'siteden gizlendi' : 'sitede tekrar görünüyor'}.`)
       setIsHidden(next)
       onChange?.(next)
       router.refresh()

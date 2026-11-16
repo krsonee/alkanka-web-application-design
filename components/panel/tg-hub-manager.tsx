@@ -963,7 +963,7 @@ export function TgHubManager({ data }: { data: TgHubData }) {
   return (
     <>
       {/* The Durum tab one level up lists every failing section, so the red box is not repeated here. */}
-      <TelegramTabs label="Telegram Merkezi bölümleri" legend={false} issues="none" tabs={tabs} />
+      <TelegramTabs label="Telegram Merkezi bölümleri" legend={false} issues="none" tabs={tabs} param="t" />
       <MemberCardHost />
     </>
   )

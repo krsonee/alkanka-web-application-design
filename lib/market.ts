@@ -277,12 +277,24 @@ export async function pendingCount(): Promise<number> {
 
 export async function resolveRequest(id: number, approve: boolean, note: string) {
   await ensure()
-  const r = await rows<ReqRow>(sql`UPDATE market_requests SET status = ${approve ? 'onaylandi' : 'reddedildi'},
-    note = ${clean(note, 300) || null}, resolved_at = now() WHERE id = ${id} AND status = 'beklemede' RETURNING *`)
+  if (approve) {
+    const r = await rows<ReqRow>(sql`UPDATE market_requests SET status = 'onaylandi',
+      note = ${clean(note, 300) || null}, resolved_at = now() WHERE id = ${id} AND status = 'beklemede' RETURNING *`)
+    if (!r[0]) throw new Error('Talep bulunamadı ya da zaten sonuçlandı.')
+    return
+  }
+  // One statement, so a rejected request can never be left without its refund and its stock.
+  const r = await rows<ReqRow & { refunded: string }>(sql`WITH req AS (
+      UPDATE market_requests SET status = 'reddedildi', note = ${clean(note, 300) || null}, resolved_at = now()
+      WHERE id = ${id} AND status = 'beklemede' RETURNING *
+    ), refund AS (
+      UPDATE wallets w SET balance = w.balance + req.price, updated_at = now() FROM req WHERE w.user_id = req.user_id RETURNING w.user_id
+    ), restock AS (
+      UPDATE market_items i SET stock = i.stock + 1 FROM req WHERE i.id = req.item_id RETURNING i.id
+    )
+    SELECT req.*, (SELECT count(*) FROM refund) AS refunded, (SELECT count(*) FROM restock) AS restocked FROM req`)
   const req = r[0]
   if (!req) throw new Error('Talep bulunamadı ya da zaten sonuçlandı.')
-  if (!approve) {
-    await credit(req.user_id, req.price)
-    await rows(sql`UPDATE market_items SET stock = stock + 1 WHERE id = ${req.item_id}`)
-  }
+  // A member who paid always has a wallet row; this only covers one that was removed since.
+  if (Number(req.refunded) === 0) await credit(req.user_id, req.price)
 }

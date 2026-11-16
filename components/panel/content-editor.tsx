@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { askConfirm, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
+import { useActionPulse } from '@/components/panel/flash'
 import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
 import { addSlide, duplicateSlide, moveSlide, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
@@ -257,6 +258,7 @@ export function ContentEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const guard = useUnsavedGuard(contentRef)
+  useActionPulse()
   const pick = async (id: PanelTab) => {
     setNavOpen(false)
     if (id === tab) return

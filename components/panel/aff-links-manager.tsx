@@ -7,6 +7,7 @@ import { Check, Copy, ExternalLink, Link2, Loader2, Pause, Pencil, Play, Plus, R
 import { checkAffLinkAction, deleteAffLinkAction, saveAffLinkAction, toggleAffLinkAction } from '@/app/panel/growth-actions'
 import type { AffLinkView, AffMode } from '@/lib/aff-links'
 import { cn } from '@/lib/utils'
+import { Flash } from '@/components/panel/flash'
 
 export type AffSiteOption = { id: number; name: string; slug: string; active: boolean }
 type Props = { links: AffLinkView[]; sites: AffSiteOption[]; siteUrl: string }
@@ -187,7 +188,7 @@ function Editor({ draft, sites, siteUrl, onClose }: { draft: Draft; sites: AffSi
         </fieldset>
       ) : null}
 
-      {msg ? <p role="status" className={cn('break-all text-sm', msg.ok ? 'text-primary' : 'text-destructive')}>{msg.message}</p> : null}
+      <Flash ok={msg?.ok} text={msg?.message} token={msg} className="break-all" />
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={btn} disabled={pending || !d.affUrl.trim() || d.code.length < 2}>
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : d.id ? <Check className="size-4" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
@@ -297,7 +298,7 @@ function LinkRow({ link, sites, siteUrl }: { link: AffLinkView; sites: AffSiteOp
         ) : null}
       </div>
 
-      {msg ? <p role="status" className={cn('break-all text-sm', msg.ok ? 'text-primary' : 'text-destructive')}>{msg.message}</p> : null}
+      <Flash ok={msg?.ok} text={msg?.message} token={msg} className="break-all" />
       <div className="flex flex-wrap gap-2">
         <button type="button" className={ghost} onClick={() => setEditing(true)}>
           <Pencil className="size-3.5" aria-hidden="true" /> Düzenle / linki yenile

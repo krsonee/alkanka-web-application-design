@@ -14,6 +14,7 @@ import { beginTournament, kickEntry, pickMatchWinner, removeTournament, saveTour
 import type { ActionState } from '@/app/panel/actions'
 import { BracketView } from '@/components/alkanka/arena/bracket-view'
 import { formatTR } from '@/components/alkanka/arena/tournament-card'
+import { Flash } from '@/components/panel/flash'
 
 const ISTANBUL_OFFSET = -180
 
@@ -26,12 +27,7 @@ const field = 'rounded-xl border border-input bg-background px-3 py-2.5 text-sm 
 const labelCls = 'flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground'
 
 function Feedback({ state }: { state: ActionState }) {
-  if (!state.message) return null
-  return (
-    <p role="status" className={cn('text-sm font-semibold', state.ok ? 'text-primary' : 'text-destructive')}>
-      {state.message}
-    </p>
-  )
+  return <Flash ok={state.ok} text={state.message} token={state} className="font-semibold" />
 }
 
 function ActionButton({
@@ -82,7 +78,7 @@ function ActionButton({
         {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
         {children}
       </button>
-      {!state.ok && state.message && <span className="text-xs text-destructive">{state.message}</span>}
+      <Flash ok={false} text={state.ok ? null : state.message} token={state} className="text-xs" />
     </form>
   )
 }

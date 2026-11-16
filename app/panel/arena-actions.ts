@@ -5,8 +5,6 @@ import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { setContent } from '@/lib/content'
-import { pool } from '@/lib/db'
-import { credit, debit, recordHistory } from '@/lib/member'
 import { ARENA_GAMES, ARENA_META, isArenaGame, type ArenaSettings } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
 import { cancelTable } from '@/lib/pvp/tables'
@@ -208,25 +206,5 @@ export async function adminCancelTable(_: ActionState, form: FormData): Promise<
     return { ok: true, message: 'Masa kapatıldı, bahisler iade edildi.' }
   } catch (e) {
     return fail(e, 'Masa kapatılamadı.')
-  }
-}
-
-export async function adjustMemberBalance(_: ActionState, form: FormData): Promise<ActionState> {
-  try {
-    await requireAdmin('games')
-    const email = String(form.get('email') ?? '').trim().toLowerCase()
-    const amount = Math.round(Number(form.get('amount')))
-    if (!email) return { message: 'Üye e-postası gir.' }
-    if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 1000000) return { message: 'Geçerli bir tutar gir (örn. 500 veya -200).' }
-    const u = await pool.query('SELECT id, name FROM "user" WHERE lower(email) = $1', [email])
-    const user = u.rows[0]
-    if (!user) return { message: 'Bu e-postaya ait üye bulunamadı.' }
-    if (amount > 0) await credit(user.id, amount)
-    else if (!(await debit(user.id, -amount))) return { message: 'Üyenin bakiyesi yetersiz.' }
-    await recordHistory({ userId: user.id, userName: user.name, game: 'panel', mode: 'admin', opponent: 'Panel düzenlemesi', stake: 0, result: amount > 0 ? 'win' : 'loss', delta: amount })
-    refresh()
-    return { ok: true, message: `${user.name}: ${amount > 0 ? '+' : ''}${amount} KC uygulandı.` }
-  } catch (e) {
-    return fail(e, 'Uygulanamadı.')
   }
 }

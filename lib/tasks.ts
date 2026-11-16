@@ -102,6 +102,7 @@ export function ensureTasks() {
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starts_at timestamptz`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ends_at timestamptz`)
     await rows(sql`ALTER TABLE task_claims ADD COLUMN IF NOT EXISTS period_key text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE task_claims ADD COLUMN IF NOT EXISTS note text`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS task_claims_period_uniq ON task_claims (user_id, task_id, period_key)`)
     await rows(sql`ALTER TABLE task_claims DROP CONSTRAINT IF EXISTS task_claims_user_id_task_id_key`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'manual'`)
@@ -491,10 +492,25 @@ export async function approveClaim(claimId: number): Promise<{ awarded: boolean;
   return { awarded: result.awarded, points: result.points }
 }
 
-export async function rejectClaim(claimId: number): Promise<void> {
+export async function rejectClaim(claimId: number, note = ''): Promise<void> {
   await ensureTasks()
-  const updated = await rows<{ id: number }>(sql`UPDATE task_claims SET status = 'reddedildi' WHERE id = ${claimId} AND status = 'beklemede' RETURNING id`)
-  if (!updated.length) throw new Error('Talep bulunamadı.')
+  const reason = note.trim().slice(0, 300)
+  const updated = await rows<{ user_id: string; task_id: number }>(
+    sql`UPDATE task_claims SET status = 'reddedildi', note = ${reason || null} WHERE id = ${claimId} AND status = 'beklemede' RETURNING user_id, task_id`,
+  )
+  const claim = updated[0]
+  if (!claim) throw new Error('Talep bulunamadı.')
+  // The member only sees "reddedildi" on the task; the inbox is where the reason reaches them.
+  const [task] = await rows<{ title: string }>(sql`SELECT title FROM tasks WHERE id = ${claim.task_id}`).catch(() => [])
+  const { sendMessage } = await import('@/lib/inbox')
+  await sendMessage({
+    userId: String(claim.user_id),
+    targetLabel: 'Görev talebi',
+    title: 'Görev talebin reddedildi',
+    body: `${task?.title ? `"${task.title}" görevi için gönderdiğin talep reddedildi.` : 'Gönderdiğin görev talebi reddedildi.'}${reason ? ` Sebep: ${reason}` : ''}`,
+    url: '/gorevler',
+    sentBy: 'Sistem',
+  }).catch((error) => console.error('[tasks] red mesajı gönderilemedi', error))
 }
 
 /** Counts what the member actually did in the task's current period, straight from the source tables. */

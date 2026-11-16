@@ -3,6 +3,7 @@
 
 import { askConfirm, confirmed } from '@/components/panel/confirm-dialog'
 import { useState } from 'react'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { Ban, Check, ShieldOff, Trash2, X } from 'lucide-react'
 import {
   approveShare,
@@ -40,7 +41,7 @@ const STATUS: Record<AdminWithdrawShare['status'], { label: string; tone: string
 const time = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 export function WithdrawManager({ shares, settings, siteRewards, sites, blocks }: Props) {
-  const [view, setView] = useState<'queue' | 'rewards' | 'rules'>('queue')
+  const [view, setView] = useUrlTab<'queue' | 'rewards' | 'rules'>(['queue', 'rewards', 'rules'], 'queue', 'v')
   const pendingCount = shares.filter((s) => s.status === 'pending').length
   return (
     <div className="flex flex-col gap-4">

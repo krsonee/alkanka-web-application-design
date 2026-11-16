@@ -9,6 +9,7 @@ import { AD_PAGES, AD_POSITIONS, adDisplaySize, type AdMap, type AdPage, type Ad
 import { formatLocal, scheduleState } from '@/lib/schedule'
 import { ImageField } from '@/components/panel/image-field'
 import { cn } from '@/lib/utils'
+import { Flash } from '@/components/panel/flash'
 
 type SlotKey = `${AdPage}:${AdPosition}`
 type Stats = Record<string, { views: number; clicks: number }>
@@ -220,11 +221,7 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
         <button type="submit" disabled={pending} className="h-10 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60">
           {pending ? 'Kaydediliyor…' : 'Reklamları kaydet'}
         </button>
-        {state.message && (
-          <p role="status" className={state.ok ? 'text-sm text-live' : 'text-sm text-destructive'}>
-            {state.message}
-          </p>
-        )}
+        <Flash ok={state.ok} text={state.message} token={state} />
       </div>
     </form>
   )

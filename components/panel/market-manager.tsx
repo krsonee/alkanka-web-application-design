@@ -1,15 +1,17 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, askReason } from '@/components/panel/confirm-dialog'
 import { MarketGuide } from '@/components/panel/area-guides'
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
+import { useUrlTab } from '@/components/panel/use-url-tab'
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketProduct, MarketRequest, ProductInput } from '@/lib/market'
 import { deleteMarketProductAction, resolveMarketRequestAction, saveMarketProductAction } from '@/app/panel/market-actions'
 import { ImageField } from '@/components/panel/image-field'
+import { Flash } from '@/components/panel/flash'
 
 type SponsorOption = { id: string; name: string }
 
@@ -20,8 +22,10 @@ const EMPTY: ProductInput = {
 
 const field = 'h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary'
 
+const MARKET_REJECT_REASONS = ['Site kullanıcı adı hatalı ya da eksik', 'Sponsor sitede hesap bulunamadı', 'Bu ürün şu an verilemiyor']
+
 export function MarketManager({ products, requests, sponsors }: { products: MarketProduct[]; requests: MarketRequest[]; sponsors: SponsorOption[] }) {
-  const [view, setView] = useState<'talepler' | 'urunler'>('talepler')
+  const [view, setView] = useUrlTab<'talepler' | 'urunler'>(['talepler', 'urunler'], 'talepler', 'v')
   const [editing, setEditing] = useState<ProductInput | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
@@ -57,7 +61,7 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
             {label}
           </button>
         ))}
-        {msg && <p className={cn('text-sm', msg.ok ? 'text-success' : 'text-destructive')} aria-live="polite">{msg.text}</p>}
+        <Flash ok={msg?.ok} text={msg?.text} token={msg} />
       </div>
 
       {view === 'talepler' ? (
@@ -144,7 +148,15 @@ function RequestList({ requests, pending, onResolve }: { requests: MarketRequest
               <button type="button" disabled={pending} onClick={() => void askConfirm(`${r.userName} adlı üyenin "${r.itemName}" talebi onaylansın mı? Onay geri alınamaz; ödülü üyeye teslim ettiğinden emin ol.`).then((ok) => ok && onResolve(r.id, true, notes[r.id] ?? ''))} className="flex h-10 items-center gap-1.5 rounded-lg bg-success px-3 text-sm font-semibold text-background disabled:opacity-50">
                 <Check className="size-4" aria-hidden="true" /> Onayla
               </button>
-              <button type="button" disabled={pending} onClick={() => void askConfirm(`${r.userName} adlı üyenin "${r.itemName}" talebi reddedilsin mi? ${r.price.toLocaleString('tr-TR')} KC üyeye iade edilir.`).then((ok) => ok && onResolve(r.id, false, notes[r.id] ?? ''))} className="flex h-10 items-center gap-1.5 rounded-lg border border-destructive/50 px-3 text-sm font-semibold text-destructive disabled:opacity-50">
+              <button type="button" disabled={pending} onClick={() =>
+                  void askReason(`${r.userName} adlı üyenin "${r.itemName}" talebi reddedilecek ve ${r.price.toLocaleString('tr-TR')} KC iade edilecek. Sebebi üye görür.`, {
+                    label: 'Red sebebi',
+                    required: true,
+                    initial: notes[r.id] ?? '',
+                    confirm: 'Reddet ve iade et',
+                    presets: MARKET_REJECT_REASONS,
+                  }).then((note) => note !== null && onResolve(r.id, false, note))
+                } className="flex h-10 items-center gap-1.5 rounded-lg border border-destructive/50 px-3 text-sm font-semibold text-destructive disabled:opacity-50">
                 <X className="size-4" aria-hidden="true" /> Reddet ve iade et
               </button>
             </div>

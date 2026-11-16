@@ -35,12 +35,12 @@ export async function approveClaimAction(claimId: number): Promise<Result> {
   }
 }
 
-export async function rejectClaimAction(claimId: number): Promise<Result> {
+export async function rejectClaimAction(claimId: number, note = ''): Promise<Result> {
   if (!(await canPanel('tasks'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
-    await rejectClaim(claimId)
-    await logPanel('tasks', 'Görev talebi reddedildi', `Talep #${claimId}`)
-    return done('Talep reddedildi.')
+    await rejectClaim(claimId, String(note ?? ''))
+    await logPanel('tasks', 'Görev talebi reddedildi', `Talep #${claimId}`, String(note ?? '').trim() || null)
+    return done('Talep reddedildi, üyeye mesajla bildirildi.')
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Talep reddedilemedi.' }
   }

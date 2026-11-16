@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import type { ReactNode } from 'react'
+import { cache, type ReactNode } from 'react'
 import { adminConfigured, canPanel } from '@/lib/admin-auth'
 import { getPanelSession, type PanelSession } from '@/lib/panel-auth'
 import type { PanelModule } from '@/lib/panel-modules'
@@ -97,18 +97,36 @@ import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
 import { listPendingClaims, listTasks } from '@/lib/tasks'
-import { moderationTotal, pendingDetail, type PendingDetail } from '@/lib/panel-pending'
+import { EMPTY_PENDING, moderationTotal, pendingDetail, type PendingDetail } from '@/lib/panel-pending'
 import { ModerationQueue, type ModerationItem } from '@/components/panel/moderation-queue'
+
+/** Per-request tally of lists that could not be read and fell back to "empty". */
+const dataGaps = cache(() => ({ count: 0 }))
+
+/**
+ * Fallback for a read that failed. The section still opens, but the admin is told that an empty
+ * list on this screen may be a read error rather than "no records".
+ */
+function miss<T>(fallback: T) {
+  return (error: unknown): T => {
+    console.error('[panel:veri]', error)
+    dataGaps().count++
+    return fallback
+  }
+}
 
 async function moderationItems(can: (id: 'community' | 'tasks' | 'market') => boolean): Promise<ModerationItem[]> {
   const { pendingProofs } = await import('@/lib/trust-extra')
+  const shares = can('community')
+    ? await import('@/lib/withdrawals').then((w) => w.adminWithdrawals()).catch(miss([]))
+    : []
   const [proofs, reviews, complaints, claims, requests, sites] = await Promise.all([
-    can('community') ? pendingProofs().catch(() => []) : [],
-    can('community') ? pendingReviews().catch(() => []) : [],
-    can('community') ? adminComplaints().catch(() => []) : [],
-    can('tasks') ? listPendingClaims().catch(() => []) : [],
-    can('market') ? listRequests().catch(() => []) : [],
-    can('community') ? siteOptions().catch(() => []) : [],
+    can('community') ? pendingProofs().catch(miss([])) : [],
+    can('community') ? pendingReviews().catch(miss([])) : [],
+    can('community') ? adminComplaints().catch(miss([])) : [],
+    can('tasks') ? listPendingClaims().catch(miss([])) : [],
+    can('market') ? listRequests().catch(miss([])) : [],
+    can('community') ? siteOptions().catch(miss([])) : [],
   ])
   const siteName = (id: string) => sites.find((s) => String(s.id) === id)?.name ?? id
   return [
@@ -122,6 +140,18 @@ async function moderationItems(can: (id: 'community' | 'tasks' | 'market') => bo
       image: `/api/guven/kanit/${encodeURIComponent(p.proofPath.split('/').pop() ?? '')}`,
     })),
     ...reviews.map((r): ModerationItem => ({ key: `review-${r.id}`, kind: 'review', id: r.id, title: `${siteName(r.siteId)} · ${r.rating}/5`, who: r.userName, detail: r.body, createdAt: r.createdAt })),
+    ...shares
+      .filter((s) => s.status === 'pending')
+      .map((s): ModerationItem => ({
+        key: `withdraw-${s.id}`,
+        kind: 'withdraw',
+        id: s.id,
+        title: `${s.siteName || siteName(s.siteId)} · ${s.amount.toLocaleString('tr-TR')} TL`,
+        who: `${s.userName} (${s.fullUsername})`,
+        detail: '',
+        createdAt: s.createdAt,
+        image: s.image,
+      })),
     ...claims.map((c): ModerationItem => ({ key: `claim-${c.id}`, kind: 'claim', id: c.id, title: c.taskTitle, who: c.userName, detail: c.email, createdAt: c.createdAt })),
     ...requests
       .filter((r) => r.status === 'beklemede')
@@ -441,11 +471,11 @@ async function telegramSection({ session, active }: SectionCtx): Promise<ReactNo
 async function marketPanel() {
   const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
-  const themeCatalog = await getThemeCatalog().catch(() => DEFAULT_OFFERS)
+  const themeCatalog = await getThemeCatalog().catch(miss(DEFAULT_OFFERS))
   const [avatars, stats, coverRows] = await Promise.all([
     listCatalog({ includeInactive: true }),
     avatarStats(),
-    rows<{ id: string; n: string }>(sql`SELECT cover_id AS id, count(*) AS n FROM member_look WHERE cover_id IS NOT NULL GROUP BY cover_id`).catch(() => []),
+    rows<{ id: string; n: string }>(sql`SELECT cover_id AS id, count(*) AS n FROM member_look WHERE cover_id IS NOT NULL GROUP BY cover_id`).catch(miss([])),
   ])
   const coverUsage = Object.fromEntries(coverRows.map((r) => [r.id, Number(r.n)]))
   return (
@@ -461,7 +491,7 @@ async function marketPanel() {
 }
 
 async function kpPanel() {
-  const [cfg, badges, awards, board, online, ticker, quest, questWinners, boosts, raffles] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek(), getBoostConfig(), recentRaffles().catch(() => [])])
+  const [cfg, badges, awards, board, online, ticker, quest, questWinners, boosts, raffles] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek(), getBoostConfig(), recentRaffles().catch(miss([]))])
   return (
     <div className="flex flex-col gap-10">
       <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} quest={quest} questWinners={questWinners} />
@@ -499,7 +529,7 @@ async function staffPanel() {
   return <StaffManager accounts={accounts} />
 }
 
-export const metadata: Metadata = { title: 'Yönetim paneli | AL KANKA', robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
+export const metadata: Metadata = { title: { absolute: 'Yönetim paneli | AL KANKA' }, robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
 export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; r?: string; from?: string; to?: string }> }) {
   const [session, params] = await Promise.all([getPanelSession(), searchParams])
@@ -635,15 +665,15 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return (
         <SeoManager
           siteSeo={await getSiteSeo()}
-          care={await weeklyCare().catch(() => [])}
+          care={await weeklyCare().catch(miss([]))}
           posts={await listPosts({ includeDrafts: true })}
           deals={await listDeals(30)}
           publishing={await dealsPublishing()}
-          verification={await getVerification().catch(() => ({ google: '', bing: '', yandex: '', meta: '' }))}
+          verification={await getVerification().catch(miss({ google: '', bing: '', yandex: '', meta: '' }))}
           siteUrl={SITE_URL}
-          issues={await seoHealth().catch(() => [])}
-          notFound={await list404().catch(() => [])}
-          redirects={await listRedirects().catch(() => [])}
+          issues={await seoHealth().catch(miss([]))}
+          notFound={await list404().catch(miss([]))}
+          redirects={await listRedirects().catch(miss([]))}
         />
       )
     }),
@@ -653,7 +683,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       const { TourSettingsEditor } = await import('@/components/panel/tour-settings-editor')
       const [settings, stats] = await Promise.all([
         getTourSettings(),
-        tourStats().catch(() => ({ done: 0, rewarded: 0, blocked: 0, paidTotal: 0, recentBlocked: [] })),
+        tourStats().catch(miss({ done: 0, rewarded: 0, blocked: 0, paidTotal: 0, recentBlocked: [] })),
       ])
       return <TourSettingsEditor settings={settings} stats={stats} />
     }),
@@ -663,13 +693,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         getReferralSettings(),
         getAmbientSettings(),
         siteOptions(),
-        listSites().catch(() => []),
-        getSiteLinks().catch(() => ({})),
-        followerCounts().catch(() => ({})),
-        trafficReport(30).catch(() => ({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 })),
-        flaggedMembers().catch(() => []),
-        adminSponsorAccounts().catch(() => []),
-        affLinkViews().catch(() => []),
+        listSites().catch(miss([])),
+        getSiteLinks().catch(miss({})),
+        followerCounts().catch(miss({})),
+        trafficReport(30).catch(miss({ days: 30, sources: [], sites: [], totalClicks: 0, totalSignups: 0 })),
+        flaggedMembers().catch(miss([])),
+        adminSponsorAccounts().catch(miss([])),
+        affLinkViews().catch(miss([])),
       ])
       return (
         <TelegramTabs
@@ -703,9 +733,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'marketing', 'Pazarlama', async () => {
       const [tracking, campaigns, earnings, mSites] = await Promise.all([
         getTracking(),
-        listCampaigns().catch(() => []),
-        listEarnings().catch(() => []),
-        listSites().catch(() => []),
+        listCampaigns().catch(miss([])),
+        listEarnings().catch(miss([])),
+        listSites().catch(miss([])),
       ])
       const opts = mSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))
       return (
@@ -724,20 +754,20 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'community', 'Topluluk', async () => (
       <CommunityManager
-        reviews={await pendingReviews().catch(() => [])}
-        published={await publishedReviews().catch(() => [])}
-        proofs={await (await import('@/lib/trust-extra')).pendingProofs().catch(() => [])}
-        complaints={await adminComplaints().catch(() => [])}
-        matches={await listLeagueMatches(null, { admin: true }).catch(() => [])}
+        reviews={await pendingReviews().catch(miss([]))}
+        published={await publishedReviews().catch(miss([]))}
+        proofs={await (await import('@/lib/trust-extra')).pendingProofs().catch(miss([]))}
+        complaints={await adminComplaints().catch(miss([]))}
+        matches={await listLeagueMatches(null, { admin: true }).catch(miss([]))}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
         withdraw={await (async () => {
           const w = await import('@/lib/withdrawals')
           const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
-            w.adminWithdrawals().catch(() => []),
-            w.getWithdrawSettings().catch(() => w.WITHDRAW_DEFAULTS),
-            w.listSiteRewards().catch(() => []),
-            siteOptions().catch(() => []),
-            w.listWithdrawBlocks().catch(() => []),
+            w.adminWithdrawals().catch(miss([])),
+            w.getWithdrawSettings().catch(miss(w.WITHDRAW_DEFAULTS)),
+            w.listSiteRewards().catch(miss([])),
+            siteOptions().catch(miss([])),
+            w.listWithdrawBlocks().catch(miss([])),
           ])
           return { shares, settings, siteRewards, sites: sites.map((s) => ({ id: s.id, name: s.name })), blocks }
         })()}
@@ -745,20 +775,20 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )),
     section(ctx, 'badges', 'Rozet sistemi', kpPanel),
     section(ctx, 'tasks', 'Görevler', async () => {
-      const [list, claims, sites] = await Promise.all([listTasks(), listPendingClaims(), siteOptions().catch(() => [])])
+      const [list, claims, sites] = await Promise.all([listTasks(), listPendingClaims(), siteOptions().catch(miss([]))])
       return <TasksManager tasks={list} claims={claims} sites={sites.map((x) => ({ id: x.id, name: x.name }))} />
     }),
     section(ctx, 'market', 'Market', marketPanel),
     section(ctx, 'social', 'Sosyal medya', async () => (
       <SocialManager
-        links={await getSocialLinks().catch(() => ({}) as SocialLinks)}
-        channels={await getChannelUsernames().catch(() => null)}
-        accounts={await adminSocialAccounts().catch(() => [])}
-        events={await listSocialEvents({ includeInactive: true }).catch(() => [])}
-        entries={await adminEntries().catch(() => [])}
+        links={await getSocialLinks().catch(miss(({}) as SocialLinks))}
+        channels={await getChannelUsernames().catch(miss(null))}
+        accounts={await adminSocialAccounts().catch(miss([]))}
+        events={await listSocialEvents({ includeInactive: true }).catch(miss([]))}
+        entries={await adminEntries().catch(miss([]))}
         api={await import('@/lib/social-verify')
           .then(async (m) => ({ summary: await m.socialApiSummary(), fields: m.API_FIELDS }))
-          .catch(() => undefined)}
+          .catch(miss(undefined))}
       />
     )),
     section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch((e) => { console.error('[panel-limits]', e); return [] })} />),
@@ -777,9 +807,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     telegramSection(ctx),
     section(ctx, 'push', 'Bildirimler', async () => {
       const [stats, appSettings, mCounts] = await Promise.all([
-        pushStats().catch(() => ({ total: 0, members: 0, log: [] })),
+        pushStats().catch(miss({ total: 0, members: 0, log: [] })),
         getAppSettings(),
-        mobileCounts().catch(() => ({ total: 0, installed: 0, push: 0, both: 0, none: 0, opensToday: 0, turnedOff: 0 })),
+        mobileCounts().catch(miss({ total: 0, installed: 0, push: 0, both: 0, none: 0, opensToday: 0, turnedOff: 0 })),
       ])
       const topicLabels = Object.fromEntries(PUSH_TOPICS.map((t) => [t.value, t.label]))
       return (
@@ -795,10 +825,10 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'studio', 'Stüdyo', async () => (
       <Studio
-        brands={await listBrands().catch(() => [])}
-        assets={await listAssets().catch(() => [])}
-        jobs={await listJobs().catch(() => [])}
-        spend={await studioSpend().catch(() => ({ total: 0, month: 0, count: 0 }))}
+        brands={await listBrands().catch(miss([]))}
+        assets={await listAssets().catch(miss([]))}
+        jobs={await listJobs().catch(miss([]))}
+        spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
       />
     )),
     section(ctx, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
@@ -830,9 +860,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
 
   const onDash = active === 'dashboard'
   const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
-    pendingDetail(can).catch((): PendingDetail => ({ reviews: 0, complaints: 0, withdrawals: 0, claims: 0, market: 0, proofs: 0 })),
-    onDash && can('users') ? listMembers().then((r) => r.counts).catch(() => null) : null,
-    onDash && session.isOwner ? recentAudit(8).catch(() => []) : [],
+    pendingDetail(can).catch((): PendingDetail => EMPTY_PENDING),
+    onDash && can('users') ? listMembers().then((r) => r.counts).catch(miss(null)) : null,
+    onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
     onDash && session.isOwner ? loadSystemStatus().catch((error) => (console.error('[panel:system-status]', error), null)) : null,
   ])
@@ -840,6 +870,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     community: detail.reviews + detail.complaints + detail.withdrawals + (detail.proofs ?? 0),
     tasks: detail.claims,
     market: detail.market,
+    growth: detail.sponsorAccounts ?? 0,
+    social: (detail.socialAccounts ?? 0) + (detail.socialEntries ?? 0),
     moderation: moderationTotal(detail),
   }
   const dashboard = onDash ? (
@@ -861,6 +893,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         <ContentEditor
           key={active}
           initialTab={active}
+          dataGaps={dataGaps().count}
           userName={session.displayName}
           siteUrl={SITE_URL}
           logout={<LogoutButton />}

@@ -339,6 +339,7 @@ export async function runMirrorAction(): Promise<ActionState> {
     if (r.skipped) parts.push(`${r.skipped} atlandı`)
     if (r.failed) parts.push(`${r.failed} başarısız`)
     if (r.primed) parts.push(`${r.primed} yeni kaynak için başlangıç noktası kaydedildi`)
+    await logPanel('telegram', 'Kanal aynalama elle çalıştırıldı', null, parts.join(', '))
     return { ok: r.errors.length === 0, message: parts.join(', ') + '.' + (r.errors.length ? ` Hatalar: ${r.errors.join(' | ')}` : '') }
   } catch (error) {
     return { message: errorText(error) }

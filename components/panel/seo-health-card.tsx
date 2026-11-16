@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowRight, CircleAlert, CircleCheck, Loader2, Trash2 } 
 import { clear404Action, deleteRedirectAction, saveRedirectAction } from '@/app/panel/seo-actions'
 import { confirmed } from '@/components/panel/confirm-dialog'
 import type { HealthIssue, NotFoundHit, Redirect } from '@/lib/seo-health'
+import { Flash } from '@/components/panel/flash'
 
 const input =
   'min-w-0 flex-1 rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -122,11 +123,7 @@ function RedirectsCard({ notFound, redirects }: { notFound: NotFoundHit[]; redir
           Yönlendir
         </button>
       </form>
-      {message && (
-        <p role="status" className={`text-sm font-semibold ${message.ok ? 'text-primary' : 'text-destructive'}`}>
-          {message.text}
-        </p>
-      )}
+      <Flash ok={message?.ok} text={message?.text} token={message} className="font-semibold" />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
