@@ -1,6 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
+import { wholeInRange } from '@/lib/drift'
 import { SPRINT_MULTIPLIER, sprintState } from '@/lib/sprint'
 import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, ROLE_STYLES, publicRankName, type BadgeTier, type LevelDef, type MemberRole, type PointRules } from '@/lib/kanka-puan-shared'
 
@@ -122,10 +123,22 @@ export async function getKpConfig(): Promise<KpConfig> {
 
 export async function saveLevels(input: LevelDef[]) {
   await ensureKp()
-  const levels = input
-    .map((l) => ({ name: String(l.name).trim().slice(0, 30), badge: String(l.badge).trim().slice(0, 40), min: Math.max(0, Math.floor(Number(l.min))) }))
-    .filter((l) => l.name && l.badge && Number.isFinite(l.min))
-    .sort((a, b) => a.min - b.min)
+  // Levels are saved exactly as written. Dropping, trimming or re-sorting a row changes which
+  // level name members carry, so a row that cannot be kept as it is stops the save instead.
+  const levels = input.map((l, i) => {
+    const row = `${i + 1}. seviye`
+    const name = String(l.name ?? '').trim()
+    const badge = String(l.badge ?? '').trim()
+    if (!name) throw new Error(`${row}: ad boş bırakılamaz.`)
+    if (name.length > 30) throw new Error(`${row}: ad en fazla 30 karakter olabilir (yazdığın ${name.length}).`)
+    if (!badge) throw new Error(`${row} ("${name}"): rozet seçilmemiş.`)
+    return { name, badge: badge.slice(0, 40), min: wholeInRange(l.min, 0, 1_000_000_000, `${row} ("${name}") puanı`) }
+  })
+  const outOfOrder = levels.findIndex((l, i) => i > 0 && l.min < levels[i - 1].min)
+  if (outOfOrder > 0) {
+    const [prev, cur] = [levels[outOfOrder - 1], levels[outOfOrder]]
+    throw new Error(`"${cur.name}" (${cur.min} puan), üstündeki "${prev.name}" seviyesinden (${prev.min} puan) düşük. Puanlar yukarıdan aşağı artmalı; puanı düzelt. Hiçbir şey kaydedilmedi.`)
+  }
   if (levels.length < 2) throw new Error('En az 2 seviye olmalı.')
   if (levels.length > 50) throw new Error('En fazla 50 seviye olabilir.')
   if (levels[0].min !== 0) throw new Error('İlk seviyenin puanı 0 olmalı.')

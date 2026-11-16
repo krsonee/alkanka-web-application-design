@@ -14,6 +14,7 @@ import {
   type UpcomingSlot,
 } from '@/lib/cember'
 import type { CemberConfig } from '@/lib/cember-shared'
+import { wholeInRange } from '@/lib/drift'
 
 export type CemberActionResult = {
   ok: boolean
@@ -90,6 +91,18 @@ export async function cancelInstantEvent(eventId: string, slotIso: string): Prom
 export async function saveCember(input: CemberConfig[]): Promise<CemberActionResult> {
   if (!(await canPanel('cember'))) return { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
+    // Prizes are paid in real coin, so a blank name or an out-of-range amount stops the save
+    // instead of being replaced with a default.
+    for (const [i, ev] of (Array.isArray(input) ? input : []).entries()) {
+      const title = String(ev?.title ?? '').trim()
+      const where = `${i + 1}. etkinlik${title ? ` ("${title.slice(0, 30)}")` : ''}`
+      if (!title) throw new Error(`${where}: etkinlik adı boş bırakılamaz. Hiçbir şey kaydedilmedi.`)
+      if (title.length > 40) throw new Error(`${where}: etkinlik adı en fazla 40 karakter olabilir (yazdığın ${title.length}). Hiçbir şey kaydedilmedi.`)
+      for (const p of Array.isArray(ev?.prizes) ? ev.prizes : []) {
+        if (p?.type === 'coin' || p?.type === 'kp') wholeInRange(p.amount, 1, 1_000_000, `${where} · ${p.type === 'coin' ? 'coin' : 'puan'} ödülü`)
+      }
+      wholeInRange(ev?.predictKp ?? 0, 0, 10_000, `${where} · tahmin puanı`)
+    }
     const events = await saveCemberEvents(input)
     return { ok: true, message: `${events.length} etkinlik kaydedildi. Sitede 5 saniye içinde güncellenir.`, events, upcoming: upcomingSlots(events) }
   } catch (e) {

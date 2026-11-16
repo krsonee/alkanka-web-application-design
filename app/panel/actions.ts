@@ -139,8 +139,9 @@ export async function saveTexts(_: ActionState, form: FormData): Promise<ActionS
     await requireAdmin('texts')
     const value: Record<string, string> = {}
     for (const f of TEXT_FIELDS) {
-      const v = String(form.get(f.key) ?? '').trim().slice(0, f.max)
+      const v = String(form.get(f.key) ?? '').trim()
       if (!v) continue
+      if (v.length > f.max) return { message: `"${f.label}" en fazla ${f.max} karakter olabilir (yazdığın ${v.length} karakter). Hiçbir şey kaydedilmedi.` }
       if (f.key === 'auth.bonus' && !/^\d{1,6}$/.test(v)) return { message: 'Kayıt bonusu sadece rakam olmalı.' }
       value[f.key] = v
     }

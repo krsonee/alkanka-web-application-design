@@ -1,5 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
+import { wholeInRange } from '@/lib/drift'
 import { credit, debit, getBalance } from '@/lib/member'
 import { levelMap } from '@/lib/kanka-puan'
 import { isFlagged } from '@/lib/growth'
@@ -234,8 +235,9 @@ export async function saveAvatar(input: AvatarInput) {
   if (!name) throw new Error('Avatar adı gerekli.')
   if (!src || !(src.startsWith('/') || src.startsWith('https://'))) throw new Error('Geçerli bir görsel seç.')
   const unlock: AvatarUnlock = ['free', 'level', 'coin'].includes(input.unlock) ? input.unlock : 'free'
-  const level = unlock === 'level' ? Math.max(1, Math.min(100, Math.round(input.level) || 1)) : 1
-  const price = unlock === 'coin' ? Math.max(1, Math.min(1_000_000, Math.round(input.price) || 1)) : 0
+  if (input.name.trim().length > 40) throw new Error(`Avatar adı en fazla 40 karakter olabilir (yazdığın ${input.name.trim().length}).`)
+  const level = unlock === 'level' ? wholeInRange(input.level, 1, 100, 'Seviye') : 1
+  const price = unlock === 'coin' ? wholeInRange(input.price, 1, 1_000_000, 'Fiyat') : 0
   const group: AvatarGroup = input.group === 'takim' ? 'takim' : 'jako'
   const sort = Math.round(input.sort) || 0
   const id = input.id?.trim() || `ozel-${Date.now().toString(36)}`
