@@ -39,6 +39,8 @@ const shortDateTime = (iso: string) =>
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 const trDate = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`
 const DELETED_SPONSORS = 'Silinmiş sponsorlar'
+const LIVE_REFRESH_MS = 5 * 60_000
+const LIVE_IDLE_MS = 10 * 60_000
 
 const PRESETS: { value: Preset; label: string }[] = [
   { value: 'today', label: 'Bugün' },
@@ -149,12 +151,23 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
   const live = stats?.live ?? false
   useEffect(() => {
     if (!live) return
+    // Every refresh wakes the database, which is billed by the hour it stays awake. Refresh
+    // slowly, and only while somebody is actually using the page.
+    let lastActive = Date.now()
+    const touch = () => {
+      lastActive = Date.now()
+    }
+    const events = ['pointerdown', 'keydown', 'pointermove'] as const
+    for (const name of events) window.addEventListener(name, touch, { passive: true })
     const id = window.setInterval(async () => {
-      if (document.hidden) return
+      if (document.hidden || Date.now() - lastActive > LIVE_IDLE_MS) return
       const fresh = await loadDashStats(paramsRef.current)
       if (fresh) setStats(fresh)
-    }, 60_000)
-    return () => window.clearInterval(id)
+    }, LIVE_REFRESH_MS)
+    return () => {
+      window.clearInterval(id)
+      for (const name of events) window.removeEventListener(name, touch)
+    }
   }, [live])
 
   const pickDay = (p: SeriesPoint) => {

@@ -700,7 +700,19 @@ export async function adjustPoints(userId: string, points: number, note: string)
   if (!Number.isFinite(p) || p === 0 || Math.abs(p) > 100000) throw new Error('Puan -100.000 ile 100.000 arasında ve sıfırdan farklı olmalı.')
   const user = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${userId}`)
   if (!user.length) throw new Error('Üye bulunamadı.')
+  if (p < 0) {
+    const { kp } = await getKpLevel(userId)
+    if (kp + p < 0) {
+      throw new Error(kp > 0 ? `Üyenin ${kp.toLocaleString('tr-TR')} puanı var, en fazla o kadar düşebilirsin.` : 'Üyenin puanı zaten sıfır, düşülecek puan yok.')
+    }
+  }
   await rows(sql`INSERT INTO kp_events (user_id, source, points, note) VALUES (${userId}, 'admin', ${p}, ${note.trim().slice(0, 120) || null})`)
+}
+
+export async function badgeCount(userId: string, badgeId: string) {
+  await ensureKp()
+  const [row] = await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM kp_awards WHERE user_id = ${userId} AND badge_id = ${badgeId}`)
+  return row?.n ?? 0
 }
 
 export async function searchMembers(q: string) {

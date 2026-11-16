@@ -153,7 +153,14 @@ export function InstantEvent({
             <button
               type="button"
               disabled={pending || !chosen}
-              onClick={() => launch(false)}
+              onClick={() => {
+                if (!chosen) return
+                const when = START_OPTIONS.find((o) => o.seconds === delay)?.label ?? `${delay} sn`
+                const note = chosen.enabled ? '' : ' Bu etkinlik kapalı; sadece bu tur oynanır, takvimi açılmaz.'
+                void askConfirm(`"${chosen.title}" turu herkese açılsın mı? Başlangıç: ${when === 'Hemen' ? '20 saniye içinde' : `${when} sonra`}. Ödüller gerçek dağıtılır.${note}`).then(
+                  (ok) => ok && launch(false),
+                )
+              }}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-60"
             >
               <Zap className="size-4" aria-hidden /> {pending ? 'Kuruluyor...' : 'Anlık etkinliği başlat'}

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
@@ -11,6 +12,8 @@ const retextLabel = (texts: StudioTexts | null) =>
   texts ? `Yazı güncellendi: ${[texts.headline, texts.subline, texts.cta].filter(Boolean).join(' · ')}` : 'Yazılar kaldırıldı'
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null

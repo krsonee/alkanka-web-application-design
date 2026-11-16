@@ -11,6 +11,7 @@ import {
   findMembers,
   giveBadge,
   giveContestBadge,
+  heldBadgeCount,
   previewContest,
   removeBadge,
   takeBackAward,
@@ -651,6 +652,12 @@ function ManualAward({ badges }: { badges: SpecialBadge[] }) {
   const [note, setNote] = useState('')
   const [points, setPoints] = useState(100)
   const { pending, status, run } = useAction()
+  const giveBadgeChecked = async (userId: string) => {
+    const held = await heldBadgeCount(badgeId, userId)
+    const name = badges.find((b) => b.id === badgeId)?.name ?? 'Bu'
+    if (held > 0 && !(await askConfirm(`Bu üyede "${name}" rozeti zaten var. Bir kez daha verirsen bonus puanı da tekrar eklenir. Yine de verilsin mi?`))) return
+    run(() => giveBadge(badgeId, userId, note))
+  }
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -663,7 +670,7 @@ function ManualAward({ badges }: { badges: SpecialBadge[] }) {
           {badges.map((b) => <option key={b.id} value={b.id}>{b.name} (+{b.bonus} KP)</option>)}
         </select>
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Not (örn. Ekim yazı yarışması birincisi)" className={field} aria-label="Not" />
-        <button disabled={pending || !member || !badgeId} onClick={() => member && run(() => giveBadge(badgeId, member.id, note))} className="h-10 rounded-lg bg-primary text-sm font-bold text-primary-foreground disabled:opacity-40">
+        <button disabled={pending || !member || !badgeId} onClick={() => member && void giveBadgeChecked(member.id)} className="h-10 rounded-lg bg-primary text-sm font-bold text-primary-foreground disabled:opacity-40">
           Rozeti ver
         </button>
         <div className="flex items-center gap-2 border-t border-border pt-3">

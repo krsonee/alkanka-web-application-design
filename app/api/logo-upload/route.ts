@@ -1,9 +1,12 @@
 import { put } from '@vercel/blob'
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanelAny } from '@/lib/admin-auth'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { UPLOAD_MODULES, checkImageUpload, uploadId } from '@/lib/upload-limits'
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanelAny(UPLOAD_MODULES))) {
     return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
   }

@@ -11,6 +11,7 @@ import {
   DEFAULT_TICKER,
   type TickerConfig,
   MAX_ONLINE_HOURS,
+  MAX_ONLINE_TIERS,
   nextReward,
   rewardForHour,
   type OnlineConfig,
@@ -42,6 +43,16 @@ export async function getOnlineConfig(): Promise<OnlineConfig> {
 
 export async function saveOnlineConfig(input: OnlineConfig) {
   await ensureOnline()
+  // cleanOnlineConfig quietly drops rows it cannot use; a save must say so instead of losing rewards.
+  const hours = new Set<number>()
+  for (const t of Array.isArray(input.tiers) ? input.tiers : []) {
+    const hour = Math.round(Number(t?.hour))
+    if (!Number.isFinite(hour) || hour < 1 || hour > MAX_ONLINE_HOURS) throw new Error(`Saat 1 ile ${MAX_ONLINE_HOURS} arasında olmalı.`)
+    if (hours.has(hour)) throw new Error(`${hour}. saat iki kez yazılmış. Her basamağın saati farklı olmalı.`)
+    hours.add(hour)
+    if (!(Number(t?.coin) > 0) && !(Number(t?.kp) > 0)) throw new Error(`${hour}. saatin ödülü boş. Coin ya da puan yaz, ya da basamağı sil.`)
+  }
+  if (hours.size > MAX_ONLINE_TIERS) throw new Error(`En fazla ${MAX_ONLINE_TIERS} basamak olabilir.`)
   const cfg = cleanOnlineConfig(input)
   if (!cfg.tiers.length) throw new Error('En az bir saat ödülü olmalı.')
   await rows(sql`INSERT INTO kp_settings (key, value) VALUES (${SETTINGS_KEY}, ${JSON.stringify(cfg)}::jsonb)

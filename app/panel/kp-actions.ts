@@ -7,6 +7,7 @@ import {
   awardBadge,
   awardBadgeId,
   awardContest,
+  badgeCount,
   isRoleBadge,
   contestStandings,
   deleteSpecialBadge,
@@ -93,6 +94,11 @@ export async function removeBadge(id: string) {
 }
 
 const NO_ROLE_PERMISSION = 'Görevli rozetlerini sadece yönetici veya yetkili personel verebilir.'
+
+export async function heldBadgeCount(badgeId: string, userId: string): Promise<number> {
+  if (!(await canPanel('badges'))) return 0
+  return badgeCount(String(userId), String(badgeId)).catch(() => 0)
+}
 
 export async function giveBadge(badgeId: string, userId: string, note: string) {
   return guard(async () => {

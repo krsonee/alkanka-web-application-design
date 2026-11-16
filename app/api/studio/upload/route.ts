@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import sharp from 'sharp'
 import { canPanel } from '@/lib/admin-auth'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { addAsset, storeFile } from '@/lib/studio'
 
 export const maxDuration = 120
@@ -22,6 +23,8 @@ async function fromUrl(raw: string): Promise<Source> {
 }
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const form = await request.formData()

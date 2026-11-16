@@ -4,7 +4,7 @@ import { randomInt } from 'node:crypto'
 import { getContent } from '@/lib/content'
 import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
-import { predictionClosesAt } from '@/lib/catalog-shared'
+import { PREDICTION_PAYOUT, predictionClosesAt, predictionPayout } from '@/lib/catalog-shared'
 import { getPredictionVoteCounts, getUserPredictionPicks, savePredictionPick } from '@/lib/prediction-picks'
 import { diceReward, wheelBigIndices, type RewardConfig } from '@/lib/rewards-shared'
 import { rows, sql } from '@/lib/db'
@@ -20,7 +20,7 @@ const REWARD_LIMITS: Record<string, { perClaim: number; perDay: number; label: s
   sandik: { perClaim: 500, perDay: 3, label: 'Gizemli Sandık' },
   zar: { perClaim: 400, perDay: 3, label: 'Zar At' },
   gorev: { perClaim: 300, perDay: 12, label: 'Görev' },
-  tahmin: { perClaim: 200, perDay: 10, label: 'Tahmin' },
+  tahmin: { perClaim: PREDICTION_PAYOUT.max, perDay: PREDICTION_PAYOUT.perDay, label: 'Tahmin' },
 }
 
 const SPEND_SOURCES: Record<string, string> = { market: 'Puan marketi', etkinlik: 'Etkinlik' }
@@ -87,7 +87,7 @@ export async function claimPrediction(matchId: string, optionId: string): Promis
   if (!match || !match.options.some((o) => o.id === String(optionId))) return { ok: false, error: 'Geçersiz tahmin.' }
   const closesAt = predictionClosesAt(match)
   if (closesAt !== null && Date.now() >= closesAt) return { ok: false, error: 'Bu maç için tahminler kapandı.' }
-  const value = Math.min(limit.perClaim, Math.max(0, Math.round(Number(match.reward) / 5)))
+  const value = predictionPayout(match.reward)
   const ref = `tahmin:${match.id}`
 
   try {

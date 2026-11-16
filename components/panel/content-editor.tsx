@@ -790,7 +790,7 @@ function ItemCard({
       <div className="relative aspect-[16/7] bg-secondary">
         <Image src={preview || '/placeholder.svg'} alt="" fill sizes="(min-width: 1536px) 520px, 600px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
-        <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
+        <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
           <div className="flex flex-wrap items-center gap-1">
             {position && <SlideOrderTools id={item.id} index={position.index} total={position.total} />}
             {item.hidden && (

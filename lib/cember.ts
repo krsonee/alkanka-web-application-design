@@ -217,7 +217,12 @@ function findClash(events: CemberConfig[]): string | null {
 
 export async function saveCemberEvents(input: Partial<CemberConfig>[]) {
   await ensure()
-  const events = normalizeEvents({ events: Array.isArray(input) ? input : [] })
+  const before = await getCemberEvents()
+  const now = Date.now()
+  // Switching an event off also calls off the hand-started rounds still waiting on it.
+  const events = normalizeEvents({ events: Array.isArray(input) ? input : [] }).map((ev) =>
+    !ev.enabled && before.find((b) => b.id === ev.id)?.enabled ? { ...ev, extraSlots: ev.extraSlots.filter((s) => Date.parse(s) <= now) } : ev,
+  )
   for (const ev of events) {
     if (!ev.conditions.length) throw new Error(`"${ev.title}" için en az bir katılım şartı ekle.`)
     if (!ev.prizes.length) throw new Error(`"${ev.title}" için en az bir ödül ekle.`)
@@ -235,7 +240,7 @@ export async function scheduleTestRound(eventId: string, delaySeconds: number) {
   const ev = events.find((e) => e.id === eventId)
   if (!ev) throw new Error('Etkinlik bulunamadı, önce kaydet.')
   const at = new Date(Math.ceil((Date.now() + delaySeconds * 1000) / 1000) * 1000).toISOString()
-  await saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, enabled: true, extraSlots: [...e.extraSlots, at] } : e)))
+  await saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, extraSlots: [...e.extraSlots, at] } : e)))
   return at
 }
 
@@ -283,7 +288,7 @@ export async function scheduleInstantRound(eventId: string, delaySeconds: number
       )
     }
   }
-  const saved = await saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, enabled: true, extraSlots: [...e.extraSlots, at] } : e)))
+  const saved = await saveCemberEvents(events.map((e) => (e.id === eventId ? { ...e, extraSlots: [...e.extraSlots, at] } : e)))
   return { kind: 'scheduled', at, events: saved }
 }
 
@@ -388,14 +393,14 @@ function trDayStart(at: number) {
 
 type Slot = { at: number; ev: CemberConfig }
 
-/** Every enabled event's rounds from yesterday to tomorrow, soonest first; one event per instant. */
+/** Calendar rounds of enabled events plus every hand-started round, from yesterday to tomorrow, soonest first; one event per instant. */
 function slotsAround(events: CemberConfig[], now: number): Slot[] {
   const out = new Map<number, CemberConfig>()
   const today = trDayStart(now)
   for (const ev of events) {
-    if (!ev.enabled) continue
     const minutes = slotMinutes(ev)
-    for (const day of [today - 86400_000, today, today + 86400_000]) {
+    // A switched-off event keeps its calendar silent, but a one-off round started by hand still runs.
+    for (const day of ev.enabled ? [today - 86400_000, today, today + 86400_000] : []) {
       if (ev.days.length && !ev.days.includes((new Date(day + TR_OFFSET_MS).getUTCDay() + 6) % 7)) continue
       for (const h of ev.hours) for (const m of minutes) {
         const at = day + h * 3600_000 + m * 60_000

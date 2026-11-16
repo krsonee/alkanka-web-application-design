@@ -961,6 +961,17 @@ export function CampaignBoard() {
     .filter((c) => (tag === 'Tümü' || c.tag === tag) && (!todayOnly || c.hoursLeft <= 24))
     .sort((a, b) => (sort === 'bitis' ? a.hoursLeft - b.hoursLeft : b.hoursLeft - a.hoursLeft))
   const shown = rest.slice(0, visible)
+  if (!featured) {
+    return (
+      <section aria-label="Kampanyalar" className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-6 py-14 text-center">
+        <h2 className="font-display text-xl font-bold text-foreground text-balance">Şu an yayında kampanya yok</h2>
+        <p className="max-w-md text-sm leading-relaxed text-muted-foreground text-pretty">Yeni kampanyalar eklendiğinde burada görünecek. Bu arada sponsor fırsatlarına göz atabilirsin.</p>
+        <Link href="/sponsorlar" className="mt-2 inline-flex h-10 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground">
+          Sponsorlara git
+        </Link>
+      </section>
+    )
+  }
   const fs = sponsorById(featured.sponsorId)
 
   return (

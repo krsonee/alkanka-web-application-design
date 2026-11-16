@@ -79,6 +79,9 @@ export async function listRedirects(): Promise<Redirect[]> {
 
 export async function saveRedirect(fromRaw: string, toRaw: string) {
   const from = normalizePath(fromRaw)
+  if (/^[a-z][a-z0-9+.-]*:/i.test(toRaw.trim()) && !/^https?:\/\//i.test(toRaw.trim())) {
+    throw new Error('Yeni adres site içi bir sayfa (/kampanyalar gibi) ya da https:// ile başlayan bir adres olmalı.')
+  }
   const to = /^https?:\/\//i.test(toRaw.trim()) ? toRaw.trim().slice(0, 500) : normalizePath(toRaw)
   if (!from || from === '/') throw new Error('Eski adres geçerli değil.')
   if (!to) throw new Error('Yeni adres geçerli değil.')

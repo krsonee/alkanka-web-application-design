@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { extractBrandFromScreenshot } from '@/lib/brand-extract'
 
 export const maxDuration = 120
@@ -8,6 +9,8 @@ const MAX_BYTES = 10 * 1024 * 1024
 const TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanel('studio'))) return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
 
   const form = await request.formData()

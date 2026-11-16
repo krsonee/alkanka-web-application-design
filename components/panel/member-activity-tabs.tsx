@@ -343,7 +343,12 @@ function RewardsTab({
             <input aria-label="Rozet notu" value={badgeNote} onChange={(e) => setBadgeNote(e.target.value)} placeholder="Not (isteğe bağlı)" className={input} />
             <button
               disabled={busy || !badgeId}
-              onClick={() => run(() => memberBadgeAction(userId, badgeId, badgeNote), () => setBadgeNote(''))}
+              onClick={() => {
+                const give = () => run(() => memberBadgeAction(userId, badgeId, badgeNote), () => setBadgeNote(''))
+                const held = activity.badges.find((b) => b.id === badgeId)
+                if (!held) return give()
+                void askConfirm(`Bu üyede "${held.name}" rozeti zaten var. Bir kez daha verirsen bonus puanı da tekrar eklenir. Yine de verilsin mi?`).then((ok) => ok && give())
+              }}
               className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-40"
             >
               Rozeti ver

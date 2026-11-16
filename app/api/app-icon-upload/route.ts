@@ -3,12 +3,15 @@ import sharp from 'sharp'
 import { revalidatePath } from 'next/cache'
 import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel } from '@/lib/admin-auth'
+import { rejectCrossSite } from '@/lib/same-origin'
 import { getBranding, ICON_SIZES, updateBranding } from '@/lib/branding'
 
 const MAX_BYTES = 4 * 1024 * 1024
 const TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
 
 export async function POST(request: NextRequest) {
+  const crossSite = rejectCrossSite(request)
+  if (crossSite) return crossSite
   if (!(await canPanel('branding'))) {
     return NextResponse.json({ error: 'Oturum süresi doldu, tekrar giriş yap.' }, { status: 401 })
   }

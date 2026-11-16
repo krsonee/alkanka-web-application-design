@@ -6,7 +6,7 @@ import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
-import { BONUS_TYPES, EVENT_KINDS, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
 import type { HiddenMap, HiddenScope } from '@/lib/hidden-shared'
@@ -48,7 +48,7 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
   },
   predictions: {
     title: 'Maç tahminleri',
-    hint: 'Doğru tahmin edene verilecek puanı belirle. Seçenek oyları sitede birikir.',
+    hint: `Sitede "Doğru tahmin: +ödül KC" diye görünür. Üyeye ödenen ise ödülün ${PREDICTION_PAYOUT.share}'te biridir (en fazla ${PREDICTION_PAYOUT.max} KC) ve tahmini yaptığı an hesabına geçer; günde ${PREDICTION_PAYOUT.perDay} tahmine kadar. Maç sonucu girilmez, doğru tahmine ayrıca ödeme yapılmaz.`,
     field: 'home',
     fields: [
       { key: 'league', label: 'Lig', type: 'text', max: 40 },
@@ -57,7 +57,7 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
       { key: 'kickoff', label: 'Başlama yazısı · maç tarihi boşsa gösterilir', type: 'text', max: 30 },
       { key: 'home', label: 'Ev sahibi', type: 'text', max: 30 },
       { key: 'away', label: 'Deplasman', type: 'text', max: 30 },
-      { key: 'reward', label: 'Ödül (KC)', type: 'number' },
+      { key: 'reward', label: `Ödül (KC) · üyeye ${PREDICTION_PAYOUT.share}'te biri ödenir, en fazla ${PREDICTION_PAYOUT.max}`, type: 'number' },
       { key: 'options', label: 'Seçenekler', type: 'pairs', hint: 'Satır başına: seçenek | oy', a: 'label', b: 'votes', numericB: true },
     ],
     blank: () => ({ id: '', league: 'Süper Lig', home: 'Ev sahibi', away: 'Deplasman', kickoff: '', kickoffAt: toTrIso(new Date(Date.now() + 86_400_000)), closesAt: '', reward: 100, options: [{ id: 'o1', label: '1', votes: 0 }, { id: 'o2', label: 'X', votes: 0 }, { id: 'o3', label: '2', votes: 0 }] }),
