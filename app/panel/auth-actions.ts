@@ -16,7 +16,9 @@ import {
   loginBlocked,
   ownerPasswordMatches,
   recordFailedLogin,
+  setPendingLogin,
   setSessionCookie,
+  takePendingLogin,
   verifyPassword,
   type PanelAccountRow,
 } from '@/lib/panel-auth'
@@ -120,7 +122,10 @@ export async function panelLogin(_: LoginState, form: FormData): Promise<LoginSt
       }
       await rows(sql`UPDATE panel_accounts SET totp_secret = totp_pending, totp_pending = NULL, totp_enabled = true WHERE id = ${row.id}`)
       const codes = await issueBackupCodes(row.id)
-      await finishLogin(row)
+      // The session starts in panelLoginFinish, once the codes have been seen.
+      await clearFailedLogins(row.username)
+      await setPendingLogin(row)
+      await logPanel('account', 'İki adımlı doğrulama açıldı', null, 'İlk girişte kuruldu', actorOf(row))
       return { step: 'backup', codes }
     }
 
@@ -129,6 +134,18 @@ export async function panelLogin(_: LoginState, form: FormData): Promise<LoginSt
   } catch (error) {
     console.error('[panel-login]', error)
     return { message: 'Giriş yapılamadı. Biraz sonra tekrar dene.' }
+  }
+}
+
+export async function panelLoginFinish(): Promise<{ error?: string }> {
+  try {
+    const row = await takePendingLogin()
+    if (!row) return { error: 'Bekleme süresi doldu. Sayfayı yenile; kullanıcı adın, şifren ve uygulamadaki kodla gir.' }
+    await finishLogin(row)
+    return {}
+  } catch (error) {
+    console.error('[panel-login]', error)
+    return { error: 'Giriş yapılamadı. Biraz sonra tekrar dene.' }
   }
 }
 

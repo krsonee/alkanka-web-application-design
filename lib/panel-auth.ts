@@ -95,9 +95,50 @@ export async function setSessionCookie(account: Pick<PanelAccountRow, 'id' | 'se
   })
 }
 
+const PENDING_COOKIE = 'alk_panel_pending'
+const PENDING_MINUTES = 15
+
+function pendingSignature(key: Buffer, body: string) {
+  return createHmac('sha256', key).update(`pending|${body}`).digest('base64url')
+}
+
+/**
+ * Keeps a fully verified sign-in on hold while the login screen still has something to show.
+ * Starting the session right away redraws the page as the panel, and the screen is lost.
+ */
+export async function setPendingLogin(account: Pick<PanelAccountRow, 'id' | 'session_version'>) {
+  const key = signingKey()
+  if (!key) throw new Error('Panel anahtarı ayarlı değil (ADMIN_PASSWORD).')
+  const body = `${account.id}.${account.session_version}.${Math.floor(Date.now() / 1000) + PENDING_MINUTES * 60}`
+  ;(await cookies()).set(PENDING_COOKIE, `${body}.${pendingSignature(key, body)}`, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    path: '/',
+    maxAge: PENDING_MINUTES * 60,
+  })
+}
+
+/** The account whose sign-in was on hold, or null. The hold is used up either way. */
+export async function takePendingLogin() {
+  const key = signingKey()
+  const jar = await cookies()
+  const value = jar.get(PENDING_COOKIE)?.value
+  jar.delete(PENDING_COOKIE)
+  if (!key || !value) return null
+  const parts = value.split('.')
+  if (parts.length !== 4) return null
+  const [id, ver, exp, sig] = parts
+  if (!safeEqual(sig, pendingSignature(key, `${id}.${ver}.${exp}`))) return null
+  if (Number(exp) * 1000 < Date.now()) return null
+  const row = await accountById(Number(id))
+  return row && row.active && row.session_version === Number(ver) ? row : null
+}
+
 export async function clearSessionCookie() {
   const jar = await cookies()
   jar.delete(PANEL_COOKIE)
+  jar.delete(PENDING_COOKIE)
   jar.delete('alk_admin')
 }
 

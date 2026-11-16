@@ -320,9 +320,9 @@ export async function restoreMember(userId: string) {
 
 export async function adjustWallet(userId: string, amount: number, reason: string) {
   await ensureMemberAdmin()
-  const n = Math.trunc(Number(amount))
+  const n = Number(amount)
   const text = reason.trim()
-  if (!Number.isFinite(n) || n === 0 || Math.abs(n) > 1_000_000) throw new Error('Tutar -1.000.000 ile 1.000.000 arasında ve sıfırdan farklı olmalı.')
+  if (!Number.isInteger(n) || n === 0 || Math.abs(n) > 1_000_000) throw new Error('Tutar -1.000.000 ile 1.000.000 arasında, sıfırdan farklı bir tam sayı olmalı.')
   if (text.length < 3) throw new Error('İşlem gerekçesi yazmalısın.')
   const label = await memberLabel(userId)
   await rows(sql`INSERT INTO wallets (user_id, balance) VALUES (${userId}, 0) ON CONFLICT (user_id) DO NOTHING`)

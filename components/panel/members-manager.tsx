@@ -5,6 +5,7 @@ import { askConfirm, confirmed, notify } from '@/components/panel/confirm-dialog
 import { useEffect, useState, useTransition } from 'react'
 import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Coins, Download, Link2Off, Lock, LogOut, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { parseAmount } from '@/lib/amount'
 import {
   banAction,
   exportMembersAction,
@@ -40,6 +41,20 @@ const STATUS: Record<MemberStatus, { label: string; cls: string }> = {
 
 const input = 'rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary'
 const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
+
+const WALLET_LIMIT = 1_000_000
+
+function walletAmount(raw: string): { value: number | null; problem: string | null } {
+  const text = raw.trim()
+  if (!text || text === '-') return { value: null, problem: null }
+  const negative = text.startsWith('-')
+  const n = parseAmount(negative ? text.slice(1) : text)
+  if (n === null) return { value: null, problem: 'Tutar bir sayı olmalı. Örn. 500 ya da -200.' }
+  if (!Number.isInteger(n)) return { value: null, problem: `Tutar tam sayı olmalı (yazdığın ${text}). Kanka Coin küsuratlı olmaz.` }
+  if (n === 0) return { value: null, problem: 'Tutar sıfır olamaz.' }
+  if (n > WALLET_LIMIT) return { value: null, problem: `Tek seferde en fazla ${WALLET_LIMIT.toLocaleString('tr-TR')} KC eklenebilir ya da düşülebilir.` }
+  return { value: negative ? -n : n, problem: null }
+}
 
 const NO_EXTRA: MemberExtra = { sort: 'yeni', source: '', from: '', to: '', minBalance: null, maxBalance: null, telegram: '' }
 const EXTRA_KEYS = ['sort', 'source', 'from', 'to', 'minBalance', 'maxBalance', 'telegram'] as const
@@ -322,6 +337,7 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
   const [ipBlock, setIpBlock] = useState(false)
   const [amount, setAmount] = useState('')
   const [walletReason, setWalletReason] = useState('')
+  const wallet = walletAmount(amount)
 
   const [tab, setTab] = useState<'genel' | ActivityTab>('genel')
   const [act, setAct] = useState<Awaited<ReturnType<typeof memberActivityAction>> | undefined>(undefined)
@@ -505,21 +521,37 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
             </Section>
 
             <Section icon={<Coins className="size-4" aria-hidden="true" />} title="Bakiye düzeltme">
-              <input aria-label="Tutar" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d-]/g, ''))} placeholder="Örn. 500 ya da -200" className={input} />
+              <input
+                aria-label="Tutar"
+                inputMode="text"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.,\s-]/g, ''))}
+                placeholder="Örn. 500 ya da -200"
+                aria-invalid={Boolean(wallet.problem)}
+                aria-describedby={wallet.problem ? 'wallet-amount-problem' : undefined}
+                className={input}
+              />
+              {wallet.problem && (
+                <p id="wallet-amount-problem" role="alert" className="text-sm leading-relaxed text-live">
+                  {wallet.problem}
+                </p>
+              )}
               <input aria-label="İşlem gerekçesi" value={walletReason} onChange={(e) => setWalletReason(e.target.value)} placeholder="İşlem gerekçesi (zorunlu)" className={input} />
               <button
-                disabled={busy || !Number(amount) || walletReason.trim().length < 3}
-                onClick={() =>
+                disabled={busy || wallet.value === null || walletReason.trim().length < 3}
+                onClick={() => {
+                  const value = wallet.value
+                  if (value === null) return
                   confirmed(
-                    Number(amount) < 0
-                      ? `${m.name} bakiyesinden ${Math.abs(Number(amount)).toLocaleString('tr-TR')} KC düşülsün mü?`
-                      : `${m.name} bakiyesine ${Number(amount).toLocaleString('tr-TR')} KC eklensin mi?`,
-                    () => run(() => walletAction(m.id, Number(amount), walletReason), () => (setAmount(''), setWalletReason(''))),
+                    value < 0
+                      ? `${m.name} bakiyesinden ${Math.abs(value).toLocaleString('tr-TR')} KC düşülsün mü?`
+                      : `${m.name} bakiyesine ${value.toLocaleString('tr-TR')} KC eklensin mi?`,
+                    () => run(() => walletAction(m.id, value, walletReason), () => (setAmount(''), setWalletReason(''))),
                   )
-                }
+                }}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
               >
-                {Number(amount) < 0 ? 'Bakiyeden düş' : 'Bakiyeye ekle'}
+                {amount.trim().startsWith('-') ? 'Bakiyeden düş' : 'Bakiyeye ekle'}
               </button>
             </Section>
 

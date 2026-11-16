@@ -1,10 +1,10 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { KeyRound, LockKeyhole, LogOut, ShieldCheck } from 'lucide-react'
+import { Copy, KeyRound, LockKeyhole, LogOut, ShieldCheck } from 'lucide-react'
 import { logout } from '@/app/panel/actions'
-import { panelLogin, type LoginState } from '@/app/panel/auth-actions'
+import { panelLogin, panelLoginFinish, type LoginState } from '@/app/panel/auth-actions'
 
 const INPUT = 'rounded-lg border border-input bg-background px-3 py-2 text-foreground outline-none focus:border-primary read-only:opacity-70'
 
@@ -13,9 +13,13 @@ export function LoginForm({ configured }: { configured: boolean }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const router = useRouter()
+  const [finishing, startFinish] = useTransition()
+  const [finishError, setFinishError] = useState('')
+  const [copied, setCopied] = useState(false)
   const step = state.step ?? 'password'
 
   if (step === 'backup' && state.codes) {
+    const codes = state.codes
     return (
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-2xl border border-primary/30 bg-card p-6">
         <div className="flex items-center gap-3">
@@ -26,12 +30,41 @@ export function LoginForm({ configured }: { configured: boolean }) {
           Telefonunu kaybedersen bu kodlarla girebilirsin. Her kod bir kez çalışır. Bir yere not al; bu ekran bir daha gösterilmez.
         </p>
         <ul className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-background p-3 font-mono text-sm text-foreground">
-          {state.codes.map((c) => (
+          {codes.map((c) => (
             <li key={c}>{c}</li>
           ))}
         </ul>
-        <button onClick={() => router.refresh()} className="rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground hover:opacity-90">
-          Not aldım, panele geç
+        <button
+          type="button"
+          onClick={() =>
+            navigator.clipboard.writeText(codes.join('\n')).then(
+              () => setCopied(true),
+              () => setFinishError('Kodlar kopyalanamadı. Elle not al.'),
+            )
+          }
+          className="flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm text-foreground hover:bg-secondary"
+        >
+          <Copy className="size-4" aria-hidden="true" />
+          {copied ? 'Kopyalandı' : 'Kodları kopyala'}
+        </button>
+        {finishError && (
+          <p role="alert" className="text-sm leading-relaxed text-live">
+            {finishError}
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={finishing}
+          onClick={() =>
+            startFinish(async () => {
+              const result = await panelLoginFinish()
+              if (result.error) setFinishError(result.error)
+              else router.refresh()
+            })
+          }
+          className="rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          {finishing ? 'Panel açılıyor…' : 'Not aldım, panele geç'}
         </button>
       </div>
     )
