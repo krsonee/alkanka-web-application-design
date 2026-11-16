@@ -63,7 +63,7 @@ export function PushSender({ total, members, log, configured }: Props) {
                 ;(f.elements.namedItem('body') as HTMLTextAreaElement).value = p.body
                 ;(f.elements.namedItem('url') as HTMLInputElement).value = p.url
               }}
-              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
+              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary max-sm:min-h-9"
             >
               {p.title}
             </button>

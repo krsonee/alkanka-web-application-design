@@ -35,7 +35,7 @@ export function EmojiPicker({ onPick, label = 'Emoji ekle' }: { onPick: (emoji: 
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold',
+          'flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold max-sm:min-h-9',
           open ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground',
         )}
       >

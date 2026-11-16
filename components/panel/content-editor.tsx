@@ -420,7 +420,7 @@ export function ContentEditor({
             <button
               type="button"
               onClick={() => pick(hasModeration ? 'moderation' : 'dashboard')}
-              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-secondary"
+              className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-secondary max-sm:min-h-9"
             >
               <MessageSquare className="size-3.5 sm:hidden" aria-hidden="true" />
               <span className="hidden sm:inline">Bekleyen iş</span>
@@ -694,7 +694,7 @@ function SlideOrderTools({ id, index, total }: { id: string; index: number; tota
   const [moveState, moveAction, moving] = useActionState<ActionState, FormData>(moveSlide, {})
   const [dupState, dupAction, duplicating] = useActionState<ActionState, FormData>(duplicateSlide, {})
   const btn =
-    'flex size-7 items-center justify-center rounded-md bg-background/80 text-foreground backdrop-blur hover:bg-background disabled:opacity-30'
+    'flex size-7 items-center justify-center rounded-md bg-background/80 text-foreground backdrop-blur hover:bg-background disabled:opacity-30 max-sm:size-9'
   const failed = (!moveState.ok && moveState.message) || (!dupState.ok && dupState.message)
   return (
     <div className="flex items-center gap-1">
@@ -810,10 +810,10 @@ function ItemCard({
 
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="relative aspect-[16/11] bg-secondary sm:aspect-[16/7]">
+      <div className="relative aspect-[16/11] bg-secondary max-sm:min-h-68 sm:aspect-[16/7]">
         <Image src={preview || '/placeholder.svg'} alt="" fill sizes="(min-width: 1536px) 520px, 600px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
-        <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
+        <div className="absolute inset-x-0 top-0 z-10 flex flex-wrap items-start justify-between gap-2 p-3">
           <div className="flex flex-wrap items-center gap-1">
             {position && <SlideOrderTools id={item.id} index={position.index} total={position.total} />}
             {item.hidden && (
@@ -836,9 +836,11 @@ function ItemCard({
               href={item.path}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs text-foreground backdrop-blur hover:bg-background"
+              title="Sitede aç"
+              className="flex items-center justify-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs text-foreground backdrop-blur hover:bg-background max-sm:size-9 max-sm:p-0"
             >
-              Sitede aç <ExternalLink className="size-3" aria-hidden="true" />
+              <span className="max-sm:sr-only">Sitede aç</span>
+              <ExternalLink className="size-3 max-sm:size-4" aria-hidden="true" />
             </a>
           </div>
         </div>
@@ -930,11 +932,11 @@ function ItemCard({
                 <button
                   type="button"
                   onClick={(e) => e.currentTarget.form && applyPreset(e.currentTarget.form, presetPending)}
-                  className="rounded-md bg-primary px-2.5 py-1 font-semibold text-primary-foreground"
+                    className="rounded-md bg-primary px-2.5 py-1 font-semibold text-primary-foreground max-sm:min-h-9 max-sm:px-3"
                 >
                   Evet, doldur
                 </button>
-                <button type="button" onClick={() => setPresetPending(null)} className="rounded-md border border-border px-2.5 py-1">
+                <button type="button" onClick={() => setPresetPending(null)} className="rounded-md border border-border px-2.5 py-1 max-sm:min-h-9 max-sm:px-3">
                   Vazgeç
                 </button>
               </div>
@@ -945,7 +947,7 @@ function ItemCard({
                     key={p.label}
                     type="button"
                     onClick={() => setPresetPending(p)}
-                    className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
+                    className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary max-sm:min-h-9 max-sm:px-3"
                   >
                     {p.label}
                   </button>

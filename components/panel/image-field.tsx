@@ -107,9 +107,13 @@ export function ImageField({
               type="button"
               onClick={() => set('')}
               aria-label="Görseli kaldır"
-              className="absolute right-1 top-1 rounded-full bg-card/90 p-1 text-foreground hover:bg-card"
+              className={cn(
+                'absolute right-1 top-1 flex items-center justify-center rounded-full bg-card/90 p-1 text-foreground hover:bg-card',
+                // The compact thumbnail is 56px wide; a full-size target would cover it.
+                !compact && 'max-sm:size-9',
+              )}
             >
-              <X className="size-3" aria-hidden="true" />
+              <X className={cn('size-3', !compact && 'max-sm:size-4')} aria-hidden="true" />
             </button>
           )}
         </div>

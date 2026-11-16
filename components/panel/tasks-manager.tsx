@@ -105,7 +105,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
               key={t.title}
               type="button"
               onClick={() => setEditing({ ...EMPTY, ...t, sort: tasks.length })}
-              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
+              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary hover:text-primary max-sm:min-h-9"
             >
               {t.title}
             </button>
@@ -133,7 +133,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
               </span>
               {!task.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
               <HideButton key={`${task.id}-${task.active}`} kind="task" id={task.id} hidden={!task.active} label={task.title} />
-              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', param: task.param ?? '', chain: task.chain ?? '', badge: task.badge ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground max-sm:p-2.5">
+              <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', param: task.param ?? '', chain: task.chain ?? '', badge: task.badge ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-foreground max-sm:min-h-9 max-sm:px-3">
                 <Pencil className="size-4" aria-hidden="true" />
               </button>
             </li>
