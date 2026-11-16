@@ -156,6 +156,7 @@ import { SystemStatus } from '@/components/panel/system-status'
 import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
+import { TgGuide } from '@/components/panel/tg-guide'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
 import { DmPanel } from '@/components/panel/tg-dm-panel'
 import { TgPanelProvider } from '@/components/panel/tg-hub-ui'
@@ -413,7 +414,10 @@ async function telegramPanel(access: TelegramAccess) {
   }
   return (
     <TgPanelProvider access={access} chats={chats}>
-      <TelegramTabs issues={access.mod ? 'none' : 'box'} tabs={tabs} />
+      <div className="flex flex-col gap-4">
+        <TgGuide access={access} />
+        <TelegramTabs issues={access.mod ? 'none' : 'box'} tabs={tabs} />
+      </div>
     </TgPanelProvider>
   )
 }

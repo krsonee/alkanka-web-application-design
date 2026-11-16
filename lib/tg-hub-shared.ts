@@ -1,6 +1,8 @@
 export type SupportSponsor = { name: string; chatId: string; title: string }
 
 /** Shared by the guard and the panel text so the screen never promises a different number than the bot uses. */
+/** Served by app/panel/telegram-kilavuz only to a signed-in panel account; never link the guide as a public file. */
+export const TG_GUIDE_URL = '/panel/telegram-kilavuz'
 export const CAPTCHA_MINUTES = 3
 export const RAID_BAN_MINUTES = 10
 

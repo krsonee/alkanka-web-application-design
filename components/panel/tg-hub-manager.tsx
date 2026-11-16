@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { Plus, Trash2 } from 'lucide-react'
 import type { MirrorBot } from '@/lib/telegram-mirror'
-import { CANNED_MAX, CAPTCHA_MINUTES, CAPTCHA_MODES, RAID_BAN_MINUTES, REPLY_BUTTON_MAX, REPLY_RULE_MAX, REPLY_WORD_MAX } from '@/lib/tg-hub-shared'
+import { CANNED_MAX, CAPTCHA_MINUTES, CAPTCHA_MODES, RAID_BAN_MINUTES, REPLY_BUTTON_MAX, REPLY_RULE_MAX, REPLY_WORD_MAX, TG_GUIDE_URL } from '@/lib/tg-hub-shared'
 import type { HubConfig, HubGroup, HubStats, KnownChat, LeaderRow, LockRow, LogPage, QuietRow, ReplyRule, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { ChatField } from '@/components/panel/tg-chat-field'
@@ -166,10 +166,10 @@ function RepairCard() {
         <button type="button" className={btn} disabled={a.pending} onClick={() => a.run(() => repairTelegramAction())}>
           {a.pending ? 'Kontrol ediliyor…' : 'Kontrol et ve onar'}
         </button>
-        <a className={btnGhost} href="/downloads/alkanka-telegram-kilavuz.html" target="_blank" rel="noreferrer">
-          Kurulum kılavuzunu aç
+        <a className={btnGhost} href={TG_GUIDE_URL} target="_blank" rel="noreferrer">
+          Kullanım kılavuzunu aç
         </a>
-        <a className={btnGhost} href="/downloads/alkanka-telegram-kilavuz.html" download="alkanka-telegram-kilavuz.html">
+        <a className={btnGhost} href={`${TG_GUIDE_URL}?indir=1`} download="alkanka-telegram-kilavuz.html">
           Kılavuzu indir
         </a>
       </div>
@@ -183,7 +183,7 @@ function SetupSection({ d }: { d: TgHubData }) {
   return (
     <div className="flex flex-col gap-4">
       <RepairCard />
-      <Card title="1. Botlar�� görevlere ata" hint="Her rol için ayrı bot önerilir. Aynı bot birden fazla rol yapabilir ama Oran ve KankaTV botlarını burada kullanma.">
+      <Card title="1. Botları görevlere ata" hint="Her rol için ayrı bot önerilir. Aynı bot birden fazla rol yapabilir ama Oran ve KankaTV botlarını burada kullanma.">
         <RoleRow role="guard" label="Bekçi (güvenlik + kontrolcü + sayaç)" hint="Gruplarda küfür, spam, reklam, bot saldırısı ve sahte hesapları engeller; mesajları sayar." botId={hub.guardBotId} bots={d.bots} info={d.guardHook} />
         <RoleRow role="support" label="Destek botu" hint="Üyeler bu bota özelden yazar. Sorun yetkili grubuna ve sponsor grubuna bilet olarak düşer." botId={hub.supportBotId} bots={d.bots} info={d.supportHook} />
         <RoleRow
@@ -289,7 +289,7 @@ function GuardSection({ d }: { d: TgHubData }) {
         </label>
         <div className="grid gap-2 md:grid-cols-2">
           <Toggle label="Başka kanaldan iletilen mesajları sil" hint="Reklamcılar genelde iletme ile reklam yapar." checked={g.blockForwards} onChange={(v) => set({ blockForwards: v })} />
-          <Toggle label="Yapay zekâ moderasyonu" hint="Listeye takılmayan hakaret ve dolandırıc��lık mesajlarını anlar. Şüpheli mesajı siler, log grubuna yazar." checked={g.aiModeration} onChange={(v) => set({ aiModeration: v })} />
+          <Toggle label="Yapay zekâ moderasyonu" hint="Listeye takılmayan hakaret ve dolandırıcılık mesajlarını anlar. Şüpheli mesajı siler, log grubuna yazar." checked={g.aiModeration} onChange={(v) => set({ aiModeration: v })} />
         </div>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Grup kuralları (/kurallar yazınca gösterilir)
@@ -561,7 +561,7 @@ function CounterSection({ d }: { d: TgHubData }) {
   return (
     <div className="flex flex-col gap-4">
       <Toggle label="Mesaj sayacı açık" hint="Telegram gruplarında ve sitedeki canlı sohbette yazılanları sayar. Grupta /liste haftanın sıralamasını, /ben kişinin kendi sırasını gösterir." checked={c.enabled} onChange={(v) => setCfg((x) => ({ ...x, counter: { ...x.counter, enabled: v } }))} />
-      <Card title="Ayarlar" hint="Pazartesi 00:00'da geçen haftanın listesi gruba atılır, ��düller hesabını siteye bağlamış üyelere otomatik yüklenir.">
+      <Card title="Ayarlar" hint="Pazartesi 00:00'da geçen haftanın listesi gruba atılır, ödüller hesabını siteye bağlamış üyelere otomatik yüklenir.">
         <NumberField label="En az kaç harf olan mesaj sayılsın (tek harf spamı sayılmaz)" value={c.minLength} onChange={(v) => setCfg((x) => ({ ...x, counter: { ...x.counter, minLength: v } }))} />
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Haftalık ödüller (1., 2., 3. … sırayla KC)
