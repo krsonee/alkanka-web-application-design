@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { AlertTriangle, ArrowRight, CircleAlert, CircleCheck, Loader2, Trash2 } from 'lucide-react'
 import { clear404Action, deleteRedirectAction, saveRedirectAction } from '@/app/panel/seo-actions'
+import { confirmed } from '@/components/panel/confirm-dialog'
 import type { HealthIssue, NotFoundHit, Redirect } from '@/lib/seo-health'
 
 const input =
@@ -147,7 +148,7 @@ function RedirectsCard({ notFound, redirects }: { notFound: NotFoundHit[]; redir
                     type="button"
                     aria-label={`${n.path} kaydını sil`}
                     className="text-muted-foreground hover:text-destructive"
-                    onClick={() => run(() => clear404Action(n.path))}
+                    onClick={() => confirmed(`${n.path} adresinin 404 kaydı silinsin mi?`, () => run(() => clear404Action(n.path)))}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>
@@ -172,7 +173,7 @@ function RedirectsCard({ notFound, redirects }: { notFound: NotFoundHit[]; redir
                     type="button"
                     aria-label={`${r.from} yönlendirmesini sil`}
                     className="text-muted-foreground hover:text-destructive"
-                    onClick={() => run(() => deleteRedirectAction(r.from))}
+                    onClick={() => confirmed(`${r.from} yönlendirmesi silinsin mi? Bu adrese gelenler artık "sayfa bulunamadı" görür.`, () => run(() => deleteRedirectAction(r.from)))}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>

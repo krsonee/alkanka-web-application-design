@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useRef } from 'react'
 import { Bell, Loader2, Send, Smartphone, Users } from 'lucide-react'
+import { askConfirm } from '@/components/panel/confirm-dialog'
 import { sendPushAction } from '@/app/panel/push-actions'
 import type { ActionState } from '@/app/panel/actions'
 import type { PushLog } from '@/lib/push'
@@ -19,10 +20,27 @@ const input =
 
 export function PushSender({ total, members, log, configured }: Props) {
   const [state, action, pending] = useActionState<ActionState, FormData>(sendPushAction, {})
+  const approved = useRef(false)
 
   return (
     <div className="grid grid-cols-12 gap-6">
-      <form action={action} className="col-span-12 flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 lg:col-span-7">
+      <form
+        action={action}
+        onSubmit={(e) => {
+          if (approved.current) {
+            approved.current = false
+            return
+          }
+          e.preventDefault()
+          const form = e.currentTarget
+          void askConfirm(`Bu bildirim ${total.toLocaleString('tr-TR')} cihaza hemen gönderilsin mi? Gönderilen bildirim geri alınamaz.`).then((ok) => {
+            if (!ok) return
+            approved.current = true
+            form.requestSubmit()
+          })
+        }}
+        className="col-span-12 flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 lg:col-span-7"
+      >
         <div className="flex items-center gap-2">
           <Bell className="size-5 text-primary" aria-hidden />
           <h2 className="font-display text-xl font-bold uppercase text-foreground">Bildirim gönder</h2>

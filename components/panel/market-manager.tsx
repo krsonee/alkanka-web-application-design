@@ -141,10 +141,10 @@ function RequestList({ requests, pending, onResolve }: { requests: MarketRequest
                 placeholder="Not (opsiyonel, üyeye görünür)"
                 className={cn(field, 'min-w-0 flex-1')}
               />
-              <button type="button" disabled={pending} onClick={() => onResolve(r.id, true, notes[r.id] ?? '')} className="flex h-10 items-center gap-1.5 rounded-lg bg-success px-3 text-sm font-semibold text-background disabled:opacity-50">
+              <button type="button" disabled={pending} onClick={() => void askConfirm(`${r.userName} adlı üyenin "${r.itemName}" talebi onaylansın mı? Onay geri alınamaz; ödülü üyeye teslim ettiğinden emin ol.`).then((ok) => ok && onResolve(r.id, true, notes[r.id] ?? ''))} className="flex h-10 items-center gap-1.5 rounded-lg bg-success px-3 text-sm font-semibold text-background disabled:opacity-50">
                 <Check className="size-4" aria-hidden="true" /> Onayla
               </button>
-              <button type="button" disabled={pending} onClick={() => onResolve(r.id, false, notes[r.id] ?? '')} className="flex h-10 items-center gap-1.5 rounded-lg border border-destructive/50 px-3 text-sm font-semibold text-destructive disabled:opacity-50">
+              <button type="button" disabled={pending} onClick={() => void askConfirm(`${r.userName} adlı üyenin "${r.itemName}" talebi reddedilsin mi? ${r.price.toLocaleString('tr-TR')} KC üyeye iade edilir.`).then((ok) => ok && onResolve(r.id, false, notes[r.id] ?? ''))} className="flex h-10 items-center gap-1.5 rounded-lg border border-destructive/50 px-3 text-sm font-semibold text-destructive disabled:opacity-50">
                 <X className="size-4" aria-hidden="true" /> Reddet ve iade et
               </button>
             </div>

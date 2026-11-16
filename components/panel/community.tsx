@@ -209,7 +209,11 @@ function FinishRow({ m }: { m: LeagueMatch }) {
           <input aria-label="Ev sahibi gol" inputMode="numeric" value={h} onChange={(e) => setH(e.target.value.replace(/\D/g, ''))} placeholder="0" className="h-9 w-14 rounded-lg border border-border bg-background text-center text-sm text-foreground" />
           <span className="text-muted-foreground">-</span>
           <input aria-label="Deplasman gol" inputMode="numeric" value={a} onChange={(e) => setA(e.target.value.replace(/\D/g, ''))} placeholder="0" className="h-9 w-14 rounded-lg border border-border bg-background text-center text-sm text-foreground" />
-          <button disabled={pending || h === '' || a === ''} onClick={() => run(() => finishLeagueMatch(m.id, Number(h), Number(a)))} className="h-9 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-40">
+          <button disabled={pending || h === '' || a === ''} onClick={() =>
+              void askConfirm(`${m.home} ${Number(h)} - ${Number(a)} ${m.away} sonucu girilsin mi? ${m.picks} tahmin hemen puanlanır ve ödüller dağıtılır. Bu işlem geri alınamaz.`).then(
+                (ok) => ok && run(() => finishLeagueMatch(m.id, Number(h), Number(a))),
+              )
+            } className="h-9 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-40">
             Sonucu gir ve puanla
           </button>
           <button disabled={pending} onClick={() => void askConfirm('Maç ve tahminleri silinsin mi?').then((ok) => ok && run(() => removeLeagueMatch(m.id)))} aria-label="Maçı sil" className="flex size-9 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">

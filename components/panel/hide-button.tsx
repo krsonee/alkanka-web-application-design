@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { setVisibility, type VisibilityKind } from '@/app/panel/visibility-actions'
 import { cn } from '@/lib/utils'
+import { confirmed } from '@/components/panel/confirm-dialog'
+
+const CLOSES_FOR_EVERYONE = new Set<VisibilityKind>(['arena', 'mini'])
 
 /** Toggles whether an item is shown on the public site. Sits next to each row's delete button. */
 export function HideButton({
@@ -27,7 +30,12 @@ export function HideButton({
   const [isHidden, setIsHidden] = useState(hidden)
   const [error, setError] = useState('')
 
-  const toggle = () =>
+  const toggle = () => {
+    if (isHidden || !CLOSES_FOR_EVERYONE.has(kind)) return apply()
+    confirmed(`${label ? `"${label}"` : 'Bu oyun'} siteden gizlensin mi? Tüm üyelere kapanır; "Göster" ile tekrar açabilirsin.`, apply)
+  }
+
+  const apply = () =>
     start(async () => {
       setError('')
       const next = !isHidden

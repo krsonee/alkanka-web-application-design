@@ -240,10 +240,15 @@ function RewardsTab({
   return (
     <div className="flex flex-col gap-4">
       <Card icon={<Gift className="size-4" aria-hidden="true" />} title="Hediye gönder" hint="Kanka Coin hesabına eklenir ve gelen kutusuna hediye mesajı düşer.">
-        <input aria-label="Hediye tutarı" inputMode="numeric" value={gift} onChange={(e) => setGift(e.target.value.replace(/\D/g, ''))} placeholder="Tutar (KC)" className={input} />
+        <input aria-label="Hediye tutarı" inputMode="numeric" value={gift} onChange={(e) => setGift(e.target.value.replace(/[^\d-]/g, ''))} placeholder="Tutar (KC)" className={input} />
+        {gift !== '' && !(Number(gift) >= 1 && Number(gift) <= 100000) && (
+          <p role="alert" className="text-xs text-destructive">
+            Hediye 1 ile 100.000 KC arasında olmalı. Bakiye düşmek için &quot;Bakiye düzeltme&quot; bölümünü kullan.
+          </p>
+        )}
         <textarea aria-label="Hediye mesajı" value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} rows={2} placeholder="Mesaj (isteğe bağlı) — örn. Turnuva tesellisi, iyi şanslar!" className={cn(input, 'resize-y leading-relaxed')} />
         <button
-          disabled={busy || !Number(gift)}
+          disabled={busy || !(Number(gift) >= 1 && Number(gift) <= 100000)}
           onClick={() =>
             confirmed(`Bu üyeye ${Number(gift).toLocaleString('tr-TR')} KC hediye gönderilsin mi? Hesabına hemen eklenir ve gelen kutusuna mesaj düşer.`, () =>
               run(() => giftAction(userId, Number(gift), giftMsg), () => (setGift(''), setGiftMsg(''))),
@@ -357,7 +362,7 @@ function RewardsTab({
               onClick={() => {
                 const give = () => run(() => memberBadgeAction(userId, badgeId, badgeNote), () => setBadgeNote(''))
                 const held = activity.badges.find((b) => b.id === badgeId)
-                if (!held) return give()
+                if (!held) return confirmed(`Bu üyeye "${badges.find((b) => b.id === badgeId)?.name ?? ''}" rozeti verilsin mi? Bonus puanı varsa hemen eklenir.`, give)
                 void askConfirm(`Bu üyede "${held.name}" rozeti zaten var. Bir kez daha verirsen bonus puanı da tekrar eklenir. Yine de verilsin mi?`).then((ok) => ok && give())
               }}
               className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-40"

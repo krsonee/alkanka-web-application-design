@@ -13,6 +13,7 @@ import { GrowthGuide } from '@/components/panel/growth-guide'
 import type { AffLinkView } from '@/lib/aff-links'
 import type { FlaggedMember, SiteLink, SponsorAccount, TrafficReport } from '@/lib/growth'
 import { cn } from '@/lib/utils'
+import { confirmed } from '@/components/panel/confirm-dialog'
 
 type Site = { id: string; name: string }
 type Props = {
@@ -288,7 +289,13 @@ function Wagers({ sites, period }: { sites: Site[]; period: string }) {
         aria-label="Çevrim verisi"
       />
       <Note msg={msg} />
-      <button type="button" className={cn(btn, 'self-start')} disabled={pending || !text.trim()} onClick={() => run(() => importWagersAction(siteId, p, text))}>
+      <button type="button" className={cn(btn, 'self-start')} disabled={pending || !text.trim()} onClick={() =>
+          confirmed(
+            `${sites.find((s) => s.id === siteId)?.name ?? 'Seçili site'} için ${p} döneminin mevcut çevrim verisi silinip yapıştırdığın liste yazılsın mı? Eski veri geri gelmez.`,
+            () => run(() => importWagersAction(siteId, p, text)),
+          )
+        }
+      >
         {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
         Yükle
       </button>

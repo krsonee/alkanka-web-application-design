@@ -1,7 +1,7 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, confirmed } from '@/components/panel/confirm-dialog'
 import { useRef, useState, useTransition } from 'react'
 import { ImagePlus, Loader2, Mail, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react'
 import { EmojiPicker } from './emoji-picker'
@@ -70,6 +70,11 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
   const send = () => {
     setStatus(null)
     if (mode === 'one' && !target) return setStatus({ ok: false, text: 'Önce bir üye seç.' })
+    if (mode === 'all') return confirmed('Bu mesaj TÜM üyelerin gelen kutusuna hemen gönderilsin mi?', deliver)
+    deliver()
+  }
+
+  const deliver = () => {
     startSend(async () => {
       const r = await sendInboxMessage({ userId: mode === 'one' ? target!.id : null, title, body, url, imageUrl })
       if (r.ok) {
