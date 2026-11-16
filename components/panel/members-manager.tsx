@@ -3,7 +3,7 @@
 
 import { askConfirm, confirmed, notify } from '@/components/panel/confirm-dialog'
 import { useEffect, useState, useTransition } from 'react'
-import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Coins, Download, Link2Off, Lock, LogOut, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
+import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Coins, Download, Link2Off, Lock, LogOut, NotebookPen, Search, ShieldCheck, Snowflake, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { parseAmount } from '@/lib/amount'
 import {
@@ -14,13 +14,17 @@ import {
   restoreAction,
   revokeSessionsAction,
   searchMembersAction,
+  type MemberDetailFull,
   type MemberExtra,
   suspendAction,
   unlinkTelegramAction,
   walletAction,
 } from '@/app/panel/members-actions'
-import type { MemberDetail, MemberRow, MemberStatus } from '@/lib/members-admin'
+import type { MemberRow, MemberStatus } from '@/lib/members-admin'
+import { BULK_LIMIT } from '@/lib/members-bulk-shared'
 import { MemberActivityTabs, type ActivityTab } from '@/components/panel/member-activity-tabs'
+import { BulkBar, type Picked } from '@/components/panel/member-bulk'
+import { MemberNotes } from '@/components/panel/member-notes'
 
 type Filter = MemberStatus | 'tumu'
 
@@ -68,8 +72,19 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
   )
 }
 
-export function MembersManager({ initial, counts: initialCounts, levels }: { initial: MemberRow[]; counts: Record<Filter, number>; levels: Record<string, string> }) {
+export function MembersManager({
+  initial,
+  counts: initialCounts,
+  levels,
+  canMessage,
+}: {
+  initial: MemberRow[]
+  counts: Record<Filter, number>
+  levels: Record<string, string>
+  canMessage: boolean
+}) {
   const [q, setQ] = useState('')
+  const [picked, setPicked] = useState<Map<string, Picked>>(new Map())
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('q')
     if (fromUrl) setQ(fromUrl)
@@ -106,6 +121,33 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
 
   const refresh = () => load(page)
 
+  const pageAllPicked = list.length > 0 && list.every((m) => picked.has(m.id))
+  const tooMany = () => notify(false, `Tek seferde en fazla ${BULK_LIMIT} üye seçilebilir.`)
+
+  const togglePick = (m: MemberRow) => {
+    if (!picked.has(m.id) && picked.size >= BULK_LIMIT) return tooMany()
+    const next = new Map(picked)
+    if (!next.delete(m.id)) next.set(m.id, { id: m.id, name: m.name, status: m.status })
+    setPicked(next)
+  }
+
+  const togglePage = () => {
+    const next = new Map(picked)
+    if (pageAllPicked) {
+      for (const m of list) next.delete(m.id)
+    } else {
+      for (const m of list) {
+        if (next.has(m.id)) continue
+        if (next.size >= BULK_LIMIT) {
+          tooMany()
+          break
+        }
+        next.set(m.id, { id: m.id, name: m.name, status: m.status })
+      }
+    }
+    setPicked(next)
+  }
+
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
   const from = total === 0 ? 0 : page * pageSize + 1
   const to = Math.min(total, (page + 1) * pageSize)
@@ -132,7 +174,9 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 className="font-display text-xl font-bold text-foreground">Tüm üyeler</h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">Üye ara, hesabı dondur, banla ya da bakiyesini düzelt. Her işlem İşlem Loglarına yazılır.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Üye ara, hesabı dondur, banla ya da bakiyesini düzelt. Birden fazla üyeyi kutucukla seçip toplu mesaj, hediye ya da dondurma yapabilirsin. Her işlem İşlem Loglarına yazılır.
+          </p>
         </div>
         <button
           type="button"
@@ -235,6 +279,16 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
+              <th className="w-10 py-3 pl-4">
+                <input
+                  type="checkbox"
+                  checked={pageAllPicked}
+                  onChange={togglePage}
+                  disabled={list.length === 0}
+                  aria-label="Bu sayfadaki üyelerin hepsini seç"
+                  className="size-4 accent-primary"
+                />
+              </th>
               <th className="px-4 py-3 font-semibold">Üye</th>
               <th className="px-4 py-3 font-semibold">Rozet seviyesi</th>
               <th className="px-4 py-3 font-semibold">Bakiye</th>
@@ -247,12 +301,28 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
           </thead>
           <tbody>
             {list.map((m) => (
-              <tr key={m.id} onClick={() => setOpenId(m.id)} className="cursor-pointer border-b border-border last:border-0 hover:bg-secondary/50">
+              <tr
+                key={m.id}
+                onClick={() => setOpenId(m.id)}
+                className={cn('cursor-pointer border-b border-border last:border-0 hover:bg-secondary/50', picked.has(m.id) && 'bg-primary/5')}
+              >
+                <td className="w-10 py-3 pl-4" onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={picked.has(m.id)} onChange={() => togglePick(m)} aria-label={`${m.name} seç`} className="size-4 accent-primary" />
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar name={m.name} image={m.image} />
                     <div className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium text-foreground">{m.name}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium text-foreground">{m.name}</span>
+                        {m.notes > 0 && (
+                          <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-1.5 py-0.5 text-xs font-semibold text-foreground" title={`${m.notes} personel notu`}>
+                            <NotebookPen className="size-3" aria-hidden="true" />
+                            {m.notes}
+                            <span className="sr-only">personel notu</span>
+                          </span>
+                        )}
+                      </span>
                       <span className="truncate text-xs text-muted-foreground">{m.email}</span>
                     </div>
                   </div>
@@ -288,7 +358,7 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
             ))}
             {list.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                   Bu filtreyle eşleşen üye yok.
                 </td>
               </tr>
@@ -322,13 +392,23 @@ export function MembersManager({ initial, counts: initialCounts, levels }: { ini
         </div>
       </nav>
 
+      <BulkBar
+        picked={[...picked.values()]}
+        canMessage={canMessage}
+        onClear={() => setPicked(new Map())}
+        onDone={() => {
+          setPicked(new Map())
+          refresh()
+        }}
+      />
+
       {openId && <MemberDrawer key={openId} id={openId} level={levels[openId] ?? 'Çaylak'} onClose={() => setOpenId(null)} onChanged={refresh} />}
     </section>
   )
 }
 
 function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: string; onClose: () => void; onChanged: () => void }) {
-  const [m, setM] = useState<MemberDetail | null | undefined>(undefined)
+  const [m, setM] = useState<MemberDetailFull | null | undefined>(undefined)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, start] = useTransition()
   const [duration, setDuration] = useState('7')
@@ -480,6 +560,10 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
 
             {tab === 'genel' && (
               <>
+            <Section icon={<NotebookPen className="size-4" aria-hidden="true" />} title={`Personel notları${m.staffNotes.length ? ` (${m.staffNotes.length})` : ''}`}>
+              <MemberNotes userId={m.id} notes={m.staffNotes} busy={busy} run={run} />
+            </Section>
+
             <Section icon={<Snowflake className="size-4" aria-hidden="true" />} title="Hesabı dondur">
               <select aria-label="Süre" value={duration} onChange={(e) => setDuration(e.target.value)} className={input}>
                 <option value="1">1 gün</option>

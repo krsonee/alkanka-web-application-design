@@ -48,6 +48,8 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Davet sistemi', words: 'referans arkadaşını getir davet ödülü', row: 'growth', query: 's=referral' },
   { title: 'Masa doluluğu', words: 'doluluk canlı masa görünümü kalabalık', query: 's=ambient', moved: 'ambient' },
   { title: 'Üyelik kapısı', words: 'yeni kayıt kapat aç kayıt olma', row: 'users' },
+  { title: 'Toplu üye işlemi', words: 'toplu mesaj hediye dondur çoklu seçim', row: 'users' },
+  { title: 'Personel notları', words: 'üye notu not düş', row: 'users' },
   { title: 'Yorum onayı', row: 'community', query: 's=reviews' },
   { title: 'Kanıt & karne', words: 'ekran görüntüsü kanıtlı yorum', row: 'community', query: 's=kanit' },
   { title: 'Şikâyetler', words: 'şikayet', row: 'community', query: 's=complaints' },

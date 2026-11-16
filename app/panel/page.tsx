@@ -221,7 +221,7 @@ import { getTelegramPromo } from '@/lib/telegram-promo'
 import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 
 async function usersPanel() {
-  const [{ members, counts }, levels, cfg, roles, held, gate, canRoles] = await Promise.all([
+  const [{ members, counts }, levels, cfg, roles, held, gate, canRoles, canMessage] = await Promise.all([
     listMembers(),
     levelMap().catch(miss(({}) as Record<string, number>)),
     getKpConfig(),
@@ -229,13 +229,14 @@ async function usersPanel() {
     roleMap().catch(miss(({}) as Awaited<ReturnType<typeof roleMap>>)),
     getSignupGate(),
     canPanel('roles'),
+    canPanel('messages'),
   ])
   const names = Object.fromEntries(Object.entries(levels).map(([id, n]) => [id, cfg.levels[n - 1]?.name ?? 'Çaylak']))
   for (const [id, role] of Object.entries(held)) names[id] = role.name
   return (
     <div className="flex flex-col gap-6">
       <AccessManager gate={gate} roles={roles} canRoles={canRoles} />
-      <MembersManager initial={members} counts={counts} levels={names} />
+      <MembersManager initial={members} counts={counts} levels={names} canMessage={canMessage} />
     </div>
   )
 }

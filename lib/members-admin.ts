@@ -21,6 +21,8 @@ export type MemberRow = {
   banUntil: string | null
   banReason: string | null
   sharedIp: number
+  /** How many staff notes this member has. */
+  notes: number
 }
 
 export type MemberDetail = MemberRow & {
@@ -54,6 +56,10 @@ export function ensureMemberAdmin() {
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_links (
       user_id text PRIMARY KEY, tg_id bigint NOT NULL UNIQUE, tg_username text, tg_name text NOT NULL,
       linked_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS member_notes (
+      id bigserial PRIMARY KEY, user_id text NOT NULL, author text NOT NULL, author_username text NOT NULL, body text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE INDEX IF NOT EXISTS member_notes_user ON member_notes (user_id, created_at DESC)`)
   })().catch((error) => {
     ready = null
     throw error
@@ -103,6 +109,7 @@ type RawMember = {
   until: string | null
   reason: string | null
   shared_ip: string | null
+  notes: string | null
 }
 
 function toRow(m: RawMember): MemberRow {
@@ -124,6 +131,7 @@ function toRow(m: RawMember): MemberRow {
     banUntil: m.until ? new Date(m.until).toISOString() : null,
     banReason: m.reason,
     sharedIp,
+    notes: Number(m.notes ?? 0),
   }
 }
 
@@ -140,7 +148,8 @@ const baseSelect = sql`
     (SELECT coalesce(sum(points), 0) FROM kp_events k WHERE k.user_id = u.id) AS points,
     l.tg_id::text AS tg_id, coalesce(l.tg_username, l.tg_name) AS tg_name,
     b.kind, b.until, b.reason,
-    (SELECT count(*) FROM member_origin o2 WHERE o.ip_hash IS NOT NULL AND o2.ip_hash = o.ip_hash AND o2.user_id <> u.id) AS shared_ip
+    (SELECT count(*) FROM member_origin o2 WHERE o.ip_hash IS NOT NULL AND o2.ip_hash = o.ip_hash AND o2.user_id <> u.id) AS shared_ip,
+    (SELECT count(*) FROM member_notes n WHERE n.user_id = u.id) AS notes
   ${memberJoins}`
 
 /** Same rule as toRow(), in SQL, so status filtering and counting happen in the database. */
