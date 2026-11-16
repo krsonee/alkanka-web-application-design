@@ -27,10 +27,11 @@ export function BulkBar({ picked, canMessage, onClear, onDone }: { picked: Picke
 
   return (
     <>
+      <div aria-hidden="true" className="h-20 sm:hidden" />
       <div
         role="region"
         aria-label="Toplu işlem"
-        className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/40 bg-card px-4 py-3 shadow-lg"
+        className="fixed inset-x-4 bottom-4 z-20 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-primary/40 bg-card px-4 py-3 shadow-lg lg:left-80 lg:right-8 [body:has([data-unsaved-bar])_&]:bottom-20"
       >
         <p className="text-sm font-semibold text-foreground" aria-live="polite">
           {`${picked.length} üye seçili`}
