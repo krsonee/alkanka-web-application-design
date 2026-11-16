@@ -2,9 +2,12 @@
 
 import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
-import { canPanel } from '@/lib/admin-auth'
+import { canPanel, isPanelOwner } from '@/lib/admin-auth'
+import { parseAmount } from '@/lib/amount'
 import { extractBrand } from '@/lib/brand-extract'
 import { deleteAsset, deleteBrand, deleteJob, saveBrand } from '@/lib/studio'
+import { saveStudioCap } from '@/lib/studio-budget'
+import { STUDIO_CAP_RANGE, usd } from '@/lib/studio-types'
 
 type Result = { ok?: boolean; message?: string; brand?: { name: string; domain: string; logo: string; colors: string[]; font: string } }
 
@@ -49,6 +52,24 @@ export async function saveBrandAction(input: {
   revalidatePath('/panel')
   await logPanel('studio', 'Marka kiti kaydedildi', input.name)
   return { ok: true, message: 'Marka kiti kaydedildi.' }
+}
+
+export async function saveStudioCapAction(raw: string): Promise<Result> {
+  if (!(await isPanelOwner())) return { message: 'Aylık tavanı sadece ana yönetici değiştirebilir.' }
+  const text = String(raw).trim()
+  if (!text) {
+    await saveStudioCap(null)
+    revalidatePath('/panel')
+    await logPanel('studio', 'Stüdyo aylık tavanı kaldırıldı')
+    return { ok: true, message: 'Aylık tavan kaldırıldı.' }
+  }
+  const cap = parseAmount(text)
+  const [min, max] = STUDIO_CAP_RANGE
+  if (cap == null || cap < min || cap > max) return { message: `Tavan ${min} ile ${max} dolar arasında bir tutar olmalı.` }
+  await saveStudioCap(cap)
+  revalidatePath('/panel')
+  await logPanel('studio', 'Stüdyo aylık tavanı değişti', null, usd(cap))
+  return { ok: true, message: `Aylık tavan ${usd(cap)} olarak kaydedildi.` }
 }
 
 export async function deleteBrandAction(id: number): Promise<Result> {

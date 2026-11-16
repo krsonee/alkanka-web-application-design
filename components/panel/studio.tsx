@@ -3,7 +3,7 @@
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type FormEvent } from 'react'
 import {
   BookOpen,
   Clapperboard,
@@ -27,9 +27,13 @@ import {
   deleteJobAction,
   extractBrandAction,
   saveBrandAction,
+  saveStudioCapAction,
 } from '@/app/panel/studio-actions'
 import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
+import { amountInput } from '@/lib/amount'
 import {
+  budgetState,
+  usd,
   DEFAULT_IMAGE_SIZE,
   EMPTY_TEXTS,
   IMAGE_SIZES,
@@ -58,6 +62,7 @@ type Props = {
   assets: StudioAsset[]
   jobs: StudioJob[]
   spend: { total: number; month: number; count: number }
+  budget: { cap: number | null; canEdit: boolean }
 }
 
 const input =
@@ -69,10 +74,100 @@ const primaryBtn =
 const ghostBtn =
   'flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-50'
 
-const usd = (n: number) => `$${n.toFixed(2)}`
+function BudgetMeter({ spend, budget }: Pick<Props, 'spend' | 'budget'>) {
+  const router = useRouter()
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [message, setMessage] = useState('')
+  const [pending, startTransition] = useTransition()
+  const { level, share } = budgetState(spend.month, budget.cap)
+  const percent = Math.round(share * 100)
 
-export function Studio({ brands, assets, jobs, spend }: Props) {
+  function open() {
+    setValue(budget.cap ? amountInput(budget.cap) : '')
+    setMessage('')
+    setEditing(true)
+  }
+
+  function save(e: FormEvent) {
+    e.preventDefault()
+    startTransition(async () => {
+      const res = await saveStudioCapAction(value)
+      setMessage(res.message ?? '')
+      if (!res.ok) return
+      setEditing(false)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 text-sm text-muted-foreground sm:ml-auto sm:max-w-sm sm:items-end">
+      <p>
+        Bu ay <strong className="text-foreground">{usd(spend.month)}</strong>
+        {budget.cap != null ? ` / ${usd(budget.cap)}` : ''} · Toplam {spend.count} üretim, {usd(spend.total)}
+      </p>
+      {budget.cap != null ? (
+        <div
+          role="progressbar"
+          aria-label="Aylık tavanın dolan kısmı"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          className="h-1.5 w-full overflow-hidden rounded-full bg-secondary sm:w-64"
+        >
+          <div
+            className={cn('h-full rounded-full', level === 'full' ? 'bg-destructive' : level === 'near' ? 'bg-primary' : 'bg-success')}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      ) : null}
+      {level === 'full' ? (
+        <p role="status" className="text-pretty font-semibold text-destructive sm:text-right">
+          Bu ayın tavanı doldu. Ücretli üretim ay başına kadar kapalı; ücretsiz işlemler çalışır.
+        </p>
+      ) : level === 'near' ? (
+        <p role="status" className="font-semibold text-foreground">{`Aylık tavanın %${percent}'i doldu.`}</p>
+      ) : level === 'none' ? (
+        <p>Aylık tavan yok: üretim sınırsız.</p>
+      ) : null}
+      {editing ? (
+        <form onSubmit={save} data-no-guard className="flex flex-wrap items-end gap-2">
+          <label className={label}>
+            Aylık tavan (dolar)
+            <input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              inputMode="decimal"
+              placeholder="Örn: 50"
+              autoFocus
+              className={cn(input, 'w-32')}
+            />
+          </label>
+          <button type="submit" disabled={pending} className={primaryBtn}>
+            Kaydet
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className={cn(ghostBtn, 'py-2.5')}>
+            Vazgeç
+          </button>
+          <p className="basis-full text-xs">Boş bırakıp kaydedersen tavan kalkar.</p>
+        </form>
+      ) : budget.canEdit ? (
+        <button type="button" onClick={open} className={ghostBtn}>
+          {budget.cap != null ? 'Tavanı değiştir' : 'Aylık tavan koy'}
+        </button>
+      ) : null}
+      {message ? (
+        <p role="status" className="text-xs text-foreground">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+export function Studio({ brands, assets, jobs, spend, budget }: Props) {
   const [view, setView] = useState<StudioView>(brands.length ? 'create' : 'guide')
+  const { left } = budgetState(spend.month, budget.cap)
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -100,9 +195,7 @@ export function Studio({ brands, assets, jobs, spend }: Props) {
             </button>
           ))}
         </div>
-        <p className="text-sm text-muted-foreground">
-          Bu ay <strong className="text-foreground">{usd(spend.month)}</strong> · Toplam {spend.count} üretim, {usd(spend.total)}
-        </p>
+        <BudgetMeter spend={spend} budget={budget} />
       </div>
       {view === 'guide' ? (
         <StudioGuide onNavigate={setView} />
@@ -110,7 +203,7 @@ export function Studio({ brands, assets, jobs, spend }: Props) {
         <StudioHint section={view} onOpenGuide={() => setView('guide')} />
       )}
       {view === 'create' ? (
-        <Creator brands={brands} assets={assets} jobs={jobs} />
+        <Creator brands={brands} assets={assets} jobs={jobs} left={left} />
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
       ) : view === 'library' ? (
@@ -120,7 +213,7 @@ export function Studio({ brands, assets, jobs, spend }: Props) {
   )
 }
 
-function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
+function Creator({ brands, assets, jobs, left }: Pick<Props, 'brands' | 'assets' | 'jobs'> & { left: number | null }) {
   const router = useRouter()
   const [kind, setKind] = useState<StudioKind>('banner')
   const [brandId, setBrandId] = useState<number | ''>(brands[0]?.id ?? '')
@@ -151,6 +244,10 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
   const textsChanged = revising?.kind === 'banner' && !sameTexts(revisedTexts, revising.texts)
   // Copy-only changes are re-printed on the stored text-free picture, so they cost nothing.
   const retextOnly = Boolean(revising?.retextable) && textsChanged && revision.trim().length < 5
+  // The server refuses these too; the buttons close first so nobody waits for a refusal.
+  const overCap = (cost: number) => left != null && cost > left + 1e-9
+  const plannedCost = unitCost * runs.length
+  const revisionCost = revising && !retextOnly ? imageCost(revising.kind === 'sticker' ? '1K' : size) : 0
 
   async function post(url: string, body: Record<string, unknown>): Promise<StudioJob | null> {
     try {
@@ -422,10 +519,11 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
           </details>
         ) : null}
 
-        <button type="button" onClick={start} disabled={running + videoRuns > 0} className={primaryBtn}>
+        <button type="button" onClick={start} disabled={running + videoRuns > 0 || overCap(plannedCost)} className={primaryBtn}>
           {running + videoRuns > 0 ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
-          {running + videoRuns > 0 ? `Üretiliyor (${running + videoRuns})...` : `Üret · ~${usd(unitCost * runs.length)}`}
+          {running + videoRuns > 0 ? `Üretiliyor (${running + videoRuns})...` : `Üret · ~${usd(plannedCost)}`}
         </button>
+        {overCap(plannedCost) ? <CapNote cost={plannedCost} left={left} /> : null}
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -462,13 +560,14 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
               </>
             ) : null}
             <div className="flex gap-2">
-              <button type="button" onClick={revise} disabled={revision.trim().length < 5 && !retextOnly} className={primaryBtn}>
-                {retextOnly ? 'Yazıyı güncelle · ücretsiz' : `Revizeyi üret · ~${usd(imageCost(revising.kind === 'sticker' ? '1K' : size))}`}
+              <button type="button" onClick={revise} disabled={(revision.trim().length < 5 && !retextOnly) || overCap(revisionCost)} className={primaryBtn}>
+                {retextOnly ? 'Yazıyı güncelle · ücretsiz' : `Revizeyi üret · ~${usd(revisionCost)}`}
               </button>
               <button type="button" onClick={() => setRevising(null)} className={ghostBtn}>
                 Vazgeç
               </button>
             </div>
+            {overCap(revisionCost) ? <CapNote cost={revisionCost} left={left} /> : null}
           </div>
         ) : null}
 
@@ -488,16 +587,17 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
               <button type="button" onClick={() => runAnimation('gif')} className={ghostBtn}>
                 <Film className="size-3.5" aria-hidden /> Efekt GIF · ücretsiz
               </button>
-              <button type="button" onClick={() => runAnimation('aigif')} className={ghostBtn}>
+              <button type="button" onClick={() => runAnimation('aigif')} disabled={overCap(videoCost(4, false, false))} className={ghostBtn}>
                 <Film className="size-3.5" aria-hidden /> Yapay zeka GIF · ~{usd(videoCost(4, false, false))}
               </button>
-              <button type="button" onClick={() => runAnimation('video')} className={primaryBtn}>
+              <button type="button" onClick={() => runAnimation('video')} disabled={overCap(videoCost(duration, audio))} className={primaryBtn}>
                 <Clapperboard className="size-4" aria-hidden /> Video üret · ~{usd(videoCost(duration, audio))}
               </button>
               <button type="button" onClick={() => setAnimating(null)} className={ghostBtn}>
                 Vazgeç
               </button>
             </div>
+            {overCap(videoCost(duration, audio)) ? <CapNote cost={videoCost(duration, audio)} left={left} /> : null}
           </div>
         ) : null}
 
@@ -540,6 +640,14 @@ function Creator({ brands, assets, jobs }: Omit<Props, 'spend'>) {
         </div>
       </div>
     </div>
+  )
+}
+
+function CapNote({ cost, left }: { cost: number; left: number | null }) {
+  return (
+    <p role="status" className="text-pretty text-sm text-destructive">
+      {`Bu iş (~${usd(cost)}) aylık tavandan kalan ${usd(left ?? 0)} tutarını aşıyor. Tavanı ana yönetici yukarıdan değiştirebilir.`}
+    </p>
   )
 }
 

@@ -86,6 +86,23 @@ export const DEFAULT_IMAGE_SIZE: ImageSize = '2K'
 export const toImageSize = (value: unknown): ImageSize => IMAGE_SIZES.find((s) => s.id === value)?.id ?? DEFAULT_IMAGE_SIZE
 export const imageCost = (size: ImageSize) => IMAGE_SIZES.find((s) => s.id === size)?.cost ?? IMAGE_SIZES[0].cost
 
+export const usd = (n: number) => `$${n.toFixed(2)}`
+
+export const STUDIO_CAP_RANGE = [1, 5000] as const
+const CAP_WARN_SHARE = 0.8
+
+export type BudgetLevel = 'none' | 'ok' | 'near' | 'full'
+
+/** `left` is what paid jobs may still spend this month; null when no cap is set. */
+export function budgetState(month: number, cap: number | null): { level: BudgetLevel; left: number | null; share: number } {
+  if (cap == null) return { level: 'none', left: null, share: 0 }
+  const left = Math.max(0, cap - month)
+  const share = Math.min(1, month / cap)
+  // Under the price of the cheapest picture nothing paid can start any more.
+  const level = left < IMAGE_SIZES[0].cost ? 'full' : share >= CAP_WARN_SHARE ? 'near' : 'ok'
+  return { level, left, share }
+}
+
 export const VIDEO_DURATIONS = [4, 6, 8] as const
 export const VIDEO_COST_PER_SECOND = {
   hd: { silent: 0.05, audio: 0.08 },

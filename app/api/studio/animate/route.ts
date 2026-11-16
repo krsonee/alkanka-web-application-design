@@ -3,6 +3,7 @@ import { canPanel } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
+import { budgetBlock } from '@/lib/studio-budget'
 import { AI_GIF_SECONDS, makeGif, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { brushOf } from '@/lib/studio-overlay'
 import { makeStickerIcon, makeVideoSticker } from '@/lib/studio-telegram'
@@ -34,6 +35,9 @@ export async function POST(request: NextRequest) {
   const duration = VIDEO_DURATIONS.find((d) => d === Number(body?.duration)) ?? 6
   const audio = body?.audio === true
   const motion = String(body?.motion ?? '').trim().slice(0, 600)
+  const paid = mode === 'aigif' ? videoCost(AI_GIF_SECONDS, false, false) : mode === 'video' ? videoCost(duration, audio) : 0
+  const overCap = await budgetBlock(paid)
+  if (overCap) return NextResponse.json({ error: overCap }, { status: 409 })
 
   try {
     const image = await readFile(source.pathname)
@@ -52,7 +56,7 @@ export async function POST(request: NextRequest) {
               data: await videoToGif(await clip(AI_GIF_SECONDS, false, false)),
               contentType: 'image/gif',
               ext: 'gif',
-              cost: videoCost(AI_GIF_SECONDS, false, false),
+              cost: paid,
               folder: 'gifs',
             }
         : mode === 'tgsticker'
@@ -63,7 +67,7 @@ export async function POST(request: NextRequest) {
                 data: await clip(duration, audio, true),
                 contentType: 'video/mp4',
                 ext: 'mp4',
-                cost: videoCost(duration, audio),
+                cost: paid,
                 folder: 'videos',
               }
     const pathname = await storeFile(result.folder, result.data, result.contentType, result.ext)

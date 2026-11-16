@@ -69,6 +69,7 @@ import { CommunityManager } from '@/components/panel/community'
 import { adminComplaints, listLeagueMatches, pendingReviews, publishedReviews } from '@/lib/community'
 import { siteOptions } from '@/lib/sites'
 import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
+import { getStudioCap } from '@/lib/studio-budget'
 import { KpManager } from '@/components/panel/kp-manager'
 import { BoostManager } from '@/components/panel/boost-manager'
 import { getBoostConfig } from '@/lib/boosts'
@@ -220,10 +221,10 @@ import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 async function usersPanel() {
   const [{ members, counts }, levels, cfg, roles, held, gate, canRoles] = await Promise.all([
     listMembers(),
-    levelMap().catch(() => ({}) as Record<string, number>),
+    levelMap().catch(miss(({}) as Record<string, number>)),
     getKpConfig(),
     listRoles(),
-    roleMap().catch(() => ({}) as Awaited<ReturnType<typeof roleMap>>),
+    roleMap().catch(miss(({}) as Awaited<ReturnType<typeof roleMap>>)),
     getSignupGate(),
     canPanel('roles'),
   ])
@@ -275,32 +276,32 @@ type TgShared = {
 /** Bots, automations and channel settings: the tabs that need the setup permission, and the data only they use. */
 async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Promise<{ tabs: TgTab[]; chats: Array<{ chatId?: string | null; title?: string | null }> }> {
   const [oddsConfig, oddsStatus, oddsSources, oddsPage] = await Promise.all([
-    getOddsBotConfig().catch(() => DEFAULT_ODDS_BOT),
-    oddsBotStatus().catch(() => EMPTY_ODDS_STATUS),
-    listOddsSources().catch(() => []),
-    searchAdminOdds({}).catch(() => ({ rows: [], hasMore: false })),
+    getOddsBotConfig().catch(miss(DEFAULT_ODDS_BOT)),
+    oddsBotStatus().catch(miss(EMPTY_ODDS_STATUS)),
+    listOddsSources().catch(miss([])),
+    searchAdminOdds({}).catch(miss({ rows: [], hasMore: false })),
   ])
   const [sources, log, cronKey, invite, addresses, shareInfo] = await Promise.all([
-    listSources().catch(() => []),
-    listLog().catch(() => []),
-    getCronKey().catch(() => 'ANAHTAR'),
-    getInviteConfig().catch(() => null),
-    getTelegramAddresses(TELEGRAM_URL).catch(() => null),
-    shareStatus().catch(() => ({ lastError: null, lastRunAt: null, shared: 0 })),
+    listSources().catch(miss([])),
+    listLog().catch(miss([])),
+    getCronKey().catch(miss('ANAHTAR')),
+    getInviteConfig().catch(miss(null)),
+    getTelegramAddresses(TELEGRAM_URL).catch(miss(null)),
+    shareStatus().catch(miss({ lastError: null, lastRunAt: null, shared: 0 })),
   ])
   const [tvConfig, tvStatus, tvToday] = await Promise.all([
-    getTvConfig().catch(() => DEFAULT_TV),
-    tvBotStatus().catch(() => ({ lastRunAt: null, lastError: null, sent: 0, tracked: 0 })),
-    tvStats().catch(() => ({ watchersToday: 0, minutesToday: 0, coinsToday: 0, predictionsToday: 0, openPredictions: 0, follows: 0 })),
+    getTvConfig().catch(miss(DEFAULT_TV)),
+    tvBotStatus().catch(miss({ lastRunAt: null, lastError: null, sent: 0, tracked: 0 })),
+    tvStats().catch(miss({ watchersToday: 0, minutesToday: 0, coinsToday: 0, predictionsToday: 0, openPredictions: 0, follows: 0 })),
   ])
   const [betsConfig, betsStatus, betsToday, betsMarkets, betsHistory] = await Promise.all([
-    getBetsConfig().catch(() => DEFAULT_BETS),
-    betsBotStatus().catch(() => ({ lastRunAt: null, lastError: null, sent: 0, opened: 0, settled: 0, voided: 0 })),
-    betsStats().catch(() => ({ betsToday: 0, stakedToday: 0, paidToday: 0, burnedToday: 0, openMarkets: 0, openStake: 0, players: 0 })),
-    adminMarkets().catch(() => []),
-    betsLog().catch(() => []),
+    getBetsConfig().catch(miss(DEFAULT_BETS)),
+    betsBotStatus().catch(miss({ lastRunAt: null, lastError: null, sent: 0, opened: 0, settled: 0, voided: 0 })),
+    betsStats().catch(miss({ betsToday: 0, stakedToday: 0, paidToday: 0, burnedToday: 0, openMarkets: 0, openStake: 0, players: 0 })),
+    adminMarkets().catch(miss([])),
+    betsLog().catch(miss([])),
   ])
-  const tgPromo = await getTelegramPromo().catch(() => TELEGRAM_PROMO_DEFAULTS)
+  const tgPromo = await getTelegramPromo().catch(miss(TELEGRAM_PROMO_DEFAULTS))
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
   const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
   const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
@@ -366,11 +367,11 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
 /** One section for all three Telegram permissions; each tab is built only for an account that may use it. */
 async function telegramPanel(access: TelegramAccess) {
   const [bots, targets, suite, chat, savedHub] = await Promise.all([
-    listBots().catch(() => []),
-    listTargets().catch(() => []),
-    getBotSuite().catch(() => DEFAULT_SUITE),
-    chatStatus().catch(() => null),
-    getHub().catch(() => null),
+    listBots().catch(miss([])),
+    listTargets().catch(miss([])),
+    getBotSuite().catch(miss(DEFAULT_SUITE)),
+    chatStatus().catch(miss(null)),
+    getHub().catch(miss(null)),
   ])
   const linkedMembers = chat?.linkedMembers ?? 0
   const hubData = access.mod ? await loadTgHub(bots, suite.share.botId ?? null, linkedMembers) : null
@@ -514,7 +515,7 @@ async function staffPanel() {
     active: boolean
     last_login_at: string | null
   }>(sql`SELECT id, username, display_name, is_owner, permissions, totp_enabled, totp_required, active, last_login_at FROM panel_accounts ORDER BY is_owner DESC, username`)
-  const addresses = await lastLoginAddresses().catch((): Record<string, string> => ({}))
+  const addresses = await lastLoginAddresses().catch(miss<Record<string, string>>({}))
   const accounts: StaffRow[] = list.map((a) => ({
     id: Number(a.id),
     username: a.username,
@@ -792,7 +793,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           .catch(miss(undefined))}
       />
     )),
-    section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch((e) => { console.error('[panel-limits]', e); return [] })} />),
+    section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch(miss([]))} />),
     section(ctx, 'games', 'Oyun ayarları', async () => (
       <div className="flex flex-col gap-6">
         <GameStats />
@@ -848,6 +849,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         assets={await listAssets().catch(miss([]))}
         jobs={await listJobs().catch(miss([]))}
         spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
+        budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
       />
     )),
     section(ctx, 'messages', 'Site içi mesajlar', async () => <MessageSender sent={await listSent()} />),
@@ -879,11 +881,11 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
 
   const onDash = active === 'dashboard'
   const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
-    pendingDetail(can).catch((): PendingDetail => EMPTY_PENDING),
+    pendingDetail(can).catch(miss<PendingDetail>(EMPTY_PENDING)),
     onDash && can('users') ? memberCounts().catch(miss(null)) : null,
     onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
-    onDash && session.isOwner ? dashStats(parseQuery(params)).catch((error) => (console.error('[panel:dash-stats]', error), null)) : null,
-    onDash && session.isOwner ? loadSystemStatus({ totpEnabled: session.totpEnabled }).catch((error) => (console.error('[panel:system-status]', error), null)) : null,
+    onDash && session.isOwner ? dashStats(parseQuery(params)).catch(miss(null)) : null,
+    onDash && session.isOwner ? loadSystemStatus({ totpEnabled: session.totpEnabled }).catch(miss(null)) : null,
   ])
   const pending: Record<string, number> = {
     community: detail.reviews + detail.complaints + detail.withdrawals + (detail.proofs ?? 0),

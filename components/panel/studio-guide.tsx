@@ -270,6 +270,11 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
           <p className="text-xs leading-relaxed text-muted-foreground">
             Ücretler Vercel AI Gateway bakiyenden düşer. Üretim sunucuda yapıldığı için site ve panel kasmaz.
           </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Ana yönetici ekranın sağ üstünden aylık harcama tavanı koyabilir. Tavanın %80&apos;i dolunca uyarı çıkar, tavan dolunca ücretli üretim
+            ay başına kadar kapanır; yazı güncelleme, efekt GIF ve Telegram çıktıları gibi ücretsiz işlemler çalışmaya devam eder. Sayaç liste
+            fiyatlarından hesaplanan tahmindir, kesin tutar Vercel faturasında yazar.
+          </p>
         </Block>
       </div>
 
