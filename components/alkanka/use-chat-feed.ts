@@ -5,7 +5,7 @@ import { useIdle } from './use-idle'
 import type { ChatFeed, ChatLink } from '@/lib/telegram-chat'
 import type { BroadcastSlug, ChannelFeed } from '@/lib/telegram-channels-shared'
 
-export type ChatResponse = ChatFeed & { locked?: boolean; me: { loggedIn: boolean; link: ChatLink | null; joined: boolean } }
+export type ChatResponse = ChatFeed & { locked?: boolean; me: { loggedIn: boolean; link: ChatLink | null; joined: boolean; mod?: boolean } }
 
 const fetcher = <T,>(url: string) => fetch(url, { cache: 'no-store' }).then((r) => r.json() as Promise<T>)
 

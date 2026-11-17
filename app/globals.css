@@ -1746,9 +1746,10 @@
   --sidebar-w: 72px;
 }
 
-/* While a card-table game is on screen the Telegram rail steps aside so the table gets the width. */
+/* While a card-table game is on screen the Telegram rail steps aside so the table gets the width.
+   A rail the visitor opened with the Sohbet button stays: it is drawn over the page, not beside it. */
 @media (min-width: 1280px) {
-  body:has([data-game-table]) aside[data-live-rail] {
+  body:has([data-game-table]) aside[data-live-rail]:not([data-open]) {
     display: none;
   }
   body:has([data-game-table]) .xl\:pr-80 {

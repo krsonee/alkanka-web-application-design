@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { AlertTriangle, Gift, MessageSquare, Star } from 'lucide-react'
 import { addComplaintAction, addReviewAction } from '@/app/actions/community'
 import { cn } from '@/lib/utils'
+import { COMPLAINT_BODY_MAX, COMPLAINT_BODY_MIN, COMPLAINT_TITLE_MAX, COMPLAINT_TITLE_MIN, REVIEW_MAX, REVIEW_MIN } from '@/lib/community-limits'
 import { usePoints } from '../points-context'
 import { StatusLine, useAction } from './use-action'
 import { WithdrawForm } from './withdraw-form'
@@ -15,6 +16,19 @@ const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 
 type Mode = 'review' | 'complaint' | 'cekim'
+
+/** Says how much is still missing, so a greyed-out send button is never a mystery. */
+function LengthHint({ id, length, min, max }: { id: string; length: number; min: number; max: number }) {
+  const missing = min - length
+  return (
+    <p id={id} aria-live="polite" className="-mt-1.5 flex items-center justify-between gap-3 text-xs leading-relaxed">
+      <span className={missing > 0 && length > 0 ? 'font-semibold text-primary' : 'text-muted-foreground'}>
+        {missing > 0 ? (length > 0 ? `${missing} karakter daha yaz (en az ${min}).` : `En az ${min} karakter yaz.`) : 'Uzunluk yeterli.'}
+      </span>
+      <span className="shrink-0 tabular-nums text-muted-foreground">{`${length} / ${max}`}</span>
+    </p>
+  )
+}
 
 const TABS: { id: Mode; label: string; icon: typeof Star }[] = [
   { id: 'review', label: 'Yorum', icon: MessageSquare },
@@ -101,11 +115,13 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
           </fieldset>
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
             Deneyimin
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} maxLength={1000} placeholder="Çekim hızı, destek, bonus şartları..." className={field} />
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} maxLength={REVIEW_MAX} placeholder="Çekim hızı, destek, bonus şartları..." aria-describedby="review-hint" className={field} />
           </label>
-          <button disabled={review.pending || rating === 0 || body.trim().length < 20} className="btn-sheen h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
+          <LengthHint id="review-hint" length={body.trim().length} min={REVIEW_MIN} max={REVIEW_MAX} />
+          <button disabled={review.pending || rating === 0 || body.trim().length < REVIEW_MIN} className="btn-sheen h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
             {review.pending ? 'Gönderiliyor...' : 'Yorumu gönder'}
           </button>
+          {rating === 0 && body.trim().length >= REVIEW_MIN && <p className="text-xs leading-relaxed text-primary">Göndermek için yukarıdan yıldız puanını da seç.</p>}
           <StatusLine status={review.status} />
           <ProofUpload siteId={siteId} kp={proofKp} />
         </form>
@@ -122,13 +138,15 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
         >
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
             Başlık
-            <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Örn. Çekim talebim 3 gündür bekliyor" className={field} />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={COMPLAINT_TITLE_MAX} placeholder="Örn. Çekim talebim 3 gündür bekliyor" aria-describedby="complaint-title-hint" className={field} />
           </label>
+          <LengthHint id="complaint-title-hint" length={title.trim().length} min={COMPLAINT_TITLE_MIN} max={COMPLAINT_TITLE_MAX} />
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
             Ne oldu?
-            <textarea value={detail} onChange={(e) => setDetail(e.target.value)} rows={5} maxLength={2000} placeholder="Tarih, tutar ve yaşadığın sorunu yaz. Şifre ya da kart bilgisi paylaşma." className={field} />
+            <textarea value={detail} onChange={(e) => setDetail(e.target.value)} rows={5} maxLength={COMPLAINT_BODY_MAX} placeholder="Tarih, tutar ve yaşadığın sorunu yaz. Şifre ya da kart bilgisi paylaşma." aria-describedby="complaint-body-hint" className={field} />
           </label>
-          <button disabled={complaint.pending || title.trim().length < 5 || detail.trim().length < 30} className="btn-sheen h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
+          <LengthHint id="complaint-body-hint" length={detail.trim().length} min={COMPLAINT_BODY_MIN} max={COMPLAINT_BODY_MAX} />
+          <button disabled={complaint.pending || title.trim().length < COMPLAINT_TITLE_MIN || detail.trim().length < COMPLAINT_BODY_MIN} className="btn-sheen h-10 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
             {complaint.pending ? 'Gönderiliyor...' : 'Şikâyeti gönder'}
           </button>
           <p className="text-xs leading-relaxed text-muted-foreground">Ekibimiz şikâyeti inceleyip siteye iletir. Durumu profilinden takip edersin.</p>

@@ -5,6 +5,7 @@ import { createLinkCode, sendFromSite, unlink } from '@/lib/telegram-chat'
 import { sendChannelComment } from '@/lib/telegram-channels'
 import { isBroadcastSlug } from '@/lib/telegram-channels-shared'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
+import type { ChatModAction } from '@/lib/chat-mod-shared'
 
 type Result = { ok: boolean; message?: string; url?: string }
 
@@ -17,6 +18,23 @@ export async function sendChatMessage(text: string): Promise<Result> {
   try {
     await sendFromSite(member.id, text)
     return { ok: true }
+  } catch (error) {
+    return { ok: false, message: errorText(error) }
+  }
+}
+
+export async function moderateChat(messageId: number, action: ChatModAction, minutes = 0): Promise<Result> {
+  const member = await getMember()
+  if (!member) return { ok: false, message: 'Önce giriş yap.' }
+  const mod = await import('@/lib/chat-mod')
+  if (!(await mod.isChatModerator(member.id))) return { ok: false, message: 'Bu işlem için moderatör yetkisi gerekiyor.' }
+  if (await hitRateLimit(`chatmod:${member.id}`, 30, 60)) return { ok: false, message: RATE_LIMIT_MESSAGE }
+  try {
+    const id = Number(messageId)
+    if (action === 'delete') return { ok: true, message: await mod.modDeleteMessage(member, id) }
+    if (action === 'mute') return { ok: true, message: await mod.modMute(member, id, Number(minutes)) }
+    if (action === 'unmute') return { ok: true, message: await mod.modUnmute(member, id) }
+    return { ok: false, message: 'Bilinmeyen işlem.' }
   } catch (error) {
     return { ok: false, message: errorText(error) }
   }

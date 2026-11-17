@@ -77,6 +77,9 @@ function ensureChatTables() {
       WHERE tg_message_id IS NOT NULL`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_site_removed (chat_id text NOT NULL, tg_message_id bigint NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (chat_id, tg_message_id))`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS chat_mutes (
+      tg_id bigint PRIMARY KEY, user_id text, name text NOT NULL, until timestamptz NOT NULL,
+      by_id text NOT NULL, by_name text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_links (
       user_id text PRIMARY KEY, tg_id bigint NOT NULL UNIQUE, tg_username text, tg_name text NOT NULL,
       linked_at timestamptz NOT NULL DEFAULT now())`)
@@ -306,6 +309,7 @@ export async function handleUpdate(update: TgUpdate) {
     SELECT ${config.chatId}, ${m.message_id}, ${m.from.id}, ${link[0]?.user_id ?? null}, ${displayName(m.from)},
       ${text.slice(0, 1500)}, 'telegram', ${media?.type ?? null}, ${media?.fileId ?? null}
     WHERE NOT EXISTS (SELECT 1 FROM tg_site_removed WHERE chat_id = ${config.chatId} AND tg_message_id = ${m.message_id})
+      AND NOT EXISTS (SELECT 1 FROM chat_mutes WHERE tg_id = ${m.from.id} AND until > now())
     ON CONFLICT DO NOTHING`)
 }
 
@@ -414,6 +418,14 @@ export async function sendFromSite(userId: string, rawText: string) {
   const link = await rows<{ tg_id: string; tg_name: string }>(sql`SELECT tg_id, tg_name FROM tg_links WHERE user_id = ${userId}`)
   if (!link[0]) throw new Error('Yazmak için önce Telegram hesabını bağla.')
 
+  const { mutedUntil, staffRoleName } = await import('@/lib/chat-mod')
+  const until = await mutedUntil(Number(link[0].tg_id))
+  if (until) {
+    const minutes = Math.max(1, Math.ceil((until.getTime() - Date.now()) / 60_000))
+    const left = minutes >= 60 ? `${Math.ceil(minutes / 60)} saat` : `${minutes} dakika`
+    throw new Error(`Sohbette susturuldun. Yaklaşık ${left} sonra yeniden yazabilirsin.`)
+  }
+
   const last = await rows<{ created_at: string }>(sql`SELECT created_at FROM tg_chat_messages
     WHERE user_id = ${userId} AND origin = 'site' ORDER BY id DESC LIMIT 1`)
   if (last[0] && Date.now() - new Date(last[0].created_at).getTime() < SEND_COOLDOWN_MS) throw new Error('Biraz yavaş kanka, birkaç saniye bekle.')
@@ -441,9 +453,10 @@ export async function sendFromSite(userId: string, rawText: string) {
   if (member.status === 'restricted' && member.can_send_messages === false) throw new Error('Bu grupta yazma iznin kısıtlanmış.')
 
   const author = link[0].tg_name
+  const role = await staffRoleName(userId)
   const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
     chat_id: config.chatId,
-    text: `<b>${escapeHtml(author)}</b> <i>(site)</i>: ${escapeHtml(text)}`,
+    text: `<b>${escapeHtml(author)}</b>${role ? ` [${escapeHtml(role)}]` : ''} <i>(site)</i>: ${escapeHtml(text)}`,
     parse_mode: 'HTML',
     link_preview_options: { is_disabled: true },
   })

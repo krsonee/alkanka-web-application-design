@@ -178,6 +178,8 @@ async function unmute(token: string, chatId: number | string, userId: number) {
   })
 }
 
+export { mute as muteMember, unmute as unmuteMember }
+
 async function ban(token: string, chatId: number | string, userId: number) {
   await dropUserFromSite(chatId, userId)
   await callBot(token, 'banChatMember', { chat_id: chatId, user_id: userId, revoke_messages: true })
