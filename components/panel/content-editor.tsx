@@ -84,6 +84,7 @@ export type EditorItem = {
 
 export function ContentEditor({
   slides,
+  slideAudience,
   heroes,
   library,
   logos,
@@ -148,6 +149,8 @@ export function ContentEditor({
   marketing: React.ReactNode
   social: React.ReactNode
   slides: EditorItem[]
+  /** Who still gets the home page that carries these slides; the new design has its own cover. */
+  slideAudience: SlideAudience
   heroes: EditorItem[]
   library: string[]
   logos: React.ReactNode
@@ -582,7 +585,7 @@ export function ContentEditor({
         <div className="flex flex-col gap-6">{logos}</div>
       ) : (
         tab === 'slide' ? (
-          <SlideGrid slides={items} library={library} />
+          <SlideGrid slides={items} library={library} audience={slideAudience} />
         ) : (
           <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
             {items.map((item) => (
@@ -736,7 +739,17 @@ const poseImage = (p: string) => (p === 'jako' ? '/images/mascots/jako.png' : `/
 const PREVIEW_KEYS = ['eyebrow', 'title', 'description', 'cta', 'speech'] as const
 type LiveFields = Record<(typeof PREVIEW_KEYS)[number], string>
 
-function SlideGrid({ slides, library }: { slides: EditorItem[]; library: string[] }) {
+type SlideAudience = { members: boolean; guests: boolean }
+
+function slideAudienceNote({ members, guests }: SlideAudience) {
+  if (members && guests) return null
+  const rest = 'Yeni ana sayfa tasarımının kapağı kendi oyun slaytlarını kullanır; buradaki slaytlar sadece eski ana sayfada çıkar. Hangisinin açık olduğu "Ana sayfa ayarları" ekranından değişir.'
+  if (!members && !guests) return `Bu slaytlar şu an sitede kimseye gösterilmiyor. ${rest}`
+  return `Bu slaytları şu an sadece ${members ? 'üyeler' : 'misafirler'} görüyor. ${rest}`
+}
+
+function SlideGrid({ slides, library, audience }: { slides: EditorItem[]; library: string[]; audience: SlideAudience }) {
+  const note = slideAudienceNote(audience)
   const order = useOrder(slides, (slide) => slide.id)
   const [sorting, startSort] = useTransition()
 
@@ -752,20 +765,28 @@ function SlideGrid({ slides, library }: { slides: EditorItem[]; library: string[
   }
 
   return (
-    <SortableList
-      layout="grid"
-      items={order.ordered}
-      idOf={(slide) => slide.id}
-      nameOf={(slide) => slide.saved?.title || slide.defaults.title || 'Slayt'}
-      onMove={move}
-      disabled={sorting}
-      className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3"
-      itemClassName="rounded-2xl"
-      handleClassName="size-7 bg-background/80 text-foreground backdrop-blur hover:bg-background max-sm:size-9"
-      before={<AddSlideCard />}
-    >
-      {(slide, handle, i) => <ItemCard item={slide} library={library} position={{ index: i, total: order.ordered.length }} handle={handle} />}
-    </SortableList>
+    <div className="flex flex-col gap-5">
+      {note && (
+        <p role="note" className="flex items-start gap-2.5 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm leading-relaxed text-foreground text-pretty">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="min-w-0">{note}</span>
+        </p>
+      )}
+      <SortableList
+        layout="grid"
+        items={order.ordered}
+        idOf={(slide) => slide.id}
+        nameOf={(slide) => slide.saved?.title || slide.defaults.title || 'Slayt'}
+        onMove={move}
+        disabled={sorting}
+        className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3"
+        itemClassName="rounded-2xl"
+        handleClassName="size-7 bg-background/80 text-foreground backdrop-blur hover:bg-background max-sm:size-9"
+        before={<AddSlideCard />}
+      >
+        {(slide, handle, i) => <ItemCard item={slide} library={library} position={{ index: i, total: order.ordered.length }} handle={handle} />}
+      </SortableList>
+    </div>
   )
 }
 
@@ -1008,8 +1029,8 @@ function ItemCard({
             library={library}
             uploadId="slide-mobile"
             placeholder="Boşsa telefonda da üstteki görsel kullanılır"
-            previewClassName="aspect-[4/5] w-40"
-            hint="Telefonda slayt dikeydir; geniş görselin kenarları kesilir. Buraya dikey bir görsel koyarsan telefonda o gösterilir. Önerilen boyut 800×1000."
+            previewClassName="aspect-[5/4] w-40"
+            hint="Telefonda slayt kutusu kareye yakındır; geniş görselin sağı ve solu kesilir. Buraya kareye yakın bir görsel koyarsan telefonda o gösterilir. Önerilen boyut 1000×800."
           />
         )}
         {item.custom && (

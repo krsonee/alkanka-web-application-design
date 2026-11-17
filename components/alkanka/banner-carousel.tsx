@@ -19,11 +19,11 @@ function SlideImage({ image, mobileImage, first }: { image: string; mobileImage?
   if (!mobileImage) return <Image src={wide} alt="" fill draggable={false} priority={first} sizes={WIDE_SIZES} className={IMAGE_CLASS} />
   const common = { alt: '', fill: true, priority: first }
   const desktop = getImageProps({ ...common, src: wide, sizes: WIDE_SIZES }).props
-  const { srcSet, ...phone } = getImageProps({ ...common, src: mobileImage, sizes: '100vw' }).props
+  const phone = getImageProps({ ...common, src: mobileImage, sizes: '100vw' }).props
+  // `images.unoptimized` leaves srcSet empty; a <source> without one is skipped and the phone image would show everywhere.
   return (
     <picture>
-      <source media="(min-width: 640px)" srcSet={desktop.srcSet} sizes={WIDE_SIZES} />
-      <source srcSet={srcSet} sizes="100vw" />
+      <source media="(min-width: 640px)" srcSet={desktop.srcSet ?? desktop.src} sizes={desktop.srcSet ? WIDE_SIZES : undefined} />
       <img {...phone} alt="" draggable={false} className={IMAGE_CLASS} />
     </picture>
   )

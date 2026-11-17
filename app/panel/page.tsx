@@ -575,6 +575,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const ctx: SectionCtx = { session, active }
 
   const slideStats = can('slide') && active === 'slide' ? await readPromoTotals('slide') : {}
+  const homeDesign = mergeHomeV2(content[HOME_V2_KEY]).home
+  const slideAudience = { members: !(homeDesign.fullPage && homeDesign.enabled), guests: !(homeDesign.fullPage && homeDesign.guestEnabled) }
   const slides = can('slide')
     ? sortByOrder(SLIDES.map((s) => ({
         kind: 'slide' as const,
@@ -1005,6 +1007,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           moderation={moderation === undefined ? <></> : moderation}
           isOwner={session.isOwner}
           slides={slides}
+          slideAudience={slideAudience}
           heroes={heroes}
           library={IMAGE_LIBRARY}
           texts={texts}
