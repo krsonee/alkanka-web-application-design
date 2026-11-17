@@ -18,7 +18,8 @@ export function MemberLedger({ userId, balance }: { userId: string; balance: num
       if (!res) throw new Error('Döküm alınamadı.')
       return res
     },
-    { revalidateOnFocus: false, revalidateFirstPage: false },
+    // The list is remounted whenever the balance changes or the tab is reopened; each time it must read the ledger again, not the cached copy.
+    { revalidateOnFocus: false, revalidateFirstPage: false, revalidateOnMount: true },
   )
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Yükleniyor…</p>
@@ -30,15 +31,15 @@ export function MemberLedger({ userId, balance }: { userId: string; balance: num
 
   return (
     <div className="flex flex-col gap-4">
-      <dl className="grid grid-cols-3 gap-3 text-sm">
+      <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3 sm:gap-3">
         {[
           ['Giren', kc(head.coinsIn)],
           ['Çıkan', kc(head.coinsOut)],
           ['Şu anki bakiye', kc(balance)],
         ].map(([k, v]) => (
-          <div key={k} className="flex flex-col rounded-lg bg-background px-3 py-2">
+          <div key={k} className="flex items-center justify-between gap-3 rounded-lg bg-background px-3 py-2 sm:flex-col sm:items-start sm:justify-start sm:gap-0">
             <dt className="text-xs text-muted-foreground">{k}</dt>
-            <dd className="font-display text-lg font-bold tabular-nums text-foreground">{v}</dd>
+            <dd className="whitespace-nowrap font-display text-lg font-bold tabular-nums text-foreground">{v}</dd>
           </div>
         ))}
       </dl>
