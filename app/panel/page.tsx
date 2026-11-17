@@ -589,7 +589,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           path: '/',
           custom: true,
           defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
-          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href, startAt: s.startAt, endAt: s.endAt },
+          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, mobileImage: s.mobileImage, href: s.href, startAt: s.startAt, endAt: s.endAt },
         })),
       ), readSlideOrder(content[SLIDE_ORDER_KEY])).map((s) => ({ ...s, stats: slideStats[s.id] ?? { views: 0, clicks: 0 } }))
     : []
@@ -614,6 +614,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     tour,
     sponsors,
     growth,
+    referral,
     marketing,
     community,
     badges,
@@ -715,8 +716,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} today={istanbulToday()} />),
     section(ctx, 'growth', 'Büyüme', async () => {
-      const [referral, ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
-        getReferralSettings(),
+      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
         tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
         siteOptions(),
         listSites().catch(miss([])),
@@ -727,35 +727,34 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         adminSponsorAccounts().catch(miss([])),
         affLinkViews().catch(miss([])),
       ])
+      const traffic = (
+        <GrowthManager
+          sites={options.map((s) => ({ id: s.id, name: s.name }))}
+          recordNames={Object.fromEntries(allSites.map((site) => [String(site.id), site.name]))}
+          links={links}
+          followers={followers}
+          report={report}
+          flagged={flagged}
+          accounts={accounts}
+          period={currentPeriod()}
+          siteUrl={SITE_URL}
+          campaignsHref={can('marketing') ? '/panel?b=marketing&s=campaigns' : null}
+          affLinks={affLinks}
+          affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
+        />
+      )
+      if (!ambient) return traffic
       return (
         <TelegramTabs
           label="Büyüme bölümleri"
           tabs={[
-            {
-              id: 'traffic',
-              label: 'Trafik & hesaplar',
-              content: (
-                <GrowthManager
-                  sites={options.map((s) => ({ id: s.id, name: s.name }))}
-                  recordNames={Object.fromEntries(allSites.map((site) => [String(site.id), site.name]))}
-                  links={links}
-                  followers={followers}
-                  report={report}
-                  flagged={flagged}
-                  accounts={accounts}
-                  period={currentPeriod()}
-                  siteUrl={SITE_URL}
-                  affLinks={affLinks}
-                  affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
-                />
-              ),
-            },
-            { id: 'referral', label: 'Davet sistemi', content: <ReferralEditor settings={referral} /> },
-            ...(ambient ? [{ id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> }] : []),
+            { id: 'traffic', label: 'Trafik & hesaplar', content: traffic },
+            { id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> },
           ]}
         />
       )
     }),
+    section(ctx, 'referral', 'Davet sistemi', async () => <ReferralEditor settings={await getReferralSettings()} />),
     section(ctx, 'marketing', 'Pazarlama', async () => {
       const [tracking, campaigns, earnings, mSites, earningReminders, adStats] = await Promise.all([
         getTracking(),
@@ -895,6 +894,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         jobs={await listJobs().catch(miss([]))}
         spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
         budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
+        canSlide={can('slide')}
       />
     )),
     section(ctx, 'messages', 'Site içi mesajlar', async () => {
@@ -1017,6 +1017,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           community={community}
           home={home}
           withdrawals={withdrawals}
+          referral={referral}
           badges={badges}
           tasks={tasks}
           market={market}

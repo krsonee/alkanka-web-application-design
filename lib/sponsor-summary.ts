@@ -6,6 +6,7 @@ import { ensureCommunity } from '@/lib/community'
 import { ensureGrowth } from '@/lib/growth'
 import { ensureMarketing } from '@/lib/marketing'
 import { listSites } from '@/lib/sites'
+import { dealDaysLeft, istanbulToday } from '@/lib/sites-shared'
 import type { SponsorSummary } from '@/lib/sponsor-summary-shared'
 
 type Row = Record<string, unknown>

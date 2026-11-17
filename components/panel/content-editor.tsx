@@ -48,6 +48,7 @@ type Fields = {
   cta?: string
   speech?: string
   image?: string
+  mobileImage?: string
   pose?: string
   href?: string
   startAt?: string
@@ -100,6 +101,7 @@ export function ContentEditor({
   community,
   home,
   withdrawals,
+  referral,
   badges,
   tasks,
   faqs,
@@ -163,6 +165,7 @@ export function ContentEditor({
   community: React.ReactNode
   home: React.ReactNode
   withdrawals: React.ReactNode
+  referral: React.ReactNode
   badges: React.ReactNode
   tasks: React.ReactNode
   faqs: React.ReactNode
@@ -557,6 +560,8 @@ export function ContentEditor({
         home
       ) : tab === 'withdrawals' ? (
         withdrawals
+      ) : tab === 'referral' ? (
+        referral
       ) : tab === 'badges' ? (
         badges
       ) : tab === 'tasks' ? (
@@ -848,6 +853,7 @@ function ItemCard({
     return result
   }, {})
   const [image, setImage] = useState(item.saved?.image || '')
+  const [mobileImage, setMobileImage] = useState(item.saved?.mobileImage || '')
   const value = (k: keyof Fields) => item.saved?.[k] ?? ''
   const initialLive = (): LiveFields =>
     Object.fromEntries(PREVIEW_KEYS.map((k) => [k, value(k) || item.defaults[k] || ''])) as LiveFields
@@ -953,7 +959,11 @@ function ItemCard({
                 <span className="sr-only">Tıklanma</span>
                 {item.stats.clicks.toLocaleString('tr-TR')}
               </span>
-              {item.stats.views > 0 && <span className="text-foreground">{`%${ctr.toFixed(1)}`}</span>}
+              {item.stats.views > 0 ? (
+                <span className="font-semibold text-foreground">{`Tıklama oranı %${ctr.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`}</span>
+              ) : (
+                <span>Henüz gösterim yok</span>
+              )}
             </span>
           )}
           <span
@@ -973,6 +983,7 @@ function ItemCard({
         onReset={(e) => {
           const form = e.currentTarget
           setImage(item.saved?.image || '')
+          setMobileImage(item.saved?.mobileImage || '')
           setTimeout(() => syncPreview(form))
         }}
         className="flex flex-col gap-3 p-4"
@@ -988,6 +999,19 @@ function ItemCard({
           placeholder="Hazır görsel kullanılıyor"
           hint={`Bilgisayardan yükle, galeriden seç ya da link yapıştır. Önerilen boyut ${isSlide ? '1600×600' : '1600×500'}.`}
         />
+        {isSlide && (
+          <ImageField
+            name="mobileImage"
+            label="Telefon görseli (isteğe bağlı)"
+            value={mobileImage}
+            onChange={setMobileImage}
+            library={library}
+            uploadId="slide-mobile"
+            placeholder="Boşsa telefonda da üstteki görsel kullanılır"
+            previewClassName="aspect-[4/5] w-40"
+            hint="Telefonda slayt dikeydir; geniş görselin kenarları kesilir. Buraya dikey bir görsel koyarsan telefonda o gösterilir. Önerilen boyut 800×1000."
+          />
+        )}
         {item.custom && (
           <label className="flex flex-col gap-1.5 text-sm text-foreground">
             Butonun gideceği link
@@ -1125,6 +1149,7 @@ function ItemCard({
               }
               setConfirming(false)
               setImage('')
+              setMobileImage('')
             }}
             className={cn(
               'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm disabled:opacity-40',

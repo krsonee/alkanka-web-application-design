@@ -1,7 +1,7 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, notify } from '@/components/panel/confirm-dialog'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition, type FormEvent } from 'react'
 import {
@@ -9,6 +9,7 @@ import {
   Clapperboard,
   Download,
   Film,
+  GalleryHorizontal,
   Globe,
   ImagePlus,
   Link2,
@@ -28,6 +29,7 @@ import {
   extractBrandAction,
   saveBrandAction,
   saveStudioCapAction,
+  studioToSlideAction,
 } from '@/app/panel/studio-actions'
 import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
 import { amountInput } from '@/lib/amount'
@@ -63,6 +65,8 @@ type Props = {
   jobs: StudioJob[]
   spend: { total: number; month: number; count: number }
   budget: { cap: number | null; canEdit: boolean }
+  /** The account may also open the Slider section, so a banner can be sent there. */
+  canSlide: boolean
 }
 
 const input =
@@ -165,7 +169,7 @@ function BudgetMeter({ spend, budget }: Pick<Props, 'spend' | 'budget'>) {
   )
 }
 
-export function Studio({ brands, assets, jobs, spend, budget }: Props) {
+export function Studio({ brands, assets, jobs, spend, budget, canSlide }: Props) {
   const [view, setView] = useState<StudioView>(brands.length ? 'create' : 'guide')
   const { left } = budgetState(spend.month, budget.cap)
   return (
@@ -203,7 +207,7 @@ export function Studio({ brands, assets, jobs, spend, budget }: Props) {
         <StudioHint section={view} onOpenGuide={() => setView('guide')} />
       )}
       {view === 'create' ? (
-        <Creator brands={brands} assets={assets} jobs={jobs} left={left} />
+        <Creator brands={brands} assets={assets} jobs={jobs} left={left} canSlide={canSlide} />
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
       ) : view === 'library' ? (
@@ -213,7 +217,7 @@ export function Studio({ brands, assets, jobs, spend, budget }: Props) {
   )
 }
 
-function Creator({ brands, assets, jobs, left }: Pick<Props, 'brands' | 'assets' | 'jobs'> & { left: number | null }) {
+function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' | 'assets' | 'jobs' | 'canSlide'> & { left: number | null }) {
   const router = useRouter()
   const [kind, setKind] = useState<StudioKind>('banner')
   const [brandId, setBrandId] = useState<number | ''>(brands[0]?.id ?? '')
@@ -628,6 +632,7 @@ function Creator({ brands, assets, jobs, left }: Pick<Props, 'brands' | 'assets'
             <JobCard
               key={job.id}
               job={job}
+              canSlide={canSlide}
               onRevise={() => openRevision(job)}
               onAnimate={() => setAnimating(job)}
               onTelegram={async (mode) => {
@@ -751,8 +756,10 @@ function JobCard({
   onRevise,
   onAnimate,
   onTelegram,
+  canSlide,
 }: {
   job: StudioJob
+  canSlide: boolean
   onRevise: () => void
   onAnimate: () => void
   onTelegram?: (mode: 'tgsticker' | 'tgicon') => void
@@ -794,6 +801,30 @@ function JobCard({
           {job.kind === 'banner' ? (
             <button type="button" onClick={onAnimate} className={ghostBtn}>
               <Film className="size-3.5" aria-hidden /> Hareketlendir
+            </button>
+          ) : null}
+          {job.kind === 'banner' && canSlide ? (
+            <button
+              type="button"
+              disabled={pending}
+              title="Görseli gizli bir slayt olarak Slider'a ekler"
+              onClick={() =>
+                void askConfirm(
+                  job.format === '16:9'
+                    ? 'Bu görsel Slider\'a gizli bir slayt olarak eklensin mi? Başlığını ve linkini Slider bölümünde düzenleyip yayına alırsın.'
+                    : `Bu görsel ${job.format} oranında; slider yatay olduğu için kenarları kesilir. Yine de gizli bir slayt olarak eklensin mi?`,
+                ).then(
+                  (ok) =>
+                    ok &&
+                    start(async () => {
+                      const result = await studioToSlideAction(job.id)
+                      notify(Boolean(result.ok), result.message ?? 'Eklenemedi.')
+                    }),
+                )
+              }
+              className={ghostBtn}
+            >
+              <GalleryHorizontal className="size-3.5" aria-hidden /> {'Slider\'a ekle'}
             </button>
           ) : null}
           {job.kind === 'sticker' && onTelegram ? (

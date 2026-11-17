@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import { deletePost, savePost } from '@/lib/blog'
 import { deleteDeal, extractVerificationCode, setDealsPublishing, setVerification } from '@/lib/deals'
+import { cleanLocal, formatLocal, parseLocal } from '@/lib/schedule'
 import { slugify } from '@/lib/seo'
 import type { ActionState } from './actions'
 
@@ -58,6 +59,11 @@ export async function savePostAction(_: ActionState, form: FormData): Promise<Ac
   const slug = slugify(str(form, 'slug', 90) || title)
   if (!slug) return { message: 'Geçerli bir adres (slug) girilemedi.' }
   const rawId = Number.parseInt(String(form.get('id') ?? ''), 10)
+  const published = form.get('published') === 'on'
+  const rawAt = String(form.get('publishAt') ?? '').trim()
+  const publishAt = cleanLocal(rawAt)
+  if (rawAt && !publishAt) return { message: 'Yayın zamanı okunamadı. Tarihi ve saati takvimden seç ya da alanı boş bırak.' }
+  const waits = published && !!publishAt && parseLocal(publishAt) > Date.now()
   try {
     await savePost({
       id: Number.isFinite(rawId) ? rawId : null,
@@ -67,12 +73,15 @@ export async function savePostAction(_: ActionState, form: FormData): Promise<Ac
       body,
       cover,
       keywords: str(form, 'keywords', 300),
-      published: form.get('published') === 'on',
+      published,
+      publishAt,
     })
     revalidatePath('/rehber', 'layout')
     revalidatePath('/sitemap.xml')
     revalidatePath('/panel')
-    await logPanel('seo', 'Rehber yazısı kaydedildi', title, `/rehber/${slug}`)
+    await logPanel('seo', 'Rehber yazısı kaydedildi', title, waits ? `/rehber/${slug} · ${formatLocal(publishAt)} için zamanlandı` : `/rehber/${slug}`)
+    if (waits) return { ok: true, message: `Yazı kaydedildi. ${formatLocal(publishAt)} (Türkiye saati) gelince yayına girer; sitede görünmesi 10-20 dakika sürebilir.` }
+    if (!published && publishAt) return { ok: true, message: 'Yazı taslak olarak kaydedildi. "Yayında" işaretli olmadığı için zamanı gelse de yayına girmez.' }
     return { ok: true, message: 'Yazı kaydedildi.' }
   } catch (error) {
     console.error('[blog] kaydedilemedi', error)

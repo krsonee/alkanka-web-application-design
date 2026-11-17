@@ -158,7 +158,7 @@
     <tr><th>Ayar</th><th>Nerede</th><th>Ne kadar yük</th></tr>
     <tr><td>Tepki (emoji) seli</td><td>Telegram Merkezi → Koruma</td><td>En ağırı. Korunan gruplardaki her emoji tepkisi bildirilir; hareketli grupta veritabanı neredeyse hiç uyumaz</td></tr>
     <tr><td>Kanal girişleri alarmı, Yönetici ve bot yetkisi alarmı</td><td>Telegram Merkezi → Koruma</td><td>Bekçi'nin yönetici olduğu her sohbetteki her giriş ve çıkış bildirilir. Normal günde az, baskında çok</td></tr>
-    <tr><td>Açık kampanya davet linki</td><td>Durum → Dayanıklılık</td><td>Yukarıdaki giriş bildirimleriyle aynı. Son link iptal edilince ve iki alarm da kapalıysa dinleme durur</td></tr>
+    <tr><td>Açık Telegram davet linki</td><td>Durum → Dayanıklılık</td><td>Yukarıdaki giriş bildirimleriyle aynı. Son link iptal edilince ve iki alarm da kapalıysa dinleme durur</td></tr>
     <tr><td>Dış zamanlayıcı (cron-job.org)</td><td>Otomasyonlar → Bağlantı &amp; Cron</td><td>Ne kadar sık çağırırsa o kadar pahalı. Dakikada bir çağrı veritabanını hiç uyutmaz. Çoğu zaman gerekmez</td></tr>
   </table></div>
   <div class="box tip">Kanal sağlığı alarmı ek bildirim istemez; saatte bir, sitenin zaten çalışan arka plan işleriyle birlikte kontrol eder.</div>
@@ -209,7 +209,7 @@
     <tr><td>Postu sabitlemek</td><td>Mesaj sabitle</td></tr>
     <tr><td>Küfür, spam, reklam silmek; temizlik</td><td>Mesajları sil</td></tr>
     <tr><td>Susturmak, banlamak, baskında çıkarmak, grubu kilitlemek</td><td>Kullanıcıları yasakla</td></tr>
-    <tr><td>Kampanya davet linki, kişiye özel davet linki</td><td>Kullanıcı davet et (link ile)</td></tr>
+    <tr><td>Telegram davet linki, kişiye özel davet linki</td><td>Kullanıcı davet et (link ile)</td></tr>
   </table></div>
   <div class="box tip">Eksik bir yetki varsa <span class="path">Durum → Durum → Gruplar ve kanallar</span> listesinde sohbetin altında "Eksik yetki" diye yazar.</div>
 </section>
@@ -244,7 +244,7 @@
   <h2><span class="n">8</span> Hangi bot hangi işi yapacak</h2>
   <div class="scroll"><table>
     <tr><th>Bot</th><th>İşi</th><th>Nereden bağlanır</th></tr>
-    <tr><td>Bekçi botu</td><td>Gruplarda küfür, spam, reklam, baskın koruması; mesaj sayacı; temizlik; oto cevap; kampanya davet linkleri</td><td>Telegram Merkezi → Kurulum → Bekçi</td></tr>
+    <tr><td>Bekçi botu</td><td>Gruplarda küfür, spam, reklam, baskın koruması; mesaj sayacı; temizlik; oto cevap; Telegram davet linkleri</td><td>Telegram Merkezi → Kurulum → Bekçi</td></tr>
     <tr><td>Destek botu</td><td>Üyelerin özelden yazdığı destek talepleri (bilet)</td><td>Telegram Merkezi → Kurulum → Destek botu</td></tr>
     <tr><td>Postçu botu</td><td>Post Merkezi'nden post atar, sponsor grubundaki postları kanallara paylaşır</td><td>Post Paylaşım sekmesi, sonra Kurulum → Postçu → Bağla</td></tr>
     <tr><td>Sohbet botu</td><td>Sitedeki canlı sohbeti Telegram grubuna bağlar, üyeler hesabını bu botla bağlar, DM duyurular bu bottan gider</td><td>Canlı Sohbet sekmesi</td></tr>
@@ -304,7 +304,7 @@
   <p>Sitedeki tüm "Telegram'a katıl" linkleri, üst şerit, alt bilgi ve botların yazıları bu tek adresi kullanır. Yeni adresi yaz → <kbd>Yeni kanala geç</kbd>; hepsi tek seferde yeni kanala döner ve nelerin değiştiği altında listelenir. <code>@kanaladi</code>, <code>t.me/kanaladi</code> ya da <code>t.me/+…</code> davet linki yazabilirsin. Özel davet linki yazarsan linkler döner ama site içindeki duyuru akışı herkese açık kanal istediği için değişmez.</p>
   <h3>Üye köprüsü</h3>
   <p>Kanal giderse üyeye ulaşmanın tek yolu budur: Telegram'ını siteye bağlamış üyeye bot özelden yazabilir. Burada kaç üyenin bağlı olduğunu, kaçına özelden yazılabildiğini ve son 7 / 30 günde kaç kişinin bağladığını görürsün. Sayıyı artırmak için postlara "Üyeye özel" ya da "Bota git" butonu ekle.</p>
-  <h3>Kampanya davet linkleri</h3>
+  <h3>Telegram davet linkleri</h3>
   <ol>
     <li>Grup ya da kanalı seç, kampanya adını yaz (ör. "Instagram reklamı") → <kbd>Link aç</kbd>.</li>
     <li>Her reklama ya da paylaşıma ayrı link ver. Hangi linkten kaç kişi geldiği, son giriş ve son 1 saatteki giriş sayısı linkin yanında yazar.</li>
@@ -321,7 +321,7 @@
     <li>Sohbeti (ya da "Korunan tüm sohbetler") ve dönemi (son 7 ya da 30 gün) seç.</li>
     <li>Görürsün: mesaj sayısı, yazan kişi, yeni giriş, girenlerden çıkarılan, ayrılan; günlük mesaj tablosu ve en yoğun saatler.</li>
     <li>Mesaj sayısı Bekçi'nin gruplarda gördüğü mesajlardır. Mesaj ve giriş kayıtları 35 gün tutulur.</li>
-    <li>Gruplardaki giriş ve çıkışlar her zaman sayılır. Kanaldaki giriş ve çıkışlar yalnızca Koruma sekmesindeki giriş takibi ya da açık bir kampanya linki varken sayılır.</li>
+    <li>Gruplardaki giriş ve çıkışlar her zaman sayılır. Kanaldaki giriş ve çıkışlar yalnızca Koruma sekmesindeki giriş takibi ya da açık bir Telegram davet linki varken sayılır.</li>
     <li>Üye sayısı, kanal sağlığı alarmı açıkken saatte bir kaydedilir ve tek bir sohbet seçiliyken gösterilir.</li>
     <li>Telegram, postların görüntülenme sayısını botlara vermez; o yüzden burada yoktur.</li>
   </ul>
@@ -719,7 +719,7 @@
 <section id="kanallar">
   <h2><span class="n">33</span> Kanallar grubu</h2>
   <ul>
-    <li><strong>Davet linkleri:</strong> Bir bot ve grup seçersen site, her üyeye kişiye özel davet linki üretir; kimin kimi getirdiği sayılır. Bot o grupta "Kullanıcı davet et" izniyle yönetici olmalı. (Reklam kampanyaları için olan linkler ayrıdır: <a href="#dayaniklilik">Dayanıklılık → Kampanya davet linkleri</a>.)</li>
+    <li><strong>Davet linkleri:</strong> Bir bot ve grup seçersen site, her üyeye kişiye özel davet linki üretir; kimin kimi getirdiği sayılır. Bot o grupta "Kullanıcı davet et" izniyle yönetici olmalı. (Reklam kampanyaları için olan linkler ayrıdır: <a href="#dayaniklilik">Dayanıklılık → Telegram davet linkleri</a>.)</li>
     <li><strong>Kanallar:</strong> Sitedeki Telegram butonlarının hangi kanala gideceği. Sadece kullanıcı adını yaz; bir kanalı kaldırmak için alanı boş bırakıp kaydet.</li>
     <li><strong>Site şeridi:</strong> Sitenin üstündeki Telegram tanıtım şeridi; açıp kapatır, yazısını değiştirirsin.</li>
   </ul>

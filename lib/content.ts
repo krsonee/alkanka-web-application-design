@@ -68,6 +68,7 @@ export type SlideOverride = {
   description?: string
   cta?: string
   image?: string
+  mobileImage?: string
   startAt?: string
   endAt?: string
 }

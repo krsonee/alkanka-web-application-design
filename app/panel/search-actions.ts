@@ -41,6 +41,9 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: '404 kayıtları', words: 'bulunamayan sayfa kırık link', row: 'seo' },
   { title: 'Arama motoru doğrulaması', words: 'google bing yandex search console', row: 'seo' },
   { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio' },
+  { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
+  { title: 'Slayt telefon görseli', words: 'mobil dikey görsel slider telefon', row: 'slide' },
+  { title: 'Rehber yazısını ileri tarihe zamanla', words: 'yayın zamanı tarih saat zamanla blog yazı', row: 'seo' },
   { title: 'Turnuva şablonları', words: 'şablon kalıp tekrar aç haftalık kupa', row: 'tournaments' },
   { title: 'İçerik takvimi görünümü', words: 'takvim ay tarih kampanya maç süresi geçen', row: 'catalog', query: 's=calendar' },
   { title: 'Sponsor özeti', words: 'sponsor tıklama yorum şikayet hakediş özet sıralama sürükle', row: 'sponsors' },
@@ -48,7 +51,11 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Affiliate hakediş', words: 'komisyon ödeme vade', row: 'marketing', query: 's=earnings' },
   { title: 'Ölçüm etiketleri', words: 'piksel analytics gtm meta tiktok', row: 'marketing', query: 's=tracking' },
   { title: 'Trafik & hesaplar', words: 'sponsor hesabı eşleştirme tıklama', row: 'growth', query: 's=traffic' },
-  { title: 'Davet sistemi', words: 'referans arkadaşını getir davet ödülü', row: 'growth', query: 's=referral' },
+  { title: 'Davet sistemi', words: 'referans arkadaşını getir davet ödülü', row: 'referral' },
+  { title: 'Sponsor anlaşma tarihi ve bedeli', words: 'anlaşma bitiş sözleşme süre aylık bedel ücret kayıt başı maliyet', row: 'sponsors' },
+  { title: 'Sponsor linklerini kontrol et', words: 'link kontrol kırık adres açılmıyor sağlık', row: 'sponsors' },
+  { title: 'Sponsorları toplu yayına al / çıkar', words: 'toplu gizle göster aç kapat yayın', row: 'sponsors' },
+  { title: 'Hakediş hatırlatmaları', words: 'hatırlatma eksik dönem ödenmedi talep', row: 'marketing', query: 's=earnings' },
   { title: 'Masa doluluğu', words: 'doluluk canlı masa görünümü kalabalık', query: 's=ambient', moved: 'ambient' },
   { title: 'Üyelik kapısı', words: 'yeni kayıt kapat aç kayıt olma', row: 'users' },
   { title: 'Toplu üye işlemi', words: 'toplu mesaj hediye dondur çoklu seçim', row: 'users' },
@@ -135,7 +142,7 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
     hits.push({ kind: 'sponsor', id: String(s.id), title: s.name, detail: s.domain || s.bonusText, tab: 'sponsors', href: `/panel?b=sponsors&f=sponsor-${s.id}` })
   }
   for (const p of posts.filter((p) => has(`${p.title} ${p.slug}`)).slice(0, LIMIT)) {
-    hits.push({ kind: 'post', id: String(p.id), title: p.title, detail: p.published ? `/${p.slug}` : 'Taslak', tab: 'seo', href: `/panel?b=seo&f=post-${p.id}` })
+    hits.push({ kind: 'post', id: String(p.id), title: p.title, detail: !p.published ? 'Taslak' : p.scheduled ? 'Zamanlandı' : `/${p.slug}`, tab: 'seo', href: `/panel?b=seo&f=post-${p.id}` })
   }
   for (const t of tasks.filter((t) => has(t.title)).slice(0, LIMIT)) {
     hits.push({ kind: 'task', id: String(t.id), title: t.title, detail: t.active ? 'Yayında' : 'Gizli', tab: 'tasks', href: `/panel?b=tasks&f=task-${t.id}` })

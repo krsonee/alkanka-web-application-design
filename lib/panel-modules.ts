@@ -19,7 +19,7 @@ export const PANEL_GROUPS = [
     label: 'Sponsorlar',
     modules: [
       { id: 'sponsors', label: 'Sponsor siteler', hint: 'Sponsor listesi, bonuslar ve yönlendirme linkleri' },
-      { id: 'growth', label: 'Sponsor performansı', hint: 'Sponsor bazında tıklama, kayıt, hesap eşleştirme ve davet sistemi' },
+      { id: 'growth', label: 'Sponsor performansı', hint: 'Sponsor bazında tıklama, kayıt, kaynak raporu ve hesap eşleştirme' },
       { id: 'marketing', label: 'Kampanya, reklam & hakediş', hint: 'Kampanya linkleri, reklam alanları, affiliate hakediş ve ölçüm etiketleri' },
     ],
   },
@@ -103,6 +103,7 @@ type Can = (module: PanelModule) => boolean
 export const PANEL_VIEWS = [
   { id: 'home', group: 'site', after: 'hero', needs: 'logo', was: 'home-v2', label: 'Ana sayfa & Masa aç', hint: 'Ana sayfa düzeni, misafir ve üye bölümleri, masa açma sihirbazı' },
   { id: 'withdrawals', group: 'members', after: 'community', needs: 'community', was: 'cekim', label: 'Çekim paylaşımları', hint: 'Üyelerin çekim paylaşımları, ödülleri ve kuralları' },
+  { id: 'referral', group: 'members', after: 'tasks', needs: 'growth', was: 'referral', label: 'Davet sistemi', hint: 'Arkadaşını getiren üyenin ödülü, davet kuralları ve sınırları' },
 ] as const satisfies readonly { id: string; group: string; after: PanelModule; needs: PanelModule; was: string; label: string; hint: string }[]
 
 export type PanelView = (typeof PANEL_VIEWS)[number]['id']
@@ -145,7 +146,7 @@ export function movedAddress(b: string | undefined, s: string | undefined, can: 
 export const PERMISSION_EXTRAS: Partial<Record<PanelModule, string>> = {
   logo: 'Ana sayfa & Masa aç ile Reklam alanlarını da açar.',
   community: 'Çekim paylaşımlarını da açar.',
-  growth: 'Masa doluluğunu da açar.',
+  growth: 'Davet sistemini ve Masa doluluğunu da açar.',
   market: 'Masa temalarını da açar.',
 }
 

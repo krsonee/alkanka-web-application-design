@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
+import Image, { getImageProps } from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SLIDES, type Slide } from './data'
@@ -10,6 +10,24 @@ import { trackPromo } from '@/lib/promo-client'
 const INTERVAL = 6000
 const SWIPE_RATIO = 0.15
 const WHEEL_MIN = 30
+const WIDE_SIZES = '(min-width: 1280px) 1100px, 100vw'
+const IMAGE_CLASS = 'pointer-events-none object-cover object-center'
+
+/** A slide with its own phone image swaps sources at the `sm` breakpoint, so a phone never downloads the wide one. */
+function SlideImage({ image, mobileImage, first }: { image: string; mobileImage?: string; first: boolean }) {
+  const wide = image || '/placeholder.svg'
+  if (!mobileImage) return <Image src={wide} alt="" fill draggable={false} priority={first} sizes={WIDE_SIZES} className={IMAGE_CLASS} />
+  const common = { alt: '', fill: true, priority: first }
+  const desktop = getImageProps({ ...common, src: wide, sizes: WIDE_SIZES }).props
+  const { srcSet, ...phone } = getImageProps({ ...common, src: mobileImage, sizes: '100vw' }).props
+  return (
+    <picture>
+      <source media="(min-width: 640px)" srcSet={desktop.srcSet} sizes={WIDE_SIZES} />
+      <source srcSet={srcSet} sizes="100vw" />
+      <img {...phone} alt="" draggable={false} className={IMAGE_CLASS} />
+    </picture>
+  )
+}
 
 export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
   const [index, setIndex] = useState(0)
@@ -127,15 +145,7 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
                 className="relative h-full w-full shrink-0 overflow-hidden"
               >
                 <div className="absolute inset-0 sm:left-1/4">
-                  <Image
-                    src={slide.image || '/placeholder.svg'}
-                    alt=""
-                    fill
-                    draggable={false}
-                    priority={i === 0}
-                    sizes="(min-width: 1280px) 1100px, 100vw"
-                    className="pointer-events-none object-cover object-center"
-                  />
+                  <SlideImage image={slide.image} mobileImage={slide.mobileImage} first={i === 0} />
                 </div>
                 <div
                   aria-hidden="true"
