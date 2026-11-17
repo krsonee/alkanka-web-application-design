@@ -93,6 +93,8 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
       {mode === 'cekim' ? (
         <WithdrawForm siteId={siteId} siteName={siteName} />
       ) : mode === 'review' ? (
+        // The proof upload is a form of its own, so it sits beside the review form, never inside it.
+        <div className="flex flex-col gap-3">
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {
@@ -123,8 +125,9 @@ export function TrustForms({ siteId, siteName, initialMode = 'review' }: { siteI
           </button>
           {rating === 0 && body.trim().length >= REVIEW_MIN && <p className="text-xs leading-relaxed text-primary">Göndermek için yukarıdan yıldız puanını da seç.</p>}
           <StatusLine status={review.status} />
-          <ProofUpload siteId={siteId} kp={proofKp} />
         </form>
+        <ProofUpload siteId={siteId} kp={proofKp} />
+        </div>
       ) : (
         <form
           className="flex flex-col gap-3"
