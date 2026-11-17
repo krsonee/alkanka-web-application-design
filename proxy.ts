@@ -71,7 +71,7 @@ async function guideExists(slug: string): Promise<boolean> {
   if (guideCache && age < GUIDE_RECHECK) return false
   try {
     const query = neon(process.env.DATABASE_URL!)
-    const list = (await query`SELECT slug FROM blog_posts WHERE published`) as { slug: string }[]
+    const list = (await query`SELECT slug FROM blog_posts WHERE published AND (publish_at IS NULL OR publish_at <= now())`) as { slug: string }[]
     guideCache = { slugs: new Set(list.map((r) => r.slug)), at: Date.now() }
     return guideCache.slugs.has(slug)
   } catch {

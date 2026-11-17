@@ -103,6 +103,7 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
                   <button
                     type="button"
                     disabled={pending}
+                    aria-label={`${a.username}: ${a.renewDue ? 'yenilemeyi geri al' : '2FA yenilet'}`}
                     onClick={() => {
                       if (a.renewDue) {
                         act(() => cancelTotpRenewal(a.id))
@@ -123,6 +124,7 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
                   <button
                     type="button"
                     disabled={pending}
+                    aria-label={`${a.username}: 2FA sıfırla`}
                     onClick={() => {
                       void askConfirm(`${a.username} için 2FA sıfırlansın mı? Hesap bir sonraki girişte yeniden kurar.`).then((ok) => {
       if (ok) act(() => resetAccountTotp(a.id))

@@ -41,6 +41,8 @@ import { listSent } from '@/lib/inbox'
 import { listOutbox, listTemplates } from '@/lib/outbox'
 import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
 import { RewardsEditor } from '@/components/panel/rewards-editor'
+import { miniPlayStats } from '@/lib/rewards-stats'
+import type { MiniPlayStats } from '@/lib/rewards-forecast'
 import { CatalogEditor } from '@/components/panel/catalog-editor'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
@@ -902,8 +904,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <MessageSender sent={sent} outbox={outbox} templates={templates} />
     }),
     section(ctx, 'rewards', 'Ödül ayarları', async () => {
-      const [config, hidden, winRate] = await Promise.all([getRewardConfig(), getHidden(), getHouseWinRate()])
-      return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} />
+      const [config, hidden, winRate, stats] = await Promise.all([getRewardConfig(), getHidden(), getHouseWinRate(), miniPlayStats().catch(miss<MiniPlayStats | null>(null))])
+      return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} stats={stats} />
     }),
     section(ctx, 'catalog', 'Etkinlik ve kampanyalar', async () => {
       const [{ rewards: _rewards, ...catalog }, hidden, options, cups] = await Promise.all([

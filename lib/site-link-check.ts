@@ -1,8 +1,10 @@
 import 'server-only'
+import dns from 'node:dns/promises'
 import { listSites } from '@/lib/sites'
 import type { LinkCheck, SponsorSite } from '@/lib/sites-shared'
 
 const TIMEOUT_MS = 6000
+const LOOKUP_MS = 3000
 const DEADLINE_MS = 25_000
 const PARALLEL = 8
 const MAX_SITES = 120
@@ -22,6 +24,41 @@ function publicTarget(raw: string): URL | null {
   }
 }
 
+/** Loopback, private, link-local and other addresses that are not a site on the open internet. */
+export function isPrivateAddress(address: string) {
+  const text = address.toLowerCase()
+  const mapped = text.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+  const v4 = mapped ? mapped[1] : /^\d+\.\d+\.\d+\.\d+$/.test(text) ? text : null
+  if (v4) {
+    const [a, b] = v4.split('.').map(Number)
+    return (
+      a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19))
+    )
+  }
+  return text === '::' || text === '::1' || /^f[cd]/.test(text) || /^fe[89ab]/.test(text) || text.startsWith('::ffff:')
+}
+
+/**
+ * A public-looking name can still point at a private address. A name that does not resolve is left
+ * to the request itself, which reports it as unreachable.
+ */
+async function pointsInside(host: string) {
+  try {
+    const found = await Promise.race([
+      dns.lookup(host, { all: true }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('lookup timeout')), LOOKUP_MS)),
+    ])
+    return found.some((entry) => isPrivateAddress(entry.address))
+  } catch {
+    return false
+  }
+}
+
 function targetOf(site: SponsorSite) {
   const entry = site.entryUrl.trim()
   const main = site.url.trim()
@@ -38,6 +75,9 @@ async function checkOne(site: SponsorSite): Promise<LinkCheck> {
   if (!raw) return { ...base, target: null, state: 'none', code: null, ms: null, note: 'Giriş ya da site adresi girilmemiş; sitedeki buton bir yere gitmiyor.' }
   const url = publicTarget(raw)
   if (!url) return { ...base, target: raw, state: 'none', code: null, ms: null, note: 'Adres https:// ile başlayan açık bir site adresi değil; kontrol edilmedi.' }
+  if (await pointsInside(url.hostname)) {
+    return { ...base, target: raw, state: 'none', code: null, ms: null, note: 'Bu alan adı açık internetteki bir siteye çıkmıyor; kontrol edilmedi.' }
+  }
 
   const domain = site.domain.trim().toLowerCase()
   const mismatch = domain && !hostMatches(url.hostname.toLowerCase(), domain) ? ` Adres, yazılı alan adıyla (${domain}) uyuşmuyor.` : ''

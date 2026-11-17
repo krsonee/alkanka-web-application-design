@@ -1,7 +1,8 @@
 'use client'
 
 
-import { askConfirm } from '@/components/panel/confirm-dialog'
+import { askConfirm, askReason } from '@/components/panel/confirm-dialog'
+import { COMPLAINT_REPLIES, REVIEW_REJECT_REASONS } from '@/components/panel/community-presets'
 import { useState } from 'react'
 import { Check, Star, Trash2, X } from 'lucide-react'
 import { answerComplaint, createLeagueMatch, finishLeagueMatch, moderateReview, removeComplaint, removeLeagueMatch, removeReview } from '@/app/panel/community-actions'
@@ -75,7 +76,18 @@ function Reviews({ reviews, published, siteNames }: { reviews: Review[]; publish
               <button disabled={pending} onClick={() => run(() => moderateReview(r.id, 'approved'))} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-bold text-primary-foreground disabled:opacity-50">
                 <Check className="size-4" aria-hidden /> Yayınla
               </button>
-              <button disabled={pending} onClick={() => run(() => moderateReview(r.id, 'rejected'))} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary text-xs font-bold text-secondary-foreground disabled:opacity-50">
+              <button
+                disabled={pending}
+                onClick={() =>
+                  void askReason('Yorum reddedilecek. Sebep yazarsan üyeye site içi mesajla gider; boş bırakırsan mesaj gitmez.', {
+                    label: 'Red sebebi (isteğe bağlı)',
+                    confirm: 'Reddet',
+                    maxLength: 300,
+                    presets: REVIEW_REJECT_REASONS,
+                  }).then((note) => note !== null && run(() => moderateReview(r.id, 'rejected', note)))
+                }
+                className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary text-xs font-bold text-secondary-foreground disabled:opacity-50"
+              >
                 <X className="size-4" aria-hidden /> Reddet
               </button>
             </div>
@@ -127,6 +139,22 @@ function ComplaintRow({ c, site }: { c: Complaint; site: string }) {
         <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
       </div>
       <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{c.body}</p>
+      <div role="group" aria-label="Hazır cevaplar" className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">Hazır cevap:</span>
+        {COMPLAINT_REPLIES.map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            onClick={() => {
+              setReply(preset.text)
+              setState(preset.status)
+            }}
+            className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary max-sm:min-h-9"
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
         Herkese açık yanıt
         <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={2} maxLength={1000} placeholder="Örn. Site ile görüştük, ödeme 24 saat içinde yapılacak." className={field} />

@@ -343,9 +343,21 @@ export async function pendingReviews() {
   return (await rows(sql`SELECT * FROM site_reviews WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100`)).map(mapReview)
 }
 
-export async function setReviewStatus(id: number, status: 'approved' | 'rejected') {
+/** A rejection with a reason is also sent to the member's inbox; without one nothing is sent. */
+export async function setReviewStatus(id: number, status: 'approved' | 'rejected', note = '') {
   await ensureCommunity()
-  await rows(sql`UPDATE site_reviews SET status = ${status} WHERE id = ${id}`)
+  const [row] = await rows<{ user_id: string }>(sql`UPDATE site_reviews SET status = ${status} WHERE id = ${id} RETURNING user_id`)
+  const reason = String(note ?? '').trim().slice(0, 300)
+  if (!row || status !== 'rejected' || !reason) return
+  const { sendMessage } = await import('@/lib/inbox')
+  await sendMessage({
+    userId: String(row.user_id),
+    targetLabel: 'Yorum',
+    title: 'Yorumun yayınlanmadı',
+    body: `Bir siteye yazdığın yorum yayınlanmadı. Sebep: ${reason}. Yorumunu düzeltip yeniden gönderebilirsin.`,
+    url: '/guven',
+    sentBy: 'Sistem',
+  }).catch((error) => console.error('[community] red mesajı gönderilemedi', error))
 }
 
 export async function publishedReviews() {
