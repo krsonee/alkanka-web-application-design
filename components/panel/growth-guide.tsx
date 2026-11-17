@@ -28,6 +28,9 @@ const STEPS: GuideStep[] = [
     body: (
       <ol className={ol}>
         <li>
+          Kampanya bölümünü açabilen hesapta bu kutunun yerinde <b>Kampanya linklerine git</b> düğmesi çıkar: linkler artık orada açılır, ziyaret, bütçe ve üye başı maliyet de orada tutulur. Aşağıdaki adımlar, o bölümü açamayan hesapta görünen hızlı kutu içindir.
+        </li>
+        <li>
           <b>Kaynak etiketi</b> alanına kanalın adını yaz (ör. <span className={code}>sms-ekim</span>, <span className={code}>tg-kanal</span>, <span className={code}>mail-bulten</span>). Sadece harf, rakam, - ve _ kullanılır.
         </li>
         <li>
