@@ -403,12 +403,18 @@ export const MARKET_ITEMS: MarketItem[] = [
   { id: 'profil-cercevesi', name: 'Özel Profil Çerçevesi', type: 'ROZET', price: 1800, stock: 27, total: 40, image: '/images/hero-chest.png', limit: 1, description: 'Profil fotoğrafının etrafında hareketli altın çerçeve.', delivery: 'Anında profiline eklenir.', rules: ['Hesap başına 1 adet alınabilir.'] },
 ].map((item) => ({ ...item, rules: [...item.rules, ...MARKET_COMMON_RULES] })) as MarketItem[]
 
+import type { EventPayout, EventRank } from '@/lib/event-rules'
+
 export type EventItem = {
   id: string
   kind: 'Haftalık' | 'Günlük' | 'Aylık'
   title: string
   subtitle: string
+  /** Derived from `endsAt`; events are scheduled by their dates. */
   hoursLeft: number
+  startsAt?: string
+  endsAt?: string
+  /** Shown on top of the members who really joined. */
   participants: number
   entry: number
   prize: string
@@ -417,6 +423,12 @@ export type EventItem = {
   steps: string[]
   rules: string[]
   prizes: { place: string; prize: string }[]
+  /** How entrants are ordered when the event ends; missing means it is run by hand. */
+  rank?: EventRank
+  /** One game whose plays are scored, or blank for every game. */
+  game?: string
+  /** KC paid per finishing place once the event ends. */
+  payouts?: EventPayout[]
 }
 
 export const EVENTS: EventItem[] = [

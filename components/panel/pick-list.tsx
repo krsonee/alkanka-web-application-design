@@ -5,14 +5,30 @@ import useSWR from 'swr'
 import { ChevronDown, Loader2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export type PickRow = { userId: string; name: string; pick: string; note?: string; at: string }
+export type PickRow = { userId: string; name: string; pick: string; note?: string; at?: string }
 export type PickListData = { ok: true; total: number; rows: PickRow[]; summary?: string } | { ok: false; error: string }
 
-const when = (iso: string) =>
-  new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+const when = (iso?: string) =>
+  iso ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '-'
 
-/** Who predicted and what they picked. Loaded only when opened, so a long match list stays cheap. */
-export function PickList({ cacheKey, load, count, pickLabel = 'Tahmini' }: { cacheKey: string; load: () => Promise<PickListData>; count?: number; pickLabel?: string }) {
+/** Who took part and what they picked or scored. Loaded only when opened, so a long list stays cheap. */
+export function PickList({
+  cacheKey,
+  load,
+  count,
+  pickLabel = 'Tahmini',
+  title = 'Katılımcılar ve tahminleri',
+  empty = 'Henüz kimse tahmin yapmadı.',
+  whenLabel = 'Ne zaman',
+}: {
+  cacheKey: string
+  load: () => Promise<PickListData>
+  count?: number
+  pickLabel?: string
+  title?: string
+  empty?: string
+  whenLabel?: string
+}) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const panelId = useId()
@@ -32,7 +48,7 @@ export function PickList({ cacheKey, load, count, pickLabel = 'Tahmini' }: { cac
         className="flex items-center gap-2 self-start rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary"
       >
         <Users className="size-3.5" aria-hidden="true" />
-        {count === undefined ? 'Katılımcılar ve tahminleri' : `Katılımcılar ve tahminleri (${count})`}
+        {count === undefined ? title : `${title} (${count})`}
         <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </button>
       {open && (
@@ -48,7 +64,7 @@ export function PickList({ cacheKey, load, count, pickLabel = 'Tahmini' }: { cac
               {failed}
             </p>
           )}
-          {data?.ok && data.total === 0 && <p className="text-xs text-muted-foreground">Henüz kimse tahmin yapmadı.</p>}
+          {data?.ok && data.total === 0 && <p className="text-xs leading-relaxed text-muted-foreground">{data.summary ? `${data.summary} ${empty}` : empty}</p>}
           {data?.ok && data.total > 0 && (
             <>
               {data.summary && <p className="text-xs leading-relaxed text-foreground">{data.summary}</p>}
@@ -62,7 +78,7 @@ export function PickList({ cacheKey, load, count, pickLabel = 'Tahmini' }: { cac
                       <th scope="col" className="px-3 py-2 font-semibold">Üye</th>
                       <th scope="col" className="px-3 py-2 font-semibold">{pickLabel}</th>
                       <th scope="col" className="px-3 py-2 font-semibold">Sonuç</th>
-                      <th scope="col" className="px-3 py-2 font-semibold">Ne zaman</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">{whenLabel}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
