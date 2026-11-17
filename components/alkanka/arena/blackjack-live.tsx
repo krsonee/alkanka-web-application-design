@@ -894,7 +894,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
             : "Sonuç";
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+    <div className="grid gap-4 lg:grid-cols-[1fr_20rem] rail-narrow:grid-cols-[minmax(0,1fr)]">
       <LandscapeFit label="Canlı Blackjack">
       <DeckOrigin.Provider value={deckRef}>
       <section

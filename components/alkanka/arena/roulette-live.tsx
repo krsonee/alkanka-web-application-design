@@ -685,7 +685,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
         </div>
       </header>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] rail-narrow:grid-cols-[minmax(0,1fr)]">
         <section className="tavla-wood flex min-w-0 flex-col gap-4 rounded-3xl p-1.5 sm:rounded-[2rem] sm:p-3" aria-label="Rulet masası">
           <div className="felt-table @container relative flex flex-col gap-3 rounded-[1.25rem] p-2 sm:gap-5 sm:rounded-[1.6rem] sm:p-5">
             <TableBrand center={false} className="z-20" />
@@ -797,7 +797,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
           </div>
         </section>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:flex xl:flex-col">
+        <div className="grid gap-4 md:grid-cols-2 xl:flex xl:flex-col rail-narrow:grid">
           <WinnersPanel last={data?.lastRound} />
           <PlayersPanel players={players} phase={clock.phase} />
           <FairPanel fair={data?.fair} />

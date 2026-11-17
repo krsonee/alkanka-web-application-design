@@ -1268,7 +1268,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
         </p>
       )}
 
-      <div className="flex flex-col gap-3 p-2 sm:p-4 xl:flex-row xl:items-start">
+      <div className="flex flex-col gap-3 p-2 sm:p-4 xl:flex-row xl:items-start rail-narrow:flex-col rail-narrow:items-stretch">
       <div className="min-w-0 flex-1">
         {data.status === 'bekliyor' && (
           <div className="flex flex-col items-center gap-4 py-10 text-center">
@@ -1567,7 +1567,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
         )}
       </div>
       {!((data.game === 'batak' || data.game === 'pisti') && (data.status === 'oynaniyor' || ended)) && (
-        <TableChat tableId={id} className="hidden h-72 lg:flex xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0" />
+        <TableChat tableId={id} className="hidden h-72 lg:flex xl:sticky xl:top-20 xl:h-[32rem] xl:w-80 xl:shrink-0 rail-narrow:static rail-narrow:h-72 rail-narrow:w-auto" />
       )}
       </div>
     </RoomShell>
