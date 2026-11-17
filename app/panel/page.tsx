@@ -799,7 +799,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         published={await publishedReviews().catch(miss([]))}
         proofs={await (await import('@/lib/trust-extra')).pendingProofs().catch(miss([]))}
         complaints={await adminComplaints().catch(miss([]))}
-        matches={await listLeagueMatches(null, { admin: true }).catch(miss([]))}
+        matches={tabHome('league', can) === 'community' ? await listLeagueMatches(null, { admin: true }).catch(miss([])) : null}
         siteNames={Object.fromEntries((await siteOptions()).map((s) => [s.id, s.name]))}
       />
     )),
@@ -910,11 +910,12 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} stats={stats} />
     }),
     section(ctx, 'catalog', 'Etkinlik ve kampanyalar', async () => {
-      const [{ rewards: _rewards, ...catalog }, hidden, options, cups] = await Promise.all([
+      const [{ rewards: _rewards, ...catalog }, hidden, options, cups, league] = await Promise.all([
         getCatalog({ includeHidden: true }),
         getHidden(),
         siteOptions(),
         ctx.session.isOwner || ctx.session.permissions.includes('tournaments') ? listTournaments().catch(miss([])) : [],
+        tabHome('league', can) === 'catalog' ? listLeagueMatches(null, { admin: true }).catch(miss([])) : null,
       ])
       return (
         <CatalogEditor
@@ -923,6 +924,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           library={IMAGE_LIBRARY}
           hidden={hidden}
           tournaments={cups.map((t) => ({ id: t.id, title: t.title, startsAt: t.startsAt, status: t.status }))}
+          league={league}
         />
       )
     }),

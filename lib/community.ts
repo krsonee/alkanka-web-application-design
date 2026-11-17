@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { credit } from '@/lib/member'
 import type { ParsedOdd } from '@/lib/deal-types'
+import { COMPLAINT_BODY_MAX, COMPLAINT_BODY_MIN, COMPLAINT_TITLE_MAX, COMPLAINT_TITLE_MIN, EXACT_REWARD, OUTCOME_REWARD, REVIEW_MAX, REVIEW_MIN } from '@/lib/community-limits'
 
 let ready: Promise<unknown> | null = null
 export function ensureCommunity() {
@@ -305,8 +306,8 @@ export async function addReview(user: { id: string; name: string }, siteId: stri
   siteId = recordId
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error('Puan 1 ile 5 arasında olmalı.')
   const text = body.trim()
-  if (text.length < 20) throw new Error('Yorum en az 20 karakter olmalı.')
-  if (text.length > 1000) throw new Error('Yorum en fazla 1000 karakter olabilir.')
+  if (text.length < REVIEW_MIN) throw new Error(`Yorum en az ${REVIEW_MIN} karakter olmalı.`)
+  if (text.length > REVIEW_MAX) throw new Error(`Yorum en fazla ${REVIEW_MAX} karakter olabilir.`)
   await rows(sql`INSERT INTO site_reviews (site_id, user_id, user_name, rating, body) VALUES (${siteId}, ${user.id}, ${user.name.slice(0, 40)}, ${rating}, ${text})
     ON CONFLICT (site_id, user_id) DO UPDATE SET rating = EXCLUDED.rating, body = EXCLUDED.body, status = 'pending', created_at = now()`)
 }
@@ -318,8 +319,8 @@ export async function addComplaint(user: { id: string; name: string }, siteId: s
   siteId = recordId
   const t = title.trim()
   const b = body.trim()
-  if (t.length < 5 || t.length > 120) throw new Error('Başlık 5-120 karakter olmalı.')
-  if (b.length < 30 || b.length > 2000) throw new Error('Açıklama 30-2000 karakter olmalı.')
+  if (t.length < COMPLAINT_TITLE_MIN || t.length > COMPLAINT_TITLE_MAX) throw new Error(`Başlık ${COMPLAINT_TITLE_MIN}-${COMPLAINT_TITLE_MAX} karakter olmalı.`)
+  if (b.length < COMPLAINT_BODY_MIN || b.length > COMPLAINT_BODY_MAX) throw new Error(`Açıklama ${COMPLAINT_BODY_MIN}-${COMPLAINT_BODY_MAX} karakter olmalı.`)
   const [{ open }] = await rows<{ open: string }>(sql`SELECT count(*) AS open FROM complaints WHERE user_id = ${user.id} AND status IN ('open', 'forwarded')`)
   if (Number(open) >= 3) throw new Error('Aynı anda en fazla 3 açık şikâyetin olabilir.')
   await rows(sql`INSERT INTO complaints (site_id, user_id, user_name, title, body) VALUES (${siteId}, ${user.id}, ${user.name.slice(0, 40)}, ${t}, ${b})`)
@@ -463,8 +464,7 @@ export async function notifyOddsAlerts(brand: string, link: string, odds: Parsed
 
 // --- Prediction league ---------------------------------------------------
 
-export const EXACT_REWARD = 150
-export const OUTCOME_REWARD = 40
+export { EXACT_REWARD, OUTCOME_REWARD }
 
 export type LeagueMatch = {
   id: number
@@ -520,6 +520,29 @@ export async function savePick(user: { id: string; name: string }, matchId: numb
   const saved = await rows(sql`INSERT INTO league_picks (match_id, user_id, user_name, home, away) VALUES (${matchId}, ${user.id}, ${user.name.slice(0, 40)}, ${home}, ${away})
     ON CONFLICT (match_id, user_id) DO NOTHING RETURNING match_id`)
   if (!saved.length) throw new Error('Bu maç için zaten tahmin yaptın.')
+}
+
+export type LeaguePick = { userId: string; name: string; home: number; away: number; points: number | null; at: string }
+
+/** Everyone who predicted this match, earliest first, for the panel. */
+export async function leaguePicks(matchId: number, limit = 500): Promise<{ total: number; picks: LeaguePick[] }> {
+  await ensureCommunity()
+  if (!Number.isSafeInteger(matchId) || matchId <= 0) return { total: 0, picks: [] }
+  const [count, list] = await Promise.all([
+    rows<{ n: string }>(sql`SELECT count(*) AS n FROM league_picks WHERE match_id = ${matchId}`),
+    rows(sql`SELECT user_id, user_name, home, away, points, created_at FROM league_picks WHERE match_id = ${matchId} ORDER BY created_at ASC LIMIT ${limit}`),
+  ])
+  return {
+    total: Number(count[0]?.n ?? 0),
+    picks: list.map((x) => ({
+      userId: String(x.user_id),
+      name: String(x.user_name),
+      home: Number(x.home),
+      away: Number(x.away),
+      points: x.points === null || x.points === undefined ? null : Number(x.points),
+      at: iso(x.created_at),
+    })),
+  }
 }
 
 export type LeagueRow = { userId: string; name: string; points: number; exact: number; picks: number }

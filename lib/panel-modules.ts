@@ -28,7 +28,7 @@ export const PANEL_GROUPS = [
     label: 'Üyeler',
     modules: [
       { id: 'users', label: 'Tüm üyeler', hint: 'Üye ara, dondur, banla, coin ekle veya düş' },
-      { id: 'community', label: 'Yorum, şikayet & kanıt', hint: 'Yorum onayı, yorum kanıtları, şikayetler ve tahmin ligi' },
+      { id: 'community', label: 'Yorum, şikayet & kanıt', hint: 'Yorum onayı, yorum kanıtları ve şikayetler' },
       { id: 'badges', label: 'Rozetler & puan', hint: 'Seviyeler, puan kuralları ve özel rozetler' },
       { id: 'roles', label: 'Görevliler', hint: 'Moderatör ve Sponsor Destek rozetleri' },
       { id: 'tasks', label: 'Görevler', hint: 'Görev tanımları ve onay bekleyen görevler' },
@@ -122,6 +122,7 @@ export const MOVED_TABS = {
   ads: { needs: 'logo', home: 'marketing' },
   ambient: { needs: 'growth', home: 'games' },
   themes: { needs: 'market', home: 'games' },
+  league: { needs: 'community', home: 'catalog' },
 } as const satisfies Record<string, { needs: PanelModule; home: PanelModule }>
 
 export type MovedTab = keyof typeof MOVED_TABS
@@ -145,7 +146,7 @@ export function movedAddress(b: string | undefined, s: string | undefined, can: 
 /** What a permission opens besides its own menu row, shown where permissions are handed out. */
 export const PERMISSION_EXTRAS: Partial<Record<PanelModule, string>> = {
   logo: 'Ana sayfa & Masa aç ile Reklam alanlarını da açar.',
-  community: 'Çekim paylaşımlarını da açar.',
+  community: 'Çekim paylaşımlarını ve Skor tahmin ligini de açar.',
   growth: 'Davet sistemini ve Masa doluluğunu da açar.',
   market: 'Masa temalarını da açar.',
 }

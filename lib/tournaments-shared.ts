@@ -37,6 +37,8 @@ export type Tournament = {
   rules: string
   entryFee: number
   prizePool: number
+  /** KC per finishing place, best first. Empty on older tournaments, where the champion takes the whole pool. */
+  prizes: number[]
   prizeNote: string
   maxPlayers: number
   startsAt: string
@@ -64,6 +66,7 @@ export type TournamentTemplate = {
   rules: string
   entryFee: number
   prizePool: number
+  prizes: number[]
   prizeNote: string
   maxPlayers: number
   startTime: string

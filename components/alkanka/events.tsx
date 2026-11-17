@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import useSWR from 'swr'
 import { Coins, Users } from 'lucide-react'
-import { joinEventAction, myEventEntries } from '@/app/actions/events'
+import { getEventBoard, getEventOverview, joinEventAction } from '@/app/actions/events'
+import { RANK_SHORT, SCORE_UNIT, eventGameLabel, eventPhase, payoutRows, type EventBoard } from '@/lib/event-rules'
 import { getPredictionState } from '@/app/actions/wallet'
 import { predictionClosesAt } from '@/lib/catalog-shared'
 import { cn } from '@/lib/utils'
@@ -31,60 +32,115 @@ import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
 import { useTexts } from './texts-context'
 
-function useNow() {
+function useNow(everyMs = 1000) {
   const [now, setNow] = useState<number | null>(null)
   useEffect(() => {
     setNow(Date.now())
-    const t = setInterval(() => setNow(Date.now()), 1000)
+    const t = setInterval(() => setNow(Date.now()), everyMs)
     return () => clearInterval(t)
-  }, [])
+  }, [everyMs])
   return now
 }
 
-function Countdown({ hoursLeft, start }: { hoursLeft: number; start: number | null }) {
+/** The event's real dates: a countdown to the start or the end, and what happened once it is over. */
+function EventClock({ event, settled }: { event: EventItem; settled: boolean }) {
   const now = useNow()
-  const total = start && now ? Math.max(0, hoursLeft * 3600 - Math.floor((now - start) / 1000)) : hoursLeft * 3600
-  const parts = [
-    { v: Math.floor(total / 86400), l: 'Gün' },
-    { v: Math.floor((total % 86400) / 3600), l: 'Saat' },
-    { v: Math.floor((total % 3600) / 60), l: 'Dk' },
-    { v: Math.floor(total % 60), l: 'Sn' },
-  ]
+  const range = [event.startsAt, event.endsAt].map((d) => (d ? formatTrDate(d) : '')).filter(Boolean).join(' - ')
+  // Until the clock starts on the client a dated event counts as running, so the server and the first paint agree.
+  const phase = now === null ? (event.endsAt ? 'live' : 'undated') : eventPhase(event, now)
+  const target = phase === 'upcoming' ? Date.parse(event.startsAt ?? '') : Date.parse(event.endsAt ?? '')
+  const total = now && Number.isFinite(target) ? Math.max(0, Math.floor((target - now) / 1000)) : null
+  const parts =
+    total === null
+      ? null
+      : [
+          { v: Math.floor(total / 86400), l: 'Gün' },
+          { v: Math.floor((total % 86400) / 3600), l: 'Saat' },
+          { v: Math.floor((total % 3600) / 60), l: 'Dk' },
+          { v: Math.floor(total % 60), l: 'Sn' },
+        ]
+  const over = settled || phase === 'ended'
   return (
-    <div className="grid grid-cols-4 gap-1.5" role="timer" aria-label="Kalan süre">
-      {parts.map((p) => (
-        <div key={p.l} className="flex flex-col items-center rounded-md bg-background py-1.5">
-          <span className="font-display text-base font-bold text-foreground tabular-nums">{String(p.v).padStart(2, '0')}</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{p.l}</span>
+    <div className="flex flex-col gap-1.5">
+      {over || phase === 'undated' ? (
+        <p className="flex min-h-12 items-center justify-center rounded-md bg-background px-3 text-center text-xs font-semibold text-muted-foreground">
+          {settled ? 'Sonuçlandı, ödüller dağıtıldı' : phase === 'ended' ? 'Sona erdi' : 'Bitiş tarihi duyurulacak'}
+        </p>
+      ) : (
+        <div className="grid min-h-12 grid-cols-4 gap-1.5" role="timer" aria-label={phase === 'upcoming' ? 'Başlamasına kalan süre' : 'Bitmesine kalan süre'}>
+          {(parts ?? [{ l: 'Gün' }, { l: 'Saat' }, { l: 'Dk' }, { l: 'Sn' }]).map((p) => (
+            <div key={p.l} className="flex flex-col items-center rounded-md bg-background py-1.5">
+              <span className="font-display text-base font-bold text-foreground tabular-nums">{'v' in p ? String(p.v).padStart(2, '0') : '--'}</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{p.l}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+      {range && (
+        <p className="text-center text-xs text-muted-foreground">
+          {phase === 'upcoming' && !over ? 'Başlıyor: ' : ''}
+          {range}
+        </p>
+      )}
     </div>
   )
+}
+
+function boardTable(board: EventBoard) {
+  const unit = SCORE_UNIT[board.rank]
+  const rows = board.top.map((r) => ({
+    label: `${r.place}. ${r.name}${r.me ? ' (sen)' : ''}`,
+    sub: r.prize > 0 ? `${board.settled ? 'Ödül' : 'Bu sırada kalırsa'}: ${formatAC(r.prize)} KC` : undefined,
+    value: unit ? `${formatAC(r.score)} ${unit}` : board.settled ? 'Kazandı' : '',
+  }))
+  if (board.me && !board.top.some((r) => r.me)) {
+    rows.push({
+      label: `${board.me.place}. Sen`,
+      sub: board.me.prize > 0 ? `${board.settled ? 'Ödül' : 'Bu sırada kalırsa'}: ${formatAC(board.me.prize)} KC` : undefined,
+      value: unit ? `${formatAC(board.me.score)} ${unit}` : '',
+    })
+  }
+  const title = board.settled ? (board.rank === 'draw' ? 'Çekiliş sonucu' : 'Final sıralaması') : 'Güncel sıralama'
+  return rows.length ? { title, rows } : undefined
 }
 
 function EventCards() {
   const { events: EVENTS } = useCatalog()
   const { member, requireLogin, setBalance } = usePoints()
   const t = useTexts()
-  const [start] = useState(() => (typeof window === 'undefined' ? null : Date.now()))
-  const { data: entries, mutate } = useSWR(member ? ['event-entries', member.id] : null, () => myEventEntries())
-  const joined: Record<string, boolean> = Object.fromEntries((entries ?? []).map((id) => [id, true]))
+  // The cards only need to know which side of a date they are on; each clock ticks on its own.
+  const now = useNow(20_000)
+  const { data: overview, mutate } = useSWR(['event-overview', member?.id ?? ''], () => getEventOverview(), { revalidateOnFocus: false })
+  const joined: Record<string, boolean> = Object.fromEntries((overview?.joined ?? []).map((id) => [id, true]))
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<EventItem | null>(null)
+  const { data: board } = useSWR(detail && (detail.rank ?? 'none') !== 'none' ? ['event-board', detail.id, member?.id ?? ''] : null, () => (detail ? getEventBoard(detail.id) : null), {
+    revalidateOnFocus: false,
+  })
 
-  async function join(id: string, _entry: number) {
-    if (joined[id] || busy || !requireLogin()) return
-    setBusy(id)
+  const isSettled = (e: EventItem) => Boolean(overview?.settled.includes(e.id))
+  const count = (e: EventItem) => e.participants + (overview?.counts[e.id] ?? (joined[e.id] ? 1 : 0))
+  /** Why the join button is off, or null when the event can be joined right now. */
+  const closed = (e: EventItem) => {
+    if (joined[e.id]) return 'Katıldın'
+    if (isSettled(e)) return 'Sonuçlandı'
+    const phase = now ? eventPhase(e, now) : 'live'
+    return phase === 'ended' ? 'Sona erdi' : phase === 'upcoming' ? 'Yakında başlıyor' : null
+  }
+
+  async function join(e: EventItem) {
+    if (closed(e) || busy || !requireLogin()) return
+    setBusy(e.id)
     setError(null)
-    const r = await joinEventAction(id)
+    const r = await joinEventAction(e.id)
     setBusy(null)
     if (r.ok) {
       setBalance(r.balance)
-      await mutate((list) => [...(list ?? []), id], { revalidate: false })
+      await mutate()
     } else {
       setError(r.error)
-      if (r.error.includes('zaten')) await mutate()
+      await mutate()
     }
   }
 
@@ -102,28 +158,28 @@ function EventCards() {
               <h3 className="font-display text-lg font-bold text-foreground">{t(`event.${e.id}.title`, e.title)}</h3>
               <p className="text-sm text-muted-foreground">{t(`event.${e.id}.subtitle`, e.subtitle)}</p>
             </div>
-            <Countdown hoursLeft={e.hoursLeft} start={start} />
+            <EventClock event={e} settled={isSettled(e)} />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Users className="size-3.5" aria-hidden="true" />
-                {formatAC(e.participants + (joined[e.id] ? 1 : 0))} katılımcı
+                {formatAC(count(e))} katılımcı
               </span>
               <span className="text-primary">{t(`event.${e.id}.prize`, e.prize)}</span>
             </div>
             <div className="mt-auto flex items-stretch gap-2">
-            <DetailButton onClick={() => setDetail(e)} />
+            <DetailButton onClick={() => setDetail(e)} label={(e.rank ?? 'none') === 'none' ? undefined : 'Sıralama & kurallar'} />
             <button
               type="button"
-              onClick={() => join(e.id, e.entry)}
-              disabled={joined[e.id] || busy === e.id}
+              onClick={() => join(e)}
+              disabled={Boolean(closed(e)) || busy === e.id}
               className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-primary/15 disabled:text-primary"
             >
-              {joined[e.id] ? 'Katıldın' : e.entry === 0 ? 'Ücretsiz katıl' : (
+              {closed(e) ?? (e.entry === 0 ? 'Ücretsiz katıl' : (
                 <>
                   <Coins className="size-3.5" aria-hidden="true" />
                   {e.entry} KC ile katıl
                 </>
-              )}
+              ))}
             </button>
             </div>
           </div>
@@ -153,22 +209,36 @@ function EventCards() {
             description: detail.description,
             facts: [
               { label: 'Katılım', value: detail.entry === 0 ? 'Ücretsiz' : `${detail.entry} KC` },
-              { label: 'Katılımcı', value: formatAC(detail.participants + (joined[detail.id] ? 1 : 0)) },
+              { label: 'Katılımcı', value: formatAC(count(detail)) },
+              ...(detail.startsAt ? [{ label: 'Başlangıç', value: formatTrDate(detail.startsAt) }] : []),
+              ...(detail.endsAt ? [{ label: 'Bitiş', value: formatTrDate(detail.endsAt) }] : []),
+              ...((detail.rank ?? 'none') === 'none'
+                ? []
+                : [{ label: 'Sıralama', value: detail.rank === 'draw' ? RANK_SHORT.draw : `${RANK_SHORT[detail.rank ?? 'none']} · ${eventGameLabel(detail.game ?? '')}` }]),
             ],
             steps: detail.steps,
-            prizes: detail.prizes,
+            table: board ? boardTable(board) : undefined,
+            prizes: detail.payouts?.length ? payoutRows(detail.payouts) : detail.prizes,
             rules: detail.rules,
+            note:
+              (detail.rank ?? 'none') === 'none'
+                ? undefined
+                : board?.settled
+                  ? 'Ödüller kazananların hesabına eklendi.'
+                  : detail.rank === 'draw'
+                    ? 'Kazananlar bitiş tarihinde katılanlar arasından rastgele çekilir ve ödüller hesaplara kendiliğinden eklenir.'
+                    : 'Sadece etkinliğe katıldıktan sonra oynadıkların sayılır. Ödüller bitiş tarihinde hesaplara kendiliğinden eklenir.',
           }
         }
         action={
           detail && (
             <button
               type="button"
-              onClick={() => join(detail.id, detail.entry)}
-              disabled={joined[detail.id] || busy === detail.id}
+              onClick={() => join(detail)}
+              disabled={Boolean(closed(detail)) || busy === detail.id}
               className="flex h-11 items-center justify-center rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:bg-primary/15 disabled:text-primary"
             >
-              {joined[detail.id] ? 'Katıldın' : detail.entry === 0 ? 'Ücretsiz katıl' : `${detail.entry} KC ile katıl`}
+              {closed(detail) ?? (detail.entry === 0 ? 'Ücretsiz katıl' : `${detail.entry} KC ile katıl`)}
             </button>
           )
         }

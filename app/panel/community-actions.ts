@@ -10,6 +10,7 @@ import {
   deleteLeagueMatch,
   deleteReview,
   importLeagueFixtures,
+  leaguePicks,
   publishedFixtureIds,
   setReviewStatus,
   settleLeagueMatch,
@@ -18,6 +19,8 @@ import {
   type FixtureInput,
 } from '@/lib/community'
 import { getFinalScore, getFixtures, type Fixture } from '@/lib/kankatv'
+
+import type { PickListData } from '@/components/panel/pick-list'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
@@ -125,6 +128,28 @@ export async function removeLeagueMatch(id: number) {
     await logPanel('community', 'Tahmin maçı silindi', `Maç #${id}`)
     return message
   })
+}
+
+const POINT_NOTE: Record<number, string> = { 3: '3 puan · tam skor', 1: '1 puan · doğru sonuç', 0: '0 puan' }
+
+export async function loadLeaguePicks(matchId: number): Promise<PickListData> {
+  if (!(await canPanel('community'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+  try {
+    const { total, picks } = await leaguePicks(Number(matchId))
+    const scored = picks.filter((p) => p.points !== null)
+    const summary = scored.length
+      ? `${scored.filter((p) => p.points === 3).length} tam skor, ${scored.filter((p) => p.points === 1).length} doğru sonuç, ${scored.filter((p) => p.points === 0).length} tutmayan tahmin.`
+      : undefined
+    return {
+      ok: true,
+      total,
+      summary,
+      rows: picks.map((p) => ({ userId: p.userId, name: p.name, pick: `${p.home} - ${p.away}`, note: p.points === null ? 'Sonuç bekleniyor' : (POINT_NOTE[p.points] ?? `${p.points} puan`), at: p.at })),
+    }
+  } catch (error) {
+    console.error('[community] tahmin listesi okunamadı', (error as Error).message)
+    return { ok: false, error: 'Liste okunamadı.' }
+  }
 }
 
 export async function finishLeagueMatch(id: number, home: number, away: number) {

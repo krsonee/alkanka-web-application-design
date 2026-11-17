@@ -36,6 +36,24 @@ export async function getUserPredictionPicks(userId: string): Promise<Record<str
   return Object.fromEntries(r.map((x) => [x.prediction_id, x.option_id]))
 }
 
+export type PredictionPick = { userId: string; name: string; optionId: string; at: string }
+
+/** Everyone who picked on this match, earliest first, for the panel. */
+export async function listPredictionPicks(predictionId: string, limit = 500): Promise<{ total: number; picks: PredictionPick[] }> {
+  await ensurePicks()
+  const [count, list] = await Promise.all([
+    rows<{ n: string }>(sql`SELECT count(*) AS n FROM catalog_prediction_picks WHERE prediction_id = ${predictionId}`),
+    rows<{ user_id: string; name: string | null; option_id: string; created_at: string }>(
+      sql`SELECT p.user_id, u.name, p.option_id, p.created_at FROM catalog_prediction_picks p LEFT JOIN "user" u ON u.id = p.user_id
+        WHERE p.prediction_id = ${predictionId} ORDER BY p.created_at ASC LIMIT ${limit}`,
+    ),
+  ])
+  return {
+    total: Number(count[0]?.n ?? 0),
+    picks: list.map((x) => ({ userId: x.user_id, name: x.name?.trim() || 'Silinmiş üye', optionId: x.option_id, at: new Date(x.created_at).toISOString() })),
+  }
+}
+
 export async function getPredictionVoteCounts(): Promise<Record<string, Record<string, number>>> {
   await ensurePicks()
   const r = await rows<{ prediction_id: string; option_id: string; n: string }>(

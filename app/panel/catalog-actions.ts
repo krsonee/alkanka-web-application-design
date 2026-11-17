@@ -13,6 +13,8 @@ import {
   cleanPredictions,
 } from '@/lib/catalog-shared'
 import { driftMessage } from '@/lib/drift'
+import { SCORE_UNIT, cleanPayouts, isScored, payoutError, payoutTotal } from '@/lib/event-rules'
+import type { PickListData } from '@/components/panel/pick-list'
 import { mergeRewards, type RewardConfig } from '@/lib/rewards-shared'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
@@ -50,6 +52,9 @@ const CATALOG_LABELS = {
   entry: 'Bilet fiyatı',
   participants: 'Katılımcı sayısı',
   hoursLeft: 'Kalan süre (saat)',
+  rank: 'Sıralama türü',
+  game: 'Sayılan oyun',
+  payouts: 'Otomatik ödül',
   prize: 'Ödül yazısı',
   steps: 'Nasıl katılınır',
   rules: 'Kurallar',
@@ -96,6 +101,102 @@ function campaignDateError(items: unknown): string | null {
   return null
 }
 
+/**
+ * An automated event pays real coins the moment its end date passes, so a save is refused when the
+ * prize lines cannot be paid as written or when it would settle an event straight away by mistake.
+ */
+async function eventError(items: unknown): Promise<string | null> {
+  if (!Array.isArray(items)) return null
+  const { getCatalog } = await import('@/lib/catalog')
+  const stored = (await getCatalog({ includeHidden: true })).events
+  const now = Date.now()
+  for (const [i, raw] of items.entries()) {
+    const e = (raw ?? {}) as Record<string, unknown>
+    const where = `${i + 1}. satır · "${String(e.title ?? '').slice(0, 40)}"`
+    const start = Date.parse(String(e.startsAt ?? ''))
+    const end = Date.parse(String(e.endsAt ?? ''))
+    if (Number.isFinite(start) && Number.isFinite(end) && end <= start) return `${where}: bitiş tarihi başlangıçtan önce. Hiçbir şey kaydedilmedi.`
+    const problem = payoutError(e.payouts)
+    if (problem) return `${where}: ${problem} Hiçbir şey kaydedilmedi.`
+    const rank = String(e.rank ?? 'none')
+    if (rank === 'none') continue
+    if (!Number.isFinite(end)) return `${where}: otomatik sıralama için bitiş tarihi gerekli; ödüller o tarihte dağıtılır. Hiçbir şey kaydedilmedi.`
+    if (!cleanPayouts(e.payouts).length) return `${where}: otomatik sıralama seçili ama "Otomatik ödül" satırı yok. En az bir satır yaz (örnek: 1 | 5000). Hiçbir şey kaydedilmedi.`
+    const before = stored.find((s) => s.id === String(e.id ?? ''))
+    const unchanged = before && (before.rank ?? 'none') !== 'none' && Date.parse(before.endsAt ?? '') === end
+    if (end <= now && !unchanged) return `${where}: bitiş tarihi geçmişte. Böyle kaydedilirse etkinlik hemen sonuçlanır ve ödüller dağıtılır. İleri bir bitiş tarihi gir. Hiçbir şey kaydedilmedi.`
+  }
+  return null
+}
+
+const kc = (n: number) => `${n.toLocaleString('tr-TR')} KC`
+
+export async function loadEventBoard(eventId: string): Promise<PickListData> {
+  if (!(await canPanel('catalog'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
+  try {
+    const { eventAdminBoard } = await import('@/lib/event-entries')
+    const board = await eventAdminBoard(String(eventId).slice(0, 80))
+    if (!board) return { ok: false, error: 'Bu etkinlik henüz kaydedilmemiş. Önce listeyi kaydet.' }
+    const scored = isScored(board.rank)
+    const state =
+      board.rank === 'none'
+        ? 'Otomatik sıralama kapalı: bu etkinlikte kazananı ve ödülü sen belirlersin.'
+        : board.settled
+          ? board.unpaid
+            ? `Sonuçlandı; ${board.unpaid} ödül ödenmeyi bekliyor, bir dakika içinde kendiliğinden ödenir.`
+            : 'Sonuçlandı ve ödüller ödendi. Yeni tur açmak için bitiş tarihini ileri bir tarihe alıp kaydet.'
+          : board.phase === 'ended'
+            ? 'Süre doldu. Sitede ziyaretçi varken ödüller bir dakika içinde kendiliğinden dağıtılır; beklemek istemezsen "Şimdi sonuçlandır"a bas.'
+            : board.phase === 'upcoming'
+              ? 'Henüz başlamadı.'
+              : 'Devam ediyor. Bitiş tarihinde sıralama dondurulur ve ödüller kendiliğinden dağıtılır.'
+    return {
+      ok: true,
+      total: board.entrants,
+      closed: board.settled && !board.unpaid,
+      summary: `${board.round}. tur · ${board.entrants} katılımcı. ${state}`,
+      rows: board.rows.map((r) => ({
+        userId: r.userId,
+        name: r.name,
+        pick: scored ? `${r.score.toLocaleString('tr-TR')} ${SCORE_UNIT[board.rank]}` : board.settled ? 'Çekilişte çıktı' : 'Katıldı',
+        note: board.settled
+          ? r.prize > 0
+            ? `${r.place}. sıra · ${kc(r.prize)} ${r.paid ? 'ödendi' : 'ödeme bekliyor'}`
+            : `${r.place}. sıra · ödül yok`
+          : r.place === null
+            ? board.rank === 'draw'
+              ? 'Çekilişi bekliyor'
+              : '-'
+            : r.prize > 0
+              ? `${r.place}. sıra · şu an ${kc(r.prize)}`
+              : `${r.place}. sıra`,
+        at: r.joinedAt ?? undefined,
+      })),
+    }
+  } catch (error) {
+    console.error('[catalog] etkinlik sıralaması okunamadı', (error as Error).message)
+    return { ok: false, error: 'Liste okunamadı.' }
+  }
+}
+
+export async function settleEventNow(eventId: string): Promise<Result> {
+  if (!(await canPanel('catalog'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
+  try {
+    const id = String(eventId).slice(0, 80)
+    const { settleEvent } = await import('@/lib/event-entries')
+    const r = await settleEvent(id, 'panel')
+    if (!r.ok) return r
+    revalidatePath('/', 'layout')
+    const waiting = r.unpaid ? ` ${r.unpaid} ödül sırada, bir dakika içinde kendiliğinden ödenir.` : ''
+    if (r.already) return { ok: true, message: r.paid ? `Bu tur zaten sonuçlanmıştı; bekleyen ${r.paid} ödül ödendi.${waiting}` : `Bu tur zaten sonuçlandı, ödenmemiş ödül yok.${waiting}` }
+    await logPanel('catalog', 'Etkinlik sonuçlandırıldı', id, `${r.entrants} katılımcı · ${r.winners} ödül · ${r.paid} ödendi`)
+    return { ok: true, message: `${r.entrants} katılımcı sıralandı, ${r.winners} kişi ödül kazandı, ${r.paid} ödül ödendi.${waiting}` }
+  } catch (error) {
+    console.error('[catalog] etkinlik sonuçlandırılamadı', (error as Error).message)
+    return { ok: false, error: 'Sonuçlandırılamadı. Ödenen ödül tekrar ödenmez; birazdan yeniden dene.' }
+  }
+}
+
 export async function saveRewards(input: RewardConfig): Promise<Result> {
   if (!(await canPanel('rewards'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
   try {
@@ -119,21 +220,45 @@ export async function saveCatalogList(kind: ListKind, items: unknown): Promise<R
   try {
     const cleaned = clean(items)
     const drift =
-      (kind === 'campaigns' ? campaignDateError(items) : null) ??
+      (kind === 'campaigns' ? campaignDateError(items) : kind === 'events' ? await eventError(items) : null) ??
       driftMessage(items, cleaned, {
         labels: CATALOG_LABELS,
-        ignore: kind === 'campaigns' ? [...CATALOG_DERIVED, 'hoursLeft'] : CATALOG_DERIVED,
+        // Event prize lines are checked line by line above; the cleaner only rewrites how the place is spelled.
+        ignore: kind === 'campaigns' ? [...CATALOG_DERIVED, 'hoursLeft'] : kind === 'events' ? [...CATALOG_DERIVED, 'hoursLeft', 'payouts'] : CATALOG_DERIVED,
         blankOk: CATALOG_BLANK_OK,
         mustKeep: ['url', 'startsAt', 'endsAt', 'kickoffAt', 'closesAt'],
       })
     if (drift) return { ok: false, error: drift }
     await setContent(CATALOG_KEYS[kind], cleaned)
     revalidatePath('/', 'layout')
-    await logPanel('catalog', 'İçerik listesi kaydedildi', KIND_LABEL[kind] ?? kind, `${Array.isArray(items) ? items.length : 0} kayıt`)
+    const prizes = kind === 'events' ? cleanEvents(items).reduce((sum, e) => sum + ((e.rank ?? 'none') === 'none' ? 0 : payoutTotal(e.payouts ?? [])), 0) : 0
+    await logPanel('catalog', 'İçerik listesi kaydedildi', KIND_LABEL[kind] ?? kind, `${Array.isArray(items) ? items.length : 0} kayıt${prizes ? ` · otomatik etkinlik ödülleri en fazla ${kc(prizes)}` : ''}`)
     return { ok: true, message: 'Kaydedildi, sitede hemen geçerli.' }
   } catch (error) {
     console.error(`[catalog:${kind}] kaydedilemedi`, error)
     return { ok: false, error: 'Kaydedilemedi.' }
+  }
+}
+
+export async function loadPredictionPicks(predictionId: string): Promise<PickListData> {
+  if (!(await canPanel('catalog'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
+  try {
+    const id = String(predictionId).slice(0, 80)
+    const [{ listPredictionPicks }, { getCatalog }] = await Promise.all([import('@/lib/prediction-picks'), import('@/lib/catalog')])
+    const [{ total, picks }, catalog] = await Promise.all([listPredictionPicks(id), getCatalog({ includeHidden: true })])
+    const options = catalog.predictions.find((p) => p.id === id)?.options ?? []
+    const label = (optionId: string) => options.find((o) => o.id === optionId)?.label ?? 'Silinmiş seçenek'
+    const tally = new Map<string, number>()
+    for (const p of picks) tally.set(label(p.optionId), (tally.get(label(p.optionId)) ?? 0) + 1)
+    return {
+      ok: true,
+      total,
+      summary: [...tally].map(([name, n]) => `${name}: ${n} üye`).join(' · ') || undefined,
+      rows: picks.map((p) => ({ userId: p.userId, name: p.name, pick: label(p.optionId), at: p.at })),
+    }
+  } catch (error) {
+    console.error('[catalog] tahmin listesi okunamadı', (error as Error).message)
+    return { ok: false, error: 'Liste okunamadı.' }
   }
 }
 

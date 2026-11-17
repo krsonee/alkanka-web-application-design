@@ -5,6 +5,7 @@ import type { ArenaGame } from './arena'
 import { bracketChampion, createBracket, setMatchWinner, type Bracket } from './bracket'
 import { createLeague, leagueChampion, MAX_LEAGUE_PLAYERS, setLeagueWinner } from './league'
 import { initState } from './pvp/rules'
+import { cleanPrizes, prizeTotal, tournamentPayouts } from './tournament-prizes'
 import { MAX_TOURNAMENT_PLAYERS, type LiveMatch, type Tournament, type TournamentFormat, type TournamentStatus } from './tournaments-shared'
 
 export { TOURNAMENT_STATUSES, STATUS_LABEL, MAX_TOURNAMENT_PLAYERS } from './tournaments-shared'
@@ -41,6 +42,7 @@ function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
     rules: String(r.rules ?? ''),
     entryFee: Number(r.entry_fee),
     prizePool: Number(r.prize_pool),
+    prizes: cleanPrizes(r.prizes, r.format === 'lig' ? 'lig' : 'eleme', Number(r.max_players)),
     prizeNote: String(r.prize_note ?? ''),
     maxPlayers: Number(r.max_players),
     startsAt: new Date(String(r.starts_at)).toISOString(),
@@ -96,7 +98,8 @@ export type TournamentInput = {
   description: string
   rules: string
   entryFee: number
-  prizePool: number
+  /** KC per finishing place, best first. The pool shown on the site is worked out from these. */
+  prizes: number[]
   prizeNote: string
   maxPlayers: number
   startsAt: string
@@ -106,19 +109,45 @@ export type TournamentInput = {
 const clampPlayers = (n: number, format: TournamentFormat) =>
   Math.min(format === 'lig' ? MAX_LEAGUE_PLAYERS : MAX_TOURNAMENT_PLAYERS, Math.max(2, Math.floor(n)))
 
+let prizesReady: Promise<unknown> | null = null
+
+/** Never call this inside a transaction that already locked a tournament row: adding the column would wait on that lock. */
+function ensurePrizes() {
+  prizesReady ??= (async () => {
+    await pool.query('ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prizes jsonb')
+    await pool.query(`CREATE TABLE IF NOT EXISTS tournament_payouts (
+      tournament_id int NOT NULL, player_key text NOT NULL, place int NOT NULL, amount int NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (tournament_id, player_key))`)
+  })().catch((error) => {
+    prizesReady = null
+    throw error
+  })
+  return prizesReady
+}
+
+function prizeColumns(t: TournamentInput) {
+  const maxPlayers = clampPlayers(t.maxPlayers, t.format)
+  const prizes = cleanPrizes(t.prizes, t.format, maxPlayers)
+  return { maxPlayers, prizes: JSON.stringify(prizes), pool: prizeTotal(t.format, maxPlayers, prizes) }
+}
+
 export async function createTournament(t: TournamentInput) {
+  await ensurePrizes()
+  const p = prizeColumns(t)
   await pool.query(
-    `INSERT INTO tournaments (game, title, description, rules, entry_fee, prize_pool, prize_note, max_players, starts_at, format, table_size)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,2)`,
-    [t.game, t.title, t.description, t.rules, t.entryFee, t.prizePool, t.prizeNote, clampPlayers(t.maxPlayers, t.format), t.startsAt, t.format],
+    `INSERT INTO tournaments (game, title, description, rules, entry_fee, prize_pool, prize_note, max_players, starts_at, format, table_size, prizes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,2,$11::jsonb)`,
+    [t.game, t.title, t.description, t.rules, t.entryFee, p.pool, t.prizeNote, p.maxPlayers, t.startsAt, t.format, p.prizes],
   )
 }
 
 export async function updateTournament(id: number, t: TournamentInput) {
+  await ensurePrizes()
+  const p = prizeColumns(t)
   await pool.query(
     `UPDATE tournaments SET game=$2, title=$3, description=$4, rules=$5, entry_fee=$6, prize_pool=$7, prize_note=$8,
-       max_players=$9, starts_at=$10, format=$11 WHERE id=$1 AND status = 'kayit'`,
-    [id, t.game, t.title, t.description, t.rules, t.entryFee, t.prizePool, t.prizeNote, clampPlayers(t.maxPlayers, t.format), t.startsAt, t.format],
+       max_players=$9, starts_at=$10, format=$11, prizes=$12::jsonb WHERE id=$1 AND status = 'kayit'`,
+    [id, t.game, t.title, t.description, t.rules, t.entryFee, p.pool, t.prizeNote, p.maxPlayers, t.startsAt, t.format, p.prizes],
   )
 }
 
@@ -233,6 +262,7 @@ export async function startTournament(id: number) {
  * once the whole previous round has finished so winners wait and advance together.
  */
 async function openReadyMatches(id: number) {
+  await ensurePrizes()
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -244,9 +274,10 @@ async function openReadyMatches(id: number) {
     }
     const bracket = row.bracket as Bracket
     const order = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [id])
-    const champion = championOf(row.format, bracket, order.rows.map(entryKey))
+    const keys = order.rows.map(entryKey)
+    const champion = championOf(row.format, bracket, keys)
     if (champion) {
-      await finishTournament(client, row, bracket, champion)
+      await finishTournament(client, row, bracket, champion, keys)
       await client.query('COMMIT')
       return
     }
@@ -286,7 +317,7 @@ async function openReadyMatches(id: number) {
   }
 }
 
-async function finishTournament(client: { query: typeof pool.query }, row: Row, bracket: Bracket, champion: string) {
+async function finishTournament(client: { query: typeof pool.query }, row: Row, bracket: Bracket, champion: string, order: string[]) {
   const names = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1', [row.id])
   const n = names.rows.find((x) => (x.user_id ?? `misafir:${x.nickname}`) === champion)
   const display = n?.nickname ?? champion
@@ -294,15 +325,51 @@ async function finishTournament(client: { query: typeof pool.query }, row: Row, 
     `UPDATE tournaments SET status = 'bitti', winner = $2, bracket = $3::jsonb WHERE id = $1 AND status = 'basladi' RETURNING id`,
     [row.id, display, JSON.stringify(bracket)],
   )
-  if (upd.rowCount && n?.user_id) {
+  if (!upd.rowCount) return
+  if (n?.user_id) {
     const { rewardTournamentWin } = await import('@/lib/kanka-puan')
     await rewardTournamentWin(n.user_id, Number(row.id), String(row.title))
   }
-  const prize = Number(row.prize_pool)
-  if (upd.rowCount && prize > 0 && n?.user_id) {
-    await credit(n.user_id, prize, 'Turnuva ödülü')
-    await recordHistory({ userId: n.user_id, userName: display, game: String(row.game), mode: 'turnuva', opponent: `Şampiyonluk: ${row.title}`, stake: 0, result: 'win', delta: prize })
+  const format: TournamentFormat = row.format === 'lig' ? 'lig' : 'eleme'
+  const maxPlayers = Number(row.max_players)
+  const payouts = tournamentPayouts(
+    { format, maxPlayers, prizes: cleanPrizes(row.prizes, format, maxPlayers), prizePool: Number(row.prize_pool) },
+    bracket,
+    order,
+  )
+  for (const p of payouts) {
+    const player = names.rows.find((x) => (x.user_id ?? `misafir:${x.nickname}`) === p.key)
+    if (!player?.user_id) continue
+    await payPrize(Number(row.id), { userId: player.user_id, name: player.nickname, key: p.key }, p, { game: String(row.game), title: String(row.title) })
   }
+}
+
+/**
+ * The claim row is what makes a payout happen once: finishing runs inside a transaction that can be
+ * retried, and a retry must not pay the places that were already credited.
+ */
+async function payPrize(
+  tournamentId: number,
+  player: { userId: string; name: string; key: string },
+  prize: { place: number; amount: number; label: string },
+  t: { game: string; title: string },
+) {
+  const claim = await pool.query(
+    `INSERT INTO tournament_payouts (tournament_id, player_key, place, amount) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (tournament_id, player_key) DO NOTHING RETURNING tournament_id`,
+    [tournamentId, player.key, prize.place, prize.amount],
+  )
+  if (!claim.rowCount) return
+  try {
+    await credit(player.userId, prize.amount, 'Turnuva ödülü')
+  } catch (error) {
+    await pool.query('DELETE FROM tournament_payouts WHERE tournament_id = $1 AND player_key = $2', [tournamentId, player.key])
+    throw error
+  }
+  const what = prize.place === 0 ? 'Şampiyonluk' : `${prize.label} sıra ödülü`
+  await recordHistory({ userId: player.userId, userName: player.name, game: t.game, mode: 'turnuva', opponent: `${what}: ${t.title}`, stake: 0, result: 'win', delta: prize.amount }).catch((error) =>
+    console.error('[tournaments] ödül geçmişi yazılamadı', (error as Error).message),
+  )
 }
 
 /** Records a match result, then opens the next round once every match in this round is decided. */

@@ -1,13 +1,29 @@
 'use server'
 
 import { getBalance, getMember } from '@/lib/member'
-import { joinEvent, joinedEventIds } from '@/lib/event-entries'
+import { eventBoard, eventOverview, joinEvent } from '@/lib/event-entries'
+import type { EventBoard } from '@/lib/event-rules'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
-export async function myEventEntries(): Promise<string[]> {
+export type EventOverview = { joined: string[]; counts: Record<string, number>; settled: string[] }
+
+const EMPTY: EventOverview = { joined: [], counts: {}, settled: [] }
+
+export async function getEventOverview(): Promise<EventOverview> {
   const member = await getMember()
-  if (!member) return []
-  return joinedEventIds(member.id).catch(() => [])
+  return eventOverview(member?.id ?? null).catch((error) => {
+    console.error('[events] özet okunamadı', (error as Error).message)
+    return EMPTY
+  })
+}
+
+export async function getEventBoard(eventId: string): Promise<EventBoard | null> {
+  if (typeof eventId !== 'string' || !eventId || eventId.length > 80) return null
+  const member = await getMember()
+  return eventBoard(eventId, member?.id ?? null).catch((error) => {
+    console.error('[events] sıralama okunamadı', (error as Error).message)
+    return null
+  })
 }
 
 export async function joinEventAction(eventId: string): Promise<{ ok: true; balance: number } | { ok: false; error: string }> {

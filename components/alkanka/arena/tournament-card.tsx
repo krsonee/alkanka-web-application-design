@@ -12,6 +12,7 @@ import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
 import { LeagueView } from './league-view'
+import { PrizeList } from './prize-list'
 
 export function formatTR(iso: string) {
   return new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', weekday: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
@@ -115,6 +116,7 @@ export function TournamentCard({ t }: { t: Tournament }) {
               {t.prizeNote}
             </p>
           )}
+          {(t.prizes.length > 1 || t.status === 'bitti') && <PrizeList t={t} />}
 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs font-semibold">

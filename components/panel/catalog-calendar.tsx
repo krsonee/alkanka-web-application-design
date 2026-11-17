@@ -9,7 +9,7 @@ import { STATUS_LABEL, type TournamentStatus } from '@/lib/tournaments-shared'
 import { cn } from '@/lib/utils'
 
 export type CalendarTournament = { id: number; title: string; startsAt: string; status: TournamentStatus }
-type ListKind = 'predictions' | 'campaigns'
+type ListKind = 'events' | 'predictions' | 'campaigns'
 type EntryType = 'start' | 'end' | 'match' | 'tournament'
 type Entry = { key: string; day: string; time: string; at: number; type: EntryType; label: string; note?: string; open?: { kind: ListKind; id: string }; href?: string }
 
@@ -29,13 +29,20 @@ const trStamp = (ms: number) => new Date(ms + TR_OFFSET).toISOString()
 const pad = (n: number) => String(n).padStart(2, '0')
 const dayLabel = (day: string) => `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`
 
-function collect(catalog: Pick<Catalog, 'predictions' | 'campaigns'>, tournaments: CalendarTournament[], hidden: HiddenMap): Entry[] {
+function collect(catalog: Pick<Catalog, 'events' | 'predictions' | 'campaigns'>, tournaments: CalendarTournament[], hidden: HiddenMap): Entry[] {
   const out: Entry[] = []
   const push = (iso: string | undefined, entry: Omit<Entry, 'day' | 'time' | 'at'>) => {
     const at = Date.parse(iso ?? '')
     if (!Number.isFinite(at)) return
     const stamp = trStamp(at)
     out.push({ ...entry, at, day: stamp.slice(0, 10), time: stamp.slice(11, 16) })
+  }
+  for (const e of catalog.events) {
+    const note = hidden.event?.includes(e.id) ? 'gizli' : undefined
+    const pays = (e.rank ?? 'none') === 'none' ? undefined : 'ödül dağıtılır'
+    const open = { kind: 'events' as const, id: e.id }
+    push(e.startsAt, { key: `es-${e.id}`, type: 'start', label: e.title, note, open })
+    push(e.endsAt, { key: `ee-${e.id}`, type: 'end', label: e.title, note: [note, pays].filter(Boolean).join(', ') || undefined, open })
   }
   for (const c of catalog.campaigns) {
     const note = hidden.campaign?.includes(c.id) ? 'gizli' : undefined
@@ -127,7 +134,7 @@ export function CatalogCalendar({
 
   const ended = entries.filter((e) => (e.type === 'end' || e.type === 'match') && e.at <= now).reverse()
   const undated = [
-    { label: 'Etkinlik', n: catalog.events.length, why: 'tarih alanı yok, "Kalan saat" elle yazılıyor' },
+    { label: 'Etkinlik', n: catalog.events.filter((e) => !e.endsAt).length, why: 'bitiş tarihi boş, sitede geri sayım görünmez' },
     { label: 'Kampanya', n: catalog.campaigns.length - dated.length, why: 'başlangıç ve bitiş boş, hep yayında' },
     { label: 'Tahmin', n: catalog.predictions.filter((p) => !p.kickoffAt).length, why: 'maç tarihi boş' },
     { label: 'Bonus', n: catalog.bonuses.length, why: 'bonuslarda tarih yok' },
@@ -138,7 +145,7 @@ export function CatalogCalendar({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-sm font-semibold text-foreground">Takvim</h3>
-          <p className="text-xs leading-relaxed text-muted-foreground">Kaydedilmiş kampanya, maç ve turnuva tarihleri, İstanbul saatiyle. Bir kayda basınca düzenleme ekranı açılır.</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">Kaydedilmiş etkinlik, kampanya, maç ve turnuva tarihleri, İstanbul saatiyle. Bir kayda basınca düzenleme ekranı açılır.</p>
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => shift(-1)} aria-label="Önceki ay" className="flex size-9 items-center justify-center rounded-lg border border-border text-foreground hover:bg-secondary">

@@ -7,8 +7,13 @@ import { useRef, useState, useTransition } from 'react'
 import { useUrlTab } from '@/components/panel/use-url-tab'
 import { CatalogCalendar, type CalendarTournament } from '@/components/panel/catalog-calendar'
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
-import { resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
-import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { loadEventBoard, loadPredictionPicks, resetCatalog, saveCatalogList, saveCategoryOrder, settleEventNow } from '@/app/panel/catalog-actions'
+import { EVENT_GAME_OPTIONS, EVENT_RANKS, RANK_LABEL, RANK_SHORT, cleanPayouts, eventGameLabel, lastPrizePlace, parseKc, payoutTotal, type EventRank } from '@/lib/event-rules'
+import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, predictionPayout, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { EXACT_POINTS, EXACT_REWARD, OUTCOME_POINTS, OUTCOME_REWARD } from '@/lib/community-limits'
+import type { LeagueMatch } from '@/lib/community'
+import { LeagueAdmin } from '@/components/panel/community'
+import { PickList } from '@/components/panel/pick-list'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
 import type { HiddenMap, HiddenScope } from '@/lib/hidden-shared'
@@ -23,6 +28,7 @@ type Field =
   | { key: string; label: string; type: 'number' }
   | { key: string; label: string; type: 'datetime' }
   | { key: string; label: string; type: 'select'; options: string[] }
+  | { key: string; label: string; type: 'choice'; options: { value: string; label: string }[] }
   | { key: string; label: string; type: 'sponsor' }
   | { key: string; label: string; type: 'lines'; hint: string }
   | { key: string; label: string; type: 'pairs'; hint: string; a: string; b: string; numericB?: boolean }
@@ -30,23 +36,30 @@ type Field =
 const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields: Field[]; blank: () => Item }> = {
   events: {
     title: 'Etkinlikler & biletler',
-    hint: 'Etkinlikler sayfasındaki bilet kartları. Bilet fiyatı Kanka Coin olarak düşülür.',
+    hint: 'Etkinlikler sayfasındaki bilet kartları. Bilet fiyatı Kanka Coin olarak düşülür. Sıralama türü seçilen etkinlikte güncel sıralama sitede görünür ve ödüller bitiş tarihinde kendiliğinden dağıtılır.',
     field: 'title',
     fields: [
       { key: 'title', label: 'Başlık', type: 'text', max: 60 },
       { key: 'kind', label: 'Tür', type: 'select', options: EVENT_KINDS },
       { key: 'subtitle', label: 'Alt başlık', type: 'text', max: 80, wide: true },
+      { key: 'startsAt', label: 'Başlangıç tarihi · boşsa hemen açık', type: 'datetime' },
+      { key: 'endsAt', label: 'Bitiş tarihi', type: 'datetime' },
       { key: 'entry', label: 'Bilet fiyatı (KC)', type: 'number' },
-      { key: 'prize', label: 'Ödül', type: 'text', max: 60 },
-      { key: 'hoursLeft', label: 'Kalan saat', type: 'number' },
-      { key: 'participants', label: 'Katılımcı', type: 'number' },
+      { key: 'participants', label: 'Katılımcı · gerçek katılımcı sayısına eklenir', type: 'number' },
+      { key: 'rank', label: 'Sıralama türü', type: 'choice', options: EVENT_RANKS.map((r) => ({ value: r, label: RANK_LABEL[r] })) },
+      { key: 'game', label: 'Sayılan oyun · çekilişte kullanılmaz', type: 'choice', options: EVENT_GAME_OPTIONS },
+      { key: 'payouts', label: 'Otomatik ödül (KC)', type: 'pairs', hint: 'Satır başına: sıra | KC · örnek: 1 | 5000 ve 2-10 | 1000', a: 'rank', b: 'kc', numericB: true },
+      { key: 'prize', label: 'Ödül yazısı · kartta görünür', type: 'text', max: 60 },
       { key: 'image', label: 'Görsel', type: 'image', wide: true },
       { key: 'description', label: 'Açıklama', type: 'textarea', max: 600, wide: true },
       { key: 'steps', label: 'Nasıl katılınır', type: 'lines', hint: 'Her satır bir adım' },
       { key: 'rules', label: 'Kurallar', type: 'lines', hint: 'Her satır bir kural' },
-      { key: 'prizes', label: 'Ödül sıralaması', type: 'pairs', hint: 'Satır başına: sıra | ödül', a: 'place', b: 'prize' },
+      { key: 'prizes', label: 'Ödül sıralaması yazısı', type: 'pairs', hint: 'Sadece otomatik ödül boşsa sitede görünür · satır başına: sıra | ödül', a: 'place', b: 'prize' },
     ],
-    blank: () => ({ id: '', kind: 'Haftalık', title: 'Yeni etkinlik', subtitle: '', hoursLeft: 72, participants: 0, entry: 100, prize: '', image: '/images/banner-events.png', description: '', steps: [], rules: [], prizes: [] }),
+    blank: () => {
+      const start = new Date()
+      return { id: '', kind: 'Haftalık', title: 'Yeni etkinlik', subtitle: '', startsAt: toTrIso(start), endsAt: toTrIso(new Date(start.getTime() + 7 * 86_400_000)), participants: 0, entry: 100, rank: 'none', game: '', payouts: [], prize: '', image: '/images/banner-events.png', description: '', steps: [], rules: [], prizes: [] }
+    },
   },
   predictions: {
     title: 'Maç tahminleri',
@@ -126,7 +139,8 @@ function fromPairs(text: string, a: string, b: string, numericB?: boolean, prev?
     .map(([x, y = ''], i) => ({
       ...(a === 'label' ? { id: (old[i]?.id as string) || `o${i + 1}` } : {}),
       [a]: x,
-      [b]: numericB ? Math.max(0, Number(y) || 0) : y,
+      // Prize amounts are typed the Turkish way ("5.000"), which Number() would read as five.
+      [b]: b === 'kc' ? parseKc(y) || 0 : numericB ? Math.max(0, Number(y) || 0) : y,
     }))
 }
 
@@ -154,6 +168,14 @@ function FieldInput({ field, item, set, sponsors, library }: { field: Field; ite
         <select id={id} className={input} value={String(value ?? '')} onChange={(e) => set({ [field.key]: e.target.value })}>
           {field.options.map((o) => (
             <option key={o}>{o}</option>
+          ))}
+        </select>
+      ) : field.type === 'choice' ? (
+        <select id={id} className={input} value={String(value ?? field.options[0]?.value ?? '')} onChange={(e) => set({ [field.key]: e.target.value })}>
+          {field.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
       ) : field.type === 'sponsor' ? (
@@ -187,14 +209,97 @@ function FieldInput({ field, item, set, sponsors, library }: { field: Field; ite
   )
 }
 
-const EVENT_TEMPLATES: Item[] = [
-  { kind: 'Haftalık', title: 'Tavla Haftası', subtitle: 'En çok maç kazanan ödülü alır', hoursLeft: 168, entry: 0, prize: '5.000 KC', description: 'Hafta boyunca tavla masalarında en çok galibiyet alan ilk 3 oyuncu ödül kazanır.', steps: ['Tavla masasına otur', 'Maçları sonuna kadar oyna', 'Sıralamayı takip et'], rules: ['Yarıda bırakılan maçlar sayılmaz', 'Aynı rakiple en fazla 5 maç sayılır'], prizes: ['1. 2.500 KC', '2. 1.500 KC', '3. 1.000 KC'] },
-  { kind: 'Günlük', title: 'Okey Gecesi', subtitle: 'Bu akşam canlı Okey masaları', hoursLeft: 24, entry: 0, prize: '1.000 KC', description: 'Bu gece Okey ve 101 Okey masalarında en çok el kazanan oyuncu ödülü alır.', steps: ['Okey ya da 101 masasına otur', 'El kazan', 'Gece yarısı sonuçları gör'], rules: ['Sadece canlı masalar sayılır'], prizes: ['1. 1.000 KC'] },
-  { kind: 'Haftalık', title: 'Batak Ligi', subtitle: 'Haftalık puan yarışı', hoursLeft: 168, entry: 50, prize: '3.000 KC', description: 'Batak masalarında kazandığın her el lig puanı getirir. Hafta sonunda zirvedekiler kazanır.', steps: ['Lige katıl', 'Batak masalarında el kazan', 'Lig tablosunu takip et'], rules: ['Katılım ücreti bir kez alınır'], prizes: ['1. 1.500 KC', '2. 1.000 KC', '3. 500 KC'] },
-  { kind: 'Özel', title: 'Bilardo Düellosu', subtitle: 'Birebir eleme turnuvası', hoursLeft: 72, entry: 100, prize: '2.000 KC', description: 'Amerikan Bilardo düellolarında rakiplerini eleyerek finale çık.', steps: ['Kaydını yap', 'Eşleşmeni bekle', 'Düelloyu kazan'], rules: ['Faul kuralları geçerlidir', 'Süreyi dolduran faul yer'], prizes: ['Şampiyon 2.000 KC'] },
+const TEMPLATE_RULES = ['Etkinliğe katıldıktan sonra oynadığın oyunlar sayılır', 'Eşitlikte puana önce ulaşan üstte yer alır', 'Turnuva maçları sayılmaz']
+
+/** `days` is how long the event runs from the moment it is added. */
+const EVENT_TEMPLATES: (Item & { days: number })[] = [
+  { days: 7, kind: 'Haftalık', title: 'Tavla Haftası', subtitle: 'En çok maç kazanan ödülü alır', entry: 0, prize: '5.000 KC', rank: 'wins', game: 'tavla', payouts: [{ rank: '1', kc: 2500 }, { rank: '2', kc: 1500 }, { rank: '3', kc: 1000 }], description: 'Hafta boyunca tavla masalarında en çok galibiyet alan ilk 3 oyuncu ödül kazanır.', steps: ['Etkinliğe katıl', 'Tavla masasına otur ve maç kazan', 'Sıralamayı etkinlik detayından takip et'], rules: TEMPLATE_RULES },
+  { days: 1, kind: 'Günlük', title: 'Okey Gecesi', subtitle: 'Bugün en çok Okey eli kazanan', entry: 0, prize: '1.000 KC', rank: 'wins', game: 'okey', payouts: [{ rank: '1', kc: 1000 }], description: 'Bir gün boyunca Okey masalarında en çok el kazanan oyuncu ödülü alır.', steps: ['Etkinliğe katıl', 'Okey masasına otur ve el kazan', 'Sıralamayı etkinlik detayından takip et'], rules: TEMPLATE_RULES },
+  { days: 7, kind: 'Haftalık', title: 'Batak Ligi', subtitle: 'Haftalık galibiyet yarışı', entry: 50, prize: '3.000 KC', rank: 'wins', game: 'batak', payouts: [{ rank: '1', kc: 1500 }, { rank: '2', kc: 1000 }, { rank: '3', kc: 500 }], description: 'Batak masalarında kazandığın her oyun seni sıralamada yukarı taşır. Hafta sonunda zirvedekiler kazanır.', steps: ['Lige katıl', 'Batak masalarında oyun kazan', 'Sıralamayı etkinlik detayından takip et'], rules: ['Katılım ücreti bir kez alınır', ...TEMPLATE_RULES] },
+  { days: 3, kind: 'Haftalık', title: 'Bilardo Düellosu', subtitle: 'En çok düello kazanan', entry: 100, prize: '2.000 KC', rank: 'wins', game: 'bilardo', payouts: [{ rank: '1', kc: 2000 }], description: 'Üç gün boyunca Amerikan Bilardo masalarında en çok düello kazanan oyuncu ödülü alır.', steps: ['Etkinliğe katıl', 'Bilardo masasında düello kazan', 'Sıralamayı etkinlik detayından takip et'], rules: ['Katılım ücreti bir kez alınır', ...TEMPLATE_RULES] },
+  { days: 7, kind: 'Haftalık', title: 'Bilet Çekilişi', subtitle: 'Katılanlar arasından çekiliş', entry: 50, prize: '1. ödül 5.000 KC', rank: 'draw', game: '', payouts: [{ rank: '1', kc: 5000 }, { rank: '2-3', kc: 1000 }], description: 'Bilet alan herkes çekilişe girer. Bitiş tarihinde kazananlar rastgele çekilir ve ödülleri hesaplarına eklenir.', steps: ['Biletini al', 'Bitiş tarihini bekle', 'Kazananları etkinlik detayında gör'], rules: ['Hesap başına bir bilet alınır', 'Çekiliş bitiş tarihinde kendiliğinden yapılır'] },
 ]
 
 type SaveResult = { ok: true; message: string } | { ok: false; error: string }
+
+const eventRank = (item: Item): EventRank => (EVENT_RANKS.includes(item.rank as EventRank) ? (item.rank as EventRank) : 'none')
+
+function scoringText(rank: EventRank, game: string) {
+  const games = game ? `${eventGameLabel(game)} oyunları` : 'tüm oyunlar'
+  if (rank === 'draw') return 'Bitiş tarihinde kazananlar katılanlar arasından rastgele çekilir.'
+  const counted = rank === 'wins' ? `kazandığı oyunlar sayılır (${games})` : rank === 'coins' ? `oyunlardan kazandığı KC toplanır (${games}; kayıplar düşülmez)` : `oynadığı oyunlar sayılır (${games})`
+  return `Üyenin etkinliğe katıldıktan sonra ve etkinlik tarihleri içinde ${counted}. Bota karşı oyunlar da sayılır, turnuva maçları sayılmaz. Puanı sıfır olan ödül almaz.`
+}
+
+/** Standings and payout state of one saved event, plus the manual "settle now" fallback. */
+function EventBoardBox({ id, item }: { id: string; item: Item }) {
+  const [version, setVersion] = useState(0)
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [closed, setClosed] = useState(false)
+  const [pending, start] = useTransition()
+  const [now] = useState(() => Date.now())
+  const rank = eventRank(item)
+  const payouts = cleanPayouts(item.payouts)
+  const end = Date.parse(String(item.endsAt ?? ''))
+  const ended = rank !== 'none' && Number.isFinite(end) && end <= now
+
+  const settle = () =>
+    void askConfirm('Etkinlik şimdi sonuçlandırılsın mı? Sıralama dondurulur ve ödüller kazananların hesabına eklenir. Bu işlem geri alınamaz.').then((ok) => {
+      if (!ok) return
+      start(async () => {
+        const r = await settleEventNow(id)
+        setStatus(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error })
+        setVersion((v) => v + 1)
+      })
+    })
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
+      {rank === 'none' ? (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-bold text-foreground">Otomatik sıralama kapalı.</span> Bu etkinlikte kimse kendiliğinden sıralanmaz ve ödül almaz; kazananı ve ödülü sen belirlersin. Açmak için bir sıralama türü seç, bitiş tarihi ve otomatik ödül yaz.
+        </p>
+      ) : (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {payouts.length ? (
+            <>
+              Dağıtılacak ödül en fazla <span className="font-bold text-foreground">{`${payoutTotal(payouts).toLocaleString('tr-TR')} KC`}</span>
+              {` (ilk ${lastPrizePlace(payouts)} sıra). `}
+            </>
+          ) : (
+            <span className="font-bold text-destructive">Otomatik ödül satırı yok. </span>
+          )}
+          {scoringText(rank, String(item.game ?? ''))} Ödüller bitiş tarihinde kendiliğinden hesaplara eklenir ve kazanana site içi mesaj gider.
+        </p>
+      )}
+      <PickList
+        cacheKey={`event-board-${id}-${version}`}
+        load={() => loadEventBoard(id)}
+        title="Sıralama ve katılımcılar"
+        pickLabel="Puan"
+        whenLabel="Katıldı"
+        empty="Henüz katılan yok."
+        onData={(d) => setClosed(d.ok && Boolean(d.closed))}
+      />
+      <p className="text-xs text-muted-foreground">Liste kaydedilmiş ayarlara göre gelir; değişiklik yaptıysan önce kaydet.</p>
+      {ended && (!closed || status) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {!closed && (
+            <button type="button" onClick={settle} disabled={pending} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-60">
+              {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+              Şimdi sonuçlandır
+            </button>
+          )}
+          {status && (
+            <p role="status" className={cn('text-xs', status.ok ? 'text-primary' : 'text-destructive')}>
+              {status.text}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function CategoryOrderEditor({ title, values, order, onSave }: { title: string; values: string[]; order: string[]; onSave: (next: string[]) => Promise<SaveResult> }) {
   const [list, setList] = useState(() => sortByOrder(values, order))
@@ -355,7 +460,10 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                 key={String(t.title)}
                 type="button"
                 onClick={() => {
-                  setItems((list) => [{ ...schema.blank(), ...t, id: `events-${Date.now().toString(36)}` }, ...list])
+                  const { days, ...template } = t
+                  const start = new Date()
+                  const dates = { startsAt: toTrIso(start), endsAt: toTrIso(new Date(start.getTime() + days * 86_400_000)) }
+                  setItems((list) => [{ ...schema.blank(), ...template, ...dates, id: `events-${Date.now().toString(36)}` }, ...list])
                   setOpen(0)
                 }}
                 className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
@@ -392,8 +500,9 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                 <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : i)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left">
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', isHidden ? 'text-muted-foreground line-through' : 'text-foreground')}>{name}</span>
                   {isHidden && <span className="shrink-0 text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
+                  {kind === 'events' && !item.endsAt && <span className="shrink-0 text-xs font-bold text-destructive">Bitiş tarihi yok</span>}
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {kind === 'events' ? `${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : (sponsors.find((s) => s.id === String(item.sponsorId))?.name ?? 'Sponsor yok')}
+                    {kind === 'events' ? `${RANK_SHORT[eventRank(item)]} · ${item.entry} KC` : kind === 'predictions' ? `${item.reward} KC` : (sponsors.find((s) => s.id === String(item.sponsorId))?.name ?? 'Sponsor yok')}
                   </span>
                   <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-180')} aria-hidden />
                 </button>
@@ -406,6 +515,16 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                       <FieldInput key={f.key} field={f} item={item} set={(v) => update(i, v)} sponsors={sponsors} library={library} />
                     ))}
                   </div>
+                  {kind === 'events' && <EventBoardBox id={id} item={item} />}
+                  {kind === 'predictions' && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Tahmin başına ödenen: <span className="font-bold text-foreground">{`${predictionPayout(Number(item.reward))} KC`}</span>
+                        {`, tahmin yapıldığı an (günde ${PREDICTION_PAYOUT.perDay} tahmine kadar). Bu tahmin türünde sonuç girilmez ve doğru bilene ayrıca ödül verilmez; sonuçlu, puanlı tahmin için Skor tahmin ligini kullan.`}
+                      </p>
+                      <PickList cacheKey={`prediction-picks-${id}`} load={() => loadPredictionPicks(id)} pickLabel="Seçtiği" />
+                    </div>
+                  )}
                   <button type="button" onClick={() => remove(i)} className="inline-flex items-center gap-1.5 self-start rounded-lg px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
                     <Trash2 className="size-3.5" aria-hidden />
                     Sil
@@ -437,9 +556,10 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
   )
 }
 
-type Tab = Kind | 'calendar'
+/** `league` is the score league: it lives under the Tahminler tab, next to the option predictions. */
+type Tab = Kind | 'calendar' | 'league'
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: Exclude<Tab, 'league'>; label: string }[] = [
   { id: 'events', label: 'Etkinlik & bilet' },
   { id: 'predictions', label: 'Tahminler' },
   { id: 'campaigns', label: 'Kampanyalar' },
@@ -447,22 +567,39 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'calendar', label: 'Takvim' },
 ]
 
+const PREDICTION_KINDS = [
+  {
+    id: 'predictions',
+    label: 'Seçenekli tahminler',
+    about: `Üye bir seçeneğe oy verir (1, X, 2 gibi). Tahmini yaptığı an katılım ödülünü alır; sonuç girilmez, puan yazılmaz.`,
+  },
+  {
+    id: 'league',
+    label: 'Skor tahmin ligi',
+    about: `Üye maçın skorunu yazar. Sonuç girilince tam skor ${EXACT_POINTS} puan + ${EXACT_REWARD} KC, doğru sonuç ${OUTCOME_POINTS} puan + ${OUTCOME_REWARD} KC kazandırır; puanlar /tahminler sayfasındaki sıralamaya yazılır.`,
+  },
+] as const
+
 export function CatalogEditor({
   catalog,
   sponsors,
   library,
   hidden = {},
   tournaments = [],
+  league = null,
 }: {
   catalog: Omit<Catalog, 'rewards'>
   sponsors: Option[]
   library: string[]
   hidden?: HiddenMap
   tournaments?: CalendarTournament[]
+  /** Score-league matches, when this account may manage them here. */
+  league?: LeagueMatch[] | null
 }) {
-  const [tab, setTab] = useUrlTab<Tab>(['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
+  const [tab, setTab] = useUrlTab<Tab>(league ? ['events', 'predictions', 'league', 'campaigns', 'bonuses', 'calendar'] : ['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
   const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
   const [focus, setFocus] = useState<{ kind: Kind; id: string } | null>(null)
+  const top = tab === 'league' ? 'predictions' : tab
   return (
     <div className="flex flex-col gap-4">
       <div role="tablist" aria-label="Katalog bölümleri" className="flex flex-wrap gap-2">
@@ -471,15 +608,35 @@ export function CatalogEditor({
             key={t.id}
             type="button"
             role="tab"
-            aria-selected={tab === t.id}
+            aria-selected={top === t.id}
             onClick={() => setTab(t.id)}
-            className={cn('rounded-full border px-4 py-2 text-sm font-medium transition-colors', tab === t.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary')}
+            className={cn('rounded-full border px-4 py-2 text-sm font-medium transition-colors', top === t.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary')}
           >
             {t.label}
           </button>
         ))}
       </div>
-      {tab === 'calendar' ? (
+      {top === 'predictions' && league && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
+          <div role="group" aria-label="Tahmin türü" className="flex w-fit flex-wrap gap-1 rounded-lg border border-border bg-background p-1">
+            {PREDICTION_KINDS.map((k) => (
+              <button
+                key={k.id}
+                type="button"
+                aria-pressed={tab === k.id}
+                onClick={() => setTab(k.id)}
+                className={cn('h-9 rounded-md px-3 text-xs font-bold', tab === k.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+              >
+                {k.id === 'league' ? `${k.label} (${league.filter((m) => !m.settled).length})` : `${k.label} (${catalog.predictions.length})`}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">{PREDICTION_KINDS.find((k) => k.id === tab)?.about}</p>
+        </div>
+      )}
+      {tab === 'league' ? (
+        league && <LeagueAdmin matches={league} />
+      ) : tab === 'calendar' ? (
         <CatalogCalendar
           catalog={catalog}
           tournaments={tournaments}

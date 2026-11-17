@@ -115,8 +115,10 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     title: 'Turnuva oluşturma',
     body: (
       <ol className={ol}>
-        <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir. Ödül havuzu giriş ücretlerinden ve senin eklediğin ödülden oluşur.</li>
+        <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir.</li>
         <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar.</li>
+        <li><b>Kontenjan</b> listeden seçilir: elemede 2, 4, 8, 16, 32, 64, 128 ya da 256 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı.</li>
+        <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
         <li>Kaydettiğin turnuva hemen <span className={code}>/turnuvalar</span> sayfasında kayda açılır.</li>
       </ol>
     ),
@@ -128,7 +130,7 @@ const TOURNAMENT_STEPS: GuideStep[] = [
         <li>Kayıt dolunca ya da saat gelince <b>Başlat</b> de. Eşleşmeler kura ile çekilir: tavla ve bilardo birebir, okey 4 kişilik masadır.</li>
         <li>Maçlar sitede oynanınca kazanan kendiliğinden ilerler. Bir maç takılırsa kazananı elle seçebilirsin.</li>
         <li>Gelmeyen oyuncuyu başlamadan önce kayıt listesinden çıkarabilirsin. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
-        <li>Şampiyona ödül ve şampiyon rozeti otomatik verilir, adı kazananlar şeridinde çıkar.</li>
+        <li>Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir. Şampiyona şampiyon rozeti de verilir, adı kazananlar şeridinde çıkar.</li>
       </ol>
     ),
   },

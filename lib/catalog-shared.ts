@@ -9,6 +9,7 @@ import {
   type Prediction,
 } from '@/components/alkanka/data'
 import { DEFAULT_REWARDS, mergeRewards, type RewardConfig } from './rewards-shared'
+import { EVENT_GAMES, EVENT_RANKS, cleanPayouts, type EventRank } from './event-rules'
 
 export type Catalog = {
   rewards: RewardConfig
@@ -91,13 +92,22 @@ const unique = <T extends { id: string }>(items: T[]) => {
 }
 
 export function cleanEvents(raw: unknown): EventItem[] {
+  const now = Date.now()
   return unique(
-    list(raw).map((e: Record<string, unknown>, i) => ({
+    list(raw).map((e: Record<string, unknown>, i) => {
+      const startsAt = isoDate(e.startsAt)
+      const endsAt = isoDate(e.endsAt)
+      return {
       id: slug(e.id, i, 'etkinlik'),
       kind: EVENT_KINDS.includes(e.kind as EventItem['kind']) ? (e.kind as EventItem['kind']) : 'Haftalık',
       title: str(e.title, 80) || 'Yeni etkinlik',
       subtitle: str(e.subtitle, 120),
-      hoursLeft: num(e.hoursLeft, 0, 24 * 365),
+      hoursLeft: endsAt ? Math.max(0, Math.ceil((Date.parse(endsAt) - now) / 3_600_000)) : num(e.hoursLeft, 0, 24 * 365),
+      ...(startsAt ? { startsAt } : {}),
+      ...(endsAt ? { endsAt } : {}),
+      rank: EVENT_RANKS.includes(e.rank as EventRank) ? (e.rank as EventRank) : 'none',
+      game: EVENT_GAMES.includes(String(e.game)) ? String(e.game) : '',
+      payouts: cleanPayouts(e.payouts),
       participants: int(e.participants, 0, 10_000_000),
       entry: int(e.entry, 0, 1_000_000),
       prize: str(e.prize, 80),
@@ -109,7 +119,8 @@ export function cleanEvents(raw: unknown): EventItem[] {
         .map((p: Record<string, unknown>) => ({ place: str(p?.place, 30), prize: str(p?.prize, 80) }))
         .filter((p) => p.place && p.prize)
         .slice(0, 12),
-    })),
+      }
+    }),
   )
 }
 

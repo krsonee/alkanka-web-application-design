@@ -16,12 +16,17 @@ import {
   RefreshCw,
   Send,
   Ticket,
+  Trash2,
   UserPlus,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { sendChannelCommentAction, sendChatMessage, startTelegramLink } from '@/app/actions/chat'
+import { moderateChat, sendChannelCommentAction, sendChatMessage, startTelegramLink } from '@/app/actions/chat'
+import { CHAT_MUTE_OPTIONS, type ChatModAction } from '@/lib/chat-mod-shared'
+import type { ChatMessage } from '@/lib/telegram-chat'
 import {
   BROADCAST_CHANNELS,
   type BroadcastSlug,
@@ -277,11 +282,92 @@ function SiteBadge() {
   )
 }
 
+type ModNote = { ok: boolean; text: string }
+
+const modItem =
+  'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-semibold text-foreground transition-colors hover:bg-secondary disabled:opacity-50'
+
+/** Moderators open this from the author's name: remove the message or silence its writer. */
+function ModMenu({ message, up, onDone, children }: { message: ChatMessage; up: boolean; onDone: (note: ModNote) => void; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const [pending, startTransition] = useTransition()
+  const ref = useRef<HTMLSpanElement>(null)
+  // Bot announcements have no writer behind them, so there is nobody to silence.
+  const hasWriter = message.origin === 'telegram' || Boolean(message.userId)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [open])
+
+  const run = (action: ChatModAction, minutes = 0) =>
+    startTransition(async () => {
+      const res = await moderateChat(message.id, action, minutes)
+      setOpen(false)
+      onDone({ ok: res.ok, text: res.message ?? (res.ok ? 'Tamam.' : 'İşlem yapılamadı.') })
+    })
+
+  return (
+    <span
+      ref={ref}
+      className="relative min-w-0"
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || !open) return
+        e.stopPropagation()
+        setOpen(false)
+      }}
+    >
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`${message.author}: moderatör işlemleri`}
+        onClick={() => setOpen((v) => !v)}
+        className="max-w-full truncate rounded underline decoration-dotted underline-offset-2 hover:decoration-solid focus-visible:outline-2 focus-visible:outline-primary"
+      >
+        {children}
+      </button>
+      {open && (
+        <span
+          role="menu"
+          aria-label={`${message.author} için işlemler`}
+          className={cn('absolute left-0 z-20 flex w-48 flex-col rounded-lg border border-border bg-card p-1 shadow-xl', up ? 'bottom-full mb-1' : 'top-full mt-1')}
+        >
+          <button type="button" role="menuitem" disabled={pending} onClick={() => run('delete')} className={cn(modItem, 'text-destructive')}>
+            <Trash2 className="size-3.5 shrink-0" aria-hidden="true" />
+            Mesajı sil
+          </button>
+          {hasWriter &&
+            CHAT_MUTE_OPTIONS.map((o) => (
+              <button key={o.minutes} type="button" role="menuitem" disabled={pending} onClick={() => run('mute', o.minutes)} className={modItem}>
+                <VolumeX className="size-3.5 shrink-0" aria-hidden="true" />
+                {o.label}
+              </button>
+            ))}
+          {hasWriter && (
+            <button type="button" role="menuitem" disabled={pending} onClick={() => run('unmute')} className={modItem}>
+              <Volume2 className="size-3.5 shrink-0" aria-hidden="true" />
+              Susturmayı kaldır
+            </button>
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefresh: () => void }) {
   const listRef = useStickToBottom(data?.messages.at(-1)?.id)
   const telegramUrl = useTelegramUrl()
   const inviteUrl = data?.inviteUrl ?? telegramUrl
   const locked = Boolean(data?.configured && data.locked)
+  const isMod = Boolean(data?.me.mod)
+  const [modNote, setModNote] = useState<ModNote | null>(null)
+  const total = data?.messages.length ?? 0
 
   return (
     <>
@@ -310,10 +396,23 @@ function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefr
             }
           />
         ) : (
-          data.messages.map((m) => (
-            <li key={m.id} className="animate-slide-in flex flex-col gap-0.5 text-sm leading-relaxed">
+          data.messages.map((m, i) => (
+            <li key={m.id} className="animate-slide-in flex flex-col gap-0.5 text-sm leading-relaxed has-[[role=menu]]:relative has-[[role=menu]]:z-10">
               <span className="flex items-center gap-1.5 text-xs">
-                <MemberName userId={m.userId} className={m.origin === 'site' ? 'text-primary' : 'text-accent'}>{m.author}</MemberName>
+                {isMod ? (
+                  <ModMenu
+                    message={m}
+                    up={total > 6 && i >= total - 5}
+                    onDone={(note) => {
+                      setModNote(note)
+                      onRefresh()
+                    }}
+                  >
+                    <MemberName userId={m.userId} className={m.origin === 'site' ? 'text-primary' : 'text-accent'}>{m.author}</MemberName>
+                  </ModMenu>
+                ) : (
+                  <MemberName userId={m.userId} className={m.origin === 'site' ? 'text-primary' : 'text-accent'}>{m.author}</MemberName>
+                )}
                 <MemberRank userId={m.userId} />
                 {m.origin === 'site' && <SiteBadge />}
                 <time dateTime={m.createdAt} className="ml-auto text-[10px] text-muted-foreground tabular-nums">
@@ -340,6 +439,11 @@ function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefr
 
       {data && !locked && (
         <div className="flex flex-col gap-2 border-t border-border p-3">
+          {isMod && (
+            <p role="status" className={cn('text-xs leading-relaxed', modNote ? (modNote.ok ? 'text-foreground' : 'text-destructive') : 'text-muted-foreground')}>
+              {modNote ? modNote.text : 'Moderatörsün: mesajı silmek ya da yazanı susturmak için kullanıcı adına tıkla.'}
+            </p>
+          )}
           {data.configured && data.me.joined ? (
             <>
               <Composer data={data} onSent={onRefresh} />
@@ -590,6 +694,7 @@ export function LiveRail() {
     )}
     <aside
       data-live-rail
+      data-open={mobileOpen ? '' : undefined}
       aria-label="Telegram canlı sohbet"
       className={cn(
         'fixed inset-x-0 bottom-0 z-50 h-[85dvh] w-full flex-col overflow-hidden rounded-t-3xl border-t border-accent/40 bg-surface shadow-2xl',

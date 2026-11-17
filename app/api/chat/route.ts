@@ -1,5 +1,6 @@
 import { getMember } from '@/lib/member'
 import { getFeed, getLink, isGroupMember } from '@/lib/telegram-chat'
+import { isChatModerator } from '@/lib/chat-mod'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +9,8 @@ export async function GET() {
     const [feed, member] = await Promise.all([getFeed(), getMember()])
     const link = member ? await getLink(member.id) : null
     const joined = member && link && feed.configured ? await isGroupMember(member.id) : false
-    const me = { loggedIn: Boolean(member), link, joined }
+    const mod = member && joined ? await isChatModerator(member.id).catch(() => false) : false
+    const me = { loggedIn: Boolean(member), link, joined, mod }
     if (feed.configured && !joined) return Response.json({ ...feed, pinned: null, messages: [], locked: true, me })
     return Response.json({ ...feed, locked: false, me })
   } catch (error) {
