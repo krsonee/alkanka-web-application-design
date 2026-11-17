@@ -7,7 +7,9 @@ import { BookmarkPlus, Loader2, Play, Plus, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TournamentGuide } from '@/components/panel/area-guides'
 import { ARENA_GAMES, ARENA_META } from '@/lib/arena'
-import { FORMAT_LABEL, FORMAT_SHORT, STATUS_LABEL, TOURNAMENT_FORMATS, type Tournament, type TournamentTemplate } from '@/lib/tournaments-shared'
+import { FORMAT_LABEL, FORMAT_SHORT, STATUS_LABEL, TOURNAMENT_FORMATS, type Tournament, type TournamentFormat, type TournamentTemplate } from '@/lib/tournaments-shared'
+import { MAX_PRIZE_KC, effectivePrizes, isPlayerCount, playerOptions, prizePlaces, prizeTotal, snapPlayers } from '@/lib/tournament-prizes'
+import { PrizeList } from '@/components/alkanka/arena/prize-list'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { LeagueView } from '@/components/alkanka/arena/league-view'
 import { beginTournament, dropTournamentTemplate, keepTournamentTemplate, kickEntry, pickMatchWinner, removeTournament, saveTournament, stopTournament } from '@/app/panel/arena-actions'
@@ -95,6 +97,12 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
     return next
   }, {})
   const from = t ?? preset
+  const [format, setFormat] = useState<TournamentFormat>(from?.format ?? 'eleme')
+  const [maxPlayers, setMaxPlayers] = useState(() => snapPlayers(from?.format ?? 'eleme', from?.maxPlayers ?? 16))
+  const [prizes, setPrizes] = useState<string[]>(() => (from ? effectivePrizes(from) : [5000]).map(String))
+  const places = prizePlaces(format, maxPlayers)
+  const total = prizeTotal(format, maxPlayers, places.map((_, i) => Math.max(0, Math.round(Number(prizes[i]) || 0))))
+  const legacySize = Boolean(from && !isPlayerCount(from.format, from.maxPlayers))
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="id" value={t?.id ?? 0} />
@@ -113,7 +121,16 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
         </label>
         <label className={labelCls}>
           Format
-          <select name="format" defaultValue={from?.format ?? 'eleme'} className={field}>
+          <select
+            name="format"
+            value={format}
+            onChange={(e) => {
+              const next = e.target.value as TournamentFormat
+              setFormat(next)
+              setMaxPlayers((n) => snapPlayers(next, n))
+            }}
+            className={field}
+          >
             {TOURNAMENT_FORMATS.map((f) => (
               <option key={f} value={f}>
                 {FORMAT_LABEL[f]}
@@ -137,16 +154,48 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
         </label>
         <label className={labelCls}>
           Kontenjan (oyuncu)
-          <input type="number" name="maxPlayers" min={2} max={500} required defaultValue={from?.maxPlayers ?? 16} className={field} />
+          <select name="maxPlayers" value={maxPlayers} onChange={(e) => setMaxPlayers(Number(e.target.value))} className={field}>
+            {playerOptions(format).map((n) => (
+              <option key={n} value={n}>
+                {n} oyuncu
+              </option>
+            ))}
+          </select>
+          <span className="font-normal">
+            {format === 'eleme' ? 'Eleme tablosu boş maç kalmadan dolsun diye 2 ve katları seçilir.' : 'Ligde kimse hafta boş geçmesin diye çift sayı seçilir.'}
+            {legacySize && ` Bu kayıt eski kuralla ${from?.maxPlayers} kişilikti; en yakın uygun sayıya çekildi.`}
+          </span>
         </label>
         <label className={labelCls}>
           Katılım ücreti (KC, 0 = ücretsiz)
           <input type="number" name="entryFee" min={0} max={100000} required defaultValue={from?.entryFee ?? 100} className={field} />
         </label>
-        <label className={labelCls}>
-          Ödül havuzu (KC)
-          <input type="number" name="prizePool" min={0} max={10000000} required defaultValue={from?.prizePool ?? 5000} className={field} />
-        </label>
+        <fieldset className="flex flex-col gap-3 rounded-xl border border-border p-4 sm:col-span-2">
+          <legend className="px-1 text-xs font-semibold text-muted-foreground">Sıralama ödülleri (KC)</legend>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {places.map((place, i) => (
+              <label key={`${format}-${i}`} className={labelCls}>
+                <span>
+                  <span className="text-foreground">{place.label}</span> {place.hint}
+                </span>
+                <input
+                  type="number"
+                  name={`prize${i}`}
+                  min={0}
+                  max={MAX_PRIZE_KC}
+                  required
+                  value={prizes[i] ?? '0'}
+                  onChange={(e) => setPrizes((list) => places.map((_, j) => (j === i ? e.target.value : (list[j] ?? '0'))))}
+                  className={field}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground" aria-live="polite">
+            Toplam ödül havuzu: <span className="font-bold text-foreground">{total.toLocaleString('tr-TR')} KC</span>. Sitede bu toplam gösterilir. Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir; ödül vermek istemediğin sırayı 0 bırak.
+            {format === 'eleme' && places.length > 2 && ' Elemede üçüncülük maçı oynanmaz: aynı turda elenenler aynı ödülü alır.'}
+          </p>
+        </fieldset>
         <label className={cn(labelCls, 'sm:col-span-2')}>
           Ödül notu (isteğe bağlı)
           <input name="prizeNote" maxLength={120} defaultValue={from?.prizeNote} placeholder="1. 3.000 KC · 2. 1.500 KC · 3. 500 KC" className={field} />
@@ -222,6 +271,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
             {formatTR(t.startsAt)} · {t.entries.length}/{t.maxPlayers} oyuncu · {t.entryFee} KC giriş · {t.prizePool} KC ödül
           </p>
           {t.winner && <p className="text-sm font-bold text-primary">Şampiyon: {t.winner}</p>}
+          <PrizeList t={t} className="mt-1" />
         </div>
         <div className="flex flex-wrap gap-2">
           {t.status === 'kayit' && (

@@ -13,6 +13,7 @@ import {
   cleanPredictions,
 } from '@/lib/catalog-shared'
 import { driftMessage } from '@/lib/drift'
+import type { PickListData } from '@/components/panel/pick-list'
 import { mergeRewards, type RewardConfig } from '@/lib/rewards-shared'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
@@ -134,6 +135,28 @@ export async function saveCatalogList(kind: ListKind, items: unknown): Promise<R
   } catch (error) {
     console.error(`[catalog:${kind}] kaydedilemedi`, error)
     return { ok: false, error: 'Kaydedilemedi.' }
+  }
+}
+
+export async function loadPredictionPicks(predictionId: string): Promise<PickListData> {
+  if (!(await canPanel('catalog'))) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
+  try {
+    const id = String(predictionId).slice(0, 80)
+    const [{ listPredictionPicks }, { getCatalog }] = await Promise.all([import('@/lib/prediction-picks'), import('@/lib/catalog')])
+    const [{ total, picks }, catalog] = await Promise.all([listPredictionPicks(id), getCatalog({ includeHidden: true })])
+    const options = catalog.predictions.find((p) => p.id === id)?.options ?? []
+    const label = (optionId: string) => options.find((o) => o.id === optionId)?.label ?? 'Silinmiş seçenek'
+    const tally = new Map<string, number>()
+    for (const p of picks) tally.set(label(p.optionId), (tally.get(label(p.optionId)) ?? 0) + 1)
+    return {
+      ok: true,
+      total,
+      summary: [...tally].map(([name, n]) => `${name}: ${n} üye`).join(' · ') || undefined,
+      rows: picks.map((p) => ({ userId: p.userId, name: p.name, pick: label(p.optionId), at: p.at })),
+    }
+  } catch (error) {
+    console.error('[catalog] tahmin listesi okunamadı', (error as Error).message)
+    return { ok: false, error: 'Liste okunamadı.' }
   }
 }
 

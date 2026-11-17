@@ -5,8 +5,10 @@ import { askConfirm, askReason } from '@/components/panel/confirm-dialog'
 import { COMPLAINT_REPLIES, REVIEW_REJECT_REASONS } from '@/components/panel/community-presets'
 import { useState } from 'react'
 import { Check, Star, Trash2, X } from 'lucide-react'
-import { answerComplaint, createLeagueMatch, finishLeagueMatch, moderateReview, removeComplaint, removeLeagueMatch, removeReview } from '@/app/panel/community-actions'
+import { answerComplaint, createLeagueMatch, finishLeagueMatch, loadLeaguePicks, moderateReview, removeComplaint, removeLeagueMatch, removeReview } from '@/app/panel/community-actions'
 import type { Complaint, LeagueMatch, Review } from '@/lib/community'
+import { EXACT_POINTS, EXACT_REWARD, OUTCOME_POINTS, OUTCOME_REWARD } from '@/lib/community-limits'
+import { PickList } from '@/components/panel/pick-list'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { usePanelAction as useAction } from '@/components/panel/flash'
@@ -24,26 +26,26 @@ type Props = {
   reviews: Review[]
   published: Review[]
   complaints: Complaint[]
-  matches: LeagueMatch[]
+  /** Null when this account sees the score league under İçerik takvimi → Tahminler instead. */
+  matches: LeagueMatch[] | null
   siteNames: Record<string, string>
   proofs: PendingProof[]
 }
 
 export function CommunityManager({ reviews, published, complaints, matches, siteNames, proofs }: Props) {
-  const [tab, setTab] = useUrlTab<CommunityTab>(['reviews', 'kanit', 'complaints', 'league'], 'reviews')
+  const [tab, setTab] = useUrlTab<CommunityTab>(matches ? ['reviews', 'kanit', 'complaints', 'league'] : ['reviews', 'kanit', 'complaints'], 'reviews')
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'forwarded').length
+  const tabs: [CommunityTab, string][] = [
+    ['reviews', `Yorum onayı (${reviews.length})`],
+    ['kanit', `Kanıt & karne (${proofs.length})`],
+    ['complaints', `Şikâyetler (${openComplaints})`],
+  ]
+  if (matches) tabs.push(['league', `Skor tahmin ligi (${matches.filter((m) => !m.settled).length})`])
   return (
     <div className="flex flex-col gap-5">
       <CommunityGuide />
       <div role="tablist" className="flex w-fit gap-1 rounded-lg border border-border bg-card p-1">
-        {(
-          [
-            ['reviews', `Yorum onayı (${reviews.length})`],
-            ['kanit', `Kanıt & karne (${proofs.length})`],
-            ['complaints', `Şikâyetler (${openComplaints})`],
-            ['league', `Tahmin ligi (${matches.filter((m) => !m.settled).length})`],
-          ] as const
-        ).map(([id, label]) => (
+        {tabs.map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cn('h-9 rounded-md px-3 text-xs font-bold', tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
             {label}
           </button>
@@ -53,7 +55,7 @@ export function CommunityManager({ reviews, published, complaints, matches, site
       {tab === 'reviews' && <Reviews reviews={reviews} published={published} siteNames={siteNames} />}
       {tab === 'kanit' && <TrustProofs proofs={proofs} siteNames={siteNames} />}
       {tab === 'complaints' && <Complaints complaints={complaints} siteNames={siteNames} />}
-      {tab === 'league' && <LeagueAdmin matches={matches} />}
+      {tab === 'league' && matches && <LeagueAdmin matches={matches} />}
     </div>
   )
 }
@@ -248,16 +250,31 @@ function FinishRow({ m }: { m: LeagueMatch }) {
         </div>
       )}
       <StatusLine status={status} />
+      <PickList cacheKey={`league-picks-${m.id}-${m.settled ? 'done' : m.picks}`} load={() => loadLeaguePicks(m.id)} count={m.picks} pickLabel="Skor tahmini" />
     </li>
   )
 }
 
-function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
+export function LeagueAdmin({ matches }: { matches: LeagueMatch[] }) {
   const { pending, status, run } = useAction()
   const [form, setForm] = useState({ league: 'Süper Lig', home: '', away: '', kickoff: '', closesAt: '' })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
   return (
     <div className="flex flex-col gap-5">
+    <dl className="grid gap-3 rounded-xl border border-border bg-card p-4 text-sm sm:grid-cols-3">
+      <div className="flex flex-col gap-0.5">
+        <dt className="text-xs font-semibold text-muted-foreground">Tam skoru bilen</dt>
+        <dd className="font-semibold text-foreground">{`${EXACT_POINTS} puan + ${EXACT_REWARD} KC`}</dd>
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <dt className="text-xs font-semibold text-muted-foreground">Sadece sonucu bilen</dt>
+        <dd className="font-semibold text-foreground">{`${OUTCOME_POINTS} puan + ${OUTCOME_REWARD} KC`}</dd>
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <dt className="text-xs font-semibold text-muted-foreground">Ne zaman ödenir</dt>
+        <dd className="leading-relaxed text-foreground">Sonuç girilince, kendiliğinden. Çarpan etkinliği açıksa KC artar.</dd>
+      </div>
+    </dl>
     <FixturePicker />
     <div className="grid gap-5 xl:grid-cols-[22rem_1fr]">
       <form

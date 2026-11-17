@@ -2,6 +2,7 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { isArenaGame } from './arena'
 import { MAX_LEAGUE_PLAYERS } from './league'
+import { cleanPrizes } from './tournament-prizes'
 import { MAX_TOURNAMENT_PLAYERS, MAX_TOURNAMENT_TEMPLATES, isTournamentFormat, type Tournament, type TournamentTemplate } from './tournaments-shared'
 
 let ready: Promise<unknown> | null = null
@@ -34,6 +35,7 @@ function readSettings(raw: unknown): Settings | null {
   const title = text(d.title, 80)
   if (title.length < 3) return null
   const startTime = text(d.startTime, 5)
+  const maxPlayers = whole(d.maxPlayers, 2, format === 'lig' ? MAX_LEAGUE_PLAYERS : MAX_TOURNAMENT_PLAYERS, 16)
   return {
     game: String(d.game) as Settings['game'],
     format,
@@ -42,8 +44,9 @@ function readSettings(raw: unknown): Settings | null {
     rules: text(d.rules, 2000),
     entryFee: whole(d.entryFee, 0, 100000, 0),
     prizePool: whole(d.prizePool, 0, 10000000, 0),
+    prizes: cleanPrizes(d.prizes, format, maxPlayers),
     prizeNote: text(d.prizeNote, 120),
-    maxPlayers: whole(d.maxPlayers, 2, format === 'lig' ? MAX_LEAGUE_PLAYERS : MAX_TOURNAMENT_PLAYERS, 16),
+    maxPlayers,
     startTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) ? startTime : '21:00',
   }
 }

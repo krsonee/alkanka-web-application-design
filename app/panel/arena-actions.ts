@@ -23,6 +23,7 @@ import {
 import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tournament-templates'
 import { MAX_TOURNAMENT_TEMPLATES, isTournamentFormat } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
+import { MAX_PRIZE_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces } from '@/lib/tournament-prizes'
 import type { ActionState } from './actions'
 
 const MAX_BET_OPTIONS = 8
@@ -108,6 +109,12 @@ function readTournament(form: FormData): TournamentInput {
   if (format === 'lig' && maxPlayers > MAX_LEAGUE_PLAYERS) {
     throw new Error(`Lig formatında en fazla ${MAX_LEAGUE_PLAYERS} oyuncu olabilir (herkes herkesle oynar).`)
   }
+  if (!isPlayerCount(format, maxPlayers)) throw new Error(playerRuleText(format))
+  const prizes = cleanPrizes(
+    prizePlaces(format, maxPlayers).map((_, i) => int(form, `prize${i}`, 'Sıralama ödülü', 0, MAX_PRIZE_KC)),
+    format,
+    maxPlayers,
+  )
   return {
     format,
     game,
@@ -115,7 +122,7 @@ function readTournament(form: FormData): TournamentInput {
     description: String(form.get('description') ?? '').trim().slice(0, 400),
     rules: String(form.get('rules') ?? '').trim().slice(0, 2000),
     entryFee: int(form, 'entryFee', 'Katılım ücreti', 0, 100000),
-    prizePool: int(form, 'prizePool', 'Ödül havuzu', 0, 10000000),
+    prizes,
     prizeNote: String(form.get('prizeNote') ?? '').trim().slice(0, 120),
     maxPlayers,
     startsAt,
@@ -130,7 +137,7 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
     if (id) await updateTournament(id, input)
     else await createTournament(input)
     refresh()
-    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · ödül ${input.prizePool} KC · ${input.maxPlayers} kişi`)
+    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · sıralama ödülleri ${input.prizes.length ? input.prizes.join(' / ') : 'yok'} KC · ${input.maxPlayers} kişi`)
     return { ok: true, message: id ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')

@@ -7,8 +7,12 @@ import { useRef, useState, useTransition } from 'react'
 import { useUrlTab } from '@/components/panel/use-url-tab'
 import { CatalogCalendar, type CalendarTournament } from '@/components/panel/catalog-calendar'
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
-import { resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
-import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { loadPredictionPicks, resetCatalog, saveCatalogList, saveCategoryOrder } from '@/app/panel/catalog-actions'
+import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, predictionPayout, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { EXACT_POINTS, EXACT_REWARD, OUTCOME_POINTS, OUTCOME_REWARD } from '@/lib/community-limits'
+import type { LeagueMatch } from '@/lib/community'
+import { LeagueAdmin } from '@/components/panel/community'
+import { PickList } from '@/components/panel/pick-list'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
 import type { HiddenMap, HiddenScope } from '@/lib/hidden-shared'
@@ -406,6 +410,15 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                       <FieldInput key={f.key} field={f} item={item} set={(v) => update(i, v)} sponsors={sponsors} library={library} />
                     ))}
                   </div>
+                  {kind === 'predictions' && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Tahmin başına ödenen: <span className="font-bold text-foreground">{`${predictionPayout(Number(item.reward))} KC`}</span>
+                        {`, tahmin yapıldığı an (günde ${PREDICTION_PAYOUT.perDay} tahmine kadar). Bu tahmin türünde sonuç girilmez ve doğru bilene ayrıca ödül verilmez; sonuçlu, puanlı tahmin için Skor tahmin ligini kullan.`}
+                      </p>
+                      <PickList cacheKey={`prediction-picks-${id}`} load={() => loadPredictionPicks(id)} pickLabel="Seçtiği" />
+                    </div>
+                  )}
                   <button type="button" onClick={() => remove(i)} className="inline-flex items-center gap-1.5 self-start rounded-lg px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
                     <Trash2 className="size-3.5" aria-hidden />
                     Sil
@@ -437,9 +450,10 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
   )
 }
 
-type Tab = Kind | 'calendar'
+/** `league` is the score league: it lives under the Tahminler tab, next to the option predictions. */
+type Tab = Kind | 'calendar' | 'league'
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: Exclude<Tab, 'league'>; label: string }[] = [
   { id: 'events', label: 'Etkinlik & bilet' },
   { id: 'predictions', label: 'Tahminler' },
   { id: 'campaigns', label: 'Kampanyalar' },
@@ -447,22 +461,39 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'calendar', label: 'Takvim' },
 ]
 
+const PREDICTION_KINDS = [
+  {
+    id: 'predictions',
+    label: 'Seçenekli tahminler',
+    about: `Üye bir seçeneğe oy verir (1, X, 2 gibi). Tahmini yaptığı an katılım ödülünü alır; sonuç girilmez, puan yazılmaz.`,
+  },
+  {
+    id: 'league',
+    label: 'Skor tahmin ligi',
+    about: `Üye maçın skorunu yazar. Sonuç girilince tam skor ${EXACT_POINTS} puan + ${EXACT_REWARD} KC, doğru sonuç ${OUTCOME_POINTS} puan + ${OUTCOME_REWARD} KC kazandırır; puanlar /tahminler sayfasındaki sıralamaya yazılır.`,
+  },
+] as const
+
 export function CatalogEditor({
   catalog,
   sponsors,
   library,
   hidden = {},
   tournaments = [],
+  league = null,
 }: {
   catalog: Omit<Catalog, 'rewards'>
   sponsors: Option[]
   library: string[]
   hidden?: HiddenMap
   tournaments?: CalendarTournament[]
+  /** Score-league matches, when this account may manage them here. */
+  league?: LeagueMatch[] | null
 }) {
-  const [tab, setTab] = useUrlTab<Tab>(['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
+  const [tab, setTab] = useUrlTab<Tab>(league ? ['events', 'predictions', 'league', 'campaigns', 'bonuses', 'calendar'] : ['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
   const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
   const [focus, setFocus] = useState<{ kind: Kind; id: string } | null>(null)
+  const top = tab === 'league' ? 'predictions' : tab
   return (
     <div className="flex flex-col gap-4">
       <div role="tablist" aria-label="Katalog bölümleri" className="flex flex-wrap gap-2">
@@ -471,15 +502,35 @@ export function CatalogEditor({
             key={t.id}
             type="button"
             role="tab"
-            aria-selected={tab === t.id}
+            aria-selected={top === t.id}
             onClick={() => setTab(t.id)}
-            className={cn('rounded-full border px-4 py-2 text-sm font-medium transition-colors', tab === t.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary')}
+            className={cn('rounded-full border px-4 py-2 text-sm font-medium transition-colors', top === t.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary')}
           >
             {t.label}
           </button>
         ))}
       </div>
-      {tab === 'calendar' ? (
+      {top === 'predictions' && league && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
+          <div role="group" aria-label="Tahmin türü" className="flex w-fit flex-wrap gap-1 rounded-lg border border-border bg-background p-1">
+            {PREDICTION_KINDS.map((k) => (
+              <button
+                key={k.id}
+                type="button"
+                aria-pressed={tab === k.id}
+                onClick={() => setTab(k.id)}
+                className={cn('h-9 rounded-md px-3 text-xs font-bold', tab === k.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+              >
+                {k.id === 'league' ? `${k.label} (${league.filter((m) => !m.settled).length})` : `${k.label} (${catalog.predictions.length})`}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">{PREDICTION_KINDS.find((k) => k.id === tab)?.about}</p>
+        </div>
+      )}
+      {tab === 'league' ? (
+        league && <LeagueAdmin matches={league} />
+      ) : tab === 'calendar' ? (
         <CatalogCalendar
           catalog={catalog}
           tournaments={tournaments}
