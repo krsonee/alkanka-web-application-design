@@ -10,6 +10,8 @@ export type SponsorSummary = {
   slug: string
   active: boolean
   links: { entry: boolean; site: boolean }
+  /** `ends` is YYYY-MM-DD or empty; `daysLeft` is null without an end date; `fee` is the monthly TL fee, 0 when not entered. */
+  deal: { ends: string; daysLeft: number | null; fee: number }
   clicks: {
     week: number
     month: number

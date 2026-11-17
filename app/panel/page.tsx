@@ -96,6 +96,9 @@ import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, ge
 import { listSites } from '@/lib/sites'
 import { listProducts, listRequests } from '@/lib/market'
 import { SitesManager } from '@/components/panel/sites-manager'
+import { SponsorReminders } from '@/components/panel/sponsor-reminders'
+import { sponsorReminders, type SponsorReminder } from '@/lib/sponsor-reminders'
+import { istanbulToday } from '@/lib/sites-shared'
 import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
@@ -710,7 +713,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       ])
       return <TourSettingsEditor settings={settings} stats={stats} />
     }),
-    section(ctx, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
+    section(ctx, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} today={istanbulToday()} />),
     section(ctx, 'growth', 'Büyüme', async () => {
       const [referral, ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
         getReferralSettings(),
@@ -754,11 +757,12 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       )
     }),
     section(ctx, 'marketing', 'Pazarlama', async () => {
-      const [tracking, campaigns, earnings, mSites, adStats] = await Promise.all([
+      const [tracking, campaigns, earnings, mSites, earningReminders, adStats] = await Promise.all([
         getTracking(),
         listCampaigns().catch(miss([])),
         listEarnings().catch(miss([])),
         listSites().catch(miss([])),
+        sponsorReminders({ deals: false, earnings: true }).catch(miss<SponsorReminder[]>([])),
         tabHome('ads', can) === 'marketing' ? readPromoTotals('ad').catch(miss<Awaited<ReturnType<typeof readPromoTotals>>>({})) : null,
       ])
       const opts = mSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))
@@ -770,7 +774,16 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
             tabs={[
               { id: 'campaigns', label: 'Kampanya linkleri', content: <CampaignsManager campaigns={campaigns} sites={opts} siteUrl={SITE_URL} /> },
               ...(adStats ? [adsTab(adStats)] : []),
-              { id: 'earnings', label: 'Affiliate hakediş', content: <EarningsManager earnings={earnings} sites={opts} /> },
+              {
+                id: 'earnings',
+                label: 'Affiliate hakediş',
+                content: (
+                  <div className="flex flex-col gap-5">
+                    <SponsorReminders items={earningReminders} title="Hakediş hatırlatmaları" linked={false} />
+                    <EarningsManager earnings={earnings} sites={opts} />
+                  </div>
+                ),
+              },
               { id: 'tracking', label: 'Ölçüm etiketleri', content: <TrackingEditor settings={tracking} /> },
             ]}
           />
@@ -940,8 +953,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       : null
 
   const onDash = active === 'dashboard'
-  const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
+  const [detail, dashReminders, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
     pendingDetail(can).catch(miss<PendingDetail>(EMPTY_PENDING)),
+    onDash ? sponsorReminders({ deals: can('sponsors'), earnings: can('marketing') }).catch(miss<SponsorReminder[]>([])) : [],
     onDash && can('users') ? memberCounts().catch(miss(null)) : null,
     onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch(miss(null)) : null,
@@ -959,6 +973,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const dashboard = onDash ? (
     <div className="flex flex-col gap-6">
       {sysStatus ? <SystemStatus items={sysStatus} /> : null}
+      <SponsorReminders items={dashReminders} />
       <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} />
     </div>
   ) : null

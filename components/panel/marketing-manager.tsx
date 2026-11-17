@@ -584,9 +584,10 @@ function EarningRow({ e, sites }: { e: EarningView; sites: MarketingSite[] }) {
         </div>
         <span className="text-lg font-bold tabular-nums text-foreground">{money(e.amount, e.currency)}</span>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Stat title="Model" value={EARNING_MODELS.find((m) => m.id === e.model)?.label.split(' ')[0] ?? e.model} />
         <Stat title="FTD" value={fmt(e.ftd)} />
+        <Stat title="Kayıt başı" value={e.ftd ? money(e.amount / e.ftd, e.currency) : '—'} hint={e.ftd ? 'tutar ÷ FTD' : 'FTD girilmedi'} />
         <Stat title="Bizden giden tık." value={fmt(e.clicks)} hint="o ay, /git üzerinden" />
         <Stat title="Tık başı kazanç" value={epc ? money(epc, e.currency) : '—'} />
       </div>

@@ -86,6 +86,7 @@ export async function getSponsorSummary(id: number, opts: { earnings: boolean })
     slug: site.slug,
     active: site.active,
     links: { entry: Boolean(site.entryUrl.trim()), site: Boolean(site.url.trim()) },
+    deal: { ends: site.dealEnds, daysLeft: dealDaysLeft(site.dealEnds, istanbulToday()), fee: site.dealFee },
     clicks: {
       week: n(totals[0]?.week),
       month: n(totals[0]?.month),

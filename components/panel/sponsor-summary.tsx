@@ -51,7 +51,8 @@ const SECTION_LINK: Record<SummarySection, { href: string; label: string }> = {
 }
 
 export function SponsorSummaryPanel({ summary, sections, onClose }: { summary: SponsorSummary; sections: SummarySection[]; onClose: () => void }) {
-  const { clicks, reviews, complaints, accounts, content, earnings } = summary
+  const { clicks, reviews, complaints, accounts, content, earnings, deal } = summary
+  const lastFtd = earnings?.rows.find((e) => e.ftd > 0 && e.status !== 'rejected') ?? null
   const openComplaints = complaints.open + complaints.forwarded
   const noLink = !summary.links.entry && !summary.links.site
   return (
@@ -85,6 +86,18 @@ export function SponsorSummaryPanel({ summary, sections, onClose }: { summary: S
         <Tile label="Takipçi" value={num(summary.followers)} note="Adres değişince bildirim alan üye" />
         <Tile label="Bağlı hesap" value={num(accounts.approved)} note={`${num(accounts.pending)} onay bekliyor · ${num(accounts.rejected)} reddedildi`} />
         <Tile label="Kampanya" value={`${num(content.liveCampaigns)} yayında`} note={`Toplam ${num(content.campaigns)} kampanya · ${num(content.bonuses)} bonus`} />
+        <Tile
+          label="Anlaşma"
+          value={deal.daysLeft === null ? 'Süresiz' : deal.daysLeft < 0 ? 'Süresi bitti' : deal.daysLeft === 0 ? 'Bugün bitiyor' : `${num(deal.daysLeft)} gün kaldı`}
+          note={[deal.daysLeft === null ? 'Bitiş tarihi girilmedi' : `Bitiş ${deal.ends.split('-').reverse().join('.')}`, deal.fee ? `aylık ${money(deal.fee, 'TL')}` : 'aylık bedel girilmedi'].join(' · ')}
+        />
+        {earnings && deal.fee > 0 && (
+          <Tile
+            label="Kayıt başı maliyet"
+            value={lastFtd ? money(deal.fee / lastFtd.ftd, 'TL') : 'Hesaplanamadı'}
+            note={lastFtd ? `${lastFtd.period}: aylık bedel ÷ ${num(lastFtd.ftd)} FTD` : 'Hakedişte FTD girilmiş bir ay yok'}
+          />
+        )}
         {earnings && <Tile label="İlk yatırım (FTD)" value={num(earnings.ftd)} note="Hakedişe girilen aylardan" />}
         {earnings &&
           earnings.totals.map((t) => (
@@ -129,6 +142,7 @@ export function SponsorSummaryPanel({ summary, sections, onClose }: { summary: S
                   <th scope="col" className="px-3 py-2 font-semibold">Model</th>
                   <th scope="col" className="px-3 py-2 text-right font-semibold">FTD</th>
                   <th scope="col" className="px-3 py-2 text-right font-semibold">Tutar</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">Kayıt başı</th>
                   <th scope="col" className="px-3 py-2 font-semibold">Durum</th>
                 </tr>
               </thead>
@@ -139,6 +153,7 @@ export function SponsorSummaryPanel({ summary, sections, onClose }: { summary: S
                     <td className="px-3 py-2 text-muted-foreground">{labelOf(EARNING_MODELS, e.model)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-foreground">{num(e.ftd)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-foreground">{money(e.amount, e.currency)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{e.ftd ? money(e.amount / e.ftd, e.currency) : '—'}</td>
                     <td className="px-3 py-2 text-muted-foreground">{labelOf(EARNING_STATUSES, e.status)}</td>
                   </tr>
                 ))}

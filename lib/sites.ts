@@ -1,7 +1,7 @@
 import 'server-only'
 import { tierRank, type Sponsor, type SponsorTier } from '@/components/alkanka/data'
 import { pool, rows, sql } from '@/lib/db'
-import { SITE_BADGES, SLUG_LETTER_ERROR, publicSlug, slugHasLetter, slugify, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
+import { SITE_BADGES, SLUG_LETTER_ERROR, isCalendarDay, publicSlug, slugHasLetter, slugify, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
 export type { SiteInput, SponsorSite } from '@/lib/sites-shared'
 export { SITE_BADGES, slugify } from '@/lib/sites-shared'
@@ -33,6 +33,7 @@ export function ensureSites() {
       slug text NOT NULL DEFAULT '',
       created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE sites ADD COLUMN IF NOT EXISTS slug text`)
+    await rows(sql`ALTER TABLE sites ADD COLUMN IF NOT EXISTS deal_ends date, ADD COLUMN IF NOT EXISTS deal_fee numeric NOT NULL DEFAULT 0`)
     await rows(sql`CREATE INDEX IF NOT EXISTS sites_sort_idx ON sites (sort_order, id)`)
     const missing = await rows<{ id: number; name: string }>(sql`SELECT id, name FROM sites WHERE slug IS NULL OR btrim(slug) = '' ORDER BY id`)
     for (const row of missing) {
@@ -79,6 +80,8 @@ type SiteRow = {
   wager_text: string
   bonus_code: string
   slug: string | null
+  deal_ends: string | null
+  deal_fee: number | string | null
   created_at: string | Date
 }
 
@@ -105,6 +108,8 @@ function mapSite(row: SiteRow): SponsorSite {
     wagerText: row.wager_text,
     bonusCode: row.bonus_code,
     slug: String(row.slug ?? '').trim(),
+    dealEnds: row.deal_ends ?? '',
+    dealFee: Number(row.deal_fee) || 0,
     createdAt: new Date(row.created_at).toISOString(),
   }
 }
@@ -223,9 +228,21 @@ export async function sponsorTarget(key: string): Promise<string | null> {
 export async function listSites(): Promise<SponsorSite[]> {
   await ensureSites()
   const found = await rows<SiteRow>(sql`SELECT id, name, logo_url, bonus_text, url, entry_url, domain, badge, featured, active,
-    sort_order, clicks, tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, slug, created_at
+    sort_order, clicks, tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, slug,
+    to_char(deal_ends, 'YYYY-MM-DD') AS deal_ends, deal_fee, created_at
     FROM sites ORDER BY sort_order, id`)
   return found.map(mapSite)
+}
+
+/** Shows or hides several sponsors at once; returns the names that actually changed. */
+export async function setSitesActive(ids: number[], active: boolean) {
+  await ensureSites()
+  const list = [...new Set((Array.isArray(ids) ? ids : []).map(Number))]
+  if (!list.length || list.length > 200 || list.some((id) => !Number.isInteger(id) || id < 1)) {
+    throw new Error('Sponsor seçimi okunamadı. Sayfayı yenileyip tekrar dene.')
+  }
+  const changed = await pool.query(`UPDATE sites SET active = $2 WHERE id = ANY($1::int[]) AND active <> $2 RETURNING name`, [list, Boolean(active)])
+  return changed.rows.map((row) => String(row.name))
 }
 
 /** Writes 1, 2, 3… in the given order. Sponsors left out of the list keep the number they had. */
@@ -273,7 +290,13 @@ function clean(input: SiteInput): Omit<SiteInput, 'id' | 'slug'> {
   if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 10000) throw new Error('Sıra 0 ile 10000 arasında tam sayı olmalı.')
   const rating = Number(input.rating)
   if (!Number.isFinite(rating) || rating < 0 || rating > 5) throw new Error('Puan 0 ile 5 arasında olmalı.')
+  const dealEnds = clip(input.dealEnds, 10)
+  if (dealEnds && !isCalendarDay(dealEnds)) throw new Error('Anlaşma bitiş tarihi geçerli bir gün olmalı.')
+  const dealFee = Number(input.dealFee ?? 0)
+  if (!Number.isFinite(dealFee) || dealFee < 0 || dealFee > 1e9) throw new Error('Aylık anlaşma bedeli 0 ile 1.000.000.000 arasında olmalı.')
   return {
+    dealEnds,
+    dealFee: Math.round(dealFee * 100) / 100,
     name,
     logoUrl: logoOf(clip(input.logoUrl, 500)),
     bonusText: clip(input.bonusText, 200),
@@ -321,7 +344,9 @@ export async function saveSite(input: SiteInput): Promise<number> {
       bonus_type = ${site.bonusType},
       wager_text = ${site.wagerText},
       bonus_code = ${site.bonusCode},
-      slug = ${slug}
+      slug = ${slug},
+      deal_ends = ${site.dealEnds || null}::date,
+      deal_fee = ${site.dealFee}
       WHERE id = ${id}
       RETURNING id`)
     if (!updated.length) throw new Error('Sponsor bulunamadı.')
@@ -329,11 +354,11 @@ export async function saveSite(input: SiteInput): Promise<number> {
   }
   const inserted = await rows<{ id: number }>(sql`INSERT INTO sites (
     name, logo_url, bonus_text, url, entry_url, domain, badge, featured, active, sort_order,
-    tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, slug)
+    tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, slug, deal_ends, deal_fee)
     VALUES (
       ${site.name}, ${site.logoUrl}, ${site.bonusText}, ${site.url}, ${site.entryUrl}, ${site.domain}, ${site.badge},
       ${site.featured}, ${site.active}, ${site.sortOrder}, ${site.tagline}, ${site.perks}, ${site.rating}, ${site.payout},
-      ${site.bonusType}, ${site.wagerText}, ${site.bonusCode}, ${slug})
+      ${site.bonusType}, ${site.wagerText}, ${site.bonusCode}, ${slug}, ${site.dealEnds || null}::date, ${site.dealFee})
     RETURNING id`)
   return Number(inserted[0]?.id)
 }
