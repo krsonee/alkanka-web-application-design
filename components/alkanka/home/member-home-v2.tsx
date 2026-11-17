@@ -50,6 +50,8 @@ export function MemberHomeV2({
         .sort((a, b) => a.price - b.price)
         .slice(-3)
   const showSide = config.showWallet || config.showLeaderboard
+  // This strip does not know which free plays are ready, so a line that needs that count is left out instead of printing "{hazir}".
+  const dailySub = config.dailySub.includes('{hazir}') ? '' : config.dailySub.replace('{toplam}', String(config.daily.length))
 
   return (
     <div className={showSide ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]' : 'flex flex-col gap-6'}>
@@ -89,7 +91,7 @@ export function MemberHomeV2({
           <section aria-labelledby="daily-h" className="flex flex-col gap-3">
             <div className="flex flex-col gap-0.5">
               <h2 id="daily-h" className="text-lg font-bold text-foreground">{config.dailyTitle}</h2>
-              {config.dailySub && <p className="text-sm text-muted-foreground">{config.dailySub}</p>}
+              {dailySub && <p className="text-sm text-muted-foreground">{dailySub}</p>}
             </div>
             <div className="grid grid-cols-3 gap-3">
               {config.daily.map((t) => (
