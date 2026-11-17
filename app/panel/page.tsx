@@ -895,7 +895,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         getCatalog({ includeHidden: true }),
         getHidden(),
         siteOptions(),
-        listTournaments().catch(miss([])),
+        ctx.session.isOwner || ctx.session.permissions.includes('tournaments') ? listTournaments().catch(miss([])) : [],
       ])
       return (
         <CatalogEditor

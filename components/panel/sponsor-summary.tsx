@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { X } from 'lucide-react'
 import { EARNING_MODELS, EARNING_STATUSES } from '@/lib/marketing-shared'
-import type { SponsorSummary } from '@/lib/sponsor-summary-shared'
+import type { SponsorSummary, SummarySection } from '@/lib/sponsor-summary-shared'
 
 const num = (v: number) => v.toLocaleString('tr-TR')
 const money = (v: number, currency: string) => `${v.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${currency}`
@@ -43,7 +43,14 @@ function ClickChart({ daily }: { daily: SponsorSummary['clicks']['daily'] }) {
   )
 }
 
-export function SponsorSummaryPanel({ summary, onClose }: { summary: SponsorSummary; onClose: () => void }) {
+const SECTION_LINK: Record<SummarySection, { href: string; label: string }> = {
+  community: { href: '/panel?b=community', label: 'Yorum ve şikayetler' },
+  growth: { href: '/panel?b=growth', label: 'Tıklama ve bağlı hesaplar' },
+  marketing: { href: '/panel?b=marketing', label: 'Hakediş' },
+  catalog: { href: '/panel?b=catalog&s=campaigns', label: 'Kampanya ve bonuslar' },
+}
+
+export function SponsorSummaryPanel({ summary, sections, onClose }: { summary: SponsorSummary; sections: SummarySection[]; onClose: () => void }) {
   const { clicks, reviews, complaints, accounts, content, earnings } = summary
   const openComplaints = complaints.open + complaints.forwarded
   const noLink = !summary.links.entry && !summary.links.site
@@ -141,12 +148,15 @@ export function SponsorSummaryPanel({ summary, onClose }: { summary: SponsorSumm
         )}
       </div>
 
-      <nav aria-label={`${summary.name} ile ilgili bölümler`} className="flex flex-wrap gap-2 text-xs font-semibold">
-        <Link href="/panel?b=community" className="rounded-lg border border-border px-3 py-2 text-foreground hover:bg-secondary">Yorum ve şikayetler</Link>
-        <Link href="/panel?b=growth" className="rounded-lg border border-border px-3 py-2 text-foreground hover:bg-secondary">Tıklama ve bağlı hesaplar</Link>
-        <Link href="/panel?b=marketing" className="rounded-lg border border-border px-3 py-2 text-foreground hover:bg-secondary">Hakediş</Link>
-        <Link href="/panel?b=catalog&s=campaigns" className="rounded-lg border border-border px-3 py-2 text-foreground hover:bg-secondary">Kampanya ve bonuslar</Link>
-      </nav>
+      {sections.length > 0 && (
+        <nav aria-label={`${summary.name} ile ilgili bölümler`} className="flex flex-wrap gap-2 text-xs font-semibold">
+          {sections.map((id) => (
+            <Link key={id} href={SECTION_LINK[id].href} className="rounded-lg border border-border px-3 py-2 text-foreground hover:bg-secondary">
+              {SECTION_LINK[id].label}
+            </Link>
+          ))}
+        </nav>
+      )}
     </section>
   )
 }

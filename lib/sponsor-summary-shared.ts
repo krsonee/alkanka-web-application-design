@@ -1,5 +1,9 @@
 export type SponsorEarningRow = { period: string; model: string; ftd: number; amount: number; currency: string; status: string }
 
+/** Panel sections the summary links to; a link is shown only to an account that may open that section. */
+export const SUMMARY_SECTIONS = ['community', 'growth', 'marketing', 'catalog'] as const
+export type SummarySection = (typeof SUMMARY_SECTIONS)[number]
+
 export type SponsorSummary = {
   id: number
   name: string

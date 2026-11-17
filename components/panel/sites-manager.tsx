@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { reorderSitesAction, saveSiteAction, sponsorSummaryAction } from '@/app/panel/site-actions'
 import { SortableList, useOrder } from '@/components/panel/sortable-list'
 import { SponsorSummaryPanel } from '@/components/panel/sponsor-summary'
-import type { SponsorSummary } from '@/lib/sponsor-summary-shared'
+import type { SponsorSummary, SummarySection } from '@/lib/sponsor-summary-shared'
 import { SITE_BADGES, SLUG_LETTER_ERROR, publicSlug, slugHasLetter, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
@@ -49,6 +49,7 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
   const order = useOrder(sites, (site) => String(site.id))
   const [sorting, startSort] = useTransition()
   const [summary, setSummary] = useState<SponsorSummary | null>(null)
+  const [sections, setSections] = useState<SummarySection[]>([])
   const [loadingId, setLoadingId] = useState<number | null>(null)
   const [, startSummary] = useTransition()
 
@@ -70,8 +71,10 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
     startSummary(async () => {
       const res = await sponsorSummaryAction(id)
       setLoadingId(null)
-      if (res.ok) setSummary(res.summary)
-      else setMsg({ ok: false, text: res.error })
+      if (res.ok) {
+        setSections(res.sections)
+        setSummary(res.summary)
+      } else setMsg({ ok: false, text: res.error })
     })
   }
 
@@ -150,7 +153,7 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
                   <Pencil className="size-4" aria-hidden="true" />
                 </button>
               </div>
-              {summary?.id === site.id && <SponsorSummaryPanel summary={summary} onClose={() => setSummary(null)} />}
+              {summary?.id === site.id && <SponsorSummaryPanel summary={summary} sections={sections} onClose={() => setSummary(null)} />}
             </>
           )}
         </SortableList>

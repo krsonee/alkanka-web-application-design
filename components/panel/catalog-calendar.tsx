@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 export type CalendarTournament = { id: number; title: string; startsAt: string; status: TournamentStatus }
 type ListKind = 'predictions' | 'campaigns'
 type EntryType = 'start' | 'end' | 'match' | 'tournament'
-type Entry = { key: string; day: string; time: string; at: number; type: EntryType; label: string; note?: string; open?: { kind: ListKind; id: string } }
+type Entry = { key: string; day: string; time: string; at: number; type: EntryType; label: string; note?: string; open?: { kind: ListKind; id: string }; href?: string }
 
 const TR_OFFSET = 3 * 3_600_000
 const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
@@ -47,7 +47,13 @@ function collect(catalog: Pick<Catalog, 'predictions' | 'campaigns'>, tournament
     push(p.kickoffAt, { key: `p-${p.id}`, type: 'match', label: `${p.home} - ${p.away}`, note: hidden.prediction?.includes(p.id) ? 'gizli' : undefined, open: { kind: 'predictions', id: p.id } })
   }
   for (const t of tournaments) {
-    push(t.startsAt, { key: `t-${t.id}`, type: 'tournament', label: t.title, note: t.status === 'kayit' ? undefined : STATUS_LABEL[t.status].toLocaleLowerCase('tr') })
+    push(t.startsAt, {
+      key: `t-${t.id}`,
+      type: 'tournament',
+      label: t.title,
+      note: t.status === 'kayit' ? undefined : STATUS_LABEL[t.status].toLocaleLowerCase('tr'),
+      href: `/panel?b=tournaments&f=tournament-${t.id}`,
+    })
   }
   return out.sort((a, b) => a.at - b.at)
 }
@@ -67,7 +73,7 @@ function Chip({ entry, onOpen, wide }: { entry: Entry; onOpen: (kind: ListKind, 
   const title = `${PREFIX[entry.type]}: ${entry.label} · ${entry.time}${entry.note ? ` · ${entry.note}` : ''}`
   if (!entry.open) {
     return (
-      <Link href="/panel?b=tournaments" title={title} className={cls}>
+      <Link href={entry.href ?? '/panel?b=tournaments'} title={title} className={cls}>
         {body}
       </Link>
     )

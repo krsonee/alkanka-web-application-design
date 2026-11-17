@@ -382,6 +382,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                       if (!el || arrived.current) return
                       arrived.current = true
                       el.scrollIntoView({ block: 'center' })
+                      el.querySelector<HTMLButtonElement>('button[aria-expanded]')?.focus({ preventScroll: true })
                     }
                   : undefined
               }
