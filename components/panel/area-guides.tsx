@@ -30,7 +30,9 @@ const TASK_STEPS: GuideStep[] = [
       <ol className={ol}>
         <li><b>Tekrar</b>: Tek seferlik bir kez yapılır. Günlük her gece, haftalık her pazartesi, aylık her ayın 1’inde (Türkiye saati) sıfırlanır.</li>
         <li><b>Başlangıç</b> ve <b>Bitiş</b> boşsa görev hemen başlar ve süresiz kalır. Tarih girersen sadece o aralıkta görünür.</li>
-        <li>Görevler silinmez, geçmiş puanlar bozulmasın diye. Yayından kaldırmak için <b>Aktif</b> kutusunu kapat ya da satırdaki <b>Gizle</b> butonunu kullan.</li>
+        <li>Görevler silinmez, geçmiş puanlar bozulmasın diye. Kısa süreliğine yayından kaldırmak için <b>Aktif</b> kutusunu kapat ya da satırdaki göz düğmesine bas.</li>
+        <li>Artık kullanmayacağın görevi <b>Arşivle</b>: listeden çıkar, sayfanın altındaki <b>Arşiv</b> kutusuna gider ve sitede görünmez. Üyelerin daha önce kazandığı puanlara dokunulmaz. <b>Arşivden çıkar</b> dersen görev listeye gizli olarak döner; yayına almak için göz düğmesine basarsın.</li>
+        <li>Benzer bir görev açacaksan satırdaki <b>Kopyala</b> düğmesine bas: form aynı ayarlarla dolar, adın sonuna “(kopya)” eklenir. Adını ve ayarlarını düzeltip kaydet. Kopya gizli kaydedilir, hazır olunca yayına alırsın.</li>
         <li>Görevi tamamlayan üyenin adı sitedeki kazananlar şeridinde görünür.</li>
       </ol>
     ),
@@ -80,6 +82,7 @@ const MARKET_STEPS: GuideStep[] = [
       <ol className={ol}>
         <li><b>Ürünler</b> sekmesinde <b>Yeni ürün / sponsor bonusu</b> butonuna bas. <b>Tür</b> sponsor bonusuysa bir <b>Sponsor site</b> seç; ürün o sitenin logosuyla görünür.</li>
         <li><b>Fiyat (KC)</b> üyenin ödeyeceği Kanka Coin’dir. <b>Toplam stok</b> başta kaç adet olduğunu, <b>Kalan stok</b> şu an kaç adet kaldığını gösterir. Kalan 0 olunca ürün “tükendi” olur.</li>
+        <li>Yayındaki bir ürünün stoku azalınca (toplamın beşte biri, en az 3 adet) ya da bitince bu ekranın üstünde ve Genel bakışta uyarı çıkar; üründe “Stok azaldı” ya da “Stok bitti” etiketi görünür. Stok eklemek için ürünün kalemine bas, <b>Kalan stok</b>’u artır. Gizli ürün için uyarı çıkmaz.</li>
         <li><b>Kişi başı limit</b> bir üyenin aynı üründen kaç kez alabileceğidir.</li>
         <li><b>Görsel URL</b> alanına link yapıştır ya da yükle; boşsa varsayılan market görseli çıkar.</li>
       </ol>
@@ -269,6 +272,7 @@ const SEO_STEPS: GuideStep[] = [
         <li><b>İçerik</b>: <b>Şablonu ekle</b> ile hazır iskeleti çağır, sonra araç çubuğunu kullan: ara başlık (H2/H3), kalın, link, madde, alıntı ve <b>SSS</b>. SSS bloğu <span className={code}>S: soru</span> ve <span className={code}>C: cevap</span> satırlarından oluşur.</li>
         <li><b>Kapak görseli</b> ekle. Paylaşımda ve Google Görseller’de kullanılır.</li>
         <li><b>Önizleme</b> sekmesinden sitede nasıl görüneceğine bak. Sağdaki kontrol listesinin çoğu yeşil olunca kaydet.</li>
+        <li>Yazıyı ileri bir güne bırakacaksan <b>Yayın zamanı</b> alanına tarih ve saat gir (Türkiye saati). <b>Yayında</b> işaretli olsa bile o saate kadar yazı sitede, rehber listesinde ve site haritasında görünmez; panelde “Zamanlandı” diye durur. Saat gelince kendiliğinden açılır, görünmesi 10-20 dakika sürebilir. Alanı boş bırakırsan yazı kaydedince yayına girer.</li>
         <li>Yayınladıktan sonra adresi Search Console’da <b>Dizine eklenmesini iste</b> ile gönder.</li>
       </ol>
     ),
