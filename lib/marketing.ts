@@ -16,7 +16,7 @@ import {
 const RESERVED_SRC = new Set(['direkt', 'eski-uye', 'alkanka'])
 
 let ready: Promise<unknown> | null = null
-function ensureMarketing() {
+export function ensureMarketing() {
   ready ??= (async () => {
     await ensureGrowth()
     await rows(sql`CREATE TABLE IF NOT EXISTS mkt_settings (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())`)

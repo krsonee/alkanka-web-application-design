@@ -3,7 +3,7 @@ import webpush from 'web-push'
 import { rows, sql } from '@/lib/db'
 
 export type PushPayload = { title: string; body: string; url: string }
-export type PushLog = { id: number; title: string; body: string; url: string; sent: number; failed: number; createdAt: string }
+export type PushLog = { id: number; title: string; body: string; url: string; sent: number; failed: number; createdAt: string; sentBy: string }
 
 let ready: Promise<void> | null = null
 function ensureTables() {
@@ -16,6 +16,7 @@ function ensureTables() {
     await rows(sql`CREATE TABLE IF NOT EXISTS push_log (
       id serial PRIMARY KEY, title text NOT NULL, body text NOT NULL, url text NOT NULL,
       sent int NOT NULL DEFAULT 0, failed int NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE push_log ADD COLUMN IF NOT EXISTS sent_by text NOT NULL DEFAULT ''`)
   })().catch((error) => {
     ready = null
     throw error
@@ -61,6 +62,7 @@ export async function pushStats() {
         sent: Number(l.sent),
         failed: Number(l.failed),
         createdAt: new Date(String(l.created_at)).toISOString(),
+        sentBy: String(l.sent_by ?? ''),
       }),
     ),
   }
@@ -108,7 +110,24 @@ export async function sendToUsers(userIds: string[], payload: PushPayload, topic
   return { sent, failed }
 }
 
-export async function sendToAll(payload: PushPayload) {
+/** Sends to one registered device, for trying a notification out before it goes to everyone. Not logged in push_log. */
+export async function sendToEndpoint(endpoint: string, payload: PushPayload): Promise<'sent' | 'missing' | 'failed'> {
+  const vapid = await getVapid()
+  const [s] = await rows<{ endpoint: string; p256dh: string; auth: string }>(sql`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE endpoint = ${endpoint}`)
+  if (!s) return 'missing'
+  webpush.setVapidDetails('mailto:destek@alkanka.com', vapid.publicKey, vapid.privateKey)
+  try {
+    await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 60 * 60 })
+    return 'sent'
+  } catch (error) {
+    const code = (error as { statusCode?: number })?.statusCode
+    if (code !== 404 && code !== 410) return 'failed'
+    await rows(sql`DELETE FROM push_subscriptions WHERE endpoint = ${s.endpoint}`)
+    return 'missing'
+  }
+}
+
+export async function sendToAll(payload: PushPayload, sentBy = '') {
   const vapid = await getVapid()
   webpush.setVapidDetails('mailto:destek@alkanka.com', vapid.publicKey, vapid.privateKey)
   const subs = await rows<{ endpoint: string; p256dh: string; auth: string }>(sql`SELECT endpoint, p256dh, auth FROM push_subscriptions`)
@@ -131,6 +150,6 @@ export async function sendToAll(payload: PushPayload) {
   }
 
   for (const endpoint of expired) await rows(sql`DELETE FROM push_subscriptions WHERE endpoint = ${endpoint}`)
-  await rows(sql`INSERT INTO push_log (title, body, url, sent, failed) VALUES (${payload.title}, ${payload.body}, ${payload.url}, ${sent}, ${failed})`)
+  await rows(sql`INSERT INTO push_log (title, body, url, sent, failed, sent_by) VALUES (${payload.title}, ${payload.body}, ${payload.url}, ${sent}, ${failed}, ${sentBy})`)
   return { sent, failed, removed: expired.length }
 }

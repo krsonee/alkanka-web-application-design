@@ -1,6 +1,6 @@
 import 'server-only'
 import { tierRank, type Sponsor, type SponsorTier } from '@/components/alkanka/data'
-import { rows, sql } from '@/lib/db'
+import { pool, rows, sql } from '@/lib/db'
 import { SITE_BADGES, SLUG_LETTER_ERROR, publicSlug, slugHasLetter, slugify, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
 export type { SiteInput, SponsorSite } from '@/lib/sites-shared'
@@ -226,6 +226,19 @@ export async function listSites(): Promise<SponsorSite[]> {
     sort_order, clicks, tagline, perks, rating, payout, bonus_type, wager_text, bonus_code, slug, created_at
     FROM sites ORDER BY sort_order, id`)
   return found.map(mapSite)
+}
+
+/** Writes 1, 2, 3… in the given order. Sponsors left out of the list keep the number they had. */
+export async function reorderSites(ids: number[]) {
+  await ensureSites()
+  const list = Array.isArray(ids) ? ids.map(Number) : []
+  if (!list.length || list.length > 500 || list.some((id) => !Number.isInteger(id) || id < 1) || new Set(list).size !== list.length) {
+    throw new Error('Sıra kaydedilemedi. Sayfayı yenileyip tekrar dene.')
+  }
+  await pool.query(
+    `UPDATE sites s SET sort_order = v.ord::int FROM unnest($1::int[]) WITH ORDINALITY AS v(id, ord) WHERE s.id = v.id`,
+    [list],
+  )
 }
 
 function clip(value: unknown, max: number) {

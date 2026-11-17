@@ -51,4 +51,22 @@ export type Tournament = {
   currentRound: number | null
 }
 
+export const MAX_TOURNAMENT_TEMPLATES = 30
+
+/** A tournament's settings without its date, players or results. `startTime` is Istanbul time, HH:MM. */
+export type TournamentTemplate = {
+  id: number
+  name: string
+  game: ArenaGame
+  format: TournamentFormat
+  title: string
+  description: string
+  rules: string
+  entryFee: number
+  prizePool: number
+  prizeNote: string
+  maxPlayers: number
+  startTime: string
+}
+
 export const displayName = (t: Pick<Tournament, 'names'>, key: string | null) => (key ? (t.names[key] ?? key) : null)

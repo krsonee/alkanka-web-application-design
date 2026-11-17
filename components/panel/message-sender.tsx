@@ -3,10 +3,13 @@
 
 import { askConfirm, confirmed, notify } from '@/components/panel/confirm-dialog'
 import { useRef, useState, useTransition } from 'react'
-import { ImagePlus, Loader2, Mail, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react'
+import { BookmarkPlus, CalendarClock, ImagePlus, Loader2, Mail, Search, Send, Trash2, UserRound, Users, X } from 'lucide-react'
 import { EmojiPicker } from './emoji-picker'
-import { deleteInboxMessage, searchMembersForMessage, sendInboxMessage } from '@/app/panel/inbox-actions'
+import { OutboxList, ScheduleField, sendTimeFmt } from './outbox'
+import { deleteInboxMessage, deleteMessageTemplate, saveMessageTemplate, searchMembersForMessage, sendInboxMessage } from '@/app/panel/inbox-actions'
+import { scheduleMessage } from '@/app/panel/outbox-actions'
 import type { SentMessage } from '@/lib/inbox'
+import { cleanSendAt, type MessageTemplate, type OutboxItem } from '@/lib/outbox-shared'
 import { cn } from '@/lib/utils'
 
 type Member = { id: string; name: string; email: string }
@@ -14,8 +17,18 @@ type Member = { id: string; name: string; email: string }
 const input = 'rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
 const dateFmt = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
 
-export function MessageSender({ sent }: { sent: SentMessage[] }) {
+function readText(m: SentMessage) {
+  if (!m.toAll) return m.reads > 0 ? 'Okundu' : 'Okunmadı'
+  if (!m.audience) return `${m.reads} okundu`
+  const share = Math.min(100, Math.round((m.reads / m.audience) * 100))
+  return `%${share} okundu (${m.reads.toLocaleString('tr-TR')} / ${m.audience.toLocaleString('tr-TR')})`
+}
+
+export function MessageSender({ sent, outbox, templates }: { sent: SentMessage[]; outbox: OutboxItem[]; templates: MessageTemplate[] }) {
   const [mode, setMode] = useState<'all' | 'one'>('all')
+  const [scheduled, setScheduled] = useState(false)
+  const [at, setAt] = useState('')
+  const [savingTemplate, startTemplate] = useTransition()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Member[]>([])
   const [target, setTarget] = useState<Member | null>(null)
@@ -82,20 +95,48 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
   const send = () => {
     setStatus(null)
     if (mode === 'one' && !target) return setStatus({ ok: false, text: 'Önce bir üye seç.' })
-    if (mode === 'all') return confirmed('Bu mesaj TÜM üyelerin gelen kutusuna hemen gönderilsin mi?', deliver)
-    deliver()
+    if (scheduled) {
+      const when = cleanSendAt(at)
+      if (!when.ok) return setStatus({ ok: false, text: when.error })
+      const whose = mode === 'all' ? 'o an üye olan herkesin' : `${target!.name || target!.email} adlı üyenin`
+      return confirmed(`Bu mesaj ${sendTimeFmt.format(new Date(when.value))} (Türkiye saati) için zamanlansın mı? Zamanı gelince ${whose} gelen kutusuna düşer.`, () => deliver(true))
+    }
+    if (mode === 'all') return confirmed('Bu mesaj TÜM üyelerin gelen kutusuna hemen gönderilsin mi?', () => deliver(false))
+    deliver(false)
   }
 
-  const deliver = () => {
+  const deliver = (later: boolean) => {
     startSend(async () => {
-      const r = await sendInboxMessage({ userId: mode === 'one' ? target!.id : null, title, body, url, imageUrl })
+      const message = { userId: mode === 'one' ? target!.id : null, title, body, url, imageUrl }
+      const r = later ? await scheduleMessage({ ...message, at }) : await sendInboxMessage(message)
       if (r.ok) {
         setStatus({ ok: true, text: r.message })
         setTitle('')
         setBody('')
         setUrl('')
         setImageUrl('')
+        setScheduled(false)
+        setAt('')
       } else setStatus({ ok: false, text: r.error })
+    })
+  }
+
+  const saveAsTemplate = () => {
+    setStatus(null)
+    if (!title.trim() || !body.trim()) return setStatus({ ok: false, text: 'Şablon için başlık ve mesaj yaz.' })
+    startTemplate(async () => {
+      const r = await saveMessageTemplate({ title, body, url })
+      setStatus({ ok: r.ok, text: r.ok ? r.message : r.error })
+    })
+  }
+
+  const removeTemplate = (t: MessageTemplate) => {
+    void askConfirm(`"${t.title}" şablonu silinsin mi?`).then((ok) => {
+      if (!ok) return
+      startTemplate(async () => {
+        const r = await deleteMessageTemplate(t.id)
+        notify(r.ok, r.ok ? r.message : r.error)
+      })
     })
   }
 
@@ -203,6 +244,41 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
         )}
 
         <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Hazır şablonlar</span>
+          {templates.length ? (
+            <ul className="flex flex-wrap gap-2">
+              {templates.map((t) => (
+                <li key={t.id} className="flex items-center rounded-full border border-border">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTitle(t.title)
+                      setBody(t.body)
+                      setUrl(t.url)
+                    }}
+                    className="rounded-l-full py-1.5 pr-1.5 pl-3 text-xs font-semibold text-foreground hover:bg-secondary max-sm:min-h-9"
+                  >
+                    {t.title}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`${t.title} şablonunu sil`}
+                    onClick={() => removeTemplate(t)}
+                    className="flex size-8 items-center justify-center rounded-r-full text-muted-foreground hover:bg-secondary hover:text-destructive max-sm:size-9"
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Henüz şablon yok. Sık yazdığın bir mesajı doldurup aşağıdaki &quot;Şablon olarak kaydet&quot; ile sakla; sonra tek tıkla forma gelir.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="msg-title" className="text-xs font-semibold text-muted-foreground">Başlık (en fazla 80)</label>
             <EmojiPicker label="Başlığa emoji ekle" onPick={(e) => insertAt(titleRef.current, title, setTitle, e, 80)} />
@@ -260,23 +336,43 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="/bonuslar" className={input} />
         </label>
 
+        <ScheduleField what="Mesaj" on={scheduled} at={at} onToggle={setScheduled} onAt={setAt} />
+
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
             disabled={sending || uploading}
             className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50"
           >
-            {sending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
-            {mode === 'all' ? 'Tüm üyelere gönder' : 'Üyeye gönder'}
+            {sending ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : scheduled ? (
+              <CalendarClock className="size-4" aria-hidden />
+            ) : (
+              <Send className="size-4" aria-hidden />
+            )}
+            {scheduled ? 'Zamanla' : mode === 'all' ? 'Tüm üyelere gönder' : 'Üyeye gönder'}
           </button>
-          {status && (
-            <p role="status" className={status.ok ? 'text-sm text-primary' : 'text-sm text-destructive'}>
-              {status.text}
-            </p>
-          )}
+          <button
+            type="button"
+            onClick={saveAsTemplate}
+            disabled={savingTemplate}
+            className="flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
+          >
+            {savingTemplate ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <BookmarkPlus className="size-4" aria-hidden />}
+            Şablon olarak kaydet
+          </button>
         </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">Şablon başlığı, mesajı ve buton linkini saklar; görsel saklanmaz.</p>
+        {status && (
+          <p role="status" className={status.ok ? 'text-sm text-primary' : 'text-sm text-destructive'}>
+            {status.text}
+          </p>
+        )}
       </form>
 
+      <div className="flex flex-col gap-4">
+      <OutboxList items={outbox} empty="Zamanlanmış mesaj yok." />
       <aside className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5">
         <h3 className="font-display text-base font-bold uppercase text-foreground">Gönderilenler</h3>
         <div role="radiogroup" aria-label="Hangi mesajlar görünsün" className="flex flex-wrap gap-1.5">
@@ -303,7 +399,8 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
           ))}
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Otomatik: ödül, hediye ve onay sonrası sistemin kendiliğinden gönderdiği mesajlar. Liste son {sent.length} mesajı gösterir.
+          Otomatik: ödül, hediye ve onay sonrası sistemin kendiliğinden gönderdiği mesajlar. Liste son {sent.length} mesajı gösterir. Okunma oranı, mesaj gönderildiği an üye olan herkes üzerinden
+          hesaplanır.
         </p>
         {shown.length ? (
           <ul className="flex flex-col gap-2">
@@ -335,7 +432,7 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
                 )}
                 <p className="line-clamp-2 text-xs text-muted-foreground">{m.body}</p>
                 <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-                  <span>{m.target}</span>·<span>{m.reads} okundu</span>·<span>{dateFmt.format(new Date(m.createdAt))}</span>·
+                  <span>{m.target}</span>·<span>{readText(m)}</span>·<span>{dateFmt.format(new Date(m.createdAt))}</span>·
                   <span>{m.manual ? `Gönderen: ${m.sentBy || 'panel'}` : `Otomatik: ${m.sentBy || 'Sistem'}`}</span>
                 </p>
               </li>
@@ -351,6 +448,7 @@ export function MessageSender({ sent }: { sent: SentMessage[] }) {
           </p>
         )}
       </aside>
+      </div>
     </div>
   )
 }

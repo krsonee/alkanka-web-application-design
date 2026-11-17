@@ -3,9 +3,12 @@
 import { HideButton } from '@/components/panel/hide-button'
 import { ImageField } from '@/components/panel/image-field'
 import { useState, useTransition } from 'react'
-import { Pencil, Plus } from 'lucide-react'
+import { BarChart3, Loader2, Pencil, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { saveSiteAction } from '@/app/panel/site-actions'
+import { reorderSitesAction, saveSiteAction, sponsorSummaryAction } from '@/app/panel/site-actions'
+import { SortableList, useOrder } from '@/components/panel/sortable-list'
+import { SponsorSummaryPanel } from '@/components/panel/sponsor-summary'
+import type { SponsorSummary, SummarySection } from '@/lib/sponsor-summary-shared'
 import { SITE_BADGES, SLUG_LETTER_ERROR, publicSlug, slugHasLetter, type SiteInput, type SponsorSite } from '@/lib/sites-shared'
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
@@ -43,6 +46,37 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
   const [editing, setEditing] = useState<SiteInput | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
+  const order = useOrder(sites, (site) => String(site.id))
+  const [sorting, startSort] = useTransition()
+  const [summary, setSummary] = useState<SponsorSummary | null>(null)
+  const [sections, setSections] = useState<SummarySection[]>([])
+  const [loadingId, setLoadingId] = useState<number | null>(null)
+  const [, startSummary] = useTransition()
+
+  function move(ids: string[]) {
+    order.set(ids)
+    startSort(async () => {
+      const res = await reorderSitesAction(ids.map(Number))
+      if (!res.ok) order.reset()
+      setMsg(res.ok ? { ok: true, text: res.message ?? 'Sıra kaydedildi.' } : { ok: false, text: res.error })
+    })
+  }
+
+  function toggleSummary(id: number) {
+    if (summary?.id === id) {
+      setSummary(null)
+      return
+    }
+    setLoadingId(id)
+    startSummary(async () => {
+      const res = await sponsorSummaryAction(id)
+      setLoadingId(null)
+      if (res.ok) {
+        setSections(res.sections)
+        setSummary(res.summary)
+      } else setMsg({ ok: false, text: res.error })
+    })
+  }
 
   function save(input: SiteInput) {
     if (!slugHasLetter(publicSlug(input.slug, input.name))) {
@@ -60,6 +94,9 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
     <div className="flex flex-col gap-4">
       <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
         Sponsor adı, logo, bonus, ana veya VIP rozeti, öne çıkan işareti, sıra ve çekim bilgisi burada durur. Kayıt silinmez; yayından çıkarmak için aktif kutusunu kapat.
+      </p>
+      <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+        Sırayı değiştirmek için soldaki tutamağı sürükle; bıraktığın an kaydedilir. Sitede önce rozet sırası geçerlidir (ana, elit, VIP, güvenilir), bu liste aynı rozetteki sponsorların kendi arasındaki sırayı belirler. &quot;Özet&quot; o sponsorun tıklama, yorum, şikayet ve hakediş durumunu açar.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -80,24 +117,46 @@ export function SitesManager({ sites }: { sites: SponsorSite[] }) {
       {sites.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz sponsor yok. Formdan ekle.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
-          {sites.map((site) => (
-            <li key={site.id} data-find={`sponsor-${site.id}`} className="flex flex-wrap items-center gap-3 p-3 text-sm">
-              <span className="w-8 shrink-0 text-xs tabular-nums text-muted-foreground">{site.sortOrder}</span>
-              <span className={cn('min-w-0 flex-1 font-medium text-foreground', !site.active && 'opacity-50')}>
-                {site.name}
-                {site.slug ? <span className="ml-2 font-normal text-muted-foreground">/{site.slug}</span> : null}
-              </span>
-              <span className="rounded bg-secondary px-2 py-0.5 text-xs font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
-              {site.featured && <span className="text-xs font-bold uppercase text-primary">Öne çıkan</span>}
-              {!site.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
-              <HideButton key={`${site.id}-${site.active}`} kind="sponsor" id={site.id} hidden={!site.active} label={site.name} />
-              <button type="button" aria-label={`${site.name} düzenle`} onClick={() => setEditing(site)} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
-                <Pencil className="size-4" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SortableList
+          items={order.ordered}
+          idOf={(site) => String(site.id)}
+          nameOf={(site) => site.name}
+          onMove={move}
+          disabled={sorting}
+          className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card"
+          itemClassName="bg-card first:rounded-t-xl last:rounded-b-xl"
+        >
+          {(site, handle, i) => (
+            <>
+              <div data-find={`sponsor-${site.id}`} className="flex flex-wrap items-center gap-2 p-2 pr-3 text-sm">
+                {handle}
+                <span className="w-6 shrink-0 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+                <span className={cn('min-w-0 flex-1 basis-40 font-medium text-foreground', !site.active && 'opacity-50')}>
+                  {site.name}
+                  {site.slug ? <span className="ml-2 font-normal text-muted-foreground">/{site.slug}</span> : null}
+                </span>
+                <span className="rounded bg-secondary px-2 py-0.5 text-xs font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
+                {site.featured && <span className="text-xs font-bold uppercase text-primary">Öne çıkan</span>}
+                {!site.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
+                <button
+                  type="button"
+                  aria-expanded={summary?.id === site.id}
+                  disabled={loadingId !== null}
+                  onClick={() => toggleSummary(site.id)}
+                  className="flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-60"
+                >
+                  {loadingId === site.id ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <BarChart3 className="size-3.5" aria-hidden="true" />}
+                  Özet
+                </button>
+                <HideButton key={`${site.id}-${site.active}`} kind="sponsor" id={site.id} hidden={!site.active} label={site.name} />
+                <button type="button" aria-label={`${site.name} düzenle`} onClick={() => setEditing(site)} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
+                  <Pencil className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+              {summary?.id === site.id && <SponsorSummaryPanel summary={summary} sections={sections} onClose={() => setSummary(null)} />}
+            </>
+          )}
+        </SortableList>
       )}
     </div>
   )

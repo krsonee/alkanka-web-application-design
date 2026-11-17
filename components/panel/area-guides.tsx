@@ -128,6 +128,16 @@ const TOURNAMENT_STEPS: GuideStep[] = [
       </ol>
     ),
   },
+  {
+    title: 'Aynı turnuvayı tekrar açma (şablon)',
+    body: (
+      <ol className={ol}>
+        <li>Beğendiğin bir turnuvanın altındaki <b>Şablon olarak kaydet</b>e bas ve bir ad ver. Oyun, format, ad, açıklama, kontenjan, ücret, ödül ve başlangıç saati saklanır.</li>
+        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, tarih yarına ayarlanır. Tarihi kontrol edip <b>Turnuvayı oluştur</b> de.</li>
+        <li>Şablon sadece formu doldurur. Şablonu silmek ya da değiştirmek, daha önce açılmış turnuvalara dokunmaz.</li>
+      </ol>
+    ),
+  },
 ]
 
 const KP_STEPS: GuideStep[] = [

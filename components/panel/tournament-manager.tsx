@@ -2,15 +2,15 @@
 
 import { HideButton } from '@/components/panel/hide-button'
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { useActionState, type ReactNode } from 'react'
-import { Loader2, Play, Plus, Shuffle, Trash2, UserX } from 'lucide-react'
+import { useActionState, useState, type ReactNode } from 'react'
+import { BookmarkPlus, Loader2, Play, Plus, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TournamentGuide } from '@/components/panel/area-guides'
 import { ARENA_GAMES, ARENA_META } from '@/lib/arena'
-import { FORMAT_LABEL, FORMAT_SHORT, STATUS_LABEL, TOURNAMENT_FORMATS, type Tournament } from '@/lib/tournaments-shared'
+import { FORMAT_LABEL, FORMAT_SHORT, STATUS_LABEL, TOURNAMENT_FORMATS, type Tournament, type TournamentTemplate } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { LeagueView } from '@/components/alkanka/arena/league-view'
-import { beginTournament, kickEntry, pickMatchWinner, removeTournament, saveTournament, stopTournament } from '@/app/panel/arena-actions'
+import { beginTournament, dropTournamentTemplate, keepTournamentTemplate, kickEntry, pickMatchWinner, removeTournament, saveTournament, stopTournament } from '@/app/panel/arena-actions'
 import type { ActionState } from '@/app/panel/actions'
 import { BracketView } from '@/components/alkanka/arena/bracket-view'
 import { formatTR } from '@/components/alkanka/arena/tournament-card'
@@ -83,16 +83,27 @@ function ActionButton({
   )
 }
 
-function TournamentForm({ t }: { t?: Tournament }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(saveTournament, {})
+/** Tomorrow in Istanbul at the template's hour, so a weekly cup reopens with one date change at most. */
+function tomorrowAt(time: string) {
+  return `${new Date(Date.now() + 27 * 3600000).toISOString().slice(0, 10)}T${time}`
+}
+
+function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: TournamentTemplate; onCreated?: (state: ActionState) => void }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(async (prev, form) => {
+    const next = await saveTournament(prev, form)
+    if (next.ok && preset) onCreated?.(next)
+    return next
+  }, {})
+  const from = t ?? preset
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="id" value={t?.id ?? 0} />
       <input type="hidden" name="tz" value={ISTANBUL_OFFSET} />
+      <input type="hidden" name="rules" value={from?.rules ?? ''} />
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={labelCls}>
           Oyun
-          <select name="game" defaultValue={t?.game ?? 'tavla'} className={field}>
+          <select name="game" defaultValue={from?.game ?? 'tavla'} className={field}>
             {ARENA_GAMES.map((g) => (
               <option key={g} value={g}>
                 {ARENA_META[g].title} ({ARENA_META[g].group === 4 ? '4 kişilik masalar' : 'birebir'})
@@ -102,7 +113,7 @@ function TournamentForm({ t }: { t?: Tournament }) {
         </label>
         <label className={labelCls}>
           Format
-          <select name="format" defaultValue={t?.format ?? 'eleme'} className={field}>
+          <select name="format" defaultValue={from?.format ?? 'eleme'} className={field}>
             {TOURNAMENT_FORMATS.map((f) => (
               <option key={f} value={f}>
                 {FORMAT_LABEL[f]}
@@ -113,31 +124,32 @@ function TournamentForm({ t }: { t?: Tournament }) {
         </label>
         <label className={labelCls}>
           Turnuva adı
-          <input name="title" required minLength={3} maxLength={80} defaultValue={t?.title} placeholder="Cuma Akşamı Tavla Kupası" className={field} />
+          <input name="title" required minLength={3} maxLength={80} defaultValue={from?.title} placeholder="Cuma Akşamı Tavla Kupası" className={field} />
         </label>
         <label className={cn(labelCls, 'sm:col-span-2')}>
           Açıklama
-          <textarea name="description" rows={2} maxLength={400} defaultValue={t?.description} placeholder="Kurallar, format, yayın bilgisi..." className={field} />
+          <textarea name="description" rows={2} maxLength={400} defaultValue={from?.description} placeholder="Kurallar, format, yayın bilgisi..." className={field} />
         </label>
         <label className={labelCls}>
           Başlangıç (İstanbul saati)
-          <input type="datetime-local" name="startsAt" required defaultValue={toIstanbulInput(t?.startsAt)} className={field} />
+          <input type="datetime-local" name="startsAt" required defaultValue={preset ? tomorrowAt(preset.startTime) : toIstanbulInput(t?.startsAt)} className={field} />
+          {preset && <span className="font-normal">Şablondaki saatle yarına ayarlandı. Tarihi kontrol et.</span>}
         </label>
         <label className={labelCls}>
           Kontenjan (oyuncu)
-          <input type="number" name="maxPlayers" min={2} max={500} required defaultValue={t?.maxPlayers ?? 16} className={field} />
+          <input type="number" name="maxPlayers" min={2} max={500} required defaultValue={from?.maxPlayers ?? 16} className={field} />
         </label>
         <label className={labelCls}>
           Katılım ücreti (KC, 0 = ücretsiz)
-          <input type="number" name="entryFee" min={0} max={100000} required defaultValue={t?.entryFee ?? 100} className={field} />
+          <input type="number" name="entryFee" min={0} max={100000} required defaultValue={from?.entryFee ?? 100} className={field} />
         </label>
         <label className={labelCls}>
           Ödül havuzu (KC)
-          <input type="number" name="prizePool" min={0} max={10000000} required defaultValue={t?.prizePool ?? 5000} className={field} />
+          <input type="number" name="prizePool" min={0} max={10000000} required defaultValue={from?.prizePool ?? 5000} className={field} />
         </label>
         <label className={cn(labelCls, 'sm:col-span-2')}>
           Ödül notu (isteğe bağlı)
-          <input name="prizeNote" maxLength={120} defaultValue={t?.prizeNote} placeholder="1. 3.000 KC · 2. 1.500 KC · 3. 500 KC" className={field} />
+          <input name="prizeNote" maxLength={120} defaultValue={from?.prizeNote} placeholder="1. 3.000 KC · 2. 1.500 KC · 3. 500 KC" className={field} />
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -280,11 +292,122 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
           <TournamentForm t={t} />
         </div>
       </details>
+
+      <details className="rounded-xl border border-border">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Şablon olarak kaydet</summary>
+        <div className="border-t border-border p-4">
+          <TemplateSaver t={t} />
+        </div>
+      </details>
     </article>
   )
 }
 
-export function TournamentManager({ tournaments, hidden = [] }: { tournaments: Tournament[]; hidden?: string[] }) {
+function TemplateSaver({ t }: { t: Tournament }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(keepTournamentTemplate, {})
+  return (
+    <form action={action} className="flex flex-col gap-3">
+      <input type="hidden" name="id" value={t.id} />
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Oyun, format, ad, açıklama, kontenjan, ücret, ödül ve başlangıç saati saklanır. Tarih, oyuncular ve sonuçlar saklanmaz. Aynı adla kaydedersen eski şablonun üzerine yazılır.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className={cn(labelCls, 'min-w-0 flex-1 basis-60')}>
+          Şablon adı
+          <input name="name" required minLength={3} maxLength={60} defaultValue={t.title.slice(0, 60)} className={field} />
+        </label>
+        <button type="submit" disabled={pending} className="flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-bold text-foreground hover:bg-secondary disabled:opacity-60">
+          {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <BookmarkPlus className="size-4" aria-hidden="true" />}
+          Şablonu kaydet
+        </button>
+      </div>
+      <Feedback state={state} />
+    </form>
+  )
+}
+
+function TemplatePicker({ templates, picked, onPick }: { templates: TournamentTemplate[]; picked: TournamentTemplate | null; onPick: (t: TournamentTemplate | null) => void }) {
+  if (templates.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+        Henüz şablon yok. Aşağıdaki bir turnuvada &quot;Şablon olarak kaydet&quot;e basarsan, aynı ayarlarla yenisini buradan tek tıkla açarsın.
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
+      <span className="text-xs font-semibold text-muted-foreground">Şablondan doldur (form dolar, tarihi kontrol edip oluştur)</span>
+      <ul className="flex flex-wrap gap-2">
+        {templates.map((tpl) => (
+          <li key={tpl.id} className="flex items-stretch overflow-hidden rounded-lg border border-border">
+            <button
+              type="button"
+              aria-pressed={picked?.id === tpl.id}
+              onClick={() => onPick(picked?.id === tpl.id ? null : tpl)}
+              className={cn('flex flex-col items-start gap-0.5 px-3 py-2 text-left text-sm font-semibold', picked?.id === tpl.id ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary')}
+            >
+              {tpl.name}
+              <span className={cn('text-xs font-normal', picked?.id === tpl.id ? 'text-primary-foreground' : 'text-muted-foreground')}>
+                {ARENA_META[tpl.game].title} · {FORMAT_SHORT[tpl.format]} · {tpl.maxPlayers} kişi · {tpl.startTime}
+              </span>
+            </button>
+            <TemplateRemover tpl={tpl} onDone={() => picked?.id === tpl.id && onPick(null)} />
+          </li>
+        ))}
+      </ul>
+      {picked && (
+        <button type="button" onClick={() => onPick(null)} className="self-start text-xs font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground">
+          Şablonu bırak, boş formla devam et
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TemplateRemover({ tpl, onDone }: { tpl: TournamentTemplate; onDone: () => void }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(async (prev, form) => {
+    const result = await dropTournamentTemplate(prev, form)
+    if (result.ok) onDone()
+    return result
+  }, {})
+  return (
+    <form
+      action={action}
+      className="flex border-l border-border"
+      onSubmit={(e) => {
+        const form = e.currentTarget
+        if (form.dataset.confirmed === '1') {
+          delete form.dataset.confirmed
+          return
+        }
+        e.preventDefault()
+        void askConfirm(`"${tpl.name}" şablonu silinsin mi? Bu şablonla açılmış turnuvalar etkilenmez.`).then((ok) => {
+          if (!ok) return
+          form.dataset.confirmed = '1'
+          form.requestSubmit()
+        })
+      }}
+    >
+      <input type="hidden" name="id" value={tpl.id} />
+      <button type="submit" disabled={pending} aria-label={`${tpl.name} şablonunu sil`} className="flex w-10 items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-60">
+        {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Trash2 className="size-4" aria-hidden="true" />}
+      </button>
+      {!state.ok && state.message && (
+        <span role="alert" className="sr-only">
+          {state.message}
+        </span>
+      )}
+    </form>
+  )
+}
+
+export function TournamentManager({ tournaments, templates = [], hidden = [] }: { tournaments: Tournament[]; templates?: TournamentTemplate[]; hidden?: string[] }) {
+  const [picked, setPicked] = useState<TournamentTemplate | null>(null)
+  const [opened, setOpened] = useState<ActionState>({})
+  const pick = (tpl: TournamentTemplate | null) => {
+    setOpened({})
+    setPicked(tpl)
+  }
   return (
     <div className="flex flex-col gap-6">
       <TournamentGuide />
@@ -295,7 +418,16 @@ export function TournamentManager({ tournaments, hidden = [] }: { tournaments: T
             Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlattığında eşleşmeler kura ile çekilir: tavla ve bilardo birebir, okey 4 kişilik masalardır.
           </p>
         </div>
-        <TournamentForm />
+        <TemplatePicker templates={templates} picked={picked} onPick={pick} />
+        <TournamentForm
+          key={picked ? `tpl-${picked.id}` : 'blank'}
+          preset={picked ?? undefined}
+          onCreated={(state) => {
+            setPicked(null)
+            setOpened(state)
+          }}
+        />
+        <Feedback state={opened} />
       </section>
       {tournaments.length === 0 ? (
         <p className="text-sm text-muted-foreground">Henüz turnuva yok.</p>
