@@ -11,7 +11,7 @@ export const STATUS_LABEL: Record<TournamentStatus, string> = {
   iptal: 'İptal edildi',
 }
 
-export const MAX_TOURNAMENT_PLAYERS = 500
+export const MAX_TOURNAMENT_PLAYERS = 1024
 
 export const TOURNAMENT_FORMATS = ['eleme', 'lig'] as const
 export type TournamentFormat = (typeof TOURNAMENT_FORMATS)[number]

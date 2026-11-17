@@ -94,7 +94,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <div
           className={
             chatLive
-              ? 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)] xl:pr-80 xl:[body:has([data-game-page])_&]:pr-0'
+              ? 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)] xl:pr-80'
               : 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)]'
           }
         >

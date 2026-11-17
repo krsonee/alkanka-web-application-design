@@ -297,15 +297,24 @@ async function openReadyMatches(id: number) {
     )
     const opened = new Set(existing.rows.map((e) => Number(e.match_no)))
     const names = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1', [id])
-    const nameOf = (key: string) => names.rows.find((n) => (n.user_id ?? `misafir:${n.nickname}`) === key)?.nickname ?? key
+    const nicknames = new Map<string, string>(names.rows.map((n) => [n.user_id ?? `misafir:${n.nickname}`, n.nickname]))
+    const tables: { match_no: number; players: unknown; state: unknown }[] = []
     for (const [mi, match] of bracket.rounds[roundIdx].entries()) {
       const real = match.players.filter((p): p is string => Boolean(p))
       if (match.winner || real.length !== 2 || opened.has(mi)) continue
-      const players = real.map((key, seat) => ({ id: key, name: nameOf(key), seat }))
+      tables.push({
+        match_no: mi,
+        players: real.map((key, seat) => ({ id: key, name: nicknames.get(key) ?? key, seat })),
+        state: initState(row.game),
+      })
+    }
+    // One statement for the whole round: a 1024-player bracket opens 512 tables while the tournament row is locked.
+    if (tables.length) {
       await client.query(
         `INSERT INTO game_tables (game, stake, seats, status, players, state, created_by, mode, tournament_id, round_no, match_no)
-         VALUES ($1, 0, 2, 'oynaniyor', $2::jsonb, $3::jsonb, 'turnuva', 'turnuva', $4, $5, $6)`,
-        [row.game, JSON.stringify(players), JSON.stringify(initState(row.game)), id, roundIdx, mi],
+         SELECT $1, 0, 2, 'oynaniyor', t.players, t.state, 'turnuva', 'turnuva', $2, $3, t.match_no
+         FROM jsonb_to_recordset($4::jsonb) AS t(match_no int, players jsonb, state jsonb)`,
+        [row.game, id, roundIdx, JSON.stringify(tables)],
       )
     }
     await client.query('COMMIT')
