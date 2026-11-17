@@ -7,7 +7,7 @@ export const MAX_PRIZE_KC = 10_000_000
 const MAX_LEAGUE_PRIZE_PLACES = 8
 
 /** A knockout bracket only fills without byes at these sizes; a league needs an even field so nobody sits a week out. */
-const KNOCKOUT_SIZES = [2, 4, 8, 16, 32, 64, 128, 256]
+const KNOCKOUT_SIZES = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 
 export function playerOptions(format: Format): number[] {
   if (format === 'eleme') return KNOCKOUT_SIZES

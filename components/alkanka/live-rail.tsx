@@ -622,21 +622,32 @@ function ChannelPanel({ slug, data, onRefresh }: { slug: BroadcastSlug; data: Ch
   )
 }
 
-const XL_QUERY = '(min-width: 1280px)'
-function subscribeXl(onChange: () => void) {
-  const mq = window.matchMedia(XL_QUERY)
-  mq.addEventListener('change', onChange)
-  return () => mq.removeEventListener('change', onChange)
+function mediaStore(query: string) {
+  return {
+    subscribe(onChange: () => void) {
+      const mq = window.matchMedia(query)
+      mq.addEventListener('change', onChange)
+      return () => mq.removeEventListener('change', onChange)
+    },
+    matches: () => window.matchMedia(query).matches,
+  }
 }
+const XL = mediaStore('(min-width: 1280px)')
+const LG = mediaStore('(min-width: 1024px)')
+const never = () => false
 
 export function LiveRail() {
   const telegramUrl = useTelegramUrl()
   const [tab, setTab] = useState<ChatTab>('sohbet')
   const [mobileOpen, setMobileOpen] = useState(false)
-  const isDesktopRail = useSyncExternalStore(subscribeXl, () => window.matchMedia(XL_QUERY).matches, () => false)
-  // On a game page the rail starts closed so the table gets the full width; the Sohbet button opens it over the page.
+  const isDesktopRail = useSyncExternalStore(XL.subscribe, XL.matches, never)
+  const isSideRail = useSyncExternalStore(LG.subscribe, LG.matches, never)
+  // On a game page the rail starts closed so the table gets the full width; the Sohbet button opens it beside the page.
   const gamePage = /^\/oyunlar\/(?!canli(\/|$))[^/]+/.test(usePathname() ?? '')
   const railVisible = (isDesktopRail && !gamePage) || mobileOpen
+  // Only the phone sheet takes the screen over; a side rail leaves the page under it usable.
+  const sheet = mobileOpen && !isSideRail
+  const closeRef = useRef<HTMLButtonElement>(null)
   const chat = useChatFeed(railVisible && tab === 'sohbet')
   const channel = useChannelFeed(railVisible && tab !== 'sohbet' ? tab : null)
 
@@ -659,7 +670,7 @@ export function LiveRail() {
   }, [])
 
   useEffect(() => {
-    if (!mobileOpen) return
+    if (!sheet) return
     const onKey = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && setMobileOpen(false)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -668,28 +679,37 @@ export function LiveRail() {
       document.body.style.overflow = prev
       window.removeEventListener('keydown', onKey)
     }
-  }, [mobileOpen])
+  }, [sheet])
+
+  // The Sohbet button leaves the page once the rail is open, so keyboard focus moves into the rail with it.
+  const openFromButton = () => {
+    setMobileOpen(true)
+    requestAnimationFrame(() => closeRef.current?.focus({ preventScroll: true }))
+  }
 
   return (
     <>
-    <button
-      type="button"
-      onClick={() => setMobileOpen(true)}
-      className={cn(
-        'fixed bottom-5 right-5 z-30 hidden items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground shadow-lg transition-opacity hover:opacity-90 lg:flex [body:has([data-table-playing])_&]:hidden',
-        !gamePage && 'xl:hidden',
-      )}
-    >
-      <MessagesSquare className="size-4" aria-hidden="true" />
-      Sohbet
-    </button>
-    {mobileOpen && (
+    {!mobileOpen && (
+      <button
+        type="button"
+        data-chat-toggle
+        onClick={openFromButton}
+        className={cn(
+          'fixed bottom-5 right-5 z-30 hidden items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground shadow-lg transition-opacity hover:opacity-90 lg:flex',
+          !gamePage && 'xl:hidden',
+        )}
+      >
+        <MessagesSquare className="size-4" aria-hidden="true" />
+        Sohbet
+      </button>
+    )}
+    {sheet && (
       <button
         type="button"
         tabIndex={-1}
         aria-label="Sohbeti kapat"
         onClick={() => setMobileOpen(false)}
-        className={cn('animate-in fade-in fixed inset-0 z-50 bg-background/60 backdrop-blur-sm', !gamePage && 'xl:hidden')}
+        className="animate-in fade-in fixed inset-0 z-50 bg-background/60 backdrop-blur-sm lg:hidden"
       />
     )}
     <aside
@@ -698,13 +718,13 @@ export function LiveRail() {
       aria-label="Telegram canlı sohbet"
       className={cn(
         'fixed inset-x-0 bottom-0 z-50 h-[85dvh] w-full flex-col overflow-hidden rounded-t-3xl border-t border-accent/40 bg-surface shadow-2xl',
-        'xl:top-0 xl:left-auto xl:h-auto xl:w-80 xl:rounded-none xl:border-t-0 xl:border-l xl:border-border',
-        gamePage ? 'xl:z-50' : 'xl:z-30 xl:flex xl:shadow-none',
-        mobileOpen ? 'animate-in slide-in-from-bottom flex pb-[env(safe-area-inset-bottom)] duration-300 xl:animate-none xl:pb-0' : 'hidden',
+        'lg:top-0 lg:left-auto lg:h-auto lg:w-80 lg:rounded-none lg:border-t-0 lg:border-l lg:border-border xl:shadow-none',
+        !gamePage && 'xl:z-30 xl:flex',
+        mobileOpen ? 'animate-in slide-in-from-bottom flex pb-[env(safe-area-inset-bottom)] duration-300 lg:animate-none lg:pb-0' : 'hidden',
       )}
     >
-      <span className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border xl:hidden" aria-hidden="true" />
-      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 xl:h-16">
+      <span className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border lg:hidden" aria-hidden="true" />
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 lg:h-16">
         <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
           <Send className="size-4" aria-hidden="true" />
         </span>
@@ -722,13 +742,19 @@ export function LiveRail() {
           className="ml-auto flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-accent/40 px-2.5 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-foreground"
         >
           <ExternalLink className="size-3.5" aria-hidden="true" />
-          {tab === 'sohbet' ? "Telegram'da izle" : 'Kanalı aç'}
+          {/* Beside the close button the side rail has no room for the label next to its title. */}
+          <span className={cn('lg:sr-only', !gamePage && 'xl:not-sr-only')}>{tab === 'sohbet' ? "Telegram'da izle" : 'Kanalı aç'}</span>
         </a>
         <button
+          ref={closeRef}
           type="button"
+          data-chat-close
           onClick={() => setMobileOpen(false)}
           aria-label="Sohbeti kapat"
-          className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground xl:hidden"
+          className={cn(
+            'flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
+            !gamePage && 'xl:hidden',
+          )}
         >
           <X className="size-5" aria-hidden="true" />
         </button>

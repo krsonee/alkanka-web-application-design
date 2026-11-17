@@ -117,7 +117,7 @@ const TOURNAMENT_STEPS: GuideStep[] = [
       <ol className={ol}>
         <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir.</li>
         <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar.</li>
-        <li><b>Kontenjan</b> listeden seçilir: elemede 2, 4, 8, 16, 32, 64, 128 ya da 256 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı.</li>
+        <li><b>Kontenjan</b> listeden seçilir: elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı.</li>
         <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
         <li>Kaydettiğin turnuva hemen <span className={code}>/turnuvalar</span> sayfasında kayda açılır.</li>
       </ol>

@@ -13,6 +13,15 @@
     @slot;
   }
 }
+/* The Sohbet rail is open beside a game page and has taken 20rem off it: side columns drop under the table
+   so the table keeps the width it has with the rail closed. Past 1600px there is room for both. */
+@custom-variant rail-narrow {
+  @media (min-width: 1280px) and (max-width: 1599.98px) {
+    body:has(aside[data-live-rail][data-open]) & {
+      @slot;
+    }
+  }
+}
 
 @theme inline {
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
@@ -1746,14 +1755,26 @@
   --sidebar-w: 72px;
 }
 
-/* While a card-table game is on screen the Telegram rail steps aside so the table gets the width.
-   A rail the visitor opened with the Sohbet button stays: it is drawn over the page, not beside it. */
+/* On a game page the Telegram rail steps aside so the table gets the width.
+   A rail the visitor opened with the Sohbet button stays, and the page narrows to sit beside it. */
 @media (min-width: 1280px) {
   body:has([data-game-table]) aside[data-live-rail]:not([data-open]) {
     display: none;
   }
-  body:has([data-game-table]) .xl\:pr-80 {
+  body:has(:is([data-game-page], [data-game-table])):not(:has(aside[data-live-rail][data-open])) .xl\:pr-80 {
     padding-right: 0;
+  }
+  /* Layers that stop short of the rail (the guest prompt) reach the screen edge while the rail is away. */
+  body:has(:is([data-game-page], [data-game-table])):not(:has(aside[data-live-rail][data-open])) .xl\:right-80 {
+    right: 0;
+  }
+}
+
+/* During a match the floating Sohbet button sits in the bottom corner; the page keeps room under the table
+   so the button never rests on the table's own corner once the page is scrolled to its end. */
+@media (min-width: 1024px) {
+  body:has([data-table-playing]):not(:has(aside[data-live-rail][data-open])) main {
+    padding-bottom: 5rem;
   }
 }
 
