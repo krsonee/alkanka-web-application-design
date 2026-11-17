@@ -1,7 +1,17 @@
 'use client'
 
 import { useId, useState, type ReactNode } from 'react'
-import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type UniqueIdentifier } from '@dnd-kit/core'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type KeyboardCoordinateGetter,
+  type UniqueIdentifier,
+} from '@dnd-kit/core'
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical } from 'lucide-react'
@@ -29,6 +39,22 @@ export function mergeOrder(all: string[], visible: string[]) {
   const moved = new Set(visible)
   let i = 0
   return all.map((id) => (moved.has(id) ? visible[i++] : id))
+}
+
+/**
+ * In a grid the stock getter picks the nearest card in the arrow's direction, which jumps around
+ * once cards differ in height or a non-sortable cell sits in the grid. A grid here is still one
+ * sequence, so left/up is one place earlier and right/down one place later.
+ */
+const stepInSequence: KeyboardCoordinateGetter = (event, { context: { active, over, collisionRect, droppableRects } }) => {
+  const step = event.code === 'ArrowRight' || event.code === 'ArrowDown' ? 1 : event.code === 'ArrowLeft' || event.code === 'ArrowUp' ? -1 : 0
+  if (!step || !active || !collisionRect) return undefined
+  event.preventDefault()
+  const sequence: UniqueIdentifier[] = active.data.current?.sortable?.items ?? []
+  const target = sequence[sequence.indexOf(over?.id ?? active.id) + step]
+  const rect = target === undefined ? undefined : droppableRects.get(target)
+  if (!rect) return undefined
+  return { x: rect.left + (rect.width - collisionRect.width) / 2, y: rect.top + (rect.height - collisionRect.height) / 2 }
 }
 
 const HANDLE = 'flex size-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40'
@@ -108,7 +134,7 @@ export function SortableList<T>({
   const contextId = useId()
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, { coordinateGetter: layout === 'list' ? sortableKeyboardCoordinates : stepInSequence }),
   )
   const ids = items.map(idOf)
   const names = new Map(items.map((item) => [idOf(item), nameOf(item)]))
@@ -122,6 +148,10 @@ export function SortableList<T>({
     const to = ids.indexOf(String(over.id))
     if (from < 0 || to < 0) return
     onMove(arrayMove(ids, from, to))
+    if (event.activatorEvent instanceof KeyboardEvent && event.activatorEvent.target instanceof HTMLElement) {
+      const grip = event.activatorEvent.target
+      requestAnimationFrame(() => grip.scrollIntoView({ block: 'nearest' }))
+    }
   }
 
   const List = layout === 'list' ? 'ul' : 'div'

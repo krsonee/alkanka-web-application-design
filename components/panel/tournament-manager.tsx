@@ -88,8 +88,12 @@ function tomorrowAt(time: string) {
   return `${new Date(Date.now() + 27 * 3600000).toISOString().slice(0, 10)}T${time}`
 }
 
-function TournamentForm({ t, preset }: { t?: Tournament; preset?: TournamentTemplate }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(saveTournament, {})
+function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: TournamentTemplate; onCreated?: (state: ActionState) => void }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(async (prev, form) => {
+    const next = await saveTournament(prev, form)
+    if (next.ok && preset) onCreated?.(next)
+    return next
+  }, {})
   const from = t ?? preset
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -399,6 +403,11 @@ function TemplateRemover({ tpl, onDone }: { tpl: TournamentTemplate; onDone: () 
 
 export function TournamentManager({ tournaments, templates = [], hidden = [] }: { tournaments: Tournament[]; templates?: TournamentTemplate[]; hidden?: string[] }) {
   const [picked, setPicked] = useState<TournamentTemplate | null>(null)
+  const [opened, setOpened] = useState<ActionState>({})
+  const pick = (tpl: TournamentTemplate | null) => {
+    setOpened({})
+    setPicked(tpl)
+  }
   return (
     <div className="flex flex-col gap-6">
       <TournamentGuide />
@@ -409,8 +418,16 @@ export function TournamentManager({ tournaments, templates = [], hidden = [] }: 
             Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlattığında eşleşmeler kura ile çekilir: tavla ve bilardo birebir, okey 4 kişilik masalardır.
           </p>
         </div>
-        <TemplatePicker templates={templates} picked={picked} onPick={setPicked} />
-        <TournamentForm key={picked ? `tpl-${picked.id}` : 'blank'} preset={picked ?? undefined} />
+        <TemplatePicker templates={templates} picked={picked} onPick={pick} />
+        <TournamentForm
+          key={picked ? `tpl-${picked.id}` : 'blank'}
+          preset={picked ?? undefined}
+          onCreated={(state) => {
+            setPicked(null)
+            setOpened(state)
+          }}
+        />
+        <Feedback state={opened} />
       </section>
       {tournaments.length === 0 ? (
         <p className="text-sm text-muted-foreground">Henüz turnuva yok.</p>
