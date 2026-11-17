@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { cache, type ReactNode } from 'react'
 import { adminConfigured, canPanel } from '@/lib/admin-auth'
-import { getPanelSession, type PanelSession } from '@/lib/panel-auth'
+import { getPanelSession, totpRenewalIds, type PanelSession } from '@/lib/panel-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { rows, sql } from '@/lib/db'
 import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
@@ -520,7 +520,9 @@ async function staffPanel() {
     last_login_at: string | null
   }>(sql`SELECT id, username, display_name, is_owner, permissions, totp_enabled, totp_required, active, last_login_at FROM panel_accounts ORDER BY is_owner DESC, username`)
   const addresses = await lastLoginAddresses().catch(miss<Record<string, string>>({}))
+  const renewDue = new Set(await totpRenewalIds().catch(miss<number[]>([])))
   const accounts: StaffRow[] = list.map((a) => ({
+    renewDue: renewDue.has(Number(a.id)),
     id: Number(a.id),
     username: a.username,
     displayName: a.display_name,
