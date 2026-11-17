@@ -103,7 +103,7 @@ export async function claimPrediction(matchId: string, optionId: string): Promis
       if (Number(r[0]?.done ?? 0) > 0 || Number(r[0]?.today ?? 0) >= limit.perDay) {
         return { ok: true, balance: await getBalance(member.id) }
       }
-      await credit(member.id, value)
+      await credit(member.id, value, 'Tahmin katılım ödülü')
       await recordHistory({ userId: member.id, userName: member.name, game: 'tahmin', mode: 'odul', opponent: limit.label, stake: 0, result: 'win', delta: value, tableId: ref })
       return { ok: true, balance: await getBalance(member.id) }
     })
@@ -182,7 +182,7 @@ async function playMiniLocked(
     outcome = { game, prizes, points: prizes[c] }
   }
 
-  await credit(member.id, outcome.points)
+  await credit(member.id, outcome.points, `Mini oyun ödülü (${game})`)
   await recordHistory({ userId: member.id, userName: member.name, game, mode: 'odul', opponent: limit.label, stake: 0, result: big ? 'win' : 'draw', delta: outcome.points, tableId: paid ? EXTRA_PLAY_REF : undefined })
   return { ok: true, balance: await getBalance(member.id), ...outcome }
 }
@@ -195,7 +195,7 @@ export async function spendKC(source: string, amount: number): Promise<WalletRes
   if (!label) return { ok: false, error: 'Geçersiz işlem.' }
   const value = Math.floor(Number(amount))
   if (!Number.isInteger(value) || value <= 0 || value > 100000) return { ok: false, error: 'Geçersiz tutar.' }
-  if (!(await debit(member.id, value))) return { ok: false, error: 'Yetersiz Kanka Coin.', balance: await getBalance(member.id) }
+  if (!(await debit(member.id, value, `Harcama: ${label}`))) return { ok: false, error: 'Yetersiz Kanka Coin.', balance: await getBalance(member.id) }
   await recordHistory({ userId: member.id, userName: member.name, game: source, mode: 'harcama', opponent: label, stake: value, result: 'loss', delta: -value })
   return { ok: true, balance: await getBalance(member.id) }
 }

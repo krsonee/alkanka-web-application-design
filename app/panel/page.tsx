@@ -94,7 +94,7 @@ import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, ty
 import { affLinkViews } from '@/lib/aff-links'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
-import { listProducts, listRequests } from '@/lib/market'
+import { listProducts, listRequests, stockReminders } from '@/lib/market'
 import { SitesManager } from '@/components/panel/sites-manager'
 import { SponsorReminders } from '@/components/panel/sponsor-reminders'
 import { sponsorReminders, type SponsorReminder } from '@/lib/sponsor-reminders'
@@ -953,9 +953,10 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       : null
 
   const onDash = active === 'dashboard'
-  const [detail, dashReminders, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
+  const [detail, dashReminders, dashStock, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
     pendingDetail(can).catch(miss<PendingDetail>(EMPTY_PENDING)),
     onDash ? sponsorReminders({ deals: can('sponsors'), earnings: can('marketing') }).catch(miss<SponsorReminder[]>([])) : [],
+    onDash && can('market') ? stockReminders().catch(miss<SponsorReminder[]>([])) : [],
     onDash && can('users') ? memberCounts().catch(miss(null)) : null,
     onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch(miss(null)) : null,
@@ -974,6 +975,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     <div className="flex flex-col gap-6">
       {sysStatus ? <SystemStatus items={sysStatus} /> : null}
       <SponsorReminders items={dashReminders} />
+      <SponsorReminders items={dashStock} title="Market stok uyarıları" />
       <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} />
     </div>
   ) : null

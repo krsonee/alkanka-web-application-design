@@ -5,6 +5,7 @@ import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
 import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, bjOpeningMs, bjRevealMs, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
+import { applyCoins } from '@/lib/wallet-ledger'
 import { isStackedBet } from '@/lib/arena'
 import { gameSecret, loadGameKey, usesRotatedKey } from '@/lib/game-keys'
 
@@ -221,13 +222,12 @@ const MAX_IDLE_HANDS = 2
 /** Charges inside the table transaction, so a rolled-back hand never keeps the money. */
 async function debitIn(c: PoolClient, userId: string, amount: number) {
   if (amount <= 0) return true
-  const r = await c.query(`UPDATE wallets SET balance = balance - $2, updated_at = now() WHERE user_id = $1 AND balance >= $2 RETURNING balance`, [userId, amount])
-  return (r.rowCount ?? 0) > 0
+  return (await applyCoins(userId, -amount, 'Blackjack bahsi', { min: 0, client: c })) !== null
 }
 
 async function creditIn(c: PoolClient, userId: string, amount: number) {
   if (amount <= 0) return
-  await c.query(`UPDATE wallets SET balance = balance + $2, updated_at = now() WHERE user_id = $1`, [userId, amount])
+  await applyCoins(userId, amount, 'Blackjack bahis iadesi', { client: c })
 }
 
 /**
@@ -341,7 +341,7 @@ async function settleFinished() {
     const returned = Math.min(s.main.ret + s.insurance.ret, total)
     const sideReturned = total - returned
     await pool.query(`UPDATE blackjack_live SET returned = $2, side_returned = $3, staked = $4 WHERE id = $1`, [row.id, returned, sideReturned, s.stake])
-    if (total) await credit(String(row.user_id), total)
+    if (total) await credit(String(row.user_id), total, 'Blackjack ödemesi')
     const values = s.hands.map((h) => handValue(h.cards))
     await recordHistory({
       userId: String(row.user_id),
@@ -393,7 +393,7 @@ export async function joinBlackjack(
   if (!isStackedBet(bet, allowedBets)) throw new Error('Geçersiz bahis.')
   if (!BJ_SIDE_STAKES.includes(side.pairs) || !BJ_SIDE_STAKES.includes(side.t213)) throw new Error('Geçersiz yan bahis.')
   const total = bet + side.pairs + side.t213
-  if (!(await debit(member.id, total))) throw new Error('Yetersiz Kanka Coin.')
+  if (!(await debit(member.id, total, 'Blackjack bahsi'))) throw new Error('Yetersiz Kanka Coin.')
   let out: { tableNo: number; seated: boolean; charged: boolean }
   try {
     out = await inTx(async (c) => {
@@ -461,10 +461,10 @@ export async function joinBlackjack(
       return { tableNo: freshNo, seated: true, charged: true }
     })
   } catch (e) {
-    await credit(member.id, total)
+    await credit(member.id, total, 'Blackjack bahis iadesi')
     throw e
   }
-  if (!out.charged) await credit(member.id, total)
+  if (!out.charged) await credit(member.id, total, 'Blackjack bahis iadesi')
   return { balance: await getBalance(member.id), tableNo: out.tableNo, seated: out.seated }
 }
 

@@ -16,6 +16,8 @@ import {
   type RoleInput,
 } from '@/lib/kanka-puan'
 import { closeSignup, openSignup } from '@/lib/signup-gate'
+import { listLedger } from '@/lib/wallet-ledger'
+import type { LedgerPage } from '@/lib/wallet-ledger-shared'
 import {
   adjustWallet,
   banMember,
@@ -56,6 +58,11 @@ async function guard(fn: () => Promise<string>): Promise<Result> {
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'İşlem yapılamadı.' }
   }
+}
+
+export async function memberLedgerAction(userId: string, page: number): Promise<LedgerPage | null> {
+  if (!(await canPanel('users'))) return null
+  return listLedger(String(userId), Number(page) || 0)
 }
 
 export type MemberExtra = Pick<MemberFilters, 'sort' | 'source' | 'from' | 'to' | 'minBalance' | 'maxBalance' | 'telegram'>

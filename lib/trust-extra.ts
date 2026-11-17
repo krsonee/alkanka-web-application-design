@@ -170,7 +170,7 @@ async function payHelpfulWeek() {
   const [top] = await helpfulBoard(from, thisWeek, 1)
   if (!top || top.votes < HELPFUL_MIN_VOTES) return null
   await grantKp(top.userId, 'faydali', HELPFUL_KP, from, 'Haftanın en faydalı yorumu')
-  await credit(top.userId, HELPFUL_COIN)
+  await credit(top.userId, HELPFUL_COIN, 'Faydalı yorum ödülü')
   await rows(sql`UPDATE trust_runs SET result = ${JSON.stringify(top)}::jsonb WHERE kind = 'faydali' AND period = ${from}`)
   await inbox(top.userId, 'Haftanın en faydalı yorumcusu sensin', `Yorumların ${top.votes} "faydalı" oyu aldı. ${HELPFUL_KP} KP + ${HELPFUL_COIN} KC hesabında.`)
   return top

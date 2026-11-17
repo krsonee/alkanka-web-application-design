@@ -111,7 +111,7 @@ export async function tickOnline(userId: string): Promise<OnlineStatus> {
         VALUES (${userId}, 'online', ${tier.kp}, ${tier.coin}, ${`${sessionKey}:${h}`}, ${`${h} saat kesintisiz online`})
         ON CONFLICT DO NOTHING RETURNING id`)
       if (!inserted.length) continue
-      if (tier.coin > 0) await credit(userId, tier.coin)
+      if (tier.coin > 0) await credit(userId, tier.coin, 'Çevrimiçi kalma ödülü')
       granted.push(tier)
     }
   }

@@ -10,6 +10,9 @@ export type MemberLimit = {
   marketBan: boolean
   marketSpendLimit: number | null
   note: string
+  /** When the restriction stops applying; null means it stays until removed. */
+  expiresAt: string | null
+  expired: boolean
   updatedBy: string
   updatedAt: string
 }
@@ -20,6 +23,7 @@ export type LimitInput = {
   marketBan: boolean
   marketSpendLimit: number | null
   note: string
+  expiresAt: string | null
 }
 
 const TODAY = `date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul'`
@@ -37,9 +41,12 @@ type Row = {
   market_ban: boolean
   market_spend_limit: number | null
   note: string | null
+  expires_at?: string | null
   updated_by: string | null
   updated_at: string
 }
+
+const endOf = (r: Row) => (r.expires_at ? new Date(r.expires_at) : null)
 
 const toLimit = (r: Row): MemberLimit => ({
   userId: r.user_id,
@@ -50,6 +57,8 @@ const toLimit = (r: Row): MemberLimit => ({
   marketBan: !!r.market_ban,
   marketSpendLimit: r.market_spend_limit,
   note: r.note ?? '',
+  expiresAt: endOf(r)?.toISOString() ?? null,
+  expired: (endOf(r)?.getTime() ?? Infinity) <= Date.now(),
   updatedBy: r.updated_by ?? '',
   updatedAt: new Date(r.updated_at).toISOString(),
 })
@@ -57,7 +66,8 @@ const toLimit = (r: Row): MemberLimit => ({
 async function limitFor(userId: string): Promise<MemberLimit | null> {
   try {
     const r = await pool.query<Row>(`SELECT * FROM member_limits WHERE user_id = $1`, [userId])
-    return r.rows[0] ? toLimit(r.rows[0]) : null
+    const limit = r.rows[0] ? toLimit(r.rows[0]) : null
+    return limit && !limit.expired ? limit : null
   } catch (error) {
     console.error('[member-limits] okunamadı', error)
     return null
@@ -107,6 +117,16 @@ export async function assertCanBuy(userId: string, price: number) {
   if (Number(r.rows[0]?.spent ?? 0) + price > limit.marketSpendLimit) throw new Error(BUY_BLOCKED)
 }
 
+let expiryReady: Promise<unknown> | null = null
+
+function ensureExpiry() {
+  expiryReady ??= pool.query(`ALTER TABLE member_limits ADD COLUMN IF NOT EXISTS expires_at timestamptz`).catch((error) => {
+    expiryReady = null
+    throw error
+  })
+  return expiryReady
+}
+
 export async function listLimits(): Promise<MemberLimit[]> {
   const r = await pool.query<Row>(`SELECT * FROM member_limits ORDER BY updated_at DESC LIMIT 500`)
   return r.rows.map(toLimit)
@@ -143,18 +163,22 @@ export async function saveLimit(userId: string, input: LimitInput, by: string): 
   const ban = !!input.marketBan
   const note = String(input.note ?? '').trim()
   if (note.length > LIMIT_NOTE_MAX) throw new Error(`Not en fazla ${LIMIT_NOTE_MAX} karakter olabilir (şu an ${note.length}).`)
+  const ends = input.expiresAt ? new Date(input.expiresAt) : null
+  if (ends && Number.isNaN(ends.getTime())) throw new Error('Bitiş tarihi okunamadı. Tarihi ve saati yeniden seç.')
+  if (ends && ends.getTime() <= Date.now()) throw new Error('Bitiş tarihi geçmişte kalıyor. İleri bir tarih seç ya da süresiz bırak.')
+  await ensureExpiry()
   if (dailyWin === null && dailyGame === null && spend === null && !ban) {
     const gone = await pool.query(`DELETE FROM member_limits WHERE user_id = $1 RETURNING user_id`, [userId])
     if (!gone.rowCount) throw new Error('Kaydedilecek bir kısıtlama yok. En az bir sınır gir ya da market yasağını aç.')
     return 'cleared'
   }
   await pool.query(
-    `INSERT INTO member_limits (user_id, user_name, user_email, daily_win_limit, daily_game_limit, market_ban, market_spend_limit, note, updated_by, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+    `INSERT INTO member_limits (user_id, user_name, user_email, daily_win_limit, daily_game_limit, market_ban, market_spend_limit, note, updated_by, expires_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())
      ON CONFLICT (user_id) DO UPDATE SET user_name = EXCLUDED.user_name, user_email = EXCLUDED.user_email,
        daily_win_limit = EXCLUDED.daily_win_limit, daily_game_limit = EXCLUDED.daily_game_limit, market_ban = EXCLUDED.market_ban,
-       market_spend_limit = EXCLUDED.market_spend_limit, note = EXCLUDED.note, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-    [userId, u.rows[0].name ?? '', u.rows[0].email, dailyWin, dailyGame, ban, spend, note, by],
+       market_spend_limit = EXCLUDED.market_spend_limit, note = EXCLUDED.note, updated_by = EXCLUDED.updated_by, expires_at = EXCLUDED.expires_at, updated_at = now()`,
+    [userId, u.rows[0].name ?? '', u.rows[0].email, dailyWin, dailyGame, ban, spend, note, by, ends],
   )
   return 'saved'
 }

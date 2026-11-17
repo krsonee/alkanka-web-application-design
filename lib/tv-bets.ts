@@ -207,7 +207,7 @@ type BetRow = { id: number; user_id: string; pick: string; stake: number; odd: n
 
 async function payBet(bet: BetRow, status: BetStatus, payout: number) {
   const updated = await rows(sql`UPDATE tv_bets SET status = ${status}, payout = ${payout}, settled_at = now() WHERE id = ${bet.id} AND status = 'open' RETURNING id`)
-  if (updated.length && payout > 0) await credit(bet.user_id, payout)
+  if (updated.length && payout > 0) await credit(bet.user_id, payout, 'Yayın bahsi kazancı')
   return updated.length > 0
 }
 
@@ -472,17 +472,17 @@ export async function placeBet(userId: string, marketId: number, pick: string, s
     if (Number(e?.n ?? 0) + Math.floor(stake * odd) > cfg.fixedExposure) throw new Error('Bu seçenek için limit doldu')
   }
 
-  if (!(await debit(userId, stake))) throw new Error('Yeterli kanka coinin yok')
+  if (!(await debit(userId, stake, 'Yayın bahsi'))) throw new Error('Yeterli kanka coinin yok')
   const inserted = await rows<{ id: number }>(sql`INSERT INTO tv_bets (market_id, user_id, pick, stake, odd) VALUES (${marketId}, ${userId}, ${pick}, ${stake}, ${odd})
     ON CONFLICT (market_id, user_id) DO NOTHING RETURNING id`)
   if (!inserted.length) {
-    await credit(userId, stake)
+    await credit(userId, stake, 'Yayın bahsi iadesi')
     throw new Error('Bu etkinlikte zaten bahsin var')
   }
   const [still] = await rows(sql`SELECT 1 FROM tv_markets WHERE id = ${marketId} AND status = 'open'`)
   if (!still) {
     await rows(sql`DELETE FROM tv_bets WHERE id = ${inserted[0].id} AND status = 'open'`)
-    await credit(userId, stake)
+    await credit(userId, stake, 'Yayın bahsi iadesi')
     throw new Error('Bu etkinlik az önce kapandı, coinin iade edildi')
   }
   return { id: inserted[0].id, balance: await getBalance(userId) }

@@ -142,7 +142,7 @@ async function payOnce(userId: string, source: string, ref: string, coin: number
   const inserted = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
     VALUES (${userId}, ${source}, 0, ${coin}, ${ref}, ${note}) ON CONFLICT DO NOTHING RETURNING id`)
   if (!inserted.length) return false
-  await credit(userId, coin)
+  await credit(userId, coin, note)
   return true
 }
 
@@ -164,7 +164,7 @@ export async function tickWatch(userId: string): Promise<TvWatchStatus> {
       VALUES (${userId}, 'kankatv', 0, ${coin}, ${`${today}:${step}`}, ${`KankaTV ${step * cfg.watch.minutes} dk izleme`})
       ON CONFLICT DO NOTHING RETURNING id`)
     if (!inserted.length) continue
-    await credit(userId, coin)
+    await credit(userId, coin, 'KankaTV izleme ödülü')
     paid += coin
   }
   if (cfg.chests.enabled) {
@@ -347,7 +347,7 @@ export async function settlePredictions(opts: { userId?: string; limit?: number 
       const inserted = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
         VALUES (${row.user_id}, 'kankatv-tahmin', 0, ${row.coin}, ${`p:${row.id}`}, 'KankaTV sıradaki gol tahmini')
         ON CONFLICT DO NOTHING RETURNING id`)
-      if (inserted.length) await credit(row.user_id, row.coin)
+      if (inserted.length) await credit(row.user_id, row.coin, 'KankaTV gol tahmini ödülü')
     }
   }
   return settled

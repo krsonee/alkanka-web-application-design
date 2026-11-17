@@ -6,8 +6,9 @@ import { MarketGuide } from '@/components/panel/area-guides'
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition } from 'react'
 import { useUrlTab } from '@/components/panel/use-url-tab'
-import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, PackageOpen, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { stockLevel, stockWarning } from '@/lib/market-stock'
 import type { MarketProduct, MarketRequest, ProductInput } from '@/lib/market'
 import { deleteMarketProductAction, resolveMarketRequestAction, saveMarketProductAction } from '@/app/panel/market-actions'
 import { ImageField } from '@/components/panel/image-field'
@@ -30,6 +31,7 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
   const waiting = requests.filter((r) => r.status === 'beklemede')
+  const lowStock = products.filter((p) => p.active && stockLevel(p.stock, p.total) !== 'ok').sort((a, b) => a.stock - b.stock)
 
   function run(p: Promise<{ ok: true; message?: string } | { ok: false; error: string }>, after?: () => void) {
     start(async () => {
@@ -63,6 +65,26 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
         ))}
         <Flash ok={msg?.ok} text={msg?.text} token={msg} />
       </div>
+
+      {lowStock.length > 0 && (
+        <div role="status" className="flex flex-col gap-2 rounded-xl border border-primary/40 bg-primary/10 p-4 text-sm">
+          <p className="flex items-center gap-2 font-semibold text-foreground">
+            <PackageOpen className="size-4 text-primary" aria-hidden="true" />
+            {`Stoku azalan ya da biten ${lowStock.length} ürün var`}
+          </p>
+          <ul className="flex flex-col gap-1 text-muted-foreground">
+            {lowStock.map((p) => (
+              <li key={p.id}>
+                <span className="font-medium text-foreground">{p.name}</span>
+                {`: ${stockWarning(p.stock, p.total)} (toplam ${p.total})`}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Stok eklemek için Ürünler sekmesinde ürünün kalemine bas, &quot;Kalan stok&quot; alanını artır. Satmayacaksan ürünü gizle; gizli ürün için uyarı çıkmaz.
+          </p>
+        </div>
+      )}
 
       {view === 'talepler' ? (
         <RequestList requests={requests} pending={pending} onResolve={(id, ok, note) => run(resolveMarketRequestAction(id, ok, note))} />
@@ -99,6 +121,16 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
                 <span className={cn('min-w-0 flex-1 font-medium text-foreground', !p.active && 'opacity-50')}>{p.name}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">{p.price.toLocaleString('tr-TR')} KC</span>
                 <span className={cn('text-xs tabular-nums', p.stock > 0 ? 'text-muted-foreground' : 'text-destructive')}>Stok {p.stock}/{p.total}</span>
+                {p.active && stockLevel(p.stock, p.total) !== 'ok' && (
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-xs font-semibold',
+                      p.stock > 0 ? 'bg-primary/15 text-primary' : 'bg-destructive/15 text-destructive',
+                    )}
+                  >
+                    {p.stock > 0 ? 'Stok azaldı' : 'Stok bitti'}
+                  </span>
+                )}
                 <HideButton key={`${p.id}-${p.active}`} kind="market" id={p.id} hidden={!p.active} label={p.name} />
                 <button type="button" aria-label={`${p.name} düzenle`} onClick={() => setEditing({ ...p })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                   <Pencil className="size-4" aria-hidden="true" />

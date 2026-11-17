@@ -984,7 +984,7 @@ async function payRound(row: RoundRow) {
       VALUES (${userId}, 'cember', ${kp}, ${coins}, ${slotKey}, ${row.title}) ON CONFLICT DO NOTHING RETURNING id`)
     if (!marker.length) continue
     if (coins > 0) {
-      await credit(userId, coins)
+      await credit(userId, coins, 'Jako Çemberi ödülü')
       await recordHistory({ userId, userName: name, game: 'cember', mode: 'odul', opponent: row.title, stake: 0, result: 'win', delta: coins })
     }
     for (const p of c.prizes) {

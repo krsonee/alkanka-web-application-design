@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { rows, sql } from '@/lib/db'
 import { getSignupBonus } from '@/lib/site-texts'
 import { isBanned } from '@/lib/members-admin'
+import { applyCoins, noteCoins } from '@/lib/wallet-ledger'
 
 export const SIGNUP_BONUS = 250
 
@@ -29,27 +30,27 @@ export async function requireMember(): Promise<Member> {
 
 export async function getBalance(userId: string): Promise<number> {
   const bonus = await getSignupBonus().catch(() => SIGNUP_BONUS)
-  const r = await rows<{ balance: number }>(sql`
+  const r = await rows<{ balance: number; created: boolean }>(sql`
     INSERT INTO wallets (user_id, balance) VALUES (${userId}, ${bonus})
     ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id
-    RETURNING balance`)
-  return r[0]?.balance ?? 0
+    RETURNING balance, (xmax = 0) AS created`)
+  const balance = Number(r[0]?.balance ?? 0)
+  if (r[0]?.created && balance > 0) await noteCoins(userId, balance, 'Kayıt bonusu')
+  return balance
 }
 
-/** Atomically removes KC; returns false when the balance is insufficient. */
-export async function debit(userId: string, amount: number): Promise<boolean> {
+/** Atomically removes KC; returns false when the balance is insufficient. `why` is what the panel's coin statement shows. */
+export async function debit(userId: string, amount: number, why?: string): Promise<boolean> {
   if (!Number.isInteger(amount) || amount < 0) throw new Error('Geçersiz tutar.')
   await getBalance(userId)
   if (amount === 0) return true
-  const r = await rows(sql`UPDATE wallets SET balance = balance - ${amount}, updated_at = now()
-    WHERE user_id = ${userId} AND balance >= ${amount} RETURNING balance`)
-  return r.length > 0
+  return (await applyCoins(userId, -amount, why, { min: 0 })) !== null
 }
 
-export async function credit(userId: string, amount: number) {
+export async function credit(userId: string, amount: number, why?: string) {
   if (!Number.isInteger(amount) || amount <= 0) return
   await getBalance(userId)
-  await rows(sql`UPDATE wallets SET balance = balance + ${amount}, updated_at = now() WHERE user_id = ${userId}`)
+  await applyCoins(userId, amount, why)
 }
 
 export type HistoryInput = {

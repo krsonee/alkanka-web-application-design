@@ -6,7 +6,7 @@ import { DEAL_WARN_DAYS, dealDaysLeft, dealLabel, istanbulToday } from '@/lib/si
 
 export type SponsorReminder = {
   id: string
-  kind: 'deal' | 'earning'
+  kind: 'deal' | 'earning' | 'stock'
   urgent: boolean
   title: string
   text: string

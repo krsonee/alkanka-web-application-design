@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { driftMessage, wholeInRange } from '@/lib/drift'
 import { credit } from '@/lib/member'
+import { noteCoins } from '@/lib/wallet-ledger'
 
 export type WithdrawStatus = 'pending' | 'approved' | 'rejected' | 'fake'
 
@@ -333,7 +334,7 @@ export async function approveWithdrawal(id: number, reward: WithdrawReward) {
     reward_item = ${item}, resolved_at = now() WHERE id = ${id} AND status = 'pending' RETURNING *`)
   if (!row) throw new Error('Kayıt zaten sonuçlanmış.')
   const userId = String(row.user_id)
-  if (coin > 0) await credit(userId, coin)
+  if (coin > 0) await credit(userId, coin, 'Çekim paylaşımı ödülü')
   if (kp > 0) {
     const { ensureKp } = await import('@/lib/kanka-puan')
     await ensureKp()
@@ -378,7 +379,12 @@ export async function markWithdrawalFake(id: number) {
   if (row.status === 'fake') throw new Error('Zaten sahte olarak işaretli.')
   if (row.status === 'approved') {
     const coin = Number(row.reward_coin)
-    if (coin > 0) await rows(sql`UPDATE wallets SET balance = greatest(0, balance - ${coin}), updated_at = now() WHERE user_id = ${row.user_id}`)
+    if (coin > 0) {
+      const [w] = await rows<{ before: number; after: number }>(sql`UPDATE wallets w SET balance = greatest(0, w.balance - ${coin}), updated_at = now()
+        FROM (SELECT user_id, balance FROM wallets WHERE user_id = ${row.user_id} FOR UPDATE) o
+        WHERE w.user_id = o.user_id RETURNING o.balance AS before, w.balance AS after`)
+      if (w) await noteCoins(row.user_id, Number(w.after) - Number(w.before), 'Sahte çekim paylaşımı: ödül geri alındı')
+    }
     await rows(sql`DELETE FROM kp_events WHERE user_id = ${row.user_id} AND source = 'cekim' AND ref = ${String(id)}`).catch(() => {})
   }
   await rows(sql`UPDATE withdraw_shares SET status = 'fake', note = 'Sahte paylaşım', resolved_at = now() WHERE id = ${id}`)

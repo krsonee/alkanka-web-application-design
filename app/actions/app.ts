@@ -27,7 +27,7 @@ const ensureTable = async () => (await import('@/lib/mobile')).ensureMobile()
 async function payCombo(member: { id: string; name: string }, amount: number) {
   const paid = await claimCombo(member.id, amount).catch(() => 0)
   if (!paid) return 0
-  await credit(member.id, paid)
+  await credit(member.id, paid, 'Uygulama ve bildirim bonusu')
   await recordHistory({
     userId: member.id,
     userName: member.name,
@@ -58,7 +58,7 @@ export async function claimAppBonus(platform: string): Promise<BonusResult> {
     return { ok: true, awarded: false, amount: 0, balance: await getBalance(member.id) }
   }
   const combo = await payCombo(member, comboBonus)
-  await credit(member.id, installBonus)
+  await credit(member.id, installBonus, 'Uygulama kurulum bonusu')
   await recordHistory({
     userId: member.id,
     userName: member.name,
@@ -105,7 +105,7 @@ export async function subscribePush(sub: { endpoint?: string; keys?: { p256dh?: 
   await reportPushState(member.id, 'granted', true).catch(() => {})
   if (!inserted.length || pushBonus <= 0) return { ok: true, awarded: false, amount: 0 }
   const combo = await payCombo(member, comboBonus)
-  await credit(member.id, pushBonus)
+  await credit(member.id, pushBonus, 'Bildirim bonusu')
   await recordHistory({
     userId: member.id,
     userName: member.name,

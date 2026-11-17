@@ -23,6 +23,7 @@ import {
 import type { MemberRow, MemberStatus } from '@/lib/members-admin'
 import { BULK_LIMIT } from '@/lib/members-bulk-shared'
 import { MemberActivityTabs, type ActivityTab } from '@/components/panel/member-activity-tabs'
+import { MemberLedger } from '@/components/panel/member-ledger'
 import { BulkBar, type Picked } from '@/components/panel/member-bulk'
 import { MemberNotes } from '@/components/panel/member-notes'
 
@@ -419,7 +420,7 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
   const [walletReason, setWalletReason] = useState('')
   const wallet = walletAmount(amount)
 
-  const [tab, setTab] = useState<'genel' | ActivityTab>('genel')
+  const [tab, setTab] = useState<'genel' | 'coin' | ActivityTab>('genel')
   const [act, setAct] = useState<Awaited<ReturnType<typeof memberActivityAction>> | undefined>(undefined)
 
   const load = () =>
@@ -461,6 +462,7 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
               [
                 ['genel', 'Genel ve yönetim'],
                 ['oyunlar', `Oyunlar${act ? ` (${act.activity.gameSummary.played})` : ''}`],
+                ['coin', 'Coin dökümü'],
                 ['islemler', 'İşlemler'],
                 ['odul', 'Hediye ve rozet'],
               ] as const
@@ -520,7 +522,10 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
               </p>
             )}
 
+            {tab === 'coin' && <MemberLedger key={m.balance} userId={m.id} balance={m.balance} />}
+
             {tab !== 'genel' &&
+              tab !== 'coin' &&
               (act === undefined ? (
                 <p className="text-sm text-muted-foreground">Yükleniyor…</p>
               ) : act === null ? (

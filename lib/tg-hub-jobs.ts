@@ -24,7 +24,7 @@ export async function runWeeklyHub(force = false) {
     for (const [i, b] of board.entries()) {
       const amount = hub.counter.rewards[i]
       if (!amount || b.key.startsWith('tg:')) continue
-      await credit(b.key, amount).catch((e) => console.error('[hub-weekly] credit failed', e))
+      await credit(b.key, amount, 'Telegram haftalık ödülü').catch((e) => console.error('[hub-weekly] credit failed', e))
       paid.push(`${b.name} +${amount} KC`)
     }
     const botId = hub.guardBotId ?? hub.supportBotId

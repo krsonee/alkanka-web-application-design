@@ -94,7 +94,7 @@ async function buyShieldLocked(userId: string) {
   const cfg = await getBoostConfig()
   if ((await shieldCount(userId)) >= 3) throw new Error('En fazla 3 seri kalkanı biriktirebilirsin.')
   const { debit, recordHistory } = await import('@/lib/member')
-  if (!(await debit(userId, cfg.shieldPrice))) throw new Error('Kanka Coin bakiyen yetersiz.')
+  if (!(await debit(userId, cfg.shieldPrice, 'Seri kalkanı'))) throw new Error('Kanka Coin bakiyen yetersiz.')
   await rows(sql`INSERT INTO streak_shields (user_id, count) VALUES (${userId}, 1)
     ON CONFLICT (user_id) DO UPDATE SET count = streak_shields.count + 1, updated_at = now()`)
   await recordHistory({ userId, userName: 'Kanka', game: 'market', mode: 'harcama', opponent: 'Seri Kalkanı', stake: cfg.shieldPrice, result: 'loss', delta: -cfg.shieldPrice }).catch(() => {})
@@ -133,7 +133,7 @@ export async function onFirstMinuteOfDay(userId: string) {
     if (gap >= cfg.comeback.days) {
       const ins = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
         VALUES (${userId}, 'kampanya', 0, ${cfg.comeback.coin}, ${`geri-don:${today}`}, 'Geri dönüş hediyesi') ON CONFLICT DO NOTHING RETURNING id`)
-      if (ins.length) await credit(userId, cfg.comeback.coin)
+      if (ins.length) await credit(userId, cfg.comeback.coin, 'Geri dönüş hediyesi')
     }
   }
 
@@ -142,7 +142,7 @@ export async function onFirstMinuteOfDay(userId: string) {
     if (b?.md === today.slice(5)) {
       const ins = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
         VALUES (${userId}, 'kampanya', 0, ${cfg.birthday.coin}, ${`dogum-gunu:${today.slice(0, 4)}`}, 'Doğum günü hediyesi') ON CONFLICT DO NOTHING RETURNING id`)
-      if (ins.length) await credit(userId, cfg.birthday.coin)
+      if (ins.length) await credit(userId, cfg.birthday.coin, 'Doğum günü hediyesi')
     }
   }
 }

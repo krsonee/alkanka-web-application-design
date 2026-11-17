@@ -3,6 +3,9 @@ import { rows, sql } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { MARKET_ITEMS } from '@/components/alkanka/data'
 import { assertCanBuy } from '@/lib/member-limits'
+import { noteCoins } from '@/lib/wallet-ledger'
+import { stockWarning } from '@/lib/market-stock'
+import type { SponsorReminder } from '@/lib/sponsor-reminders'
 import { isAllowedImage } from '@/lib/site-registry'
 
 export type MarketKind = 'alkanka' | 'sponsor'
@@ -137,6 +140,27 @@ const MAX_STOCK = 100_000
 const clean = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max)
 const int = (v: unknown, min: number, max: number) => Math.min(max, Math.max(min, Math.floor(Number(v) || 0)))
 
+/** Products on sale that are sold out or about to be, for the panel's overview. Read when the screen opens. */
+export async function stockReminders(): Promise<SponsorReminder[]> {
+  const out: SponsorReminder[] = []
+  for (const p of await listProducts()) {
+    const warning = p.active ? stockWarning(p.stock, p.total) : null
+    if (!warning) continue
+    const empty = p.stock <= 0
+    out.push({
+      id: `stock-${p.id}`,
+      kind: 'stock',
+      urgent: empty,
+      title: p.name,
+      text: empty
+        ? `Stok bitti (${p.total} üzerinden 0). Üyeler bu ürünü alamıyor; stok ekle ya da ürünü gizle.`
+        : `Stok azaldı: ${p.total} üzerinden ${p.stock} kaldı. Bitmeden stok ekle.`,
+      href: '/panel?b=market&v=urunler',
+    })
+  }
+  return out.sort((a, b) => Number(b.urgent) - Number(a.urgent))
+}
+
 export async function saveProduct(input: ProductInput) {
   await ensure()
   const name = clean(input.name, 120)
@@ -197,7 +221,7 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
 
   const reserved = await rows(sql`UPDATE market_items SET stock = stock - 1 WHERE id = ${item.id} AND stock > 0 RETURNING stock`)
   if (!reserved.length) throw new Error('Stok tükendi.')
-  if (!(await debit(member.id, price))) {
+  if (!(await debit(member.id, price, 'Market alışverişi'))) {
     await rows(sql`UPDATE market_items SET stock = stock + 1 WHERE id = ${item.id}`)
     throw new Error('Kanka Coin bakiyen yetersiz.')
   }
@@ -297,5 +321,6 @@ export async function resolveRequest(id: number, approve: boolean, note: string)
   const req = r[0]
   if (!req) throw new Error('Talep bulunamadı ya da zaten sonuçlandı.')
   // A member who paid always has a wallet row; this only covers one that was removed since.
-  if (Number(req.refunded) === 0) await credit(req.user_id, req.price)
+  if (Number(req.refunded) === 0) await credit(req.user_id, req.price, 'Market iadesi')
+  else await noteCoins(req.user_id, Number(req.price), 'Market iadesi')
 }

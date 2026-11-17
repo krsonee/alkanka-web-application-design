@@ -2,10 +2,10 @@
 
 import { TasksGuide } from '@/components/panel/area-guides'
 import { HideButton } from '@/components/panel/hide-button'
-import { askReason } from '@/components/panel/confirm-dialog'
+import { askConfirm, askReason } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
-import { Pencil, Plus } from 'lucide-react'
-import { approveClaimAction, rejectClaimAction, saveTaskAction } from '@/app/panel/task-actions'
+import { Archive, ArchiveRestore, Copy, Pencil, Plus } from 'lucide-react'
+import { approveClaimAction, archiveTaskAction, rejectClaimAction, saveTaskAction } from '@/app/panel/task-actions'
 import type { PendingClaim, TaskInput, TaskRecord } from '@/lib/tasks'
 import { PERIODS, type TaskPeriod } from '@/lib/task-period'
 import { KIND_META, TASK_GAMES, TASK_KINDS, TASK_PLATFORMS, type TaskKind } from '@/lib/task-kinds'
@@ -75,6 +75,37 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
     })
   }
 
+  const live = tasks.filter((t) => !t.archived)
+  const archive = tasks.filter((t) => t.archived)
+  const iconButton = 'flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-50 max-sm:min-h-9 max-sm:px-3'
+
+  /** Opens the form with a hidden copy; a chain step cannot exist twice, so the copy leaves the chain. */
+  function copy(task: TaskRecord) {
+    setEditing({
+      ...task,
+      id: null,
+      title: `${task.title.slice(0, 72)} (kopya)`,
+      active: false,
+      sort: tasks.length,
+      link: task.link ?? '',
+      param: task.param ?? '',
+      chain: '',
+      chainStep: 0,
+      badge: task.badge ?? '',
+      startsAt: toLocalInput(task.startsAt),
+      endsAt: toLocalInput(task.endsAt),
+    })
+    setMsg({ ok: true, text: 'Kopya formda açıldı: adını ve ayarlarını düzelt, sonra kaydet. Kopya gizli kaydedilir.' })
+  }
+
+  async function setArchived(task: TaskRecord, archived: boolean) {
+    if (archived && !(await askConfirm(`"${task.title}" arşive alınsın mı? Sitede görünmez olur; üyelerin daha önce kazandığı puanlara dokunulmaz. Arşivden geri çıkarabilirsin.`))) return
+    start(async () => {
+      const res = await archiveTaskAction(task.id, archived)
+      setMsg(res.ok ? { ok: true, text: res.message ?? 'Kaydedildi.' } : { ok: false, text: res.error })
+    })
+  }
+
   const activeCount = tasks.filter((t) => t.active).length
   const autoCount = tasks.filter((t) => t.active && t.kind !== 'manual').length
   const totalPoints = tasks.filter((t) => t.active).reduce((sum, t) => sum + t.points, 0)
@@ -84,7 +115,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
     <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
       <TasksGuide />
       <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
-        Görev adı, kısa açıklama ve puan burada durur. Kayıt silinmez; yayından çıkarmak için aktif kutusunu kapat.
+        Görev adı, kısa açıklama ve puan burada durur. Kayıt silinmez: kısa süreliğine yayından çıkarmak için göz düğmesini, işi biten görevi listeden kaldırmak için arşiv düğmesini kullan.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -113,11 +144,13 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
         </div>
       </div>
       {editing && <TaskForm key={formKey} sites={sites} value={editing} pending={pending} onCancel={() => setEditing(null)} onSave={save} />}
-      {tasks.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz görev yok.</p>
+      {live.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          {archive.length ? 'Listede görev yok; hepsi arşivde.' : 'Henüz görev yok.'}
+        </p>
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
-          {tasks.map((task) => (
+          {live.map((task) => (
             <li key={task.id} data-find={`task-${task.id}`} className="flex flex-wrap items-center gap-3 p-3 text-sm">
               <span className="w-8 shrink-0 text-xs tabular-nums text-muted-foreground">{task.sort}</span>
               <span className={cn('min-w-0 flex-1 font-medium text-foreground', !task.active && 'opacity-50')}>
@@ -136,9 +169,45 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
               <button type="button" aria-label={`${task.title} düzenle`} onClick={() => setEditing({ ...task, link: task.link ?? '', param: task.param ?? '', chain: task.chain ?? '', badge: task.badge ?? '', startsAt: toLocalInput(task.startsAt), endsAt: toLocalInput(task.endsAt) })} className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-foreground max-sm:min-h-9 max-sm:px-3">
                 <Pencil className="size-4" aria-hidden="true" />
               </button>
+              <button type="button" aria-label={`${task.title} kopyala`} title="Kopyala" onClick={() => copy(task)} className={iconButton}>
+                <Copy className="size-4" aria-hidden="true" />
+              </button>
+              <button type="button" aria-label={`${task.title} arşivle`} title="Arşivle" disabled={pending} onClick={() => setArchived(task, true)} className={iconButton}>
+                <Archive className="size-4" aria-hidden="true" />
+              </button>
             </li>
           ))}
         </ul>
+      )}
+      {archive.length > 0 && (
+        <details className="rounded-xl border border-border bg-card">
+          <summary className="cursor-pointer p-3 text-sm font-semibold text-foreground">{`Arşiv (${archive.length})`}</summary>
+          <p className="px-3 pb-2 text-xs leading-relaxed text-muted-foreground">
+            Arşivdeki görev sitede görünmez. Geri çıkarınca gizli gelir; yayına almak için listede göz düğmesine basarsın.
+          </p>
+          <ul className="flex flex-col divide-y divide-border border-t border-border">
+            {archive.map((task) => (
+              <li key={task.id} data-find={`task-${task.id}`} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+                <span className="min-w-0 flex-1 text-muted-foreground">
+                  {task.title}
+                  <span className="ml-2">+{task.points}</span>
+                </span>
+                <button type="button" aria-label={`${task.title} kopyala`} title="Kopyala" onClick={() => copy(task)} className={iconButton}>
+                  <Copy className="size-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setArchived(task, false)}
+                  className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border px-3 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
+                >
+                  <ArchiveRestore className="size-4" aria-hidden="true" />
+                  Arşivden çıkar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
     <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4 lg:col-span-4">

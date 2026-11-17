@@ -29,6 +29,8 @@ export type TaskRecord = {
   badge: string | null
   /** Max members who can complete it per period (e.g. "İlk 100 Kanka"); 0 = unlimited. */
   cap: number
+  /** Put away by the panel: never shown to members and kept out of the panel's working list. */
+  archived: boolean
 }
 
 export const DAILY_PICKS = 5
@@ -115,6 +117,7 @@ export function ensureTasks() {
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS badge text`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS cap int NOT NULL DEFAULT 0`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS theme text`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false`)
     await rows(sql`CREATE TABLE IF NOT EXISTS trust_helpful (
       user_id text NOT NULL, review_id int NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, review_id))`)
@@ -161,6 +164,7 @@ function mapTask(row: Record<string, unknown>): TaskRecord {
     chainStep: Number(row.chain_step ?? 0) || 0,
     badge: row.badge ? String(row.badge) : null,
     cap: Math.max(0, Number(row.cap ?? 0) || 0),
+    archived: Boolean(row.archived),
   }
 }
 
@@ -170,14 +174,25 @@ export async function listTasks(): Promise<TaskRecord[]> {
   await seedAppTask().catch((error) => console.error('[tasks] app seed', (error as Error).message))
   await seedTaskPack().catch((error) => console.error('[tasks] pack seed', (error as Error).message))
   const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param,
-    category, pool, chain, chain_step, badge, cap FROM tasks ORDER BY sort, id`)
+    category, pool, chain, chain_step, badge, cap, archived FROM tasks ORDER BY sort, id`)
   return found.map(mapTask)
+}
+
+/** Archiving also takes the task off the site; taking it back out leaves it hidden until it is switched on again. */
+export async function archiveTask(id: number, archived: boolean): Promise<string> {
+  await ensureTasks()
+  const taskId = Number(id)
+  if (!Number.isInteger(taskId) || taskId < 1) throw new Error('Görev bulunamadı.')
+  const [row] = await rows<{ title: string }>(sql`UPDATE tasks SET archived = ${archived}, active = CASE WHEN ${archived}::boolean THEN false ELSE active END
+    WHERE id = ${taskId} RETURNING title`)
+  if (!row) throw new Error('Görev bulunamadı.')
+  return row.title
 }
 
 export async function listPublicTasks(): Promise<TaskRecord[]> {
   const now = Date.now()
   const live = (await listTasks()).filter((task) =>
-    task.active && (!task.startsAt || Date.parse(task.startsAt) <= now) && (!task.endsAt || Date.parse(task.endsAt) > now))
+    task.active && !task.archived && (!task.startsAt || Date.parse(task.startsAt) <= now) && (!task.endsAt || Date.parse(task.endsAt) > now))
   if (!live.some((t) => t.kind === 'social_follow' && !t.link)) return live
   const official = await officialSocialLinks()
   return live.map((t) => (t.kind === 'social_follow' && !t.link && t.param ? { ...t, link: official[t.param] ?? null } : t))
@@ -455,7 +470,7 @@ export async function awardTask(userId: string, taskId: number, claimKey?: strin
     RETURNING id`)
   const awarded = inserted.length > 0
   if (awarded) {
-    await credit(userId, points)
+    await credit(userId, points, 'Görev ödülü')
     if (task.badge) {
       const { awardBadge } = await import('@/lib/kanka-puan')
       await awardBadge(task.badge, userId, key || 'tek', task.title).catch((error) => console.error('[tasks] badge', (error as Error).message))
