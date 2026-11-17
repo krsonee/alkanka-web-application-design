@@ -40,6 +40,7 @@ export function GameResultCard({
   gameImage,
   stake,
   delta,
+  kcText,
   badge,
   players,
   extra,
@@ -54,6 +55,8 @@ export function GameResultCard({
   stake: number
   /** Net KC from the settled match; falls back to the stake while it is still unknown. */
   delta?: number | null
+  /** Replaces the KC line where no stake is on the table, e.g. a tournament match. */
+  kcText?: string
   /** Short highlight above the title, e.g. "Mars · 3x". */
   badge?: string
   players: ResultPlayer[]
@@ -161,7 +164,7 @@ export function GameResultCard({
           )}
         >
           <Coins className="size-5" aria-hidden="true" />
-          {kcLabel(outcome, stake, delta)}
+          {kcText ?? kcLabel(outcome, stake, delta)}
         </div>
 
         {ranked.length > 1 && (

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import useSWR, { useSWRConfig } from 'swr'
 import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, BOT_DAILY_PROFIT_CAP, TURN_SECONDS, botFillSeconds, isFullPotGame, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
@@ -46,6 +47,7 @@ import { arenaThemeGame } from '@/lib/table-themes'
 import { TableSetupWizard } from './table-setup-wizard'
 import { BOT_QUICK, PlayChooser, type PlayTab } from './play-chooser'
 import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
+import type { MyMatch, TableTour } from '@/lib/tournaments-shared'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -70,6 +72,8 @@ export type TableSummary = {
   winnerId: string | null
   tournamentId: number | null
   roundNo: number | null
+  /** Tournament title and round name; missing on tournament tables opened before these were stored. */
+  tour?: TableTour | null
   updatedAt: string
   paused?: boolean
   /** Milliseconds until the okey bot on turn moves; only the table poll sends it. */
@@ -83,7 +87,7 @@ export type TableSummary = {
 type LobbyData = {
   open: TableSummary[]
   mine: TableSummary[]
-  tournament: { id: string; game: string; round: number; title: string }[]
+  tournament: MyMatch[]
 }
 
 const fetcher = async (url: string) => {
@@ -274,13 +278,16 @@ export function TableLobby({
     tour.length > 0 ? (
       <div className="flex flex-col gap-2 rounded-2xl border border-primary bg-primary/10 p-4">
         {tour.map((t) => (
-          <div key={t.id} className="flex flex-wrap items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Trophy className="size-4 text-primary" aria-hidden="true" />
-              {t.title} · {t.round}. tur maçın hazır
+          <div key={t.tableId} className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Trophy className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                {t.title} · {t.round} maçın hazır
+              </span>
+              <span className="text-xs text-muted-foreground">Kayıt ücretin ödendi, masada bahis yok.</span>
             </span>
-            <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
-              Maça gir
+            <button onClick={() => setActiveId(t.tableId)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+              Masaya gir
             </button>
           </div>
         ))}
@@ -1116,6 +1123,13 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   const { recap, loading: recapLoading } = useMatchRecap(matchOver && !practice ? { game: data.game, tableId: id } : null)
   const recapBlock = practice ? <PracticeNote /> : <MatchRecapBlock recap={recap} loading={recapLoading} />
 
+  // A finished tournament table leaves the "maçın hazır" strip at once instead of on the next minute ping.
+  const tourOver = !!data && data.tournamentId != null && (data.status === 'bitti' || data.status === 'iptal')
+  useEffect(() => {
+    if (tourOver) refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourOver])
+
   if (error) return <RoomShell onLeave={() => onLeave()}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
   if (!data) {
     return (
@@ -1140,6 +1154,37 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   const duelStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn == null && data.state?.scores?.[mySeat] && idleMs > 10 * 60 * 1000
   const won = member != null && (data.winners ?? []).includes(member.id)
   const turnName = data.turn != null ? names[data.turn] : null
+  const tourney = data.tournamentId != null
+  const tourRound = data.tour?.round ?? (data.roundNo != null ? `${data.roundNo + 1}. tur` : null)
+  const winnerNames = data.players.filter((p) => (data.winners ?? []).includes(p.id)).map((p) => p.name).join(' & ')
+  // No stake sits on a tournament table, so its result speaks about the tournament instead of a pot or a refund.
+  const tourResult =
+    data.status === 'iptal'
+      ? 'Maç iptal edildi. Turnuva iptal olduysa kayıt ücretin iade edilir.'
+      : spectator
+        ? `Kazanan: ${winnerNames}`
+        : !data.tour
+          ? won
+            ? 'Maçı aldın, sonuç turnuvaya işlendi.'
+            : 'Maç rakibine yazıldı, sonuç turnuvaya işlendi.'
+          : data.tour.league
+            ? won
+              ? 'Galibiyetin puan durumuna işlendi.'
+              : 'Sonuç puan durumuna işlendi. Kalan maçların için turnuva sayfasına bak.'
+            : won
+              ? data.tour.round === 'Final'
+                ? 'Turnuvayı kazandın. Helal olsun kanka!'
+                : 'Turu geçtin. Sıradaki maçın açılınca "Turnuva maçın hazır" kutusu çıkar.'
+              : 'Bu turnuvada elendin. Bir dahakine görüşürüz kanka.'
+  const backToTournament = (
+    <Link
+      href="/turnuvalar"
+      onClick={() => refresh()}
+      className="rounded-xl bg-primary px-5 py-2.5 text-center text-sm font-bold text-primary-foreground"
+    >
+      Turnuvaya dön
+    </Link>
+  )
 
   const remote: Remote<unknown> = {
     id,
@@ -1192,7 +1237,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       immersive={immersive}
       playing={data.status === 'oynaniyor'}
       onLeave={() => onLeave(ended)}
-      title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
+      title={`${meta?.title ?? data.game} · ${tourney ? (data.tour?.title ?? 'Turnuva maçı') : `${formatAC(data.stake)} KC`}${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${tourney && tourRound ? ` · ${tourRound}` : ''}`}
     >
       <div className={cn('flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm', immersive && 'max-lg:flex-nowrap max-lg:px-2 max-lg:py-2')}>
         <span className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground', immersive && 'max-lg:hidden')}>
@@ -1474,7 +1519,9 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                         : 'Kaybettin'
               }
               subtitle={
-                practice
+                tourney
+                  ? tourResult
+                  : practice
                   ? data.winnerId == null
                     ? 'Pratik maçı berabere bitti.'
                     : won && !spectator
@@ -1490,6 +1537,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               gameImage={meta?.image}
               stake={data.stake}
               delta={spectator ? undefined : practice ? 0 : recap?.kc?.delta}
+              kcText={tourney ? (tourRound ? `Turnuva · ${tourRound}` : 'Turnuva maçı') : undefined}
               recap={spectator ? undefined : recapBlock}
               players={data.players.map((p) => ({
                 id: p.id,
@@ -1529,13 +1577,17 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                 >
                   Masaya dön
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { refresh(); onLeave(true) }}
-                  className="rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground"
-                >
-                  Lobiye dön
-                </button>
+                {tourney ? (
+                  backToTournament
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { refresh(); onLeave(true) }}
+                    className="rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground"
+                  >
+                    Lobiye dön
+                  </button>
+                )}
             </GameResultCard>
           </div>
         )}
@@ -1546,23 +1598,27 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               {left
                 ? 'Masadan ayrıldın, bahsin geri gelmez.'
                 : data.status === 'iptal'
-                ? 'Masa iptal edildi, bahis iade edildi.'
+                ? tourney
+                  ? 'Maç iptal edildi.'
+                  : 'Masa iptal edildi, bahis iade edildi.'
                 : data.winnerId == null
                   ? 'Berabere, bahisler iade edildi.'
                   : spectator
-                    ? `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`
+                    ? `Kazanan: ${winnerNames}`
                     : won
                       ? data.team
                         ? 'Takımın kazandı!'
                         : 'Kazandın!'
                       : 'Kaybettin'}
             </p>
-            {data.tournamentId && won && (
-              <p className="text-sm text-muted-foreground">Turdaki tüm maçlar bitince bir sonraki tura otomatik eşleşeceksin.</p>
+            {tourney && data.status === 'bitti' && !spectator && <p className="text-pretty text-sm text-muted-foreground">{tourResult}</p>}
+            {tourney ? (
+              backToTournament
+            ) : (
+              <button onClick={() => { refresh(); onLeave(true) }} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground">
+                Lobiye dön
+              </button>
             )}
-            <button onClick={() => { refresh(); onLeave(true) }} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground">
-              Lobiye dön
-            </button>
           </div>
         )}
       </div>

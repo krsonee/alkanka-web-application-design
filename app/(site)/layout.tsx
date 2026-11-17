@@ -45,6 +45,7 @@ import { TelegramStrip } from '@/components/alkanka/telegram-strip'
 import { getTelegramPromo } from '@/lib/telegram-promo'
 import { TELEGRAM_PROMO_DEFAULTS } from '@/lib/telegram-promo-config'
 import { isSignupClosed } from '@/lib/signup-gate'
+import { TournamentMatchBanner } from '@/components/alkanka/arena/tournament-match-banner'
 
 /** Promo bands above the page: gone while a table is being played, and on phones for the whole game page so "Oyna" is on the first screen. */
 const CHROME_BAND = '[body:has([data-table-playing])_&]:hidden max-lg:[body:has([data-game-page])_&]:hidden'
@@ -114,6 +115,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
             <WinnersTicker />
           </div>
           <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
+            <TournamentMatchBanner />
             {boosts.length > 0 && (
               <div className={CHROME_BAND}>
                 <BoostStrip boosts={boosts} />

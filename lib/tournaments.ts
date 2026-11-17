@@ -1,4 +1,5 @@
 import 'server-only'
+import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import type { ArenaGame } from './arena'
@@ -6,7 +7,16 @@ import { bracketChampion, createBracket, setMatchWinner, type Bracket } from './
 import { createLeague, leagueChampion, MAX_LEAGUE_PLAYERS, setLeagueWinner } from './league'
 import { initState } from './pvp/rules'
 import { cleanPrizes, prizeTotal, tournamentPayouts } from './tournament-prizes'
-import { MAX_TOURNAMENT_PLAYERS, type LiveMatch, type Tournament, type TournamentFormat, type TournamentStatus } from './tournaments-shared'
+import {
+  MAX_TOURNAMENT_PLAYERS,
+  roundName,
+  type LiveMatch,
+  type MyMatch,
+  type TableTour,
+  type Tournament,
+  type TournamentFormat,
+  type TournamentStatus,
+} from './tournaments-shared'
 
 export { TOURNAMENT_STATUSES, STATUS_LABEL, MAX_TOURNAMENT_PLAYERS } from './tournaments-shared'
 export type { Tournament, TournamentStatus } from './tournaments-shared'
@@ -14,6 +24,30 @@ export type { Tournament, TournamentStatus } from './tournaments-shared'
 type Row = Record<string, unknown>
 
 const entryKey = (e: Row) => (e.user_id ? String(e.user_id) : `misafir:${e.nickname}`)
+
+const RUNNING_MEMO_MS = 20_000
+let runningMemo: { at: number; value: boolean } | null = null
+
+/**
+ * "Is my match ready" is asked on every page a member opens. Between tournaments the answer is
+ * remembered for a few seconds, so those pages cost one tiny query instead of a scan of the tables.
+ */
+async function anyRunning() {
+  if (runningMemo && Date.now() - runningMemo.at < RUNNING_MEMO_MS) return runningMemo.value
+  const r = await pool.query(`SELECT 1 FROM tournaments WHERE status = 'basladi' LIMIT 1`)
+  runningMemo = { at: Date.now(), value: Boolean(r.rowCount) }
+  return runningMemo.value
+}
+
+/** A start, a result or a cancel changes what /turnuvalar shows; outside a request there is nothing to refresh. */
+function tournamentChanged() {
+  runningMemo = null
+  try {
+    revalidatePath('/turnuvalar')
+  } catch {
+    // Called while a page is being rendered: that render already reads the new state.
+  }
+}
 
 function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
   const own = entries.filter((e) => e.tournament_id === r.id)
@@ -75,13 +109,18 @@ async function load(where: string, params: unknown[]) {
   return t.rows.map((r) => mapRow(r, entries.rows, tables.rows))
 }
 
+/** Like `listTournaments`, but a failed read is an error instead of an empty list. */
+export async function readTournaments(): Promise<Tournament[]> {
+  await autoStartDue()
+  return load(
+    `ORDER BY CASE status WHEN 'basladi' THEN 0 WHEN 'kayit' THEN 1 WHEN 'bitti' THEN 2 ELSE 3 END, starts_at ASC`,
+    [],
+  )
+}
+
 export async function listTournaments(): Promise<Tournament[]> {
   try {
-    await autoStartDue()
-    return await load(
-      `ORDER BY CASE status WHEN 'basladi' THEN 0 WHEN 'kayit' THEN 1 WHEN 'bitti' THEN 2 ELSE 3 END, starts_at ASC`,
-      [],
-    )
+    return await readTournaments()
   } catch (error) {
     console.error('[tournaments] liste okunamadı', error)
     return []
@@ -170,6 +209,7 @@ export async function cancelTournament(id: number) {
   if (!r.rowCount) return
   await pool.query(`UPDATE game_tables SET status = 'iptal', updated_at = now() WHERE tournament_id = $1 AND status = 'oynaniyor'`, [id])
   await refundAll(id)
+  tournamentChanged()
 }
 
 export async function deleteTournament(id: number) {
@@ -178,6 +218,7 @@ export async function deleteTournament(id: number) {
   await pool.query(`UPDATE game_tables SET status = 'iptal' WHERE tournament_id = $1 AND status = 'oynaniyor'`, [id])
   await pool.query('DELETE FROM tournament_entries WHERE tournament_id = $1', [id])
   await pool.query('DELETE FROM tournaments WHERE id = $1', [id])
+  tournamentChanged()
 }
 
 export async function joinTournament(m: Member, id: number) {
@@ -255,6 +296,7 @@ export async function startTournament(id: number) {
   )
   if (!r.rowCount) return
   await openReadyMatches(id)
+  tournamentChanged()
 }
 
 /**
@@ -310,11 +352,13 @@ async function openReadyMatches(id: number) {
     }
     // One statement for the whole round: a 1024-player bracket opens 512 tables while the tournament row is locked.
     if (tables.length) {
+      const league = row.format === 'lig'
+      const tour: TableTour = { title: String(row.title), round: roundName(league, roundIdx, bracket.rounds.length), league }
       await client.query(
-        `INSERT INTO game_tables (game, stake, seats, status, players, state, created_by, mode, tournament_id, round_no, match_no)
-         SELECT $1, 0, 2, 'oynaniyor', t.players, t.state, 'turnuva', 'turnuva', $2, $3, t.match_no
+        `INSERT INTO game_tables (game, stake, seats, status, players, state, created_by, mode, tournament_id, round_no, match_no, options)
+         SELECT $1, 0, 2, 'oynaniyor', t.players, t.state, 'turnuva', 'turnuva', $2, $3, t.match_no, $5::jsonb
          FROM jsonb_to_recordset($4::jsonb) AS t(match_no int, players jsonb, state jsonb)`,
-        [row.game, id, roundIdx, JSON.stringify(tables)],
+        [row.game, id, roundIdx, JSON.stringify(tables), JSON.stringify({ tour })],
       )
     }
     await client.query('COMMIT')
@@ -401,6 +445,7 @@ export async function advanceTournament(id: number, round: number, match: number
     client.release()
   }
   await openReadyMatches(id)
+  tournamentChanged()
 }
 
 /** Admin override for no-shows: closes the live table and advances the chosen player. */
@@ -413,11 +458,22 @@ export async function adminSetMatchWinner(id: number, round: number, match: numb
   await advanceTournament(id, round, match, winnerKey)
 }
 
-export async function myTournamentTables(userId: string) {
+/** The member's open tournament tables, oldest first. Empty without a query while no tournament is being played. */
+export async function myMatches(userId: string): Promise<MyMatch[]> {
+  if (!(await anyRunning())) return []
   const r = await pool.query(
-    `SELECT g.id, g.game, g.round_no, t.title FROM game_tables g JOIN tournaments t ON t.id = g.tournament_id
-     WHERE g.status = 'oynaniyor' AND g.players @> $1::jsonb`,
+    `SELECT g.id, g.game, g.round_no, t.id AS tournament_id, t.title, t.format,
+            jsonb_array_length(COALESCE(t.bracket->'rounds', '[]'::jsonb)) AS rounds
+     FROM game_tables g JOIN tournaments t ON t.id = g.tournament_id
+     WHERE g.status = 'oynaniyor' AND t.status = 'basladi' AND g.players @> $1::jsonb
+     ORDER BY g.created_at ASC`,
     [JSON.stringify([{ id: userId }])],
   )
-  return r.rows.map((x) => ({ id: String(x.id), game: String(x.game), round: Number(x.round_no), title: String(x.title) }))
+  return r.rows.map((x) => ({
+    tableId: String(x.id),
+    tournamentId: Number(x.tournament_id),
+    game: String(x.game),
+    title: String(x.title),
+    round: roundName(x.format === 'lig', Number(x.round_no), Number(x.rounds)),
+  }))
 }

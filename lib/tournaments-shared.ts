@@ -1,5 +1,5 @@
 import type { ArenaGame } from './arena'
-import type { Bracket } from './bracket'
+import { roundLabel, type Bracket } from './bracket'
 
 export const TOURNAMENT_STATUSES = ['kayit', 'basladi', 'bitti', 'iptal'] as const
 export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number]
@@ -28,6 +28,19 @@ export const isTournamentFormat = (v: unknown): v is TournamentFormat => TOURNAM
 export type TournamentEntry = { id: number; userId: string | null; nickname: string; telegram: string; createdAt: string }
 
 export type LiveMatch = { tableId: string; round: number; match: number; players: string[]; status: string }
+
+/** Rounds are stored from 0 and read from 1. A knockout names its last three rounds. */
+export const roundName = (league: boolean, index: number, total: number) =>
+  league || total < 1 ? `${index + 1}. tur` : roundLabel(index, total)
+
+/** A tournament table the member is seated at and still has to play. */
+export type MyMatch = { tableId: string; tournamentId: number; game: string; title: string; round: string }
+
+/** Straight to the table: the game page opens the room named in `masa` without its stake screen. */
+export const matchHref = (m: Pick<MyMatch, 'game' | 'tableId'>) => `/oyunlar/${m.game}?masa=${m.tableId}`
+
+/** What a tournament table carries about its tournament, so the table screen needs no extra query. */
+export type TableTour = { title: string; round: string; league: boolean }
 
 export type Tournament = {
   id: number

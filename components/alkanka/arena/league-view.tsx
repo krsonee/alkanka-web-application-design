@@ -72,7 +72,7 @@ export function LeagueView({
       </div>
 
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Haftalar">
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Turlar">
           {bracket.rounds.map((r, i) => {
             const done = r.every((m) => m.winner)
             return (
@@ -88,7 +88,7 @@ export function LeagueView({
                   done && round !== i && 'text-muted-foreground',
                 )}
               >
-                {i + 1}. hafta
+                {i + 1}. tur
               </button>
             )
           })}

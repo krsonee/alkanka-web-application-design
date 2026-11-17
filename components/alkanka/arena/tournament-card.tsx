@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { CalendarClock, ChevronDown, Coins, Crown, Gamepad2, Medal, ScrollText, Trophy, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META } from '@/lib/arena'
-import { STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
+import { matchHref, roundName, STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
 import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
@@ -45,7 +45,7 @@ const STATUS_STYLE = {
   iptal: 'bg-muted text-muted-foreground',
 } as const
 
-export function TournamentCard({ t }: { t: Tournament }) {
+export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: () => void }) {
   const meta = ARENA_META[t.game]
   const { points, member, refresh, requireLogin } = usePoints()
   const router = useRouter()
@@ -55,7 +55,12 @@ export function TournamentCard({ t }: { t: Tournament }) {
   const canAfford = points >= t.entryFee
   const fill = Math.min(100, Math.round((t.entries.length / t.maxPlayers) * 100))
   const joined = member != null && t.entries.some((e) => e.userId === member.id)
-  const myMatch = member ? t.liveMatches.find((m) => m.players.includes(member.id)) : undefined
+  const myMatch = member ? t.liveMatches.find((m) => m.status === 'oynaniyor' && m.players.includes(member.id)) : undefined
+  const league = t.format === 'lig'
+  const liveCount = t.liveMatches.filter((m) => m.status === 'oynaniyor').length
+  const myId = member?.id ?? null
+  const eliminated =
+    myId != null && !league && (t.bracket?.rounds.some((round) => round.some((m) => m.winner != null && m.winner !== myId && m.players.includes(myId))) ?? false)
 
   const toggle = () => {
     if (!requireLogin()) return
@@ -65,6 +70,7 @@ export function TournamentCard({ t }: { t: Tournament }) {
       if (!r.ok) setError(r.error ?? 'İşlem başarısız.')
       refresh()
       router.refresh()
+      onChanged?.()
     })
   }
 
@@ -145,15 +151,34 @@ export function TournamentCard({ t }: { t: Tournament }) {
           {t.status === 'basladi' && (
             <div className="flex flex-col gap-2 rounded-2xl border border-border bg-secondary p-4 text-sm">
               <p className="font-semibold text-foreground">
-                {t.currentRound ? `${t.currentRound}. tur oynanıyor` : 'Turnuva sürüyor'} · {t.liveMatches.filter((m) => m.status === 'oynaniyor').length} maç aynı anda devam ediyor
+                {t.currentRound != null ? `${roundName(league, t.currentRound, t.bracket?.rounds.length ?? 0)} oynanıyor` : 'Turnuva sürüyor'} ·{' '}
+                {liveCount > 0 ? `${liveCount} maç devam ediyor` : 'sıradaki maçlar açılıyor'}
               </p>
               <p className="leading-relaxed text-muted-foreground">
-                Turdaki tüm maçlar bitince kazananlar otomatik olarak bir sonraki tura eşleşir, finale kadar böyle devam eder.
+                {league
+                  ? 'Turdaki tüm maçlar bitince sıradaki tur açılır. Herkes herkesle bir kez oynar, bu sayfa kendiliğinden güncellenir.'
+                  : 'Turdaki tüm maçlar bitince kazananlar bir sonraki tura eşleşir, finale kadar böyle devam eder. Bu sayfa kendiliğinden güncellenir.'}
               </p>
-              {myMatch && myMatch.status === 'oynaniyor' && (
-                <Link href={`/oyunlar/${t.game}`} className="mt-1 rounded-xl bg-primary px-5 py-3 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground">
-                  Maçın hazır, oyuna gir
-                </Link>
+              {myMatch ? (
+                <>
+                  <Link
+                    href={matchHref({ game: t.game, tableId: myMatch.tableId })}
+                    className="mt-1 rounded-xl bg-primary px-5 py-3 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground"
+                  >
+                    Maçın hazır, masaya gir
+                  </Link>
+                  <p className="text-center text-xs text-muted-foreground">
+                    {t.entryFee ? 'Kayıt ücretin ödendi, masada ayrıca bahis yok.' : 'Turnuva masasında bahis yok.'}
+                  </p>
+                </>
+              ) : (
+                joined && (
+                  <p className="mt-1 rounded-xl border border-border bg-card p-3 font-semibold text-foreground" role="status">
+                    {eliminated
+                      ? 'Bu turnuvada elendin. Eşleşmeleri aşağıdan izleyebilirsin.'
+                      : 'Şu an açık maçın yok. Sıradaki maçın açılınca düğmesi burada çıkar.'}
+                  </p>
+                )
               )}
             </div>
           )}

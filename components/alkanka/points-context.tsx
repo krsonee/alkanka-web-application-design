@@ -3,12 +3,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import useSWR from 'swr'
 import { claimPrediction, spendKC } from '@/app/actions/wallet'
+import type { MyMatch } from '@/lib/tournaments-shared'
 
-type MeResponse = { member: { id: string; name: string } | null; balance: number }
+type MeResponse = { member: { id: string; name: string } | null; balance: number; matches?: MyMatch[] }
+
+const NO_MATCHES: MyMatch[] = []
 
 type PointsContextValue = {
   points: number
   member: MeResponse['member']
+  /** Tournament tables waiting for this member. Only ever taken from a real answer, never from the device's last known state. */
+  matches: MyMatch[]
   /** The session request has not answered yet; `member` may still come from the device's last known state. */
   loading: boolean
   /** Guest or member is decided (by the request or the device's last known state), so account UI can be drawn. */
@@ -93,6 +98,7 @@ export function PointsProvider({ children }: { children: ReactNode }) {
   const me = data ?? hint
   const member = me?.member ?? null
   const points = member ? (me?.balance ?? 0) : 0
+  const matches = data?.member ? (data.matches ?? NO_MATCHES) : NO_MATCHES
   // A failed request is not an answer: walls and login prompts wait for a real one.
   const loading = data === undefined
   const known = me != null || error != null
@@ -139,8 +145,8 @@ export function PointsProvider({ children }: { children: ReactNode }) {
   if (member && prev.current === null && data) prev.current = data.balance
 
   const value = useMemo(
-    () => ({ points, member, loading, known, lastGain, predict, spend, setBalance, refresh: () => mutate(), requireLogin }),
-    [points, member, loading, known, lastGain, predict, spend, setBalance, mutate, requireLogin],
+    () => ({ points, member, matches, loading, known, lastGain, predict, spend, setBalance, refresh: () => mutate(), requireLogin }),
+    [points, member, matches, loading, known, lastGain, predict, spend, setBalance, mutate, requireLogin],
   )
   return <PointsContext.Provider value={value}>{children}</PointsContext.Provider>
 }

@@ -27,6 +27,7 @@ import { normalizeRules, normalizeVariant, rulesToList } from '@/lib/games/batak
 import { normalizePistiRules, normalizeTarget, pistiRulesToList } from '@/lib/games/pisti'
 import { normalizePapazRules, papazRulesToList } from '@/lib/games/papaz'
 import { monoRulesToList, normalizeMonoRules } from '@/lib/games/monopoly'
+import type { TableTour } from '@/lib/tournaments-shared'
 
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
 
@@ -41,7 +42,7 @@ export type TableRow = {
   version: number
   winnerId: string | null
   /** hold: extra coins blocked per player on single-game tavla tables to cover a mars (2x) or ağır mars (3x). */
-  options: TableOptions & { winners?: string[]; lastActs?: Record<string, string>; forfeits?: number; hold?: number }
+  options: TableOptions & { winners?: string[]; lastActs?: Record<string, string>; forfeits?: number; hold?: number; tour?: TableTour }
   createdBy: string
   tournamentId: number | null
   roundNo: number | null
@@ -125,6 +126,7 @@ function mapTable(r: Record<string, unknown>): TableRow {
       lastActs: raw.lastActs,
       forfeits: Number(raw.forfeits ?? 0) || 0,
       ...(raw.hold ? { hold: Number(raw.hold) || 0 } : {}),
+      ...(raw.tour && typeof raw.tour === 'object' ? { tour: raw.tour } : {}),
     },
     createdBy: String(r.created_by ?? ''),
     tournamentId: r.tournament_id == null ? null : Number(r.tournament_id),
@@ -168,6 +170,7 @@ export function tableView(t: TableRow, userId: string | null) {
     winnerId: t.winnerId,
     tournamentId: t.tournamentId,
     roundNo: t.roundNo,
+    tour: t.options.tour ?? null,
     updatedAt: t.updatedAt,
     seat,
     spectator: seat < 0,
