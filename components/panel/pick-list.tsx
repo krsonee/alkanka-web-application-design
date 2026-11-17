@@ -6,7 +6,7 @@ import { ChevronDown, Loader2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type PickRow = { userId: string; name: string; pick: string; note?: string; at?: string }
-export type PickListData = { ok: true; total: number; rows: PickRow[]; summary?: string } | { ok: false; error: string }
+export type PickListData = { ok: true; total: number; rows: PickRow[]; summary?: string; closed?: boolean } | { ok: false; error: string }
 
 const when = (iso?: string) =>
   iso ? new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '-'
@@ -20,7 +20,9 @@ export function PickList({
   title = 'Katılımcılar ve tahminleri',
   empty = 'Henüz kimse tahmin yapmadı.',
   whenLabel = 'Ne zaman',
+  onData,
 }: {
+  onData?: (data: PickListData) => void
   cacheKey: string
   load: () => Promise<PickListData>
   count?: number
@@ -32,7 +34,7 @@ export function PickList({
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const panelId = useId()
-  const { data, error, isLoading } = useSWR(open ? cacheKey : null, load, { revalidateOnFocus: false })
+  const { data, error, isLoading } = useSWR(open ? cacheKey : null, load, { revalidateOnFocus: false, onSuccess: onData })
   const rows = data?.ok ? data.rows : []
   const needle = q.trim().toLocaleLowerCase('tr')
   const shown = needle ? rows.filter((r) => r.name.toLocaleLowerCase('tr').includes(needle) || r.pick.toLocaleLowerCase('tr').includes(needle)) : rows

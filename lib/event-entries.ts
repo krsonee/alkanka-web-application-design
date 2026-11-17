@@ -334,7 +334,7 @@ const PAY_BATCH = 150
  * Credits the prizes of a settled round. Each prize is claimed by stamping its row first, so a
  * second run (a retry, another instance, the next tick) can never pay the same place twice.
  */
-async function payRound(event: Pick<EventItem, 'id' | 'title'>, round: number) {
+async function payRound(event: Pick<EventItem, 'id' | 'title' | 'rank'>, round: number) {
   const { credit, recordHistory } = await import('@/lib/member')
   const { sendMessage } = await import('@/lib/inbox')
   const due = await rows<{ user_id: string; user_name: string; place: number; prize: number }>(sql`
@@ -360,7 +360,10 @@ async function payRound(event: Pick<EventItem, 'id' | 'title'>, round: number) {
       userId: w.user_id,
       targetLabel: 'Etkinlik ödülü',
       title: 'Etkinlik ödülün hesabında',
-      body: `${event.title} etkinliğini ${w.place}. sırada bitirdin. ${prize.toLocaleString('tr-TR')} KC hesabına eklendi.`,
+      body:
+        rankOf(event) === 'draw'
+          ? `${event.title} çekilişinde adın çıktı (${w.place}. ödül). ${prize.toLocaleString('tr-TR')} KC hesabına eklendi.`
+          : `${event.title} etkinliğini ${w.place}. sırada bitirdin. ${prize.toLocaleString('tr-TR')} KC hesabına eklendi.`,
       url: '/kampanyalar',
       sentBy: 'Sistem',
     }).catch((error) => console.error('[events] ödül mesajı gönderilemedi', (error as Error).message))

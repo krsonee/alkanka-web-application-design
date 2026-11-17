@@ -660,6 +660,15 @@
     <li>Sekmenin ışığı yeşile dönmeli. Sitedeki sohbet kutusundan bir mesaj yaz ve gruba düştüğünü kontrol et.</li>
   </ol>
   <p>Üyeler hesaplarını Telegram'a bu bot üzerinden bağlar (profil sayfasındaki "Telegram'ı bağla"). Sayaç ödülleri, DM duyurular ve üye köprüsü bu bağlantıya göre çalışır.</p>
+  <h3>Sitedeki sohbeti moderatör hesabıyla yönetmek</h3>
+  <ol>
+    <li><span class="path">Üyeler</span> bölümünde üyenin kartını aç ve <strong>Rol ver</strong> kutusundan <strong>Moderatör</strong> rolünü ver. Panele giriş yetkisi gerekmez; üye kendi site hesabıyla çalışır.</li>
+    <li>Moderatör sitedeki sohbeti açınca isimlerin altı noktalı çizgili görünür. İsme tıklayınca menü açılır: <strong>Mesajı sil</strong>, <strong>10 dakika sustur</strong>, <strong>1 saat sustur</strong>, <strong>24 saat sustur</strong>, <strong>Susturmayı kaldır</strong>.</li>
+    <li>Silinen mesaj siteden ve Telegram grubundan silinir. Susturulan kişi süre dolana kadar siteden yazamaz, Telegram grubunda da susturulur.</li>
+    <li>Her işlem, yapan moderatörün adıyla <span class="path">Telegram Merkezi → Kayıtlar</span>'a düşer.</li>
+  </ol>
+  <div class="box warn"><strong>Bot grupta yönetici değilse</strong> ya da mesaj 48 saatten eskiyse işlem yalnızca sitede geçerli olur; moderatörün ekranındaki not bunu açıkça yazar. Görevli rolündeki üyeler ve bot duyuruları susturulamaz, moderatör kendini susturamaz.</div>
+  <p><strong>Rol etiketi:</strong> Moderatör ya da Sponsor Destek rolündeki üye siteden yazdığında mesajı gruba adının yanında rolüyle düşer: <code>Ahmet [Moderatör] (site): mesaj</code>. Diğer üyelerde eskisi gibi <code>Ahmet (site): mesaj</code> yazar.</p>
 </section>
 
 <section id="oran">

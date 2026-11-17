@@ -153,6 +153,7 @@ export async function loadEventBoard(eventId: string): Promise<PickListData> {
     return {
       ok: true,
       total: board.entrants,
+      closed: board.settled && !board.unpaid,
       summary: `${board.round}. tur · ${board.entrants} katılımcı. ${state}`,
       rows: board.rows.map((r) => ({
         userId: r.userId,

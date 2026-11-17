@@ -226,6 +226,27 @@ const MOD_STEPS: GuideStep[] = [
     ),
   },
   {
+    title: 'Sitedeki sohbeti moderatör hesabıyla yönet',
+    body: (
+      <ul className={ul}>
+        <li>
+          <b>Üyeler</b> bölümünde üyenin kartındaki <b>Rol ver</b> kutusundan <b>Moderatör</b> rolünü ver. O üye sitedeki sohbette isimlerin altı noktalı çizgili olduğunu görür; panele girmesi gerekmez.
+        </li>
+        <li>
+          İsme tıklayınca <b>Mesajı sil</b>, <b>10 dakika</b>, <b>1 saat</b>, <b>24 saat sustur</b> ve <b>Susturmayı kaldır</b> çıkar. Silinen mesaj Telegram grubundan da silinir; susturulan kişi
+          siteden de gruptan da yazamaz.
+        </li>
+        <li>Görevli rolündeki üyeler ve bot duyuruları susturulamaz. Bot grupta yönetici değilse işlem sadece sitede geçerli olur; ekrandaki not bunu söyler.</li>
+        <li>
+          Her silme ve susturma, kimin yaptığıyla birlikte <b>Telegram Merkezi → Kayıtlar</b>’a yazılır.
+        </li>
+        <li>
+          Moderatör ya da Sponsor Destek rolündeki üye siteden yazınca, mesajı Telegram grubuna adının yanında rolüyle düşer: <span className={code}>Ahmet [Moderatör] (site): …</span>
+        </li>
+      </ul>
+    ),
+  },
+  {
     title: 'Kanal kapanırsa ve istatistik',
     body: (
       <ul className={ul}>

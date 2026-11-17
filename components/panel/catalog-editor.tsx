@@ -235,6 +235,7 @@ function scoringText(rank: EventRank, game: string) {
 function EventBoardBox({ id, item }: { id: string; item: Item }) {
   const [version, setVersion] = useState(0)
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [closed, setClosed] = useState(false)
   const [pending, start] = useTransition()
   const [now] = useState(() => Date.now())
   const rank = eventRank(item)
@@ -278,14 +279,17 @@ function EventBoardBox({ id, item }: { id: string; item: Item }) {
         pickLabel="Puan"
         whenLabel="Katıldı"
         empty="Henüz katılan yok."
+        onData={(d) => setClosed(d.ok && Boolean(d.closed))}
       />
       <p className="text-xs text-muted-foreground">Liste kaydedilmiş ayarlara göre gelir; değişiklik yaptıysan önce kaydet.</p>
-      {ended && (
+      {ended && (!closed || status) && (
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={settle} disabled={pending} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-60">
-            {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-            Şimdi sonuçlandır
-          </button>
+          {!closed && (
+            <button type="button" onClick={settle} disabled={pending} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-60">
+              {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+              Şimdi sonuçlandır
+            </button>
+          )}
           {status && (
             <p role="status" className={cn('text-xs', status.ok ? 'text-primary' : 'text-destructive')}>
               {status.text}
