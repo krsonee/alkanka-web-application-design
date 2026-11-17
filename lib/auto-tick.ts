@@ -4,6 +4,8 @@ import { rows, sql } from '@/lib/db'
 const TELEGRAM_EVERY_SEC = 180
 const KANKATV_EVERY_SEC = 60
 const HUB_EVERY_SEC = 60
+const LEDGER_PRUNE_EVERY_SEC = 6 * 3600
+const LEDGER_LOOK_GAP_MS = 3_600_000
 // A warm instance asks the database for a slot at most this often, however many pages it renders.
 const LOCAL_GAP_MS = 10_000
 
@@ -46,11 +48,27 @@ async function kankatvTick() {
   ])
 }
 
+let lastLedgerLook = 0
+
+/** Trims the coin ledger a few times a day. A warm instance asks about the slot at most once an hour. */
+async function ledgerPruneSlot() {
+  const now = Date.now()
+  if (now - lastLedgerLook < LEDGER_LOOK_GAP_MS) return
+  lastLedgerLook = now
+  if (!(await claim('auto_tick_ledger_prune', LEDGER_PRUNE_EVERY_SEC))) return
+  const { pruneLedger } = await import('@/lib/wallet-ledger')
+  await pruneLedger()
+}
+
 async function hubTickSlot() {
   if (!(await claim('auto_tick_hub', HUB_EVERY_SEC))) return
   const [{ hubTick }, { runOutbox }] = await Promise.all([import('@/lib/tg-hub-jobs'), import('@/lib/outbox')])
-  // Scheduled notifications and inbox messages share this slot, so they cost no claim of their own.
-  await Promise.all([hubTick(), runOutbox().catch((e) => console.error('[auto-tick] outbox', e))])
+  // Scheduled notifications, inbox messages and the ledger trim share this slot, so they wake nothing on their own.
+  await Promise.all([
+    hubTick(),
+    runOutbox().catch((e) => console.error('[auto-tick] outbox', e)),
+    ledgerPruneSlot().catch((e) => console.error('[auto-tick] ledger prune', e)),
+  ])
 }
 
 let lastPostAttempt = 0

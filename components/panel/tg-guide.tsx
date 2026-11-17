@@ -237,7 +237,7 @@ const MOD_STEPS: GuideStep[] = [
           <b>Üye köprüsü</b>: Telegram’ını siteye bağlamış ve özelden yazılabilen üye sayısı. Kanal giderse yeni adresi onlara DM duyuruyla ulaştırırsın.
         </li>
         <li>
-          <b>Kampanya davet linkleri</b>: her reklama ayrı link aç, hangi linkten kaç kişi geldiğini gör. Saldırı bir linkten geliyorsa sadece onu iptal et.
+          <b>Telegram davet linkleri</b>: her reklama ayrı link aç, hangi linkten kaç kişi geldiğini gör. Saldırı bir linkten geliyorsa sadece onu iptal et.
         </li>
         <li>
           <b>Durum → İstatistik</b>: son 7 ya da 30 günde mesaj, yazan kişi, giriş, çıkış ve en yoğun saatler. Telegram görüntülenme sayısını botlara vermez.
@@ -340,7 +340,7 @@ const SETUP_STEPS: GuideStep[] = [
           <b>Kanal girişleri alarmı</b> ve <b>Yönetici ve bot yetkisi alarmı</b> (Koruma): her giriş ve çıkış bildirilir.
         </li>
         <li>
-          <b>Açık kampanya davet linki</b> (Dayanıklılık): aynı giriş bildirimleri. Kampanya bitince linki iptal et.
+          <b>Açık Telegram davet linki</b> (Dayanıklılık): aynı giriş bildirimleri. Kampanya bitince linki iptal et.
         </li>
         <li>
           <b>Dış zamanlayıcı</b> (Bağlantı &amp; Cron): ne kadar sık çağırırsa o kadar pahalı; çoğu zaman gerekmez.

@@ -39,12 +39,12 @@ export async function joinEvent(userId: string, userName: string, eventId: strin
 
     const { debit, credit, recordHistory } = await import('@/lib/member')
     const price = Math.max(0, Math.floor(Number(event.entry) || 0))
-    if (price > 0 && !(await debit(userId, price))) throw new Error('Kanka Coin bakiyen yetersiz.')
+    if (price > 0 && !(await debit(userId, price, 'Etkinlik katılımı'))) throw new Error('Kanka Coin bakiyen yetersiz.')
 
     const inserted = await rows<{ event_id: string }>(sql`INSERT INTO event_entries (user_id, event_id, paid)
       VALUES (${userId}, ${eventId}, ${price}) ON CONFLICT DO NOTHING RETURNING event_id`)
     if (!inserted.length) {
-      if (price > 0) await credit(userId, price)
+      if (price > 0) await credit(userId, price, 'Etkinlik katılım iadesi')
       throw new Error('Bu etkinliğe zaten katıldın.')
     }
     if (price > 0) {

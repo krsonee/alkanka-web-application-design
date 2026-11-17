@@ -12,9 +12,20 @@ import { LimitsGuide } from '@/components/panel/area-guides'
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-normal text-foreground outline-none focus:border-primary'
 
 type Target = { id: string; name: string; email: string }
-type Draft = { dailyWinLimit: string; dailyGameLimit: string; marketBan: boolean; marketSpendLimit: string; note: string }
+type Draft = { dailyWinLimit: string; dailyGameLimit: string; marketBan: boolean; marketSpendLimit: string; note: string; expiresAt: string }
+
+/** ISO time as the value a datetime-local input shows in the browser's own time zone. */
+function localInput(iso: string | null | undefined) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
+
+const fromNow = (days: number) => localInput(new Date(Date.now() + days * 86_400_000).toISOString())
+const endsLabel = (iso: string) => new Date(iso).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' })
 
 const toDraft = (l?: MemberLimit): Draft => ({
+  expiresAt: localInput(l?.expiresAt),
   dailyWinLimit: l?.dailyWinLimit == null ? '' : String(l.dailyWinLimit),
   dailyGameLimit: l?.dailyGameLimit == null ? '' : String(l.dailyGameLimit),
   marketBan: l?.marketBan ?? false,
@@ -65,6 +76,7 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
         marketBan: draft.marketBan,
         marketSpendLimit: num(draft.marketSpendLimit),
         note: draft.note,
+        expiresAt: draft.expiresAt ? new Date(draft.expiresAt).toISOString() : null,
       })
       setMsg(res.ok ? { ok: true, text: res.message ?? 'Kaydedildi.' } : { ok: false, text: res.error })
       if (res.ok) setTarget(null)
@@ -81,10 +93,11 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
     })
   }
 
+  const active = limits.filter((l) => !l.expired)
   const counts = {
-    win: limits.filter((l) => l.dailyWinLimit !== null).length,
-    game: limits.filter((l) => l.dailyGameLimit !== null).length,
-    market: limits.filter((l) => l.marketBan || l.marketSpendLimit !== null).length,
+    win: active.filter((l) => l.dailyWinLimit !== null).length,
+    game: active.filter((l) => l.dailyGameLimit !== null).length,
+    market: active.filter((l) => l.marketBan || l.marketSpendLimit !== null).length,
   }
 
   return (
@@ -163,6 +176,43 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
             <input type="checkbox" checked={draft.marketBan} onChange={(e) => setDraft({ ...draft, marketBan: e.target.checked })} className="size-4 accent-primary" />
             Marketten hiç alışveriş yapamasın
           </label>
+          <div className="flex flex-col gap-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Bitiş tarihi (boş bırakırsan sen kaldırana kadar sürer)
+              <input
+                type="datetime-local"
+                value={draft.expiresAt}
+                onChange={(e) => setDraft({ ...draft, expiresAt: e.target.value })}
+                className={cn(field, 'sm:max-w-xs')}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: '1 gün', days: 1 },
+                { label: '7 gün', days: 7 },
+                { label: '30 gün', days: 30 },
+              ].map((o) => (
+                <button
+                  key={o.days}
+                  type="button"
+                  onClick={() => setDraft({ ...draft, expiresAt: fromNow(o.days) })}
+                  className="h-8 rounded-lg border border-border px-3 text-xs font-medium text-foreground hover:bg-secondary"
+                >
+                  {o.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setDraft({ ...draft, expiresAt: '' })}
+                className="h-8 rounded-lg border border-border px-3 text-xs font-medium text-foreground hover:bg-secondary"
+              >
+                Süresiz
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Süre dolunca sınırlar kendiliğinden kalkar; üye listede &quot;Süresi doldu&quot; diye kalır, istersen yeniden uzatırsın.
+            </p>
+          </div>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Not (sadece panelde görünür)
             <input value={draft.note} maxLength={300} onChange={(e) => setDraft({ ...draft, note: e.target.value })} className={field} />
@@ -197,7 +247,9 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
           </div>
         ))}
       </div>
-      <h3 className="text-sm font-semibold text-foreground">Kısıtlanan üyeler ({limits.length})</h3>
+      <h3 className="text-sm font-semibold text-foreground">
+        Kısıtlanan üyeler ({active.length}){limits.length > active.length ? ` · süresi dolan ${limits.length - active.length}` : ''}
+      </h3>
       <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
         {limits.length === 0 && <li className="p-4 text-sm text-muted-foreground">Kısıtlanmış üye yok.</li>}
         {limits.map((l) => (
@@ -206,7 +258,12 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
               <span className="font-medium text-foreground">
                 {l.userName || 'İsimsiz'} <span className="font-normal text-muted-foreground">{l.userEmail}</span>
               </span>
-              <span className="text-xs text-muted-foreground">{summary(l)}</span>
+              <span className={cn('text-xs text-muted-foreground', l.expired && 'line-through')}>{summary(l)}</span>
+              {l.expired ? (
+                <span className="text-xs font-semibold text-destructive">{`Süresi doldu (${endsLabel(l.expiresAt ?? l.updatedAt)}), artık uygulanmıyor`}</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">{l.expiresAt ? `Bitiş: ${endsLabel(l.expiresAt)} (TR saati)` : 'Süresiz'}</span>
+              )}
               {l.note && <span className="text-xs text-muted-foreground">Not: {l.note}</span>}
             </div>
             <button type="button" aria-label="Düzenle" onClick={() => pick({ id: l.userId, name: l.userName, email: l.userEmail })} className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">

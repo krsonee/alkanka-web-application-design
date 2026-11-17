@@ -4,7 +4,7 @@
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
-import { deleteStaffAccount, resetAccountTotp, saveStaffAccount, type StaffInput } from '@/app/panel/auth-actions'
+import { cancelTotpRenewal, deleteStaffAccount, requireTotpRenewal, resetAccountTotp, saveStaffAccount, type StaffInput } from '@/app/panel/auth-actions'
 import { PANEL_GROUPS, PERMISSION_EXTRAS } from '@/lib/panel-modules'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +16,8 @@ export type StaffRow = {
   permissions: string[]
   totpEnabled: boolean
   totpRequired: boolean
+  /** Asked to scan a new barcode at the next sign-in. */
+  renewDue: boolean
   active: boolean
   lastLoginAt: string | null
   lastLoginIp: string | null
@@ -93,6 +95,7 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
               <ShieldCheck className="size-3.5" aria-hidden="true" />
               {a.totpEnabled ? '2FA açık' : a.totpRequired ? '2FA zorunlu, kurulmadı' : '2FA kapalı'}
             </span>
+            {a.renewDue && <span className="rounded-md bg-primary/15 px-2 py-1 text-xs font-semibold text-primary">Yenileme bekliyor</span>}
             {!a.active && <span className="text-xs font-bold uppercase text-muted-foreground">Pasif</span>}
             {!a.isOwner && (
               <div className="flex items-center gap-1">
@@ -100,6 +103,28 @@ export function StaffManager({ accounts }: { accounts: StaffRow[] }) {
                   <button
                     type="button"
                     disabled={pending}
+                    aria-label={`${a.username}: ${a.renewDue ? 'yenilemeyi geri al' : '2FA yenilet'}`}
+                    onClick={() => {
+                      if (a.renewDue) {
+                        act(() => cancelTotpRenewal(a.id))
+                        return
+                      }
+                      void askConfirm(
+                        `${a.username} bir sonraki girişinde 2FA'sını yenilesin mi? Önce eski kodunu girer, sonra yeni barkodu tarar ve yeni yedek kodlarını görür. Hesap bu sırada korumasız kalmaz.`,
+                      ).then((ok) => {
+                        if (ok) act(() => requireTotpRenewal(a.id))
+                      })
+                    }}
+                    className="rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  >
+                    {a.renewDue ? 'Yenilemeyi geri al' : '2FA yenilet'}
+                  </button>
+                )}
+                {a.totpEnabled && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    aria-label={`${a.username}: 2FA sıfırla`}
                     onClick={() => {
                       void askConfirm(`${a.username} için 2FA sıfırlansın mı? Hesap bir sonraki girişte yeniden kurar.`).then((ok) => {
       if (ok) act(() => resetAccountTotp(a.id))

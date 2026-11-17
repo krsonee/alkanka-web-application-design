@@ -174,7 +174,7 @@ async function claimFirstReward(userId: string): Promise<number> {
     WHERE me.user_id = ${userId} AND me.ip_hash IS NOT NULL LIMIT 1`).catch(() => [{}])
   if (sibling.length) return 0
   await rows(sql`UPDATE member_look SET reward_paid = true WHERE user_id = ${userId}`)
-  await credit(userId, FIRST_AVATAR_REWARD)
+  await credit(userId, FIRST_AVATAR_REWARD, 'İlk avatar ödülü')
   return FIRST_AVATAR_REWARD
 }
 
@@ -200,11 +200,11 @@ export async function buyAvatar(userId: string, avatarId: string) {
   if (av.unlock !== 'coin' || av.price <= 0) throw new Error('Bu avatar satın alınamaz.')
   const owned = await rows(sql`SELECT 1 FROM avatar_owned WHERE user_id = ${userId} AND avatar_id = ${avatarId}`)
   if (owned.length) throw new Error('Bu avatar zaten senin.')
-  if (!(await debit(userId, av.price))) throw new Error('Yeterli KC bakiyen yok.')
+  if (!(await debit(userId, av.price, 'Avatar satın alma'))) throw new Error('Yeterli KC bakiyen yok.')
   const inserted = await rows(sql`INSERT INTO avatar_owned (user_id, avatar_id, price) VALUES (${userId}, ${avatarId}, ${av.price})
     ON CONFLICT DO NOTHING RETURNING avatar_id`)
   if (!inserted.length) {
-    await credit(userId, av.price)
+    await credit(userId, av.price, 'Avatar iadesi')
     throw new Error('Bu avatar zaten senin.')
   }
   return chooseAvatar(userId, avatarId)

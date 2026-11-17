@@ -276,7 +276,7 @@ export async function createTable(m: Member, game: string, stake: number, input?
     [JSON.stringify([{ id: m.id }])],
   )
   if (open.rows[0].n >= 3) throw new Error('Aynı anda en fazla 3 masada oturabilirsin.')
-  if (!(await debit(m.id, stake + hold)))
+  if (!(await debit(m.id, stake + hold, `Masa bahsi (${game})`)))
     throw new Error(hold ? `Bu masa için bakiyende en az ${stake + hold} KC olmalı (mars güvencesi).` : 'Yetersiz Kanka Coin.')
   const humanSeats = opts.seats - opts.bots
   const players: Player[] = [{ id: m.id, name: m.name, seat: 0 }]
@@ -313,7 +313,7 @@ export async function joinTable(m: Member, id: string, expectedStake?: number) {
   const seat = Array.from({ length: t.seats }, (_, i) => i).find((i) => !taken.has(i))
   if (seat === undefined) throw new Error('Masa dolu.')
   const hold = t.options.hold ?? 0
-  if (!(await debit(m.id, entry(t))))
+  if (!(await debit(m.id, entry(t), `Masa bahsi (${t.game})`)))
     throw new Error(hold ? `Bu masa için bakiyende en az ${entry(t)} KC olmalı (mars güvencesi).` : 'Yetersiz Kanka Coin.')
   const players = [...t.players, { id: m.id, name: m.name, seat }].sort((a, b) => a.seat - b.seat)
   const full = players.length >= seatsNeeded(t)
@@ -329,7 +329,7 @@ export async function joinTable(m: Member, id: string, expectedStake?: number) {
     [id, JSON.stringify(players), state ? JSON.stringify(state) : null, full ? 'oynaniyor' : 'bekliyor', t.players.length, JSON.stringify(full ? { lastActs } : {})],
   )
   if (r.rowCount === 0) {
-    await credit(m.id, entry(t))
+    await credit(m.id, entry(t), `Masa bahis iadesi (${t.game})`)
     throw new Error('Masa az önce güncellendi, tekrar dene.')
   }
 }
@@ -438,14 +438,14 @@ export async function cancelTable(id: string, opts: { byUser?: string; admin?: b
   if (t.status === 'bekliyor') {
     if (!opts.admin && t.createdBy !== opts.byUser) throw new Error('Bu masayı sadece açan kapatabilir.')
     const r = await pool.query(`UPDATE game_tables SET status = 'iptal', updated_at = now() WHERE id = $1 AND status = 'bekliyor' RETURNING id`, [id])
-    if (r.rowCount) for (const p of humans(t)) await credit(p.id, entry(t))
+    if (r.rowCount) for (const p of humans(t)) await credit(p.id, entry(t), `Masa bahis iadesi (${t.game})`)
     return
   }
   if (t.status === 'oynaniyor' && opts.admin) {
     const r = await pool.query(`UPDATE game_tables SET status = 'iptal', updated_at = now() WHERE id = $1 AND status = 'oynaniyor' RETURNING id`, [id])
     if (r.rowCount) {
       for (const p of humans(t)) {
-        await credit(p.id, entry(t))
+        await credit(p.id, entry(t), `Masa bahis iadesi (${t.game})`)
         await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: t.tournamentId ? 'turnuva' : 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: 'refund', delta: 0, tableId: t.id })
       }
     }
@@ -504,7 +504,7 @@ export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'lea
     const others = humans(t).filter((p) => p.id !== me.id)
     if (t.createdBy === me.id || others.length === 0) {
       const r = await pool.query(`UPDATE game_tables SET status = 'iptal', updated_at = now() WHERE id = $1 AND status = 'bekliyor' RETURNING id`, [id])
-      if (r.rowCount) for (const p of humans(t)) await credit(p.id, entry(t))
+      if (r.rowCount) for (const p of humans(t)) await credit(p.id, entry(t), `Masa bahis iadesi (${t.game})`)
       return
     }
     const players = t.players.filter((p) => p.id !== me.id)
@@ -513,7 +513,7 @@ export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'lea
       [id, JSON.stringify(players), t.version],
     )
     if (r.rowCount === 0) throw new Error('Masa güncellendi, tekrar dene.')
-    await credit(me.id, entry(t))
+    await credit(me.id, entry(t), `Masa bahis iadesi (${t.game})`)
     return
   }
 
@@ -573,7 +573,7 @@ export async function kickIdlePlayers(t: TableRow): Promise<boolean> {
     }
     if (now - new Date(t.updatedAt).getTime() < IDLE_KICK_MS) return false
     const r = await pool.query(`UPDATE game_tables SET status = 'iptal', updated_at = now() WHERE id = $1 AND status = 'bekliyor' RETURNING id`, [t.id])
-    if (r.rowCount) for (const p of humans(t)) await credit(p.id, entry(t))
+    if (r.rowCount) for (const p of humans(t)) await credit(p.id, entry(t), `Masa bahis iadesi (${t.game})`)
     return Boolean(r.rowCount)
   }
   if (t.status !== 'oynaniyor' || !t.state) return false
@@ -762,7 +762,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   if (t.stake === 0) return
   if (isDraw) {
     for (const p of people) {
-      await credit(p.id, entry(t))
+      await credit(p.id, entry(t), `Masa berabere: bahis iadesi (${t.game})`)
       await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: historyMode(t), opponent: soloOkey(t) ? 'Alkanka Bot' : rivalName(t, p.id), stake: t.stake, result: 'draw', delta: 0, tableId: t.id })
     }
     return
@@ -783,7 +783,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
       gross = Math.min(gross, t.stake + room)
     }
     const payout = await capPayout(p.id, t.stake, gross)
-    if (payout) await credit(p.id, payout)
+    if (payout) await credit(p.id, payout, `Masa ödemesi (${t.game})`)
     await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'bot', opponent: 'Alkanka Bot', stake: t.stake, result: won ? 'win' : 'loss', delta: payout - t.stake, tableId: t.id })
     return
   }
@@ -815,7 +815,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
     }
     const amount = await capPayout(p.id, t.stake, boostedPrize)
     paid.set(p.id, amount)
-    await credit(p.id, amount)
+    await credit(p.id, amount, `Masa kazancı (${t.game})`)
   }
   // Mars hold: every player gets the blocked coins back, minus what a mars costs the loser.
   // The loser's extra (1x for mars, 2x for ağır mars) goes to the winner after commission.
@@ -828,7 +828,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
     for (const p of people) {
       const back = paid.has(p.id) ? hold + marsGain : hold - marsExtra
       extra.set(p.id, paid.has(p.id) ? marsGain : -marsExtra)
-      if (back > 0) await credit(p.id, back)
+      if (back > 0) await credit(p.id, back, `Masa iadesi (${t.game})`)
     }
   }
   for (const p of people) {

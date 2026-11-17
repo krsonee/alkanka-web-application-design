@@ -20,7 +20,13 @@ export async function saveMemberLimit(userId: string, input: LimitInput): Promis
     const result = await saveLimit(String(userId), input, session?.username ?? '')
     revalidatePath('/panel')
     const cleared = result === 'cleared'
-    await logPanel('limits', cleared ? 'Gizli kısıtlama kaldırıldı' : 'Gizli kısıtlama kaydedildi', await memberTag(userId))
+    const ends = input.expiresAt ? new Date(input.expiresAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' }) : null
+    await logPanel(
+      'limits',
+      cleared ? 'Gizli kısıtlama kaldırıldı' : 'Gizli kısıtlama kaydedildi',
+      await memberTag(userId),
+      cleared ? null : ends ? `Bitiş: ${ends} (TR saati)` : 'Süresiz',
+    )
     return { ok: true, message: cleared ? 'Tüm alanlar boş olduğu için bu üyenin kısıtlaması kaldırıldı.' : 'Kısıtlama kaydedildi.' }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Kaydedilemedi.' }

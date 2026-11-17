@@ -8,17 +8,23 @@ import { rows, sql } from '@/lib/db'
 import {
   accountById,
   accountByUsername,
+  askTotpRenewal,
   clearFailedLogins,
+  clearRenewProof,
   clearSessionCookie,
+  clearTotpRenewal,
   clientIp,
   getPanelSession,
   hashPassword,
+  hasRenewProof,
   loginBlocked,
   ownerPasswordMatches,
   recordFailedLogin,
   setPendingLogin,
+  setRenewProof,
   setSessionCookie,
   takePendingLogin,
+  totpRenewalDue,
   verifyPassword,
   type PanelAccountRow,
 } from '@/lib/panel-auth'
@@ -32,6 +38,8 @@ const moduleLabel = (id: string) => PANEL_MODULES.find((m) => m.id === id)?.labe
 
 export type LoginState = {
   step?: 'password' | 'totp' | 'enroll' | 'backup'
+  /** The account already has 2FA and is replacing it; the old code was checked first. */
+  renew?: boolean
   message?: string
   qr?: string
   secret?: string
@@ -100,8 +108,38 @@ export async function panelLogin(_: LoginState, form: FormData): Promise<LoginSt
 
     if (row.totp_enabled && row.totp_secret) {
       if (!code) return { step: 'totp' }
+      const renewing = await totpRenewalDue(row.id)
+      if (renewing && row.totp_pending && (await hasRenewProof(row))) {
+        const pending = decryptSecret(row.totp_pending)
+        if (!verifyTotp(pending, code)) {
+          await recordFailedLogin(username).catch(() => {})
+          await logPanel('auth', 'Hatalı giriş denemesi', `@${row.username}`, '2FA yenileme kodu yanlış.', NOT_SIGNED_IN)
+          return {
+            step: 'enroll',
+            renew: true,
+            secret: pending,
+            qr: await qrFor(pending, row.username),
+            message: 'Kod yanlış. Yeni barkodu taradıktan sonra uygulamadaki yeni kaydın 6 haneli kodunu gir.',
+          }
+        }
+        await rows(sql`UPDATE panel_accounts SET totp_secret = totp_pending, totp_pending = NULL WHERE id = ${row.id}`)
+        const codes = await issueBackupCodes(row.id)
+        await clearTotpRenewal(row.id)
+        await clearRenewProof()
+        await clearFailedLogins(row.username)
+        await setPendingLogin(row)
+        await logPanel('account', 'İki adımlı doğrulama yenilendi', null, 'Girişte yeni barkod tarandı, yedek kodlar yenilendi', actorOf(row))
+        return { step: 'backup', codes }
+      }
       const ok = verifyTotp(decryptSecret(row.totp_secret), code) || (await useBackupCode(row, code))
       if (!ok) return fail('Doğrulama kodu yanlış.', 'totp', row.username)
+      if (renewing) {
+        // The old factor stays in force until the new one is confirmed, so the account is never left on a password alone.
+        const pending = newTotpSecret()
+        await rows(sql`UPDATE panel_accounts SET totp_pending = ${encryptSecret(pending)} WHERE id = ${row.id}`)
+        await setRenewProof(row)
+        return { step: 'enroll', renew: true, secret: pending, qr: await qrFor(pending, row.username) }
+      }
       await finishLogin(row)
       return {}
     }
@@ -330,9 +368,34 @@ export async function resetAccountTotp(id: number): Promise<Result> {
       UPDATE panel_accounts SET totp_enabled = false, totp_secret = NULL, totp_pending = NULL, backup_codes = '[]'::jsonb, session_version = session_version + 1
       WHERE id = ${id}
     `)
+    await clearTotpRenewal(id).catch(() => {})
     const row = await accountById(id)
     await logPanel('staff', 'Personelin 2FA ayarı sıfırlandı', row ? `@${row.username}` : `Hesap #${id}`, 'Açık oturumları kapatıldı')
     return '2FA sıfırlandı. Hesap bir sonraki girişte yeniden kurar.'
+  })
+}
+
+/** Unlike a reset, the account keeps its current 2FA until the new barcode is confirmed. */
+export async function requireTotpRenewal(id: number): Promise<Result> {
+  return run(async () => {
+    const session = await owner()
+    const row = await accountById(Number(id))
+    if (!row) throw new Error('Hesap bulunamadı.')
+    if (!row.totp_enabled || !row.totp_secret) throw new Error('Bu hesapta 2FA kurulu değil. 2FA zorunluysa ilk girişte barkod zaten çıkar.')
+    await askTotpRenewal(row.id, session.username)
+    await logPanel('staff', '2FA yenilemesi istendi', `@${row.username}`, 'Bir sonraki girişte yeni barkod ve yeni yedek kodlar')
+    return `${row.username} bir sonraki girişinde önce eski kodunu girecek, sonra yeni barkodu tarayıp yeni yedek kodlarını görecek.`
+  })
+}
+
+export async function cancelTotpRenewal(id: number): Promise<Result> {
+  return run(async () => {
+    await owner()
+    const row = await accountById(Number(id))
+    if (!row) throw new Error('Hesap bulunamadı.')
+    await clearTotpRenewal(row.id)
+    await logPanel('staff', '2FA yenileme isteği geri alındı', `@${row.username}`)
+    return 'Yenileme isteği geri alındı.'
   })
 }
 
@@ -343,6 +406,7 @@ export async function deleteStaffAccount(id: number): Promise<Result> {
     if (!row) throw new Error('Hesap bulunamadı.')
     if (row.is_owner) throw new Error('Ana yönetici silinemez.')
     await rows(sql`DELETE FROM panel_accounts WHERE id = ${id}`)
+    await clearTotpRenewal(id).catch(() => {})
     await logPanel('staff', 'Personel hesabı silindi', `@${row.username}`, row.display_name || null)
     return 'Hesap silindi.'
   })

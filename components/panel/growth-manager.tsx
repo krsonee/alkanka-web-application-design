@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState, useTransition } from 'react'
 import { Check, Copy, Loader2, ShieldAlert, X } from 'lucide-react'
 import {
@@ -27,6 +28,8 @@ type Props = {
   accounts: SponsorAccount[]
   period: string
   siteUrl: string
+  /** Where campaign links are managed, for an account that may open that section; null keeps the quick builder here. */
+  campaignsHref: string | null
   affLinks: AffLinkView[]
   affSites: AffSiteOption[]
 }
@@ -352,7 +355,21 @@ export function GrowthManager(props: Props) {
       <GrowthGuide />
       <AffLinksManager links={props.affLinks} sites={props.affSites} siteUrl={props.siteUrl} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <LinkBuilder siteUrl={props.siteUrl} />
+        {props.campaignsHref ? (
+          <section className={card}>
+            <div className="flex flex-col gap-1">
+              <h2 className="font-display text-lg font-bold text-foreground">Kampanya linkleri</h2>
+              <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+                Kampanya linkleri artık tek yerde açılıyor. Orada açtığın her link aşağıdaki kaynak raporuna kendi koduyla düşer; ayrıca ziyaret, bütçe ve üye başı maliyet de tutulur.
+              </p>
+            </div>
+            <Link href={props.campaignsHref} className={cn(btn, 'self-start')}>
+              Kampanya linklerine git
+            </Link>
+          </section>
+        ) : (
+          <LinkBuilder siteUrl={props.siteUrl} />
+        )}
         <Flagged flagged={props.flagged} />
       </div>
       <Report report={props.report} names={{ ...names, ...props.recordNames }} />

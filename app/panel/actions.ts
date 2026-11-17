@@ -26,10 +26,11 @@ function field(form: FormData, name: keyof typeof LIMITS) {
   return value
 }
 
-function imageField(form: FormData) {
-  const value = String(form.get('image') ?? '').trim()
+function imageField(form: FormData, name = 'image', label = 'Görsel') {
+  const value = String(form.get(name) ?? '').trim()
   if (!value) return ''
-  if (!isAllowedImage(value)) throw new Error('Görsel /images/ ile ya da https:// ile başlamalı.')
+  if (value.length > 500) throw new Error(`${label} adresi en fazla 500 karakter olabilir.`)
+  if (!isAllowedImage(value)) throw new Error(`${label} /images/ ile ya da https:// ile başlamalı.`)
   return value
 }
 
@@ -177,6 +178,8 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       cta: field(form, 'cta'),
       image: imageField(form),
     }
+    const mobileImage = imageField(form, 'mobileImage', 'Telefon görseli')
+    if (mobileImage) value.mobileImage = mobileImage
     const startAt = cleanLocal(form.get('startAt'))
     const endAt = cleanLocal(form.get('endAt'))
     if (startAt && endAt && parseLocal(endAt) <= parseLocal(startAt)) return { message: 'Bitiş tarihi başlangıçtan sonra olmalı.' }
@@ -198,6 +201,7 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
               description: value.description || '',
               cta: value.cta || 'İncele',
               image: value.image || s.image,
+              mobileImage: mobileImage || undefined,
               href,
               startAt: startAt || undefined,
               endAt: endAt || undefined,
@@ -324,6 +328,7 @@ export async function duplicateSlide(_: ActionState, form: FormData): Promise<Ac
       cta: String(source.cta ?? 'İncele'),
       href: String(source.href ?? '/'),
       image: String(source.image ?? '/images/banner-wheel.png'),
+      ...(typeof source.mobileImage === 'string' && source.mobileImage ? { mobileImage: source.mobileImage } : {}),
     }
     await setContent(CUSTOM_SLIDES_KEY, [...list, copy])
     const ids = await currentSlideIds()

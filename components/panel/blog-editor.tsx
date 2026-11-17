@@ -24,6 +24,7 @@ import { deletePostAction, savePostAction } from '@/app/panel/seo-actions'
 import type { ActionState } from '@/app/panel/actions'
 import type { BlogPost } from '@/lib/blog'
 import { analyzePost, BlogBody } from '@/lib/blog-format'
+import { formatLocal } from '@/lib/schedule'
 import { ImageField } from '@/components/panel/image-field'
 
 const input =
@@ -87,6 +88,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
   const [editing, setEditing] = useState<BlogPost | null>(null)
   const [draft, setDraft] = useState<Draft>(() => toDraft(null))
   const [formKey, setFormKey] = useState(0)
+  const [publishAt, setPublishAt] = useState('')
   const [tab, setTab] = useState<'write' | 'preview'>('write')
   const [state, action, pending] = useActionState<ActionState, FormData>(savePostAction, {})
   const [deleting, startDelete] = useTransition()
@@ -99,6 +101,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
   const open = (post: BlogPost | null) => {
     setEditing(post)
     setDraft(toDraft(post))
+    setPublishAt(post?.publishAt ?? '')
     setTab('write')
     setFormKey((k) => k + 1)
   }
@@ -248,6 +251,30 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
           <input type="checkbox" name="published" defaultChecked={editing?.published ?? true} className="size-4 accent-primary" />
           Yayında
         </label>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="post-publish-at" className="text-xs font-semibold text-muted-foreground">
+            Yayın zamanı (isteğe bağlı, Türkiye saati)
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              id="post-publish-at"
+              type="datetime-local"
+              name="publishAt"
+              value={publishAt}
+              onChange={(e) => setPublishAt(e.target.value)}
+              aria-describedby="post-publish-hint"
+              className={input}
+            />
+            {publishAt ? (
+              <button type="button" onClick={() => setPublishAt('')} className="rounded-xl border border-border px-3 py-2.5 text-sm text-foreground hover:bg-secondary">
+                Zamanı kaldır
+              </button>
+            ) : null}
+          </div>
+          <p id="post-publish-hint" className="text-xs leading-relaxed text-muted-foreground text-pretty">
+            {'Boş bırakırsan yazı kaydedince yayına girer. İleri bir tarih seçersen "Yayında" işaretli olsa bile o saate kadar sitede görünmez; saat gelince kendiliğinden açılır (görünmesi 10-20 dakika sürebilir). Yazının tarihi olarak bu zaman gösterilir.'}
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={pending} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50">
             {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
@@ -258,7 +285,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
               <button type="button" onClick={() => open(null)} className="rounded-xl border border-border px-4 py-2.5 text-sm text-foreground hover:bg-secondary">
                 Yeni yazı
               </button>
-              {editing.published ? (
+              {editing.published && !editing.scheduled ? (
                 <a href={`/rehber/${editing.slug}`} target="_blank" rel="noreferrer" className="text-sm text-muted-foreground underline hover:text-foreground">
                   Sitede gör
                 </a>
@@ -312,7 +339,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
                   <button type="button" onClick={() => open(p)} className="flex min-w-0 flex-1 flex-col text-left">
                     <span className="truncate text-sm font-semibold text-foreground">{p.title}</span>
                     <span className="text-xs text-muted-foreground">
-                      {p.published ? `/rehber/${p.slug}` : 'Taslak'}
+                      {!p.published ? 'Taslak' : p.scheduled ? `Zamanlandı: ${formatLocal(p.publishAt)}` : `/rehber/${p.slug}`}
                       {' · '}
                       {new Date(p.updatedAt).toLocaleDateString('tr-TR')}
                     </span>

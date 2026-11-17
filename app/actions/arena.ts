@@ -67,7 +67,7 @@ export async function startBotGame(game: string, stake: number) {
     if (!s.bets.includes(stake)) throw new Error('Geçersiz bahis.')
     await assertCanPlay(m.id)
     await pool.query(`UPDATE solo_sessions SET status = 'terk' WHERE user_id = $1 AND game = $2 AND status = 'acik'`, [m.id, game])
-    if (!(await debit(m.id, stake))) throw new Error('Yetersiz Kanka Coin.')
+    if (!(await debit(m.id, stake, `Bota karşı oyun bahsi (${game})`))) throw new Error('Yetersiz Kanka Coin.')
     const r = await pool.query(`INSERT INTO solo_sessions (user_id, game, stake, status) VALUES ($1,$2,$3,'acik') RETURNING id`, [m.id, game, stake])
     return { ok: true as const, sessionId: String(r.rows[0].id), balance: await getBalance(m.id) }
   } catch (e) {
@@ -108,7 +108,7 @@ export async function cancelBotGame(sessionId: string) {
       throw new Error('Oyun oturumu bulunamadı.')
     }
     const refund = Number(row.stake)
-    await credit(m.id, refund)
+    await credit(m.id, refund, 'Bota karşı oyun: bahis iadesi')
     return { ok: true as const, refund, balance: await getBalance(m.id) }
   } catch (e) {
     return fail(e)
@@ -151,7 +151,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
       }
     }
     const payout = await capPayout(m.id, stake, gross)
-    if (payout) await credit(m.id, payout)
+    if (payout) await credit(m.id, payout, 'Bota karşı oyun ödemesi')
     await recordHistory({
       userId: m.id,
       userName: m.name,
@@ -174,7 +174,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
 async function settleBlackjack(m: { id: string; name: string }, id: string, state: BjState, stake: number) {
   const wagered = bjWagered(state)
   const payout = await capPayout(m.id, wagered, bjPayout(state))
-  if (payout) await credit(m.id, payout)
+  if (payout) await credit(m.id, payout, 'Blackjack ödemesi')
   const result = payout > wagered ? 'win' : payout === wagered ? 'draw' : 'loss'
   await recordHistory({ userId: m.id, userName: m.name, game: 'blackjack', mode: 'bot', opponent: 'Krupiye', stake: wagered, result, delta: payout - wagered, tableId: id })
   void stake
@@ -187,7 +187,7 @@ export async function blackjackDeal(stake: number) {
     if (!s.enabled) throw new Error('Blackjack şu an kapalı.')
     if (!isStackedBet(stake, s.bets)) throw new Error('Geçersiz bahis.')
     await assertCanPlay(m.id)
-    if (!(await debit(m.id, stake))) throw new Error('Yetersiz Kanka Coin.')
+    if (!(await debit(m.id, stake, 'Blackjack bahsi'))) throw new Error('Yetersiz Kanka Coin.')
     const state = bjDeal(stake)
     const r = await pool.query(`INSERT INTO solo_sessions (user_id, game, stake, status, state) VALUES ($1,'blackjack',$2,$3,$4::jsonb) RETURNING id`, [
       m.id,
@@ -216,7 +216,7 @@ export async function blackjackAct(id: string, action: BjAction) {
     if (action === 'surrender' && !bjCanSurrender(prev)) throw new Error('Teslim olmak sadece ilk iki kartta mümkün.')
     if ((action === 'insure' || action === 'noInsure') !== (prev.phase === 'insurance')) throw new Error('Bu hamle şu an yapılamaz.')
     const cost = bjActionCost(prev, action)
-    if (cost && !(await debit(m.id, cost))) throw new Error('Bu hamle için yeterli KC yok.')
+    if (cost && !(await debit(m.id, cost, 'Blackjack hamlesi'))) throw new Error('Bu hamle için yeterli KC yok.')
     const state = bjAct(prev, action)
     // Only applies on top of the exact state this action was computed from, so two parallel taps can't both charge.
     const upd = await pool.query(
@@ -224,7 +224,7 @@ export async function blackjackAct(id: string, action: BjAction) {
       [id, m.id, JSON.stringify(state), state.phase === 'done' ? 'bitti' : 'acik', JSON.stringify(row.state)],
     )
     if (!upd.rowCount) {
-      if (cost) await credit(m.id, cost)
+      if (cost) await credit(m.id, cost, 'Blackjack hamle iadesi')
       throw new Error('El zaten bitti.')
     }
     if (state.phase === 'done') await settleBlackjack(m, id, state, Number(row.stake))
@@ -314,10 +314,10 @@ export async function spinRoulette(bets: RouletteBet[]) {
     if (!bets.every(validBet) || bets.some((b) => b.amount > max)) throw new Error('Geçersiz bahis.')
     const total = bets.reduce((a, b) => a + b.amount, 0)
     await assertCanPlay(m.id)
-    if (!(await debit(m.id, total))) throw new Error('Yetersiz Kanka Coin.')
+    if (!(await debit(m.id, total, 'Rulet bahsi'))) throw new Error('Yetersiz Kanka Coin.')
     const n = Math.floor(Math.random() * 37)
     const returned = await capPayout(m.id, total, bets.reduce((a, b) => a + betReturn(b, n), 0))
-    if (returned) await credit(m.id, returned)
+    if (returned) await credit(m.id, returned, 'Rulet ödemesi')
     await recordHistory({
       userId: m.id,
       userName: m.name,

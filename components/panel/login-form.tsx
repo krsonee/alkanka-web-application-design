@@ -81,7 +81,13 @@ export function LoginForm({ configured }: { configured: boolean }) {
         <div className="flex flex-col">
           <h1 className="font-display text-xl font-bold uppercase text-foreground">Yönetim paneli</h1>
           <p className="text-sm text-muted-foreground">
-            {step === 'totp' ? 'Authenticator uygulamandaki kodu gir.' : step === 'enroll' ? 'Bu hesapta iki adımlı doğrulama zorunlu.' : 'Kullanıcı adı ve şifrenle gir.'}
+            {step === 'totp'
+              ? 'Authenticator uygulamandaki kodu gir.'
+              : step === 'enroll'
+                ? state.renew
+                  ? 'İki adımlı doğrulamanı yenilemen gerekiyor.'
+                  : 'Bu hesapta iki adımlı doğrulama zorunlu.'
+                : 'Kullanıcı adı ve şifrenle gir.'}
           </p>
         </div>
       </div>
@@ -100,7 +106,11 @@ export function LoginForm({ configured }: { configured: boolean }) {
       </label>
       {step === 'enroll' && state.qr && (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-background p-3 text-center">
-          <p className="text-sm leading-relaxed text-foreground">Google Authenticator ile bu kodu tara, sonra uygulamadaki 6 haneli kodu aşağıya yaz.</p>
+          <p className="text-sm leading-relaxed text-foreground">
+            {state.renew
+              ? 'Eski kodun doğrulandı. Şimdi bu yeni barkodu Google Authenticator ile tara ve yeni kaydın 6 haneli kodunu aşağıya yaz. Onayladıktan sonra uygulamadaki eski Alkanka kaydını sil; artık çalışmaz.'
+              : 'Google Authenticator ile bu kodu tara, sonra uygulamadaki 6 haneli kodu aşağıya yaz.'}
+          </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={state.qr} alt="İki adımlı doğrulama QR kodu" width={180} height={180} className="rounded-md bg-foreground p-1" />
           <p className="break-all font-mono text-xs text-muted-foreground">Elle giriş: {state.secret}</p>
@@ -110,7 +120,7 @@ export function LoginForm({ configured }: { configured: boolean }) {
         <label className="flex flex-col gap-1.5 text-sm text-foreground">
           <span className="flex items-center gap-1.5">
             <KeyRound className="size-4 text-primary" aria-hidden="true" />
-            {step === 'totp' ? 'Doğrulama kodu veya yedek kod' : 'Doğrulama kodu'}
+            {step === 'totp' ? 'Doğrulama kodu veya yedek kod' : state.renew ? 'Yeni kaydın doğrulama kodu' : 'Doğrulama kodu'}
           </span>
           <input name="code" required autoFocus inputMode={step === 'enroll' ? 'numeric' : 'text'} autoComplete="one-time-code" maxLength={20} className={`${INPUT} font-mono tracking-widest`} />
         </label>

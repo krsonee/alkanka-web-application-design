@@ -134,7 +134,7 @@ export async function buyTheme(userId: string, userName: string, themeId: string
     if (!offer || offer.source !== 'shop' || !offer.active) throw new Error('Bu tema mağazada satılmıyor.')
     if (lv.level < offer.minLevel) throw new Error(`Bu temayı almak için Lv ${offer.minLevel} rozetine ulaşman lazım.`)
     await assertCanBuy(userId, offer.price)
-    if (!(await debit(userId, offer.price))) throw new Error('Kanka Coin bakiyen yetmiyor.')
+    if (!(await debit(userId, offer.price, 'Masa teması'))) throw new Error('Kanka Coin bakiyen yetmiyor.')
     await grantTheme(userId, themeId, 'shop', offer.price)
     await recordHistory({
       userId,

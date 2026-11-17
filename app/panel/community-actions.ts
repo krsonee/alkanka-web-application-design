@@ -34,11 +34,12 @@ async function guard(fn: () => Promise<string | void>): Promise<Result> {
   }
 }
 
-export async function moderateReview(id: number, status: 'approved' | 'rejected') {
+export async function moderateReview(id: number, status: 'approved' | 'rejected', note = '') {
   return guard(async () => {
-    const message = await setReviewStatus(id, status)
-    await logPanel('community', status === 'approved' ? 'Yorum yayınlandı' : 'Yorum reddedildi', `Yorum #${id}`)
-    return message
+    const reason = status === 'rejected' ? String(note ?? '').trim().slice(0, 300) : ''
+    await setReviewStatus(id, status, reason)
+    await logPanel('community', status === 'approved' ? 'Yorum yayınlandı' : 'Yorum reddedildi', `Yorum #${id}`, reason || null)
+    return status === 'rejected' && reason ? 'Yorum reddedildi, sebep üyeye mesajla bildirildi.' : undefined
   })
 }
 

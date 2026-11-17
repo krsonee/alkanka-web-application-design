@@ -131,7 +131,7 @@ async function refundAll(id: number) {
   if (!fee) return
   const e = await pool.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 AND user_id IS NOT NULL', [id])
   for (const row of e.rows) {
-    await credit(row.user_id, fee)
+    await credit(row.user_id, fee, 'Turnuva iadesi')
     await recordHistory({ userId: row.user_id, userName: row.nickname, game: t.rows[0].game, mode: 'turnuva', opponent: 'Turnuva iadesi', stake: fee, result: 'refund', delta: fee })
   }
 }
@@ -163,7 +163,7 @@ async function joinTournamentLocked(m: Member, id: number) {
   const exists = await pool.query('SELECT 1 FROM tournament_entries WHERE tournament_id = $1 AND user_id = $2', [id, m.id])
   if (exists.rowCount) throw new Error('Bu turnuvaya zaten kayıtlısın.')
   const fee = Number(row.entry_fee)
-  if (fee > 0 && !(await debit(m.id, fee))) throw new Error('Yetersiz Kanka Coin.')
+  if (fee > 0 && !(await debit(m.id, fee, 'Turnuva giriş ücreti'))) throw new Error('Yetersiz Kanka Coin.')
   const ins = await pool.query(
     `INSERT INTO tournament_entries (tournament_id, nickname, telegram, user_id)
      SELECT $1, $2, '', $3 WHERE (SELECT count(*) FROM tournament_entries WHERE tournament_id = $1) < $4
@@ -171,7 +171,7 @@ async function joinTournamentLocked(m: Member, id: number) {
     [id, m.name, m.id, Number(row.max_players)],
   )
   if (!ins.rowCount) {
-    if (fee > 0) await credit(m.id, fee)
+    if (fee > 0) await credit(m.id, fee, 'Turnuva iadesi')
     throw new Error('Turnuva kontenjanı doldu.')
   }
   if (fee > 0) await recordHistory({ userId: m.id, userName: m.name, game: row.game, mode: 'turnuva', opponent: `Kayıt: ${row.title}`, stake: fee, result: 'loss', delta: -fee })
@@ -184,7 +184,7 @@ export async function leaveTournament(m: Member, id: number) {
   const del = await pool.query('DELETE FROM tournament_entries WHERE tournament_id = $1 AND user_id = $2 RETURNING id', [id, m.id])
   const fee = Number(row.entry_fee)
   if (del.rowCount && fee > 0) {
-    await credit(m.id, fee)
+    await credit(m.id, fee, 'Turnuva iadesi')
     await recordHistory({ userId: m.id, userName: m.name, game: row.game, mode: 'turnuva', opponent: `İade: ${row.title}`, stake: fee, result: 'refund', delta: fee })
   }
 }
@@ -200,7 +200,7 @@ export async function removeEntry(entryId: number) {
   const t = await pool.query('SELECT entry_fee, game FROM tournaments WHERE id = $1', [row.tournament_id])
   const fee = Number(t.rows[0]?.entry_fee ?? 0)
   if (fee > 0) {
-    await credit(row.user_id, fee)
+    await credit(row.user_id, fee, 'Turnuva iadesi')
     await recordHistory({ userId: row.user_id, userName: row.nickname, game: t.rows[0].game, mode: 'turnuva', opponent: 'Kayıt iadesi', stake: fee, result: 'refund', delta: fee })
   }
 }
@@ -300,7 +300,7 @@ async function finishTournament(client: { query: typeof pool.query }, row: Row, 
   }
   const prize = Number(row.prize_pool)
   if (upd.rowCount && prize > 0 && n?.user_id) {
-    await credit(n.user_id, prize)
+    await credit(n.user_id, prize, 'Turnuva ödülü')
     await recordHistory({ userId: n.user_id, userName: display, game: String(row.game), mode: 'turnuva', opponent: `Şampiyonluk: ${row.title}`, stake: 0, result: 'win', delta: prize })
   }
 }

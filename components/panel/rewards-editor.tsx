@@ -9,6 +9,8 @@ import { WHEEL_TONES, type RewardConfig } from '@/lib/rewards-shared'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
 import { WheelPreview } from '@/components/panel/wheel-preview'
+import { RewardsForecast } from '@/components/panel/rewards-forecast'
+import type { MiniPlayStats } from '@/lib/rewards-forecast'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none'
 const label = 'flex flex-col gap-1.5 text-xs font-medium text-muted-foreground'
@@ -43,7 +45,17 @@ function Num({ text, value, onChange, min = 0, max = 100000 }: { text: string; v
   )
 }
 
-export function RewardsEditor({ initial, hidden = [], winRate = 40 }: { initial: RewardConfig; hidden?: string[]; winRate?: number }) {
+export function RewardsEditor({
+  initial,
+  hidden = [],
+  winRate = 40,
+  stats = null,
+}: {
+  initial: RewardConfig
+  hidden?: string[]
+  winRate?: number
+  stats?: MiniPlayStats | null
+}) {
   const [cfg, setCfg] = useState(initial)
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
@@ -71,6 +83,7 @@ export function RewardsEditor({ initial, hidden = [], winRate = 40 }: { initial:
 
   return (
     <div className="flex flex-col gap-5">
+      <RewardsForecast config={cfg} winRate={winRate} hidden={hidden} stats={stats} />
       <Card icon={Target} game="cark" hidden={hidden.includes('cark')} title="Şans çarkı" hint="8 dilim. Kısa yazı çarkın üstünde görünür, puan üyenin hesabına geçer.">
         <WheelPreview segments={cfg.wheel.segments} winRate={winRate} />
         <Num text="Kaç saatte bir çevirebilir" value={cfg.wheel.cooldownHours} min={1} max={168} onChange={(n) => patch('wheel', { cooldownHours: n })} />

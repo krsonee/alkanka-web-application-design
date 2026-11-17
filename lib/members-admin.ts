@@ -1,5 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
+import { applyCoins } from '@/lib/wallet-ledger'
 import { getPanelSession } from '@/lib/panel-auth'
 import { logPanel } from '@/lib/panel-log'
 
@@ -335,11 +336,10 @@ export async function adjustWallet(userId: string, amount: number, reason: strin
   if (text.length < 3) throw new Error('İşlem gerekçesi yazmalısın.')
   const label = await memberLabel(userId)
   await rows(sql`INSERT INTO wallets (user_id, balance) VALUES (${userId}, 0) ON CONFLICT (user_id) DO NOTHING`)
-  const r = await rows<{ balance: number }>(sql`UPDATE wallets SET balance = balance + ${n}, updated_at = now()
-    WHERE user_id = ${userId} AND balance + ${n} >= 0 RETURNING balance`)
-  if (!r.length) throw new Error('Bakiye eksiye düşemez.')
+  const balance = await applyCoins(userId, n, `Panel düzeltmesi: ${text}`, { min: 0 })
+  if (balance === null) throw new Error('Bakiye eksiye düşemez.')
   await logAudit(n > 0 ? 'Manuel Kanka Coin eklendi' : 'Manuel Kanka Coin düşüldü', label, `${n > 0 ? '+' : ''}${n} KC · ${text}`)
-  return Number(r[0].balance)
+  return balance
 }
 
 export type MemberActivity = {
@@ -400,7 +400,8 @@ export async function giftMember(userId: string, amount: number, message: string
   const text = message.trim().slice(0, 300)
   const label = await memberLabel(userId)
   await rows(sql`INSERT INTO wallets (user_id, balance) VALUES (${userId}, 0) ON CONFLICT (user_id) DO NOTHING`)
-  const [r] = await rows<{ balance: number }>(sql`UPDATE wallets SET balance = balance + ${n}, updated_at = now() WHERE user_id = ${userId} RETURNING balance`)
+  const balance = await applyCoins(userId, n, 'Panel hediyesi')
+  if (balance === null) throw new Error('Üyenin cüzdanı bulunamadı.')
   const session = await getPanelSession()
   const { sendMessage } = await import('@/lib/inbox')
   await sendMessage({
@@ -412,7 +413,7 @@ export async function giftMember(userId: string, amount: number, message: string
     sentBy: session?.displayName ?? 'Alkanka',
   }).catch((error) => console.error('[gift inbox]', error))
   await logAudit('Hediye gönderildi', label, `+${n} KC${text ? ` · ${text}` : ''}`)
-  return Number(r.balance)
+  return balance
 }
 
 export async function revokeSessions(userId: string) {

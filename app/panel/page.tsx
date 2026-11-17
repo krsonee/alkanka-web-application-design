@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { cache, type ReactNode } from 'react'
 import { adminConfigured, canPanel } from '@/lib/admin-auth'
-import { getPanelSession, type PanelSession } from '@/lib/panel-auth'
+import { getPanelSession, totpRenewalIds, type PanelSession } from '@/lib/panel-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { rows, sql } from '@/lib/db'
 import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
@@ -41,6 +41,8 @@ import { listSent } from '@/lib/inbox'
 import { listOutbox, listTemplates } from '@/lib/outbox'
 import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
 import { RewardsEditor } from '@/components/panel/rewards-editor'
+import { miniPlayStats } from '@/lib/rewards-stats'
+import type { MiniPlayStats } from '@/lib/rewards-forecast'
 import { CatalogEditor } from '@/components/panel/catalog-editor'
 import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
@@ -94,8 +96,11 @@ import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, ty
 import { affLinkViews } from '@/lib/aff-links'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
-import { listProducts, listRequests } from '@/lib/market'
+import { listProducts, listRequests, stockReminders } from '@/lib/market'
 import { SitesManager } from '@/components/panel/sites-manager'
+import { SponsorReminders } from '@/components/panel/sponsor-reminders'
+import { sponsorReminders, type SponsorReminder } from '@/lib/sponsor-reminders'
+import { istanbulToday } from '@/lib/sites-shared'
 import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
@@ -520,7 +525,9 @@ async function staffPanel() {
     last_login_at: string | null
   }>(sql`SELECT id, username, display_name, is_owner, permissions, totp_enabled, totp_required, active, last_login_at FROM panel_accounts ORDER BY is_owner DESC, username`)
   const addresses = await lastLoginAddresses().catch(miss<Record<string, string>>({}))
+  const renewDue = new Set(await totpRenewalIds().catch(miss<number[]>([])))
   const accounts: StaffRow[] = list.map((a) => ({
+    renewDue: renewDue.has(Number(a.id)),
     id: Number(a.id),
     username: a.username,
     displayName: a.display_name,
@@ -568,6 +575,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const ctx: SectionCtx = { session, active }
 
   const slideStats = can('slide') && active === 'slide' ? await readPromoTotals('slide') : {}
+  const homeDesign = mergeHomeV2(content[HOME_V2_KEY]).home
+  const slideAudience = { members: !(homeDesign.fullPage && homeDesign.enabled), guests: !(homeDesign.fullPage && homeDesign.guestEnabled) }
   const slides = can('slide')
     ? sortByOrder(SLIDES.map((s) => ({
         kind: 'slide' as const,
@@ -584,7 +593,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           path: '/',
           custom: true,
           defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
-          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href, startAt: s.startAt, endAt: s.endAt },
+          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, mobileImage: s.mobileImage, href: s.href, startAt: s.startAt, endAt: s.endAt },
         })),
       ), readSlideOrder(content[SLIDE_ORDER_KEY])).map((s) => ({ ...s, stats: slideStats[s.id] ?? { views: 0, clicks: 0 } }))
     : []
@@ -609,6 +618,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     tour,
     sponsors,
     growth,
+    referral,
     marketing,
     community,
     badges,
@@ -708,10 +718,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       ])
       return <TourSettingsEditor settings={settings} stats={stats} />
     }),
-    section(ctx, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} />),
+    section(ctx, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} today={istanbulToday()} />),
     section(ctx, 'growth', 'Büyüme', async () => {
-      const [referral, ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
-        getReferralSettings(),
+      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
         tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
         siteOptions(),
         listSites().catch(miss([])),
@@ -722,41 +731,41 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         adminSponsorAccounts().catch(miss([])),
         affLinkViews().catch(miss([])),
       ])
+      const traffic = (
+        <GrowthManager
+          sites={options.map((s) => ({ id: s.id, name: s.name }))}
+          recordNames={Object.fromEntries(allSites.map((site) => [String(site.id), site.name]))}
+          links={links}
+          followers={followers}
+          report={report}
+          flagged={flagged}
+          accounts={accounts}
+          period={currentPeriod()}
+          siteUrl={SITE_URL}
+          campaignsHref={can('marketing') ? '/panel?b=marketing&s=campaigns' : null}
+          affLinks={affLinks}
+          affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
+        />
+      )
+      if (!ambient) return traffic
       return (
         <TelegramTabs
           label="Büyüme bölümleri"
           tabs={[
-            {
-              id: 'traffic',
-              label: 'Trafik & hesaplar',
-              content: (
-                <GrowthManager
-                  sites={options.map((s) => ({ id: s.id, name: s.name }))}
-                  recordNames={Object.fromEntries(allSites.map((site) => [String(site.id), site.name]))}
-                  links={links}
-                  followers={followers}
-                  report={report}
-                  flagged={flagged}
-                  accounts={accounts}
-                  period={currentPeriod()}
-                  siteUrl={SITE_URL}
-                  affLinks={affLinks}
-                  affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
-                />
-              ),
-            },
-            { id: 'referral', label: 'Davet sistemi', content: <ReferralEditor settings={referral} /> },
-            ...(ambient ? [{ id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> }] : []),
+            { id: 'traffic', label: 'Trafik & hesaplar', content: traffic },
+            { id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> },
           ]}
         />
       )
     }),
+    section(ctx, 'referral', 'Davet sistemi', async () => <ReferralEditor settings={await getReferralSettings()} />),
     section(ctx, 'marketing', 'Pazarlama', async () => {
-      const [tracking, campaigns, earnings, mSites, adStats] = await Promise.all([
+      const [tracking, campaigns, earnings, mSites, earningReminders, adStats] = await Promise.all([
         getTracking(),
         listCampaigns().catch(miss([])),
         listEarnings().catch(miss([])),
         listSites().catch(miss([])),
+        sponsorReminders({ deals: false, earnings: true }).catch(miss<SponsorReminder[]>([])),
         tabHome('ads', can) === 'marketing' ? readPromoTotals('ad').catch(miss<Awaited<ReturnType<typeof readPromoTotals>>>({})) : null,
       ])
       const opts = mSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))
@@ -768,7 +777,16 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
             tabs={[
               { id: 'campaigns', label: 'Kampanya linkleri', content: <CampaignsManager campaigns={campaigns} sites={opts} siteUrl={SITE_URL} /> },
               ...(adStats ? [adsTab(adStats)] : []),
-              { id: 'earnings', label: 'Affiliate hakediş', content: <EarningsManager earnings={earnings} sites={opts} /> },
+              {
+                id: 'earnings',
+                label: 'Affiliate hakediş',
+                content: (
+                  <div className="flex flex-col gap-5">
+                    <SponsorReminders items={earningReminders} title="Hakediş hatırlatmaları" linked={false} />
+                    <EarningsManager earnings={earnings} sites={opts} />
+                  </div>
+                ),
+              },
               { id: 'tracking', label: 'Ölçüm etiketleri', content: <TrackingEditor settings={tracking} /> },
             ]}
           />
@@ -880,6 +898,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         jobs={await listJobs().catch(miss([]))}
         spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
         budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
+        canSlide={can('slide')}
       />
     )),
     section(ctx, 'messages', 'Site içi mesajlar', async () => {
@@ -887,8 +906,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <MessageSender sent={sent} outbox={outbox} templates={templates} />
     }),
     section(ctx, 'rewards', 'Ödül ayarları', async () => {
-      const [config, hidden, winRate] = await Promise.all([getRewardConfig(), getHidden(), getHouseWinRate()])
-      return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} />
+      const [config, hidden, winRate, stats] = await Promise.all([getRewardConfig(), getHidden(), getHouseWinRate(), miniPlayStats().catch(miss<MiniPlayStats | null>(null))])
+      return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} stats={stats} />
     }),
     section(ctx, 'catalog', 'Etkinlik ve kampanyalar', async () => {
       const [{ rewards: _rewards, ...catalog }, hidden, options, cups] = await Promise.all([
@@ -938,8 +957,10 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       : null
 
   const onDash = active === 'dashboard'
-  const [detail, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
+  const [detail, dashReminders, dashStock, dashCounts, dashRecent, dashStatsData, sysStatus] = await Promise.all([
     pendingDetail(can).catch(miss<PendingDetail>(EMPTY_PENDING)),
+    onDash ? sponsorReminders({ deals: can('sponsors'), earnings: can('marketing') }).catch(miss<SponsorReminder[]>([])) : [],
+    onDash && can('market') ? stockReminders().catch(miss<SponsorReminder[]>([])) : [],
     onDash && can('users') ? memberCounts().catch(miss(null)) : null,
     onDash && session.isOwner ? recentAudit(8).catch(miss([])) : null,
     onDash && session.isOwner ? dashStats(parseQuery(params)).catch(miss(null)) : null,
@@ -957,6 +978,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   const dashboard = onDash ? (
     <div className="flex flex-col gap-6">
       {sysStatus ? <SystemStatus items={sysStatus} /> : null}
+      <SponsorReminders items={dashReminders} />
+      <SponsorReminders items={dashStock} title="Market stok uyarıları" />
       <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} />
     </div>
   ) : null
@@ -984,6 +1007,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           moderation={moderation === undefined ? <></> : moderation}
           isOwner={session.isOwner}
           slides={slides}
+          slideAudience={slideAudience}
           heroes={heroes}
           library={IMAGE_LIBRARY}
           texts={texts}
@@ -1000,6 +1024,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           community={community}
           home={home}
           withdrawals={withdrawals}
+          referral={referral}
           badges={badges}
           tasks={tasks}
           market={market}

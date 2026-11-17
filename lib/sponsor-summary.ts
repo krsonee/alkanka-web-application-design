@@ -6,6 +6,7 @@ import { ensureCommunity } from '@/lib/community'
 import { ensureGrowth } from '@/lib/growth'
 import { ensureMarketing } from '@/lib/marketing'
 import { listSites } from '@/lib/sites'
+import { dealDaysLeft, istanbulToday } from '@/lib/sites-shared'
 import type { SponsorSummary } from '@/lib/sponsor-summary-shared'
 
 type Row = Record<string, unknown>
@@ -86,6 +87,7 @@ export async function getSponsorSummary(id: number, opts: { earnings: boolean })
     slug: site.slug,
     active: site.active,
     links: { entry: Boolean(site.entryUrl.trim()), site: Boolean(site.url.trim()) },
+    deal: { ends: site.dealEnds, daysLeft: dealDaysLeft(site.dealEnds, istanbulToday()), fee: site.dealFee },
     clicks: {
       week: n(totals[0]?.week),
       month: n(totals[0]?.month),

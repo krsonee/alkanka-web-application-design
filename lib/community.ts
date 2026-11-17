@@ -141,7 +141,7 @@ export async function attachReferral(userId: string, code: string) {
   if (!r.length) return false
   const { getReferralSettings } = await import('@/lib/referral-settings')
   const { welcome } = await getReferralSettings()
-  if (welcome > 0) await credit(userId, welcome).catch((error) => console.error('[referral] hoş geldin bonusu verilemedi', error))
+  if (welcome > 0) await credit(userId, welcome, 'Davet: hoş geldin bonusu').catch((error) => console.error('[referral] hoş geldin bonusu verilemedi', error))
   return true
 }
 
@@ -186,10 +186,10 @@ export async function claimReferralRewards(userId: string) {
       AND (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id) >= ${settings.minGames}
       AND NOT EXISTS (SELECT 1 FROM member_origin o WHERE o.user_id = r.referred_id AND o.flagged)
     RETURNING r.referred_id`)
-  for (const d of done) await credit(d.referred_id, settings.referred)
+  for (const d of done) await credit(d.referred_id, settings.referred, 'Davet ödülü (davet edilen)')
   const rank = await rankForUser(userId)
   const total = Math.round(settings.referrer * done.length * rank.multiplier)
-  if (done.length) await credit(userId, total)
+  if (done.length) await credit(userId, total, 'Davet ödülü (davet eden)')
   return { count: done.length, total, blocked: false }
 }
 
@@ -343,9 +343,21 @@ export async function pendingReviews() {
   return (await rows(sql`SELECT * FROM site_reviews WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100`)).map(mapReview)
 }
 
-export async function setReviewStatus(id: number, status: 'approved' | 'rejected') {
+/** A rejection with a reason is also sent to the member's inbox; without one nothing is sent. */
+export async function setReviewStatus(id: number, status: 'approved' | 'rejected', note = '') {
   await ensureCommunity()
-  await rows(sql`UPDATE site_reviews SET status = ${status} WHERE id = ${id}`)
+  const [row] = await rows<{ user_id: string }>(sql`UPDATE site_reviews SET status = ${status} WHERE id = ${id} RETURNING user_id`)
+  const reason = String(note ?? '').trim().slice(0, 300)
+  if (!row || status !== 'rejected' || !reason) return
+  const { sendMessage } = await import('@/lib/inbox')
+  await sendMessage({
+    userId: String(row.user_id),
+    targetLabel: 'Yorum',
+    title: 'Yorumun yayınlanmadı',
+    body: `Bir siteye yazdığın yorum yayınlanmadı. Sebep: ${reason}. Yorumunu düzeltip yeniden gönderebilirsin.`,
+    url: '/guven',
+    sentBy: 'Sistem',
+  }).catch((error) => console.error('[community] red mesajı gönderilemedi', error))
 }
 
 export async function publishedReviews() {
@@ -603,8 +615,8 @@ export async function settleLeagueMatch(id: number, home: number, away: number) 
   const outcome = await boosted('tahmin', OUTCOME_REWARD)
   for (const s of scored) {
     const p = Number(s.points)
-    if (p === 3) await credit(s.user_id, exact)
-    else if (p === 1) await credit(s.user_id, outcome)
+    if (p === 3) await credit(s.user_id, exact, 'Skor tahmini ödülü (tam skor)')
+    else if (p === 1) await credit(s.user_id, outcome, 'Skor tahmini ödülü (sonuç)')
   }
   return { picks: scored.length, winners: scored.filter((s) => Number(s.points) > 0).length }
 }

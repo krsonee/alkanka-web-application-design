@@ -100,7 +100,7 @@ export async function claimTourReward(member: { id: string; name: string }, ipHa
     throw error
   }
 
-  await credit(member.id, reward)
+  await credit(member.id, reward, 'Site turu ödülü')
   await recordHistory({
     userId: member.id,
     userName: member.name,

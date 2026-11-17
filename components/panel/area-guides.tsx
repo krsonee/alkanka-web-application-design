@@ -57,6 +57,7 @@ const LIMIT_STEPS: GuideStep[] = [
         <li><b>Günlük max market harcaması</b>: Marketten bir günde harcayabileceği en fazla Kanka Coin.</li>
         <li><b>Marketten hiç alışveriş yapamasın</b>: Market tamamen kapanır, harcama sınırı devre dışı kalır.</li>
         <li>Boş bırakılan alan <b>sınırsız</b> demektir. Sayaçlar her gece 00:00’da (Türkiye saati) sıfırlanır.</li>
+        <li><b>Bitiş tarihi</b>: Kısıtlamanın kendiliğinden kalkacağı gün ve saat. Boş bırakırsan sen kaldırana kadar sürer. Süresi dolan üye listede “Süresi doldu” diye kalır; kalemle açıp yeni tarih verirsen yeniden başlar.</li>
       </ol>
     ),
   },

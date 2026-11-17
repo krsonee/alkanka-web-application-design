@@ -100,6 +100,8 @@ export type Slide = {
   cta: string
   href: string
   image: string
+  /** Shown instead of `image` below the `sm` breakpoint, where the slide is taller than it is wide. */
+  mobileImage?: string
   chips?: string[]
   startAt?: string
   endAt?: string

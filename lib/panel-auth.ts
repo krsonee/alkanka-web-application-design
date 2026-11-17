@@ -135,10 +135,90 @@ export async function takePendingLogin() {
   return row && row.active && row.session_version === Number(ver) ? row : null
 }
 
+const RENEW_COOKIE = 'alk_panel_renew'
+const RENEW_MINUTES = 15
+
+function renewSignature(key: Buffer, body: string) {
+  return createHmac('sha256', key).update(`renew|${body}`).digest('base64url')
+}
+
+/**
+ * Marks that the account's current second factor was just checked during a forced renewal,
+ * so the next code is read against the new secret. It never starts a session by itself.
+ */
+export async function setRenewProof(account: Pick<PanelAccountRow, 'id' | 'session_version'>) {
+  const key = signingKey()
+  if (!key) throw new Error('Panel anahtarı ayarlı değil (ADMIN_PASSWORD).')
+  const body = `${account.id}.${account.session_version}.${Math.floor(Date.now() / 1000) + RENEW_MINUTES * 60}`
+  ;(await cookies()).set(RENEW_COOKIE, `${body}.${renewSignature(key, body)}`, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    path: '/',
+    maxAge: RENEW_MINUTES * 60,
+  })
+}
+
+export async function hasRenewProof(account: Pick<PanelAccountRow, 'id' | 'session_version'>) {
+  const key = signingKey()
+  const value = (await cookies()).get(RENEW_COOKIE)?.value
+  if (!key || !value) return false
+  const parts = value.split('.')
+  if (parts.length !== 4) return false
+  const [id, ver, exp, sig] = parts
+  if (!safeEqual(sig, renewSignature(key, `${id}.${ver}.${exp}`))) return false
+  if (Number(exp) * 1000 < Date.now()) return false
+  return Number(id) === account.id && Number(ver) === account.session_version
+}
+
+export async function clearRenewProof() {
+  ;(await cookies()).delete(RENEW_COOKIE)
+}
+
+let renewReady: Promise<unknown> | null = null
+function ensureTotpRenewal() {
+  renewReady ??= rows(sql`CREATE TABLE IF NOT EXISTS panel_totp_renew (
+    account_id integer PRIMARY KEY, asked_by text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now())`).catch((error) => {
+    renewReady = null
+    throw error
+  })
+  return renewReady
+}
+
+export async function totpRenewalIds(): Promise<number[]> {
+  await ensureTotpRenewal()
+  const found = await rows<{ account_id: number }>(sql`SELECT account_id FROM panel_totp_renew`)
+  return found.map((row) => Number(row.account_id))
+}
+
+/** Never throws: a sign-in must not fail because this list could not be read. */
+export async function totpRenewalDue(id: number) {
+  try {
+    await ensureTotpRenewal()
+    const found = await rows(sql`SELECT 1 FROM panel_totp_renew WHERE account_id = ${id}`)
+    return found.length > 0
+  } catch (error) {
+    console.error('[panel-2fa] yenileme listesi okunamadı', error)
+    return false
+  }
+}
+
+export async function askTotpRenewal(id: number, askedBy: string) {
+  await ensureTotpRenewal()
+  await rows(sql`INSERT INTO panel_totp_renew (account_id, asked_by) VALUES (${id}, ${askedBy.slice(0, 64)})
+    ON CONFLICT (account_id) DO NOTHING`)
+}
+
+export async function clearTotpRenewal(id: number) {
+  await ensureTotpRenewal()
+  await rows(sql`DELETE FROM panel_totp_renew WHERE account_id = ${id}`)
+}
+
 export async function clearSessionCookie() {
   const jar = await cookies()
   jar.delete(PANEL_COOKIE)
   jar.delete(PENDING_COOKIE)
+  jar.delete(RENEW_COOKIE)
   jar.delete('alk_admin')
 }
 

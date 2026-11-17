@@ -211,7 +211,7 @@ function InvitesCard({ data, onChanged }: { data: ResilienceData; onChanged: () 
 
   return (
     <Card
-      title={`Kampanya davet linkleri (${open.length} açık)`}
+      title={`Telegram davet linkleri (${open.length} açık)`}
       hint="Her reklama ya da paylaşıma ayrı link ver: hangi linkten kaç kişi geldiği burada görünür. Saldırı bir linkten geliyorsa sadece o link iptal edilir, diğerleri çalışmaya devam eder."
     >
       {!data.guardReady && (

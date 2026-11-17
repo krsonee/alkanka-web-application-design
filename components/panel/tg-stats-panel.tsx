@@ -192,7 +192,7 @@ export function StatsSection() {
 
       <ul className="flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-muted-foreground">
         <li>Mesaj sayısı Bekçi&apos;nin gruplarda gördüğü mesajlardır; mesaj ve giriş kayıtları 35 gün tutulur.</li>
-        <li>Gruplardaki giriş ve çıkışlar her zaman sayılır. Kanaldaki giriş ve çıkışlar yalnızca Koruma sekmesindeki giriş takibi ya da açık bir kampanya linki varken sayılır.</li>
+        <li>Gruplardaki giriş ve çıkışlar her zaman sayılır. Kanaldaki giriş ve çıkışlar yalnızca Koruma sekmesindeki giriş takibi ya da açık bir Telegram davet linki varken sayılır.</li>
         <li>Üye sayısı, kanal sağlığı alarmı açıkken saatte bir kaydedilir ve tek bir sohbet seçiliyken gösterilir.</li>
       </ul>
     </div>

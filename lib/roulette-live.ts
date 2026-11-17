@@ -76,7 +76,7 @@ export async function settleRounds(userId?: string) {
     const userId = String(row.user_id)
     const returned = await capPayout(userId, total, bets.reduce((a, b) => a + betReturn(b, n), 0))
     await pool.query(`UPDATE roulette_bets SET returned = $2 WHERE id = $1`, [row.id, returned])
-    if (returned) await credit(userId, returned)
+    if (returned) await credit(userId, returned, 'Canlı rulet ödemesi')
     await recordHistory({
       userId,
       userName: String(row.user_name),
@@ -135,7 +135,7 @@ export async function placeLiveBets(member: Member, bets: RouletteBet[], spotLim
   const clean = merge([], bets.map((b) => ({ kind: b.kind, value: b.value ?? undefined, amount: b.amount })))
   const total = clean.reduce((a, b) => a + b.amount, 0)
   await settleFor(member)
-  if (!(await debit(member.id, total))) throw new Error('Yetersiz Kanka Coin.')
+  if (!(await debit(member.id, total, 'Canlı rulet bahsi'))) throw new Error('Yetersiz Kanka Coin.')
   let saved: StoredBet[]
   try {
     saved = await inTx(async (c) => {
@@ -149,7 +149,7 @@ export async function placeLiveBets(member: Member, bets: RouletteBet[], spotLim
       return next
     })
   } catch (e) {
-    await credit(member.id, total)
+    await credit(member.id, total, 'Canlı rulet bahis iadesi')
     throw e
   }
   return { roundId: c0.roundId, bets: saved, balance: await getBalance(member.id) }
@@ -167,7 +167,7 @@ export async function withdrawLiveBets(member: Member, bets?: StoredBet[]) {
     await saveRow(c, row.id, next)
     return { refund: before - after, next }
   })
-  if (refund > 0) await credit(member.id, refund)
+  if (refund > 0) await credit(member.id, refund, 'Canlı rulet bahis iadesi')
   return { roundId: c0.roundId, bets: next, balance: await getBalance(member.id) }
 }
 
