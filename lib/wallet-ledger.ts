@@ -1,10 +1,11 @@
 import 'server-only'
 import { DatabaseError, type PoolClient } from 'pg'
 import { pool } from '@/lib/db'
-import { LEDGER_PAGE_SIZE, type LedgerPage } from '@/lib/wallet-ledger-shared'
+import { LEDGER_KEEP_DAYS, LEDGER_PAGE_SIZE, type LedgerPage } from '@/lib/wallet-ledger-shared'
 
 const MIN_INT = -2147483648
 const SOURCE_MAX = 80
+const PRUNE_BATCH = 50_000
 
 let ready = false
 let ensuring: Promise<void> | null = null
@@ -88,6 +89,21 @@ export async function noteCoins(userId: string, delta: number, why: string) {
   } catch (error) {
     console.error('[wallet-ledger] hareket yazılamadı', error)
   }
+}
+
+/**
+ * Drops lines older than the keeping window. Only the oldest lines are looked at, by primary key,
+ * so a run stays small however large the table is. Returns how many lines were removed.
+ */
+export async function pruneLedger() {
+  if (!ready) await ensureLedger()
+  if (!ready) return 0
+  const r = await pool.query(
+    `DELETE FROM wallet_ledger WHERE id IN (SELECT id FROM wallet_ledger ORDER BY id LIMIT $1::int)
+       AND created_at < now() - make_interval(days => $2::int)`,
+    [PRUNE_BATCH, LEDGER_KEEP_DAYS],
+  )
+  return r.rowCount ?? 0
 }
 
 export async function listLedger(userId: string, page: number): Promise<LedgerPage> {

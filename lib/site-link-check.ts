@@ -3,11 +3,12 @@ import dns from 'node:dns/promises'
 import { listSites } from '@/lib/sites'
 import type { LinkCheck, SponsorSite } from '@/lib/sites-shared'
 
-const TIMEOUT_MS = 6000
+const TIMEOUT_MS = 8000
 const LOOKUP_MS = 3000
 const DEADLINE_MS = 25_000
 const PARALLEL = 8
 const MAX_SITES = 120
+const MAX_HOPS = 4
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
 
 /** Only public https hosts: the address is typed in the panel and must not be a way to probe anything else. */
@@ -69,54 +70,84 @@ function hostMatches(host: string, domain: string) {
   return host === domain || host.endsWith(`.${domain}`)
 }
 
+function sameSite(a: string, b: string) {
+  return a === b || a === `www.${b}` || `www.${a}` === b
+}
+
+/**
+ * Sponsor links are usually short or affiliate links that hand over to another host, so the check
+ * walks the redirects itself (every hop is held to the same public-https rule) and reports whether
+ * the page at the end opens.
+ */
 async function checkOne(site: SponsorSite): Promise<LinkCheck> {
   const base = { id: site.id, name: site.name }
   const raw = targetOf(site)
   if (!raw) return { ...base, target: null, state: 'none', code: null, ms: null, note: 'Giriş ya da site adresi girilmemiş; sitedeki buton bir yere gitmiyor.' }
-  const url = publicTarget(raw)
-  if (!url) return { ...base, target: raw, state: 'none', code: null, ms: null, note: 'Adres https:// ile başlayan açık bir site adresi değil; kontrol edilmedi.' }
-  if (await pointsInside(url.hostname)) {
-    return { ...base, target: raw, state: 'none', code: null, ms: null, note: 'Bu alan adı açık internetteki bir siteye çıkmıyor; kontrol edilmedi.' }
-  }
+  const first = publicTarget(raw)
+  if (!first) return { ...base, target: raw, state: 'none', code: null, ms: null, note: 'Adres https:// ile başlayan açık bir site adresi değil; kontrol edilmedi.' }
 
+  const startHost = first.hostname.toLowerCase()
   const domain = site.domain.trim().toLowerCase()
-  const mismatch = domain && !hostMatches(url.hostname.toLowerCase(), domain) ? ` Adres, yazılı alan adıyla (${domain}) uyuşmuyor.` : ''
+  const mismatch = domain && !hostMatches(startHost, domain) ? ` Adres, yazılı alan adıyla (${domain}) uyuşmuyor.` : ''
+  const target = first.toString()
   const started = Date.now()
+  const signal = AbortSignal.timeout(TIMEOUT_MS)
+  let url = first
+
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      redirect: 'manual',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { 'user-agent': UA, accept: 'text/html,*/*;q=0.8', 'accept-language': 'tr-TR,tr;q=0.9' },
-    })
-    await res.body?.cancel().catch(() => {})
-    const ms = Date.now() - started
-    const done = { ...base, target: url.toString(), code: res.status, ms }
-    if (res.status >= 200 && res.status < 300) return { ...done, state: 'ok', note: `Açılıyor.${mismatch}`.trim() }
-    if (res.status >= 300 && res.status < 400) {
-      let to = ''
-      try {
-        to = new URL(res.headers.get('location') ?? '', url).hostname.toLowerCase()
-      } catch {}
-      const same = to && (to === url.hostname.toLowerCase() || to === `www.${url.hostname.toLowerCase()}` || `www.${to}` === url.hostname.toLowerCase())
-      if (same) return { ...done, state: 'ok', note: `Açılıyor (aynı sitede yönleniyor).${mismatch}` }
-      return { ...done, state: 'redirect', note: `${to || 'Başka bir adrese'} yönlendiriyor. Sponsor adres değiştirmiş olabilir; güncel adresi yaz.${mismatch}` }
+    for (let hop = 0; ; hop += 1) {
+      if (await pointsInside(url.hostname)) {
+        return { ...base, target, state: 'none', code: null, ms: null, note: `${url.hostname} açık internetteki bir siteye çıkmıyor; kontrol edilmedi.${mismatch}` }
+      }
+      const res = await fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        cache: 'no-store',
+        signal,
+        headers: { 'user-agent': UA, accept: 'text/html,*/*;q=0.8', 'accept-language': 'tr-TR,tr;q=0.9' },
+      })
+      await res.body?.cancel().catch(() => {})
+      const host = url.hostname.toLowerCase()
+      const moved = !sameSite(host, startHost)
+      const done = { ...base, target, code: res.status, ms: Date.now() - started }
+
+      if (res.status >= 300 && res.status < 400) {
+        let next: URL | null = null
+        try {
+          next = publicTarget(new URL(res.headers.get('location') ?? '', url).toString())
+        } catch {}
+        if (!next) {
+          return { ...done, state: 'redirect', note: `${host} başka bir adrese yönlendiriyor ama gittiği adres https:// ile başlayan açık bir site adresi değil; sonu kontrol edilemedi. Linki kendi tarayıcından aç.${mismatch}` }
+        }
+        if (hop >= MAX_HOPS) {
+          return { ...done, state: 'redirect', note: `Link ${MAX_HOPS + 1} kez yönlendi ve hâlâ bir sayfaya varmadı (son adres ${next.hostname}). Linki kendi tarayıcından aç.${mismatch}` }
+        }
+        url = next
+        continue
+      }
+
+      if (res.status >= 200 && res.status < 300) {
+        return moved
+          ? { ...done, state: 'redirect', note: `Link açılıyor ve ${host} adresine gidiyor. Kısa link ya da affiliate linkiyse bu normal; sponsor adres değiştirdiyse güncel adresi yaz.${mismatch}` }
+          : { ...done, state: 'ok', note: `Açılıyor.${mismatch}` }
+      }
+      const where = moved ? ` Link ${host} adresine gidiyor.` : ''
+      if ([401, 403, 406, 429, 451, 503].includes(res.status)) {
+        return { ...done, state: 'blocked', note: `Site, sunucumuzdan gelen isteği geri çevirdi (HTTP ${res.status}). Yurt dışını ya da otomatik istekleri engelliyor olabilir; adresi kendi tarayıcından aç.${where}${mismatch}` }
+      }
+      return { ...done, state: 'down', note: `Sayfa hata veriyor (HTTP ${res.status}).${where}${mismatch}` }
     }
-    if ([401, 403, 406, 429, 451, 503].includes(res.status)) {
-      return { ...done, state: 'blocked', note: `Site, sunucumuzdan gelen isteği geri çevirdi (HTTP ${res.status}). Yurt dışını ya da otomatik istekleri engelliyor olabilir; adresi kendi tarayıcından aç.${mismatch}` }
-    }
-    return { ...done, state: 'down', note: `Sayfa hata veriyor (HTTP ${res.status}).${mismatch}` }
   } catch (error) {
     const ms = Date.now() - started
     const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+    const where = sameSite(url.hostname.toLowerCase(), startHost) ? '' : ` Link ${url.hostname.toLowerCase()} adresine gidiyor.`
     return timedOut
-      ? { ...base, target: url.toString(), state: 'timeout', code: null, ms, note: `${TIMEOUT_MS / 1000} saniyede cevap gelmedi. Site yavaş ya da sunucumuza kapalı olabilir; kendi tarayıcından dene.${mismatch}` }
-      : { ...base, target: url.toString(), state: 'down', code: null, ms, note: `Adres açılmadı: alan adı bulunamadı ya da bağlantı reddedildi.${mismatch}` }
+      ? { ...base, target, state: 'timeout', code: null, ms, note: `${TIMEOUT_MS / 1000} saniyede cevap gelmedi. Site yavaş ya da sunucumuza kapalı olabilir; kendi tarayıcından dene.${where}${mismatch}` }
+      : { ...base, target, state: 'down', code: null, ms, note: `Adres açılmadı: alan adı bulunamadı ya da bağlantı reddedildi.${where}${mismatch}` }
   }
 }
 
-/** Opens each published sponsor's outgoing address once, without following redirects. Nothing is stored. */
+/** Opens each published sponsor's outgoing address once and follows its redirects to the end. Nothing is stored. */
 export async function checkSiteLinks(): Promise<LinkCheck[]> {
   const sites = (await listSites()).filter((site) => site.active).slice(0, MAX_SITES)
   const out: LinkCheck[] = new Array(sites.length)

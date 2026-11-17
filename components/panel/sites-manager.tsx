@@ -116,10 +116,18 @@ export function SitesManager({ sites, today }: { sites: SponsorSite[]; today: st
         return
       }
       setChecks(new Map(res.checks.map((check) => [check.id, check])))
-      const bad = res.checks.filter((check) => check.state !== 'ok').length
+      const total = res.checks.length
+      const broken = res.checks.filter((check) => check.state === 'down' || check.state === 'timeout').length
+      const unsure = res.checks.filter((check) => check.state === 'blocked' || check.state === 'none').length
+      const moved = res.checks.filter((check) => check.state === 'redirect').length
+      const parts = [
+        broken ? `${broken} tanesi açılmıyor` : '',
+        unsure ? `${unsure} tanesi buradan doğrulanamadı` : '',
+        moved ? `${moved} tanesi başka adrese gidiyor` : '',
+      ].filter(Boolean)
       setMsg({
-        ok: bad === 0,
-        text: res.checks.length === 0 ? 'Yayında sponsor yok; kontrol edilecek link bulunamadı.' : bad ? `${res.checks.length} sponsorun linki denendi, ${bad} tanesine bakmalısın.` : `${res.checks.length} sponsorun linki denendi, hepsi açılıyor.`,
+        ok: broken === 0,
+        text: total === 0 ? 'Yayında sponsor yok; kontrol edilecek link bulunamadı.' : parts.length ? `${total} sponsorun linki denendi: ${parts.join(', ')}. Ayrıntı satırların altında.` : `${total} sponsorun linki denendi, hepsi açılıyor.`,
       })
     })
   }

@@ -2,7 +2,7 @@
 
 import useSWRInfinite from 'swr/infinite'
 import { memberLedgerAction } from '@/app/panel/members-actions'
-import { LEDGER_PAGE_SIZE } from '@/lib/wallet-ledger-shared'
+import { LEDGER_KEEP_DAYS, LEDGER_PAGE_SIZE } from '@/lib/wallet-ledger-shared'
 import { cn } from '@/lib/utils'
 
 const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
@@ -45,8 +45,8 @@ export function MemberLedger({ userId, balance }: { userId: string; balance: num
 
       <p className="text-xs leading-relaxed text-muted-foreground">
         {head.since
-          ? `Döküm ${day(head.since)} tarihinden beri tutuluyor: o günden sonraki her coin girişi ve çıkışı burada. Öncesi için Oyunlar ve İşlemler sekmelerine bak.`
-          : 'Döküm bu sürümle tutulmaya başladı; ilk coin hareketiyle birlikte dolacak. Öncesi için Oyunlar ve İşlemler sekmelerine bak.'}
+          ? `Döküm ${day(head.since)} tarihinden beri tutuluyor: o günden sonraki her coin girişi ve çıkışı burada. Hareketler ${LEDGER_KEEP_DAYS} gün saklanır, daha eskisi silinir. Öncesi için Oyunlar ve İşlemler sekmelerine bak.`
+          : `Döküm bu sürümle tutulmaya başladı; ilk coin hareketiyle birlikte dolacak ve hareketler ${LEDGER_KEEP_DAYS} gün saklanır. Öncesi için Oyunlar ve İşlemler sekmelerine bak.`}
       </p>
 
       {list.length === 0 ? (
