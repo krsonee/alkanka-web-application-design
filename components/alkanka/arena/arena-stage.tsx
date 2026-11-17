@@ -154,20 +154,27 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
     if (id) return { id }
     return wizardEnabledFor(setup, game) && params.has('masa-ac') ? { id: null } : null
   }
+  const openLinked = (query: string) => {
+    // A table named in the link opens even where the game has no player tables: that is how a tournament match is reached.
+    const linked = linkTarget(query)
+    const target = linked && (linked.id || (hasTables && !liveOnly)) ? linked : null
+    if (!target) return
+    if (target.id) setInvitedTable(target.id)
+    else setOpenWizard(true)
+    setEntered({ bet: settings.bets[0] })
+  }
   if (search !== null && !linkRead) {
     setLinkRead(true)
-    // A table named in the link opens even where the game has no player tables: that is how a tournament match is reached.
-    const linked = linkTarget(search)
-    const target = linked && (linked.id || (hasTables && !liveOnly)) ? linked : null
-    if (target) {
-      if (target.id) setInvitedTable(target.id)
-      else setOpenWizard(true)
-      setEntered({ bet: settings.bets[0] })
-    }
+    openLinked(search)
   }
 
   useEffect(() => {
-    if (!hasTables || linkTarget(window.location.search)) return
+    if (linkTarget(window.location.search)) {
+      // Reached by a link inside the site: the address changes only after the first render, which read the previous page's.
+      if (entered == null && invitedTable == null) openLinked(window.location.search)
+      return
+    }
+    if (!hasTables) return
     // A refresh (or a PWA relaunch) can drop ?masa; fall back to the table the player is still seated at.
     let cancelled = false
     fetch(`/api/tables?game=${game}`, { cache: 'no-store' })
