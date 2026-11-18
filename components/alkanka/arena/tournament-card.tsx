@@ -25,19 +25,27 @@ const STATUS_STYLE = {
 
 function Stat({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex min-w-0 items-baseline justify-between gap-2 rounded-lg bg-secondary px-2.5 py-1.5 lg:flex-col lg:items-start lg:justify-start lg:gap-0.5 lg:bg-transparent lg:p-0', className)}>
-      <dt className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-sm font-bold text-foreground lg:text-[15px]">{children}</dd>
+    <div
+      className={cn(
+        'flex min-w-0 items-baseline gap-1.5 @2xl:flex-col @2xl:items-stretch @2xl:gap-0.5 @2xl:rounded-lg @2xl:bg-secondary @2xl:px-2.5 @2xl:py-1.5 @6xl:bg-transparent @6xl:p-0',
+        className,
+      )}
+    >
+      <dt className="shrink-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-sm font-bold text-foreground @6xl:text-[15px]">{children}</dd>
     </div>
   )
 }
 
-const primaryAction = 'flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-50 lg:flex-none'
+const primaryAction = 'flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-50 @2xl:flex-none'
 
 /**
  * One tournament as a summary row: what it is, what it pays, when, how full, and the one thing the
  * viewer can do about it. Everything else opens underneath. `defaultOpen` is for a page with a single
  * tournament to show; a row the viewer has a match waiting in opens by itself.
+ *
+ * The row is laid out by its own width, not the window's: with the chat rail open the page column is
+ * far narrower than the screen.
  */
 export function TournamentCard({ t, onChanged, defaultOpen = false }: { t: Tournament; onChanged?: () => void; defaultOpen?: boolean }) {
   const meta = ARENA_META[t.game]
@@ -104,10 +112,10 @@ export function TournamentCard({ t, onChanged, defaultOpen = false }: { t: Tourn
   const view: TournamentView = { myId, joined, myMatch, joinLeft, pending, error, canJoin, joinLabel, toggleEntry }
 
   return (
-    <article className={cn('overflow-hidden rounded-2xl border bg-card', myMatch ? 'border-primary' : joined && t.status !== 'bitti' ? 'border-primary/50' : 'border-border')}>
-      <div className="flex flex-wrap items-center gap-3 p-3 sm:p-4 lg:flex-nowrap lg:gap-6">
-        <div className="flex min-w-0 basis-full items-center gap-3 sm:flex-1 sm:basis-0 lg:w-[22rem] lg:flex-none xl:w-[26rem]">
-          <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-secondary sm:size-16">
+    <article className={cn('@container overflow-hidden rounded-2xl border bg-card', myMatch ? 'border-primary' : joined && t.status !== 'bitti' ? 'border-primary/50' : 'border-border')}>
+      <div className="flex flex-wrap items-center gap-3 p-3 @2xl:p-4 @6xl:flex-nowrap @6xl:gap-6">
+        <div className="flex min-w-0 basis-full items-center gap-3 @2xl:flex-1 @2xl:basis-0 @6xl:w-[22rem] @6xl:flex-none @7xl:w-[26rem]">
+          <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-secondary @2xl:size-16">
             <Image src={meta.image || '/placeholder.svg'} alt="" fill sizes="64px" className="object-cover object-[center_35%]" />
           </div>
           <div className="flex min-w-0 flex-col gap-1">
@@ -117,7 +125,7 @@ export function TournamentCard({ t, onChanged, defaultOpen = false }: { t: Tourn
                 {meta.title} · {formatLine(t)}
               </span>
             </div>
-            <h3 className="truncate font-display text-lg font-bold uppercase leading-tight text-foreground sm:text-xl">{t.title}</h3>
+            <h3 className="truncate font-display text-lg font-bold uppercase leading-tight text-foreground @2xl:text-xl">{t.title}</h3>
             {subline ? (
               <p className="truncate text-xs leading-5 text-muted-foreground">{subline}</p>
             ) : (
@@ -129,7 +137,7 @@ export function TournamentCard({ t, onChanged, defaultOpen = false }: { t: Tourn
           </div>
         </div>
 
-        <dl className="order-2 grid basis-full grid-cols-2 gap-2 sm:order-3 sm:grid-cols-4 lg:order-2 lg:flex-1 lg:basis-0 lg:gap-4">
+        <dl className="order-2 flex basis-full flex-wrap gap-x-4 gap-y-1 @2xl:order-3 @2xl:grid @2xl:grid-cols-4 @2xl:gap-2 @6xl:order-2 @6xl:flex-1 @6xl:basis-0 @6xl:gap-4">
           <Stat label="Ödül">
             <span className="text-primary">{formatAC(t.prizePool)} KC</span>
           </Stat>
@@ -141,7 +149,7 @@ export function TournamentCard({ t, onChanged, defaultOpen = false }: { t: Tourn
                 {t.entries.length} / {t.maxPlayers}
               </span>
               {t.status === 'kayit' && (
-                <span className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-secondary lg:block" role="progressbar" aria-valuenow={fill} aria-valuemin={0} aria-valuemax={100} aria-label="Kontenjan doluluğu">
+                <span className="hidden h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-background @2xl:block @6xl:bg-secondary" role="progressbar" aria-valuenow={fill} aria-valuemin={0} aria-valuemax={100} aria-label="Kontenjan doluluğu">
                   <span className="block h-full rounded-full bg-primary" style={{ width: `${fill}%` }} />
                 </span>
               )}
@@ -149,10 +157,10 @@ export function TournamentCard({ t, onChanged, defaultOpen = false }: { t: Tourn
           </Stat>
         </dl>
 
-        <div className="order-3 flex basis-full items-center gap-2 sm:order-2 sm:basis-auto lg:order-3 lg:w-64 lg:flex-none lg:justify-end">
+        <div className="order-3 flex basis-full items-center gap-2 @2xl:order-2 @2xl:basis-auto @6xl:order-3 @6xl:w-60 @6xl:flex-none @6xl:justify-end">
           {t.status === 'kayit' &&
             (joined ? (
-              <span className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-primary/50 bg-primary/10 px-3 py-2.5 text-sm font-bold text-foreground lg:flex-none">
+              <span className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-primary/50 bg-primary/10 px-3 py-2.5 text-sm font-bold text-foreground @2xl:flex-none">
                 <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
                 Kayıtlısın
               </span>
@@ -177,7 +185,7 @@ export function TournamentCard({ t, onChanged, defaultOpen = false }: { t: Tourn
             onClick={() => setPicked(!open)}
             aria-expanded={open}
             aria-controls={panelId}
-            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2.5 text-sm font-bold text-foreground hover:bg-secondary [&:only-child]:flex-1 lg:[&:only-child]:flex-none"
+            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2.5 text-sm font-bold text-foreground hover:bg-secondary [&:only-child]:flex-1 @2xl:[&:only-child]:flex-none"
           >
             {t.status === 'bitti' ? 'Sonuçlar' : 'Detaylar'}
             <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden="true" />

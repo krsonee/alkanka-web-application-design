@@ -197,7 +197,7 @@ function EntryBlock({ t, view }: { t: Tournament; view: TournamentView }) {
           {error}
         </p>
       )}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-2 @md:flex-row @md:items-center">
         <button
           type="button"
           onClick={toggleEntry}
@@ -285,7 +285,7 @@ export function TournamentDetails({ t, id, view }: { t: Tournament; id: string; 
   const closed = closeNote(t)
   const started = Boolean(t.bracket)
   return (
-    <div id={id} className="flex flex-col gap-5 border-t border-border p-3 sm:p-4 lg:p-5">
+    <div id={id} className="flex flex-col gap-5 border-t border-border p-3 @2xl:p-4 @6xl:p-5">
       {t.status === 'bitti' && t.winner && (
         <div className="flex items-center gap-3 rounded-2xl border border-primary/50 bg-primary/10 p-4">
           <Crown className="size-7 shrink-0 text-primary" aria-hidden="true" />
@@ -303,7 +303,7 @@ export function TournamentDetails({ t, id, view }: { t: Tournament; id: string; 
       {t.status === 'basladi' && <RunningBlock t={t} view={view} />}
       {t.status === 'kayit' && <EntryBlock t={t} view={view} />}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 @3xl:grid-cols-2">
         <div className="flex flex-col gap-4">
           {t.description && <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{t.description}</p>}
           <Facts t={t} />
