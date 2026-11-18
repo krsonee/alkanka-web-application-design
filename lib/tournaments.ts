@@ -1,7 +1,10 @@
 import 'server-only'
 import { revalidatePath } from 'next/cache'
+import type { PoolClient } from 'pg'
 import { pool } from '@/lib/db'
-import { credit, debit, recordHistory, type Member } from '@/lib/member'
+import { credit, getBalance, recordHistory, type Member } from '@/lib/member'
+import { assertCanPlay } from '@/lib/member-limits'
+import { applyCoins, ensureLedger } from '@/lib/wallet-ledger'
 import type { ArenaGame } from './arena'
 import { bracketChampion, createBracket, setMatchWinner, type Bracket } from './bracket'
 import { createLeague, leagueChampion, MAX_LEAGUE_PLAYERS, setLeagueWinner } from './league'
@@ -9,6 +12,7 @@ import { initState } from './pvp/rules'
 import { cleanPrizes, prizeTotal, tournamentPayouts } from './tournament-prizes'
 import {
   MAX_TOURNAMENT_PLAYERS,
+  TOURNAMENT_MONEY_GAME,
   roundName,
   type LiveMatch,
   type MyMatch,
@@ -193,28 +197,119 @@ export async function updateTournament(id: number, t: TournamentInput) {
 const championOf = (format: unknown, bracket: Bracket, order: string[]) =>
   format === 'lig' ? leagueChampion(bracket, order) : bracketChampion(bracket)
 
-async function refundAll(id: number) {
-  const t = await pool.query('SELECT entry_fee, game FROM tournaments WHERE id = $1', [id])
-  const fee = Number(t.rows[0]?.entry_fee ?? 0)
-  if (!fee) return
-  const e = await pool.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 AND user_id IS NOT NULL', [id])
-  for (const row of e.rows) {
-    await credit(row.user_id, fee, 'Turnuva iadesi')
-    await recordHistory({ userId: row.user_id, userName: row.nickname, game: t.rows[0].game, mode: 'turnuva', opponent: 'Turnuva iadesi', stake: fee, result: 'refund', delta: fee })
+let entriesReady: Promise<unknown> | null = null
+
+/** Never call this inside a transaction that already locked a tournament row: changing the entries table would wait on that lock. */
+function ensureEntries() {
+  entriesReady ??= (async () => {
+    const seen = await pool.query(
+      `SELECT (SELECT count(*) FROM information_schema.columns WHERE table_name = 'tournament_entries' AND column_name = 'fee_paid')::int AS col,
+              ARRAY(SELECT indexname::text FROM pg_indexes WHERE tablename = 'tournament_entries') AS idx`,
+    )
+    const indexes: string[] = seen.rows[0]?.idx ?? []
+    if (!seen.rows[0]?.col) {
+      await pool.query('ALTER TABLE tournament_entries ADD COLUMN IF NOT EXISTS fee_paid int')
+      // Entries made before the fee was stored paid what the tournament asked at the time this ran.
+      await pool.query(
+        `UPDATE tournament_entries e SET fee_paid = t.entry_fee FROM tournaments t WHERE t.id = e.tournament_id AND e.fee_paid IS NULL`,
+      )
+    }
+    // Two members can share a display name; the member is what may enter only once.
+    if (indexes.includes('tournament_entries_unique')) await pool.query('DROP INDEX IF EXISTS tournament_entries_unique')
+    if (!indexes.includes('tournament_entries_member')) {
+      await pool
+        .query(`CREATE UNIQUE INDEX IF NOT EXISTS tournament_entries_member ON tournament_entries (tournament_id, user_id) WHERE user_id IS NOT NULL`)
+        .catch((error) => console.error('[tournaments] üye dizini kurulamadı', (error as Error).message))
+    }
+  })().catch((error) => {
+    entriesReady = null
+    throw error
+  })
+  return entriesReady
+}
+
+/**
+ * Runs `fn` in one transaction that holds the tournament's row. Joining, leaving, removing an entrant,
+ * starting and cancelling all go through here, so none of them can see a half-finished other.
+ */
+async function withTournament<T>(id: number, fn: (client: PoolClient, row: Row | undefined) => Promise<T>): Promise<T> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const t = await client.query('SELECT * FROM tournaments WHERE id = $1 FOR UPDATE', [id])
+    const out = await fn(client, t.rows[0])
+    await client.query('COMMIT')
+    return out
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
   }
 }
 
-export async function cancelTournament(id: number) {
-  const r = await pool.query(`UPDATE tournaments SET status = 'iptal' WHERE id = $1 AND status IN ('kayit','basladi') RETURNING id`, [id])
-  if (!r.rowCount) return
+/** What the entrant was actually charged, which is not the tournament's fee if the fee was edited afterwards. */
+const paidFee = (entry: Row, tournament: Row) => Number(entry.fee_paid ?? tournament.entry_fee ?? 0)
+
+type Refund = { userId: string; name: string; fee: number }
+
+/**
+ * Fees, refunds and prizes are written as coin movements under their own game name, never as a played game:
+ * play counters, win counters and the daily game limit must not move when coins change hands.
+ */
+async function noteFee(userId: string, name: string, label: string, fee: number, refund: boolean) {
+  await recordHistory({
+    userId,
+    userName: name,
+    game: TOURNAMENT_MONEY_GAME,
+    mode: 'harcama',
+    opponent: label,
+    stake: fee,
+    result: refund ? 'refund' : 'loss',
+    delta: refund ? fee : -fee,
+  }).catch((error) => console.error('[tournaments] ücret geçmişi yazılamadı', (error as Error).message))
+}
+
+/** Gives the fee back inside the caller's transaction. False means there was no wallet to pay into. */
+async function refundIn(client: PoolClient, userId: string, fee: number) {
+  if (fee <= 0) return true
+  return (await applyCoins(userId, fee, 'Turnuva iadesi', { client })) !== null
+}
+
+/**
+ * Closes an open or running tournament and returns every fee. The status change and all refunds commit
+ * together, so a failure half way leaves the tournament untouched and the cancel can simply be repeated.
+ */
+async function closeAndRefund(id: number) {
+  await Promise.all([ensureEntries(), ensureLedger()])
+  const closed = await withTournament(id, async (client, row) => {
+    if (!row || (row.status !== 'kayit' && row.status !== 'basladi')) return null
+    await client.query(`UPDATE tournaments SET status = 'iptal' WHERE id = $1`, [id])
+    const entries = await client.query(
+      'SELECT user_id, nickname, fee_paid FROM tournament_entries WHERE tournament_id = $1 AND user_id IS NOT NULL ORDER BY id ASC',
+      [id],
+    )
+    const refunds: Refund[] = []
+    for (const entry of entries.rows) {
+      const fee = paidFee(entry, row)
+      if (fee <= 0) continue
+      if (await refundIn(client, entry.user_id, fee)) refunds.push({ userId: entry.user_id, name: entry.nickname, fee })
+      else console.error('[tournaments] iade edilecek cüzdan yok', entry.user_id)
+    }
+    return { refunds, title: String(row.title) }
+  })
+  if (!closed) return false
   await pool.query(`UPDATE game_tables SET status = 'iptal', updated_at = now() WHERE tournament_id = $1 AND status = 'oynaniyor'`, [id])
-  await refundAll(id)
-  tournamentChanged()
+  for (const r of closed.refunds) await noteFee(r.userId, r.name, `İptal iadesi: ${closed.title}`, r.fee, true)
+  return true
+}
+
+export async function cancelTournament(id: number) {
+  if (await closeAndRefund(id)) tournamentChanged()
 }
 
 export async function deleteTournament(id: number) {
-  const t = await pool.query('SELECT status FROM tournaments WHERE id = $1', [id])
-  if (t.rows[0]?.status === 'kayit' || t.rows[0]?.status === 'basladi') await refundAll(id)
+  await closeAndRefund(id)
   await pool.query(`UPDATE game_tables SET status = 'iptal' WHERE tournament_id = $1 AND status = 'oynaniyor'`, [id])
   await pool.query('DELETE FROM tournament_entries WHERE tournament_id = $1', [id])
   await pool.query('DELETE FROM tournaments WHERE id = $1', [id])
@@ -222,57 +317,65 @@ export async function deleteTournament(id: number) {
 }
 
 export async function joinTournament(m: Member, id: number) {
+  await assertCanPlay(m.id)
   const { withUserLock } = await import('@/lib/user-lock')
   return withUserLock(`tournament:${id}:${m.id}`, () => joinTournamentLocked(m, id))
 }
 
 async function joinTournamentLocked(m: Member, id: number) {
-  const t = await pool.query('SELECT * FROM tournaments WHERE id = $1', [id])
-  const row = t.rows[0]
-  if (!row || row.status !== 'kayit') throw new Error('Bu turnuvanın kayıtları kapalı.')
-  const exists = await pool.query('SELECT 1 FROM tournament_entries WHERE tournament_id = $1 AND user_id = $2', [id, m.id])
-  if (exists.rowCount) throw new Error('Bu turnuvaya zaten kayıtlısın.')
-  const fee = Number(row.entry_fee)
-  if (fee > 0 && !(await debit(m.id, fee, 'Turnuva giriş ücreti'))) throw new Error('Yetersiz Kanka Coin.')
-  const ins = await pool.query(
-    `INSERT INTO tournament_entries (tournament_id, nickname, telegram, user_id)
-     SELECT $1, $2, '', $3 WHERE (SELECT count(*) FROM tournament_entries WHERE tournament_id = $1) < $4
-     RETURNING id`,
-    [id, m.name, m.id, Number(row.max_players)],
-  )
-  if (!ins.rowCount) {
-    if (fee > 0) await credit(m.id, fee, 'Turnuva iadesi')
-    throw new Error('Turnuva kontenjanı doldu.')
-  }
-  if (fee > 0) await recordHistory({ userId: m.id, userName: m.name, game: row.game, mode: 'turnuva', opponent: `Kayıt: ${row.title}`, stake: fee, result: 'loss', delta: -fee })
+  // The wallet has to exist before the transaction: creating it inside would be rolled back with a refused entry.
+  await Promise.all([ensureEntries(), ensureLedger(), getBalance(m.id)])
+  const paid = await withTournament(id, async (client, row) => {
+    if (!row || row.status !== 'kayit') throw new Error('Bu turnuvanın kayıtları kapalı.')
+    const taken = await client.query(
+      'SELECT count(*)::int AS n, (count(*) FILTER (WHERE user_id = $2))::int AS mine FROM tournament_entries WHERE tournament_id = $1',
+      [id, m.id],
+    )
+    if (taken.rows[0].mine) throw new Error('Bu turnuvaya zaten kayıtlısın.')
+    if (taken.rows[0].n >= Number(row.max_players)) throw new Error('Turnuva kontenjanı doldu.')
+    const fee = Number(row.entry_fee)
+    if (fee > 0 && (await applyCoins(m.id, -fee, 'Turnuva giriş ücreti', { min: 0, client })) === null) throw new Error('Yetersiz Kanka Coin.')
+    await client.query(`INSERT INTO tournament_entries (tournament_id, nickname, telegram, user_id, fee_paid) VALUES ($1, $2, '', $3, $4)`, [
+      id,
+      m.name,
+      m.id,
+      fee,
+    ])
+    return { fee, title: String(row.title) }
+  })
+  if (paid.fee > 0) await noteFee(m.id, m.name, `Kayıt: ${paid.title}`, paid.fee, false)
 }
 
 export async function leaveTournament(m: Member, id: number) {
-  const t = await pool.query('SELECT * FROM tournaments WHERE id = $1', [id])
-  const row = t.rows[0]
-  if (!row || row.status !== 'kayit') throw new Error('Turnuva başladıktan sonra ayrılamazsın.')
-  const del = await pool.query('DELETE FROM tournament_entries WHERE tournament_id = $1 AND user_id = $2 RETURNING id', [id, m.id])
-  const fee = Number(row.entry_fee)
-  if (del.rowCount && fee > 0) {
-    await credit(m.id, fee, 'Turnuva iadesi')
-    await recordHistory({ userId: m.id, userName: m.name, game: row.game, mode: 'turnuva', opponent: `İade: ${row.title}`, stake: fee, result: 'refund', delta: fee })
-  }
+  await Promise.all([ensureEntries(), ensureLedger(), getBalance(m.id)])
+  const back = await withTournament(id, async (client, row) => {
+    if (!row || row.status !== 'kayit') throw new Error('Turnuva başladıktan sonra ayrılamazsın.')
+    const del = await client.query('DELETE FROM tournament_entries WHERE tournament_id = $1 AND user_id = $2 RETURNING fee_paid', [id, m.id])
+    if (!del.rowCount) return null
+    const fee = paidFee(del.rows[0], row)
+    if (!(await refundIn(client, m.id, fee))) throw new Error('Ücret iade edilemedi, kaydın duruyor. Birazdan tekrar dene.')
+    return { fee, title: String(row.title) }
+  })
+  if (back && back.fee > 0) await noteFee(m.id, m.name, `İade: ${back.title}`, back.fee, true)
 }
 
 export async function removeEntry(entryId: number) {
-  const e = await pool.query(
-    `DELETE FROM tournament_entries WHERE id = $1 AND tournament_id IN (SELECT id FROM tournaments WHERE status = 'kayit')
-     RETURNING user_id, nickname, tournament_id`,
-    [entryId],
-  )
-  const row = e.rows[0]
-  if (!row?.user_id) return
-  const t = await pool.query('SELECT entry_fee, game FROM tournaments WHERE id = $1', [row.tournament_id])
-  const fee = Number(t.rows[0]?.entry_fee ?? 0)
-  if (fee > 0) {
-    await credit(row.user_id, fee, 'Turnuva iadesi')
-    await recordHistory({ userId: row.user_id, userName: row.nickname, game: t.rows[0].game, mode: 'turnuva', opponent: 'Kayıt iadesi', stake: fee, result: 'refund', delta: fee })
-  }
+  await Promise.all([ensureEntries(), ensureLedger()])
+  const found = await pool.query('SELECT tournament_id, user_id FROM tournament_entries WHERE id = $1', [entryId])
+  const entry = found.rows[0]
+  if (!entry) throw new Error('Kayıt bulunamadı. Sayfayı yenile.')
+  if (entry.user_id) await getBalance(entry.user_id)
+  const back = await withTournament(Number(entry.tournament_id), async (client, row) => {
+    if (!row || row.status !== 'kayit') throw new Error('Turnuva başladıktan sonra katılımcı çıkarılamaz.')
+    const del = await client.query('DELETE FROM tournament_entries WHERE id = $1 RETURNING user_id, nickname, fee_paid', [entryId])
+    const gone = del.rows[0]
+    if (!gone) throw new Error('Kayıt bulunamadı. Sayfayı yenile.')
+    if (!gone.user_id) return null
+    const fee = paidFee(gone, row)
+    if (!(await refundIn(client, gone.user_id, fee))) throw new Error('Ücret iade edilemedi, kayıt silinmedi.')
+    return { userId: String(gone.user_id), name: String(gone.nickname), fee, title: String(row.title) }
+  })
+  if (back && back.fee > 0) await noteFee(back.userId, back.name, `Kayıt iadesi: ${back.title}`, back.fee, true)
 }
 
 export async function autoStartDue() {
@@ -285,16 +388,17 @@ export async function autoStartDue() {
 
 /** Pairs every entrant at once and opens all first-round tables simultaneously. */
 export async function startTournament(id: number) {
-  const entries = await pool.query('SELECT * FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [id])
-  if (entries.rowCount! < 2) throw new Error('Başlatmak için en az 2 oyuncu gerekli.')
-  const t = await pool.query('SELECT format FROM tournaments WHERE id = $1', [id])
-  const keys = entries.rows.map(entryKey)
-  const bracket = t.rows[0]?.format === 'lig' ? createLeague(keys) : createBracket(keys, 2)
-  const r = await pool.query(
-    `UPDATE tournaments SET status = 'basladi', bracket = $2::jsonb, winner = NULL WHERE id = $1 AND status = 'kayit' RETURNING id`,
-    [id, JSON.stringify(bracket)],
-  )
-  if (!r.rowCount) return
+  // The entrants are read under the tournament's lock: whoever is paired is exactly whoever is registered.
+  const started = await withTournament(id, async (client, row) => {
+    if (!row || row.status !== 'kayit') return false
+    const entries = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [id])
+    if (entries.rows.length < 2) throw new Error('Başlatmak için en az 2 oyuncu gerekli.')
+    const keys = entries.rows.map(entryKey)
+    const bracket = row.format === 'lig' ? createLeague(keys) : createBracket(keys, 2)
+    await client.query(`UPDATE tournaments SET status = 'basladi', bracket = $2::jsonb, winner = NULL WHERE id = $1`, [id, JSON.stringify(bracket)])
+    return true
+  })
+  if (!started) return
   await openReadyMatches(id)
   tournamentChanged()
 }
@@ -420,7 +524,7 @@ async function payPrize(
     throw error
   }
   const what = prize.place === 0 ? 'Şampiyonluk' : `${prize.label} sıra ödülü`
-  await recordHistory({ userId: player.userId, userName: player.name, game: t.game, mode: 'turnuva', opponent: `${what}: ${t.title}`, stake: 0, result: 'win', delta: prize.amount }).catch((error) =>
+  await recordHistory({ userId: player.userId, userName: player.name, game: TOURNAMENT_MONEY_GAME, mode: 'odul', opponent: `${what}: ${t.title}`, stake: 0, result: 'win', delta: prize.amount }).catch((error) =>
     console.error('[tournaments] ödül geçmişi yazılamadı', (error as Error).message),
   )
 }

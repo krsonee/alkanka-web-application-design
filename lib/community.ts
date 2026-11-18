@@ -61,7 +61,7 @@ export type Profile = {
 export async function getProfile(userId: string): Promise<Profile> {
   await ensureCommunity()
   const [s] = await rows<Record<string, string | null>>(sql`SELECT
-    (SELECT count(*) FROM game_history WHERE user_id = ${userId}) AS games,
+    (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva') AS games,
     (SELECT coalesce(sum(delta) FILTER (WHERE delta > 0), 0) FROM game_history WHERE user_id = ${userId}) AS won,
     (SELECT count(*) FROM site_reviews WHERE user_id = ${userId} AND status = 'approved') AS reviews,
     (SELECT coalesce(sum(points), 0) FROM league_picks WHERE user_id = ${userId}) AS league_points,
@@ -71,7 +71,7 @@ export async function getProfile(userId: string): Promise<Profile> {
     (SELECT count(*) FROM tg_links WHERE user_id = ${userId}) AS telegram`).catch(async () => {
     // tg_links only exists once the Telegram chat module has run.
     return rows<Record<string, string | null>>(sql`SELECT
-      (SELECT count(*) FROM game_history WHERE user_id = ${userId}) AS games,
+      (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva') AS games,
       (SELECT coalesce(sum(delta) FILTER (WHERE delta > 0), 0) FROM game_history WHERE user_id = ${userId}) AS won,
       (SELECT count(*) FROM site_reviews WHERE user_id = ${userId} AND status = 'approved') AS reviews,
       (SELECT coalesce(sum(points), 0) FROM league_picks WHERE user_id = ${userId}) AS league_points,

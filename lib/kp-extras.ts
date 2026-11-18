@@ -99,7 +99,7 @@ async function questProgress(userId: string, metric: QuestMetric) {
   if (!(await exists(table[metric]))) return 0
   const q = {
     tahmin: sql`SELECT count(*) AS n FROM league_picks WHERE user_id = ${userId} AND created_at >= ${WEEK_START}`,
-    oyun: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND created_at >= ${WEEK_START}`,
+    oyun: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND game <> 'turnuva' AND created_at >= ${WEEK_START}`,
     gorev: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode = 'odul' AND game = 'gorev' AND created_at >= ${WEEK_START}`,
     sohbet: sql`SELECT count(*) AS n FROM tg_chat_messages WHERE user_id = ${userId} AND created_at >= ${WEEK_START}`,
     dakika: sql`SELECT count(*) AS n FROM kp_events WHERE user_id = ${userId} AND source = 'sure' AND created_at >= ${WEEK_START}`,
@@ -256,7 +256,7 @@ export async function getHiddenBadges(userId: string | null, bestStreak: number)
   const [r] = await rows<{ night: boolean; games: string; exact: string; refs: string }>(sql`SELECT
     EXISTS (SELECT 1 FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
       AND extract(hour FROM created_at AT TIME ZONE 'Europe/Istanbul') BETWEEN 2 AND 4) AS night,
-    ${games ? sql`(SELECT count(*) FROM game_history WHERE user_id = ${userId} AND mode <> 'odul')` : sql`0`} AS games,
+    ${games ? sql`(SELECT count(*) FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND game <> 'turnuva')` : sql`0`} AS games,
     ${picks ? sql`(SELECT count(*) FROM league_picks WHERE user_id = ${userId} AND points = 3)` : sql`0`} AS exact,
     ${refs ? sql`(SELECT count(*) FROM referrals WHERE referrer_id = ${userId} AND rewarded_at IS NOT NULL)` : sql`0`} AS refs`)
   const done: Record<string, boolean> = {

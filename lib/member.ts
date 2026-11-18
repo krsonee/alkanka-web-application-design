@@ -112,7 +112,7 @@ export async function listHistory(opts: { userId?: string; game?: string; limit?
 
 export async function historySummary(userId: string) {
   const r = await rows<{ played: string; wins: string; net: string | null }>(sql`
-    SELECT count(*) AS played, count(*) FILTER (WHERE result = 'win') AS wins, sum(delta) AS net
+    SELECT count(*) FILTER (WHERE game <> 'turnuva') AS played, count(*) FILTER (WHERE result = 'win' AND game <> 'turnuva') AS wins, sum(delta) AS net
     FROM game_history WHERE user_id = ${userId}`)
   return { played: Number(r[0]?.played ?? 0), wins: Number(r[0]?.wins ?? 0), net: Number(r[0]?.net ?? 0) }
 }

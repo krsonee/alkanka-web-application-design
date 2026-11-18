@@ -13,6 +13,12 @@ export const STATUS_LABEL: Record<TournamentStatus, string> = {
 
 export const MAX_TOURNAMENT_PLAYERS = 1024
 
+/**
+ * The game name on history rows for entry fees, refunds and prizes. Queries that count played games
+ * leave this name out (as the literal 'turnuva'); the matches themselves are logged under the real game.
+ */
+export const TOURNAMENT_MONEY_GAME = 'turnuva'
+
 export const TOURNAMENT_FORMATS = ['eleme', 'lig'] as const
 export type TournamentFormat = (typeof TOURNAMENT_FORMATS)[number]
 
