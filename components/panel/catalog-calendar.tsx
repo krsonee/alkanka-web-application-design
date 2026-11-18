@@ -84,15 +84,29 @@ function collect(catalog: Pick<Catalog, 'events' | 'predictions' | 'campaigns'>,
 }
 
 function Chip({ entry, onOpen, wide }: { entry: Entry; onOpen: (kind: ListKind, id: string) => void; wide?: boolean }) {
-  const cls = cn('flex min-w-0 items-baseline gap-1 rounded-md border px-1.5 py-1 text-left text-xs leading-tight text-foreground hover:border-primary', TONE[entry.type], wide && 'px-2.5 py-2 text-sm')
-  const body = (
+  const cls = cn(
+    'flex min-w-0 rounded-md border text-left leading-tight text-foreground hover:border-primary',
+    TONE[entry.type],
+    wide ? 'items-baseline gap-1 px-2.5 py-2 text-sm' : 'flex-col gap-0.5 overflow-hidden px-1.5 py-1 text-xs',
+  )
+  // A day cell is too narrow for one line: the kind gets the first, the time and the name share the second.
+  const body = wide ? (
     <>
       <span className="shrink-0 font-semibold">{PREFIX[entry.type]}</span>
-      <span className={cn('min-w-0', !wide && 'truncate')}>{entry.label}</span>
+      <span className="min-w-0">{entry.label}</span>
       <span className="shrink-0 tabular-nums text-muted-foreground">
         {entry.time}
         {entry.note ? ` · ${entry.note}` : ''}
       </span>
+    </>
+  ) : (
+    <>
+      <span className="truncate font-semibold">{PREFIX[entry.type]}</span>
+      <span className="flex min-w-0 items-baseline gap-1">
+        <span className="shrink-0 tabular-nums text-muted-foreground">{entry.time}</span>
+        <span className="truncate">{entry.label}</span>
+      </span>
+      {entry.note && <span className="truncate text-muted-foreground">{entry.note}</span>}
     </>
   )
   const title = `${PREFIX[entry.type]}: ${entry.label} · ${entry.time}${entry.note ? ` · ${entry.note}` : ''}`
@@ -241,7 +255,7 @@ export function CatalogCalendar({
       <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground" aria-label="Takvimdeki kayıt türleri">
         {(Object.keys(PREFIX) as EntryType[]).map((type) => (
           <li key={type} className="flex items-center gap-1.5">
-            <span className={cn('size-3 rounded-sm border', TONE[type])} aria-hidden="true" />
+            <span className={cn('size-3 shrink-0 rounded-sm border', TONE[type])} aria-hidden="true" />
             {LEGEND[type]}
           </li>
         ))}
