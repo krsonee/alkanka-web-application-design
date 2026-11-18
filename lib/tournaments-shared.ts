@@ -60,6 +60,40 @@ export const JOIN_MINUTES = [3, 5, 10, 15] as const
 export const DEFAULT_JOIN_MINUTES = 5
 export const cleanJoinMinutes = (v: unknown) => ((JOIN_MINUTES as readonly number[]).includes(Number(v)) ? Number(v) : DEFAULT_JOIN_MINUTES)
 
+/**
+ * How long one match is, for the games that can be played over more than one hand. `value` is the
+ * table's `rounds` option; the first choice is what the game plays when nothing was picked.
+ */
+export type MatchLength = { value: number; label: string; hint: string }
+
+const MATCH_LENGTHS: Record<string, MatchLength[]> = {
+  tavla: [
+    { value: 1, label: 'Tek el', hint: 'Eli alan maçı kazanır.' },
+    { value: 3, label: '3 puanlık maç', hint: '3 puana ilk ulaşan maçı kazanır. Normal el 1, mars 2, ağır mars 3 puandır.' },
+    { value: 5, label: '5 puanlık maç', hint: '5 puana ilk ulaşan maçı kazanır. Normal el 1, mars 2, ağır mars 3 puandır.' },
+  ],
+  okey: [
+    { value: 0, label: 'Tek el', hint: 'Eli bitiren maçı kazanır. Deste biterse el yeniden dağıtılır.' },
+    ...[10, 20, 30].map((n) => ({
+      value: n,
+      label: `${n} puandan düşüş`,
+      hint: `İki oyuncu ${n} puanla başlar. Eli bitiren rakibinin puanını düşürür; puanı önce sıfıra inen maçı kaybeder.`,
+    })),
+  ],
+}
+
+export const matchLengths = (game: string): MatchLength[] => MATCH_LENGTHS[game] ?? []
+
+/** The stored choice for this game, or null when the game has only one way to be played. */
+export function cleanMatchLength(game: string, v: unknown): number | null {
+  const choices = matchLengths(game)
+  if (!choices.length) return null
+  const picked = v === null || v === undefined || v === '' ? NaN : Number(v)
+  return (choices.find((c) => c.value === picked) ?? choices[0]).value
+}
+
+export const matchLengthOf = (game: string, v: number | null | undefined) => matchLengths(game).find((c) => c.value === v) ?? null
+
 /** The shortest tournament the panel accepts, from start to end. */
 export const MIN_TOURNAMENT_MINUTES = 10
 
@@ -166,6 +200,8 @@ export type Tournament = {
   /** Open matches close and the result is written at this moment. Null on tournaments from before end times. */
   endsAt: string | null
   joinMinutes: number
+  /** The `rounds` option of every match table, or null when the game has no choice. See `matchLengths`. */
+  matchLength: number | null
   finishedAt: string | null
   finishReason: FinishReason | null
   status: TournamentStatus
@@ -181,7 +217,15 @@ export type Tournament = {
 
 export const MAX_TOURNAMENT_TEMPLATES = 30
 
-/** A tournament's settings without its date, players or results. `startTime` is Istanbul time, HH:MM. */
+/** How long a tournament opened from a template runs when the template was saved before it kept a length. */
+export const DEFAULT_TOURNAMENT_MINUTES = 180
+/** A week: longer than that is a typing mistake, not a tournament. */
+export const MAX_TOURNAMENT_MINUTES = 7 * 24 * 60
+
+/**
+ * A tournament's settings without its date, players or results. `startTime` is Istanbul time, HH:MM;
+ * `lengthMinutes` is how long after the start the tournament closes.
+ */
 export type TournamentTemplate = {
   id: number
   name: string
@@ -196,6 +240,9 @@ export type TournamentTemplate = {
   prizeNote: string
   maxPlayers: number
   startTime: string
+  lengthMinutes: number
+  joinMinutes: number
+  matchLength: number | null
 }
 
 export const displayName = (t: Pick<Tournament, 'names'>, key: string | null) => (key ? (t.names[key] ?? key) : null)

@@ -3,7 +3,20 @@ import { rows, sql } from '@/lib/db'
 import { isArenaGame } from './arena'
 import { MAX_LEAGUE_PLAYERS } from './league'
 import { cleanPrizes } from './tournament-prizes'
-import { MAX_TOURNAMENT_PLAYERS, MAX_TOURNAMENT_TEMPLATES, formatsFor, isTournamentFormat, tournamentSeats, type Tournament, type TournamentTemplate } from './tournaments-shared'
+import {
+  DEFAULT_TOURNAMENT_MINUTES,
+  MAX_TOURNAMENT_MINUTES,
+  MAX_TOURNAMENT_PLAYERS,
+  MAX_TOURNAMENT_TEMPLATES,
+  MIN_TOURNAMENT_MINUTES,
+  cleanJoinMinutes,
+  cleanMatchLength,
+  formatsFor,
+  isTournamentFormat,
+  tournamentSeats,
+  type Tournament,
+  type TournamentTemplate,
+} from './tournaments-shared'
 
 let ready: Promise<unknown> | null = null
 
@@ -51,10 +64,17 @@ function readSettings(raw: unknown): Settings | null {
     prizeNote: text(d.prizeNote, 120),
     maxPlayers,
     startTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) ? startTime : '21:00',
+    // Templates saved before the end time existed have no length: they open with the form's usual one.
+    lengthMinutes: whole(d.lengthMinutes, MIN_TOURNAMENT_MINUTES, MAX_TOURNAMENT_MINUTES, DEFAULT_TOURNAMENT_MINUTES),
+    joinMinutes: cleanJoinMinutes(d.joinMinutes),
+    matchLength: cleanMatchLength(game, d.matchLength),
   }
 }
 
 const istanbulTime = (iso: string) => new Date(Date.parse(iso) + 3 * 3_600_000).toISOString().slice(11, 16)
+
+/** Minutes from the tournament's start to its end time; undefined on a tournament from before end times. */
+const lengthOf = (t: Tournament) => (t.endsAt ? Math.round((Date.parse(t.endsAt) - Date.parse(t.startsAt)) / 60_000) : undefined)
 
 export async function listTournamentTemplates(): Promise<TournamentTemplate[]> {
   await ensure()
@@ -70,7 +90,7 @@ export async function listTournamentTemplates(): Promise<TournamentTemplate[]> {
 /** Saving under an existing name replaces that template instead of adding a second one. */
 export async function saveTournamentTemplate(name: string, t: Tournament): Promise<'saved' | 'updated' | 'full'> {
   await ensure()
-  const settings = readSettings({ ...t, startTime: istanbulTime(t.startsAt) })
+  const settings = readSettings({ ...t, startTime: istanbulTime(t.startsAt), lengthMinutes: lengthOf(t) })
   if (!settings) throw new Error('Bu turnuva şablona çevrilemedi.')
   const data = JSON.stringify(settings)
   const updated = await rows(sql`UPDATE tournament_templates SET data = ${data}::jsonb, updated_at = now() WHERE lower(name) = lower(${name}) RETURNING id`)

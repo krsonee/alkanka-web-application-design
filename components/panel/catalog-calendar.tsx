@@ -8,20 +8,28 @@ import type { HiddenMap } from '@/lib/hidden-shared'
 import { STATUS_LABEL, type TournamentStatus } from '@/lib/tournaments-shared'
 import { cn } from '@/lib/utils'
 
-export type CalendarTournament = { id: number; title: string; startsAt: string; status: TournamentStatus }
+export type CalendarTournament = { id: number; title: string; startsAt: string; endsAt: string | null; finishedAt: string | null; status: TournamentStatus }
 type ListKind = 'events' | 'predictions' | 'campaigns'
-type EntryType = 'start' | 'end' | 'match' | 'tournament'
+type EntryType = 'start' | 'end' | 'match' | 'tournament' | 'cupEnd'
 type Entry = { key: string; day: string; time: string; at: number; type: EntryType; label: string; note?: string; open?: { kind: ListKind; id: string }; href?: string }
 
 const TR_OFFSET = 3 * 3_600_000
 const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
-const PREFIX: Record<EntryType, string> = { start: 'Başlar', end: 'Biter', match: 'Maç', tournament: 'Turnuva' }
+const PREFIX: Record<EntryType, string> = { start: 'Başlar', end: 'Biter', match: 'Maç', tournament: 'Turnuva', cupEnd: 'Turnuva biter' }
 const TONE: Record<EntryType, string> = {
   start: 'border-primary/50 bg-primary/15',
   end: 'border-destructive/50 bg-destructive/10',
   match: 'border-border bg-secondary',
   tournament: 'border-success/50 bg-success/15',
+  cupEnd: 'border-success/50 bg-background',
+}
+const LEGEND: Record<EntryType, string> = {
+  start: 'Başlar: kampanya başlangıcı',
+  end: 'Biter: kampanya bitişi',
+  match: 'Maç: tahmin maçı',
+  tournament: 'Turnuva: başlangıç saati',
+  cupEnd: 'Turnuva biter: en geç kapanacağı saat (maçlar erken biterse daha önce kapanır)',
 }
 
 /** Calendar days are Istanbul days (UTC+3, no DST), the same clock the date fields use. */
@@ -59,6 +67,16 @@ function collect(catalog: Pick<Catalog, 'events' | 'predictions' | 'campaigns'>,
       type: 'tournament',
       label: t.title,
       note: t.status === 'kayit' ? undefined : STATUS_LABEL[t.status].toLocaleLowerCase('tr'),
+      href: `/panel?b=tournaments&f=tournament-${t.id}`,
+    })
+    // A cancelled tournament has no end to plan around; a finished one is shown at the moment it really closed.
+    if (t.status === 'iptal') continue
+    const closed = t.status === 'bitti'
+    push(closed ? (t.finishedAt ?? t.endsAt ?? undefined) : (t.endsAt ?? undefined), {
+      key: `te-${t.id}`,
+      type: 'cupEnd',
+      label: t.title,
+      note: closed ? 'kapandı' : undefined,
       href: `/panel?b=tournaments&f=tournament-${t.id}`,
     })
   }
@@ -224,7 +242,7 @@ export function CatalogCalendar({
         {(Object.keys(PREFIX) as EntryType[]).map((type) => (
           <li key={type} className="flex items-center gap-1.5">
             <span className={cn('size-3 rounded-sm border', TONE[type])} aria-hidden="true" />
-            {type === 'start' ? 'Başlar: kampanya başlangıcı' : type === 'end' ? 'Biter: kampanya bitişi' : type === 'match' ? 'Maç: tahmin maçı' : 'Turnuva: başlangıç saati'}
+            {LEGEND[type]}
           </li>
         ))}
       </ul>

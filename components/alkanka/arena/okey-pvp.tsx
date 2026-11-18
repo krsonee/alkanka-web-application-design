@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Eye, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -50,14 +50,15 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   const idsKey = hand.map((t) => t.id).join(',')
   if (idsKey !== knownIds) {
     const prev = new Set(knownIds.split(',').filter(Boolean).map(Number))
-    const added = hand.find((t) => !prev.has(t.id))
+    // A fresh deal changes every tile at once; only a hand that grew by one tile was a draw.
+    const drawn = hand.length === prev.size + 1 ? hand.find((t) => !prev.has(t.id)) : undefined
     setKnownIds(idsKey)
-    setFresh(added && prev.size > 0 ? added.id : null)
-    if (added && pendingSlot != null) rack.moveTo(added.id, pendingSlot)
+    setFresh(drawn ? drawn.id : null)
+    if (drawn && pendingSlot != null) rack.moveTo(drawn.id, pendingSlot)
     if (pendingSlot != null) setPendingSlot(null)
     // A tile taken from the discard pile can't be thrown back this turn, so pre-selecting it only locked the throw.
-    if (added && prev.size > 0 && added.id !== s.takenId) rack.setSelected(added.id)
-    else if (added && added.id === s.takenId) rack.setSelected(null)
+    if (drawn && drawn.id !== s.takenId) rack.setSelected(drawn.id)
+    else if (drawn) rack.setSelected(null)
   }
 
   const bots = s.bots ?? []
@@ -124,6 +125,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
     const name = mine ? 'Sen' : nameOf(i)
     const uid = remote.userIds?.[i] ?? null
     const count = s.handCounts[i] ?? 0
+    const points = scored ? (s.scores?.[i] ?? s.target ?? 0) : null
     const tag = s.team ? (i === partner ? 'Eş' : i % 2 === 0 ? 'A' : 'B') : bots.includes(i) ? 'Bot' : null
     return (
       <div key={`seat-${i}`} className={cn('okt-pl', `okt-p${posOf(i)}`, s.turn === i && !showWin && 'active')}>
@@ -132,11 +134,11 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
         </div>
         <div className="okt-nm" aria-hidden="true">
           {short(name)}
-          <s>{count}</s>
+          <s>{points != null ? `${points}p` : count}</s>
           {tag && <em>{tag}</em>}
         </div>
         <span className="sr-only">
-          {`${name}${bots.includes(i) ? ' (bot)' : ''}${s.team ? `, ${i === partner ? 'eşin' : `${i % 2 === 0 ? 'A' : 'B'} takımı`}` : ''}, ${count} taş${s.turn === i ? ', sırada' : ''}`}
+          {`${name}${bots.includes(i) ? ' (bot)' : ''}${s.team ? `, ${i === partner ? 'eşin' : `${i % 2 === 0 ? 'A' : 'B'} takımı`}` : ''}, ${count} taş${points != null ? `, ${points} puan` : ''}${s.turn === i ? ', sırada' : ''}`}
         </span>
       </div>
     )
@@ -215,7 +217,7 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
         <ThemeDecor theme={tableTheme} />
         {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
         <div className="okt-logo" aria-hidden="true">
-          ALKANKA
+          {scored ? `ALKANKA · ${s.hand ?? 1}. EL` : 'ALKANKA'}
         </div>
         <div className={cn('okt-drop', dropOver && 'on')} aria-hidden="true" />
         <div className="okt-rot" aria-hidden="true">
@@ -278,19 +280,6 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
               </button>
             )}
           </div>
-        )}
-
-        {scored && (
-          <dl className="okt-info">
-            <dt>El</dt>
-            <dd>{s.hand ?? 1}</dd>
-            {Array.from({ length: n }, (_, i) => (
-              <Fragment key={i}>
-                <dt>{!spectator && i === seat ? 'Sen' : short(nameOf(i))}</dt>
-                <dd>{s.scores?.[i] ?? s.target ?? 0}</dd>
-              </Fragment>
-            ))}
-          </dl>
         )}
 
         <div className={cn('okt-toast', toastTone)} aria-live="polite">

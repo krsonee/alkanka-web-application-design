@@ -923,7 +923,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))}
           library={IMAGE_LIBRARY}
           hidden={hidden}
-          tournaments={cups.map((t) => ({ id: t.id, title: t.title, startsAt: t.startsAt, status: t.status }))}
+          tournaments={cups.map((t) => ({ id: t.id, title: t.title, startsAt: t.startsAt, endsAt: t.endsAt, finishedAt: t.finishedAt, status: t.status }))}
           league={league}
         />
       )

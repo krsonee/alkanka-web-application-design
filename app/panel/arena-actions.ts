@@ -23,7 +23,7 @@ import {
 } from '@/lib/tournaments'
 import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tournament-templates'
 import { listTournamentMatches } from '@/lib/tournament-matches'
-import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, formatsFor, isTournamentFormat, tournamentSeats, type MatchRecord } from '@/lib/tournaments-shared'
+import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, cleanMatchLength, formatsFor, matchLengthOf, isTournamentFormat, tournamentSeats, type MatchRecord } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { MAX_PRIZE_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces } from '@/lib/tournament-prizes'
 import type { ActionState } from './actions'
@@ -158,6 +158,7 @@ function readTournament(form: FormData): TournamentInput {
     startsAt,
     endsAt,
     joinMinutes: cleanJoinMinutes(form.get('joinMinutes')),
+    matchLength: cleanMatchLength(game, form.get('matchLength')),
   }
 }
 
@@ -201,7 +202,7 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
     if (!id) await createTournament(input)
     else if (!(await updateTournament(id, input))) return { message: 'Turnuva az önce başladı ya da kapandı, değişiklikler kaydedilmedi. Sayfayı yenile.' }
     refresh()
-    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · sıralama ödülleri ${input.prizes.length ? input.prizes.join(' / ') : 'yok'} KC · ${input.maxPlayers} kişi · bitiş ${input.endsAt} · maça giriş ${input.joinMinutes} dk`)
+    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · sıralama ödülleri ${input.prizes.length ? input.prizes.join(' / ') : 'yok'} KC · ${input.maxPlayers} kişi · bitiş ${input.endsAt} · maça giriş ${input.joinMinutes} dk${matchLengthOf(input.game, input.matchLength) ? ` · maç: ${matchLengthOf(input.game, input.matchLength)?.label}` : ''}`)
     return { ok: true, message: id ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')

@@ -119,6 +119,7 @@ const TOURNAMENT_STEPS: GuideStep[] = [
         <li><b>Birebir oyunlar</b>: Okey, Tavla, Bilardo, Kafa Topu, Kafa Basketbolu. Bu oyunlarda her maç iki kişi arasında oynanır.</li>
         <li><b>Ortak masa oyunları</b>: 101 Okey, Batak, Pişti, Jakopoly. Bu oyunlarda oyuncular kura ile <b>4 kişilik masalara</b> oturur, herkes kendi adına oynar (eş yok). Her masanın <b>ilk 2 oyuncusu</b> bir sonraki tura geçer; final masasının birincisi şampiyon olur. Listede olmayan oyunlarda turnuva açılmaz.</li>
         <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar. Lig sadece birebir oyunlarda vardır; ortak masa oyunlarında düzen hep elemedir.</li>
+        <li><b>Maç uzunluğu</b> sadece Tavla ve Okey&apos;de çıkar. Tavla: tek el, 3 puanlık ya da 5 puanlık maç (normal el 1, mars 2, ağır mars 3 puan). Okey: tek el ya da 10, 20, 30 puandan düşüş (eli bitiren rakibinin puanını düşürür, puanı önce sıfıra inen kaybeder). Uzun maç seçersen bitiş saatini de ileri al: bitiş saatinde süren maçlar kapanır. Diğer oyunlar kendi standart uzunluğuyla oynanır.</li>
         <li><b>Kontenjan</b> listeden seçilir: birebir elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı, ortak masa oyunlarında 4, 8, 16 … 1024 kişi (masalar tam dolsun diye).</li>
         <li>Ortak masa turnuvası <b>en az 4 kayıtla</b> başlar. Kontenjan dolmazsa oyuncular masalara eşit dağıtılır: 3 oyunculu masada boş koltuğa <b>bot</b> oturur, 2 ya da daha az oyuncusu olan masa oynanmaz ve oyuncuları doğrudan tur atlar. Bot tur atlayamaz, ödül alamaz; sırası en iyi oyuncuya geçer.</li>
         <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Birebir elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ortak masa oyunlarında final masası tek tek sıralanır (1., 2., 3., 4.), 5.-8. sırası yarı final masalarında elenenlerdir ve tutarı kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
@@ -167,8 +168,9 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     title: 'Aynı turnuvayı tekrar açma (şablon)',
     body: (
       <ol className={ol}>
-        <li>Beğendiğin bir turnuvanın altındaki <b>Şablon olarak kaydet</b>e bas ve bir ad ver. Oyun, format, ad, açıklama, kontenjan, ücret, ödül ve başlangıç saati saklanır.</li>
-        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, başlangıç yarına, bitiş başlangıçtan 3 saat sonrasına ayarlanır. Tarihleri kontrol edip <b>Turnuvayı oluştur</b> de.</li>
+        <li>Beğendiğin bir turnuvanın altındaki <b>Şablon olarak kaydet</b>e bas ve bir ad ver. Oyun, format, ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır.</li>
+        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, başlangıç yarın şablondaki saate, bitiş şablondaki süre kadar sonrasına ayarlanır. Bu güncellemeden önce kaydedilmiş şablonlarda süre yoktur; onlar 3 saatle açılır, bir kez yeniden kaydedersen süreyi de saklar. Tarihleri kontrol edip <b>Turnuvayı oluştur</b> de.</li>
+        <li><b>İçerik Takvimi</b>nde her turnuva iki satırla görünür: <b>Turnuva</b> (başlangıç saati) ve <b>Turnuva biter</b> (en geç kapanacağı saat). Biten turnuvada ikinci satır gerçekten kapandığı anı gösterir; iptal edilen turnuvanın bitiş satırı olmaz.</li>
         <li>Şablon sadece formu doldurur. Şablonu silmek ya da değiştirmek, daha önce açılmış turnuvalara dokunmaz.</li>
       </ol>
     ),

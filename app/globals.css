@@ -2544,10 +2544,17 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .okp .okt-toast.warn { background: #6b1d17; color: #ffe2dc; }
 .okp .okt-toast.me { background: var(--okt-brass); color: var(--okt-ink); }
 .okp .okt-num.low { color: var(--okt-brass); font-weight: 800; }
-/* Scores have their own board above the table; it is hidden on a sideways phone, so they move onto the felt there. */
-.okp .okt-info { display: none; }
-.ls-split .okp .okt-info { display: grid; }
 .okp .table-chat-btn { left: auto; right: 1.8%; top: 4%; }
+/* With "Eli Bitir", "Taşı At" and "Göster" all showing, a single column runs into the left seat and the rack. */
+@media (min-width: 640px) {
+  .okp .okt-side:has(> :nth-child(4)) { display: grid; grid-template-columns: auto auto; }
+}
+.ls-split .okp .okt-side:has(> :nth-child(4)) { display: grid; grid-template-columns: auto auto; }
+/* Upright and narrow: side seats hang from the table edge so a long name plus points stays on the felt. */
+@media (max-width: 639.98px) and (orientation: portrait) {
+  .okp .okt-p3 { left: 1.5%; transform: translate(0, -50%); }
+  .okp .okt-p1 { left: auto; right: 1.5%; transform: translate(0, -50%); }
+}
 
 /* 101 table chat button: free corner per layout */
 /* Pişti: fullscreen exit + menu live top-left, so the chat button goes top-right like the other tables. */

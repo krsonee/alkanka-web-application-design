@@ -19,6 +19,7 @@ import {
   TABLE_PASS,
   TOURNAMENT_MONEY_GAME,
   cleanJoinMinutes,
+  cleanMatchLength,
   isFinishReason,
   minEntrants,
   roundName,
@@ -68,6 +69,7 @@ const toDate = (v: unknown) => (v instanceof Date ? v : new Date(String(v)))
 const isoOrNull = (v: unknown) => (v ? toDate(v).toISOString() : null)
 const passed = (v: unknown) => Boolean(v) && toDate(v).getTime() <= Date.now()
 const joinMinutesOf = (row: Row) => cleanJoinMinutes((row.settings as { joinMinutes?: unknown } | null)?.joinMinutes)
+const matchLengthOf = (row: Row) => cleanMatchLength(String(row.game), (row.settings as { matchLength?: unknown } | null)?.matchLength)
 
 /**
  * Players per table. Once paired, a tournament keeps the size it was paired with, so one that started
@@ -113,6 +115,7 @@ function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
     startsAt: new Date(String(r.starts_at)).toISOString(),
     endsAt: isoOrNull(r.ends_at),
     joinMinutes: joinMinutesOf(r),
+    matchLength: matchLengthOf(r),
     finishedAt: isoOrNull(r.finished_at),
     finishReason: isFinishReason(r.finish_reason) ? r.finish_reason : null,
     status: r.status as TournamentStatus,
@@ -183,6 +186,8 @@ export type TournamentInput = {
   endsAt?: string | null
   /** Minutes a player has to sit down once a match opens. */
   joinMinutes?: number
+  /** How long one match is, for the games with that choice. */
+  matchLength?: number | null
   format: TournamentFormat
 }
 
@@ -251,7 +256,10 @@ function prizeColumns(t: TournamentInput) {
   return { maxPlayers, seats, prizes: JSON.stringify(prizes), pool: prizeTotal(t.format, maxPlayers, prizes, seats) }
 }
 
-const settingsOf = (t: TournamentInput) => JSON.stringify({ joinMinutes: cleanJoinMinutes(t.joinMinutes) })
+const settingsOf = (t: TournamentInput) => {
+  const matchLength = cleanMatchLength(t.game, t.matchLength)
+  return JSON.stringify({ joinMinutes: cleanJoinMinutes(t.joinMinutes), ...(matchLength === null ? {} : { matchLength }) })
+}
 
 export async function createTournament(t: TournamentInput) {
   await ensureColumns()
@@ -620,7 +628,7 @@ async function openReadyMatches(id: number) {
     const roundIdx = openRound(bracket)
     if (roundIdx < 0) return null
     const seats = bracket.seats ?? 2
-    const setup = tournamentTable(String(row.game), seats)
+    const setup = tournamentTable(String(row.game), seats, matchLengthOf(row))
     const existing = await client.query(
       `SELECT match_no FROM game_tables WHERE tournament_id = $1 AND round_no = $2 AND status IN ('oynaniyor','bitti')`,
       [id, roundIdx],

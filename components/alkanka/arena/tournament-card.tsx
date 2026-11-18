@@ -8,7 +8,7 @@ import { CalendarClock, ChevronDown, Coins, Crown, Gamepad2, Hourglass, Medal, S
 import { cn } from '@/lib/utils'
 import { ARENA_META, TURN_SECONDS } from '@/lib/arena'
 import { isDecided, isRealMatch, passedOn } from '@/lib/bracket'
-import { CANCEL_TEXT, TABLE_PASS, matchHref, minEntrants, roundName, STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
+import { CANCEL_TEXT, TABLE_PASS, matchHref, matchLengthOf, minEntrants, roundName, STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
 import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
@@ -37,6 +37,7 @@ function tournamentRules(t: Tournament, gameTitle: string) {
   const isLeague = t.format === 'lig'
   const seats = t.tableSize
   const pass = t.bracket?.pass ?? TABLE_PASS
+  const length = matchLengthOf(t.game, t.matchLength)
   const rules =
     seats > 2
       ? [
@@ -64,6 +65,7 @@ function tournamentRules(t: Tournament, gameTitle: string) {
               ? 'Hamle süren dolarsa hamlen kendiliğinden yapılır; üst üste 3 kez dolarsa maçı hükmen kaybedersin.'
               : 'Süresinde oynamayan maçı hükmen kaybeder.'
           } Masadaki "Pes et" düğmesiyle maçı bırakabilirsin.`,
+          ...(length ? [`Maç uzunluğu: ${length.label.toLocaleLowerCase('tr')}. ${length.hint}`] : []),
         ]
   if (t.endsAt) {
     rules.push(

@@ -9,6 +9,7 @@ import { TournamentGuide } from '@/components/panel/area-guides'
 import { ARENA_GAMES, ARENA_META, type ArenaGame } from '@/lib/arena'
 import {
   DEFAULT_JOIN_MINUTES,
+  DEFAULT_TOURNAMENT_MINUTES,
   FINISH_LABEL,
   FORMAT_LABEL,
   FORMAT_SHORT,
@@ -17,7 +18,10 @@ import {
   STATUS_LABEL,
   TABLE_PASS,
   canHostTournament,
+  cleanMatchLength,
   formatsFor,
+  matchLengthOf,
+  matchLengths,
   minEntrants,
   tournamentSeats,
   type Tournament,
@@ -41,7 +45,7 @@ const ISTANBUL_OFFSET = -180
 const MINUTE = 60_000
 const QUARTER = 15 * MINUTE
 /** How long a new tournament runs unless the end time is changed. */
-const DEFAULT_LENGTH = 180 * MINUTE
+const DEFAULT_LENGTH = DEFAULT_TOURNAMENT_MINUTES * MINUTE
 
 /** A moment as the text a `datetime-local` field shows for Istanbul. */
 const toIstanbulInput = (ms: number) => new Date(ms + 3 * 3600000).toISOString().slice(0, 16)
@@ -145,9 +149,11 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
   const legacyFormat = Boolean(from && from.format !== format && from.game === game)
   const [times, setTimes] = useState(() => {
     const start = preset ? tomorrowAt(preset.startTime) : toIstanbulInput(t ? Date.parse(t.startsAt) : defaultStart())
-    return { start, end: t?.endsAt ? toIstanbulInput(Date.parse(t.endsAt)) : shiftInput(start, DEFAULT_LENGTH) }
+    return { start, end: t?.endsAt ? toIstanbulInput(Date.parse(t.endsAt)) : shiftInput(start, preset ? preset.lengthMinutes * MINUTE : DEFAULT_LENGTH) }
   })
   const length = (inputMs(times.end) - inputMs(times.start)) / MINUTE
+  const [matchLength, setMatchLength] = useState(() => cleanMatchLength(from?.game ?? 'tavla', from?.matchLength))
+  const lengthChoices = matchLengths(game)
   const games = ARENA_GAMES.filter((g) => canHostTournament(g) || g === from?.game)
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -166,6 +172,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
               setGame(next)
               setFormat(nextFormat)
               setMaxPlayers((n) => snapPlayers(nextFormat, n, tournamentSeats(next) ?? 2))
+              setMatchLength(cleanMatchLength(next, next === from?.game ? from.matchLength : null))
             }}
             className={field}
           >
@@ -234,7 +241,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
             className={field}
           />
           <span className="font-normal">
-            {preset ? 'Şablondaki saatle yarına ayarlandı. Tarihi kontrol et. ' : ''}
+            {preset ? 'Şablondaki saatle yarına ayarlandı, bitiş şablondaki süreye göre geldi. Tarihi kontrol et. ' : ''}
             Kayıtlar bu saatte kapanır ve turnuva kendiliğinden başlar. {minEntrants(seats)} kişiden az kayıt varsa iptal olur, ücretler iade edilir.
           </span>
         </label>
@@ -247,9 +254,24 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
               : `Bitiş, başlangıçtan en az ${MIN_TOURNAMENT_MINUTES} dakika sonra olmalı.`}
           </span>
         </label>
+        {lengthChoices.length > 0 && (
+          <label className={labelCls}>
+            Maç uzunluğu
+            <select name="matchLength" value={matchLength ?? lengthChoices[0].value} onChange={(e) => setMatchLength(Number(e.target.value))} className={field}>
+              {lengthChoices.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <span className="font-normal" aria-live="polite">
+              {matchLengthOf(game, matchLength)?.hint} Uzun maç seçersen bitiş saatini de ona göre ileri al: bitiş saatinde süren maçlar kapanır.
+            </span>
+          </label>
+        )}
         <label className={labelCls}>
           Maça giriş süresi
-          <select name="joinMinutes" defaultValue={t?.joinMinutes ?? DEFAULT_JOIN_MINUTES} className={field}>
+          <select name="joinMinutes" defaultValue={from?.joinMinutes ?? DEFAULT_JOIN_MINUTES} className={field}>
             {JOIN_MINUTES.map((n) => (
               <option key={n} value={n}>
                 {n} dakika
@@ -336,7 +358,7 @@ function RunningForm({ t }: { t: Tournament }) {
       <input type="hidden" name="id" value={t.id} />
       <input type="hidden" name="tz" value={ISTANBUL_OFFSET} />
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Turnuva başladı: oyun, format, kontenjan, ücret, ödüller ve maça giriş süresi artık değişmez. Bitiş saatini, açıklamayı ve ödül notunu değiştirebilirsin.
+        Turnuva başladı: oyun, format, kontenjan, ücret, ödüller, maç uzunluğu ve maça giriş süresi artık değişmez. Bitiş saatini, açıklamayı ve ödül notunu değiştirebilirsin.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={labelCls}>
@@ -452,6 +474,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
               'Bitiş saati yok (eski turnuva): kendiliğinden kapanmaz'
             )}{' '}
             · maça giriş {t.joinMinutes} dk
+            {matchLengthOf(t.game, t.matchLength) && ` · maç: ${matchLengthOf(t.game, t.matchLength)?.label.toLocaleLowerCase('tr')}`}
           </p>
           {t.finishReason && (
             <p className="text-xs font-semibold text-foreground">
@@ -588,7 +611,7 @@ function TemplateSaver({ t }: { t: Tournament }) {
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="id" value={t.id} />
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Oyun, format, ad, açıklama, kontenjan, ücret, ödül ve başlangıç saati saklanır. Tarih, oyuncular ve sonuçlar saklanmaz. Aynı adla kaydedersen eski şablonun üzerine yazılır.
+        Oyun, format, ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır. Tarih, oyuncular ve sonuçlar saklanmaz. Aynı adla kaydedersen eski şablonun üzerine yazılır.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <label className={cn(labelCls, 'min-w-0 flex-1 basis-60')}>
@@ -627,7 +650,7 @@ function TemplatePicker({ templates, picked, onPick }: { templates: TournamentTe
             >
               {tpl.name}
               <span className={cn('text-xs font-normal', picked?.id === tpl.id ? 'text-primary-foreground' : 'text-muted-foreground')}>
-                {ARENA_META[tpl.game].title} · {FORMAT_SHORT[tpl.format]} · {tpl.maxPlayers} kişi · {tpl.startTime}
+                {ARENA_META[tpl.game].title} · {FORMAT_SHORT[tpl.format]} · {tpl.maxPlayers} kişi · {tpl.startTime} · {lengthText(tpl.lengthMinutes)}
               </span>
             </button>
             <TemplateRemover tpl={tpl} onDone={() => picked?.id === tpl.id && onPick(null)} />
