@@ -2,7 +2,7 @@ import 'server-only'
 import { revalidatePath } from 'next/cache'
 import type { PoolClient } from 'pg'
 import { pool } from '@/lib/db'
-import { credit, getBalance, recordHistory, type Member } from '@/lib/member'
+import { getBalance, recordHistory, type Member } from '@/lib/member'
 import { assertCanPlay } from '@/lib/member-limits'
 import { applyCoins, ensureLedger } from '@/lib/wallet-ledger'
 import type { ArenaGame } from './arena'
@@ -313,8 +313,19 @@ const paidFee = (entry: Row, tournament: Row) => Number(entry.fee_paid ?? tourna
 
 type Refund = { userId: string; name: string; fee: number }
 
+type PaidPrize = { userId: string; name: string; amount: number; what: string }
+
 /** What closing a tournament leaves to do once its transaction has committed. */
-type Closed = { status: 'bitti' | 'iptal'; reason: FinishReason; title: string; refunds: Refund[]; entrants: Refund[] }
+type Closed = {
+  id: number
+  status: 'bitti' | 'iptal'
+  reason: FinishReason
+  title: string
+  refunds: Refund[]
+  entrants: Refund[]
+  prizes?: PaidPrize[]
+  champion?: string | null
+}
 
 /**
  * Fees, refunds and prizes are written as coin movements under their own game name, never as a played game:
@@ -371,13 +382,22 @@ async function cancelIn(client: PoolClient, row: Row, reason: FinishReason): Pro
      WHERE tournament_id = $1 AND status = 'oynaniyor'`,
     [row.id],
   )
-  return { status: 'iptal', reason, title: String(row.title), refunds, entrants }
+  return { id: Number(row.id), status: 'iptal', reason, title: String(row.title), refunds, entrants }
 }
 
-/** History rows and messages are written after the commit: they may fail without undoing a cancel or a result. */
+/** History rows, badges and messages are written after the commit: they may fail without undoing a cancel or a result. */
 async function afterClose(closed: Closed | null) {
   if (!closed) return false
   for (const r of closed.refunds) await noteFee(r.userId, r.name, `İptal iadesi: ${closed.title}`, r.fee, true)
+  for (const p of closed.prizes ?? []) {
+    await recordHistory({ userId: p.userId, userName: p.name, game: TOURNAMENT_MONEY_GAME, mode: 'odul', opponent: `${p.what}: ${closed.title}`, stake: 0, result: 'win', delta: p.amount }).catch((error) =>
+      console.error('[tournaments] ödül geçmişi yazılamadı', (error as Error).message),
+    )
+  }
+  if (closed.champion) {
+    const { rewardTournamentWin } = await import('@/lib/kanka-puan')
+    await rewardTournamentWin(closed.champion, closed.id, closed.title)
+  }
   if (closed.status === 'iptal' && closed.entrants.length) {
     const { notifyCancelled } = await import('./tournament-notify')
     await notifyCancelled({ title: closed.title, reason: closed.reason, entrants: closed.entrants })
@@ -621,10 +641,6 @@ async function finishTournament(client: PoolClient, row: Row, bracket: Bracket, 
       [row.id],
     )
   }
-  if (who?.user_id) {
-    const { rewardTournamentWin } = await import('@/lib/kanka-puan')
-    await rewardTournamentWin(who.user_id, Number(row.id), String(row.title))
-  }
   const maxPlayers = Number(row.max_players)
   const payouts = tournamentPayouts(
     { format, maxPlayers, prizes: cleanPrizes(row.prizes, format, maxPlayers), prizePool: Number(row.prize_pool) },
@@ -632,40 +648,38 @@ async function finishTournament(client: PoolClient, row: Row, bracket: Bracket, 
     order,
     reason === 'sure',
   )
+  const prizes: PaidPrize[] = []
   for (const p of payouts) {
     const player = entries.rows.find((x) => entryKey(x) === p.key)
     if (!player?.user_id) continue
-    await payPrize(Number(row.id), { userId: player.user_id, name: player.nickname, key: p.key }, p, { game: String(row.game), title: String(row.title) })
+    const paid = await payPrizeIn(client, Number(row.id), { userId: String(player.user_id), name: String(player.nickname), key: p.key }, p)
+    if (paid) prizes.push(paid)
   }
-  return { status: 'bitti', reason, title: String(row.title), refunds: [], entrants: [] }
+  return { id: Number(row.id), status: 'bitti', reason, title: String(row.title), refunds: [], entrants: [], prizes, champion: who?.user_id ? String(who.user_id) : null }
 }
 
 /**
- * The claim row is what makes a payout happen once: finishing runs inside a transaction that can be
- * retried, and a retry must not pay the places that were already credited.
+ * Pays one place inside the caller's transaction, so the result and every prize are written together or
+ * not at all. It must not reach for another connection: requests waiting for this tournament's row each
+ * hold one, and a payout that needed one more would wait for them for ever.
+ * The claim row keeps a place that was already paid from being paid again.
  */
-async function payPrize(
-  tournamentId: number,
-  player: { userId: string; name: string; key: string },
-  prize: Payout,
-  t: { game: string; title: string },
-) {
-  const claim = await pool.query(
+async function payPrizeIn(client: PoolClient, tournamentId: number, player: { userId: string; name: string; key: string }, prize: Payout): Promise<PaidPrize | null> {
+  if (!Number.isInteger(prize.amount) || prize.amount <= 0) return null
+  const claim = await client.query(
     `INSERT INTO tournament_payouts (tournament_id, player_key, place, amount) VALUES ($1, $2, $3, $4)
      ON CONFLICT (tournament_id, player_key) DO NOTHING RETURNING tournament_id`,
     [tournamentId, player.key, prize.place, prize.amount],
   )
-  if (!claim.rowCount) return
-  try {
-    await credit(player.userId, prize.amount, 'Turnuva ödülü')
-  } catch (error) {
-    await pool.query('DELETE FROM tournament_payouts WHERE tournament_id = $1 AND player_key = $2', [tournamentId, player.key])
-    throw error
+  if (!claim.rowCount) return null
+  if ((await applyCoins(player.userId, prize.amount, 'Turnuva ödülü', { client })) === null) {
+    // Every entrant got a wallet when joining; one that is gone since has nowhere to be paid into.
+    await client.query('DELETE FROM tournament_payouts WHERE tournament_id = $1 AND player_key = $2', [tournamentId, player.key])
+    console.error('[tournaments] ödül yüklenecek cüzdan yok', player.userId)
+    return null
   }
   const what = prize.shared ? 'Süre bitimi ödül payı' : prize.place === 0 ? 'Şampiyonluk' : `${prize.label} sıra ödülü`
-  await recordHistory({ userId: player.userId, userName: player.name, game: TOURNAMENT_MONEY_GAME, mode: 'odul', opponent: `${what}: ${t.title}`, stake: 0, result: 'win', delta: prize.amount }).catch((error) =>
-    console.error('[tournaments] ödül geçmişi yazılamadı', (error as Error).message),
-  )
+  return { userId: player.userId, name: player.name, amount: prize.amount, what }
 }
 
 /** Changes one match of a running tournament, then opens the next round or closes the tournament. */
