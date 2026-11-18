@@ -55,7 +55,7 @@ const LIMIT_STEPS: GuideStep[] = [
     body: (
       <ol className={ol}>
         <li><b>Günlük max net kazanç</b>: Üyenin gün içindeki kazancı (kazandığı eksi yatırdığı) bu sayıya ulaşınca ödemesi bu sayıda kesilir. Kaybetmesine engel olmaz.</li>
-        <li><b>Günlük max oyun sayısı</b>: Gün içinde açabileceği oyun/masa sayısı. Dolunca yeni masa açamaz ama oturduğu oyunu bitirebilir.</li>
+        <li><b>Günlük max oyun sayısı</b>: Gün içinde açabileceği oyun/masa sayısı. Dolunca yeni masa açamaz ve turnuvaya kaydolamaz ama oturduğu oyunu bitirebilir.</li>
         <li><b>Günlük max market harcaması</b>: Marketten bir günde harcayabileceği en fazla Kanka Coin.</li>
         <li><b>Marketten hiç alışveriş yapamasın</b>: Market tamamen kapanır, harcama sınırı devre dışı kalır.</li>
         <li>Boş bırakılan alan <b>sınırsız</b> demektir. Sayaçlar her gece 00:00’da (Türkiye saati) sıfırlanır.</li>
@@ -120,6 +120,9 @@ const TOURNAMENT_STEPS: GuideStep[] = [
         <li><b>Kontenjan</b> listeden seçilir: elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı.</li>
         <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
         <li>Kaydettiğin turnuva hemen <span className={code}>/turnuvalar</span> sayfasında kayda açılır.</li>
+        <li>Kayıt sürerken <b>giriş ücretini</b> değiştirirsen yeni ücret sadece sonradan kaydolanlardan kesilir. Önceden kaydolan, ayrılınca ya da turnuva iptal olunca kendi ödediği tutarı geri alır.</li>
+        <li>Aynı ada sahip iki üye aynı turnuvaya girebilir; bir üye aynı turnuvaya ikinci kez giremez.</li>
+        <li>Giriş ücretleri panel özetinde <b>Harcanan</b>, turnuva ödülleri <b>Dağıtılan</b> altında (<b>Turnuva ödülleri</b> satırı) görünür. Ücret ve ödül, üyenin oynadığı ya da kazandığı oyun sayısına ve görev sayaçlarına eklenmez.</li>
       </ol>
     ),
   },
