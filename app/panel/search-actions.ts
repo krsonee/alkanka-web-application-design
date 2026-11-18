@@ -46,6 +46,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Rehber yazısını ileri tarihe zamanla', words: 'yayın zamanı tarih saat zamanla blog yazı', row: 'seo' },
   { title: 'Turnuva şablonları', words: 'şablon kalıp tekrar aç haftalık kupa', row: 'tournaments' },
   { title: 'Turnuva sıralama ödülleri', words: 'sıralama ödülü ikinci üçüncü ödül havuzu kontenjan kişi sayısı', row: 'tournaments' },
+  { title: 'Turnuva bitiş saati ve maça giriş süresi', words: 'bitiş saati süre hükmen gelmeyen oyuncu maça giriş dakika otomatik başlat hamle süresi pes', row: 'tournaments' },
   { title: 'İçerik takvimi görünümü', words: 'takvim ay tarih kampanya maç süresi geçen', row: 'catalog', query: 's=calendar' },
   { title: 'Sponsor özeti', words: 'sponsor tıklama yorum şikayet hakediş özet sıralama sürükle', row: 'sponsors' },
   { title: 'Kampanya linkleri', words: 'utm takip linki', row: 'marketing', query: 's=campaigns' },

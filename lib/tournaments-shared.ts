@@ -41,9 +41,9 @@ export const roundName = (league: boolean, index: number, total: number) =>
 
 /**
  * A tournament table the member is seated at and still has to play. `joinBy` is set while the member
- * has not sat down yet: after that moment the match is forfeited.
+ * has not sat down yet: after that moment the match is forfeited. `seated` says the member has opened the table.
  */
-export type MyMatch = { tableId: string; tournamentId: number; game: string; title: string; round: string; joinBy: string | null }
+export type MyMatch = { tableId: string; tournamentId: number; game: string; title: string; round: string; joinBy: string | null; seated: boolean }
 
 /** Straight to the table: the game page opens the room named in `masa` without its stake screen. */
 export const matchHref = (m: Pick<MyMatch, 'game' | 'tableId'>) => `/oyunlar/${m.game}?masa=${m.tableId}`
@@ -88,6 +88,15 @@ export const FINISH_LABEL: Record<FinishReason, string> = {
 }
 
 export const isFinishReason = (v: unknown): v is FinishReason => typeof v === 'string' && v in FINISH_LABEL
+
+/** Why a tournament was cancelled, in the words players read. */
+export const CANCEL_TEXT: Partial<Record<FinishReason, string>> = {
+  'kayit-yok': 'Başlangıç saatinde en az 2 kayıt olmadığı için turnuva iptal edildi.',
+  oynanmadi: 'Hiçbir maç oynanmadığı için turnuva iptal edildi.',
+  gec: 'Turnuva saatinde başlatılamadığı için iptal edildi.',
+  oyun: 'Bu oyunda turnuva düzenlenemediği için turnuva iptal edildi.',
+  panel: 'Turnuva yönetim tarafından iptal edildi.',
+}
 
 /** Games that cannot be played by two players, so a tournament cannot pair them. */
 const NOT_HEAD_TO_HEAD: readonly string[] = ['batak']

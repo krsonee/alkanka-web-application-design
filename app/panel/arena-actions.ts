@@ -168,7 +168,10 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
     if (current && current.status !== 'kayit' && current.status !== 'basladi') return { message: CLOSED_MESSAGE }
     if (current?.status === 'basladi') {
       // Players are already paired and fees are paid: the game, the field, the fee and the prizes stay as they are.
-      const input = { endsAt: readEnd(form, new Date(), 'şu andan'), ...readTexts(form) }
+      // An end time left as it was is not checked again: a text can be fixed in the tournament's last minutes too.
+      const typed = formTime(form, 'endsAt')
+      const kept = typed && current.endsAt && Math.abs(typed.getTime() - Date.parse(current.endsAt)) < 60_000
+      const input = { endsAt: kept ? current.endsAt! : readEnd(form, new Date(), 'şu andan'), ...readTexts(form) }
       if (!(await updateRunningTournament(id, input))) return { message: CLOSED_MESSAGE }
       refresh()
       await logPanel('tournaments', 'Devam eden turnuva güncellendi', current.title, `bitiş ${input.endsAt}`)

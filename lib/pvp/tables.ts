@@ -717,11 +717,14 @@ export async function claimTimeout(m: Member, id: string) {
   if (!t || t.status !== 'oynaniyor' || !t.state) throw new Error('Oyun aktif değil.')
   const seat = t.players.find((p) => p.id === m.id && !p.bot)?.seat
   if (seat === undefined) throw new Error('Bu masada oyuncu değilsin.')
+  // Until both players have sat down, only the deadline for sitting down decides a tournament match.
+  if (awaitsPlayers(t)) throw new Error('Rakibinin masaya girme süresi dolmadı.')
+  const end: TableEnd = t.tournamentId ? { how: 'sure' } : {}
   const idle = await activeIdleMs(new Date(t.updatedAt).getTime())
   if (t.state.kind === 'duel') {
     if (!t.state.scores[seat] || t.state.scores[seat ? 0 : 1]) throw new Error('Henüz talep edemezsin.')
     if (idle < DUEL_TIMEOUT_MS) throw new Error('Rakibin için süre dolmadı.')
-    await finishTable(t, { winnerSeat: seat })
+    await finishTable(t, { winnerSeat: seat }, end)
     return
   }
   const turn = currentTurn(t.state)
@@ -741,7 +744,7 @@ export async function claimTimeout(m: Member, id: string) {
     if (outcome) await finishTable({ ...t, state, version: t.version + 1 }, outcome)
     return
   }
-  await finishTable(t, { winnerSeat: seat })
+  await finishTable(t, { winnerSeat: seat }, end)
 }
 
 /** `how` and `noShow` say why a tournament table closed without being played to the end, and who never sat down at it. */

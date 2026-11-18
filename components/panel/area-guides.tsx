@@ -115,7 +115,8 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     title: 'Turnuva oluşturma',
     body: (
       <ol className={ol}>
-        <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir.</li>
+        <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç</b> ve <b>bitiş saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir. Form başlangıcı bir saat sonrasına, bitişi başlangıçtan 3 saat sonrasına getirir; başlangıcı değiştirirsen bitiş de aynı kadar kayar.</li>
+        <li>Bütün turnuva maçları <b>birebir</b> oynanır. İki kişiyle oynanamayan oyunlar (Batak) oyun listesinde çıkmaz.</li>
         <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar.</li>
         <li><b>Kontenjan</b> listeden seçilir: elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı.</li>
         <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
@@ -127,12 +128,27 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     ),
   },
   {
-    title: 'Başlatma ve kazanan seçme',
+    title: 'Saatler: başlangıç, maça giriş, hamle süresi, bitiş',
     body: (
       <ol className={ol}>
-        <li>Kayıt dolunca ya da saat gelince <b>Başlat</b> de. Eşleşmeler kura ile çekilir: tavla ve bilardo birebir, okey 4 kişilik masadır.</li>
+        <li><b>Başlangıç saatinde</b> kayıtlar kapanır ve turnuva kendiliğinden başlar. O an 2 kişiden az kayıt varsa turnuva iptal olur, ücretler iade edilir ve kayıtlı üyelere mesaj gider.</li>
+        <li>Bir maç açılınca iki oyuncuya <b>bildirim ve site içi mesaj</b> gider; sitenin üstünde &quot;Turnuva maçın hazır&quot; kutusu ve geri sayım çıkar.</li>
+        <li><b>Maça giriş süresi</b> (3, 5, 10 ya da 15 dakika) içinde masaya girmeyen oyuncu maçı hükmen kaybeder. İkisi de girmezse maç ikisi için de kayıp sayılır. Gelmediği için kaybeden oyuncu o maçtan sıralama ödülü almaz.</li>
+        <li>İki oyuncu da masaya girince <b>hamle süresi</b> başlar (normal masalardaki süre). Süre dolunca hamle kendiliğinden yapılır; aynı oyuncunun süresi üst üste 3 kez dolarsa maçı hükmen kaybeder. Oyuncu masadaki <b>Pes et</b> ile maçı bırakabilir. Turnuva masasında yerine bot geçmez.</li>
+        <li>Bir tur bitince sıradaki tur beklemeden açılır. <b>Bütün maçlar bitince</b> bitiş saati beklenmez; sonuç yazılır, ödüller yüklenir.</li>
+        <li><b>Bitiş saatinde</b> süren maçlar kapanır, yeni maç açılmaz. Ligde o anki puan durumu geçerlidir. Elemede şampiyon belli değilse turnuvada kalan oyuncular, paylaştıkları sıraların ödül toplamını eşit bölüşür ve şampiyon yazılmaz. Hiçbir maç oynanmadıysa turnuva iptal olur, ücretler iade edilir.</li>
+        <li>Saatler ziyaretçi trafiğiyle işler: sitede kimse yokken saati gelen iş, siteye ilk giren ziyaretçide (en geç bir dakika içinde) yapılır.</li>
+        <li>Turnuva başladıktan sonra sadece <b>bitiş saati</b>, <b>açıklama</b> ve <b>ödül notu</b> değişir. Biten ya da iptal olan turnuva düzenlenemez. Her turnuvanın altında nasıl kapandığı yazar.</li>
+      </ol>
+    ),
+  },
+  {
+    title: 'Elle başlatma ve kazanan seçme',
+    body: (
+      <ol className={ol}>
+        <li>Başlangıç saatini beklemek istemezsen <b>Kayıtları kapat ve başlat</b> de. Eşleşmeler kura ile çekilir.</li>
         <li>Maçlar sitede oynanınca kazanan kendiliğinden ilerler. Bir maç takılırsa kazananı elle seçebilirsin.</li>
-        <li>Gelmeyen oyuncuyu başlamadan önce kayıt listesinden çıkarabilirsin. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
+        <li>Bir oyuncuyu başlamadan önce kayıt listesinden çıkarabilirsin; ücreti iade edilir. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
         <li>Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir. Şampiyona şampiyon rozeti de verilir, adı kazananlar şeridinde çıkar.</li>
       </ol>
     ),
@@ -142,7 +158,7 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     body: (
       <ol className={ol}>
         <li>Beğendiğin bir turnuvanın altındaki <b>Şablon olarak kaydet</b>e bas ve bir ad ver. Oyun, format, ad, açıklama, kontenjan, ücret, ödül ve başlangıç saati saklanır.</li>
-        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, tarih yarına ayarlanır. Tarihi kontrol edip <b>Turnuvayı oluştur</b> de.</li>
+        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, başlangıç yarına, bitiş başlangıçtan 3 saat sonrasına ayarlanır. Tarihleri kontrol edip <b>Turnuvayı oluştur</b> de.</li>
         <li>Şablon sadece formu doldurur. Şablonu silmek ya da değiştirmek, daha önce açılmış turnuvalara dokunmaz.</li>
       </ol>
     ),
@@ -418,7 +434,7 @@ export function MarketGuide() {
 }
 
 export function TournamentGuide() {
-  return <FeatureGuide title="Turnuva rehberi" subtitle="Turnuva oluşturma, eleme ve lig formatı, başlatma ve kazanan seçme nasıl çalışır" steps={TOURNAMENT_STEPS} />
+  return <FeatureGuide title="Turnuva rehberi" subtitle="Turnuva oluşturma, eleme ve lig formatı, saatler, hükmen kuralları ve kazanan seçme nasıl çalışır" steps={TOURNAMENT_STEPS} />
 }
 
 export function KpGuide() {

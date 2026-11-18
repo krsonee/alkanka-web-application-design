@@ -7,7 +7,20 @@ import { BookmarkPlus, Loader2, Play, Plus, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TournamentGuide } from '@/components/panel/area-guides'
 import { ARENA_GAMES, ARENA_META } from '@/lib/arena'
-import { FORMAT_LABEL, FORMAT_SHORT, STATUS_LABEL, TOURNAMENT_FORMATS, type Tournament, type TournamentFormat, type TournamentTemplate } from '@/lib/tournaments-shared'
+import {
+  DEFAULT_JOIN_MINUTES,
+  FINISH_LABEL,
+  FORMAT_LABEL,
+  FORMAT_SHORT,
+  JOIN_MINUTES,
+  MIN_TOURNAMENT_MINUTES,
+  STATUS_LABEL,
+  TOURNAMENT_FORMATS,
+  canHostTournament,
+  type Tournament,
+  type TournamentFormat,
+  type TournamentTemplate,
+} from '@/lib/tournaments-shared'
 import { MAX_PRIZE_KC, effectivePrizes, isPlayerCount, playerOptions, prizePlaces, prizeTotal, snapPlayers } from '@/lib/tournament-prizes'
 import { PrizeList } from '@/components/alkanka/arena/prize-list'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
@@ -19,10 +32,24 @@ import { formatTR } from '@/components/alkanka/arena/tournament-card'
 import { Flash } from '@/components/panel/flash'
 
 const ISTANBUL_OFFSET = -180
+const MINUTE = 60_000
+const QUARTER = 15 * MINUTE
+/** How long a new tournament runs unless the end time is changed. */
+const DEFAULT_LENGTH = 180 * MINUTE
 
-function toIstanbulInput(iso?: string) {
-  const d = iso ? new Date(iso) : new Date(Date.now() + 86400000)
-  return new Date(d.getTime() + 3 * 3600000).toISOString().slice(0, 16)
+/** A moment as the text a `datetime-local` field shows for Istanbul. */
+const toIstanbulInput = (ms: number) => new Date(ms + 3 * 3600000).toISOString().slice(0, 16)
+const inputMs = (value: string) => Date.parse(`${value}:00Z`)
+const shiftInput = (value: string, ms: number) => (Number.isNaN(inputMs(value)) ? value : new Date(inputMs(value) + ms).toISOString().slice(0, 16))
+
+/** A new tournament starts on the next quarter hour that is at least an hour away, not a day later. */
+const defaultStart = () => Math.ceil((Date.now() + 3600000) / QUARTER) * QUARTER
+
+function lengthText(minutes: number) {
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  const rest = Math.round(minutes % 60)
+  return [days && `${days} gün`, hours && `${hours} saat`, rest && `${rest} dakika`].filter(Boolean).join(' ')
 }
 
 const field = 'rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -103,6 +130,12 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
   const places = prizePlaces(format, maxPlayers)
   const total = prizeTotal(format, maxPlayers, places.map((_, i) => Math.max(0, Math.round(Number(prizes[i]) || 0))))
   const legacySize = Boolean(from && !isPlayerCount(from.format, from.maxPlayers))
+  const [times, setTimes] = useState(() => {
+    const start = preset ? tomorrowAt(preset.startTime) : toIstanbulInput(t ? Date.parse(t.startsAt) : defaultStart())
+    return { start, end: t?.endsAt ? toIstanbulInput(Date.parse(t.endsAt)) : shiftInput(start, DEFAULT_LENGTH) }
+  })
+  const length = (inputMs(times.end) - inputMs(times.start)) / MINUTE
+  const games = ARENA_GAMES.filter((g) => canHostTournament(g) || g === from?.game)
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="id" value={t?.id ?? 0} />
@@ -112,12 +145,13 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
         <label className={labelCls}>
           Oyun
           <select name="game" defaultValue={from?.game ?? 'tavla'} className={field}>
-            {ARENA_GAMES.map((g) => (
+            {games.map((g) => (
               <option key={g} value={g}>
-                {ARENA_META[g].title} ({ARENA_META[g].group === 4 ? '4 kişilik masalar' : 'birebir'})
+                {ARENA_META[g].title}
               </option>
             ))}
           </select>
+          <span className="font-normal">Bütün turnuva maçları birebir oynanır. İki kişiyle oynanamayan oyunlar listede yok.</span>
         </label>
         <label className={labelCls}>
           Format
@@ -149,8 +183,45 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
         </label>
         <label className={labelCls}>
           Başlangıç (İstanbul saati)
-          <input type="datetime-local" name="startsAt" required defaultValue={preset ? tomorrowAt(preset.startTime) : toIstanbulInput(t?.startsAt)} className={field} />
-          {preset && <span className="font-normal">Şablondaki saatle yarına ayarlandı. Tarihi kontrol et.</span>}
+          <input
+            type="datetime-local"
+            name="startsAt"
+            required
+            value={times.start}
+            onChange={(e) => {
+              const next = e.target.value
+              // The end moves with the start, so the tournament keeps the length that was set.
+              setTimes((now) => {
+                const moved = inputMs(next) - inputMs(now.start)
+                return { start: next, end: Number.isFinite(moved) ? shiftInput(now.end, moved) : now.end }
+              })
+            }}
+            className={field}
+          />
+          <span className="font-normal">
+            {preset ? 'Şablondaki saatle yarına ayarlandı. Tarihi kontrol et. ' : ''}
+            Kayıtlar bu saatte kapanır ve turnuva kendiliğinden başlar. 2 kişiden az kayıt varsa iptal olur, ücretler iade edilir.
+          </span>
+        </label>
+        <label className={labelCls}>
+          Bitiş (İstanbul saati)
+          <input type="datetime-local" name="endsAt" required value={times.end} onChange={(e) => setTimes((now) => ({ ...now, end: e.target.value }))} className={field} />
+          <span className={cn('font-normal', length < MIN_TOURNAMENT_MINUTES && 'text-destructive')} aria-live="polite">
+            {length >= MIN_TOURNAMENT_MINUTES
+              ? `Turnuva en fazla ${lengthText(length)} sürer. Maçlar daha önce biterse sonuç beklenmeden yazılır; bu saatte süren maçlar kapanır.`
+              : `Bitiş, başlangıçtan en az ${MIN_TOURNAMENT_MINUTES} dakika sonra olmalı.`}
+          </span>
+        </label>
+        <label className={labelCls}>
+          Maça giriş süresi
+          <select name="joinMinutes" defaultValue={t?.joinMinutes ?? DEFAULT_JOIN_MINUTES} className={field}>
+            {JOIN_MINUTES.map((n) => (
+              <option key={n} value={n}>
+                {n} dakika
+              </option>
+            ))}
+          </select>
+          <span className="font-normal">Maç açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen maçı hükmen kaybeder; ikisi de girmezse ikisi de kaybeder.</span>
         </label>
         <label className={labelCls}>
           Kontenjan (oyuncu)
@@ -162,7 +233,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
             ))}
           </select>
           <span className="font-normal">
-            {format === 'eleme' ? 'Eleme tablosu boş maç kalmadan dolsun diye 2 ve katları seçilir.' : 'Ligde kimse hafta boş geçmesin diye çift sayı seçilir.'}
+            {format === 'eleme' ? 'Eleme tablosu boş maç kalmadan dolsun diye 2 ve katları seçilir.' : 'Ligde kimse tur boş geçmesin diye çift sayı seçilir.'}
             {legacySize && ` Bu kayıt eski kuralla ${from?.maxPlayers} kişilikti; en yakın uygun sayıya çekildi.`}
           </span>
         </label>
@@ -205,6 +276,52 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
         <button type="submit" disabled={pending} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-60">
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
           {t ? 'Değişiklikleri kaydet' : 'Turnuvayı oluştur'}
+        </button>
+        <Feedback state={state} />
+      </div>
+    </form>
+  )
+}
+
+/** Players are paired and fees are paid: only the end time and the two texts can still change. */
+function RunningForm({ t }: { t: Tournament }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(saveTournament, {})
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <input type="hidden" name="id" value={t.id} />
+      <input type="hidden" name="tz" value={ISTANBUL_OFFSET} />
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Turnuva başladı: oyun, format, kontenjan, ücret, ödüller ve maça giriş süresi artık değişmez. Bitiş saatini, açıklamayı ve ödül notunu değiştirebilirsin.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className={labelCls}>
+          Bitiş (İstanbul saati)
+          <input
+            type="datetime-local"
+            name="endsAt"
+            required
+            defaultValue={toIstanbulInput(t.endsAt ? Date.parse(t.endsAt) : Math.ceil((Date.now() + DEFAULT_LENGTH) / QUARTER) * QUARTER)}
+            className={field}
+          />
+          <span className="font-normal">
+            {t.endsAt
+              ? `Değiştirirsen şu andan en az ${MIN_TOURNAMENT_MINUTES} dakika sonrası olmalı. Bu saatte süren maçlar kapanır ve sonuç yazılır.`
+              : 'Bu turnuvanın bitiş saati yoktu. Kaydedersen bu saatte kapanır. Şu an açık olan eski maçlarda giriş süresi işlemez; bundan sonra açılan maçlarda işler.'}
+          </span>
+        </label>
+        <label className={labelCls}>
+          Ödül notu (isteğe bağlı)
+          <input name="prizeNote" maxLength={120} defaultValue={t.prizeNote} className={field} />
+        </label>
+        <label className={cn(labelCls, 'sm:col-span-2')}>
+          Açıklama
+          <textarea name="description" rows={2} maxLength={400} defaultValue={t.description} className={field} />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={pending} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-60">
+          {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+          Değişiklikleri kaydet
         </button>
         <Feedback state={state} />
       </div>
@@ -270,12 +387,33 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
           <p className="text-xs capitalize text-muted-foreground">
             {formatTR(t.startsAt)} · {t.entries.length}/{t.maxPlayers} oyuncu · {t.entryFee} KC giriş · {t.prizePool} KC ödül
           </p>
+          <p className="text-xs text-muted-foreground">
+            {t.endsAt ? (
+              <>
+                Bitiş: <span className="capitalize">{formatTR(t.endsAt)}</span>
+              </>
+            ) : (
+              'Bitiş saati yok (eski turnuva): kendiliğinden kapanmaz'
+            )}{' '}
+            · maça giriş {t.joinMinutes} dk
+          </p>
+          {t.finishReason && (
+            <p className="text-xs font-semibold text-foreground">
+              {t.status === 'iptal' ? 'İptal nedeni' : 'Kapanış'}: {FINISH_LABEL[t.finishReason]}
+              {t.finishedAt && <span className="font-normal capitalize text-muted-foreground"> · {formatTR(t.finishedAt)}</span>}
+            </p>
+          )}
           {t.winner && <p className="text-sm font-bold text-primary">Şampiyon: {t.winner}</p>}
           <PrizeList t={t} className="mt-1" />
         </div>
         <div className="flex flex-wrap gap-2">
           {t.status === 'kayit' && (
-            <ActionButton act={beginTournament} fields={{ id: t.id }} variant="primary" confirm="Kayıtlar kapanacak ve tüm oyuncular aynı anda eşleşecek.">
+            <ActionButton
+              act={beginTournament}
+              fields={{ id: t.id }}
+              variant="primary"
+              confirm={`Başlangıç saati beklenmeden kayıtlar kapanacak ve tüm oyuncular hemen eşleşecek. Oyuncuların masaya girmek için ${t.joinMinutes} dakikası olur.`}
+            >
               <Play className="size-3.5" aria-hidden="true" />
               Kayıtları kapat ve başlat
             </ActionButton>
@@ -295,7 +433,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
 
       {t.bracket && t.format === 'lig' && (
         <div className="flex flex-col gap-2">
-          <h4 className="text-sm font-bold text-foreground">Puan durumu ve fikstür (kazananı seçince puan tablosu güncellenir, hafta bitince sonraki hafta açılır)</h4>
+          <h4 className="text-sm font-bold text-foreground">Puan durumu ve fikstür (kazananı seçince puan tablosu güncellenir, tur bitince sonraki tur açılır)</h4>
           <LeagueView
             bracket={t.bracket}
             names={t.names}
@@ -336,12 +474,22 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
         )}
       </details>
 
-      <details className="rounded-xl border border-border">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Bilgileri düzenle</summary>
-        <div className="border-t border-border p-4">
-          <TournamentForm t={t} />
-        </div>
-      </details>
+      {t.status === 'kayit' && (
+        <details className="rounded-xl border border-border">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Bilgileri düzenle</summary>
+          <div className="border-t border-border p-4">
+            <TournamentForm t={t} />
+          </div>
+        </details>
+      )}
+      {t.status === 'basladi' && (
+        <details className="rounded-xl border border-border">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Bitiş saatini ve yazıları düzenle</summary>
+          <div className="border-t border-border p-4">
+            <RunningForm t={t} />
+          </div>
+        </details>
+      )}
 
       <details className="rounded-xl border border-border">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Şablon olarak kaydet</summary>
@@ -465,7 +613,7 @@ export function TournamentManager({ tournaments, templates = [], hidden = [] }: 
         <div className="flex flex-col gap-1">
           <h2 className="font-display text-xl font-bold uppercase text-foreground">Yeni turnuva oluştur</h2>
           <p className="text-sm text-muted-foreground">
-            Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlattığında eşleşmeler kura ile çekilir: tavla ve bilardo birebir, okey 4 kişilik masalardır.
+            Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlangıç saatinde kendiliğinden başlar, bitiş saatinde kesin kapanır. Eşleşmeler kura ile çekilir, bütün maçlar birebir oynanır.
           </p>
         </div>
         <TemplatePicker templates={templates} picked={picked} onPick={pick} />

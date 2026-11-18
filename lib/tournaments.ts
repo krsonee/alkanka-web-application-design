@@ -57,8 +57,10 @@ function tournamentChanged() {
   }
 }
 
-const isoOrNull = (v: unknown) => (v ? new Date(String(v)).toISOString() : null)
-const passed = (v: unknown) => Boolean(v) && new Date(String(v)).getTime() <= Date.now()
+// A Date turned into text loses its milliseconds, so a moment read from the database is used as it is.
+const toDate = (v: unknown) => (v instanceof Date ? v : new Date(String(v)))
+const isoOrNull = (v: unknown) => (v ? toDate(v).toISOString() : null)
+const passed = (v: unknown) => Boolean(v) && toDate(v).getTime() <= Date.now()
 const joinMinutesOf = (row: Row) => cleanJoinMinutes((row.settings as { joinMinutes?: unknown } | null)?.joinMinutes)
 
 function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
@@ -717,6 +719,7 @@ export async function myMatches(userId: string): Promise<MyMatch[]> {
   const r = await pool.query(
     `SELECT g.id, g.game, g.round_no, t.id AS tournament_id, t.title, t.format,
             jsonb_array_length(COALESCE(t.bracket->'rounds', '[]'::jsonb)) AS rounds,
+            COALESCE(g.options->'seen', '{}'::jsonb) ? $2 AS seated,
             CASE WHEN COALESCE(g.options->'seen', '{}'::jsonb) ? $2 THEN NULL ELSE g.options->'tour'->>'joinBy' END AS join_by
      FROM game_tables g JOIN tournaments t ON t.id = g.tournament_id
      WHERE g.status = 'oynaniyor' AND t.status = 'basladi' AND g.players @> $1::jsonb
@@ -730,5 +733,6 @@ export async function myMatches(userId: string): Promise<MyMatch[]> {
     title: String(x.title),
     round: roundName(x.format === 'lig', Number(x.round_no), Number(x.rounds)),
     joinBy: x.join_by ? new Date(String(x.join_by)).toISOString() : null,
+    seated: x.seated === true,
   }))
 }

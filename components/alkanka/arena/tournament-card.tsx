@@ -4,15 +4,16 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarClock, ChevronDown, Coins, Crown, Gamepad2, Medal, ScrollText, Trophy, Users } from 'lucide-react'
+import { CalendarClock, ChevronDown, Coins, Crown, Gamepad2, Hourglass, Medal, ScrollText, Trophy, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ARENA_META } from '@/lib/arena'
-import { matchHref, roundName, STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
+import { ARENA_META, TURN_SECONDS } from '@/lib/arena'
+import { CANCEL_TEXT, matchHref, roundName, STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
 import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
 import { LeagueView } from './league-view'
 import { PrizeList } from './prize-list'
+import { Countdown, useSecondsLeft } from './tournament-countdown'
 
 export function formatTR(iso: string) {
   return new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', weekday: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
@@ -24,18 +25,43 @@ function formatShortTR(iso: string) {
 
 function tournamentRules(t: Tournament, gameTitle: string) {
   const isLeague = t.format === 'lig'
-  return [
+  const rules = [
     isLeague
-      ? 'Lig usulü: herkes herkesle oynar. Galibiyet puan kazandırır, sezon sonunda en çok puanı toplayan şampiyon olur.'
+      ? 'Lig usulü: herkes herkesle bir kez oynar. Galibiyet puan kazandırır, en çok puanı toplayan şampiyon olur.'
       : 'Eleme usulü: kaybeden elenir, kazanan bir sonraki tura geçer. Final kazananı şampiyon olur.',
-    `Kontenjan ${t.maxPlayers} oyuncu. Kayıtlar başlangıç saatine kadar açık, istediğin zaman kaydını iptal edebilirsin.`,
-    'Başlangıç saatinde tüm kayıtlı oyuncular otomatik eşleşir. Maçın hazır olunca sayfada "oyuna gir" butonu çıkar.',
-    `Maçlar ${gameTitle.toLowerCase()} masasında standart kurallarla oynanır. Sıranı uzun süre oynamazsan hükmen mağlup sayılırsın.`,
-    t.entryFee
-      ? `Katılım ${formatAC(t.entryFee)} KC; kayıt iptalinde iade edilir. Ödüller turnuva bitince Kanka Coin olarak hesabına yüklenir.`
-      : 'Katılım ücretsiz. Ödüller turnuva bitince Kanka Coin olarak hesabına otomatik yüklenir.',
-    'Birden fazla hesapla katılmak, maç ayarlamak veya hile tespit edilirse oyuncu diskalifiye edilir ve ödülü iptal olur.',
+    `Kontenjan ${t.maxPlayers} oyuncu. Kayıtlar başlangıç saatinde kapanır; o ana kadar kaydını iptal edebilirsin.`,
+    'Turnuva başlangıç saatinde kendiliğinden başlar ve oyuncular eşleşir. En az 2 kayıt yoksa iptal olur, ücretler iade edilir.',
+    `Maçın açılınca bildirim gelir ve sitenin üstünde "Turnuva maçın hazır" kutusu çıkar. ${t.joinMinutes} dakika içinde masaya girmeyen maçı hükmen kaybeder; iki oyuncu da girmezse maç ikisi için de kayıp sayılır.`,
+    `Maçlar ${gameTitle.toLowerCase()} masasında standart kurallarla, birebir ve bahissiz oynanır. ${
+      TURN_SECONDS[t.game]
+        ? 'Hamle süren dolarsa hamlen kendiliğinden yapılır; üst üste 3 kez dolarsa maçı hükmen kaybedersin.'
+        : 'Süresinde oynamayan maçı hükmen kaybeder.'
+    } Masadaki "Pes et" düğmesiyle maçı bırakabilirsin.`,
   ]
+  if (t.endsAt) {
+    rules.push(
+      `Turnuva en geç ${formatTR(t.endsAt)} biter. Bütün maçlar daha önce biterse sonuç beklenmeden yazılır. Bitiş saatinde süren maçlar kapanır; ${
+        isLeague
+          ? 'o anki puan durumu geçerli olur, oynanmayan maç sayılmaz.'
+          : 'şampiyon belli değilse turnuvada kalan oyuncular paylaştıkları sıraların ödülünü eşit bölüşür.'
+      }`,
+    )
+  }
+  rules.push(
+    t.entryFee
+      ? `Katılım ${formatAC(t.entryFee)} KC, bir kez kayıtta kesilir; kayıt iptalinde ve turnuva iptalinde iade edilir. Ödüller turnuva bitince Kanka Coin olarak hesabına yüklenir.`
+      : 'Katılım ücretsiz. Ödüller turnuva bitince Kanka Coin olarak hesabına kendiliğinden yüklenir.',
+    'Birden fazla hesapla katılmak, maç ayarlamak veya hile tespit edilirse oyuncu diskalifiye edilir ve ödülü iptal olur.',
+  )
+  return rules
+}
+
+/** What a closed tournament says about how it closed, when that is not simply "all matches were played". */
+function closeNote(t: Tournament) {
+  if (t.status === 'iptal') return `${(t.finishReason && CANCEL_TEXT[t.finishReason]) ?? 'Turnuva iptal edildi.'}${t.entryFee ? ' Kayıt ücretleri iade edildi.' : ''}`
+  if (t.status !== 'bitti' || t.finishReason !== 'sure') return null
+  if (t.format === 'lig') return 'Bitiş saati geldi; o anki puan durumu geçerli oldu, oynanmayan maçlar sayılmadı.'
+  return t.winner ? null : 'Bitiş saati geldiğinde şampiyon belli değildi. Turnuvada kalan oyuncular ödülü eşit paylaştı.'
 }
 
 const STATUS_STYLE = {
@@ -47,7 +73,7 @@ const STATUS_STYLE = {
 
 export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: () => void }) {
   const meta = ARENA_META[t.game]
-  const { points, member, refresh, requireLogin } = usePoints()
+  const { points, member, refresh, requireLogin, matches } = usePoints()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -56,6 +82,8 @@ export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: ()
   const fill = Math.min(100, Math.round((t.entries.length / t.maxPlayers) * 100))
   const joined = member != null && t.entries.some((e) => e.userId === member.id)
   const myMatch = member ? t.liveMatches.find((m) => m.status === 'oynaniyor' && m.players.includes(member.id)) : undefined
+  const joinLeft = useSecondsLeft(myMatch ? matches.find((m) => m.tableId === myMatch.tableId)?.joinBy : null)
+  const closed = closeNote(t)
   const league = t.format === 'lig'
   const liveCount = t.liveMatches.filter((m) => m.status === 'oynaniyor').length
   const myId = member?.id ?? null
@@ -122,6 +150,14 @@ export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: ()
               {t.prizeNote}
             </p>
           )}
+          {t.endsAt && (t.status === 'kayit' || t.status === 'basladi') && (
+            <p className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
+              <Hourglass className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+              <span className="text-pretty">
+                En geç <span className="font-semibold capitalize text-foreground">{formatTR(t.endsAt)}</span> biter. Maçlar erken biterse beklenmez.
+              </span>
+            </p>
+          )}
           {(t.prizes.length > 1 || t.status === 'bitti') && <PrizeList t={t} />}
 
           <div className="flex flex-col gap-2">
@@ -148,6 +184,12 @@ export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: ()
             </div>
           )}
 
+          {closed && (
+            <p className="rounded-xl border border-border bg-secondary p-3 text-pretty text-sm leading-relaxed text-foreground" role="note">
+              {closed}
+            </p>
+          )}
+
           {t.status === 'basladi' && (
             <div className="flex flex-col gap-2 rounded-2xl border border-border bg-secondary p-4 text-sm">
               <p className="font-semibold text-foreground">
@@ -167,7 +209,14 @@ export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: ()
                   >
                     Maçın hazır, masaya gir
                   </Link>
+                  {joinLeft != null && joinLeft > 0 && (
+                    <p className="flex flex-wrap items-center justify-center gap-x-2 text-center text-sm font-semibold text-foreground">
+                      Masaya girmek için kalan süre
+                      <Countdown seconds={joinLeft} label="Masaya girmek için kalan süre" />
+                    </p>
+                  )}
                   <p className="text-center text-xs text-muted-foreground">
+                    {joinLeft != null && joinLeft > 0 ? 'Süre dolmadan girmezsen maçı hükmen kaybedersin. ' : ''}
                     {t.entryFee ? 'Kayıt ücretin ödendi, masada ayrıca bahis yok.' : 'Turnuva masasında bahis yok.'}
                   </p>
                 </>

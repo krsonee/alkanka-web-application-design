@@ -1,5 +1,5 @@
 import 'server-only'
-import { matchHref, type FinishReason } from './tournaments-shared'
+import { CANCEL_TEXT, matchHref, type FinishReason } from './tournaments-shared'
 
 /**
  * Messages go out after the response: a round of a large knockout opens hundreds of tables at once,
@@ -45,14 +45,6 @@ export async function notifyMatchReady(input: {
     await sendMessages(notes.map((n) => ({ userId: n.userId, targetLabel: n.name, title: n.title, body: n.body, url: n.url, sentBy: 'Sistem' })))
     await sendEach(notes.map((n) => ({ userId: n.userId, payload: { title: n.title, body: n.body, url: n.url } })))
   })
-}
-
-const CANCEL_TEXT: Partial<Record<FinishReason, string>> = {
-  'kayit-yok': 'Başlangıç saatinde en az 2 kayıt olmadığı için turnuva iptal edildi.',
-  oynanmadi: 'Hiçbir maç oynanmadığı için turnuva iptal edildi.',
-  gec: 'Turnuva saatinde başlatılamadığı için iptal edildi.',
-  oyun: 'Bu oyunda turnuva düzenlenemediği için turnuva iptal edildi.',
-  panel: 'Turnuva yönetim tarafından iptal edildi.',
 }
 
 /** Tells every entrant that the tournament is off and what came back to their balance. */
