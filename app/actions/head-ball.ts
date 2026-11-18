@@ -14,7 +14,7 @@ export async function getHeadRecord(): Promise<HeadRecord | null> {
     if (!m) return null
     const r = await pool.query<{ result: string; n: number; g: number }>(
       `SELECT result, count(*)::int AS n, coalesce(sum(score), 0)::int AS g
-         FROM game_history WHERE user_id = $1 AND game = ANY($2::text[]) GROUP BY result`,
+         FROM game_history WHERE user_id = $1 AND game = ANY($2::text[]) AND mode <> 'admin' GROUP BY result`,
       [m.id, HEAD_GAMES],
     )
     const rec: HeadRecord = { wins: 0, draws: 0, losses: 0, goals: 0, trophies: 0 }

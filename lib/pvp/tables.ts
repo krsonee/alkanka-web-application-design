@@ -28,7 +28,7 @@ import { normalizeRules, normalizeVariant, rulesToList } from '@/lib/games/batak
 import { normalizePistiRules, normalizeTarget, pistiRulesToList } from '@/lib/games/pisti'
 import { normalizePapazRules, papazRulesToList } from '@/lib/games/papaz'
 import { monoRulesToList, normalizeMonoRules } from '@/lib/games/monopoly'
-import { MATCH_END_LABEL, type MatchEnd, type TableTour } from '@/lib/tournaments-shared'
+import { MATCH_END_LABEL, matchHistoryMode, type MatchEnd, type TableTour } from '@/lib/tournaments-shared'
 
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
 
@@ -856,7 +856,7 @@ async function finishTourTable(t: TableRow, outcome: Outcome, end: TableEnd = {}
   // Closed at the deadline for sitting down: the board was never played.
   if (end.how !== 'gelmedi') {
     for (const p of people) {
-      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'turnuva', opponent: tourOpponent(t, p.id, end.how), stake: 0, result: through.includes(p) ? 'win' : 'loss', delta: 0, tableId: t.id })
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: matchHistoryMode(end.how), opponent: tourOpponent(t, p.id, end.how), stake: 0, result: through.includes(p) ? 'win' : 'loss', delta: 0, tableId: t.id })
     }
   }
   const { settleTournamentTable } = await import('@/lib/tournaments')
@@ -933,7 +933,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: Tabl
     // A match one side never sat down to was not played, so it adds no game to anybody's history or counters.
     if (end.how !== 'gelmedi') {
       for (const p of humans(t)) {
-        await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'turnuva', opponent: tourOpponent(t, p.id, end.how), stake: 0, result: p.id === champ.id ? 'win' : 'loss', delta: 0, tableId: t.id })
+        await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: matchHistoryMode(end.how), opponent: tourOpponent(t, p.id, end.how), stake: 0, result: p.id === champ.id ? 'win' : 'loss', delta: 0, tableId: t.id })
       }
     }
     const { advanceTournament } = await import('@/lib/tournaments')

@@ -61,7 +61,7 @@ export type Profile = {
 export async function getProfile(userId: string): Promise<Profile> {
   await ensureCommunity()
   const [s] = await rows<Record<string, string | null>>(sql`SELECT
-    (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva') AS games,
+    (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva' AND mode <> 'admin') AS games,
     (SELECT coalesce(sum(delta) FILTER (WHERE delta > 0), 0) FROM game_history WHERE user_id = ${userId}) AS won,
     (SELECT count(*) FROM site_reviews WHERE user_id = ${userId} AND status = 'approved') AS reviews,
     (SELECT coalesce(sum(points), 0) FROM league_picks WHERE user_id = ${userId}) AS league_points,
@@ -71,7 +71,7 @@ export async function getProfile(userId: string): Promise<Profile> {
     (SELECT count(*) FROM tg_links WHERE user_id = ${userId}) AS telegram`).catch(async () => {
     // tg_links only exists once the Telegram chat module has run.
     return rows<Record<string, string | null>>(sql`SELECT
-      (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva') AS games,
+      (SELECT count(*) FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva' AND mode <> 'admin') AS games,
       (SELECT coalesce(sum(delta) FILTER (WHERE delta > 0), 0) FROM game_history WHERE user_id = ${userId}) AS won,
       (SELECT count(*) FROM site_reviews WHERE user_id = ${userId} AND status = 'approved') AS reviews,
       (SELECT coalesce(sum(points), 0) FROM league_picks WHERE user_id = ${userId}) AS league_points,
@@ -153,7 +153,7 @@ export async function referrersWithReadyRewards(): Promise<string[]> {
   const { minGames } = await getReferralSettings()
   const r = await rows<{ referrer_id: string }>(sql`SELECT DISTINCT r.referrer_id FROM referrals r
     WHERE r.rewarded_at IS NULL
-      AND (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id AND g.game <> 'turnuva') >= ${minGames}
+      AND (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id AND g.game <> 'turnuva' AND g.mode <> 'admin') >= ${minGames}
     LIMIT 500`)
   return r.map((x) => x.referrer_id)
 }
@@ -163,7 +163,7 @@ export type ReferralRow = { name: string; games: number; rewarded: boolean; crea
 export async function listReferrals(userId: string): Promise<ReferralRow[]> {
   await ensureCommunity()
   const r = await rows(sql`SELECT u.name, r.rewarded_at, r.created_at,
-      (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id AND g.game <> 'turnuva') AS games
+      (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id AND g.game <> 'turnuva' AND g.mode <> 'admin') AS games
     FROM referrals r LEFT JOIN public."user" u ON u.id = r.referred_id
     WHERE r.referrer_id = ${userId} ORDER BY r.created_at DESC LIMIT 100`)
   return r.map((x) => ({
@@ -184,7 +184,7 @@ export async function claimReferralRewards(userId: string) {
   const settings = await getReferralSettings()
   const done = await rows<{ referred_id: string }>(sql`UPDATE referrals r SET rewarded_at = now()
     WHERE r.referrer_id = ${userId} AND r.rewarded_at IS NULL
-      AND (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id AND g.game <> 'turnuva') >= ${settings.minGames}
+      AND (SELECT count(*) FROM game_history g WHERE g.user_id = r.referred_id AND g.game <> 'turnuva' AND g.mode <> 'admin') >= ${settings.minGames}
       AND NOT EXISTS (SELECT 1 FROM member_origin o WHERE o.user_id = r.referred_id AND o.flagged)
     RETURNING r.referred_id`)
   for (const d of done) await credit(d.referred_id, settings.referred, 'Davet ödülü (davet edilen)')

@@ -66,6 +66,13 @@ export const MIN_TOURNAMENT_MINUTES = 10
 /** How a tournament table closed when it was not simply played to the end. */
 export type MatchEnd = 'gelmedi' | 'sure' | 'pes' | 'panel' | 'bitis' | 'iptal'
 
+/**
+ * The mode on the history rows of a tournament match. A result written from the panel is kept apart:
+ * it shows in the member's history, but nobody played it, so nothing that counts played or won games
+ * picks it up (those queries leave the literal 'admin' out).
+ */
+export const matchHistoryMode = (how?: MatchEnd | null) => (how === 'panel' ? 'admin' : 'turnuva')
+
 export const MATCH_END_LABEL: Record<MatchEnd, string> = {
   gelmedi: 'hükmen, masaya gelmedi',
   sure: 'hükmen, hamle süresi',

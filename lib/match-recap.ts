@@ -41,7 +41,7 @@ export async function getMatchRecap(userId: string, game: string, tableId: strin
         AND (${tableId}::text IS NULL OR table_id::text = ${tableId})
         AND created_at > now() - interval '15 minutes'
       ORDER BY created_at DESC LIMIT 1`).catch(() => []),
-    rows<{ n: string | number }>(sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND game <> 'turnuva'
+    rows<{ n: string | number }>(sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND game <> 'turnuva' AND mode <> 'admin'
       AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')`).catch(() => []),
     getKpLevel(userId),
     nearestGameTask(userId, game).catch(() => null),

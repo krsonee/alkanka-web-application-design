@@ -14,6 +14,7 @@ import { tournamentTable } from './tournament-games'
 import { cleanPrizes, prizeTotal, tournamentPayouts, type Payout } from './tournament-prizes'
 import {
   MATCH_END_LABEL,
+  matchHistoryMode,
   MAX_TOURNAMENT_PLAYERS,
   TABLE_PASS,
   TOURNAMENT_MONEY_GAME,
@@ -836,7 +837,7 @@ export async function adminSetMatchWinner(id: number, round: number, match: numb
       userId: String(entrant.user_id),
       userName: String(entrant.nickname),
       game: String(row.game),
-      mode: 'turnuva',
+      mode: matchHistoryMode('panel'),
       opponent: `${rival ? nameOf(rival) : 'Rakip'} (${MATCH_END_LABEL.panel})`,
       stake: 0,
       result: key === winnerKey ? 'win' : 'loss',

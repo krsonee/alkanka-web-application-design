@@ -77,7 +77,7 @@ async function limitFor(userId: string): Promise<MemberLimit | null> {
 async function todayGames(userId: string) {
   const r = await pool.query<{ played: string; net: string | null }>(
     `SELECT count(*) AS played, sum(delta) AS net FROM game_history
-     WHERE user_id = $1 AND game NOT IN ('market', 'turnuva') AND mode <> 'turnuva' AND created_at >= ${TODAY}`,
+     WHERE user_id = $1 AND game NOT IN ('market', 'turnuva') AND mode NOT IN ('turnuva', 'admin') AND created_at >= ${TODAY}`,
     [userId],
   )
   return { played: Number(r.rows[0]?.played ?? 0), net: Number(r.rows[0]?.net ?? 0) }

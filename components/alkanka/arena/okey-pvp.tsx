@@ -1,15 +1,16 @@
 'use client'
 
-import { useMemo, useState, type CSSProperties } from 'react'
-import { ArrowDownToLine, Bot, Eye, Layers, Trophy, X } from 'lucide-react'
+import { Fragment, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Eye, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canShowIndicator, isOkeyScored, type OkeyLast, type OkeyReveal, type OkeyState } from '@/lib/pvp/rules'
 import type { Remote } from './remote'
-import { BrandLogo } from '../logo-selector'
-import { TileBack, TileFace, TurnSteps } from './okey'
-import { OkeyRack, useRack } from './okey-rack'
-import { findWinningDiscard, isJoker, okeyFrom, type Okey as OkeyValue, type Tile } from './okey-engine'
+import { TileFace, TurnSteps, useDrawDrag } from './okey'
+import { MockTile, OkeyRack, ghostTransform, useRack } from './okey-rack'
+import { COLOR_NAMES, findWinningDiscard, isJoker, okeyFrom, winningKindFor, type Okey as OkeyValue, type Tile } from './okey-engine'
 import { TableBrand } from './table-brand'
+import { ThemeDecor, themeSurfaceProps, useTableTheme } from './table-theme'
 import { OkeyWinOverlay } from './okey-win'
 import { MobileTableChat } from './mobile-table-chat'
 import { SeatFace } from './seat-face'
@@ -18,7 +19,17 @@ type OkeyView = OkeyState & { deckCount: number; handCounts: number[]; oppSeat: 
 
 const leftOf = (seat: number, n: number) => (seat - 1 + n) % n
 
+const tileName = (t: Tile) => (t.fake ? 'sahte okey' : `${COLOR_NAMES[t.color]} ${t.num}`)
+
+const short = (name: string) => (name.length > 12 ? `${name.slice(0, 11)}…` : name)
+
+/**
+ * The okey table players share, drawn on the same themed felt as the table against the bots.
+ * Seats are placed around the viewer: 0 the viewer, 1 right, 2 across, 3 left. With two players the
+ * rival sits across, and the pile the viewer takes from stays at the viewer's left hand.
+ */
 export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
+  const { theme: tableTheme } = useTableTheme('okey')
   const s = remote.state
   const n = s.seats ?? s.hands.length
   const spectator = remote.seat < 0
@@ -27,19 +38,24 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   const hand = spectator ? [] : (s.hands[seat] ?? [])
   const rack = useRack(hand, okey, 2, `${s.hand ?? 1}:${s.indicator.id}:${hand.length > 0}`)
   const selected = rack.selected
-  const [sortMode, setSortMode] = useState<'seri' | 'cift'>('seri')
   const [knownIds, setKnownIds] = useState<string>(() => hand.map((t) => t.id).join(','))
   const [fresh, setFresh] = useState<number | null>(null)
+  // A tile dragged from the deck or the pile lands on the slot it was dropped on once the server confirms the draw.
+  const [pendingSlot, setPendingSlot] = useState<number | null>(null)
   // Start with the hand already on screen at load as "seen", so a refresh doesn't replay an old finish.
   const [seenHand, setSeenHand] = useState<number | undefined>(() => s.reveal?.hand)
   const [closedReveal, setClosedReveal] = useState<number | null>(null)
+  const [dropOver, setDropOver] = useState(false)
+  const [warning, setWarning] = useState<{ version: number; text: string } | null>(null)
   const idsKey = hand.map((t) => t.id).join(',')
   if (idsKey !== knownIds) {
     const prev = new Set(knownIds.split(',').filter(Boolean).map(Number))
     const added = hand.find((t) => !prev.has(t.id))
     setKnownIds(idsKey)
     setFresh(added && prev.size > 0 ? added.id : null)
-    // A tile taken from the discard pile can't be thrown back this turn, so pre-selecting it only locked "Taşı at".
+    if (added && pendingSlot != null) rack.moveTo(added.id, pendingSlot)
+    if (pendingSlot != null) setPendingSlot(null)
+    // A tile taken from the discard pile can't be thrown back this turn, so pre-selecting it only locked the throw.
     if (added && prev.size > 0 && added.id !== s.takenId) rack.setSelected(added.id)
     else if (added && added.id === s.takenId) rack.setSelected(null)
   }
@@ -56,61 +72,120 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
   const canShow = !spectator && canShowIndicator(s, seat)
   const lowDeck = s.deckCount > 0 && s.deckCount <= 8
   const takeTop = s.discards[fromSeat]?.at(-1)
+  const canTake = myDraw && Boolean(takeTop) && !remote.busy
+  const canThrow = myDiscard && !remote.busy
   const partner = s.team ? (seat + 2) % 4 : -1
 
-  // Seats are drawn clockwise around the viewer: right, across, left.
-  const around = n === 4 ? { right: (seat + 1) % 4, top: (seat + 2) % 4, left: (seat + 3) % 4 } : { top: (seat + 1) % 2 }
-
-  function arrange() {
-    rack.arrange(sortMode)
-    setSortMode((m) => (m === 'seri' ? 'cift' : 'seri'))
+  const posOf = (i: number) => {
+    const k = (i - seat + n) % n
+    return n === 2 && k === 1 ? 2 : k
   }
+  const pilePos = (i: number) => (i === seat ? 0 : i === fromSeat ? 3 : posOf(i))
+  const seatList = Array.from({ length: n }, (_, k) => (seat + k) % n)
 
+  const warn = (text: string) => setWarning({ version: remote.version, text })
+
+  const drawFrom = async (src: 'deck' | 'pile', slot: number | null = null) => {
+    if (!myDraw || remote.busy) return
+    if (src === 'pile' && !takeTop) return
+    setPendingSlot(slot)
+    const ok = await remote.send({ type: 'draw', from: src === 'deck' ? 'pile' : 'discard' })
+    if (!ok) setPendingSlot(null)
+  }
+  const drawDrag = useDrawDrag((src, slot) => void drawFrom(src, slot))
+
+  const discard = (tileId: number) => {
+    if (!canThrow) return
+    if (tileId === takenId) return warn('Yerden aldığın taşı bu elde geri atamazsın')
+    void remote.send({ type: 'discard', tileId })
+  }
+  const finishWith = (tileId: number) => {
+    if (!canThrow) return
+    if (tileId === takenId) return warn('Yerden aldığın taşı bu elde geri atamazsın')
+    if (!winningKindFor(hand, tileId, okey)) return warn(winning ? `Bu taşla bitmiyor – ${tileName(winning.tile)} taşını at` : 'Bu elle henüz bitemezsin')
+    void remote.send({ type: 'finish', tileId })
+  }
+  /** The tile "Eli Bitir" throws: the selected one if it ends the hand, otherwise the tile that does. */
+  const finishTile = winning ? (selected != null && !selectedIsTaken && winningKindFor(hand, selected, okey) ? selected : winning.tile.id) : null
+
+  const warningText = warning && warning.version === remote.version ? warning.text : null
   let message: string
-  if (spectator) message = `İzleyici modu · sıra ${nameOf(s.turn)} oyuncusunda`
-  else if (myDraw)
-    message = takeTop
-      ? `1. adım: desteden çek ya da ${nameOf(fromSeat)} oyuncusunun attığı taşı al.`
-      : '1. adım: ortadaki desteden taş çek.'
-  else if (myDiscard)
-    message = winning
-      ? `Elin bitmeye hazır! Bitiren taşı ortaya at, el biter.${scored && isJoker(winning.tile, okey) ? ' Okeyle bitirirsen 2 kat, çiftten ve okeyle 4 kat!' : ''}`
-      : selectedIsTaken
-        ? 'Yerden aldığın taşı bu elde geri atamazsın, başka taş seç.'
-        : `2. adım: taşı "Taşı at" butonuna sürükle, çift tıkla ya da seçip butona bas.${fresh != null ? ' Yeni gelen taş "Yeni" etiketli.' : ''}`
-  else message = `${nameOf(s.turn)} oynuyor...`
-
-  const seatProps = (i: number) => ({
-    name: nameOf(i),
-    userId: remote.userIds?.[i] ?? null,
-    seed: `${remote.id ?? 'masa'}-${i}`,
-    count: s.handCounts[i] ?? 0,
-    active: s.turn === i,
-    bot: bots.includes(i),
-    partner: i === partner,
-    team: s.team ? (i % 2 === 0 ? 'A' : 'B') : null,
-    top: s.discards[i]?.at(-1),
-    pile: s.discards[i]?.length ?? 0,
-    takeable: myDraw && i === fromSeat && Boolean(takeTop),
-    okey,
-  })
-
-  const onlyIfAllowed = (tileId: number) => tileId !== takenId
+  if (spectator) message = `İzliyorsun · sıra ${short(nameOf(s.turn))} oyuncusunda`
+  else if (myDraw) message = takeTop ? 'Ortadan çek ya da yerdeki taşı al' : 'Ortadan taş çek'
+  else if (myDiscard) message = winning ? `Bitirebilirsin – ${tileName(winning.tile)} taşını at` : 'Şimdi bir taş at'
+  else message = `${short(nameOf(s.turn))} oynuyor`
+  const toastTone = warningText ? 'warn' : myDraw || (myDiscard && winning) ? 'me' : undefined
 
   const finished = s.reveal && s.reveal.kind !== 'deste' ? s.reveal : null
   const showWin = finished != null && seenHand !== finished.hand
 
+  const seatEl = (i: number) => {
+    const mine = !spectator && i === seat
+    const name = mine ? 'Sen' : nameOf(i)
+    const uid = remote.userIds?.[i] ?? null
+    const count = s.handCounts[i] ?? 0
+    const tag = s.team ? (i === partner ? 'Eş' : i % 2 === 0 ? 'A' : 'B') : bots.includes(i) ? 'Bot' : null
+    return (
+      <div key={`seat-${i}`} className={cn('okt-pl', `okt-p${posOf(i)}`, s.turn === i && !showWin && 'active')}>
+        <div className="okt-av" aria-hidden="true">
+          <SeatFace userId={uid} botSeed={uid ? null : `${remote.id ?? 'masa'}-${i}`} initials={mine ? 'SN' : name.slice(0, 2).toLocaleUpperCase('tr-TR')} />
+        </div>
+        <div className="okt-nm" aria-hidden="true">
+          {short(name)}
+          <s>{count}</s>
+          {tag && <em>{tag}</em>}
+        </div>
+        <span className="sr-only">
+          {`${name}${bots.includes(i) ? ' (bot)' : ''}${s.team ? `, ${i === partner ? 'eşin' : `${i % 2 === 0 ? 'A' : 'B'} takımı`}` : ''}, ${count} taş${s.turn === i ? ', sırada' : ''}`}
+        </span>
+      </div>
+    )
+  }
+
+  const pile = (i: number) => {
+    const t = s.discards[i]?.at(-1)
+    const takeHere = !spectator && i === fromSeat && canTake
+    const dropHere = !spectator && i === seat
+    return (
+      <div
+        key={`pile-${i}`}
+        data-drop={dropHere && canThrow ? 'discard' : undefined}
+        className={cn('okt-pile okt-box', `okt-pile${pilePos(i)}`, (takeHere || (dropHere && canThrow)) && 'can')}
+      >
+        {t && <MockTile key={t.id} tile={t} okey={okey} />}
+        {takeHere && (
+          <button
+            type="button"
+            className="okt-hit touch-none"
+            onPointerDown={(e) => drawDrag.start(e, 'pile')}
+            onClick={() => !drawDrag.dragged.current && void drawFrom('pile')}
+            aria-label={`${nameOf(fromSeat)} oyuncusunun attığı taşı al ya da ıstakaya sürükle`}
+          />
+        )}
+        {dropHere && canThrow && selected != null && (
+          <button type="button" className="okt-hit" onClick={() => discard(selected)} aria-label="Seçili taşı buraya at" />
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
-      {scored && <ScoreBoard s={s} n={n} nameOf={nameOf} seat={spectator ? -1 : seat} />}
+    <div data-game-table className="flex flex-col gap-3 sm:gap-4">
+      {scored && (
+        <div data-ls-hide>
+          <ScoreBoard s={s} n={n} nameOf={nameOf} seat={spectator ? -1 : seat} />
+        </div>
+      )}
       {s.reveal && closedReveal !== s.reveal.hand && (
-        <HandReveal
-          reveal={s.reveal}
-          okey={s.reveal.indicator ? okeyFrom(s.reveal.indicator) : okey}
-          nameOf={nameOf}
-          scored={scored}
-          onClose={() => setClosedReveal(s.reveal?.hand ?? null)}
-        />
+        <div data-ls-hide>
+          <HandReveal
+            reveal={s.reveal}
+            okey={s.reveal.indicator ? okeyFrom(s.reveal.indicator) : okey}
+            nameOf={nameOf}
+            scored={scored}
+            onClose={() => setClosedReveal(s.reveal?.hand ?? null)}
+          />
+        </div>
       )}
       {showWin && (
         <OkeyWinOverlay
@@ -130,139 +205,141 @@ export function OkeyPvp({ remote }: { remote: Remote<OkeyView> }) {
         />
       )}
       {spectator && (
-        <p className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
+        <p data-ls-hide className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground">
           <Eye className="size-4 text-primary" aria-hidden="true" /> Masayı izliyorsun. Oyuncuların elleri gizli, atılan taşlar canlı görünür.
         </p>
       )}
-      <div data-ls-main className="relative overflow-hidden rounded-2xl bg-wood p-2 shadow-xl max-sm:-mx-2 max-sm:p-1 sm:p-3">
-        <div className="relative flex min-h-72 flex-col justify-between gap-3 rounded-xl bg-felt p-2 sm:min-h-96 sm:p-5">
-          <TableBrand />
-          {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-15">
-            <BrandLogo />
-          </div>
 
-          <div className="relative flex justify-center">
-            <SeatBadge {...seatProps(around.top)} from="top" />
-          </div>
+      <div data-fit-end className="okt okp font-sans" {...themeSurfaceProps(tableTheme)}>
+        <TableBrand center={false} plaque={false} corners={false} jako={false} />
+        <ThemeDecor theme={tableTheme} />
+        {remote.id && <MobileTableChat tableId={remote.id} placement="table" />}
+        <div className="okt-logo" aria-hidden="true">
+          ALKANKA
+        </div>
+        <div className={cn('okt-drop', dropOver && 'on')} aria-hidden="true" />
+        <div className="okt-rot" aria-hidden="true">
+          Daha büyük taşlar için telefonu yan çevir
+        </div>
 
-          <div className="relative flex items-center justify-between gap-2">
-            {around.left != null ? <SeatBadge {...seatProps(around.left)} vertical from="left" /> : <span />}
+        {seatList.map(seatEl)}
+        {seatList.map(pile)}
 
-            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6">
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gösterge</span>
-                <TileFace tile={s.indicator} okey={okey} size="sm" />
-                {canShow && (
-                  <button
-                    type="button"
-                    disabled={remote.busy}
-                    onClick={() => void remote.send({ type: 'show' })}
-                    className="mt-1 rounded-lg bg-primary px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
-                  >
-                    Göster (−1 rakip)
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                disabled={!myDraw || remote.busy}
-                onClick={() => void remote.send({ type: 'draw', from: 'pile' })}
-                className={cn('flex flex-col items-center gap-1 rounded-xl p-2', myDraw && 'animate-pulse ring-2 ring-primary')}
-                aria-label={`Ortadan taş çek, ${s.deckCount} taş kaldı`}
-              >
-                <span className="relative">
-                  <TileBack className="h-14 w-10" />
-                  <Layers className="absolute inset-0 m-auto size-4 text-primary" aria-hidden="true" />
-                </span>
-                <span className={cn('text-[10px] font-bold uppercase tracking-wider', lowDeck ? 'text-destructive' : 'text-muted-foreground')}>
-                  {lowDeck ? `Son ${s.deckCount} taş!` : `${s.deckCount} taş`}
-                </span>
-              </button>
-              {!spectator && (
-                <button
-                  type="button"
-                  disabled={!myDraw || !takeTop || remote.busy}
-                  onClick={() => void remote.send({ type: 'draw', from: 'discard' })}
-                  className={cn('flex flex-col items-center gap-1 rounded-xl p-2', myDraw && takeTop && 'ring-2 ring-primary/60')}
-                  aria-label={takeTop ? `${nameOf(fromSeat)} oyuncusunun attığı taşı al` : 'Alınacak taş yok'}
-                >
-                  {takeTop ? <TileFace tile={takeTop} okey={okey} size="sm" /> : <span className="h-11 w-8 rounded-md border border-dashed border-border" />}
-                  <span className="max-w-20 truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Yerden al</span>
-                </button>
-              )}
-            </div>
-
-            {around.right != null ? <SeatBadge {...seatProps(around.right)} vertical from="right" /> : <span />}
-          </div>
-
-          <div className="relative flex flex-col items-center gap-1">
-            <SeatBadge {...seatProps(seat)} name={spectator ? nameOf(seat) : 'Sen'} from="bottom" />
-            <p className="text-center text-sm font-semibold text-foreground" aria-live="polite">
-              {message}
-            </p>
-          </div>
+        <button
+          type="button"
+          className={cn('okt-deck', myDraw && 'touch-none')}
+          data-on={myDraw || undefined}
+          disabled={!myDraw || remote.busy}
+          onPointerDown={(e) => myDraw && !remote.busy && drawDrag.start(e, 'deck')}
+          onClick={() => !drawDrag.dragged.current && void drawFrom('deck')}
+          aria-label={`Ortadan taş çek ya da ıstakaya sürükle, ${s.deckCount} taş kaldı`}
+        >
+          <span className="okt-stack" aria-hidden="true">
+            <span className="okt-box absolute inset-0">
+              <MockTile back />
+            </span>
+            <span className="okt-box absolute inset-0">
+              <MockTile back />
+            </span>
+            <span className="okt-box absolute inset-0">
+              <MockTile back />
+            </span>
+          </span>
+          <span className={cn('okt-num', lowDeck && 'low')}>{lowDeck ? `Son ${s.deckCount} taş` : `${s.deckCount} taş`}</span>
+        </button>
+        <div className="okt-ind okt-box">
+          <MockTile tile={s.indicator} okey={{ color: -2, num: -2 } as OkeyValue} label={`Gösterge: ${tileName(s.indicator)}`} />
+        </div>
+        <div className="okt-lbl" aria-hidden="true">
+          Gösterge
         </div>
 
         {!spectator && (
-          <div className="mt-2 sm:mt-3">
-            <OkeyRack
-              hand={hand}
-              okey={okey}
-              rack={rack}
-              highlight={myDiscard ? fresh : null}
-              onDoubleTile={(tile) => {
-                if (myDiscard && !remote.busy && onlyIfAllowed(tile.id)) void remote.send({ type: 'discard', tileId: tile.id })
-              }}
-              onDropOut={(tileId, kind) => {
-                if (!myDiscard || remote.busy || !onlyIfAllowed(tileId)) return
-                if (kind === 'discard') void remote.send({ type: 'discard', tileId })
-                else if (kind === 'finish' && winning) void remote.send({ type: 'finish', tileId })
-              }}
-            />
+          <div className="okt-side">
+            {finishTile != null && (
+              <button type="button" className="okt-btn gold" data-drop="finish" disabled={remote.busy} onClick={() => finishWith(finishTile)}>
+                Eli Bitir
+              </button>
+            )}
+            <button type="button" className="okt-btn" onClick={() => rack.arrange('seri')}>
+              Seri Diz
+            </button>
+            <button type="button" className="okt-btn" onClick={() => rack.arrange('cift')}>
+              Çift Diz
+            </button>
+            {myDiscard && (
+              <button type="button" className="okt-btn gold" disabled={selected == null || selectedIsTaken || remote.busy} onClick={() => selected != null && discard(selected)}>
+                Taşı At
+              </button>
+            )}
+            {canShow && (
+              <button type="button" className="okt-btn" disabled={remote.busy} onClick={() => void remote.send({ type: 'show' })}>
+                Göster (rakip −1)
+              </button>
+            )}
           </div>
+        )}
+
+        {scored && (
+          <dl className="okt-info">
+            <dt>El</dt>
+            <dd>{s.hand ?? 1}</dd>
+            {Array.from({ length: n }, (_, i) => (
+              <Fragment key={i}>
+                <dt>{!spectator && i === seat ? 'Sen' : short(nameOf(i))}</dt>
+                <dd>{s.scores?.[i] ?? s.target ?? 0}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        )}
+
+        <div className={cn('okt-toast', toastTone)} aria-live="polite">
+          {warningText ?? message}
+        </div>
+
+        {spectator ? (
+          <div className="o1-spec">İzleyici olarak bakıyorsun</div>
+        ) : (
+          <OkeyRack
+            variant="table"
+            hand={hand}
+            okey={okey}
+            rack={rack}
+            highlight={myDiscard ? fresh : null}
+            looseDiscard={canThrow}
+            onDoubleTile={(tile) => {
+              if (myDiscard) discard(tile.id)
+              else if (isJoker(tile, okey) && !tile.fake) rack.toggleFlip(tile.id)
+            }}
+            onDropHover={(kind) => setDropOver(kind === 'discard' || kind === 'finish')}
+            onDropOut={(tileId, kind) => {
+              setDropOver(false)
+              if (kind === 'finish') finishWith(tileId)
+              else if (kind === 'discard') discard(tileId)
+            }}
+          />
         )}
       </div>
 
-      {!spectator && (
-        <>
-          {/* Right under the rack, so throwing a tile never needs scrolling; the move log and hints follow below. */}
-          <div
-            data-ls-stack
-            data-fit-end
-            className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3"
-          >
-            <button onClick={arrange} className="rounded-xl border border-border px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-foreground hover:bg-secondary">
-              {sortMode === 'seri' ? 'Seri diz' : 'Çift diz'}
-            </button>
-            <div className="grid grid-cols-2 gap-2 sm:flex">
-              <button
-                data-drop={myDiscard && winning ? 'finish' : undefined}
-                onClick={() => selected != null && void remote.send({ type: 'finish', tileId: selected })}
-                disabled={!myDiscard || selected == null || !winning || selectedIsTaken || remote.busy}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary hover:bg-primary/10 disabled:opacity-40"
-              >
-                <Trophy className="size-4" aria-hidden="true" />
-                Eli bitir
-              </button>
-              <button
-                data-drop={myDiscard ? 'discard' : undefined}
-                onClick={() => selected != null && void remote.send({ type: 'discard', tileId: selected })}
-                disabled={!myDiscard || selected == null || selectedIsTaken || remote.busy}
-                className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 disabled:opacity-40"
-              >
-                <ArrowDownToLine className="size-4" aria-hidden="true" />
-                {myDiscard && selected != null && !selectedIsTaken ? 'Seçili taşı at' : 'Taşı at'}
-              </button>
+      {drawDrag.ghost &&
+        createPortal(
+          <div ref={drawDrag.ghostEl} aria-hidden="true" className="okt-ghost" style={{ transform: ghostTransform(drawDrag.ghost.x, drawDrag.ghost.y) }}>
+            <div style={{ width: drawDrag.ghost.w, height: drawDrag.ghost.h }}>
+              {drawDrag.ghost.src === 'pile' && takeTop ? <MockTile tile={takeTop} okey={okey} /> : <MockTile back />}
             </div>
-          </div>
-          <div data-ls-hide>
-            <TurnSteps phase={myDraw ? 'draw' : myDiscard ? 'discard' : 'wait'} />
-          </div>
-        </>
+          </div>,
+          document.body,
+        )}
+
+      {!spectator && (
+        <div data-ls-hide>
+          <TurnSteps phase={myDraw ? 'draw' : myDiscard ? 'discard' : 'wait'} />
+        </div>
       )}
 
-      <LastMoves last={s.last ?? []} nameOf={nameOf} okey={okey} />
+      <div data-ls-hide>
+        <LastMoves last={s.last ?? []} nameOf={nameOf} okey={okey} />
+      </div>
     </div>
   )
 }
@@ -349,81 +426,6 @@ function HandReveal({
     </section>
   )
 }
-
-function SeatBadge({
-  name,
-  count,
-  active,
-  bot,
-  partner,
-  team,
-  top,
-  takeable,
-  okey,
-  vertical,
-  userId,
-  seed,
-  from,
-  pile,
-}: {
-  from: keyof typeof THROW_FROM
-  pile: number
-  userId: string | null
-  seed: string
-  name: string
-  count: number
-  active: boolean
-  bot: boolean
-  partner: boolean
-  team: string | null
-  top?: Tile
-  takeable: boolean
-  okey: OkeyValue
-  vertical?: boolean
-}) {
-  // Only a tile thrown while the table is open flies in; one already lying there, or uncovered when the tile above it is taken, stays put.
-  const [seen, setSeen] = useState<{ pile: number; thrown: number | null }>({ pile, thrown: null })
-  if (seen.pile !== pile) setSeen({ pile, thrown: pile > seen.pile && top ? top.id : null })
-  return (
-    <div className={cn('flex items-center gap-2', vertical && 'flex-col')}>
-      <div
-        className={cn(
-          'flex max-w-28 items-center gap-1.5 rounded-full border px-2 py-1 sm:max-w-40',
-          active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card/90 text-foreground',
-        )}
-      >
-        <span className="relative size-6 shrink-0 overflow-hidden rounded-full bg-secondary text-center text-[10px] font-bold leading-6 text-secondary-foreground" aria-hidden="true">
-          <SeatFace userId={userId} botSeed={userId ? null : seed} initials={name.slice(0, 2).toUpperCase()} />
-        </span>
-        {bot && <Bot className="size-3.5 shrink-0" aria-label="Bot" />}
-        <span className="truncate text-xs font-bold">{name}</span>
-        {team && (
-          <span className={cn('rounded px-1 text-[10px] font-bold', active ? 'bg-primary-foreground/20' : 'bg-secondary')}>
-            {partner ? 'Eş' : team}
-          </span>
-        )}
-        <span className="shrink-0 text-[10px] opacity-80">{count}</span>
-      </div>
-      <div className={cn('flex flex-col items-center rounded-md', takeable && 'ring-2 ring-primary')} title="Son attığı taş">
-        {top ? (
-          <span key={top.id} className={cn('block', seen.thrown === top.id && 'tile-fly')} style={THROW_FROM[from]}>
-            <TileFace tile={top} okey={okey} size="sm" />
-          </span>
-        ) : (
-          <span className="h-11 w-8 rounded-md border border-dashed border-border/70" aria-hidden="true" />
-        )}
-      </div>
-    </div>
-  )
-}
-
-/** Where a thrown tile starts its flight to the seat's pile: from that player's side of the table. */
-const THROW_FROM = {
-  top: { '--fy': '-56px' },
-  left: { '--fx': '-56px' },
-  right: { '--fx': '56px' },
-  bottom: { '--fy': '150px' },
-} as Record<'top' | 'left' | 'right' | 'bottom', CSSProperties>
 
 function LastMoves({ last, nameOf, okey }: { last: OkeyLast[]; nameOf: (i: number) => string; okey: OkeyValue }) {
   if (!last.length) return null

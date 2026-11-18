@@ -123,7 +123,7 @@ function GamesTab({ activity }: { activity: MemberActivity }) {
                 <li key={g.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div className="flex min-w-0 flex-col">
                     <span className="truncate font-medium capitalize text-foreground">
-                      {g.game} {!coins && <span className="font-normal text-muted-foreground">· {g.mode}</span>}
+                      {g.game} {!coins && <span className="font-normal text-muted-foreground">· {g.mode === 'admin' ? 'turnuva, sonucu yönetim girdi' : g.mode}</span>}
                     </span>
                     <span className="truncate text-xs text-muted-foreground">
                       {coins
