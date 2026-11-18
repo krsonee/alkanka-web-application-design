@@ -47,6 +47,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Turnuva şablonları', words: 'şablon kalıp tekrar aç haftalık kupa', row: 'tournaments' },
   { title: 'Turnuva sıralama ödülleri', words: 'sıralama ödülü ikinci üçüncü ödül havuzu kontenjan kişi sayısı kazanan sıra ekle kazanan sayısı', row: 'tournaments' },
   { title: 'Turnuva bitiş saati ve maça giriş süresi', words: 'bitiş saati süre hükmen gelmeyen oyuncu maça giriş dakika otomatik başlat hamle süresi pes', row: 'tournaments' },
+  { title: 'Turnuva lig çeşitleri: günlük, haftalık, puan ligi', words: 'lig usulü fikstür tur aralığı her gün 1 tur her hafta 1 tur haftada bir maç günde bir maç tek devre çift devre puan ligi kendi oyunları sayılan oyunlar oyun sınırı', row: 'tournaments' },
   { title: 'Turnuva maç uzunluğu (tavla, okey)', words: 'maç uzunluğu tek el 3 puanlık 5 puanlık mars puandan düşüş puanlı okey kaç el', row: 'tournaments' },
   { title: 'Turnuva maç listesi ve oyuncu durumu', words: 'maçlar maç listesi açık maç kim geldi masaya girdi hükmen nasıl bitti oyuncu durumu istatistik galibiyet mağlubiyet kazanan seç elle sonuç', row: 'tournaments' },
   { title: 'Turnuva oyunları: birebir ve 4 kişilik ortak masa', words: 'ortak masa 4 kişilik birebir 101 okey batak pişti jakopoly monopoly tur atlama bot masa birincisi', row: 'tournaments' },

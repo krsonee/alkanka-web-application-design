@@ -1,5 +1,5 @@
 import type { ArenaGame } from './arena'
-import { roundLabel, type Bracket } from './bracket'
+import { roundLabel, type Bracket, type PointRow } from './bracket'
 
 export const TOURNAMENT_STATUSES = ['kayit', 'basladi', 'bitti', 'iptal'] as const
 export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number]
@@ -19,17 +19,88 @@ export const MAX_TOURNAMENT_PLAYERS = 1024
  */
 export const TOURNAMENT_MONEY_GAME = 'turnuva'
 
-export const TOURNAMENT_FORMATS = ['eleme', 'lig'] as const
+/**
+ * `eleme`: knockout. `lig`: a fixture league, everyone meets everyone at tournament tables.
+ * `puan`: a points league with no matches of its own, where the entrants' ordinary games of the
+ * tournament's game earn points until the end time.
+ */
+export const TOURNAMENT_FORMATS = ['eleme', 'lig', 'puan'] as const
 export type TournamentFormat = (typeof TOURNAMENT_FORMATS)[number]
 
 export const FORMAT_LABEL: Record<TournamentFormat, string> = {
   eleme: 'Eleme (kaybeden elenir)',
-  lig: 'Lig (herkes herkesle, puanlı)',
+  lig: 'Fikstürlü lig (herkes herkesle oynar)',
+  puan: 'Puan ligi (herkes kendi oyunlarından puan toplar)',
 }
 
-export const FORMAT_SHORT: Record<TournamentFormat, string> = { eleme: 'Eleme', lig: 'Lig' }
+export const FORMAT_SHORT: Record<TournamentFormat, string> = { eleme: 'Eleme', lig: 'Lig', puan: 'Puan ligi' }
 
 export const isTournamentFormat = (v: unknown): v is TournamentFormat => TOURNAMENT_FORMATS.includes(v as TournamentFormat)
+
+/** The stored format; anything unreadable is a knockout, as tournaments from before formats were. */
+export const readFormat = (v: unknown): TournamentFormat => (isTournamentFormat(v) ? v : 'eleme')
+
+/** How often a fixture league opens a round. `ardarda`: as soon as the round before it is over. */
+export const LEAGUE_PACES = ['ardarda', 'gunluk', 'haftalik'] as const
+export type LeaguePace = (typeof LEAGUE_PACES)[number]
+
+export const PACE_LABEL: Record<LeaguePace, string> = {
+  ardarda: 'Aynı oturumda: turlar art arda',
+  gunluk: 'Her gün 1 tur',
+  haftalik: 'Her hafta 1 tur',
+}
+
+export const PACE_SHORT: Record<LeaguePace, string> = { ardarda: 'turlar art arda', gunluk: 'her gün 1 tur', haftalik: 'her hafta 1 tur' }
+
+const DAY_MS = 86_400_000
+export const PACE_MS: Record<LeaguePace, number> = { ardarda: 0, gunluk: DAY_MS, haftalik: 7 * DAY_MS }
+
+/** Which finished games earn points in a points league: tables against members only, or games against the bot too. */
+export const POINT_SOURCES = ['pvp', 'hepsi'] as const
+export type PointSource = (typeof POINT_SOURCES)[number]
+
+export const SOURCE_LABEL: Record<PointSource, string> = {
+  pvp: 'Sadece üyelere karşı oynanan masalar',
+  hepsi: 'Üyelere ve bota karşı oynanan oyunlar',
+}
+
+/** The `mode` values of the history rows each source counts. */
+export const SOURCE_MODES: Record<PointSource, string[]> = { pvp: ['pvp'], hepsi: ['pvp', 'bot'] }
+
+/** How many of a player's games count in a points league, from the first one on. 0: all of them. */
+export const POINT_GAME_CAPS = [0, 10, 20, 30, 50, 100] as const
+
+/** A league's own settings. A fixture league reads `pace` and `legs`, a points league `source` and `maxGames`. */
+export type LeagueSettings = { pace: LeaguePace; legs: 1 | 2; source: PointSource; maxGames: number }
+
+export const DEFAULT_LEAGUE: LeagueSettings = { pace: 'ardarda', legs: 1, source: 'pvp', maxGames: 0 }
+
+export function cleanLeague(raw: unknown): LeagueSettings {
+  const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const games = Number(d.maxGames)
+  return {
+    pace: LEAGUE_PACES.includes(d.pace as LeaguePace) ? (d.pace as LeaguePace) : DEFAULT_LEAGUE.pace,
+    legs: Number(d.legs) === 2 ? 2 : 1,
+    source: POINT_SOURCES.includes(d.source as PointSource) ? (d.source as PointSource) : DEFAULT_LEAGUE.source,
+    maxGames: (POINT_GAME_CAPS as readonly number[]).includes(games) ? games : DEFAULT_LEAGUE.maxGames,
+  }
+}
+
+/** Rounds a fixture league plays with this many players: one fewer than the field, rounded up to even, per leg. */
+export const leagueRounds = (players: number, legs: number) => Math.max(0, players + (players % 2) - 1) * legs
+
+/** When a round of a paced league opens. The first opens with the tournament, each later one a day or a week after the one before. */
+export const roundOpensAt = (startsAt: string | Date, index: number, pace: LeaguePace) => new Date(new Date(startsAt).getTime() + index * PACE_MS[pace])
+
+/** Minutes a paced league has to stay open after its last round opens, so that round can be played. */
+export const LAST_ROUND_MINUTES = 60
+
+/** The earliest end time a fixture league with these settings can have, or null when its rounds follow one another. */
+export function earliestLeagueEnd(startsAt: string | Date, players: number, league: Pick<LeagueSettings, 'pace' | 'legs'>) {
+  if (!PACE_MS[league.pace]) return null
+  const last = roundOpensAt(startsAt, Math.max(0, leagueRounds(players, league.legs) - 1), league.pace)
+  return new Date(last.getTime() + LAST_ROUND_MINUTES * 60_000)
+}
 
 export type TournamentEntry = { id: number; userId: string | null; nickname: string; telegram: string; createdAt: string }
 
@@ -55,8 +126,8 @@ export const matchHref = (m: Pick<MyMatch, 'game' | 'tableId'>) => `/oyunlar/${m
  */
 export type TableTour = { title: string; round: string; league: boolean; joinBy?: string; pass?: number }
 
-/** Minutes a player has to sit down at a match once its table opens. */
-export const JOIN_MINUTES = [3, 5, 10, 15] as const
+/** Minutes a player has to sit down at a match once its table opens. The long ones are for leagues that open a round a day or a week. */
+export const JOIN_MINUTES = [3, 5, 10, 15, 30, 60] as const
 export const DEFAULT_JOIN_MINUTES = 5
 export const cleanJoinMinutes = (v: unknown) => ((JOIN_MINUTES as readonly number[]).includes(Number(v)) ? Number(v) : DEFAULT_JOIN_MINUTES)
 
@@ -176,11 +247,14 @@ export const tournamentSeats = (game: string): number | null =>
 export const canHostTournament = (game: string) => tournamentSeats(game) !== null
 export const isTableTournament = (game: string) => (tournamentSeats(game) ?? 2) > 2
 
-/** A shared table has no league: everyone cannot meet everyone four at a time. */
-export const formatsFor = (game: string): readonly TournamentFormat[] => (isTableTournament(game) ? ['eleme'] : TOURNAMENT_FORMATS)
+/** A shared table has no fixture league: everyone cannot meet everyone four at a time. A points league needs no fixtures. */
+export const formatsFor = (game: string): readonly TournamentFormat[] => (isTableTournament(game) ? ['eleme', 'puan'] : TOURNAMENT_FORMATS)
 
 /** Entrants a tournament needs at its start time: two for a duel, one full table otherwise. */
 export const minEntrants = (seats: number) => Math.max(2, seats)
+
+/** The same for a given format: a points league seats nobody, so two entrants are enough whatever the game. */
+export const entrantsNeeded = (format: TournamentFormat, seats: number) => (format === 'puan' ? 2 : minEntrants(seats))
 
 export type Tournament = {
   id: number
@@ -206,6 +280,11 @@ export type Tournament = {
   finishReason: FinishReason | null
   status: TournamentStatus
   format: TournamentFormat
+  league: LeagueSettings
+  /** A paced league between two rounds: when the next one opens. Null otherwise. */
+  nextRoundAt: string | null
+  /** Standing of a points league, best first: live while it runs, final once it is over. Null for other formats and before the start. */
+  points: PointRow[] | null
   winner: string | null
   bracket: Bracket | null
   entries: TournamentEntry[]
@@ -215,12 +294,49 @@ export type Tournament = {
   currentRound: number | null
 }
 
+/** A tournament whose start time has passed is still expected to start for this long. */
+const START_GRACE_MS = 10 * 60_000
+
+/**
+ * How quickly what the public sees of a tournament can change without the viewer doing anything.
+ * `fast`: a match is being played or about to open. `slow`: a league that is only waiting for the day
+ * of its next round, or a points league, which moves when its entrants finish their own games.
+ * Null: nothing moves by itself. A league runs for days, so its pages must not ask as often as a live match.
+ */
+export function tournamentPulse(
+  t: Pick<Tournament, 'status' | 'format' | 'startsAt' | 'nextRoundAt' | 'liveMatches'>,
+  now: number,
+  soonMs: number,
+): 'fast' | 'slow' | null {
+  if (t.status === 'kayit') {
+    const until = Date.parse(t.startsAt) - now
+    return until < soonMs && until > -START_GRACE_MS ? 'fast' : null
+  }
+  if (t.status !== 'basladi') return null
+  if (t.format === 'puan') return 'slow'
+  if (t.nextRoundAt && !t.liveMatches.length && Date.parse(t.nextRoundAt) - now > soonMs) return 'slow'
+  return 'fast'
+}
+
+/** The quickest pulse among the listed tournaments. */
+export function listPulse(list: Parameters<typeof tournamentPulse>[0][], now: number, soonMs: number) {
+  const all = list.map((t) => tournamentPulse(t, now, soonMs))
+  return all.includes('fast') ? 'fast' : all.includes('slow') ? 'slow' : null
+}
+
 export const MAX_TOURNAMENT_TEMPLATES = 30
 
 /** How long a tournament opened from a template runs when the template was saved before it kept a length. */
 export const DEFAULT_TOURNAMENT_MINUTES = 180
 /** A week: longer than that is a typing mistake, not a tournament. */
 export const MAX_TOURNAMENT_MINUTES = 7 * 24 * 60
+/** A league can open a round a week: sixteen players over two legs take thirty of them. */
+export const MAX_LEAGUE_MINUTES = 366 * 24 * 60
+/** How long a points league runs when the form is switched to it. */
+export const DEFAULT_POINTS_MINUTES = 7 * 24 * 60
+
+/** The longest a tournament of this format may run, from start to end. */
+export const maxTournamentMinutes = (format: TournamentFormat) => (format === 'eleme' ? MAX_TOURNAMENT_MINUTES : MAX_LEAGUE_MINUTES)
 
 /**
  * A tournament's settings without its date, players or results. `startTime` is Istanbul time, HH:MM;
@@ -243,6 +359,7 @@ export type TournamentTemplate = {
   lengthMinutes: number
   joinMinutes: number
   matchLength: number | null
+  league: LeagueSettings
 }
 
 export const displayName = (t: Pick<Tournament, 'names'>, key: string | null) => (key ? (t.names[key] ?? key) : null)

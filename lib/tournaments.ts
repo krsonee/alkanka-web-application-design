@@ -6,25 +6,31 @@ import { getBalance, recordHistory, type Member } from '@/lib/member'
 import { assertCanPlay } from '@/lib/member-limits'
 import { applyCoins, ensureLedger } from '@/lib/wallet-ledger'
 import type { ArenaGame } from './arena'
-import { anyWin, bracketChampion, bracketOver, createBracket, createTableBracket, isDecided, isRealMatch, openRound, setMatchWinner, setTableResult, voidMatch, type Bracket } from './bracket'
+import { anyWin, bracketChampion, bracketOver, createBracket, createTableBracket, isDecided, isRealMatch, openRound, setMatchWinner, setTableResult, voidMatch, type Bracket, type PointRow } from './bracket'
 import { createLeague, leagueStandings, MAX_LEAGUE_PLAYERS, setLeagueWinner, voidLeagueMatch } from './league'
 import { initState } from './pvp/rules'
 import { pickBotNames } from './pvp/tables'
 import { tournamentTable } from './tournament-games'
+import { livePointStandings, pointStandings, type PointWindow } from './tournament-points'
 import { cleanPrizes, prizeTotal, tournamentPayouts, type Payout } from './tournament-prizes'
 import {
   MATCH_END_LABEL,
   matchHistoryMode,
   MAX_TOURNAMENT_PLAYERS,
+  PACE_MS,
   TABLE_PASS,
   TOURNAMENT_MONEY_GAME,
   cleanJoinMinutes,
+  cleanLeague,
   cleanMatchLength,
+  entrantsNeeded,
   isFinishReason,
-  minEntrants,
+  readFormat,
   roundName,
+  roundOpensAt,
   tournamentSeats,
   type FinishReason,
+  type LeagueSettings,
   type LiveMatch,
   type MyMatch,
   type TableTour,
@@ -70,6 +76,16 @@ const isoOrNull = (v: unknown) => (v ? toDate(v).toISOString() : null)
 const passed = (v: unknown) => Boolean(v) && toDate(v).getTime() <= Date.now()
 const joinMinutesOf = (row: Row) => cleanJoinMinutes((row.settings as { joinMinutes?: unknown } | null)?.joinMinutes)
 const matchLengthOf = (row: Row) => cleanMatchLength(String(row.game), (row.settings as { matchLength?: unknown } | null)?.matchLength)
+const leagueOf = (row: Row) => cleanLeague((row.settings as { league?: unknown } | null)?.league)
+
+/** The games a points league counts: from the moment it started until its end time, or until now while it has none. */
+const pointWindow = (row: Row, bracket: Bracket | null): PointWindow => ({
+  id: Number(row.id),
+  game: String(row.game),
+  from: toDate(bracket?.from ?? row.starts_at),
+  to: row.ends_at ? toDate(row.ends_at) : new Date(),
+  league: leagueOf(row),
+})
 
 /**
  * Players per table. Once paired, a tournament keeps the size it was paired with, so one that started
@@ -80,12 +96,14 @@ const tableSizeOf = (row: Row) => {
   return bracket ? (bracket.seats ?? 2) : (tournamentSeats(String(row.game)) ?? 2)
 }
 
-function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
+function mapRow(r: Row, entries: Row[], tables: Row[], livePoints?: PointRow[]): Tournament {
   const own = entries.filter((e) => e.tournament_id === r.id)
   const names: Record<string, string> = {}
   for (const e of own) names[entryKey(e)] = String(e.nickname)
   const bracket = (r.bracket as Bracket | null) ?? null
   const tableSize = tableSizeOf(r)
+  const format = readFormat(r.format)
+  const league = leagueOf(r)
   const liveMatches: LiveMatch[] = tables
     .filter((t) => t.tournament_id === r.id)
     .map((t) => ({
@@ -100,6 +118,12 @@ function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
     const idx = bracket.rounds.findIndex((round) => round.some((m) => isRealMatch(m) && !isDecided(m)))
     currentRound = idx >= 0 ? idx : null
   }
+  // A paced league waits for the day of its next round once the round before it is played out.
+  let nextRoundAt: string | null = null
+  if (format === 'lig' && PACE_MS[league.pace] && currentRound != null && currentRound > 0 && !liveMatches.some((m) => m.round === currentRound)) {
+    const opens = roundOpensAt(toDate(r.starts_at), currentRound, league.pace)
+    if (opens.getTime() > Date.now()) nextRoundAt = opens.toISOString()
+  }
   return {
     id: Number(r.id),
     game: r.game as ArenaGame,
@@ -108,7 +132,7 @@ function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
     rules: String(r.rules ?? ''),
     entryFee: Number(r.entry_fee),
     prizePool: Number(r.prize_pool),
-    prizes: cleanPrizes(r.prizes, r.format === 'lig' ? 'lig' : 'eleme', Number(r.max_players), tableSize),
+    prizes: cleanPrizes(r.prizes, format, Number(r.max_players), tableSize),
     prizeNote: String(r.prize_note ?? ''),
     maxPlayers: Number(r.max_players),
     tableSize,
@@ -119,7 +143,10 @@ function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
     finishedAt: isoOrNull(r.finished_at),
     finishReason: isFinishReason(r.finish_reason) ? r.finish_reason : null,
     status: r.status as TournamentStatus,
-    format: r.format === 'lig' ? 'lig' : 'eleme',
+    format,
+    league,
+    nextRoundAt,
+    points: format === 'puan' ? (bracket?.table?.length ? bracket.table : (livePoints ?? null)) : null,
     winner: (r.winner as string | null) ?? null,
     bracket,
     names,
@@ -144,7 +171,18 @@ async function load(where: string, params: unknown[]) {
     pool.query(`SELECT id, tournament_id, round_no, match_no, players, status FROM game_tables
       WHERE tournament_id = ANY($1) AND status = 'oynaniyor'`, [ids]),
   ])
-  return t.rows.map((r) => mapRow(r, entries.rows, tables.rows))
+  // A running points league has no table of its own yet: its standing is read from the entrants' games.
+  const points = new Map<unknown, PointRow[]>()
+  for (const r of t.rows) {
+    if (r.status !== 'basladi' || readFormat(r.format) !== 'puan' || !r.bracket) continue
+    const order = entries.rows.filter((e) => e.tournament_id === r.id).map(entryKey)
+    const rows = await livePointStandings(pointWindow(r, r.bracket as Bracket), order).catch((error) => {
+      console.error('[tournaments] puan durumu okunamadı', (error as Error).message)
+      return undefined
+    })
+    if (rows) points.set(r.id, rows)
+  }
+  return t.rows.map((r) => mapRow(r, entries.rows, tables.rows, points.get(r.id)))
 }
 
 /** Like `listTournaments`, but a failed read is an error instead of an empty list. */
@@ -189,6 +227,8 @@ export type TournamentInput = {
   /** How long one match is, for the games with that choice. */
   matchLength?: number | null
   format: TournamentFormat
+  /** A league's own settings: round pace and legs for a fixture league, counted games for a points league. */
+  league?: Partial<LeagueSettings>
 }
 
 /** What may still change once the first matches are open. */
@@ -258,7 +298,11 @@ function prizeColumns(t: TournamentInput) {
 
 const settingsOf = (t: TournamentInput) => {
   const matchLength = cleanMatchLength(t.game, t.matchLength)
-  return JSON.stringify({ joinMinutes: cleanJoinMinutes(t.joinMinutes), ...(matchLength === null ? {} : { matchLength }) })
+  return JSON.stringify({
+    joinMinutes: cleanJoinMinutes(t.joinMinutes),
+    ...(matchLength === null ? {} : { matchLength }),
+    ...(t.format === 'eleme' ? {} : { league: cleanLeague(t.league) }),
+  })
 }
 
 export async function createTournament(t: TournamentInput) {
@@ -546,9 +590,19 @@ async function pairIn(client: PoolClient, row: Row) {
   const seats = tournamentSeats(String(row.game))
   if (!seats) throw new Error('Bu oyunda turnuva oynanamıyor.')
   const entries = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [row.id])
-  if (entries.rows.length < minEntrants(seats)) throw new Error(`Başlatmak için en az ${minEntrants(seats)} oyuncu gerekli.`)
+  const format = readFormat(row.format)
+  const needed = entrantsNeeded(format, seats)
+  if (entries.rows.length < needed) throw new Error(`Başlatmak için en az ${needed} oyuncu gerekli.`)
   const keys = entries.rows.map(entryKey)
-  const bracket = seats > 2 ? createTableBracket(keys, seats, TABLE_PASS) : row.format === 'lig' ? createLeague(keys) : createBracket(keys, 2)
+  // A points league pairs nobody. Its games count from the announced start, or from now when it is started early.
+  const bracket: Bracket =
+    format === 'puan'
+      ? { group: 2, rounds: [], from: (passed(row.starts_at) ? toDate(row.starts_at) : new Date()).toISOString() }
+      : seats > 2
+        ? createTableBracket(keys, seats, TABLE_PASS)
+        : format === 'lig'
+          ? createLeague(keys, leagueOf(row).legs)
+          : createBracket(keys, 2)
   await client.query(`UPDATE tournaments SET status = 'basladi', bracket = $2::jsonb, winner = NULL, table_size = $3 WHERE id = $1`, [
     row.id,
     JSON.stringify(bracket),
@@ -593,7 +647,7 @@ export async function startDueTournament(id: number) {
       ? 'gec'
       : unplayable(row)
         ? 'oyun'
-        : entered.rows[0].n < minEntrants(tournamentSeats(String(row.game)) ?? 2)
+        : entered.rows[0].n < entrantsNeeded(readFormat(row.format), tournamentSeats(String(row.game)) ?? 2)
           ? 'kayit-yok'
           : null
     if (reason) return { closed: await cancelIn(client, row, reason) }
@@ -611,22 +665,52 @@ export async function startDueTournament(id: number) {
 
 type Opened = { game: string; title: string; round: string; joinMinutes: number; shared: boolean; matches: { tableId: string; players: { id: string; name: string }[] }[] }
 
+/** How soon the clock looks again at a paced league whose round is being played. */
+const ROUND_RECHECK_MS = 30_000
+
+/**
+ * When the clock next has to look at a tournament by itself. Every other round is opened by the result
+ * that ends the round before it; only a paced league has a round that opens because its day has come.
+ * Kept per server instance: a tournament not listed here is simply looked at once.
+ */
+const roundClock = new Map<number, number>()
+
+/** For the tournament clock: opens the round of a paced league whose day has come. Costs nothing until that moment. */
+export async function openDueRound(id: number) {
+  if ((roundClock.get(id) ?? 0) > Date.now()) return
+  await openReadyMatches(id)
+}
+
 /**
  * Opens a table for every match whose players are known and still unplayed, but only
  * once the whole previous round has finished so winners wait and advance together. When
  * nothing is left to play it closes the tournament instead. At a shared table the seats
  * nobody is named for go to bots, which can neither go through nor win anything.
+ * A league that plays a round a day or a week also waits for that round's moment.
  */
 async function openReadyMatches(id: number) {
   await ensureAll()
   const out = await withTournament(id, async (client, row): Promise<{ closed?: Closed | null; opened?: Opened } | null> => {
     if (!row || row.status !== 'basladi' || !row.bracket) return null
+    const format = readFormat(row.format)
+    const pace = format === 'lig' ? leagueOf(row).pace : 'ardarda'
+    roundClock.set(id, PACE_MS[pace] ? Date.now() + ROUND_RECHECK_MS : Number.POSITIVE_INFINITY)
+    // A points league has no matches to open and is only ever closed by its end time.
+    if (format === 'puan') return null
     const bracket = row.bracket as Bracket
     if (bracketOver(bracket)) return { closed: await finishTournament(client, row, bracket, 'tamam') }
     // Past the end time no new match opens: the tournament is about to be closed as it stands.
     if (passed(row.ends_at)) return null
     const roundIdx = openRound(bracket)
     if (roundIdx < 0) return null
+    // The first round opens with the tournament, also when the panel starts it ahead of its hour.
+    if (PACE_MS[pace] && roundIdx > 0) {
+      const opens = roundOpensAt(toDate(row.starts_at), roundIdx, pace).getTime()
+      if (opens > Date.now()) {
+        roundClock.set(id, opens)
+        return null
+      }
+    }
     const seats = bracket.seats ?? 2
     const setup = tournamentTable(String(row.game), seats, matchLengthOf(row))
     const existing = await client.query(
@@ -653,7 +737,7 @@ async function openReadyMatches(id: number) {
       })
     }
     if (!tables.length) return null
-    const league = row.format === 'lig'
+    const league = format === 'lig'
     const shared = seats > 2
     const joinMinutes = joinMinutesOf(row)
     const round = roundName(league, roundIdx, bracket.rounds.length)
@@ -701,13 +785,23 @@ async function openReadyMatches(id: number) {
  * Writes the result inside the caller's transaction. `tamam`: every match is decided. `sure`: the end
  * time came first, so the league stands as it is and a knockout without a champion shares its top prizes.
  * A tournament in which nobody won a single match was not played: it is cancelled and the fees go back.
+ * A points league is ranked here, from the games its entrants finished before the end time; one in which
+ * no entrant finished a counted game was not played either.
  */
-async function finishTournament(client: PoolClient, row: Row, bracket: Bracket, reason: 'tamam' | 'sure'): Promise<Closed | null> {
-  if (!anyWin(bracket)) return cancelIn(client, row, 'oynanmadi')
+async function finishTournament(client: PoolClient, row: Row, played: Bracket, reason: 'tamam' | 'sure'): Promise<Closed | null> {
+  const format: TournamentFormat = readFormat(row.format)
+  if (format !== 'puan' && !anyWin(played)) return cancelIn(client, row, 'oynanmadi')
   const entries = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [row.id])
   const order = entries.rows.map(entryKey)
-  const format: TournamentFormat = row.format === 'lig' ? 'lig' : 'eleme'
-  const champion = format === 'lig' ? (leagueStandings(bracket, order)[0]?.key ?? null) : bracketChampion(bracket)
+  let bracket = played
+  if (format === 'puan') {
+    const table = await pointStandings(client, pointWindow(row, played), order)
+    if (!table.some((line) => line.played > 0)) return cancelIn(client, row, 'oynanmadi')
+    bracket = { ...played, table }
+  }
+  const top = bracket.table?.[0]
+  const champion =
+    format === 'lig' ? (leagueStandings(bracket, order)[0]?.key ?? null) : format === 'puan' ? (top && top.points > 0 ? top.key : null) : bracketChampion(bracket)
   const who = champion ? entries.rows.find((x) => entryKey(x) === champion) : undefined
   const upd = await client.query(
     `UPDATE tournaments SET status = 'bitti', winner = $2, bracket = $3::jsonb, finished_at = now(), finish_reason = $4

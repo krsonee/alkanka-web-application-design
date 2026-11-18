@@ -1,6 +1,8 @@
-import type { Bracket, Match } from './bracket'
+import type { Bracket, Match, PointRow } from './bracket'
 
 export const LEAGUE_WIN_POINTS = 3
+/** A points league counts ordinary games, and those can end level. */
+export const LEAGUE_DRAW_POINTS = 1
 export const MAX_LEAGUE_PLAYERS = 16
 
 export type Standing = { key: string; played: number; wins: number; losses: number; points: number; remaining: number }
@@ -14,8 +16,11 @@ function shuffle<T>(list: T[]) {
   return a
 }
 
-/** Round-robin schedule (circle method): everyone meets everyone exactly once, byes are left out. */
-export function createLeague(keys: string[]): Bracket {
+/**
+ * Round-robin schedule (circle method): everyone meets everyone once, byes are left out.
+ * With two legs the same rounds are played again with the seats swapped.
+ */
+export function createLeague(keys: string[], legs: 1 | 2 = 1): Bracket {
   const players: (string | null)[] = shuffle(keys)
   if (players.length % 2) players.push(null)
   const n = players.length
@@ -30,7 +35,22 @@ export function createLeague(keys: string[]): Bracket {
     rounds.push(round)
     players.splice(1, 0, players.pop()!)
   }
-  return { group: 2, rounds }
+  const second: Match[][] = legs === 2 ? rounds.map((round) => round.map((m) => ({ players: [m.players[1], m.players[0]], winner: null }))) : []
+  return { group: 2, rounds: [...rounds, ...second] }
+}
+
+/**
+ * Standing of a points league, best first: points, then whoever actually played, then the fewer games
+ * it took, then registration order. Entrants without a counted game are listed last with an empty line.
+ */
+export function rankPoints(rows: PointRow[], order: string[] = []): PointRow[] {
+  const byKey = new Map(rows.map((r) => [r.key, r]))
+  const all = [...rows, ...order.filter((key) => !byKey.has(key)).map((key) => ({ key, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))]
+  const rank = (key: string) => {
+    const i = order.indexOf(key)
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i
+  }
+  return all.sort((x, y) => y.points - x.points || Number(y.played > 0) - Number(x.played > 0) || x.played - y.played || rank(x.key) - rank(y.key))
 }
 
 /** `noShow` names the players who lost by not sitting down; it is kept with the result. */
@@ -39,7 +59,7 @@ export function setLeagueWinner(b: Bracket, round: number, match: number, winner
   if (!m || (winner && !m.players.includes(winner))) return b
   const result: Match = { players: [...m.players], winner, ...(winner && noShow.length ? { noShow } : {}) }
   return {
-    group: b.group,
+    ...b,
     rounds: b.rounds.map((r, ri) => r.map((x, mi) => (ri === round && mi === match ? result : { ...x, players: [...x.players] }))),
   }
 }
@@ -50,7 +70,7 @@ export function voidLeagueMatch(b: Bracket, round: number, match: number, noShow
   if (!m || m.winner) return b
   const result: Match = { players: [...m.players], winner: null, void: true, ...(noShow.length ? { noShow } : {}) }
   return {
-    group: b.group,
+    ...b,
     rounds: b.rounds.map((r, ri) => r.map((x, mi) => (ri === round && mi === match ? result : { ...x, players: [...x.players] }))),
   }
 }

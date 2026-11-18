@@ -1,8 +1,8 @@
 import { bracketChampion, isDecided, isRealMatch, passedOn, type Bracket } from './bracket'
 import { MAX_LEAGUE_PLAYERS, leagueStandings } from './league'
-import { TABLE_PASS } from './tournaments-shared'
+import { MAX_TOURNAMENT_PLAYERS, TABLE_PASS, type TournamentFormat } from './tournaments-shared'
 
-type Format = 'eleme' | 'lig'
+type Format = TournamentFormat
 
 export const MAX_PRIZE_KC = 10_000_000
 /** The pool is stored as a 32-bit number, and a place deep in a big bracket is paid to hundreds of players. */
@@ -14,6 +14,8 @@ const KNOCKOUT_SIZES = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 /** `seats` is the table size: 2 for a duel, more at shared tables, where the field has to fill whole tables. */
 export function playerOptions(format: Format, seats = 2): number[] {
   if (format === 'eleme') return KNOCKOUT_SIZES.filter((n) => n >= seats)
+  // Nobody is paired in a points league, so its field is only a ceiling on the entries.
+  if (format === 'puan') return KNOCKOUT_SIZES
   return Array.from({ length: MAX_LEAGUE_PLAYERS / 2 }, (_, i) => (i + 1) * 2)
 }
 
@@ -28,7 +30,9 @@ export function snapPlayers(format: Format, n: number, seats = 2) {
 export const playerRuleText = (format: Format, seats = 2) =>
   format === 'eleme'
     ? `${seats > 2 ? `${seats} kişilik masalarda oynanan turnuvada` : 'Eleme turnuvasında'} kontenjan ${playerOptions(format, seats).join(', ')} olabilir.`
-    : `Lig turnuvasında kontenjan 2 ile ${MAX_LEAGUE_PLAYERS} arasında çift sayı olabilir.`
+    : format === 'puan'
+      ? `Puan liginde kontenjan ${playerOptions(format).join(', ')} olabilir.`
+      : `Fikstürlü ligde kontenjan 2 ile ${MAX_LEAGUE_PLAYERS} arasında çift sayı olabilir.`
 
 /** `count` is how many players can finish in that place: a knockout has no match to split the losing semi-finalists. */
 export type PrizePlace = { label: string; hint: string; count: number }
@@ -42,8 +46,9 @@ const ROUND_NAMES = ['yarı final', 'çeyrek final']
  * player by player followed by one shared place for the players each earlier round puts out.
  */
 export function prizePlaces(format: Format, maxPlayers: number, seats = 2): PrizePlace[] {
-  if (format === 'lig') {
-    return Array.from({ length: Math.max(1, Math.min(MAX_LEAGUE_PLAYERS, maxPlayers)) }, (_, i) => ({
+  if (format !== 'eleme') {
+    const most = format === 'lig' ? MAX_LEAGUE_PLAYERS : MAX_TOURNAMENT_PLAYERS
+    return Array.from({ length: Math.max(1, Math.min(most, maxPlayers)) }, (_, i) => ({
       label: `${i + 1}.`,
       hint: i === 0 ? 'şampiyon' : 'puan durumuna göre',
       count: 1,
@@ -110,6 +115,8 @@ function attended(bracket: Bracket) {
  */
 export function tournamentPlacements(format: Format, bracket: Bracket | null, order: string[] = []): Placement[] {
   if (!bracket) return []
+  // A points league is ranked by its closing table; only a player with a counted game has a place.
+  if (format === 'puan') return (bracket.table ?? []).flatMap((row, place) => (row.played > 0 ? [{ key: row.key, place }] : []))
   const present = attended(bracket)
   if (format === 'lig') {
     return leagueStandings(bracket, order).flatMap((s, place) => (present.has(s.key) ? [{ key: s.key, place }] : []))

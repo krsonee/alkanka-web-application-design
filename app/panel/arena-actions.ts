@@ -23,7 +23,25 @@ import {
 } from '@/lib/tournaments'
 import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tournament-templates'
 import { listTournamentMatches } from '@/lib/tournament-matches'
-import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, cleanMatchLength, formatsFor, matchLengthOf, isTournamentFormat, tournamentSeats, type MatchRecord } from '@/lib/tournaments-shared'
+import {
+  FORMAT_SHORT,
+  MAX_TOURNAMENT_TEMPLATES,
+  MIN_TOURNAMENT_MINUTES,
+  PACE_SHORT,
+  SOURCE_LABEL,
+  canHostTournament,
+  cleanJoinMinutes,
+  cleanLeague,
+  cleanMatchLength,
+  earliestLeagueEnd,
+  formatsFor,
+  isTournamentFormat,
+  leagueRounds,
+  matchLengthOf,
+  maxTournamentMinutes,
+  tournamentSeats,
+  type MatchRecord,
+} from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { MAX_PRIZE_KC, MAX_PRIZE_POOL_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces, prizeTotal } from '@/lib/tournament-prizes'
 import type { ActionState } from './actions'
@@ -134,12 +152,25 @@ function readTournament(form: FormData): TournamentInput {
   const endsAt = readEnd(form, start, 'başlangıçtan')
   const rawFormat = form.get('format')
   const format = isTournamentFormat(rawFormat) ? rawFormat : 'eleme'
-  if (!formatsFor(game).includes(format)) throw new Error(`${ARENA_META[game].title} ${seats} kişilik ortak masalarda oynanıyor; bu oyunda lig düzeni yok. Düzeni eleme seç.`)
+  if (!formatsFor(game).includes(format)) throw new Error(`${ARENA_META[game].title} ${seats} kişilik ortak masalarda oynanıyor; bu oyunda fikstürlü lig yok. Düzeni eleme ya da puan ligi seç.`)
   const maxPlayers = int(form, 'maxPlayers', 'Kişi sayısı', 2, MAX_TOURNAMENT_PLAYERS)
   if (format === 'lig' && maxPlayers > MAX_LEAGUE_PLAYERS) {
-    throw new Error(`Lig formatında en fazla ${MAX_LEAGUE_PLAYERS} oyuncu olabilir (herkes herkesle oynar).`)
+    throw new Error(`Fikstürlü ligde en fazla ${MAX_LEAGUE_PLAYERS} oyuncu olabilir (herkes herkesle oynar).`)
   }
   if (!isPlayerCount(format, maxPlayers, seats)) throw new Error(playerRuleText(format, seats))
+  const league = cleanLeague({ pace: form.get('pace'), legs: form.get('legs'), source: form.get('source'), maxGames: form.get('maxGames') })
+  // A league can run for months, so a mistyped year would keep it open; a knockout keeps the rule it always had.
+  const longest = maxTournamentMinutes(format)
+  if (format !== 'eleme' && Date.parse(endsAt) - start.getTime() > longest * 60_000) {
+    throw new Error(`Lig başlangıçtan en fazla ${Math.round(longest / 1440)} gün sonra bitebilir. Bitiş tarihini kontrol et.`)
+  }
+  // A league that opens a round a day or a week must stay open until its last round has been played.
+  const earliest = format === 'lig' ? earliestLeagueEnd(start, maxPlayers, league) : null
+  if (earliest && Date.parse(endsAt) < earliest.getTime()) {
+    throw new Error(
+      `Bu lig ${leagueRounds(maxPlayers, league.legs)} tur sürer ve ${PACE_SHORT[league.pace]} açılır. Bitiş en erken ${istanbulText(earliest)} olmalı; yoksa son turlar oynanmadan lig kapanır.`,
+    )
+  }
   // The form only sends the places a prize was added for; the rest pay nothing.
   const prizes = cleanPrizes(
     prizePlaces(format, maxPlayers, seats).map((_, i) => (form.get(`prize${i}`) == null ? 0 : int(form, `prize${i}`, 'Sıralama ödülü', 0, MAX_PRIZE_KC))),
@@ -163,7 +194,19 @@ function readTournament(form: FormData): TournamentInput {
     endsAt,
     joinMinutes: cleanJoinMinutes(form.get('joinMinutes')),
     matchLength: cleanMatchLength(game, form.get('matchLength')),
+    league,
   }
+}
+
+const istanbulText = (at: Date) =>
+  new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(at)
+
+/** The format as the panel's log names it, with the choices that belong to it. */
+function formatText(t: TournamentInput) {
+  const league = cleanLeague(t.league)
+  if (t.format === 'lig') return `${FORMAT_SHORT.lig} (${PACE_SHORT[league.pace]}, ${league.legs === 2 ? 'çift devre' : 'tek devre'})`
+  if (t.format === 'puan') return `${FORMAT_SHORT.puan} (${SOURCE_LABEL[league.source].toLocaleLowerCase('tr')}, ${league.maxGames ? `ilk ${league.maxGames} oyun` : 'oyun sınırı yok'})`
+  return FORMAT_SHORT.eleme
 }
 
 const CLOSED_MESSAGE = 'Bu turnuva bitmiş ya da iptal edilmiş, artık değiştirilemez.'
@@ -206,7 +249,7 @@ export async function saveTournament(_: ActionState, form: FormData): Promise<Ac
     if (!id) await createTournament(input)
     else if (!(await updateTournament(id, input))) return { message: 'Turnuva az önce başladı ya da kapandı, değişiklikler kaydedilmedi. Sayfayı yenile.' }
     refresh()
-    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · sıralama ödülleri ${input.prizes.length ? input.prizes.join(' / ') : 'yok'} KC · ${input.maxPlayers} kişi · bitiş ${input.endsAt} · maça giriş ${input.joinMinutes} dk${matchLengthOf(input.game, input.matchLength) ? ` · maç: ${matchLengthOf(input.game, input.matchLength)?.label}` : ''}`)
+    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `${formatText(input)} · giriş ${input.entryFee} KC · sıralama ödülleri ${input.prizes.length ? input.prizes.join(' / ') : 'yok'} KC · ${input.maxPlayers} kişi · bitiş ${input.endsAt} · maça giriş ${input.joinMinutes} dk${matchLengthOf(input.game, input.matchLength) ? ` · maç: ${matchLengthOf(input.game, input.matchLength)?.label}` : ''}`)
     return { ok: true, message: id ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
@@ -259,10 +302,13 @@ export async function removeTournament(_: ActionState, form: FormData): Promise<
 export async function beginTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('tournaments')
-    await startTournament(Number(form.get('id')))
+    const id = Number(form.get('id'))
+    await startTournament(id)
     refresh()
-    await logPanel('tournaments', 'Turnuva başlatıldı', await tournamentLabel(Number(form.get('id'))))
-    return { ok: true, message: 'Turnuva başladı. Tüm eşleşmeler aynı anda açıldı.' }
+    await logPanel('tournaments', 'Turnuva başlatıldı', await tournamentLabel(id))
+    const started = await getTournament(id).catch(() => null)
+    if (started?.format === 'puan') return { ok: true, message: 'Puan ligi başladı. Kayıtlı oyuncuların bundan sonra bitirdiği oyunlar puan tablosuna yazılır.' }
+    return { ok: true, message: started?.format === 'lig' ? 'Lig başladı. İlk turun maçları açıldı.' : 'Turnuva başladı. Tüm eşleşmeler aynı anda açıldı.' }
   } catch (e) {
     return fail(e, 'Başlatılamadı.')
   }

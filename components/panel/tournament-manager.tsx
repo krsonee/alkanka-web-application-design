@@ -9,21 +9,36 @@ import { TournamentGuide } from '@/components/panel/area-guides'
 import { ARENA_GAMES, ARENA_META, type ArenaGame } from '@/lib/arena'
 import {
   DEFAULT_JOIN_MINUTES,
+  DEFAULT_LEAGUE,
+  DEFAULT_POINTS_MINUTES,
   DEFAULT_TOURNAMENT_MINUTES,
   FINISH_LABEL,
   FORMAT_LABEL,
   FORMAT_SHORT,
   JOIN_MINUTES,
+  LEAGUE_PACES,
   MIN_TOURNAMENT_MINUTES,
+  PACE_LABEL,
+  PACE_MS,
+  PACE_SHORT,
+  POINT_GAME_CAPS,
+  POINT_SOURCES,
+  SOURCE_LABEL,
   STATUS_LABEL,
   TABLE_PASS,
   canHostTournament,
   cleanMatchLength,
+  earliestLeagueEnd,
+  entrantsNeeded,
   formatsFor,
+  leagueRounds,
   matchLengthOf,
   matchLengths,
-  minEntrants,
+  roundOpensAt,
   tournamentSeats,
+  type LeaguePace,
+  type LeagueSettings,
+  type PointSource,
   type Tournament,
   type TournamentFormat,
   type TournamentTemplate,
@@ -32,6 +47,7 @@ import { MAX_PRIZE_KC, MAX_PRIZE_POOL_KC, effectivePrizes, isPlayerCount, player
 import { PrizeList } from '@/components/alkanka/arena/prize-list'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { LeagueView } from '@/components/alkanka/arena/league-view'
+import { PointsView } from '@/components/alkanka/arena/points-view'
 import { beginTournament, dropTournamentTemplate, keepTournamentTemplate, kickEntry, pickMatchWinner, removeTournament, saveTournament, stopTournament } from '@/app/panel/arena-actions'
 import type { ActionState } from '@/app/panel/actions'
 import { BracketView } from '@/components/alkanka/arena/bracket-view'
@@ -54,6 +70,33 @@ const shiftInput = (value: string, ms: number) => (Number.isNaN(inputMs(value)) 
 
 /** A new tournament starts on the next quarter hour that is at least an hour away, not a day later. */
 const defaultStart = () => Math.ceil((Date.now() + 3600000) / QUARTER) * QUARTER
+
+/** The text a `datetime-local` field holds, read as a moment in the form's own frame and written back the same way. */
+const fromInputMs = (ms: number) => new Date(ms).toISOString().slice(0, 16)
+const inputDayText = (ms: number) =>
+  new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long', weekday: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(ms))
+
+/** Hours a paced league stays open after its last round opens when the form sets the end itself. */
+const LAST_ROUND_ROOM = 3 * 3600000
+const DAY = 24 * 3600000
+
+/**
+ * The end time after the format, the field or the league's pace changed. A league that opens a round a
+ * day or a week gets room for its last round, a points league a week, and a format played in one
+ * sitting loses an end that was left days away by one of those. Only called for such a change, so an
+ * end typed by hand stays until the next one.
+ */
+function fitEnd(times: { start: string; end: string }, format: TournamentFormat, players: number, league: LeagueSettings) {
+  const start = inputMs(times.start)
+  const span = inputMs(times.end) - start
+  if (Number.isNaN(start)) return times
+  if (format === 'lig' && PACE_MS[league.pace]) {
+    const lastRound = roundOpensAt(new Date(start), Math.max(0, leagueRounds(players, league.legs) - 1), league.pace).getTime()
+    return { ...times, end: fromInputMs(lastRound + LAST_ROUND_ROOM) }
+  }
+  if (format === 'puan') return { ...times, end: fromInputMs(start + DEFAULT_POINTS_MINUTES * MINUTE) }
+  return span > 2 * DAY ? { ...times, end: fromInputMs(start + DEFAULT_LENGTH) } : times
+}
 
 function lengthText(minutes: number) {
   const days = Math.floor(minutes / 1440)
@@ -165,6 +208,28 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
   const [matchLength, setMatchLength] = useState(() => cleanMatchLength(from?.game ?? 'tavla', from?.matchLength))
   const lengthChoices = matchLengths(game)
   const games = ARENA_GAMES.filter((g) => canHostTournament(g) || g === from?.game)
+  const [league, setLeague] = useState<LeagueSettings>(() => from?.league ?? DEFAULT_LEAGUE)
+  const fixtures = format === 'lig'
+  const pointsLeague = format === 'puan'
+  const paced = fixtures && PACE_MS[league.pace] > 0
+  const rounds = leagueRounds(maxPlayers, league.legs)
+  // The form's times are plain text in Istanbul's clock; the same frame is used for the round dates worked out from them.
+  const startMs = inputMs(times.start)
+  const lastRoundMs = paced && !Number.isNaN(startMs) ? roundOpensAt(new Date(startMs), Math.max(0, rounds - 1), league.pace).getTime() : null
+  const earliestEnd = paced && !Number.isNaN(startMs) ? earliestLeagueEnd(new Date(startMs), maxPlayers, league) : null
+  const tooShort = earliestEnd != null && inputMs(times.end) < earliestEnd.getTime()
+  /** One change to the format, the field or the league, with the end time moved to fit it. */
+  const reshape = (next: { format?: TournamentFormat; players?: number; league?: LeagueSettings }) => {
+    const f = next.format ?? format
+    const n = next.players ?? maxPlayers
+    const l = next.league ?? league
+    if (next.format) setFormat(f)
+    if (next.players) setMaxPlayers(n)
+    if (next.league) setLeague(l)
+    // A new field size alone moves the end only where the number of rounds decides it.
+    const refit = f !== format || Boolean(next.league) || (f === 'lig' && PACE_MS[l.pace] > 0)
+    if (refit) setTimes((now) => fitEnd(now, f, n, l))
+  }
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="id" value={t?.id ?? 0} />
@@ -180,8 +245,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
               const next = e.target.value as ArenaGame
               const nextFormat = startFormat(next, format)
               setGame(next)
-              setFormat(nextFormat)
-              setMaxPlayers((n) => snapPlayers(nextFormat, n, tournamentSeats(next) ?? 2))
+              reshape({ format: nextFormat, players: snapPlayers(nextFormat, maxPlayers, tournamentSeats(next) ?? 2) })
               setMatchLength(cleanMatchLength(next, next === from?.game ? from.matchLength : null))
             }}
             className={field}
@@ -195,9 +259,11 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
           <span className={cn('font-normal', !canHostTournament(game) && 'text-destructive')}>
             {!canHostTournament(game)
               ? 'Bu oyunda artık turnuva açılmıyor. Listeden başka bir oyun seç.'
-              : shared
-                ? `${ARENA_META[game].title} turnuvası ${seats} kişilik ortak masalarda oynanır: her masanın ilk ${TABLE_PASS} oyuncusu tur atlar, final masasının birincisi şampiyon olur.`
-                : `${ARENA_META[game].title} turnuvasında maçlar birebir oynanır.`}
+              : pointsLeague
+                ? `Puan liginde turnuva masası açılmaz: oyuncular ${ARENA_META[game].title} oyunlarını her zamanki gibi oynar, sonuçlar puan tablosuna yazılır.`
+                : shared
+                  ? `${ARENA_META[game].title} turnuvası ${seats} kişilik ortak masalarda oynanır: her masanın ilk ${TABLE_PASS} oyuncusu tur atlar, final masasının birincisi şampiyon olur.`
+                  : `${ARENA_META[game].title} turnuvasında maçlar birebir oynanır.`}
           </span>
         </label>
         <label className={labelCls}>
@@ -207,24 +273,95 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
             value={format}
             onChange={(e) => {
               const next = e.target.value as TournamentFormat
-              setFormat(next)
-              setMaxPlayers((n) => snapPlayers(next, n, seats))
+              reshape({ format: next, players: snapPlayers(next, maxPlayers, seats) })
             }}
             className={field}
           >
             {formats.map((f) => (
               <option key={f} value={f}>
-                {shared ? `Eleme (${seats} kişilik masalar, ilk ${TABLE_PASS} tur atlar)` : FORMAT_LABEL[f]}
+                {f === 'eleme' && shared ? `Eleme (${seats} kişilik masalar, ilk ${TABLE_PASS} tur atlar)` : FORMAT_LABEL[f]}
               </option>
             ))}
           </select>
           <span className="font-normal">
-            {shared
-              ? 'Ortak masalarda oynanan oyunlarda lig düzeni yok.'
-              : `Lig formatında en fazla ${MAX_LEAGUE_PLAYERS} oyuncu, en çok puanı toplayan şampiyon olur.`}
-            {legacyFormat && ' Bu kayıt lig düzenindeydi; bu oyunda lig olmadığı için eleme seçildi.'}
+            {format === 'eleme'
+              ? 'Kaybeden elenir, tur tur finale gidilir. Kısa sürede biten, tek oturumluk turnuva.'
+              : fixtures
+                ? `Herkes herkesle oynar, galibiyet 3 puan; en çok puanı toplayan şampiyon olur. En fazla ${MAX_LEAGUE_PLAYERS} oyuncu. Turların ne sıklıkla açılacağını aşağıdan seç.`
+                : 'Eşleşme ve fikstür yok. Lig süresince kayıtlı oyuncuların kendi oynadığı oyunlar sayılır: galibiyet 3, beraberlik 1 puan. Bitiş saatinde ilk sıralar ödülü alır.'}
+            {shared && ' Ortak masalarda oynanan oyunlarda fikstürlü lig yok.'}
+            {legacyFormat && ' Bu kayıt lig düzenindeydi; bu oyunda fikstürlü lig olmadığı için eleme seçildi.'}
           </span>
         </label>
+        {fixtures && (
+          <>
+            <label className={labelCls}>
+              Tur aralığı
+              <select name="pace" value={league.pace} onChange={(e) => reshape({ league: { ...league, pace: e.target.value as LeaguePace } })} className={field}>
+                {LEAGUE_PACES.map((p) => (
+                  <option key={p} value={p}>
+                    {PACE_LABEL[p]}
+                  </option>
+                ))}
+              </select>
+              <span className="font-normal" aria-live="polite">
+                {league.pace === 'ardarda'
+                  ? 'Bir turun bütün maçları bitince sıradaki tur hemen açılır. Lig tek oturumda, birkaç saatte biter; oyuncuların o süre boyunca sitede olması gerekir.'
+                  : `İlk tur başlangıç saatinde, sonraki her tur ${league.pace === 'gunluk' ? 'ertesi gün' : 'bir hafta sonra'} aynı saatte açılır. Oyuncunun ${league.pace === 'gunluk' ? 'günde' : 'haftada'} tek maçı olur; tur açılınca bildirim gider. Bir turda süren maç varsa sıradaki tur o maç bitince açılır.`}
+              </span>
+            </label>
+            <label className={labelCls}>
+              Devre
+              <select name="legs" value={league.legs} onChange={(e) => reshape({ league: { ...league, legs: Number(e.target.value) === 2 ? 2 : 1 } })} className={field}>
+                <option value={1}>Tek devre: herkes herkesle 1 kez</option>
+                <option value={2}>Çift devre: herkes herkesle 2 kez</option>
+              </select>
+              <span className="font-normal" aria-live="polite">
+                Kontenjan dolarsa {rounds} tur oynanır, her oyuncu {rounds} maç yapar. Daha az kayıt olursa tur sayısı da azalır.
+                {lastRoundMs != null && (
+                  <>
+                    {' '}
+                    Son tur en geç <span className="capitalize text-foreground">{inputDayText(lastRoundMs)}</span> açılır.
+                  </>
+                )}
+              </span>
+            </label>
+          </>
+        )}
+        {pointsLeague && (
+          <>
+            <label className={labelCls}>
+              Sayılan oyunlar
+              <select name="source" value={league.source} onChange={(e) => setLeague({ ...league, source: e.target.value as PointSource })} className={field}>
+                {POINT_SOURCES.map((s) => (
+                  <option key={s} value={s}>
+                    {SOURCE_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+              <span className={cn('font-normal', league.source === 'hepsi' && 'text-destructive')} aria-live="polite">
+                {league.source === 'pvp'
+                  ? 'Üyelerin birbirine karşı oynadığı masalar sayılır; bu masaların sonucunu sunucu yazar. Bota karşı oyunlar ve turnuva maçları sayılmaz.'
+                  : 'Bota karşı oyunlar da sayılır. Bot maçlarının bir kısmında sonucu oyuncunun tarayıcısı bildirir; ödüllü ligde bu seçenek hileye açıktır.'}
+              </span>
+            </label>
+            <label className={labelCls}>
+              Oyuncu başına sayılacak oyun
+              <select name="maxGames" value={league.maxGames} onChange={(e) => setLeague({ ...league, maxGames: Number(e.target.value) })} className={field}>
+                {POINT_GAME_CAPS.map((n) => (
+                  <option key={n} value={n}>
+                    {n ? `İlk ${n} oyun` : 'Sınır yok: bütün oyunlar sayılır'}
+                  </option>
+                ))}
+              </select>
+              <span className="font-normal" aria-live="polite">
+                {league.maxGames
+                  ? `Her oyuncunun lig başladıktan sonraki ilk ${league.maxGames} oyunu sayılır, sonrakiler puan getirmez. Herkes aynı sayıda oyunla yarışır.`
+                  : 'Sınır yoksa çok oynayan öne geçer. İki hesabın birbirine oyun vermesini de sınırlamak istersen bir sınır seç.'}
+              </span>
+            </label>
+          </>
+        )}
         <label className={labelCls}>
           Turnuva adı
           <input name="title" required minLength={3} maxLength={80} defaultValue={from?.title} placeholder="Cuma Akşamı Tavla Kupası" className={field} />
@@ -252,19 +389,30 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
           />
           <span className="font-normal">
             {preset ? 'Şablondaki saatle yarına ayarlandı, bitiş şablondaki süreye göre geldi. Tarihi kontrol et. ' : ''}
-            Kayıtlar bu saatte kapanır ve turnuva kendiliğinden başlar. {minEntrants(seats)} kişiden az kayıt varsa iptal olur, ücretler iade edilir.
+            Kayıtlar bu saatte kapanır ve {pointsLeague ? 'lig' : 'turnuva'} kendiliğinden başlar. {entrantsNeeded(format, seats)} kişiden az kayıt varsa iptal olur, ücretler iade edilir.
+            {paced && ` Bu saat aynı zamanda her turun açılış saatidir: turlar ${league.pace === 'gunluk' ? 'her gün' : 'her hafta aynı gün'} bu saatte açılır.`}
           </span>
         </label>
         <label className={labelCls}>
           Bitiş (İstanbul saati)
           <input type="datetime-local" name="endsAt" required value={times.end} onChange={(e) => setTimes((now) => ({ ...now, end: e.target.value }))} className={field} />
-          <span className={cn('font-normal', length < MIN_TOURNAMENT_MINUTES && 'text-destructive')} aria-live="polite">
-            {length >= MIN_TOURNAMENT_MINUTES
-              ? `Turnuva en fazla ${lengthText(length)} sürer. Maçlar daha önce biterse sonuç beklenmeden yazılır; bu saatte süren maçlar kapanır.`
-              : `Bitiş, başlangıçtan en az ${MIN_TOURNAMENT_MINUTES} dakika sonra olmalı.`}
+          <span className={cn('font-normal', (length < MIN_TOURNAMENT_MINUTES || tooShort) && 'text-destructive')} aria-live="polite">
+            {length < MIN_TOURNAMENT_MINUTES || Number.isNaN(length) ? (
+              `Bitiş, başlangıçtan en az ${MIN_TOURNAMENT_MINUTES} dakika sonra olmalı.`
+            ) : tooShort && earliestEnd ? (
+              <>
+                Bu lig {rounds} tur sürer. Bitiş en erken <span className="capitalize">{inputDayText(earliestEnd.getTime())}</span> olmalı; yoksa son turlar oynanmadan lig kapanır.
+              </>
+            ) : pointsLeague ? (
+              `Lig ${lengthText(length)} sürer ve bu saatte kapanır: o ana kadar biten oyunlar sayılır, ödüller o anki sıralamaya göre dağıtılır. Puan ligi daha erken bitmez.`
+            ) : paced ? (
+              `Lig en fazla ${lengthText(length)} sürer. Bitiş, son tur açıldıktan sonraya kendiliğinden ayarlandı; son turun maçları için pay bırakmak istersen ileri al. Bütün maçlar daha önce biterse sonuç beklenmeden yazılır.`
+            ) : (
+              `Turnuva en fazla ${lengthText(length)} sürer. Maçlar daha önce biterse sonuç beklenmeden yazılır; bu saatte süren maçlar kapanır.`
+            )}
           </span>
         </label>
-        {lengthChoices.length > 0 && (
+        {!pointsLeague && lengthChoices.length > 0 && (
           <label className={labelCls}>
             Maç uzunluğu
             <select name="matchLength" value={matchLength ?? lengthChoices[0].value} onChange={(e) => setMatchLength(Number(e.target.value))} className={field}>
@@ -279,36 +427,41 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
             </span>
           </label>
         )}
-        <label className={labelCls}>
-          Maça giriş süresi
-          <select name="joinMinutes" defaultValue={from?.joinMinutes ?? DEFAULT_JOIN_MINUTES} className={field}>
-            {JOIN_MINUTES.map((n) => (
-              <option key={n} value={n}>
-                {n} dakika
-              </option>
-            ))}
-          </select>
-          <span className="font-normal">
-            {shared
-              ? 'Masa açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen elenir, koltuğuna bot oturur ve masa onsuz oynanır; kimse girmezse masa herkes için kayıp sayılır.'
-              : 'Maç açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen maçı hükmen kaybeder; ikisi de girmezse ikisi de kaybeder.'}
-          </span>
-        </label>
+        {!pointsLeague && (
+          <label className={labelCls}>
+            Maça giriş süresi
+            <select name="joinMinutes" defaultValue={from?.joinMinutes ?? DEFAULT_JOIN_MINUTES} className={field}>
+              {JOIN_MINUTES.map((n) => (
+                <option key={n} value={n}>
+                  {n} dakika
+                </option>
+              ))}
+            </select>
+            <span className="font-normal">
+              {shared
+                ? 'Masa açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen elenir, koltuğuna bot oturur ve masa onsuz oynanır; kimse girmezse masa herkes için kayıp sayılır.'
+                : 'Maç açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen maçı hükmen kaybeder; ikisi de girmezse ikisi de kaybeder.'}
+              {paced && ' Günlük ve haftalık ligde oyuncu maçını bildirimle öğrenir; kısa süre çok hükmen sonuç çıkarır, 30 ya da 60 dakika seçmeni öneririz.'}
+            </span>
+          </label>
+        )}
         <label className={labelCls}>
           Kontenjan (oyuncu)
-          <select name="maxPlayers" value={maxPlayers} onChange={(e) => setMaxPlayers(Number(e.target.value))} className={field}>
+          <select name="maxPlayers" value={maxPlayers} onChange={(e) => reshape({ players: Number(e.target.value) })} className={field}>
             {playerOptions(format, seats).map((n) => (
               <option key={n} value={n}>
-                {n} oyuncu{shared ? ` · ${n / seats} masa` : ''}
+                {n} oyuncu{shared && format === 'eleme' ? ` · ${n / seats} masa` : ''}
               </option>
             ))}
           </select>
           <span className="font-normal">
-            {shared
-              ? `Kontenjan dolarsa her masada ${seats} gerçek oyuncu olur. Dolmazsa oyuncular masalara eşit dağıtılır: ${TABLE_PASS} ya da daha az oyuncusu olan masa oynanmaz, oyuncuları tur atlar; 3 oyunculu masada boş koltuğa bot oturur. Bot tur atlayamaz, ödül alamaz.`
-              : format === 'eleme'
-                ? 'Eleme tablosu boş maç kalmadan dolsun diye 2 ve katları seçilir.'
-                : 'Ligde kimse tur boş geçmesin diye çift sayı seçilir.'}
+            {pointsLeague
+              ? 'Puan liginde eşleşme yok; kontenjan sadece kaç kişinin kaydolabileceğini belirler. Sıralama ödülleri bu sayıya kadar yazılabilir.'
+              : shared
+                ? `Kontenjan dolarsa her masada ${seats} gerçek oyuncu olur. Dolmazsa oyuncular masalara eşit dağıtılır: ${TABLE_PASS} ya da daha az oyuncusu olan masa oynanmaz, oyuncuları tur atlar; 3 oyunculu masada boş koltuğa bot oturur. Bot tur atlayamaz, ödül alamaz.`
+                : format === 'eleme'
+                  ? 'Eleme tablosu boş maç kalmadan dolsun diye 2 ve katları seçilir.'
+                  : `Ligde kimse tur boş geçmesin diye çift sayı seçilir. Kontenjan büyüdükçe tur sayısı artar: ${maxPlayers} oyuncuda ${rounds} tur${paced ? `, yani ${rounds} ${league.pace === 'gunluk' ? 'gün' : 'hafta'}` : ''}.`}
             {legacySize && ` Bu kayıt eski kuralla ${from?.maxPlayers} kişilikti; en yakın uygun sayıya çekildi.`}
           </span>
         </label>
@@ -373,11 +526,13 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
             {total > MAX_PRIZE_POOL_KC
               ? `Havuz en fazla ${MAX_PRIZE_POOL_KC.toLocaleString('tr-TR')} KC olabilir; kişi başı yazılan sıraların tutarını düşür.`
               : 'Sitede bu toplam gösterilir. Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir. İstediğin kadar kazanan sıra ekleyebilirsin; ödül vermek istemediğin sırayı 0 bırak.'}
-            {shared
-              ? ` Final masası tek tek sıralanır (1. - ${seats}.); daha önceki turda elenenler aynı ödülü alır.`
-              : format === 'eleme'
-                ? ' Elemede üçüncülük maçı oynanmaz: aynı turda elenenler aynı ödülü alır, tutar kişi başıdır.'
-                : ' Ligde her sıra tek oyuncudur, puan durumuna göre belirlenir.'}
+            {pointsLeague
+              ? ' Puan liginde her sıra tek oyuncudur, bitiş saatindeki puan tablosuna göre belirlenir. Sayılan bir oyunu olmayan oyuncu ödül alamaz; o sıranın ödülü ödenmez.'
+              : shared
+                ? ` Final masası tek tek sıralanır (1. - ${seats}.); daha önceki turda elenenler aynı ödülü alır.`
+                : format === 'eleme'
+                  ? ' Elemede üçüncülük maçı oynanmaz: aynı turda elenenler aynı ödülü alır, tutar kişi başıdır.'
+                  : ' Ligde her sıra tek oyuncudur, puan durumuna göre belirlenir.'}
           </p>
         </fieldset>
         <label className={cn(labelCls, 'sm:col-span-2')}>
@@ -404,7 +559,7 @@ function RunningForm({ t }: { t: Tournament }) {
       <input type="hidden" name="id" value={t.id} />
       <input type="hidden" name="tz" value={ISTANBUL_OFFSET} />
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Turnuva başladı: oyun, format, kontenjan, ücret, ödüller, maç uzunluğu ve maça giriş süresi artık değişmez. Bitiş saatini, açıklamayı ve ödül notunu değiştirebilirsin.
+        Turnuva başladı: oyun, format, lig ayarları, kontenjan, ücret, ödüller, maç uzunluğu ve maça giriş süresi artık değişmez. Bitiş saatini, açıklamayı ve ödül notunu değiştirebilirsin.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={labelCls}>
@@ -417,9 +572,13 @@ function RunningForm({ t }: { t: Tournament }) {
             className={field}
           />
           <span className="font-normal">
-            {t.endsAt
-              ? `Değiştirirsen şu andan en az ${MIN_TOURNAMENT_MINUTES} dakika sonrası olmalı. Bu saatte süren maçlar kapanır ve sonuç yazılır.`
-              : 'Bu turnuvanın bitiş saati yoktu. Kaydedersen bu saatte kapanır. Şu an açık olan eski maçlarda giriş süresi işlemez; bundan sonra açılan maçlarda işler.'}
+            {t.format === 'puan'
+              ? `Değiştirirsen şu andan en az ${MIN_TOURNAMENT_MINUTES} dakika sonrası olmalı. Lig bu saatte kapanır ve ödüller o anki puan tablosuna göre ödenir.`
+              : t.endsAt
+                ? `Değiştirirsen şu andan en az ${MIN_TOURNAMENT_MINUTES} dakika sonrası olmalı. Bu saatte süren maçlar kapanır ve sonuç yazılır.${
+                    t.format === 'lig' && PACE_MS[t.league.pace] ? ' Günlük ya da haftalık ligde bitişi öne alırsan açılmamış turlar oynanmaz; o anki puan durumu geçerli olur.' : ''
+                  }`
+                : 'Bu turnuvanın bitiş saati yoktu. Kaydedersen bu saatte kapanır. Şu an açık olan eski maçlarda giriş süresi işlemez; bundan sonra açılan maçlarda işler.'}
           </span>
         </label>
         <label className={labelCls}>
@@ -500,12 +659,20 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
   const playing = running && t.bracket ? openRound(t.bracket) : -1
   /** A result can be named only for a match of the round being played: a written one never changes. */
   const canPick = (round: number, m: Match) => round === playing && isRealMatch(m) && !isDecided(m)
+  const points = t.format === 'puan'
+  const shape = points
+    ? `${SOURCE_LABEL[t.league.source].toLocaleLowerCase('tr')} · ${t.league.maxGames ? `ilk ${t.league.maxGames} oyun` : 'oyun sınırı yok'}`
+    : t.format === 'lig'
+      ? `${PACE_SHORT[t.league.pace]} · ${t.league.legs === 2 ? 'çift devre' : 'tek devre'}`
+      : t.tableSize > 2
+        ? `${t.tableSize} kişilik masa`
+        : 'birebir'
   return (
     <article data-find={`tournament-${t.id}`} className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">
-            {ARENA_META[t.game].title} · {FORMAT_SHORT[t.format]} · {t.tableSize > 2 ? `${t.tableSize} kişilik masa` : 'birebir'} · {STATUS_LABEL[t.status]}
+            {ARENA_META[t.game].title} · {FORMAT_SHORT[t.format]} · {shape} · {STATUS_LABEL[t.status]}
           </span>
           <h3 className="font-display text-xl font-bold uppercase text-foreground">{t.title}</h3>
           <p className="text-xs capitalize text-muted-foreground">
@@ -518,10 +685,15 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
               </>
             ) : (
               'Bitiş saati yok (eski turnuva): kendiliğinden kapanmaz'
-            )}{' '}
-            · maça giriş {t.joinMinutes} dk
-            {matchLengthOf(t.game, t.matchLength) && ` · maç: ${matchLengthOf(t.game, t.matchLength)?.label.toLocaleLowerCase('tr')}`}
+            )}
+            {!points && ` · maça giriş ${t.joinMinutes} dk`}
+            {!points && matchLengthOf(t.game, t.matchLength) && ` · maç: ${matchLengthOf(t.game, t.matchLength)?.label.toLocaleLowerCase('tr')}`}
           </p>
+          {running && t.nextRoundAt && (
+            <p className="text-xs font-semibold text-foreground">
+              Sıradaki tur: <span className="capitalize">{formatTR(t.nextRoundAt)}</span>
+            </p>
+          )}
           {t.finishReason && (
             <p className="text-xs font-semibold text-foreground">
               {t.status === 'iptal' ? 'İptal nedeni' : 'Kapanış'}: {FINISH_LABEL[t.finishReason]}
@@ -537,7 +709,13 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
               act={beginTournament}
               fields={{ id: t.id }}
               variant="primary"
-              confirm={`Başlangıç saati beklenmeden kayıtlar kapanacak ve tüm oyuncular hemen eşleşecek. Oyuncuların masaya girmek için ${t.joinMinutes} dakikası olur.`}
+              confirm={
+                points
+                  ? 'Başlangıç saati beklenmeden kayıtlar kapanacak ve puan ligi hemen başlayacak. Bu andan sonra biten oyunlar sayılır.'
+                  : t.format === 'lig' && PACE_MS[t.league.pace]
+                    ? `Başlangıç saati beklenmeden kayıtlar kapanacak ve ilk tur hemen açılacak. Sonraki turlar yine kayıtlı başlangıç saatine göre açılır. Oyuncuların masaya girmek için ${t.joinMinutes} dakikası olur.`
+                    : `Başlangıç saati beklenmeden kayıtlar kapanacak ve tüm oyuncular hemen eşleşecek. Oyuncuların masaya girmek için ${t.joinMinutes} dakikası olur.`
+              }
             >
               <Play className="size-3.5" aria-hidden="true" />
               Kayıtları kapat ve başlat
@@ -565,8 +743,17 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
             bracket={t.bracket}
             names={t.names}
             order={order}
+            schedule={{ startsAt: t.startsAt, pace: t.league.pace }}
             renderPick={(r, m, match) => (canPick(r, match) ? <WinnerPicker t={t} round={r} match={m} players={match.players} winner={null} /> : null)}
           />
+        </div>
+      )}
+      {points && t.points && (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-sm font-bold text-foreground">
+            {running ? 'Puan durumu (oyuncuların kendi oyunlarından; lig bitiş saatinde kapanır ve ödüller bu sıraya göre ödenir)' : 'Puan durumu'}
+          </h4>
+          <PointsView rows={t.points} names={t.names} maxGames={t.league.maxGames} closed={!running} />
         </div>
       )}
       {t.bracket && t.format === 'eleme' && (
@@ -597,7 +784,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
         </div>
       )}
 
-      {t.bracket && <TournamentMatches id={t.id} running={running} />}
+      {t.bracket && !points && <TournamentMatches id={t.id} running={running} />}
 
       <details className="group rounded-xl border border-border">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Katılımcılar ({t.entries.length})</summary>
@@ -657,7 +844,7 @@ function TemplateSaver({ t }: { t: Tournament }) {
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="id" value={t.id} />
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Oyun, format, ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır. Tarih, oyuncular ve sonuçlar saklanmaz. Aynı adla kaydedersen eski şablonun üzerine yazılır.
+        Oyun, format, lig ayarları (tur aralığı, devre, sayılan oyunlar), ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır. Tarih, oyuncular ve sonuçlar saklanmaz. Aynı adla kaydedersen eski şablonun üzerine yazılır.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <label className={cn(labelCls, 'min-w-0 flex-1 basis-60')}>
