@@ -3,7 +3,7 @@ import { rows, sql } from '@/lib/db'
 import { sendToUsers } from '@/lib/push'
 import { getCronKey } from '@/lib/telegram-mirror'
 import { trDay } from '@/lib/task-period'
-import { autoStartDue } from '@/lib/tournaments'
+import { tournamentTick } from '@/lib/tournament-run'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -80,7 +80,7 @@ export async function GET(req: Request) {
   const podiums = await announcePodiums().then(String, (e) => String(e))
   const trust = await import('@/lib/trust-extra').then(({ runTrustCron }) => runTrustCron()).catch((e) => String(e))
   const [tournaments, reminders, referrals, cember, ranks, boosts, tvWeekly] = await Promise.allSettled([
-    autoStartDue(),
+    tournamentTick(),
     remindStreaks(),
     payReferrals(),
     import('@/lib/cember').then(({ settleMissedRounds }) => settleMissedRounds()),

@@ -118,6 +118,16 @@ export async function sendMessage(input: { userId: string | null; targetLabel: s
   return Number(r[0].id)
 }
 
+/** Personal messages to many members in one statement, each with its own text and link. */
+export async function sendMessages(list: { userId: string; targetLabel: string; title: string; body: string; url: string | null; sentBy: string }[]) {
+  if (!list.length) return
+  await ensure()
+  const batch = JSON.stringify(list.map((m) => ({ user_id: m.userId, target_label: m.targetLabel, title: m.title, body: m.body, url: m.url, sent_by: m.sentBy })))
+  await rows(sql`INSERT INTO member_messages (user_id, target_label, title, body, url, sent_by)
+    SELECT x.user_id, x.target_label, x.title, x.body, x.url, x.sent_by
+    FROM jsonb_to_recordset(${batch}::jsonb) AS x(user_id text, target_label text, title text, body text, url text, sent_by text)`)
+}
+
 /** The name a message to this member is filed under, or null when there is no such member. */
 export async function memberLabel(userId: string) {
   const [u] = await rows<{ name: string | null; email: string }>(sql`SELECT name, email FROM "user" WHERE id = ${userId}`)

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getMember } from '@/lib/member'
 import { okeyBotDueMs } from '@/lib/pvp/rules'
 import { notifyTable } from '@/lib/pvp/table-events'
-import { enforceTurnClock, getTableRow, kickIdlePlayers, pausedClock, tableView } from '@/lib/pvp/tables'
+import { enforceTurnClock, enterTournamentTable, getTableRow, kickIdlePlayers, pausedClock, tableView } from '@/lib/pvp/tables'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +12,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!row) return NextResponse.json({ error: 'Masa bulunamadı.' }, { status: 404 })
   const kicked = await kickIdlePlayers(row).catch(() => false)
   const fresh = kicked ? ((await getTableRow(id)) ?? row) : row
-  const t = await enforceTurnClock(fresh)
+  // A tournament table first seats whoever is asking and applies the deadline for sitting down.
+  const seated = await enterTournamentTable(fresh, m?.id ?? null).catch((error) => {
+    console.error('[tables] turnuva masası', error)
+    return fresh
+  })
+  const t = await enforceTurnClock(seated)
   // A bot move, a forced move or a kick made by this poll reaches the other seats now, not on their next poll.
   if (kicked || t.version !== row.version || t.status !== row.status) await notifyTable(id, t.version)
   const view = tableView(t, m?.id ?? null)

@@ -17,11 +17,12 @@ import {
   getTournament,
   removeEntry,
   startTournament,
+  updateRunningTournament,
   updateTournament,
   type TournamentInput,
 } from '@/lib/tournaments'
 import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tournament-templates'
-import { MAX_TOURNAMENT_TEMPLATES, isTournamentFormat } from '@/lib/tournaments-shared'
+import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, isTournamentFormat } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { MAX_PRIZE_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces } from '@/lib/tournament-prizes'
 import type { ActionState } from './actions'
@@ -93,16 +94,42 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
   }
 }
 
+/** A `datetime-local` value typed in the form's time zone, as a moment. Null when the field is empty or unreadable. */
+function formTime(form: FormData, name: string) {
+  const raw = String(form.get(name) ?? '').trim()
+  if (!raw) return null
+  const offset = Number(form.get('tz') ?? 0)
+  const local = new Date(`${raw}:00Z`)
+  if (Number.isNaN(local.getTime())) return null
+  return new Date(local.getTime() + (Number.isFinite(offset) ? offset : 0) * 60000)
+}
+
+/** A start a minute or two in the past is a form that sat open; anything older would start or cancel the tournament on the spot. */
+const START_SLACK_MS = 2 * 60_000
+
+function readEnd(form: FormData, from: Date, label: string) {
+  const end = formTime(form, 'endsAt')
+  if (!end) throw new Error('Bitiş saatini gir. Turnuva o saatte, bitmemiş maçlar olsa da kapanır.')
+  if (end.getTime() < from.getTime() + MIN_TOURNAMENT_MINUTES * 60_000) throw new Error(`Bitiş saati ${label} en az ${MIN_TOURNAMENT_MINUTES} dakika sonra olmalı.`)
+  return end.toISOString()
+}
+
+const readTexts = (form: FormData) => ({
+  description: String(form.get('description') ?? '').trim().slice(0, 400),
+  prizeNote: String(form.get('prizeNote') ?? '').trim().slice(0, 120),
+})
+
 function readTournament(form: FormData): TournamentInput {
   const game = String(form.get('game'))
   if (!isArenaGame(game)) throw new Error('Oyun seç.')
+  if (!canHostTournament(game)) throw new Error(`${ARENA_META[game].title} iki kişiyle oynanamadığı için turnuvası açılamıyor.`)
   const title = String(form.get('title') ?? '').trim().slice(0, 80)
   if (title.length < 3) throw new Error('Turnuva adı en az 3 karakter olmalı.')
-  const startsRaw = String(form.get('startsAt') ?? '')
-  const offset = Number(form.get('tz') ?? 0)
-  const local = new Date(`${startsRaw}:00Z`)
-  if (Number.isNaN(local.getTime())) throw new Error('Başlangıç tarihi geçersiz.')
-  const startsAt = new Date(local.getTime() + (Number.isFinite(offset) ? offset : 0) * 60000).toISOString()
+  const start = formTime(form, 'startsAt')
+  if (!start) throw new Error('Başlangıç tarihi geçersiz.')
+  if (start.getTime() < Date.now() - START_SLACK_MS) throw new Error('Başlangıç saati geçmişte. İleri bir saat seç; hemen başlatmak için kaydettikten sonra "Kayıtları kapat ve başlat"a bas.')
+  const startsAt = start.toISOString()
+  const endsAt = readEnd(form, start, 'başlangıçtan')
   const rawFormat = form.get('format')
   const format = isTournamentFormat(rawFormat) ? rawFormat : 'eleme'
   const maxPlayers = int(form, 'maxPlayers', 'Kişi sayısı', 2, MAX_TOURNAMENT_PLAYERS)
@@ -119,25 +146,39 @@ function readTournament(form: FormData): TournamentInput {
     format,
     game,
     title,
-    description: String(form.get('description') ?? '').trim().slice(0, 400),
+    ...readTexts(form),
     rules: String(form.get('rules') ?? '').trim().slice(0, 2000),
     entryFee: int(form, 'entryFee', 'Katılım ücreti', 0, 100000),
     prizes,
-    prizeNote: String(form.get('prizeNote') ?? '').trim().slice(0, 120),
     maxPlayers,
     startsAt,
+    endsAt,
+    joinMinutes: cleanJoinMinutes(form.get('joinMinutes')),
   }
 }
+
+const CLOSED_MESSAGE = 'Bu turnuva bitmiş ya da iptal edilmiş, artık değiştirilemez.'
 
 export async function saveTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('tournaments')
-    const input = readTournament(form)
     const id = Number(form.get('id'))
-    if (id) await updateTournament(id, input)
-    else await createTournament(input)
+    const current = id ? await getTournament(id) : null
+    if (id && !current) return { message: 'Turnuva bulunamadı. Sayfayı yenile.' }
+    if (current && current.status !== 'kayit' && current.status !== 'basladi') return { message: CLOSED_MESSAGE }
+    if (current?.status === 'basladi') {
+      // Players are already paired and fees are paid: the game, the field, the fee and the prizes stay as they are.
+      const input = { endsAt: readEnd(form, new Date(), 'şu andan'), ...readTexts(form) }
+      if (!(await updateRunningTournament(id, input))) return { message: CLOSED_MESSAGE }
+      refresh()
+      await logPanel('tournaments', 'Devam eden turnuva güncellendi', current.title, `bitiş ${input.endsAt}`)
+      return { ok: true, message: 'Bitiş saati, açıklama ve ödül notu kaydedildi. Başlamış turnuvada başka bir şey değişmez.' }
+    }
+    const input = readTournament(form)
+    if (!id) await createTournament(input)
+    else if (!(await updateTournament(id, input))) return { message: 'Turnuva az önce başladı ya da kapandı, değişiklikler kaydedilmedi. Sayfayı yenile.' }
     refresh()
-    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · sıralama ödülleri ${input.prizes.length ? input.prizes.join(' / ') : 'yok'} KC · ${input.maxPlayers} kişi`)
+    await logPanel('tournaments', id ? 'Turnuva güncellendi' : 'Turnuva oluşturuldu', input.title, `giriş ${input.entryFee} KC · sıralama ödülleri ${input.prizes.length ? input.prizes.join(' / ') : 'yok'} KC · ${input.maxPlayers} kişi · bitiş ${input.endsAt} · maça giriş ${input.joinMinutes} dk`)
     return { ok: true, message: id ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')

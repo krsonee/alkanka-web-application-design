@@ -1,4 +1,4 @@
-import type { Bracket } from './bracket'
+import { isDecided, isRealMatch, type Bracket } from './bracket'
 import { MAX_LEAGUE_PLAYERS, leagueStandings } from './league'
 
 type Format = 'eleme' | 'lig'
@@ -67,32 +67,81 @@ export function prizeTotal(format: Format, maxPlayers: number, prizes: number[])
 export const effectivePrizes = (t: { prizes: number[]; prizePool: number }) =>
   t.prizes.length ? t.prizes : t.prizePool > 0 ? [t.prizePool] : []
 
-export type Placement = { key: string; place: number }
+/** `split` is how many players share the one prize of this place: two when a match was written off for both. */
+export type Placement = { key: string; place: number; split?: number }
 
-/** Final ranking as prize-place indexes. Knockout losers of the same round share a place; a bye has no loser. */
+/** Everyone who sat down at one of their matches at least once. A bye is not a match. */
+function attended(bracket: Bracket) {
+  const seen = new Set<string>()
+  for (const match of bracket.rounds.flat()) {
+    if (!isRealMatch(match) || !isDecided(match)) continue
+    for (const key of match.players as string[]) if (!match.noShow?.includes(key)) seen.add(key)
+  }
+  return seen
+}
+
+/**
+ * Final ranking as prize-place indexes. Knockout losers of the same round share a place; a bye has no loser.
+ * A player who never sat down at any match has no place, so no prize can be collected by only registering.
+ */
 export function tournamentPlacements(format: Format, bracket: Bracket | null, order: string[] = []): Placement[] {
   if (!bracket) return []
-  if (format === 'lig') return leagueStandings(bracket, order).map((s, place) => ({ key: s.key, place }))
+  const present = attended(bracket)
+  if (format === 'lig') {
+    return leagueStandings(bracket, order).flatMap((s, place) => (present.has(s.key) ? [{ key: s.key, place }] : []))
+  }
   const last = bracket.rounds.length - 1
   const champion = bracket.rounds[last]?.[0]?.winner
-  if (!champion) return []
-  const out: Placement[] = [{ key: champion, place: 0 }]
+  const out: Placement[] = champion ? [{ key: champion, place: 0 }] : []
   for (let r = last; r >= 0; r--) {
     for (const match of bracket.rounds[r]) {
-      const real = match.players.filter((p): p is string => Boolean(p))
-      if (real.length !== 2 || !match.winner) continue
-      for (const key of real) if (key !== match.winner) out.push({ key, place: last - r + 1 })
+      if (!isRealMatch(match) || !isDecided(match)) continue
+      const place = last - r + 1
+      for (const key of match.players as string[]) {
+        if (key === match.winner || !present.has(key)) continue
+        out.push(match.void ? { key, place, split: 2 } : { key, place })
+      }
     }
   }
   return out
 }
 
-/** Who is owed what once the tournament is over. Places without a prize are left out. */
-export function tournamentPayouts(t: { format: Format; maxPlayers: number; prizes: number[]; prizePool: number }, bracket: Bracket | null, order: string[] = []) {
+/** Knockout players nobody has beaten yet. When the clock stops the tournament they are still in it together. */
+export function stillIn(bracket: Bracket | null): string[] {
+  if (!bracket) return []
+  const out = new Set<string>()
+  for (const match of bracket.rounds.flat()) {
+    if (!isRealMatch(match) || !isDecided(match)) continue
+    for (const key of match.players as string[]) if (key !== match.winner) out.add(key)
+  }
+  const entrants = (bracket.rounds[0] ?? []).flatMap((m) => m.players).filter((p): p is string => Boolean(p))
+  return entrants.filter((key) => !out.has(key))
+}
+
+export type Payout = { key: string; place: number; amount: number; label: string; shared?: boolean }
+
+/**
+ * Who is owed what once the tournament is over. Places without a prize are left out.
+ * `cut` is a knockout stopped by its end time before a champion was found: the players still in it
+ * split, in equal parts, the prizes of the top places they would have filled between them.
+ */
+export function tournamentPayouts(
+  t: { format: Format; maxPlayers: number; prizes: number[]; prizePool: number },
+  bracket: Bracket | null,
+  order: string[] = [],
+  cut = false,
+): Payout[] {
   const prizes = effectivePrizes(t)
   const places = prizePlaces(t.format, t.maxPlayers)
-  return tournamentPlacements(t.format, bracket, order).flatMap(({ key, place }) => {
-    const amount = prizes[place] ?? 0
+  const out: Payout[] = tournamentPlacements(t.format, bracket, order).flatMap(({ key, place, split }) => {
+    const amount = Math.floor((prizes[place] ?? 0) / (split ?? 1))
     return amount > 0 ? [{ key, place, amount, label: places[place]?.label ?? `${place + 1}.` }] : []
   })
+  if (!cut || t.format !== 'eleme' || !bracket || out.some((p) => p.place === 0)) return out
+  const left = stillIn(bracket)
+  if (!left.length) return out
+  const seats = places.flatMap((place, i) => Array.from({ length: place.count }, () => prizes[i] ?? 0))
+  const share = Math.floor(seats.slice(0, left.length).reduce((sum, amount) => sum + amount, 0) / left.length)
+  if (share > 0) for (const key of left) out.push({ key, place: -1, amount: share, label: 'paylaşım', shared: true })
+  return out
 }

@@ -39,14 +39,59 @@ export type LiveMatch = { tableId: string; round: number; match: number; players
 export const roundName = (league: boolean, index: number, total: number) =>
   league || total < 1 ? `${index + 1}. tur` : roundLabel(index, total)
 
-/** A tournament table the member is seated at and still has to play. */
-export type MyMatch = { tableId: string; tournamentId: number; game: string; title: string; round: string }
+/**
+ * A tournament table the member is seated at and still has to play. `joinBy` is set while the member
+ * has not sat down yet: after that moment the match is forfeited.
+ */
+export type MyMatch = { tableId: string; tournamentId: number; game: string; title: string; round: string; joinBy: string | null }
 
 /** Straight to the table: the game page opens the room named in `masa` without its stake screen. */
 export const matchHref = (m: Pick<MyMatch, 'game' | 'tableId'>) => `/oyunlar/${m.game}?masa=${m.tableId}`
 
-/** What a tournament table carries about its tournament, so the table screen needs no extra query. */
-export type TableTour = { title: string; round: string; league: boolean }
+/**
+ * What a tournament table carries about its tournament, so the table screen needs no extra query.
+ * Tables opened before the time rules existed have no `joinBy`; none of those rules apply to them.
+ */
+export type TableTour = { title: string; round: string; league: boolean; joinBy?: string }
+
+/** Minutes a player has to sit down at a match once its table opens. */
+export const JOIN_MINUTES = [3, 5, 10, 15] as const
+export const DEFAULT_JOIN_MINUTES = 5
+export const cleanJoinMinutes = (v: unknown) => ((JOIN_MINUTES as readonly number[]).includes(Number(v)) ? Number(v) : DEFAULT_JOIN_MINUTES)
+
+/** The shortest tournament the panel accepts, from start to end. */
+export const MIN_TOURNAMENT_MINUTES = 10
+
+/** How a tournament table closed when it was not simply played to the end. */
+export type MatchEnd = 'gelmedi' | 'sure' | 'pes' | 'panel' | 'bitis' | 'iptal'
+
+export const MATCH_END_LABEL: Record<MatchEnd, string> = {
+  gelmedi: 'hükmen, masaya gelmedi',
+  sure: 'hükmen, hamle süresi',
+  pes: 'pes etti',
+  panel: 'sonucu yönetim girdi',
+  bitis: 'turnuva süresi doldu',
+  iptal: 'turnuva iptal',
+}
+
+/** Why a tournament closed. The first two are finished tournaments, the rest are cancellations. */
+export type FinishReason = 'tamam' | 'sure' | 'kayit-yok' | 'oynanmadi' | 'gec' | 'oyun' | 'panel'
+
+export const FINISH_LABEL: Record<FinishReason, string> = {
+  tamam: 'Bütün maçlar oynandı',
+  sure: 'Bitiş saati geldi',
+  'kayit-yok': 'Başlangıç saatinde 2 kişiden az kayıt vardı',
+  oynanmadi: 'Hiçbir maç oynanmadı',
+  gec: 'Başlangıç saati kaçtı, bitiş saati de geçmişti',
+  oyun: 'Bu oyun turnuvada birebir oynanamıyor',
+  panel: 'Panelden iptal edildi',
+}
+
+export const isFinishReason = (v: unknown): v is FinishReason => typeof v === 'string' && v in FINISH_LABEL
+
+/** Games that cannot be played by two players, so a tournament cannot pair them. */
+const NOT_HEAD_TO_HEAD: readonly string[] = ['batak']
+export const canHostTournament = (game: string) => !NOT_HEAD_TO_HEAD.includes(game)
 
 export type Tournament = {
   id: number
@@ -61,6 +106,11 @@ export type Tournament = {
   prizeNote: string
   maxPlayers: number
   startsAt: string
+  /** Open matches close and the result is written at this moment. Null on tournaments from before end times. */
+  endsAt: string | null
+  joinMinutes: number
+  finishedAt: string | null
+  finishReason: FinishReason | null
   status: TournamentStatus
   format: TournamentFormat
   winner: string | null
