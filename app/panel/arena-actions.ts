@@ -22,7 +22,8 @@ import {
   type TournamentInput,
 } from '@/lib/tournaments'
 import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tournament-templates'
-import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, formatsFor, isTournamentFormat, tournamentSeats } from '@/lib/tournaments-shared'
+import { listTournamentMatches } from '@/lib/tournament-matches'
+import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, formatsFor, isTournamentFormat, tournamentSeats, type MatchRecord } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { MAX_PRIZE_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces } from '@/lib/tournament-prizes'
 import type { ActionState } from './actions'
@@ -162,6 +163,22 @@ function readTournament(form: FormData): TournamentInput {
 
 const CLOSED_MESSAGE = 'Bu turnuva bitmiş ya da iptal edilmiş, artık değiştirilemez.'
 
+/** The tournament as the log names it. A deleted one has only its number left. */
+async function tournamentLabel(id: number) {
+  const t = await getTournament(id).catch(() => null)
+  return t ? `${t.title} (#${id})` : `Turnuva #${id}`
+}
+
+/** The tournament's tables for the panel's match list. Read when the list is opened, not with the page. */
+export async function loadTournamentMatches(id: number): Promise<{ matches?: MatchRecord[]; message?: string }> {
+  try {
+    await requireAdmin('tournaments')
+    return { matches: await listTournamentMatches(Number(id)) }
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : 'Maçlar okunamadı.' }
+  }
+}
+
 export async function saveTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('tournaments')
@@ -224,9 +241,10 @@ export async function dropTournamentTemplate(_: ActionState, form: FormData): Pr
 export async function removeTournament(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('tournaments')
+    const label = await tournamentLabel(Number(form.get('id')))
     await deleteTournament(Number(form.get('id')))
     refresh()
-    await logPanel('tournaments', 'Turnuva silindi', `Turnuva #${Number(form.get('id'))}`, 'Kayıt ücretleri iade edildi')
+    await logPanel('tournaments', 'Turnuva silindi', label, 'Kayıt ücretleri iade edildi')
     return { ok: true, message: 'Turnuva silindi, kayıt ücretleri iade edildi.' }
   } catch (e) {
     return fail(e, 'Silinemedi.')
@@ -238,7 +256,7 @@ export async function beginTournament(_: ActionState, form: FormData): Promise<A
     await requireAdmin('tournaments')
     await startTournament(Number(form.get('id')))
     refresh()
-    await logPanel('tournaments', 'Turnuva başlatıldı', `Turnuva #${Number(form.get('id'))}`)
+    await logPanel('tournaments', 'Turnuva başlatıldı', await tournamentLabel(Number(form.get('id'))))
     return { ok: true, message: 'Turnuva başladı. Tüm eşleşmeler aynı anda açıldı.' }
   } catch (e) {
     return fail(e, 'Başlatılamadı.')
@@ -250,7 +268,7 @@ export async function stopTournament(_: ActionState, form: FormData): Promise<Ac
     await requireAdmin('tournaments')
     await cancelTournament(Number(form.get('id')))
     refresh()
-    await logPanel('tournaments', 'Turnuva iptal edildi', `Turnuva #${Number(form.get('id'))}`, 'Kayıt ücretleri iade edildi')
+    await logPanel('tournaments', 'Turnuva iptal edildi', await tournamentLabel(Number(form.get('id'))), 'Kayıt ücretleri iade edildi')
     return { ok: true, message: 'Turnuva iptal edildi, kayıt ücretleri iade edildi.' }
   } catch (e) {
     return fail(e, 'İptal edilemedi.')
@@ -262,10 +280,11 @@ export async function pickMatchWinner(_: ActionState, form: FormData): Promise<A
     await requireAdmin('tournaments')
     const winner = String(form.get('winner') ?? '')
     if (!winner) return { message: 'Kazananı seç.' }
-    await adminSetMatchWinner(Number(form.get('id')), Number(form.get('round')), Number(form.get('match')), winner)
+    const id = Number(form.get('id'))
+    const said = await adminSetMatchWinner(id, Number(form.get('round')), Number(form.get('match')), winner)
     refresh()
-    await logPanel('tournaments', 'Maç kazananı girildi', `Turnuva #${Number(form.get('id'))}`, `tur ${Number(form.get('round'))} · maç ${Number(form.get('match'))} · kazanan ${winner}`)
-    return { ok: true, message: 'Sonuç girildi, tur ilerletildi.' }
+    await logPanel('tournaments', 'Maç kazananı girildi', await tournamentLabel(id), `${said.round} · ${said.players.join(' - ')} · kazanan ${said.winner}`)
+    return { ok: true, message: `Sonuç girildi: ${said.winner} kazandı.` }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
   }
@@ -274,10 +293,10 @@ export async function pickMatchWinner(_: ActionState, form: FormData): Promise<A
 export async function kickEntry(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('tournaments')
-    await removeEntry(Number(form.get('entryId')))
+    const gone = await removeEntry(Number(form.get('entryId')))
     refresh()
-    await logPanel('tournaments', 'Turnuva katılımcısı çıkarıldı', `Kayıt #${Number(form.get('entryId'))}`, 'Ücreti iade edildi')
-    return { ok: true, message: 'Katılımcı çıkarıldı, ücreti iade edildi.' }
+    await logPanel('tournaments', 'Turnuva katılımcısı çıkarıldı', gone.title, gone.fee > 0 ? `${gone.name} · ${gone.fee} KC iade edildi` : `${gone.name} · ücret ödememişti`)
+    return { ok: true, message: gone.fee > 0 ? `${gone.name} çıkarıldı, ${gone.fee} KC ücreti iade edildi.` : `${gone.name} çıkarıldı.` }
   } catch (e) {
     return fail(e, 'Çıkarılamadı.')
   }

@@ -75,6 +75,26 @@ export const MATCH_END_LABEL: Record<MatchEnd, string> = {
   iptal: 'turnuva iptal',
 }
 
+/**
+ * One tournament table as the panel lists it. `arrived`: the player opened the table. `out`: the player
+ * left a shared table before it finished. `started`: everyone due had sat down, so the move clock ran.
+ */
+export type MatchRecord = {
+  tableId: string
+  round: number
+  roundName: string
+  match: number
+  seats: number
+  status: 'oynaniyor' | 'bitti' | 'iptal'
+  players: { id: string; name: string; arrived: boolean; winner: boolean; out: MatchEnd | null }[]
+  how: MatchEnd | null
+  started: boolean
+  moves: number
+  openedAt: string
+  closedAt: string | null
+  joinBy: string | null
+}
+
 /** Why a tournament closed. The first two are finished tournaments, the rest are cancellations. */
 export type FinishReason = 'tamam' | 'sure' | 'kayit-yok' | 'oynanmadi' | 'gec' | 'oyun' | 'panel'
 

@@ -884,6 +884,23 @@ export async function adminFinishTourTable(tournamentId: number, round: number, 
   return true
 }
 
+/**
+ * The panel names the winner of an open duel: the table closes as any finished match does, so both
+ * players get the match in their history and the tournament moves on. False when no such table is open.
+ */
+export async function adminFinishDuelTable(tournamentId: number, round: number, match: number, winnerKey: string) {
+  const r = await pool.query(`SELECT * FROM game_tables WHERE tournament_id = $1 AND round_no = $2 AND match_no = $3 AND status = 'oynaniyor' LIMIT 1`, [
+    tournamentId,
+    round,
+    match,
+  ])
+  const t = r.rows[0] ? mapTable(r.rows[0]) : null
+  const winner = t ? humans(t).find((p) => p.id === winnerKey) : undefined
+  if (!t || isTourTable(t) || !winner) return false
+  await finishTable(t, { winnerSeat: winner.seat }, { how: 'panel' })
+  return true
+}
+
 async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: TableEnd = {}) {
   if (isTourTable(t)) {
     await finishTourTable(t, outcome, end)

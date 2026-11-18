@@ -198,6 +198,19 @@ const TOURNAMENT_COLUMNS: [string, string][] = [
   ['finish_reason', 'text'],
 ]
 
+/**
+ * A table still open for a tournament that is deleted, cancelled or finished can never close by itself:
+ * it would sit in the list of live tables for ever. Returns how many were closed.
+ */
+export async function closeOrphanTables() {
+  const r = await pool.query(
+    `UPDATE game_tables g SET status = 'iptal', updated_at = now(), options = COALESCE(g.options, '{}'::jsonb) || '{"how":"iptal"}'::jsonb
+     WHERE g.tournament_id IS NOT NULL AND g.status = 'oynaniyor'
+       AND NOT EXISTS (SELECT 1 FROM tournaments t WHERE t.id = g.tournament_id AND t.status = 'basladi')`,
+  )
+  return r.rowCount ?? 0
+}
+
 let columnsReady: Promise<unknown> | null = null
 
 /** Never call this inside a transaction that already locked a tournament row: adding a column would wait on that lock. */
@@ -221,6 +234,7 @@ function ensureColumns() {
         .query(`CREATE INDEX IF NOT EXISTS game_tables_tournament_idx ON game_tables (tournament_id, status) WHERE tournament_id IS NOT NULL`)
         .catch((error) => console.error('[tournaments] masa dizini kurulamadı', (error as Error).message))
     }
+    await closeOrphanTables().catch((error) => console.error('[tournaments] sahipsiz masalar kapatılamadı', (error as Error).message))
   })().catch((error) => {
     columnsReady = null
     throw error
@@ -500,12 +514,14 @@ export async function removeEntry(entryId: number) {
     const del = await client.query('DELETE FROM tournament_entries WHERE id = $1 RETURNING user_id, nickname, fee_paid', [entryId])
     const gone = del.rows[0]
     if (!gone) throw new Error('Kayıt bulunamadı. Sayfayı yenile.')
-    if (!gone.user_id) return null
+    const who = { name: String(gone.nickname), title: String(row.title) }
+    if (!gone.user_id) return { ...who, userId: null, fee: 0 }
     const fee = paidFee(gone, row)
     if (!(await refundIn(client, gone.user_id, fee))) throw new Error('Ücret iade edilemedi, kayıt silinmedi.')
-    return { userId: String(gone.user_id), name: String(gone.nickname), fee, title: String(row.title) }
+    return { ...who, userId: String(gone.user_id), fee }
   })
-  if (back && back.fee > 0) await noteFee(back.userId, back.name, `Kayıt iadesi: ${back.title}`, back.fee, true)
+  if (back.userId && back.fee > 0) await noteFee(back.userId, back.name, `Kayıt iadesi: ${back.title}`, back.fee, true)
+  return { name: back.name, title: back.title, fee: Math.max(0, back.fee) }
 }
 
 /** Pairs the entrants inside the caller's transaction. The entrants are read under the tournament's lock: whoever is paired is exactly whoever is registered. */
@@ -763,21 +779,47 @@ export async function settleTournamentTable(id: number, round: number, match: nu
   await settleMatch(id, (bracket) => setTableResult(bracket, round, match, rank, through, noShow))
 }
 
-/** Admin override for no-shows: closes the live table and advances the chosen player. */
+/**
+ * The panel names the winner of a match that is still open. A written result stays as it is: changing
+ * it would leave the next round's table with a player who no longer belongs there.
+ * Returns the names for the panel's log.
+ */
 export async function adminSetMatchWinner(id: number, round: number, match: number, winnerKey: string) {
-  const shared = await pool.query(`SELECT (bracket->>'seats') IS NOT NULL AS shared FROM tournaments WHERE id = $1`, [id])
-  if (shared.rows[0]?.shared) {
-    // A shared table sends more than one player on, so its result is read from the open table itself.
-    const { adminFinishTourTable } = await import('./pvp/tables')
-    if (!(await adminFinishTourTable(id, round, match, winnerKey))) throw new Error('Bu masa açık değil ya da seçilen oyuncu masada değil. Sonuç ancak açık bir masada girilebilir.')
-    return
+  const found = await pool.query(`SELECT status, format, bracket FROM tournaments WHERE id = $1`, [id])
+  const row = found.rows[0]
+  if (!row) throw new Error('Turnuva bulunamadı. Sayfayı yenile.')
+  if (row.status !== 'basladi' || !row.bracket) throw new Error('Sonuç ancak devam eden bir turnuvada girilebilir.')
+  const bracket = row.bracket as Bracket
+  const league = row.format === 'lig'
+  const m = bracket.rounds[round]?.[match]
+  if (!m || !isRealMatch(m)) throw new Error('Maç bulunamadı. Sayfayı yenile.')
+  if (isDecided(m)) throw new Error('Bu maçın sonucu yazılmış. Biten bir maçın sonucu değiştirilemez.')
+  if (!m.players.includes(winnerKey)) throw new Error('Seçilen oyuncu bu maçta değil. Sayfayı yenile.')
+  const names = await pool.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1', [id])
+  const nameOf = (key: string) => String(names.rows.find((n) => entryKey(n) === key)?.nickname ?? key)
+  const said = {
+    round: roundName(league, round, bracket.rounds.length),
+    winner: nameOf(winnerKey),
+    players: m.players.filter((p): p is string => Boolean(p)).map(nameOf),
   }
-  await pool.query(
-    `UPDATE game_tables SET status = 'bitti', winner_id = $4, updated_at = now(), options = COALESCE(options, '{}'::jsonb) || '{"how":"panel"}'::jsonb
-     WHERE tournament_id = $1 AND round_no = $2 AND match_no = $3 AND status = 'oynaniyor'`,
-    [id, round, match, winnerKey],
-  )
-  await advanceTournament(id, round, match, winnerKey)
+  const { adminFinishTourTable, adminFinishDuelTable } = await import('./pvp/tables')
+  if (bracket.seats) {
+    // A shared table sends more than one player on, so its result is read from the open table itself.
+    if (!(await adminFinishTourTable(id, round, match, winnerKey))) throw new Error('Bu masa açık değil ya da seçilen oyuncu masada değil. Sonuç ancak açık bir masada girilebilir.')
+    return said
+  }
+  if (await adminFinishDuelTable(id, round, match, winnerKey)) return said
+  // No open table: a match of a tournament from before tables were opened for every match. The result
+  // goes straight into the pairing, and only while the match is still undecided under the tournament's lock.
+  let written = false
+  await settleMatch(id, (b, lig) => {
+    const now = b.rounds[round]?.[match]
+    if (!now || isDecided(now) || !now.players.includes(winnerKey)) return b
+    written = true
+    return (lig ? setLeagueWinner : setMatchWinner)(b, round, match, winnerKey)
+  })
+  if (!written) throw new Error('Bu maçın sonucu az önce yazıldı. Sayfayı yenile.')
+  return said
 }
 
 /**
