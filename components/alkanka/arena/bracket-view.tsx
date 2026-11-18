@@ -82,7 +82,7 @@ function MatchCard({ m, ri, mi, last, nameOf, closed, renderPick }: { m: Match; 
             nameOf={nameOf}
             seed={mi * 2 + pi + 1}
             state={!p || !m.winner ? 'idle' : m.winner === p ? 'win' : 'lose'}
-            placeholder={ri === 0 ? 'Bay (otomatik tur atlar)' : 'Bekleniyor'}
+            placeholder={ri === 0 ? 'Bay (otomatik tur atlar)' : closed ? 'Belli olmadı' : 'Bekleniyor'}
           />
         ))}
       </div>
@@ -91,7 +91,7 @@ function MatchCard({ m, ri, mi, last, nameOf, closed, renderPick }: { m: Match; 
   )
 }
 
-function ChampionCard({ champion, compact }: { champion: string | null; compact?: boolean }) {
+function ChampionCard({ champion, compact, closed }: { champion: string | null; compact?: boolean; closed: boolean }) {
   return (
     <div
       className={cn(
@@ -104,7 +104,7 @@ function ChampionCard({ champion, compact }: { champion: string | null; compact?
       <div className="flex min-w-0 flex-col">
         {compact && <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Şampiyon</span>}
         <span className={cn('truncate font-display text-lg font-bold uppercase leading-tight', champion ? 'text-foreground' : 'text-muted-foreground')}>
-          {champion ?? 'Belli olacak'}
+          {champion ?? (closed ? 'Şampiyon çıkmadı' : 'Belli olacak')}
         </span>
       </div>
     </div>
@@ -159,7 +159,7 @@ function MobileBracket({ bracket, champion, ...shared }: { bracket: Bracket; cha
         ))}
       </ol>
 
-      <ChampionCard champion={champion} compact />
+      <ChampionCard champion={champion} closed={shared.closed} compact />
     </div>
   )
 }
@@ -196,7 +196,7 @@ function DesktopBracket({ bracket, champion, ...shared }: { bracket: Bracket; ch
           <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-primary">Şampiyon</div>
           <div className="relative flex flex-1 items-center">
             <span className="absolute -left-8 top-1/2 h-px w-8 bg-primary/50" aria-hidden="true" />
-            <ChampionCard champion={champion} />
+            <ChampionCard champion={champion} closed={shared.closed} />
           </div>
         </li>
       </ol>

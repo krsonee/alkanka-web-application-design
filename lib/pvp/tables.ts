@@ -498,7 +498,8 @@ export async function actOnTable(m: Member, id: string, version: number, action:
   const { state, outcome } = applyAction(t.state, seat, action)
   await saveState(t, version, state)
   await touchPlayer(t.id, m.id)
-  if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome)
+  // The board's own "Pes et" arrives as an action; a tournament match closed that way says so, like one left from the header.
+  if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome, t.tournamentId && action.type === 'resign' ? { how: 'pes' } : {})
 }
 
 async function touchPlayer(tableId: string, userId: string) {

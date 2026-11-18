@@ -1296,9 +1296,11 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           {data.status === 'bekliyor'
             ? `Oyuncu bekleniyor (${data.players.filter((p) => !p.bot).length}/${seatCount - (data.bots ?? 0)})`
             : data.status === 'oynaniyor'
-              ? data.turn == null
-                ? 'Eş zamanlı oynanıyor'
-                : data.turn === mySeat
+              ? tourWaiting
+                ? 'Oyuncular bekleniyor'
+                : data.turn == null
+                  ? 'Eş zamanlı oynanıyor'
+                  : data.turn === mySeat
                   ? 'Sıra sende'
                   : `${turnName} oynuyor`
               : data.status === 'bitti'
@@ -1561,7 +1563,9 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               }
               title={
                 data.status === 'iptal'
-                  ? 'İptal'
+                  ? how === 'bitis'
+                    ? 'Turnuva süresi doldu'
+                    : 'İptal'
                   : tourVoid
                     ? spectator
                       ? 'Maç oynanmadı'
@@ -1657,7 +1661,9 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                 ? 'Masadan ayrıldın, bahsin geri gelmez.'
                 : data.status === 'iptal'
                 ? tourney
-                  ? 'Maç iptal edildi.'
+                  ? how === 'bitis'
+                    ? 'Turnuva süresi doldu.'
+                    : 'Maç iptal edildi.'
                   : 'Masa iptal edildi, bahis iade edildi.'
                 : tourVoid
                   ? spectator
