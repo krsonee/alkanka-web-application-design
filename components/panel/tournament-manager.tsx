@@ -6,7 +6,7 @@ import { useActionState, useState, type ReactNode } from 'react'
 import { BookmarkPlus, Loader2, Play, Plus, Trash2, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TournamentGuide } from '@/components/panel/area-guides'
-import { ARENA_GAMES, ARENA_META } from '@/lib/arena'
+import { ARENA_GAMES, ARENA_META, type ArenaGame } from '@/lib/arena'
 import {
   DEFAULT_JOIN_MINUTES,
   FINISH_LABEL,
@@ -15,8 +15,11 @@ import {
   JOIN_MINUTES,
   MIN_TOURNAMENT_MINUTES,
   STATUS_LABEL,
-  TOURNAMENT_FORMATS,
+  TABLE_PASS,
   canHostTournament,
+  formatsFor,
+  minEntrants,
+  tournamentSeats,
   type Tournament,
   type TournamentFormat,
   type TournamentTemplate,
@@ -124,12 +127,19 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
     return next
   }, {})
   const from = t ?? preset
-  const [format, setFormat] = useState<TournamentFormat>(from?.format ?? 'eleme')
-  const [maxPlayers, setMaxPlayers] = useState(() => snapPlayers(from?.format ?? 'eleme', from?.maxPlayers ?? 16))
+  const [game, setGame] = useState<ArenaGame>(from?.game ?? 'tavla')
+  // A game played at shared tables has no league and fills whole tables, so the game decides the other choices.
+  const seats = tournamentSeats(game) ?? 2
+  const shared = seats > 2
+  const formats = formatsFor(game)
+  const startFormat = (g: ArenaGame, f: TournamentFormat): TournamentFormat => (formatsFor(g).includes(f) ? f : 'eleme')
+  const [format, setFormat] = useState<TournamentFormat>(() => startFormat(from?.game ?? 'tavla', from?.format ?? 'eleme'))
+  const [maxPlayers, setMaxPlayers] = useState(() => snapPlayers(startFormat(from?.game ?? 'tavla', from?.format ?? 'eleme'), from?.maxPlayers ?? 16, tournamentSeats(from?.game ?? 'tavla') ?? 2))
   const [prizes, setPrizes] = useState<string[]>(() => (from ? effectivePrizes(from) : [5000]).map(String))
-  const places = prizePlaces(format, maxPlayers)
-  const total = prizeTotal(format, maxPlayers, places.map((_, i) => Math.max(0, Math.round(Number(prizes[i]) || 0))))
-  const legacySize = Boolean(from && !isPlayerCount(from.format, from.maxPlayers))
+  const places = prizePlaces(format, maxPlayers, seats)
+  const total = prizeTotal(format, maxPlayers, places.map((_, i) => Math.max(0, Math.round(Number(prizes[i]) || 0))), seats)
+  const legacySize = Boolean(from && !isPlayerCount(format, from.maxPlayers, seats))
+  const legacyFormat = Boolean(from && from.format !== format && from.game === game)
   const [times, setTimes] = useState(() => {
     const start = preset ? tomorrowAt(preset.startTime) : toIstanbulInput(t ? Date.parse(t.startsAt) : defaultStart())
     return { start, end: t?.endsAt ? toIstanbulInput(Date.parse(t.endsAt)) : shiftInput(start, DEFAULT_LENGTH) }
@@ -144,14 +154,31 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={labelCls}>
           Oyun
-          <select name="game" defaultValue={from?.game ?? 'tavla'} className={field}>
+          <select
+            name="game"
+            value={game}
+            onChange={(e) => {
+              const next = e.target.value as ArenaGame
+              const nextFormat = startFormat(next, format)
+              setGame(next)
+              setFormat(nextFormat)
+              setMaxPlayers((n) => snapPlayers(nextFormat, n, tournamentSeats(next) ?? 2))
+            }}
+            className={field}
+          >
             {games.map((g) => (
               <option key={g} value={g}>
-                {ARENA_META[g].title}
+                {ARENA_META[g].title} · {(tournamentSeats(g) ?? 2) > 2 ? `${tournamentSeats(g)} kişilik masa` : 'birebir'}
               </option>
             ))}
           </select>
-          <span className="font-normal">Bütün turnuva maçları birebir oynanır. İki kişiyle oynanamayan oyunlar listede yok.</span>
+          <span className={cn('font-normal', !canHostTournament(game) && 'text-destructive')}>
+            {!canHostTournament(game)
+              ? 'Bu oyunda artık turnuva açılmıyor. Listeden başka bir oyun seç.'
+              : shared
+                ? `${ARENA_META[game].title} turnuvası ${seats} kişilik ortak masalarda oynanır: her masanın ilk ${TABLE_PASS} oyuncusu tur atlar, final masasının birincisi şampiyon olur.`
+                : `${ARENA_META[game].title} turnuvasında maçlar birebir oynanır.`}
+          </span>
         </label>
         <label className={labelCls}>
           Format
@@ -161,17 +188,22 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
             onChange={(e) => {
               const next = e.target.value as TournamentFormat
               setFormat(next)
-              setMaxPlayers((n) => snapPlayers(next, n))
+              setMaxPlayers((n) => snapPlayers(next, n, seats))
             }}
             className={field}
           >
-            {TOURNAMENT_FORMATS.map((f) => (
+            {formats.map((f) => (
               <option key={f} value={f}>
-                {FORMAT_LABEL[f]}
+                {shared ? `Eleme (${seats} kişilik masalar, ilk ${TABLE_PASS} tur atlar)` : FORMAT_LABEL[f]}
               </option>
             ))}
           </select>
-          <span className="font-normal">Lig formatında en fazla {MAX_LEAGUE_PLAYERS} oyuncu, en çok puanı toplayan şampiyon olur.</span>
+          <span className="font-normal">
+            {shared
+              ? 'Ortak masalarda oynanan oyunlarda lig düzeni yok.'
+              : `Lig formatında en fazla ${MAX_LEAGUE_PLAYERS} oyuncu, en çok puanı toplayan şampiyon olur.`}
+            {legacyFormat && ' Bu kayıt lig düzenindeydi; bu oyunda lig olmadığı için eleme seçildi.'}
+          </span>
         </label>
         <label className={labelCls}>
           Turnuva adı
@@ -200,7 +232,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
           />
           <span className="font-normal">
             {preset ? 'Şablondaki saatle yarına ayarlandı. Tarihi kontrol et. ' : ''}
-            Kayıtlar bu saatte kapanır ve turnuva kendiliğinden başlar. 2 kişiden az kayıt varsa iptal olur, ücretler iade edilir.
+            Kayıtlar bu saatte kapanır ve turnuva kendiliğinden başlar. {minEntrants(seats)} kişiden az kayıt varsa iptal olur, ücretler iade edilir.
           </span>
         </label>
         <label className={labelCls}>
@@ -221,19 +253,27 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
               </option>
             ))}
           </select>
-          <span className="font-normal">Maç açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen maçı hükmen kaybeder; ikisi de girmezse ikisi de kaybeder.</span>
+          <span className="font-normal">
+            {shared
+              ? 'Masa açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen elenir, koltuğuna bot oturur ve masa onsuz oynanır; kimse girmezse masa herkes için kayıp sayılır.'
+              : 'Maç açılınca oyuncunun masaya girmesi için tanınan süre. Girmeyen maçı hükmen kaybeder; ikisi de girmezse ikisi de kaybeder.'}
+          </span>
         </label>
         <label className={labelCls}>
           Kontenjan (oyuncu)
           <select name="maxPlayers" value={maxPlayers} onChange={(e) => setMaxPlayers(Number(e.target.value))} className={field}>
-            {playerOptions(format).map((n) => (
+            {playerOptions(format, seats).map((n) => (
               <option key={n} value={n}>
-                {n} oyuncu
+                {n} oyuncu{shared ? ` · ${n / seats} masa` : ''}
               </option>
             ))}
           </select>
           <span className="font-normal">
-            {format === 'eleme' ? 'Eleme tablosu boş maç kalmadan dolsun diye 2 ve katları seçilir.' : 'Ligde kimse tur boş geçmesin diye çift sayı seçilir.'}
+            {shared
+              ? `Kontenjan dolarsa her masada ${seats} gerçek oyuncu olur. Dolmazsa oyuncular masalara eşit dağıtılır: ${TABLE_PASS} ya da daha az oyuncusu olan masa oynanmaz, oyuncuları tur atlar; 3 oyunculu masada boş koltuğa bot oturur. Bot tur atlayamaz, ödül alamaz.`
+              : format === 'eleme'
+                ? 'Eleme tablosu boş maç kalmadan dolsun diye 2 ve katları seçilir.'
+                : 'Ligde kimse tur boş geçmesin diye çift sayı seçilir.'}
             {legacySize && ` Bu kayıt eski kuralla ${from?.maxPlayers} kişilikti; en yakın uygun sayıya çekildi.`}
           </span>
         </label>
@@ -245,7 +285,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
           <legend className="px-1 text-xs font-semibold text-muted-foreground">Sıralama ödülleri (KC)</legend>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {places.map((place, i) => (
-              <label key={`${format}-${i}`} className={labelCls}>
+              <label key={`${format}-${seats}-${i}`} className={labelCls}>
                 <span>
                   <span className="text-foreground">{place.label}</span> {place.hint}
                 </span>
@@ -264,7 +304,9 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground" aria-live="polite">
             Toplam ödül havuzu: <span className="font-bold text-foreground">{total.toLocaleString('tr-TR')} KC</span>. Sitede bu toplam gösterilir. Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir; ödül vermek istemediğin sırayı 0 bırak.
-            {format === 'eleme' && places.length > 2 && ' Elemede üçüncülük maçı oynanmaz: aynı turda elenenler aynı ödülü alır.'}
+            {shared
+              ? ` Final masası tek tek sıralanır (1. - ${seats}.); daha önceki turda elenenler aynı ödülü alır.`
+              : format === 'eleme' && places.length > 2 && ' Elemede üçüncülük maçı oynanmaz: aynı turda elenenler aynı ödülü alır.'}
           </p>
         </fieldset>
         <label className={cn(labelCls, 'sm:col-span-2')}>
@@ -354,7 +396,9 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
             return
           }
           void askConfirm(
-            `"${t.names[picked] ?? picked}" bu maçın kazananı olarak işaretlensin mi? Bu son maçsa turnuva biter ve ödül havuzu hemen ödenir; geri alınamaz.`,
+            t.tableSize > 2
+              ? `"${t.names[picked] ?? picked}" bu masanın birincisi olarak işaretlensin mi? Masa kapanır; diğer oyuncular oyunun o anki durumuna göre sıralanır ve tur atlayanlar buna göre belirlenir. Bu final masasıysa turnuva biter ve ödüller hemen ödenir; geri alınamaz.`
+              : `"${t.names[picked] ?? picked}" bu maçın kazananı olarak işaretlensin mi? Bu son maçsa turnuva biter ve ödül havuzu hemen ödenir; geri alınamaz.`,
           ).then((ok) => {
             if (ok) select.form?.requestSubmit()
             else select.value = winner ?? ''
@@ -362,7 +406,7 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
         }}
         className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
       >
-        <option value="">Kazanan seç</option>
+        <option value="">{t.tableSize > 2 ? 'Masa birincisini seç' : 'Kazanan seç'}</option>
         {real.map((p, i) => (
           <option key={`${i}-${p}`} value={p}>
             {t.names[p] ?? p}
@@ -381,7 +425,7 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">
-            {ARENA_META[t.game].title} · {FORMAT_SHORT[t.format]} · {STATUS_LABEL[t.status]}
+            {ARENA_META[t.game].title} · {FORMAT_SHORT[t.format]} · {t.tableSize > 2 ? `${t.tableSize} kişilik masa` : 'birebir'} · {STATUS_LABEL[t.status]}
           </span>
           <h3 className="font-display text-xl font-bold uppercase text-foreground">{t.title}</h3>
           <p className="text-xs capitalize text-muted-foreground">
@@ -444,7 +488,11 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
       )}
       {t.bracket && t.format === 'eleme' && (
         <div className="flex flex-col gap-2">
-          <h4 className="text-sm font-bold text-foreground">Eşleşmeler (kazananı seçince otomatik bir üst tura geçer)</h4>
+          <h4 className="text-sm font-bold text-foreground">
+            {t.tableSize > 2
+              ? `Masalar (her masanın ilk ${t.bracket.pass ?? TABLE_PASS} oyuncusu tur atlar; açık bir masada birinciyi elle seçebilirsin)`
+              : 'Eşleşmeler (kazananı seçince otomatik bir üst tura geçer)'}
+          </h4>
           <BracketView bracket={t.bracket} names={t.names} closed={t.status !== 'basladi'} renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />} />
         </div>
       )}
@@ -613,7 +661,7 @@ export function TournamentManager({ tournaments, templates = [], hidden = [] }: 
         <div className="flex flex-col gap-1">
           <h2 className="font-display text-xl font-bold uppercase text-foreground">Yeni turnuva oluştur</h2>
           <p className="text-sm text-muted-foreground">
-            Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlangıç saatinde kendiliğinden başlar, bitiş saatinde kesin kapanır. Eşleşmeler kura ile çekilir, bütün maçlar birebir oynanır.
+            Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlangıç saatinde kendiliğinden başlar, bitiş saatinde kesin kapanır. Eşleşmeler kura ile çekilir. Okey, Tavla, Bilardo, Kafa Topu ve Kafa Basketbolu birebir; 101 Okey, Batak, Pişti ve Jakopoly 4 kişilik ortak masalarda oynanır.
           </p>
         </div>
         <TemplatePicker templates={templates} picked={picked} onPick={pick} />

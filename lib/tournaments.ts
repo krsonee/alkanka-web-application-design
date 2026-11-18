@@ -6,17 +6,21 @@ import { getBalance, recordHistory, type Member } from '@/lib/member'
 import { assertCanPlay } from '@/lib/member-limits'
 import { applyCoins, ensureLedger } from '@/lib/wallet-ledger'
 import type { ArenaGame } from './arena'
-import { anyWin, bracketChampion, bracketOver, createBracket, isDecided, isRealMatch, setMatchWinner, voidMatch, type Bracket } from './bracket'
+import { anyWin, bracketChampion, bracketOver, createBracket, createTableBracket, isDecided, isRealMatch, setMatchWinner, setTableResult, voidMatch, type Bracket } from './bracket'
 import { createLeague, leagueStandings, MAX_LEAGUE_PLAYERS, setLeagueWinner, voidLeagueMatch } from './league'
 import { initState } from './pvp/rules'
+import { pickBotNames } from './pvp/tables'
 import { tournamentTable } from './tournament-games'
 import { cleanPrizes, prizeTotal, tournamentPayouts, type Payout } from './tournament-prizes'
 import {
   MAX_TOURNAMENT_PLAYERS,
+  TABLE_PASS,
   TOURNAMENT_MONEY_GAME,
   cleanJoinMinutes,
   isFinishReason,
+  minEntrants,
   roundName,
+  tournamentSeats,
   type FinishReason,
   type LiveMatch,
   type MyMatch,
@@ -63,18 +67,28 @@ const isoOrNull = (v: unknown) => (v ? toDate(v).toISOString() : null)
 const passed = (v: unknown) => Boolean(v) && toDate(v).getTime() <= Date.now()
 const joinMinutesOf = (row: Row) => cleanJoinMinutes((row.settings as { joinMinutes?: unknown } | null)?.joinMinutes)
 
+/**
+ * Players per table. Once paired, a tournament keeps the size it was paired with, so one that started
+ * as a duel before its game moved to shared tables is played out as a duel.
+ */
+const tableSizeOf = (row: Row) => {
+  const bracket = row.bracket as Bracket | null
+  return bracket ? (bracket.seats ?? 2) : (tournamentSeats(String(row.game)) ?? 2)
+}
+
 function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
   const own = entries.filter((e) => e.tournament_id === r.id)
   const names: Record<string, string> = {}
   for (const e of own) names[entryKey(e)] = String(e.nickname)
   const bracket = (r.bracket as Bracket | null) ?? null
+  const tableSize = tableSizeOf(r)
   const liveMatches: LiveMatch[] = tables
     .filter((t) => t.tournament_id === r.id)
     .map((t) => ({
       tableId: String(t.id),
       round: Number(t.round_no),
       match: Number(t.match_no),
-      players: ((t.players as { id: string }[]) ?? []).map((p) => p.id),
+      players: ((t.players as { id: string; bot?: boolean }[]) ?? []).filter((p) => !p.bot).map((p) => p.id),
       status: String(t.status),
     }))
   let currentRound: number | null = null
@@ -90,9 +104,10 @@ function mapRow(r: Row, entries: Row[], tables: Row[]): Tournament {
     rules: String(r.rules ?? ''),
     entryFee: Number(r.entry_fee),
     prizePool: Number(r.prize_pool),
-    prizes: cleanPrizes(r.prizes, r.format === 'lig' ? 'lig' : 'eleme', Number(r.max_players)),
+    prizes: cleanPrizes(r.prizes, r.format === 'lig' ? 'lig' : 'eleme', Number(r.max_players), tableSize),
     prizeNote: String(r.prize_note ?? ''),
     maxPlayers: Number(r.max_players),
+    tableSize,
     startsAt: new Date(String(r.starts_at)).toISOString(),
     endsAt: isoOrNull(r.ends_at),
     joinMinutes: joinMinutesOf(r),
@@ -214,9 +229,10 @@ function ensureColumns() {
 }
 
 function prizeColumns(t: TournamentInput) {
+  const seats = tournamentSeats(t.game) ?? 2
   const maxPlayers = clampPlayers(t.maxPlayers, t.format)
-  const prizes = cleanPrizes(t.prizes, t.format, maxPlayers)
-  return { maxPlayers, prizes: JSON.stringify(prizes), pool: prizeTotal(t.format, maxPlayers, prizes) }
+  const prizes = cleanPrizes(t.prizes, t.format, maxPlayers, seats)
+  return { maxPlayers, seats, prizes: JSON.stringify(prizes), pool: prizeTotal(t.format, maxPlayers, prizes, seats) }
 }
 
 const settingsOf = (t: TournamentInput) => JSON.stringify({ joinMinutes: cleanJoinMinutes(t.joinMinutes) })
@@ -226,8 +242,8 @@ export async function createTournament(t: TournamentInput) {
   const p = prizeColumns(t)
   await pool.query(
     `INSERT INTO tournaments (game, title, description, rules, entry_fee, prize_pool, prize_note, max_players, starts_at, format, table_size, prizes, ends_at, settings)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,2,$11::jsonb,$12,$13::jsonb)`,
-    [t.game, t.title, t.description, t.rules, t.entryFee, p.pool, t.prizeNote, p.maxPlayers, t.startsAt, t.format, p.prizes, t.endsAt ?? null, settingsOf(t)],
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$14,$11::jsonb,$12,$13::jsonb)`,
+    [t.game, t.title, t.description, t.rules, t.entryFee, p.pool, t.prizeNote, p.maxPlayers, t.startsAt, t.format, p.prizes, t.endsAt ?? null, settingsOf(t), p.seats],
   )
 }
 
@@ -237,8 +253,8 @@ export async function updateTournament(id: number, t: TournamentInput) {
   const p = prizeColumns(t)
   const r = await pool.query(
     `UPDATE tournaments SET game=$2, title=$3, description=$4, rules=$5, entry_fee=$6, prize_pool=$7, prize_note=$8,
-       max_players=$9, starts_at=$10, format=$11, prizes=$12::jsonb, ends_at=$13, settings=$14::jsonb WHERE id=$1 AND status = 'kayit' RETURNING id`,
-    [id, t.game, t.title, t.description, t.rules, t.entryFee, p.pool, t.prizeNote, p.maxPlayers, t.startsAt, t.format, p.prizes, t.endsAt ?? null, settingsOf(t)],
+       max_players=$9, starts_at=$10, format=$11, prizes=$12::jsonb, ends_at=$13, settings=$14::jsonb, table_size=$15 WHERE id=$1 AND status = 'kayit' RETURNING id`,
+    [id, t.game, t.title, t.description, t.rules, t.entryFee, p.pool, t.prizeNote, p.maxPlayers, t.startsAt, t.format, p.prizes, t.endsAt ?? null, settingsOf(t), p.seats],
   )
   if (r.rowCount) tournamentChanged()
   return Boolean(r.rowCount)
@@ -494,11 +510,25 @@ export async function removeEntry(entryId: number) {
 
 /** Pairs the entrants inside the caller's transaction. The entrants are read under the tournament's lock: whoever is paired is exactly whoever is registered. */
 async function pairIn(client: PoolClient, row: Row) {
+  const seats = tournamentSeats(String(row.game))
+  if (!seats) throw new Error('Bu oyunda turnuva oynanamıyor.')
   const entries = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1 ORDER BY created_at ASC', [row.id])
-  if (entries.rows.length < 2) throw new Error('Başlatmak için en az 2 oyuncu gerekli.')
+  if (entries.rows.length < minEntrants(seats)) throw new Error(`Başlatmak için en az ${minEntrants(seats)} oyuncu gerekli.`)
   const keys = entries.rows.map(entryKey)
-  const bracket = row.format === 'lig' ? createLeague(keys) : createBracket(keys, 2)
-  await client.query(`UPDATE tournaments SET status = 'basladi', bracket = $2::jsonb, winner = NULL WHERE id = $1`, [row.id, JSON.stringify(bracket)])
+  const bracket = seats > 2 ? createTableBracket(keys, seats, TABLE_PASS) : row.format === 'lig' ? createLeague(keys) : createBracket(keys, 2)
+  await client.query(`UPDATE tournaments SET status = 'basladi', bracket = $2::jsonb, winner = NULL, table_size = $3 WHERE id = $1`, [
+    row.id,
+    JSON.stringify(bracket),
+    seats,
+  ])
+}
+
+/** Why this tournament cannot be paired at all, whoever has entered: its game or its format has no tournament any more. */
+function unplayable(row: Row) {
+  const seats = tournamentSeats(String(row.game))
+  if (!seats) return 'Bu oyunda artık turnuva oynanmıyor. Turnuvayı iptal et ya da "Bilgileri düzenle"den oyunu değiştir.'
+  if (seats > 2 && row.format === 'lig') return 'Bu oyun ortak masalarda oynanıyor, lig düzeni yok. "Bilgileri düzenle"den düzeni eleme yap.'
+  return null
 }
 
 /** The panel's "start now": pairs every entrant at once and opens all first-round tables together. */
@@ -506,7 +536,8 @@ export async function startTournament(id: number) {
   await ensureAll()
   const started = await withTournament(id, async (client, row) => {
     if (!row || row.status !== 'kayit') return false
-    if (!tournamentTable(String(row.game))) throw new Error('Bu oyun iki kişiyle oynanamadığı için turnuvası başlatılamaz.')
+    const blocked = unplayable(row)
+    if (blocked) throw new Error(blocked)
     if (passed(row.ends_at)) throw new Error('Bitiş saati geçmiş. Önce "Bilgileri düzenle"den bitiş saatini ileri al.')
     await pairIn(client, row)
     return true
@@ -517,8 +548,8 @@ export async function startTournament(id: number) {
 }
 
 /**
- * The start time has come. With two or more entrants the tournament starts; otherwise, or when it
- * could not be played any more, it is cancelled and every fee goes back.
+ * The start time has come. With enough entrants (two for a duel, one full table otherwise) the
+ * tournament starts; otherwise, or when it could not be played any more, it is cancelled and every fee goes back.
  */
 export async function startDueTournament(id: number) {
   await ensureAll()
@@ -527,11 +558,11 @@ export async function startDueTournament(id: number) {
     const entered = await client.query('SELECT count(*)::int AS n FROM tournament_entries WHERE tournament_id = $1', [id])
     const reason: FinishReason | null = passed(row.ends_at)
       ? 'gec'
-      : entered.rows[0].n < 2
-        ? 'kayit-yok'
-        : tournamentTable(String(row.game))
-          ? null
-          : 'oyun'
+      : unplayable(row)
+        ? 'oyun'
+        : entered.rows[0].n < minEntrants(tournamentSeats(String(row.game)) ?? 2)
+          ? 'kayit-yok'
+          : null
     if (reason) return { closed: await cancelIn(client, row, reason) }
     await pairIn(client, row)
     return { closed: null }
@@ -545,12 +576,13 @@ export async function startDueTournament(id: number) {
   tournamentChanged()
 }
 
-type Opened = { game: string; title: string; round: string; joinMinutes: number; matches: { tableId: string; players: { id: string; name: string }[] }[] }
+type Opened = { game: string; title: string; round: string; joinMinutes: number; shared: boolean; matches: { tableId: string; players: { id: string; name: string }[] }[] }
 
 /**
- * Opens a table for every match whose two players are known and still unplayed, but only
+ * Opens a table for every match whose players are known and still unplayed, but only
  * once the whole previous round has finished so winners wait and advance together. When
- * nothing is left to play it closes the tournament instead.
+ * nothing is left to play it closes the tournament instead. At a shared table the seats
+ * nobody is named for go to bots, which can neither go through nor win anything.
  */
 async function openReadyMatches(id: number) {
   await ensureAll()
@@ -564,8 +596,8 @@ async function openReadyMatches(id: number) {
     if (roundIdx < 0) return null
     const earlierOpen = bracket.rounds.slice(0, roundIdx).some((round) => round.some((m) => !isDecided(m) && m.players.some(Boolean)))
     if (earlierOpen) return null
-    const setup = tournamentTable(String(row.game))
-    if (!setup) return null
+    const seats = bracket.seats ?? 2
+    const setup = tournamentTable(String(row.game), seats)
     const existing = await client.query(
       `SELECT match_no FROM game_tables WHERE tournament_id = $1 AND round_no = $2 AND status IN ('oynaniyor','bitti')`,
       [id, roundIdx],
@@ -573,27 +605,41 @@ async function openReadyMatches(id: number) {
     const opened = new Set(existing.rows.map((e) => Number(e.match_no)))
     const names = await client.query('SELECT user_id, nickname FROM tournament_entries WHERE tournament_id = $1', [id])
     const nicknames = new Map<string, string>(names.rows.map((n) => [entryKey(n), String(n.nickname)]))
-    const tables: { match_no: number; players: unknown; state: unknown }[] = []
+    const tables: { match_no: number; players: unknown; state: unknown; bots: number }[] = []
     for (const [mi, match] of bracket.rounds[roundIdx].entries()) {
       if (!isRealMatch(match) || isDecided(match) || opened.has(mi)) continue
+      const keys = match.players.filter((p): p is string => Boolean(p))
+      const botSeats = Array.from({ length: Math.max(0, seats - keys.length) }, (_, i) => keys.length + i)
+      const botNames = pickBotNames(botSeats.length)
       tables.push({
         match_no: mi,
-        players: (match.players as string[]).map((key, seat) => ({ id: key, name: nicknames.get(key) ?? key, seat })),
-        state: initState(row.game as never, { ...setup, botSeats: [] }),
+        players: [
+          ...keys.map((key, seat) => ({ id: key, name: nicknames.get(key) ?? key, seat })),
+          ...botSeats.map((seat, i) => ({ id: `bot:${seat}`, name: botNames[i], seat, bot: true })),
+        ],
+        state: initState(row.game as never, { ...setup, bots: botSeats.length, botSeats }),
+        bots: botSeats.length,
       })
     }
     if (!tables.length) return null
     const league = row.format === 'lig'
+    const shared = seats > 2
     const joinMinutes = joinMinutesOf(row)
     const round = roundName(league, roundIdx, bracket.rounds.length)
-    const tour: TableTour = { title: String(row.title), round, league, joinBy: new Date(Date.now() + joinMinutes * 60_000).toISOString() }
+    const tour: TableTour = {
+      title: String(row.title),
+      round,
+      league,
+      joinBy: new Date(Date.now() + joinMinutes * 60_000).toISOString(),
+      ...(shared ? { pass: roundIdx === bracket.rounds.length - 1 ? 1 : Math.max(1, bracket.pass ?? 1) } : {}),
+    }
     // One statement for the whole round: a 1024-player bracket opens 512 tables while the tournament row is locked.
     const made = await client.query(
       `INSERT INTO game_tables (game, stake, seats, status, players, state, created_by, mode, tournament_id, round_no, match_no, options)
-       SELECT $1, 0, 2, 'oynaniyor', t.players, t.state, 'turnuva', 'turnuva', $2, $3, t.match_no, $5::jsonb
-       FROM jsonb_to_recordset($4::jsonb) AS t(match_no int, players jsonb, state jsonb)
+       SELECT $1, 0, $6, 'oynaniyor', t.players, t.state, 'turnuva', 'turnuva', $2, $3, t.match_no, $5::jsonb || jsonb_build_object('bots', t.bots)
+       FROM jsonb_to_recordset($4::jsonb) AS t(match_no int, players jsonb, state jsonb, bots int)
        RETURNING id, players`,
-      [row.game, id, roundIdx, JSON.stringify(tables), JSON.stringify({ ...setup, tour })],
+      [row.game, id, roundIdx, JSON.stringify(tables), JSON.stringify({ ...setup, tour }), seats],
     )
     return {
       opened: {
@@ -601,7 +647,11 @@ async function openReadyMatches(id: number) {
         title: String(row.title),
         round,
         joinMinutes,
-        matches: made.rows.map((t) => ({ tableId: String(t.id), players: (t.players as { id: string; name: string }[]) ?? [] })),
+        shared,
+        matches: made.rows.map((t) => ({
+          tableId: String(t.id),
+          players: ((t.players as { id: string; name: string; bot?: boolean }[]) ?? []).filter((p) => !p.bot),
+        })),
       },
     }
   })
@@ -642,8 +692,9 @@ async function finishTournament(client: PoolClient, row: Row, bracket: Bracket, 
     )
   }
   const maxPlayers = Number(row.max_players)
+  const tableSize = bracket.seats ?? 2
   const payouts = tournamentPayouts(
-    { format, maxPlayers, prizes: cleanPrizes(row.prizes, format, maxPlayers), prizePool: Number(row.prize_pool) },
+    { format, maxPlayers, tableSize, prizes: cleanPrizes(row.prizes, format, maxPlayers, tableSize), prizePool: Number(row.prize_pool) },
     bracket,
     order,
     reason === 'sure',
@@ -704,8 +755,23 @@ export async function voidTournamentMatch(id: number, round: number, match: numb
   await settleMatch(id, (bracket, league) => (league ? voidLeagueMatch : voidMatch)(bracket, round, match, noShow))
 }
 
+/**
+ * Records how a shared table finished: `rank` is the whole table from best to worst, `through` the
+ * players who finished it and go on. `noShow` names those who never sat down.
+ */
+export async function settleTournamentTable(id: number, round: number, match: number, rank: string[], through: string[], noShow: string[] = []) {
+  await settleMatch(id, (bracket) => setTableResult(bracket, round, match, rank, through, noShow))
+}
+
 /** Admin override for no-shows: closes the live table and advances the chosen player. */
 export async function adminSetMatchWinner(id: number, round: number, match: number, winnerKey: string) {
+  const shared = await pool.query(`SELECT (bracket->>'seats') IS NOT NULL AS shared FROM tournaments WHERE id = $1`, [id])
+  if (shared.rows[0]?.shared) {
+    // A shared table sends more than one player on, so its result is read from the open table itself.
+    const { adminFinishTourTable } = await import('./pvp/tables')
+    if (!(await adminFinishTourTable(id, round, match, winnerKey))) throw new Error('Bu masa açık değil ya da seçilen oyuncu masada değil. Sonuç ancak açık bir masada girilebilir.')
+    return
+  }
   await pool.query(
     `UPDATE game_tables SET status = 'bitti', winner_id = $4, updated_at = now(), options = COALESCE(options, '{}'::jsonb) || '{"how":"panel"}'::jsonb
      WHERE tournament_id = $1 AND round_no = $2 AND match_no = $3 AND status = 'oynaniyor'`,

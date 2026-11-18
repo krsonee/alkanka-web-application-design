@@ -51,8 +51,9 @@ export const matchHref = (m: Pick<MyMatch, 'game' | 'tableId'>) => `/oyunlar/${m
 /**
  * What a tournament table carries about its tournament, so the table screen needs no extra query.
  * Tables opened before the time rules existed have no `joinBy`; none of those rules apply to them.
+ * `pass` is set on a shared table: how many of its players go through, one at the final.
  */
-export type TableTour = { title: string; round: string; league: boolean; joinBy?: string }
+export type TableTour = { title: string; round: string; league: boolean; joinBy?: string; pass?: number }
 
 /** Minutes a player has to sit down at a match once its table opens. */
 export const JOIN_MINUTES = [3, 5, 10, 15] as const
@@ -68,7 +69,7 @@ export type MatchEnd = 'gelmedi' | 'sure' | 'pes' | 'panel' | 'bitis' | 'iptal'
 export const MATCH_END_LABEL: Record<MatchEnd, string> = {
   gelmedi: 'hükmen, masaya gelmedi',
   sure: 'hükmen, hamle süresi',
-  pes: 'pes etti',
+  pes: 'pes',
   panel: 'sonucu yönetim girdi',
   bitis: 'turnuva süresi doldu',
   iptal: 'turnuva iptal',
@@ -80,10 +81,10 @@ export type FinishReason = 'tamam' | 'sure' | 'kayit-yok' | 'oynanmadi' | 'gec' 
 export const FINISH_LABEL: Record<FinishReason, string> = {
   tamam: 'Bütün maçlar oynandı',
   sure: 'Bitiş saati geldi',
-  'kayit-yok': 'Başlangıç saatinde 2 kişiden az kayıt vardı',
+  'kayit-yok': 'Başlangıç saatinde yeterli kayıt yoktu',
   oynanmadi: 'Hiçbir maç oynanmadı',
   gec: 'Başlangıç saati kaçtı, bitiş saati de geçmişti',
-  oyun: 'Bu oyun turnuvada birebir oynanamıyor',
+  oyun: 'Bu oyunda ya da bu düzende turnuva oynanamıyor',
   panel: 'Panelden iptal edildi',
 }
 
@@ -91,16 +92,34 @@ export const isFinishReason = (v: unknown): v is FinishReason => typeof v === 's
 
 /** Why a tournament was cancelled, in the words players read. */
 export const CANCEL_TEXT: Partial<Record<FinishReason, string>> = {
-  'kayit-yok': 'Başlangıç saatinde en az 2 kayıt olmadığı için turnuva iptal edildi.',
+  'kayit-yok': 'Başlangıç saatinde yeterli kayıt olmadığı için turnuva iptal edildi (birebir oyunlarda en az 2, masa oyunlarında en az 4 kayıt gerekir).',
   oynanmadi: 'Hiçbir maç oynanmadığı için turnuva iptal edildi.',
   gec: 'Turnuva saatinde başlatılamadığı için iptal edildi.',
   oyun: 'Bu oyunda turnuva düzenlenemediği için turnuva iptal edildi.',
   panel: 'Turnuva yönetim tarafından iptal edildi.',
 }
 
-/** Games that cannot be played by two players, so a tournament cannot pair them. */
-const NOT_HEAD_TO_HEAD: readonly string[] = ['batak']
-export const canHostTournament = (game: string) => !NOT_HEAD_TO_HEAD.includes(game)
+/** Tournament games played one against one. */
+export const DUEL_TOURNAMENT_GAMES: readonly string[] = ['tavla', 'okey', 'bilardo', 'kafa-topu', 'kafa-basketbolu']
+/** Tournament games played at shared tables: with two players they are too long, too dull or not playable at all. */
+export const TABLE_TOURNAMENT_GAMES: readonly string[] = ['okey101', 'batak', 'pisti', 'monopoly']
+
+/** Seats at a shared tournament table, and how many of them go through to the next round. The final has one winner. */
+export const TABLE_SEATS = 4
+export const TABLE_PASS = 2
+
+/** Players per tournament table for this game, or null when the game has no tournaments. */
+export const tournamentSeats = (game: string): number | null =>
+  DUEL_TOURNAMENT_GAMES.includes(game) ? 2 : TABLE_TOURNAMENT_GAMES.includes(game) ? TABLE_SEATS : null
+
+export const canHostTournament = (game: string) => tournamentSeats(game) !== null
+export const isTableTournament = (game: string) => (tournamentSeats(game) ?? 2) > 2
+
+/** A shared table has no league: everyone cannot meet everyone four at a time. */
+export const formatsFor = (game: string): readonly TournamentFormat[] => (isTableTournament(game) ? ['eleme'] : TOURNAMENT_FORMATS)
+
+/** Entrants a tournament needs at its start time: two for a duel, one full table otherwise. */
+export const minEntrants = (seats: number) => Math.max(2, seats)
 
 export type Tournament = {
   id: number
@@ -114,6 +133,8 @@ export type Tournament = {
   prizes: number[]
   prizeNote: string
   maxPlayers: number
+  /** Players per table: 2 for a duel, 4 at shared tables. A running tournament keeps the size it started with. */
+  tableSize: number
   startsAt: string
   /** Open matches close and the result is written at this moment. Null on tournaments from before end times. */
   endsAt: string | null

@@ -17,24 +17,28 @@ async function later(run: () => Promise<unknown>) {
 
 const isMember = (id: string) => !id.startsWith('misafir:')
 
-/** Tells both players of every newly opened match, in the site inbox and on their devices, with a link straight to the table. */
+/** Tells the players of every newly opened match, in the site inbox and on their devices, with a link straight to the table. */
 export async function notifyMatchReady(input: {
   game: string
   title: string
   round: string
   joinMinutes: number
+  /** A shared table: several rivals, and whoever stays away is out while the others play on. */
+  shared?: boolean
   matches: { tableId: string; players: { id: string; name: string }[] }[]
 }) {
   const notes = input.matches.flatMap((match) =>
     match.players
       .filter((p) => isMember(p.id))
       .map((p) => {
-        const rival = match.players.find((x) => x.id !== p.id)?.name ?? 'belli oldu'
+        const rivals = match.players.filter((x) => x.id !== p.id).map((x) => x.name)
+        const who = input.shared ? `Masandakiler: ${rivals.join(', ') || 'belli oldu'}` : `Rakibin: ${rivals[0] ?? 'belli oldu'}`
+        const rule = input.shared ? 'masaya girmezsen elenirsin, masa sensiz oynanır' : 'masaya girmezsen maçı hükmen kaybedersin'
         return {
           userId: p.id,
           name: p.name,
           title: 'Turnuva maçın hazır',
-          body: `${input.title} · ${input.round}. Rakibin: ${rival}. ${input.joinMinutes} dakika içinde masaya girmezsen maçı hükmen kaybedersin.`,
+          body: `${input.title} · ${input.round}. ${who}. ${input.joinMinutes} dakika içinde ${rule}.`.slice(0, 400),
           url: matchHref({ game: input.game, tableId: match.tableId }),
         }
       }),

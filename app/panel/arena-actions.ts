@@ -22,7 +22,7 @@ import {
   type TournamentInput,
 } from '@/lib/tournaments'
 import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tournament-templates'
-import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, isTournamentFormat } from '@/lib/tournaments-shared'
+import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, formatsFor, isTournamentFormat, tournamentSeats } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { MAX_PRIZE_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces } from '@/lib/tournament-prizes'
 import type { ActionState } from './actions'
@@ -122,7 +122,8 @@ const readTexts = (form: FormData) => ({
 function readTournament(form: FormData): TournamentInput {
   const game = String(form.get('game'))
   if (!isArenaGame(game)) throw new Error('Oyun seç.')
-  if (!canHostTournament(game)) throw new Error(`${ARENA_META[game].title} iki kişiyle oynanamadığı için turnuvası açılamıyor.`)
+  if (!canHostTournament(game)) throw new Error(`${ARENA_META[game].title} oyununda turnuva açılmıyor. Listeden başka bir oyun seç.`)
+  const seats = tournamentSeats(game) ?? 2
   const title = String(form.get('title') ?? '').trim().slice(0, 80)
   if (title.length < 3) throw new Error('Turnuva adı en az 3 karakter olmalı.')
   const start = formTime(form, 'startsAt')
@@ -132,15 +133,17 @@ function readTournament(form: FormData): TournamentInput {
   const endsAt = readEnd(form, start, 'başlangıçtan')
   const rawFormat = form.get('format')
   const format = isTournamentFormat(rawFormat) ? rawFormat : 'eleme'
+  if (!formatsFor(game).includes(format)) throw new Error(`${ARENA_META[game].title} ${seats} kişilik ortak masalarda oynanıyor; bu oyunda lig düzeni yok. Düzeni eleme seç.`)
   const maxPlayers = int(form, 'maxPlayers', 'Kişi sayısı', 2, MAX_TOURNAMENT_PLAYERS)
   if (format === 'lig' && maxPlayers > MAX_LEAGUE_PLAYERS) {
     throw new Error(`Lig formatında en fazla ${MAX_LEAGUE_PLAYERS} oyuncu olabilir (herkes herkesle oynar).`)
   }
-  if (!isPlayerCount(format, maxPlayers)) throw new Error(playerRuleText(format))
+  if (!isPlayerCount(format, maxPlayers, seats)) throw new Error(playerRuleText(format, seats))
   const prizes = cleanPrizes(
-    prizePlaces(format, maxPlayers).map((_, i) => int(form, `prize${i}`, 'Sıralama ödülü', 0, MAX_PRIZE_KC)),
+    prizePlaces(format, maxPlayers, seats).map((_, i) => int(form, `prize${i}`, 'Sıralama ödülü', 0, MAX_PRIZE_KC)),
     format,
     maxPlayers,
+    seats,
   )
   return {
     format,
@@ -262,7 +265,7 @@ export async function pickMatchWinner(_: ActionState, form: FormData): Promise<A
     await adminSetMatchWinner(Number(form.get('id')), Number(form.get('round')), Number(form.get('match')), winner)
     refresh()
     await logPanel('tournaments', 'Maç kazananı girildi', `Turnuva #${Number(form.get('id'))}`, `tur ${Number(form.get('round'))} · maç ${Number(form.get('match'))} · kazanan ${winner}`)
-    return { ok: true, message: 'Maç sonucu girildi, tur ilerletildi.' }
+    return { ok: true, message: 'Sonuç girildi, tur ilerletildi.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
   }
