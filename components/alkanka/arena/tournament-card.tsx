@@ -146,9 +146,9 @@ export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: ()
 
         <div className="flex flex-col gap-4 p-4 md:gap-5 md:p-7">
           <div className="flex flex-col gap-1.5 md:gap-2">
-            <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-primary md:text-xs">
+            <span className="flex items-start gap-2 text-[11px] font-bold uppercase leading-4 tracking-[0.18em] text-primary md:text-xs md:leading-4">
               <Gamepad2 className="size-4 shrink-0" aria-hidden="true" />
-              <span className="truncate">{meta.title} turnuvası · {shared ? `${t.tableSize} kişilik masalar` : 'birebir'}</span>
+              <span className="min-w-0 text-pretty">{meta.title} turnuvası · {shared ? `${t.tableSize} kişilik masalar` : 'birebir'}</span>
             </span>
             <h2 className="font-display text-2xl font-bold uppercase leading-none text-foreground text-balance md:text-3xl">{t.title}</h2>
             {t.description && <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground text-pretty md:line-clamp-none">{t.description}</p>}

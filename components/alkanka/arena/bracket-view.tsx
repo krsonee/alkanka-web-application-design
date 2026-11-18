@@ -25,6 +25,7 @@ function PlayerRow({
   placeholder,
   nameOf,
   winLabel,
+  absent,
 }: {
   player: string | null
   seed: string
@@ -32,6 +33,7 @@ function PlayerRow({
   placeholder: string
   nameOf: NameOf
   winLabel: string
+  absent: boolean
 }) {
   if (!player) {
     return (
@@ -64,6 +66,7 @@ function PlayerRow({
         {name}
       </span>
       {guest && <span className="shrink-0 rounded bg-secondary px-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">misafir</span>}
+      {absent && <span className="shrink-0 rounded bg-secondary px-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">gelmedi</span>}
       {seed && <span className="w-4 shrink-0 text-right font-display text-[10px] font-bold tabular-nums text-muted-foreground">{seed}</span>}
       {state === 'win' && <Crown className="size-3.5 shrink-0 text-primary" aria-label={winLabel} />}
     </div>
@@ -133,6 +136,7 @@ function MatchCard({ m, ri, mi, last, open, nameOf, closed, renderPick, seats }:
             nameOf={nameOf}
             seed={table ? (m.rank?.length ? `${pi + 1}.` : '') : String(mi * 2 + pi + 1)}
             state={stateOf(p)}
+            absent={Boolean(p && m.noShow?.includes(p))}
             winLabel={table && !last ? 'Tur atladı' : 'Kazanan'}
             placeholder={placeholder}
           />

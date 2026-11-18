@@ -5,7 +5,7 @@ import { formatAC } from '../points-context'
 
 export type ResultOutcome = 'win' | 'lose' | 'draw' | 'cancel' | 'spectate'
 
-type ResultPlayer = { id: string; name: string; winner: boolean; me: boolean; bot?: boolean }
+type ResultPlayer = { id: string; name: string; winner: boolean; me: boolean; bot?: boolean; tag?: string }
 
 const SPARKS = [
   { left: '12%', delay: '0s', size: 'size-1.5' },
@@ -190,7 +190,7 @@ export function GameResultCard({
                   {p.me && <span className="ml-1.5 text-xs font-semibold text-primary">(Sen)</span>}
                 </span>
                 <span className={cn('text-xs font-bold uppercase tracking-wider', p.winner ? 'text-primary' : 'text-muted-foreground')}>
-                  {p.winner ? 'Kazandı' : outcome === 'draw' || outcome === 'cancel' ? '—' : 'Elendi'}
+                  {p.tag ?? (p.winner ? 'Kazandı' : outcome === 'draw' || outcome === 'cancel' ? '—' : 'Elendi')}
                 </span>
               </li>
             ))}

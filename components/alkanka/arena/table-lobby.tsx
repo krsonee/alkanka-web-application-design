@@ -1685,13 +1685,26 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               delta={spectator ? undefined : practice ? 0 : recap?.kc?.delta}
               kcText={tourney ? (tourRound ? `Turnuva · ${tourRound}` : 'Turnuva maçı') : undefined}
               recap={spectator ? undefined : recapBlock}
-              players={data.players.map((p) => ({
-                id: p.id,
-                name: p.name,
-                bot: p.bot,
-                me: member != null && p.id === member.id,
-                winner: (data.winners ?? []).includes(p.id),
-              }))}
+              players={
+                tourShared && data.status === 'bitti' && data.rank?.length
+                  ? data.rank.map((p, i) => {
+                      const through = (data.winners ?? []).includes(p.id)
+                      return {
+                        id: p.id,
+                        name: p.name,
+                        me: member != null && p.id === member.id,
+                        winner: through,
+                        tag: tourFinal ? `${i + 1}.` : `${i + 1}. · ${through ? 'Tur atladı' : 'Elendi'}`,
+                      }
+                    })
+                  : data.players.map((p) => ({
+                      id: p.id,
+                      name: p.name,
+                      bot: p.bot,
+                      me: member != null && p.id === member.id,
+                      winner: (data.winners ?? []).includes(p.id),
+                    }))
+              }
               extra={
                 data.game === 'pisti' && data.status === 'bitti' && Array.isArray(data.state?.totals) ? (
                   <PistiFinalScore state={data.state} names={names} mySeat={mySeat} />
