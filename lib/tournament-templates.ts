@@ -5,14 +5,15 @@ import { MAX_LEAGUE_PLAYERS } from './league'
 import { cleanPrizes } from './tournament-prizes'
 import {
   DEFAULT_TOURNAMENT_MINUTES,
-  MAX_TOURNAMENT_MINUTES,
   MAX_TOURNAMENT_PLAYERS,
   MAX_TOURNAMENT_TEMPLATES,
   MIN_TOURNAMENT_MINUTES,
   cleanJoinMinutes,
+  cleanLeague,
   cleanMatchLength,
   formatsFor,
   isTournamentFormat,
+  maxTournamentMinutes,
   tournamentSeats,
   type Tournament,
   type TournamentTemplate,
@@ -65,9 +66,10 @@ function readSettings(raw: unknown): Settings | null {
     maxPlayers,
     startTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) ? startTime : '21:00',
     // Templates saved before the end time existed have no length: they open with the form's usual one.
-    lengthMinutes: whole(d.lengthMinutes, MIN_TOURNAMENT_MINUTES, MAX_TOURNAMENT_MINUTES, DEFAULT_TOURNAMENT_MINUTES),
+    lengthMinutes: whole(d.lengthMinutes, MIN_TOURNAMENT_MINUTES, maxTournamentMinutes(format), DEFAULT_TOURNAMENT_MINUTES),
     joinMinutes: cleanJoinMinutes(d.joinMinutes),
     matchLength: cleanMatchLength(game, d.matchLength),
+    league: cleanLeague(d.league),
   }
 }
 

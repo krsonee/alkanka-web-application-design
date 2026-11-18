@@ -14,11 +14,16 @@ export type Match = {
   bye?: boolean
 }
 
+/** One player's line in a points league: the games of the tournament's game that player finished while it ran. */
+export type PointRow = { key: string; played: number; wins: number; draws: number; losses: number; points: number }
+
 /**
  * `group` matches of one round feed one match of the next. A duel bracket sends one winner up.
  * A shared-table bracket has `seats` players at a table and sends `pass` of them up; its final has one winner.
+ * A points league has no matches of its own: `from` is the moment its games started to count and
+ * `table` is the final standing, written when it closes.
  */
-export type Bracket = { group: number; rounds: Match[][]; seats?: number; pass?: number }
+export type Bracket = { group: number; rounds: Match[][]; seats?: number; pass?: number; from?: string; table?: PointRow[] }
 
 function shuffle<T>(list: T[]) {
   const a = [...list]
