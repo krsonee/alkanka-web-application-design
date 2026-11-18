@@ -5,7 +5,7 @@ import { formatAC } from '../points-context'
 
 export type ResultOutcome = 'win' | 'lose' | 'draw' | 'cancel' | 'spectate'
 
-type ResultPlayer = { id: string; name: string; winner: boolean; me: boolean; bot?: boolean }
+type ResultPlayer = { id: string; name: string; winner: boolean; me: boolean; bot?: boolean; tag?: string }
 
 const SPARKS = [
   { left: '12%', delay: '0s', size: 'size-1.5' },
@@ -40,6 +40,7 @@ export function GameResultCard({
   gameImage,
   stake,
   delta,
+  kcText,
   badge,
   players,
   extra,
@@ -54,6 +55,8 @@ export function GameResultCard({
   stake: number
   /** Net KC from the settled match; falls back to the stake while it is still unknown. */
   delta?: number | null
+  /** Replaces the KC line where no stake is on the table, e.g. a tournament match. */
+  kcText?: string
   /** Short highlight above the title, e.g. "Mars · 3x". */
   badge?: string
   players: ResultPlayer[]
@@ -161,7 +164,7 @@ export function GameResultCard({
           )}
         >
           <Coins className="size-5" aria-hidden="true" />
-          {kcLabel(outcome, stake, delta)}
+          {kcText ?? kcLabel(outcome, stake, delta)}
         </div>
 
         {ranked.length > 1 && (
@@ -187,7 +190,7 @@ export function GameResultCard({
                   {p.me && <span className="ml-1.5 text-xs font-semibold text-primary">(Sen)</span>}
                 </span>
                 <span className={cn('text-xs font-bold uppercase tracking-wider', p.winner ? 'text-primary' : 'text-muted-foreground')}>
-                  {p.winner ? 'Kazandı' : outcome === 'draw' || outcome === 'cancel' ? '—' : 'Elendi'}
+                  {p.tag ?? (p.winner ? 'Kazandı' : outcome === 'draw' || outcome === 'cancel' ? '—' : 'Elendi')}
                 </span>
               </li>
             ))}

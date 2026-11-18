@@ -25,10 +25,10 @@ import {
 } from '@/components/alkanka/arena/okey-engine'
 import * as Pool from '@/lib/games/bilardo'
 
-import { initOkey101, okey101BotTurn, okey101Step, runOkey101Bots, viewOkey101, type Okey101State } from '@/lib/games/okey101'
+import { initOkey101, okey101BotTurn, okey101Step, rankTotals101, runOkey101Bots, viewOkey101, type Okey101State } from '@/lib/games/okey101'
 import { batakBotTurn, batakPaceMs, batakStep, initBatak, runBatakBots, viewBatak, type BatakState } from '@/lib/games/batak'
-import { initMonopoly, monoActor, monopolyBotTurn, monopolyPaceMs, monopolyStep, runMonopolyBots, type MonopolyState } from '@/lib/games/monopoly'
-import { initPisti, pistiBotTurn, pistiPaceMs, pistiStep, runPistiBots, viewPisti, type PistiState } from '@/lib/games/pisti'
+import { initMonopoly, monoActor, monopolyBotTurn, monopolyPaceMs, monopolyStep, netWorth, runMonopolyBots, type MonopolyState } from '@/lib/games/monopoly'
+import { initPisti, pistiBotTurn, pistiPaceMs, pistiStep, runPistiBots, sideOf as pistiSideOf, viewPisti, type PistiState } from '@/lib/games/pisti'
 import { initPapaz, papazBotTurn, papazPaceMs, papazStep, runPapazBots, viewPapaz, type PapazState } from '@/lib/games/papaz'
 
 export const PVP_GAMES = ['tavla', 'okey', 'bilardo', 'blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu', 'okey101', 'batak', 'monopoly', 'pisti', 'papaz'] as const
@@ -271,6 +271,25 @@ function seatAct(s: SeatState, seat: number, a: Action): ActResult {
   if (pacedBots(r.state)) return { state: r.state, outcome: null }
   const b = seatBots(r.state)
   return { state: b.state, outcome: seatOutcome(b.winners) }
+}
+
+/**
+ * The seats of a shared table from best to worst as the board stands, the game's own winners first.
+ * Null for a game that has no such order. A tournament uses it to say who goes through when a bot
+ * took the table, and how the final table finished.
+ */
+export function seatStanding(state: PvpState | null, winners: number[] = []): number[] | null {
+  if (!state || !isSeatState(state) || state.kind === 'papaz') return null
+  const s = state
+  const score = (seat: number) => {
+    if (s.kind === 'okey101') return -rankTotals101(s)[seat]
+    // Level on points, the player who took more tricks in the last hand is ahead.
+    if (s.kind === 'batak') return s.totals[seat] * 100 + (s.taken[seat] ?? 0)
+    if (s.kind === 'pisti') return s.totals[pistiSideOf(s, seat)] ?? 0
+    return s.players[seat].out ? -1 : netWorth(s, seat)
+  }
+  const won = (seat: number) => Number(winners.includes(seat))
+  return Array.from({ length: s.seats }, (_, i) => i).sort((a, b) => won(b) - won(a) || score(b) - score(a) || a - b)
 }
 
 /** Hands an absent player's seat in a multi-seat game to a bot. */

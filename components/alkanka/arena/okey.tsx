@@ -116,7 +116,7 @@ export function TileFace({
 export function TurnSteps({ phase }: { phase: 'draw' | 'discard' | 'wait' }) {
   const steps = [
     { key: 'draw', label: '1. Taş çek', hint: 'Ortadaki desteye ya da yerdeki taşa dokun' },
-    { key: 'discard', label: '2. Taş at', hint: 'Taşa çift dokun ya da "Buraya at" alanına sürükle' },
+    { key: 'discard', label: '2. Taş at', hint: 'Taşa çift dokun ya da ıstakadan masaya sürükle' },
   ] as const
   return (
     <ol className="grid grid-cols-2 gap-2" aria-label="Hamle adımları">

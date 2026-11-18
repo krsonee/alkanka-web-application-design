@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getMember } from '@/lib/member'
 import { listMyActiveTables, listOpenTables, sweepIdleTables, tableView } from '@/lib/pvp/tables'
-import { myTournamentTables } from '@/lib/tournaments'
+import { myMatches } from '@/lib/tournaments'
 import { AMBIENT_DEFAULTS, ambientTables, getAmbientSettings } from '@/lib/ambient-tables'
 
 export const dynamic = 'force-dynamic'
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   const [open, mine, tour] = await Promise.all([
     listOpenTables(game),
     m ? listMyActiveTables(m.id) : Promise.resolve([]),
-    m ? myTournamentTables(m.id) : Promise.resolve([]),
+    m ? myMatches(m.id) : Promise.resolve([]),
   ])
   const strip = (t: ReturnType<typeof tableView>) => ({ ...t, state: null })
   const ambient = game ? ambientTables(game, await getAmbientSettings().catch(() => AMBIENT_DEFAULTS)) : []

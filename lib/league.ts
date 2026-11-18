@@ -33,12 +33,25 @@ export function createLeague(keys: string[]): Bracket {
   return { group: 2, rounds }
 }
 
-export function setLeagueWinner(b: Bracket, round: number, match: number, winner: string | null): Bracket {
+/** `noShow` names the players who lost by not sitting down; it is kept with the result. */
+export function setLeagueWinner(b: Bracket, round: number, match: number, winner: string | null, noShow: string[] = []): Bracket {
   const m = b.rounds[round]?.[match]
   if (!m || (winner && !m.players.includes(winner))) return b
+  const result: Match = { players: [...m.players], winner, ...(winner && noShow.length ? { noShow } : {}) }
   return {
     group: b.group,
-    rounds: b.rounds.map((r, ri) => r.map((x, mi) => (ri === round && mi === match ? { ...x, winner } : { ...x, players: [...x.players] }))),
+    rounds: b.rounds.map((r, ri) => r.map((x, mi) => (ri === round && mi === match ? result : { ...x, players: [...x.players] }))),
+  }
+}
+
+/** Neither player sat down: the match is written off as a loss for both. */
+export function voidLeagueMatch(b: Bracket, round: number, match: number, noShow: string[] = []): Bracket {
+  const m = b.rounds[round]?.[match]
+  if (!m || m.winner) return b
+  const result: Match = { players: [...m.players], winner: null, void: true, ...(noShow.length ? { noShow } : {}) }
+  return {
+    group: b.group,
+    rounds: b.rounds.map((r, ri) => r.map((x, mi) => (ri === round && mi === match ? result : { ...x, players: [...x.players] }))),
   }
 }
 
@@ -55,7 +68,10 @@ export function leagueStandings(b: Bracket, order: string[] = []): Standing[] {
   for (const m of matches) {
     for (const p of m.players as string[]) {
       const s = row(p)
-      if (!m.winner) s.remaining++
+      if (m.void) {
+        s.played++
+        s.losses++
+      } else if (!m.winner) s.remaining++
       else {
         s.played++
         if (m.winner === p) {
@@ -83,6 +99,6 @@ export function leagueStandings(b: Bracket, order: string[] = []): Standing[] {
 export function leagueChampion(b: Bracket | null, order: string[] = []) {
   if (!b) return null
   const matches = allMatches(b)
-  if (!matches.length || matches.some((m) => !m.winner)) return null
+  if (!matches.length || matches.some((m) => !m.winner && !m.void)) return null
   return leagueStandings(b, order)[0]?.key ?? null
 }

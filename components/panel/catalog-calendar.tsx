@@ -8,20 +8,28 @@ import type { HiddenMap } from '@/lib/hidden-shared'
 import { STATUS_LABEL, type TournamentStatus } from '@/lib/tournaments-shared'
 import { cn } from '@/lib/utils'
 
-export type CalendarTournament = { id: number; title: string; startsAt: string; status: TournamentStatus }
+export type CalendarTournament = { id: number; title: string; startsAt: string; endsAt: string | null; finishedAt: string | null; status: TournamentStatus }
 type ListKind = 'events' | 'predictions' | 'campaigns'
-type EntryType = 'start' | 'end' | 'match' | 'tournament'
+type EntryType = 'start' | 'end' | 'match' | 'tournament' | 'cupEnd'
 type Entry = { key: string; day: string; time: string; at: number; type: EntryType; label: string; note?: string; open?: { kind: ListKind; id: string }; href?: string }
 
 const TR_OFFSET = 3 * 3_600_000
 const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
-const PREFIX: Record<EntryType, string> = { start: 'Başlar', end: 'Biter', match: 'Maç', tournament: 'Turnuva' }
+const PREFIX: Record<EntryType, string> = { start: 'Başlar', end: 'Biter', match: 'Maç', tournament: 'Turnuva', cupEnd: 'Turnuva biter' }
 const TONE: Record<EntryType, string> = {
   start: 'border-primary/50 bg-primary/15',
   end: 'border-destructive/50 bg-destructive/10',
   match: 'border-border bg-secondary',
   tournament: 'border-success/50 bg-success/15',
+  cupEnd: 'border-success/50 bg-background',
+}
+const LEGEND: Record<EntryType, string> = {
+  start: 'Başlar: kampanya başlangıcı',
+  end: 'Biter: kampanya bitişi',
+  match: 'Maç: tahmin maçı',
+  tournament: 'Turnuva: başlangıç saati',
+  cupEnd: 'Turnuva biter: en geç kapanacağı saat (maçlar erken biterse daha önce kapanır)',
 }
 
 /** Calendar days are Istanbul days (UTC+3, no DST), the same clock the date fields use. */
@@ -61,20 +69,44 @@ function collect(catalog: Pick<Catalog, 'events' | 'predictions' | 'campaigns'>,
       note: t.status === 'kayit' ? undefined : STATUS_LABEL[t.status].toLocaleLowerCase('tr'),
       href: `/panel?b=tournaments&f=tournament-${t.id}`,
     })
+    // A cancelled tournament has no end to plan around; a finished one is shown at the moment it really closed.
+    if (t.status === 'iptal') continue
+    const closed = t.status === 'bitti'
+    push(closed ? (t.finishedAt ?? t.endsAt ?? undefined) : (t.endsAt ?? undefined), {
+      key: `te-${t.id}`,
+      type: 'cupEnd',
+      label: t.title,
+      note: closed ? 'kapandı' : undefined,
+      href: `/panel?b=tournaments&f=tournament-${t.id}`,
+    })
   }
   return out.sort((a, b) => a.at - b.at)
 }
 
 function Chip({ entry, onOpen, wide }: { entry: Entry; onOpen: (kind: ListKind, id: string) => void; wide?: boolean }) {
-  const cls = cn('flex min-w-0 items-baseline gap-1 rounded-md border px-1.5 py-1 text-left text-xs leading-tight text-foreground hover:border-primary', TONE[entry.type], wide && 'px-2.5 py-2 text-sm')
-  const body = (
+  const cls = cn(
+    'flex min-w-0 rounded-md border text-left leading-tight text-foreground hover:border-primary',
+    TONE[entry.type],
+    wide ? 'items-baseline gap-1 px-2.5 py-2 text-sm' : 'flex-col gap-0.5 overflow-hidden px-1.5 py-1 text-xs',
+  )
+  // A day cell is too narrow for one line: the kind gets the first, the time and the name share the second.
+  const body = wide ? (
     <>
       <span className="shrink-0 font-semibold">{PREFIX[entry.type]}</span>
-      <span className={cn('min-w-0', !wide && 'truncate')}>{entry.label}</span>
+      <span className="min-w-0">{entry.label}</span>
       <span className="shrink-0 tabular-nums text-muted-foreground">
         {entry.time}
         {entry.note ? ` · ${entry.note}` : ''}
       </span>
+    </>
+  ) : (
+    <>
+      <span className="truncate font-semibold">{PREFIX[entry.type]}</span>
+      <span className="flex min-w-0 items-baseline gap-1">
+        <span className="shrink-0 tabular-nums text-muted-foreground">{entry.time}</span>
+        <span className="truncate">{entry.label}</span>
+      </span>
+      {entry.note && <span className="truncate text-muted-foreground">{entry.note}</span>}
     </>
   )
   const title = `${PREFIX[entry.type]}: ${entry.label} · ${entry.time}${entry.note ? ` · ${entry.note}` : ''}`
@@ -223,8 +255,8 @@ export function CatalogCalendar({
       <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground" aria-label="Takvimdeki kayıt türleri">
         {(Object.keys(PREFIX) as EntryType[]).map((type) => (
           <li key={type} className="flex items-center gap-1.5">
-            <span className={cn('size-3 rounded-sm border', TONE[type])} aria-hidden="true" />
-            {type === 'start' ? 'Başlar: kampanya başlangıcı' : type === 'end' ? 'Biter: kampanya bitişi' : type === 'match' ? 'Maç: tahmin maçı' : 'Turnuva: başlangıç saati'}
+            <span className={cn('size-3 shrink-0 rounded-sm border', TONE[type])} aria-hidden="true" />
+            {LEGEND[type]}
           </li>
         ))}
       </ul>

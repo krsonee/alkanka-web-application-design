@@ -16,6 +16,7 @@ import {
   paceBotTurn,
   botPaceMs,
   seatGameToBot,
+  seatStanding,
   seatToBot,
   viewState,
   type Outcome,
@@ -27,8 +28,11 @@ import { normalizeRules, normalizeVariant, rulesToList } from '@/lib/games/batak
 import { normalizePistiRules, normalizeTarget, pistiRulesToList } from '@/lib/games/pisti'
 import { normalizePapazRules, papazRulesToList } from '@/lib/games/papaz'
 import { monoRulesToList, normalizeMonoRules } from '@/lib/games/monopoly'
+import { MATCH_END_LABEL, matchHistoryMode, type MatchEnd, type TableTour } from '@/lib/tournaments-shared'
 
 export type Player = { id: string; name: string; seat: number; bot?: boolean }
+
+type TableLeaver = { id: string; name: string; how: MatchEnd }
 
 export type TableRow = {
   id: string
@@ -40,8 +44,25 @@ export type TableRow = {
   state: PvpState | null
   version: number
   winnerId: string | null
-  /** hold: extra coins blocked per player on single-game tavla tables to cover a mars (2x) or ağır mars (3x). */
-  options: TableOptions & { winners?: string[]; lastActs?: Record<string, string>; forfeits?: number; hold?: number }
+  /**
+   * hold: extra coins blocked per player on single-game tavla tables to cover a mars (2x) or ağır mars (3x).
+   * seen: when each player first opened a tournament table. ready: all of them have, so the move clock runs.
+   * how: the way a tournament table closed when it was not played to the end.
+   * out: players who left a shared tournament table before it ended, in the order they went; a bot plays their seat.
+   * rank: how a shared tournament table finished, best first.
+   */
+  options: TableOptions & {
+    winners?: string[]
+    lastActs?: Record<string, string>
+    forfeits?: number
+    hold?: number
+    tour?: TableTour
+    seen?: Record<string, string>
+    ready?: boolean
+    how?: MatchEnd
+    out?: TableLeaver[]
+    rank?: { id: string; name: string }[]
+  }
   createdBy: string
   tournamentId: number | null
   roundNo: number | null
@@ -90,7 +111,7 @@ const BOT_NAMES = [
   'Jako Bot', 'Kanka Bot', 'Usta Bot', 'Reis Bot', 'Paşa Bot', 'Kartal Bot', 'Baykuş Bot', 'Şahin Bot',
   'Tilki Bot', 'Aslan Bot', 'Efe Bot', 'Dayı Bot', 'Kaptan Bot', 'Hoca Bot', 'Çakal Bot', 'Bozkurt Bot',
 ]
-const pickBotNames = (n: number) => {
+export const pickBotNames = (n: number) => {
   const pool = [...BOT_NAMES]
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -125,6 +146,12 @@ function mapTable(r: Record<string, unknown>): TableRow {
       lastActs: raw.lastActs,
       forfeits: Number(raw.forfeits ?? 0) || 0,
       ...(raw.hold ? { hold: Number(raw.hold) || 0 } : {}),
+      ...(raw.tour && typeof raw.tour === 'object' ? { tour: raw.tour } : {}),
+      ...(raw.seen && typeof raw.seen === 'object' ? { seen: raw.seen } : {}),
+      ...(raw.ready === true ? { ready: true } : {}),
+      ...(raw.how ? { how: raw.how } : {}),
+      ...(Array.isArray(raw.out) ? { out: raw.out } : {}),
+      ...(Array.isArray(raw.rank) ? { rank: raw.rank } : {}),
     },
     createdBy: String(r.created_by ?? ''),
     tournamentId: r.tournament_id == null ? null : Number(r.tournament_id),
@@ -168,6 +195,13 @@ export function tableView(t: TableRow, userId: string | null) {
     winnerId: t.winnerId,
     tournamentId: t.tournamentId,
     roundNo: t.roundNo,
+    tour: t.options.tour ?? null,
+    arrived: Object.keys(t.options.seen ?? {}),
+    ready: t.options.ready === true,
+    how: t.options.how ?? null,
+    // Set for a viewer who left this shared tournament table before it ended: why they are out.
+    outHow: (userId && t.options.out?.find((o) => o.id === userId)?.how) || null,
+    rank: t.options.rank ?? null,
     updatedAt: t.updatedAt,
     seat,
     spectator: seat < 0,
@@ -473,10 +507,16 @@ export async function actOnTable(m: Member, id: string, version: number, action:
   const seat = t.players.find((p) => p.id === m.id && !p.bot)?.seat
   if (seat === undefined) throw new Error('Bu masada oyuncu değilsin.')
   if (t.version !== version) throw new Error('Masa güncellendi, tekrar dene.')
+  if (isTourTable(t) && action.type === 'resign') {
+    // Giving up at a shared tournament table takes the player out; the table plays on.
+    if (!(await dropTourPlayers(t, [m.id], 'pes'))) throw new Error('Masa güncellendi, tekrar dene.')
+    return
+  }
   const { state, outcome } = applyAction(t.state, seat, action)
   await saveState(t, version, state)
   await touchPlayer(t.id, m.id)
-  if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome)
+  // The board's own "Pes et" arrives as an action; a tournament match closed that way says so, like one left from the header.
+  if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome, t.tournamentId && action.type === 'resign' ? { how: 'pes' } : {})
 }
 
 async function touchPlayer(tableId: string, userId: string) {
@@ -496,9 +536,19 @@ async function touchPlayer(tableId: string, userId: string) {
 export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'leave' | 'idle' = 'leave') {
   const t = await getTableRow(id)
   if (!t || (t.status !== 'bekliyor' && t.status !== 'oynaniyor')) return
-  if (t.tournamentId) throw new Error('Turnuva masasından kalkamazsın.')
   const me = t.players.find((p) => p.id === m.id && !p.bot)
   if (!me) throw new Error('Bu masada oyuncu değilsin.')
+  if (t.tournamentId) {
+    if (isTourTable(t)) {
+      // A shared table plays on without the player who gave up: a bot takes the seat and the player is out.
+      if (t.status === 'oynaniyor' && !(await dropTourPlayers(t, [me.id], 'pes'))) throw new Error('Masa güncellendi, tekrar dene.')
+      return
+    }
+    // Nobody takes over a seat in a duel: giving up hands the match to the rival.
+    const rival = humans(t).find((p) => p.id !== me.id)
+    if (t.status === 'oynaniyor' && rival) await finishTable(t, { winnerSeat: rival.seat }, { how: 'pes' })
+    return
+  }
 
   if (t.status === 'bekliyor') {
     const others = humans(t).filter((p) => p.id !== me.id)
@@ -625,6 +675,9 @@ export async function sweepIdleTables() {
  */
 export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
   if (t.status !== 'oynaniyor' || !t.state) return t
+  // A tournament table stands still until its players have sat down: no clock runs and no bot moves.
+  // Tables opened before that rule have no clock at all.
+  if (t.tournamentId && !t.options.ready) return t
   const paced = Date.now() - new Date(t.updatedAt).getTime() >= botPaceMs(t.state) ? paceBotTurn(t.state) : null
   if (paced) {
     try {
@@ -635,7 +688,6 @@ export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
     if (paced.outcome) await finishTable({ ...t, state: paced.state, version: t.version + 1 }, paced.outcome)
     return (await getTableRow(t.id)) ?? t
   }
-  if (t.tournamentId) return t
   const limit = TURN_SECONDS[t.game as keyof typeof TURN_SECONDS]
   const turn = currentTurn(t.state)
   if (!limit || turn == null) return t
@@ -656,6 +708,19 @@ export async function enforceTurnClock(t: TableRow): Promise<TableRow> {
     return (await getTableRow(t.id)) ?? t
   }
   const strikes = await addTimeoutStrike(t.id, idlePlayer.id)
+  if (t.tournamentId) {
+    // Three clocks run out in a row forfeit the match. At a shared table the others play on.
+    const fresh = (await getTableRow(t.id)) ?? t
+    if (isTourTable(fresh)) {
+      if (strikes < TIMEOUT_STRIKES_TO_BOT || fresh.status !== 'oynaniyor') return fresh
+      await dropTourPlayers(fresh, [idlePlayer.id], 'sure')
+      return (await getTableRow(t.id)) ?? fresh
+    }
+    const rival = humans(fresh).find((p) => p.id !== idlePlayer.id)
+    if (strikes < TIMEOUT_STRIKES_TO_BOT || fresh.status !== 'oynaniyor' || !rival) return fresh
+    await finishTable(fresh, { winnerSeat: rival.seat }, { how: 'sure' })
+    return (await getTableRow(t.id)) ?? fresh
+  }
   const botCanTakeOver = isSeatGame(t.game) || (t.state.kind === 'okey' && okeySeats(t.state) > 2 && !t.state.team)
   if (botCanTakeOver && strikes >= TIMEOUT_STRIKES_TO_BOT) await leaveTable(idlePlayer, t.id, 'idle').catch(() => {})
   return (await getTableRow(t.id)) ?? t
@@ -681,16 +746,24 @@ export async function claimTimeout(m: Member, id: string) {
   if (!t || t.status !== 'oynaniyor' || !t.state) throw new Error('Oyun aktif değil.')
   const seat = t.players.find((p) => p.id === m.id && !p.bot)?.seat
   if (seat === undefined) throw new Error('Bu masada oyuncu değilsin.')
+  // Until both players have sat down, only the deadline for sitting down decides a tournament match.
+  if (awaitsPlayers(t)) throw new Error('Rakibinin masaya girme süresi dolmadı.')
+  const end: TableEnd = t.tournamentId ? { how: 'sure' } : {}
   const idle = await activeIdleMs(new Date(t.updatedAt).getTime())
   if (t.state.kind === 'duel') {
     if (!t.state.scores[seat] || t.state.scores[seat ? 0 : 1]) throw new Error('Henüz talep edemezsin.')
     if (idle < DUEL_TIMEOUT_MS) throw new Error('Rakibin için süre dolmadı.')
-    await finishTable(t, { winnerSeat: seat })
+    await finishTable(t, { winnerSeat: seat }, end)
     return
   }
   const turn = currentTurn(t.state)
   if (turn === seat) throw new Error('Sıra sende.')
   if (idle < TURN_TIMEOUT_MS) throw new Error('Rakibin için süre dolmadı.')
+  if (isTourTable(t)) {
+    const idlePlayer = humans(t).find((p) => p.seat === turn)
+    if (idlePlayer) await dropTourPlayers(t, [idlePlayer.id], 'sure')
+    return
+  }
   if (isSeatGame(t.game) && turn != null) {
     const res = seatGameToBot(t.state, turn)
     if (res) {
@@ -705,10 +778,134 @@ export async function claimTimeout(m: Member, id: string) {
     if (outcome) await finishTable({ ...t, state, version: t.version + 1 }, outcome)
     return
   }
-  await finishTable(t, { winnerSeat: seat })
+  await finishTable(t, { winnerSeat: seat }, end)
 }
 
-async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
+/** `how` and `noShow` say why a tournament table closed without being played to the end, and who never sat down at it. */
+type TableEnd = { how?: MatchEnd; noShow?: string[] }
+
+const tourOpponent = (t: TableRow, userId: string, how?: MatchEnd) => (how ? `${rivalName(t, userId)} (${MATCH_END_LABEL[how]})` : rivalName(t, userId))
+
+/** A tournament table with more than two seats: some of its players go through, and a bot plays any seat a player left. */
+const isTourTable = (t: TableRow) => Boolean(t.tournamentId) && t.seats > 2
+/** How many players leave a shared tournament table for the next round. */
+const passOf = (t: TableRow) => Math.max(1, Math.floor(Number(t.options.tour?.pass)) || 1)
+
+const LEAVER_LABEL: Record<string, string> = { pes: 'pes etti', sure: 'süresi doldu', gelmedi: 'gelmedi' }
+
+/**
+ * Takes players out of a shared tournament table: bots play their seats from here and they are out of the
+ * tournament. `start` also starts the move clock, for the moment the deadline for sitting down has passed.
+ * When no more players are left than go through anyway, the table closes on the spot.
+ * False when somebody else changed the table first; the caller's next look at it tries again.
+ */
+async function dropTourPlayers(t: TableRow, ids: string[], how: MatchEnd, start = false): Promise<boolean> {
+  const gone = humans(t).filter((p) => ids.includes(p.id))
+  if (t.status !== 'oynaniyor' || !t.state || !gone.length) return false
+  let state = t.state
+  for (const p of gone) state = seatGameToBot(state, p.seat)?.state ?? state
+  const players = t.players.map((p) => (gone.includes(p) ? { id: `bot:${p.seat}`, name: `${p.name} (${LEAVER_LABEL[how] ?? 'ayrıldı'})`, seat: p.seat, bot: true } : p))
+  const out: TableLeaver[] = [...(t.options.out ?? []), ...gone.map((p) => ({ id: p.id, name: p.name, how }))]
+  const now = new Date().toISOString()
+  const staying = players.filter((p) => !p.bot)
+  const patch = start ? { out, bots: players.filter((p) => p.bot).length, ready: true, lastActs: Object.fromEntries(staying.map((p) => [p.id, now])) } : { out, bots: players.filter((p) => p.bot).length }
+  const r = await pool.query(
+    `UPDATE game_tables SET players = $3::jsonb, state = $4::jsonb, version = version + 1, updated_at = now(),
+       options = COALESCE(options, '{}'::jsonb) || $5::jsonb
+     WHERE id = $1 AND version = $2 AND status = 'oynaniyor' RETURNING id`,
+    [t.id, t.version, JSON.stringify(players), JSON.stringify(state), JSON.stringify(patch)],
+  )
+  if (r.rowCount === 0) return false
+  // A table one never sat down at was not played, so it adds no game to that player's history.
+  if (how !== 'gelmedi') {
+    for (const p of gone) {
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'turnuva', opponent: tourOpponent(t, p.id, how), stake: 0, result: 'loss', delta: 0, tableId: t.id })
+    }
+  }
+  if (staying.length > passOf(t)) return true
+  const fresh = await getTableRow(t.id)
+  if (fresh) await finishTourTable(fresh, null, { how })
+  return true
+}
+
+/**
+ * Closes a shared tournament table. The players still seated are ranked by the board, the game's own
+ * winners first; as many as the round allows go through. Players who left earlier are ranked below
+ * them, the last to leave highest. A bot's result counts for nothing: the best player takes its place.
+ */
+async function finishTourTable(t: TableRow, outcome: Outcome, end: TableEnd = {}) {
+  const left = t.options.out ?? []
+  const noShow = left.filter((o) => o.how === 'gelmedi').map((o) => o.id)
+  const people = humans(t)
+  if (!people.length) {
+    await voidTable(t, end.how ?? 'gelmedi', noShow)
+    return
+  }
+  const winnerSeats = outcome ? (outcome.winnerSeats ?? (outcome.winnerSeat === null ? [] : [outcome.winnerSeat])) : []
+  const bySeat = t.players.map((p) => p.seat).sort((a, b) => Number(winnerSeats.includes(b)) - Number(winnerSeats.includes(a)) || a - b)
+  const standing = seatStanding(t.state, winnerSeats) ?? bySeat
+  const finishers = standing.flatMap((seat) => people.filter((p) => p.seat === seat))
+  const through = finishers.slice(0, passOf(t))
+  const rank = [...finishers, ...[...left].reverse()].map((p) => ({ id: p.id, name: p.name }))
+  const r = await pool.query(
+    `UPDATE game_tables SET status = 'bitti', winner_id = $2, options = COALESCE(options, '{}'::jsonb) || $3::jsonb, updated_at = now()
+     WHERE id = $1 AND status = 'oynaniyor' RETURNING id`,
+    [t.id, through[0].id, JSON.stringify({ winners: through.map((p) => p.id), rank, ...(end.how ? { how: end.how } : {}) })],
+  )
+  if (r.rowCount === 0) return
+  // Closed at the deadline for sitting down: the board was never played.
+  if (end.how !== 'gelmedi') {
+    for (const p of people) {
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: matchHistoryMode(end.how), opponent: tourOpponent(t, p.id, end.how), stake: 0, result: through.includes(p) ? 'win' : 'loss', delta: 0, tableId: t.id })
+    }
+  }
+  const { settleTournamentTable } = await import('@/lib/tournaments')
+  await settleTournamentTable(
+    t.tournamentId!,
+    t.roundNo!,
+    t.matchNo!,
+    rank.map((p) => p.id),
+    through.map((p) => p.id),
+    noShow,
+  )
+}
+
+/** The panel names the winner of an open shared table: that player is first, the rest follow as the board stands. */
+export async function adminFinishTourTable(tournamentId: number, round: number, match: number, winnerKey: string) {
+  const r = await pool.query(`SELECT * FROM game_tables WHERE tournament_id = $1 AND round_no = $2 AND match_no = $3 AND status = 'oynaniyor' LIMIT 1`, [
+    tournamentId,
+    round,
+    match,
+  ])
+  const t = r.rows[0] ? mapTable(r.rows[0]) : null
+  const winner = t ? humans(t).find((p) => p.id === winnerKey) : undefined
+  if (!t || !isTourTable(t) || !winner) return false
+  await finishTourTable(t, { winnerSeat: winner.seat }, { how: 'panel' })
+  return true
+}
+
+/**
+ * The panel names the winner of an open duel: the table closes as any finished match does, so both
+ * players get the match in their history and the tournament moves on. False when no such table is open.
+ */
+export async function adminFinishDuelTable(tournamentId: number, round: number, match: number, winnerKey: string) {
+  const r = await pool.query(`SELECT * FROM game_tables WHERE tournament_id = $1 AND round_no = $2 AND match_no = $3 AND status = 'oynaniyor' LIMIT 1`, [
+    tournamentId,
+    round,
+    match,
+  ])
+  const t = r.rows[0] ? mapTable(r.rows[0]) : null
+  const winner = t ? humans(t).find((p) => p.id === winnerKey) : undefined
+  if (!t || isTourTable(t) || !winner) return false
+  await finishTable(t, { winnerSeat: winner.seat }, { how: 'panel' })
+  return true
+}
+
+async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: TableEnd = {}) {
+  if (isTourTable(t)) {
+    await finishTourTable(t, outcome, end)
+    return
+  }
   const winnerSeats = outcome.winnerSeats ?? (outcome.winnerSeat === null ? [] : [outcome.winnerSeat])
   const isDraw = outcome.winnerSeat === null && outcome.winnerSeats === undefined
   const winners = t.players.filter((p) => winnerSeats.includes(p.seat))
@@ -716,10 +913,10 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const isTournament = Boolean(t.tournamentId)
 
   if (isTournament && humanWinners.length === 0) {
-    // Tournament draws are replayed on a fresh board with the same pairing.
+    // Tournament draws are replayed on a fresh board with the same pairing and the same table rules.
     await pool.query(`UPDATE game_tables SET state = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1`, [
       t.id,
-      JSON.stringify(initState(t.game as never)),
+      JSON.stringify(initState(t.game as never, { ...t.options, botSeats: [] })),
     ])
     return
   }
@@ -727,17 +924,20 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
   const r = await pool.query(
     `UPDATE game_tables SET status = 'bitti', winner_id = $2, options = options || $3::jsonb, updated_at = now()
      WHERE id = $1 AND status = 'oynaniyor' RETURNING id`,
-    [t.id, winners[0]?.id ?? null, JSON.stringify({ winners: winners.map((p) => p.id) })],
+    [t.id, winners[0]?.id ?? null, JSON.stringify({ winners: winners.map((p) => p.id), ...(end.how ? { how: end.how } : {}) })],
   )
   if (r.rowCount === 0) return
 
   if (isTournament) {
     const champ = humanWinners[0]
-    for (const p of humans(t)) {
-      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'turnuva', opponent: rivalName(t, p.id), stake: 0, result: p.id === champ.id ? 'win' : 'loss', delta: 0, tableId: t.id })
+    // A match one side never sat down to was not played, so it adds no game to anybody's history or counters.
+    if (end.how !== 'gelmedi') {
+      for (const p of humans(t)) {
+        await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: matchHistoryMode(end.how), opponent: tourOpponent(t, p.id, end.how), stake: 0, result: p.id === champ.id ? 'win' : 'loss', delta: 0, tableId: t.id })
+      }
     }
     const { advanceTournament } = await import('@/lib/tournaments')
-    await advanceTournament(t.tournamentId!, t.roundNo!, t.matchNo!, champ.id)
+    await advanceTournament(t.tournamentId!, t.roundNo!, t.matchNo!, champ.id, end.noShow ?? [])
     return
   }
 
@@ -836,6 +1036,122 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>) {
     const bonus = extra.get(p.id) ?? 0
     await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: (won ? (paid.get(p.id) ?? 0) - t.stake : -t.stake) + bonus, tableId: t.id })
   }
+}
+
+/** Closes a tournament table nobody won: the match is a loss for both players. */
+async function voidTable(t: TableRow, how: MatchEnd, noShow: string[]) {
+  const r = await pool.query(
+    `UPDATE game_tables SET status = 'bitti', winner_id = NULL, options = COALESCE(options, '{}'::jsonb) || $2::jsonb, updated_at = now()
+     WHERE id = $1 AND status = 'oynaniyor' RETURNING id`,
+    [t.id, JSON.stringify({ winners: [], how })],
+  )
+  if (r.rowCount === 0) return
+  if (how !== 'gelmedi') {
+    for (const p of humans(t)) {
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'turnuva', opponent: tourOpponent(t, p.id, how), stake: 0, result: 'loss', delta: 0, tableId: t.id })
+    }
+  }
+  const { voidTournamentMatch } = await import('@/lib/tournaments')
+  await voidTournamentMatch(t.tournamentId!, t.roundNo!, t.matchNo!, noShow)
+}
+
+/** A tournament table that still waits for a player to sit down. Tables from before the time rules never do. */
+const awaitsPlayers = (t: TableRow) => Boolean(t.tournamentId) && t.status === 'oynaniyor' && Boolean(t.options.tour?.joinBy) && !t.options.ready
+
+/**
+ * Notes that a player has opened their tournament table. When the second one does, the move clock
+ * starts from that moment. The version check keeps two arrivals at once from overwriting each other.
+ */
+async function markArrival(t: TableRow, userId: string): Promise<boolean> {
+  if (!awaitsPlayers(t) || t.options.seen?.[userId] || !humans(t).some((p) => p.id === userId)) return false
+  const now = new Date().toISOString()
+  const seen = { ...t.options.seen, [userId]: now }
+  const ready = humans(t).every((p) => seen[p.id])
+  const patch = ready ? { seen, ready: true, lastActs: Object.fromEntries(humans(t).map((p) => [p.id, now])) } : { seen }
+  const r = await pool.query(
+    `UPDATE game_tables SET options = COALESCE(options, '{}'::jsonb) || $3::jsonb, version = version + 1,
+       updated_at = CASE WHEN $4::boolean THEN now() ELSE updated_at END
+     WHERE id = $1 AND version = $2 AND status = 'oynaniyor' RETURNING id`,
+    [t.id, t.version, JSON.stringify(patch), ready],
+  )
+  return Boolean(r.rowCount)
+}
+
+/**
+ * Past the deadline for sitting down: the player who came wins by forfeit, and if nobody came the match
+ * is written off for both. A late player is still seated as long as nobody has checked the deadline yet.
+ */
+async function settleNoShow(t: TableRow): Promise<boolean> {
+  if (!awaitsPlayers(t) || Date.now() < new Date(t.options.tour!.joinBy!).getTime()) return false
+  const people = humans(t)
+  const here = people.filter((p) => t.options.seen?.[p.id])
+  const absent = people.filter((p) => !t.options.seen?.[p.id]).map((p) => p.id)
+  if (!absent.length) return false
+  if (isTourTable(t)) {
+    // Whoever came plays on with bots in the empty seats; with nobody there the table is written off.
+    if (here.length) return dropTourPlayers(t, absent, 'gelmedi', true)
+    await voidTable(t, 'gelmedi', absent)
+    return true
+  }
+  if (here.length === 1) await finishTable(t, { winnerSeat: here[0].seat }, { how: 'gelmedi', noShow: absent })
+  else await voidTable(t, 'gelmedi', absent)
+  return true
+}
+
+/**
+ * Called on every poll of a tournament table, before the turn clock: seats the polling player and
+ * applies the deadline for sitting down. Returns the table as it is afterwards.
+ */
+export async function enterTournamentTable(t: TableRow, userId: string | null): Promise<TableRow> {
+  if (!awaitsPlayers(t)) return t
+  let row = t
+  const unseated = (x: TableRow) => userId != null && awaitsPlayers(x) && !x.options.seen?.[userId] && humans(x).some((p) => p.id === userId)
+  for (let attempt = 0; attempt < 3 && unseated(row); attempt++) {
+    const seated = await markArrival(row, userId!)
+    const fresh = await getTableRow(t.id)
+    // Lost the race to the other player's arrival or move: retry on the newer table.
+    if (!fresh || (!seated && fresh.version === row.version)) break
+    row = fresh
+  }
+  if (await settleNoShow(row)) row = (await getTableRow(t.id)) ?? row
+  return row
+}
+
+/** The clock for a tournament table that nobody is polling: what the players' own requests would have done. */
+export async function nudgeTournamentTable(t: TableRow) {
+  if (!t.tournamentId || t.status !== 'oynaniyor') return
+  if (await settleNoShow(t)) return
+  const state = t.state
+  if (!t.options.ready || !state) return
+  if (state.kind !== 'duel') {
+    await enforceTurnClock(t)
+    return
+  }
+  // Each side plays its own game here; whoever never finished theirs loses, and if neither did the match is written off.
+  if ((await activeIdleMs(new Date(t.updatedAt).getTime())) < DUEL_TIMEOUT_MS) return
+  const done = [0, 1].filter((seat) => state.scores[seat])
+  if (done.length === 1) await finishTable(t, { winnerSeat: done[0] }, { how: 'sure' })
+  else if (done.length === 0) await voidTable(t, 'sure', [])
+}
+
+/**
+ * Open tables of the given tournaments whose clock may have run out: the deadline for sitting down has
+ * passed, or both players are seated and the table has been still for longer than the shortest move clock.
+ * `joinOnly` leaves the second kind out; `before` only takes deadlines that fell before that moment.
+ */
+export async function listTournamentTablesDue(tournamentIds: number[], opts: { joinOnly?: boolean; before?: Date; limit?: number } = {}) {
+  if (!tournamentIds.length) return []
+  const r = await pool.query(
+    `SELECT * FROM game_tables
+     WHERE tournament_id = ANY($1::int[]) AND status = 'oynaniyor' AND options->'tour'->>'joinBy' IS NOT NULL
+       AND (
+         (options->>'ready' IS NULL AND (options->'tour'->>'joinBy')::timestamptz <= COALESCE($3::timestamptz, now()))
+         OR ($2::boolean = false AND options->>'ready' = 'true' AND updated_at < now() - interval '20 seconds')
+       )
+     ORDER BY updated_at ASC LIMIT $4`,
+    [tournamentIds, opts.joinOnly === true, opts.before ?? null, opts.limit ?? 5000],
+  )
+  return r.rows.map(mapTable)
 }
 
 export async function adminListTables(status?: string) {

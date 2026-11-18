@@ -55,7 +55,7 @@ const LIMIT_STEPS: GuideStep[] = [
     body: (
       <ol className={ol}>
         <li><b>Günlük max net kazanç</b>: Üyenin gün içindeki kazancı (kazandığı eksi yatırdığı) bu sayıya ulaşınca ödemesi bu sayıda kesilir. Kaybetmesine engel olmaz.</li>
-        <li><b>Günlük max oyun sayısı</b>: Gün içinde açabileceği oyun/masa sayısı. Dolunca yeni masa açamaz ama oturduğu oyunu bitirebilir.</li>
+        <li><b>Günlük max oyun sayısı</b>: Gün içinde açabileceği oyun/masa sayısı. Dolunca yeni masa açamaz ve turnuvaya kaydolamaz ama oturduğu oyunu bitirebilir.</li>
         <li><b>Günlük max market harcaması</b>: Marketten bir günde harcayabileceği en fazla Kanka Coin.</li>
         <li><b>Marketten hiç alışveriş yapamasın</b>: Market tamamen kapanır, harcama sınırı devre dışı kalır.</li>
         <li>Boş bırakılan alan <b>sınırsız</b> demektir. Sayaçlar her gece 00:00’da (Türkiye saati) sıfırlanır.</li>
@@ -115,21 +115,51 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     title: 'Turnuva oluşturma',
     body: (
       <ol className={ol}>
-        <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir.</li>
-        <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar.</li>
-        <li><b>Kontenjan</b> listeden seçilir: elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı.</li>
-        <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
+        <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç</b> ve <b>bitiş saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir. Form başlangıcı bir saat sonrasına, bitişi başlangıçtan 3 saat sonrasına getirir; başlangıcı değiştirirsen bitiş de aynı kadar kayar.</li>
+        <li><b>Birebir oyunlar</b>: Okey, Tavla, Bilardo, Kafa Topu, Kafa Basketbolu. Bu oyunlarda her maç iki kişi arasında oynanır.</li>
+        <li><b>Ortak masa oyunları</b>: 101 Okey, Batak, Pişti, Jakopoly. Bu oyunlarda oyuncular kura ile <b>4 kişilik masalara</b> oturur, herkes kendi adına oynar (eş yok). Her masanın <b>ilk 2 oyuncusu</b> bir sonraki tura geçer; final masasının birincisi şampiyon olur. Listede olmayan oyunlarda turnuva açılmaz.</li>
+        <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar. Lig sadece birebir oyunlarda vardır; ortak masa oyunlarında düzen hep elemedir.</li>
+        <li><b>Maç uzunluğu</b> sadece Tavla ve Okey&apos;de çıkar. Tavla: tek el, 3 puanlık ya da 5 puanlık maç (normal el 1, mars 2, ağır mars 3 puan). Okey: tek el ya da 10, 20, 30 puandan düşüş (eli bitiren rakibinin puanını düşürür, puanı önce sıfıra inen kaybeder). Uzun maç seçersen bitiş saatini de ileri al: bitiş saatinde süren maçlar kapanır. Diğer oyunlar kendi standart uzunluğuyla oynanır.</li>
+        <li><b>Kontenjan</b> listeden seçilir: birebir elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı, ortak masa oyunlarında 4, 8, 16 … 1024 kişi (masalar tam dolsun diye).</li>
+        <li>Ortak masa turnuvası <b>en az 4 kayıtla</b> başlar. Kontenjan dolmazsa oyuncular masalara eşit dağıtılır: 3 oyunculu masada boş koltuğa <b>bot</b> oturur, 2 ya da daha az oyuncusu olan masa oynanmaz ve oyuncuları doğrudan tur atlar. Bot tur atlayamaz, ödül alamaz; sırası en iyi oyuncuya geçer.</li>
+        <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Birebir elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ortak masa oyunlarında final masası tek tek sıralanır (1., 2., 3., 4.), 5.-8. sırası yarı final masalarında elenenlerdir ve tutarı kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
         <li>Kaydettiğin turnuva hemen <span className={code}>/turnuvalar</span> sayfasında kayda açılır.</li>
+        <li>Kayıt sürerken <b>giriş ücretini</b> değiştirirsen yeni ücret sadece sonradan kaydolanlardan kesilir. Önceden kaydolan, ayrılınca ya da turnuva iptal olunca kendi ödediği tutarı geri alır.</li>
+        <li>Aynı ada sahip iki üye aynı turnuvaya girebilir; bir üye aynı turnuvaya ikinci kez giremez.</li>
+        <li>Giriş ücretleri panel özetinde <b>Harcanan</b>, turnuva ödülleri <b>Dağıtılan</b> altında (<b>Turnuva ödülleri</b> satırı) görünür. Ücret ve ödül, üyenin oynadığı ya da kazandığı oyun sayısına ve görev sayaçlarına eklenmez.</li>
       </ol>
     ),
   },
   {
-    title: 'Başlatma ve kazanan seçme',
+    title: 'Saatler: başlangıç, maça giriş, hamle süresi, bitiş',
     body: (
       <ol className={ol}>
-        <li>Kayıt dolunca ya da saat gelince <b>Başlat</b> de. Eşleşmeler kura ile çekilir: tavla ve bilardo birebir, okey 4 kişilik masadır.</li>
-        <li>Maçlar sitede oynanınca kazanan kendiliğinden ilerler. Bir maç takılırsa kazananı elle seçebilirsin.</li>
-        <li>Gelmeyen oyuncuyu başlamadan önce kayıt listesinden çıkarabilirsin. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
+        <li><b>Başlangıç saatinde</b> kayıtlar kapanır ve turnuva kendiliğinden başlar. O an yeterli kayıt yoksa (birebir oyunlarda 2, ortak masa oyunlarında 4 kişiden az) turnuva iptal olur, ücretler iade edilir ve kayıtlı üyelere mesaj gider.</li>
+        <li>Bir maç ya da masa açılınca oyuncularına <b>bildirim ve site içi mesaj</b> gider; sitenin üstünde &quot;Turnuva maçın hazır&quot; kutusu ve geri sayım çıkar.</li>
+        <li><b>Maça giriş süresi</b> (3, 5, 10 ya da 15 dakika), birebir oyunlarda: masaya girmeyen oyuncu maçı hükmen kaybeder. İkisi de girmezse maç ikisi için de kayıp sayılır. Gelmediği için kaybeden oyuncu o maçtan sıralama ödülü almaz.</li>
+        <li><b>Maça giriş süresi</b>, ortak masa oyunlarında: herkes gelince oyun hemen başlar. Süre dolduğunda gelmeyen oyuncu elenir, koltuğuna bot oturur ve masa onsuz oynanır. Masaya kimse girmezse masa herkes için kayıp sayılır. Gelenler tur atlayacak sayıdan fazla değilse masa oynanmadan kapanır, gelenler tur atlar.</li>
+        <li>Oyuncular masaya girince <b>hamle süresi</b> başlar (normal masalardaki süre). Süre dolunca hamle kendiliğinden yapılır; aynı oyuncunun süresi üst üste 3 kez dolarsa birebir oyunda maçı hükmen kaybeder, ortak masada elenir ve koltuğuna bot oturur. Oyuncu masadaki <b>Pes et</b> ile bırakabilir: birebir oyunda maç rakibe yazılır, ortak masada oyuncu elenir, masa bot ile devam eder. Birebir turnuva masasında yerine bot geçmez.</li>
+        <li><b>Jako Çemberi turu ekrandayken</b> (bir tur 1 ile 3 dakika arası sürer) masalardaki hamle süresi durur, tur bitince kaldığı yerden işler. <b>Maça giriş süresi durmaz</b>: tur sırasında maçı açılan oyuncu tur ekranını kapatıp masaya girmelidir. Masa sayfası açık olan oyuncu gelmiş sayılır. Maçlar Çember saatine denk gelecekse giriş süresini 3 dakika yerine 5 dakika ya da daha uzun seç.</li>
+        <li>Ortak masada sıralamayı oyunun kendi sonucu belirler: 101 Okey&apos;de en az ceza puanı, Batak ve Pişti&apos;de en çok puan, Jakopoly&apos;de en yüksek varlık. Bot birinci bitirse bile tur atlayamaz; yerine sıradaki oyuncu geçer.</li>
+        <li>Bir tur bitince sıradaki tur beklemeden açılır. <b>Bütün maçlar bitince</b> bitiş saati beklenmez; sonuç yazılır, ödüller yüklenir.</li>
+        <li><b>Bitiş saatinde</b> süren maçlar kapanır, yeni maç açılmaz. Ligde o anki puan durumu geçerlidir. Elemede şampiyon belli değilse turnuvada kalan oyuncular, paylaştıkları sıraların ödül toplamını eşit bölüşür ve şampiyon yazılmaz. Hiçbir maç oynanmadıysa turnuva iptal olur, ücretler iade edilir.</li>
+        <li>Saatler ziyaretçi trafiğiyle işler: sitede kimse yokken saati gelen iş, siteye ilk giren ziyaretçide (en geç bir dakika içinde) yapılır.</li>
+        <li>Turnuva başladıktan sonra sadece <b>bitiş saati</b>, <b>açıklama</b> ve <b>ödül notu</b> değişir. Biten ya da iptal olan turnuva düzenlenemez. Her turnuvanın altında nasıl kapandığı yazar.</li>
+      </ol>
+    ),
+  },
+  {
+    title: 'Elle başlatma ve kazanan seçme',
+    body: (
+      <ol className={ol}>
+        <li>Başlangıç saatini beklemek istemezsen <b>Kayıtları kapat ve başlat</b> de. Eşleşmeler kura ile çekilir.</li>
+        <li>Maçlar sitede oynanınca kazanan kendiliğinden ilerler. Bir maç takılırsa kazananı elle seçebilirsin. Seçici sadece <b>devam eden turnuvada, oynanmakta olan turun henüz bitmemiş maçlarında</b> çıkar.</li>
+        <li><b>Yazılmış bir sonuç değiştirilemez.</b> Biten maçta, sırası gelmemiş turda ve biten ya da iptal olan turnuvada seçici görünmez. Yanlış oyuncuyu seçmemek için kaydetmeden önce adı kontrol et.</li>
+        <li>Elle girdiğin sonuç iki oyuncunun da oyun geçmişine &quot;sonucu yönetim girdi&quot; notuyla düşer (coin değişmez) ve işlem kaydına tur, oyuncu adları ve kazananın adıyla yazılır. Bu satır oynanmış ya da kazanılmış oyun sayılmaz: görev sayaçlarına, Kanka Puanı&apos;na, üye istatistiğine ve günlük oyun sınırına eklenmez. Masada oynanarak, pes ya da süre ile biten maçlar sayılır.</li>
+        <li><b>Maçlar</b> listesi (turnuvanın altında, başlığa basınca açılır): açılan her masa, oyuncuları, kimin masaya girdiği, maçın açık mı kapalı mı olduğu, nasıl bittiği (oynanarak, hükmen, pes, süre, yönetim) ve açılış ile kapanış saati. Liste kendiliğinden yenilenmez; güncel durum için <b>Yenile</b>ye bas. Buradan maç değiştirilmez.</li>
+        <li><b>Oyuncu durumu</b> tablosu (elemede): her oyuncunun oynadığı, kazandığı ve kaybettiği maç sayısı ile nerede olduğu (turnuvada, elendi, şampiyon). Masaya gelmediği için kaybedilen maç oynanmış sayılmaz, &quot;gelmedi&quot; diye işaretlenir. Aynı tablo sitede turnuva kartında da görünür. Ligde bunun yerine puan durumu vardır.</li>
+        <li>Ortak masa oyunlarında sadece <b>açık bir masanın</b> birincisini seçebilirsin. Seçtiğin oyuncu birinci olur, masa kapanır; diğerleri oyunun o anki durumuna göre sıralanır ve tur atlayanlar buna göre belirlenir.</li>
+        <li>Bir oyuncuyu başlamadan önce kayıt listesinden çıkarabilirsin; ücreti iade edilir. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
         <li>Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir. Şampiyona şampiyon rozeti de verilir, adı kazananlar şeridinde çıkar.</li>
       </ol>
     ),
@@ -138,8 +168,9 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     title: 'Aynı turnuvayı tekrar açma (şablon)',
     body: (
       <ol className={ol}>
-        <li>Beğendiğin bir turnuvanın altındaki <b>Şablon olarak kaydet</b>e bas ve bir ad ver. Oyun, format, ad, açıklama, kontenjan, ücret, ödül ve başlangıç saati saklanır.</li>
-        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, tarih yarına ayarlanır. Tarihi kontrol edip <b>Turnuvayı oluştur</b> de.</li>
+        <li>Beğendiğin bir turnuvanın altındaki <b>Şablon olarak kaydet</b>e bas ve bir ad ver. Oyun, format, ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır.</li>
+        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, başlangıç yarın şablondaki saate, bitiş şablondaki süre kadar sonrasına ayarlanır. Bu güncellemeden önce kaydedilmiş şablonlarda süre yoktur; onlar 3 saatle açılır, bir kez yeniden kaydedersen süreyi de saklar. Tarihleri kontrol edip <b>Turnuvayı oluştur</b> de.</li>
+        <li><b>İçerik Takvimi</b>nde her turnuva iki satırla görünür: <b>Turnuva</b> (başlangıç saati) ve <b>Turnuva biter</b> (en geç kapanacağı saat). Biten turnuvada ikinci satır gerçekten kapandığı anı gösterir; iptal edilen turnuvanın bitiş satırı olmaz.</li>
         <li>Şablon sadece formu doldurur. Şablonu silmek ya da değiştirmek, daha önce açılmış turnuvalara dokunmaz.</li>
       </ol>
     ),
@@ -415,7 +446,7 @@ export function MarketGuide() {
 }
 
 export function TournamentGuide() {
-  return <FeatureGuide title="Turnuva rehberi" subtitle="Turnuva oluşturma, eleme ve lig formatı, başlatma ve kazanan seçme nasıl çalışır" steps={TOURNAMENT_STEPS} />
+  return <FeatureGuide title="Turnuva rehberi" subtitle="Turnuva oluşturma, eleme ve lig formatı, saatler, hükmen kuralları ve kazanan seçme nasıl çalışır" steps={TOURNAMENT_STEPS} />
 }
 
 export function KpGuide() {

@@ -10,7 +10,8 @@ import { BilardoPool } from './bilardo-pool'
 import { BlackjackLive } from './blackjack-live'
 import { RouletteLive } from './roulette-live'
 import { HeadGame } from './head-game'
-import { TableLobby } from './table-lobby'
+import { TableLobby, TableRoom } from './table-lobby'
+import { TournamentMatchCard } from './tournament-match-banner'
 import { PvpTablesPanel } from './pvp-tables-panel'
 import { wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { LiveLobby } from './live-lobby'
@@ -110,6 +111,8 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   // Okey is the exception: its bot game keeps its own themed table, and server bots only fill player tables.
   const botPlay = isBotTableGame(game) && game !== 'okey' ? 'table' : meta.modes.includes('bot') ? 'session' : null
   const hasTables = pvp || botPlay === 'table'
+  // Roulette and blackjack have no table list of their own; a table room only opens there from a direct link.
+  const liveOnly = game === 'rulet' || game === 'blackjack'
   const [entered, setEntered] = useState<{ bet: number } | null>(null)
   const [invitedTable, setInvitedTable] = useState<string | null>(null)
   const [watching, setWatching] = useState<string | null>(null)
@@ -151,18 +154,27 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
     if (id) return { id }
     return wizardEnabledFor(setup, game) && params.has('masa-ac') ? { id: null } : null
   }
+  const openLinked = (query: string) => {
+    // A table named in the link opens even where the game has no player tables: that is how a tournament match is reached.
+    const linked = linkTarget(query)
+    const target = linked && (linked.id || (hasTables && !liveOnly)) ? linked : null
+    if (!target) return
+    if (target.id) setInvitedTable(target.id)
+    else setOpenWizard(true)
+    setEntered({ bet: settings.bets[0] })
+  }
   if (search !== null && !linkRead) {
     setLinkRead(true)
-    const target = hasTables ? linkTarget(search) : null
-    if (target) {
-      if (target.id) setInvitedTable(target.id)
-      else setOpenWizard(true)
-      setEntered({ bet: settings.bets[0] })
-    }
+    openLinked(search)
   }
 
   useEffect(() => {
-    if (!hasTables || linkTarget(window.location.search)) return
+    if (linkTarget(window.location.search)) {
+      // Reached by a link inside the site: the address changes only after the first render, which read the previous page's.
+      if (entered == null && invitedTable == null) openLinked(window.location.search)
+      return
+    }
+    if (!hasTables) return
     // A refresh (or a PWA relaunch) can drop ?masa; fall back to the table the player is still seated at.
     let cancelled = false
     fetch(`/api/tables?game=${game}`, { cache: 'no-store' })
@@ -185,8 +197,29 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
 
   // Roulette and blackjack are shared live tables: no bot / player choice, no stake gate.
   // Blackjack seats you at the first 6-seat table with a free spot, or opens a new one.
-  if (game === 'rulet') return <RouletteLive settings={settings} />
-  if (game === 'blackjack') return <BlackjackLive settings={settings} />
+  if (liveOnly) {
+    if (invitedTable) {
+      return (
+        <div className="flex flex-col gap-4">
+          <button
+            type="button"
+            onClick={backToLobby}
+            className="flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary [body:has([data-table-playing])_&]:hidden"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Geri
+          </button>
+          <TableRoom key={invitedTable} id={invitedTable} onLeave={backToLobby} />
+        </div>
+      )
+    }
+    return (
+      <>
+        <TournamentMatchCard game={game} onEnter={(id) => openTableRoom(id, settings.bets[0])} />
+        {game === 'rulet' ? <RouletteLive settings={settings} /> : <BlackjackLive settings={settings} />}
+      </>
+    )
+  }
 
   if (watching) {
     return (
@@ -198,6 +231,7 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
 
   return (
     <div className="flex flex-col gap-4">
+      {entered == null && <TournamentMatchCard game={game} onEnter={(id) => openTableRoom(id, settings.bets[0])} />}
       {entered == null && (
         <StakeGate
           game={game}

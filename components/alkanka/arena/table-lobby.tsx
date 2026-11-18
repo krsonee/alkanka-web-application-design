@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import useSWR, { useSWRConfig } from 'swr'
 import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, BOT_DAILY_PROFIT_CAP, TURN_SECONDS, botFillSeconds, isFullPotGame, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
@@ -46,6 +47,8 @@ import { arenaThemeGame } from '@/lib/table-themes'
 import { TableSetupWizard } from './table-setup-wizard'
 import { BOT_QUICK, PlayChooser, type PlayTab } from './play-chooser'
 import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
+import { MATCH_END_LABEL, type MatchEnd, type MyMatch, type TableTour } from '@/lib/tournaments-shared'
+import { Countdown, useSecondsLeft } from './tournament-countdown'
 
 type PlayerInfo = { id: string; name: string; seat: number; bot?: boolean }
 export type TableSummary = {
@@ -70,6 +73,18 @@ export type TableSummary = {
   winnerId: string | null
   tournamentId: number | null
   roundNo: number | null
+  /** Tournament title and round name; missing on tournament tables opened before these were stored. */
+  tour?: TableTour | null
+  /** Tournament tables: the move clock runs once both players have sat down. */
+  ready?: boolean
+  /** How a tournament table closed when it was not simply played to the end. */
+  how?: MatchEnd | null
+  /** Tournament tables: the players who have sat down so far. */
+  arrived?: string[]
+  /** Shared tournament tables: why the viewer is out of a table they were named for. */
+  outHow?: MatchEnd | null
+  /** Shared tournament tables: how the table finished, best first. */
+  rank?: { id: string; name: string }[] | null
   updatedAt: string
   paused?: boolean
   /** Milliseconds until the okey bot on turn moves; only the table poll sends it. */
@@ -83,7 +98,7 @@ export type TableSummary = {
 type LobbyData = {
   open: TableSummary[]
   mine: TableSummary[]
-  tournament: { id: string; game: string; round: number; title: string }[]
+  tournament: MyMatch[]
 }
 
 const fetcher = async (url: string) => {
@@ -274,13 +289,16 @@ export function TableLobby({
     tour.length > 0 ? (
       <div className="flex flex-col gap-2 rounded-2xl border border-primary bg-primary/10 p-4">
         {tour.map((t) => (
-          <div key={t.id} className="flex flex-wrap items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Trophy className="size-4 text-primary" aria-hidden="true" />
-              {t.title} · {t.round}. tur maçın hazır
+          <div key={t.tableId} className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Trophy className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                {t.title} · {t.round} maçın hazır
+              </span>
+              <span className="text-xs text-muted-foreground">Kayıt ücretin ödendi, masada bahis yok.</span>
             </span>
-            <button onClick={() => setActiveId(t.id)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
-              Maça gir
+            <button onClick={() => setActiveId(t.tableId)} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+              Masaya gir
             </button>
           </div>
         ))}
@@ -1116,6 +1134,13 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   const { recap, loading: recapLoading } = useMatchRecap(matchOver && !practice ? { game: data.game, tableId: id } : null)
   const recapBlock = practice ? <PracticeNote /> : <MatchRecapBlock recap={recap} loading={recapLoading} />
 
+  // A finished tournament table leaves the "maçın hazır" strip at once instead of on the next minute ping.
+  const tourOver = !!data && data.tournamentId != null && (data.status === 'bitti' || data.status === 'iptal')
+  useEffect(() => {
+    if (tourOver) refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourOver])
+
   if (error) return <RoomShell onLeave={() => onLeave()}><p className="p-6 text-sm text-destructive">{String(error.message)}</p></RoomShell>
   if (!data) {
     return (
@@ -1140,6 +1165,127 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   const duelStale = data.status === 'oynaniyor' && mySeat >= 0 && data.turn == null && data.state?.scores?.[mySeat] && idleMs > 10 * 60 * 1000
   const won = member != null && (data.winners ?? []).includes(member.id)
   const turnName = data.turn != null ? names[data.turn] : null
+  const tourney = data.tournamentId != null
+  const tourRound = data.tour?.round ?? (data.roundNo != null ? `${data.roundNo + 1}. tur` : null)
+  const winnerNames = data.players.filter((p) => (data.winners ?? []).includes(p.id)).map((p) => p.name).join(' & ')
+  // A tournament table waits for both players until the deadline; its move clock starts when both have sat down.
+  const tourFormat = tourney ? (data.tour?.league ? ('lig' as const) : ('eleme' as const)) : undefined
+  const tourWaiting = tourney && data.status === 'oynaniyor' && !!data.tour?.joinBy && !data.ready
+  const clockRuns = !tourney || data.ready === true
+  // Closed with nobody winning: neither player sat down, or neither played in time. Both lost the match.
+  const tourVoid = tourney && data.status === 'bitti' && data.winnerId == null
+  const how = tourney ? (data.how ?? null) : null
+  // A shared tournament table sends its best players on and plays on with a bot in the seat of whoever leaves.
+  const tourShared = tourney && seatCount > 2
+  const tourPass = Math.max(1, data.tour?.pass ?? 1)
+  const tourFinal = data.tour?.round === 'Final'
+  // Named for this table but out of it: gave up, ran out of time or never sat down. They watch from here.
+  const outHow = tourShared ? (data.outHow ?? null) : null
+  const watcher = spectator && !outHow
+  const myPlace = member ? (data.rank ?? []).findIndex((p) => p.id === member.id) + 1 : 0
+  const outNote =
+    outHow === 'gelmedi'
+      ? 'Süresi içinde masaya girmediğin için elendin.'
+      : outHow === 'sure'
+        ? 'Hamle süren üst üste 3 kez dolduğu için elendin.'
+        : outHow
+          ? 'Masayı bıraktığın için elendin.'
+          : null
+  const sharedNote = outNote
+    ? outNote
+    : how === 'gelmedi'
+      ? tourVoid
+        ? 'Süresi içinde masaya kimse girmedi; masa herkes için kayıp sayıldı.'
+        : 'Diğer oyuncular süresi içinde masaya gelmedi, masa oynanmadan kapandı.'
+      : how === 'sure' || how === 'pes'
+        ? 'Diğer oyuncular masadan düştü, masa erken kapandı.'
+        : how === 'panel'
+          ? 'Bu masanın sonucunu yönetim girdi.'
+          : null
+  const sharedNext = outHow
+    ? 'Sıralama için turnuva sayfasına bak.'
+    : tourVoid
+      ? 'Bu turnuvada elendin.'
+      : won
+        ? tourFinal
+          ? 'Turnuvayı kazandın. Helal olsun kanka!'
+          : `Tur atladın: masanın tur atlayan ${tourPass} oyuncusundan birisin. Sıradaki masan açılınca "Turnuva maçın hazır" kutusu çıkar.`
+        : tourFinal
+          ? `Final masasını ${myPlace > 0 ? `${myPlace}. ` : ''}bitirdin. Ödül sıralaması turnuva sayfasında.`
+          : `Masayı ${myPlace > 0 ? `${myPlace}. ` : ''}bitirdin; ilk ${tourPass} oyuncu tur atladı. Bu turnuvada elendin.`
+  // What the result says in its title at a shared table; a watcher keeps the usual wording.
+  const sharedTitle =
+    !tourShared || watcher || data.status !== 'bitti' || tourVoid
+      ? null
+      : outHow
+        ? 'Elendin'
+        : won
+          ? tourFinal
+            ? 'Turnuvayı kazandın!'
+            : 'Tur atladın!'
+          : tourFinal && myPlace > 0
+            ? `${myPlace}. oldun`
+            : 'Elendin'
+  const howNote = tourShared
+    ? sharedNote
+    : how === 'gelmedi'
+      ? tourVoid
+        ? 'İkiniz de süresi içinde masaya girmediniz; maç ikiniz için de kayıp sayıldı.'
+        : won
+          ? 'Rakibin süresi içinde masaya gelmedi, maçı hükmen kazandın.'
+          : 'Süresi içinde masaya girmediğin için maçı hükmen kaybettin.'
+      : how === 'sure'
+        ? tourVoid
+          ? 'İki taraf da süresinde oynamadı; maç ikiniz için de kayıp sayıldı.'
+          : won
+            ? 'Rakibin süresinde oynamadı, maçı hükmen kazandın.'
+            : 'Süresinde oynamadığın için maçı hükmen kaybettin.'
+        : how === 'pes'
+          ? won
+            ? 'Rakibin pes etti.'
+            : 'Pes ettin.'
+          : how === 'panel'
+            ? 'Bu maçın sonucunu yönetim girdi.'
+            : null
+  const tourNext = tourShared
+    ? sharedNext
+    : !data.tour
+    ? won
+      ? 'Maçı aldın, sonuç turnuvaya işlendi.'
+      : 'Maç rakibine yazıldı, sonuç turnuvaya işlendi.'
+    : data.tour.league
+      ? won
+        ? 'Galibiyetin puan durumuna işlendi.'
+        : 'Sonuç puan durumuna işlendi. Kalan maçların için turnuva sayfasına bak.'
+      : won
+        ? data.tour.round === 'Final'
+          ? 'Turnuvayı kazandın. Helal olsun kanka!'
+          : 'Turu geçtin. Sıradaki maçın açılınca "Turnuva maçın hazır" kutusu çıkar.'
+        : 'Bu turnuvada elendin. Bir dahakine görüşürüz kanka.'
+  // No stake sits on a tournament table, so its result speaks about the tournament instead of a pot or a refund.
+  const tourResult =
+    data.status === 'iptal'
+      ? how === 'bitis'
+        ? 'Turnuvanın bitiş saati geldi; bu maç tamamlanmadan kapandı. Sonuç için turnuva sayfasına bak.'
+        : how === 'iptal'
+          ? 'Turnuva iptal edildi. Kayıt ücreti ödediysen hesabına iade edildi.'
+          : 'Maç iptal edildi. Turnuva iptal olduysa kayıt ücretin iade edilir.'
+      : watcher
+        ? tourVoid
+          ? tourShared
+            ? 'Bu masaya kimse gelmedi.'
+            : 'Bu maçı kimse kazanmadı.'
+          : `${tourShared && !tourFinal ? 'Tur atlayanlar' : 'Kazanan'}: ${winnerNames}${how ? ` (${MATCH_END_LABEL[how]})` : ''}`
+        : [howNote, tourNext].filter(Boolean).join(' ')
+  const backToTournament = (
+    <Link
+      href="/turnuvalar"
+      onClick={() => refresh()}
+      className="rounded-xl bg-primary px-5 py-2.5 text-center text-sm font-bold text-primary-foreground"
+    >
+      Turnuvaya dön
+    </Link>
+  )
 
   const remote: Remote<unknown> = {
     id,
@@ -1157,8 +1303,8 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
     }),
     spectator,
     stake: data.stake,
-    // Mirrors the server: the move timer only runs with two or more humans and never in tournaments.
-    ...(data.status === 'oynaniyor' && !data.tournamentId && !data.paused && TURN_SECONDS[data.game as ArenaGame] && data.players.filter((p) => !p.bot).length > 1
+    // Mirrors the server: the move timer only runs with two or more humans, and in a tournament once both have sat down.
+    ...(data.status === 'oynaniyor' && clockRuns && !data.paused && TURN_SECONDS[data.game as ArenaGame] && data.players.filter((p) => !p.bot).length > 1
       ? { turnStartedAt: data.updatedAt, turnSeconds: TURN_SECONDS[data.game as ArenaGame] }
       : {}),
     send,
@@ -1192,7 +1338,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       immersive={immersive}
       playing={data.status === 'oynaniyor'}
       onLeave={() => onLeave(ended)}
-      title={`${meta?.title ?? data.game} · ${formatAC(data.stake)} KC${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${data.roundNo ? ` · ${data.roundNo}. tur` : ''}`}
+      title={`${meta?.title ?? data.game} · ${tourney ? (data.tour?.title ?? 'Turnuva maçı') : `${formatAC(data.stake)} KC`}${data.game === 'pisti' ? ` · ${data.variant === '101' ? 101 : 151} puan · ${data.team ? 'Eşli' : 'Tekli'}` : ''}${tourney && tourRound ? ` · ${tourRound}` : ''}`}
     >
       <div className={cn('flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm', immersive && 'max-lg:flex-nowrap max-lg:px-2 max-lg:py-2')}>
         <span className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-foreground', immersive && 'max-lg:hidden')}>
@@ -1212,9 +1358,11 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           {data.status === 'bekliyor'
             ? `Oyuncu bekleniyor (${data.players.filter((p) => !p.bot).length}/${seatCount - (data.bots ?? 0)})`
             : data.status === 'oynaniyor'
-              ? data.turn == null
-                ? 'Eş zamanlı oynanıyor'
-                : data.turn === mySeat
+              ? tourWaiting
+                ? 'Oyuncular bekleniyor'
+                : data.turn == null
+                  ? 'Eş zamanlı oynanıyor'
+                  : data.turn === mySeat
                   ? 'Sıra sende'
                   : `${turnName} oynuyor`
               : data.status === 'bitti'
@@ -1222,7 +1370,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                 : 'İptal'}
           {spectator && data.status === 'oynaniyor' ? ' · izleyici' : ''}
         </span>
-        {data.status === 'oynaniyor' && data.turn != null && TURN_SECONDS[data.game as ArenaGame] && data.players.filter((p) => !p.bot).length > 1 && (
+        {data.status === 'oynaniyor' && clockRuns && data.turn != null && TURN_SECONDS[data.game as ArenaGame] && data.players.filter((p) => !p.bot).length > 1 && (
           <div className={immersive ? 'min-w-0 flex-1 lg:flex-none' : 'contents'}>
             <TurnClock
               key={`${data.version}-${data.turn}`}
@@ -1235,20 +1383,23 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           </div>
         )}
         <div className="flex items-center gap-2">
-          {!spectator && mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (
+          {!spectator && mySeat >= 0 && data.status === 'oynaniyor' && (
             <LeaveTableButton
               id={id}
               running
               compact={immersive}
               botsOnly={botsOnly}
               stake={data.stake}
+              tourney={tourFormat}
+              shared={tourShared}
               onResigned={() => {
                 setLeft({ kind: 'resign', botsOnly, stay: true })
                 refresh()
                 void mutate()
               }}
               onDone={(kind) => {
-                setLeft({ kind, botsOnly, stay: false })
+                // A duel closes on a resignation and a shared table plays on; the table says what that means either way.
+                if (!tourney) setLeft({ kind, botsOnly, stay: false })
                 refresh()
                 void mutate()
               }}
@@ -1324,6 +1475,32 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           </div>
         )}
 
+        {tourWaiting && (
+          <TourWaiting
+            joinBy={data.tour!.joinBy!}
+            rival={spectator ? null : (data.players.find((p) => p.seat !== mySeat)?.name ?? 'Rakibin')}
+            table={
+              tourShared
+                ? {
+                    here: data.players.filter((p) => !p.bot && (data.arrived ?? []).includes(p.id)).length,
+                    expected: data.players.filter((p) => !p.bot).length,
+                    seated: !spectator,
+                  }
+                : undefined
+            }
+            onDue={() => void mutate()}
+          />
+        )}
+
+        {outHow && !ended && (
+          <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-secondary p-3 text-sm">
+            <span className="min-w-0 flex-1 basis-56 text-pretty leading-relaxed text-foreground">
+              <span className="font-bold">{outNote}</span> Koltuğunda bot oynuyor, masa sensiz devam ediyor. İstersen izleyebilirsin.
+            </span>
+            {backToTournament}
+          </div>
+        )}
+
         {data.status === 'oynaniyor' && spectator && DUEL.includes(data.game) && (
           <p className="py-10 text-center text-sm text-muted-foreground">Bu oyunda iki oyuncu aynı anda kendi masasında oynuyor, skorlar bitince görünür.</p>
         )}
@@ -1352,20 +1529,22 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                 menuRight={data.game === 'pisti'}
                 menu={
                   <>
-                    {mySeat >= 0 && !data.tournamentId && data.status === 'oynaniyor' && (
+                    {mySeat >= 0 && data.status === 'oynaniyor' && (
                       <LeaveTableButton
                         id={id}
                         running
                         compact
                         botsOnly={botsOnly}
                         stake={data.stake}
+                        tourney={tourFormat}
+                        shared={tourShared}
                         onResigned={() => {
                           setLeft({ kind: 'resign', botsOnly, stay: true })
                           refresh()
                           void mutate()
                         }}
                         onDone={(kind) => {
-                          setLeft({ kind, botsOnly, stay: false })
+                          if (!tourney) setLeft({ kind, botsOnly, stay: false })
                           refresh()
                           void mutate()
                         }}
@@ -1381,7 +1560,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           </div>
         )}
 
-        {(oppTurnStale || duelStale) && (
+        {(oppTurnStale || duelStale) && !tourWaiting && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-secondary p-3 text-sm">
             <span className="text-foreground">
               {seatCount > 2 ? `${turnName} uzun süredir hamle yapmadı.` : 'Rakibin uzun süredir hamle yapmadı.'}
@@ -1452,17 +1631,29 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               outcome={
                 data.status === 'iptal'
                   ? 'cancel'
-                  : data.winnerId == null
-                    ? 'draw'
-                    : spectator
+                  : tourVoid
+                    ? watcher
                       ? 'spectate'
-                      : won
-                        ? 'win'
-                        : 'lose'
+                      : 'lose'
+                    : data.winnerId == null
+                      ? 'draw'
+                      : watcher
+                        ? 'spectate'
+                        : won
+                          ? 'win'
+                          : 'lose'
               }
               title={
                 data.status === 'iptal'
-                  ? 'İptal'
+                  ? how === 'bitis'
+                    ? 'Turnuva süresi doldu'
+                    : 'İptal'
+                  : tourVoid
+                    ? watcher
+                      ? 'Maç oynanmadı'
+                      : 'Hükmen kaybettin'
+                  : sharedTitle
+                    ? sharedTitle
                   : data.winnerId == null
                     ? 'Berabere'
                     : spectator
@@ -1474,7 +1665,9 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                         : 'Kaybettin'
               }
               subtitle={
-                practice
+                tourney
+                  ? tourResult
+                  : practice
                   ? data.winnerId == null
                     ? 'Pratik maçı berabere bitti.'
                     : won && !spectator
@@ -1490,14 +1683,28 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               gameImage={meta?.image}
               stake={data.stake}
               delta={spectator ? undefined : practice ? 0 : recap?.kc?.delta}
+              kcText={tourney ? (tourRound ? `Turnuva · ${tourRound}` : 'Turnuva maçı') : undefined}
               recap={spectator ? undefined : recapBlock}
-              players={data.players.map((p) => ({
-                id: p.id,
-                name: p.name,
-                bot: p.bot,
-                me: member != null && p.id === member.id,
-                winner: (data.winners ?? []).includes(p.id),
-              }))}
+              players={
+                tourShared && data.status === 'bitti' && data.rank?.length
+                  ? data.rank.map((p, i) => {
+                      const through = (data.winners ?? []).includes(p.id)
+                      return {
+                        id: p.id,
+                        name: p.name,
+                        me: member != null && p.id === member.id,
+                        winner: through,
+                        tag: tourFinal ? `${i + 1}.` : `${i + 1}. · ${through ? 'Tur atladı' : 'Elendi'}`,
+                      }
+                    })
+                  : data.players.map((p) => ({
+                      id: p.id,
+                      name: p.name,
+                      bot: p.bot,
+                      me: member != null && p.id === member.id,
+                      winner: (data.winners ?? []).includes(p.id),
+                    }))
+              }
               extra={
                 data.game === 'pisti' && data.status === 'bitti' && Array.isArray(data.state?.totals) ? (
                   <PistiFinalScore state={data.state} names={names} mySeat={mySeat} />
@@ -1529,13 +1736,17 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                 >
                   Masaya dön
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { refresh(); onLeave(true) }}
-                  className="rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground"
-                >
-                  Lobiye dön
-                </button>
+                {tourney ? (
+                  backToTournament
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { refresh(); onLeave(true) }}
+                    className="rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground"
+                  >
+                    Lobiye dön
+                  </button>
+                )}
             </GameResultCard>
           </div>
         )}
@@ -1546,23 +1757,35 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               {left
                 ? 'Masadan ayrıldın, bahsin geri gelmez.'
                 : data.status === 'iptal'
-                ? 'Masa iptal edildi, bahis iade edildi.'
+                ? tourney
+                  ? how === 'bitis'
+                    ? 'Turnuva süresi doldu.'
+                    : 'Maç iptal edildi.'
+                  : 'Masa iptal edildi, bahis iade edildi.'
+                : tourVoid
+                  ? watcher
+                    ? 'Maç oynanmadı.'
+                    : 'Hükmen kaybettin'
+                : sharedTitle
+                  ? sharedTitle
                 : data.winnerId == null
                   ? 'Berabere, bahisler iade edildi.'
                   : spectator
-                    ? `Kazanan: ${data.players.filter((p) => data.winners.includes(p.id)).map((p) => p.name).join(' & ')}`
+                    ? `${tourShared && !tourFinal ? 'Tur atlayanlar' : 'Kazanan'}: ${winnerNames}`
                     : won
                       ? data.team
                         ? 'Takımın kazandı!'
                         : 'Kazandın!'
                       : 'Kaybettin'}
             </p>
-            {data.tournamentId && won && (
-              <p className="text-sm text-muted-foreground">Turdaki tüm maçlar bitince bir sonraki tura otomatik eşleşeceksin.</p>
+            {tourney && (!watcher || data.status === 'iptal' || tourVoid) && <p className="text-pretty text-sm text-muted-foreground">{tourResult}</p>}
+            {tourney ? (
+              backToTournament
+            ) : (
+              <button onClick={() => { refresh(); onLeave(true) }} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground">
+                Lobiye dön
+              </button>
             )}
-            <button onClick={() => { refresh(); onLeave(true) }} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground">
-              Lobiye dön
-            </button>
           </div>
         )}
       </div>
@@ -1571,6 +1794,54 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
       )}
       </div>
     </RoomShell>
+  )
+}
+
+/**
+ * Shown on a tournament table until both players have sat down. The server settles the match on the
+ * first request after the deadline, so the table is asked again as soon as the countdown runs out.
+ */
+function TourWaiting({
+  joinBy,
+  rival,
+  table,
+  onDue,
+}: {
+  joinBy: string
+  rival: string | null
+  /** A shared table: how many of its players have sat down, and whether the viewer is one of them. */
+  table?: { here: number; expected: number; seated: boolean }
+  onDue: () => void
+}) {
+  const left = useSecondsLeft(joinBy)
+  const due = left === 0
+  useEffect(() => {
+    if (!due) return
+    onDue()
+    const timer = setInterval(onDue, 4000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [due])
+  return (
+    <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 p-3 text-sm">
+      <span className="min-w-0 flex-1 basis-56 text-pretty leading-relaxed text-foreground">
+        <span className="font-bold">
+          {table ? `Oyuncular masaya bekleniyor (${table.here}/${table.expected} geldi).` : rival ? `${rival} masaya bekleniyor.` : 'Oyuncular masaya bekleniyor.'}
+        </span>{' '}
+        {table
+          ? due
+            ? 'Giriş süresi doldu, gelmeyenlerin koltuğuna bot oturuyor.'
+            : table.seated
+              ? 'Herkes gelince ya da süre dolunca oyun başlar. Süre dolana kadar gelmeyen elenir, koltuğuna bot oturur. Hamle süresi oyun başlayınca işler.'
+              : 'Süresi içinde gelmeyen oyuncu elenir, koltuğuna bot oturur.'
+          : due
+          ? 'Giriş süresi doldu, sonuç yazılıyor.'
+          : rival
+            ? 'Süre dolana kadar gelmezse maçı hükmen kazanırsın. Hamle süresi ikiniz de masadayken başlar.'
+            : 'Süresi içinde gelmeyen oyuncu maçı hükmen kaybeder.'}
+      </span>
+      {left != null && !due && <Countdown seconds={left} label="Masaya giriş için kalan süre" className="font-mono text-lg font-bold tabular-nums text-primary" />}
+    </div>
   )
 }
 
@@ -1751,6 +2022,8 @@ function LeaveTableButton({
   compact,
   botsOnly,
   onResigned,
+  tourney,
+  shared,
 }: {
   id: string
   running: boolean
@@ -1759,6 +2032,10 @@ function LeaveTableButton({
   compact?: boolean
   botsOnly?: boolean
   onResigned?: () => void
+  /** A tournament table can only be given up: nobody takes the seat over and there is no stake to lose. */
+  tourney?: 'eleme' | 'lig'
+  /** A shared tournament table: a bot takes the seat of whoever gives up and the others play on. */
+  shared?: boolean
 }) {
   const [mode, setMode] = useState<'resign' | 'leave' | null>(null)
   const [busy, setBusy] = useState(false)
@@ -1805,7 +2082,7 @@ function LeaveTableButton({
             <Flag className="size-4" aria-hidden="true" />
             Pes et
           </button>
-          {leaveTrigger}
+          {!tourney && leaveTrigger}
         </>
       )}
       {confirming && (
@@ -1825,7 +2102,13 @@ function LeaveTableButton({
             </p>
             <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
               {error ??
-                (!running
+                (tourney
+                  ? shared
+                    ? 'Masayı bırakırsan turnuvadan elenirsin. Koltuğuna bot oturur ve masa sensiz devam eder. Geri alınamaz.'
+                    : tourney === 'lig'
+                    ? 'Bu maçı hükmen kaybedersin, galibiyet rakibine yazılır. Turnuvadaki diğer maçların sürer.'
+                    : 'Bu maçı hükmen kaybedersin ve turnuvadan elenirsin. Geri alınamaz.'
+                  : !running
                   ? 'Bahsin iade edilir.'
                   : botsOnly
                     ? stake === 0
@@ -1856,7 +2139,7 @@ function LeaveTableButton({
                     setError(r.error ?? 'Kalkamadın, tekrar dene.')
                     return
                   }
-                  const stay = running && isResign && !botsOnly
+                  const stay = running && isResign && !botsOnly && !tourney
                   setConfirming(false)
                   if (stay) {
                     setResigned(true)

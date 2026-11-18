@@ -369,8 +369,8 @@ export async function memberActivity(userId: string): Promise<MemberActivity> {
 
   const [games, summary, byGame, points, market, badges, audit] = await Promise.all([
     safe(() => rows(sql`SELECT id, game, mode, opponent, stake, result, delta, created_at FROM game_history WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 60`), []),
-    safe(() => rows<{ played: string; wins: string; net: string | null }>(sql`SELECT count(*) AS played, count(*) FILTER (WHERE result = 'win') AS wins, sum(delta) AS net FROM game_history WHERE user_id = ${userId}`), []),
-    safe(() => rows<{ game: string; played: string; net: string | null }>(sql`SELECT game, count(*) AS played, sum(delta) AS net FROM game_history WHERE user_id = ${userId} GROUP BY game ORDER BY count(*) DESC`), []),
+    safe(() => rows<{ played: string; wins: string; net: string | null }>(sql`SELECT count(*) FILTER (WHERE game <> 'turnuva' AND mode <> 'admin') AS played, count(*) FILTER (WHERE result = 'win' AND game <> 'turnuva' AND mode <> 'admin') AS wins, sum(delta) AS net FROM game_history WHERE user_id = ${userId}`), []),
+    safe(() => rows<{ game: string; played: string; net: string | null }>(sql`SELECT game, count(*) AS played, sum(delta) AS net FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva' AND mode <> 'admin' GROUP BY game ORDER BY count(*) DESC`), []),
     safe(() => rows(sql`SELECT id, source, points, note, created_at FROM kp_events WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 60`), []),
     safe(() => rows(sql`SELECT id, item_name, price, status, created_at FROM market_requests WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 30`), []),
     safe(() => rows(sql`SELECT b.id, b.name, b.tier, count(*) AS n, max(a.awarded_at) AS last_at, max(a.id) AS last_award_id FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id WHERE a.user_id = ${userId} GROUP BY b.id ORDER BY max(a.awarded_at) DESC`), []),

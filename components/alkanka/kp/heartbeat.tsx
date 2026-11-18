@@ -6,10 +6,13 @@ import { useSWRConfig } from 'swr'
 import { Timer, X } from 'lucide-react'
 import { usePoints } from '@/components/alkanka/points-context'
 import { nextReward, type OnlineGrant, type OnlineStatus } from '@/lib/online-rewards-shared'
+import type { MyMatch } from '@/lib/tournaments-shared'
 import { LevelEmblem } from './emblem'
 import { RewardChips } from './reward-chips'
 
-type Ping = { ok: boolean; kp: number; level: number; levelName: string; badge: string; online: OnlineStatus | null }
+type Ping = { ok: boolean; kp: number; level: number; levelName: string; badge: string; online: OnlineStatus | null; matches?: MyMatch[] | null }
+
+const sameMatches = (a: MyMatch[], b: MyMatch[]) => a.length === b.length && a.every((m, i) => m.tableId === b[i].tableId)
 
 const INTERVAL_MS = 60_000
 
@@ -33,6 +36,15 @@ export function KpHeartbeat() {
         const data = (await r.json()) as Ping
         if (lastLevel.current !== null && data.level > lastLevel.current) setLevelUp(data)
         lastLevel.current = data.level
+        const matches = data.matches
+        if (matches) {
+          // The "maçın hazır" strip reads the member answer, so a table opened since the page loaded shows up here.
+          mutate(
+            '/api/me',
+            (me?: { matches?: MyMatch[] }) => (me && !sameMatches(me.matches ?? [], matches) ? { ...me, matches } : me),
+            { revalidate: false },
+          )
+        }
         if (data.online) {
           mutate('/api/kp/online', data.online, { revalidate: false })
           const last = data.online.granted.at(-1)

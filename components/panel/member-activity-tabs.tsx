@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { askConfirm, confirmed } from '@/components/panel/confirm-dialog'
 import { giftAction, memberBadgeAction, memberPointsAction, memberRevokeBadgeAction, memberRoleAction } from '@/app/panel/members-actions'
 import type { MemberActivity } from '@/lib/members-admin'
+import { TOURNAMENT_MONEY_GAME } from '@/lib/tournaments-shared'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
 
@@ -18,6 +19,12 @@ const RESULT: Record<string, { label: string; cls: string }> = {
   loss: { label: 'Kaybetti', cls: 'text-destructive' },
   draw: { label: 'Berabere', cls: 'text-muted-foreground' },
   refund: { label: 'İade', cls: 'text-muted-foreground' },
+}
+
+const TOURNAMENT_COINS: Record<string, { label: string; cls: string }> = {
+  win: { label: 'Turnuva ödülü', cls: 'text-primary' },
+  loss: { label: 'Giriş ücreti', cls: 'text-muted-foreground' },
+  refund: { label: 'Ücret iadesi', cls: 'text-muted-foreground' },
 }
 
 const SOURCE: Record<string, string> = {
@@ -110,15 +117,18 @@ function GamesTab({ activity }: { activity: MemberActivity }) {
         ) : (
           <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
             {activity.games.map((g) => {
-              const r = RESULT[g.result] ?? { label: g.result, cls: 'text-muted-foreground' }
+              const coins = g.game === TOURNAMENT_MONEY_GAME ? TOURNAMENT_COINS[g.result] : undefined
+              const r = coins ?? RESULT[g.result] ?? { label: g.result, cls: 'text-muted-foreground' }
               return (
                 <li key={g.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div className="flex min-w-0 flex-col">
                     <span className="truncate font-medium capitalize text-foreground">
-                      {g.game} <span className="font-normal text-muted-foreground">· {g.mode}</span>
+                      {g.game} {!coins && <span className="font-normal text-muted-foreground">· {g.mode === 'admin' ? 'turnuva, sonucu yönetim girdi' : g.mode}</span>}
                     </span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {g.opponent ? `Rakip: ${g.opponent} · ` : ''}Bahis {g.stake.toLocaleString('tr-TR')} KC · {when(g.createdAt)}
+                      {coins
+                        ? `${g.opponent ? `${g.opponent} · ` : ''}${when(g.createdAt)}`
+                        : `${g.opponent ? `Rakip: ${g.opponent} · ` : ''}Bahis ${g.stake.toLocaleString('tr-TR')} KC · ${when(g.createdAt)}`}
                     </span>
                   </div>
                   <div className="flex shrink-0 flex-col items-end">

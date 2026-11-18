@@ -110,6 +110,38 @@ export async function sendToUsers(userIds: string[], payload: PushPayload, topic
   return { sent, failed }
 }
 
+const EACH_BATCH = 25
+
+/**
+ * One notification per member, each with its own text and link (not logged in push_log). `ttlSeconds` is how
+ * long the push service keeps trying a device that is offline; a notice that expires should not arrive late.
+ */
+export async function sendEach(items: { userId: string; payload: PushPayload }[], ttlSeconds = 600) {
+  if (!items.length) return { sent: 0, failed: 0 }
+  const vapid = await getVapid()
+  webpush.setVapidDetails('mailto:destek@alkanka.com', vapid.publicKey, vapid.privateKey)
+  const bodies = new Map(items.map((i) => [i.userId, JSON.stringify(i.payload)]))
+  const subs = await rows<{ user_id: string; endpoint: string; p256dh: string; auth: string }>(sql`SELECT user_id, endpoint, p256dh, auth FROM push_subscriptions
+    WHERE user_id IN (${sql.join([...bodies.keys()].map((id) => sql`${id}`), sql`, `)})`)
+  let sent = 0
+  let failed = 0
+  for (let i = 0; i < subs.length; i += EACH_BATCH) {
+    const part = subs.slice(i, i + EACH_BATCH)
+    const results = await Promise.allSettled(
+      part.map((s) => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, bodies.get(s.user_id) ?? '', { TTL: ttlSeconds })),
+    )
+    for (const [idx, r] of results.entries()) {
+      if (r.status === 'fulfilled') sent++
+      else {
+        failed++
+        const code = (r.reason as { statusCode?: number })?.statusCode
+        if (code === 404 || code === 410) await rows(sql`DELETE FROM push_subscriptions WHERE endpoint = ${part[idx].endpoint}`)
+      }
+    }
+  }
+  return { sent, failed }
+}
+
 /** Sends to one registered device, for trying a notification out before it goes to everyone. Not logged in push_log. */
 export async function sendToEndpoint(endpoint: string, payload: PushPayload): Promise<'sent' | 'missing' | 'failed'> {
   const vapid = await getVapid()

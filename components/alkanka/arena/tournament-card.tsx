@@ -4,15 +4,18 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarClock, ChevronDown, Coins, Crown, Gamepad2, Medal, ScrollText, Trophy, Users } from 'lucide-react'
+import { CalendarClock, ChevronDown, Coins, Crown, Gamepad2, Hourglass, Medal, ScrollText, Trophy, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ARENA_META } from '@/lib/arena'
-import { STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
+import { ARENA_META, TURN_SECONDS } from '@/lib/arena'
+import { isDecided, isRealMatch, passedOn } from '@/lib/bracket'
+import { CANCEL_TEXT, TABLE_PASS, matchHref, matchLengthOf, minEntrants, roundName, STATUS_LABEL, type Tournament } from '@/lib/tournaments-shared'
 import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
 import { LeagueView } from './league-view'
+import { PlayerStats } from './player-stats'
 import { PrizeList } from './prize-list'
+import { Countdown, useSecondsLeft } from './tournament-countdown'
 
 export function formatTR(iso: string) {
   return new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', weekday: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
@@ -22,20 +25,72 @@ function formatShortTR(iso: string) {
   return new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
+/** How a shared table of this game is ranked, in the words players read. */
+const TABLE_ORDER: Partial<Record<Tournament['game'], string>> = {
+  okey101: 'Masada en az ceza puanı olan birinci olur.',
+  batak: 'Masada en çok puanı toplayan birinci olur.',
+  pisti: 'Masada en çok puanı toplayan birinci olur.',
+  monopoly: 'Masada varlığı en yüksek olan birinci olur; iflas eden sona düşer.',
+}
+
 function tournamentRules(t: Tournament, gameTitle: string) {
   const isLeague = t.format === 'lig'
-  return [
-    isLeague
-      ? 'Lig usulü: herkes herkesle oynar. Galibiyet puan kazandırır, sezon sonunda en çok puanı toplayan şampiyon olur.'
-      : 'Eleme usulü: kaybeden elenir, kazanan bir sonraki tura geçer. Final kazananı şampiyon olur.',
-    `Kontenjan ${t.maxPlayers} oyuncu. Kayıtlar başlangıç saatine kadar açık, istediğin zaman kaydını iptal edebilirsin.`,
-    'Başlangıç saatinde tüm kayıtlı oyuncular otomatik eşleşir. Maçın hazır olunca sayfada "oyuna gir" butonu çıkar.',
-    `Maçlar ${gameTitle.toLowerCase()} masasında standart kurallarla oynanır. Sıranı uzun süre oynamazsan hükmen mağlup sayılırsın.`,
+  const seats = t.tableSize
+  const pass = t.bracket?.pass ?? TABLE_PASS
+  const length = matchLengthOf(t.game, t.matchLength)
+  const rules =
+    seats > 2
+      ? [
+          `Masa usulü eleme: oyuncular kura ile ${seats} kişilik masalara dağıtılır. Her masanın ilk ${pass} oyuncusu bir sonraki tura geçer, diğerleri elenir. Final masasının birincisi şampiyon olur.`,
+          `Kontenjan ${t.maxPlayers} oyuncu. Kayıtlar başlangıç saatinde kapanır; o ana kadar kaydını iptal edebilirsin.`,
+          `Turnuva başlangıç saatinde kendiliğinden başlar. En az ${minEntrants(seats)} kayıt yoksa iptal olur, ücretler iade edilir.`,
+          `Kontenjan dolmazsa oyuncular masalara eşit dağıtılır. Eksik kalan koltuğa bot oturur; bot tur atlayamaz ve ödül alamaz, sırası en iyi oyuncuya geçer. ${pass} ya da daha az oyuncusu olan masa oynanmaz, oyuncuları doğrudan tur atlar.`,
+          `Masan açılınca bildirim gelir ve sitenin üstünde "Turnuva maçın hazır" kutusu çıkar. ${t.joinMinutes} dakika içinde masaya girmeyen elenir, koltuğuna bot oturur ve masa onsuz oynanır. Masaya kimse girmezse masa herkes için kayıp sayılır.`,
+          `Masalar ${gameTitle} standart kurallarıyla, herkes kendi adına (eşsiz) ve bahissiz oynanır. ${TABLE_ORDER[t.game] ?? 'Sıralama oyunun kendi sonucuna göre belirlenir.'}`,
+          `${
+            TURN_SECONDS[t.game]
+              ? 'Hamle süren dolarsa hamlen kendiliğinden yapılır; üst üste 3 kez dolarsa elenirsin ve koltuğuna bot oturur.'
+              : 'Süresinde oynamayan elenir ve koltuğuna bot oturur.'
+          } Masadaki "Pes et" düğmesiyle masayı bırakırsan da elenirsin; masa sensiz devam eder.`,
+        ]
+      : [
+          isLeague
+            ? 'Lig usulü: herkes herkesle bir kez oynar. Galibiyet puan kazandırır, en çok puanı toplayan şampiyon olur.'
+            : 'Eleme usulü: kaybeden elenir, kazanan bir sonraki tura geçer. Final kazananı şampiyon olur.',
+          `Kontenjan ${t.maxPlayers} oyuncu. Kayıtlar başlangıç saatinde kapanır; o ana kadar kaydını iptal edebilirsin.`,
+          'Turnuva başlangıç saatinde kendiliğinden başlar ve oyuncular eşleşir. En az 2 kayıt yoksa iptal olur, ücretler iade edilir.',
+          `Maçın açılınca bildirim gelir ve sitenin üstünde "Turnuva maçın hazır" kutusu çıkar. ${t.joinMinutes} dakika içinde masaya girmeyen maçı hükmen kaybeder; iki oyuncu da girmezse maç ikisi için de kayıp sayılır.`,
+          `Maçlar ${gameTitle.toLowerCase()} masasında standart kurallarla, birebir ve bahissiz oynanır. ${
+            TURN_SECONDS[t.game]
+              ? 'Hamle süren dolarsa hamlen kendiliğinden yapılır; üst üste 3 kez dolarsa maçı hükmen kaybedersin.'
+              : 'Süresinde oynamayan maçı hükmen kaybeder.'
+          } Masadaki "Pes et" düğmesiyle maçı bırakabilirsin.`,
+          ...(length ? [`Maç uzunluğu: ${length.label.toLocaleLowerCase('tr')}. ${length.hint}`] : []),
+        ]
+  if (t.endsAt) {
+    rules.push(
+      `Turnuva en geç ${formatTR(t.endsAt)} biter. Bütün ${seats > 2 ? 'masalar' : 'maçlar'} daha önce biterse sonuç beklenmeden yazılır. Bitiş saatinde süren ${seats > 2 ? 'masalar' : 'maçlar'} kapanır; ${
+        isLeague
+          ? 'o anki puan durumu geçerli olur, oynanmayan maç sayılmaz.'
+          : 'şampiyon belli değilse turnuvada kalan oyuncular paylaştıkları sıraların ödülünü eşit bölüşür.'
+      }`,
+    )
+  }
+  rules.push(
     t.entryFee
-      ? `Katılım ${formatAC(t.entryFee)} KC; kayıt iptalinde iade edilir. Ödüller turnuva bitince Kanka Coin olarak hesabına yüklenir.`
-      : 'Katılım ücretsiz. Ödüller turnuva bitince Kanka Coin olarak hesabına otomatik yüklenir.',
+      ? `Katılım ${formatAC(t.entryFee)} KC, bir kez kayıtta kesilir; kayıt iptalinde ve turnuva iptalinde iade edilir. Ödüller turnuva bitince Kanka Coin olarak hesabına yüklenir.`
+      : 'Katılım ücretsiz. Ödüller turnuva bitince Kanka Coin olarak hesabına kendiliğinden yüklenir.',
     'Birden fazla hesapla katılmak, maç ayarlamak veya hile tespit edilirse oyuncu diskalifiye edilir ve ödülü iptal olur.',
-  ]
+  )
+  return rules
+}
+
+/** What a closed tournament says about how it closed, when that is not simply "all matches were played". */
+function closeNote(t: Tournament) {
+  if (t.status === 'iptal') return `${(t.finishReason && CANCEL_TEXT[t.finishReason]) ?? 'Turnuva iptal edildi.'}${t.entryFee ? ' Kayıt ücretleri iade edildi.' : ''}`
+  if (t.status !== 'bitti' || t.finishReason !== 'sure') return null
+  if (t.format === 'lig') return 'Bitiş saati geldi; o anki puan durumu geçerli oldu, oynanmayan maçlar sayılmadı.'
+  return t.winner ? null : 'Bitiş saati geldiğinde şampiyon belli değildi. Turnuvada kalan oyuncular ödülü eşit paylaştı.'
 }
 
 const STATUS_STYLE = {
@@ -45,9 +100,9 @@ const STATUS_STYLE = {
   iptal: 'bg-muted text-muted-foreground',
 } as const
 
-export function TournamentCard({ t }: { t: Tournament }) {
+export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: () => void }) {
   const meta = ARENA_META[t.game]
-  const { points, member, refresh, requireLogin } = usePoints()
+  const { points, member, refresh, requireLogin, matches } = usePoints()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +110,21 @@ export function TournamentCard({ t }: { t: Tournament }) {
   const canAfford = points >= t.entryFee
   const fill = Math.min(100, Math.round((t.entries.length / t.maxPlayers) * 100))
   const joined = member != null && t.entries.some((e) => e.userId === member.id)
-  const myMatch = member ? t.liveMatches.find((m) => m.players.includes(member.id)) : undefined
+  const myMatch = member ? t.liveMatches.find((m) => m.status === 'oynaniyor' && m.players.includes(member.id)) : undefined
+  const joinLeft = useSecondsLeft(myMatch ? matches.find((m) => m.tableId === myMatch.tableId)?.joinBy : null)
+  const closed = closeNote(t)
+  const league = t.format === 'lig'
+  const liveCount = t.liveMatches.filter((m) => m.status === 'oynaniyor').length
+  const myId = member?.id ?? null
+  const shared = t.tableSize > 2
+  const pass = t.bracket?.pass ?? TABLE_PASS
+  // Out of a shared table that is still being played: the bracket names the player, the open table no longer seats them.
+  const dropped =
+    myId != null && t.liveMatches.some((m) => m.status === 'oynaniyor' && !m.players.includes(myId) && (t.bracket?.rounds[m.round]?.[m.match]?.players.includes(myId) ?? false))
+  const eliminated =
+    myId != null &&
+    !league &&
+    (dropped || (t.bracket?.rounds.some((round) => round.some((m) => isRealMatch(m) && isDecided(m) && m.players.includes(myId) && !passedOn(m).includes(myId))) ?? false))
 
   const toggle = () => {
     if (!requireLogin()) return
@@ -65,6 +134,7 @@ export function TournamentCard({ t }: { t: Tournament }) {
       if (!r.ok) setError(r.error ?? 'İşlem başarısız.')
       refresh()
       router.refresh()
+      onChanged?.()
     })
   }
 
@@ -79,9 +149,9 @@ export function TournamentCard({ t }: { t: Tournament }) {
 
         <div className="flex flex-col gap-4 p-4 md:gap-5 md:p-7">
           <div className="flex flex-col gap-1.5 md:gap-2">
-            <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-primary md:text-xs">
+            <span className="flex items-start gap-2 text-[11px] font-bold uppercase leading-4 tracking-[0.18em] text-primary md:text-xs md:leading-4">
               <Gamepad2 className="size-4 shrink-0" aria-hidden="true" />
-              <span className="truncate">{meta.title} turnuvası · {meta.players}</span>
+              <span className="min-w-0 text-pretty">{meta.title} turnuvası · {shared ? `${t.tableSize} kişilik masalar` : 'birebir'}</span>
             </span>
             <h2 className="font-display text-2xl font-bold uppercase leading-none text-foreground text-balance md:text-3xl">{t.title}</h2>
             {t.description && <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground text-pretty md:line-clamp-none">{t.description}</p>}
@@ -116,6 +186,14 @@ export function TournamentCard({ t }: { t: Tournament }) {
               {t.prizeNote}
             </p>
           )}
+          {t.endsAt && (t.status === 'kayit' || t.status === 'basladi') && (
+            <p className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
+              <Hourglass className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+              <span className="text-pretty">
+                En geç <span className="font-semibold capitalize text-foreground">{formatTR(t.endsAt)}</span> biter. Maçlar erken biterse beklenmez.
+              </span>
+            </p>
+          )}
           {(t.prizes.length > 1 || t.status === 'bitti') && <PrizeList t={t} />}
 
           <div className="flex flex-col gap-2">
@@ -142,18 +220,54 @@ export function TournamentCard({ t }: { t: Tournament }) {
             </div>
           )}
 
+          {closed && (
+            <p className="rounded-xl border border-border bg-secondary p-3 text-pretty text-sm leading-relaxed text-foreground" role="note">
+              {closed}
+            </p>
+          )}
+
           {t.status === 'basladi' && (
             <div className="flex flex-col gap-2 rounded-2xl border border-border bg-secondary p-4 text-sm">
               <p className="font-semibold text-foreground">
-                {t.currentRound ? `${t.currentRound}. tur oynanıyor` : 'Turnuva sürüyor'} · {t.liveMatches.filter((m) => m.status === 'oynaniyor').length} maç aynı anda devam ediyor
+                {t.currentRound != null ? `${roundName(league, t.currentRound, t.bracket?.rounds.length ?? 0)} oynanıyor` : 'Turnuva sürüyor'} ·{' '}
+                {liveCount > 0 ? `${liveCount} ${shared ? 'masa oynanıyor' : 'maç devam ediyor'}` : shared ? 'sıradaki masalar açılıyor' : 'sıradaki maçlar açılıyor'}
               </p>
               <p className="leading-relaxed text-muted-foreground">
-                Turdaki tüm maçlar bitince kazananlar otomatik olarak bir sonraki tura eşleşir, finale kadar böyle devam eder.
+                {shared
+                  ? `Turdaki tüm masalar bitince her masanın ilk ${pass} oyuncusu bir sonraki turda yeni masalara oturur. Final masasının birincisi şampiyon olur. Bu sayfa kendiliğinden güncellenir.`
+                  : league
+                    ? 'Turdaki tüm maçlar bitince sıradaki tur açılır. Herkes herkesle bir kez oynar, bu sayfa kendiliğinden güncellenir.'
+                    : 'Turdaki tüm maçlar bitince kazananlar bir sonraki tura eşleşir, finale kadar böyle devam eder. Bu sayfa kendiliğinden güncellenir.'}
               </p>
-              {myMatch && myMatch.status === 'oynaniyor' && (
-                <Link href={`/oyunlar/${t.game}`} className="mt-1 rounded-xl bg-primary px-5 py-3 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground">
-                  Maçın hazır, oyuna gir
-                </Link>
+              {myMatch ? (
+                <>
+                  <Link
+                    href={matchHref({ game: t.game, tableId: myMatch.tableId })}
+                    className="mt-1 rounded-xl bg-primary px-5 py-3 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground"
+                  >
+                    {shared ? 'Masan hazır, masaya gir' : 'Maçın hazır, masaya gir'}
+                  </Link>
+                  {joinLeft != null && joinLeft > 0 && (
+                    <p className="flex flex-wrap items-center justify-center gap-x-2 text-center text-sm font-semibold text-foreground">
+                      Masaya girmek için kalan süre
+                      <Countdown seconds={joinLeft} label="Masaya girmek için kalan süre" />
+                    </p>
+                  )}
+                  <p className="text-center text-xs text-muted-foreground">
+                    {joinLeft != null && joinLeft > 0 ? (shared ? 'Süre dolmadan girmezsen elenirsin, masa sensiz oynanır. ' : 'Süre dolmadan girmezsen maçı hükmen kaybedersin. ') : ''}
+                    {t.entryFee ? 'Kayıt ücretin ödendi, masada ayrıca bahis yok.' : 'Turnuva masasında bahis yok.'}
+                  </p>
+                </>
+              ) : (
+                joined && (
+                  <p className="mt-1 rounded-xl border border-border bg-card p-3 font-semibold text-foreground" role="status">
+                    {eliminated
+                      ? `Bu turnuvada elendin. ${shared ? 'Masaları' : 'Eşleşmeleri'} aşağıdan izleyebilirsin.`
+                      : shared
+                        ? 'Şu an açık masan yok. Sıradaki masan açılınca düğmesi burada çıkar.'
+                        : 'Şu an açık maçın yok. Sıradaki maçın açılınca düğmesi burada çıkar.'}
+                  </p>
+                )
               )}
             </div>
           )}
@@ -162,7 +276,9 @@ export function TournamentCard({ t }: { t: Tournament }) {
             <div className="flex flex-col gap-3">
               {joined && (
                 <p className="rounded-xl border border-primary/50 bg-primary/10 p-3 text-sm font-semibold text-foreground" role="status">
-                  Kaydın alındı. Turnuva başlayınca tüm oyuncular aynı anda eşleşir.
+                  {shared
+                    ? `Kaydın alındı. Turnuva başlayınca oyuncular kura ile ${t.tableSize} kişilik masalara dağıtılır.`
+                    : 'Kaydın alındı. Turnuva başlayınca tüm oyuncular aynı anda eşleşir.'}
                 </p>
               )}
               {error && (
@@ -231,11 +347,25 @@ export function TournamentCard({ t }: { t: Tournament }) {
 
       {t.bracket && (
         <div className="flex flex-col gap-3 border-t border-border p-5 md:p-7">
-          <h3 className="font-display text-lg font-bold uppercase text-foreground">{t.format === 'lig' ? 'Puan durumu ve fikstür' : 'Eşleşmeler'}</h3>
+          <h3 className="font-display text-lg font-bold uppercase text-foreground">{t.format === 'lig' ? 'Puan durumu ve fikstür' : (t.bracket.seats ?? 2) > 2 ? 'Masalar' : 'Eşleşmeler'}</h3>
           {t.format === 'lig' ? (
             <LeagueView bracket={t.bracket} names={t.names} order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)} />
           ) : (
             <BracketView bracket={t.bracket} names={t.names} closed={t.status !== 'basladi'} />
+          )}
+          {t.format !== 'lig' && (
+            <details className="group rounded-xl border border-border">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-foreground [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2">
+                  <Users className="size-4 text-primary" aria-hidden="true" />
+                  Oyuncu durumu
+                </span>
+                <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <div className="border-t border-border p-3">
+                <PlayerStats bracket={t.bracket} names={t.names} order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)} closed={t.status !== 'basladi'} />
+              </div>
+            </details>
           )}
         </div>
       )}

@@ -143,6 +143,7 @@ export type DashStats = {
 const GAME_MODES = ['bot', 'pvp', 'masa']
 const SOURCE_LABELS: Record<string, string> = {
   odul: 'Mini oyun ödülleri',
+  turnuva: 'Turnuva ödülleri',
   cember: 'Jako Çemberi',
   online: 'Çevrimiçi ödülü',
   kankatv: 'Kanka TV',
@@ -368,7 +369,7 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
         SELECT src, sum(amount) AS amount FROM (
           SELECT source AS src, coins AS amount FROM kp_events WHERE coins > 0 AND ${inRange(sql`created_at`)}
           UNION ALL
-          SELECT 'odul' AS src, delta AS amount FROM game_history WHERE mode = 'odul' AND delta > 0 AND ${inRange(sql`created_at`)}
+          SELECT CASE WHEN game = 'turnuva' THEN 'turnuva' ELSE 'odul' END AS src, delta AS amount FROM game_history WHERE mode = 'odul' AND delta > 0 AND ${inRange(sql`created_at`)}
         ) t GROUP BY src ORDER BY amount DESC LIMIT 6`)
       return res.map((x) => ({ label: SOURCE_LABELS[x.src] ?? x.src, amount: num(x.amount) }))
     }, []),

@@ -2537,6 +2537,25 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 .o1-x:hover { color: #fff; background: rgb(255 255 255 / .14); }
 .o1-x svg { width: 55%; height: 55%; }
 
+/* Okey players' table (.okp): the bot table's layout plus what only a shared table shows. */
+.okp .okt-nm s { text-decoration: none; color: var(--okt-mist); margin-left: calc(var(--u) * .5); font-variant-numeric: tabular-nums; font-weight: 500; }
+.okp .okt-nm em { font-style: normal; margin-left: calc(var(--u) * .5); color: var(--okt-brass); font-weight: 700; font-size: .85em; }
+.okp .okt-pl.active .okt-nm s, .okp .okt-pl.active .okt-nm em { color: #3a2614; }
+.okp .okt-toast.warn { background: #6b1d17; color: #ffe2dc; }
+.okp .okt-toast.me { background: var(--okt-brass); color: var(--okt-ink); }
+.okp .okt-num.low { color: var(--okt-brass); font-weight: 800; }
+.okp .table-chat-btn { left: auto; right: 1.8%; top: 4%; }
+/* With "Eli Bitir", "Taşı At" and "Göster" all showing, a single column runs into the left seat and the rack. */
+@media (min-width: 640px) {
+  .okp .okt-side:has(> :nth-child(4)) { display: grid; grid-template-columns: auto auto; }
+}
+.ls-split .okp .okt-side:has(> :nth-child(4)) { display: grid; grid-template-columns: auto auto; }
+/* Upright and narrow: side seats hang from the table edge so a long name plus points stays on the felt. */
+@media (max-width: 639.98px) and (orientation: portrait) {
+  .okp .okt-p3 { left: 1.5%; transform: translate(0, -50%); }
+  .okp .okt-p1 { left: auto; right: 1.5%; transform: translate(0, -50%); }
+}
+
 /* 101 table chat button: free corner per layout */
 /* Pişti: fullscreen exit + menu live top-left, so the chat button goes top-right like the other tables. */
 .pisti-stage .table-chat-btn { left: auto; right: 0.75rem; top: 0.75rem; }

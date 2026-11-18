@@ -24,7 +24,7 @@ export function LeagueView({
   const nameOf = (key: string) => cleanName(names[key] ?? key)
   const standings = leagueStandings(bracket, order)
   const champion = leagueChampion(bracket, order)
-  const firstOpen = bracket.rounds.findIndex((r) => r.some((m) => !m.winner))
+  const firstOpen = bracket.rounds.findIndex((r) => r.some((m) => !m.winner && !m.void))
   const [round, setRound] = useState(firstOpen < 0 ? bracket.rounds.length - 1 : firstOpen)
   const matches = bracket.rounds[round] ?? []
 
@@ -72,7 +72,7 @@ export function LeagueView({
       </div>
 
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Haftalar">
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Turlar">
           {bracket.rounds.map((r, i) => {
             const done = r.every((m) => m.winner)
             return (
@@ -88,7 +88,7 @@ export function LeagueView({
                   done && round !== i && 'text-muted-foreground',
                 )}
               >
-                {i + 1}. hafta
+                {i + 1}. tur
               </button>
             )
           })}
