@@ -1,10 +1,12 @@
 import { bracketChampion, isDecided, isRealMatch, passedOn, type Bracket } from './bracket'
 import { MAX_LEAGUE_PLAYERS, leagueStandings } from './league'
+import { TABLE_PASS } from './tournaments-shared'
 
 type Format = 'eleme' | 'lig'
 
 export const MAX_PRIZE_KC = 10_000_000
-const MAX_LEAGUE_PRIZE_PLACES = 8
+/** The pool is stored as a 32-bit number, and a place deep in a big bracket is paid to hundreds of players. */
+export const MAX_PRIZE_POOL_KC = 1_000_000_000
 
 /** A knockout bracket only fills without byes at these sizes; a league needs an even field so nobody sits a week out. */
 const KNOCKOUT_SIZES = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
@@ -33,27 +35,35 @@ export type PrizePlace = { label: string; hint: string; count: number }
 
 const TABLE_ORDINALS = ['ikinci', 'üçüncü', 'dördüncü', 'beşinci', 'altıncı', 'yedinci', 'sekizinci']
 
+const ROUND_NAMES = ['yarı final', 'çeyrek final']
+
+/**
+ * Every place a prize can be written for: each player of a league, and in a knockout the final ranked
+ * player by player followed by one shared place for the players each earlier round puts out.
+ */
 export function prizePlaces(format: Format, maxPlayers: number, seats = 2): PrizePlace[] {
   if (format === 'lig') {
-    return Array.from({ length: Math.max(1, Math.min(MAX_LEAGUE_PRIZE_PLACES, maxPlayers)) }, (_, i) => ({
+    return Array.from({ length: Math.max(1, Math.min(MAX_LEAGUE_PLAYERS, maxPlayers)) }, (_, i) => ({
       label: `${i + 1}.`,
       hint: i === 0 ? 'şampiyon' : 'puan durumuna göre',
       count: 1,
     }))
   }
-  if (seats > 2) {
-    // The final table is ranked seat by seat; the tables before it only say who went through.
-    const places: PrizePlace[] = [{ label: '1.', hint: 'şampiyon', count: 1 }]
-    for (let i = 1; i < seats; i++) places.push({ label: `${i + 1}.`, hint: `final masasında ${TABLE_ORDINALS[i - 1] ?? `${i + 1}.`}`, count: 1 })
-    if (maxPlayers > seats) places.push({ label: `${seats + 1}.-${seats * 2}.`, hint: 'yarı final masalarında elenenler, kişi başı', count: seats })
-    return places
+  const shared = seats > 2
+  const pass = shared ? TABLE_PASS : 1
+  const places: PrizePlace[] = [{ label: '1.', hint: 'şampiyon', count: 1 }]
+  // The final is ranked seat by seat; the rounds before it only say who went through.
+  for (let i = 1; i < seats; i++) {
+    places.push({ label: `${i + 1}.`, hint: shared ? `final masasında ${TABLE_ORDINALS[i - 1] ?? `${i + 1}.`}` : 'finalde kaybeden', count: 1 })
   }
-  const places: PrizePlace[] = [
-    { label: '1.', hint: 'şampiyon', count: 1 },
-    { label: '2.', hint: 'finalde kaybeden', count: 1 },
-  ]
-  if (maxPlayers > 2) places.push({ label: '3.-4.', hint: 'yarı finalde elenenler, kişi başı', count: 2 })
-  if (maxPlayers > 4) places.push({ label: '5.-8.', hint: 'çeyrek finalde elenenler, kişi başı', count: 4 })
+  let taken = seats
+  for (let back = 1, tables = seats / pass; tables * pass < maxPlayers; back++, tables *= seats / pass) {
+    const count = tables * (seats - pass)
+    const name = ROUND_NAMES[back - 1]
+    const round = name ? (shared ? `${name} masalarında` : `${name}de`) : `son ${tables * seats} turunda`
+    places.push({ label: `${taken + 1}.-${taken + count}.`, hint: `${round} elenenler, kişi başı`, count })
+    taken += count
+  }
   return places
 }
 
