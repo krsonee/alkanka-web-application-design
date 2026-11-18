@@ -25,7 +25,7 @@ import { deleteTournamentTemplate, saveTournamentTemplate } from '@/lib/tourname
 import { listTournamentMatches } from '@/lib/tournament-matches'
 import { MAX_TOURNAMENT_TEMPLATES, MIN_TOURNAMENT_MINUTES, canHostTournament, cleanJoinMinutes, cleanMatchLength, formatsFor, matchLengthOf, isTournamentFormat, tournamentSeats, type MatchRecord } from '@/lib/tournaments-shared'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
-import { MAX_PRIZE_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces } from '@/lib/tournament-prizes'
+import { MAX_PRIZE_KC, MAX_PRIZE_POOL_KC, cleanPrizes, isPlayerCount, playerRuleText, prizePlaces, prizeTotal } from '@/lib/tournament-prizes'
 import type { ActionState } from './actions'
 
 const MAX_BET_OPTIONS = 8
@@ -140,12 +140,16 @@ function readTournament(form: FormData): TournamentInput {
     throw new Error(`Lig formatında en fazla ${MAX_LEAGUE_PLAYERS} oyuncu olabilir (herkes herkesle oynar).`)
   }
   if (!isPlayerCount(format, maxPlayers, seats)) throw new Error(playerRuleText(format, seats))
+  // The form only sends the places a prize was added for; the rest pay nothing.
   const prizes = cleanPrizes(
-    prizePlaces(format, maxPlayers, seats).map((_, i) => int(form, `prize${i}`, 'Sıralama ödülü', 0, MAX_PRIZE_KC)),
+    prizePlaces(format, maxPlayers, seats).map((_, i) => (form.get(`prize${i}`) == null ? 0 : int(form, `prize${i}`, 'Sıralama ödülü', 0, MAX_PRIZE_KC))),
     format,
     maxPlayers,
     seats,
   )
+  if (prizeTotal(format, maxPlayers, prizes, seats) > MAX_PRIZE_POOL_KC) {
+    throw new Error(`Toplam ödül havuzu en fazla ${MAX_PRIZE_POOL_KC.toLocaleString('tr-TR')} KC olabilir. Kişi başı yazılan sıralarda tutar o sıradaki oyuncu sayısıyla çarpılır.`)
+  }
   return {
     format,
     game,

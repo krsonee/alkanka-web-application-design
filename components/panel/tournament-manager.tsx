@@ -28,7 +28,7 @@ import {
   type TournamentFormat,
   type TournamentTemplate,
 } from '@/lib/tournaments-shared'
-import { MAX_PRIZE_KC, effectivePrizes, isPlayerCount, playerOptions, prizePlaces, prizeTotal, snapPlayers } from '@/lib/tournament-prizes'
+import { MAX_PRIZE_KC, MAX_PRIZE_POOL_KC, effectivePrizes, isPlayerCount, playerOptions, prizePlaces, prizeTotal, snapPlayers } from '@/lib/tournament-prizes'
 import { PrizeList } from '@/components/alkanka/arena/prize-list'
 import { MAX_LEAGUE_PLAYERS } from '@/lib/league'
 import { LeagueView } from '@/components/alkanka/arena/league-view'
@@ -122,6 +122,9 @@ function ActionButton({
   )
 }
 
+/** Prize rows a form opens with; more are added one place at a time. */
+const START_PRIZE_ROWS = 3
+
 /** Tomorrow in Istanbul at the template's hour, so a weekly cup reopens with one date change at most. */
 function tomorrowAt(time: string) {
   return `${new Date(Date.now() + 27 * 3600000).toISOString().slice(0, 10)}T${time}`
@@ -142,9 +145,16 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
   const startFormat = (g: ArenaGame, f: TournamentFormat): TournamentFormat => (formatsFor(g).includes(f) ? f : 'eleme')
   const [format, setFormat] = useState<TournamentFormat>(() => startFormat(from?.game ?? 'tavla', from?.format ?? 'eleme'))
   const [maxPlayers, setMaxPlayers] = useState(() => snapPlayers(startFormat(from?.game ?? 'tavla', from?.format ?? 'eleme'), from?.maxPlayers ?? 16, tournamentSeats(from?.game ?? 'tavla') ?? 2))
-  const [prizes, setPrizes] = useState<string[]>(() => (from ? effectivePrizes(from) : [5000]).map(String))
+  const [prizes, setPrizes] = useState<string[]>(() => {
+    const saved = (from ? effectivePrizes(from) : [5000]).map(String)
+    return Array.from({ length: Math.max(saved.length, START_PRIZE_ROWS) }, (_, i) => saved[i] ?? '0')
+  })
   const places = prizePlaces(format, maxPlayers, seats)
-  const total = prizeTotal(format, maxPlayers, places.map((_, i) => Math.max(0, Math.round(Number(prizes[i]) || 0))), seats)
+  // A row is a place a prize was added for; a smaller field or another format has fewer places to offer.
+  const rows = prizes.slice(0, places.length)
+  const amounts = rows.map((v) => Math.max(0, Math.round(Number(v) || 0)))
+  const total = prizeTotal(format, maxPlayers, amounts, seats)
+  const nextPlace = places[rows.length]
   const legacySize = Boolean(from && !isPlayerCount(format, from.maxPlayers, seats))
   const legacyFormat = Boolean(from && from.format !== format && from.game === game)
   const [times, setTimes] = useState(() => {
@@ -309,29 +319,65 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
         <fieldset className="flex flex-col gap-3 rounded-xl border border-border p-4 sm:col-span-2">
           <legend className="px-1 text-xs font-semibold text-muted-foreground">Sıralama ödülleri (KC)</legend>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {places.map((place, i) => (
-              <label key={`${format}-${seats}-${i}`} className={labelCls}>
-                <span>
-                  <span className="text-foreground">{place.label}</span> {place.hint}
-                </span>
-                <input
-                  type="number"
-                  name={`prize${i}`}
-                  min={0}
-                  max={MAX_PRIZE_KC}
-                  required
-                  value={prizes[i] ?? '0'}
-                  onChange={(e) => setPrizes((list) => places.map((_, j) => (j === i ? e.target.value : (list[j] ?? '0'))))}
-                  className={field}
-                />
-              </label>
-            ))}
+            {rows.map((value, i) => {
+              const place = places[i]
+              return (
+                <label key={`${format}-${seats}-${i}`} className={labelCls}>
+                  <span>
+                    <span className="text-foreground">{place.label}</span> {place.hint}
+                  </span>
+                  <input
+                    type="number"
+                    name={`prize${i}`}
+                    min={0}
+                    max={MAX_PRIZE_KC}
+                    required
+                    value={value}
+                    onChange={(e) => setPrizes(rows.map((v, j) => (j === i ? e.target.value : v)))}
+                    className={field}
+                  />
+                  {place.count > 1 && (
+                    <span className="font-normal">
+                      {`En fazla ${place.count} oyuncu · bu sıraya toplam ${(amounts[i] * place.count).toLocaleString('tr-TR')} KC`}
+                    </span>
+                  )}
+                </label>
+              )
+            })}
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground" aria-live="polite">
-            Toplam ödül havuzu: <span className="font-bold text-foreground">{total.toLocaleString('tr-TR')} KC</span>. Sitede bu toplam gösterilir. Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir; ödül vermek istemediğin sırayı 0 bırak.
+          <div className="flex flex-wrap items-center gap-2">
+            {nextPlace && (
+              <button
+                type="button"
+                onClick={() => setPrizes([...rows, '0'])}
+                className="flex items-center gap-1.5 rounded-lg border border-primary/50 px-3 py-2 text-xs font-bold text-foreground hover:bg-primary/10"
+              >
+                <Plus className="size-3.5 shrink-0" aria-hidden="true" />
+                {`Kazanan sıra ekle: ${nextPlace.label} ${nextPlace.hint.replace(', kişi başı', '')}`}
+              </button>
+            )}
+            {rows.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setPrizes(rows.slice(0, -1))}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary"
+              >
+                <Trash2 className="size-3.5 shrink-0" aria-hidden="true" />
+                {`Son sırayı kaldır (${places[rows.length - 1].label})`}
+              </button>
+            )}
+            {!nextPlace && <span className="text-xs text-muted-foreground">Bu kontenjanda ödül yazılabilecek bütün sıralar eklendi.</span>}
+          </div>
+          <p className={cn('text-xs leading-relaxed text-muted-foreground', total > MAX_PRIZE_POOL_KC && 'text-destructive')} aria-live="polite">
+            Toplam ödül havuzu: <span className={cn('font-bold', total > MAX_PRIZE_POOL_KC ? 'text-destructive' : 'text-foreground')}>{total.toLocaleString('tr-TR')} KC</span>.{' '}
+            {total > MAX_PRIZE_POOL_KC
+              ? `Havuz en fazla ${MAX_PRIZE_POOL_KC.toLocaleString('tr-TR')} KC olabilir; kişi başı yazılan sıraların tutarını düşür.`
+              : 'Sitede bu toplam gösterilir. Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir. İstediğin kadar kazanan sıra ekleyebilirsin; ödül vermek istemediğin sırayı 0 bırak.'}
             {shared
               ? ` Final masası tek tek sıralanır (1. - ${seats}.); daha önceki turda elenenler aynı ödülü alır.`
-              : format === 'eleme' && places.length > 2 && ' Elemede üçüncülük maçı oynanmaz: aynı turda elenenler aynı ödülü alır.'}
+              : format === 'eleme'
+                ? ' Elemede üçüncülük maçı oynanmaz: aynı turda elenenler aynı ödülü alır, tutar kişi başıdır.'
+                : ' Ligde her sıra tek oyuncudur, puan durumuna göre belirlenir.'}
           </p>
         </fieldset>
         <label className={cn(labelCls, 'sm:col-span-2')}>

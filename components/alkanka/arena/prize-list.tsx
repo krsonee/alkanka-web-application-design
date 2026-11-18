@@ -39,7 +39,7 @@ export function PrizeList({ t, className }: { t: Tournament; className?: string 
           return (
             <li key={i} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-3 py-2">
               <span className="flex min-w-0 items-baseline gap-2">
-                <span className="w-10 shrink-0 font-display font-bold text-primary">{place.label}</span>
+                <span className="min-w-10 shrink-0 font-display font-bold tabular-nums text-primary">{place.label}</span>
                 <span className="min-w-0 text-foreground">{winners.length ? winners.join(', ') : <span className="text-muted-foreground">{place.hint.replace(', kişi başı', '')}</span>}</span>
               </span>
               <span className="shrink-0 font-semibold tabular-nums text-foreground">

@@ -45,7 +45,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Slayt telefon görseli', words: 'mobil dikey görsel slider telefon', row: 'slide' },
   { title: 'Rehber yazısını ileri tarihe zamanla', words: 'yayın zamanı tarih saat zamanla blog yazı', row: 'seo' },
   { title: 'Turnuva şablonları', words: 'şablon kalıp tekrar aç haftalık kupa', row: 'tournaments' },
-  { title: 'Turnuva sıralama ödülleri', words: 'sıralama ödülü ikinci üçüncü ödül havuzu kontenjan kişi sayısı', row: 'tournaments' },
+  { title: 'Turnuva sıralama ödülleri', words: 'sıralama ödülü ikinci üçüncü ödül havuzu kontenjan kişi sayısı kazanan sıra ekle kazanan sayısı', row: 'tournaments' },
   { title: 'Turnuva bitiş saati ve maça giriş süresi', words: 'bitiş saati süre hükmen gelmeyen oyuncu maça giriş dakika otomatik başlat hamle süresi pes', row: 'tournaments' },
   { title: 'Turnuva maç uzunluğu (tavla, okey)', words: 'maç uzunluğu tek el 3 puanlık 5 puanlık mars puandan düşüş puanlı okey kaç el', row: 'tournaments' },
   { title: 'Turnuva maç listesi ve oyuncu durumu', words: 'maçlar maç listesi açık maç kim geldi masaya girdi hükmen nasıl bitti oyuncu durumu istatistik galibiyet mağlubiyet kazanan seç elle sonuç', row: 'tournaments' },
