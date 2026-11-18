@@ -31,6 +31,9 @@ import { LeagueView } from '@/components/alkanka/arena/league-view'
 import { beginTournament, dropTournamentTemplate, keepTournamentTemplate, kickEntry, pickMatchWinner, removeTournament, saveTournament, stopTournament } from '@/app/panel/arena-actions'
 import type { ActionState } from '@/app/panel/actions'
 import { BracketView } from '@/components/alkanka/arena/bracket-view'
+import { PlayerStats } from '@/components/alkanka/arena/player-stats'
+import { TournamentMatches } from '@/components/panel/tournament-matches'
+import { isDecided, isRealMatch, openRound, type Match } from '@/lib/bracket'
 import { formatTR } from '@/components/alkanka/arena/tournament-card'
 import { Flash } from '@/components/panel/flash'
 
@@ -414,12 +417,21 @@ function WinnerPicker({ t, round, match, players, winner }: { t: Tournament; rou
         ))}
       </select>
       {pending && <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" aria-hidden="true" />}
-      {!state.ok && state.message && <span className="sr-only">{state.message}</span>}
+      {!state.ok && state.message && (
+        <span role="alert" className="text-xs font-semibold text-destructive">
+          {state.message}
+        </span>
+      )}
     </form>
   )
 }
 
 function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
+  const running = t.status === 'basladi'
+  const order = t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)
+  const playing = running && t.bracket ? openRound(t.bracket) : -1
+  /** A result can be named only for a match of the round being played: a written one never changes. */
+  const canPick = (round: number, m: Match) => round === playing && isRealMatch(m) && !isDecided(m)
   return (
     <article data-find={`tournament-${t.id}`} className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -477,35 +489,46 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
 
       {t.bracket && t.format === 'lig' && (
         <div className="flex flex-col gap-2">
-          <h4 className="text-sm font-bold text-foreground">Puan durumu ve fikstür (kazananı seçince puan tablosu güncellenir, tur bitince sonraki tur açılır)</h4>
+          <h4 className="text-sm font-bold text-foreground">
+            {running ? 'Puan durumu ve fikstür (açık bir maçta kazananı elle seçebilirsin; tur bitince sonraki tur açılır)' : 'Puan durumu ve fikstür'}
+          </h4>
           <LeagueView
             bracket={t.bracket}
             names={t.names}
-            order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)}
-            renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />}
+            order={order}
+            renderPick={(r, m, match) => (canPick(r, match) ? <WinnerPicker t={t} round={r} match={m} players={match.players} winner={null} /> : null)}
           />
         </div>
       )}
       {t.bracket && t.format === 'eleme' && (
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-bold text-foreground">
-            {t.tableSize > 2
-              ? `Masalar (her masanın ilk ${t.bracket.pass ?? TABLE_PASS} oyuncusu tur atlar; açık bir masada birinciyi elle seçebilirsin)`
-              : 'Eşleşmeler (kazananı seçince otomatik bir üst tura geçer)'}
+            {!running
+              ? t.tableSize > 2
+                ? 'Masalar'
+                : 'Eşleşmeler'
+              : t.tableSize > 2
+                ? `Masalar (her masanın ilk ${t.bracket.pass ?? TABLE_PASS} oyuncusu tur atlar; açık bir masada birinciyi elle seçebilirsin)`
+                : 'Eşleşmeler (açık bir maçta kazananı elle seçebilirsin; kazanan bir üst tura geçer)'}
           </h4>
           <BracketView
             bracket={t.bracket}
             names={t.names}
-            closed={t.status !== 'basladi'}
+            closed={!running}
             renderPick={(r, m, match) => {
-              if (t.tableSize <= 2) return <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />
+              if (!canPick(r, match)) return null
+              if (t.tableSize <= 2) return <WinnerPicker t={t} round={r} match={m} players={match.players} winner={null} />
               // A shared table's result is read from the open table, so only the players still seated at it can be named.
               const open = t.liveMatches.find((live) => live.round === r && live.match === m && live.status === 'oynaniyor')
               return open ? <WinnerPicker t={t} round={r} match={m} players={open.players} winner={null} /> : null
             }}
           />
+          <h4 className="mt-2 text-sm font-bold text-foreground">Oyuncu durumu</h4>
+          <PlayerStats bracket={t.bracket} names={t.names} order={order} closed={!running} />
         </div>
       )}
+
+      {t.bracket && <TournamentMatches id={t.id} running={running} />}
 
       <details className="group rounded-xl border border-border">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Katılımcılar ({t.entries.length})</summary>

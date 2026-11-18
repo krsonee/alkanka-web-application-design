@@ -75,64 +75,64 @@ export function TournamentMatches({ id, running }: { id: number; running: boolea
         )}
         {matches === null && !error && <p className="text-sm text-muted-foreground">Maçlar okunuyor...</p>}
         {matches?.length === 0 && <p className="text-sm text-muted-foreground">Bu turnuva için açılmış masa yok.</p>}
-        {matches && matches.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[640px] text-sm">
-              <caption className="sr-only">Turnuva maçları</caption>
-              <thead className="bg-secondary text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th scope="col" className="px-3 py-2.5 text-left">Tur</th>
-                  <th scope="col" className="px-3 py-2.5 text-left">Oyuncular</th>
-                  <th scope="col" className="px-3 py-2.5 text-left">Durum</th>
-                  <th scope="col" className="px-3 py-2.5 text-left">Sonuç</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Açıldı / kapandı</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {matches.map((m) => (
-                  <tr key={m.tableId} className="align-top">
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-foreground">
-                      {m.roundName}
-                      <span className="block font-normal text-muted-foreground">
-                        {m.seats > 2 ? 'masa' : 'maç'} {m.match + 1}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <ul className="flex flex-col gap-0.5">
-                        {m.players.map((p) => (
-                          <li key={p.id} className="flex flex-wrap items-baseline gap-x-1.5 text-xs">
-                            <span className={cn('font-semibold', p.winner ? 'text-primary' : 'text-foreground')}>{p.name}</span>
-                            <span className="text-muted-foreground">{p.out ? (OUT_LABEL[p.out] ?? 'ayrıldı') : p.arrived ? 'masaya girdi' : 'masaya girmedi'}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs">
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 font-bold',
-                          m.status === 'oynaniyor' ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground',
-                        )}
-                      >
-                        {STATUS[m.status]}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs leading-relaxed text-foreground">
-                      {outcome(m)}
-                      {m.status === 'oynaniyor' && !m.started && m.joinBy && <span className="block text-muted-foreground">Son giriş: {clock(m.joinBy)}</span>}
-                      {m.moves > 0 && <span className="block text-muted-foreground">{m.moves} hamle</span>}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right text-xs tabular-nums text-muted-foreground">
-                      {clock(m.openedAt)}
-                      <span className="block">{m.closedAt ? clock(m.closedAt) : '—'}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {matches && matches.length > 0 && <MatchTable matches={matches} />}
       </div>
     </details>
+  )
+}
+
+/** The match list itself: one row per table the tournament opened. */
+export function MatchTable({ matches }: { matches: MatchRecord[] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border">
+      <table className="w-full min-w-[640px] text-sm">
+        <caption className="sr-only">Turnuva maçları</caption>
+        <thead className="bg-secondary text-xs uppercase tracking-wider text-muted-foreground">
+          <tr>
+            <th scope="col" className="px-3 py-2.5 text-left">Tur</th>
+            <th scope="col" className="px-3 py-2.5 text-left">Oyuncular</th>
+            <th scope="col" className="px-3 py-2.5 text-left">Durum</th>
+            <th scope="col" className="px-3 py-2.5 text-left">Sonuç</th>
+            <th scope="col" className="px-3 py-2.5 text-right">Açıldı / kapandı</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {matches.map((m) => (
+            <tr key={m.tableId} className="align-top">
+              <td className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-foreground">
+                {m.roundName}
+                <span className="block font-normal text-muted-foreground">
+                  {m.seats > 2 ? 'masa' : 'maç'} {m.match + 1}
+                </span>
+              </td>
+              <td className="px-3 py-2.5">
+                <ul className="flex flex-col gap-0.5">
+                  {m.players.map((p) => (
+                    <li key={p.id} className="flex flex-wrap items-baseline gap-x-1.5 text-xs">
+                      <span className={cn('font-semibold', p.winner ? 'text-primary' : 'text-foreground')}>{p.name}</span>
+                      <span className="text-muted-foreground">{p.out ? (OUT_LABEL[p.out] ?? 'ayrıldı') : p.arrived ? 'masaya girdi' : 'masaya girmedi'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-xs">
+                <span className={cn('rounded-full px-2 py-0.5 font-bold', m.status === 'oynaniyor' ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground')}>
+                  {STATUS[m.status]}
+                </span>
+              </td>
+              <td className="px-3 py-2.5 text-xs leading-relaxed text-foreground">
+                {outcome(m)}
+                {m.status === 'oynaniyor' && !m.started && m.joinBy && <span className="block text-muted-foreground">Son giriş: {clock(m.joinBy)}</span>}
+                {m.moves > 0 && <span className="block text-muted-foreground">{m.moves} hamle</span>}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right text-xs tabular-nums text-muted-foreground">
+                {clock(m.openedAt)}
+                <span className="block">{m.closedAt ? clock(m.closedAt) : '—'}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

@@ -13,6 +13,7 @@ import { enterTournament, exitTournament } from '@/app/actions/arena'
 import { formatAC, usePoints } from '../points-context'
 import { BracketView } from './bracket-view'
 import { LeagueView } from './league-view'
+import { PlayerStats } from './player-stats'
 import { PrizeList } from './prize-list'
 import { Countdown, useSecondsLeft } from './tournament-countdown'
 
@@ -349,6 +350,20 @@ export function TournamentCard({ t, onChanged }: { t: Tournament; onChanged?: ()
             <LeagueView bracket={t.bracket} names={t.names} order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)} />
           ) : (
             <BracketView bracket={t.bracket} names={t.names} closed={t.status !== 'basladi'} />
+          )}
+          {t.format !== 'lig' && (
+            <details className="group rounded-xl border border-border">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-foreground [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2">
+                  <Users className="size-4 text-primary" aria-hidden="true" />
+                  Oyuncu durumu
+                </span>
+                <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <div className="border-t border-border p-3">
+                <PlayerStats bracket={t.bracket} names={t.names} order={t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)} closed={t.status !== 'basladi'} />
+              </div>
+            </details>
           )}
         </div>
       )}

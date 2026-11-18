@@ -6,13 +6,14 @@ import { getBalance, recordHistory, type Member } from '@/lib/member'
 import { assertCanPlay } from '@/lib/member-limits'
 import { applyCoins, ensureLedger } from '@/lib/wallet-ledger'
 import type { ArenaGame } from './arena'
-import { anyWin, bracketChampion, bracketOver, createBracket, createTableBracket, isDecided, isRealMatch, setMatchWinner, setTableResult, voidMatch, type Bracket } from './bracket'
+import { anyWin, bracketChampion, bracketOver, createBracket, createTableBracket, isDecided, isRealMatch, openRound, setMatchWinner, setTableResult, voidMatch, type Bracket } from './bracket'
 import { createLeague, leagueStandings, MAX_LEAGUE_PLAYERS, setLeagueWinner, voidLeagueMatch } from './league'
 import { initState } from './pvp/rules'
 import { pickBotNames } from './pvp/tables'
 import { tournamentTable } from './tournament-games'
 import { cleanPrizes, prizeTotal, tournamentPayouts, type Payout } from './tournament-prizes'
 import {
+  MATCH_END_LABEL,
   MAX_TOURNAMENT_PLAYERS,
   TABLE_PASS,
   TOURNAMENT_MONEY_GAME,
@@ -303,12 +304,19 @@ function ensureEntries() {
       )
     }
     // Two members can share a display name; the member is what may enter only once.
-    if (indexes.includes('tournament_entries_unique')) await pool.query('DROP INDEX IF EXISTS tournament_entries_unique')
-    if (!indexes.includes('tournament_entries_member')) {
-      await pool
+    // The new index goes in first and the old one leaves only once it is there: if existing rows keep
+    // the new one from being built, the table must not be left with no unique index at all.
+    let byMember = indexes.includes('tournament_entries_member')
+    if (!byMember) {
+      byMember = await pool
         .query(`CREATE UNIQUE INDEX IF NOT EXISTS tournament_entries_member ON tournament_entries (tournament_id, user_id) WHERE user_id IS NOT NULL`)
-        .catch((error) => console.error('[tournaments] üye dizini kurulamadı', (error as Error).message))
+        .then(() => true)
+        .catch((error) => {
+          console.error('[tournaments] üye dizini kurulamadı, ad dizini yerinde bırakıldı', (error as Error).message)
+          return false
+        })
     }
+    if (byMember && indexes.includes('tournament_entries_unique')) await pool.query('DROP INDEX IF EXISTS tournament_entries_unique')
   })().catch((error) => {
     entriesReady = null
     throw error
@@ -608,10 +616,8 @@ async function openReadyMatches(id: number) {
     if (bracketOver(bracket)) return { closed: await finishTournament(client, row, bracket, 'tamam') }
     // Past the end time no new match opens: the tournament is about to be closed as it stands.
     if (passed(row.ends_at)) return null
-    const roundIdx = bracket.rounds.findIndex((round) => round.some((m) => isRealMatch(m) && !isDecided(m)))
+    const roundIdx = openRound(bracket)
     if (roundIdx < 0) return null
-    const earlierOpen = bracket.rounds.slice(0, roundIdx).some((round) => round.some((m) => !isDecided(m) && m.players.some(Boolean)))
-    if (earlierOpen) return null
     const seats = bracket.seats ?? 2
     const setup = tournamentTable(String(row.game), seats)
     const existing = await client.query(
@@ -785,7 +791,7 @@ export async function settleTournamentTable(id: number, round: number, match: nu
  * Returns the names for the panel's log.
  */
 export async function adminSetMatchWinner(id: number, round: number, match: number, winnerKey: string) {
-  const found = await pool.query(`SELECT status, format, bracket FROM tournaments WHERE id = $1`, [id])
+  const found = await pool.query(`SELECT status, format, game, bracket FROM tournaments WHERE id = $1`, [id])
   const row = found.rows[0]
   if (!row) throw new Error('Turnuva bulunamadı. Sayfayı yenile.')
   if (row.status !== 'basladi' || !row.bracket) throw new Error('Sonuç ancak devam eden bir turnuvada girilebilir.')
@@ -809,8 +815,11 @@ export async function adminSetMatchWinner(id: number, round: number, match: numb
     return said
   }
   if (await adminFinishDuelTable(id, round, match, winnerKey)) return said
-  // No open table: a match of a tournament from before tables were opened for every match. The result
-  // goes straight into the pairing, and only while the match is still undecided under the tournament's lock.
+  // No open table. Only a match of the round being played can be named: a later round's players are
+  // not settled yet, and its tables open by themselves once this round is over.
+  if (round !== openRound(bracket)) throw new Error('Bu maçın turu henüz açılmadı. Önce açık turdaki maçlar bitmeli.')
+  // A tournament from before a table was opened for every match. The result goes straight into the
+  // pairing, and only while the match is still undecided under the tournament's lock.
   let written = false
   await settleMatch(id, (b, lig) => {
     const now = b.rounds[round]?.[match]
@@ -819,6 +828,21 @@ export async function adminSetMatchWinner(id: number, round: number, match: numb
     return (lig ? setLeagueWinner : setMatchWinner)(b, round, match, winnerKey)
   })
   if (!written) throw new Error('Bu maçın sonucu az önce yazıldı. Sayfayı yenile.')
+  for (const key of m.players) {
+    const entrant = key ? names.rows.find((n) => entryKey(n) === key) : undefined
+    if (!entrant?.user_id) continue
+    const rival = m.players.find((p) => p && p !== key)
+    await recordHistory({
+      userId: String(entrant.user_id),
+      userName: String(entrant.nickname),
+      game: String(row.game),
+      mode: 'turnuva',
+      opponent: `${rival ? nameOf(rival) : 'Rakip'} (${MATCH_END_LABEL.panel})`,
+      stake: 0,
+      result: key === winnerKey ? 'win' : 'loss',
+      delta: 0,
+    }).catch((error) => console.error('[tournaments] elle sonuç geçmişe yazılamadı', (error as Error).message))
+  }
   return said
 }
 

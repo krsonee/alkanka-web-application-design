@@ -182,6 +182,17 @@ export function voidMatch(b: Bracket, round: number, match: number, noShow: stri
   return normalizeBracket(next)
 }
 
+/**
+ * The round being played: the first one with a match still to decide, once every earlier round is
+ * settled. -1 when nothing is left to play or an earlier round is still waiting.
+ */
+export function openRound(b: Bracket) {
+  const index = b.rounds.findIndex((round) => round.some((m) => isRealMatch(m) && !isDecided(m)))
+  if (index < 0) return -1
+  const earlierOpen = b.rounds.slice(0, index).some((round) => round.some((m) => !isDecided(m) && m.players.some(Boolean)))
+  return earlierOpen ? -1 : index
+}
+
 export function bracketChampion(b: Bracket | null) {
   if (!b) return null
   return b.rounds[b.rounds.length - 1]?.[0]?.winner ?? null

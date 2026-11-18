@@ -24,7 +24,7 @@ export function LeagueView({
   const nameOf = (key: string) => cleanName(names[key] ?? key)
   const standings = leagueStandings(bracket, order)
   const champion = leagueChampion(bracket, order)
-  const firstOpen = bracket.rounds.findIndex((r) => r.some((m) => !m.winner))
+  const firstOpen = bracket.rounds.findIndex((r) => r.some((m) => !m.winner && !m.void))
   const [round, setRound] = useState(firstOpen < 0 ? bracket.rounds.length - 1 : firstOpen)
   const matches = bracket.rounds[round] ?? []
 
