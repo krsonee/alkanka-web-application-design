@@ -797,7 +797,7 @@ export async function cutTournament(id: number) {
 export async function myMatches(userId: string): Promise<MyMatch[]> {
   if (!(await anyRunning())) return []
   const r = await pool.query(
-    `SELECT g.id, g.game, g.round_no, t.id AS tournament_id, t.title, t.format,
+    `SELECT g.id, g.game, g.round_no, g.seats, t.id AS tournament_id, t.title, t.format,
             jsonb_array_length(COALESCE(t.bracket->'rounds', '[]'::jsonb)) AS rounds,
             COALESCE(g.options->'seen', '{}'::jsonb) ? $2 AS seated,
             CASE WHEN COALESCE(g.options->'seen', '{}'::jsonb) ? $2 THEN NULL ELSE g.options->'tour'->>'joinBy' END AS join_by
@@ -814,5 +814,6 @@ export async function myMatches(userId: string): Promise<MyMatch[]> {
     round: roundName(x.format === 'lig', Number(x.round_no), Number(x.rounds)),
     joinBy: x.join_by ? new Date(String(x.join_by)).toISOString() : null,
     seated: x.seated === true,
+    shared: Number(x.seats) > 2,
   }))
 }

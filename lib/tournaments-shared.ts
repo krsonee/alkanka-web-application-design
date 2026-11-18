@@ -43,7 +43,7 @@ export const roundName = (league: boolean, index: number, total: number) =>
  * A tournament table the member is seated at and still has to play. `joinBy` is set while the member
  * has not sat down yet: after that moment the match is forfeited. `seated` says the member has opened the table.
  */
-export type MyMatch = { tableId: string; tournamentId: number; game: string; title: string; round: string; joinBy: string | null; seated: boolean }
+export type MyMatch = { tableId: string; tournamentId: number; game: string; title: string; round: string; joinBy: string | null; seated: boolean; shared?: boolean }
 
 /** Straight to the table: the game page opens the room named in `masa` without its stake screen. */
 export const matchHref = (m: Pick<MyMatch, 'game' | 'tableId'>) => `/oyunlar/${m.game}?masa=${m.tableId}`

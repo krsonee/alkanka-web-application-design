@@ -493,7 +493,17 @@ function TournamentRow({ t, hidden }: { t: Tournament; hidden: boolean }) {
               ? `Masalar (her masanın ilk ${t.bracket.pass ?? TABLE_PASS} oyuncusu tur atlar; açık bir masada birinciyi elle seçebilirsin)`
               : 'Eşleşmeler (kazananı seçince otomatik bir üst tura geçer)'}
           </h4>
-          <BracketView bracket={t.bracket} names={t.names} closed={t.status !== 'basladi'} renderPick={(r, m, match) => <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />} />
+          <BracketView
+            bracket={t.bracket}
+            names={t.names}
+            closed={t.status !== 'basladi'}
+            renderPick={(r, m, match) => {
+              if (t.tableSize <= 2) return <WinnerPicker t={t} round={r} match={m} players={match.players} winner={match.winner} />
+              // A shared table's result is read from the open table, so only the players still seated at it can be named.
+              const open = t.liveMatches.find((live) => live.round === r && live.match === m && live.status === 'oynaniyor')
+              return open ? <WinnerPicker t={t} round={r} match={m} players={open.players} winner={null} /> : null
+            }}
+          />
         </div>
       )}
 

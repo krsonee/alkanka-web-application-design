@@ -3,18 +3,36 @@
 import { useState, type ReactNode } from 'react'
 import { Crown, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { roundLabel, type Bracket, type Match } from '@/lib/bracket'
+import { isDecided, isRealMatch, passedOn, roundLabel, type Bracket, type Match } from '@/lib/bracket'
 
 type RenderPick = (round: number, match: number, m: Match) => ReactNode
 type NameOf = (key: string) => string
-type Shared = { nameOf: NameOf; closed: boolean; renderPick?: RenderPick }
+/** `seats` is the table size: above 2 the cards are shared tables that send several players on. */
+type Shared = { nameOf: NameOf; closed: boolean; renderPick?: RenderPick; seats: number }
 
 function splitName(raw: string) {
   const guest = raw.startsWith('misafir:')
   return { name: guest ? raw.slice(8) : raw, guest }
 }
 
-function PlayerRow({ player, seed, state, placeholder, nameOf }: { player: string | null; seed: number; state: 'win' | 'lose' | 'idle'; placeholder: string; nameOf: NameOf }) {
+/** The server opens a round only when every earlier one is settled, so a match with its players named may still be waiting. */
+const roundIsOpen = (bracket: Bracket, ri: number) => !bracket.rounds.slice(0, ri).some((round) => round.some((m) => !isDecided(m) && m.players.some(Boolean)))
+
+function PlayerRow({
+  player,
+  seed,
+  state,
+  placeholder,
+  nameOf,
+  winLabel,
+}: {
+  player: string | null
+  seed: string
+  state: 'win' | 'lose' | 'idle'
+  placeholder: string
+  nameOf: NameOf
+  winLabel: string
+}) {
   if (!player) {
     return (
       <div className="flex h-11 items-center gap-2.5 px-2.5 text-sm text-muted-foreground">
@@ -46,15 +64,40 @@ function PlayerRow({ player, seed, state, placeholder, nameOf }: { player: strin
         {name}
       </span>
       {guest && <span className="shrink-0 rounded bg-secondary px-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">misafir</span>}
-      <span className="w-4 shrink-0 text-right font-display text-[10px] font-bold tabular-nums text-muted-foreground">{seed}</span>
-      {state === 'win' && <Crown className="size-3.5 shrink-0 text-primary" aria-label="Kazanan" />}
+      {seed && <span className="w-4 shrink-0 text-right font-display text-[10px] font-bold tabular-nums text-muted-foreground">{seed}</span>}
+      {state === 'win' && <Crown className="size-3.5 shrink-0 text-primary" aria-label={winLabel} />}
     </div>
   )
 }
 
-function MatchCard({ m, ri, mi, last, nameOf, closed, renderPick }: { m: Match; ri: number; mi: number; last: boolean } & Shared) {
+function MatchCard({ m, ri, mi, last, open, nameOf, closed, renderPick, seats }: { m: Match; ri: number; mi: number; last: boolean; open: boolean } & Shared) {
+  const table = seats > 2
   const empty = m.players.every((p) => !p)
-  const live = !closed && !m.winner && m.players.every(Boolean)
+  const live = !closed && open && isRealMatch(m) && !isDecided(m)
+  const through = passedOn(m)
+  // A finished shared table lists its players as they finished. One that was not played lists only the players named for it.
+  const rows: (string | null)[] = !table ? m.players : m.rank?.length ? m.rank : m.bye || m.void ? m.players.filter(Boolean) : m.players
+  const stateOf = (p: string | null) => {
+    if (!p) return 'idle' as const
+    if (!table) return !m.winner ? ('idle' as const) : m.winner === p ? ('win' as const) : ('lose' as const)
+    if (m.void) return 'lose' as const
+    if (!isDecided(m)) return 'idle' as const
+    return through.includes(p) ? ('win' as const) : ('lose' as const)
+  }
+  const placeholder = table
+    ? live || (ri === 0 && isRealMatch(m))
+      ? 'Boş koltuk (bot oturur)'
+      : ri === 0
+        ? 'Boş koltuk'
+        : closed
+          ? 'Belli olmadı'
+          : 'Bekleniyor'
+    : ri === 0
+      ? 'Bay (otomatik tur atlar)'
+      : closed
+        ? 'Belli olmadı'
+        : 'Bekleniyor'
+  const pick = empty ? null : renderPick?.(ri, mi, m)
   return (
     <div
       className={cn(
@@ -65,28 +108,37 @@ function MatchCard({ m, ri, mi, last, nameOf, closed, renderPick }: { m: Match; 
       )}
     >
       <div className="flex items-center justify-between border-b border-border bg-background/60 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        <span>Maç {mi + 1}</span>
+        <span>
+          {table ? 'Masa' : 'Maç'} {mi + 1}
+        </span>
         {live && (
           <span className="flex items-center gap-1 text-destructive">
             <span className="size-1.5 animate-pulse rounded-full bg-destructive" aria-hidden="true" />
             Canlı
           </span>
         )}
-        {m.winner && <span className="text-primary">Bitti</span>}
+        {m.bye ? (
+          <span className="text-primary">{last ? 'Oynanmadı' : 'Oynanmadı · tur atladılar'}</span>
+        ) : m.winner ? (
+          <span className="text-primary">Bitti</span>
+        ) : (
+          m.void && <span>Kimse gelmedi</span>
+        )}
       </div>
       <div className="divide-y divide-border">
-        {m.players.map((p, pi) => (
+        {rows.map((p, pi) => (
           <PlayerRow
             key={pi}
             player={p}
             nameOf={nameOf}
-            seed={mi * 2 + pi + 1}
-            state={!p || !m.winner ? 'idle' : m.winner === p ? 'win' : 'lose'}
-            placeholder={ri === 0 ? 'Bay (otomatik tur atlar)' : closed ? 'Belli olmadı' : 'Bekleniyor'}
+            seed={table ? (m.rank?.length ? `${pi + 1}.` : '') : String(mi * 2 + pi + 1)}
+            state={stateOf(p)}
+            winLabel={table && !last ? 'Tur atladı' : 'Kazanan'}
+            placeholder={placeholder}
           />
         ))}
       </div>
-      {renderPick && !empty && <div className="border-t border-border bg-background/60 p-2">{renderPick(ri, mi, m)}</div>}
+      {pick && <div className="border-t border-border bg-background/60 p-2">{pick}</div>}
     </div>
   )
 }
@@ -154,7 +206,7 @@ function MobileBracket({ bracket, champion, ...shared }: { bracket: Bracket; cha
       <ol role="tabpanel" aria-label={roundLabel(active, total)} className="grid grid-cols-1 gap-2.5 min-[480px]:grid-cols-2">
         {round.map((m, mi) => (
           <li key={`${active}-${mi}`} className="animate-in fade-in slide-in-from-bottom-1 duration-300">
-            <MatchCard m={m} ri={active} mi={mi} last={active === total - 1} {...shared} />
+            <MatchCard m={m} ri={active} mi={mi} last={active === total - 1} open={roundIsOpen(bracket, active)} {...shared} />
           </li>
         ))}
       </ol>
@@ -172,12 +224,13 @@ function DesktopBracket({ bracket, champion, ...shared }: { bracket: Bracket; ch
         {bracket.rounds.map((round, ri) => {
           const last = ri === total - 1
           const done = round.filter((m) => m.winner).length
+          const open = roundIsOpen(bracket, ri)
           return (
             <li key={ri} className="flex w-60 flex-col gap-4">
               <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-3 py-2">
                 <span className={cn('text-xs font-bold uppercase tracking-[0.18em]', last ? 'text-primary' : 'text-foreground')}>{roundLabel(ri, total)}</span>
                 <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">
-                  {done}/{round.length} maç
+                  {done}/{round.length} {shared.seats > 2 ? 'masa' : 'maç'}
                 </span>
               </div>
               <ol className="flex flex-1 flex-col justify-around gap-4">
@@ -185,7 +238,7 @@ function DesktopBracket({ bracket, champion, ...shared }: { bracket: Bracket; ch
                   <li key={mi} className="relative">
                     {!last && <span className="absolute -right-8 top-1/2 h-px w-8 bg-border" aria-hidden="true" />}
                     {ri > 0 && <span className="absolute -left-8 top-1/2 h-px w-8 bg-border" aria-hidden="true" />}
-                    <MatchCard m={m} ri={ri} mi={mi} last={last} {...shared} />
+                    <MatchCard m={m} ri={ri} mi={mi} last={last} open={open} {...shared} />
                   </li>
                 ))}
               </ol>
@@ -219,7 +272,7 @@ export function BracketView({
   const final = bracket.rounds[total - 1]?.[0]
   const nameOf: NameOf = (key) => splitName(names[key] ?? key).name
   const champion = final?.winner ? nameOf(final.winner) : null
-  const shared: Shared = { nameOf, closed, renderPick }
+  const shared: Shared = { nameOf, closed, renderPick, seats: bracket.seats ?? 2 }
 
   return (
     <>

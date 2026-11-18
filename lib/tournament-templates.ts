@@ -3,7 +3,7 @@ import { rows, sql } from '@/lib/db'
 import { isArenaGame } from './arena'
 import { MAX_LEAGUE_PLAYERS } from './league'
 import { cleanPrizes } from './tournament-prizes'
-import { MAX_TOURNAMENT_PLAYERS, MAX_TOURNAMENT_TEMPLATES, isTournamentFormat, type Tournament, type TournamentTemplate } from './tournaments-shared'
+import { MAX_TOURNAMENT_PLAYERS, MAX_TOURNAMENT_TEMPLATES, formatsFor, isTournamentFormat, tournamentSeats, type Tournament, type TournamentTemplate } from './tournaments-shared'
 
 let ready: Promise<unknown> | null = null
 
@@ -30,21 +30,24 @@ type Settings = Omit<TournamentTemplate, 'id' | 'name'>
 
 function readSettings(raw: unknown): Settings | null {
   const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  if (!isArenaGame(String(d.game))) return null
-  const format = isTournamentFormat(d.format) ? d.format : 'eleme'
+  const game = String(d.game)
+  if (!isArenaGame(game)) return null
+  // A template saved before its game moved to shared tables may still say league; such a game has none.
+  const seats = tournamentSeats(game) ?? 2
+  const format = isTournamentFormat(d.format) && formatsFor(game).includes(d.format) ? d.format : 'eleme'
   const title = text(d.title, 80)
   if (title.length < 3) return null
   const startTime = text(d.startTime, 5)
   const maxPlayers = whole(d.maxPlayers, 2, format === 'lig' ? MAX_LEAGUE_PLAYERS : MAX_TOURNAMENT_PLAYERS, 16)
   return {
-    game: String(d.game) as Settings['game'],
+    game: game as Settings['game'],
     format,
     title,
     description: text(d.description, 400),
     rules: text(d.rules, 2000),
     entryFee: whole(d.entryFee, 0, 100000, 0),
     prizePool: whole(d.prizePool, 0, 10000000, 0),
-    prizes: cleanPrizes(d.prizes, format, maxPlayers),
+    prizes: cleanPrizes(d.prizes, format, maxPlayers, seats),
     prizeNote: text(d.prizeNote, 120),
     maxPlayers,
     startTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) ? startTime : '21:00',

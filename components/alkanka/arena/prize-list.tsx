@@ -7,7 +7,7 @@ import { effectivePrizes, prizePlaces, tournamentPayouts, tournamentPlacements }
 export function PrizeList({ t, className }: { t: Tournament; className?: string }) {
   const prizes = effectivePrizes(t)
   if (!prizes.length) return null
-  const places = prizePlaces(t.format, t.maxPlayers)
+  const places = prizePlaces(t.format, t.maxPlayers, t.tableSize)
   const order = t.entries.map((e) => e.userId ?? `misafir:${e.nickname}`)
   const finished = t.status === 'bitti' ? tournamentPlacements(t.format, t.bracket, order) : []
   // Stopped by its end time with no champion: the players still in it split the top prizes, so those places have no single owner.

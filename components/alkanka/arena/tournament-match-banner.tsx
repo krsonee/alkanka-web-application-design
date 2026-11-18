@@ -28,7 +28,9 @@ function MatchRow({ m, children }: { m: MyMatch; children: ReactNode }) {
             : left == null
               ? 'Masada bahis yok.'
               : left > 0
-                ? 'Süre dolmadan masaya girmezsen maçı hükmen kaybedersin.'
+                ? m.shared
+                  ? 'Süre dolmadan masaya girmezsen elenirsin, masa sensiz oynanır.'
+                  : 'Süre dolmadan masaya girmezsen maçı hükmen kaybedersin.'
                 : 'Giriş süresi doldu. Sonuç henüz yazılmadıysa hemen girersen maça alınırsın.'}
         </span>
       </span>

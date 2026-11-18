@@ -116,10 +116,12 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     body: (
       <ol className={ol}>
         <li><b>Oyun</b>, <b>ad</b>, <b>başlangıç</b> ve <b>bitiş saati</b>, <b>kontenjan</b> ve <b>giriş ücreti</b> (KC, 0 = ücretsiz) gir. Form başlangıcı bir saat sonrasına, bitişi başlangıçtan 3 saat sonrasına getirir; başlangıcı değiştirirsen bitiş de aynı kadar kayar.</li>
-        <li>Bütün turnuva maçları <b>birebir</b> oynanır. İki kişiyle oynanamayan oyunlar (Batak) oyun listesinde çıkmaz.</li>
-        <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar.</li>
-        <li><b>Kontenjan</b> listeden seçilir: elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı.</li>
-        <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
+        <li><b>Birebir oyunlar</b>: Okey, Tavla, Bilardo, Kafa Topu, Kafa Basketbolu. Bu oyunlarda her maç iki kişi arasında oynanır.</li>
+        <li><b>Ortak masa oyunları</b>: 101 Okey, Batak, Pişti, Jakopoly. Bu oyunlarda oyuncular kura ile <b>4 kişilik masalara</b> oturur, herkes kendi adına oynar (eş yok). Her masanın <b>ilk 2 oyuncusu</b> bir sonraki tura geçer; final masasının birincisi şampiyon olur. Listede olmayan oyunlarda turnuva açılmaz.</li>
+        <li><b>Format</b>: <b>Eleme</b> usulünde kaybeden çıkar, tur tur final oynanır. <b>Lig</b> usulünde herkes herkesle oynar, puan tablosu çıkar. Lig sadece birebir oyunlarda vardır; ortak masa oyunlarında düzen hep elemedir.</li>
+        <li><b>Kontenjan</b> listeden seçilir: birebir elemede 2, 4, 8, 16, 32, 64, 128, 256, 512 ya da 1024 kişi (tablo boş maç kalmadan dolsun diye), ligde çift sayı, ortak masa oyunlarında 4, 8, 16 … 1024 kişi (masalar tam dolsun diye).</li>
+        <li>Ortak masa turnuvası <b>en az 4 kayıtla</b> başlar. Kontenjan dolmazsa oyuncular masalara eşit dağıtılır: 3 oyunculu masada boş koltuğa <b>bot</b> oturur, 2 ya da daha az oyuncusu olan masa oynanmaz ve oyuncuları doğrudan tur atlar. Bot tur atlayamaz, ödül alamaz; sırası en iyi oyuncuya geçer.</li>
+        <li><b>Sıralama ödülleri</b>: her sıranın ödülünü ayrı yaz. Birebir elemede 1., 2., 3.-4. (yarı finalde elenenler) ve 5.-8. (çeyrek finalde elenenler) sıraları vardır; 3.-4. ve 5.-8. için yazdığın tutar kişi başıdır. Ortak masa oyunlarında final masası tek tek sıralanır (1., 2., 3., 4.), 5.-8. sırası yarı final masalarında elenenlerdir ve tutarı kişi başıdır. Ligde ilk 8 sıraya kadar ödül yazılır. Ödül vermek istemediğin sırayı 0 bırak. Altta yazan <b>toplam ödül havuzu</b> sitede gösterilir.</li>
         <li>Kaydettiğin turnuva hemen <span className={code}>/turnuvalar</span> sayfasında kayda açılır.</li>
         <li>Kayıt sürerken <b>giriş ücretini</b> değiştirirsen yeni ücret sadece sonradan kaydolanlardan kesilir. Önceden kaydolan, ayrılınca ya da turnuva iptal olunca kendi ödediği tutarı geri alır.</li>
         <li>Aynı ada sahip iki üye aynı turnuvaya girebilir; bir üye aynı turnuvaya ikinci kez giremez.</li>
@@ -131,10 +133,12 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     title: 'Saatler: başlangıç, maça giriş, hamle süresi, bitiş',
     body: (
       <ol className={ol}>
-        <li><b>Başlangıç saatinde</b> kayıtlar kapanır ve turnuva kendiliğinden başlar. O an 2 kişiden az kayıt varsa turnuva iptal olur, ücretler iade edilir ve kayıtlı üyelere mesaj gider.</li>
-        <li>Bir maç açılınca iki oyuncuya <b>bildirim ve site içi mesaj</b> gider; sitenin üstünde &quot;Turnuva maçın hazır&quot; kutusu ve geri sayım çıkar.</li>
-        <li><b>Maça giriş süresi</b> (3, 5, 10 ya da 15 dakika) içinde masaya girmeyen oyuncu maçı hükmen kaybeder. İkisi de girmezse maç ikisi için de kayıp sayılır. Gelmediği için kaybeden oyuncu o maçtan sıralama ödülü almaz.</li>
-        <li>İki oyuncu da masaya girince <b>hamle süresi</b> başlar (normal masalardaki süre). Süre dolunca hamle kendiliğinden yapılır; aynı oyuncunun süresi üst üste 3 kez dolarsa maçı hükmen kaybeder. Oyuncu masadaki <b>Pes et</b> ile maçı bırakabilir. Turnuva masasında yerine bot geçmez.</li>
+        <li><b>Başlangıç saatinde</b> kayıtlar kapanır ve turnuva kendiliğinden başlar. O an yeterli kayıt yoksa (birebir oyunlarda 2, ortak masa oyunlarında 4 kişiden az) turnuva iptal olur, ücretler iade edilir ve kayıtlı üyelere mesaj gider.</li>
+        <li>Bir maç ya da masa açılınca oyuncularına <b>bildirim ve site içi mesaj</b> gider; sitenin üstünde &quot;Turnuva maçın hazır&quot; kutusu ve geri sayım çıkar.</li>
+        <li><b>Maça giriş süresi</b> (3, 5, 10 ya da 15 dakika), birebir oyunlarda: masaya girmeyen oyuncu maçı hükmen kaybeder. İkisi de girmezse maç ikisi için de kayıp sayılır. Gelmediği için kaybeden oyuncu o maçtan sıralama ödülü almaz.</li>
+        <li><b>Maça giriş süresi</b>, ortak masa oyunlarında: herkes gelince oyun hemen başlar. Süre dolduğunda gelmeyen oyuncu elenir, koltuğuna bot oturur ve masa onsuz oynanır. Masaya kimse girmezse masa herkes için kayıp sayılır. Gelenler tur atlayacak sayıdan fazla değilse masa oynanmadan kapanır, gelenler tur atlar.</li>
+        <li>Oyuncular masaya girince <b>hamle süresi</b> başlar (normal masalardaki süre). Süre dolunca hamle kendiliğinden yapılır; aynı oyuncunun süresi üst üste 3 kez dolarsa birebir oyunda maçı hükmen kaybeder, ortak masada elenir ve koltuğuna bot oturur. Oyuncu masadaki <b>Pes et</b> ile bırakabilir: birebir oyunda maç rakibe yazılır, ortak masada oyuncu elenir, masa bot ile devam eder. Birebir turnuva masasında yerine bot geçmez.</li>
+        <li>Ortak masada sıralamayı oyunun kendi sonucu belirler: 101 Okey&apos;de en az ceza puanı, Batak ve Pişti&apos;de en çok puan, Jakopoly&apos;de en yüksek varlık. Bot birinci bitirse bile tur atlayamaz; yerine sıradaki oyuncu geçer.</li>
         <li>Bir tur bitince sıradaki tur beklemeden açılır. <b>Bütün maçlar bitince</b> bitiş saati beklenmez; sonuç yazılır, ödüller yüklenir.</li>
         <li><b>Bitiş saatinde</b> süren maçlar kapanır, yeni maç açılmaz. Ligde o anki puan durumu geçerlidir. Elemede şampiyon belli değilse turnuvada kalan oyuncular, paylaştıkları sıraların ödül toplamını eşit bölüşür ve şampiyon yazılmaz. Hiçbir maç oynanmadıysa turnuva iptal olur, ücretler iade edilir.</li>
         <li>Saatler ziyaretçi trafiğiyle işler: sitede kimse yokken saati gelen iş, siteye ilk giren ziyaretçide (en geç bir dakika içinde) yapılır.</li>
@@ -148,6 +152,7 @@ const TOURNAMENT_STEPS: GuideStep[] = [
       <ol className={ol}>
         <li>Başlangıç saatini beklemek istemezsen <b>Kayıtları kapat ve başlat</b> de. Eşleşmeler kura ile çekilir.</li>
         <li>Maçlar sitede oynanınca kazanan kendiliğinden ilerler. Bir maç takılırsa kazananı elle seçebilirsin.</li>
+        <li>Ortak masa oyunlarında sadece <b>açık bir masanın</b> birincisini seçebilirsin. Seçtiğin oyuncu birinci olur, masa kapanır; diğerleri oyunun o anki durumuna göre sıralanır ve tur atlayanlar buna göre belirlenir.</li>
         <li>Bir oyuncuyu başlamadan önce kayıt listesinden çıkarabilirsin; ücreti iade edilir. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
         <li>Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir. Şampiyona şampiyon rozeti de verilir, adı kazananlar şeridinde çıkar.</li>
       </ol>
