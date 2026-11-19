@@ -9,6 +9,8 @@ const fmt = (n: number) => n.toLocaleString('tr-TR')
 export function WeeklyQuestCard({ quest, signedIn }: { quest: WeeklyQuest; signedIn: boolean }) {
   const progress = Math.min(quest.progress ?? 0, quest.target)
   const pct = Math.round((progress / quest.target) * 100)
+  const kp = quest.badge.bonus + quest.extra.kp
+  const prizes = [kp > 0 ? `+${fmt(kp)} KP` : '', quest.extra.coin > 0 ? `+${fmt(quest.extra.coin)} KC` : ''].filter(Boolean)
   return (
     <section aria-labelledby="haftalik-gorev" className={cn('flex flex-col gap-4 rounded-2xl border p-4 sm:flex-row sm:items-center sm:gap-5 sm:p-5', TIER_BG[quest.badge.tier])}>
       <div className="flex items-center gap-4 sm:flex-col sm:gap-2">
@@ -27,7 +29,7 @@ export function WeeklyQuestCard({ quest, signedIn }: { quest: WeeklyQuest; signe
         </div>
         <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
           Bu hafta <b className="text-foreground">{fmt(quest.target)} {quest.unit}</b> tamamla, <b className="text-foreground">{quest.badge.name}</b> rozeti
-          {quest.badge.bonus > 0 ? ` ve +${fmt(quest.badge.bonus)} KP` : ''} senin olsun.
+          {prizes.length ? `, ${prizes.join(' ve ')}` : ''} senin olsun.
         </p>
         {signedIn ? (
           quest.done ? (

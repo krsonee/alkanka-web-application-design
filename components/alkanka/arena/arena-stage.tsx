@@ -86,7 +86,7 @@ export const RULES: Record<ArenaGame, string[]> = {
 function BotGame({ game, api, settings }: { game: ArenaGame; api: GameApi; settings: ArenaGameSettings }) {
   if (game === 'tavla') return <Tavla {...api} />
   if (game === 'okey') return <Okey {...api} />
-  if (game === 'bilardo') return <BilardoPool bet={api.bet} win={Math.round(api.bet * settings.multiplier)} finish={api.finish} />
+  if (game === 'bilardo') return <BilardoPool bet={api.bet} win={Math.floor(api.bet * settings.multiplier)} finish={api.finish} />
   const sport = game === 'kafa-topu' ? 'futbol' : 'basket'
   return (
     <HeadGame

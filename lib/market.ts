@@ -216,8 +216,8 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
   const pct = item.kind === 'sponsor' ? 0 : await marketDiscountPct(member.id).catch(() => 0)
   const price = discounted(item.price, pct)
   await assertCanBuy(member.id, price)
-  const { isRoleHolder } = await import('@/lib/kanka-puan')
-  if (await isRoleHolder(member.id)) throw new Error('Görevli hesaplar marketten alışveriş yapamaz.')
+  const { roleBlocks } = await import('@/lib/kanka-puan')
+  if (await roleBlocks(member.id, 'market')) throw new Error('Bu rolle marketten alışveriş yapılamıyor.')
 
   const reserved = await rows(sql`UPDATE market_items SET stock = stock - 1 WHERE id = ${item.id} AND stock > 0 RETURNING stock`)
   if (!reserved.length) throw new Error('Stok tükendi.')

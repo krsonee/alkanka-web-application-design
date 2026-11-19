@@ -5,7 +5,7 @@ import { rows, sql } from '@/lib/db'
 import { listMembers } from '@/lib/members-admin'
 import { listSites } from '@/lib/sites'
 import { listPosts } from '@/lib/blog'
-import { rowPermission, tabHome, type MovedTab, type PanelModule, type PanelView } from '@/lib/panel-modules'
+import { movedAddress, rowPermission, tabHome, type MovedTab, type PanelModule, type PanelView } from '@/lib/panel-modules'
 import { STATUS_LABEL } from '@/lib/tournaments-shared'
 
 export type SearchKind = 'setting' | 'member' | 'sponsor' | 'post' | 'task' | 'product' | 'tournament' | 'faq'
@@ -32,17 +32,21 @@ type Row = PanelModule | PanelView | 'account' | 'audit' | 'staff'
 const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row } | { moved: MovedTab }))[] = [
   { title: 'Yasal metinler', words: 'kvkk gizlilik kullanım şartları çerez sözleşme', row: 'texts', query: 's=legal' },
   { title: 'Paylaşım görseli', words: 'whatsapp önizleme og sosyal kart', row: 'logo', query: 's=share' },
-  { title: 'Sponsor logoları', row: 'logo', query: 's=sponsor-logos' },
-  { title: 'Takım logoları', words: 'maç tahmin özel oran', row: 'logo', query: 's=team-logos' },
+  { title: 'Sponsor logosu', words: 'sponsor logoları logo yükle', row: 'sponsors' },
+  { title: 'Site logosu ve uygulama ikonu', words: 'header logo favicon ikon marka', row: 'branding', query: 's=brand' },
+  { title: 'Etkinlik kartları', words: 'etkinlik kartı başlık alt yazı ödül yazısı kart ekle sil sırala', row: 'texts', query: 's=event-cards' },
+  { title: 'SSS', words: 'sık sorulan sorular soru cevap', row: 'faqs' },
+  { title: 'Slider', words: 'slayt banner kayan ana sayfa yeni slayt sırala', row: 'slide', query: 's=slider' },
+  { title: 'Ana sayfa düzeni', words: 'ana sayfa tasarım misafir üye kapak yan bloklar market vitrini', row: 'home', query: 's=layout' },
   { title: 'Reklam alanları', words: 'banner sponsor reklam', query: 's=ads', moved: 'ads' },
-  { title: 'Masa açma sihirbazı', words: 'masa aç oyun kurulum', row: 'home' },
-  { title: 'Günlük kutular', words: 'ana sayfa kısayol', row: 'home' },
+  { title: 'Masa açma sihirbazı', words: 'masa aç oyun kurulum', row: 'home', query: 's=wizard' },
+  { title: 'Günlük kutular', words: 'ana sayfa kısayol', row: 'home', query: 's=layout' },
   { title: 'Yönlendirmeler', words: 'redirect 301 eski adres', row: 'seo' },
   { title: '404 kayıtları', words: 'bulunamayan sayfa kırık link', row: 'seo' },
   { title: 'Arama motoru doğrulaması', words: 'google bing yandex search console', row: 'seo' },
   { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio' },
   { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
-  { title: 'Slayt telefon görseli', words: 'mobil dikey görsel slider telefon', row: 'slide' },
+  { title: 'Slayt telefon görseli', words: 'mobil dikey görsel slider telefon', row: 'slide', query: 's=slider' },
   { title: 'Rehber yazısını ileri tarihe zamanla', words: 'yayın zamanı tarih saat zamanla blog yazı', row: 'seo' },
   { title: 'Turnuva şablonları', words: 'şablon kalıp tekrar aç haftalık kupa', row: 'tournaments' },
   { title: 'Turnuva sıralama ödülleri', words: 'sıralama ödülü ikinci üçüncü ödül havuzu kontenjan kişi sayısı kazanan sıra ekle kazanan sayısı', row: 'tournaments' },
@@ -64,6 +68,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Hakediş hatırlatmaları', words: 'hatırlatma eksik dönem ödenmedi talep', row: 'marketing', query: 's=earnings' },
   { title: 'Masa doluluğu', words: 'doluluk canlı masa görünümü kalabalık', query: 's=ambient', moved: 'ambient' },
   { title: 'Üyelik kapısı', words: 'yeni kayıt kapat aç kayıt olma', row: 'users' },
+  { title: 'Üye rolleri', words: 'rol görevli moderatör sponsor destek kp kazanmaz sıralamada görünmez marketten alamaz etkinliklere katılamaz kısıt', row: 'users' },
   { title: 'Toplu üye işlemi', words: 'toplu mesaj hediye dondur çoklu seçim', row: 'users' },
   { title: 'Personel notları', words: 'üye notu not düş', row: 'users' },
   { title: 'Coin dökümü', words: 'coin hareket bakiye geçmiş döküm ekstre nereden geldi nereye gitti', row: 'users' },
@@ -86,7 +91,9 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Puan kuralları', words: 'kanka puan kp', row: 'badges', query: 's=rules' },
   { title: 'Değerli rozetler', words: 'özel rozet', row: 'badges', query: 's=badges' },
   { title: 'Rozet ver', row: 'badges', query: 's=award' },
-  { title: 'Haftalık görev', row: 'badges', query: 's=quest' },
+  { title: 'Haftalık görev', words: 'görev tipi belirli oyun oyun grubu galibiyet üst üste gün tahmin sponsor davet market turnuva sohbet hedef ek ödül', row: 'badges', query: 's=quest' },
+  { title: 'Çarpan kampanyaları', words: 'çarpan kampanya mutlu saatler hafta sonu derbi flash rozet günü sponsor haftası kat kazanç indirim', row: 'badges' },
+  { title: 'Rozet çekilişi', words: 'çekiliş kazanan sayısı rozet sahipleri tüm rozetler', row: 'badges' },
   { title: 'KP sıralaması', words: 'liderlik tablosu', row: 'badges', query: 's=board' },
   { title: 'Online ödülleri', words: 'çevrim içi süre ödülü', row: 'badges', query: 's=online' },
   { title: 'Kazananlar şeridi', words: 'kayan yazı ticker', row: 'badges', query: 's=ticker' },
@@ -95,6 +102,9 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Avatarlar & kapaklar', words: 'profil resmi kapak', row: 'market', query: 's=avatars' },
   { title: 'Masa temaları', words: 'tema fiyatı masa görünümü', query: 's=themes', moved: 'themes' },
   { title: 'Kasa oranı', words: 'kazanma oranı bot zorluğu', row: 'games' },
+  { title: 'Kazanç çarpanı ve masa payı', words: 'çarpan kazanç oranı komisyon masa payı kesinti bahis seçenekleri ödeme ortadaki para', row: 'games' },
+  { title: 'Turnuva listesi: arama ve durum süzgeci', words: 'turnuva ara süz kayıtlar açık devam ediyor tamamlandı iptal yeni turnuva adım', row: 'tournaments' },
+  { title: 'Jako Çemberi: etkinlik ayarları', words: 'çember etkinlik oyun kuralları katılım şartı ödül kazanan sayısı bot saatler günler zamanlama anlık tur demo test turu', row: 'cember' },
   { title: 'Açık masalar', words: 'takılı masa kapat bahis iade', row: 'games' },
   { title: 'Etkinlikler', words: 'bilet etkinlik sıralaması otomatik ödül çekiliş başlangıç bitiş tarihi sonuçlandır katılımcı', row: 'catalog', query: 's=events' },
   { title: 'Tahminler', words: 'seçenekli tahmin katılımcı tahmin yapanlar', row: 'catalog', query: 's=predictions' },
@@ -131,13 +141,24 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
   const can = (m: PanelModule) => session.isOwner || session.permissions.includes(m)
   const opens = (row: Row) => (row === 'account' ? true : row === 'audit' || row === 'staff' ? session.isOwner : can(rowPermission(row)))
 
+  /** A section that is a tab on another screen for this account opens there. */
+  const address = (row: string, query?: string): Pick<SearchHit, 'tab' | 'href'> => {
+    const params = new URLSearchParams(query ?? '')
+    const moved = movedAddress(row, params.get('s') ?? undefined, can)
+    if (moved?.s) params.set('s', moved.s)
+    else if (moved) params.delete('s')
+    const tab = moved?.b ?? row
+    const rest = params.toString()
+    return { tab, href: `/panel?b=${tab}${rest ? `&${rest}` : ''}` }
+  }
+
   const hits: SearchHit[] = []
   for (const s of SETTINGS) {
     if (hits.length >= SETTING_LIMIT) break
     if (!has(`${s.title} ${s.words ?? ''}`)) continue
     const row = 'moved' in s ? tabHome(s.moved, can) : opens(s.row) ? s.row : null
     if (!row) continue
-    hits.push({ kind: 'setting', id: s.title, title: s.title, detail: '', tab: row, href: `/panel?b=${row}${s.query ? `&${s.query}` : ''}` })
+    hits.push({ kind: 'setting', id: s.title, title: s.title, detail: '', ...address(row, s.query) })
   }
 
   const [members, sites, posts, tasks, products, tournaments, faqs] = await Promise.all([
@@ -171,7 +192,7 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
     hits.push({ kind: 'tournament', id: String(t.id), title: t.title, detail: STATUS_LABEL[t.status] ?? '', tab: 'tournaments', href: `/panel?b=tournaments&f=tournament-${t.id}` })
   }
   for (const f of faqs.filter((f) => has(f.question)).slice(0, LIMIT)) {
-    hits.push({ kind: 'faq', id: String(f.id), title: f.question, detail: `${f.category}${f.active ? '' : ' · Gizli'}`, tab: 'faqs', href: `/panel?b=faqs&f=faq-${f.id}` })
+    hits.push({ kind: 'faq', id: String(f.id), title: f.question, detail: `${f.category}${f.active ? '' : ' · Gizli'}`, ...address('faqs', `f=faq-${f.id}`) })
   }
   return hits
 }

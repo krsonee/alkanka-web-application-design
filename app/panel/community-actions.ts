@@ -75,11 +75,11 @@ export async function decideReviewProof(id: number, ok: boolean) {
 
 export async function postKarneNow() {
   return guard(async () => {
-    const { weeklyKarne, karneText } = await import('@/lib/trust-extra')
+    const { weeklyKarne, karneNotice } = await import('@/lib/trust-extra')
     const { broadcastPodium } = await import('@/lib/telegram-bots')
     const list = await weeklyKarne()
     if (!list.length) return 'Son 7 günde karneye girecek veri yok.'
-    const posted = await broadcastPodium((origin) => karneText(list, origin))
+    const posted = await broadcastPodium((origin) => karneNotice(list, origin))
     if (posted) await logPanel('community', 'Haftalık karne gönderildi', null, `${posted} kanal`)
     return posted ? `Karne ${posted} kanala gönderildi.` : 'Bağlı aktif kanal bulunamadı.'
   })

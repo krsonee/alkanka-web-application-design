@@ -1,19 +1,14 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useUnsavedGuard, UnsavedBar } from '@/components/panel/unsaved-guard'
-import { formatLocal, scheduleState } from '@/lib/schedule'
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import {
+  AlertTriangle,
   Loader2,
   ChevronRight,
   LayoutDashboard,
   ExternalLink,
-  Plus,
-  RotateCcw,
-  Save,
-  Trash2,
   Search,
   Globe,
   Handshake,
@@ -28,32 +23,11 @@ import {
   MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
-import { askConfirm, notify, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
-import { MAX_CUSTOM_SLIDES } from '@/lib/custom-slides'
+import { askConfirm, PanelFeedbackHost } from '@/components/panel/confirm-dialog'
 import { useActionPulse } from '@/components/panel/flash'
 import { panelSearchAction, type SearchHit } from '@/app/panel/search-actions'
 import { cn } from '@/lib/utils'
-import { addSlide, duplicateSlide, moveSlide, reorderSlides, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
-import { SortableList, useOrder } from '@/components/panel/sortable-list'
-import { AlertTriangle, ArrowDown, ArrowUp, Copy, Eye, MousePointerClick, CalendarClock } from 'lucide-react'
-import { ImageField } from '@/components/panel/image-field'
-import { JAKO_POSES } from '@/lib/site-registry'
-import { PANEL_GROUPS, PANEL_VIEWS, TELEGRAM_MODULES, type PanelModule, type PanelView } from '@/lib/panel-modules'
-import { HideButton } from '@/components/panel/hide-button'
-
-type Fields = {
-  eyebrow?: string
-  title?: string
-  description?: string
-  cta?: string
-  speech?: string
-  image?: string
-  mobileImage?: string
-  pose?: string
-  href?: string
-  startAt?: string
-  endAt?: string
-}
+import { MERGED_ROWS, PANEL_GROUPS, PANEL_VIEWS, TELEGRAM_MODULES, foldedInto, type PanelModule, type PanelView } from '@/lib/panel-modules'
 
 type PanelTab = PanelModule | PanelView | 'staff' | 'account' | 'audit' | 'dashboard' | 'moderation'
 
@@ -70,23 +44,9 @@ const HIT_LABEL: Record<SearchHit['kind'], string> = {
 
 const FOUND_MARK = ['ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background']
 
-export type EditorItem = {
-  kind: 'slide' | 'hero'
-  id: string
-  label: string
-  path: string
-  defaults: Fields
-  saved: Fields | null
-  hidden?: boolean
-  custom?: boolean
-  stats?: { views: number; clicks: number }
-}
-
 export function ContentEditor({
-  slides,
-  slideAudience,
-  heroes,
-  library,
+  slide,
+  hero,
   logos,
   texts,
   games,
@@ -148,11 +108,8 @@ export function ContentEditor({
   growth: React.ReactNode
   marketing: React.ReactNode
   social: React.ReactNode
-  slides: EditorItem[]
-  /** Who still gets the home page that carries these slides; the new design has its own cover. */
-  slideAudience: SlideAudience
-  heroes: EditorItem[]
-  library: string[]
+  slide: React.ReactNode
+  hero: React.ReactNode
   logos: React.ReactNode
   texts: React.ReactNode
   games: React.ReactNode
@@ -177,28 +134,25 @@ export function ContentEditor({
   pending?: Record<string, number>
   sponsors: React.ReactNode
 }) {
+  const can = (m: PanelModule) => allowed.includes(m)
   const groups: NavGroup[] = [
     ...PANEL_GROUPS.map((g) => ({
       id: g.id as string,
       label: g.label as string,
       items: g.modules.flatMap((m): NavItem[] => {
         // The three Telegram permissions open one shared section; what it shows inside depends on which ones the account holds.
-        const visible = m.id === 'telegram' ? TELEGRAM_MODULES.some((id) => allowed.includes(id)) : m.id !== 'roles' && !TELEGRAM_MODULES.includes(m.id) && allowed.includes(m.id)
+        // A section folded into another screen has no row of its own for an account that can open both.
+        const visible =
+          m.id === 'telegram' ? TELEGRAM_MODULES.some((id) => allowed.includes(id)) : m.id !== 'roles' && !TELEGRAM_MODULES.includes(m.id) && allowed.includes(m.id) && !foldedInto(m.id, can)
+        const merged = MERGED_ROWS[m.id]
         const own: NavItem = {
           id: m.id,
           pending: pending[m.id] ?? 0,
-          hint: m.id === 'telegram' ? 'Postlar, botlar, koruma ve otomasyonlar' : m.hint,
-          label:
-            m.id === 'slide'
-              ? `Slider (${slides.length})`
-              : m.id === 'hero'
-                ? `Sayfa başlıkları (${heroes.length})`
-                : m.id === 'telegram'
-                  ? 'Telegram botları'
-                  : m.label,
+          hint: m.id === 'telegram' ? 'Postlar, botlar, koruma ve otomasyonlar' : (merged?.hint ?? m.hint),
+          label: m.id === 'telegram' ? 'Telegram botları' : (merged?.label ?? m.label),
         }
         // A view sits right under the module it is listed after, whether or not the account can open that module.
-        const views = PANEL_VIEWS.filter((v) => v.after === m.id && allowed.includes(v.needs)).map((v): NavItem => ({ id: v.id, label: v.label, hint: v.hint, pending: pending[v.id] ?? 0 }))
+        const views = PANEL_VIEWS.filter((v) => v.after === m.id && allowed.includes(v.needs) && !foldedInto(v.id, can)).map((v): NavItem => ({ id: v.id, label: v.label, hint: v.hint, pending: pending[v.id] ?? 0 }))
         return visible ? [own, ...views] : views
       }),
     })),
@@ -241,7 +195,6 @@ export function ContentEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const items = tab === 'slide' ? slides : heroes
   const q = filter.trim().toLocaleLowerCase('tr')
   const shown = groups
     .map((g) => ({
@@ -493,7 +446,7 @@ export function ContentEditor({
             '[&_h2.font-display]:text-lg [&_h3.font-display]:text-base [&_.text-2xl]:text-xl',
           )}
         >
-      {loading && tab !== 'slide' && tab !== 'hero' && tab !== 'account' ? (
+      {loading && tab !== 'account' ? (
         <div role="status" className="flex flex-col items-start gap-3 py-16 text-sm text-muted-foreground">
           <span className="flex items-center gap-2">
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -582,17 +535,11 @@ export function ContentEditor({
       ) : tab === 'sponsors' ? (
         sponsors
       ) : tab === 'logo' ? (
-        <div className="flex flex-col gap-6">{logos}</div>
+        logos
+      ) : tab === 'slide' ? (
+        slide
       ) : (
-        tab === 'slide' ? (
-          <SlideGrid slides={items} library={library} audience={slideAudience} />
-        ) : (
-          <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-            {items.map((item) => (
-              <ItemCard key={`${item.kind}-${item.id}`} item={item} library={library} />
-            ))}
-          </div>
-        )
+        hero
       )}
         </div>
       </div>
@@ -681,542 +628,5 @@ function SectionMap({ groups, onPick }: { groups: NavGroup[]; onPick: (id: Panel
         })}
       </div>
     </details>
-  )
-}
-
-const SLIDE_PRESETS = [
-  { label: 'Tavla turnuvası', eyebrow: 'Büyük Tavla Turnuvası', title: 'Zarı at, kupayı kap', description: 'Yüksek ödüllü tavla turnuvasına kaydını şimdi yap, yerini kapan kazansın.', cta: 'Turnuvaya katıl' },
-  { label: 'Ücretsiz Okey & 101', eyebrow: 'Canlı Masalar', title: 'Okey ve 101 masaları seni bekliyor', description: 'Ücretsiz canlı masalara otur, kankalarınla aynı masada taşları diz.', cta: 'Masaya otur' },
-  { label: 'Batak ligi', eyebrow: 'Batak Ligi', title: 'Koz senden, zafer senden', description: 'Haftalık Batak liginde puan topla, sıralamanın zirvesine çık.', cta: 'Lige katıl' },
-  { label: 'Bilardo düellosu', eyebrow: 'Amerikan Bilardo', title: 'Istakanı hazırla', description: 'Birebir bilardo düellolarında rakibini yen, Kanka Coin kazan.', cta: 'Düelloya başla' },
-]
-
-function AddSlideCard() {
-  const [state, action, pending] = useActionState<ActionState>(addSlide, {})
-  return (
-    <form
-      action={action}
-      className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-card p-6 text-center"
-    >
-      <Plus className="size-8 text-primary" aria-hidden="true" />
-      <div className="flex flex-col gap-1">
-        <h2 className="font-display text-lg font-bold text-foreground">Yeni slayt ekle</h2>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Ana sayfa slider&apos;ına en fazla {MAX_CUSTOM_SLIDES} yeni slayt ekleyebilirsin. Eklenen slayt listenin sonuna düşer, görselini bilgisayardan yükleyebilirsin.
-        </p>
-      </div>
-      <button
-        disabled={pending}
-        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
-      >
-        <Plus className="size-4" aria-hidden="true" />
-        {pending ? 'Ekleniyor…' : 'Slayt ekle'}
-      </button>
-      {state.message && (
-        <p role="status" className={cn('text-sm', state.ok ? 'text-primary' : 'text-live')}>
-          {state.message}
-        </p>
-      )}
-    </form>
-  )
-}
-
-const POSE_LABELS: Record<string, string> = {
-  jako: 'Klasik',
-  merhaba: 'Merhaba',
-  kazandi: 'Kazandı',
-  duyuru: 'Duyuru',
-  sandik: 'Sandık',
-  dusunen: 'Düşünen',
-  zar: 'Zar',
-  market: 'Market',
-  uzgun: 'Üzgün',
-  telegram: 'Telegram',
-}
-
-const poseImage = (p: string) => (p === 'jako' ? '/images/mascots/jako.png' : `/images/mascots/jako-${p}.png`)
-
-const PREVIEW_KEYS = ['eyebrow', 'title', 'description', 'cta', 'speech'] as const
-type LiveFields = Record<(typeof PREVIEW_KEYS)[number], string>
-
-type SlideAudience = { members: boolean; guests: boolean }
-
-function slideAudienceNote({ members, guests }: SlideAudience) {
-  if (members && guests) return null
-  const rest = 'Yeni ana sayfa tasarımının kapağı kendi oyun slaytlarını kullanır; buradaki slaytlar sadece eski ana sayfada çıkar. Hangisinin açık olduğu "Ana sayfa ayarları" ekranından değişir.'
-  if (!members && !guests) return `Bu slaytlar şu an sitede kimseye gösterilmiyor. ${rest}`
-  return `Bu slaytları şu an sadece ${members ? 'üyeler' : 'misafirler'} görüyor. ${rest}`
-}
-
-function SlideGrid({ slides, library, audience }: { slides: EditorItem[]; library: string[]; audience: SlideAudience }) {
-  const note = slideAudienceNote(audience)
-  const order = useOrder(slides, (slide) => slide.id)
-  const [sorting, startSort] = useTransition()
-
-  function move(ids: string[]) {
-    order.set(ids)
-    startSort(async () => {
-      const result = await reorderSlides(ids)
-      if (!result.ok) {
-        order.reset()
-        notify(false, result.message ?? 'Sıra kaydedilemedi.')
-      }
-    })
-  }
-
-  return (
-    <div className="flex flex-col gap-5">
-      {note && (
-        <p role="note" className="flex items-start gap-2.5 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm leading-relaxed text-foreground text-pretty">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="min-w-0">{note}</span>
-        </p>
-      )}
-      <SortableList
-        layout="grid"
-        items={order.ordered}
-        idOf={(slide) => slide.id}
-        nameOf={(slide) => slide.saved?.title || slide.defaults.title || 'Slayt'}
-        onMove={move}
-        disabled={sorting}
-        className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3"
-        itemClassName="rounded-2xl"
-        handleClassName="size-7 bg-background/80 text-foreground backdrop-blur hover:bg-background max-sm:size-9"
-        before={<AddSlideCard />}
-      >
-        {(slide, handle, i) => <ItemCard item={slide} library={library} position={{ index: i, total: order.ordered.length }} handle={handle} />}
-      </SortableList>
-    </div>
-  )
-}
-
-function SlideOrderTools({ id, index, total }: { id: string; index: number; total: number }) {
-  const [moveState, moveAction, moving] = useActionState<ActionState, FormData>(moveSlide, {})
-  const [dupState, dupAction, duplicating] = useActionState<ActionState, FormData>(duplicateSlide, {})
-  const btn =
-    'flex size-7 items-center justify-center rounded-md bg-background/80 text-foreground backdrop-blur hover:bg-background disabled:opacity-30 max-sm:size-9'
-  const failed = (!moveState.ok && moveState.message) || (!dupState.ok && dupState.message)
-  return (
-    <div className="flex items-center gap-1">
-      <span className="rounded-md bg-background/80 px-2 py-1 text-xs font-semibold tabular-nums text-foreground backdrop-blur">
-        {`${index + 1}/${total}`}
-      </span>
-      <form action={moveAction} data-no-guard>
-        <input type="hidden" name="id" value={id} />
-        <input type="hidden" name="dir" value="up" />
-        <button disabled={moving || index === 0} className={btn} aria-label="Öne al" title="Öne al">
-          <ArrowUp className="size-3.5" aria-hidden="true" />
-        </button>
-      </form>
-      <form action={moveAction} data-no-guard>
-        <input type="hidden" name="id" value={id} />
-        <input type="hidden" name="dir" value="down" />
-        <button disabled={moving || index === total - 1} className={btn} aria-label="Arkaya al" title="Arkaya al">
-          <ArrowDown className="size-3.5" aria-hidden="true" />
-        </button>
-      </form>
-      <form action={dupAction} data-no-guard>
-        <input type="hidden" name="id" value={id} />
-        <button disabled={duplicating} className={btn} aria-label="Kopyasını oluştur" title="Kopyala">
-          {duplicating ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
-        </button>
-      </form>
-      {failed && (
-        <span role="alert" className="rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground">
-          {failed}
-        </span>
-      )}
-    </div>
-  )
-}
-
-function ScheduleBadge({ startAt, endAt }: { startAt?: string; endAt?: string }) {
-  if (!startAt && !endAt) return null
-  const state = scheduleState({ startAt, endAt })
-  const text =
-    state === 'upcoming'
-      ? `${formatLocal(startAt)} başlar`
-      : state === 'ended'
-        ? `${formatLocal(endAt)} bitti`
-        : endAt
-          ? `${formatLocal(endAt)} tarihine kadar`
-          : 'Yayında'
-  return (
-    <span
-      className={cn(
-        'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium backdrop-blur',
-        state === 'live' ? 'bg-background/80 text-foreground' : 'bg-destructive/90 text-destructive-foreground',
-      )}
-    >
-      <CalendarClock className="size-3" aria-hidden="true" />
-      {text}
-    </span>
-  )
-}
-
-function ItemCard({
-  item,
-  library,
-  position,
-  handle,
-}: {
-  item: EditorItem
-  library: string[]
-  position?: { index: number; total: number }
-  handle?: ReactNode
-}) {
-  const isSlide = item.kind === 'slide'
-  const [saveState, saveAction, saving] = useActionState<ActionState, FormData>(isSlide ? saveSlide : saveHero, {})
-  const [resetState, resetAction, resetting] = useActionState<ActionState, FormData>(async (prev, form) => {
-    const result = await (isSlide ? resetSlide : resetHero)(prev, form)
-    // A deleted slide's card is gone before its own status line could show the result.
-    if (item.custom && result.message) notify(Boolean(result.ok), result.message)
-    return result
-  }, {})
-  const [image, setImage] = useState(item.saved?.image || '')
-  const [mobileImage, setMobileImage] = useState(item.saved?.mobileImage || '')
-  const value = (k: keyof Fields) => item.saved?.[k] ?? ''
-  const initialLive = (): LiveFields =>
-    Object.fromEntries(PREVIEW_KEYS.map((k) => [k, value(k) || item.defaults[k] || ''])) as LiveFields
-  const [live, setLive] = useState<LiveFields>(initialLive)
-  const [speechLength, setSpeechLength] = useState(value('speech').length)
-  const [confirming, setConfirming] = useState(false)
-  const [presetPending, setPresetPending] = useState<(typeof SLIDE_PRESETS)[number] | null>(null)
-  const preview = image || item.defaults.image || '/placeholder.svg'
-  const status = resetState.message && !saveState.message ? resetState : saveState
-  const changed = !!item.saved && Object.values(item.saved).some(Boolean)
-  const ctr = item.stats && item.stats.views > 0 ? (item.stats.clicks / item.stats.views) * 100 : 0
-
-  useEffect(() => {
-    if (!confirming) return
-    const t = setTimeout(() => setConfirming(false), 4000)
-    return () => clearTimeout(t)
-  }, [confirming])
-
-  const syncPreview = (form: HTMLFormElement) => {
-    const read = (k: string) => (form.elements.namedItem(k) as HTMLInputElement | null)?.value ?? ''
-    setLive(Object.fromEntries(PREVIEW_KEYS.map((k) => [k, read(k) || item.defaults[k] || ''])) as LiveFields)
-    setSpeechLength(read('speech').length)
-  }
-
-  const applyPreset = (form: HTMLFormElement, p: (typeof SLIDE_PRESETS)[number]) => {
-    for (const key of ['eyebrow', 'title', 'description', 'cta'] as const) {
-      const el = form.elements.namedItem(key) as HTMLInputElement | HTMLTextAreaElement | null
-      if (el) {
-        el.value = p[key]
-        el.dispatchEvent(new Event('input', { bubbles: true }))
-      }
-    }
-    syncPreview(form)
-    setPresetPending(null)
-  }
-
-  return (
-    <article className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="relative aspect-[16/11] bg-secondary max-sm:min-h-68 sm:aspect-[16/7]">
-        <Image src={preview || '/placeholder.svg'} alt="" fill sizes="(min-width: 1536px) 520px, 600px" className="object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
-        <div className="absolute inset-x-0 top-0 z-10 flex flex-wrap items-start justify-between gap-2 p-3">
-          <div className="flex flex-wrap items-center gap-1">
-            {handle}
-            {position && <SlideOrderTools id={item.id} index={position.index} total={position.total} />}
-            {item.hidden && (
-              <span className="rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur">Siteden gizli</span>
-            )}
-            <ScheduleBadge startAt={item.saved?.startAt} endAt={item.saved?.endAt} />
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {isSlide && (
-              <HideButton
-                key={`${item.id}-${!!item.hidden}`}
-                kind="slide"
-                id={item.id}
-                hidden={!!item.hidden}
-                label={item.label}
-                className="bg-background/80 backdrop-blur"
-              />
-            )}
-            <a
-              href={item.path}
-              target="_blank"
-              rel="noreferrer"
-              title="Sitede aç"
-              className="flex items-center justify-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs text-foreground backdrop-blur hover:bg-background max-sm:size-9 max-sm:p-0"
-            >
-              <span className="max-sm:sr-only">Sitede aç</span>
-              <ExternalLink className="size-3 max-sm:size-4" aria-hidden="true" />
-            </a>
-          </div>
-        </div>
-        <div className="absolute inset-y-0 left-0 flex w-3/4 flex-col justify-end gap-1 p-4">
-          {live.eyebrow && <span className="truncate text-xs font-bold uppercase tracking-wider text-primary">{live.eyebrow}</span>}
-          <h2 className="line-clamp-2 text-balance font-display text-lg font-bold leading-tight text-foreground">
-            {live.title || item.label}
-          </h2>
-          {live.description && <p className="line-clamp-2 text-xs leading-relaxed text-foreground/80">{live.description}</p>}
-          {isSlide && live.cta && (
-            <span className="mt-1 w-fit rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">{live.cta}</span>
-          )}
-          {!isSlide && live.speech && (
-            <span className="mt-1 w-fit max-w-full truncate rounded-lg bg-card/90 px-2.5 py-1 text-xs text-foreground">
-              {`Jako: ${live.speech}`}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-        <span className="truncate text-sm font-semibold text-foreground">{item.label}</span>
-        <div className="flex shrink-0 items-center gap-2">
-          {isSlide && item.stats && (
-            <span className="flex items-center gap-2.5 text-xs tabular-nums text-muted-foreground" title="Son 30 gün">
-              <span className="flex items-center gap-1">
-                <Eye className="size-3.5" aria-hidden="true" />
-                <span className="sr-only">Gösterim</span>
-                {item.stats.views.toLocaleString('tr-TR')}
-              </span>
-              <span className="flex items-center gap-1">
-                <MousePointerClick className="size-3.5" aria-hidden="true" />
-                <span className="sr-only">Tıklanma</span>
-                {item.stats.clicks.toLocaleString('tr-TR')}
-              </span>
-              {item.stats.views > 0 ? (
-                <span className="font-semibold text-foreground">{`Tıklama oranı %${ctr.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`}</span>
-              ) : (
-                <span>Henüz gösterim yok</span>
-              )}
-            </span>
-          )}
-          <span
-            className={cn(
-              'rounded-full px-2 py-0.5 text-xs font-semibold',
-              item.custom ? 'bg-secondary text-foreground' : changed ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground',
-            )}
-          >
-            {item.custom ? 'Yeni slayt' : changed ? 'Değiştirildi' : 'Varsayılan'}
-          </span>
-        </div>
-      </div>
-
-      <form
-        action={saveAction}
-        onInput={(e) => syncPreview(e.currentTarget)}
-        onReset={(e) => {
-          const form = e.currentTarget
-          setImage(item.saved?.image || '')
-          setMobileImage(item.saved?.mobileImage || '')
-          setTimeout(() => syncPreview(form))
-        }}
-        className="flex flex-col gap-3 p-4"
-      >
-        <input type="hidden" name={isSlide ? 'id' : 'slug'} value={item.id} />
-        <ImageField
-          name="image"
-          label="Görsel"
-          value={image}
-          onChange={setImage}
-          library={library}
-          uploadId={isSlide ? 'slide' : 'hero'}
-          placeholder="Hazır görsel kullanılıyor"
-          hint={`Bilgisayardan yükle, galeriden seç ya da link yapıştır. Önerilen boyut ${isSlide ? '1600×600' : '1600×500'}.`}
-        />
-        {isSlide && (
-          <ImageField
-            name="mobileImage"
-            label="Telefon görseli (isteğe bağlı)"
-            value={mobileImage}
-            onChange={setMobileImage}
-            library={library}
-            uploadId="slide-mobile"
-            placeholder="Boşsa telefonda da üstteki görsel kullanılır"
-            previewClassName="aspect-[5/4] w-40"
-            hint="Telefonda slayt kutusu kareye yakındır; geniş görselin sağı ve solu kesilir. Buraya kareye yakın bir görsel koyarsan telefonda o gösterilir. Önerilen boyut 1000×800."
-          />
-        )}
-        {item.custom && (
-          <label className="flex flex-col gap-1.5 text-sm text-foreground">
-            Butonun gideceği link
-            <input
-              name="href"
-              defaultValue={item.saved?.href ?? '/'}
-              placeholder="/oyunlar/tavla veya https://…"
-              className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-            />
-          </label>
-        )}
-
-        {isSlide && (
-          <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-2.5">
-            <span className="text-xs font-semibold text-muted-foreground">Hazır şablonlar</span>
-            {presetPending ? (
-              <div className="flex flex-wrap items-center gap-2 text-xs text-foreground">
-                <span>{`"${presetPending.label}" yazıları mevcut metnin yerine geçsin mi?`}</span>
-                <button
-                  type="button"
-                  onClick={(e) => e.currentTarget.form && applyPreset(e.currentTarget.form, presetPending)}
-                    className="rounded-md bg-primary px-2.5 py-1 font-semibold text-primary-foreground max-sm:min-h-9 max-sm:px-3"
-                >
-                  Evet, doldur
-                </button>
-                <button type="button" onClick={() => setPresetPending(null)} className="rounded-md border border-border px-2.5 py-1 max-sm:min-h-9 max-sm:px-3">
-                  Vazgeç
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {SLIDE_PRESETS.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setPresetPending(p)}
-                    className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary max-sm:min-h-9 max-sm:px-3"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        <Text name="eyebrow" label="Üst etiket" value={value('eyebrow')} placeholder={item.defaults.eyebrow || 'Boş bırakılırsa gösterilmez'} />
-        <Text name="title" label="Başlık" value={value('title')} placeholder={item.defaults.title} />
-        <Text name="description" label="Açıklama" value={value('description')} placeholder={item.defaults.description} multiline />
-        {isSlide ? (
-          <>
-            <Text name="cta" label="Buton yazısı" value={value('cta')} placeholder={item.defaults.cta} />
-            <fieldset className="flex flex-col gap-2 rounded-lg border border-border bg-background p-2.5">
-              <legend className="px-1 text-xs font-semibold text-muted-foreground">Yayın zamanı (isteğe bağlı)</legend>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex flex-col gap-1 text-xs text-foreground">
-                  Başlangıç
-                  <input
-                    type="datetime-local"
-                    name="startAt"
-                    defaultValue={value('startAt')}
-                    className="rounded-md border border-input bg-card px-2 py-1.5 text-sm text-foreground outline-none [color-scheme:dark] focus:border-primary"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs text-foreground">
-                  Bitiş
-                  <input
-                    type="datetime-local"
-                    name="endAt"
-                    defaultValue={value('endAt')}
-                    className="rounded-md border border-input bg-card px-2 py-1.5 text-sm text-foreground outline-none [color-scheme:dark] focus:border-primary"
-                  />
-                </label>
-              </div>
-              <span className="text-xs text-muted-foreground">Boş bırakırsan slayt hep yayında kalır. Türkiye saatiyle.</span>
-            </fieldset>
-          </>
-        ) : (
-          <>
-            <label className="flex flex-col gap-1.5 text-sm text-foreground">
-              <span className="flex items-center justify-between">
-                Jako konuşma balonu
-                <span className={cn('text-xs tabular-nums', speechLength > 80 ? 'text-destructive' : 'text-muted-foreground')}>
-                  {`${speechLength}/80`}
-                </span>
-              </span>
-              <input
-                name="speech"
-                defaultValue={value('speech')}
-                maxLength={140}
-                placeholder={item.defaults.speech || 'Boş bırakılırsa varsayılan metin kullanılır'}
-                className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-              />
-              {speechLength > 80 && <span className="text-xs text-destructive">Mobilde taşabilir, 80 karakterin altında tut.</span>}
-            </label>
-            <fieldset className="flex flex-col gap-1.5">
-              <legend className="pb-1.5 text-sm text-foreground">Jako pozu</legend>
-              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
-                {['', ...JAKO_POSES].map((p) => (
-                  <label
-                    key={p || 'default'}
-                    className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-border bg-background p-1.5 text-center text-xs text-foreground has-[:checked]:border-primary has-[:checked]:bg-primary/10"
-                  >
-                    <input type="radio" name="pose" value={p} defaultChecked={value('pose') === p} className="sr-only" />
-                    {p ? (
-                      <Image src={poseImage(p)} alt="" width={40} height={40} className="size-10 object-contain" />
-                    ) : (
-                      <span className="flex size-10 items-center justify-center text-muted-foreground">
-                        <RotateCcw className="size-4" aria-hidden="true" />
-                      </span>
-                    )}
-                    <span className="w-full truncate">{p ? (POSE_LABELS[p] ?? p) : 'Varsayılan'}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button
-            disabled={saving}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            <Save className="size-4" aria-hidden="true" />
-            {saving ? 'Kaydediliyor…' : 'Kaydet'}
-          </button>
-          <button
-            formAction={resetAction}
-            disabled={resetting || !item.saved}
-            onClick={(e) => {
-              if (!confirming) {
-                e.preventDefault()
-                setConfirming(true)
-                return
-              }
-              setConfirming(false)
-              setImage('')
-              setMobileImage('')
-            }}
-            className={cn(
-              'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm disabled:opacity-40',
-              confirming
-                ? 'border-destructive bg-destructive text-destructive-foreground'
-                : item.custom
-                  ? 'border-destructive/40 text-destructive hover:bg-secondary'
-                  : 'border-border text-foreground hover:bg-secondary',
-            )}
-          >
-            {item.custom ? <Trash2 className="size-4" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
-            {confirming ? (item.custom ? 'Emin misin? Sil' : 'Emin misin? Sıfırla') : item.custom ? 'Slaytı sil' : 'Varsayılana dön'}
-          </button>
-          {status.message && (
-            <p role="status" className={cn('text-sm', status.ok ? 'text-primary' : 'text-destructive')}>
-              {status.message}
-            </p>
-          )}
-        </div>
-      </form>
-    </article>
-  )
-}
-
-function Text({
-  name,
-  label,
-  value,
-  placeholder,
-  multiline,
-}: {
-  name: string
-  label: string
-  value: string
-  placeholder?: string
-  multiline?: boolean
-}) {
-  const cls = 'rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary'
-  return (
-    <label className="flex flex-col gap-1.5 text-sm text-foreground">
-      {label}
-      {multiline ? (
-        <textarea name={name} defaultValue={value} placeholder={placeholder} rows={2} className={cn(cls, 'resize-y leading-relaxed')} />
-      ) : (
-        <input name={name} defaultValue={value} placeholder={placeholder} className={cls} />
-      )}
-    </label>
   )
 }

@@ -449,6 +449,7 @@ export async function notifyOddsAlerts(brand: string, link: string, odds: Parsed
     if (!alerts.length) return
     const { getChatConfig } = await import('@/lib/telegram-chat')
     const { botToken, callBot } = await import('@/lib/telegram-mirror')
+    const { TG_HTML, tgNotice } = await import('@/lib/tg-format')
     const cfg = await getChatConfig()
     if (!cfg) return
     const token = await botToken(cfg.botId)
@@ -462,8 +463,8 @@ export async function notifyOddsAlerts(brand: string, link: string, odds: Parsed
       }
     }
     for (const { tg, lines } of perUser.values()) {
-      const text = `Oran alarmı (${brand})\n\n${[...new Set(lines)].slice(0, 6).join('\n')}\n\n${link}`
-      await callBot(token, 'sendMessage', { chat_id: tg, text, disable_web_page_preview: true }).catch(() => null)
+      const text = tgNotice({ kind: 'alarm', title: `Oran alarmı (${brand})`, lines: [...new Set(lines)].slice(0, 6), link })
+      await callBot(token, 'sendMessage', { chat_id: tg, text, ...TG_HTML }).catch(() => null)
     }
   } catch (error) {
     console.error('[alerts] bildirim gönderilemedi', error)

@@ -6,7 +6,7 @@ import { notifyTable } from '@/lib/pvp/table-events'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
 import { CLIENT_SETTLED, botProfitToday } from '@/lib/solo-sessions'
-import { ARENA_META, BOT_DAILY_PROFIT_CAP, botWinMultiplier, isArenaGame, isStackedBet } from '@/lib/arena'
+import { ARENA_META, BOT_DAILY_PROFIT_CAP, botMatchGross, isArenaGame, isStackedBet } from '@/lib/arena'
 import {
   bjAct,
   bjActionCost,
@@ -138,11 +138,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
       note = 'Skor doğrulanamadığı için sonuç kabul edilmedi.'
     }
     const s = (await getArenaSettings())[game]
-    const mars = game === 'tavla' && final === 'win' && score?.for === 15 && score.against === 0
-    // Okey reports its finish factor in score.for: okeyle / çiftten 2x, both 4x.
-    const okeyBonus = game === 'okey' && final === 'win' && [2, 4].includes(Number(score?.for)) ? Number(score?.for) : 1
-    const winMultiplier = mars ? Math.max(3, s.multiplier) : botWinMultiplier(game, s) * okeyBonus
-    let gross = final === 'win' ? Math.floor(stake * winMultiplier) : final === 'draw' ? stake : 0
+    let gross = botMatchGross(game, s, stake, final, score)
     if (gross > stake) {
       const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(m.id)))
       if (gross - stake > room) {

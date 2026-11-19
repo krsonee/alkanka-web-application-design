@@ -30,11 +30,6 @@ export async function isChatModerator(userId: string): Promise<boolean> {
   return mod
 }
 
-/** Role shown next to the name when staff write from the site (Moderatör, Sponsor Destek...). */
-export async function staffRoleName(userId: string): Promise<string | null> {
-  return (await staffRoles(userId))[0]?.name ?? null
-}
-
 export async function mutedUntil(tgId: number): Promise<Date | null> {
   const [row] = await rows<{ until: string }>(sql`SELECT until FROM chat_mutes WHERE tg_id = ${tgId} AND until > now()`)
   return row ? new Date(row.until) : null

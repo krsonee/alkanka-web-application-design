@@ -30,7 +30,6 @@ import { Marquee } from './home/marquee'
 import { TeamLogo } from './logo-context'
 import { formatAC, usePoints } from './points-context'
 import { SectionHeading } from './section-heading'
-import { useTexts } from './texts-context'
 
 function useNow(everyMs = 1000) {
   const [now, setNow] = useState<number | null>(null)
@@ -107,7 +106,6 @@ function boardTable(board: EventBoard) {
 function EventCards() {
   const { events: EVENTS } = useCatalog()
   const { member, requireLogin, setBalance } = usePoints()
-  const t = useTexts()
   // The cards only need to know which side of a date they are on; each clock ticks on its own.
   const now = useNow(20_000)
   const { data: overview, mutate } = useSWR(['event-overview', member?.id ?? ''], () => getEventOverview(), { revalidateOnFocus: false })
@@ -155,8 +153,8 @@ function EventCards() {
           </div>
           <div className="flex flex-1 flex-col gap-3 p-4 pt-0">
             <div className="flex flex-col">
-              <h3 className="font-display text-lg font-bold text-foreground">{t(`event.${e.id}.title`, e.title)}</h3>
-              <p className="text-sm text-muted-foreground">{t(`event.${e.id}.subtitle`, e.subtitle)}</p>
+              <h3 className="font-display text-lg font-bold text-foreground">{e.title}</h3>
+              <p className="text-sm text-muted-foreground">{e.subtitle}</p>
             </div>
             <EventClock event={e} settled={isSettled(e)} />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -164,7 +162,7 @@ function EventCards() {
                 <Users className="size-3.5" aria-hidden="true" />
                 {formatAC(count(e))} katılımcı
               </span>
-              <span className="text-primary">{t(`event.${e.id}.prize`, e.prize)}</span>
+              <span className="text-primary">{e.prize}</span>
             </div>
             <div className="mt-auto flex items-stretch gap-2">
             <DetailButton onClick={() => setDetail(e)} label={(e.rank ?? 'none') === 'none' ? undefined : 'Sıralama & kurallar'} />
@@ -204,7 +202,7 @@ function EventCards() {
         content={
           detail && {
             eyebrow: `${detail.kind} etkinlik`,
-            title: t(`event.${detail.id}.title`, detail.title),
+            title: detail.title,
             image: detail.image,
             description: detail.description,
             facts: [

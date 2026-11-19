@@ -223,12 +223,14 @@ export async function notifyAddressChange(siteId: string, siteName: string, page
   try {
     const { getChatConfig } = await import('@/lib/telegram-chat')
     const { botToken, callBot } = await import('@/lib/telegram-mirror')
+    const { TG_HTML, tgNotice } = await import('@/lib/tg-format')
+    const text = tgNotice({ kind: 'adres', title, lines: [body], link: pageUrl })
     const cfg = await getChatConfig()
     if (cfg) {
       const token = await botToken(cfg.botId)
       const links = await rows<{ tg_id: string }>(sql`SELECT tg_id FROM tg_links WHERE user_id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)
       for (const l of links) {
-        const ok = await callBot(token, 'sendMessage', { chat_id: l.tg_id, text: `${title}\n\n${body}\n${pageUrl}`, disable_web_page_preview: true })
+        const ok = await callBot(token, 'sendMessage', { chat_id: l.tg_id, text, ...TG_HTML })
           .then(() => true)
           .catch(() => false)
         if (ok) telegram++

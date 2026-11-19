@@ -4,6 +4,7 @@ import { sendToUsers } from '@/lib/push'
 import { getCronKey } from '@/lib/telegram-mirror'
 import { trDay } from '@/lib/task-period'
 import { tournamentTick } from '@/lib/tournament-run'
+import { bold } from '@/lib/tg-format'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -61,16 +62,13 @@ async function announcePodiums() {
   const { broadcastPodium } = await import('@/lib/telegram-bots')
   const fresh = await settlePodiums()
   for (const p of fresh) {
-    await broadcastPodium((origin) =>
-      [
-        `${PODIUM_TITLE[p.kind]} Şampiyon Kürsüsü`,
-        '',
-        ...p.rows.map((r) => `${r.place}. ${r.name} · ${r.kp.toLocaleString('tr-TR')} KP`),
-        '',
-        'Tebrikler kankalar! Yeni dönem başladı, kürsü seni bekliyor.',
-        `${origin}/sampiyonlar`,
-      ].join('\n'),
-    ).catch(() => 0)
+    await broadcastPodium((origin) => ({
+      kind: 'kazanan',
+      title: `${PODIUM_TITLE[p.kind]} Şampiyon Kürsüsü`,
+      lines: p.rows.map((r) => [`${r.place}. `, bold(r.name), ` · ${r.kp.toLocaleString('tr-TR')} KP`]),
+      foot: 'Tebrikler kankalar! Yeni dönem başladı, kürsü seni bekliyor.',
+      link: `${origin}/sampiyonlar`,
+    })).catch(() => 0)
   }
   return fresh.length
 }

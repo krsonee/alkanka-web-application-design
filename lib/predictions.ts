@@ -537,13 +537,13 @@ async function settlePeriod(kind: PeriodKind, cfg: PeriodPrizes, now: number): P
   if (!claimed.length) return false
 
   const { grantAward } = await import('@/lib/prediction-awards')
-  const { isRoleHolder } = await import('@/lib/kanka-puan')
+  const { roleBlocks } = await import('@/lib/kanka-puan')
   const board = await standings(p.start, p.end, cfg.places.length + 20)
   const winners: PeriodWinner[] = []
   for (const row of board) {
     if (winners.length >= cfg.places.length) break
     // Staff stay on the table but the prizes are for members.
-    if (row.points <= 0 || (await isRoleHolder(row.userId).catch(() => false))) continue
+    if (row.points <= 0 || (await roleBlocks(row.userId, 'events').catch(() => false))) continue
     const place = winners.length + 1
     const prize = cfg.places[place - 1]
     await grantAward({ userId: row.userId, userName: row.name, source: kind, ref: p.key, place, title: `${PERIOD_LABEL[kind]} lig ${place}. sıra (${p.label})`, prize })

@@ -1,5 +1,3 @@
-import { EVENTS } from '@/components/alkanka/data'
-
 export const TEXTS_KEY = 'texts:site'
 export const DEFAULT_SIGNUP_BONUS = 250
 
@@ -20,21 +18,38 @@ export const TEXT_GROUPS: TextGroup[] = [
       { key: 'auth.loginCta', label: 'Giriş butonu', default: 'Giriş yap', max: 40 },
     ],
   },
-  {
-    id: 'events',
-    title: 'Etkinlik kartları',
-    description: 'Ana sayfa ve kampanyalar sayfasındaki etkinlik kartları.',
-    fields: EVENTS.flatMap((e) => [
-      { key: `event.${e.id}.title`, label: `${e.title} · başlık`, default: e.title, max: 60 },
-      { key: `event.${e.id}.subtitle`, label: `${e.title} · alt yazı`, default: e.subtitle, max: 90 },
-      { key: `event.${e.id}.prize`, label: `${e.title} · ödül yazısı`, default: e.prize, max: 40 },
-    ]),
-  },
 ]
 
 export const TEXT_FIELDS = TEXT_GROUPS.flatMap((g) => g.fields)
 
 export type SiteTexts = Record<string, string>
+
+const EVENT_TEXT = /^event\.(.+)\.(title|subtitle|prize)$/
+
+/**
+ * Event cards used to be three fixed rows of text here, laid over the event list. They are edited on
+ * the events themselves now; what was typed in the old rows is still honoured until the event is saved.
+ */
+export function legacyEventTexts(saved: unknown): SiteTexts {
+  const out: SiteTexts = {}
+  if (!saved || typeof saved !== 'object') return out
+  for (const [key, value] of Object.entries(saved as Record<string, unknown>)) {
+    if (EVENT_TEXT.test(key) && typeof value === 'string' && value.trim()) out[key] = value.trim()
+  }
+  return out
+}
+
+/** Lays the old per-event text rows over a list of events. */
+export function withLegacyEventTexts<T extends { id: string; title: string; subtitle: string; prize: string }>(events: T[], saved: unknown): T[] {
+  const texts = legacyEventTexts(saved)
+  if (!Object.keys(texts).length) return events
+  return events.map((e) => ({
+    ...e,
+    title: texts[`event.${e.id}.title`] ?? e.title,
+    subtitle: texts[`event.${e.id}.subtitle`] ?? e.subtitle,
+    prize: texts[`event.${e.id}.prize`] ?? e.prize,
+  }))
+}
 
 export function mergeTexts(saved: SiteTexts | null | undefined): SiteTexts {
   const out: SiteTexts = {}

@@ -10,9 +10,8 @@ import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides, isSafeHref, rea
 import { cleanLocal, parseLocal } from '@/lib/schedule'
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
-import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
 import { SHARE_KEY } from '@/lib/share'
-import { TEXT_FIELDS, TEXTS_KEY } from '@/lib/site-texts-shared'
+import { TEXT_FIELDS, TEXTS_KEY, legacyEventTexts } from '@/lib/site-texts-shared'
 
 export type ActionState = { ok?: boolean; message?: string }
 
@@ -147,7 +146,9 @@ export async function resetHero(_: ActionState, form: FormData): Promise<ActionS
 export async function saveTexts(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('texts')
-    const value: Record<string, string> = {}
+    // Event card texts typed here before the cards moved to their own tab stay until that event is saved again.
+    const value: Record<string, string> = legacyEventTexts(await getContent(TEXTS_KEY))
+    const kept = Object.keys(value).length
     for (const f of TEXT_FIELDS) {
       const v = String(form.get(f.key) ?? '').trim()
       if (!v) continue
@@ -160,8 +161,9 @@ export async function saveTexts(_: ActionState, form: FormData): Promise<ActionS
     }
     await setContent(TEXTS_KEY, value)
     revalidatePath('/', 'layout')
-    await logPanel('texts', 'Site yazıları kaydedildi', null, `${Object.keys(value).length} özel metin`)
-    return { ok: true, message: `Kaydedildi (${Object.keys(value).length} özel metin).` }
+    const custom = Object.keys(value).length - kept
+    await logPanel('texts', 'Site yazıları kaydedildi', null, `${custom} özel metin`)
+    return { ok: true, message: `Kaydedildi (${custom} özel metin).` }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
   }
@@ -224,44 +226,42 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
   }
 }
 
-export async function addSlide(_: ActionState): Promise<ActionState> {
+/** A new slide exists only once its form is saved, so closing the form leaves nothing half-made on the site. */
+export async function createSlide(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     await requireAdmin('slide')
     const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
     if (list.length >= MAX_CUSTOM_SLIDES) return { message: `En fazla ${MAX_CUSTOM_SLIDES} yeni slayt eklenebilir.` }
+    const title = field(form, 'title')
+    if (!title) return { message: 'Başlık boş olamaz.' }
+    const href = String(form.get('href') ?? '').trim().slice(0, 300) || '/'
+    if (!isSafeHref(href)) return { message: 'Link / ile ya da https:// ile başlamalı.' }
+    const startAt = cleanLocal(form.get('startAt'))
+    const endAt = cleanLocal(form.get('endAt'))
+    if (startAt && endAt && parseLocal(endAt) <= parseLocal(startAt)) return { message: 'Bitiş tarihi başlangıçtan sonra olmalı.' }
+    const mobileImage = imageField(form, 'mobileImage', 'Telefon görseli')
     const id = `c-${Date.now().toString(36)}`
     await setContent(CUSTOM_SLIDES_KEY, [
       ...list,
-      { id, eyebrow: 'Yeni slayt', title: 'Başlığı buraya yaz', description: '', cta: 'İncele', href: '/', image: '/images/banner-wheel.png' },
+      {
+        id,
+        eyebrow: field(form, 'eyebrow'),
+        title,
+        description: field(form, 'description'),
+        cta: field(form, 'cta') || 'İncele',
+        href,
+        image: imageField(form) || '/images/banner-wheel.png',
+        ...(mobileImage ? { mobileImage } : {}),
+        ...(startAt ? { startAt } : {}),
+        ...(endAt ? { endAt } : {}),
+      },
     ])
     revalidatePath('/')
     revalidatePath('/panel')
-    await logPanel('slide', 'Slayt eklendi', id)
-    return { ok: true, message: 'Yeni slayt eklendi. Aşağıdan düzenleyip kaydet.' }
+    await logPanel('slide', 'Slayt eklendi', title)
+    return { ok: true, message: 'Slayt eklendi, listenin sonunda.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Eklenemedi.' }
-  }
-}
-
-export async function saveLogos(_: ActionState, form: FormData): Promise<ActionState> {
-  try {
-    await requireAdmin('logo')
-    const kind = String(form.get('kind'))
-    const allowed = kind === 'sponsors' ? await listLogoSponsors() : kind === 'teams' ? LOGO_TEAMS : null
-    if (!allowed) return { message: 'Geçersiz liste.' }
-    const value: Record<string, string> = {}
-    for (const item of allowed) {
-      const url = String(form.get(`logo:${item.id}`) ?? '').trim()
-      if (!url) continue
-      if (!isAllowedImage(url)) return { message: `${item.label}: logo /images/ ya da https:// ile başlamalı.` }
-      value[item.id] = url.slice(0, 500)
-    }
-    await setContent(`logos:${kind}`, value)
-    revalidatePath('/', 'layout')
-    await logPanel('logo', kind === 'sponsors' ? 'Sponsor logoları kaydedildi' : 'Takım logoları kaydedildi', null, `${Object.keys(value).length} logo`)
-    return { ok: true, message: `Kaydedildi (${Object.keys(value).length} logo).` }
-  } catch (e) {
-    return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
   }
 }
 
@@ -269,26 +269,6 @@ async function currentSlideIds() {
   const custom = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
   const all = [...SLIDES.map((s) => ({ id: s.id })), ...custom.map((s) => ({ id: s.id }))]
   return sortByOrder(all, readSlideOrder(await getContent(SLIDE_ORDER_KEY))).map((s) => s.id)
-}
-
-export async function moveSlide(_: ActionState, form: FormData): Promise<ActionState> {
-  try {
-    await requireAdmin('slide')
-    const id = String(form.get('id'))
-    const dir = form.get('dir') === 'up' ? -1 : 1
-    const ids = await currentSlideIds()
-    const i = ids.indexOf(id)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= ids.length) return { message: 'Taşınamadı.' }
-    ;[ids[i], ids[j]] = [ids[j], ids[i]]
-    await setContent(SLIDE_ORDER_KEY, ids)
-    revalidatePath('/')
-    revalidatePath('/panel')
-    await logPanel('slide', 'Slayt sırası değişti', id, dir < 0 ? 'öne alındı' : 'arkaya alındı')
-    return { ok: true, message: 'Sıra güncellendi.' }
-  } catch (e) {
-    return { message: e instanceof Error ? e.message : 'Taşınamadı.' }
-  }
 }
 
 export async function reorderSlides(ids: string[]): Promise<ActionState> {
@@ -375,8 +355,11 @@ export async function saveHomeV2(_: ActionState, form: FormData): Promise<Action
   try {
     await requireAdmin('logo')
     const { HOME_V2_KEY, mergeHomeV2 } = await import('@/lib/home-v2-shared')
-    const raw = JSON.parse(String(form.get('payload') ?? '{}')) as unknown
-    const value = mergeHomeV2(raw)
+    const raw = mergeHomeV2(JSON.parse(String(form.get('payload') ?? '{}')) as unknown)
+    // The layout and the wizard are saved from separate tabs; each one writes only its own half.
+    const part = String(form.get('part') ?? '')
+    const stored = part === 'home' || part === 'setup' ? mergeHomeV2(await getContent(HOME_V2_KEY)) : null
+    const value = stored ? mergeHomeV2({ ...stored, [part]: raw[part as 'home' | 'setup'] }) : raw
     const tiles = [...value.home.daily, ...value.home.free, ...value.home.promos]
     const images = [value.home.heroImage, ...tiles.map((t) => t.image)].filter(Boolean)
     for (const img of images) if (!isAllowedImage(img)) throw new Error('Görseller /images/ ile ya da https:// ile başlamalı.')
@@ -389,12 +372,14 @@ export async function saveHomeV2(_: ActionState, form: FormData): Promise<Action
       ...tiles.map((t) => t.href),
       ...value.home.rail.map((t) => t.href),
     ]
-    for (const h of hrefs) if (h && !h.startsWith('/') && !/^https:\/\//.test(h)) throw new Error('Bağlantılar / ya da https:// ile başlamalı.')
+    // "#kayit" and "#giris" open the sign-up and sign-in windows; the guest button ships with "#kayit".
+    for (const h of hrefs) if (h && !isSafeHref(h) && !/^#[\w-]+$/.test(h)) throw new Error(`"${h.slice(0, 60)}" geçerli bir bağlantı değil. Bağlantılar / ile, https:// ile ya da #kayit gibi # ile başlamalı.`)
     await setContent(HOME_V2_KEY, value)
     revalidatePath('/')
     revalidatePath('/oyunlar/okey')
-    await logPanel('logo', 'Ana sayfa ve masa açma ayarları kaydedildi')
-    return { ok: true, message: 'Ana sayfa ve masa açma ayarları kaydedildi.' }
+    const what = part === 'home' ? 'Ana sayfa düzeni' : part === 'setup' ? 'Masa açma sihirbazı' : 'Ana sayfa ve masa açma ayarları'
+    await logPanel('logo', `${what} kaydedildi`)
+    return { ok: true, message: `${what} kaydedildi.` }
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
   }

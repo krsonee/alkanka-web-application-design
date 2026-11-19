@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { setContent } from '@/lib/content'
-import { ARENA_GAMES, ARENA_META, isArenaGame, type ArenaSettings } from '@/lib/arena'
+import { ARENA_GAMES, ARENA_META, MAX_COMMISSION, isArenaGame, usesCommission, usesMultiplier, type ArenaSettings } from '@/lib/arena'
 import { getArenaSettings } from '@/lib/arena-server'
 import { cancelTable } from '@/lib/pvp/tables'
 import {
@@ -73,6 +73,7 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
     await requireAdmin('games')
     const current = await getArenaSettings()
     const value = {} as ArenaSettings
+    const changes: string[] = []
     for (const g of ARENA_GAMES) {
       const title = ARENA_META[g].title
       const tokens = String(form.get(`${g}:bets`) ?? '')
@@ -83,13 +84,19 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
       const unique = [...new Set(tokens.map(Number))].sort((a, b) => a - b)
       if (!unique.length) return { message: `${title}: en az bir bahis tutarı gir.` }
       if (unique.length > MAX_BET_OPTIONS) return { message: `${title}: en fazla ${MAX_BET_OPTIONS} bahis tutarı girilebilir.` }
-      const multiplier = Number(String(form.get(`${g}:multiplier`) ?? '').replace(',', '.'))
-      if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 20) return { message: `${title}: çarpan 1 ile 20 arasında olmalı.` }
-      // The settings form has no commission or kanka-table field. Reading a missing field as 0 / off
+      // A game that pays from the pot or by its own odds never reads the multiplier: its field is locked
+      // in the form and the saved value stays as it is.
+      const hasMultiplier = usesMultiplier(g) && form.has(`${g}:multiplier`)
+      const multiplier = hasMultiplier ? Number(String(form.get(`${g}:multiplier`) ?? '').replace(',', '.')) : current[g].multiplier
+      if (hasMultiplier && (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 20)) return { message: `${title}: çarpan 1 ile 20 arasında olmalı.` }
+      // A field the form did not send keeps its saved value. Reading a missing field as 0 / off
       // closed player tables and zeroed the table cut for every game on each save.
-      const hasCommission = form.has(`${g}:commission`)
-      const commission = hasCommission ? Math.round(Number(form.get(`${g}:commission`))) : current[g].commission
-      if (hasCommission && (!Number.isFinite(commission) || commission < 0 || commission > 30)) return { message: `${title}: komisyon %0 ile %30 arasında olmalı.` }
+      const hasCommission = usesCommission(g) && form.has(`${g}:commission`)
+      const commission = hasCommission ? Math.round(Number(String(form.get(`${g}:commission`) ?? '').replace(',', '.'))) : current[g].commission
+      if (hasCommission && (!Number.isFinite(commission) || commission < 0 || commission > MAX_COMMISSION)) return { message: `${title}: masa payı %0 ile %${MAX_COMMISSION} arasında olmalı.` }
+      if (multiplier !== current[g].multiplier) changes.push(`${title} çarpan ${current[g].multiplier} → ${Math.round(multiplier * 100) / 100}`)
+      if (commission !== current[g].commission) changes.push(`${title} masa payı %${current[g].commission} → %${commission}`)
+      if (unique.join() !== current[g].bets.join()) changes.push(`${title} bahisler ${unique.join(', ')}`)
       const image = String(form.get(`${g}:image`) ?? '').trim().slice(0, 500)
       if (image && !/^(https:\/\/|\/)/.test(image)) return { message: `${title}: görsel adresi https:// veya / ile başlamalı.` }
       value[g] = {
@@ -106,8 +113,8 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
     await setContent('arena:settings', value)
     await setContent('arena:house', { winRate })
     refresh()
-    await logPanel('games', 'Oyun ayarları kaydedildi', null, `mini oyun kazanma oranı %${winRate}`)
-    return { ok: true, message: 'Oyun ayarları kaydedildi.' }
+    await logPanel('games', 'Oyun ayarları kaydedildi', null, [...changes, `mini oyun kazanma oranı %${winRate}`].join(' · ').slice(0, 600))
+    return { ok: true, message: 'Oyun ayarları kaydedildi. Çarpan ve masa payı bundan sonra biten maçlarda geçerli olur.' }
   } catch (e) {
     return fail(e, 'Kaydedilemedi.')
   }

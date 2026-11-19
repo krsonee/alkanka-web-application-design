@@ -3,7 +3,7 @@ import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
 import { ensureTv, sendToTargets } from '@/lib/kankatv-engage'
 import { getGameLive, type GameLive } from '@/lib/kankatv'
-import { isRoleHolder } from '@/lib/kanka-puan'
+import { roleBlocks } from '@/lib/kanka-puan'
 import { credit, debit, getBalance } from '@/lib/member'
 import { trDay } from '@/lib/task-period'
 import {
@@ -452,7 +452,7 @@ export async function placeBet(userId: string, marketId: number, pick: string, s
   if (!cfg.enabled) throw new Error('Canlı etkinlikler şu an kapalı')
   if (!Number.isSafeInteger(marketId) || typeof pick !== 'string') throw new Error('Geçersiz bahis')
   if (!Number.isInteger(stake) || stake < cfg.minStake || stake > cfg.maxStake) throw new Error(`Bahis ${cfg.minStake} - ${cfg.maxStake} coin arasında olmalı`)
-  if (await isRoleHolder(userId)) throw new Error('Yetkili hesaplar etkinliklere katılamaz')
+  if (await roleBlocks(userId, 'events')) throw new Error('Bu rolle etkinliklere katılınamıyor')
 
   const [m] = await rows<MarketRow>(sql`SELECT * FROM tv_markets WHERE id = ${marketId}`)
   if (!m || m.status !== 'open') throw new Error('Bu etkinlik kapandı')

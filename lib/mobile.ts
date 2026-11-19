@@ -126,7 +126,9 @@ export async function getPushPrefs(userId: string): Promise<string[]> {
 export async function savePushPrefs(userId: string, off: string[]) {
   await ensureMobile()
   const clean = Array.from(new Set(off.filter((t) => TOPIC_SET.has(t))))
-  await rows(sql`INSERT INTO push_prefs (user_id, off, updated_at) VALUES (${userId}, ${clean}, now())
+  // A list placed straight into the query is written as "(a, b)", which is not an array: the column needs ARRAY[...] spelled out.
+  const list = clean.length ? sql`ARRAY[${sql.join(clean.map((t) => sql`${t}`), sql`, `)}]::text[]` : sql`'{}'::text[]`
+  await rows(sql`INSERT INTO push_prefs (user_id, off, updated_at) VALUES (${userId}, ${list}, now())
     ON CONFLICT (user_id) DO UPDATE SET off = EXCLUDED.off, updated_at = now()`)
   return clean
 }

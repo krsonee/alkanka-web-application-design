@@ -2,8 +2,8 @@
 
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { useState, useTransition } from 'react'
-import { Copy, Play, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
+import { useEffect, useState, useTransition } from 'react'
+import { Copy, Loader2, Play, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { saveCember, startTestRound } from '@/app/panel/cember-actions'
 import { CemberDemo } from './cember-demo'
 import { InstantEvent } from './instant-event'
@@ -46,6 +46,15 @@ const PRIZE_TYPES: Record<PrizeType, string> = { coin: 'Kanka Coin (KC)', kp: 'K
 const input = 'h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground'
 const uid = () => Math.random().toString(36).slice(2, 9)
 
+const TABS = [
+  { id: 'genel', label: 'Genel', hint: 'Etkinliğin adı, hangi oyunun oynanacağı, o oyunun kuralları ve arenayı dolduran botlar.' },
+  { id: 'sartlar', label: 'Katılım şartları', hint: 'Üyenin çembere girebilmesi için yapması gerekenler. Hepsini tamamlayan kendiliğinden eklenir.' },
+  { id: 'oduller', label: 'Ödüller', hint: 'Kazanana verilecekler, kaç kişinin kazanacağı, ödülün nasıl paylaşılacağı ve izleyici tahmin oyunu.' },
+  { id: 'zaman', label: 'Zamanlama', hint: 'Turların hangi gün ve saatlerde açılacağı. Takvim dışı anlık tur ve günlük bütçe de burada.' },
+  { id: 'deneme', label: 'Deneme ve geçmiş', hint: 'Turu sahte oyuncularla kendi ekranında izle, gerçek bir ek tur kur, son turların sonucuna bak.' },
+] as const
+type CemberTab = (typeof TABS)[number]['id']
+
 export function CemberEditor({
   initial,
   tasks,
@@ -66,6 +75,9 @@ export function CemberEditor({
   upcoming: UpcomingSlot[]
 }) {
   const [events, setEvents] = useState<CemberConfig[]>(initial.length ? initial : [{ ...DEFAULT_CEMBER, id: uid() }])
+  /** What the server holds: the save bar compares the screen against it. */
+  const [stored, setStored] = useState(events)
+  const [tab, setTab] = useState<CemberTab>('genel')
   const [upcoming, setUpcoming] = useState(initialUpcoming)
   const [budget, setBudget] = useState(initialBudget)
   const [sel, setSel] = useState(0)
@@ -120,10 +132,16 @@ export function CemberEditor({
   const toggleHour = (h: number) =>
     set({ hours: cfg.hours.includes(h) ? cfg.hours.filter((x) => x !== h) : [...cfg.hours, h].sort((a, b) => a - b) })
 
+  /** The server's copy after a save: what it sent back, or what was sent when it echoes nothing. */
+  const keep = (r: { ok: boolean; events?: CemberConfig[] }, sent: CemberConfig[]) => {
+    if (r.events) setEvents(r.events)
+    if (r.ok) setStored(r.events ?? sent)
+  }
+
   const save = () =>
     start(async () => {
       const r = await saveCember(events)
-      if (r.events) setEvents(r.events)
+      keep(r, events)
       if (r.upcoming) setUpcoming(r.upcoming)
       setMsg({ ok: r.ok, text: r.message })
     })
@@ -132,10 +150,19 @@ export function CemberEditor({
     start(async () => {
       const saved = await saveCember(events)
       if (!saved.ok) return setMsg({ ok: false, text: saved.message })
-      if (saved.events) setEvents(saved.events)
+      keep(saved, events)
+      if (saved.upcoming) setUpcoming(saved.upcoming)
       const r = await startTestRound(cfg.id, 60)
       setMsg({ ok: r.ok, text: r.message })
     })
+
+  const dirty = JSON.stringify(events) !== JSON.stringify(stored)
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
 
   const hoursLabel = (e: CemberConfig) => {
     const perHour = slotMinutes(e).length
@@ -154,24 +181,24 @@ export function CemberEditor({
     )
   }
 
+  const tabNote: Record<CemberTab, string | null> = {
+    genel: null,
+    sartlar: cfg.conditions.length ? String(cfg.conditions.length) : null,
+    oduller: cfg.prizes.length ? String(cfg.prizes.length) : null,
+    zaman: null,
+    deneme: null,
+  }
+  /** What the event is still missing: it is not saved without a condition and a prize, and never plays without an hour. */
+  const tabGap: Record<CemberTab, string | null> = {
+    genel: null,
+    sartlar: cfg.conditions.length ? null : 'şart yok',
+    oduller: cfg.prizes.length ? null : 'ödül yok',
+    zaman: cfg.enabled && !cfg.hours.length ? 'saat seçilmedi' : null,
+    deneme: null,
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <CemberDemo title={cfg.title} prize={prizeText(cfg.prizes, names)} />
-
-      <InstantEvent
-        key={cfg.id}
-        events={events}
-        selectedId={cfg.id}
-        upcoming={upcoming}
-        budget={budget}
-        onSaved={(r) => {
-          if (r.events) setEvents(r.events)
-          if (r.upcoming) setUpcoming(r.upcoming)
-          if (r.budget) setBudget(r.budget)
-          if (!r.clash) setMsg({ ok: r.ok, text: r.message })
-        }}
-      />
-
+    <div className="flex flex-col gap-6 pb-24">
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" aria-label="Etkinlikler">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -237,11 +264,55 @@ export function CemberEditor({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div role="tablist" aria-label="Etkinlik ayarları" className="flex gap-1 overflow-x-auto rounded-xl bg-secondary p-1">
+          {TABS.map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === x.id}
+              onClick={() => setTab(x.id)}
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
+                tab === x.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {x.label}
+              {tabNote[x.id] && <span className="rounded bg-background px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">{tabNote[x.id]}</span>}
+              {tabGap[x.id] && <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-xs text-destructive">{tabGap[x.id]}</span>}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm leading-relaxed text-muted-foreground">{TABS.find((x) => x.id === tab)?.hint}</p>
+      </section>
+
+      {tab === 'genel' && (
+        <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">Etkinlik adı</span>
             <input className={input} value={cfg.title} maxLength={40} onChange={(e) => set({ title: e.target.value })} />
+            <span className="text-xs text-muted-foreground">Tur penceresinde ve duyurularda bu ad görünür</span>
           </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">En fazla katılımcı</span>
+            <input
+              type="number"
+              className={input}
+              min={2}
+              max={MAX_PLAYERS}
+              value={cfg.maxPlayers}
+              onChange={(e) => set({ maxPlayers: Math.min(MAX_PLAYERS, Math.max(2, Number(e.target.value) || 2)) })}
+            />
+            <span className="text-xs text-muted-foreground">Fazlası olursa aralarından rastgele seçilir</span>
+          </label>
+        </section>
+      )}
+      {tab === 'genel' && <ArenaSettings cfg={cfg} set={set} part="game" />}
+      {tab === 'genel' && <ArenaSettings cfg={cfg} set={set} part="bots" />}
+
+      {tab === 'zaman' && (
+      <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">Sıklık</span>
             <select className={input} value={cfg.every} onChange={(e) => set({ every: Number(e.target.value) })}>
@@ -266,18 +337,6 @@ export function CemberEditor({
             <span className="text-xs text-muted-foreground">
               {cfg.every ? `Turlar: ${slotMinutes(cfg).map((m) => `:${String(m).padStart(2, '0')}`).join(' ')}` : '0 = saat başı, 30 = buçuk'}
             </span>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold">En fazla katılımcı</span>
-            <input
-              type="number"
-              className={input}
-              min={2}
-              max={MAX_PLAYERS}
-              value={cfg.maxPlayers}
-              onChange={(e) => set({ maxPlayers: Math.min(MAX_PLAYERS, Math.max(2, Number(e.target.value) || 2)) })}
-            />
-            <span className="text-xs text-muted-foreground">Fazlası olursa aralarından rastgele seçilir</span>
           </label>
         </div>
 
@@ -333,9 +392,28 @@ export function CemberEditor({
           </div>
         </div>
       </section>
+      )}
+      {tab === 'zaman' && (
+        <InstantEvent
+          key={cfg.id}
+          events={events}
+          selectedId={cfg.id}
+          upcoming={upcoming}
+          budget={budget}
+          onSaved={(r) => {
+            // An instant round is set up from the saved events; the server sends them back only when it changed them.
+            if (r.events) {
+              setEvents(r.events)
+              setStored(r.events)
+            }
+            if (r.upcoming) setUpcoming(r.upcoming)
+            if (r.budget) setBudget(r.budget)
+            if (!r.clash) setMsg({ ok: r.ok, text: r.message })
+          }}
+        />
+      )}
 
-      <ArenaSettings cfg={cfg} set={set} />
-
+      {tab === 'sartlar' && (
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -345,7 +423,7 @@ export function CemberEditor({
           <button
             type="button"
             onClick={() => set({ conditions: [...cfg.conditions, { id: uid(), kind: 'oyun', target: 1, window: 'gun', param: null, label: '' }] })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-semibold"
           >
             <Plus className="size-4" aria-hidden /> Şart ekle
           </button>
@@ -436,8 +514,15 @@ export function CemberEditor({
             </div>
           )
         })}
+        {cfg.conditions.length === 0 && (
+          <p className="rounded-lg border border-dashed border-destructive/50 px-3 py-4 text-center text-sm text-muted-foreground">
+            Şart yok. Her etkinlikte en az bir katılım şartı olmalı; şart eklemeden kaydedilmez.
+          </p>
+        )}
       </section>
+      )}
 
+      {tab === 'oduller' && (
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -449,7 +534,7 @@ export function CemberEditor({
           <button
             type="button"
             onClick={() => set({ prizes: [...cfg.prizes, { id: uid(), type: 'coin', amount: 25, ref: null, label: '' }] })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-semibold"
           >
             <Plus className="size-4" aria-hidden /> Ödül ekle
           </button>
@@ -519,31 +604,31 @@ export function CemberEditor({
           Market ödülü kazanana talep olarak düşer ve teslimat Market bölümündeki taleplerden takip edilir.
         </p>
       </section>
+      )}
+      {tab === 'oduller' && <ArenaSettings cfg={cfg} set={set} part="winners" />}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={save}
-          disabled={pending}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-60"
-        >
-          <Save className="size-4" aria-hidden /> {pending ? 'Kaydediliyor...' : 'Tümünü kaydet'}
-        </button>
-        <button
-          type="button"
-          onClick={test}
-          disabled={pending}
-          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-4 text-sm font-bold disabled:opacity-60"
-        >
-          <Play className="size-4" aria-hidden /> Bu etkinlik için 1 dk sonra test turu
-        </button>
-        {msg && (
-          <p role="status" className={msg.ok ? 'text-sm text-primary' : 'text-sm text-destructive'}>
-            {msg.text}
-          </p>
-        )}
-      </div>
+      {tab === 'deneme' && <CemberDemo title={cfg.title} prize={prizeText(cfg.prizes, names)} />}
+      {tab === 'deneme' && (
+        <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+          <div className="flex flex-col gap-1">
+            <h3 className="font-display font-bold uppercase">Gerçek ek tur</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+              Önce ekrandaki bütün ayarlar kaydedilir, sonra bu etkinlik için 1 dakika sonrasına bir tur kurulur. Demo&apos;dan farkı: tur o saatte sitedeki herkese
+              açılır, şartları tamamlayan üyeler oynar ve kazanan ödülü gerçekten alır.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={test}
+            disabled={pending}
+            className="inline-flex h-10 w-fit items-center gap-2 rounded-lg border border-border px-4 text-sm font-bold disabled:opacity-60"
+          >
+            <Play className="size-4" aria-hidden /> Kaydet ve 1 dakika sonra tur kur
+          </button>
+        </section>
+      )}
 
+      {tab === 'deneme' && (
       <section className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
         <h3 className="font-display font-bold uppercase">Son turlar</h3>
         {recent.length === 0 ? (
@@ -584,6 +669,35 @@ export function CemberEditor({
           </div>
         )}
       </section>
+      )}
+
+      <div
+        role="region"
+        aria-label="Kaydet"
+        className={cn(
+          'fixed inset-x-4 bottom-4 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-4 py-3 shadow-lg lg:left-80 lg:right-8 [body:has([data-unsaved-bar])_&]:bottom-20',
+          dirty ? 'border-primary/60' : 'border-border',
+        )}
+      >
+        <button
+          type="button"
+          onClick={save}
+          disabled={pending}
+          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-60"
+        >
+          {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+          {pending ? 'Kaydediliyor...' : 'Tümünü kaydet'}
+        </button>
+        <p className={cn('text-sm font-semibold', dirty ? 'text-foreground' : 'text-muted-foreground')} aria-live="polite">
+          {dirty ? 'Kaydedilmemiş değişiklik var' : 'Değişiklik yok'}
+          <span className="font-normal text-muted-foreground">{` · ${events.length} etkinliğin hepsi birlikte kaydedilir`}</span>
+        </p>
+        {msg && (
+          <p role="status" className={cn('basis-full text-sm sm:basis-auto', msg.ok ? 'text-primary' : 'text-destructive')}>
+            {msg.text}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -597,7 +711,14 @@ const SURVIVAL_PRESETS: { id: string; label: string; desc: string; opts: CemberC
   { id: 'besli', label: '5 Takım Savaşı', desc: 'Altın, Mavi, Yakut, Zümrüt, Gümüş. Kadrosu biten takım çıkar, sahada kalan son takım kazanır.', opts: { teams: 5, rule: 'last', shield: true, captain: false } },
 ]
 
-function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<CemberConfig>) => void }) {
+const PART_TEXT = {
+  game: { title: 'Oyun ve kurallar', hint: 'Bu etkinlikte hangi oyun oynansın ve o oyun hangi kuralla bitsin.' },
+  winners: { title: 'Kazananlar ve paylaşım', hint: 'Kaç kişi ödül alsın, ödül aralarında nasıl paylaşılsın, izleyiciler tahminle ne kazansın.' },
+  bots: { title: 'Botlar', hint: 'Az katılım olduğunda arena kaç kişiye tamamlansın.' },
+}
+
+/** The event's play settings, shown in three parts so each sits on the tab it belongs to. */
+function ArenaSettings({ cfg, set, part }: { cfg: CemberConfig; set: (patch: Partial<CemberConfig>) => void; part: keyof typeof PART_TEXT }) {
   const isSv = cfg.game === 'survival'
   const isKd = cfg.game === 'karadelik' || isSv
   const sv = cfg.survival
@@ -610,12 +731,14 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
   const clampW = (n: number) => Math.min(MAX_WINNERS, Math.max(1, Math.round(n) || 1))
 
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4" aria-label="Oyun ve kazananlar">
+    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4" aria-label={PART_TEXT[part].title}>
       <div>
-        <h3 className="font-display text-base font-bold">Oyun, kazananlar ve botlar</h3>
-        <p className="text-xs text-muted-foreground">Bu etkinlikte hangi oyun oynansın, kaç kişi ödül alsın, arena kaç kişiyle dolsun.</p>
+        <h3 className="font-display text-base font-bold">{PART_TEXT[part].title}</h3>
+        <p className="text-xs text-muted-foreground">{PART_TEXT[part].hint}</p>
       </div>
 
+      {part === 'game' && (
+      <>
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-semibold">Oyun</span>
         <div className="grid gap-2 sm:grid-cols-3">
@@ -764,7 +887,24 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
           </label>
         </div>
       )}
+      {isKd && (
+        <label className="flex flex-col gap-1 text-sm sm:max-w-sm">
+          <span className="font-semibold">Final&apos;e kadar süre</span>
+          <select className={input} value={cfg.duration} onChange={(e) => set({ duration: Number(e.target.value) })}>
+            {KD_DURATIONS.map((s) => (
+              <option key={s} value={s}>
+                {s < 60 ? `${s} saniye` : `${s / 60} dakika`}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">Süre bitince Final Savaşı başlar, kazanan sayısına inene kadar devam eder</span>
+        </label>
+      )}
+      </>
+      )}
 
+      {part === 'winners' && (
+      <>
       <label className="flex flex-col gap-1 rounded-lg border border-border bg-background p-3 text-sm">
         <span className="font-semibold">Tahmin oyunu (doğru tahmin başına KP)</span>
         <input
@@ -783,17 +923,6 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
       {isKd && (
         <>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-semibold">Final&apos;e kadar süre</span>
-              <select className={input} value={cfg.duration} onChange={(e) => set({ duration: Number(e.target.value) })}>
-                {KD_DURATIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s < 60 ? `${s} saniye` : `${s / 60} dakika`}
-                  </option>
-                ))}
-              </select>
-              <span className="text-xs text-muted-foreground">Süre bitince Final Savaşı başlar, kazanan sayısına inene kadar devam eder</span>
-            </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-semibold">Ödül paylaşımı</span>
               <select className={input} value={cfg.prizeSplit} onChange={(e) => set({ prizeSplit: e.target.value as CemberConfig['prizeSplit'] })}>
@@ -906,7 +1035,15 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
           </div>
         </>
       )}
+      {!isKd && (
+        <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+          {`${GAME_META[cfg.game].label} oyununda tur tek kazananla biter: ödülün tamamını son kalan oyuncu alır. Birden çok kazanan ve ödül paylaşımı diğer oyunlarda seçilir (Genel sekmesi, Oyun).`}
+        </p>
+      )}
+      </>
+      )}
 
+      {part === 'bots' && (
       <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
         <label className="flex items-center gap-2 text-sm font-semibold">
           <input type="checkbox" checked={bots.enabled} onChange={(e) => setBots({ enabled: e.target.checked })} className="size-4 accent-primary" />
@@ -946,6 +1083,7 @@ function ArenaSettings({ cfg, set }: { cfg: CemberConfig; set: (patch: Partial<C
         )}
         <p className="text-xs text-muted-foreground">Botlar ödül almaz. Hiç gerçek katılımcı yoksa tur açılmaz.</p>
       </div>
+      )}
     </section>
   )
 }

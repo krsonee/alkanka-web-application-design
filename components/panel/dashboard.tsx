@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useId, useRef, useState, useTransition } from 'react'
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -19,7 +20,9 @@ import {
 import { loadDashStats } from '@/app/panel/dash-actions'
 import type { AuditRow, MemberStatus } from '@/lib/members-admin'
 import type { PendingDetail } from '@/lib/panel-pending'
+import type { DashExtras } from '@/lib/panel-overview'
 import type { DashPreset, DashStats, HealthItem, SeriesPoint } from '@/lib/panel-stats'
+import type { StatusItem } from '@/lib/system-status'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -27,11 +30,15 @@ type Props = {
   pending: PendingDetail
   recent: AuditRow[] | null
   stats: DashStats | null
+  /** Bots, automations, verification and tracking codes; shown in one strip with the database checks. */
+  system?: StatusItem[] | null
 }
 type Params = { r?: string; from?: string; to?: string }
 type Preset = Exclude<DashPreset, 'custom'>
 
 const fmt = (n: number) => Math.round(n).toLocaleString('tr-TR')
+const compact = (n: number) => (n >= 10_000 ? new Intl.NumberFormat('tr-TR', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : fmt(n))
+const usd = (n: number) => `${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0)
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
 const shortDateTime = (iso: string) =>
@@ -84,19 +91,25 @@ function useTween(value: number) {
   return shown
 }
 
-function Num({ value, signed }: { value: number; signed?: boolean }) {
+function Num({ value, signed, short }: { value: number; signed?: boolean; short?: boolean }) {
   const v = useTween(value)
+  // A seven-digit number does not fit a narrow tile; the exact figure stays in the tooltip.
+  const size = Math.abs(value)
+  const brief = short && size >= 1_000_000
+  const sign = signed && Math.round(v) > 0 ? '+' : ''
+  if (!brief) return <>{`${sign}${fmt(v)}`}</>
+  if (size >= 10_000_000) return <span title={fmt(value)}>{`${sign}${compact(v)}`}</span>
   return (
-    <>
-      {signed && Math.round(v) > 0 ? '+' : ''}
-      {fmt(v)}
-    </>
+    <span title={fmt(value)}>
+      <span className="@xl:hidden">{`${sign}${compact(v)}`}</span>
+      <span className="hidden @xl:inline">{`${sign}${fmt(v)}`}</span>
+    </span>
   )
 }
 
 const rise = (ms: number) => ({ className: 'dash-rise', style: { '--d': `${ms}ms` } as React.CSSProperties })
 
-export function PanelDashboard({ counts, pending, recent, stats: initial }: Props) {
+export function PanelDashboard({ counts, pending, recent, stats: initial, system }: Props) {
   const [stats, setStats] = useState(initial)
   const [loading, startTransition] = useTransition()
   const [refreshing, setRefreshing] = useState(false)
@@ -189,7 +202,7 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
               {!empty && <span aria-hidden="true">·</span>}
               <span>
                 {`Son güncelleme ${clock(stats.generatedAt)}`}
-                {stats.live && ', her dakika yenilenir'}
+                {stats.live && ', 5 dakikada bir yenilenir'}
               </span>
             </p>
           )}
@@ -266,26 +279,27 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
           <EmptyRange stats={stats} onGo={() => load({ r: 'month' })} />
         ) : (
           <>
+            <SystemStrip items={systemItems(system, stats?.health ?? [])} />
             {stats && <KpiRow stats={stats} />}
 
             <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-12">
               {stats && (
-                <div {...rise(160)} className="dash-rise @5xl:col-span-8">
-                  <TrendCard stats={stats} onPick={pickDay} />
+                <div {...rise(160)} className="dash-rise flex min-w-0 flex-col gap-6 @5xl:col-span-8">
+                  <div className="flex-1">
+                    <TrendCard stats={stats} onPick={pickDay} />
+                  </div>
+                  <AgendaCard extras={stats.extras} />
                 </div>
               )}
-              <div {...rise(200)} className={cn('dash-rise flex flex-col gap-6', stats ? '@5xl:col-span-4' : '@5xl:col-span-12')}>
-                <JobsCard counts={counts} pending={pending} />
-                {stats && <HealthCard items={stats.health} />}
+              <div {...rise(200)} className={cn('dash-rise min-w-0', stats ? '@5xl:col-span-4' : '@5xl:col-span-12')}>
+                <JobsCard counts={counts} pending={pending} tickets={stats?.extras.tickets ?? 0} />
               </div>
             </div>
 
             {stats && (
               <>
-                <div {...rise(240)} className="dash-rise grid grid-cols-1 gap-6 @3xl:grid-cols-2 @6xl:grid-cols-3">
-                  <TopSponsorsCard stats={stats} />
-                  <OriginsCard stats={stats} />
-                  <GamesCard stats={stats} />
+                <div {...rise(240)}>
+                  <CardGrid tiles={[sponsorsTile(stats), originsTile(stats), gamesTile(stats)]} />
                 </div>
 
                 <div {...rise(280)}>
@@ -293,13 +307,17 @@ export function PanelDashboard({ counts, pending, recent, stats: initial }: Prop
                 </div>
 
                 <div {...rise(320)} className="dash-rise grid grid-cols-1 items-start gap-6 @5xl:grid-cols-12">
-                  <div className="@5xl:col-span-7">
+                  <div className="min-w-0 @5xl:col-span-7">
                     <EconomyCard stats={stats} />
                   </div>
-                  <div className="flex flex-col gap-6 @5xl:col-span-5">
+                  <div className="flex min-w-0 flex-col gap-6 @5xl:col-span-5">
                     <RetentionCard stats={stats} />
                     {counts && <MembersCard counts={counts} />}
                   </div>
+                </div>
+
+                <div {...rise(340)}>
+                  <CardGrid tiles={[telegramTile(stats.extras), shortLinksTile(stats.extras), studioTile(stats.extras)]} />
                 </div>
 
                 <div {...rise(360)}>
@@ -611,9 +629,9 @@ function KpiRow({ stats }: { stats: DashStats }) {
       {items.map((i, idx) => (
         <a key={i.label} href={i.href} {...rise(40 * (idx + 1))} className={cn('dash-rise', tile)}>
           <span className="truncate text-[13px] text-muted-foreground">{i.label}</span>
-          <span className="flex items-center justify-between gap-2">
+          <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <span className="font-display text-3xl font-semibold tabular-nums text-foreground">
-              <Num value={i.pair.cur} />
+              <Num value={i.pair.cur} short />
             </span>
             {stats.hasPrev && <Delta {...i.pair} compare={stats.compare} />}
           </span>
@@ -655,13 +673,15 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
   const total = series.reduce((s, x) => s + x[metric.key], 0)
   const prevTotal = series.reduce((s, x) => s + x[metric.prev], 0)
 
-  const values = series.filter((x) => !x.future).flatMap((x) => (showPrev ? [x[metric.key], x[metric.prev]] : [x[metric.key]]))
+  // Hours that have not come yet still draw their "previous period" bar, so the scale has to cover them too.
+  const values = series.flatMap((x) => [x.future ? 0 : x[metric.key], showPrev ? x[metric.prev] : 0])
   const { top, ticks } = niceScale(Math.max(0, ...values))
+  const blank = total === 0 && (!showPrev || prevTotal === 0)
   const every = unit === 'hour' ? 3 : n > 31 ? 7 : n > 14 ? 3 : 1
   const active = hover !== null ? series[hover] : null
   const clickable = unit !== 'hour'
   const title = unit === 'hour' ? 'Saat saat' : unit === 'week' ? 'Hafta hafta' : 'Gün gün'
-  const h = (v: number) => `${(v / top) * 100}%`
+  const h = (v: number) => `${Math.min(100, (v / top) * 100)}%`
 
   return (
     <Card
@@ -693,7 +713,7 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
         </span>
         <span className="text-sm text-muted-foreground">{`toplam ${METRIC_NAMES[metric.key]}`}</span>
         {showPrev && <Delta cur={total} prev={prevTotal} compare="önceki dönem" />}
-        <span className="ml-auto flex items-center gap-4 text-xs text-muted-foreground" aria-hidden="true">
+        <span className="flex w-full items-center gap-4 text-xs text-muted-foreground @2xl:ml-auto @2xl:w-auto" aria-hidden="true">
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded-sm bg-primary" />
             Seçili dönem
@@ -707,17 +727,17 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
         </span>
       </div>
 
-      <div className="flex min-h-72 flex-1 gap-3 px-5 pb-5 pt-5">
-        <div className="flex w-8 shrink-0 flex-col justify-between pb-6 text-right text-xs tabular-nums text-muted-foreground" aria-hidden="true">
+      <div className="flex min-h-56 flex-1 gap-3 px-5 pb-5 pt-5 @2xl:min-h-72">
+        <div className="flex min-w-6 shrink-0 flex-col justify-between pb-6 text-right text-xs tabular-nums text-muted-foreground" aria-hidden="true">
           {ticks.map((t) => (
             <span key={t} className="leading-none">
-              {fmt(t)}
+              {compact(t)}
             </span>
           ))}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="relative flex-1" onMouseLeave={() => setHover(null)}>
+          <div className="relative flex-1 overflow-hidden" onMouseLeave={() => setHover(null)}>
             <div className="absolute inset-0 flex flex-col justify-between" aria-hidden="true">
               {ticks.map((t, i) => (
                 <div key={t} className={cn('h-px w-full', i === ticks.length - 1 ? 'bg-border' : 'border-t border-dashed border-border/60')} />
@@ -755,6 +775,12 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
               ))}
             </div>
 
+            {blank && (
+              <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-muted-foreground">
+                {`Bu aralıkta ${METRIC_NAMES[metric.key]} yok.`}
+              </p>
+            )}
+
             {active && hover !== null && (
               <div
                 className={cn(
@@ -778,7 +804,11 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
           <div className="relative h-4 text-xs tabular-nums text-muted-foreground" aria-hidden="true">
             {series.map((x, i) =>
               i % every === 0 ? (
-                <span key={x.key} className={cn('absolute -translate-x-1/2 whitespace-nowrap', x.future && 'opacity-50')} style={{ left: `${((i + 0.5) / n) * 100}%` }}>
+                <span
+                  key={x.key}
+                  className={cn('absolute -translate-x-1/2 whitespace-nowrap', x.future && 'opacity-50', (i / every) % 2 === 1 && 'hidden @2xl:block')}
+                  style={{ left: `${((i + 0.5) / n) * 100}%` }}
+                >
                   {x.label}
                 </span>
               ) : null,
@@ -790,7 +820,7 @@ function TrendCard({ stats, onPick }: { stats: DashStats; onPick: (p: SeriesPoin
   )
 }
 
-function JobsCard({ counts, pending }: { counts: Props['counts']; pending: PendingDetail }) {
+function JobsCard({ counts, pending, tickets }: { counts: Props['counts']; pending: PendingDetail; tickets: number }) {
   const jobs = [
     { label: 'Çekim paylaşımları', hint: 'Üyeler › Çekim paylaşımları', count: pending.withdrawals, href: '?b=withdrawals' },
     { label: 'Onay bekleyen yorumlar', hint: 'Üyeler › Yorum, şikayet & kanıt', count: pending.reviews, href: '?b=community&s=reviews' },
@@ -800,13 +830,14 @@ function JobsCard({ counts, pending }: { counts: Props['counts']; pending: Pendi
     { label: 'Onay bekleyen sponsor hesapları', hint: 'Sponsorlar › Sponsor performansı', count: pending.sponsorAccounts ?? 0, href: '?b=growth' },
     { label: 'Onay bekleyen sosyal hesaplar', hint: 'Üyeler › Sosyal medya', count: pending.socialAccounts ?? 0, href: '?b=social' },
     { label: 'Sosyal etkinlik katılımları', hint: 'Üyeler › Sosyal medya', count: pending.socialEntries ?? 0, href: '?b=social' },
+    { label: 'Açık destek biletleri', hint: 'Telegram › Destek masası', count: tickets, href: '?b=telegram' },
   ]
   const open = jobs.filter((j) => j.count > 0).sort((a, b) => b.count - a.count)
   const total = open.reduce((s, j) => s + j.count, 0)
   const suspects = counts?.supheli ?? 0
 
   return (
-    <Card title="Yapılacaklar" sub={total > 0 ? `${total} iş onayını bekliyor` : undefined} className="h-auto">
+    <Card title="Bugün yapılacaklar" sub={total > 0 ? `${total} iş seni bekliyor` : undefined} className="h-auto">
       <div className="flex flex-col gap-1 px-3 pb-3">
         {open.length === 0 && suspects === 0 ? (
           <p className="flex items-center gap-2.5 rounded-lg px-2 py-3 text-sm text-muted-foreground">
@@ -844,27 +875,217 @@ function JobsCard({ counts, pending }: { counts: Props['counts']; pending: Pendi
   )
 }
 
-const STATE: Record<HealthItem['state'], { dot: string; text: string; label: string }> = {
-  ok: { dot: 'bg-live', text: 'text-live', label: 'Çalışıyor' },
-  off: { dot: 'bg-muted-foreground', text: 'text-muted-foreground', label: 'Ayarlı değil' },
-  warn: { dot: 'bg-destructive', text: 'text-destructive', label: 'Hata' },
+type SysItem = { id: string; group: string; label: string; level: 'ok' | 'warn' | 'off'; detail: string; href?: string }
+
+const SYS_DOT: Record<SysItem['level'], string> = { ok: 'bg-live', warn: 'bg-destructive', off: 'bg-muted-foreground/40' }
+const SYS_WORD: Record<SysItem['level'], string> = { ok: 'Çalışıyor', warn: 'Sorun var', off: 'Kapalı ya da kurulmamış' }
+const HEALTH_LINKS: Record<string, string> = {
+  'Telegram botları': '?b=telegram',
+  'Kanal aynalama': '?b=telegram',
+  'Oran botu': '?b=telegram',
+  'Telegram paylaşımları': '?b=telegram',
+  Bildirimler: '?b=push',
 }
 
-function HealthCard({ items }: { items: HealthItem[] }) {
-  const errors = items.filter((i) => i.state === 'warn').length
+/** The database checks and the setup checks used to be two separate blocks saying "Sistem durumu". */
+function systemItems(system: StatusItem[] | null | undefined, health: HealthItem[]): SysItem[] {
+  const setup: SysItem[] = (system ?? []).map((i) => ({ id: i.id, group: i.group, label: i.label, level: i.level, detail: i.detail, href: i.href }))
+  const hasBots = setup.some((i) => i.id === 'bots')
+  const checks: SysItem[] = health
+    .filter((x) => !(hasBots && x.label === 'Telegram botları'))
+    .map((x) => ({ id: `check-${x.label}`, group: 'Altyapı', label: x.label, level: x.state, detail: x.note, href: HEALTH_LINKS[x.label] }))
+  return [...checks, ...setup]
+}
+
+function SysRow({ item }: { item: SysItem }) {
+  const body = (
+    <>
+      <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', SYS_DOT[item.level])} aria-hidden="true" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-sm text-foreground">
+          {item.label}
+          <span className="sr-only">{`: ${SYS_WORD[item.level]}`}</span>
+        </span>
+        <span className={cn('truncate text-xs', item.level === 'warn' ? 'text-destructive' : 'text-muted-foreground')} title={item.detail}>
+          {item.detail}
+        </span>
+      </span>
+    </>
+  )
+  return item.href ? (
+    <a href={item.href} className="flex items-start gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-secondary">
+      {body}
+    </a>
+  ) : (
+    <div className="flex items-start gap-2.5 px-2 py-1.5">{body}</div>
+  )
+}
+
+function SystemStrip({ items }: { items: SysItem[] }) {
+  const [open, setOpen] = useState(false)
+  const panelId = useId()
+  if (items.length === 0) return null
+  const problems = items.filter((i) => i.level === 'warn')
+  const working = items.filter((i) => i.level === 'ok').length
+  const off = items.length - working - problems.length
+  const groups = Array.from(new Set(items.map((i) => i.group)))
+
   return (
-    <Card title="Sistem durumu" sub={errors ? `${errors} sistemde hata var, kontrol et.` : 'Hata yok. Gri olanlar henüz kurulmamış.'} className="flex-1">
-      <ul className="flex flex-col px-5 pb-4">
-        {items.map((i) => (
-          <li key={i.label} className="flex items-center gap-3 border-t border-border py-2.5 first:border-t-0">
-            <span className={cn('size-2 shrink-0 rounded-full', STATE[i.state].dot)} aria-hidden="true" />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-sm text-foreground">{i.label}</span>
-              <span className="truncate text-xs text-muted-foreground" title={i.note}>
-                {i.note}
+    <section aria-label="Sistem durumu" className={cn('rounded-2xl bg-card ring-1', problems.length ? 'ring-destructive/40' : 'ring-border')}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-secondary/40"
+      >
+        <span className={cn('size-2.5 shrink-0 rounded-full', problems.length ? 'bg-destructive' : 'bg-live')} aria-hidden="true" />
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+          <span className="text-sm font-semibold text-foreground">Sistem durumu</span>
+          <span className={cn('text-sm', problems.length ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+            {problems.length ? `${problems.length} kalemde sorun var` : 'Sorun yok'}
+          </span>
+          <span className="text-xs text-muted-foreground">{`${working} çalışıyor${off ? ` · ${off} kapalı ya da kurulmamış` : ''}`}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+          {open ? 'Gizle' : 'Ayrıntı'}
+          <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} aria-hidden="true" />
+        </span>
+      </button>
+
+      {!open && problems.length > 0 && (
+        <ul className="grid grid-cols-1 gap-x-4 border-t border-border px-2 py-1.5 @3xl:grid-cols-2">
+          {problems.map((i) => (
+            <li key={i.id}>
+              <SysRow item={i} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {open && (
+        <div id={panelId} className="grid grid-cols-1 gap-x-4 gap-y-4 border-t border-border px-2 py-3 @2xl:grid-cols-2 @5xl:grid-cols-3 @7xl:grid-cols-6">
+          {groups.map((g) => (
+            <div key={g} className="flex min-w-0 flex-col gap-1">
+              <h3 className="px-2 text-xs font-medium text-muted-foreground">{g}</h3>
+              <ul className="flex flex-col">
+                {items
+                  .filter((i) => i.group === g)
+                  .map((i) => (
+                    <li key={i.id}>
+                      <SysRow item={i} />
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+type QuietLine = { title: string; text: string; link?: { href: string; label: string } }
+type Tile = { key: string; empty: boolean; card: React.ReactNode; quiet: QuietLine }
+
+/** One line for a card that has nothing to show, instead of a tall box around a single sentence. */
+function Slim({ title, text, link }: QuietLine) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3">
+      <span className="text-sm font-medium text-foreground">{title}</span>
+      <span className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">{text}</span>
+      {link && (
+        <a href={link.href} className="group flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+          {link.label}
+          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+        </a>
+      )}
+    </div>
+  )
+}
+
+function QuietList({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-col divide-y divide-border rounded-2xl bg-card ring-1 ring-border">{children}</div>
+}
+
+function CardGrid({ tiles }: { tiles: Tile[] }) {
+  const full = tiles.filter((t) => !t.empty)
+  const quiet = tiles.filter((t) => t.empty)
+  return (
+    <div className="flex flex-col gap-6">
+      {full.length > 0 && (
+        <div className={cn('grid grid-cols-1 gap-6', full.length >= 2 && '@3xl:grid-cols-2', full.length >= 3 && '@6xl:grid-cols-3')}>
+          {full.map((t) => (
+            <div key={t.key} className="min-w-0">
+              {t.card}
+            </div>
+          ))}
+        </div>
+      )}
+      {quiet.length > 0 && (
+        <QuietList>
+          {quiet.map((t) => (
+            <Slim key={t.key} {...t.quiet} />
+          ))}
+        </QuietList>
+      )}
+    </div>
+  )
+}
+
+function AgendaCard({ extras }: { extras: DashExtras }) {
+  const a = extras.agenda
+  const tiles = [
+    {
+      label: 'Turnuva',
+      href: '?b=tournaments',
+      value: a.tournaments.live + a.tournaments.open,
+      note: `${fmt(a.tournaments.live)} oynanıyor · ${fmt(a.tournaments.open)} kayıtta`,
+      today: a.tournaments.endingToday ? `${fmt(a.tournaments.endingToday)} bugün bitiyor` : '',
+      alert: '',
+    },
+    {
+      label: 'Etkinlik',
+      href: '?b=catalog',
+      value: a.events.live,
+      note: 'yayında',
+      today: a.events.endingToday ? `${fmt(a.events.endingToday)} bugün bitiyor` : '',
+      alert: '',
+    },
+    {
+      label: 'Tahmin',
+      href: '?b=catalog&s=league',
+      value: a.predictions.open,
+      note: 'tahmine açık',
+      today: a.predictions.closingToday ? `${fmt(a.predictions.closingToday)} bugün kapanıyor` : '',
+      alert: a.predictions.waiting ? `${fmt(a.predictions.waiting)} maç sonuç bekliyor` : '',
+    },
+  ]
+  if (tiles.every((t) => t.value === 0 && !t.alert)) {
+    return (
+      <QuietList>
+        <Slim title="Şu an yayında" text="Açık turnuva, etkinlik ya da tahmin yok." link={{ href: '?b=catalog', label: 'İçerik takvimi' }} />
+      </QuietList>
+    )
+  }
+  return (
+    <Card title="Şu an yayında" sub="Açık turnuva, etkinlik ve tahminler" link={{ href: '?b=catalog', label: 'İçerik takvimi' }} className="h-auto">
+      <ul className="grid grid-cols-1 gap-2 px-5 pb-5 @2xl:grid-cols-3">
+        {tiles.map((t) => (
+          <li key={t.label}>
+            <a href={t.href} className="flex h-full flex-col gap-1 rounded-xl bg-secondary/60 px-3 py-2.5 transition-colors hover:bg-secondary">
+              <span className="flex items-baseline gap-2">
+                <span className="font-display text-2xl font-semibold tabular-nums text-foreground">{fmt(t.value)}</span>
+                <span className="text-sm font-medium text-foreground">{t.label}</span>
               </span>
-            </span>
-            <span className={cn('shrink-0 text-xs font-medium', STATE[i.state].text)}>{STATE[i.state].label}</span>
+              <span className="text-xs text-muted-foreground">{t.note}</span>
+              {(t.today || t.alert) && (
+                <span className="flex flex-wrap gap-1 pt-1">
+                  {t.today && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">{t.today}</span>}
+                  {t.alert && <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">{t.alert}</span>}
+                </span>
+              )}
+            </a>
           </li>
         ))}
       </ul>
@@ -911,74 +1132,232 @@ function MiniStat({ label, value, tone, hint, note }: { label: string; value: Re
   )
 }
 
-function TopSponsorsCard({ stats }: { stats: DashStats }) {
+function sponsorsTile(stats: DashStats): Tile {
   const total = stats.topSponsors.reduce((s, x) => s + x.clicks, 0)
   const sorted = [...stats.topSponsors].sort((a, b) => Number(a.name === DELETED_SPONSORS) - Number(b.name === DELETED_SPONSORS) || b.clicks - a.clicks)
   const live = stats.topSponsors.filter((s) => s.name !== DELETED_SPONSORS).length
-  return (
-    <Card title="En çok tıklanan sponsorlar" link={{ href: '?b=growth', label: 'Trafik raporu' }}>
-      <div className="grid grid-cols-2 gap-2 px-5 pb-4">
-        <MiniStat label="Toplam yönlendirme" value={<Num value={stats.sponsorClicks.cur} />} />
-        <MiniStat label="Tıklanan sponsor" value={fmt(live)} />
-      </div>
-      <RankList
-        items={sorted.map((s) => ({ name: s.name, value: s.clicks, sub: total ? `%${pct(s.clicks, total)}` : undefined, muted: s.name === DELETED_SPONSORS }))}
-        empty="Bu aralıkta sponsor tıklaması yok."
-        unit="tık"
-      />
-    </Card>
-  )
+  const { accounts, approved, bestSource } = stats.extras.sponsor
+  const clicks = stats.sponsorClicks.cur
+  return {
+    key: 'sponsors',
+    empty: stats.topSponsors.length === 0 && accounts === 0,
+    quiet: { title: 'Sponsorlar', text: 'Bu aralıkta sponsor tıklaması ve bağlanan sponsor hesabı yok.', link: { href: '?b=growth', label: 'Trafik raporu' } },
+    card: (
+      <Card title="Sponsor özeti" sub="Tıklamadan bağlanan hesaba" link={{ href: '?b=growth', label: 'Trafik raporu' }}>
+        <div className="grid grid-cols-2 gap-2 px-5 pb-4">
+          <MiniStat label="Toplam yönlendirme" value={<Num value={clicks} />} note={`${fmt(live)} sponsora`} />
+          <MiniStat
+            label="Bağlanan hesap"
+            value={<Num value={accounts} />}
+            note={clicks ? `Tıklamaların %${pct(accounts, clicks)}'i · ${fmt(approved)} onaylı` : `${fmt(approved)} onaylı`}
+            hint="Bu aralıkta sponsor sitedeki kullanıcı adını Alkanka hesabına bağlayan üyeler."
+          />
+          <div className="col-span-2">
+            <MiniStat
+              label="En iyi kaynak"
+              value={bestSource ? bestSource.label : '–'}
+              note={bestSource ? `${fmt(bestSource.clicks)} tık, tıklamaların %${pct(bestSource.clicks, clicks)}'i` : 'Bu aralıkta tıklama yok'}
+              hint="Sponsor tıklamalarının en çok geldiği yer."
+            />
+          </div>
+        </div>
+        <h4 className="px-5 pb-2 text-xs font-medium text-muted-foreground">En çok tıklanan sponsorlar</h4>
+        <RankList
+          items={sorted.map((s) => ({ name: s.name, value: s.clicks, sub: total ? `%${pct(s.clicks, total)}` : undefined, muted: s.name === DELETED_SPONSORS }))}
+          empty="Bu aralıkta sponsor tıklaması yok."
+          unit="tık"
+        />
+      </Card>
+    ),
+  }
 }
 
-function OriginsCard({ stats }: { stats: DashStats }) {
+function originsTile(stats: DashStats): Tile {
   const total = stats.origins.reduce((s, x) => s + x.count, 0)
   const top = stats.origins[0]
-  return (
-    <Card title="Üyeler nereden geliyor" link={{ href: '?b=growth', label: 'Davet sistemi' }}>
-      <div className="grid grid-cols-2 gap-2 px-5 pb-4">
-        <MiniStat label="Yeni üye" value={<Num value={total} />} />
-        <MiniStat label="En çok getiren" value={top ? `%${pct(top.count, total)}` : '–'} note={top?.label} />
-      </div>
-      <RankList items={stats.origins.map((o) => ({ name: o.label, value: o.count, sub: `%${pct(o.count, total)}` }))} empty="Bu aralıkta yeni üye yok." unit="üye" />
-    </Card>
-  )
+  return {
+    key: 'origins',
+    empty: total === 0,
+    quiet: { title: 'Üyeler nereden geliyor', text: 'Bu aralıkta yeni üye yok.', link: { href: '?b=growth', label: 'Davet sistemi' } },
+    card: (
+      <Card title="Üyeler nereden geliyor" link={{ href: '?b=growth', label: 'Davet sistemi' }}>
+        <div className="grid grid-cols-2 gap-2 px-5 pb-4">
+          <MiniStat label="Yeni üye" value={<Num value={total} />} />
+          <MiniStat label="En çok getiren" value={top ? `%${pct(top.count, total)}` : '–'} note={top?.label} />
+        </div>
+        <RankList items={stats.origins.map((o) => ({ name: o.label, value: o.count, sub: `%${pct(o.count, total)}` }))} empty="Bu aralıkta yeni üye yok." unit="üye" />
+      </Card>
+    ),
+  }
 }
 
-function GamesCard({ stats }: { stats: DashStats }) {
-  return (
-    <Card title="Oyun hareketi" link={{ href: '?b=games', label: 'Oyun ayarları' }}>
-      <div className="grid grid-cols-3 gap-2 px-5 pb-4">
-        {stats.gameModes.map((m) => (
-          <MiniStat key={m.mode} label={m.mode} value={<Num value={m.count} />} note={`${fmt(m.stake)} KC bahis`} />
-        ))}
-      </div>
-      <h4 className="px-5 pb-2 text-xs font-medium text-muted-foreground">En popüler oyunlar</h4>
-      <RankList items={stats.topGames.map((g) => ({ name: g.game, value: g.count }))} empty="Bu aralıkta maç oynanmadı." unit="maç" />
-    </Card>
-  )
+function gamesTile(stats: DashStats): Tile {
+  return {
+    key: 'games',
+    empty: stats.games.cur === 0 && stats.topGames.length === 0,
+    quiet: { title: 'Oyun hareketi', text: 'Bu aralıkta maç oynanmadı.', link: { href: '?b=games', label: 'Oyun ayarları' } },
+    card: (
+      <Card title="Oyun hareketi" link={{ href: '?b=games', label: 'Oyun ayarları' }}>
+        <div className="grid grid-cols-3 gap-2 px-5 pb-4">
+          {stats.gameModes.map((m) => (
+            <MiniStat key={m.mode} label={m.mode} value={<Num value={m.count} />} note={`${fmt(m.stake)} KC bahis`} />
+          ))}
+        </div>
+        <h4 className="px-5 pb-2 text-xs font-medium text-muted-foreground">En popüler oyunlar</h4>
+        <RankList items={stats.topGames.map((g) => ({ name: g.game, value: g.count }))} empty="Bu aralıkta maç oynanmadı." unit="maç" />
+      </Card>
+    ),
+  }
 }
+
+function telegramTile(extras: DashExtras): Tile {
+  const { lanes, scheduled, lastError } = extras.telegram
+  const sent = lanes.reduce((s, l) => s + l.sent, 0)
+  const failed = lanes.reduce((s, l) => s + l.failed, 0)
+  return {
+    key: 'telegram',
+    empty: lanes.length === 0 && scheduled === 0,
+    quiet: { title: 'Telegram bugün', text: 'Bugün gönderim yok, sırada bekleyen zamanlı post yok.', link: { href: '?b=telegram', label: 'Telegram' } },
+    card: (
+      <Card title="Telegram bugün" sub={`${fmt(sent)} gönderim${failed ? `, ${fmt(failed)} hata` : ', hata yok'}`} link={{ href: '?b=telegram', label: 'Telegram' }}>
+        <ul className="flex flex-col px-5 pb-3">
+          {lanes.map((l) => (
+            <li key={l.label} className="flex items-center gap-3 border-t border-border py-2.5 text-sm first:border-t-0">
+              <span className="min-w-0 flex-1 truncate text-foreground">{l.label}</span>
+              {l.failed > 0 && <span className="shrink-0 rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium tabular-nums text-destructive">{`${fmt(l.failed)} hata`}</span>}
+              <span className="shrink-0 font-semibold tabular-nums text-foreground">{fmt(l.sent)}</span>
+            </li>
+          ))}
+          {scheduled > 0 && (
+            <li className="flex items-center gap-3 border-t border-border py-2.5 text-sm first:border-t-0">
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">Bugün sırada bekleyen zamanlı post</span>
+              <span className="shrink-0 font-semibold tabular-nums text-foreground">{fmt(scheduled)}</span>
+            </li>
+          )}
+        </ul>
+        {lastError && (
+          <p className="mx-5 mb-5 rounded-xl bg-destructive/[0.06] px-3 py-2 text-xs leading-relaxed text-destructive ring-1 ring-destructive/20" title={lastError}>
+            <span className="font-medium">Son hata: </span>
+            {lastError}
+          </p>
+        )}
+      </Card>
+    ),
+  }
+}
+
+function shortLinksTile(extras: DashExtras): Tile {
+  const l = extras.shortLinks
+  return {
+    key: 'links',
+    empty: l.clicks === 0,
+    quiet: { title: 'Kısa linkler', text: 'Bu aralıkta kısa link tıklaması yok.', link: { href: '?b=growth', label: 'Linkler' } },
+    card: (
+      <Card title="Kısa linkler" sub="Seçili aralık" link={{ href: '?b=growth', label: 'Linkler' }}>
+        <div className="grid grid-cols-3 gap-2 px-5 pb-4">
+          <MiniStat label="Tıklama" value={<Num value={l.clicks} />} />
+          <MiniStat label="Tekil ziyaretçi" value={<Num value={l.unique} />} hint="Aynı cihazdan gelen tıklamalar bir kez sayılır." />
+          <MiniStat label="Tıklanan link" value={<Num value={l.links} />} />
+        </div>
+        {l.top && (
+          <p className="flex items-baseline gap-2 px-5 pb-5 text-sm">
+            <span className="shrink-0 text-xs text-muted-foreground">En çok tıklanan</span>
+            <span className="min-w-0 flex-1 truncate text-foreground" title={l.top.label}>
+              {l.top.label}
+            </span>
+            <span className="shrink-0 font-semibold tabular-nums text-foreground">
+              {fmt(l.top.clicks)}
+              <span className="ml-1 text-xs font-normal text-muted-foreground">tık</span>
+            </span>
+          </p>
+        )}
+      </Card>
+    ),
+  }
+}
+
+function studioTile(extras: DashExtras): Tile {
+  const st = extras.studio
+  const month = st?.month ?? 0
+  const cap = st?.cap ?? null
+  const used = cap ? Math.min(100, Math.round((month / cap) * 100)) : 0
+  return {
+    key: 'studio',
+    empty: month === 0,
+    quiet: { title: 'Stüdyo harcaması', text: cap ? `Bu ay üretim yok. Aylık tavan ${usd(cap)}.` : 'Bu ay üretim yok, aylık tavan ayarlı değil.', link: { href: '?b=studio', label: 'Stüdyo' } },
+    card: (
+      <Card title="Stüdyo harcaması" sub="Bu ay" link={{ href: '?b=studio', label: 'Stüdyo' }}>
+        <div className="flex flex-col gap-3 px-5 pb-5">
+          <span className="flex items-baseline gap-2">
+            <span className="font-display text-3xl font-semibold tabular-nums text-foreground">{usd(month)}</span>
+            <span className="text-sm text-muted-foreground">{cap ? `/ ${usd(cap)} tavan` : 'tavan ayarlı değil'}</span>
+          </span>
+          {cap ? (
+            <>
+              <div className="h-2 overflow-hidden rounded-full bg-secondary" role="img" aria-label={`Aylık tavanın yüzde ${used} kadarı kullanıldı`}>
+                <div className={cn('h-full rounded-full transition-[width] duration-500', used >= 90 ? 'bg-destructive' : 'bg-primary')} style={{ width: `${used}%` }} />
+              </div>
+              <span className={cn('text-xs', used >= 90 ? 'text-destructive' : 'text-muted-foreground')}>
+                {used >= 100 ? 'Tavan doldu, yeni üretim başlamaz.' : `Tavanın %${used}'i kullanıldı, kalan ${usd(Math.max(0, cap - month))}.`}
+              </span>
+            </>
+          ) : (
+            <span className="text-xs leading-relaxed text-muted-foreground text-pretty">Tavan koymak için Stüdyo ekranındaki aylık harcama tavanını gir.</span>
+          )}
+        </div>
+      </Card>
+    ),
+  }
+}
+
 
 function EconomyCard({ stats }: { stats: DashStats }) {
   const [tab, setTab] = useState<'odul' | 'oyun'>('odul')
   const list = tab === 'odul' ? stats.rewardEarners : stats.gameWinners
   // Net supply change: rewards paid out plus what players won from the house, minus what they spent in the market.
   const net = stats.kcOut.cur - stats.houseNet - stats.kcSpent
+  const kcIn = stats.kcOut.cur + Math.max(0, -stats.houseNet)
+  const kcGone = stats.kcSpent + Math.max(0, stats.houseNet)
   return (
     <Card title="KC ekonomisi" link={{ href: '?b=rewards', label: 'Ödül ayarları' }}>
-      <div className="grid grid-cols-3 gap-2 px-5 pb-2">
-        <MiniStat label="Dağıtılan" value={<Num value={stats.kcOut.cur} />} />
-        <MiniStat label="Harcanan" value={<Num value={stats.kcSpent} />} />
-        <MiniStat label="Kasa kazancı" value={<Num value={stats.houseNet} />} tone={stats.houseNet < 0 ? 'bad' : undefined} />
-      </div>
-      <div className="grid grid-cols-3 gap-2 px-5 pb-4">
+      <div className="grid grid-cols-2 gap-2 px-5 pb-4 @xl:grid-cols-3">
+        <MiniStat label="Dağıtılan" value={<Num value={stats.kcOut.cur} short />} />
+        <MiniStat label="Harcanan" value={<Num value={stats.kcSpent} short />} />
+        <MiniStat label="Kasa kazancı" value={<Num value={stats.houseNet} short />} tone={stats.houseNet < 0 ? 'bad' : undefined} />
         <MiniStat
           label="Piyasaya net giren"
-          value={<Num value={net} signed />}
+          value={<Num value={net} signed short />}
           note={net > 0 ? 'Ekonomi büyüyor' : net < 0 ? 'Ekonomi daralıyor' : 'Dengede'}
           hint="Dağıtılan + oyuncuların kasadan kazandığı − harcanan. Uzun süre hep artıda kalırsa KC'nin değeri düşer."
         />
-        <MiniStat label="Dolaşımdaki KC" value={<Num value={stats.circulation.total} />} note="Tüm cüzdanlar, şu an" />
+        <MiniStat label="Dolaşımdaki KC" value={<Num value={stats.circulation.total} short />} note="Tüm cüzdanlar, şu an" />
         <MiniStat label="Üye başına" value={<Num value={stats.circulation.holders ? stats.circulation.total / stats.circulation.holders : 0} />} note="Bakiyesi olanlar" />
+      </div>
+
+      <div className="flex flex-col gap-2 px-5 pb-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            Giren <span className="font-semibold tabular-nums text-foreground">{fmt(kcIn)}</span> KC
+          </span>
+          <span>
+            Çıkan <span className="font-semibold tabular-nums text-foreground">{fmt(kcGone)}</span> KC
+          </span>
+        </div>
+        <div
+          role="img"
+          aria-label={`Giriş-çıkış dengesi: giren ${fmt(kcIn)} KC, çıkan ${fmt(kcGone)} KC`}
+          className="flex h-2 overflow-hidden rounded-full bg-secondary"
+        >
+          {kcIn + kcGone > 0 && (
+            <>
+              <span className="bg-primary transition-[width] duration-500" style={{ width: `${(kcIn / (kcIn + kcGone)) * 100}%` }} />
+              <span className="flex-1 bg-foreground/25" />
+            </>
+          )}
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
+          Giren: dağıtılan ödül ve oyuncuların kasadan kazandığı. Çıkan: markette harcanan ve kasaya kalan.
+        </p>
       </div>
 
       {stats.anomalies.length > 0 && (
@@ -1057,21 +1436,24 @@ function HeatmapCard({ stats }: { stats: DashStats }) {
             <span className="text-sm font-semibold text-foreground">{x.value}</span>
           </div>
         ))}
-        <p className="ml-auto max-w-72 text-right text-xs leading-relaxed text-muted-foreground text-pretty">
+        <p className="w-full text-xs leading-relaxed text-muted-foreground text-pretty @3xl:ml-auto @3xl:w-auto @3xl:max-w-72 @3xl:text-right">
           Telegram paylaşımlarını ve etkinlikleri koyu renkli saatlere planla.
         </p>
       </div>
       <div className="overflow-x-auto px-5 pb-5">
-        <div className="flex min-w-[720px] flex-col gap-1">
+        <div className="flex min-w-[560px] flex-col gap-1">
           {grid.map((row, d) => (
             <div key={WEEKDAYS[d]} className="flex items-center gap-3">
-              <span className="w-20 shrink-0 text-xs text-muted-foreground">{WEEKDAYS[d]}</span>
+              <span className="w-8 shrink-0 text-xs text-muted-foreground @3xl:w-20">
+                <span className="@3xl:hidden">{WEEKDAY_SHORT[d]}</span>
+                <span className="hidden @3xl:inline">{WEEKDAYS[d]}</span>
+              </span>
               <div className="grid flex-1 grid-cols-24 gap-1">
                 {row.map((v, h) => (
                   <span
                     key={h}
                     title={`${WEEKDAYS[d]} ${hh(h)} · ${fmt(v)} hareket`}
-                    className={cn('h-8 rounded-md transition-opacity', v ? 'bg-primary' : 'bg-secondary/70')}
+                    className={cn('h-6 rounded-md transition-opacity @3xl:h-8', v ? 'bg-primary' : 'bg-secondary/70')}
                     style={v ? { opacity: 0.12 + 0.88 * (v / max) } : undefined}
                   />
                 ))}
@@ -1079,7 +1461,7 @@ function HeatmapCard({ stats }: { stats: DashStats }) {
             </div>
           ))}
           <div className="flex items-center gap-3 pt-1" aria-hidden="true">
-            <span className="w-20 shrink-0" />
+            <span className="w-8 shrink-0 @3xl:w-20" />
             <div className="grid flex-1 grid-cols-24 gap-1 text-center text-xs tabular-nums text-muted-foreground">
               {Array.from({ length: 24 }, (_, h) => (
                 <span key={h}>{String(h).padStart(2, '0')}</span>
@@ -1105,6 +1487,13 @@ function RetentionCard({ stats }: { stats: DashStats }) {
     { label: 'Ertesi gün döndü', hint: 'Kayıttan en az 1 gün sonra tekrar işlem yapan', got: r.d1, of: r.d1Eligible },
     { label: '7 gün sonra aktif', hint: 'Kayıttan en az 7 gün sonra tekrar işlem yapan', got: r.d7, of: r.d7Eligible },
   ]
+  if (r.cohort === 0) {
+    return (
+      <QuietList>
+        <Slim title="Geri dönen üyeler" text="Bu aralıkta yeni kayıt yok, dönüş oranı hesaplanamıyor." />
+      </QuietList>
+    )
+  }
   return (
     <Card title="Geri dönen üyeler" sub={`Bu aralıkta kayıt olan ${fmt(r.cohort)} üye`} className="h-auto">
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-5 pb-5 pt-1">
@@ -1137,6 +1526,13 @@ function RetentionCard({ stats }: { stats: DashStats }) {
 }
 
 function SignupsCard({ stats }: { stats: DashStats }) {
+  if (stats.signups.length === 0) {
+    return (
+      <QuietList>
+        <Slim title="Yeni kayıtlar" text="Bu aralıkta kayıt yok." link={{ href: '?b=users', label: 'Tüm üyeler' }} />
+      </QuietList>
+    )
+  }
   return (
     <Card title="Yeni kayıtlar" sub="Son kayıt olanlar ve şimdiye kadar kazandıkları KC" link={{ href: '?b=users', label: 'Tüm üyeler' }}>
       {stats.signups.length === 0 ? (
@@ -1252,6 +1648,9 @@ function downloadCsv(s: DashStats) {
     ['Oynanan maç', s.games.cur, s.games.prev],
     ['Harcanan KC', s.kcSpent],
     ['Kasa kazancı', s.houseNet],
+    ['Bağlanan sponsor hesabı', s.extras.sponsor.accounts],
+    ['Kısa link tıklaması', s.extras.shortLinks.clicks],
+    ['Kısa linkte tekil ziyaretçi', s.extras.shortLinks.unique],
     [],
     [s.seriesUnit === 'hour' ? 'Saat' : s.seriesUnit === 'week' ? 'Hafta' : 'Gün', 'Yeni kayıt', 'İşlem yapan', 'Sponsor tıklaması', 'Dağıtılan KC', 'Oynanan maç'],
     ...s.series.filter((x) => !x.future).map((x) => [s.seriesUnit === 'hour' ? `${s.from} ${x.label}` : x.date, x.users, x.active, x.clicks, x.kc, x.games]),

@@ -93,9 +93,23 @@ function Section({ title, desc, children }: { title: string; desc?: string; chil
   )
 }
 
-export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
+const HOME_SECTIONS = [
+  { id: 'general', label: 'Genel' },
+  { id: 'guest', label: 'Misafir kapağı' },
+  { id: 'guest-blocks', label: 'Misafir bölümleri' },
+  { id: 'member', label: 'Üye kapağı' },
+  { id: 'daily', label: 'Günlük kutular' },
+  { id: 'side', label: 'Yan bloklar' },
+] as const
+
+type HomeSection = (typeof HOME_SECTIONS)[number]['id']
+
+/** One half of the home settings: the page layout or the table wizard. Each tab saves only its own half. */
+export function HomeV2Editor({ initial, part }: { initial: HomeV2Settings; part: 'home' | 'setup' }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveHomeV2, {})
   const [v, setV] = useState<HomeV2Settings>(initial)
+  const [section, setSection] = useState<HomeSection>('general')
+  const on = (id: HomeSection) => part === 'home' && section === id
   const home = v.home
   const setup = v.setup
   const setHome = (patch: Partial<HomeV2Settings['home']>) => setV((p) => ({ ...p, home: { ...p.home, ...patch } }))
@@ -108,7 +122,25 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
   return (
     <form action={action} className="flex flex-col gap-5">
       <input type="hidden" name="payload" value={JSON.stringify(v)} />
+      <input type="hidden" name="part" value={part} />
+      {part === 'home' && (
+        <div role="tablist" aria-label="Ana sayfa düzeni bölümleri" className="flex flex-wrap gap-1.5">
+          {HOME_SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={section === s.id}
+              onClick={() => setSection(s.id)}
+              className={`h-9 rounded-full border px-3.5 text-sm font-semibold transition-colors ${section === s.id ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'}`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
 
+      {on('general') && (
       <Section title="Yeni ana sayfa tasarımı" desc="Onaylanan mockup tasarımı. Açıkken ana sayfanın tamamı yeni tasarımla gösterilir; kapatırsan eski ana sayfa olduğu gibi geri gelir.">
         <Toggle
           label="Yeni tasarımı tam sayfa göster"
@@ -161,16 +193,10 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
           </Field>
         </div>
       </Section>
+      )}
 
-      <Section title="Misafir sayfası bölümleri" desc="Giriş yapmamış ziyaretçinin gördüğü kapak altı bölümler.">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Başlıkta altın renkli kelime" hint="Başlıkta geçen kelimeyi yaz, o kelime altın renkte görünür.">
-            <input className={input} value={home.guestHighlight} maxLength={40} onChange={(e) => setHome({ guestHighlight: e.target.value })} />
-          </Field>
-          <Field label="Kapak açıklaması">
-            <textarea className={`${input} h-20 py-2`} value={home.guestText} maxLength={300} onChange={(e) => setHome({ guestText: e.target.value })} />
-          </Field>
-        </div>
+      {on('guest-blocks') && (
+      <Section title="Misafir sayfası bölümleri" desc="Giriş yapmamış ziyaretçinin kapağın altında gördüğü bölümler: yeni üye kartı, ücretsiz kutular, market vitrini ve alt kartlar.">
         <Toggle label="'Siteye yeni misin?' kartı" checked={home.showNewbie} onChange={(showNewbie) => setHome({ showNewbie })} />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Kart başlığı">
@@ -234,7 +260,9 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
           ))}
         </div>
       </Section>
+      )}
 
+      {on('guest') && (
       <Section title="Misafir ana sayfası (giriş yapmadan)" desc="Giriş yapmamış ziyaretçiler ana sayfanın en üstünde bu bölümü görür. Kapak görseli, günlük kutular ve yan bloklar üye bölümüyle ortaktır.">
         <Toggle label="Misafir ana sayfasını göster" checked={home.guestEnabled} onChange={(guestEnabled) => setHome({ guestEnabled })} hint="Kapatırsan misafirler sadece eski karşılama bölümünü görür." />
         <div className="grid gap-4 md:grid-cols-2">
@@ -260,8 +288,18 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
             <input className={input} value={home.guestCardTitle} maxLength={40} onChange={(e) => setHome({ guestCardTitle: e.target.value })} />
           </Field>
         </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Başlıkta altın renkli kelime" hint="Başlıkta geçen kelimeyi yaz, o kelime altın renkte görünür.">
+            <input className={input} value={home.guestHighlight} maxLength={40} onChange={(e) => setHome({ guestHighlight: e.target.value })} />
+          </Field>
+          <Field label="Kapak açıklaması">
+            <textarea className={`${input} h-20 py-2`} value={home.guestText} maxLength={300} onChange={(e) => setHome({ guestText: e.target.value })} />
+          </Field>
+        </div>
       </Section>
+      )}
 
+      {on('member') && (
       <Section title="Üye ana sayfası (giriş yapınca)" desc="Giriş yapmış üyeler ana sayfada bu bölümü görür.">
         <Toggle label="Yeni üye ana sayfasını göster" checked={home.enabled} onChange={(enabled) => setHome({ enabled })} hint="Kapatırsan üyeler eski ana sayfayı görür." />
         <div className="grid gap-4 md:grid-cols-2">
@@ -293,7 +331,9 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
         </Field>
         <ImageField label="Kapak görseli" value={home.heroImage} onChange={(heroImage) => setHome({ heroImage })} uploadId="home-v2-hero" />
       </Section>
+      )}
 
+      {on('daily') && (
       <Section title="Günlük kutular" desc="Ana sayfadaki 3 kısayol kutusu.">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Bölüm başlığı">
@@ -321,7 +361,9 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
           ))}
         </div>
       </Section>
+      )}
 
+      {on('side') && (
       <Section title="Yan bloklar">
         <div className="grid gap-3 md:grid-cols-2">
           <Toggle label="Cüzdan kartı" checked={home.showWallet} onChange={(showWallet) => setHome({ showWallet })} />
@@ -331,7 +373,9 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
           <input className={input} value={home.marketHref} maxLength={200} onChange={(e) => setHome({ marketHref: e.target.value })} />
         </Field>
       </Section>
+      )}
 
+      {part === 'setup' && (
       <Section title="Masa açma sihirbazı" desc="Masa oyunlarında adım adım masa kurma ekranı. Okeye özel puan ve kişi ayarları bu bölümde.">
         <Toggle label="Sihirbazı aç (tüm oyunlar)" checked={setup.enabled} onChange={(enabled) => setSetup({ enabled })} hint="Kapalıyken tüm lobiler eskisi gibi çalışır." />
         <div className="grid gap-4 md:grid-cols-2">
@@ -376,7 +420,9 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
           />
         </Field>
       </Section>
+      )}
 
+      {part === 'setup' && (
       <Section title="Oyun bazında sihirbaz" desc="Her oyun için sihirbazı ayrı açıp kapatabilir, açıklamasını ve özet ekranındaki kural metnini düzenleyebilirsin. Blackjack, rulet ve mini oyunlarda sihirbaz yoktur.">
         <div className="grid gap-4 lg:grid-cols-2">
           {WIZARD_GAMES.map((g) => {
@@ -407,13 +453,14 @@ export function HomeV2Editor({ initial }: { initial: HomeV2Settings }) {
           })}
         </div>
       </Section>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={pending} className="h-10 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60">
           {pending ? 'Kaydediliyor…' : 'Kaydet'}
         </button>
-        <button type="button" onClick={() => setV(DEFAULT_HOME_V2)} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold text-muted-foreground hover:text-foreground">
-          Varsayılana dön
+        <button type="button" onClick={() => setV((prev) => ({ ...prev, [part]: DEFAULT_HOME_V2[part] }))} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold text-muted-foreground hover:text-foreground">
+          {part === 'home' ? 'Düzeni varsayılana döndür' : 'Sihirbazı varsayılana döndür'}
         </button>
         {state.message && (
           <p role="status" className={`text-sm ${state.ok ? 'text-primary' : 'text-destructive'}`}>
